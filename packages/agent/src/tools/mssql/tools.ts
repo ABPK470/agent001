@@ -1,7 +1,7 @@
 import sql from "mssql"
 import { readToolTraceContext } from "../../application/shell/loop.js"
 import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
-import type { Tool } from "../../domain/agent-types.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/agent-types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import type { CatalogGraph } from "../catalog/graph/index.js"
 import { getPool } from "./connection.js"
@@ -491,7 +491,7 @@ function isIntegerLikeType(dataType: string): boolean {
 // `name` / `description` / `parameters` so callers (CLI listers,
 // prompt generators) can introspect without building a host.
 
-const QUERY_MSSQL_DEF = (() => {
+const QUERY_MSSQL_DEF: ToolMetadata = (() => {
   // Build once with a throwaway host purely to expose the static shape.
   // The throwaway is never executed because the ambient export below
   // also throws — `createMssqlTool(host)` is the only valid path.
@@ -499,30 +499,20 @@ const QUERY_MSSQL_DEF = (() => {
   const t = buildQueryMssqlTool(stub)
   return { name: t.name, description: t.description, parameters: t.parameters }
 })()
-const SCHEMA_MSSQL_DEF = (() => {
+const SCHEMA_MSSQL_DEF: ToolMetadata = (() => {
   const stub = {} as AgentHost
   const t = buildSchemaMssqlTool(stub)
   return { name: t.name, description: t.description, parameters: t.parameters }
 })()
 
-export const mssqlTool: Tool = {
-  ...QUERY_MSSQL_DEF,
-  async execute(_args) {
-    throw new Error("mssqlTool must be built via createMssqlTool(host)")
-  },
-}
+export const mssqlTool = QUERY_MSSQL_DEF
 
-export const mssqlSchemaTool: Tool = {
-  ...SCHEMA_MSSQL_DEF,
-  async execute(_args) {
-    throw new Error("mssqlSchemaTool must be built via createMssqlSchemaTool(host)")
-  },
-}
+export const mssqlSchemaTool = SCHEMA_MSSQL_DEF
 
-export function createMssqlTool(host: AgentHost, run?: RunContext): Tool {
+export function createMssqlTool(host: AgentHost, run?: RunContext): ExecutableTool {
   return buildQueryMssqlTool(host, run)
 }
 
-export function createMssqlSchemaTool(host: AgentHost, run?: RunContext): Tool {
+export function createMssqlSchemaTool(host: AgentHost, run?: RunContext): ExecutableTool {
   return buildSchemaMssqlTool(host, run)
 }

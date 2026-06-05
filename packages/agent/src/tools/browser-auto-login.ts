@@ -20,7 +20,7 @@
  */
 
 import type { AgentHost } from "../application/shell/runtime.js"
-import type { Tool } from "../domain/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../domain/agent-types.js"
 import { resolveLocator } from "./browse-web/selectors.js"
 import { getKillSignal, getSession, persistSessionState } from "./browse-web/session.js"
 
@@ -61,20 +61,17 @@ const BROWSER_AUTO_LOGIN_PARAMETERS = {
     required: ["session_id", "credential_id", "mode"],
   } as const
 
-export const browserAutoLoginTool: Tool = {
+export const browserAutoLoginToolMetadata: ToolMetadata = {
   name: "browser_auto_login",
   description: BROWSER_AUTO_LOGIN_DESCRIPTION,
   parameters: BROWSER_AUTO_LOGIN_PARAMETERS,
-  async execute(_args) {
-    throw new Error("browserAutoLoginTool must be built via createBrowserAutoLoginTool(host)")
-  },
 }
 
-export function createBrowserAutoLoginTool(host: AgentHost): Tool {
+export const browserAutoLoginTool = browserAutoLoginToolMetadata
+
+export function createBrowserAutoLoginTool(host: AgentHost): ExecutableTool {
   return {
-    name: "browser_auto_login",
-    description: BROWSER_AUTO_LOGIN_DESCRIPTION,
-    parameters: BROWSER_AUTO_LOGIN_PARAMETERS,
+    ...browserAutoLoginToolMetadata,
     async execute(args) {
       const provider = host.browser.credentialReader
       if (!provider) {

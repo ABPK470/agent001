@@ -17,7 +17,7 @@ import { HUMAN_HANDOFF_REASON_VALUES, HumanHandoffReason, UserInputStatus } from
  */
 
 import type { AgentHost } from "../application/shell/runtime.js"
-import type { Tool } from "../domain/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../domain/agent-types.js"
 import { getSession } from "./browse-web/session.js"
 
 const BROWSER_HUMAN_HANDOFF_DESCRIPTION =
@@ -47,20 +47,17 @@ const BROWSER_HUMAN_HANDOFF_PARAMETERS = {
     required: ["session_id", "reason", "message"],
   } as const
 
-export const browserHumanHandoffTool: Tool = {
+export const browserHumanHandoffToolMetadata: ToolMetadata = {
   name: "browser_human_handoff",
   description: BROWSER_HUMAN_HANDOFF_DESCRIPTION,
   parameters: BROWSER_HUMAN_HANDOFF_PARAMETERS,
-  async execute(_args) {
-    throw new Error("browserHumanHandoffTool must be built via createBrowserHumanHandoffTool(host)")
-  },
 }
 
-export function createBrowserHumanHandoffTool(host: AgentHost): Tool {
+export const browserHumanHandoffTool = browserHumanHandoffToolMetadata
+
+export function createBrowserHumanHandoffTool(host: AgentHost): ExecutableTool {
   return {
-    name: "browser_human_handoff",
-    description: BROWSER_HUMAN_HANDOFF_DESCRIPTION,
-    parameters: BROWSER_HUMAN_HANDOFF_PARAMETERS,
+    ...browserHumanHandoffToolMetadata,
     async execute(args) {
       const sessionId = String(args["session_id"] ?? "")
       const reasonRaw = String(args["reason"] ?? HumanHandoffReason.Manual)

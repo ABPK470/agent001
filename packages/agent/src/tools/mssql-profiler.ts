@@ -9,7 +9,7 @@
 import sql from "mssql"
 import type { AgentHost, RunContext } from "../application/shell/runtime.js"
 import { getTenantConfig } from "../application/shell/tenant-config.js"
-import type { Tool } from "../domain/agent-types.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../domain/agent-types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "./_tool-cache.js"
 import { getCatalog } from "./catalog/store.js"
 import { getPool } from "./mssql/index.js"
@@ -790,19 +790,18 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool { return 
   },
 } }
 
-export const profileDataTool: Tool = (() => {
+export const profileDataToolMetadata: ToolMetadata = (() => {
   const stub = {} as AgentHost
   const t = buildProfileDataTool(stub)
   return {
     name: t.name,
     description: t.description,
     parameters: t.parameters,
-    async execute(_args) {
-      throw new Error("profileDataTool must be built via createProfileDataTool(host)")
-    },
   }
 })()
 
-export function createProfileDataTool(host: AgentHost, run?: RunContext): Tool {
+export const profileDataTool = profileDataToolMetadata
+
+export function createProfileDataTool(host: AgentHost, run?: RunContext): ExecutableTool {
   return buildProfileDataTool(host, run)
 }

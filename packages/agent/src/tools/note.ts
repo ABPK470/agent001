@@ -19,7 +19,7 @@
  * agent never silently swallows note writes.
  */
 
-import type { Tool } from "../domain/agent-types.js"
+import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../domain/agent-types.js"
 
 /** Allowed values for the optional `category` field. Free-form is intentionally
  * NOT allowed so consolidation and retrieval can rely on a small vocabulary. */
@@ -45,7 +45,7 @@ export interface NotePayload {
 /** Handler signature injected by the server-side factory. */
 export type NoteHandler = (payload: NotePayload) => Promise<{ ok: true; noteId: string } | { ok: false; reason: string }>
 
-export const noteTool: Tool = {
+export const noteToolMetadata: ToolMetadata = {
   name: "note",
   description:
     "Save a durable, structured fact to working memory so future turns see it. " +
@@ -94,14 +94,39 @@ export const noteTool: Tool = {
     },
     required: ["subject", "claim"],
   },
+}
 
-  async execute() {
-    // The server's per-run factory replaces this execute with one that calls
-    // the memory store. If this default runs it means the tool was wired into
-    // an agent without going through the per-run composition, which is a bug.
-    return "Error: note handler is not bound in this execution context. " +
-      "Ensure the agent is constructed via composePerRunTools (server) so the " +
-      "memory writer is injected."
+export const noteTool = noteToolMetadata
+
+export const noteToolDefinition: ToolDefinition<NoteHandler> = {
+  metadata: noteToolMetadata,
+  bind(handler) {
+    return {
+      ...noteToolMetadata,
+      async execute(args) {
+        const subject = String(args["subject"] ?? "").trim()
+        if (!subject) return "Error: 'subject' is required (non-empty string)."
+
+        const claim = String(args["claim"] ?? "").trim()
+        if (!claim) return "Error: 'claim' is required (non-empty string)."
+
+        const evidenceRaw = args["evidence"]
+        const evidence = typeof evidenceRaw === "string" && evidenceRaw.trim() ? evidenceRaw.trim() : undefined
+
+        const categoryRaw = args["category"]
+        let category: NoteCategory | undefined
+        if (typeof categoryRaw === "string" && categoryRaw.trim()) {
+          if (!(NOTE_CATEGORIES as readonly string[]).includes(categoryRaw)) {
+            return `Error: 'category' must be one of: ${NOTE_CATEGORIES.join(", ")}.`
+          }
+          category = categoryRaw as NoteCategory
+        }
+
+        const result = await handler({ subject, claim, evidence, category })
+        if (!result.ok) return `note: not stored — ${result.reason}`
+        return `note: stored (id=${result.noteId}) — ${category ?? "observation"}: ${subject}`
+      },
+    }
   },
 }
 
@@ -113,44 +138,14 @@ export const noteTool: Tool = {
  * in the server's ingestAgentNote helper. This wrapper just validates inputs
  * and produces a tool-result string.
  */
-export function bindNoteTool(handler: NoteHandler): Tool {
-  return {
-    ...noteTool,
-    async execute(args) {
-      const subject = String(args["subject"] ?? "").trim()
-      if (!subject) return "Error: 'subject' is required (non-empty string)."
-
-      const claim = String(args["claim"] ?? "").trim()
-      if (!claim) return "Error: 'claim' is required (non-empty string)."
-
-      const evidenceRaw = args["evidence"]
-      const evidence = typeof evidenceRaw === "string" && evidenceRaw.trim() ? evidenceRaw.trim() : undefined
-
-      const categoryRaw = args["category"]
-      let category: NoteCategory | undefined
-      if (typeof categoryRaw === "string" && categoryRaw.trim()) {
-        if (!(NOTE_CATEGORIES as readonly string[]).includes(categoryRaw)) {
-          return `Error: 'category' must be one of: ${NOTE_CATEGORIES.join(", ")}.`
-        }
-        category = categoryRaw as NoteCategory
-      }
-
-      const result = await handler({ subject, claim, evidence, category })
-      if (!result.ok) return `note: not stored — ${result.reason}`
-      return `note: stored (id=${result.noteId}) — ${category ?? "observation"}: ${subject}`
-    },
-  }
+export function bindNoteTool(handler: NoteHandler): ExecutableTool {
+  return noteToolDefinition.bind(handler)
 }
 
 // ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
 
 import type { AgentHost } from "../application/shell/runtime.js"
 
-export function createNoteTool(_host: AgentHost): Tool {
-  return {
-    name: noteTool.name,
-    description: noteTool.description,
-    parameters: noteTool.parameters,
-    execute: (args) => noteTool.execute(args),
-  }
+export function createNoteTool(_host: AgentHost): never {
+  throw new Error("note requires per-run binding via bindNoteTool(handler); metadata is available via noteToolMetadata")
 }

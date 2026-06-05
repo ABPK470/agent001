@@ -46,15 +46,14 @@ export {
 export type {
     AgentConfig,
     ChatCallUsageRecord,
+    ExecutableTool,
     LLMClient,
     LLMResponse,
     Message,
     PromptBudgetSection,
     StopReason,
-    TokenUsage,
-    Tool,
-    ToolCall,
-    ToolKillManager
+    TokenUsage, Tool,
+    ToolCall, ToolDefinition, ToolKillManager, ToolMetadata
 } from "./domain/agent-types.js"
 
 // ── Clusters (one barrel per cluster) ───────────────────────────────

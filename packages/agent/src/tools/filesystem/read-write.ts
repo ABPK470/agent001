@@ -1,8 +1,8 @@
 import { appendFile as fsAppendFile, mkdir, readFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import type { AgentHost } from "../../application/shell/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
 import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
-import type { Tool } from "../../domain/agent-types.js"
 import { checkWriteIntegrity, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
 import { buildToolOutcome, safePathResolvedWith } from "../filesystem-security.js"
 import { executeWriteFileWith } from "./write-execute.js"
@@ -21,12 +21,16 @@ const READ_FILE_PARAMETERS = {
   required: ["path"],
 } as const
 
+export const readFileToolMetadata: ToolMetadata = {
+  name: "read_file",
+  description: READ_FILE_DESCRIPTION,
+  parameters: READ_FILE_PARAMETERS,
+}
+
 /** Factory: build a `read_file` tool bound to `host.filesystem.basePath`. */
-export function createReadFileTool(host: AgentHost): Tool {
+export function createReadFileTool(host: AgentHost): ExecutableTool {
   return {
-    name: "read_file",
-    description: READ_FILE_DESCRIPTION,
-    parameters: READ_FILE_PARAMETERS,
+    ...readFileToolMetadata,
 
     async execute(args) {
       try {
@@ -58,6 +62,12 @@ const APPEND_FILE_PARAMETERS = {
   },
   required: ["path", "content"],
 } as const
+
+export const appendFileToolMetadata: ToolMetadata = {
+  name: "append_file",
+  description: APPEND_FILE_DESCRIPTION,
+  parameters: APPEND_FILE_PARAMETERS,
+}
 
 async function executeAppendFile(
   args: Record<string, unknown>,
@@ -139,12 +149,16 @@ const WRITE_FILE_PARAMETERS = {
   required: ["path", "content"],
 } as const
 
+export const writeFileToolMetadata: ToolMetadata = {
+  name: "write_file",
+  description: WRITE_FILE_DESCRIPTION,
+  parameters: WRITE_FILE_PARAMETERS,
+}
+
 /** Factory: build a `write_file` tool bound to `host.filesystem.basePath`. */
-export function createWriteFileTool(host: AgentHost): Tool {
+export function createWriteFileTool(host: AgentHost): ExecutableTool {
   return {
-    name: "write_file",
-    description: WRITE_FILE_DESCRIPTION,
-    parameters: WRITE_FILE_PARAMETERS,
+    ...writeFileToolMetadata,
     async execute(args) {
       return executeWriteFileWith(host, args)
     },
@@ -152,11 +166,9 @@ export function createWriteFileTool(host: AgentHost): Tool {
 }
 
 /** Factory: build an `append_file` tool bound to `host.filesystem.basePath`. */
-export function createAppendFileTool(host: AgentHost): Tool {
+export function createAppendFileTool(host: AgentHost): ExecutableTool {
   return {
-    name: "append_file",
-    description: APPEND_FILE_DESCRIPTION,
-    parameters: APPEND_FILE_PARAMETERS,
+    ...appendFileToolMetadata,
     async execute(args) {
       return executeAppendFile(args, (p) => safePathResolvedWith(host, p))
     },

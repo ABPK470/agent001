@@ -14,9 +14,9 @@
  */
 
 import { CHART_CATALOGUE_SECTION, renderPromptVars } from "../application/shell/loop.js"
-import type { Tool } from "../domain/agent-types.js"
+import type { Tool, ToolMetadata } from "../domain/agent-types.js"
 
-export const getChartSpecsTool: Tool = {
+export const getChartSpecsToolMetadata: ToolMetadata = {
   name: "get_chart_specs",
   description:
     "Return the full reference for every supported chart fenced-block kind " +
@@ -28,6 +28,10 @@ export const getChartSpecsTool: Tool = {
     type: "object",
     properties: {},
   },
+}
+
+export const getChartSpecsTool: Tool = {
+  ...getChartSpecsToolMetadata,
 
   async execute() {
     return renderPromptVars(CHART_CATALOGUE_SECTION)

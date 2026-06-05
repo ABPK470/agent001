@@ -19,8 +19,8 @@ import { mkdir, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import { readToolTraceContext } from "../../application/shell/loop.js"
 import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
 import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../domain/enums/tools.js"
-import type { Tool } from "../../domain/agent-types.js"
 import { safePathResolvedWith } from "../filesystem-security.js"
 import { getPool } from "./connection.js"
 import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
@@ -331,24 +331,18 @@ async function executeExportQueryToFile(
  * tool must be built via {@link createExportQueryToFileTool}(host) so it
  * can resolve paths against the per-run workspace root.
  */
-export const exportQueryToFileTool: Tool = {
+export const exportQueryToFileToolMetadata: ToolMetadata = {
   name: "export_query_to_file",
   description: EXPORT_QUERY_TO_FILE_DESCRIPTION,
   parameters: EXPORT_QUERY_TO_FILE_PARAMETERS,
-  async execute() {
-    throw new Error(
-      "exportQueryToFileTool must be built via createExportQueryToFileTool(host); " +
-      "the static export is schema-only.",
-    )
-  },
 }
 
+export const exportQueryToFileTool = exportQueryToFileToolMetadata
+
 /** Factory: build an `export_query_to_file` tool bound to `host.filesystem.basePath`. */
-export function createExportQueryToFileTool(host: AgentHost, run?: RunContext): Tool {
+export function createExportQueryToFileTool(host: AgentHost, run?: RunContext): ExecutableTool {
   return {
-    name: "export_query_to_file",
-    description: EXPORT_QUERY_TO_FILE_DESCRIPTION,
-    parameters: EXPORT_QUERY_TO_FILE_PARAMETERS,
+    ...exportQueryToFileToolMetadata,
     async execute(args) {
       return executeExportQueryToFile(args, {
         resolveSafe: (p) => safePathResolvedWith(host, p),

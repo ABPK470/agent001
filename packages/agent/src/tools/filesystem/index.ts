@@ -1,3 +1,15 @@
-export { createListDirectoryTool, createReplaceInFileTool } from "./path-edit.js"
-export { createAppendFileTool, createReadFileTool, createWriteFileTool } from "./read-write.js"
+export {
+    createListDirectoryTool,
+    createReplaceInFileTool,
+    listDirectoryToolMetadata,
+    replaceInFileToolMetadata
+} from "./path-edit.js"
+export {
+    appendFileToolMetadata,
+    createAppendFileTool,
+    createReadFileTool,
+    createWriteFileTool,
+    readFileToolMetadata,
+    writeFileToolMetadata
+} from "./read-write.js"
 

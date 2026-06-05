@@ -20,7 +20,7 @@
  */
 
 import type { AgentHost } from "../../application/shell/runtime.js"
-import type { Tool } from "../../domain/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
 import { closeAllBrowserSessions, deleteSession, launchSession, persistSessionState } from "../browse-web/session.js"
 import { bingAdapter } from "./bing.js"
 import { fetchDuckDuckGoLite } from "./ddg-fetch.js"
@@ -135,20 +135,17 @@ const WEB_SEARCH_PARAMETERS = {
     required: ["query"],
   } as const
 
-export const webSearchTool: Tool = {
+export const webSearchToolMetadata: ToolMetadata = {
   name: "web_search",
   description: WEB_SEARCH_DESCRIPTION,
   parameters: WEB_SEARCH_PARAMETERS,
-  async execute(_args) {
-    throw new Error("webSearchTool must be built via createWebSearchTool(host)")
-  },
 }
 
-export function createWebSearchTool(host: AgentHost): Tool {
+export const webSearchTool = webSearchToolMetadata
+
+export function createWebSearchTool(host: AgentHost): ExecutableTool {
   return {
-    name: "web_search",
-    description: WEB_SEARCH_DESCRIPTION,
-    parameters: WEB_SEARCH_PARAMETERS,
+    ...webSearchToolMetadata,
     async execute(args) {
       const query = String(args["query"] ?? "").trim()
       if (!query) return "web_search requires a non-empty 'query'."

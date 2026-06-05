@@ -13,7 +13,7 @@
 import { readdir, readFile, stat } from "node:fs/promises"
 import { basename, extname, resolve } from "node:path"
 import type { AgentHost } from "../application/shell/runtime.js"
-import type { Tool } from "../domain/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../domain/agent-types.js"
 
 // ── Configuration ────────────────────────────────────────────────
 
@@ -159,6 +159,12 @@ const SEARCH_FILES_PARAMETERS = {
   required: ["pattern"],
 } as const
 
+export const searchFilesToolMetadata: ToolMetadata = {
+  name: "search_files",
+  description: SEARCH_FILES_DESCRIPTION,
+  parameters: SEARCH_FILES_PARAMETERS,
+}
+
 interface SearchFilesCtx {
   basePath: string
   excludeDirs: ReadonlySet<string>
@@ -276,11 +282,9 @@ async function executeSearchFiles(
 }
 
 /** Factory: build a `search_files` tool bound to `host.searchFiles`. */
-export function createSearchFilesTool(host: AgentHost): Tool {
+export function createSearchFilesTool(host: AgentHost): ExecutableTool {
   return {
-    name: "search_files",
-    description: SEARCH_FILES_DESCRIPTION,
-    parameters: SEARCH_FILES_PARAMETERS,
+    ...searchFilesToolMetadata,
     async execute(args) {
       return executeSearchFiles(args, {
         basePath: host.searchFiles.basePath,

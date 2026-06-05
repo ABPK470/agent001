@@ -9,7 +9,7 @@
 
 import sql from "mssql"
 import type { AgentHost } from "../../application/shell/runtime.js"
-import type { Tool } from "../../domain/agent-types.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/agent-types.js"
 import { fingerprintForCatalogBuild, fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "../mssql/index.js"
 import {
@@ -304,19 +304,18 @@ function buildDiscoverRelationshipsTool(host: AgentHost): Tool { return {
   },
 } }
 
-export const discoverRelationshipsTool: Tool = (() => {
+export const discoverRelationshipsToolMetadata: ToolMetadata = (() => {
   const stub = {} as AgentHost
   const t = buildDiscoverRelationshipsTool(stub)
   return {
     name: t.name,
     description: t.description,
     parameters: t.parameters,
-    async execute(_args) {
-      throw new Error("discoverRelationshipsTool must be built via createDiscoverRelationshipsTool(host)")
-    },
   }
 })()
 
-export function createDiscoverRelationshipsTool(host: AgentHost): Tool {
+export const discoverRelationshipsTool = discoverRelationshipsToolMetadata
+
+export function createDiscoverRelationshipsTool(host: AgentHost): ExecutableTool {
   return buildDiscoverRelationshipsTool(host)
 }

@@ -1,4 +1,4 @@
-import { type Agent, type DelegateContext, type EngineServices, type Message, type RunState, type Tool, type Unsubscribe } from "@mia/agent"
+import { type Agent, type DelegateContext, type EngineServices, type ExecutableTool, type Message, type RunState, type Unsubscribe } from "@mia/agent"
 import type { AgentBus } from "../../../../agent-bus.js"
 import type { OrchestratorRunCtx } from "../../../../ports/orchestration.js"
 import { type RunPriority } from "../../queue/run-queue.js"
@@ -16,7 +16,7 @@ export type ExecuteRunInput = {
   ctx: OrchestratorRunCtx
   runId: string
   goal: string
-  tools: Tool[]
+  tools: ExecutableTool[]
   systemPrompt: string | undefined
   agentId: string | null
   services: EngineServices
@@ -52,7 +52,7 @@ export type ExecutionEnvironment = {
   runContext: ReturnType<typeof import("@mia/agent").makeRunContext>
   toolDecision: ReturnType<typeof import("../../../core/decide-sections.js").decideSections>
   delegateCtx: DelegateContext
-  allTools: Tool[]
+  allTools: ExecutableTool[]
   systemMessages: Awaited<ReturnType<typeof import("../../../core/system-messages.js").buildSystemMessages>>
   agentRef: AgentRef
 }

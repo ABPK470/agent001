@@ -17,7 +17,7 @@
 import { stat } from "node:fs/promises"
 import { join } from "node:path"
 import type { AgentHost } from "../../application/shell/runtime.js"
-import type { Tool } from "../../domain/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
 import { startStaticServer } from "./static-server.js"
 
 /** Result from a sandboxed browser check. */
@@ -78,21 +78,18 @@ const BROWSER_CHECK_PARAMETERS = {
   required: ["path"],
 } as const
 
-export const browserCheckTool: Tool = {
+export const browserCheckToolMetadata: ToolMetadata = {
   name: "browser_check",
   description: BROWSER_CHECK_DESCRIPTION,
   parameters: BROWSER_CHECK_PARAMETERS,
-  async execute() {
-    throw new Error("browserCheckTool must be built via createBrowserCheckTool(host); ambient execute is no longer supported.")
-  },
 }
 
+export const browserCheckTool = browserCheckToolMetadata
+
 /** Factory variant bound to `host.browserCheck.{cwd,client}`. */
-export function createBrowserCheckTool(host: AgentHost): Tool {
+export function createBrowserCheckTool(host: AgentHost): ExecutableTool {
   return {
-    name: "browser_check",
-    description: BROWSER_CHECK_DESCRIPTION,
-    parameters: BROWSER_CHECK_PARAMETERS,
+    ...browserCheckToolMetadata,
     async execute(args) {
       return runBrowserCheck(args, {
         cwd: host.browserCheck.cwd,

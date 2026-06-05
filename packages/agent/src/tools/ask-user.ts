@@ -10,7 +10,7 @@
  */
 
 import type { AgentHost } from "../application/shell/runtime.js"
-import type { Tool } from "../domain/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../domain/agent-types.js"
 
 /**
  * Resolver function injected by the orchestrator.
@@ -54,6 +54,12 @@ export const ASK_USER_PARAMETERS = {
   required: ["question"],
 } as const
 
+export const askUserToolMetadata: ToolMetadata = {
+  name: "ask_user",
+  description: ASK_USER_DESCRIPTION,
+  parameters: ASK_USER_PARAMETERS,
+}
+
 async function runAskUser(
   resolver: AskUserResolver | null | undefined,
   args: Record<string, unknown>,
@@ -76,11 +82,9 @@ async function runAskUser(
  * {@link AgentHost}'s `userInput` reader. No ambient state, no
  * runtime fallback. See docs/doctrine.md.
  */
-export function createAskUserTool(host: AgentHost): Tool {
+export function createAskUserTool(host: AgentHost): ExecutableTool {
   return {
-    name: "ask_user",
-    description: ASK_USER_DESCRIPTION,
-    parameters: ASK_USER_PARAMETERS,
+    ...askUserToolMetadata,
     async execute(args) {
       return runAskUser(host.userInput, args)
     },

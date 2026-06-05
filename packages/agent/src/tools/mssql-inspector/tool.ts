@@ -1,6 +1,6 @@
 import type sql from "mssql"
 import type { AgentHost } from "../../application/shell/runtime.js"
-import type { Tool } from "../../domain/agent-types.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/agent-types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getPool } from "../mssql/index.js"
 import { runObjectInspection } from "./handlers/definition.js"
@@ -163,19 +163,18 @@ function buildInspectDefinitionTool(host: AgentHost): Tool { return {
   },
 } }
 
-export const inspectDefinitionTool: Tool = (() => {
+export const inspectDefinitionToolMetadata: ToolMetadata = (() => {
   const stub = {} as AgentHost
   const t = buildInspectDefinitionTool(stub)
   return {
     name: t.name,
     description: t.description,
     parameters: t.parameters,
-    async execute(_args) {
-      throw new Error("inspectDefinitionTool must be built via createInspectDefinitionTool(host)")
-    },
   }
 })()
 
-export function createInspectDefinitionTool(host: AgentHost): Tool {
+export const inspectDefinitionTool = inspectDefinitionToolMetadata
+
+export function createInspectDefinitionTool(host: AgentHost): ExecutableTool {
   return buildInspectDefinitionTool(host)
 }

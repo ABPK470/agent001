@@ -6,9 +6,10 @@
  *   sync_execute     : execute a previously-computed plan with safety rails
  */
 
+import type { ExecutableTool, Tool, ToolMetadata } from "@mia/agent"
 import { getEnvironments } from "../../domain/environments.js"
 import type { EntityType } from "../../domain/recipes.js"
-import { getPool, type AgentHost, type Tool } from "../../ports/index.js"
+import { getPool, type AgentHost } from "../../ports/index.js"
 import { executeSync, previewSync } from "./orchestrator/index.js"
 import { loadPlan } from "./plan-store.js"
 
@@ -78,20 +79,19 @@ function buildCompareCatalogsTool(host: AgentHost): Tool { return {
   },
 } }
 
-export const compareCatalogsTool: Tool = (() => {
+export const compareCatalogsToolMetadata: ToolMetadata = (() => {
   const stub = {} as AgentHost
   const t = buildCompareCatalogsTool(stub)
   return {
     name: t.name,
     description: t.description,
     parameters: t.parameters,
-    async execute(_args) {
-      throw new Error("compareCatalogsTool must be built via createCompareCatalogsTool(host)")
-    },
   }
 })()
 
-export function createCompareCatalogsTool(host: AgentHost): Tool {
+export const compareCatalogsTool = compareCatalogsToolMetadata
+
+export function createCompareCatalogsTool(host: AgentHost): ExecutableTool {
   return buildCompareCatalogsTool(host)
 }
 
@@ -197,20 +197,19 @@ function buildSyncPreviewTool(host: AgentHost): Tool { return {
   },
 } }
 
-export const syncPreviewTool: Tool = (() => {
+export const syncPreviewToolMetadata: ToolMetadata = (() => {
   const stub = {} as AgentHost
   const t = buildSyncPreviewTool(stub)
   return {
     name: t.name,
     description: t.description,
     parameters: t.parameters,
-    async execute(_args) {
-      throw new Error("syncPreviewTool must be built via createSyncPreviewTool(host)")
-    },
   }
 })()
 
-export function createSyncPreviewTool(host: AgentHost): Tool {
+export const syncPreviewTool = syncPreviewToolMetadata
+
+export function createSyncPreviewTool(host: AgentHost): ExecutableTool {
   return buildSyncPreviewTool(host)
 }
 
@@ -248,20 +247,19 @@ function buildSyncExecuteTool(host: AgentHost): Tool { return {
   },
 } }
 
-export const syncExecuteTool: Tool = (() => {
+export const syncExecuteToolMetadata: ToolMetadata = (() => {
   const stub = {} as AgentHost
   const t = buildSyncExecuteTool(stub)
   return {
     name: t.name,
     description: t.description,
     parameters: t.parameters,
-    async execute(_args) {
-      throw new Error("syncExecuteTool must be built via createSyncExecuteTool(host)")
-    },
   }
 })()
 
-export function createSyncExecuteTool(host: AgentHost): Tool {
+export const syncExecuteTool = syncExecuteToolMetadata
+
+export function createSyncExecuteTool(host: AgentHost): ExecutableTool {
   return buildSyncExecuteTool(host)
 }
 
@@ -282,19 +280,18 @@ function buildListEnvironmentsTool(host: AgentHost): Tool { return {
   },
 } }
 
-export const listEnvironmentsTool: Tool = (() => {
+export const listEnvironmentsToolMetadata: ToolMetadata = (() => {
   const stub = {} as AgentHost
   const t = buildListEnvironmentsTool(stub)
   return {
     name: t.name,
     description: t.description,
     parameters: t.parameters,
-    async execute(_args) {
-      throw new Error("listEnvironmentsTool must be built via createListEnvironmentsTool(host)")
-    },
   }
 })()
 
-export function createListEnvironmentsTool(host: AgentHost): Tool {
+export const listEnvironmentsTool = listEnvironmentsToolMetadata
+
+export function createListEnvironmentsTool(host: AgentHost): ExecutableTool {
   return buildListEnvironmentsTool(host)
 }

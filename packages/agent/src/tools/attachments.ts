@@ -14,8 +14,8 @@
  */
 
 import type { AgentHost } from "../application/shell/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../domain/agent-types.js"
 import type { AttachmentStore } from "../ports/index.js"
-import type { Tool } from "../domain/agent-types.js"
 
 function requireServiceFromHost(host: AgentHost): AttachmentStore {
   if (!host.attachments) {
@@ -44,6 +44,12 @@ const LIST_ATTACHMENTS_PARAMETERS = {
   },
 } as const
 
+export const listAttachmentsToolMetadata: ToolMetadata = {
+  name: "list_attachments",
+  description: LIST_ATTACHMENTS_DESCRIPTION,
+  parameters: LIST_ATTACHMENTS_PARAMETERS,
+}
+
 const READ_ATTACHMENT_DESCRIPTION =
   "Read the text content of an attachment by id. " +
   "Best for text/* and application/json|csv|xml. Binary attachments are refused — " +
@@ -61,6 +67,12 @@ const READ_ATTACHMENT_PARAMETERS = {
   required: ["id"],
 } as const
 
+export const readAttachmentToolMetadata: ToolMetadata = {
+  name: "read_attachment",
+  description: READ_ATTACHMENT_DESCRIPTION,
+  parameters: READ_ATTACHMENT_PARAMETERS,
+}
+
 const IMPORT_ATTACHMENT_DESCRIPTION =
   "Copy an attachment into the current run sandbox so other tools can operate on it. " +
   "The destination must be a sandbox-relative path; the host refuses any path that " +
@@ -74,6 +86,12 @@ const IMPORT_ATTACHMENT_PARAMETERS = {
   },
   required: ["id", "destination"],
 } as const
+
+export const importAttachmentToolMetadata: ToolMetadata = {
+  name: "import_attachment",
+  description: IMPORT_ATTACHMENT_DESCRIPTION,
+  parameters: IMPORT_ATTACHMENT_PARAMETERS,
+}
 
 const PROMOTE_ATTACHMENT_DESCRIPTION =
   "Promote a file the agent produced inside the sandbox into the durable " +
@@ -92,14 +110,18 @@ const PROMOTE_ATTACHMENT_PARAMETERS = {
   required: ["sandboxPath"],
 } as const
 
+export const promoteAttachmentToolMetadata: ToolMetadata = {
+  name: "promote_attachment",
+  description: PROMOTE_ATTACHMENT_DESCRIPTION,
+  parameters: PROMOTE_ATTACHMENT_PARAMETERS,
+}
+
 // ── Closure factories (no ambient state) ──────────────────────────
 
 /** Factory: build a `list_attachments` tool bound to `host.attachments`. */
-export function createListAttachmentsTool(host: AgentHost): Tool {
+export function createListAttachmentsTool(host: AgentHost): ExecutableTool {
   return {
-    name: "list_attachments",
-    description: LIST_ATTACHMENTS_DESCRIPTION,
-    parameters: LIST_ATTACHMENTS_PARAMETERS,
+    ...listAttachmentsToolMetadata,
     async execute(args) {
       const svc = requireServiceFromHost(host)
       const q = typeof args["q"] === "string" ? (args["q"] as string) : undefined
@@ -114,11 +136,9 @@ export function createListAttachmentsTool(host: AgentHost): Tool {
 }
 
 /** Factory: build a `read_attachment` tool bound to `host.attachments`. */
-export function createReadAttachmentTool(host: AgentHost): Tool {
+export function createReadAttachmentTool(host: AgentHost): ExecutableTool {
   return {
-    name: "read_attachment",
-    description: READ_ATTACHMENT_DESCRIPTION,
-    parameters: READ_ATTACHMENT_PARAMETERS,
+    ...readAttachmentToolMetadata,
     async execute(args) {
       const svc = requireServiceFromHost(host)
       const id = String(args["id"] ?? "")
@@ -143,11 +163,9 @@ export function createReadAttachmentTool(host: AgentHost): Tool {
 }
 
 /** Factory: build an `import_attachment` tool bound to `host.attachments`. */
-export function createImportAttachmentTool(host: AgentHost): Tool {
+export function createImportAttachmentTool(host: AgentHost): ExecutableTool {
   return {
-    name: "import_attachment",
-    description: IMPORT_ATTACHMENT_DESCRIPTION,
-    parameters: IMPORT_ATTACHMENT_PARAMETERS,
+    ...importAttachmentToolMetadata,
     async execute(args) {
       const svc = requireServiceFromHost(host)
       const id          = String(args["id"] ?? "")
@@ -161,11 +179,9 @@ export function createImportAttachmentTool(host: AgentHost): Tool {
 }
 
 /** Factory: build a `promote_attachment` tool bound to `host.attachments`. */
-export function createPromoteAttachmentTool(host: AgentHost): Tool {
+export function createPromoteAttachmentTool(host: AgentHost): ExecutableTool {
   return {
-    name: "promote_attachment",
-    description: PROMOTE_ATTACHMENT_DESCRIPTION,
-    parameters: PROMOTE_ATTACHMENT_PARAMETERS,
+    ...promoteAttachmentToolMetadata,
     async execute(args) {
       const svc = requireServiceFromHost(host)
       const sandboxPath = String(args["sandboxPath"] ?? "")

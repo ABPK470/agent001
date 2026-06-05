@@ -129,20 +129,42 @@ export interface ToolResultEnvelope {
 }
 
 /**
- * A tool the agent can use.
+ * Metadata the runtime and LLM need in order to advertise a tool.
  *
- * This is the core plugin interface. Every tool has:
- *   name        — unique identifier the LLM references
- *   description — tells the LLM when/why to use this tool
- *   parameters  — JSON Schema describing the arguments
- *   execute     — the actual implementation
+ * This surface is intentionally execution-free so registry/discovery code can
+ * reason about the tool catalog without constructing a live executable tool.
  */
-export interface Tool {
+export interface ToolMetadata {
   readonly name: string
   readonly description: string
   readonly parameters: Record<string, unknown>
+}
+
+/**
+ * A fully bound executable tool the agent can call.
+ *
+ * `ExecutableTool` is the execution-facing contract. If a tool exists in this
+ * form, its runtime dependencies should already have been validated during
+ * construction/binding rather than failing later because required capabilities
+ * were never provided.
+ */
+export interface ExecutableTool extends ToolMetadata {
   execute(args: Record<string, unknown>): Promise<string | ToolResultEnvelope>
 }
+
+/**
+ * Definition-time shape for a tool that is not executable until runtime
+ * dependencies have been bound.
+ */
+export interface ToolDefinition<TContext> {
+  readonly metadata: ToolMetadata
+  bind(context: TContext): ExecutableTool
+}
+
+/**
+ * Backward-compatible alias while the codebase migrates to `ExecutableTool`.
+ */
+export type Tool = ExecutableTool
 
 // ── LLM client ───────────────────────────────────────────────────
 

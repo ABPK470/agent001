@@ -16,8 +16,8 @@
  * `recordTableVerdict` from server memory.
  */
 
+import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../domain/agent-types.js"
 import type { TableVerdictRoleType } from "../ports/index.js"
-import type { Tool } from "../domain/agent-types.js"
 
 export const TABLE_VERDICT_ROLES = [
   "canonical",
@@ -41,7 +41,7 @@ export type RecordTableVerdictHandler = (
   payload: TableVerdictPayload,
 ) => Promise<{ ok: true; verdictId: string } | { ok: false; reason: string }>
 
-export const recordTableVerdictTool: Tool = {
+export const recordTableVerdictToolMetadata: ToolMetadata = {
   name: "record_table_verdict",
   description:
     "Record a durable role classification for an MSSQL table/view so future " +
@@ -89,11 +89,47 @@ export const recordTableVerdictTool: Tool = {
     },
     required: ["qname", "role"],
   },
+}
 
-  async execute() {
-    return "Error: record_table_verdict handler is not bound in this execution context. " +
-      "Ensure the agent is constructed via composePerRunTools (server) so the " +
-      "verdict writer is injected."
+export const recordTableVerdictTool = recordTableVerdictToolMetadata
+
+export const recordTableVerdictToolDefinition: ToolDefinition<RecordTableVerdictHandler> = {
+  metadata: recordTableVerdictToolMetadata,
+  bind(handler) {
+    return {
+      ...recordTableVerdictToolMetadata,
+      async execute(args) {
+        const qname = String(args["qname"] ?? "").trim()
+        if (!qname) return "Error: 'qname' is required (non-empty string)."
+        if (!/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(qname)) {
+          return "Error: 'qname' must be a schema-qualified object name (e.g. 'publish.Revenue')."
+        }
+
+        const roleRaw = String(args["role"] ?? "").trim()
+        if (!(TABLE_VERDICT_ROLES as readonly string[]).includes(roleRaw)) {
+          return `Error: 'role' must be one of: ${TABLE_VERDICT_ROLES.join(", ")}.`
+        }
+        const role = roleRaw as TableVerdictRole
+
+        const evidenceRaw = args["evidence"]
+        let evidence: string[] = []
+        if (Array.isArray(evidenceRaw)) {
+          evidence = evidenceRaw
+            .map((e) => String(e ?? "").trim())
+            .filter(Boolean)
+            .map((e) => e.length > 200 ? e.slice(0, 200) : e)
+        }
+
+        const observedRaw = args["observedFromGoal"]
+        const observedFromGoal = typeof observedRaw === "string" && observedRaw.trim()
+          ? observedRaw.trim()
+          : undefined
+
+        const result = await handler({ qname, role, evidence, observedFromGoal })
+        if (!result.ok) return `record_table_verdict: not stored — ${result.reason}`
+        return `record_table_verdict: stored (id=${result.verdictId}) — ${qname} → ${role}`
+      },
+    }
   },
 }
 
@@ -102,52 +138,14 @@ export const recordTableVerdictTool: Tool = {
  * server's PER_RUN_FACTORIES uses this to attach a closure over
  * `recordTableVerdict` + run/session/upn provenance.
  */
-export function bindRecordTableVerdictTool(handler: RecordTableVerdictHandler): Tool {
-  return {
-    ...recordTableVerdictTool,
-    async execute(args) {
-      const qname = String(args["qname"] ?? "").trim()
-      if (!qname) return "Error: 'qname' is required (non-empty string)."
-      if (!/^[A-Za-z_][A-Za-z0-9_]*\.[A-Za-z_][A-Za-z0-9_]*$/.test(qname)) {
-        return "Error: 'qname' must be a schema-qualified object name (e.g. 'publish.Revenue')."
-      }
-
-      const roleRaw = String(args["role"] ?? "").trim()
-      if (!(TABLE_VERDICT_ROLES as readonly string[]).includes(roleRaw)) {
-        return `Error: 'role' must be one of: ${TABLE_VERDICT_ROLES.join(", ")}.`
-      }
-      const role = roleRaw as TableVerdictRole
-
-      const evidenceRaw = args["evidence"]
-      let evidence: string[] = []
-      if (Array.isArray(evidenceRaw)) {
-        evidence = evidenceRaw
-          .map((e) => String(e ?? "").trim())
-          .filter(Boolean)
-          .map((e) => e.length > 200 ? e.slice(0, 200) : e)
-      }
-
-      const observedRaw = args["observedFromGoal"]
-      const observedFromGoal = typeof observedRaw === "string" && observedRaw.trim()
-        ? observedRaw.trim()
-        : undefined
-
-      const result = await handler({ qname, role, evidence, observedFromGoal })
-      if (!result.ok) return `record_table_verdict: not stored — ${result.reason}`
-      return `record_table_verdict: stored (id=${result.verdictId}) — ${qname} → ${role}`
-    },
-  }
+export function bindRecordTableVerdictTool(handler: RecordTableVerdictHandler): ExecutableTool {
+  return recordTableVerdictToolDefinition.bind(handler)
 }
 
 // ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
 
 import type { AgentHost } from "../application/shell/runtime.js"
 
-export function createRecordTableVerdictTool(_host: AgentHost): Tool {
-  return {
-    name: recordTableVerdictTool.name,
-    description: recordTableVerdictTool.description,
-    parameters: recordTableVerdictTool.parameters,
-    execute: (args) => recordTableVerdictTool.execute(args),
-  }
+export function createRecordTableVerdictTool(_host: AgentHost): never {
+  throw new Error("record_table_verdict requires per-run binding via bindRecordTableVerdictTool(handler); metadata is available via recordTableVerdictToolMetadata")
 }

@@ -10,18 +10,23 @@
  */
 
 import {
+  appendFileToolMetadata,
   ASK_USER_DESCRIPTION,
   ASK_USER_PARAMETERS,
+  askUserToolMetadata,
   bindNoteTool,
   bindRecallPriorResultTool,
   bindRecordTableVerdictTool,
-  configureAgent,
+  browserAutoLoginTool,
+  browserCheckTool,
+  browserHumanHandoffTool,
+  browseWebTool,
   createAppendFileTool,
   createAskUserTool,
-  createBrowseWebTool,
   createBrowserAutoLoginTool,
   createBrowserCheckTool,
   createBrowserHumanHandoffTool,
+  createBrowseWebTool,
   createDelegateTools,
   createDiscoverRelationshipsTool,
   createExportQueryToFileTool,
@@ -42,23 +47,47 @@ import {
   createShellTool,
   createWebSearchTool,
   createWriteFileTool,
+  discoverRelationshipsTool,
+  exportQueryToFileTool,
+  fetchUrlTool,
   getChartSpecsTool,
-  noteTool,
-  recallPriorResultTool,
-  recordTableVerdictTool,
+  getChartSpecsToolMetadata,
+  importAttachmentToolMetadata,
+  inspectDefinitionTool,
+  listAttachmentsToolMetadata,
+  listDirectoryToolMetadata,
+  mssqlSchemaTool,
+  mssqlTool,
+  noteToolMetadata,
+  profileDataTool,
+  promoteAttachmentToolMetadata,
+  readAttachmentToolMetadata,
+  readFileToolMetadata,
+  recallPriorResultToolMetadata,
+  recordTableVerdictToolMetadata,
+  replaceInFileToolMetadata,
+  searchCatalogTool,
+  searchFilesToolMetadata,
+  shellTool,
   thinkTool,
+  webSearchTool,
+  writeFileToolMetadata,
   type AgentHost,
   type DelegateContext,
+  type ExecutableTool,
   type GovernToolOptions,
-  type LLMClient,
   type RunContext,
-  type Tool
+  type ToolMetadata,
 } from "@mia/agent"
 import {
+  compareCatalogsTool,
   createCompareCatalogsTool,
   createListEnvironmentsTool,
   createSyncExecuteTool,
   createSyncPreviewTool,
+  listEnvironmentsTool,
+  syncExecuteTool,
+  syncPreviewTool,
 } from "@mia/sync"
 import { ingestAgentNote, recordTableVerdict } from "./adapters/persistence/memory.js"
 import { getToolResult, isRecallableToolResult, loadRecentToolResults } from "./adapters/persistence/tool-results.js"
@@ -66,71 +95,154 @@ import { AgentBus, createBusTools } from "./agent-bus.js"
 
 export { thinkTool }
 
-export interface ToolInfo {
-  name: string
-  description: string
+export interface ToolInfo extends Pick<ToolMetadata, "name" | "description"> {}
+
+type StaticToolBinder = {
+  metadata: ToolMetadata
+  bind: (host: AgentHost, run?: RunContext) => ExecutableTool
 }
 
-// ── Factories ─────────────────────────────────────────────────────
-// Each entry produces ONE tool from the supplied host/run context.
-//
-// Current split:
-// - host-bound factories: filesystem, shell/browser, MSSQL, catalog,
-//   attachments, and sync tools
-// - ambient/static tools: think, get_chart_specs
-// - compatibility stubs that must be rebound per run via
-//   composePerRunTools/PER_RUN_FACTORIES: note, recall_prior_result,
-//   record_table_verdict
-//
-// Those compatibility tools intentionally expose a placeholder execute()
-// at registry time so accidental use without the server-side runtime
-// wiring fails loudly instead of silently dropping writes/lookups.
-
-type ToolFactory = (host: AgentHost, run?: RunContext) => Tool
-
-const ALL_TOOL_FACTORIES: ToolFactory[] = [
+const STATIC_TOOL_BINDERS: readonly StaticToolBinder[] = [
   // ── Filesystem (host-bound) ──
-  createReadFileTool,
-  createWriteFileTool,
-  createAppendFileTool,
-  createReplaceInFileTool,
-  createListDirectoryTool,
-  createSearchFilesTool,
+  { metadata: readFileToolMetadata, bind: (host) => createReadFileTool(host) },
+  { metadata: writeFileToolMetadata, bind: (host) => createWriteFileTool(host) },
+  { metadata: appendFileToolMetadata, bind: (host) => createAppendFileTool(host) },
+  { metadata: replaceInFileToolMetadata, bind: (host) => createReplaceInFileTool(host) },
+  { metadata: listDirectoryToolMetadata, bind: (host) => createListDirectoryTool(host) },
+  { metadata: searchFilesToolMetadata, bind: (host) => createSearchFilesTool(host) },
   // ── Shell + browser (host-bound) ──
-  createShellTool,
-  createBrowseWebTool,
-  createBrowserCheckTool,
-  createBrowserAutoLoginTool,
-  createBrowserHumanHandoffTool,
-  createWebSearchTool,
+  { metadata: shellTool, bind: (host, run) => createShellTool(host, run) },
+  { metadata: browseWebTool, bind: (host, run) => createBrowseWebTool(host, run) },
+  { metadata: browserCheckTool, bind: (host) => createBrowserCheckTool(host) },
+  { metadata: browserAutoLoginTool, bind: (host) => createBrowserAutoLoginTool(host) },
+  { metadata: browserHumanHandoffTool, bind: (host) => createBrowserHumanHandoffTool(host) },
+  { metadata: webSearchTool, bind: (host) => createWebSearchTool(host) },
   // ── Legacy runtime-backed factories (host arg ignored) ──
-  (_h, run) => createFetchUrlTool(run),
+  { metadata: fetchUrlTool, bind: (_host, run) => createFetchUrlTool(run) },
   // ── User input (host-bound) ──
-  createAskUserTool,
+  { metadata: askUserToolMetadata, bind: (host) => createAskUserTool(host) },
   // ── Misc ambient ──
-  (_h) => getChartSpecsTool,
-  (_h) => thinkTool,
-  (_h) => noteTool,
-  (_h) => recallPriorResultTool,
-  (_h) => recordTableVerdictTool,
+  { metadata: getChartSpecsToolMetadata, bind: () => getChartSpecsTool },
+  { metadata: thinkTool, bind: () => thinkTool },
   // ── MSSQL (host-bound) / catalog (ambient) ──
-  createMssqlTool,
-  createMssqlSchemaTool,
-  createExportQueryToFileTool,
-  createDiscoverRelationshipsTool,
-  createProfileDataTool,
-  createInspectDefinitionTool,
-  createSearchCatalogTool,
+  { metadata: mssqlTool, bind: (host, run) => createMssqlTool(host, run) },
+  { metadata: mssqlSchemaTool, bind: (host, run) => createMssqlSchemaTool(host, run) },
+  { metadata: exportQueryToFileTool, bind: (host, run) => createExportQueryToFileTool(host, run) },
+  { metadata: discoverRelationshipsTool, bind: (host) => createDiscoverRelationshipsTool(host) },
+  { metadata: profileDataTool, bind: (host, run) => createProfileDataTool(host, run) },
+  { metadata: inspectDefinitionTool, bind: (host) => createInspectDefinitionTool(host) },
+  { metadata: searchCatalogTool, bind: (host) => createSearchCatalogTool(host) },
   // ── ABI environment sync ──
-  createCompareCatalogsTool,
-  createSyncPreviewTool,
-  createSyncExecuteTool,
-  createListEnvironmentsTool,
+  { metadata: compareCatalogsTool, bind: (host) => createCompareCatalogsTool(host) },
+  { metadata: syncPreviewTool, bind: (host) => createSyncPreviewTool(host) },
+  { metadata: syncExecuteTool, bind: (host) => createSyncExecuteTool(host) },
+  { metadata: listEnvironmentsTool, bind: (host) => createListEnvironmentsTool(host) },
   // ── Attachments (host-bound) ──
-  createListAttachmentsTool,
-  createReadAttachmentTool,
-  createImportAttachmentTool,
-  createPromoteAttachmentTool,
+  { metadata: listAttachmentsToolMetadata, bind: (host) => createListAttachmentsTool(host) },
+  { metadata: readAttachmentToolMetadata, bind: (host) => createReadAttachmentTool(host) },
+  { metadata: importAttachmentToolMetadata, bind: (host) => createImportAttachmentTool(host) },
+  { metadata: promoteAttachmentToolMetadata, bind: (host) => createPromoteAttachmentTool(host) },
+]
+
+const CATALOG_ONLY_TOOLS: readonly ToolMetadata[] = [
+  noteToolMetadata,
+  recallPriorResultToolMetadata,
+  recordTableVerdictToolMetadata,
+]
+
+const DELEGATE_TOOL_CATALOG: readonly ToolMetadata[] = [
+  {
+    name: "delegate",
+    description:
+      "Delegate a focused sub-task to a child agent with its own iteration loop and tool set. " +
+      "Use when work is separable and easier to verify as an independent unit.",
+    parameters: {
+      type: "object",
+      properties: {
+        goal: { type: "string", description: "Clear, specific goal for the child agent." },
+        agentId: { type: "string", description: "Optional ID of a named agent definition to use." },
+        instructions: { type: "string", description: "Optional system-level instructions for the child." },
+        tools: { type: "array", items: { type: "string" }, description: "Optional subset of tool names." },
+        maxIterations: { type: "number", description: "Optional iteration cap for the child agent." },
+      },
+      required: ["goal"],
+    },
+  },
+  {
+    name: "delegate_parallel",
+    description:
+      "Delegate multiple independent sub-tasks to child agents that run in parallel, then collect every result together.",
+    parameters: {
+      type: "object",
+      properties: {
+        tasks: {
+          type: "array",
+          description: "Array of child-agent tasks to run in parallel.",
+          items: {
+            type: "object",
+            properties: {
+              goal: { type: "string", description: "Specific goal for this child agent." },
+              agentId: { type: "string", description: "Optional agent definition ID." },
+              instructions: { type: "string", description: "Optional child instructions." },
+              tools: { type: "array", items: { type: "string" }, description: "Optional tool subset." },
+              maxIterations: { type: "number", description: "Optional iteration cap." },
+            },
+            required: ["goal"],
+          },
+        },
+      },
+      required: ["tasks"],
+    },
+  },
+]
+
+const BUS_TOOL_CATALOG: readonly ToolMetadata[] = [
+  {
+    name: "send_message",
+    description: "Send a coordination message to other agents in the current run tree.",
+    parameters: {
+      type: "object",
+      properties: {
+        topic: { type: "string", description: "Topic/channel for the message." },
+        content: { type: "string", description: "Message content." },
+        protocol: {
+          type: "string",
+          enum: ["status", "result", "help", "question", "answer", "broadcast"],
+          description: "Coordination intent for the message.",
+        },
+        reply_to: { type: "string", description: "Required when protocol='answer'." },
+      },
+      required: ["topic", "content"],
+    },
+  },
+  {
+    name: "check_messages",
+    description: "Read new inter-agent messages received since the last check.",
+    parameters: {
+      type: "object",
+      properties: {
+        topic: { type: "string", description: "Optional topic filter." },
+        protocol: {
+          type: "string",
+          enum: ["status", "result", "help", "question", "answer", "broadcast"],
+          description: "Optional protocol filter.",
+        },
+      },
+      required: [],
+    },
+  },
+  {
+    name: "wait_for_response",
+    description: "Block until another agent answers a previously sent question message.",
+    parameters: {
+      type: "object",
+      properties: {
+        message_id: { type: "string", description: "ID of the question message to wait on." },
+        timeout_ms: { type: "number", description: "Optional timeout in milliseconds." },
+      },
+      required: ["message_id"],
+    },
+  },
 ]
 
 /**
@@ -138,48 +250,26 @@ const ALL_TOOL_FACTORIES: ToolFactory[] = [
  * Callers must pass the host they want the tools to be bound to — e.g.
  * the per-run host built from boot deps + run workspace root.
  */
-export function getAllTools(host: AgentHost, run?: RunContext): Tool[] {
-  return ALL_TOOL_FACTORIES.map((f) => f(host, run))
+export function getAllTools(host: AgentHost, run?: RunContext): ExecutableTool[] {
+  return STATIC_TOOL_BINDERS.map((entry) => entry.bind(host, run))
 }
 
 /** Build the name-keyed tool map for a given host. */
-export function getToolMap(host: AgentHost, run?: RunContext): ReadonlyMap<string, Tool> {
+export function getToolMap(host: AgentHost, run?: RunContext): ReadonlyMap<string, ExecutableTool> {
   return new Map(getAllTools(host, run).map((t) => [t.name, t]))
-}
-
-const catalogLlm: LLMClient = {
-  async chat() {
-    return {
-      content: "",
-      toolCalls: [],
-      usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 },
-    }
-  },
 }
 
 /**
  * Build the catalog list used by `listAvailableTools()` and the agents
- * route — every static tool plus the delegate/bus families. Uses a stub
- * host so we surface name/description without binding to any workspace.
+ * route — every static tool plus the delegate/bus families.
  */
-function listRuntimeCatalogTools(): Tool[] {
-  const stubHost = configureAgent({})
-  const staticTools = getAllTools(stubHost)
-  const catalog = new Map<string, Tool>()
+function listRuntimeCatalogTools(): ToolMetadata[] {
+  const catalog = new Map<string, ToolMetadata>()
 
-  for (const tool of staticTools) catalog.set(tool.name, tool)
-
-  const delegateTools = createDelegateTools({
-    llm: catalogLlm,
-    availableTools: staticTools,
-    depth: 0,
-    maxDepth: 1,
-    resolveAgent: () => null,
-  })
-  for (const tool of delegateTools) catalog.set(tool.name, tool)
-
-  const busTools = createBusTools(new AgentBus("catalog"), "catalog", "Catalog Agent")
-  for (const tool of busTools) catalog.set(tool.name, tool)
+  for (const tool of STATIC_TOOL_BINDERS.map((entry) => entry.metadata)) catalog.set(tool.name, tool)
+  for (const tool of CATALOG_ONLY_TOOLS) catalog.set(tool.name, tool)
+  for (const tool of DELEGATE_TOOL_CATALOG) catalog.set(tool.name, tool)
+  for (const tool of BUS_TOOL_CATALOG) catalog.set(tool.name, tool)
 
   return [...catalog.values()].sort((a, b) => a.name.localeCompare(b.name))
 }
@@ -220,7 +310,7 @@ function warnOnMissingGuardTools(resolvedNames: ReadonlySet<string>): void {
  * Resolve an array of tool names into host-bound Tool objects. Throws on
  * unknown names.
  */
-export function resolveTools(names: string[], host: AgentHost, run?: RunContext): Tool[] {
+export function resolveTools(names: string[], host: AgentHost, run?: RunContext): ExecutableTool[] {
   const map = getToolMap(host, run)
   const resolved = names.map((name) => {
     const tool = map.get(name)
@@ -283,7 +373,7 @@ const VISITOR_TOOL_NAMES: ReadonlySet<string> = new Set([
 ])
 
 /** Filter a tool list down to the visitor allowlist. */
-export function filterToolsForVisitor(tools: Tool[]): Tool[] {
+export function filterToolsForVisitor(tools: ExecutableTool[]): ExecutableTool[] {
   return tools.filter((t) => VISITOR_TOOL_NAMES.has(t.name))
 }
 
@@ -310,7 +400,7 @@ export interface PerRunToolContext {
    * state, and the abort signal at construction; the factory only chooses
    * per-tool overrides like timeoutMs.
    */
-  govern: (tool: Tool, opts?: Pick<GovernToolOptions, "timeoutMs">) => Tool
+  govern: (tool: ExecutableTool, opts?: Pick<GovernToolOptions, "timeoutMs">) => ExecutableTool
   /**
    * Resolves an ask_user prompt by recording the question, broadcasting
    * UserInputRequired, and waiting for the user's response. The factory
@@ -327,7 +417,7 @@ export interface PerRunToolContext {
   upn: string | null
 }
 
-export type PerRunToolFactory = (ctx: PerRunToolContext) => Tool[]
+export type PerRunToolFactory = (ctx: PerRunToolContext) => ExecutableTool[]
 
 /**
  * Ordered list of factories that produce per-run tools. Each factory is
@@ -486,6 +576,6 @@ function extractStoredText(json: string): string {
  * registry tools after effect-wrapping and governance; this function
  * appends the output of every per-run factory in order.
  */
-export function composePerRunTools(governedStaticTools: Tool[], ctx: PerRunToolContext): Tool[] {
+export function composePerRunTools(governedStaticTools: ExecutableTool[], ctx: PerRunToolContext): ExecutableTool[] {
   return [...governedStaticTools, ...PER_RUN_FACTORIES.flatMap((f) => f(ctx))]
 }

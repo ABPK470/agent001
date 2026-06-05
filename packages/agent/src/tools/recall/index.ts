@@ -13,7 +13,7 @@
  * `record_table_verdict`.
  */
 
-import type { Tool } from "../../domain/agent-types.js"
+import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../../domain/agent-types.js"
 
 /** Payload passed to the bound handler. */
 export interface RecallPriorResultPayload {
@@ -37,7 +37,7 @@ export type RecallPriorResultHandler = (
   | { ok: false; reason: string }
 >
 
-export const recallPriorResultTool: Tool = {
+export const recallPriorResultToolMetadata: ToolMetadata = {
   name: "recall_prior_result",
   description:
     "Retrieve the FULL payload of a tool call from an earlier turn in THIS session. " +
@@ -78,10 +78,57 @@ export const recallPriorResultTool: Tool = {
       },
     },
   },
+}
 
-  async execute() {
-    return "Error: recall_prior_result handler is not bound in this execution context. " +
-      "Ensure the agent is constructed via composePerRunTools (server) so the lookup is injected."
+export const recallPriorResultTool = recallPriorResultToolMetadata
+
+export const recallPriorResultToolDefinition: ToolDefinition<RecallPriorResultHandler> = {
+  metadata: recallPriorResultToolMetadata,
+  bind(handler) {
+    return {
+      ...recallPriorResultToolMetadata,
+      async execute(args) {
+        const runIdRaw = args["runId"]
+        const toolCallIdRaw = args["toolCallId"]
+        const turnRaw = args["turn"]
+        const toolNameRaw = args["toolName"]
+        const fullRaw = args["full"]
+
+        const runId       = typeof runIdRaw       === "string" && runIdRaw.trim()       ? runIdRaw.trim()       : undefined
+        const toolCallId  = typeof toolCallIdRaw  === "string" && toolCallIdRaw.trim()  ? toolCallIdRaw.trim()  : undefined
+        const toolName    = typeof toolNameRaw    === "string" && toolNameRaw.trim()    ? toolNameRaw.trim()    : undefined
+        const full        = fullRaw === true
+        let   turn: number | undefined =
+          typeof turnRaw === "number" && Number.isFinite(turnRaw) ? Math.trunc(turnRaw) : undefined
+
+        if ((runId && !toolCallId) || (!runId && toolCallId)) {
+          return "Error: runId and toolCallId must be provided together (they come as a pair " +
+            "from a <prior_results> evidence tag)."
+        }
+
+        if (!runId && !toolCallId && turn === undefined) turn = -1
+
+        if (turn !== undefined && turn >= 0) {
+          return "Error: 'turn' must be a negative integer (-1 = latest prior result, -2 = previous, ...)."
+        }
+
+        const payload: RecallPriorResultPayload = {}
+        if (runId) payload.runId = runId
+        if (toolCallId) payload.toolCallId = toolCallId
+        if (turn !== undefined) payload.turn = turn
+        if (toolName) payload.toolName = toolName
+        if (full) payload.full = true
+
+        const result = await handler(payload)
+        if (!result.ok) return `recall_prior_result: not found — ${result.reason}`
+
+        const header =
+          `recall_prior_result: tool=${result.toolName} run=${result.runId} tool_call=${result.toolCallId}` +
+          (result.rowCount != null ? ` rows=${result.rowCount}` : "") +
+          (result.truncated ? " [truncated]" : "")
+        return `${header}\n\n${result.result}`
+      },
+    }
   },
 }
 
@@ -89,65 +136,14 @@ export const recallPriorResultTool: Tool = {
  * Build a per-run-bound copy of the recall tool. Server's PER_RUN_FACTORIES
  * uses this to attach the session-scoped lookup over `tool_results`.
  */
-export function bindRecallPriorResultTool(handler: RecallPriorResultHandler): Tool {
-  return {
-    ...recallPriorResultTool,
-    async execute(args) {
-      const runIdRaw = args["runId"]
-      const toolCallIdRaw = args["toolCallId"]
-      const turnRaw = args["turn"]
-      const toolNameRaw = args["toolName"]
-      const fullRaw = args["full"]
-
-      const runId       = typeof runIdRaw       === "string" && runIdRaw.trim()       ? runIdRaw.trim()       : undefined
-      const toolCallId  = typeof toolCallIdRaw  === "string" && toolCallIdRaw.trim()  ? toolCallIdRaw.trim()  : undefined
-      const toolName    = typeof toolNameRaw    === "string" && toolNameRaw.trim()    ? toolNameRaw.trim()    : undefined
-      const full        = fullRaw === true
-      let   turn: number | undefined =
-        typeof turnRaw === "number" && Number.isFinite(turnRaw) ? Math.trunc(turnRaw) : undefined
-
-      // Pairing rule: runId and toolCallId go together (both or neither).
-      if ((runId && !toolCallId) || (!runId && toolCallId)) {
-        return "Error: runId and toolCallId must be provided together (they come as a pair " +
-          "from a <prior_results> evidence tag)."
-      }
-
-      // Default to latest turn when nothing was specified.
-      if (!runId && !toolCallId && turn === undefined) turn = -1
-
-      // Turn must be negative when used.
-      if (turn !== undefined && turn >= 0) {
-        return "Error: 'turn' must be a negative integer (-1 = latest prior result, -2 = previous, ...)."
-      }
-
-      const payload: RecallPriorResultPayload = {}
-      if (runId)      payload.runId = runId
-      if (toolCallId) payload.toolCallId = toolCallId
-      if (turn !== undefined) payload.turn = turn
-      if (toolName)   payload.toolName = toolName
-      if (full)       payload.full = true
-
-      const result = await handler(payload)
-      if (!result.ok) return `recall_prior_result: not found — ${result.reason}`
-
-      const header =
-        `recall_prior_result: tool=${result.toolName} run=${result.runId} tool_call=${result.toolCallId}` +
-        (result.rowCount != null ? ` rows=${result.rowCount}` : "") +
-        (result.truncated ? " [truncated]" : "")
-      return `${header}\n\n${result.result}`
-    },
-  }
+export function bindRecallPriorResultTool(handler: RecallPriorResultHandler): ExecutableTool {
+  return recallPriorResultToolDefinition.bind(handler)
 }
 
 // ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
 
 import type { AgentHost } from "../../application/shell/runtime.js"
 
-export function createRecallPriorResultTool(_host: AgentHost): Tool {
-  return {
-    name: recallPriorResultTool.name,
-    description: recallPriorResultTool.description,
-    parameters: recallPriorResultTool.parameters,
-    execute: (args) => recallPriorResultTool.execute(args),
-  }
+export function createRecallPriorResultTool(_host: AgentHost): never {
+  throw new Error("recall_prior_result requires per-run binding via bindRecallPriorResultTool(handler); metadata is available via recallPriorResultToolMetadata")
 }

@@ -1,5 +1,5 @@
 import type { AgentHost } from "../../application/shell/runtime.js"
-import type { Tool } from "../../domain/agent-types.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/agent-types.js"
 import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"
 import {
     handleColumn,
@@ -98,21 +98,20 @@ function buildSearchCatalogTool(host: AgentHost): Tool { return {
   },
 } }
 
-export const searchCatalogTool: Tool = (() => {
+export const searchCatalogToolMetadata: ToolMetadata = (() => {
   const stub = {} as AgentHost
   const t = buildSearchCatalogTool(stub)
   return {
     name: t.name,
     description: t.description,
     parameters: t.parameters,
-    async execute(_args) {
-      throw new Error("searchCatalogTool must be built via createSearchCatalogTool(host)")
-    },
   }
 })()
 
+export const searchCatalogTool = searchCatalogToolMetadata
+
 // ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
 
-export function createSearchCatalogTool(host: AgentHost): Tool {
+export function createSearchCatalogTool(host: AgentHost): ExecutableTool {
   return buildSearchCatalogTool(host)
 }

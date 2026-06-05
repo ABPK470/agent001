@@ -16,7 +16,7 @@
 
 import { execFile } from "node:child_process"
 import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
-import type { Tool } from "../../domain/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
 
 /** Workspace directory — shell commands run here.
  *  Source: `host.shell.cwd` (built per-run by the server from the run workspace).
@@ -133,23 +133,20 @@ const SHELL_TOOL_PARAMETERS = {
   required: ["command"],
 } as const
 
-export const shellTool: Tool = {
+export const shellToolMetadata: ToolMetadata = {
   name: "run_command",
   description: SHELL_TOOL_DESCRIPTION,
   parameters: SHELL_TOOL_PARAMETERS,
-  async execute() {
-    throw new Error("shellTool must be built via createShellTool(host); ambient execute is no longer supported.")
-  },
 }
+
+export const shellTool = shellToolMetadata
 
 /**
  * Factory variant bound to `host.shell.{cwd,client,sandboxStrict}` and optional run context.
  */
-export function createShellTool(host: AgentHost, run?: RunContext): Tool {
+export function createShellTool(host: AgentHost, run?: RunContext): ExecutableTool {
   return {
-    name: "run_command",
-    description: SHELL_TOOL_DESCRIPTION,
-    parameters: SHELL_TOOL_PARAMETERS,
+    ...shellToolMetadata,
     async execute(args) {
       return runShell(args, {
         cwd: host.shell.cwd,

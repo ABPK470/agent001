@@ -2,8 +2,8 @@ import { readdir, readFile, stat, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { detectPlaceholderPatterns } from "../../application/core/governance.js"
 import type { AgentHost } from "../../application/shell/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
 import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
-import type { Tool } from "../../domain/agent-types.js"
 import { checkWriteIntegrity, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
 import { buildToolOutcome, safePathResolvedWith, safePathWith } from "../filesystem-security.js"
 
@@ -26,6 +26,12 @@ const REPLACE_IN_FILE_PARAMETERS = {
   },
   required: ["path", "old_string", "new_string"],
 } as const
+
+export const replaceInFileToolMetadata: ToolMetadata = {
+  name: "replace_in_file",
+  description: REPLACE_IN_FILE_DESCRIPTION,
+  parameters: REPLACE_IN_FILE_PARAMETERS,
+}
 
 async function executeReplaceInFile(
   args: Record<string, unknown>,
@@ -150,11 +156,9 @@ async function executeReplaceInFile(
 }
 
 /** Factory variant of `replace_in_file` bound to `host.filesystem.basePath`. */
-export function createReplaceInFileTool(host: AgentHost): Tool {
+export function createReplaceInFileTool(host: AgentHost): ExecutableTool {
   return {
-    name: "replace_in_file",
-    description: REPLACE_IN_FILE_DESCRIPTION,
-    parameters: REPLACE_IN_FILE_PARAMETERS,
+    ...replaceInFileToolMetadata,
     async execute(args) {
       return executeReplaceInFile(args, (p) => safePathResolvedWith(host, p))
     },
@@ -176,6 +180,12 @@ const LIST_DIRECTORY_PARAMETERS = {
     },
   },
 } as const
+
+export const listDirectoryToolMetadata: ToolMetadata = {
+  name: "list_directory",
+  description: LIST_DIRECTORY_DESCRIPTION,
+  parameters: LIST_DIRECTORY_PARAMETERS,
+}
 
 async function executeListDirectory(
   args: Record<string, unknown>,
@@ -214,11 +224,9 @@ async function executeListDirectory(
 }
 
 /** Factory variant of `list_directory` bound to `host.filesystem.basePath`. */
-export function createListDirectoryTool(host: AgentHost): Tool {
+export function createListDirectoryTool(host: AgentHost): ExecutableTool {
   return {
-    name: "list_directory",
-    description: LIST_DIRECTORY_DESCRIPTION,
-    parameters: LIST_DIRECTORY_PARAMETERS,
+    ...listDirectoryToolMetadata,
     async execute(args) {
       return executeListDirectory(args, host)
     },

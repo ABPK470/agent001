@@ -21,8 +21,8 @@
  */
 
 import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
 import { BROWSE_WEB_ACTION_VALUES, BrowseWebAction } from "../../domain/enums/browse-web.js"
-import type { Tool } from "../../domain/agent-types.js"
 import {
     handleClick,
     handleClose,
@@ -123,14 +123,13 @@ const BROWSE_WEB_PARAMETERS = {
   required: ["action"],
 } as const
 
-export const browseWebTool: Tool = {
+export const browseWebToolMetadata: ToolMetadata = {
   name: "browse_web",
   description: BROWSE_WEB_DESCRIPTION,
   parameters: BROWSE_WEB_PARAMETERS,
-  async execute(_args) {
-    throw new Error("browseWebTool must be built via createBrowseWebTool(host)")
-  },
 }
+
+export const browseWebTool = browseWebToolMetadata
 
 /**
  * Factory variant bound to a host — the only supported construction path.
@@ -138,11 +137,9 @@ export const browseWebTool: Tool = {
  * `host.browser.idCounter`, and `host.browser.contextReader` are sourced
  * from the explicit AgentHost rather than any ambient runtime state.
  */
-export function createBrowseWebTool(host: AgentHost, run?: RunContext): Tool {
+export function createBrowseWebTool(host: AgentHost, run?: RunContext): ExecutableTool {
   return {
-    name: "browse_web",
-    description: BROWSE_WEB_DESCRIPTION,
-    parameters: BROWSE_WEB_PARAMETERS,
+    ...browseWebToolMetadata,
     async execute(args) {
       return runBrowseWeb(args, host, run)
     },

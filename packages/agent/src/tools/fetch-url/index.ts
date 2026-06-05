@@ -14,7 +14,7 @@
 
 import { lookup } from "node:dns/promises"
 import type { RunContext } from "../../application/shell/runtime.js"
-import type { Tool } from "../../domain/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
 import { checkHostname, checkResolvedIp, fetchWithBrowser } from "./helpers.js"
 
 /** Max response body size (1 MB). */
@@ -189,20 +189,17 @@ async function executeFetchUrl(args: Record<string, unknown>, run?: RunContext):
   return text || "(empty response)"
 }
 
-export const fetchUrlTool: Tool = {
+export const fetchUrlToolMetadata: ToolMetadata = {
   name: "fetch_url",
   description: FETCH_URL_DESCRIPTION,
   parameters: FETCH_URL_PARAMETERS,
-  async execute() {
-    throw new Error("fetchUrlTool must be built via createFetchUrlTool(run)")
-  },
 }
 
-export function createFetchUrlTool(run?: RunContext): Tool {
+export const fetchUrlTool = fetchUrlToolMetadata
+
+export function createFetchUrlTool(run?: RunContext): ExecutableTool {
   return {
-    name: fetchUrlTool.name,
-    description: fetchUrlTool.description,
-    parameters: fetchUrlTool.parameters,
+    ...fetchUrlToolMetadata,
     async execute(args) {
       return executeFetchUrl(args, run)
     },
