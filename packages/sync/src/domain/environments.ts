@@ -113,20 +113,20 @@ export interface LoadSyncEnvironmentsResult {
 
 /** Configure all environments at once. Replaces any prior config. */
 export function replaceEnvironments(host: SyncEnvironmentRegistryHost, envs: SyncEnvironment[]): void {
-  host.sync.environments.clear()
-  for (const e of envs) host.sync.environments.set(e.name, e)
+  host.sync.environments.items.clear()
+  for (const e of envs) host.sync.environments.items.set(e.name, e)
 }
 
 /** Read the current environment registry. */
 export function getEnvironments(host: SyncEnvironmentRegistryHost): SyncEnvironment[] {
-  return Array.from(host.sync.environments.values())
+  return Array.from(host.sync.environments.items.values())
 }
 
 /** Get one environment by name; throws if missing. */
 export function getEnvironment(host: SyncEnvironmentRegistryHost, name: string): SyncEnvironment {
-  const e = host.sync.environments.get(name)
+  const e = host.sync.environments.items.get(name)
   if (!e) {
-    const available = Array.from(host.sync.environments.keys()).join(", ") || "none"
+    const available = Array.from(host.sync.environments.items.keys()).join(", ") || "none"
     throw new Error(`Unknown environment "${name}". Available: ${available}.`)
   }
   return e

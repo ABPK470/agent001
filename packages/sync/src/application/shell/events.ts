@@ -11,11 +11,11 @@ export type { SqlEventInput, SyncEvent, SyncEventSink, SyncTelemetryContext } fr
 const SQL_EVENT_MAX_CHARS = 2_000
 
 export function configureSyncEventSink(host: SyncEventHost, sink: SyncEventSink): void {
-  host.sync.eventSink = sink
+  host.sync.events.sink = sink
 }
 
 export function emitSyncEvent(host: SyncEventHost, type: EventType, data: Record<string, unknown>): void {
-  try { host.sync.eventSink({ type, data }) } catch (e) {
+  try { host.sync.events.sink({ type, data }) } catch (e) {
     console.error(`[sync.event] sink failed for ${type}:`, e)
   }
 }

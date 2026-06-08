@@ -35,12 +35,15 @@ function createHost(root: string): AgentHost {
       defaultConnection: { value: "DEV" },
     },
     sync: {
-      eventSink: () => {},
-      runSink: { start: () => {}, finish: () => {}, savePlan: () => {}, loadPlan: () => null },
-      environments: new Map(),
+      events: { sink: () => {} },
+      runs: { sink: { start: () => {}, finish: () => {}, savePlan: () => {}, loadPlan: () => null } },
+      governance: { freezeWindowsReader: () => [] },
+      environments: { items: new Map() },
       plans: { diskRoot: null, memCache: new Map() },
-      dbProjectRoot: root,
-      publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+      project: {
+        dbProjectRoot: root,
+        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+      },
     },
   } as unknown as AgentHost
   return host
@@ -52,7 +55,7 @@ async function seedLiveEnvironments(root: string, host: AgentHost): Promise<void
     { name: "DEV", server: "dev-sql", database: "mymi", writeEnabled: true, knowledge: null },
     { name: "UAT", server: "uat-sql", database: "mymi", writeEnabled: true, knowledge: null },
   ])
-  host.sync.environments = new Map(loaded.environments.map((env) => [env.name, env]))
+  host.sync.environments.items = new Map(loaded.environments.map((env) => [env.name, env]))
 }
 
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
@@ -130,8 +133,8 @@ describe("sync-environment routes", () => {
       payload: { role: "source", allowedSyncTargets: ["DEV", "PROD"] },
     })
     expect(update.statusCode).toBe(200)
-    expect(host.sync.environments.get("UAT")?.allowedSyncTargets).toEqual(["DEV", "PROD"])
-    expect(host.sync.environments.get("UAT")?.role).toBe("source")
+    expect(host.sync.environments.items.get("UAT")?.allowedSyncTargets).toEqual(["DEV", "PROD"])
+    expect(host.sync.environments.items.get("UAT")?.role).toBe("source")
 
     const remove = await app.inject({
       method: "DELETE",
@@ -147,7 +150,7 @@ describe("sync-environment routes", () => {
     const body = response.json() as Array<{ name: string }>
     const uat = body.find((env) => env.name === "UAT")
     expect(uat).toBeUndefined()
-    expect(host.sync.environments.get("UAT")).toBeUndefined()
+    expect(host.sync.environments.items.get("UAT")).toBeUndefined()
 
     await app.close()
   })
@@ -196,8 +199,8 @@ describe("sync-environment routes", () => {
       role: "both",
       allowedSyncTargets: ["DEV"],
     })
-    expect(host.sync.environments.get("UAT")?.role).toBe("both")
-    expect(host.sync.environments.get("UAT")?.allowedSyncTargets).toEqual(["DEV"])
+    expect(host.sync.environments.items.get("UAT")?.role).toBe("both")
+    expect(host.sync.environments.items.get("UAT")?.allowedSyncTargets).toEqual(["DEV"])
 
     await app.close()
   })

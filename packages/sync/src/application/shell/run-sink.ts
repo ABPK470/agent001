@@ -6,9 +6,9 @@ import type { SyncRunHost } from "../../ports/host.js"
 import type { SyncRunSink } from "../../ports/run-sink.js"
 
 export function configureSyncRunSink(host: SyncRunHost, sink: SyncRunSink): void {
-  host.sync.runSink = sink
+  host.sync.runs.sink = sink
 }
 
 export function getSyncRunSink(host: SyncRunHost): SyncRunSink {
-  return host.sync.runSink
+  return host.sync.runs.sink
 }

@@ -110,10 +110,10 @@ async function main() {
   const mssqlSetup = setupMssql(_projectRoot)
   const syncEnvironments = loadPersistedSyncEnvironments(_projectRoot, mssqlSetup.configs)
   ensureSyncDefinitionConfigs(_projectRoot)
-  const syncEventSink: AgentHost["sync"]["eventSink"] = (ev) => {
+  const syncEventSink: AgentHost["sync"]["events"]["sink"] = (ev) => {
     broadcast({ type: ev.type, data: ev.data })
   }
-  const syncRunSink: AgentHost["sync"]["runSink"] = {
+  const syncRunSink: AgentHost["sync"]["runs"]["sink"] = {
     start: (i) => {
       try { recordSyncRunStart(i) } catch (e) { console.warn("[sync] recordSyncRunStart failed:", e) }
     },
@@ -269,13 +269,12 @@ async function main() {
         defaultCachePath: bootHost.catalog.defaultCachePath,
       },
       sync: {
-        eventSink: bootHost.sync.eventSink,
-        runSink: bootHost.sync.runSink,
-        freezeWindowsReader: bootHost.sync.freezeWindowsReader,
+        events: bootHost.sync.events,
+        runs: bootHost.sync.runs,
+        governance: bootHost.sync.governance,
         environments: bootHost.sync.environments,
         plans: bootHost.sync.plans,
-        dbProjectRoot: bootHost.sync.dbProjectRoot,
-        publishedDefinitions: bootHost.sync.publishedDefinitions,
+        project: bootHost.sync.project,
       },
     },
   })

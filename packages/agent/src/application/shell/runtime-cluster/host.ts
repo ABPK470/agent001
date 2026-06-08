@@ -89,16 +89,41 @@ export interface CatalogHost {
   readonly defaultCachePath: { value: string | undefined }
 }
 
-/** Mutable container for sync state. This is the host-owned sync surface. */
-export interface SyncHost {
-  eventSink: SyncEventSink
-  runSink: SyncRunSink
+export interface SyncEventsHost {
+  sink: SyncEventSink
+}
+
+export interface SyncRunsHost {
+  sink: SyncRunSink
+}
+
+export interface SyncGovernanceHost {
   freezeWindowsReader: () => readonly FreezeWindowDefinition[]
-  environments: Map<string, SyncEnvironment>
+}
+
+export interface SyncEnvironmentRegistryHost {
+  items: Map<string, SyncEnvironment>
+}
+
+export interface SyncPlansHost {
   /** Plan disk root + in-memory cache. Both fields mutable at runtime. */
-  plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }
+  diskRoot: string | null
+  memCache: Map<string, SyncPlan>
+}
+
+export interface SyncProjectHost {
   dbProjectRoot: string | null
   publishedDefinitions: PublishedSyncDefinitionRegistry
+}
+
+/** Mutable container for sync state. This is the host-owned sync surface. */
+export interface SyncHost {
+  events: SyncEventsHost
+  runs: SyncRunsHost
+  governance: SyncGovernanceHost
+  environments: SyncEnvironmentRegistryHost
+  plans: SyncPlansHost
+  project: SyncProjectHost
 }
 
 export interface TenantHost {

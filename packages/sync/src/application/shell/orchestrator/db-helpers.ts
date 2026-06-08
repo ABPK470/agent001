@@ -30,11 +30,11 @@ export const DRIFT_ABORT_PCT = 0.05
 
 /** Configure the project root used to load published sync definitions. */
 export function configureSyncOrchestrator(host: SyncProjectRootHost, projectRoot: string): void {
-  host.sync.dbProjectRoot = projectRoot
+  host.sync.project.dbProjectRoot = projectRoot
 }
 
 export function projectRoot(host: SyncProjectRootHost): string {
-  const root = host.sync.dbProjectRoot
+  const root = host.sync.project.dbProjectRoot
   if (!root) throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(host, projectRoot)")
   return root
 }

@@ -430,13 +430,18 @@ function createHost(): SyncRuntimeHost {
       defaultConnection: { value: null },
     },
     sync: {
-      eventSink: vi.fn(),
-      runSink: {
-        start: vi.fn(),
-        finish: vi.fn(),
+      events: { sink: vi.fn() },
+      runs: {
+        sink: {
+          start: vi.fn(),
+          finish: vi.fn(),
+        },
       },
-      publishedDefinitions: createPublishedSyncDefinitionRegistry(),
-      environments: new Map([
+      project: {
+        dbProjectRoot: null,
+        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+      },
+      environments: { items: new Map([
         ["DEV", {
           name: "DEV",
           displayName: "DEV",
@@ -471,9 +476,8 @@ function createHost(): SyncRuntimeHost {
           denyDdl: true,
           approvalRequiredOperations: ["sync_execute"],
         }],
-      ]),
+      ]) },
       plans: { diskRoot: null, memCache: new Map() },
-      dbProjectRoot: null,
     },
   }
 }

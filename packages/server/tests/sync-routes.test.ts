@@ -32,12 +32,15 @@ function createHost(root: string): AgentHost {
       defaultConnection: { value: "DEV" },
     },
     sync: {
-      eventSink: () => {},
-      runSink: { start: () => {}, finish: () => {}, savePlan: () => {}, loadPlan: () => null },
-      environments: new Map(),
+      events: { sink: () => {} },
+      runs: { sink: { start: () => {}, finish: () => {}, savePlan: () => {}, loadPlan: () => null } },
+      governance: { freezeWindowsReader: () => [] },
+      environments: { items: new Map() },
       plans: { diskRoot: null, memCache: new Map() },
-      dbProjectRoot: root,
-      publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+      project: {
+        dbProjectRoot: root,
+        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+      },
     },
   } as unknown as AgentHost
 }

@@ -47,21 +47,42 @@ export interface MssqlAccessHost {
   mssql: MssqlHost
 }
 
-export interface SyncHost {
-  eventSink: SyncEventSink
-  runSink: SyncRunSink
-  environments: Map<string, SyncEnvironment>
-  plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }
+export interface SyncEventsHost {
+  sink: SyncEventSink
+}
+
+export interface SyncRunsHost {
+  sink: SyncRunSink
+}
+
+export interface SyncEnvironmentRegistry {
+  items: Map<string, SyncEnvironment>
+}
+
+export interface SyncPlanRegistry {
+  diskRoot: string | null
+  memCache: Map<string, SyncPlan>
+}
+
+export interface SyncProjectRegistry {
   dbProjectRoot: string | null
   publishedDefinitions: PublishedSyncDefinitionRegistry
 }
 
+export interface SyncHost {
+  events: SyncEventsHost
+  runs: SyncRunsHost
+  environments: SyncEnvironmentRegistry
+  plans: SyncPlanRegistry
+  project: SyncProjectRegistry
+}
+
 export interface SyncEventHost {
-  sync: Pick<SyncHost, "eventSink">
+  sync: Pick<SyncHost, "events">
 }
 
 export interface SyncRunHost {
-  sync: Pick<SyncHost, "runSink">
+  sync: Pick<SyncHost, "runs">
 }
 
 export interface SyncEnvironmentRegistryHost {
@@ -69,11 +90,11 @@ export interface SyncEnvironmentRegistryHost {
 }
 
 export interface SyncPlanStoreHost {
-  sync: Pick<SyncHost, "plans" | "runSink">
+  sync: Pick<SyncHost, "plans" | "runs">
 }
 
 export interface SyncProjectRootHost {
-  sync: Pick<SyncHost, "dbProjectRoot" | "publishedDefinitions">
+  sync: Pick<SyncHost, "project">
 }
 
 export interface SyncStateHost {

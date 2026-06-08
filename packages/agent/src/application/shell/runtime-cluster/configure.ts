@@ -73,11 +73,11 @@ export interface ConfigureAgentOptions {
 
   // Shared sync surface and hosted sync readers
   syncState?: AgentHost["sync"]
-  syncEventSink?: AgentHost["sync"]["eventSink"]
-  syncRunSink?: AgentHost["sync"]["runSink"]
+  syncEventSink?: AgentHost["sync"]["events"]["sink"]
+  syncRunSink?: AgentHost["sync"]["runs"]["sink"]
   syncEnvironments?: ReadonlyArray<SyncEnvironment>
   syncDbProjectRoot?: string
-  syncFreezeWindowsReader?: AgentHost["sync"]["freezeWindowsReader"]
+  syncFreezeWindowsReader?: AgentHost["sync"]["governance"]["freezeWindowsReader"]
 }
 
 /**
@@ -96,24 +96,26 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const mssqlDatabases = options.mssqlDatabases ?? buildMssqlDatabases(options.mssqlConfigs)
   const mssqlDefaultConnection = options.mssqlDefaultConnection ?? { value: options.mssqlDefaultConnectionName ?? null }
   const syncState = options.syncState ?? {
-    eventSink: options.syncEventSink ?? NOOP_SYNC_EVENT_SINK,
-    runSink: options.syncRunSink ?? NOOP_SYNC_RUN_SINK,
-    freezeWindowsReader: options.syncFreezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER,
-    environments: new Map((options.syncEnvironments ?? []).map((env) => [env.name, env])),
+    events: { sink: options.syncEventSink ?? NOOP_SYNC_EVENT_SINK },
+    runs: { sink: options.syncRunSink ?? NOOP_SYNC_RUN_SINK },
+    governance: { freezeWindowsReader: options.syncFreezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER },
+    environments: { items: new Map((options.syncEnvironments ?? []).map((env) => [env.name, env])) },
     plans: { diskRoot: null, memCache: new Map() },
-    dbProjectRoot: options.syncDbProjectRoot ?? null,
-    publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+    project: {
+      dbProjectRoot: options.syncDbProjectRoot ?? null,
+      publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+    },
   }
 
   if (options.syncState) {
-    if (options.syncEventSink) syncState.eventSink = options.syncEventSink
-    if (options.syncRunSink) syncState.runSink = options.syncRunSink
+    if (options.syncEventSink) syncState.events.sink = options.syncEventSink
+    if (options.syncRunSink) syncState.runs.sink = options.syncRunSink
     if (options.syncEnvironments) {
-      syncState.environments.clear()
-      for (const env of options.syncEnvironments) syncState.environments.set(env.name, env)
+      syncState.environments.items.clear()
+      for (const env of options.syncEnvironments) syncState.environments.items.set(env.name, env)
     }
-    if (options.syncDbProjectRoot !== undefined) syncState.dbProjectRoot = options.syncDbProjectRoot
-    if (options.syncFreezeWindowsReader) syncState.freezeWindowsReader = options.syncFreezeWindowsReader
+    if (options.syncDbProjectRoot !== undefined) syncState.project.dbProjectRoot = options.syncDbProjectRoot
+    if (options.syncFreezeWindowsReader) syncState.governance.freezeWindowsReader = options.syncFreezeWindowsReader
   }
 
   return Object.freeze<AgentHost>({
@@ -171,16 +173,16 @@ const NOOP_SHELL_CLIENT: NonNullable<AgentHost["shell"]["client"]> = async () =>
   throw new Error("configureAgent: no shellClient wired (pass options.shellClient).")
 }
 
-const NOOP_SYNC_EVENT_SINK: AgentHost["sync"]["eventSink"] = () => {
+const NOOP_SYNC_EVENT_SINK: AgentHost["sync"]["events"]["sink"] = () => {
   // dropped on the floor — Phase 4 will swap in a real sink
 }
 
-const NOOP_SYNC_RUN_SINK: AgentHost["sync"]["runSink"] = {
+const NOOP_SYNC_RUN_SINK: AgentHost["sync"]["runs"]["sink"] = {
   start() { /* noop */ },
   finish() { /* noop */ },
 }
 
-const EMPTY_FREEZE_WINDOWS_READER: AgentHost["sync"]["freezeWindowsReader"] = () => []
+const EMPTY_FREEZE_WINDOWS_READER: AgentHost["sync"]["governance"]["freezeWindowsReader"] = () => []
 
 function buildMssqlDatabases(configs: ReadonlyArray<ConfigureMssqlConnection> | undefined): AgentHost["mssql"]["databases"] {
   const databases = new Map<string, AgentHost["mssql"]["databases"] extends Map<string, infer Entry> ? Entry : never>()

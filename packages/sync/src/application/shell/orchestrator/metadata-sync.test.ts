@@ -73,7 +73,7 @@ describe("runMetadataSync", () => {
     } as never
 
     await expect(runMetadataSync({
-      host: { sync: { eventSink } } as never,
+      host: { sync: { events: { sink: eventSink } } } as never,
       plan,
       planId: "plan-123",
       pkByTable: new Map(),

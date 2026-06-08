@@ -102,13 +102,15 @@ export interface BootCatalogState {
 }
 
 export interface BootSyncState {
-  eventSink: SyncEventSink
-  runSink: SyncRunSink
-  freezeWindowsReader: () => readonly FreezeWindowDefinition[]
-  environments: Map<string, SyncEnvironment>
+  events: { sink: SyncEventSink }
+  runs: { sink: SyncRunSink }
+  governance: { freezeWindowsReader: () => readonly FreezeWindowDefinition[] }
+  environments: { items: Map<string, SyncEnvironment> }
   plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }
-  dbProjectRoot: string | null
-  publishedDefinitions: PublishedSyncDefinitionRegistry
+  project: {
+    dbProjectRoot: string | null
+    publishedDefinitions: PublishedSyncDefinitionRegistry
+  }
 }
 
 /**

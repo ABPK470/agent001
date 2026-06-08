@@ -26,15 +26,19 @@ function createHost(): SyncRuntimeHost {
       defaultConnection: { value: null },
     },
     sync: {
-      eventSink: () => {},
-      runSink: {
-        start: () => {},
-        finish: () => {},
+      events: { sink: () => {} },
+      runs: {
+        sink: {
+          start: () => {},
+          finish: () => {},
+        },
       },
-      environments: new Map(),
+      environments: { items: new Map() },
       plans: { diskRoot: null, memCache: new Map() },
-      dbProjectRoot: null,
-      publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+      project: {
+        dbProjectRoot: null,
+        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+      },
     },
   }
 }

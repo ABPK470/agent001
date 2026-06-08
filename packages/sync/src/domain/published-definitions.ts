@@ -83,7 +83,7 @@ export function loadPublishedSyncDefinitionBundle(
   projectRoot: string,
   relPath = DEFAULT_PUBLISHED_DEFINITIONS_PATH,
 ): PublishedSyncDefinitionBundle {
-  return host.sync.publishedDefinitions.loadBundle(projectRoot, relPath)
+  return host.sync.project.publishedDefinitions.loadBundle(projectRoot, relPath)
 }
 
 export function getPublishedSyncDefinition(
@@ -167,7 +167,7 @@ function toPostMetadataAction(kind: string): Array<{ kind: PostMetadataActionKin
 }
 
 function requireProjectRoot(host: SyncProjectRootHost): string {
-  const root = host.sync.dbProjectRoot
+  const root = host.sync.project.dbProjectRoot
   if (!root) {
     throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(host, projectRoot)")
   }

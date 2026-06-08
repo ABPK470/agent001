@@ -248,7 +248,7 @@ export function savePlan(host: SyncPlanStoreHost, plan: SyncPlan): void {
   // Durable persistence (e.g. server's SQLite-backed sink). Survives restarts
   // and the disk-JSON 24h TTL — required so the History modal can re-hydrate
   // older plans on demand.
-  try { host.sync.runSink.savePlan?.(plan) } catch { /* sink failure must not break preview */ }
+  try { host.sync.runs.sink.savePlan?.(plan) } catch { /* sink failure must not break preview */ }
 }
 
 /** Load a plan. Returns null if missing. Tries memory → disk → durable sink. */
@@ -273,7 +273,7 @@ export function loadPlan(host: SyncPlanStoreHost, planId: string): SyncPlan | nu
   // Durable sink (e.g. SQLite). No TTL — required for History re-hydration
   // after server restart.
   try {
-    const fromSink = host.sync.runSink.loadPlan?.(planId) ?? null
+    const fromSink = host.sync.runs.sink.loadPlan?.(planId) ?? null
     if (fromSink) {
       plans.memCache.set(planId, fromSink)
       return fromSink

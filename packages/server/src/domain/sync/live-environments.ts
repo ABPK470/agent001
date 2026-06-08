@@ -11,7 +11,7 @@ export interface PersistedSyncEnvironmentLoad {
 }
 
 function requireProjectRoot(host: AgentHost): string {
-  const root = host.sync.dbProjectRoot
+  const root = host.sync.project.dbProjectRoot
   if (!root) {
     throw new Error("Sync orchestrator not configured — missing project root for live environment reload")
   }
