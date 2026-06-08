@@ -44,7 +44,8 @@ const RUN_EXECUTOR_FINALIZATION = join(
   "runs",
   "execution",
   "run-executor",
-  "finalization.ts"
+  "finalization",
+  "completed.ts"
 )
 
 // ── Shared helpers ────────────────────────────────────────────────

@@ -713,7 +713,17 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       "utf8"
     )
     const ingestSrc = readFileSync(
-      join(here, "..", "src", "features", "runs", "execution", "run-executor", "finalization.ts"),
+      join(
+        here,
+        "..",
+        "src",
+        "features",
+        "runs",
+        "execution",
+        "run-executor",
+        "finalization",
+        "completed.ts"
+      ),
       "utf8"
     )
 
