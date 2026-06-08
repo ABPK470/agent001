@@ -1,1 +1,1 @@
-export * from "./db/index.js"
+export * from "../../platform/persistence/sqlite.js"

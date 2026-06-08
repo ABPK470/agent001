@@ -1,1 +1,1 @@
-export * from "./attachments/index.js"
+export * from "../../platform/persistence/attachments.js"

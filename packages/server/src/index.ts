@@ -36,8 +36,51 @@ import {
 } from "@mia/agent"
 import { configurePlanStore } from "@mia/sync"
 import Fastify from "fastify"
-import { createLlmCompletionAdapter } from "./adapters/llm/index.js"
-import { pruneExpiredAttachments, serverAttachmentService } from "./adapters/persistence/attachments.js"
+import { registerApprovalRoutes } from "./api/approvals.js"
+import { getRunProfile } from "./bootstrap/workspace.js"
+import { registerAdminRoutes } from "./features/admin/routes.js"
+import { registerAgentRoutes } from "./features/agents/routes.js"
+import { registerToolCacheRoutes } from "./features/agents/tool-cache-routes.js"
+import { registerAttachmentRoutes } from "./features/attachments/routes.js"
+import { registerIdentity } from "./features/auth/identity.js"
+import { registerAuthRoutes } from "./features/auth/routes.js"
+import { bootstrapAdminFromEnv } from "./features/auth/users.js"
+import { serverBrowserCredentialProvider } from "./features/browser/credential-provider.js"
+import { serverBrowserHandoffProvider } from "./features/browser/handoff-provider.js"
+import { buildBrowserScript, formatBrowserReport } from "./features/browser/helpers.js"
+import { serverBrowserContextProvider } from "./features/browser/provider.js"
+import { registerBrowserRoutes } from "./features/browser/routes.js"
+import { registerEventRoutes } from "./features/events/routes.js"
+import { registerEvidenceRoutes } from "./features/evidence/routes.js"
+import { registerLayoutRoutes } from "./features/layouts/routes.js"
+import { registerLlmRoutes } from "./features/llm/routes.js"
+import { registerMemoryRoutes } from "./features/memory/routes.js"
+import { registerMetricsRoutes } from "./features/metrics/routes.js"
+import { registerMymiRoutes } from "./features/mymi/routes.js"
+import { registerNotificationRouteRoutes } from "./features/notifications/route-rules.js"
+import { dispatchNotification } from "./features/notifications/router.js"
+import { registerNotificationRoutes } from "./features/notifications/routes.js"
+import { registerOperationRoutes } from "./features/operations/routes.js"
+import { seedDefaultPoliciesIfMissing } from "./features/policies/policy-seeder.js"
+import { registerPolicyRoutes } from "./features/policies/routes.js"
+import { registerProfileRoutes } from "./features/profile/routes.js"
+import { registerProposerRoutes } from "./features/proposer/routes.js"
+import { startScheduler, stopScheduler } from "./features/proposer/scheduler.js"
+import { AgentOrchestrator } from "./features/runs/orchestrator.js"
+import { registerRunRoutes } from "./features/runs/routes.js"
+import { registerFreezeWindowRoutes } from "./features/sync/admin.js"
+import { registerEntityRegistryRoutes } from "./features/sync/definitions-routes.js"
+import { ensureSyncDefinitionConfigs } from "./features/sync/definitions.js"
+import { registerSyncEnvironmentRoutes } from "./features/sync/environments.js"
+import { loadPersistedSyncEnvironments } from "./features/sync/live-environments.js"
+import { registerSyncRoutes } from "./features/sync/routes.js"
+import { registerUsageRoutes } from "./features/usage/routes.js"
+import { registerWebhookRoutes } from "./features/webhooks/routes.js"
+import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./platform/events/broadcaster.js"
+import { createLlmCompletionAdapter } from "./platform/llm/index.js"
+import { buildLlmClient } from "./platform/llm/registry.js"
+import { setupMssql } from "./platform/mssql/setup.js"
+import { pruneExpiredAttachments, serverAttachmentService } from "./platform/persistence/attachments.js"
 import {
   clearTransactionalData,
   getDb,
@@ -57,10 +100,9 @@ import {
   recordSyncRunStart,
   saveApiRequest,
   tryBuildSignerFromEnv
-} from "./adapters/persistence/index.js"
-import { migrateMemory, prune as pruneMemory } from "./adapters/persistence/memory.js"
-import { touchSession } from "./adapters/persistence/sessions.js"
-import { registerAuthRoutes } from "./api/auth.js"
+} from "./platform/persistence/index.js"
+import { migrateMemory, prune as pruneMemory } from "./platform/persistence/memory.js"
+import { touchSession } from "./platform/persistence/sessions.js"
 import {
   MessageQueue,
   MessageRouter,
@@ -69,52 +111,8 @@ import {
   TeamsChannel,
   listChannelConfigs,
   migrateChannels
-} from "./api/channels/index.js"
-import {
-  registerAdminRoutes,
-  registerAgentRoutes,
-  registerApprovalRoutes,
-  registerAttachmentRoutes,
-  registerBrowserRoutes,
-  registerEntityRegistryRoutes,
-  registerEventRoutes,
-  registerEvidenceRoutes,
-  registerFreezeWindowRoutes,
-  registerLayoutRoutes,
-  registerLlmRoutes,
-  registerMemoryRoutes,
-  registerMetricsRoutes,
-  registerMymiRoutes,
-  registerNotificationRouteRoutes,
-  registerNotificationRoutes,
-  registerOperationRoutes,
-  registerPolicyRoutes,
-  registerProfileRoutes,
-  registerProposerRoutes,
-  registerRunRoutes,
-  registerSyncEnvironmentRoutes,
-  registerSyncRoutes,
-  registerToolCacheRoutes,
-  registerUsageRoutes,
-  registerWebhookRoutes
-} from "./api/http-routes.js"
-import { dispatchNotification } from "./api/notifications/router.js"
-import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
-import { startScheduler, stopScheduler } from "./application/shell/proposer/scheduler.js"
-import { getRunProfile } from "./application/shell/workspace/run-workspace.js"
-import { registerIdentity } from "./auth/identity.js"
-import { bootstrapAdminFromEnv } from "./auth/users.js"
-import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
-import { serverBrowserCredentialProvider } from "./browser/credential-provider.js"
-import { serverBrowserHandoffProvider } from "./browser/handoff-provider.js"
-import { serverBrowserContextProvider } from "./browser/provider.js"
-import { seedDefaultPoliciesIfMissing } from "./domain/policy/policy-seeder.js"
-import { ensureSyncDefinitionConfigs } from "./domain/sync-definition-admin.js"
-import { loadPersistedSyncEnvironments } from "./domain/sync/live-environments.js"
-import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
-import { buildLlmClient } from "./llm/registry.js"
-import { initSandbox } from "./sandbox/index.js"
-import { setupMssql } from "./setup-mssql.js"
+} from "./platform/queue/channels/index.js"
+import { initSandbox } from "./platform/sandbox/index.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)
 const HOST = process.env["HOST"] ?? "0.0.0.0"
@@ -588,7 +586,7 @@ interface AppOpts {
   setWorkspace: (w: string) => void
   // F1 — evidence + proposer wiring built at boot, threaded into routes.
   evidenceStorageRoot: string
-  evidenceSigner: import("./adapters/persistence/evidence.js").Signer | null
+  evidenceSigner: import("./platform/persistence/evidence.js").Signer | null
   llmPortHolder: { current: import("@mia/sync").LlmCompletionPort }
   /** Boot-level AgentHost (shared mssql Map) for routes that hit DB. */
   bootHost: AgentHost

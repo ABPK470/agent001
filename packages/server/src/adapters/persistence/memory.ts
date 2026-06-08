@@ -1,1 +1,1 @@
-export * from "./memory/index.js"
+export * from "../../platform/persistence/memory.js"

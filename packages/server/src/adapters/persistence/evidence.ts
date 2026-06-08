@@ -1,1 +1,1 @@
-export * from "./evidence/index.js"
+export * from "../../platform/persistence/evidence.js"

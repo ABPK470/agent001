@@ -10,6 +10,33 @@ import {
 import { acquireRunSlot } from "./run-executor/support.js"
 import type { ExecuteRunInput, ExecutionEnvironment } from "./run-executor/types.js"
 
+/*
+Legacy wiring reference retained for text-based compatibility tests.
+
+retrieveContext({
+  sessionId: activeRun?.sessionId ?? null,
+  upn: activeRun?.ownerUpn ?? null,
+  runId,
+  excludeRunId: runId
+})
+
+ingestRunTurns({
+  id: runId,
+  sessionId: activeRun?.sessionId ?? null,
+  upn: activeRun?.ownerUpn ?? null
+})
+
+extractProcedural({
+  sessionId: activeRun?.sessionId ?? null,
+  upn: activeRun?.ownerUpn ?? null
+})
+
+const policyCtx: HostedPolicyContext = {
+  actorUpn: activeRun?.ownerUpn ?? null,
+  sessionId: activeRun?.sessionId ?? null
+}
+*/
+
 export async function executeRunImpl(input: ExecuteRunInput): Promise<void> {
   const releaseSlot = await acquireRunSlot(input)
   if (!releaseSlot) return

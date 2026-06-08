@@ -1,47 +1,56 @@
 {
-    "editor.defaultFormatter": "esbenp.prettier-vscode",
-    "editor.formatOnSave": true,
-    "prettier.requireConfig": true,
-    "[typescript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.formatOnSave": true,
+  "prettier.requireConfig": true,
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[javascriptreact]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[json]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[jsonc]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[markdown]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[html]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[css]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  },
+  "typescript.updateImportsOnFileMove.enabled": "always",
+  "editor.codeActionsOnSave": { "source.organizeImports": "always" },
+  "typescript.suggest.autoImports": true,
+  "typescript.format.semicolons": "remove",
+  "javascript.format.semicolons": "remove",
+  "typescript.preferences.quoteStyle": "double",
+  "javascript.preferences.quoteStyle": "double",
+  "chat.tools.terminal.autoApprove": {
+    "sqlite3": true,
+    "/^cd /Users/kalko/git/agent001 && node -e \"\nconst sql = require\\('mssql'\\);\n\\(async \\(\\) => \\{\n  const pool = await sql\\.connect\\(\\{\n    server: 'localhost', port: 1433, user: 'sa',\n    password: 'Agent001_Test!', database: 'master',\n    options: \\{ encrypt: true, trustServerCertificate: true \\}\n  \\}\\);\n  // Kill all connections to AgentDWH then drop it\n  try \\{\n    await pool\\.request\\(\\)\\.query\\(\\\\\"ALTER DATABASE AgentDWH SET SINGLE_USER WITH ROLLBACK IMMEDIATE\\\\\"\\);\n  \\} catch\\(e\\) \\{\\}\n  try \\{\n    await pool\\.request\\(\\)\\.query\\('DROP DATABASE AgentDWH'\\);\n    console\\.log\\('Dropped AgentDWH'\\);\n  \\} catch\\(e\\) \\{ console\\.log\\('Drop failed:', e\\.message\\); \\}\n  await pool\\.close\\(\\);\n\\}\\)\\(\\);\n\"$/": {
+      "approve": true,
+      "matchCommandLine": true
     },
-    "[typescriptreact]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[javascript]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[javascriptreact]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[json]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[jsonc]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[markdown]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[html]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "[css]": {
-        "editor.defaultFormatter": "esbenp.prettier-vscode"
-    },
-    "typescript.format.semicolons": "remove",
-    "javascript.format.semicolons": "remove",
-    "typescript.preferences.quoteStyle": "double",
-    "javascript.preferences.quoteStyle": "double",
-    "chat.tools.terminal.autoApprove": {
-        "sqlite3": true,
-        "/^cd /Users/kalko/git/agent001 && node -e \"\nconst sql = require\\('mssql'\\);\n\\(async \\(\\) => \\{\n  const pool = await sql\\.connect\\(\\{\n    server: 'localhost', port: 1433, user: 'sa',\n    password: 'Agent001_Test!', database: 'master',\n    options: \\{ encrypt: true, trustServerCertificate: true \\}\n  \\}\\);\n  // Kill all connections to AgentDWH then drop it\n  try \\{\n    await pool\\.request\\(\\)\\.query\\(\\\\\"ALTER DATABASE AgentDWH SET SINGLE_USER WITH ROLLBACK IMMEDIATE\\\\\"\\);\n  \\} catch\\(e\\) \\{\\}\n  try \\{\n    await pool\\.request\\(\\)\\.query\\('DROP DATABASE AgentDWH'\\);\n    console\\.log\\('Dropped AgentDWH'\\);\n  \\} catch\\(e\\) \\{ console\\.log\\('Drop failed:', e\\.message\\); \\}\n  await pool\\.close\\(\\);\n\\}\\)\\(\\);\n\"$/": {
-            "approve": true,
-            "matchCommandLine": true
-        },
-        "/^node scripts/build\\.mjs 2>&1$/": {
-            "approve": true,
-            "matchCommandLine": true
-        }
+    "/^node scripts/build\\.mjs 2>&1$/": {
+      "approve": true,
+      "matchCommandLine": true
     }
+  }
+  "[markdown]": {
+    "editor.formatOnSave": false
+  }
 }

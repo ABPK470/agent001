@@ -1,1 +1,1 @@
-export * from "./db/sessions.js"
+export * from "../../platform/persistence/sessions.js"

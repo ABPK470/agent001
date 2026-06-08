@@ -1,0 +1,71 @@
+import type { AgentHost } from "@mia/agent"
+import { ensureSyncDefinitionConfigs } from "../features/sync/definitions.js"
+import { loadPersistedSyncEnvironments } from "../features/sync/live-environments.js"
+import { broadcast } from "../platform/events/broadcaster.js"
+import {
+  getSyncRunPlanJson,
+  listFreezeWindowDefinitionsForTenant,
+  recordSyncRunFinish,
+  recordSyncRunPreview,
+  recordSyncRunStart
+} from "../platform/persistence/index.js"
+
+export function loadBootSyncEnvironments(projectRoot: string, connections: ReadonlyArray<{ name: string }>) {
+  ensureSyncDefinitionConfigs(projectRoot)
+  return loadPersistedSyncEnvironments(projectRoot, connections)
+}
+
+export function createSyncEventSink(): AgentHost["sync"]["events"]["sink"] {
+  return (event) => {
+    broadcast({ type: event.type, data: event.data })
+  }
+}
+
+export function createSyncRunSink(): AgentHost["sync"]["runs"]["sink"] {
+  return {
+    start: (input) => {
+      try {
+        recordSyncRunStart(input)
+      } catch (error) {
+        console.warn("[sync] recordSyncRunStart failed:", error)
+      }
+    },
+    finish: (input) => {
+      try {
+        recordSyncRunFinish(input)
+      } catch (error) {
+        console.warn("[sync] recordSyncRunFinish failed:", error)
+      }
+    },
+    savePlan: (plan) => {
+      try {
+        recordSyncRunPreview({
+          planId: plan.planId,
+          entityType: plan.executionContract?.definitionId ?? plan.recipeSnapshot.entityType,
+          entityId: plan.entity.id,
+          entityDisplayName: plan.entity.displayName,
+          source: plan.source,
+          target: plan.target,
+          actorUpn: null,
+          previewTotals: plan.totals,
+          planJson: JSON.stringify(plan)
+        })
+      } catch (error) {
+        console.warn("[sync] recordSyncRunPreview failed:", error)
+      }
+    },
+    loadPlan: (planId) => {
+      try {
+        const json = getSyncRunPlanJson(planId)
+        return json ? JSON.parse(json) : null
+      } catch (error) {
+        console.warn("[sync] getSyncRunPlanJson failed:", error)
+        return null
+      }
+    }
+  }
+}
+
+export function readFreezeWindows() {
+  return listFreezeWindowDefinitionsForTenant()
+}

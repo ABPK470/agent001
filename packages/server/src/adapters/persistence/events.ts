@@ -1,1 +1,1 @@
-export * from "./db/events.js"
+export * from "../../platform/persistence/events.js"

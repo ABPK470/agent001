@@ -3,7 +3,7 @@ import { dirname, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
 import * as db from "../adapters/persistence/sqlite.js"
-import { formatEntitiesYaml } from "../adapters/sync/entity-yaml.js"
+import { formatEntitiesYaml } from "../features/sync/entity-yaml.js"
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const ROOT = resolve(HERE, "../../../../")

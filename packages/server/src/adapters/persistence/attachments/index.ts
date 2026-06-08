@@ -1,6 +1,1 @@
-export * from "./agent-service.js"
-export * from "./audit.js"
-export * from "./lifecycle.js"
-export * from "./repo.js"
-export * from "./service.js"
-export * from "./storage.js"
+export * from "../../../platform/persistence/attachments/index.js"
