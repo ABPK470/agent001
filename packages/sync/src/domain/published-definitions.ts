@@ -1,6 +1,3 @@
-import { existsSync, readFileSync, statSync } from "node:fs"
-import { resolve } from "node:path"
-
 import type { SyncProjectRootHost } from "../ports/index.js"
 import { PostMetadataActionKind, type PostMetadataActionKind as PostMetadataActionKindValue } from "./enums.js"
 import { deriveArchiveTable, type SyncRecipe, type SyncRecipeDiscrepancy, type SyncRecipeTable } from "./recipes.js"
@@ -86,42 +83,7 @@ export function loadPublishedSyncDefinitionBundle(
   projectRoot: string,
   relPath = DEFAULT_PUBLISHED_DEFINITIONS_PATH,
 ): PublishedSyncDefinitionBundle {
-  const syncState = host.sync as typeof host.sync & {
-    definitions?: {
-      bundle: PublishedSyncDefinitionBundle | null
-      loadedFromPath: string | null
-      loadedFromMtimeMs: number | null
-      loadedFromSize: number | null
-    }
-  }
-  const full = resolve(projectRoot, relPath)
-  if (!syncState.definitions) {
-    syncState.definitions = { bundle: null, loadedFromPath: null, loadedFromMtimeMs: null, loadedFromSize: null }
-  }
-  if (!existsSync(full)) {
-    throw new Error(
-      `Published sync definition bundle not found at ${relPath}. ` +
-      `Run npm run sync:definitions:compile -- --write before previewing syncs.`,
-    )
-  }
-  const stats = statSync(full)
-  if (
-    syncState.definitions.bundle &&
-    syncState.definitions.loadedFromPath === relPath &&
-    syncState.definitions.loadedFromMtimeMs === stats.mtimeMs &&
-    syncState.definitions.loadedFromSize === stats.size
-  ) {
-    return syncState.definitions.bundle
-  }
-  const parsed = JSON.parse(readFileSync(full, "utf-8")) as PublishedSyncDefinitionBundle
-  if (parsed.version !== 1) {
-    throw new Error(`Unsupported published sync definition bundle version: ${parsed.version}`)
-  }
-  syncState.definitions.bundle = parsed
-  syncState.definitions.loadedFromPath = relPath
-  syncState.definitions.loadedFromMtimeMs = stats.mtimeMs
-  syncState.definitions.loadedFromSize = stats.size
-  return parsed
+  return host.sync.publishedDefinitions.loadBundle(projectRoot, relPath)
 }
 
 export function getPublishedSyncDefinition(

@@ -6,6 +6,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
+import { createPublishedSyncDefinitionRegistry } from "@mia/sync"
 import type { CurrentSession } from "../src/auth/context.js"
 
 let testDb: Database.Database
@@ -39,6 +40,7 @@ function createHost(root: string): AgentHost {
       environments: new Map(),
       plans: { diskRoot: null, memCache: new Map() },
       dbProjectRoot: root,
+      publishedDefinitions: createPublishedSyncDefinitionRegistry(),
     },
   } as unknown as AgentHost
   return host

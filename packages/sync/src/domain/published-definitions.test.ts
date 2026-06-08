@@ -5,6 +5,7 @@ import { join, resolve } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
 import type { SyncRuntimeHost } from "../ports/host.js"
+import { createPublishedSyncDefinitionRegistry } from "./published-definition-registry.js"
 import {
     definitionToSyncRecipe,
     getPublishedSyncRecipe,
@@ -26,6 +27,7 @@ function createHost(projectRoot: string): SyncRuntimeHost {
       environments: new Map(),
       plans: { diskRoot: null, memCache: new Map() },
       dbProjectRoot: projectRoot,
+      publishedDefinitions: createPublishedSyncDefinitionRegistry(),
     },
   }
 }

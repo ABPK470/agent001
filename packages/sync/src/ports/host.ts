@@ -2,6 +2,7 @@ import type sql from "mssql"
 import type { SyncPlan } from "../application/shell/plan-store.js"
 import type { ToolControlDirective, ToolOutcomeSeverity } from "../domain/enums.js"
 import type { SyncEnvironment } from "../domain/environments.js"
+import type { PublishedSyncDefinitionRegistry } from "../domain/published-definition-registry.js"
 import type { SyncEventSink } from "./events.js"
 import type { SyncRunSink } from "./run-sink.js"
 
@@ -52,6 +53,7 @@ export interface SyncHost {
   environments: Map<string, SyncEnvironment>
   plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }
   dbProjectRoot: string | null
+  publishedDefinitions: PublishedSyncDefinitionRegistry
 }
 
 export interface SyncEventHost {
@@ -71,7 +73,7 @@ export interface SyncPlanStoreHost {
 }
 
 export interface SyncProjectRootHost {
-  sync: Pick<SyncHost, "dbProjectRoot">
+  sync: Pick<SyncHost, "dbProjectRoot" | "publishedDefinitions">
 }
 
 export interface SyncStateHost {

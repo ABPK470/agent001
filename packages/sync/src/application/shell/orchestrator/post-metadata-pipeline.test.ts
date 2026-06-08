@@ -2,6 +2,7 @@ import type { ConnectionPool } from "mssql"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { PostMetadataActionKind } from "../../../domain/enums.js"
+import { createPublishedSyncDefinitionRegistry } from "../../../domain/published-definition-registry.js"
 import type { SyncRuntimeHost } from "../../../ports/host.js"
 import type { SyncExecutionContractStep, SyncPlan } from "../plan-store.js"
 import {
@@ -434,6 +435,7 @@ function createHost(): SyncRuntimeHost {
         start: vi.fn(),
         finish: vi.fn(),
       },
+      publishedDefinitions: createPublishedSyncDefinitionRegistry(),
       environments: new Map([
         ["DEV", {
           name: "DEV",

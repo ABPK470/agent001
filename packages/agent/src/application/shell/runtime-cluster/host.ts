@@ -18,6 +18,7 @@
 
 import type {
     FreezeWindowDefinition,
+    PublishedSyncDefinitionRegistry,
     SyncEnvironment,
     SyncEventSink,
     SyncPlan,
@@ -97,6 +98,7 @@ export interface SyncHost {
   /** Plan disk root + in-memory cache. Both fields mutable at runtime. */
   plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }
   dbProjectRoot: string | null
+  publishedDefinitions: PublishedSyncDefinitionRegistry
 }
 
 export interface TenantHost {

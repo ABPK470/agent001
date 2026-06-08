@@ -10,7 +10,7 @@
  * sole composition root for the agent.
  */
 
-import type { SyncEnvironment } from "@mia/sync"
+import { createPublishedSyncDefinitionRegistry, type SyncEnvironment } from "@mia/sync"
 import type sql from "mssql"
 import type { AgentHost } from "./host.js"
 
@@ -102,6 +102,7 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
     environments: new Map((options.syncEnvironments ?? []).map((env) => [env.name, env])),
     plans: { diskRoot: null, memCache: new Map() },
     dbProjectRoot: options.syncDbProjectRoot ?? null,
+    publishedDefinitions: createPublishedSyncDefinitionRegistry(),
   }
 
   if (options.syncState) {

@@ -11,7 +11,7 @@ import type {
     PolicyRole,
     ShellClient,
 } from "@mia/agent"
-import type { FreezeWindowDefinition, SyncEnvironment, SyncEventSink, SyncPlan, SyncRunSink } from "@mia/sync"
+import type { FreezeWindowDefinition, PublishedSyncDefinitionRegistry, SyncEnvironment, SyncEventSink, SyncPlan, SyncRunSink } from "@mia/sync"
 import type { AgentBus } from "../agent-bus.js"
 import type { RunQueue } from "../application/shell/queue/run-queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../application/shell/workspace/run-workspace.js"
@@ -108,6 +108,7 @@ export interface BootSyncState {
   environments: Map<string, SyncEnvironment>
   plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }
   dbProjectRoot: string | null
+  publishedDefinitions: PublishedSyncDefinitionRegistry
 }
 
 /**

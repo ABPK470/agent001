@@ -275,6 +275,7 @@ async function main() {
         environments: bootHost.sync.environments,
         plans: bootHost.sync.plans,
         dbProjectRoot: bootHost.sync.dbProjectRoot,
+        publishedDefinitions: bootHost.sync.publishedDefinitions,
       },
     },
   })
