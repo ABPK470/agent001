@@ -78,10 +78,12 @@ export interface BootHostDeps {
   browserContextReader?: BrowserContextProvider | null
   browserCredentialReader?: BrowserCredentialProvider | null
   browserHandoffStore?: BrowserHandoffProvider | null
-  /** Sandbox-routed shell client (Docker exec). Null = host execution. */
-  shellClient?: ShellClient | null
-  /** Sandbox "all" mode — relaxed deny list when true. */
-  shellSandboxStrict?: boolean
+  /** Final shell policy for per-run hosts. Host mode is the normal default. */
+  shell?: {
+    mode: import("@mia/agent").AgentHost["shell"]["mode"]
+    client?: ShellClient | null
+    sandboxStrict?: boolean
+  }
   /** Sandbox-routed Playwright client. Null = host fallback. */
   browserCheckClient?: BrowserClient | null
   /** Shared mssql connection registry (mutable Map, populated by setupMssql). */
@@ -94,10 +96,6 @@ export interface BootHostDeps {
   catalogDefaultCachePath?: import("@mia/agent").AgentHost["catalog"]["defaultCachePath"]
   /** Shared sync host state (environments, plans, sinks, registry readers). */
   syncState?: import("@mia/agent").AgentHost["sync"]
-  /** Shared toolKnowledge adapter — same instance for boot + per-run hosts. */
-  toolKnowledge?: import("@mia/agent").AgentHost["toolKnowledge"]
-  /** Shared tableVerdicts adapter — same instance for boot + per-run hosts. */
-  tableVerdicts?: import("@mia/agent").AgentHost["tableVerdicts"]
 }
 
 // ── Notification types ────────────────────────────────────────────

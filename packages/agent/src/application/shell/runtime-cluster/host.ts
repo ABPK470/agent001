@@ -17,23 +17,23 @@
  */
 
 import type {
-    FreezeWindowDefinition,
-    SyncEnvironment,
-    SyncEventSink,
-    SyncPlan,
-    SyncRunSink,
+  FreezeWindowDefinition,
+  SyncEnvironment,
+  SyncEventSink,
+  SyncPlan,
+  SyncRunSink,
 } from "@mia/sync"
 import type {
-    AttachmentStore,
-    BrowserClient,
-    BrowserContextReader,
-    CredentialReader,
-    HandoffStore,
-    MssqlEntry,
-    ShellClient,
-    TableVerdictsReader,
-    ToolKnowledgeStore,
-    UserInputReader,
+  AttachmentStore,
+  BrowserClient,
+  BrowserContextReader,
+  CredentialReader,
+  HandoffStore,
+  MssqlEntry,
+  ShellClient,
+  TableVerdictsReader,
+  ToolKnowledgeStore,
+  UserInputReader,
 } from "../../../ports/ports.js"
 import type { BrowserSession, CatalogGraph } from "../../../tools/index.js"
 
@@ -57,9 +57,10 @@ export interface SearchFilesHost {
 }
 
 export interface ShellHost {
+  readonly mode: "host" | "sandbox" | "disabled"
   readonly cwd: string
   readonly sandboxStrict: boolean
-  readonly client: ShellClient
+  readonly client: ShellClient | null
 }
 
 export interface BrowserCheckHost {

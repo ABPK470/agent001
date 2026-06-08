@@ -25,16 +25,16 @@ import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
-    EventType,
-    buildCatalog, closeMssqlPool,
-    configureAgent,
-    getMssqlConfig,
-    type AgentHost,
-    type BrowserClient,
-    type ShellClient,
+  EventType,
+  buildCatalog, closeMssqlPool,
+  configureAgent,
+  getMssqlConfig,
+  type AgentHost,
+  type BrowserClient,
+  type ShellClient,
 } from "@mia/agent"
 import {
-    configurePlanStore,
+  configurePlanStore,
 } from "@mia/sync"
 import Fastify from "fastify"
 import { registerIdentity } from "./adapters/auth/identity.js"
@@ -51,41 +51,41 @@ import { touchSession } from "./adapters/persistence/sessions.js"
 import { initSandbox } from "./adapters/sandbox/index.js"
 import { registerAuthRoutes } from "./api/auth.js"
 import {
-    MessageQueue,
-    MessageRouter,
-    SqliteConversationStore,
-    SqliteQueueStore,
-    TeamsChannel,
-    listChannelConfigs,
-    migrateChannels,
+  MessageQueue,
+  MessageRouter,
+  SqliteConversationStore,
+  SqliteQueueStore,
+  TeamsChannel,
+  listChannelConfigs,
+  migrateChannels,
 } from "./api/channels/index.js"
 import {
-    registerAdminRoutes,
-    registerAgentRoutes,
-    registerApprovalRoutes,
-    registerAttachmentRoutes,
-    registerBrowserRoutes,
-    registerEntityRegistryRoutes,
-    registerEventRoutes,
-    registerEvidenceRoutes,
-    registerFreezeWindowRoutes,
-    registerLayoutRoutes,
-    registerLlmRoutes,
-    registerMemoryRoutes,
-    registerMetricsRoutes,
-    registerMymiRoutes,
-    registerNotificationRouteRoutes,
-    registerNotificationRoutes,
-    registerOperationRoutes,
-    registerPolicyRoutes,
-    registerProfileRoutes,
-    registerProposerRoutes,
-    registerRunRoutes,
-    registerSyncEnvironmentRoutes,
-    registerSyncRoutes,
-    registerToolCacheRoutes,
-    registerUsageRoutes,
-    registerWebhookRoutes,
+  registerAdminRoutes,
+  registerAgentRoutes,
+  registerApprovalRoutes,
+  registerAttachmentRoutes,
+  registerBrowserRoutes,
+  registerEntityRegistryRoutes,
+  registerEventRoutes,
+  registerEvidenceRoutes,
+  registerFreezeWindowRoutes,
+  registerLayoutRoutes,
+  registerLlmRoutes,
+  registerMemoryRoutes,
+  registerMetricsRoutes,
+  registerMymiRoutes,
+  registerNotificationRouteRoutes,
+  registerNotificationRoutes,
+  registerOperationRoutes,
+  registerPolicyRoutes,
+  registerProfileRoutes,
+  registerProposerRoutes,
+  registerRunRoutes,
+  registerSyncEnvironmentRoutes,
+  registerSyncRoutes,
+  registerToolCacheRoutes,
+  registerUsageRoutes,
+  registerWebhookRoutes,
 } from "./api/http-routes.js"
 import { dispatchNotification } from "./api/notifications/router.js"
 import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
@@ -251,8 +251,11 @@ async function main() {
       browserContextReader: serverBrowserContextProvider,
       browserCredentialReader: serverBrowserCredentialProvider,
       browserHandoffStore: serverBrowserHandoffProvider,
-      shellClient,
-      shellSandboxStrict,
+      shell: {
+        mode: shellClient ? "sandbox" : "host",
+        client: shellClient,
+        sandboxStrict: shellSandboxStrict,
+      },
       browserCheckClient,
       mssqlDatabases: bootHost.mssql.databases,
       mssqlDefaultConnection: bootHost.mssql.defaultConnection,
@@ -385,7 +388,7 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
   let shellSandboxStrict = false
   let browserCheckClient: BrowserClient | null = null
 
-  if (dockerReady) {
+  if (dockerReady && sandbox.mode !== "host") {
     shellClient = async (command, cwd, signal) => {
       return sandbox.exec(command, cwd || getWorkspace(), { signal })
     }
@@ -425,7 +428,9 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
       console.error("SANDBOX_MODE=all requires Docker but Docker is not available. Aborting.")
       process.exit(1)
     }
-    console.log("Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
+    console.log(sandbox.mode === "host"
+      ? "Docker sandbox: BYPASSED (commands run on host with filtered env)"
+      : "Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
   }
 
   return { sandbox, shellClient, shellSandboxStrict, browserCheckClient }

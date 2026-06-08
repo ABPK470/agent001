@@ -34,6 +34,14 @@ afterEach(async () => {
 // ── createShellTool ──────────────────────────────────────────────
 
 describe("createShellTool — Phase 4 item 5", () => {
+  it("falls back to host execution when shellMode=host", async () => {
+    const tool = createShellTool(configureAgent({ shellCwd: sandboxA, shellMode: "host" }))
+
+    const result = await tool.execute({ command: "pwd" })
+
+    expect(String(result)).toContain(sandboxA)
+  })
+
   it("routes commands through host.shell.client with configured cwd", async () => {
     const exec = vi.fn(async (_cmd: string, _cwd: string): Promise<ShellExecResult> => ({
       stdout: "hi",
@@ -94,6 +102,14 @@ describe("createShellTool — Phase 4 item 5", () => {
 
     expect(execA).toHaveBeenCalledWith("pwd", sandboxA, undefined)
     expect(execB).toHaveBeenCalledWith("pwd", sandboxB, undefined)
+  })
+
+  it("returns a friendly error when shellMode=disabled", async () => {
+    const tool = createShellTool(configureAgent({ shellCwd: sandboxA, shellMode: "disabled" }))
+
+    const result = await tool.execute({ command: "pwd" })
+
+    expect(String(result)).toMatch(/disabled/i)
   })
 })
 

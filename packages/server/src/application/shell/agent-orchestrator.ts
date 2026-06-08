@@ -27,6 +27,7 @@ import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
 import type { ExecuteRunInput } from "./execution/run-executor/types.js"
 import { applyRunWorkspaceDiff } from "./execution/workspace-effects.js"
+import { bootHostDepsToConfigureAgentOptions } from "./host-deps.js"
 import { RunPriority, RunQueue } from "./queue/run-queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace/run-workspace.js"
 import { cleanupStaleRunWorkspaces } from "./workspace/run-workspace.js"
@@ -369,18 +370,7 @@ export class AgentOrchestrator {
   private buildBootTools(): Tool[] {
     const root = this.workspace ?? process.cwd()
     const host = configureAgent({
-      ...(this.bootHostDeps.attachments ? { attachments: this.bootHostDeps.attachments } : {}),
-      ...(this.bootHostDeps.browserContextReader ? { browserContextReader: this.bootHostDeps.browserContextReader } : {}),
-      ...(this.bootHostDeps.browserCredentialReader ? { browserCredentialReader: this.bootHostDeps.browserCredentialReader } : {}),
-      ...(this.bootHostDeps.browserHandoffStore ? { browserHandoffStore: this.bootHostDeps.browserHandoffStore } : {}),
-      ...(this.bootHostDeps.shellClient ? { shellClient: this.bootHostDeps.shellClient } : {}),
-      ...(this.bootHostDeps.shellSandboxStrict !== undefined ? { shellSandboxStrict: this.bootHostDeps.shellSandboxStrict } : {}),
-      ...(this.bootHostDeps.browserCheckClient ? { browserCheckClient: this.bootHostDeps.browserCheckClient } : {}),
-      ...(this.bootHostDeps.mssqlDatabases ? { mssqlDatabases: this.bootHostDeps.mssqlDatabases } : {}),
-      ...(this.bootHostDeps.mssqlDefaultConnection ? { mssqlDefaultConnection: this.bootHostDeps.mssqlDefaultConnection } : {}),
-      ...(this.bootHostDeps.catalogInstances ? { catalogInstances: this.bootHostDeps.catalogInstances } : {}),
-      ...(this.bootHostDeps.catalogDefaultCachePath ? { catalogDefaultCachePath: this.bootHostDeps.catalogDefaultCachePath } : {}),
-      ...(this.bootHostDeps.syncState ? { syncState: this.bootHostDeps.syncState } : {}),
+      ...bootHostDepsToConfigureAgentOptions(this.bootHostDeps),
       workspaceRoot: root,
       filesystemBasePath: root,
       searchFilesBasePath: root,

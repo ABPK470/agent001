@@ -1,20 +1,20 @@
 import {
-    computeAutoDetectedExcludeDirs,
-    configureAgent,
-    createRun,
-    EventType,
-    getCatalog,
-    governTool,
-    makeRunContext,
-    PolicyRole,
-    PolicyRunMode,
-    runStarted,
-    startRunningPure,
-    type AgentHost,
-    type DelegateContext,
-    type HostedPolicyContext,
-    type RunState,
-    type Tool,
+  computeAutoDetectedExcludeDirs,
+  configureAgent,
+  createRun,
+  EventType,
+  getCatalog,
+  governTool,
+  makeRunContext,
+  PolicyRole,
+  PolicyRunMode,
+  runStarted,
+  startRunningPure,
+  type AgentHost,
+  type DelegateContext,
+  type HostedPolicyContext,
+  type RunState,
+  type Tool,
 } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { SyncRunStatus } from "@mia/sync"
@@ -37,6 +37,7 @@ import { loadPriorResults } from "../../../core/data-blocks/prior-results-block.
 import { loadPriorTurns } from "../../../core/data-blocks/prior-turns.js"
 import { decideSections, filterToolsByGoal } from "../../../core/decide-sections.js"
 import { buildSystemMessages } from "../../../core/system-messages.js"
+import { bootHostDepsToConfigureAgentOptions } from "../../host-deps.js"
 import { RunPriority } from "../../queue/run-queue.js"
 import { prepareRunWorkspace } from "../../workspace/run-workspace.js"
 import { enforceClarificationUiOptions } from "../ask-user-options.js"
@@ -84,16 +85,7 @@ function createPolicyContext(runId: string, activeRun: ActiveRunRecord | undefin
 
 function createPerRunHost(input: ExecuteRunInput, activeRun: ActiveRunRecord | undefined, runWorkspace: RunWorkspace, policyCtx: HostedPolicyContext): AgentHost {
   return configureAgent({
-    ...(input.ctx.bootHostDeps.browserCredentialReader ? { browserCredentialReader: input.ctx.bootHostDeps.browserCredentialReader } : {}),
-    ...(input.ctx.bootHostDeps.browserHandoffStore ? { browserHandoffStore: input.ctx.bootHostDeps.browserHandoffStore } : {}),
-    ...(input.ctx.bootHostDeps.shellClient ? { shellClient: input.ctx.bootHostDeps.shellClient } : {}),
-    ...(input.ctx.bootHostDeps.shellSandboxStrict !== undefined ? { shellSandboxStrict: input.ctx.bootHostDeps.shellSandboxStrict } : {}),
-    ...(input.ctx.bootHostDeps.browserCheckClient ? { browserCheckClient: input.ctx.bootHostDeps.browserCheckClient } : {}),
-    ...(input.ctx.bootHostDeps.mssqlDatabases ? { mssqlDatabases: input.ctx.bootHostDeps.mssqlDatabases } : {}),
-    ...(input.ctx.bootHostDeps.mssqlDefaultConnection ? { mssqlDefaultConnection: input.ctx.bootHostDeps.mssqlDefaultConnection } : {}),
-    ...(input.ctx.bootHostDeps.catalogInstances ? { catalogInstances: input.ctx.bootHostDeps.catalogInstances } : {}),
-    ...(input.ctx.bootHostDeps.catalogDefaultCachePath ? { catalogDefaultCachePath: input.ctx.bootHostDeps.catalogDefaultCachePath } : {}),
-    ...(input.ctx.bootHostDeps.syncState ? { syncState: input.ctx.bootHostDeps.syncState } : {}),
+    ...bootHostDepsToConfigureAgentOptions(input.ctx.bootHostDeps),
     attachments: createServerAttachmentService(() => policyCtx),
     browserContextReader: createServerBrowserContextProvider(activeRun?.ownerUpn ?? null),
     browserCredentialReader: createServerBrowserCredentialProvider(activeRun?.ownerUpn ?? null),

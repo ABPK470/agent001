@@ -40,6 +40,7 @@ export interface ConfigureAgentOptions {
 
   // Shell + browser-check
   shellCwd?: string
+  shellMode?: AgentHost["shell"]["mode"]
   shellSandboxStrict?: boolean
   shellClient?: AgentHost["shell"]["client"]
   browserCheckCwd?: string
@@ -89,6 +90,7 @@ export interface ConfigureAgentOptions {
  */
 export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const workspaceRoot = options.workspaceRoot ?? process.cwd()
+  const shellMode = options.shellMode ?? (options.shellClient ? "sandbox" : "host")
   const mssqlDatabases = options.mssqlDatabases ?? buildMssqlDatabases(options.mssqlConfigs)
   const mssqlDefaultConnection = options.mssqlDefaultConnection ?? { value: options.mssqlDefaultConnectionName ?? null }
   const syncState = options.syncState ?? {
@@ -125,9 +127,10 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       excludeDirs: options.searchFilesExcludeDirs ?? new Set<string>(),
     }),
     shell: Object.freeze({
+      mode: shellMode,
       cwd: options.shellCwd ?? workspaceRoot,
       sandboxStrict: options.shellSandboxStrict ?? false,
-      client: options.shellClient ?? NOOP_SHELL_CLIENT,
+      client: shellMode === "sandbox" ? (options.shellClient ?? NOOP_SHELL_CLIENT) : null,
     }),
     browserCheck: Object.freeze({
       cwd: options.browserCheckCwd ?? workspaceRoot,
@@ -160,7 +163,7 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
 
 // ── Built-in no-op adapters (Phase 2 stubs) ──────────────────────
 
-const NOOP_SHELL_CLIENT: AgentHost["shell"]["client"] = async () => {
+const NOOP_SHELL_CLIENT: NonNullable<AgentHost["shell"]["client"]> = async () => {
   throw new Error("configureAgent: no shellClient wired (pass options.shellClient).")
 }
 

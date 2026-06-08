@@ -149,6 +149,7 @@ export function createShellTool(host: AgentHost, run?: RunContext): ExecutableTo
     ...shellToolMetadata,
     async execute(args) {
       return runShell(args, {
+        mode: host.shell.mode,
         cwd: host.shell.cwd,
         executor: host.shell.client,
         sandboxStrict: host.shell.sandboxStrict,
@@ -161,6 +162,7 @@ export function createShellTool(host: AgentHost, run?: RunContext): ExecutableTo
 // ── Shared body ──────────────────────────────────────────────────
 
 interface ShellCtx {
+  mode: AgentHost["shell"]["mode"]
   cwd: string
   executor: ShellExecutor | null
   sandboxStrict: boolean
@@ -177,8 +179,14 @@ async function runShell(args: Record<string, unknown>, ctx: ShellCtx): Promise<s
       return `Error: Command blocked for safety (matched: "${blocked}"). This command is not allowed.`
     }
 
-    // Route through sandbox executor if available
-    if (ctx.executor) {
+    if (ctx.mode === "disabled") {
+      return "Error: Shell commands are disabled in this deployment."
+    }
+
+    if (ctx.mode === "sandbox") {
+      if (!ctx.executor) {
+        return "Error: Shell sandbox is enabled but no sandbox executor is configured."
+      }
       try {
         const result = await ctx.executor(command, ctx.cwd, ctx.killSignal ?? undefined)
         return formatResult(result)
@@ -187,7 +195,7 @@ async function runShell(args: Record<string, unknown>, ctx: ShellCtx): Promise<s
       }
     }
 
-    // Fallback: direct execution with safe env only
+    // Host mode: direct execution with safe env only.
     return new Promise<string>((resolve) => {
       execFile(
         "/bin/sh",
