@@ -96,7 +96,8 @@ export function extractToolFailureText(record: ToolCallRecord): string {
   if (typeof parsed.error === "string") append(parsed.error)
   if (typeof parsed.error === "object" && parsed.error !== null && !Array.isArray(parsed.error)) {
     const e = parsed.error as Record<string, unknown>
-    append(e.message); append(e.code)
+    append(e.message)
+    append(e.code)
   }
   if (typeof parsed.stderr === "string") append(parsed.stderr)
   if (typeof parsed.stdout === "string" && (parsed.timedOut === true || pieces.length > 0)) {
@@ -115,10 +116,7 @@ export function extractToolFailureText(record: ToolCallRecord): string {
  * Build a semantic key for tool call dedup.
  * Used for detecting semantically equivalent repeated calls.
  */
-export function buildSemanticToolCallKey(
-  name: string,
-  args: Record<string, unknown>,
-): string {
+export function buildSemanticToolCallKey(name: string, args: Record<string, unknown>): string {
   return `${name}:${normalizeSemanticValue(args)}`
 }
 
@@ -130,7 +128,7 @@ function normalizeSemanticValue(value: unknown): string {
   if (typeof value === "object") {
     const obj = value as Record<string, unknown>
     const keys = Object.keys(obj).sort()
-    return `{${keys.map(k => `${k}:${normalizeSemanticValue(obj[k])}`).join(",")}}`
+    return `{${keys.map((k) => `${k}:${normalizeSemanticValue(obj[k])}`).join(",")}}`
   }
   return String(value)
 }
@@ -140,9 +138,13 @@ function normalizeSemanticValue(value: unknown): string {
 // ============================================================================
 
 export function isToolResultEnvelope(value: unknown): value is ToolResultEnvelope {
-  return !!value && typeof value === "object" && !Array.isArray(value)
-    && typeof (value as ToolResultEnvelope).ok === "boolean"
-    && typeof (value as ToolResultEnvelope).summary === "string"
+  return (
+    !!value &&
+    typeof value === "object" &&
+    !Array.isArray(value) &&
+    typeof (value as ToolResultEnvelope).ok === "boolean" &&
+    typeof (value as ToolResultEnvelope).summary === "string"
+  )
 }
 
 function formatToolResultEnvelope(outcome: ToolResultEnvelope): string {
@@ -155,9 +157,10 @@ function formatToolResultEnvelope(outcome: ToolResultEnvelope): string {
  * Normalize a tool execution return value (string or ToolResultEnvelope)
  * into a consistent { result, outcome } shape.
  */
-export function normalizeToolExecutionOutput(
-  value: string | ToolResultEnvelope,
-): { result: string; outcome?: ToolResultEnvelope } {
+export function normalizeToolExecutionOutput(value: string | ToolResultEnvelope): {
+  result: string
+  outcome?: ToolResultEnvelope
+} {
   if (typeof value === "string") return { result: value }
   if (isToolResultEnvelope(value)) {
     return { result: formatToolResultEnvelope(value), outcome: value }

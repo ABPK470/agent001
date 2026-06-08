@@ -7,9 +7,9 @@
  */
 
 export const PolicyEffect = {
-  Allow:           "allow",
+  Allow: "allow",
   RequireApproval: "require_approval",
-  Deny:            "deny",
+  Deny: "deny"
 } as const
 
 export type PolicyEffect = (typeof PolicyEffect)[keyof typeof PolicyEffect]
@@ -23,7 +23,7 @@ export const isPolicyEffect = (value: unknown): value is PolicyEffect =>
  *  default-deny; developer runs are default-allow with audit. */
 export const PolicyRunMode = {
   Developer: "developer",
-  Hosted:    "hosted",
+  Hosted: "hosted"
 } as const
 
 export type PolicyRunMode = (typeof PolicyRunMode)[keyof typeof PolicyRunMode]
@@ -35,9 +35,9 @@ export const isPolicyRunMode = (value: unknown): value is PolicyRunMode =>
 
 /** Caller role used by selector rules. */
 export const PolicyRole = {
-  Admin:      "admin",
+  Admin: "admin",
   HostedUser: "hosted_user",
-  Visitor:    "visitor",
+  Visitor: "visitor"
 } as const
 
 export type PolicyRole = (typeof PolicyRole)[keyof typeof PolicyRole]
@@ -49,10 +49,10 @@ export const isPolicyRole = (value: unknown): value is PolicyRole =>
 
 /** Scope axis on a selector rule (which "world" the action targets). */
 export const PolicyScope = {
-  Sandbox:         "sandbox",
+  Sandbox: "sandbox",
   AttachmentStore: "attachment_store",
-  AppWorkspace:    "app_workspace",
-  System:          "system",
+  AppWorkspace: "app_workspace",
+  System: "system"
 } as const
 
 export type PolicyScope = (typeof PolicyScope)[keyof typeof PolicyScope]
@@ -64,9 +64,9 @@ export const isPolicyScope = (value: unknown): value is PolicyScope =>
 
 /** MSSQL environment a DB operation targets. */
 export const PolicyDbEnvironment = {
-  Dev:  "dev",
-  Uat:  "uat",
-  Prod: "prod",
+  Dev: "dev",
+  Uat: "uat",
+  Prod: "prod"
 } as const
 
 export type PolicyDbEnvironment = (typeof PolicyDbEnvironment)[keyof typeof PolicyDbEnvironment]
@@ -78,11 +78,11 @@ export const isPolicyDbEnvironment = (value: unknown): value is PolicyDbEnvironm
 
 /** Categorical DB operation a policy can match against. */
 export const PolicyDbOperation = {
-  QueryRead:   "query_read",
+  QueryRead: "query_read",
   SyncPreview: "sync_preview",
   SyncExecute: "sync_execute",
-  Ddl:         "ddl",
-  Dml:         "dml",
+  Ddl: "ddl",
+  Dml: "dml"
 } as const
 
 export type PolicyDbOperation = (typeof PolicyDbOperation)[keyof typeof PolicyDbOperation]
@@ -95,8 +95,8 @@ export const isPolicyDbOperation = (value: unknown): value is PolicyDbOperation 
 /** Network capability tier for a tool — `None` means the tool may not
  *  reach the network at all; `Allow` permits egress. */
 export const PolicyNetwork = {
-  None:  "none",
-  Allow: "allow",
+  None: "none",
+  Allow: "allow"
 } as const
 
 export type PolicyNetwork = (typeof PolicyNetwork)[keyof typeof PolicyNetwork]

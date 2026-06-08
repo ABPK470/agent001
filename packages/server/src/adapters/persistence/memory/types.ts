@@ -93,6 +93,6 @@ export function entryToLegacy(e: MemoryEntry): Memory {
     runId: e.runId,
     createdAt: e.createdAt,
     updatedAt: e.updatedAt,
-    expiresAt: null,
+    expiresAt: null
   }
 }

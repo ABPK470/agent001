@@ -6,7 +6,7 @@ import { getDb, migrateSessionFkSetNull } from "./connection.js"
 
 export interface DbNotification {
   id: string
-  type: string        // 'run.failed' | 'run.completed' | 'approval.required' | 'run.recovered'
+  type: string // 'run.failed' | 'run.completed' | 'approval.required' | 'run.recovered'
   title: string
   message: string
   run_id: string | null
@@ -15,8 +15,8 @@ export interface DbNotification {
   owner_upn: string
   /** Originating session — nullable for cross-session notifications. */
   session_id: string | null
-  actions: string     // JSON array of { label, action, data }
-  read: number        // 0 or 1
+  actions: string // JSON array of { label, action, data }
+  read: number // 0 or 1
   created_at: string
 }
 
@@ -47,10 +47,14 @@ export function migrateNotifications(): void {
 }
 
 export function saveNotification(n: DbNotification): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO notifications (id, type, title, message, run_id, step_id, owner_upn, session_id, actions, read, created_at)
     VALUES (@id, @type, @title, @message, @run_id, @step_id, @owner_upn, @session_id, @actions, @read, @created_at)
-  `).run(n)
+  `
+    )
+    .run(n)
 }
 
 export function getNotification(id: string): DbNotification | undefined {
@@ -70,18 +74,20 @@ export function listNotifications(limit = 50): DbNotification[] {
  */
 export function listNotificationsForUser(
   opts: { upn?: string | null; sid?: string | null },
-  limit = 50,
+  limit = 50
 ): DbNotification[] {
   const upn = opts.upn ?? null
   const sid = opts.sid ?? null
   return getDb()
-    .prepare(`
+    .prepare(
+      `
       SELECT * FROM notifications
       WHERE (owner_upn IS NULL AND session_id IS NULL)
          OR (@upn IS NOT NULL AND owner_upn = @upn)
          OR (@upn IS NULL AND @sid IS NOT NULL AND session_id = @sid)
       ORDER BY created_at DESC LIMIT @limit
-    `)
+    `
+    )
     .all({ upn, sid, limit }) as DbNotification[]
 }
 
@@ -94,21 +100,29 @@ export function markAllNotificationsRead(): void {
 }
 
 export function getUnreadNotificationCount(): number {
-  const row = getDb().prepare("SELECT COUNT(*) as count FROM notifications WHERE read = 0").get() as { count: number }
+  const row = getDb().prepare("SELECT COUNT(*) as count FROM notifications WHERE read = 0").get() as {
+    count: number
+  }
   return row.count
 }
 
-export function getUnreadNotificationCountForUser(opts: { upn?: string | null; sid?: string | null }): number {
+export function getUnreadNotificationCountForUser(opts: {
+  upn?: string | null
+  sid?: string | null
+}): number {
   const upn = opts.upn ?? null
   const sid = opts.sid ?? null
   const row = getDb()
-    .prepare(`
+    .prepare(
+      `
       SELECT COUNT(*) as count FROM notifications
       WHERE read = 0 AND (
         (owner_upn IS NULL AND session_id IS NULL)
         OR (@upn IS NOT NULL AND owner_upn = @upn)
         OR (@upn IS NULL AND @sid IS NOT NULL AND session_id = @sid)
       )
-    `).get({ upn, sid }) as { count: number }
+    `
+    )
+    .get({ upn, sid }) as { count: number }
   return row.count
 }

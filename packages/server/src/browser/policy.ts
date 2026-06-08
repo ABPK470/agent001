@@ -48,7 +48,7 @@ function toRule(r: Row): PolicyRule {
     pattern: r.pattern,
     effect: r.effect,
     reason: r.reason,
-    createdAt: r.created_at,
+    createdAt: r.created_at
   }
 }
 
@@ -59,10 +59,12 @@ export function addPolicyRule(input: {
   reason?: string
 }): PolicyRule {
   const id = randomUUID()
-  getDb().prepare(
-    `INSERT INTO browser_domain_policy (id, owner_upn, pattern, effect, reason)
-     VALUES (?, ?, ?, ?, ?)`,
-  ).run(id, input.ownerUpn, input.pattern.toLowerCase(), input.effect, input.reason ?? "")
+  getDb()
+    .prepare(
+      `INSERT INTO browser_domain_policy (id, owner_upn, pattern, effect, reason)
+     VALUES (?, ?, ?, ?, ?)`
+    )
+    .run(id, input.ownerUpn, input.pattern.toLowerCase(), input.effect, input.reason ?? "")
   const row = getDb().prepare("SELECT * FROM browser_domain_policy WHERE id = ?").get(id) as Row
   return toRule(row)
 }
@@ -75,12 +77,14 @@ export function deletePolicyRule(id: string): boolean {
 export function listPolicyRules(ownerUpn: string | null): PolicyRule[] {
   // Returns tenant + global. Pass null for "list global only".
   const rows = ownerUpn
-    ? getDb().prepare(
-        "SELECT * FROM browser_domain_policy WHERE owner_upn = ? OR owner_upn IS NULL ORDER BY effect, pattern",
-      ).all(ownerUpn) as Row[]
-    : getDb().prepare(
-        "SELECT * FROM browser_domain_policy WHERE owner_upn IS NULL ORDER BY effect, pattern",
-      ).all() as Row[]
+    ? (getDb()
+        .prepare(
+          "SELECT * FROM browser_domain_policy WHERE owner_upn = ? OR owner_upn IS NULL ORDER BY effect, pattern"
+        )
+        .all(ownerUpn) as Row[])
+    : (getDb()
+        .prepare("SELECT * FROM browser_domain_policy WHERE owner_upn IS NULL ORDER BY effect, pattern")
+        .all() as Row[])
   return rows.map(toRule)
 }
 
@@ -125,7 +129,7 @@ export function evaluatePolicy(ownerUpn: string, url: string): PolicyDecision {
       return {
         allow: false,
         reason: r.reason ? `denied by policy: ${r.reason}` : `denied by policy rule ${r.pattern}`,
-        ruleId: r.id,
+        ruleId: r.id
       }
     }
   }
@@ -139,7 +143,7 @@ export function evaluatePolicy(ownerUpn: string, url: string): PolicyDecision {
     return {
       allow: false,
       reason: `host ${host} is not on the tenant allow-list`,
-      ruleId: null,
+      ruleId: null
     }
   }
 

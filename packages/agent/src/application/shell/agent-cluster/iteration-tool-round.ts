@@ -19,10 +19,11 @@ export interface ToolCallsBranchInput {
   state: AgentLoopState
   tools: Map<string, Tool>
   toolList: Tool[]
-  config: ToolExecContext["config"] & PostRoundContext["config"] & {
-    verbose: boolean
-    onStreamDiscard?: (() => void) | undefined
-  }
+  config: ToolExecContext["config"] &
+    PostRoundContext["config"] & {
+      verbose: boolean
+      onStreamDiscard?: (() => void) | undefined
+    }
   allToolCalls: ToolCallRecord[]
 }
 
@@ -35,9 +36,7 @@ export interface ToolCallsBranchResult {
   needsSynthesis?: boolean
 }
 
-export async function executeToolCallsBranch(
-  input: ToolCallsBranchInput,
-): Promise<ToolCallsBranchResult> {
+export async function executeToolCallsBranch(input: ToolCallsBranchInput): Promise<ToolCallsBranchResult> {
   const { response, messages, iteration: i, state, tools, toolList, config, allToolCalls } = input
 
   // This iteration was intermediate — discard the buffered tokens.
@@ -46,32 +45,54 @@ export async function executeToolCallsBranch(
     role: MessageRole.Assistant,
     content: response.content,
     toolCalls: response.toolCalls as Message["toolCalls"],
-    section: "history",
+    section: "history"
   })
 
   const roundResult = await executeToolRound(
-    response.toolCalls as Array<{ id: string; name: string; arguments: Record<string, unknown> & { __parseError?: boolean; __raw?: string } }>,
+    response.toolCalls as Array<{
+      id: string
+      name: string
+      arguments: Record<string, unknown> & { __parseError?: boolean; __raw?: string }
+    }>,
     {
-      tools, toolList,
-      state, messages,
+      tools,
+      toolList,
+      state,
+      messages,
       config,
       iteration: i,
-      allToolCalls,
-    },
+      allToolCalls
+    }
   )
 
   if (roundResult.forcedAbortLoopMessage) {
     allToolCalls.push(...roundResult.roundToolCalls)
-    messages.push({ role: MessageRole.System, content: roundResult.forcedAbortLoopMessage, section: "history" })
-    config.onNudge?.({ tag: "fatal-tool-outcome", message: roundResult.forcedAbortLoopMessage, iteration: i })
+    messages.push({
+      role: MessageRole.System,
+      content: roundResult.forcedAbortLoopMessage,
+      section: "history"
+    })
+    config.onNudge?.({
+      tag: "fatal-tool-outcome",
+      message: roundResult.forcedAbortLoopMessage,
+      iteration: i
+    })
     if (config.verbose) log.logError(roundResult.forcedAbortLoopMessage)
     return { finalAnswer: roundResult.forcedAbortLoopMessage }
   }
 
   if (roundResult.forcedAbortRoundMessage) {
     allToolCalls.push(...roundResult.roundToolCalls)
-    messages.push({ role: MessageRole.System, content: roundResult.forcedAbortRoundMessage, section: "history" })
-    config.onNudge?.({ tag: "abort-round-tool-outcome", message: roundResult.forcedAbortRoundMessage, iteration: i })
+    messages.push({
+      role: MessageRole.System,
+      content: roundResult.forcedAbortRoundMessage,
+      section: "history"
+    })
+    config.onNudge?.({
+      tag: "abort-round-tool-outcome",
+      message: roundResult.forcedAbortRoundMessage,
+      iteration: i
+    })
     if (config.verbose) log.logError(roundResult.forcedAbortRoundMessage)
     config.onStep?.(messages, i)
     return { shouldContinue: true }
@@ -80,13 +101,14 @@ export async function executeToolCallsBranch(
   const postRound = processPostRound({
     roundToolCalls: roundResult.roundToolCalls,
     response,
-    messages, state,
+    messages,
+    state,
     iteration: i,
     config,
     allToolCalls,
     failuresThisRound: roundResult.failuresThisRound,
     delegationThisRound: roundResult.delegationThisRound,
-    delegationThisRoundWasReadOnly: roundResult.delegationThisRoundWasReadOnly,
+    delegationThisRoundWasReadOnly: roundResult.delegationThisRoundWasReadOnly
   })
 
   if (postRound.finalAnswer) {

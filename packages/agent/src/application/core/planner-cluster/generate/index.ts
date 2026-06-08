@@ -12,9 +12,7 @@ import { DiagnosticCategory, DiagnosticSeverity } from "../../domain/index.js"
 
 import type { LLMClient, Message, Tool } from "../../types.js"
 import { parsePlanFromResponse } from "../internal/generate-parse.js"
-import {
-    PLANNER_SYSTEM_PROMPT,
-} from "../internal/generate-prompts.js"
+import { PLANNER_SYSTEM_PROMPT } from "../internal/generate-prompts.js"
 import type { Plan, PlanDiagnostic, PlannerCoherentBootstrap, PlannerRoute } from "../types.js"
 
 export { isValidArtifactPath } from "../internal/generate-parse.js"
@@ -32,8 +30,8 @@ function buildToolDescriptions(tools: readonly Tool[]): string {
   const cached = toolDescCache.get(tools as Tool[])
   if (cached) return cached
   const built = tools
-    .filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
-    .map(t => `- ${t.name}: ${t.description}`)
+    .filter((t) => t.name !== "delegate" && t.name !== "delegate_parallel")
+    .map((t) => `- ${t.name}: ${t.description}`)
     .join("\n")
   toolDescCache.set(tools as Tool[], built)
   return built
@@ -76,7 +74,7 @@ export interface PlanGenerationResult {
 export async function generatePlan(
   llm: LLMClient,
   ctx: PlanGenerationContext,
-  opts?: { maxAttempts?: number; signal?: AbortSignal },
+  opts?: { maxAttempts?: number; signal?: AbortSignal }
 ): Promise<PlanGenerationResult> {
   const maxAttempts = opts?.maxAttempts ?? 3
   const diagnostics: PlanDiagnostic[] = []
@@ -95,17 +93,17 @@ export async function generatePlan(
     {
       role: MessageRole.System,
       content: `Available tools for children:\n${toolDescriptions}\n\nWorkspace root: ${ctx.workspaceRoot}`,
-      cacheHint: "ephemeral",
-    },
+      cacheHint: "ephemeral"
+    }
   ]
 
-  const recentHistory = ctx.history.slice(-10).filter(
-    m => m.role === MessageRole.User || m.role === MessageRole.Assistant,
-  )
+  const recentHistory = ctx.history
+    .slice(-10)
+    .filter((m) => m.role === MessageRole.User || m.role === MessageRole.Assistant)
   if (recentHistory.length > 0) {
     messagesPrefix.push({
       role: MessageRole.System,
-      content: `Recent conversation context:\n${recentHistory.map(m => `[${m.role}]: ${(m.content ?? "").slice(0, 500)}`).join("\n")}`,
+      content: `Recent conversation context:\n${recentHistory.map((m) => `[${m.role}]: ${(m.content ?? "").slice(0, 500)}`).join("\n")}`
     })
   }
 
@@ -121,14 +119,15 @@ export async function generatePlan(
         `Shared contracts:\n${ctx.coherentBootstrap.sharedContracts?.map((contract) => `- ${contract.name}: ${contract.description}`).join("\n") || "- none"}\n` +
         `Invariants:\n${ctx.coherentBootstrap.invariants?.map((invariant) => `- ${invariant.id}: ${invariant.description}`).join("\n") || "- none"}\n` +
         `Rules: preserve this architecture unless ownership separation is real. Do not decompose multi-file greenfield work automatically.`,
-      cacheHint: "ephemeral",
+      cacheHint: "ephemeral"
     })
   }
 
   if (ctx.route === "planner_with_coherent_bootstrap") {
     messagesPrefix.push({
       role: MessageRole.System,
-      content: "This is a planner_with_coherent_bootstrap run. First honor the frozen architecture, then decompose only when there are real ownership boundaries and overwrite-risk reductions.",
+      content:
+        "This is a planner_with_coherent_bootstrap run. First honor the frozen architecture, then decompose only when there are real ownership boundaries and overwrite-risk reductions."
     })
   }
 
@@ -139,7 +138,7 @@ export async function generatePlan(
     if (refinementHint) {
       messages.push({
         role: MessageRole.System,
-        content: `REFINEMENT REQUIRED: Your previous plan had issues. Fix them:\n${refinementHint}`,
+        content: `REFINEMENT REQUIRED: Your previous plan had issues. Fix them:\n${refinementHint}`
       })
     }
 
@@ -152,10 +151,11 @@ export async function generatePlan(
 
       if (!rawResponse) {
         diagnostics.push({
-          category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
+          category: DiagnosticCategory.Parse,
+          severity: DiagnosticSeverity.Error,
           code: "empty_response",
           message: "Planner returned empty response",
-          details: { attempt },
+          details: { attempt }
         })
         refinementHint = "You returned an empty response. Respond with a valid JSON plan object."
         continue
@@ -168,16 +168,21 @@ export async function generatePlan(
         const salvaged = salvagePlanFromMalformedResponse(rawResponse, ctx.workspaceRoot)
         if (salvaged) {
           diagnostics.push({
-            category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
+            category: DiagnosticCategory.Parse,
+            severity: DiagnosticSeverity.Error,
             code: "salvaged_from_malformed",
             message: "Plan was salvaged from malformed planner response",
-            details: { attempt },
+            details: { attempt }
           })
-          return { plan: normalizeWorkspaceRoots(salvaged, ctx.workspaceRoot), diagnostics, rawResponse }
+          return {
+            plan: normalizeWorkspaceRoots(salvaged, ctx.workspaceRoot),
+            diagnostics,
+            rawResponse
+          }
         }
 
         diagnostics.push(...parsed.diagnostics)
-        refinementHint = parsed.diagnostics.map(d => d.message).join("\n")
+        refinementHint = parsed.diagnostics.map((d) => d.message).join("\n")
         continue
       }
 
@@ -189,18 +194,19 @@ export async function generatePlan(
         plan: {
           ...normalizedPlan,
           route: ctx.route,
-          coherentBootstrap: ctx.coherentBootstrap,
+          coherentBootstrap: ctx.coherentBootstrap
         },
         diagnostics,
-        rawResponse,
+        rawResponse
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : String(err)
       diagnostics.push({
-        category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
+        category: DiagnosticCategory.Parse,
+        severity: DiagnosticSeverity.Error,
         code: "llm_error",
         message: `LLM call failed: ${errMsg}`,
-        details: { attempt },
+        details: { attempt }
       })
 
       // Abort errors should not be retried
@@ -209,7 +215,10 @@ export async function generatePlan(
       }
 
       // Transient network errors (fetch failed, timeout, etc.) — retry
-      const isTransient = /fetch failed|timeout|timed out|econnreset|econnrefused|socket hang up|network|429|502|503/i.test(errMsg)
+      const isTransient =
+        /fetch failed|timeout|timed out|econnreset|econnrefused|socket hang up|network|429|502|503/i.test(
+          errMsg
+        )
       if (!isTransient) {
         return { plan: null, diagnostics, rawResponse }
       }
@@ -226,8 +235,4 @@ export async function generatePlan(
 // ============================================================================
 
 import { MessageRole } from "../../domain/enums/message.js"
-import {
-    normalizeWorkspaceRoots,
-    salvagePlanFromMalformedResponse,
-} from "./normalize.js"
-
+import { normalizeWorkspaceRoots, salvagePlanFromMalformedResponse } from "./normalize.js"

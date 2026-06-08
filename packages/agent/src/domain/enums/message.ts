@@ -8,10 +8,10 @@
  */
 
 export const MessageRole = {
-  System:    "system",
-  User:      "user",
+  System: "system",
+  User: "user",
   Assistant: "assistant",
-  Tool:      "tool",
+  Tool: "tool"
 } as const
 
 export type MessageRole = (typeof MessageRole)[keyof typeof MessageRole]

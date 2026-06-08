@@ -5,10 +5,10 @@
  */
 
 import {
-    DELEGATION_OUTPUT_VALIDATION_CODE_VALUES,
-    DelegationOutputValidationCode,
-    DelegationRole,
-    EffectClass,
+  DELEGATION_OUTPUT_VALIDATION_CODE_VALUES,
+  DelegationOutputValidationCode,
+  DelegationRole,
+  EffectClass
 } from "../../../../domain/enums/delegation.js"
 import { VerificationMode } from "../../../../domain/enums/planner.js"
 import type { ToolCallRecord } from "../../../../tools/index.js"
@@ -53,9 +53,7 @@ export interface GateParams {
 
 // ── Tool/command constants ──────────────────────────────────────
 
-export const FILE_READ_TOOLS = new Set([
-  "read_file", "list_directory", "search_files",
-])
+export const FILE_READ_TOOLS = new Set(["read_file", "list_directory", "search_files"])
 
 export const SHELL_FILE_WRITE_RE =
   /\b(?:tee|touch|cp|mv|install)\b|\bcat\b[^\n]*\s(?:>|>>|<<)\s*\S|(?:^|[^>])>{1,2}\s*\S/i

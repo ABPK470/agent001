@@ -23,11 +23,7 @@
  * canonical-JSON of the envelope **with `signature` field absent**.
  */
 
-import {
-    canonicalJsonStringify,
-    canonicalSha256,
-    sha256Hex,
-} from "@mia/sync"
+import { canonicalJsonStringify, canonicalSha256, sha256Hex } from "@mia/sync"
 
 export const ENVELOPE_VERSION = 1 as const
 
@@ -39,56 +35,56 @@ export const ENVELOPE_SECTIONS = [
   "approval",
   "execution",
   "verification",
-  "audit",
+  "audit"
 ] as const
 
 export type EnvelopeSection = (typeof ENVELOPE_SECTIONS)[number]
 
 export interface EnvelopeHeader {
-  version:    1
-  id:         string
-  createdAt:  string
-  tenantId:   string
-  planId:     string
+  version: 1
+  id: string
+  createdAt: string
+  tenantId: string
+  planId: string
   proposalId: string | null
-  envPair:    { source: string; target: string }
-  actor:      string
-  outcome:    "success" | "failed"
+  envPair: { source: string; target: string }
+  actor: string
+  outcome: "success" | "failed"
 }
 
 export interface EnvelopeSignature {
-  alg:       string
-  signerId:  string
+  alg: string
+  signerId: string
   /** base64url-encoded detached signature over canonical-JSON of body. */
-  value:     string
+  value: string
   /** SHA-256 of the body (before signing). */
   contentHash: string
 }
 
 export interface EvidenceEnvelope {
-  envelope:     EnvelopeHeader
-  proposal:     unknown
-  annotation:   unknown
-  plan:         unknown
-  approval:     unknown
-  execution:    unknown
+  envelope: EnvelopeHeader
+  proposal: unknown
+  annotation: unknown
+  plan: unknown
+  approval: unknown
+  execution: unknown
   verification: unknown
-  audit:        readonly unknown[]
-  hashChain:    readonly string[]
-  signature?:   EnvelopeSignature
+  audit: readonly unknown[]
+  hashChain: readonly string[]
+  signature?: EnvelopeSignature
 }
 
 // ── builder ─────────────────────────────────────────────────────
 
 export interface BuildEnvelopeInput {
-  header:       EnvelopeHeader
-  proposal:     unknown
-  annotation:   unknown
-  plan:         unknown
-  approval:     unknown
-  execution:    unknown
+  header: EnvelopeHeader
+  proposal: unknown
+  annotation: unknown
+  plan: unknown
+  approval: unknown
+  execution: unknown
   verification: unknown
-  audit:        readonly unknown[]
+  audit: readonly unknown[]
 }
 
 /**
@@ -98,41 +94,41 @@ export interface BuildEnvelopeInput {
  */
 export function buildEnvelope(i: BuildEnvelopeInput): EvidenceEnvelope {
   const sections: Record<EnvelopeSection, unknown> = {
-    envelope:     i.header,
-    proposal:     i.proposal,
-    annotation:   i.annotation,
-    plan:         i.plan,
-    approval:     i.approval,
-    execution:    i.execution,
+    envelope: i.header,
+    proposal: i.proposal,
+    annotation: i.annotation,
+    plan: i.plan,
+    approval: i.approval,
+    execution: i.execution,
     verification: i.verification,
-    audit:        i.audit,
+    audit: i.audit
   }
   const hashChain = ENVELOPE_SECTIONS.map((s) => `sha256:${canonicalSha256(sections[s])}`)
   return {
-    envelope:     i.header,
-    proposal:     i.proposal,
-    annotation:   i.annotation,
-    plan:         i.plan,
-    approval:     i.approval,
-    execution:    i.execution,
+    envelope: i.header,
+    proposal: i.proposal,
+    annotation: i.annotation,
+    plan: i.plan,
+    approval: i.approval,
+    execution: i.execution,
     verification: i.verification,
-    audit:        i.audit,
-    hashChain,
+    audit: i.audit,
+    hashChain
   }
 }
 
 /** Serialise envelope body (no signature) → bytes the signer signs. */
 export function envelopeBodyBytes(env: EvidenceEnvelope): Buffer {
   const body: Omit<EvidenceEnvelope, "signature"> = {
-    envelope:     env.envelope,
-    proposal:     env.proposal,
-    annotation:   env.annotation,
-    plan:         env.plan,
-    approval:     env.approval,
-    execution:    env.execution,
+    envelope: env.envelope,
+    proposal: env.proposal,
+    annotation: env.annotation,
+    plan: env.plan,
+    approval: env.approval,
+    execution: env.execution,
     verification: env.verification,
-    audit:        env.audit,
-    hashChain:    env.hashChain,
+    audit: env.audit,
+    hashChain: env.hashChain
   }
   return Buffer.from(canonicalJsonStringify(body), "utf-8")
 }
@@ -150,18 +146,18 @@ export function envelopeBodyHash(env: EvidenceEnvelope): string {
 export function recomputeHashChain(env: EvidenceEnvelope): readonly EnvelopeSection[] {
   const failed: EnvelopeSection[] = []
   const sections: Record<EnvelopeSection, unknown> = {
-    envelope:     env.envelope,
-    proposal:     env.proposal,
-    annotation:   env.annotation,
-    plan:         env.plan,
-    approval:     env.approval,
-    execution:    env.execution,
+    envelope: env.envelope,
+    proposal: env.proposal,
+    annotation: env.annotation,
+    plan: env.plan,
+    approval: env.approval,
+    execution: env.execution,
     verification: env.verification,
-    audit:        env.audit,
+    audit: env.audit
   }
   for (let i = 0; i < ENVELOPE_SECTIONS.length; i++) {
     const expected = env.hashChain[i]
-    const actual   = `sha256:${canonicalSha256(sections[ENVELOPE_SECTIONS[i]!])}`
+    const actual = `sha256:${canonicalSha256(sections[ENVELOPE_SECTIONS[i]!])}`
     if (expected !== actual) failed.push(ENVELOPE_SECTIONS[i]!)
   }
   return failed

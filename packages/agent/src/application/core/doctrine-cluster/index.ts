@@ -8,7 +8,12 @@ import { tempScalarSubqueryDoctrine } from "./temp-scalar-subquery.js"
 import { DOCTRINE_BLOCK_BUDGET_BYTES, type DoctrineDiagnostic, type DoctrineModule } from "./types.js"
 import { wideUnionViewPolicyDoctrine } from "./wide-union-view-policy.js"
 
-export { buildResolvedFacts, RESOLVED_FACTS_BUDGET_BYTES, type LargeObjectFact, type ResolvedFactsInput } from "./resolved-facts.js"
+export {
+  buildResolvedFacts,
+  RESOLVED_FACTS_BUDGET_BYTES,
+  type LargeObjectFact,
+  type ResolvedFactsInput
+} from "./resolved-facts.js"
 export { DOCTRINE_BLOCK_BUDGET_BYTES }
 export type { DoctrineDiagnostic, DoctrineModule }
 
@@ -18,7 +23,7 @@ export const MSSQL_DOCTRINES: readonly DoctrineModule[] = [
   tempScalarSubqueryDoctrine,
   bigViewBudgetDoctrine,
   aggregateNamingDoctrine,
-  wideUnionViewPolicyDoctrine,
+  wideUnionViewPolicyDoctrine
 ]
 
 /** Assembles the doctrine block for prompt injection. Throws if over budget. */
@@ -29,7 +34,7 @@ export function assembleDoctrineBlock(): string {
     const size = Buffer.byteLength(text, "utf8")
     if (size > d.summaryBudgetBytes) {
       throw new Error(
-        `Doctrine ${d.id}@${d.version} summary is ${size}B, exceeds ${d.summaryBudgetBytes}B budget.`,
+        `Doctrine ${d.id}@${d.version} summary is ${size}B, exceeds ${d.summaryBudgetBytes}B budget.`
       )
     }
     parts.push(text)
@@ -38,7 +43,7 @@ export function assembleDoctrineBlock(): string {
   const totalSize = Buffer.byteLength(block, "utf8")
   if (totalSize > DOCTRINE_BLOCK_BUDGET_BYTES) {
     throw new Error(
-      `Assembled doctrine block is ${totalSize}B, exceeds total ${DOCTRINE_BLOCK_BUDGET_BYTES}B budget.`,
+      `Assembled doctrine block is ${totalSize}B, exceeds total ${DOCTRINE_BLOCK_BUDGET_BYTES}B budget.`
     )
   }
   return block
@@ -76,4 +81,3 @@ export function doctrineVersionsSnapshot(): Record<string, string> {
 export function mssqlPolicyVersion(): string {
   return MSSQL_DOCTRINES.map((d) => `${d.id}@${d.version}`).join("|")
 }
-

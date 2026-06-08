@@ -5,6 +5,6 @@ export default defineConfig({
     root: ".",
     include: ["tests/**/*.test.ts"],
     globals: true,
-    setupFiles: ["./tests/setup.ts"],
-  },
+    setupFiles: ["./tests/setup.ts"]
+  }
 })

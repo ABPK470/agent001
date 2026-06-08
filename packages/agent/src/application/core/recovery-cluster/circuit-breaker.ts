@@ -119,7 +119,7 @@ export class ToolFailureCircuitBreaker {
     }
     return {
       reason: this.state.reason ?? "Circuit breaker open after repeated tool failures",
-      retryAfterMs: Math.max(0, this.state.openUntil - now),
+      retryAfterMs: Math.max(0, this.state.openUntil - now)
     }
   }
 

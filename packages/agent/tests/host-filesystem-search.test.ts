@@ -16,10 +16,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { configureAgent } from "../src/application/shell/runtime.js"
-import {
-    createAppendFileTool,
-    createWriteFileTool,
-} from "../src/tools/filesystem/read-write.js"
+import { createAppendFileTool, createWriteFileTool } from "../src/tools/filesystem/read-write.js"
 import { createSearchFilesTool } from "../src/tools/search-files.js"
 
 let sandboxA: string
@@ -113,7 +110,7 @@ describe("createSearchFilesTool — Phase 4 item 4", () => {
     const host = configureAgent({ searchFilesBasePath: sandboxA })
     const tool = createSearchFilesTool(host)
 
-    const result = await tool.execute({ pattern: "NEEDLE" }) as string
+    const result = (await tool.execute({ pattern: "NEEDLE" })) as string
 
     expect(result).toContain("a.ts")
     expect(result).toContain("NEEDLE")
@@ -126,11 +123,11 @@ describe("createSearchFilesTool — Phase 4 item 4", () => {
     await writeFile(join(sandboxA, "top.ts"), "TARGET\n", "utf-8")
     const host = configureAgent({
       searchFilesBasePath: sandboxA,
-      searchFilesExcludeDirs: new Set(["packages"]),
+      searchFilesExcludeDirs: new Set(["packages"])
     })
     const tool = createSearchFilesTool(host)
 
-    const result = await tool.execute({ pattern: "TARGET" }) as string
+    const result = (await tool.execute({ pattern: "TARGET" })) as string
 
     expect(result).toContain("top.ts")
     expect(result).not.toContain("packages/x.ts")
@@ -140,7 +137,7 @@ describe("createSearchFilesTool — Phase 4 item 4", () => {
     const host = configureAgent({ searchFilesBasePath: sandboxA })
     const tool = createSearchFilesTool(host)
 
-    const result = await tool.execute({ pattern: "anything", path: "../" }) as string
+    const result = (await tool.execute({ pattern: "anything", path: "../" })) as string
 
     expect(result).toMatch(/escapes the workspace/i)
   })
@@ -153,7 +150,7 @@ describe("createSearchFilesTool — Phase 4 item 4", () => {
 
     const [rA, rB] = await Promise.all([
       createSearchFilesTool(hostA).execute({ pattern: "ONLY-A" }) as Promise<string>,
-      createSearchFilesTool(hostB).execute({ pattern: "ONLY-B" }) as Promise<string>,
+      createSearchFilesTool(hostB).execute({ pattern: "ONLY-B" }) as Promise<string>
     ])
 
     expect(rA).toContain("a.ts")

@@ -7,8 +7,8 @@
 export function parseTSqlReferences(definition: string): Map<string, number> {
   // Normalize: collapse whitespace, strip comments
   const cleaned = definition
-    .replace(/--[^\n]*/g, " ")                          // line comments
-    .replace(/\/\*[\s\S]*?\*\//g, " ")                  // block comments
+    .replace(/--[^\n]*/g, " ") // line comments
+    .replace(/\/\*[\s\S]*?\*\//g, " ") // block comments
     .replace(/\s+/g, " ")
     .toUpperCase()
 

@@ -1,4 +1,11 @@
-import { EffectClass, StepRole, VerificationMode, isEffectClass, isStepRole, isVerificationMode } from "../../domain/index.js"
+import {
+  EffectClass,
+  StepRole,
+  VerificationMode,
+  isEffectClass,
+  isStepRole,
+  isVerificationMode
+} from "../../domain/index.js"
 /**
  * Parse helpers and auto-fix normalizers for plan structures.
  *
@@ -49,15 +56,18 @@ export function parseStepRole(value: unknown): StepRole {
   return StepRole.Writer
 }
 
-export function parseArtifactRelations(value: unknown): Array<{ relationType: "read_dependency" | "write_owner"; artifactPath: string }> {
+export function parseArtifactRelations(
+  value: unknown
+): Array<{ relationType: "read_dependency" | "write_owner"; artifactPath: string }> {
   if (!Array.isArray(value)) return []
   return value
     .filter((v): v is Record<string, unknown> => typeof v === "object" && v !== null)
-    .map(v => ({
-      relationType: v.relationType === "write_owner" ? "write_owner" as const : "read_dependency" as const,
-      artifactPath: String(v.artifactPath ?? ""),
+    .map((v) => ({
+      relationType:
+        v.relationType === "write_owner" ? ("write_owner" as const) : ("read_dependency" as const),
+      artifactPath: String(v.artifactPath ?? "")
     }))
-    .filter(r => r.artifactPath.length > 0)
+    .filter((r) => r.artifactPath.length > 0)
 }
 
 // ============================================================================
@@ -113,10 +123,7 @@ export function normalizeArtifactDirectories(steps: PlanStep[]): void {
 
     // Strategy 2: scan objective text for "dir/filename" patterns
     if (!changed) {
-      const textBlob = [
-        sa.objective ?? "",
-        ...(sa.acceptanceCriteria ?? []),
-      ].join(" ")
+      const textBlob = [sa.objective ?? "", ...(sa.acceptanceCriteria ?? [])].join(" ")
 
       for (let i = 0; i < newArtifacts.length; i++) {
         const art = newArtifacts[i]
@@ -142,7 +149,7 @@ export function normalizeArtifactDirectories(steps: PlanStep[]): void {
       const newCtx = {
         ...ctx,
         targetArtifacts: newArtifacts,
-        ...(newRelations ? { artifactRelations: newRelations } : {}),
+        ...(newRelations ? { artifactRelations: newRelations } : {})
       }
       steps[si] = { ...sa, executionContext: newCtx } as SubagentTaskStep
     }
@@ -154,15 +161,13 @@ export function normalizeArtifactDirectories(steps: PlanStep[]): void {
 // ============================================================================
 
 export function deduplicateWriteOwnership(steps: PlanStep[]): void {
-  const subagentSteps = steps.filter(
-    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
-  )
+  const subagentSteps = steps.filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
 
   const ownersByArtifact = new Map<string, string[]>()
   for (const s of subagentSteps) {
     const relations = [
       ...(s.executionContext?.artifactRelations ?? []),
-      ...(s.workflowStep?.artifactRelations ?? []),
+      ...(s.workflowStep?.artifactRelations ?? [])
     ]
     for (const rel of relations) {
       if (rel.relationType === "write_owner") {
@@ -225,7 +230,7 @@ export function stripRedundantVerificationSteps(steps: PlanStep[], edges: PlanEd
 
   for (const step of steps) {
     if (step.dependsOn) {
-      const filtered = step.dependsOn.filter(d => !toRemove.has(d))
+      const filtered = step.dependsOn.filter((d) => !toRemove.has(d))
       ;(step as unknown as { dependsOn: string[] }).dependsOn = filtered
     }
   }
@@ -236,16 +241,12 @@ export function stripRedundantVerificationSteps(steps: PlanStep[], edges: PlanEd
 // ============================================================================
 
 export function ensureVerificationCoverage(steps: PlanStep[]): void {
-  const subagentSteps = steps.filter(
-    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
-  )
+  const subagentSteps = steps.filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
   if (subagentSteps.length <= 1) return
 
-  const hasWriters = subagentSteps.some(
-    s => s.executionContext?.effectClass !== "readonly",
-  )
+  const hasWriters = subagentSteps.some((s) => s.executionContext?.effectClass !== "readonly")
   const hasVerification = subagentSteps.some(
-    s => s.executionContext?.verificationMode !== VerificationMode.None,
+    (s) => s.executionContext?.verificationMode !== VerificationMode.None
   )
 
   if (hasWriters && !hasVerification) {

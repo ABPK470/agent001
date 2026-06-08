@@ -9,7 +9,7 @@ import type { ActiveRun, NotificationOpts } from "../../../ports/orchestration.j
 export function saveTrace(
   activeRuns: Map<string, ActiveRun>,
   runId: string,
-  entry: Record<string, unknown>,
+  entry: Record<string, unknown>
 ): void {
   const active = activeRuns.get(runId)
   const seq = active ? active.traceSeq++ : 0
@@ -17,7 +17,7 @@ export function saveTrace(
     run_id: runId,
     seq,
     data: JSON.stringify(entry),
-    created_at: new Date().toISOString(),
+    created_at: new Date().toISOString()
   })
 }
 
@@ -29,7 +29,7 @@ export function persistRun(
   agentId: string | null,
   parentRunId?: string,
   answer?: string,
-  error?: string,
+  error?: string
 ): void {
   db.saveRun({
     id: run.id,
@@ -41,7 +41,7 @@ export function persistRun(
     parent_run_id: parentRunId ?? null,
     agent_id: agentId,
     created_at: run.createdAt.toISOString(),
-    completed_at: run.completedAt?.toISOString() ?? null,
+    completed_at: run.completedAt?.toISOString() ?? null
   })
 }
 
@@ -53,7 +53,7 @@ export async function persistAuditLog(services: EngineServices, runId: string): 
       actor: entry.actor,
       action: entry.action,
       detail: JSON.stringify(entry.detail),
-      timestamp: entry.timestamp.toISOString(),
+      timestamp: entry.timestamp.toISOString()
     })
   }
 }
@@ -67,7 +67,7 @@ export function persistTokenUsage(runId: string, agent: Agent): void {
       total_tokens: agent.usage.totalTokens,
       llm_calls: agent.llmCalls,
       model: process.env["MODEL"] ?? "gpt-5.4",
-      created_at: new Date().toISOString(),
+      created_at: new Date().toISOString()
     })
   }
 }
@@ -88,8 +88,8 @@ export function createNotification(opts: NotificationOpts): void {
   if (opts.runId) {
     const r = db.getRun(opts.runId)
     if (r) {
-      ownerUpn  = r.upn          ?? null
-      sessionId = r.session_id   ?? null
+      ownerUpn = r.upn ?? null
+      sessionId = r.session_id ?? null
     }
   }
   if (!ownerUpn) {
@@ -107,7 +107,7 @@ export function createNotification(opts: NotificationOpts): void {
     session_id: sessionId,
     actions: JSON.stringify(opts.actions ?? []),
     read: 0,
-    created_at: new Date().toISOString(),
+    created_at: new Date().toISOString()
   }
   db.saveNotification(notification)
   broadcast({
@@ -120,7 +120,7 @@ export function createNotification(opts: NotificationOpts): void {
       runId: notification.run_id,
       stepId: notification.step_id,
       actions: opts.actions ?? [],
-      read: false,
-    },
+      read: false
+    }
   })
 }

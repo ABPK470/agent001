@@ -53,7 +53,12 @@ describe("browser domain policy", () => {
   it("deny rules win over allow rules", async () => {
     const { addPolicyRule, evaluatePolicy } = await import("../src/browser/policy.js")
     addPolicyRule({ ownerUpn: "alice@x", pattern: "*.example.com", effect: "allow" })
-    addPolicyRule({ ownerUpn: "alice@x", pattern: "evil.example.com", effect: "deny", reason: "phishing" })
+    addPolicyRule({
+      ownerUpn: "alice@x",
+      pattern: "evil.example.com",
+      effect: "deny",
+      reason: "phishing"
+    })
 
     const ok = evaluatePolicy("alice@x", "https://api.example.com/x")
     expect(ok.allow).toBe(true)

@@ -6,11 +6,7 @@ import { VerifierOutcome } from "../../domain/index.js"
  * @module
  */
 
-import type {
-    CoherentSolutionBundle,
-    VerifierDecision,
-    VerifierIssue,
-} from "../types.js"
+import type { CoherentSolutionBundle, VerifierDecision, VerifierIssue } from "../types.js"
 
 function uniqueStrings(values: readonly string[]): string[] {
   return [...new Set(values.filter((value) => value.trim().length > 0))]
@@ -18,19 +14,15 @@ function uniqueStrings(values: readonly string[]): string[] {
 
 export function collectDecisionIssues(decision: VerifierDecision): string[] {
   return uniqueStrings([
-    ...decision.steps
-      .filter((step) => step.outcome !== VerifierOutcome.Pass)
-      .flatMap((step) => step.issues),
+    ...decision.steps.filter((step) => step.outcome !== VerifierOutcome.Pass).flatMap((step) => step.issues),
     ...decision.unresolvedItems,
-    ...decision.systemChecks?.map((check) => check.summary) ?? [],
+    ...(decision.systemChecks?.map((check) => check.summary) ?? [])
   ])
 }
 
 export function collectAffectedArtifacts(decision: VerifierDecision): string[] {
   return uniqueStrings(
-    decision.steps.flatMap((step) =>
-      step.issueDetails?.flatMap((issue) => issue.affectedArtifacts) ?? [],
-    ),
+    decision.steps.flatMap((step) => step.issueDetails?.flatMap((issue) => issue.affectedArtifacts) ?? [])
   )
 }
 
@@ -42,17 +34,17 @@ function formatRepairFocus(issue: VerifierIssue): string {
 export function buildCoherentRepairInstructions(
   bundle: CoherentSolutionBundle,
   decision: VerifierDecision,
-  repairAttempt: number,
+  repairAttempt: number
 ): string {
   const issues = collectDecisionIssues(decision)
   const focusedIssues = uniqueStrings(
-    decision.steps.flatMap((step) =>
-      step.issueDetails?.map((issue) => formatRepairFocus(issue)) ?? [],
-    ),
+    decision.steps.flatMap((step) => step.issueDetails?.map((issue) => formatRepairFocus(issue)) ?? [])
   )
   const affectedArtifacts = collectAffectedArtifacts(decision)
-  const sharedContracts: string[] = bundle.sharedContracts?.map((contract) => `${contract.name}: ${contract.description}`) ?? []
-  const invariants: string[] = bundle.invariants?.map((invariant) => `${invariant.id}: ${invariant.description}`) ?? []
+  const sharedContracts: string[] =
+    bundle.sharedContracts?.map((contract) => `${contract.name}: ${contract.description}`) ?? []
+  const invariants: string[] =
+    bundle.invariants?.map((invariant) => `${invariant.id}: ${invariant.description}`) ?? []
 
   // Detect browser module architecture errors — when present, targeted repair is
   // impossible without restructuring (the module import error is constitutional,
@@ -70,13 +62,19 @@ export function buildCoherentRepairInstructions(
           `You MUST fix the module loading strategy — choose one of:`,
           `  (a) Change all HTML <script> tags for the affected files to use type="module" (e.g. <script type="module" src="chess.js">), ensuring the HTML loads every file that uses import/export as a module.`,
           `  (b) Remove all import/export statements and inline helper code directly into the entry file — this produces a single self-contained script that works in any browser context.`,
-          `Both approaches are acceptable. Whichever you choose, make ALL affected files consistent (HTML + every JS file).`,
+          `Both approaches are acceptable. Whichever you choose, make ALL affected files consistent (HTML + every JS file).`
         ].join("\n")
       : `Do NOT redesign or decompose the solution. Perform targeted repairs inside the existing coherent bundle first.`,
     `Artifacts in scope: ${bundle.artifacts.map((artifact) => artifact.path).join(", ")}`,
-    affectedArtifacts.length > 0 ? `Focus first on: ${affectedArtifacts.join(", ")}` : "Focus first on the artifacts implicated by the verifier findings.",
-    sharedContracts.length > 0 ? `Shared contracts to preserve:\n${sharedContracts.map((item: string) => `- ${item}`).join("\n")}` : "",
-    invariants.length > 0 ? `System invariants to preserve:\n${invariants.map((item: string) => `- ${item}`).join("\n")}` : "",
+    affectedArtifacts.length > 0
+      ? `Focus first on: ${affectedArtifacts.join(", ")}`
+      : "Focus first on the artifacts implicated by the verifier findings.",
+    sharedContracts.length > 0
+      ? `Shared contracts to preserve:\n${sharedContracts.map((item: string) => `- ${item}`).join("\n")}`
+      : "",
+    invariants.length > 0
+      ? `System invariants to preserve:\n${invariants.map((item: string) => `- ${item}`).join("\n")}`
+      : "",
     focusedIssues.length > 0
       ? `Verifier findings:\n${focusedIssues.join("\n")}`
       : `Verifier findings:\n${issues.map((issue) => `- ${issue}`).join("\n")}`,
@@ -89,14 +87,16 @@ export function buildCoherentRepairInstructions(
     `- Do NOT start server processes (node server.js, npm start, etc.) to verify code — the backend will be started by the user separately.`,
     `- Do NOT run package installation commands (npm install, yarn add, pnpm add, bun add, etc.) — dependencies must be declared in package.json files, not installed live.`,
     `- If browser_check shows ERR_CONNECTION_REFUSED to a local API, that means the backend is not running — this is expected and NOT a code bug to fix.`,
-    `Do not ask the user whether to continue. Repair now.`,
-  ].filter(Boolean).join("\n\n")
+    `Do not ask the user whether to continue. Repair now.`
+  ]
+    .filter(Boolean)
+    .join("\n\n")
 }
 
 export function buildCoherentPlannerEscalationGoal(
   originalGoal: string,
   bundle: CoherentSolutionBundle,
-  decision: VerifierDecision,
+  decision: VerifierDecision
 ): string {
   const issues = collectDecisionIssues(decision)
   return [
@@ -107,7 +107,7 @@ export function buildCoherentPlannerEscalationGoal(
     `Current artifacts: ${bundle.artifacts.map((artifact) => artifact.path).join(", ")}`,
     `Verified issues to fix:`,
     ...issues.map((issue) => `- ${issue}`),
-    `Produce a repair plan that applies the smallest coordinated fixes necessary across the existing artifacts.`,
+    `Produce a repair plan that applies the smallest coordinated fixes necessary across the existing artifacts.`
   ].join("\n")
 }
 
@@ -127,6 +127,6 @@ export function summarizeCoherentVerifierDecision(decision: VerifierDecision): {
     issueCount: issues.length,
     systemCheckCount: decision.systemChecks?.length ?? 0,
     issues,
-    affectedArtifacts,
+    affectedArtifacts
   }
 }

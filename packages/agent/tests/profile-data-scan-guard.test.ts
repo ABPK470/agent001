@@ -55,8 +55,8 @@ describe("isLargeObject helper", () => {
       viewSourceRows: new Map<string, number>([["foo.MegaView", 600_000_000]]),
       tables: new Map([
         ["foo.HugeTable", { qualifiedName: "foo.HugeTable", rowCount: 20_000_000 }],
-        ["foo.SmallTable", { qualifiedName: "foo.SmallTable", rowCount: 1_000 }],
-      ]),
+        ["foo.SmallTable", { qualifiedName: "foo.SmallTable", rowCount: 1_000 }]
+      ])
     }
     const accessor = () => fakeCatalog
     expect(isLargeObject("foo.HugeTable", accessor)).toBe(true)
@@ -86,7 +86,7 @@ describe("profile_data scan guard (deep mode)", () => {
       table: "fact.UnoTranspose",
       mode: "deep",
       columns: ["pkMonth"],
-      sample: 3,
+      sample: 3
     })
     expect(out).toMatch(/refusing DEEP profile of fact\.UnoTranspose/i)
   })

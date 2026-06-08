@@ -7,16 +7,10 @@
  * @module
  */
 
-import {
-    extractToolFailureText,
-    type ToolCallRecord,
-} from "../../../../tools/index.js"
+import { extractToolFailureText, type ToolCallRecord } from "../../../../tools/index.js"
 import type { RecoveryHint } from "../recovery.js"
 import { inferAdvancedRecoveryHint } from "./build-hints-advanced.js"
-import {
-    isShellExecutionAnomalyFailure,
-    isWatchModeOutput,
-} from "./recovery-detectors.js"
+import { isShellExecutionAnomalyFailure, isWatchModeOutput } from "./recovery-detectors.js"
 
 export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefined {
   const result = call.result
@@ -35,7 +29,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
         "For Vitest: `vitest run` or `vitest --run`. " +
         "For Jest: `CI=1 npm test` or `jest --runInBand`. " +
         "For pytest: remove `-s` interactive flags. " +
-        "Only append npm `--` flags when the underlying runner supports them.",
+        "Only append npm `--` flags when the underlying runner supports them."
     }
   }
 
@@ -46,7 +40,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
       message:
         "This shell command printed a real error on stderr even though exits code was 0. " +
         "Treat it as failed. Fix the cwd/path/script invocation before rerunning. " +
-        "For scripts that use relative paths, invoke from the workspace root.",
+        "For scripts that use relative paths, invoke from the workspace root."
     }
   }
 
@@ -63,7 +57,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
       message:
         `File or directory not found: ${missingPath ?? "(see error)"}. ` +
         "Use list_directory or `find` to discover what actually exists before retrying. " +
-        "Do not guess paths — verify them first.",
+        "Do not guess paths — verify them first."
     }
   }
 
@@ -74,7 +68,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
       message:
         "Permission denied. If this is a script, try `chmod +x` first. " +
         "If writing to a system directory, use a local path instead. " +
-        "Do NOT use sudo unless explicitly allowed.",
+        "Do NOT use sudo unless explicitly allowed."
     }
   }
 
@@ -86,7 +80,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
       key: `port-in-use:${port}`,
       message:
         `Port ${port} is already in use. Either kill the existing process ` +
-        `(\`lsof -i :${port}\` then \`kill <PID>\`) or use a different port.`,
+        `(\`lsof -i :${port}\` then \`kill <PID>\`) or use a different port.`
     }
   }
 
@@ -100,7 +94,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
         `Module "${moduleName ?? "(see error)"}" not found. ` +
         "Check: (1) Is it installed? Run `npm install` / `pip install`. " +
         "(2) Is the import path correct? Check for typos and relative vs absolute paths. " +
-        "(3) Does the file you're importing from actually export that symbol?",
+        "(3) Does the file you're importing from actually export that symbol?"
     }
   }
 
@@ -112,7 +106,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
         "Syntax error in your code. Read the error carefully — it tells you the exact line and position. " +
         "Use read_file to check that specific location. Fix the EXACT syntax issue; " +
         "do NOT rewrite the entire file. Common causes: missing brackets, unclosed strings, " +
-        "misplaced commas, mixing tabs and spaces.",
+        "misplaced commas, mixing tabs and spaces."
     }
   }
 
@@ -123,7 +117,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
       message:
         "TypeScript compilation error. Read the type error carefully. " +
         "Fix the specific type mismatch — do not add `as any` or `@ts-ignore`. " +
-        "If you need to understand the expected types, read the type definitions first.",
+        "If you need to understand the expected types, read the type definitions first."
     }
   }
 
@@ -135,7 +129,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
         "Package installation failed. Check the error: " +
         "ERESOLVE = dependency conflict (try `--legacy-peer-deps`). " +
         "EPERM = permission issue. " +
-        "If a package doesn't exist, verify the exact package name on npm.",
+        "If a package doesn't exist, verify the exact package name on npm."
     }
   }
 
@@ -145,14 +139,15 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
       key: "python-traceback",
       message:
         "Python raised an exception. Read the LAST line of the traceback — that's the actual error. " +
-        "The lines above show the call stack. Fix the specific error; do not rewrite the entire script.",
+        "The lines above show the call stack. Fix the specific error; do not rewrite the entire script."
     }
   }
 
   // Command not found
   if (/command not found|not recognized as.*command/i.test(result)) {
-    const cmdMatch = result.match(/(?:command not found|not recognized).*?:\s*(\S+)/i)
-      ?? result.match(/(\S+):\s*command not found/i)
+    const cmdMatch =
+      result.match(/(?:command not found|not recognized).*?:\s*(\S+)/i) ??
+      result.match(/(\S+):\s*command not found/i)
     const cmd = cmdMatch?.[1]
     return {
       key: `command-not-found:${cmd ?? "unknown"}`,
@@ -160,7 +155,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
         `Command "${cmd ?? "(see error)"}" not found. ` +
         "Check: (1) Is it installed? (2) Is it in PATH? Use `which` to verify. " +
         "(3) For npm packages, try `npx <command>` instead. " +
-        "(4) For Python, try `python -m <module>`.",
+        "(4) For Python, try `python -m <module>`."
     }
   }
 
@@ -172,7 +167,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
         "Compilation or linker error. Read the error to identify the missing symbol or library. " +
         "For undefined references: check that all source files are included in the build. " +
         "For missing libraries: install the development package (e.g., `-dev` or `-devel` suffix). " +
-        "Do not rewrite working code to fix a build configuration issue.",
+        "Do not rewrite working code to fix a build configuration issue."
     }
   }
 
@@ -183,7 +178,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
       message:
         "A test assertion failed. Read the expected vs actual values carefully. " +
         "Fix the implementation code to match the expected behavior — do NOT fix the test " +
-        "unless the test itself is wrong. Focus on the FIRST failing assertion.",
+        "unless the test itself is wrong. Focus on the FIRST failing assertion."
     }
   }
 
@@ -194,7 +189,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
       message:
         "JSON parsing failed. The data is not valid JSON. Common causes: " +
         "trailing commas, single quotes instead of double, unquoted keys, " +
-        "or the response is HTML/text instead of JSON. Inspect the raw data first.",
+        "or the response is HTML/text instead of JSON. Inspect the raw data first."
     }
   }
 
@@ -205,7 +200,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
       message:
         "Operation timed out. The process likely hung. Common causes: " +
         "infinite loop, unresolved promise, open handle, or waiting for user input. " +
-        "Do NOT increase the timeout. Inspect the code for hanging operations.",
+        "Do NOT increase the timeout. Inspect the code for hanging operations."
     }
   }
 
@@ -215,7 +210,7 @@ export function inferRecoveryHint(call: ToolCallRecord): RecoveryHint | undefine
       key: "out-of-memory",
       message:
         "Process ran out of memory. The code is likely creating too much data at once. " +
-        "Use streaming, pagination, or process data in chunks instead of loading everything into memory.",
+        "Use streaming, pagination, or process data in chunks instead of loading everything into memory."
     }
   }
 

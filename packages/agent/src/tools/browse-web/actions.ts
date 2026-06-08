@@ -9,12 +9,12 @@ import type { AgentHost } from "../../application/shell/runtime.js"
 import { dismissCookieConsent, readPageText } from "./page-helpers.js"
 import { resolveLocator } from "./selectors.js"
 import {
-    type BrowserSession,
-    deleteSession,
-    getSession,
-    launchSession,
-    persistSessionState,
-    withKillGuard,
+  type BrowserSession,
+  deleteSession,
+  getSession,
+  launchSession,
+  persistSessionState,
+  withKillGuard
 } from "./session.js"
 import { validateUrl } from "./ssrf.js"
 
@@ -48,11 +48,13 @@ export async function handleNavigate(args: NavigateArgs): Promise<string> {
   if (sessionId) {
     const s = getSession(host, sessionId)
     if (typeof s === "string") return s
-    session = s; id = sessionId
+    session = s
+    id = sessionId
   } else {
     const result = await launchSession(host, visible)
     if (typeof result === "string") return result
-    session = result.session; id = result.id
+    session = result.session
+    id = result.id
   }
 
   try {
@@ -61,17 +63,21 @@ export async function handleNavigate(args: NavigateArgs): Promise<string> {
     if (guard) {
       const decision = await guard.checkUrl(url)
       if (!decision.allow) {
-        const retry = decision.retryAfterMs ? ` (retry after ~${Math.ceil(decision.retryAfterMs / 1000)}s)` : ""
+        const retry = decision.retryAfterMs
+          ? ` (retry after ~${Math.ceil(decision.retryAfterMs / 1000)}s)`
+          : ""
         return `Navigation refused: ${decision.reason}${retry}`
       }
     }
-    await withKillGuard(session.page, () =>
-      // `domcontentloaded` (not `networkidle`) is the right wait condition for
-      // commerce sites: alza.cz, amazon, etc. continually poll trackers and
-      // ads, so the network is NEVER idle. We just need the HTML + scripts
-      // parsed; subsequent reads happen against the live page anyway.
-      session.page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 }),
-      args.signal,
+    await withKillGuard(
+      session.page,
+      () =>
+        // `domcontentloaded` (not `networkidle`) is the right wait condition for
+        // commerce sites: alza.cz, amazon, etc. continually poll trackers and
+        // ads, so the network is NEVER idle. We just need the HTML + scripts
+        // parsed; subsequent reads happen against the live page anyway.
+        session.page.goto(url, { waitUntil: "domcontentloaded", timeout: 60_000 }),
+      args.signal
     )
     session.url = session.page.url()
     await dismissCookieConsent(session.page)
@@ -82,10 +88,12 @@ export async function handleNavigate(args: NavigateArgs): Promise<string> {
       void guard.recordAction({ action: "browse_web.navigate", url: session.page.url() })
     }
     if (interstitial) {
-      return `[Session: ${id}] [URL: ${session.page.url()}]\n\n` +
+      return (
+        `[Session: ${id}] [URL: ${session.page.url()}]\n\n` +
         `⚠️  ${interstitial} interstitial detected. The page below is the challenge wall, NOT the requested content. ` +
         `If \`visible: true\`, ask the user to solve the challenge in the open browser window, then call \`browse_web action=read sessionId=${id}\` to re-read the page once they're through. ` +
         `If headless, call \`browser_human_handoff\` to hand control over.\n\n${text}`
+      )
     }
     return `[Session: ${id}] [URL: ${session.page.url()}]\n\n${text}`
   } catch (err) {
@@ -94,9 +102,9 @@ export async function handleNavigate(args: NavigateArgs): Promise<string> {
     // Try to extract whatever's there before giving up.
     if (err instanceof Error && /Timeout|timeout/.test(err.message)) {
       try {
-        const currentUrl   = session.page.url()
+        const currentUrl = session.page.url()
         const interstitial = await detectInterstitial(session.page)
-        const text         = await readPageText(session.page, maxLength)
+        const text = await readPageText(session.page, maxLength)
         if (text.trim().length > 0) {
           session.url = currentUrl
           const banner = interstitial
@@ -104,7 +112,9 @@ export async function handleNavigate(args: NavigateArgs): Promise<string> {
             : `⚠️  Navigation didn't finish loading within 60s but the page has content (likely heavy trackers prevent network-idle). Continuing with what loaded.`
           return `[Session: ${id}] [URL: ${currentUrl}]\n\n${banner}\n\n${text}`
         }
-      } catch { /* fall through to generic error */ }
+      } catch {
+        /* fall through to generic error */
+      }
     }
     return `Error navigating to ${url}: ${err instanceof Error ? err.message : String(err)}`
   }
@@ -117,16 +127,27 @@ export async function handleNavigate(args: NavigateArgs): Promise<string> {
  */
 async function detectInterstitial(page: import("playwright").Page): Promise<string | null> {
   try {
-    const sample = (await page.title().catch(() => "")).toLowerCase()
-      + " "
-      + ((await page.locator("body").innerText({ timeout: 1000 }).catch(() => "")) ?? "").slice(0, 4000).toLowerCase()
-    if (/just a moment|checking your browser|cloudflare/.test(sample))         return "Cloudflare"
-    if (/cf-turnstile|turnstile/.test(sample))                                  return "Cloudflare Turnstile"
-    if (/are you a robot|please verify you are human|hcaptcha/.test(sample))    return "hCaptcha"
-    if (/recaptcha|i'?m not a robot/.test(sample))                              return "reCAPTCHA"
-    if (/access denied|unusual traffic|automated requests/.test(sample))        return "Anti-bot"
+    const sample =
+      (await page.title().catch(() => "")).toLowerCase() +
+      " " +
+      (
+        (await page
+          .locator("body")
+          .innerText({ timeout: 1000 })
+          .catch(() => "")) ?? ""
+      )
+        .slice(0, 4000)
+        .toLowerCase()
+    if (/just a moment|checking your browser|cloudflare/.test(sample)) return "Cloudflare"
+    if (/cf-turnstile|turnstile/.test(sample)) return "Cloudflare Turnstile"
+    if (/are you a robot|please verify you are human|hcaptcha/.test(sample)) return "hCaptcha"
+    if (/recaptcha|i'?m not a robot/.test(sample)) return "reCAPTCHA"
+    if (/access denied|unusual traffic|automated requests/.test(sample)) return "Anti-bot"
     // DOM-level check for Turnstile widget which renders even without text.
-    const hasTurnstile = await page.locator(".cf-turnstile, iframe[src*='challenges.cloudflare.com']").count().catch(() => 0)
+    const hasTurnstile = await page
+      .locator(".cf-turnstile, iframe[src*='challenges.cloudflare.com']")
+      .count()
+      .catch(() => 0)
     if (hasTurnstile > 0) return "Cloudflare Turnstile"
     return null
   } catch {
@@ -139,7 +160,7 @@ export async function handleClick(
   sessionId: string,
   selector: string,
   maxLength: number,
-  signal?: AbortSignal | null,
+  signal?: AbortSignal | null
 ): Promise<string> {
   if (!selector) return "Error: 'selector' is required for click action"
 
@@ -151,7 +172,9 @@ export async function handleClick(
       await withKillGuard(session.page, () => loc.first().waitFor({ timeout: 3000 }), signal)
       await loc.first().click()
       clicked = true
-    } catch { /* primary selector failed, try text-content fallback below */ }
+    } catch {
+      /* primary selector failed, try text-content fallback below */
+    }
 
     if (!clicked) {
       // Fallback: click by text content on the active page (string eval for DOM type compat).
@@ -191,7 +214,7 @@ export async function handleType(
   selector: string,
   rawText: string,
   maxLength: number,
-  signal?: AbortSignal | null,
+  signal?: AbortSignal | null
 ): Promise<string> {
   if (!selector) return "Error: 'selector' is required for type action"
   if (!rawText) return "Error: 'text' is required for type action"
@@ -205,8 +228,13 @@ export async function handleType(
     // Detect submit intent: literal newline or escaped \n at end
     let typeText = rawText
     let submit = false
-    if (typeText.endsWith("\n")) { typeText = typeText.slice(0, -1); submit = true }
-    else if (typeText.endsWith("\\n")) { typeText = typeText.slice(0, -2); submit = true }
+    if (typeText.endsWith("\n")) {
+      typeText = typeText.slice(0, -1)
+      submit = true
+    } else if (typeText.endsWith("\\n")) {
+      typeText = typeText.slice(0, -2)
+      submit = true
+    }
 
     await withKillGuard(session.page, () => loc.first().pressSequentially(typeText, { delay: 30 }), signal)
 
@@ -214,7 +242,7 @@ export async function handleType(
       await session.page.keyboard.press("Enter")
       await session.page.waitForLoadState("networkidle", { timeout: 5000 }).catch(() => {})
     } else {
-      await new Promise(r => setTimeout(r, 500))
+      await new Promise((r) => setTimeout(r, 500))
     }
 
     session.url = session.page.url()
@@ -229,11 +257,11 @@ export async function handleScroll(
   session: BrowserSession,
   sessionId: string,
   direction: string,
-  maxLength: number,
+  maxLength: number
 ): Promise<string> {
   try {
     await session.page.evaluate(`window.scrollBy(0, ${direction === "up" ? -800 : 800})`)
-    await new Promise(r => setTimeout(r, 500))
+    await new Promise((r) => setTimeout(r, 500))
     const text = await readPageText(session.page, maxLength)
     return `[Session: ${sessionId}] [URL: ${session.page.url()}]\n\n${text}`
   } catch (err) {
@@ -244,7 +272,7 @@ export async function handleScroll(
 export async function handleRead(
   session: BrowserSession,
   sessionId: string,
-  maxLength: number,
+  maxLength: number
 ): Promise<string> {
   try {
     const text = await readPageText(session.page, maxLength)
@@ -257,10 +285,14 @@ export async function handleRead(
 export async function handleClose(
   host: AgentHost,
   session: BrowserSession,
-  sessionId: string,
+  sessionId: string
 ): Promise<string> {
   await persistSessionState(session)
-  try { await session.browser.close() } catch { /* ignore */ }
+  try {
+    await session.browser.close()
+  } catch {
+    /* ignore */
+  }
   deleteSession(host, sessionId)
   return `Session ${sessionId} closed.`
 }
@@ -279,7 +311,7 @@ export async function handleUpload(
   selector: string,
   filePath: string,
   workspaceRoot: string,
-  maxLength: number,
+  maxLength: number
 ): Promise<string> {
   if (!selector) return "Error: 'selector' is required for upload action"
   if (!filePath) return "Error: 'file_path' is required for upload action"
@@ -297,7 +329,7 @@ export async function handleUpload(
     const target = activeTarget(session)
     const loc = resolveLocator(target, selector)
     await loc.first().setInputFiles(abs)
-    await new Promise(r => setTimeout(r, 250))
+    await new Promise((r) => setTimeout(r, 250))
     const text = await readPageText(session.page, maxLength)
     return `[Session: ${sessionId}] [URL: ${session.page.url()}]\nUploaded "${rel}".\n\n${text}`
   } catch (err) {
@@ -318,13 +350,11 @@ export async function handleTabs(
   sub: string,
   index: number | undefined,
   url: string | undefined,
-  maxLength: number,
+  maxLength: number
 ): Promise<string> {
   const pages = session.context.pages()
   if (sub === "list") {
-    const lines = pages.map((p, i) =>
-      `[${i}]${p === session.page ? "*" : " "} ${p.url() || "about:blank"}`,
-    )
+    const lines = pages.map((p, i) => `[${i}]${p === session.page ? "*" : " "} ${p.url() || "about:blank"}`)
     return `[Session: ${sessionId}] tabs:\n${lines.join("\n")}`
   }
   if (sub === "switch") {
@@ -382,7 +412,7 @@ export async function handleFrame(
   session: BrowserSession,
   sessionId: string,
   sub: string,
-  index: number | undefined,
+  index: number | undefined
 ): Promise<string> {
   if (sub === "top") {
     session.frame = null
@@ -418,7 +448,7 @@ export async function handleIntercept(
   session: BrowserSession,
   sessionId: string,
   mode: string,
-  patterns: string[],
+  patterns: string[]
 ): Promise<string> {
   if (mode === "clear") {
     session.blockedPatterns = []
@@ -427,12 +457,15 @@ export async function handleIntercept(
   }
   if (mode === "set") {
     const wasEmpty = session.blockedPatterns.length === 0
-    session.blockedPatterns = patterns.filter(p => p && p.length > 0)
+    session.blockedPatterns = patterns.filter((p) => p && p.length > 0)
     if (wasEmpty && session.blockedPatterns.length > 0) {
       await session.page.route("**/*", (route) => {
         const url = route.request().url()
         for (const p of session.blockedPatterns) {
-          if (url.includes(p)) { route.abort().catch(() => {}); return }
+          if (url.includes(p)) {
+            route.abort().catch(() => {})
+            return
+          }
         }
         route.continue().catch(() => {})
       })

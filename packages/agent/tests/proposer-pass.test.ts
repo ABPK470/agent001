@@ -11,13 +11,13 @@
  */
 
 import {
-    ProposalKind,
-    runProposerPass,
-    type CatalogDriftProbe,
-    type DivergentEntityRow,
-    type EntityDescriptor,
-    type EnvPair,
-    type ProposerPassDeps,
+  ProposalKind,
+  runProposerPass,
+  type CatalogDriftProbe,
+  type DivergentEntityRow,
+  type EntityDescriptor,
+  type EnvPair,
+  type ProposerPassDeps
 } from "@mia/sync"
 import { describe, expect, it } from "vitest"
 
@@ -27,12 +27,12 @@ function ent(id: string, defVersion = 1): EntityDescriptor {
 
 function row(id: string, opts: Partial<DivergentEntityRow> = {}): DivergentEntityRow {
   return {
-    entityId:    id,
+    entityId: id,
     entityLabel: `Row ${id}`,
-    counts:      { insert: 0, update: 1, delete: 0, unchanged: 0, unknown: 0 },
-    perTable:    [],
+    counts: { insert: 0, update: 1, delete: 0, unchanged: 0, unknown: 0 },
+    perTable: [],
     newOnTarget: false,
-    ...opts,
+    ...opts
   }
 }
 
@@ -41,11 +41,11 @@ const NOW = "2025-01-15T12:00:00.000Z"
 
 function buildDeps(over: Partial<ProposerPassDeps> = {}): ProposerPassDeps {
   return {
-    listEntities:       async () => [],
-    probeCatalogDrift:  async () => ({ issues: [] }),
-    scanDivergentRows:  async () => [],
-    now:                () => NOW,
-    ...over,
+    listEntities: async () => [],
+    probeCatalogDrift: async () => ({ issues: [] }),
+    scanDivergentRows: async () => [],
+    now: () => NOW,
+    ...over
   }
 }
 
@@ -53,9 +53,12 @@ describe("runProposerPass", () => {
   it("emits exactly one Drift finding when catalog drift is present (skips rows)", async () => {
     let scanned = 0
     const deps = buildDeps({
-      listEntities:      async () => [ent("contract")],
+      listEntities: async () => [ent("contract")],
       probeCatalogDrift: async () => ({ issues: ["missing column foo"] }) satisfies CatalogDriftProbe,
-      scanDivergentRows: async () => { scanned++; return [] },
+      scanDivergentRows: async () => {
+        scanned++
+        return []
+      }
     })
     const r = await runProposerPass(envPair, {}, deps)
     expect(r.findings).toHaveLength(1)
@@ -67,8 +70,8 @@ describe("runProposerPass", () => {
   it("respects perEntityCap", async () => {
     const rows = Array.from({ length: 10 }, (_, i) => row(`r${i}`))
     const deps = buildDeps({
-      listEntities:      async () => [ent("contract")],
-      scanDivergentRows: async () => rows,
+      listEntities: async () => [ent("contract")],
+      scanDivergentRows: async () => rows
     })
     const r = await runProposerPass(envPair, { perEntityCap: 4 }, deps)
     expect(r.findings).toHaveLength(4)
@@ -77,8 +80,8 @@ describe("runProposerPass", () => {
   it("respects maxFindings", async () => {
     const rows = Array.from({ length: 100 }, (_, i) => row(`r${i}`))
     const deps = buildDeps({
-      listEntities:      async () => [ent("a"), ent("b")],
-      scanDivergentRows: async () => rows,
+      listEntities: async () => [ent("a"), ent("b")],
+      scanDivergentRows: async () => rows
     })
     const r = await runProposerPass(envPair, { perEntityCap: 100, maxFindings: 7 }, deps)
     expect(r.findings).toHaveLength(7)
@@ -86,12 +89,12 @@ describe("runProposerPass", () => {
 
   it("increments errors but keeps going on probe failure", async () => {
     const deps = buildDeps({
-      listEntities:      async () => [ent("a"), ent("b")],
+      listEntities: async () => [ent("a"), ent("b")],
       probeCatalogDrift: async (_p, e) => {
         if (e.id === "a") throw new Error("boom")
         return { issues: [] }
       },
-      scanDivergentRows: async () => [row("r1")],
+      scanDivergentRows: async () => [row("r1")]
     })
     const r = await runProposerPass(envPair, {}, deps)
     expect(r.counts.errors).toBe(1)
@@ -101,8 +104,8 @@ describe("runProposerPass", () => {
 
   it("produces stable fingerprints for identical input", async () => {
     const deps = buildDeps({
-      listEntities:      async () => [ent("contract")],
-      scanDivergentRows: async () => [row("rA"), row("rB")],
+      listEntities: async () => [ent("contract")],
+      scanDivergentRows: async () => [row("rA"), row("rB")]
     })
     const a = await runProposerPass(envPair, {}, deps)
     const b = await runProposerPass(envPair, {}, deps)
@@ -111,8 +114,8 @@ describe("runProposerPass", () => {
 
   it("honours entityIds whitelist", async () => {
     const deps = buildDeps({
-      listEntities:      async () => [ent("a"), ent("b"), ent("c")],
-      scanDivergentRows: async () => [row("r")],
+      listEntities: async () => [ent("a"), ent("b"), ent("c")],
+      scanDivergentRows: async () => [row("r")]
     })
     const r = await runProposerPass(envPair, { entityIds: ["b"] }, deps)
     expect(r.counts.scanned).toBe(1)
@@ -121,8 +124,8 @@ describe("runProposerPass", () => {
 
   it("emits ProposalKind.New when row is missing on target", async () => {
     const deps = buildDeps({
-      listEntities:      async () => [ent("contract")],
-      scanDivergentRows: async () => [row("rNew", { newOnTarget: true })],
+      listEntities: async () => [ent("contract")],
+      scanDivergentRows: async () => [row("rNew", { newOnTarget: true })]
     })
     const r = await runProposerPass(envPair, {}, deps)
     expect(r.findings[0]!.kind).toBe(ProposalKind.New)

@@ -24,20 +24,14 @@ export const DEFAULT_OPTS: DiffOptions = {
   rowCap: 5_000_000,
   sampleSize: 50,
   expandedIds: null,
-  telemetryContext: undefined,
+  telemetryContext: undefined
 }
 
 /**
  * Columns excluded from row-fingerprint comparison and UPDATE SET clauses.
  * Mirrors legacy core.uspSyncObjectTran's exclusion list.
  */
-export const META_EXCLUDED_COLUMNS = new Set([
-  "validFrom",
-  "validTo",
-  "isLocked",
-  "syncDate",
-  "deployDate",
-])
+export const META_EXCLUDED_COLUMNS = new Set(["validFrom", "validTo", "isLocked", "syncDate", "deployDate"])
 
 export interface PkHashRow {
   pk: string

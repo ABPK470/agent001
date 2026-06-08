@@ -63,9 +63,7 @@ export function compareTrajectories(runIdA: string, runIdB: string): TrajectoryC
   const normA = goalTextA.trim().toLowerCase().replace(/\s+/g, " ")
   const normB = goalTextB.trim().toLowerCase().replace(/\s+/g, " ")
   const sameGoal = !!(normA && normB && normA === normB)
-  const goalSimilarity = normA && normB
-    ? normA === normB ? 1 : diceCoefficient(normA, normB)
-    : 0
+  const goalSimilarity = normA && normB ? (normA === normB ? 1 : diceCoefficient(normA, normB)) : 0
 
   const toolsA = new Set(a.scorecard.toolsUsed)
   const toolsB = new Set(b.scorecard.toolsUsed)
@@ -74,12 +72,22 @@ export function compareTrajectories(runIdA: string, runIdB: string): TrajectoryC
   const toolOverlap = union.size > 0 ? intersection.size / union.size : 1
 
   const moreEfficient =
-    a.scorecard.eventsPerIteration < b.scorecard.eventsPerIteration ? "a"
-    : a.scorecard.eventsPerIteration > b.scorecard.eventsPerIteration ? "b"
-    : "equal"
+    a.scorecard.eventsPerIteration < b.scorecard.eventsPerIteration
+      ? "a"
+      : a.scorecard.eventsPerIteration > b.scorecard.eventsPerIteration
+        ? "b"
+        : "equal"
 
-  const outcomeA: "answer" | "error" | "incomplete" = a.scorecard.hasAnswer ? "answer" : a.scorecard.hasError ? "error" : "incomplete"
-  const outcomeB: "answer" | "error" | "incomplete" = b.scorecard.hasAnswer ? "answer" : b.scorecard.hasError ? "error" : "incomplete"
+  const outcomeA: "answer" | "error" | "incomplete" = a.scorecard.hasAnswer
+    ? "answer"
+    : a.scorecard.hasError
+      ? "error"
+      : "incomplete"
+  const outcomeB: "answer" | "error" | "incomplete" = b.scorecard.hasAnswer
+    ? "answer"
+    : b.scorecard.hasError
+      ? "error"
+      : "incomplete"
 
   const lines: string[] = []
   if (sameGoal) {
@@ -108,6 +116,6 @@ export function compareTrajectories(runIdA: string, runIdB: string): TrajectoryC
     moreEfficient,
     outcomeA,
     outcomeB,
-    summary: lines.join(" "),
+    summary: lines.join(" ")
   }
 }

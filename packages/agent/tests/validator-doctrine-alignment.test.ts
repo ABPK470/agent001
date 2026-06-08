@@ -21,23 +21,23 @@ const CASES: readonly Case[] = [
       "FROM publish.Revenue a",
       "JOIN publish.Revenue b ON b.pkClient = a.pkClient",
       "JOIN publish.Revenue c ON c.pkClient = a.pkClient",
-      "WHERE a.pkMonth = 202501",
+      "WHERE a.pkMonth = 202501"
     ].join("\n"),
     expectedValidatorCode: "large_object_overused",
-    expectedDoctrineCode: "large_object_overused",
+    expectedDoctrineCode: "large_object_overused"
   },
   {
     name: "aggregate_semantic_mismatch",
     sql: "SELECT SUM(b.AverageCreditBalanceZARMTD) AS AvgCreditBalZAR FROM #x_a3f91c08 b WHERE b.pkMonth = 1",
     expectedValidatorCode: "aggregate_semantic_mismatch",
-    expectedDoctrineCode: "aggregate_semantic_mismatch",
+    expectedDoctrineCode: "aggregate_semantic_mismatch"
   },
   {
     name: "temp_table_integrity",
     sql: "CREATE TABLE #range_a3f91c0 (x int); SELECT * FROM #range_a3f91c0; DROP TABLE #range_a3f91c0;",
     expectedValidatorCode: "temp_table_integrity",
-    expectedDoctrineCode: "temp_table_integrity",
-  },
+    expectedDoctrineCode: "temp_table_integrity"
+  }
 ]
 
 describe("validator ↔ doctrine alignment", () => {
@@ -50,7 +50,7 @@ describe("validator ↔ doctrine alignment", () => {
       const diags = enforceDoctrines(c.sql)
       expect(
         diags.some((d) => d.code === c.expectedDoctrineCode),
-        `doctrine block missing for ${c.name}; got: ${diags.map((d) => d.code).join(",") || "none"}`,
+        `doctrine block missing for ${c.name}; got: ${diags.map((d) => d.code).join(",") || "none"}`
       ).toBe(true)
     })
   }

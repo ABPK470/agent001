@@ -13,12 +13,10 @@
  * @module
  */
 
-
 import { PLACEHOLDER_PATTERNS } from "./patterns.js"
 import { detectInconsistentBranches } from "./branch-analysis.js"
 export { PLACEHOLDER_PATTERNS } from "./patterns.js"
 export { detectInconsistentBranches } from "./branch-analysis.js"
-
 
 // ============================================================================
 // Detection functions
@@ -38,7 +36,8 @@ export function detectPlaceholderPatterns(code: string): string[] {
     if (code[i] === "\n") lineStarts.push(i + 1)
   }
   const getLineNumber = (offset: number): number => {
-    let lo = 0, hi = lineStarts.length - 1
+    let lo = 0,
+      hi = lineStarts.length - 1
     while (lo < hi) {
       const mid = (lo + hi + 1) >> 1
       if (lineStarts[mid]! <= offset) lo = mid
@@ -80,7 +79,8 @@ export function detectPlaceholderPatterns(code: string): string[] {
   }
 
   // ── "will go here" / "will be added" deferred-work comments ──
-  const deferredRe = /\/\/\s*(?:\w+\s+)*(?:will\s+(?:go|be\s+(?:added|implemented|handled))|goes?\s+here|add(?:ed)?\s+(?:later|here))\b/gi
+  const deferredRe =
+    /\/\/\s*(?:\w+\s+)*(?:will\s+(?:go|be\s+(?:added|implemented|handled))|goes?\s+here|add(?:ed)?\s+(?:later|here))\b/gi
   deferredRe.lastIndex = 0
   const matchDetails: string[] = []
   let dm: RegExpExecArray | null
@@ -105,7 +105,8 @@ export function detectCatchAllReturns(code: string): string[] {
   const findings: string[] = []
   // Match both `function` declarations AND class method syntax (indented, no `function` keyword).
   // Class methods: `  isLegalMove(start, end) {` — indented name, followed by parens and brace.
-  const funcRe = /(?:function\s+|^\s+)(validate\w*|check\w*|is[A-Z]\w*|can[A-Z]\w*|isValid\w*|isLegal\w*|getLegal\w*|calculate\w*|compute\w*|get[A-Z]\w*|find[A-Z]\w*|handle[A-Z]\w*|on[A-Z]\w*)\s*\(/gm
+  const funcRe =
+    /(?:function\s+|^\s+)(validate\w*|check\w*|is[A-Z]\w*|can[A-Z]\w*|isValid\w*|isLegal\w*|getLegal\w*|calculate\w*|compute\w*|get[A-Z]\w*|find[A-Z]\w*|handle[A-Z]\w*|on[A-Z]\w*)\s*\(/gm
   let m: RegExpExecArray | null
   while ((m = funcRe.exec(code)) !== null) {
     const funcName = m[1]
@@ -118,12 +119,18 @@ export function detectCatchAllReturns(code: string): string[] {
       if (code[i] === "{") depth++
       else if (code[i] === "}") {
         depth--
-        if (depth === 0) { bodyEnd = i; break }
+        if (depth === 0) {
+          bodyEnd = i
+          break
+        }
       }
     }
     if (bodyEnd < 0) continue
     const body = code.slice(bodyStart + 1, bodyEnd)
-    const bodyLines = body.split("\n").map(l => l.trim()).filter(l => l.length > 0 && !l.startsWith("//") && !l.startsWith("/*") && !l.startsWith("*"))
+    const bodyLines = body
+      .split("\n")
+      .map((l) => l.trim())
+      .filter((l) => l.length > 0 && !l.startsWith("//") && !l.startsWith("/*") && !l.startsWith("*"))
     if (bodyLines.length < 3) continue
 
     const lastLine = bodyLines[bodyLines.length - 1]
@@ -136,15 +143,41 @@ export function detectCatchAllReturns(code: string): string[] {
         const hasExhaustiveLoop = /\b(?:for|while)\s*\(/.test(body)
         // Count distinct non-builtin function calls in the body.
         // If the function delegates to 3+ helpers, it's doing real work — not a stub.
-        const builtins = new Set(["if", "for", "while", "switch", "return", "new", "typeof", "catch", "throw", "delete", "void", "Math", "console", "String", "Number", "Boolean", "Array", "Object", "JSON", "parseInt", "parseFloat", "isNaN", "isFinite"])
+        const builtins = new Set([
+          "if",
+          "for",
+          "while",
+          "switch",
+          "return",
+          "new",
+          "typeof",
+          "catch",
+          "throw",
+          "delete",
+          "void",
+          "Math",
+          "console",
+          "String",
+          "Number",
+          "Boolean",
+          "Array",
+          "Object",
+          "JSON",
+          "parseInt",
+          "parseFloat",
+          "isNaN",
+          "isFinite"
+        ])
         const callMatches = body.match(/\b([a-zA-Z_]\w*)\s*\(/g) || []
         const trailingParen = /\s*\($/
         const helperCalls = new Set(
-          callMatches.map(c => c.replace(trailingParen, "").trim()).filter(n => !builtins.has(n)),
+          callMatches.map((c) => c.replace(trailingParen, "").trim()).filter((n) => !builtins.has(n))
         )
         const hasManyHelpers = helperCalls.size >= 3
         if (!hasExhaustiveLoop && !hasManyHelpers && bodyLines.length < 20) {
-          findings.push(`catch-all "return true" in ${funcName}() — handles some cases but falls through to true for the rest`)
+          findings.push(
+            `catch-all "return true" in ${funcName}() — handles some cases but falls through to true for the rest`
+          )
         }
       }
     }

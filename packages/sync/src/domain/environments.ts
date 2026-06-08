@@ -145,7 +145,7 @@ export function assertSupportedSyncDirection(sourceEnv: SyncEnvironment, targetE
   if (normalized.includes(target)) return
   const rendered = allowedTargets.length > 0 ? allowedTargets.join(", ") : "none"
   throw new Error(
-    `Unsupported sync direction "${sourceEnv.name} -> ${targetEnv.name}". Allowed targets for ${sourceEnv.name}: ${rendered}.`,
+    `Unsupported sync direction "${sourceEnv.name} -> ${targetEnv.name}". Allowed targets for ${sourceEnv.name}: ${rendered}.`
   )
 }
 
@@ -159,39 +159,40 @@ export function assertSupportedSyncDirection(sourceEnv: SyncEnvironment, targetE
  * `deploy/sync/sync-environments.json`.
  */
 export function withPermissionDefaults(
-  e: Partial<SyncEnvironment> & Pick<SyncEnvironment, "name">,
+  e: Partial<SyncEnvironment> & Pick<SyncEnvironment, "name">
 ): SyncEnvironment {
   // Treat anything containing "prod" or "uat" (case-insensitive) as
   // read-only by default. Everything else is treated as dev-shaped.
   const isProdLike = /\bprod\b/i.test(e.name)
-  const isUatLike  = /\buat\b|\bstag(e|ing)?\b/i.test(e.name)
+  const isUatLike = /\buat\b|\bstag(e|ing)?\b/i.test(e.name)
   const lockedDown = isProdLike || isUatLike
-  const defaultAccessMode: EnvAccessMode = e.defaultAccessMode ?? (lockedDown ? EnvAccessMode.ReadOnly : EnvAccessMode.ReadWrite)
-  const denyDml = e.denyDml ?? (defaultAccessMode === EnvAccessMode.ReadOnly)
-  const denyDdl = e.denyDdl ?? (defaultAccessMode === EnvAccessMode.ReadOnly)
-  const allowedOperations = e.allowedOperations ?? (
-    lockedDown
-      ? ["query_read", "schema_introspect", "sync_preview"] as EnvOperation[]
-      : ["query_read", "schema_introspect", "sync_preview", "sync_execute", "dml"] as EnvOperation[]
-  )
+  const defaultAccessMode: EnvAccessMode =
+    e.defaultAccessMode ?? (lockedDown ? EnvAccessMode.ReadOnly : EnvAccessMode.ReadWrite)
+  const denyDml = e.denyDml ?? defaultAccessMode === EnvAccessMode.ReadOnly
+  const denyDdl = e.denyDdl ?? defaultAccessMode === EnvAccessMode.ReadOnly
+  const allowedOperations =
+    e.allowedOperations ??
+    (lockedDown
+      ? (["query_read", "schema_introspect", "sync_preview"] as EnvOperation[])
+      : (["query_read", "schema_introspect", "sync_preview", "sync_execute", "dml"] as EnvOperation[]))
   const approvalRequiredOperations = e.approvalRequiredOperations ?? ([] as EnvOperation[])
 
   return {
-    name:               e.name,
-    displayName:        e.displayName ?? e.name,
-    color:              e.color ?? "slate",
-    role:               (e.role ?? EnvRole.Both),
-    ringOrder:          typeof e.ringOrder === "number" ? e.ringOrder : 0,
-    agentServiceBaseUrl:e.agentServiceBaseUrl ?? null,
-    etlServiceBaseUrl:  e.etlServiceBaseUrl ?? null,
+    name: e.name,
+    displayName: e.displayName ?? e.name,
+    color: e.color ?? "slate",
+    role: e.role ?? EnvRole.Both,
+    ringOrder: typeof e.ringOrder === "number" ? e.ringOrder : 0,
+    agentServiceBaseUrl: e.agentServiceBaseUrl ?? null,
+    etlServiceBaseUrl: e.etlServiceBaseUrl ?? null,
     gateServiceBaseUrl: e.gateServiceBaseUrl ?? null,
-    syncAllowlist:      Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
+    syncAllowlist: Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
     allowedSyncTargets: Array.isArray(e.allowedSyncTargets) ? e.allowedSyncTargets.map(String) : null,
     defaultAccessMode,
     allowedOperations,
     denyDml,
     denyDdl,
-    approvalRequiredOperations,
+    approvalRequiredOperations
   }
 }
 
@@ -200,7 +201,7 @@ const DEFAULT_CONFIG_PATH = "deploy/sync/sync-environments.json"
 export function loadSyncEnvironments(
   projectRoot: string,
   connections: ReadonlyArray<{ name: string }>,
-  relPath = DEFAULT_CONFIG_PATH,
+  relPath = DEFAULT_CONFIG_PATH
 ): LoadSyncEnvironmentsResult {
   const configPath = resolve(projectRoot, relPath)
 
@@ -209,27 +210,29 @@ export function loadSyncEnvironments(
       const raw = readFileSync(configPath, "utf-8")
       const parsed = JSON.parse(raw) as SyncEnvironmentsConfigFile
       if (parsed.version !== 1) throw new Error(`Unsupported version: ${parsed.version}`)
-      const environments = parsed.environments.map((e) => withPermissionDefaults({
-        name: e.name,
-        displayName: e.displayName ?? e.name,
-        color: e.color ?? "slate",
-        role: (e.role ?? EnvRole.Both),
-        ringOrder: typeof e.ringOrder === "number" ? e.ringOrder : 0,
-        agentServiceBaseUrl: e.agentServiceBaseUrl ?? null,
-        etlServiceBaseUrl: e.etlServiceBaseUrl ?? null,
-        gateServiceBaseUrl: e.gateServiceBaseUrl ?? null,
-        syncAllowlist: Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
-        allowedSyncTargets: Array.isArray(e.allowedSyncTargets) ? e.allowedSyncTargets.map(String) : null,
-        defaultAccessMode: e.defaultAccessMode,
-        allowedOperations: e.allowedOperations,
-        denyDml: e.denyDml,
-        denyDdl: e.denyDdl,
-        approvalRequiredOperations: e.approvalRequiredOperations,
-      }))
+      const environments = parsed.environments.map((e) =>
+        withPermissionDefaults({
+          name: e.name,
+          displayName: e.displayName ?? e.name,
+          color: e.color ?? "slate",
+          role: e.role ?? EnvRole.Both,
+          ringOrder: typeof e.ringOrder === "number" ? e.ringOrder : 0,
+          agentServiceBaseUrl: e.agentServiceBaseUrl ?? null,
+          etlServiceBaseUrl: e.etlServiceBaseUrl ?? null,
+          gateServiceBaseUrl: e.gateServiceBaseUrl ?? null,
+          syncAllowlist: Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
+          allowedSyncTargets: Array.isArray(e.allowedSyncTargets) ? e.allowedSyncTargets.map(String) : null,
+          defaultAccessMode: e.defaultAccessMode,
+          allowedOperations: e.allowedOperations,
+          denyDml: e.denyDml,
+          denyDdl: e.denyDdl,
+          approvalRequiredOperations: e.approvalRequiredOperations
+        })
+      )
       return {
         environments,
         summary: environments.map((env) => `${env.name}[${env.role}/${env.defaultAccessMode}]`).join(", "),
-        source: "file",
+        source: "file"
       }
     } catch (e) {
       console.error(`Invalid ${relPath}:`, e instanceof Error ? e.message : e)
@@ -238,18 +241,20 @@ export function loadSyncEnvironments(
   }
 
   const FALLBACK_PALETTE = ["blue", "teal", "indigo", "pink", "slate", "cyan"]
-  const environments = connections.map((connection, i) => withPermissionDefaults({
-    name: connection.name,
-    displayName: connection.name,
-    color: FALLBACK_PALETTE[i % FALLBACK_PALETTE.length] ?? "slate",
-    role: EnvRole.Both,
-    ringOrder: i,
-    syncAllowlist: [],
-  }))
+  const environments = connections.map((connection, i) =>
+    withPermissionDefaults({
+      name: connection.name,
+      displayName: connection.name,
+      color: FALLBACK_PALETTE[i % FALLBACK_PALETTE.length] ?? "slate",
+      role: EnvRole.Both,
+      ringOrder: i,
+      syncAllowlist: []
+    })
+  )
   return {
     environments,
     summary: environments.map((env) => `${env.name}[${env.defaultAccessMode}]`).join(", "),
-    source: environments.length ? "mssql" : "none",
+    source: environments.length ? "mssql" : "none"
   }
 }
 
@@ -257,7 +262,11 @@ export function loadSyncEnvironments(
  * Initialise environments. Reads `deploy/sync/sync-environments.json` if
  * present; otherwise synthesises one entry per configured MSSQL connection.
  */
-export async function setupEnvironments(host: MssqlAccessHost & SyncEnvironmentRegistryHost, projectRoot: string, relPath = DEFAULT_CONFIG_PATH): Promise<string> {
+export async function setupEnvironments(
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
+  projectRoot: string,
+  relPath = DEFAULT_CONFIG_PATH
+): Promise<string> {
   const loaded = loadSyncEnvironments(projectRoot, getMssqlConfig(host), relPath)
   replaceEnvironments(host, loaded.environments)
   if (loaded.source === "file") {

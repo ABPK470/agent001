@@ -8,29 +8,25 @@ import { DelegationRole, VerificationMode } from "../../../../domain/index.js"
 
 import { DelegationOutputValidationCode } from "../../../../domain/enums/delegation.js"
 import {
-    BROWSER_RUNTIME_FAILURE_RE,
-    classifyTaskIntent,
-    extractLocalArtifactReferences,
-    FILE_ARTIFACT_RE,
-    getToolCallPathArg,
-    hasMutationPathEvidence,
-    isFileMutationToolCall,
-    isLowSignalBrowserToolCall,
-    MEANINGFUL_BROWSER_TOOLS,
-    normalizeArtifactPath,
-    specRequiresBrowserEvidence,
-    specRequiresFileMutationEvidence,
+  BROWSER_RUNTIME_FAILURE_RE,
+  classifyTaskIntent,
+  extractLocalArtifactReferences,
+  FILE_ARTIFACT_RE,
+  getToolCallPathArg,
+  hasMutationPathEvidence,
+  isFileMutationToolCall,
+  isLowSignalBrowserToolCall,
+  MEANINGFUL_BROWSER_TOOLS,
+  normalizeArtifactPath,
+  specRequiresBrowserEvidence,
+  specRequiresFileMutationEvidence
 } from "../validation-patterns/index.js"
-import {
-    LOW_SIGNAL_BROWSER_TOOLS,
-    type DelegationOutputValidationResult,
-    type GateParams,
-} from "./types.js"
+import { LOW_SIGNAL_BROWSER_TOOLS, type DelegationOutputValidationResult, type GateParams } from "./types.js"
 
 export function gateFileArtifactEvidence(p: GateParams): DelegationOutputValidationResult | null {
   const { spec, trimmed, toolCalls } = p
   if (!specRequiresFileMutationEvidence(spec)) return null
-  const successfulMutations = toolCalls.filter(tc => isFileMutationToolCall(tc) && !tc.isError)
+  const successfulMutations = toolCalls.filter((tc) => isFileMutationToolCall(tc) && !tc.isError)
   if (successfulMutations.length === 0) return null
 
   const hasToolPathEvidence = successfulMutations.some(hasMutationPathEvidence)
@@ -39,7 +35,7 @@ export function gateFileArtifactEvidence(p: GateParams): DelegationOutputValidat
   return {
     ok: false,
     code: DelegationOutputValidationCode.MissingFileArtifactEvidence,
-    message: "File mutation tools were used but no artifact path evidence was found in output or tool results",
+    message: "File mutation tools were used but no artifact path evidence was found in output or tool results"
   }
 }
 
@@ -49,7 +45,7 @@ export function gateTargetCoverage(p: GateParams): DelegationOutputValidationRes
   const isImplementationLike = intent === "implementation" || intent === "mixed"
   if (!isImplementationLike || spec.targetArtifacts.length === 0) return null
 
-  const successfulMutations = toolCalls.filter(tc => isFileMutationToolCall(tc) && !tc.isError)
+  const successfulMutations = toolCalls.filter((tc) => isFileMutationToolCall(tc) && !tc.isError)
   const mutatedPaths = new Set<string>()
   const unresolvedReferences = new Set<string>()
   let hasUnknownMutationPath = false
@@ -64,16 +60,16 @@ export function gateTargetCoverage(p: GateParams): DelegationOutputValidationRes
   }
 
   const normalizedTargets = spec.targetArtifacts.map(normalizeArtifactPath)
-  const touchedTargets = normalizedTargets.filter(target => {
+  const touchedTargets = normalizedTargets.filter((target) => {
     const targetBase = target.split("/").pop() ?? target
-    return [...mutatedPaths].some(mp => mp === target || mp.endsWith(`/${targetBase}`))
+    return [...mutatedPaths].some((mp) => mp === target || mp.endsWith(`/${targetBase}`))
   })
 
   if (successfulMutations.length > 0 && touchedTargets.length === 0 && !hasUnknownMutationPath) {
     return {
       ok: false,
       code: DelegationOutputValidationCode.MissingTargetArtifactCoverage,
-      message: `Mutation tools ran, but none of the declared target artifacts were touched: ${spec.targetArtifacts.slice(0, 3).join(", ")}`,
+      message: `Mutation tools ran, but none of the declared target artifacts were touched: ${spec.targetArtifacts.slice(0, 3).join(", ")}`
     }
   }
 
@@ -83,7 +79,7 @@ export function gateTargetCoverage(p: GateParams): DelegationOutputValidationRes
     ...normalizedTargets,
     ...spec.requiredSourceArtifacts.map(normalizeArtifactPath),
     ...(spec.knownProjectArtifacts ?? []).map(normalizeArtifactPath),
-    ...[...mutatedPaths],
+    ...[...mutatedPaths]
   ])
 
   for (const tc of successfulMutations) {
@@ -95,11 +91,12 @@ export function gateTargetCoverage(p: GateParams): DelegationOutputValidationRes
     const refs = extractLocalArtifactReferences(content)
     for (const ref of refs) {
       const normalizedRef = normalizeArtifactPath(ref)
-      const resolved = normalizedRef.startsWith("../") || normalizedRef.startsWith("./")
-        ? normalizeArtifactPath(`${baseDir}/${normalizedRef}`)
-        : normalizedRef
+      const resolved =
+        normalizedRef.startsWith("../") || normalizedRef.startsWith("./")
+          ? normalizeArtifactPath(`${baseDir}/${normalizedRef}`)
+          : normalizedRef
       const refBase = resolved.split("/").pop() ?? resolved
-      const isKnown = [...knownArtifacts].some(k => k === resolved || k.endsWith(`/${refBase}`))
+      const isKnown = [...knownArtifacts].some((k) => k === resolved || k.endsWith(`/${refBase}`))
       if (!isKnown) unresolvedReferences.add(ref)
     }
   }
@@ -112,7 +109,7 @@ export function gateTargetCoverage(p: GateParams): DelegationOutputValidationRes
     return {
       ok: false,
       code: DelegationOutputValidationCode.UnresolvedArtifactReferences,
-      message: `Created/edited content references local artifacts without evidence they exist: ${sample}`,
+      message: `Created/edited content references local artifacts without evidence they exist: ${sample}`
     }
   }
   return null
@@ -122,28 +119,31 @@ export function gateBrowserEvidence(p: GateParams): DelegationOutputValidationRe
   const { spec, toolCalls } = p
   if (!specRequiresBrowserEvidence(spec) || toolCalls.length === 0) return null
 
-  const browserCalls = toolCalls.filter(tc =>
-    MEANINGFUL_BROWSER_TOOLS.has(tc.name) || LOW_SIGNAL_BROWSER_TOOLS.has(tc.name),
+  const browserCalls = toolCalls.filter(
+    (tc) => MEANINGFUL_BROWSER_TOOLS.has(tc.name) || LOW_SIGNAL_BROWSER_TOOLS.has(tc.name)
   )
   if (browserCalls.length === 0) return null
 
-  const hasFailedMeaningfulBrowserEvidence = browserCalls.some((tc) =>
-    MEANINGFUL_BROWSER_TOOLS.has(tc.name) && (tc.isError || BROWSER_RUNTIME_FAILURE_RE.test(tc.result)),
+  const hasFailedMeaningfulBrowserEvidence = browserCalls.some(
+    (tc) =>
+      MEANINGFUL_BROWSER_TOOLS.has(tc.name) && (tc.isError || BROWSER_RUNTIME_FAILURE_RE.test(tc.result))
   )
   if (hasFailedMeaningfulBrowserEvidence) {
     return {
       ok: false,
       code: DelegationOutputValidationCode.MissingExecutableVerificationEvidence,
-      message: "browser_check evidence contains runtime/load errors — fix those errors before claiming completion",
+      message:
+        "browser_check evidence contains runtime/load errors — fix those errors before claiming completion"
     }
   }
 
-  const allLowSignal = browserCalls.every(tc => isLowSignalBrowserToolCall(tc))
+  const allLowSignal = browserCalls.every((tc) => isLowSignalBrowserToolCall(tc))
   if (allLowSignal) {
     return {
       ok: false,
       code: DelegationOutputValidationCode.LowSignalBrowserEvidence,
-      message: "Browser tools were used but only low-signal actions (about:blank, tab listing) — no meaningful browser evidence",
+      message:
+        "Browser tools were used but only low-signal actions (about:blank, tab listing) — no meaningful browser evidence"
     }
   }
   return null

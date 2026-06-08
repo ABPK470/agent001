@@ -54,7 +54,7 @@ describe("browser credentials store", () => {
       label: "github",
       kind: "password",
       targetOrigin: "https://github.com",
-      payload: { username: "alice", password: "s3cret!" },
+      payload: { username: "alice", password: "s3cret!" }
     })
     expect(meta.id).toMatch(/[0-9a-f-]+/)
     expect(meta.label).toBe("github")
@@ -62,10 +62,7 @@ describe("browser credentials store", () => {
     const list = listCredentials("alice@example.com")
     expect(list.length).toBe(1)
 
-    const opened = openCredential<{ username: string; password: string }>(
-      "alice@example.com",
-      meta.id,
-    )
+    const opened = openCredential<{ username: string; password: string }>("alice@example.com", meta.id)
     expect(opened?.payload).toEqual({ username: "alice", password: "s3cret!" })
   })
 
@@ -79,7 +76,7 @@ describe("browser credentials store", () => {
       label: "shared",
       kind: "password",
       targetOrigin: "https://example.com",
-      payload: { username: "a", password: "b" },
+      payload: { username: "a", password: "b" }
     })
 
     expect(openCredential("bob@example.com", m.id)).toBeNull()
@@ -96,8 +93,8 @@ describe("browser credentials store", () => {
         label: "bad",
         kind: "password",
         targetOrigin: "x",
-        payload: { username: "only" },
-      }),
+        payload: { username: "only" }
+      })
     ).toThrow(/password credential requires/)
 
     expect(() =>
@@ -106,17 +103,15 @@ describe("browser credentials store", () => {
         label: "bad-totp",
         kind: "totp",
         targetOrigin: "x",
-        payload: {},
-      }),
+        payload: {}
+      })
     ).toThrow(/totp credential requires/)
   })
 
   it("server provider generates TOTP codes and refuses cross-tenant", async () => {
     await bootstrap()
     const { createCredential } = await import("../src/browser/credentials.js")
-    const { createServerBrowserCredentialProvider } = await import(
-      "../src/browser/credential-provider.js"
-    )
+    const { createServerBrowserCredentialProvider } = await import("../src/browser/credential-provider.js")
 
     // RFC 6238 Appendix B test vector secret (base32 of "12345678901234567890")
     const meta = createCredential({
@@ -124,7 +119,7 @@ describe("browser credentials store", () => {
       label: "test-totp",
       kind: "totp",
       targetOrigin: "https://example.com",
-      payload: { secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", digits: 6, period: 30 },
+      payload: { secret: "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ", digits: 6, period: 30 }
     })
 
     const aliceProvider = createServerBrowserCredentialProvider("alice@example.com")
@@ -140,9 +135,7 @@ describe("browser credentials store", () => {
 
   it("server provider returns null for anonymous sessions", async () => {
     await bootstrap()
-    const { serverBrowserCredentialProvider } = await import(
-      "../src/browser/credential-provider.js"
-    )
+    const { serverBrowserCredentialProvider } = await import("../src/browser/credential-provider.js")
     expect(await serverBrowserCredentialProvider.resolvePassword("anything")).toBeNull()
     expect(await serverBrowserCredentialProvider.resolveTotp("anything")).toBeNull()
   })

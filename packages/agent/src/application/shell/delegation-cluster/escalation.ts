@@ -158,6 +158,6 @@ export function buildEscalationInput(params: {
     reexecuteOnNeedsRevision: true, // mia always re-executes (no targeted revision yet)
     timedOut: params.timedOut,
     budgetExhausted: params.budgetExhausted,
-    allStepsStuck: params.allStepsRepeatedFailure,
+    allStepsStuck: params.allStepsRepeatedFailure
   }
 }

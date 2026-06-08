@@ -15,7 +15,7 @@ function makeEnvelope(overrides: Partial<ExecutionEnvelope> = {}): ExecutionEnve
     verificationMode: "none",
     artifactRelations: [],
     role: "writer",
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -31,7 +31,7 @@ function makeStep(overrides: Partial<SubagentTaskStep> = {}): SubagentTaskStep {
     executionContext: makeEnvelope(),
     maxBudgetHint: "20 iterations",
     canRunParallel: false,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -45,14 +45,14 @@ describe("computePlannerChildMaxIterations", () => {
         "Implements en passant correctly",
         "Implements promotion correctly",
         "Rejects moves that leave the king in check",
-        "Detects checkmate and stalemate",
+        "Detects checkmate and stalemate"
       ],
-      maxBudgetHint: "20 iterations",
+      maxBudgetHint: "20 iterations"
     })
     const envelope = makeEnvelope({
       requiredSourceArtifacts: ["tmp/BLUEPRINT.md", "tmp/index.html"],
       targetArtifacts: ["tmp/game_logic.js"],
-      verificationMode: "none",
+      verificationMode: "none"
     })
 
     const metrics = computePlannerChildBudgetMetrics(step, envelope)
@@ -67,10 +67,10 @@ describe("computePlannerChildMaxIterations", () => {
     const step = makeStep({
       objective: "Create a small utility module",
       acceptanceCriteria: ["Exports a helper function"],
-      maxBudgetHint: "20 iterations",
+      maxBudgetHint: "20 iterations"
     })
     const envelope = makeEnvelope({
-      targetArtifacts: ["tmp/helpers.js"],
+      targetArtifacts: ["tmp/helpers.js"]
     })
 
     const metrics = computePlannerChildBudgetMetrics(step, envelope)
@@ -90,14 +90,14 @@ describe("computePlannerChildMaxIterations", () => {
         "Produces deterministic outputs",
         "Supports recovery from partial failures",
         "Exposes readable diagnostics",
-        "Matches blueprint contracts exactly",
+        "Matches blueprint contracts exactly"
       ],
-      maxBudgetHint: "160 iterations",
+      maxBudgetHint: "160 iterations"
     })
     const envelope = makeEnvelope({
       requiredSourceArtifacts: ["tmp/BLUEPRINT.md", "tmp/model.ts", "tmp/types.ts", "tmp/state.ts"],
       targetArtifacts: ["tmp/engine.ts", "tmp/validators.ts"],
-      verificationMode: "run_tests",
+      verificationMode: "run_tests"
     })
 
     const metrics = computePlannerChildBudgetMetrics(step, envelope)

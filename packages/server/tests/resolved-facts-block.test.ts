@@ -11,9 +11,14 @@
 import type { CatalogColumn, CatalogTable } from "@mia/agent"
 import { CatalogGraph } from "@mia/agent"
 import { describe, expect, it } from "vitest"
-import { buildResolvedFactsBlock, extractObjectTokens } from "../src/application/core/data-blocks/resolved-facts-block.js"
+import {
+  buildResolvedFactsBlock,
+  extractObjectTokens
+} from "../src/application/core/data-blocks/resolved-facts-block.js"
 
-function col(name: string): CatalogColumn { return { name, dataType: "int", nullable: false } as CatalogColumn }
+function col(name: string): CatalogColumn {
+  return { name, dataType: "int", nullable: false } as CatalogColumn
+}
 function table(qualified: string, columns: string[]): CatalogTable {
   const [schema, name] = qualified.split(".")
   return {
@@ -24,7 +29,7 @@ function table(qualified: string, columns: string[]): CatalogTable {
     rowCount: 0,
     columns: columns.map(col),
     fkOutgoing: [],
-    fkIncoming: [],
+    fkIncoming: []
   }
 }
 
@@ -36,7 +41,7 @@ function graph(tables: CatalogTable[]): CatalogGraph {
     tables,
     implicitEdges: [],
     viewSourceRows: [],
-    sysCatalog: [],
+    sysCatalog: []
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
 }
 
@@ -56,12 +61,12 @@ describe("buildResolvedFactsBlock", () => {
   it("reports persistedView mirror EXISTS when catalog contains it", () => {
     const cat = graph([
       table("publish.Revenue", ["pkClient", "amount"]),
-      table("persistedView.publish.Revenue", ["pkClient", "amount"]),
+      table("persistedView.publish.Revenue", ["pkClient", "amount"])
     ])
     const out = buildResolvedFactsBlock({
       goal: "compute total publish.Revenue",
       catalog: cat,
-      mirrorSchema: "persistedView",
+      mirrorSchema: "persistedView"
     })
     expect(out).toContain("publish.revenue")
     expect(out).toContain("persistedView mirror EXISTS")
@@ -72,7 +77,7 @@ describe("buildResolvedFactsBlock", () => {
     const out = buildResolvedFactsBlock({
       goal: "scan publish.Revenue",
       catalog: cat,
-      mirrorSchema: "persistedView",
+      mirrorSchema: "persistedView"
     })
     expect(out).toContain("no persistedView mirror")
   })
@@ -80,7 +85,7 @@ describe("buildResolvedFactsBlock", () => {
   it("skips ALWAYS_TRACKED objects that don't exist anywhere", () => {
     const out = buildResolvedFactsBlock({
       goal: "compute foo bar baz",
-      catalog: graph([]),
+      catalog: graph([])
     })
     expect(out).toBe("")
   })
@@ -89,14 +94,12 @@ describe("buildResolvedFactsBlock", () => {
     const out = buildResolvedFactsBlock({
       goal: "scan publish.Revenue",
       catalog: graph([table("publish.Revenue", ["pkClient"])]),
-      schemaFingerprint: "sha1:deadbeef",
+      schemaFingerprint: "sha1:deadbeef"
     })
     expect(out).toContain("schema fingerprint: sha1:deadbeef")
   })
 
   it("does not throw with a null catalog", () => {
-    expect(() =>
-      buildResolvedFactsBlock({ goal: "publish.Revenue", catalog: null }),
-    ).not.toThrow()
+    expect(() => buildResolvedFactsBlock({ goal: "publish.Revenue", catalog: null })).not.toThrow()
   })
 })

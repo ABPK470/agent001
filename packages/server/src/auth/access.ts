@@ -20,7 +20,7 @@ export interface RunOwnerFields {
 
 export function canAccessRun(
   session: CurrentSession | null | undefined,
-  run: RunOwnerFields | null | undefined,
+  run: RunOwnerFields | null | undefined
 ): boolean {
   if (!session || !run) return false
   if (session.isAdmin) return true

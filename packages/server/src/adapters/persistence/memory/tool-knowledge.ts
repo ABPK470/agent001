@@ -12,7 +12,11 @@
 
 import { getDb } from "../sqlite.js"
 
-export type CachedTool = "profile_data" | "inspect_definition" | "discover_relationships" | "explore_mssql_schema"
+export type CachedTool =
+  | "profile_data"
+  | "inspect_definition"
+  | "discover_relationships"
+  | "explore_mssql_schema"
 
 export interface ToolKnowledgeFingerprint {
   /** Column count from catalog snapshot at write time. */
@@ -50,7 +54,7 @@ export const TOOL_KNOWLEDGE_TTL: Record<CachedTool, Record<string, number>> = {
   // explore_mssql_schema(table=…) returns INFORMATION_SCHEMA column metadata.
   // Same shape as a profile_data fast "Columns" section, so reuse the 30d TTL.
   // Catalog-fingerprint mismatch will refresh sooner whenever columns change.
-  explore_mssql_schema: { columns: 30 * DAY_MS, default: 30 * DAY_MS },
+  explore_mssql_schema: { columns: 30 * DAY_MS, default: 30 * DAY_MS }
 }
 
 export function ttlForToolMode(tool: CachedTool, mode: string): number {
@@ -78,7 +82,10 @@ function fnv1a32(s: string): string {
  * object isn't in the catalog — caller should then skip caching.
  */
 export function fingerprintFromCatalogTable(
-  table: { type: "TABLE" | "VIEW"; columns: ReadonlyArray<{ name: string; dataType: string }> } | null | undefined,
+  table:
+    | { type: "TABLE" | "VIEW"; columns: ReadonlyArray<{ name: string; dataType: string }> }
+    | null
+    | undefined
 ): ToolKnowledgeFingerprint | null {
   if (!table) return null
   const cols = table.columns ?? []
@@ -89,13 +96,13 @@ export function fingerprintFromCatalogTable(
   return {
     cols: cols.length,
     type: table.type === "VIEW" ? "V" : "T",
-    csum: fnv1a32(sig),
+    csum: fnv1a32(sig)
   }
 }
 
 export function fingerprintsEqual(
   a: ToolKnowledgeFingerprint | null | undefined,
-  b: ToolKnowledgeFingerprint | null | undefined,
+  b: ToolKnowledgeFingerprint | null | undefined
 ): boolean {
   if (!a || !b) return false
   return a.cols === b.cols && a.type === b.type && a.csum === b.csum
@@ -134,7 +141,7 @@ export function lookupToolKnowledge(opts: LookupOptions): ToolKnowledgeResult {
       `SELECT payload_text, fingerprint, created_at, created_by_upn
          FROM tool_knowledge
         WHERE tool = ? AND qname = ? AND mode = ? AND connection = ?
-        LIMIT 1`,
+        LIMIT 1`
     )
     .get(opts.tool, opts.qname, mode, connection)
 
@@ -159,10 +166,12 @@ export function lookupToolKnowledge(opts: LookupOptions): ToolKnowledgeResult {
       .prepare(
         `UPDATE tool_knowledge
             SET last_hit_at = ?, hit_count = hit_count + 1
-          WHERE tool = ? AND qname = ? AND mode = ? AND connection = ?`,
+          WHERE tool = ? AND qname = ? AND mode = ? AND connection = ?`
       )
       .run(now, opts.tool, opts.qname, mode, connection)
-  } catch { /* non-fatal */ }
+  } catch {
+    /* non-fatal */
+  }
 
   return {
     hit: true,
@@ -170,7 +179,7 @@ export function lookupToolKnowledge(opts: LookupOptions): ToolKnowledgeResult {
     ageMs,
     profiledAt: row.created_at,
     fingerprint: cachedFp!,
-    createdByUpn: row.created_by_upn,
+    createdByUpn: row.created_by_upn
   }
 }
 
@@ -206,7 +215,7 @@ export function saveToolKnowledge(opts: SaveOptions): void {
          created_by_upn = excluded.created_by_upn,
          created_at     = excluded.created_at,
          hit_count      = 0,
-         last_hit_at    = NULL`,
+         last_hit_at    = NULL`
     )
     .run(opts.tool, opts.qname, mode, connection, opts.payload, fpJson, bytes, opts.upn ?? null, now)
 }
@@ -222,9 +231,7 @@ export interface PruneOptions {
 export function pruneToolKnowledge(opts: PruneOptions): number {
   const now = opts.now ?? Date.now()
   const cutoff = now - opts.maxAgeMs
-  const info = getDb()
-    .prepare(`DELETE FROM tool_knowledge WHERE created_at < ?`)
-    .run(cutoff)
+  const info = getDb().prepare(`DELETE FROM tool_knowledge WHERE created_at < ?`).run(cutoff)
   return typeof info.changes === "number" ? info.changes : 0
 }
 

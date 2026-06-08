@@ -23,11 +23,11 @@ import { getDb } from "../../../adapters/persistence/sqlite.js"
 import { runProposer } from "./runner.js"
 
 export interface ProposerScheduleRow {
-  tenant_id:   string
-  source:      string
-  target:      string
-  cron:        string
-  enabled:     number
+  tenant_id: string
+  source: string
+  target: string
+  cron: string
+  enabled: number
   last_run_at: string | null
   next_run_at: string | null
 }
@@ -37,9 +37,15 @@ export interface SchedulerOptions {
   host?: AgentHost
   tickMs?: number
   /** Optional LLM port (or a getter returning the current port) passed to every scheduled run. */
-  llm?:    LlmCompletionPort | null | (() => LlmCompletionPort | null)
+  llm?: LlmCompletionPort | null | (() => LlmCompletionPort | null)
   /** Hook called whenever a pass succeeds or fails; useful for tests. */
-  onRunFinished?: (info: { tenantId: string; source: string; target: string; ok: boolean; error?: string }) => void
+  onRunFinished?: (info: {
+    tenantId: string
+    source: string
+    target: string
+    ok: boolean
+    error?: string
+  }) => void
 }
 
 const DEFAULT_TICK_MS = 30_000
@@ -57,7 +63,9 @@ export function startScheduler(opts: SchedulerOptions = {}): void {
   const tickMs = opts.tickMs ?? DEFAULT_TICK_MS
   const loop = async (): Promise<void> => {
     if (stopped) return
-    try { await tick(opts) } catch (e) {
+    try {
+      await tick(opts)
+    } catch (e) {
       console.warn("[proposer-scheduler] tick failed:", e instanceof Error ? e.message : e)
     } finally {
       if (!stopped) timer = setTimeout(loop, tickMs)
@@ -69,18 +77,24 @@ export function startScheduler(opts: SchedulerOptions = {}): void {
 
 export async function stopScheduler(timeoutMs = 60_000): Promise<void> {
   stopped = true
-  if (timer) { clearTimeout(timer); timer = null }
+  if (timer) {
+    clearTimeout(timer)
+    timer = null
+  }
   if (activeRuns === 0) return
   await new Promise<void>((resolve) => {
     const t = setTimeout(resolve, timeoutMs)
-    drainWaiters.push(() => { clearTimeout(t); resolve() })
+    drainWaiters.push(() => {
+      clearTimeout(t)
+      resolve()
+    })
   })
 }
 
 export function schedulerHealth(): {
-  running:    boolean
+  running: boolean
   activeRuns: number
-  inflight:   readonly string[]
+  inflight: readonly string[]
 } {
   return { running: !stopped, activeRuns, inflight: [...inflight] }
 }
@@ -110,11 +124,11 @@ async function executeWithRetry(s: ProposerScheduleRow, opts: SchedulerOptions):
           opts.host!,
           { source: s.source, target: s.target },
           {
-            tenantId:    s.tenant_id,
+            tenantId: s.tenant_id,
             triggeredBy: "scheduler",
-            trigger:     attempt === 0 ? "schedule" : "retry",
-            llm:         resolveLlm(opts.llm),
-          },
+            trigger: attempt === 0 ? "schedule" : "retry",
+            llm: resolveLlm(opts.llm)
+          }
         )
         opts.onRunFinished?.({ tenantId: s.tenant_id, source: s.source, target: s.target, ok: true })
         lastErr = null
@@ -126,8 +140,11 @@ async function executeWithRetry(s: ProposerScheduleRow, opts: SchedulerOptions):
     }
     if (lastErr) {
       opts.onRunFinished?.({
-        tenantId: s.tenant_id, source: s.source, target: s.target, ok: false,
-        error: lastErr instanceof Error ? lastErr.message : String(lastErr),
+        tenantId: s.tenant_id,
+        source: s.source,
+        target: s.target,
+        ok: false,
+        error: lastErr instanceof Error ? lastErr.message : String(lastErr)
       })
     }
     persistScheduleAdvance(s)
@@ -149,7 +166,7 @@ function sleep(ms: number): Promise<void> {
 }
 
 function resolveLlm(
-  v: LlmCompletionPort | null | (() => LlmCompletionPort | null) | undefined,
+  v: LlmCompletionPort | null | (() => LlmCompletionPort | null) | undefined
 ): LlmCompletionPort | null {
   if (typeof v === "function") return v()
   return v ?? null
@@ -158,9 +175,9 @@ function resolveLlm(
 // ── schedule persistence ───────────────────────────────────────
 
 export function listDueSchedules(now: Date): ProposerScheduleRow[] {
-  const all = getDb().prepare(
-    `SELECT * FROM proposer_schedule WHERE enabled = 1`,
-  ).all() as ProposerScheduleRow[]
+  const all = getDb()
+    .prepare(`SELECT * FROM proposer_schedule WHERE enabled = 1`)
+    .all() as ProposerScheduleRow[]
   return all.filter((s) => isDue(s, now))
 }
 
@@ -177,25 +194,31 @@ function isDue(s: ProposerScheduleRow, now: Date): boolean {
 function persistScheduleAdvance(s: ProposerScheduleRow): void {
   const now = new Date()
   const next = nextCronMatch(s.cron, new Date(now.getTime() + 60_000))
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     UPDATE proposer_schedule
        SET last_run_at = ?, next_run_at = ?
      WHERE tenant_id = ? AND source = ? AND target = ?
-  `).run(now.toISOString(), next ? next.toISOString() : null, s.tenant_id, s.source, s.target)
+  `
+    )
+    .run(now.toISOString(), next ? next.toISOString() : null, s.tenant_id, s.source, s.target)
 }
 
 export interface UpsertScheduleInput {
   tenantId: string
-  source:   string
-  target:   string
-  cron:     string
-  enabled:  boolean
-  actor:    string
+  source: string
+  target: string
+  cron: string
+  enabled: boolean
+  actor: string
 }
 
 export function upsertSchedule(i: UpsertScheduleInput): ProposerScheduleRow {
   const next = nextCronMatch(i.cron, new Date())
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO proposer_schedule (tenant_id, source, target, cron, enabled, next_run_at, updated_at, updated_by)
     VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
     ON CONFLICT(tenant_id, source, target) DO UPDATE SET
@@ -204,23 +227,24 @@ export function upsertSchedule(i: UpsertScheduleInput): ProposerScheduleRow {
       next_run_at = excluded.next_run_at,
       updated_at  = excluded.updated_at,
       updated_by  = excluded.updated_by
-  `).run(i.tenantId, i.source, i.target, i.cron, i.enabled ? 1 : 0,
-         next ? next.toISOString() : null, i.actor)
-  return getDb().prepare(
-    `SELECT * FROM proposer_schedule WHERE tenant_id = ? AND source = ? AND target = ?`,
-  ).get(i.tenantId, i.source, i.target) as ProposerScheduleRow
+  `
+    )
+    .run(i.tenantId, i.source, i.target, i.cron, i.enabled ? 1 : 0, next ? next.toISOString() : null, i.actor)
+  return getDb()
+    .prepare(`SELECT * FROM proposer_schedule WHERE tenant_id = ? AND source = ? AND target = ?`)
+    .get(i.tenantId, i.source, i.target) as ProposerScheduleRow
 }
 
 export function listSchedules(tenantId: string): ProposerScheduleRow[] {
-  return getDb().prepare(
-    `SELECT * FROM proposer_schedule WHERE tenant_id = ? ORDER BY source, target`,
-  ).all(tenantId) as ProposerScheduleRow[]
+  return getDb()
+    .prepare(`SELECT * FROM proposer_schedule WHERE tenant_id = ? ORDER BY source, target`)
+    .all(tenantId) as ProposerScheduleRow[]
 }
 
 export function deleteSchedule(tenantId: string, source: string, target: string): void {
-  getDb().prepare(
-    `DELETE FROM proposer_schedule WHERE tenant_id = ? AND source = ? AND target = ?`,
-  ).run(tenantId, source, target)
+  getDb()
+    .prepare(`DELETE FROM proposer_schedule WHERE tenant_id = ? AND source = ? AND target = ?`)
+    .run(tenantId, source, target)
 }
 
 // ── cron parsing (minimal but real) ────────────────────────────
@@ -239,10 +263,10 @@ export function nextCronMatch(cron: string, after: Date): Date | null {
 }
 
 interface ParsedCron {
-  minute:    ReadonlySet<number>
-  hour:      ReadonlySet<number>
+  minute: ReadonlySet<number>
+  hour: ReadonlySet<number>
   dayOfMonth: ReadonlySet<number>
-  month:     ReadonlySet<number>
+  month: ReadonlySet<number>
   dayOfWeek: ReadonlySet<number>
 }
 
@@ -251,13 +275,15 @@ function parseCron(cron: string): ParsedCron | null {
   if (parts.length !== 5) return null
   try {
     return {
-      minute:     expandField(parts[0]!, 0, 59),
-      hour:       expandField(parts[1]!, 0, 23),
+      minute: expandField(parts[0]!, 0, 59),
+      hour: expandField(parts[1]!, 0, 23),
       dayOfMonth: expandField(parts[2]!, 1, 31),
-      month:      expandField(parts[3]!, 1, 12),
-      dayOfWeek:  expandField(parts[4]!, 0, 6),
+      month: expandField(parts[3]!, 1, 12),
+      dayOfWeek: expandField(parts[4]!, 0, 6)
     }
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 
 function expandField(field: string, min: number, max: number): ReadonlySet<number> {
@@ -266,13 +292,16 @@ function expandField(field: string, min: number, max: number): ReadonlySet<numbe
     const [range, stepStr] = segment.split("/")
     const step = stepStr ? Number(stepStr) : 1
     if (!Number.isFinite(step) || step <= 0) throw new Error(`bad step in "${field}"`)
-    let lo = min, hi = max
+    let lo = min,
+      hi = max
     if (range && range !== "*") {
       if (range.includes("-")) {
         const [a, b] = range.split("-")
-        lo = Number(a); hi = Number(b)
+        lo = Number(a)
+        hi = Number(b)
       } else {
-        lo = Number(range); hi = Number(range)
+        lo = Number(range)
+        hi = Number(range)
       }
       if (!Number.isFinite(lo) || !Number.isFinite(hi) || lo < min || hi > max || hi < lo) {
         throw new Error(`bad range "${range}" in "${field}"`)
@@ -289,6 +318,5 @@ function matchesCron(p: ParsedCron, d: Date): boolean {
   const dom = d.getUTCDate()
   const mon = d.getUTCMonth() + 1
   const dow = d.getUTCDay()
-  return p.minute.has(m) && p.hour.has(h) && p.month.has(mon) &&
-    p.dayOfMonth.has(dom) && p.dayOfWeek.has(dow)
+  return p.minute.has(m) && p.hour.has(h) && p.month.has(mon) && p.dayOfMonth.has(dom) && p.dayOfWeek.has(dow)
 }

@@ -13,33 +13,28 @@
  * compliance audits.
  */
 
+import { getPool, type AgentHost } from "@mia/agent"
 import {
-    getPool,
-    type AgentHost,
-} from "@mia/agent"
-import {
-    emptyCounts,
-    getPublishedSyncRecipe,
-    previewSync,
-    type DivergentEntityRow,
-    type EnvPair,
-    type ProposalCounts,
+  emptyCounts,
+  getPublishedSyncRecipe,
+  previewSync,
+  type DivergentEntityRow,
+  type EnvPair,
+  type ProposalCounts
 } from "@mia/sync"
 
 export interface ProbeRowDivergenceInput {
-  host:        AgentHost
-  tenantId:    string
-  envPair:     EnvPair
-  entityId:    string
+  host: AgentHost
+  tenantId: string
+  envPair: EnvPair
+  entityId: string
   entityLabel: string
   sampleSize?: number
 }
 
 const DEFAULT_SAMPLE_SIZE = 25
 
-export async function probeRowDivergence(
-  i: ProbeRowDivergenceInput,
-): Promise<readonly DivergentEntityRow[]> {
+export async function probeRowDivergence(i: ProbeRowDivergenceInput): Promise<readonly DivergentEntityRow[]> {
   void i.tenantId
   let recipe
   try {
@@ -50,8 +45,11 @@ export async function probeRowDivergence(
 
   // Sample candidate IDs from the source root table.
   const candidates = await sampleRootIds(
-    i.host, i.envPair.source, recipe.rootTable, recipe.rootKeyColumn,
-    i.sampleSize ?? DEFAULT_SAMPLE_SIZE,
+    i.host,
+    i.envPair.source,
+    recipe.rootTable,
+    recipe.rootKeyColumn,
+    i.sampleSize ?? DEFAULT_SAMPLE_SIZE
   )
   if (candidates.length === 0) return []
 
@@ -59,12 +57,12 @@ export async function probeRowDivergence(
   for (const rootId of candidates) {
     try {
       const plan = await previewSync({
-        host:       i.host,
+        host: i.host,
         entityType: recipe.entityType,
-        entityId:   rootId,
-        source:     i.envPair.source,
-        target:     i.envPair.target,
-        force:      true,
+        entityId: rootId,
+        source: i.envPair.source,
+        target: i.envPair.target,
+        force: true
       })
       const counts = aggregatePlanCounts(plan)
       if (counts.insert + counts.update + counts.delete === 0) continue
@@ -72,19 +70,19 @@ export async function probeRowDivergence(
       const perTable = plan.tables.map((t) => ({
         name: t.table,
         counts: {
-          insert:    t.counts.insert,
-          update:    t.counts.update,
-          delete:    t.counts.delete,
+          insert: t.counts.insert,
+          update: t.counts.update,
+          delete: t.counts.delete,
           unchanged: t.counts.unchanged,
-          unknown:   t.counts.lowConfidence ?? 0,
-        } satisfies ProposalCounts,
+          unknown: t.counts.lowConfidence ?? 0
+        } satisfies ProposalCounts
       }))
       findings.push({
-        entityId:    String(rootId),
+        entityId: String(rootId),
         entityLabel: plan.entity.displayName ?? `${i.entityLabel} ${rootId}`,
         counts,
         perTable,
-        newOnTarget,
+        newOnTarget
       })
     } catch {
       // Per-id failures don't poison the whole pass; the catalog probe
@@ -98,7 +96,11 @@ export async function probeRowDivergence(
 // ── helpers ─────────────────────────────────────────────────────
 
 async function sampleRootIds(
-  host: AgentHost, conn: string, table: string, keyCol: string, limit: number,
+  host: AgentHost,
+  conn: string,
+  table: string,
+  keyCol: string,
+  limit: number
 ): Promise<readonly (string | number)[]> {
   const [schema, name] = table.split(".")
   if (!schema || !name) throw new Error(`Invalid table name: ${table}`)
@@ -121,7 +123,11 @@ interface MaybePlan {
   tables?: ReadonlyArray<{
     table: string
     counts: {
-      insert: number; update: number; delete: number; unchanged: number; lowConfidence?: number
+      insert: number
+      update: number
+      delete: number
+      unchanged: number
+      lowConfidence?: number
     }
   }>
   entityDisplayName?: string
@@ -130,11 +136,11 @@ interface MaybePlan {
 function aggregatePlanCounts(plan: MaybePlan): ProposalCounts {
   const t = plan.totals ?? {}
   return {
-    insert:    t.insert    ?? 0,
-    update:    t.update    ?? 0,
-    delete:    t.delete    ?? 0,
+    insert: t.insert ?? 0,
+    update: t.update ?? 0,
+    delete: t.delete ?? 0,
     unchanged: t.unchanged ?? 0,
-    unknown:   t.lowConfidence ?? 0,
+    unknown: t.lowConfidence ?? 0
   }
 }
 

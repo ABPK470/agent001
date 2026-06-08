@@ -19,57 +19,52 @@
  * `sync.verification.completed` / `.failed` SSE events.
  */
 
-import {
-    getPool,
-    type AgentHost,
-} from "@mia/agent"
+import { getPool, type AgentHost } from "@mia/agent"
 import { canonicalJsonStringify, getPublishedSyncRecipe } from "@mia/sync"
 import { createHash } from "node:crypto"
 
 export interface IndependentVerifyInput {
-  host:         AgentHost
-  tenantId:     string
-  source:       string
-  target:       string
-  entityType:   string
-  entityId:     string | number
-  sampleSize?:  number
+  host: AgentHost
+  tenantId: string
+  source: string
+  target: string
+  entityType: string
+  entityId: string | number
+  sampleSize?: number
   rowCountToleranceAbs?: number
 }
 
 export const VerificationStatus = {
   Pass: "pass",
   Warn: "warn",
-  Fail: "fail",
+  Fail: "fail"
 } as const
 export type VerificationStatus = (typeof VerificationStatus)[keyof typeof VerificationStatus]
 
 export interface TableVerification {
-  table:        string
-  sourceRows:   number
-  targetRows:   number
-  delta:        number
-  sampleSize:   number
+  table: string
+  sourceRows: number
+  targetRows: number
+  delta: number
+  sampleSize: number
   sampleMismatches: number
-  status:       VerificationStatus
-  issues:       readonly string[]
+  status: VerificationStatus
+  issues: readonly string[]
 }
 
 export interface VerificationReport {
-  startedAt:  string
+  startedAt: string
   finishedAt: string
   durationMs: number
-  status:     VerificationStatus
-  tables:     readonly TableVerification[]
-  issues:     readonly string[]
+  status: VerificationStatus
+  tables: readonly TableVerification[]
+  issues: readonly string[]
 }
 
 const DEFAULT_SAMPLE = 50
 const DEFAULT_TOLERANCE = 0
 
-export async function runIndependentVerification(
-  i: IndependentVerifyInput,
-): Promise<VerificationReport> {
+export async function runIndependentVerification(i: IndependentVerifyInput): Promise<VerificationReport> {
   const t0 = Date.now()
   const startedAt = new Date(t0).toISOString()
   void i.tenantId
@@ -80,8 +75,8 @@ export async function runIndependentVerification(
     return baseReport(startedAt, t0, "fail", [`no recipe for entity "${i.entityType}"`])
   }
   const sampleSize = i.sampleSize ?? DEFAULT_SAMPLE
-  const tolerance  = i.rowCountToleranceAbs ?? DEFAULT_TOLERANCE
-  const idLiteral  = formatSqlLiteral(i.entityId)
+  const tolerance = i.rowCountToleranceAbs ?? DEFAULT_TOLERANCE
+  const idLiteral = formatSqlLiteral(i.entityId)
 
   const tableResults: TableVerification[] = []
   const issues: string[] = []
@@ -89,16 +84,25 @@ export async function runIndependentVerification(
     try {
       const r = await verifyTable({
         host: i.host,
-        source: i.source, target: i.target, table: t.name,
+        source: i.source,
+        target: i.target,
+        table: t.name,
         predicate: t.predicate.replace(/\{id\}/g, idLiteral),
-        sampleSize, tolerance,
+        sampleSize,
+        tolerance
       })
       tableResults.push(r)
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       tableResults.push({
-        table: t.name, sourceRows: -1, targetRows: -1, delta: 0,
-        sampleSize: 0, sampleMismatches: 0, status: "fail", issues: [msg],
+        table: t.name,
+        sourceRows: -1,
+        targetRows: -1,
+        delta: 0,
+        sampleSize: 0,
+        sampleMismatches: 0,
+        status: "fail",
+        issues: [msg]
       })
       issues.push(`${t.name}: probe failed (${msg})`)
     }
@@ -109,9 +113,9 @@ export async function runIndependentVerification(
     startedAt,
     finishedAt: new Date().toISOString(),
     durationMs: Date.now() - t0,
-    status:     overall,
-    tables:     tableResults,
-    issues,
+    status: overall,
+    tables: tableResults,
+    issues
   }
 }
 
@@ -121,21 +125,30 @@ function aggregateStatus(rs: readonly TableVerification[]): VerificationStatus {
   return "pass"
 }
 
-function baseReport(startedAt: string, t0: number, status: VerificationStatus, issues: readonly string[]): VerificationReport {
+function baseReport(
+  startedAt: string,
+  t0: number,
+  status: VerificationStatus,
+  issues: readonly string[]
+): VerificationReport {
   return {
     startedAt,
     finishedAt: new Date().toISOString(),
     durationMs: Date.now() - t0,
     status,
-    tables:     [],
-    issues,
+    tables: [],
+    issues
   }
 }
 
 interface VerifyTableInput {
   host: AgentHost
-  source: string; target: string; table: string;
-  predicate: string; sampleSize: number; tolerance: number
+  source: string
+  target: string
+  table: string
+  predicate: string
+  sampleSize: number
+  tolerance: number
 }
 
 async function verifyTable(i: VerifyTableInput): Promise<TableVerification> {
@@ -150,7 +163,7 @@ async function verifyTable(i: VerifyTableInput): Promise<TableVerification> {
   const countSql = `SELECT COUNT_BIG(*) AS n FROM ${qt} WITH (NOLOCK) ${where}`
   const [srcRes, tgtRes] = await Promise.all([
     srcPool.request().query(countSql),
-    tgtPool.request().query(countSql),
+    tgtPool.request().query(countSql)
   ])
   const srcCount = Number((srcRes.recordset[0] as { n: number | bigint }).n)
   const tgtCount = Number((tgtRes.recordset[0] as { n: number | bigint }).n)
@@ -164,10 +177,7 @@ async function verifyTable(i: VerifyTableInput): Promise<TableVerification> {
   let actualSample = 0
   try {
     const sampleSql = `SELECT TOP ${Math.max(1, Math.min(i.sampleSize, 500))} * FROM ${qt} WITH (NOLOCK) ${where} ORDER BY (SELECT 1)`
-    const [s, t] = await Promise.all([
-      srcPool.request().query(sampleSql),
-      tgtPool.request().query(sampleSql),
-    ])
+    const [s, t] = await Promise.all([srcPool.request().query(sampleSql), tgtPool.request().query(sampleSql)])
     const srcRows = (s.recordset ?? []) as Array<Record<string, unknown>>
     const tgtRows = (t.recordset ?? []) as Array<Record<string, unknown>>
     actualSample = Math.max(srcRows.length, tgtRows.length)
@@ -180,11 +190,17 @@ async function verifyTable(i: VerifyTableInput): Promise<TableVerification> {
 
   let status: VerificationStatus = "pass"
   if (sampleMismatches > 0 || delta > i.tolerance) status = "warn"
-  if (delta > 0 && srcCount === 0)                  status = "fail"
+  if (delta > 0 && srcCount === 0) status = "fail"
 
   return {
-    table: i.table, sourceRows: srcCount, targetRows: tgtCount, delta,
-    sampleSize: actualSample, sampleMismatches, status, issues,
+    table: i.table,
+    sourceRows: srcCount,
+    targetRows: tgtCount,
+    delta,
+    sampleSize: actualSample,
+    sampleMismatches,
+    status,
+    issues
   }
 }
 

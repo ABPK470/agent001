@@ -25,12 +25,12 @@ export interface CatalogColumn {
 export interface CatalogTable {
   schema: string
   name: string
-  qualifiedName: string          // "schema.name"
+  qualifiedName: string // "schema.name"
   type: "TABLE" | "VIEW"
-  rowCount: number | null        // null for views
+  rowCount: number | null // null for views
   columns: CatalogColumn[]
-  fkOutgoing: CatalogFK[]       // this table references →
-  fkIncoming: CatalogFK[]       // ← referenced BY
+  fkOutgoing: CatalogFK[] // this table references →
+  fkIncoming: CatalogFK[] // ← referenced BY
   /**
    * For VIEWs only: the full CREATE VIEW SQL text from sys.sql_modules.
    * Loaded once at catalog build time — zero per-request cost.
@@ -52,7 +52,7 @@ export interface CatalogFK {
 export interface CatalogSearchHit {
   table: CatalogTable
   matchType: "name" | "column"
-  matchedColumns: string[]       // columns that matched (for column-match hits)
+  matchedColumns: string[] // columns that matched (for column-match hits)
   score: number
 }
 
@@ -71,9 +71,9 @@ export interface CatalogStats {
 
 /** An implicit join edge: tables sharing a column name with matching data type. */
 export interface ImplicitEdge {
-  column: string                  // e.g. "clientId"
-  dataType: string                // e.g. "int"
-  tables: string[]                // all tables sharing this column+type
+  column: string // e.g. "clientId"
+  dataType: string // e.g. "int"
+  tables: string[] // all tables sharing this column+type
 }
 
 /** Serializable snapshot — persisted to JSON on disk for instant startup. */
@@ -96,6 +96,6 @@ export interface CatalogSnapshot {
 export interface CatalogBuildOptions {
   connection?: string
   cachePath?: string
-  maxAgeMs?: number               // default 7 days
-  forceFresh?: boolean            // ignore cache, rebuild from MSSQL
+  maxAgeMs?: number // default 7 days
+  forceFresh?: boolean // ignore cache, rebuild from MSSQL
 }

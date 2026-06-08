@@ -51,7 +51,7 @@ describe("tool_knowledge — save + lookup", () => {
       tool: "profile_data",
       qname: "publish.Balances",
       mode: "fast",
-      currentFingerprint: FP_A,
+      currentFingerprint: FP_A
     })
     expect(r.hit).toBe(false)
     if (!r.hit) expect(r.reason).toBe("miss")
@@ -66,14 +66,14 @@ describe("tool_knowledge — save + lookup", () => {
       payload: "rowCount=51000000\ncolumns: ...",
       fingerprint: FP_A,
       upn: "alice@corp",
-      now: 1_000_000_000_000,
+      now: 1_000_000_000_000
     })
     const r = mem.lookupToolKnowledge({
       tool: "profile_data",
       qname: "publish.Balances",
       mode: "fast",
       currentFingerprint: FP_A,
-      now: 1_000_000_000_000 + 60_000,
+      now: 1_000_000_000_000 + 60_000
     })
     expect(r.hit).toBe(true)
     if (!r.hit) return
@@ -85,21 +85,32 @@ describe("tool_knowledge — save + lookup", () => {
   it("upserts on the same (tool, qname, mode, connection) — does not insert a duplicate", async () => {
     const mem = await setupMemory()
     mem.saveToolKnowledge({
-      tool: "profile_data", qname: "publish.X", mode: "fast",
-      payload: "v1", fingerprint: FP_A, now: 1_000,
+      tool: "profile_data",
+      qname: "publish.X",
+      mode: "fast",
+      payload: "v1",
+      fingerprint: FP_A,
+      now: 1_000
     })
     mem.saveToolKnowledge({
-      tool: "profile_data", qname: "publish.X", mode: "fast",
-      payload: "v2", fingerprint: FP_A, now: 2_000,
+      tool: "profile_data",
+      qname: "publish.X",
+      mode: "fast",
+      payload: "v2",
+      fingerprint: FP_A,
+      now: 2_000
     })
-    const rows = testDb.prepare(
-      `SELECT COUNT(*) AS n FROM tool_knowledge WHERE tool='profile_data' AND qname='publish.X'`,
-    ).get() as { n: number }
+    const rows = testDb
+      .prepare(`SELECT COUNT(*) AS n FROM tool_knowledge WHERE tool='profile_data' AND qname='publish.X'`)
+      .get() as { n: number }
     expect(rows.n).toBe(1)
 
     const r = mem.lookupToolKnowledge({
-      tool: "profile_data", qname: "publish.X", mode: "fast",
-      currentFingerprint: FP_A, now: 2_500,
+      tool: "profile_data",
+      qname: "publish.X",
+      mode: "fast",
+      currentFingerprint: FP_A,
+      now: 2_500
     })
     expect(r.hit).toBe(true)
     if (r.hit) expect(r.payload).toBe("v2")
@@ -108,20 +119,34 @@ describe("tool_knowledge — save + lookup", () => {
   it("treats different modes as separate cache entries", async () => {
     const mem = await setupMemory()
     mem.saveToolKnowledge({
-      tool: "profile_data", qname: "publish.Y", mode: "fast",
-      payload: "FAST", fingerprint: FP_A, now: 1_000,
+      tool: "profile_data",
+      qname: "publish.Y",
+      mode: "fast",
+      payload: "FAST",
+      fingerprint: FP_A,
+      now: 1_000
     })
     mem.saveToolKnowledge({
-      tool: "profile_data", qname: "publish.Y", mode: "deep",
-      payload: "DEEP", fingerprint: FP_A, now: 1_000,
+      tool: "profile_data",
+      qname: "publish.Y",
+      mode: "deep",
+      payload: "DEEP",
+      fingerprint: FP_A,
+      now: 1_000
     })
     const a = mem.lookupToolKnowledge({
-      tool: "profile_data", qname: "publish.Y", mode: "fast",
-      currentFingerprint: FP_A, now: 2_000,
+      tool: "profile_data",
+      qname: "publish.Y",
+      mode: "fast",
+      currentFingerprint: FP_A,
+      now: 2_000
     })
     const b = mem.lookupToolKnowledge({
-      tool: "profile_data", qname: "publish.Y", mode: "deep",
-      currentFingerprint: FP_A, now: 2_000,
+      tool: "profile_data",
+      qname: "publish.Y",
+      mode: "deep",
+      currentFingerprint: FP_A,
+      now: 2_000
     })
     expect(a.hit && a.payload).toBe("FAST")
     expect(b.hit && b.payload).toBe("DEEP")
@@ -130,13 +155,20 @@ describe("tool_knowledge — save + lookup", () => {
   it("returns stale when age exceeds TTL", async () => {
     const mem = await setupMemory()
     mem.saveToolKnowledge({
-      tool: "profile_data", qname: "publish.Z", mode: "fast",
-      payload: "old", fingerprint: FP_A, now: 0,
+      tool: "profile_data",
+      qname: "publish.Z",
+      mode: "fast",
+      payload: "old",
+      fingerprint: FP_A,
+      now: 0
     })
     // FAST TTL is 30 days; advance 31.
     const r = mem.lookupToolKnowledge({
-      tool: "profile_data", qname: "publish.Z", mode: "fast",
-      currentFingerprint: FP_A, now: 31 * 24 * 60 * 60 * 1000,
+      tool: "profile_data",
+      qname: "publish.Z",
+      mode: "fast",
+      currentFingerprint: FP_A,
+      now: 31 * 24 * 60 * 60 * 1000
     })
     expect(r.hit).toBe(false)
     if (!r.hit) expect(r.reason).toBe("stale")
@@ -145,12 +177,19 @@ describe("tool_knowledge — save + lookup", () => {
   it("returns fingerprint mismatch when the current catalog fingerprint differs", async () => {
     const mem = await setupMemory()
     mem.saveToolKnowledge({
-      tool: "profile_data", qname: "publish.Q", mode: "fast",
-      payload: "x", fingerprint: FP_A, now: 1_000,
+      tool: "profile_data",
+      qname: "publish.Q",
+      mode: "fast",
+      payload: "x",
+      fingerprint: FP_A,
+      now: 1_000
     })
     const r = mem.lookupToolKnowledge({
-      tool: "profile_data", qname: "publish.Q", mode: "fast",
-      currentFingerprint: FP_B, now: 2_000,
+      tool: "profile_data",
+      qname: "publish.Q",
+      mode: "fast",
+      currentFingerprint: FP_B,
+      now: 2_000
     })
     expect(r.hit).toBe(false)
     if (!r.hit) expect(r.reason).toBe("fingerprint")
@@ -159,20 +198,30 @@ describe("tool_knowledge — save + lookup", () => {
   it("bumps hit_count and last_hit_at on each successful lookup", async () => {
     const mem = await setupMemory()
     mem.saveToolKnowledge({
-      tool: "profile_data", qname: "publish.H", mode: "fast",
-      payload: "x", fingerprint: FP_A, now: 1_000,
+      tool: "profile_data",
+      qname: "publish.H",
+      mode: "fast",
+      payload: "x",
+      fingerprint: FP_A,
+      now: 1_000
     })
     mem.lookupToolKnowledge({
-      tool: "profile_data", qname: "publish.H", mode: "fast",
-      currentFingerprint: FP_A, now: 2_000,
+      tool: "profile_data",
+      qname: "publish.H",
+      mode: "fast",
+      currentFingerprint: FP_A,
+      now: 2_000
     })
     mem.lookupToolKnowledge({
-      tool: "profile_data", qname: "publish.H", mode: "fast",
-      currentFingerprint: FP_A, now: 3_000,
+      tool: "profile_data",
+      qname: "publish.H",
+      mode: "fast",
+      currentFingerprint: FP_A,
+      now: 3_000
     })
-    const row = testDb.prepare(
-      `SELECT hit_count, last_hit_at FROM tool_knowledge WHERE qname='publish.H'`,
-    ).get() as { hit_count: number; last_hit_at: number }
+    const row = testDb
+      .prepare(`SELECT hit_count, last_hit_at FROM tool_knowledge WHERE qname='publish.H'`)
+      .get() as { hit_count: number; last_hit_at: number }
     expect(row.hit_count).toBe(2)
     expect(row.last_hit_at).toBe(3_000)
   })
@@ -180,13 +229,21 @@ describe("tool_knowledge — save + lookup", () => {
   it("is cross-UPN by default — a different user gets the same cached payload", async () => {
     const mem = await setupMemory()
     mem.saveToolKnowledge({
-      tool: "profile_data", qname: "publish.Cross", mode: "fast",
-      payload: "shared-data", fingerprint: FP_A, upn: "alice@corp", now: 1_000,
+      tool: "profile_data",
+      qname: "publish.Cross",
+      mode: "fast",
+      payload: "shared-data",
+      fingerprint: FP_A,
+      upn: "alice@corp",
+      now: 1_000
     })
     // Lookup does not take a `upn` arg at all — Bob just calls and reads.
     const r = mem.lookupToolKnowledge({
-      tool: "profile_data", qname: "publish.Cross", mode: "fast",
-      currentFingerprint: FP_A, now: 2_000,
+      tool: "profile_data",
+      qname: "publish.Cross",
+      mode: "fast",
+      currentFingerprint: FP_A,
+      now: 2_000
     })
     expect(r.hit).toBe(true)
     if (r.hit) {
@@ -207,11 +264,17 @@ describe("tool_knowledge — fingerprint helper", () => {
     const mem = await setupMemory()
     const a = mem.fingerprintFromCatalogTable({
       type: "TABLE",
-      columns: [{ name: "id", dataType: "int" }, { name: "name", dataType: "varchar" }],
+      columns: [
+        { name: "id", dataType: "int" },
+        { name: "name", dataType: "varchar" }
+      ]
     })!
     const b = mem.fingerprintFromCatalogTable({
       type: "TABLE",
-      columns: [{ name: "id", dataType: "int" }, { name: "name", dataType: "varchar" }],
+      columns: [
+        { name: "id", dataType: "int" },
+        { name: "name", dataType: "varchar" }
+      ]
     })!
     expect(mem.fingerprintsEqual(a, b)).toBe(true)
   })
@@ -220,11 +283,11 @@ describe("tool_knowledge — fingerprint helper", () => {
     const mem = await setupMemory()
     const a = mem.fingerprintFromCatalogTable({
       type: "TABLE",
-      columns: [{ name: "id", dataType: "int" }],
+      columns: [{ name: "id", dataType: "int" }]
     })!
     const b = mem.fingerprintFromCatalogTable({
       type: "TABLE",
-      columns: [{ name: "id", dataType: "bigint" }],
+      columns: [{ name: "id", dataType: "bigint" }]
     })!
     expect(mem.fingerprintsEqual(a, b)).toBe(false)
   })
@@ -233,11 +296,11 @@ describe("tool_knowledge — fingerprint helper", () => {
     const mem = await setupMemory()
     const a = mem.fingerprintFromCatalogTable({
       type: "TABLE",
-      columns: [{ name: "id", dataType: "int" }],
+      columns: [{ name: "id", dataType: "int" }]
     })!
     const b = mem.fingerprintFromCatalogTable({
       type: "VIEW",
-      columns: [{ name: "id", dataType: "int" }],
+      columns: [{ name: "id", dataType: "int" }]
     })!
     expect(mem.fingerprintsEqual(a, b)).toBe(false)
   })
@@ -259,16 +322,26 @@ describe("tool_knowledge — prune", () => {
   it("removes rows older than maxAgeMs", async () => {
     const mem = await setupMemory()
     mem.saveToolKnowledge({
-      tool: "profile_data", qname: "publish.Old", mode: "fast",
-      payload: "x", fingerprint: FP_A, now: 1_000,
+      tool: "profile_data",
+      qname: "publish.Old",
+      mode: "fast",
+      payload: "x",
+      fingerprint: FP_A,
+      now: 1_000
     })
     mem.saveToolKnowledge({
-      tool: "profile_data", qname: "publish.New", mode: "fast",
-      payload: "y", fingerprint: FP_A, now: 100_000,
+      tool: "profile_data",
+      qname: "publish.New",
+      mode: "fast",
+      payload: "y",
+      fingerprint: FP_A,
+      now: 100_000
     })
     const removed = mem.pruneToolKnowledge({ maxAgeMs: 50_000, now: 100_000 })
     expect(removed).toBe(1)
-    const rows = testDb.prepare(`SELECT qname FROM tool_knowledge ORDER BY qname`).all() as Array<{ qname: string }>
+    const rows = testDb.prepare(`SELECT qname FROM tool_knowledge ORDER BY qname`).all() as Array<{
+      qname: string
+    }>
     expect(rows.map((r) => r.qname)).toEqual(["publish.New"])
   })
 })
@@ -285,9 +358,9 @@ describe("tool_knowledge — renderCachedHeader", () => {
         ageMs: now - profiledAt,
         profiledAt,
         fingerprint: FP_A,
-        createdByUpn: null,
+        createdByUpn: null
       },
-      { tool: "profile_data", mode: "fast" },
+      { tool: "profile_data", mode: "fast" }
     )
     expect(header).toBe("[cached from 2026-05-01, mode=fast, ageHours=3, source=tool_knowledge]")
   })

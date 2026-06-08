@@ -11,8 +11,8 @@ const tools: Tool[] = [
     name: "echo",
     description: "Echo a value",
     parameters: { type: "object", properties: { v: { type: "string" } }, required: ["v"] },
-    handler: async (a) => String(a.v),
-  },
+    handler: async (a) => String(a.v)
+  }
 ]
 
 describe("openai tool schema cache (Gap 1)", () => {

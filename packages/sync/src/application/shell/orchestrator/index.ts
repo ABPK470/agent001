@@ -29,4 +29,3 @@ export { executeSync } from "./execute.js"
 export { previewSync, type PreviewInput } from "./preview.js"
 export { searchEntities, type EntitySearchResult } from "./search.js"
 export type { ExecuteOptions, ExecuteProgress } from "./types.js"
-

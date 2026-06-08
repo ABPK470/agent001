@@ -8,7 +8,10 @@ import { MessageRole } from "../src/domain/enums/message.js"
 import type { Message } from "../src/domain/agent-types.js"
 
 const sys = (content: string, hint = false): Message => ({
-  role: MessageRole.System, content, section: "history", ...(hint ? { hint: true } : {}),
+  role: MessageRole.System,
+  content,
+  section: "history",
+  ...(hint ? { hint: true } : {})
 })
 
 describe("capRuntimeHints", () => {
@@ -26,19 +29,19 @@ describe("capRuntimeHints", () => {
       sys("h3", true),
       sys("h4", true),
       sys("h5", true),
-      sys("c"),
+      sys("c")
     ]
     const out = capRuntimeHints(msgs, 3)
-    const hintsKept = out.filter(m => m.hint).map(m => m.content)
+    const hintsKept = out.filter((m) => m.hint).map((m) => m.content)
     expect(hintsKept).toEqual(["h3", "h4", "h5"])
     // Non-hint messages preserved in order
-    expect(out.filter(m => !m.hint).map(m => m.content)).toEqual(["a", "b", "c"])
+    expect(out.filter((m) => !m.hint).map((m) => m.content)).toEqual(["a", "b", "c"])
   })
 
   it("default cap is 4", () => {
     const msgs: Message[] = Array.from({ length: 6 }, (_, i) => sys(`h${i + 1}`, true))
     const out = capRuntimeHints(msgs)
     expect(out.length).toBe(4)
-    expect(out.map(m => m.content)).toEqual(["h3", "h4", "h5", "h6"])
+    expect(out.map((m) => m.content)).toEqual(["h3", "h4", "h5", "h6"])
   })
 })

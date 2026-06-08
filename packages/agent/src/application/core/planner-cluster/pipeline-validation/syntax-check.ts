@@ -13,12 +13,12 @@ import type { SubagentTaskStep } from "../types.js"
 export async function runPostStepSyntaxValidation(
   step: SubagentTaskStep,
   toolCalls: readonly ToolCallRecord[],
-  validationCtx?: SubagentStepValidationContext,
+  validationCtx?: SubagentStepValidationContext
 ): Promise<string[]> {
   const errors: string[] = []
   const wsRoot = validationCtx?.workspaceRoot
 
-  const jsTargets = step.executionContext.targetArtifacts.filter(a => /\.js$/i.test(a))
+  const jsTargets = step.executionContext.targetArtifacts.filter((a) => /\.js$/i.test(a))
   const mutatedJsPaths = new Set<string>()
 
   for (const c of toolCalls) {
@@ -46,10 +46,10 @@ export async function runPostStepSyntaxValidation(
       execSync(`node --check ${JSON.stringify(checkPath)}`, {
         encoding: "utf8",
         timeout: 10_000,
-        stdio: ["pipe", "pipe", "pipe"],
+        stdio: ["pipe", "pipe", "pipe"]
       })
     } catch (err: unknown) {
-      const errMsg = err instanceof Error ? (err as { stderr?: string }).stderr ?? err.message : String(err)
+      const errMsg = err instanceof Error ? ((err as { stderr?: string }).stderr ?? err.message) : String(err)
       if (/SyntaxError|Unexpected token|Unexpected identifier/i.test(errMsg)) {
         const errorLines = errMsg.trim().split("\n").slice(0, 5).join(" | ")
         errors.push(`Syntax error in "${artifact}": ${errorLines}`)

@@ -43,20 +43,24 @@ export class EffectTracker {
       postHash: opts.postHash ?? null,
       status: EffectStatus.Applied,
       metadata: opts.metadata ?? {},
-      createdAt: now,
+      createdAt: now
     }
 
-    getDb().prepare(`
+    getDb()
+      .prepare(
+        `
       INSERT INTO effects (id, run_id, seq, kind, tool, target, pre_hash, post_hash, status, metadata, created_at)
       VALUES (@id, @run_id, @seq, @kind, @tool, @target, @pre_hash, @post_hash, @status, @metadata, @created_at)
-    `).run({
-      ...effect,
-      run_id: effect.runId,
-      pre_hash: effect.preHash,
-      post_hash: effect.postHash,
-      metadata: JSON.stringify(effect.metadata),
-      created_at: effect.createdAt,
-    })
+    `
+      )
+      .run({
+        ...effect,
+        run_id: effect.runId,
+        pre_hash: effect.preHash,
+        post_hash: effect.postHash,
+        metadata: JSON.stringify(effect.metadata),
+        created_at: effect.createdAt
+      })
 
     broadcast({
       type: EventType.EffectRecorded,
@@ -66,8 +70,8 @@ export class EffectTracker {
         kind: effect.kind,
         tool: effect.tool,
         target: effect.target,
-        status: effect.status,
-      },
+        status: effect.status
+      }
     })
 
     return effect
@@ -91,7 +95,7 @@ export class EffectTracker {
           target: opts.filePath,
           preHash: existingHash,
           postHash: newHash,
-          metadata: { idempotent: true, skipped: true },
+          metadata: { idempotent: true, skipped: true }
         })
       }
     } catch {
@@ -115,18 +119,14 @@ export class EffectTracker {
       tool: opts.tool,
       target: opts.filePath,
       preHash,
-      postHash: newHash,
+      postHash: newHash
     })
 
     await captureSnapshot(opts.runId, effect.id, opts.filePath)
     return effect
   }
 
-  async recordFileDelete(opts: {
-    runId: string
-    tool: string
-    filePath: string
-  }): Promise<Effect> {
+  async recordFileDelete(opts: { runId: string; tool: string; filePath: string }): Promise<Effect> {
     let preHash: string | null = null
     try {
       const existing = await readFile(opts.filePath, "utf-8")
@@ -139,7 +139,7 @@ export class EffectTracker {
         target: opts.filePath,
         preHash: null,
         postHash: null,
-        metadata: { skipped: true, reason: "file did not exist" },
+        metadata: { skipped: true, reason: "file did not exist" }
       })
     }
 
@@ -149,7 +149,7 @@ export class EffectTracker {
       tool: opts.tool,
       target: opts.filePath,
       preHash,
-      postHash: null,
+      postHash: null
     })
 
     await captureSnapshot(opts.runId, effect.id, opts.filePath)

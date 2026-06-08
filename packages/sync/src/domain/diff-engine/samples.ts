@@ -21,7 +21,7 @@ export async function fetchSamples(
   qualifiedTable: string,
   rows: PkHashRow[],
   pkColumns: string[],
-  telemetryContext?: import("../../ports/events.js").SyncTelemetryContext,
+  telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<SyncPlanRowSample[]> {
   if (rows.length === 0) return []
   try {
@@ -32,7 +32,7 @@ export async function fetchSamples(
       `SELECT * FROM ${qtable(qualifiedTable)} WHERE ${where}`,
       `fetchSamples(${qualifiedTable})`,
       2,
-      telemetryContext,
+      telemetryContext
     )
     // Re-order results to match input row order and build samples.
     const byPk = new Map<string, Record<string, unknown>>()
@@ -58,15 +58,29 @@ export async function fetchUpdateSamples(
   qualifiedTable: string,
   rows: PkHashRow[],
   pkColumns: string[],
-  telemetryContext?: import("../../ports/events.js").SyncTelemetryContext,
+  telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<SyncPlanRowSample[]> {
   if (rows.length === 0) return []
   try {
     const where = buildBatchWhere(rows, pkColumns)
     const qt = qtable(qualifiedTable)
     const [srcResult, tgtResult] = await Promise.all([
-      runQueryWithRetry(host, srcPool, `SELECT * FROM ${qt} WHERE ${where}`, `fetchUpdateSamples.src(${qualifiedTable})`, 2, telemetryContext),
-      runQueryWithRetry(host, tgtPool, `SELECT * FROM ${qt} WHERE ${where}`, `fetchUpdateSamples.tgt(${qualifiedTable})`, 2, telemetryContext),
+      runQueryWithRetry(
+        host,
+        srcPool,
+        `SELECT * FROM ${qt} WHERE ${where}`,
+        `fetchUpdateSamples.src(${qualifiedTable})`,
+        2,
+        telemetryContext
+      ),
+      runQueryWithRetry(
+        host,
+        tgtPool,
+        `SELECT * FROM ${qt} WHERE ${where}`,
+        `fetchUpdateSamples.tgt(${qualifiedTable})`,
+        2,
+        telemetryContext
+      )
     ])
     const srcByPk = new Map<string, Record<string, unknown>>()
     for (const r of srcResult.recordset as Record<string, unknown>[]) {

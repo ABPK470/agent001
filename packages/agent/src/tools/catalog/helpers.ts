@@ -18,9 +18,16 @@ export function tableKey(schema: string, name: string): string {
 /** Is this column name likely a join candidate (ID, key, code, FK pattern)? */
 export function isJoinCandidate(colName: string): boolean {
   const l = colName.toLowerCase()
-  return l.endsWith("id") || l.endsWith("key") || l.endsWith("code") ||
-    l.endsWith("_fk") || l.endsWith("_pk") || l.includes("identifier") ||
-    l.startsWith("fk") || l.startsWith("pk")   // catches pk_xxx, pkXxx, fk_xxx, fkXxx
+  return (
+    l.endsWith("id") ||
+    l.endsWith("key") ||
+    l.endsWith("code") ||
+    l.endsWith("_fk") ||
+    l.endsWith("_pk") ||
+    l.includes("identifier") ||
+    l.startsWith("fk") ||
+    l.startsWith("pk")
+  ) // catches pk_xxx, pkXxx, fk_xxx, fkXxx
 }
 
 /**
@@ -30,7 +37,7 @@ export function isJoinCandidate(colName: string): boolean {
  */
 export function computeImplicitEdges(
   tables: Map<string, CatalogTable>,
-  columnIndex: Map<string, Set<string>>,
+  columnIndex: Map<string, Set<string>>
 ): ImplicitEdge[] {
   const edges: ImplicitEdge[] = []
   for (const [colName, tableKeys] of columnIndex) {

@@ -1,37 +1,37 @@
 import { VerifierMode, VerifierOutcome } from "../../domain/index.js"
 import {
-    buildEvidenceId,
-    deriveOwnershipAttribution,
-    getArchitectureRepairContext,
-    getSubagentStep,
-    inferAffectedArtifacts,
-    inferIssueCode,
-    inferRepairClass,
-    inferSeverity,
-    inferSourceArtifacts,
-    isDependencyGateIssue,
-    normalizePath,
-    uniqueStrings,
+  buildEvidenceId,
+  deriveOwnershipAttribution,
+  getArchitectureRepairContext,
+  getSubagentStep,
+  inferAffectedArtifacts,
+  inferIssueCode,
+  inferRepairClass,
+  inferSeverity,
+  inferSourceArtifacts,
+  isDependencyGateIssue,
+  normalizePath,
+  uniqueStrings
 } from "../internal/verification-inference.js"
 import { compilePlannerRuntime } from "../runtime-model.js"
 import type {
-    ChildRepairGoal,
-    ChildRepairPayload,
-    PipelineResult,
-    Plan,
-    RepairPlan,
-    RepairTask,
-    StepAcceptanceState,
-    VerificationEvidence,
-    VerifierDecision,
-    VerifierIssue,
-    VerifierStepAssessment,
+  ChildRepairGoal,
+  ChildRepairPayload,
+  PipelineResult,
+  Plan,
+  RepairPlan,
+  RepairTask,
+  StepAcceptanceState,
+  VerificationEvidence,
+  VerifierDecision,
+  VerifierIssue,
+  VerifierStepAssessment
 } from "../types.js"
 
 export function collectVerificationEvidence(
   plan: Plan,
   assessments: readonly VerifierStepAssessment[],
-  source: VerificationEvidence["source"],
+  source: VerificationEvidence["source"]
 ): Map<string, VerificationEvidence[]> {
   const evidenceByStep = new Map<string, VerificationEvidence[]>()
   for (const assessment of assessments) {
@@ -47,7 +47,7 @@ export function collectVerificationEvidence(
         source,
         kind: code,
         message: summary,
-        artifactPaths: affectedArtifacts,
+        artifactPaths: affectedArtifacts
       })
     })
     evidenceByStep.set(assessment.stepName, evidence)
@@ -58,7 +58,7 @@ export function collectVerificationEvidence(
 export function deriveIssuesFromEvidence(
   plan: Plan,
   assessments: readonly VerifierStepAssessment[],
-  evidenceByStep: ReadonlyMap<string, readonly VerificationEvidence[]>,
+  evidenceByStep: ReadonlyMap<string, readonly VerificationEvidence[]>
 ): Map<string, VerifierIssue[]> {
   const issuesByStep = new Map<string, VerifierIssue[]>()
 
@@ -66,11 +66,19 @@ export function deriveIssuesFromEvidence(
     const step = getSubagentStep(plan, assessment.stepName)
     const stepEvidence = evidenceByStep.get(assessment.stepName) ?? []
     const issueDetails = stepEvidence.map((evidence) => {
-      const affectedArtifacts = evidence.artifactPaths.length > 0
-        ? [...evidence.artifactPaths]
-        : inferAffectedArtifacts(step, evidence.message)
+      const affectedArtifacts =
+        evidence.artifactPaths.length > 0
+          ? [...evidence.artifactPaths]
+          : inferAffectedArtifacts(step, evidence.message)
       const sourceArtifacts = inferSourceArtifacts(step, evidence.message)
-      const attribution = deriveOwnershipAttribution(plan, evidence.source, assessment.stepName, affectedArtifacts, sourceArtifacts, evidence.message)
+      const attribution = deriveOwnershipAttribution(
+        plan,
+        evidence.source,
+        assessment.stepName,
+        affectedArtifacts,
+        sourceArtifacts,
+        evidence.message
+      )
       return {
         code: evidence.kind,
         severity: inferSeverity(evidence.message),
@@ -84,7 +92,7 @@ export function deriveIssuesFromEvidence(
         sourceArtifacts,
         evidenceIds: [evidence.id],
         repairClass: inferRepairClass(evidence.message),
-        summary: evidence.message,
+        summary: evidence.message
       } satisfies VerifierIssue
     })
     issuesByStep.set(assessment.stepName, issueDetails)
@@ -96,7 +104,7 @@ export function deriveIssuesFromEvidence(
 export function enrichVerifierAssessments(
   plan: Plan,
   assessments: readonly VerifierStepAssessment[],
-  source: VerificationEvidence["source"],
+  source: VerificationEvidence["source"]
 ): VerifierStepAssessment[] {
   const evidenceByStep = collectVerificationEvidence(plan, assessments, source)
   const issuesByStep = deriveIssuesFromEvidence(plan, assessments, evidenceByStep)
@@ -105,14 +113,19 @@ export function enrichVerifierAssessments(
     return {
       ...assessment,
       evidence: assessment.evidence ?? evidenceByStep.get(assessment.stepName) ?? [],
-      issueDetails: assessment.issueDetails ?? issuesByStep.get(assessment.stepName) ?? [],
+      issueDetails: assessment.issueDetails ?? issuesByStep.get(assessment.stepName) ?? []
     }
   })
 }
 
 export function buildIssueIdentity(assessment: VerifierStepAssessment): string {
   const typed = assessment.issueDetails?.length
-    ? assessment.issueDetails.map((issue) => `${issue.code}:${issue.severity}:${issue.primaryOwner ?? issue.ownerStepName}:${issue.ownershipMode}:${issue.affectedArtifacts.join(",")}`).sort()
+    ? assessment.issueDetails
+        .map(
+          (issue) =>
+            `${issue.code}:${issue.severity}:${issue.primaryOwner ?? issue.ownerStepName}:${issue.ownershipMode}:${issue.affectedArtifacts.join(",")}`
+        )
+        .sort()
     : []
   if (typed.length > 0) return typed.join("|")
   return [...assessment.issues].sort().join("|")
@@ -121,18 +134,22 @@ export function buildIssueIdentity(assessment: VerifierStepAssessment): string {
 export function buildRepairPlan(
   plan: Plan,
   pipelineResult: PipelineResult,
-  decision: VerifierDecision,
+  decision: VerifierDecision
 ): RepairPlan {
   const runtime = compilePlannerRuntime(plan)
   const architectureContext = getArchitectureRepairContext(plan)
   const defaultAcceptedArtifactsByStep = new Map<string, string[]>()
   for (const assessment of decision.steps) {
     const step = getSubagentStep(plan, assessment.stepName)
-    defaultAcceptedArtifactsByStep.set(assessment.stepName, uniqueStrings([
-      ...(step?.executionContext.requiredSourceArtifacts.map(normalizePath) ?? []),
-      ...((runtime.stepAcceptedDependencies.get(assessment.stepName) ?? [])
-        .flatMap((dependencyStepName) => pipelineResult.stepResults.get(dependencyStepName)?.producedArtifacts ?? [])),
-    ]))
+    defaultAcceptedArtifactsByStep.set(
+      assessment.stepName,
+      uniqueStrings([
+        ...(step?.executionContext.requiredSourceArtifacts.map(normalizePath) ?? []),
+        ...(runtime.stepAcceptedDependencies.get(assessment.stepName) ?? []).flatMap(
+          (dependencyStepName) => pipelineResult.stepResults.get(dependencyStepName)?.producedArtifacts ?? []
+        )
+      ])
+    )
   }
   const taskMap = new Map<string, RepairTask>()
   const ensureTask = (stepName: string): RepairTask => {
@@ -147,7 +164,7 @@ export function buildRepairPlan(
       preserveArchitecture: architectureContext?.preserveArchitecture,
       architectureSummary: architectureContext?.architectureSummary,
       sharedContracts: architectureContext?.sharedContracts,
-      invariants: architectureContext?.invariants,
+      invariants: architectureContext?.invariants
     }
     taskMap.set(stepName, created)
     return created
@@ -162,21 +179,23 @@ export function buildRepairPlan(
 
     for (const issue of issueDetails) {
       if (isDependencyGateIssue(issue)) continue
-      const impactedSteps = uniqueStrings(issue.suspectedOwners.length > 0 ? issue.suspectedOwners : [assessment.stepName])
+      const impactedSteps = uniqueStrings(
+        issue.suspectedOwners.length > 0 ? issue.suspectedOwners : [assessment.stepName]
+      )
       const primaryOwner = issue.primaryOwner ?? issue.ownerStepName
       for (const impactedStep of impactedSteps) {
         const task = ensureTask(impactedStep)
         const impactedStepResult = pipelineResult.stepResults.get(impactedStep)
-        const impactedDefaultRequiredAcceptedArtifacts = defaultAcceptedArtifactsByStep.get(impactedStep) ?? []
-        const shouldOwn = issue.ownershipMode === "deterministic_owner"
-          ? primaryOwner === impactedStep
-          : issue.ownershipMode === "planner_fault"
+        const impactedDefaultRequiredAcceptedArtifacts =
+          defaultAcceptedArtifactsByStep.get(impactedStep) ?? []
+        const shouldOwn =
+          issue.ownershipMode === "deterministic_owner"
             ? primaryOwner === impactedStep
-            : impactedSteps.includes(impactedStep)
+            : issue.ownershipMode === "planner_fault"
+              ? primaryOwner === impactedStep
+              : impactedSteps.includes(impactedStep)
         const ownedIssues = shouldOwn ? [...task.ownedIssues, issue] : [...task.ownedIssues]
-        const dependencyContext = shouldOwn
-          ? [...task.dependencyContext]
-          : [...task.dependencyContext, issue]
+        const dependencyContext = shouldOwn ? [...task.dependencyContext] : [...task.dependencyContext, issue]
         const externalSourceArtifacts = (issue.sourceArtifacts ?? []).filter((artifact) => {
           const normalized = normalizePath(artifact)
           const owner = runtime.ownershipGraph.get(normalized)?.ownerStepName
@@ -185,16 +204,20 @@ export function buildRepairPlan(
         const requiredAcceptedArtifacts = uniqueStrings([
           ...task.requiredAcceptedArtifacts,
           ...(!shouldOwn ? (issue.sourceArtifacts ?? []) : externalSourceArtifacts),
-          ...impactedDefaultRequiredAcceptedArtifacts,
+          ...impactedDefaultRequiredAcceptedArtifacts
         ])
         taskMap.set(impactedStep, {
           ...task,
           mode: !assessment.retryable
             ? "blocked"
-            : (impactedStepResult?.acceptanceState === "blocked" ? "blocked" : ownedIssues.length > 0 ? "repair" : "reverify"),
+            : impactedStepResult?.acceptanceState === "blocked"
+              ? "blocked"
+              : ownedIssues.length > 0
+                ? "repair"
+                : "reverify",
           ownedIssues,
           dependencyContext,
-          requiredAcceptedArtifacts,
+          requiredAcceptedArtifacts
         })
       }
     }
@@ -205,8 +228,13 @@ export function buildRepairPlan(
         ...task,
         mode: !assessment.retryable
           ? "blocked"
-          : (stepResult?.acceptanceState === "blocked" ? "blocked" : "repair"),
-        requiredAcceptedArtifacts: uniqueStrings([...task.requiredAcceptedArtifacts, ...defaultRequiredAcceptedArtifacts]),
+          : stepResult?.acceptanceState === "blocked"
+            ? "blocked"
+            : "repair",
+        requiredAcceptedArtifacts: uniqueStrings([
+          ...task.requiredAcceptedArtifacts,
+          ...defaultRequiredAcceptedArtifacts
+        ])
       })
     }
   }
@@ -220,7 +248,9 @@ export function buildRepairPlan(
   return {
     tasks,
     rerunOrder,
-    skippedVerifiedSteps: decision.steps.filter((step) => step.outcome === VerifierOutcome.Pass).map((step) => step.stepName),
+    skippedVerifiedSteps: decision.steps
+      .filter((step) => step.outcome === VerifierOutcome.Pass)
+      .map((step) => step.stepName)
   }
 }
 
@@ -228,12 +258,12 @@ export function buildRepairPlan(
 // Legacy retry plan + compat comparison live in verification-model/legacy-compat.ts
 // ============================================================================
 
-export {
-    buildLegacyRetryPlan,
-    compareRepairPlanCompatibility
-} from "./legacy-compat.js"
+export { buildLegacyRetryPlan, compareRepairPlanCompatibility } from "./legacy-compat.js"
 
-export function deriveAcceptanceState(assessment: VerifierStepAssessment | undefined, prior: StepAcceptanceState | undefined): StepAcceptanceState {
+export function deriveAcceptanceState(
+  assessment: VerifierStepAssessment | undefined,
+  prior: StepAcceptanceState | undefined
+): StepAcceptanceState {
   if (!assessment) return prior ?? "pending_verification"
   if (assessment.outcome === VerifierOutcome.Pass) return "accepted"
   if (assessment.retryable === false) return "rejected"
@@ -251,17 +281,17 @@ function buildRepairGoal(issue: VerifierIssue): ChildRepairGoal {
     suspectedOwners: [...issue.suspectedOwners],
     primaryOwner: issue.primaryOwner,
     affectedArtifacts: [...issue.affectedArtifacts],
-    sourceArtifacts: [...(issue.sourceArtifacts ?? [])],
+    sourceArtifacts: [...(issue.sourceArtifacts ?? [])]
   }
 }
 
 export function buildChildRepairPayload(task: RepairTask): ChildRepairPayload {
-  const unresolvedDependencyBlockers = task.mode === "blocked"
-    ? task.dependencyContext.map((issue) => issue.summary)
-    : []
+  const unresolvedDependencyBlockers =
+    task.mode === "blocked" ? task.dependencyContext.map((issue) => issue.summary) : []
 
   return {
-    mode: task.mode === "repair" || task.mode === "reverify" || task.mode === "blocked" ? task.mode : "initial",
+    mode:
+      task.mode === "repair" || task.mode === "reverify" || task.mode === "blocked" ? task.mode : "initial",
     goals: task.ownedIssues.map(buildRepairGoal),
     dependencyGoals: task.dependencyContext.map(buildRepairGoal),
     requiredAcceptedArtifacts: [...task.requiredAcceptedArtifacts],
@@ -269,7 +299,7 @@ export function buildChildRepairPayload(task: RepairTask): ChildRepairPayload {
     preserveArchitecture: task.preserveArchitecture,
     architectureSummary: task.architectureSummary,
     sharedContracts: task.sharedContracts,
-    invariants: task.invariants,
+    invariants: task.invariants
   }
 }
 

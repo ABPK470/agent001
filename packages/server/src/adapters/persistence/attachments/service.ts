@@ -9,26 +9,26 @@ import { AttachmentIngestionMode } from "../../../enums/attachments.js"
 import { auditAttachmentUploaded } from "./audit.js"
 import { assertOwnerQuota, computeRetentionUntil } from "./lifecycle.js"
 import {
-    addAttachmentTag,
-    insertAttachment,
-    type AttachmentRow,
-    type AttachmentScope,
-    type AttachmentSource,
+  addAttachmentTag,
+  insertAttachment,
+  type AttachmentRow,
+  type AttachmentScope,
+  type AttachmentSource
 } from "./repo.js"
 import { writeAttachmentBlob } from "./storage.js"
 
 export interface UploadAttachmentInput {
-  bytes:         Uint8Array
-  originalName:  string
-  mediaType:     string
-  scope:         AttachmentScope
-  runId?:        string | null
-  sessionId?:    string | null
-  ownerUpn?:     string | null
-  purposeTag?:   string | null
+  bytes: Uint8Array
+  originalName: string
+  mediaType: string
+  scope: AttachmentScope
+  runId?: string | null
+  sessionId?: string | null
+  ownerUpn?: string | null
+  purposeTag?: string | null
   goalSnapshot?: string | null
-  source?:       AttachmentSource
-  tags?:         Array<{ key: string; value: string }>
+  source?: AttachmentSource
+  tags?: Array<{ key: string; value: string }>
   /**
    * Override default ingestion mode. Defaults are inferred from media type:
    *   text/* | application/json | application/csv → text_retrieval
@@ -42,7 +42,7 @@ const TEXT_LIKE_TYPES = new Set([
   "application/json",
   "application/csv",
   "application/xml",
-  "application/x-yaml",
+  "application/x-yaml"
 ])
 
 export function inferIngestionMode(mediaType: string): AttachmentIngestionMode {
@@ -60,7 +60,8 @@ export function inferIngestionMode(mediaType: string): AttachmentIngestionMode {
 export function normalizeName(originalName: string): string {
   const baseName = basename(originalName)
   const ext = extname(baseName).toLowerCase()
-  const stem = baseName.slice(0, baseName.length - ext.length)
+  const stem = baseName
+    .slice(0, baseName.length - ext.length)
     .replace(/[^A-Za-z0-9._-]+/g, "_")
     .replace(/^[._-]+|[._-]+$/g, "")
     .slice(0, 100)
@@ -76,23 +77,23 @@ export async function uploadAttachment(input: UploadAttachmentInput): Promise<At
   const blob = await writeAttachmentBlob(input.bytes)
   const ingestionMode = input.ingestionMode ?? inferIngestionMode(input.mediaType)
   const row = insertAttachment({
-    scope:          input.scope,
-    runId:          input.runId,
-    sessionId:      input.sessionId,
-    ownerUpn:       input.ownerUpn,
-    originalName:   input.originalName,
+    scope: input.scope,
+    runId: input.runId,
+    sessionId: input.sessionId,
+    ownerUpn: input.ownerUpn,
+    originalName: input.originalName,
     normalizedName: normalizeName(input.originalName),
-    mediaType:      input.mediaType,
-    sizeBytes:      blob.sizeBytes,
-    contentHash:    blob.hash,
-    storageUri:     blob.storageUri,
+    mediaType: input.mediaType,
+    sizeBytes: blob.sizeBytes,
+    contentHash: blob.hash,
+    storageUri: blob.storageUri,
     ingestionMode,
-    source:         input.source,
-    purposeTag:     input.purposeTag,
-    goalSnapshot:   input.goalSnapshot,
+    source: input.source,
+    purposeTag: input.purposeTag,
+    goalSnapshot: input.goalSnapshot,
     // Apply scope-aware retention so a long-running deployment does not
     // accumulate stale rows. Operators tune via env (see lifecycle.ts).
-    retentionUntil: computeRetentionUntil(input.scope),
+    retentionUntil: computeRetentionUntil(input.scope)
   })
   for (const tag of input.tags ?? []) addAttachmentTag(row.id, tag.key, tag.value)
   auditAttachmentUploaded(row)

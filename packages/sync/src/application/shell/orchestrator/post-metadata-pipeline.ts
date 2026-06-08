@@ -6,15 +6,15 @@ import { EventType, SyncProgressKind, type SyncRuntimeHost } from "../../../port
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
 import { type SyncExecutionContractStep, type SyncPlan } from "../plan-store.js"
 import {
-    createDataset,
-    createDatasetFKs,
-    deployETL,
-    deployRoutine,
-    resolveContractName,
-    runAuditCheckDirect,
-    runContractDeploymentScriptsDirect,
-    setContractLockDirect,
-    undeployMarkedContract,
+  createDataset,
+  createDatasetFKs,
+  deployETL,
+  deployRoutine,
+  resolveContractName,
+  runAuditCheckDirect,
+  runContractDeploymentScriptsDirect,
+  setContractLockDirect,
+  undeployMarkedContract
 } from "./contract-deploy.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
 import type { ExecuteProgress } from "./types.js"
@@ -39,7 +39,9 @@ export interface PostMetadataPipelineInput {
   steps: SyncExecutionContractStep[]
 }
 
-export async function runPostMetadataPipeline(input: PostMetadataPipelineInput): Promise<{ stepWarnings: StepWarning[] }> {
+export async function runPostMetadataPipeline(
+  input: PostMetadataPipelineInput
+): Promise<{ stepWarnings: StepWarning[] }> {
   const { host, planId, onProgress, entityId, entityType, tgtPool, srcPool, userUpn } = input
   const stepWarnings: StepWarning[] = []
   let contractNamePromise: Promise<string> | null = null
@@ -51,7 +53,12 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
       const errMsg = e instanceof Error ? e.message : String(e)
       console.warn(`[sync.execute] ${stepName} failed:`, e)
       stepWarnings.push({ step: stepName, sproc: "direct", error: errMsg })
-      onProgress({ type: SyncProgressKind.Step, step: stepName, message: `${stepName} failed`, error: errMsg })
+      onProgress({
+        type: SyncProgressKind.Step,
+        step: stepName,
+        message: `${stepName} failed`,
+        error: errMsg
+      })
       emit(host, EventType.SyncExecuteStepFailed, { planId, step: stepName, sproc: "direct", error: errMsg })
     }
   }
@@ -67,7 +74,13 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
       if (!Number.isFinite(numericEntityId)) {
         throw new Error(`Contract step requires a numeric entity id; got ${String(entityId)}.`)
       }
-      contractNamePromise = resolveContractName(host, tgtPool, numericEntityId, input.plan.target, input.telemetryContext)
+      contractNamePromise = resolveContractName(
+        host,
+        tgtPool,
+        numericEntityId,
+        input.plan.target,
+        input.telemetryContext
+      )
     }
     return contractNamePromise
   }
@@ -81,7 +94,15 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "target-lock"
         step(stepName, entry.description)
         await callStep(stepName, async () => {
-          await setContractLockDirect(host, tgtPool, Number(entityId), true, input.plan.target, undefined, input.telemetryContext)
+          await setContractLockDirect(
+            host,
+            tgtPool,
+            Number(entityId),
+            true,
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -89,7 +110,15 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "target-unlock"
         step(stepName, entry.description)
         await callStep(stepName, async () => {
-          await setContractLockDirect(host, tgtPool, Number(entityId), false, input.plan.target, undefined, input.telemetryContext)
+          await setContractLockDirect(
+            host,
+            tgtPool,
+            Number(entityId),
+            false,
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -97,11 +126,18 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "audit-check"
         step(stepName, entry.description)
         await callStep(stepName, async () => {
-          await runAuditCheckDirect(host, tgtPool, {
-            action: "syncOrNot",
-            objType: requireAuditObjectType(entry),
-            id: entityId,
-          }, input.plan.target, undefined, input.telemetryContext)
+          await runAuditCheckDirect(
+            host,
+            tgtPool,
+            {
+              action: "syncOrNot",
+              objType: requireAuditObjectType(entry),
+              id: entityId
+            },
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -109,7 +145,14 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "contract-undeploy"
         step(stepName, entry.description)
         await callStep(stepName, async () => {
-          await undeployMarkedContract(host, tgtPool, Number(entityId), input.plan.target, undefined, input.telemetryContext)
+          await undeployMarkedContract(
+            host,
+            tgtPool,
+            Number(entityId),
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -117,7 +160,15 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "contract-pre-script"
         step(stepName, entry.description)
         await callStep(stepName, async () => {
-          await runContractDeploymentScriptsDirect(host, tgtPool, await resolveContractNameOnce(), "Run preScript", input.plan.target, undefined, input.telemetryContext)
+          await runContractDeploymentScriptsDirect(
+            host,
+            tgtPool,
+            await resolveContractNameOnce(),
+            "Run preScript",
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -131,7 +182,16 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const datasetType = contractDatasetTypeForKind(stepKind)
         step(stepName, entry.description)
         await callStep(stepName, async () => {
-          await createDataset(host, tgtPool, Number(entityId), await resolveContractNameOnce(), datasetType, input.plan.target, undefined, input.telemetryContext)
+          await createDataset(
+            host,
+            tgtPool,
+            Number(entityId),
+            await resolveContractNameOnce(),
+            datasetType,
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -139,7 +199,14 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "contract-create-fks"
         step(stepName, entry.description)
         await callStep(stepName, async () => {
-          await createDatasetFKs(host, tgtPool, await resolveContractNameOnce(), input.plan.target, undefined, input.telemetryContext)
+          await createDatasetFKs(
+            host,
+            tgtPool,
+            await resolveContractNameOnce(),
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -147,7 +214,14 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "contract-deploy-etl"
         step(stepName, entry.description)
         await callStep(stepName, async () => {
-          await deployETL(host, tgtPool, await resolveContractNameOnce(), input.plan.target, undefined, input.telemetryContext)
+          await deployETL(
+            host,
+            tgtPool,
+            await resolveContractNameOnce(),
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -155,7 +229,14 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "contract-deploy-routine"
         step(stepName, entry.description)
         await callStep(stepName, async () => {
-          await deployRoutine(host, tgtPool, await resolveContractNameOnce(), input.plan.target, undefined, input.telemetryContext)
+          await deployRoutine(
+            host,
+            tgtPool,
+            await resolveContractNameOnce(),
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -163,7 +244,15 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "contract-post-script"
         step(stepName, entry.description)
         await callStep(stepName, async () => {
-          await runContractDeploymentScriptsDirect(host, tgtPool, await resolveContractNameOnce(), "Run postScript", input.plan.target, undefined, input.telemetryContext)
+          await runContractDeploymentScriptsDirect(
+            host,
+            tgtPool,
+            await resolveContractNameOnce(),
+            "Run postScript",
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -177,7 +266,7 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
             host,
             pool: tgtPool,
             connection: input.plan.target,
-            telemetryContext: input.telemetryContext,
+            telemetryContext: input.telemetryContext
           })
           await runDatasetDeploy(host, input.plan.target, datasetId, userUpn)
         })
@@ -202,7 +291,7 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
             host,
             pool: tgtPool,
             connection: input.plan.target,
-            telemetryContext: input.telemetryContext,
+            telemetryContext: input.telemetryContext
           })
           await runPipelineRegister(host, input.plan.target, pipelineId)
         })
@@ -231,7 +320,14 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "handle-dependencies"
         step(stepName, `Refreshing ${entityType} dependencies on target`)
         await callStep(stepName, async () => {
-          await runHandleDependencies(host, tgtPool, input.plan.target, requireObjectName(entry), entityId, input.telemetryContext)
+          await runHandleDependencies(
+            host,
+            tgtPool,
+            input.plan.target,
+            requireObjectName(entry),
+            entityId,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -240,11 +336,18 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "set-sync-date"
         step(stepName, "Updating sync date on source")
         await callStep(stepName, async () => {
-          await runAuditCheckDirect(host, srcPool, {
-            action: "syncDate",
-            id: entityId,
-            objType: requireAuditObjectType(entry),
-          }, input.plan.source, undefined, input.telemetryContext)
+          await runAuditCheckDirect(
+            host,
+            srcPool,
+            {
+              action: "syncDate",
+              id: entityId,
+              objType: requireAuditObjectType(entry)
+            },
+            input.plan.source,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -253,11 +356,18 @@ export async function runPostMetadataPipeline(input: PostMetadataPipelineInput):
         const stepName = "id" in entry ? entry.id : "set-deploy-date"
         step(stepName, "Updating deployment date on target")
         await callStep(stepName, async () => {
-          await runAuditCheckDirect(host, tgtPool, {
-            action: "deployDate",
-            id: entityId,
-            objType: requireAuditObjectType(entry),
-          }, input.plan.target, undefined, input.telemetryContext)
+          await runAuditCheckDirect(
+            host,
+            tgtPool,
+            {
+              action: "deployDate",
+              id: entityId,
+              objType: requireAuditObjectType(entry)
+            },
+            input.plan.target,
+            undefined,
+            input.telemetryContext
+          )
         })
         break
       }
@@ -290,13 +400,13 @@ async function runDatasetDeploy(
   host: SyncRuntimeHost,
   environmentName: string,
   entityId: string | number,
-  userUpn?: string | null,
+  userUpn?: string | null
 ): Promise<void> {
   const environment = getEnvironment(host, environmentName)
   const baseUrl = environment.etlServiceBaseUrl?.trim()
   if (!baseUrl) {
     throw new Error(
-      `Environment "${environmentName}" is missing etlServiceBaseUrl; dataset post-metadata deploy cannot run.`,
+      `Environment "${environmentName}" is missing etlServiceBaseUrl; dataset post-metadata deploy cannot run.`
     )
   }
 
@@ -308,7 +418,7 @@ async function runDatasetDeploy(
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/dataset/deploy`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify(requestBody),
+    body: JSON.stringify(requestBody)
   })
 
   if (!response.ok) {
@@ -321,13 +431,13 @@ async function runRulesDeploy(
   host: SyncRuntimeHost,
   environmentName: string,
   entityId: string | number,
-  userUpn?: string | null,
+  userUpn?: string | null
 ): Promise<void> {
   const environment = getEnvironment(host, environmentName)
   const baseUrl = environment.etlServiceBaseUrl?.trim()
   if (!baseUrl) {
     throw new Error(
-      `Environment "${environmentName}" is missing etlServiceBaseUrl; rules post-metadata deploy cannot run.`,
+      `Environment "${environmentName}" is missing etlServiceBaseUrl; rules post-metadata deploy cannot run.`
     )
   }
 
@@ -341,8 +451,8 @@ async function runRulesDeploy(
     headers: { "content-type": "application/json" },
     body: JSON.stringify({
       ruleId: numericRuleId,
-      userFullName: userUpn ?? undefined,
-    }),
+      userFullName: userUpn ?? undefined
+    })
   })
 
   if (!response.ok) {
@@ -354,13 +464,13 @@ async function runRulesDeploy(
 async function runPipelineRegister(
   host: SyncRuntimeHost,
   environmentName: string,
-  entityId: string | number,
+  entityId: string | number
 ): Promise<void> {
   const environment = getEnvironment(host, environmentName)
   const baseUrl = environment.agentServiceBaseUrl?.trim()
   if (!baseUrl) {
     throw new Error(
-      `Environment "${environmentName}" is missing agentServiceBaseUrl; pipeline registration cannot run.`,
+      `Environment "${environmentName}" is missing agentServiceBaseUrl; pipeline registration cannot run.`
     )
   }
 
@@ -372,7 +482,7 @@ async function runPipelineRegister(
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/pipeline/register`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ pipelineId: numericPipelineId }),
+    body: JSON.stringify({ pipelineId: numericPipelineId })
   })
 
   if (!response.ok) {
@@ -381,20 +491,17 @@ async function runPipelineRegister(
   }
 }
 
-async function runMetaRefresh(
-  host: SyncRuntimeHost,
-  environmentName: string,
-): Promise<void> {
+async function runMetaRefresh(host: SyncRuntimeHost, environmentName: string): Promise<void> {
   const environment = getEnvironment(host, environmentName)
   const baseUrl = environment.gateServiceBaseUrl?.trim()
   if (!baseUrl) {
     throw new Error(
-      `Environment "${environmentName}" is missing gateServiceBaseUrl; gate metadata refresh cannot run.`,
+      `Environment "${environmentName}" is missing gateServiceBaseUrl; gate metadata refresh cannot run.`
     )
   }
 
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/api/meta/refresh`, {
-    method: "GET",
+    method: "GET"
   })
 
   if (!response.ok) {
@@ -406,20 +513,20 @@ async function runMetaRefresh(
 async function runPipelineStartByName(
   host: SyncRuntimeHost,
   environmentName: string,
-  pipelineName: string,
+  pipelineName: string
 ): Promise<void> {
   const environment = getEnvironment(host, environmentName)
   const baseUrl = environment.agentServiceBaseUrl?.trim()
   if (!baseUrl) {
     throw new Error(
-      `Environment "${environmentName}" is missing agentServiceBaseUrl; pipeline start cannot run.`,
+      `Environment "${environmentName}" is missing agentServiceBaseUrl; pipeline start cannot run.`
     )
   }
 
   const response = await fetch(`${baseUrl.replace(/\/$/, "")}/pipeline/start`, {
     method: "POST",
     headers: { "content-type": "application/json" },
-    body: JSON.stringify({ name: pipelineName }),
+    body: JSON.stringify({ name: pipelineName })
   })
 
   if (!response.ok) {
@@ -433,7 +540,7 @@ async function resolveRuleInputDatasetId(
   pool: ConnectionPool,
   connection: string,
   ruleId: string | number,
-  telemetryContext?: SyncTelemetryContext,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<number> {
   const numericRuleId = typeof ruleId === "number" ? ruleId : Number(ruleId)
   if (!Number.isFinite(numericRuleId)) {
@@ -448,7 +555,7 @@ async function resolveRuleInputDatasetId(
     "SELECT inputDatasetId FROM core.[Rule] WHERE ruleId = @ruleId",
     `postMetadata.resolveRuleInputDatasetId(${numericRuleId})`,
     connection,
-    telemetryContext,
+    telemetryContext
   )
 
   const datasetId = result.recordset?.[0]?.inputDatasetId
@@ -464,7 +571,7 @@ async function resolveContractPipelineId(
   pool: ConnectionPool,
   connection: string,
   contractId: string | number,
-  telemetryContext?: SyncTelemetryContext,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<number> {
   const numericContractId = typeof contractId === "number" ? contractId : Number(contractId)
   if (!Number.isFinite(numericContractId)) {
@@ -479,7 +586,7 @@ async function resolveContractPipelineId(
     "SELECT pipelineId FROM core.Pipeline WHERE contractId = @contractId",
     `postMetadata.resolveContractPipelineId(${numericContractId})`,
     connection,
-    telemetryContext,
+    telemetryContext
   )
 
   const pipelineId = result.recordset?.[0]?.pipelineId
@@ -496,7 +603,7 @@ async function runHandleDependencies(
   connection: string,
   objectName: string,
   entityId: string | number,
-  telemetryContext?: SyncTelemetryContext,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<void> {
   const req = pool.request()
   req.input("id", sqlMod.VarChar(50), String(entityId))
@@ -508,12 +615,13 @@ async function runHandleDependencies(
     "core.uspObjectDependencies",
     `postMetadata.handleDependencies(${objectName}/${entityId})`,
     connection,
-    telemetryContext,
+    telemetryContext
   )
 }
 
 function requireAuditObjectType(step: SyncExecutionContractStep): string {
-  if (typeof step.auditObjectType === "string" && step.auditObjectType.trim().length > 0) return step.auditObjectType
+  if (typeof step.auditObjectType === "string" && step.auditObjectType.trim().length > 0)
+    return step.auditObjectType
   throw new Error(`Execution contract step ${step.id} is missing auditObjectType.`)
 }
 
@@ -535,16 +643,30 @@ async function resolveStepSubjectId(
     pool: ConnectionPool
     connection: string
     telemetryContext?: SyncTelemetryContext
-  },
+  }
 ): Promise<string | number> {
   switch (step.subjectRef ?? "entityId") {
     case "entityId":
       return input.defaultEntityId
     case "ruleInputDatasetId":
-      return resolveRuleInputDatasetId(input.host, input.pool, input.connection, input.defaultEntityId, input.telemetryContext)
+      return resolveRuleInputDatasetId(
+        input.host,
+        input.pool,
+        input.connection,
+        input.defaultEntityId,
+        input.telemetryContext
+      )
     case "contractPipelineId":
-      return resolveContractPipelineId(input.host, input.pool, input.connection, input.defaultEntityId, input.telemetryContext)
+      return resolveContractPipelineId(
+        input.host,
+        input.pool,
+        input.connection,
+        input.defaultEntityId,
+        input.telemetryContext
+      )
     default:
-      throw new Error(`Execution contract step ${step.id} has unsupported subjectRef ${String(step.subjectRef)}.`)
+      throw new Error(
+        `Execution contract step ${step.id} has unsupported subjectRef ${String(step.subjectRef)}.`
+      )
   }
 }

@@ -28,18 +28,25 @@ function fnv1a32(s: string): string {
  * when the object isn't in the catalog — caller should then skip caching
  * (no fingerprint = nothing to validate freshness against).
  */
-export function fingerprintForQname(host: AgentHost, qname: string, connName: string | undefined): ToolKnowledgeFingerprint | null {
+export function fingerprintForQname(
+  host: AgentHost,
+  qname: string,
+  connName: string | undefined
+): ToolKnowledgeFingerprint | null {
   try {
     const catalog = getCatalog(host, connName ?? "default")
     if (!catalog) return null
     const t = catalog.getTable(qname)
     if (!t) return null
     const cols = t.columns ?? []
-    const sig = cols.map((c) => `${c.name}:${c.dataType}`).join("|").toLowerCase()
+    const sig = cols
+      .map((c) => `${c.name}:${c.dataType}`)
+      .join("|")
+      .toLowerCase()
     return {
       cols: cols.length,
       type: t.type === "VIEW" ? "V" : "T",
-      csum: fnv1a32(sig),
+      csum: fnv1a32(sig)
     }
   } catch {
     return null
@@ -52,7 +59,10 @@ export function fingerprintForQname(host: AgentHost, qname: string, connName: st
  * driven by the catalog `builtAt` field — a fresh catalog means schemas may
  * have changed, which warrants a re-run. Returns null when no catalog.
  */
-export function fingerprintForCatalogBuild(host: AgentHost, connName: string | undefined): ToolKnowledgeFingerprint | null {
+export function fingerprintForCatalogBuild(
+  host: AgentHost,
+  connName: string | undefined
+): ToolKnowledgeFingerprint | null {
   try {
     const catalog = getCatalog(host, connName ?? "default")
     if (!catalog) return null
@@ -78,7 +88,7 @@ export function tryServeFromCache(
   qname: string,
   mode: string,
   connName: string | undefined,
-  fingerprint: ToolKnowledgeFingerprint | null,
+  fingerprint: ToolKnowledgeFingerprint | null
 ): string | null {
   if (!fingerprint) return null
   const tk = host.toolKnowledge
@@ -88,7 +98,7 @@ export function tryServeFromCache(
     qname: qname.toLowerCase(),
     mode,
     connection: connName ?? "default",
-    currentFingerprint: fingerprint,
+    currentFingerprint: fingerprint
   })
   if (!res.hit) {
     // eslint-disable-next-line no-console
@@ -97,7 +107,9 @@ export function tryServeFromCache(
   }
   const ageHours = Math.round(res.ageMs / 3_600_000)
   // eslint-disable-next-line no-console
-  console.log(`[${tool}] source=cache qname=${qname.toLowerCase()} mode=${mode} ageHours=${ageHours} fpMatch=1`)
+  console.log(
+    `[${tool}] source=cache qname=${qname.toLowerCase()} mode=${mode} ageHours=${ageHours} fpMatch=1`
+  )
   const header = tk.renderHeader ? tk.renderHeader(res, { qname: qname.toLowerCase(), tool, mode }) : ""
   return header ? `${header}\n${res.payload}` : res.payload
 }
@@ -113,7 +125,7 @@ export function persistToCache(
   mode: string,
   connName: string | undefined,
   payload: string,
-  fingerprint: ToolKnowledgeFingerprint | null,
+  fingerprint: ToolKnowledgeFingerprint | null
 ): void {
   if (!fingerprint) return
   try {
@@ -125,7 +137,7 @@ export function persistToCache(
       mode,
       connection: connName ?? "default",
       payload,
-      fingerprint,
+      fingerprint
     })
   } catch {
     // non-fatal

@@ -11,9 +11,9 @@
  */
 
 import {
-    MAX_CONSECUTIVE_ALL_FAILED_ROUNDS,
-    MAX_CONSECUTIVE_IDENTICAL_FAILURES,
-    MAX_CONSECUTIVE_SEMANTIC_DUPLICATE_ROUNDS,
+  MAX_CONSECUTIVE_ALL_FAILED_ROUNDS,
+  MAX_CONSECUTIVE_IDENTICAL_FAILURES,
+  MAX_CONSECUTIVE_SEMANTIC_DUPLICATE_ROUNDS
 } from "../../../domain/agent-constants.js"
 import type { ToolCallRecord } from "../result.js"
 import { buildSemanticToolCallKey, didToolCallFail } from "../result.js"
@@ -42,7 +42,7 @@ export interface StuckDetectionResult {
 export function trackToolCallFailureState(
   toolFailed: boolean,
   semanticToolKey: string,
-  loopState: ToolLoopState,
+  loopState: ToolLoopState
 ): void {
   const failKey = toolFailed ? semanticToolKey : ""
   if (toolFailed && failKey === loopState.lastFailKey) {
@@ -59,13 +59,13 @@ export function trackToolCallFailureState(
 export function checkToolLoopStuckDetection(
   roundCalls: readonly ToolCallRecord[],
   loopState: ToolLoopState,
-  stuckState: RoundStuckState,
+  stuckState: RoundStuckState
 ): StuckDetectionResult {
   // Level 1: per-call identical failure
   if (loopState.consecutiveFailCount >= MAX_CONSECUTIVE_IDENTICAL_FAILURES) {
     return {
       shouldBreak: true,
-      reason: "Detected repeated semantically-equivalent failing tool calls",
+      reason: "Detected repeated semantically-equivalent failing tool calls"
     }
   }
 
@@ -74,7 +74,7 @@ export function checkToolLoopStuckDetection(
   }
 
   // Level 2: all-failed rounds
-  const roundFailures = roundCalls.filter(c => didToolCallFail(c.isError, c.result)).length
+  const roundFailures = roundCalls.filter((c) => didToolCallFail(c.isError, c.result)).length
   if (roundFailures === roundCalls.length) {
     stuckState.consecutiveAllFailedRounds++
   } else {
@@ -83,13 +83,13 @@ export function checkToolLoopStuckDetection(
   if (stuckState.consecutiveAllFailedRounds >= MAX_CONSECUTIVE_ALL_FAILED_ROUNDS) {
     return {
       shouldBreak: true,
-      reason: `All tool calls failed for ${MAX_CONSECUTIVE_ALL_FAILED_ROUNDS} consecutive rounds`,
+      reason: `All tool calls failed for ${MAX_CONSECUTIVE_ALL_FAILED_ROUNDS} consecutive rounds`
     }
   }
 
   // Level 3: semantic duplicate rounds (same tools + args, regardless of success/failure)
   const roundSemanticKey = roundCalls
-    .map(c => buildSemanticToolCallKey(c.name, c.args))
+    .map((c) => buildSemanticToolCallKey(c.name, c.args))
     .sort()
     .join("|")
   if (roundSemanticKey.length > 0 && roundSemanticKey === stuckState.lastRoundSemanticKey) {
@@ -101,7 +101,7 @@ export function checkToolLoopStuckDetection(
   if (stuckState.consecutiveSemanticDuplicateRounds >= MAX_CONSECUTIVE_SEMANTIC_DUPLICATE_ROUNDS) {
     return {
       shouldBreak: true,
-      reason: "Detected repeated semantically equivalent tool rounds with no material progress",
+      reason: "Detected repeated semantically equivalent tool rounds with no material progress"
     }
   }
 

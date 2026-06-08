@@ -10,40 +10,40 @@
  */
 
 import {
-    annotateProposal,
-    ProposalKind,
-    RiskTier,
-    type AnnotatorCache,
-    type LlmCompletionPort,
-    type ProposerFinding,
-    type RiskAnnotation,
+  annotateProposal,
+  ProposalKind,
+  RiskTier,
+  type AnnotatorCache,
+  type LlmCompletionPort,
+  type ProposerFinding,
+  type RiskAnnotation
 } from "@mia/sync"
 import { describe, expect, it, vi } from "vitest"
 
 function finding(): ProposerFinding {
   return {
-    envPair:          { source: "uat", target: "prod" },
-    entityType:       "contract",
-    entityId:         "c1",
-    entityLabel:      "Contract c1",
-    kind:             ProposalKind.OutOfSync,
-    counts:           { insert: 0, update: 5, delete: 0, unchanged: 100, unknown: 0 },
-    detail:           { kind: "out_of_sync", outOfSync: { perTable: [] } },
-    fingerprint:      "abc",
+    envPair: { source: "uat", target: "prod" },
+    entityType: "contract",
+    entityId: "c1",
+    entityLabel: "Contract c1",
+    kind: ProposalKind.OutOfSync,
+    counts: { insert: 0, update: 5, delete: 0, unchanged: 100, unknown: 0 },
+    detail: { kind: "out_of_sync", outOfSync: { perTable: [] } },
+    fingerprint: "abc",
     entityDefVersion: 1,
-    observedAt:       "2025-01-15T12:00:00.000Z",
+    observedAt: "2025-01-15T12:00:00.000Z"
   }
 }
 
 function validReply(over: Partial<RiskAnnotation> = {}): string {
   const ann: RiskAnnotation = {
-    riskTier:          RiskTier.Medium,
-    riskScore:         40,
-    rationale:         "Plain rationale sentence one. Sentence two. Sentence three.",
+    riskTier: RiskTier.Medium,
+    riskScore: 40,
+    rationale: "Plain rationale sentence one. Sentence two. Sentence three.",
     recommendedWindow: "any",
-    dependsOn:         [],
-    warnings:          [],
-    ...over,
+    dependsOn: [],
+    warnings: [],
+    ...over
   }
   return JSON.stringify(ann)
 }
@@ -55,7 +55,7 @@ function port(replies: string[]): LlmCompletionPort {
       const next = queue.shift()
       if (next === undefined) throw new Error("LLM mock exhausted")
       return next
-    }),
+    })
   }
 }
 
@@ -82,8 +82,12 @@ describe("annotateProposal", () => {
 
   it("short-circuits on cache hit", async () => {
     const stored: RiskAnnotation = {
-      riskTier: RiskTier.Low, riskScore: 5,
-      rationale: "Cached.", recommendedWindow: "any", dependsOn: [], warnings: [],
+      riskTier: RiskTier.Low,
+      riskScore: 5,
+      rationale: "Cached.",
+      recommendedWindow: "any",
+      dependsOn: [],
+      warnings: []
     }
     const cache: AnnotatorCache = { get: () => stored, put: vi.fn() }
     const p = port([]) // would throw if invoked

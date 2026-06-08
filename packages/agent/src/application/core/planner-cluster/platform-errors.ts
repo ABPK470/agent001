@@ -34,8 +34,8 @@ const PATTERNS: Array<{ regex: RegExp; build: (m: RegExpMatchArray) => PlatformU
       subject: `MSSQL connection "${m[1]}"`,
       remediation:
         "Set MSSQL_HOST (single-database) or MSSQL_DATABASES (multi-database) in the server environment and restart. " +
-        "See packages/server/src/setup-mssql.ts for the full env-var reference.",
-    }),
+        "See packages/server/src/setup-mssql.ts for the full env-var reference."
+    })
   },
   {
     // Generic catch-all for "no MSSQL connection configured" / "not configured"
@@ -45,9 +45,9 @@ const PATTERNS: Array<{ regex: RegExp; build: (m: RegExpMatchArray) => PlatformU
     build: () => ({
       subject: `MSSQL`,
       remediation:
-        "Set MSSQL_HOST (single-database) or MSSQL_DATABASES (multi-database) in the server environment and restart.",
-    }),
-  },
+        "Set MSSQL_HOST (single-database) or MSSQL_DATABASES (multi-database) in the server environment and restart."
+    })
+  }
 ]
 
 /** Returns a hit if the message looks like a platform-unconfigured error, else null. */
@@ -80,7 +80,7 @@ export function synthesizePlatformUnconfiguredAnswer(): string {
     "",
     `A platform component this request depends on isn’t available on this server. This is a configuration issue on our side, not something you can fix from the chat.`,
     "",
-    `Please report this to the platform admin and include the reference: ${RUN_REF_PLACEHOLDER}`,
+    `Please report this to the platform admin and include the reference: ${RUN_REF_PLACEHOLDER}`
   ].join("\n")
 }
 
@@ -132,7 +132,7 @@ export function synthesizeGenericFailureAnswer(): string {
     "",
     `Something went wrong while processing this request.`,
     "",
-    `Please share this reference with an admin so they can investigate: ${RUN_REF_PLACEHOLDER}`,
+    `Please share this reference with an admin so they can investigate: ${RUN_REF_PLACEHOLDER}`
   ].join("\n")
 }
 
@@ -143,7 +143,9 @@ export function isGenericFailureAnswer(answer: string): boolean {
 
 /** True if the answer is any opaque user-safe failure (platform OR generic OR polished). */
 export function isUserSafeFailureAnswer(answer: string): boolean {
-  return isPlatformUnconfiguredAnswer(answer) || isGenericFailureAnswer(answer) || isPolishedFailureAnswer(answer)
+  return (
+    isPlatformUnconfiguredAnswer(answer) || isGenericFailureAnswer(answer) || isPolishedFailureAnswer(answer)
+  )
 }
 
 /**
@@ -170,7 +172,7 @@ export function detectInternalFailure(answer: string): InternalFailureHit | null
 
   // Planner failure JSON (buildPlannerFailurePayload output).
   const trimmed = answer.trimStart()
-  if (trimmed.startsWith("{") && trimmed.includes("\"kind\"") && trimmed.includes("planner_failure")) {
+  if (trimmed.startsWith("{") && trimmed.includes('"kind"') && trimmed.includes("planner_failure")) {
     try {
       const parsed = JSON.parse(trimmed) as { kind?: string; stage?: string; reason?: string }
       if (parsed.kind === "planner_failure") {
@@ -179,10 +181,12 @@ export function detectInternalFailure(answer: string): InternalFailureHit | null
         return {
           kind: `planner_failure:${stage}`,
           summary: reason.slice(0, 280),
-          rawDetail: answer,
+          rawDetail: answer
         }
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   // Verifier "Task FAILED" / "Task verification FAILED" wall.
@@ -191,7 +195,7 @@ export function detectInternalFailure(answer: string): InternalFailureHit | null
     return {
       kind: "task_failed",
       summary: firstLine.slice(0, 280),
-      rawDetail: answer,
+      rawDetail: answer
     }
   }
 

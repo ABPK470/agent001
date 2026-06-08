@@ -110,7 +110,7 @@ export function createAgentLoopState(maxIterations: number): AgentLoopState {
     roundStuckState: {
       consecutiveAllFailedRounds: 0,
       lastRoundSemanticKey: "",
-      consecutiveSemanticDuplicateRounds: 0,
+      consecutiveSemanticDuplicateRounds: 0
     },
     seenSuccessfulSemanticKeys: new Set(),
     seenVerificationFailureDiagKeys: new Set(),
@@ -141,6 +141,6 @@ export function createAgentLoopState(maxIterations: number): AgentLoopState {
     coherentExecution: null,
     recentTruncatedQueries: [],
     cumulativeReadFileHistory: new Map(),
-    lastAnswerSignature: undefined,
+    lastAnswerSignature: undefined
   }
 }

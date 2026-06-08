@@ -6,13 +6,19 @@ import { searchProcedures } from "./procedural.js"
 import { currentPolicyVersion, provenanceMultiplier } from "./provenance.js"
 import { rowToEntry } from "./schema.js"
 import {
-    activationBonus, confidenceDecay,
-    DEDUP_JACCARD_THRESHOLD,
-    DEFAULT_BUDGET,
-    jaccardSimilarity, RECENCY_WEIGHT,
-    recencyScore,
-    RELEVANCE_THRESHOLD, sanitizeFtsQuery,
-    SOURCE_WEIGHT, TIER_BUDGET, tokenize, WORKING_SESSION_WINDOW_H,
+  activationBonus,
+  confidenceDecay,
+  DEDUP_JACCARD_THRESHOLD,
+  DEFAULT_BUDGET,
+  jaccardSimilarity,
+  RECENCY_WEIGHT,
+  recencyScore,
+  RELEVANCE_THRESHOLD,
+  sanitizeFtsQuery,
+  SOURCE_WEIGHT,
+  TIER_BUDGET,
+  tokenize,
+  WORKING_SESSION_WINDOW_H
 } from "./scoring.js"
 import type { MemoryBudget, MemoryEntry, ProceduralMemory, UnifiedSearchResult } from "./types.js"
 import { vectorSearch } from "./vectors.js"
@@ -42,7 +48,7 @@ export async function retrieveContext(
     upn?: string | null
     /** Optional host — used to read the live catalog schema fingerprint. */
     host?: import("@mia/agent").AgentHost
-  },
+  }
 ): Promise<{
   context: string
   results: UnifiedSearchResult[]
@@ -56,7 +62,7 @@ export async function retrieveContext(
   for (const tier of [MemoryTier.Working, "episodic", "semantic"] as MemoryTier[]) {
     const tierBudget: MemoryBudget = {
       maxTokens: Math.floor(budget.maxTokens * TIER_BUDGET[tier]),
-      maxItems: Math.floor(budget.maxItems * TIER_BUDGET[tier]),
+      maxItems: Math.floor(budget.maxItems * TIER_BUDGET[tier])
     }
 
     const results = await searchEntries(goal, {
@@ -64,7 +70,7 @@ export async function retrieveContext(
       budget: tierBudget,
       sessionId: tier === MemoryTier.Working ? opts?.sessionId : undefined,
       excludeRunId: opts?.runId,
-      upn: opts?.upn ?? null,
+      upn: opts?.upn ?? null
     })
     allResults.push(...results)
   }
@@ -78,9 +84,10 @@ export async function retrieveContext(
   // simply too old, must not crowd out fresh, in-policy knowledge. The
   // multiplier is bounded above 0 so audit history is preserved.
   const policyVersion = currentPolicyVersion()
-  const currentSchema = (opts as { schemaFingerprint?: string | null } | undefined)?.schemaFingerprint
-    ?? (opts?.host ? getCatalogSchemaFingerprint(opts.host) : null)
-    ?? null
+  const currentSchema =
+    (opts as { schemaFingerprint?: string | null } | undefined)?.schemaFingerprint ??
+    (opts?.host ? getCatalogSchemaFingerprint(opts.host) : null) ??
+    null
   let demotedCount = 0
   for (const r of allResults) {
     const { multiplier, reasons } = provenanceMultiplier(
@@ -88,7 +95,7 @@ export async function retrieveContext(
       r.entry.createdAt,
       policyVersion,
       currentSchema,
-      now,
+      now
     )
     if (multiplier < 1) {
       r.combined *= multiplier
@@ -96,7 +103,7 @@ export async function retrieveContext(
       // Tag the reason on the result so downstream tooling can surface it.
       ;(r as UnifiedSearchResult & { demoted?: { multiplier: number; reasons: string[] } }).demoted = {
         multiplier,
-        reasons,
+        reasons
       }
     }
   }
@@ -107,8 +114,8 @@ export async function retrieveContext(
         reason: "provenance_demoted",
         demotedCount,
         total: allResults.length,
-        runId: opts?.runId ?? null,
-      } as Record<string, unknown>,
+        runId: opts?.runId ?? null
+      } as Record<string, unknown>
     })
   }
 
@@ -151,9 +158,11 @@ export async function retrieveContext(
   if (packed.length > 0) {
     const ids = packed.map((r) => r.entry.id)
     const placeholders = ids.map(() => "?").join(", ")
-    getDb().prepare(
-      `UPDATE memory_entries SET access_count = access_count + 1, updated_at = ? WHERE id IN (${placeholders})`
-    ).run(now.toISOString(), ...ids)
+    getDb()
+      .prepare(
+        `UPDATE memory_entries SET access_count = access_count + 1, updated_at = ? WHERE id IN (${placeholders})`
+      )
+      .run(now.toISOString(), ...ids)
   }
 
   const context = formatMemoryContext(packed, procedures)
@@ -163,15 +172,9 @@ export async function retrieveContext(
   const semanticItems = packed.filter((r) => r.entry.tier === "semantic")
 
   const perTier = {
-    working: workingItems.length > 0
-      ? workingItems.map((r) => r.entry.content).join("\n")
-      : "",
-    episodic: episodicItems.length > 0
-      ? episodicItems.map((r) => r.entry.content).join("\n")
-      : "",
-    semantic: semanticItems.length > 0
-      ? semanticItems.map((r) => r.entry.content).join("\n")
-      : "",
+    working: workingItems.length > 0 ? workingItems.map((r) => r.entry.content).join("\n") : "",
+    episodic: episodicItems.length > 0 ? episodicItems.map((r) => r.entry.content).join("\n") : "",
+    semantic: semanticItems.length > 0 ? semanticItems.map((r) => r.entry.content).join("\n") : ""
   }
 
   broadcast({
@@ -182,8 +185,8 @@ export async function retrieveContext(
       episodic: episodicItems.length,
       semantic: semanticItems.length,
       procedural: procedures.length,
-      runId: opts?.runId ?? null,
-    },
+      runId: opts?.runId ?? null
+    }
   })
 
   return { context, results: packed, perTier }
@@ -207,7 +210,7 @@ export async function searchEntries(
      * the legacy/unowned pool only. Rows with shared=1 are always visible.
      */
     upn?: string | null
-  },
+  }
 ): Promise<UnifiedSearchResult[]> {
   const now = new Date()
 
@@ -293,9 +296,9 @@ export async function searchEntries(
   sql += " ORDER BY fts_rank LIMIT ?"
   params.push(opts.budget.maxItems * 3)
 
-  const rows = getDb().prepare(sql).all(...params) as Array<
-    Record<string, unknown> & { fts_rank: number }
-  >
+  const rows = getDb()
+    .prepare(sql)
+    .all(...params) as Array<Record<string, unknown> & { fts_rank: number }>
 
   // For working tier, also get recent entries that may not match FTS
   let recentEntries: UnifiedSearchResult[] = []
@@ -309,9 +312,13 @@ export async function searchEntries(
     // Down-weight failed/incomplete entries so they don't poison future runs.
     const isFailedEntry =
       entry.confidence < 0.5 &&
-      (entry.tier === "episodic" || (entry.tier === MemoryTier.Working && entry.role === MemoryRole.Assistant))
+      (entry.tier === "episodic" ||
+        (entry.tier === MemoryTier.Working && entry.role === MemoryRole.Assistant))
     const statusPenalty = isFailedEntry ? 0.4 : 1.0
-    const normRelevance = Math.min(1, rawRank * SOURCE_WEIGHT[entry.source] * entry.confidence * statusPenalty)
+    const normRelevance = Math.min(
+      1,
+      rawRank * SOURCE_WEIGHT[entry.source] * entry.confidence * statusPenalty
+    )
     const rec = recencyScore(entry.createdAt, now)
     const decay = confidenceDecay(entry.createdAt, now)
     const activation = activationBonus(entry.accessCount, entry.updatedAt, now)
@@ -333,7 +340,9 @@ export async function searchEntries(
       if (ftsIds.has(vr.entryId)) continue
       if (vr.similarity < 0.5) continue
 
-      const row = getDb().prepare("SELECT * FROM memory_entries WHERE id = ?").get(vr.entryId) as Record<string, unknown> | undefined
+      const row = getDb().prepare("SELECT * FROM memory_entries WHERE id = ?").get(vr.entryId) as
+        | Record<string, unknown>
+        | undefined
       if (!row) continue
       if (opts.excludeRunId && row.run_id === opts.excludeRunId) continue
       if (opts.sessionId && opts.tier === MemoryTier.Working && row.session_id !== opts.sessionId) continue
@@ -355,9 +364,10 @@ export async function searchEntries(
           }
         }
       }
-      if (opts.upn === null && ((row.tier as string | null) === "episodic")) {
+      if (opts.upn === null && (row.tier as string | null) === "episodic") {
         if (!opts.sessionId && (row.shared as number | null) !== 1) continue
-        if (opts.sessionId && (row.shared as number | null) !== 1 && row.session_id !== opts.sessionId) continue
+        if (opts.sessionId && (row.shared as number | null) !== 1 && row.session_id !== opts.sessionId)
+          continue
       }
 
       const entry = rowToEntry(row)
@@ -401,7 +411,7 @@ function getRecentEntries(
   limit: number,
   sessionId?: string,
   upn?: string | null,
-  excludeRunId?: string,
+  excludeRunId?: string
 ): UnifiedSearchResult[] {
   const now = new Date()
   let sql = "SELECT * FROM memory_entries WHERE tier = ?"
@@ -445,7 +455,9 @@ function getRecentEntries(
   sql += " ORDER BY created_at DESC LIMIT ?"
   params.push(limit)
 
-  const rows = getDb().prepare(sql).all(...params) as Array<Record<string, unknown>>
+  const rows = getDb()
+    .prepare(sql)
+    .all(...params) as Array<Record<string, unknown>>
 
   return rows.map((row) => {
     const entry = rowToEntry(row)
@@ -454,17 +466,14 @@ function getRecentEntries(
       entry,
       relevance: entry.confidence * activationBonus(entry.accessCount, entry.updatedAt, now),
       recency: rec,
-      combined: entry.confidence * 0.3 + rec * 0.7,
+      combined: entry.confidence * 0.3 + rec * 0.7
     }
   })
 }
 
 // ── Output formatting ────────────────────────────────────────────
 
-function formatMemoryContext(
-  results: UnifiedSearchResult[],
-  _procedures: ProceduralMemory[],
-): string {
+function formatMemoryContext(results: UnifiedSearchResult[], _procedures: ProceduralMemory[]): string {
   if (results.length === 0) return ""
 
   // Dedup identical or near-identical entry content across tiers (Gap 4).
@@ -510,13 +519,7 @@ function formatMemoryContext(
   // Note: procedural memories (tool sequences) are intentionally excluded.
   // They consume tokens without improving LLM tool selection.
 
-  return [
-    "",
-    "<memory_context>",
-    ...blocks,
-    "</memory_context>",
-    "",
-  ].join("\n")
+  return ["", "<memory_context>", ...blocks, "</memory_context>", ""].join("\n")
 }
 
 // Re-export MemoryEntry so consumers of retrieval don't need a separate import

@@ -7,17 +7,17 @@
 
 import { randomUUID } from "node:crypto"
 import {
-    type AgentRun,
-    type AuditEntry,
-    AuditService,
-    Learner,
-    MemoryAuditRepository,
-    MemoryEventBus,
-    MemoryExecutionRecordRepository,
-    MemoryRunRepository,
-    RulePolicyEvaluator,
-    type Step,
-    StepStatus,
+  type AgentRun,
+  type AuditEntry,
+  AuditService,
+  Learner,
+  MemoryAuditRepository,
+  MemoryEventBus,
+  MemoryExecutionRecordRepository,
+  MemoryRunRepository,
+  RulePolicyEvaluator,
+  type Step,
+  StepStatus
 } from "../../../domain/index.js"
 
 // ── Engine infrastructure ────────────────────────────────────────
@@ -42,7 +42,7 @@ export function createEngineServices(): EngineServices {
     auditService: new AuditService(auditRepo),
     policyEvaluator: new RulePolicyEvaluator(),
     learner: new Learner(recordRepo),
-    eventBus,
+    eventBus
   }
 }
 
@@ -56,7 +56,7 @@ export interface GovernedResult {
   /** Audit trail — immutable log of every action. */
   auditTrail: AuditEntry[]
   /** Execution records — performance metrics per tool call. */
-  stats: Map<string, { calls: number, avgMs: number, failures: number }>
+  stats: Map<string, { calls: number; avgMs: number; failures: number }>
 }
 
 // ── Run state (shared between governed tools) ────────────────────
@@ -69,11 +69,7 @@ export interface RunState {
 
 // ── Build a Step for a tool call ─────────────────────────────────
 
-export function createToolStep(
-  toolName: string,
-  args: Record<string, unknown>,
-  state: RunState,
-): Step {
+export function createToolStep(toolName: string, args: Record<string, unknown>, state: RunState): Step {
   const order = state.stepCounter++
   return {
     id: randomUUID(),
@@ -88,6 +84,6 @@ export function createToolStep(
     output: {},
     error: null,
     startedAt: null,
-    completedAt: null,
+    completedAt: null
   }
 }

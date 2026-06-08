@@ -4,20 +4,20 @@ import { resolve } from "node:path"
 import { promisify } from "node:util"
 import { WorkspaceMountMode } from "../enums/sandbox.js"
 import {
-    BROWSER_DOCKERFILE,
-    BROWSER_IMAGE,
-    DEFAULT_IDLE_TIMEOUT,
-    DEFAULT_IMAGE,
-    DEFAULT_MAX_CONCURRENT,
-    DEFAULT_MAX_CPU,
-    DEFAULT_MAX_LIFETIME,
-    DEFAULT_MAX_MEMORY,
-    DEFAULT_TIMEOUT,
-    DEFAULT_WORKSPACE_ACCESS,
-    SAFE_ENV_KEYS,
-    Semaphore,
-    WATCHDOG_INTERVAL,
-    truncateOutput,
+  BROWSER_DOCKERFILE,
+  BROWSER_IMAGE,
+  DEFAULT_IDLE_TIMEOUT,
+  DEFAULT_IMAGE,
+  DEFAULT_MAX_CONCURRENT,
+  DEFAULT_MAX_CPU,
+  DEFAULT_MAX_LIFETIME,
+  DEFAULT_MAX_MEMORY,
+  DEFAULT_TIMEOUT,
+  DEFAULT_WORKSPACE_ACCESS,
+  SAFE_ENV_KEYS,
+  Semaphore,
+  WATCHDOG_INTERVAL,
+  truncateOutput
 } from "./helpers.js"
 import type { SandboxConfig, SandboxResult, TrackedContainer } from "./types.js"
 
@@ -43,7 +43,7 @@ export class DockerSandbox {
       maxLifetimeMs: config.maxLifetimeMs ?? DEFAULT_MAX_LIFETIME,
       workspaceAccess: config.workspaceAccess ?? DEFAULT_WORKSPACE_ACCESS,
       timeout: config.timeout ?? DEFAULT_TIMEOUT,
-      network: config.network ?? false,
+      network: config.network ?? false
     }
     this.semaphore = new Semaphore(this.config.maxConcurrent)
     this.startWatchdog()
@@ -64,7 +64,7 @@ export class DockerSandbox {
       const idle = now - info.lastActivityAt
       if (lifetime > this.config.maxLifetimeMs || idle > this.config.idleTimeoutMs) {
         console.log(
-          `🧹 Reaping container ${id} (lifetime=${Math.round(lifetime / 1000)}s, idle=${Math.round(idle / 1000)}s)`,
+          `🧹 Reaping container ${id} (lifetime=${Math.round(lifetime / 1000)}s, idle=${Math.round(idle / 1000)}s)`
         )
         await exec("docker", ["kill", id], { timeout: 5000 }).catch(() => {})
         this.trackedContainers.delete(id)
@@ -110,7 +110,7 @@ export class DockerSandbox {
       env?: Record<string, string>
       network?: boolean
       signal?: AbortSignal
-    },
+    }
   ): Promise<SandboxResult> {
     const useDocker = await this.isSandboxed()
 
@@ -118,10 +118,11 @@ export class DockerSandbox {
       if (this.config.mode === "all") {
         return {
           stdout: "",
-          stderr: "Docker is required but unavailable. Install Docker or set SANDBOX_MODE=docker to allow host fallback.",
+          stderr:
+            "Docker is required but unavailable. Install Docker or set SANDBOX_MODE=docker to allow host fallback.",
           exitCode: 1,
           timedOut: false,
-          sandboxed: false,
+          sandboxed: false
         }
       }
       return this.execHost(command, workspacePath, options)
@@ -141,7 +142,7 @@ export class DockerSandbox {
       env?: Record<string, string>
       network?: boolean
       signal?: AbortSignal
-    },
+    }
   ): Promise<SandboxResult> {
     const timeout = options?.timeout ?? this.config.timeout
     const containerCwd = options?.cwd ? `/workspace/${options.cwd}` : "/workspace"
@@ -150,21 +151,29 @@ export class DockerSandbox {
     const mountArgs = this.buildWorkspaceMount(workspacePath)
 
     const args: string[] = [
-      "run", "--rm", "--name", containerId,
+      "run",
+      "--rm",
+      "--name",
+      containerId,
       `--memory=${this.config.maxMemory}`,
       `--cpus=${this.config.maxCpu}`,
       "--oom-kill-disable=false",
       ...(allowNetwork ? [] : ["--network=none"]),
-      "--user", "1000:1000",
+      "--user",
+      "1000:1000",
       "--read-only",
-      "--tmpfs", "/tmp:rw,noexec,nosuid,size=64m",
+      "--tmpfs",
+      "/tmp:rw,noexec,nosuid,size=64m",
       ...mountArgs,
-      "-w", containerCwd,
+      "-w",
+      containerCwd,
       "--cap-drop=ALL",
       "--security-opt=no-new-privileges",
       ...this.buildEnvArgs(options?.env),
       this.config.image,
-      "/bin/sh", "-c", command,
+      "/bin/sh",
+      "-c",
+      command
     ]
 
     await this.semaphore.acquire(this.config.timeout)
@@ -174,16 +183,24 @@ export class DockerSandbox {
     this.trackedContainers.set(containerId, { startedAt: now, lastActivityAt: now })
 
     const killOnAbort = options?.signal
-      ? () => { exec("docker", ["kill", containerId], { timeout: 5000 }).catch(() => {}) }
+      ? () => {
+          exec("docker", ["kill", containerId], { timeout: 5000 }).catch(() => {})
+        }
       : undefined
     if (killOnAbort) options!.signal!.addEventListener("abort", killOnAbort, { once: true })
 
     try {
       const { stdout, stderr } = await exec("docker", args, {
         timeout: timeout + 5000,
-        maxBuffer: 2 * 1024 * 1024,
+        maxBuffer: 2 * 1024 * 1024
       })
-      return { stdout: truncateOutput(stdout), stderr: truncateOutput(stderr), exitCode: 0, timedOut: false, sandboxed: true }
+      return {
+        stdout: truncateOutput(stdout),
+        stderr: truncateOutput(stderr),
+        exitCode: 0,
+        timedOut: false,
+        sandboxed: true
+      }
     } catch (err: unknown) {
       const error = err as { killed?: boolean; code?: number; stdout?: string; stderr?: string }
       const timedOut = error.killed === true
@@ -195,7 +212,7 @@ export class DockerSandbox {
         stderr: truncateOutput(error.stderr ?? ""),
         exitCode: error.code ?? 1,
         timedOut,
-        sandboxed: true,
+        sandboxed: true
       }
     } finally {
       if (killOnAbort) options!.signal!.removeEventListener("abort", killOnAbort)
@@ -210,7 +227,7 @@ export class DockerSandbox {
   private async execHost(
     command: string,
     workspacePath: string,
-    options?: { timeout?: number; cwd?: string; env?: Record<string, string>; signal?: AbortSignal },
+    options?: { timeout?: number; cwd?: string; env?: Record<string, string>; signal?: AbortSignal }
   ): Promise<SandboxResult> {
     const timeout = options?.timeout ?? this.config.timeout
     const cwd = options?.cwd ? `${workspacePath}/${options.cwd}` : workspacePath
@@ -227,9 +244,15 @@ export class DockerSandbox {
         maxBuffer: 1024 * 1024,
         cwd,
         env: safeEnv,
-        ...(options?.signal ? { signal: options.signal } : {}),
+        ...(options?.signal ? { signal: options.signal } : {})
       })
-      return { stdout: truncateOutput(stdout), stderr: truncateOutput(stderr), exitCode: 0, timedOut: false, sandboxed: false }
+      return {
+        stdout: truncateOutput(stdout),
+        stderr: truncateOutput(stderr),
+        exitCode: 0,
+        timedOut: false,
+        sandboxed: false
+      }
     } catch (err: unknown) {
       const error = err as { killed?: boolean; code?: number; stdout?: string; stderr?: string }
       return {
@@ -237,7 +260,7 @@ export class DockerSandbox {
         stderr: truncateOutput(error.stderr ?? ""),
         exitCode: error.code ?? 1,
         timedOut: error.killed === true,
-        sandboxed: false,
+        sandboxed: false
       }
     }
   }
@@ -247,10 +270,13 @@ export class DockerSandbox {
   buildWorkspaceMount(workspacePath: string, overrideAccess?: SandboxConfig["workspaceAccess"]): string[] {
     const access = overrideAccess ?? this.config.workspaceAccess
     switch (access) {
-      case WorkspaceMountMode.None: return []
-      case WorkspaceMountMode.Readonly: return ["-v", `${workspacePath}:/workspace:ro`]
+      case WorkspaceMountMode.None:
+        return []
+      case WorkspaceMountMode.Readonly:
+        return ["-v", `${workspacePath}:/workspace:ro`]
       case WorkspaceMountMode.Readwrite:
-      default: return ["-v", `${workspacePath}:/workspace:rw`]
+      default:
+        return ["-v", `${workspacePath}:/workspace:rw`]
     }
   }
 
@@ -277,13 +303,15 @@ export class DockerSandbox {
       await exec("docker", ["image", "inspect", BROWSER_IMAGE], { timeout: 5000 })
       this.browserImageReady = true
       return true
-    } catch { /* Image doesn't exist — build it */ }
+    } catch {
+      /* Image doesn't exist — build it */
+    }
 
     try {
       const dockerfileDir = resolve(BROWSER_DOCKERFILE, "..")
-      await exec("docker", [
-        "build", "-t", BROWSER_IMAGE, "-f", BROWSER_DOCKERFILE, dockerfileDir,
-      ], { timeout: 300_000 })
+      await exec("docker", ["build", "-t", BROWSER_IMAGE, "-f", BROWSER_DOCKERFILE, dockerfileDir], {
+        timeout: 300_000
+      })
       this.browserImageReady = true
       return true
     } catch (err) {
@@ -296,7 +324,7 @@ export class DockerSandbox {
   async browserExec(
     scriptContent: string,
     workspacePath: string,
-    options?: { timeout?: number },
+    options?: { timeout?: number }
   ): Promise<SandboxResult> {
     const useDocker = await this.ensureBrowserImage()
     if (!useDocker) {
@@ -307,21 +335,31 @@ export class DockerSandbox {
     const containerId = `mia-browser-${randomBytes(6).toString("hex")}`
 
     const args: string[] = [
-      "run", "--rm", "--name", containerId,
+      "run",
+      "--rm",
+      "--name",
+      containerId,
       `--memory=${this.config.maxMemory}`,
       `--cpus=${this.config.maxCpu}`,
       "--oom-kill-disable=false",
       "--network=none",
-      "--cap-drop=ALL", "--cap-add=SYS_ADMIN",
+      "--cap-drop=ALL",
+      "--cap-add=SYS_ADMIN",
       "--security-opt=no-new-privileges",
       "--read-only",
-      "--tmpfs", "/tmp:rw,exec,nosuid,size=128m",
+      "--tmpfs",
+      "/tmp:rw,exec,nosuid,size=128m",
       ...this.buildWorkspaceMount(workspacePath, WorkspaceMountMode.Readonly),
-      "-w", "/workspace",
-      "-e", "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
-      "-e", "NO_COLOR=1",
+      "-w",
+      "/workspace",
+      "-e",
+      "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
+      "-e",
+      "NO_COLOR=1",
       BROWSER_IMAGE,
-      "node", "-e", scriptContent,
+      "node",
+      "-e",
+      scriptContent
     ]
 
     await this.semaphore.acquire(timeout)
@@ -333,9 +371,15 @@ export class DockerSandbox {
     try {
       const { stdout, stderr } = await exec("docker", args, {
         timeout: timeout + 10_000,
-        maxBuffer: 2 * 1024 * 1024,
+        maxBuffer: 2 * 1024 * 1024
       })
-      return { stdout: truncateOutput(stdout), stderr: truncateOutput(stderr), exitCode: 0, timedOut: false, sandboxed: true }
+      return {
+        stdout: truncateOutput(stdout),
+        stderr: truncateOutput(stderr),
+        exitCode: 0,
+        timedOut: false,
+        sandboxed: true
+      }
     } catch (err: unknown) {
       const error = err as { killed?: boolean; code?: number; stdout?: string; stderr?: string }
       const timedOut = error.killed === true
@@ -347,7 +391,7 @@ export class DockerSandbox {
         stderr: truncateOutput(error.stderr ?? ""),
         exitCode: error.code ?? 1,
         timedOut,
-        sandboxed: true,
+        sandboxed: true
       }
     } finally {
       this.trackedContainers.delete(containerId)
@@ -364,7 +408,7 @@ export class DockerSandbox {
       this.watchdogTimer = null
     }
     const kills = [...this.activeContainers].map((id) =>
-      exec("docker", ["kill", id], { timeout: 5000 }).catch(() => {}),
+      exec("docker", ["kill", id], { timeout: 5000 }).catch(() => {})
     )
     await Promise.all(kills)
     this.trackedContainers.clear()

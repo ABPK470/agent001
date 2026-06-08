@@ -22,7 +22,7 @@ import type {
   SyncEnvironment,
   SyncEventSink,
   SyncPlan,
-  SyncRunSink,
+  SyncRunSink
 } from "@mia/sync"
 import type {
   AttachmentStore,
@@ -34,7 +34,7 @@ import type {
   ShellClient,
   TableVerdictsReader,
   ToolKnowledgeStore,
-  UserInputReader,
+  UserInputReader
 } from "../../../ports/ports.js"
 import type { BrowserSession, CatalogGraph } from "../../../tools/index.js"
 
@@ -178,12 +178,7 @@ export interface AgentHost {
  * unchanged.
  */
 export interface RunMemoryWriter {
-  writeNote(payload: {
-    subject: string
-    claim: string
-    evidence?: string
-    category?: string
-  }): void
+  writeNote(payload: { subject: string; claim: string; evidence?: string; category?: string }): void
 }
 
 /** Causal trace for a tool call — opaque to most callers. */

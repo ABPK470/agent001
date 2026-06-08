@@ -16,7 +16,7 @@ export function recordBlockedArtifactFailure(
   state: AgentLoopState,
   artifactPath: string,
   threshold: number,
-  reason: string,
+  reason: string
 ): string | null {
   const normalizedPath = normalizeArtifactPath(artifactPath)
   if (!normalizedPath) return null
@@ -62,15 +62,16 @@ export function handleReplaceInFileMiss(
   state: AgentLoopState,
   currentLoopAbort: string | null,
   currentRoundAbort: string | null,
-  setAborts: (loop: string | null, round: string | null) => void,
+  setAborts: (loop: string | null, round: string | null) => void
 ): void {
-  if (
-    call.name === "replace_in_file"
-    && requestedPath
-    && /old_string not found/i.test(execResult.result)
-  ) {
+  if (call.name === "replace_in_file" && requestedPath && /old_string not found/i.test(execResult.result)) {
     state.artifactsRequiringReadBeforeMutation.add(requestedPath)
-    const repeatedMissAbort = recordBlockedArtifactFailure(state, requestedPath, 3, "Repeated replace_in_file old_string misses")
+    const repeatedMissAbort = recordBlockedArtifactFailure(
+      state,
+      requestedPath,
+      3,
+      "Repeated replace_in_file old_string misses"
+    )
     let newLoop = currentLoopAbort
     let newRound = currentRoundAbort
     if (repeatedMissAbort && !newLoop) newLoop = repeatedMissAbort
@@ -86,7 +87,7 @@ export function handleReplaceInFileMiss(
 export function processArtifactOutcome(
   _call: { name: string; arguments: Record<string, unknown> },
   execResult: Awaited<ReturnType<typeof executeToolWithTimeout>>,
-  state: AgentLoopState,
+  state: AgentLoopState
 ): string | null {
   let abortMessage: string | null = null
 
@@ -109,16 +110,20 @@ export function processArtifactOutcome(
       const count = (state.fatalArtifactFailureCounts.get(normalizedPath) ?? 0) + 1
       state.fatalArtifactFailureCounts.set(normalizedPath, count)
       if (count >= 2 && !abortMessage) {
-        abortMessage =
-          `Repeated fatal mutation failures on ${normalizedPath}. Stopping this agent attempt so the parent can retry or replan from a clean state.`
+        abortMessage = `Repeated fatal mutation failures on ${normalizedPath}. Stopping this agent attempt so the parent can retry or replan from a clean state.`
       }
       if (!abortMessage) {
-        abortMessage = recordBlockedArtifactFailure(state, normalizedPath, 3, "Repeated blocked mutation failures")
+        abortMessage = recordBlockedArtifactFailure(
+          state,
+          normalizedPath,
+          3,
+          "Repeated blocked mutation failures"
+        )
       }
     }
   } else if (
-    execResult.outcome?.errorCode === "artifact_incomplete_mutation"
-    || execResult.outcome?.errorCode === "artifact_inspection_required"
+    execResult.outcome?.errorCode === "artifact_incomplete_mutation" ||
+    execResult.outcome?.errorCode === "artifact_inspection_required"
   ) {
     for (const artifact of execResult.outcome.artifacts ?? []) {
       if (abortMessage) break
@@ -126,7 +131,7 @@ export function processArtifactOutcome(
         state,
         artifact.path,
         3,
-        "Repeated incomplete/blocked mutation failures",
+        "Repeated incomplete/blocked mutation failures"
       )
     }
   }
@@ -137,7 +142,7 @@ export function processArtifactOutcome(
 export function trackWriteVerification(
   call: { name: string; arguments: Record<string, unknown> },
   execResult: Awaited<ReturnType<typeof executeToolWithTimeout>>,
-  state: AgentLoopState,
+  state: AgentLoopState
 ): void {
   if (call.name === "write_file") {
     const writePath = String(call.arguments.path ?? "")

@@ -28,7 +28,7 @@ export const DEFAULT_MYMI_SCHEMA_ALLOWLIST: readonly string[] = Object.freeze([
   "coreArchive",
   "gate",
   "gateArchive",
-  "master",
+  "master"
 ])
 
 interface SchemaSnapshot {
@@ -44,7 +44,8 @@ function isTransientCatalogDriftError(e: unknown): boolean {
   if (!(e instanceof Error)) return false
   const msg = e.message.toLowerCase()
   const code = (e as { code?: string }).code ?? ""
-  if (code === "ETIMEOUT" || code === "ECONNRESET" || code === "ECONNCLOSED" || code === "ESOCKET") return true
+  if (code === "ETIMEOUT" || code === "ECONNRESET" || code === "ECONNCLOSED" || code === "ESOCKET")
+    return true
   return (
     msg.includes("connection is closed") ||
     msg.includes("connection lost") ||
@@ -59,7 +60,7 @@ async function queryWithRetry<T>(
   host: MssqlAccessHost,
   connection: string,
   query: string,
-  maxRetries = 2,
+  maxRetries = 2
 ): Promise<T[]> {
   const { pool } = await getPool(host, connection)
   let lastErr: unknown
@@ -71,14 +72,20 @@ async function queryWithRetry<T>(
       lastErr = e
       if (attempt === maxRetries || !isTransientCatalogDriftError(e)) throw e
       const delay = 100 * Math.pow(4, attempt) + Math.floor(Math.random() * 50)
-      console.warn(`[sync.catalog] transient schema fetch failure for ${connection} (attempt ${attempt + 1}/${maxRetries + 1}): ${e instanceof Error ? e.message : String(e)}; retrying in ${delay}ms`)
+      console.warn(
+        `[sync.catalog] transient schema fetch failure for ${connection} (attempt ${attempt + 1}/${maxRetries + 1}): ${e instanceof Error ? e.message : String(e)}; retrying in ${delay}ms`
+      )
       await new Promise((resolve) => setTimeout(resolve, delay))
     }
   }
   throw lastErr
 }
 
-async function fetchSchema(host: MssqlAccessHost, connection: string, schemas: readonly string[]): Promise<SchemaSnapshot> {
+async function fetchSchema(
+  host: MssqlAccessHost,
+  connection: string,
+  schemas: readonly string[]
+): Promise<SchemaSnapshot> {
   if (schemas.length === 0) {
     // Defensive: an empty allowlist would generate `IN ()` (a SQL syntax
     // error). Return an empty snapshot instead — the caller's restrict
@@ -93,11 +100,15 @@ async function fetchSchema(host: MssqlAccessHost, connection: string, schemas: r
     COLUMN_NAME: string
     DATA_TYPE: string
     CHARACTER_MAXIMUM_LENGTH: number | null
-  }>(host, connection, `
+  }>(
+    host,
+    connection,
+    `
     SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
     FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA IN (${list})
-  `)
+  `
+  )
   const tables = new Set<string>()
   const cols = new Map<string, Map<string, string>>()
   for (const row of rows) {
@@ -128,7 +139,7 @@ export async function detectCatalogDrift(
   source: string,
   target: string,
   restrictTables?: Iterable<string>,
-  allowedSchemas: readonly string[] = DEFAULT_MYMI_SCHEMA_ALLOWLIST,
+  allowedSchemas: readonly string[] = DEFAULT_MYMI_SCHEMA_ALLOWLIST
 ): Promise<CatalogDriftResult> {
   const restrict = restrictTables
     ? new Set(Array.from(restrictTables, (name) => normalizeCatalogName(name)))
@@ -141,7 +152,10 @@ export async function detectCatalogDrift(
     }
   }
   const schemaList = [...schemaSet]
-  const [src, tgt] = await Promise.all([fetchSchema(host, source, schemaList), fetchSchema(host, target, schemaList)])
+  const [src, tgt] = await Promise.all([
+    fetchSchema(host, source, schemaList),
+    fetchSchema(host, target, schemaList)
+  ])
   const issues: string[] = []
   const tablesToCheck = restrict ?? src.tables
   for (const t of tablesToCheck) {
@@ -170,17 +184,25 @@ export async function detectCatalogDrift(
  * preflight to decide whether the engine should write archive rows itself or
  * rely on existing target-side triggers (the ABI convention is the latter).
  */
-export async function tableHasTriggers(host: MssqlAccessHost, connection: string, qualifiedName: string): Promise<boolean> {
+export async function tableHasTriggers(
+  host: MssqlAccessHost,
+  connection: string,
+  qualifiedName: string
+): Promise<boolean> {
   const [schema, name] = qualifiedName.split(".")
   if (!schema || !name) return false
   try {
-    const rows = await queryWithRetry<{ cnt: number }>(host, connection, `
+    const rows = await queryWithRetry<{ cnt: number }>(
+      host,
+      connection,
+      `
       SELECT COUNT(*) AS cnt
       FROM sys.triggers t
       JOIN sys.objects o ON o.object_id = t.parent_id
       JOIN sys.schemas s ON s.schema_id = o.schema_id
       WHERE s.name = '${schema}' AND o.name = '${name}' AND t.is_disabled = 0
-    `)
+    `
+    )
     return (rows[0]?.cnt ?? 0) > 0
   } catch {
     return false

@@ -34,14 +34,14 @@ describe("bindNoteTool", () => {
       subject: "  publish.Revenue.RevenueZARMTD  ",
       claim: "cumulative MTD column",
       evidence: "profile_data showed monotone-increasing within client+period",
-      category: "column_semantics",
+      category: "column_semantics"
     })
 
     expect(handler).toHaveBeenCalledWith({
       subject: "publish.Revenue.RevenueZARMTD",
       claim: "cumulative MTD column",
       evidence: "profile_data showed monotone-increasing within client+period",
-      category: "column_semantics",
+      category: "column_semantics"
     })
     expect(out).toContain("stored")
     expect(out).toContain("abc-123")
@@ -87,7 +87,7 @@ describe("bindNoteTool", () => {
       subject: "s",
       claim: "c",
       evidence: undefined,
-      category: undefined,
+      category: undefined
     })
   })
 

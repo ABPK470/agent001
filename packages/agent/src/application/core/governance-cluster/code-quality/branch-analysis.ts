@@ -4,12 +4,14 @@
  * @module
  */
 
-
 /**
  * Helper: extract the body of a function (brace-matched).
  * Returns null if the body can't be found.
  */
-function extractFunctionBody(code: string, startOffset: number): { body: string; bodyStart: number; bodyEnd: number } | null {
+function extractFunctionBody(
+  code: string,
+  startOffset: number
+): { body: string; bodyStart: number; bodyEnd: number } | null {
   const bodyStart = code.indexOf("{", startOffset)
   if (bodyStart < 0) return null
   let depth = 0
@@ -18,7 +20,10 @@ function extractFunctionBody(code: string, startOffset: number): { body: string;
     if (code[i] === "{") depth++
     else if (code[i] === "}") {
       depth--
-      if (depth === 0) { bodyEnd = i; break }
+      if (depth === 0) {
+        bodyEnd = i
+        break
+      }
     }
   }
   if (bodyEnd < 0) return null
@@ -73,7 +78,7 @@ export function detectInconsistentBranches(code: string): string[] {
     const branches = body.split(/\}\s*else\s+if\s*\(/)
     let branchesWithPairCheck = 0
     let branchesWithReturnTrue = 0
-    let detectedProp = ''
+    let detectedProp = ""
 
     for (const branch of branches) {
       if (/return\s+true\b/.test(branch)) {
@@ -102,9 +107,9 @@ export function detectInconsistentBranches(code: string): string[] {
 
     findings.push(
       `inconsistent branch logic in ${funcName}(): ` +
-      `${branchesWithPairCheck}/${branchesWithReturnTrue} branches ` +
-      `check .${detectedProp} equality — remaining branches omit this check, ` +
-      `which may allow invalid state transitions`,
+        `${branchesWithPairCheck}/${branchesWithReturnTrue} branches ` +
+        `check .${detectedProp} equality — remaining branches omit this check, ` +
+        `which may allow invalid state transitions`
     )
   }
 

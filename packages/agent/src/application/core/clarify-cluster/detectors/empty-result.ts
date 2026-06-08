@@ -22,7 +22,7 @@ const EMPTY_PATTERNS: readonly RegExp[] = [
   /\bno\s+(rows?|results?|matches?|records?|data)\b/i,
   /\breturned\s+(nothing|empty)\b/i,
   /\bempty\s+result\s*set\b/i,
-  /^\s*\[\s*\]\s*$/, // exact empty JSON array as the whole result
+  /^\s*\[\s*\]\s*$/ // exact empty JSON array as the whole result
 ]
 
 export const emptyResultDetector: Detector = {
@@ -35,14 +35,17 @@ export const emptyResultDetector: Detector = {
     if (!EMPTY_PATTERNS.some((p) => p.test(text))) return []
     // single, stable finding id per round — there is only ever one
     // "last tool" being empty.
-    return [{
-      id: makeFindingId("empty-result", "last-tool-call"),
-      kind: "empty-result" as const,
-      severity: "warn" as const,
-      subject: "last tool call",
-      reasoning: "The most recent data tool call returned no rows; the agent should not silently produce an empty answer.",
-      suggestedQuestion: `The previous query came back empty. Could you confirm the scope — different period, different filter, a different table, or is empty actually the expected answer?`,
-      source: "detector" as const,
-    }]
-  },
+    return [
+      {
+        id: makeFindingId("empty-result", "last-tool-call"),
+        kind: "empty-result" as const,
+        severity: "warn" as const,
+        subject: "last tool call",
+        reasoning:
+          "The most recent data tool call returned no rows; the agent should not silently produce an empty answer.",
+        suggestedQuestion: `The previous query came back empty. Could you confirm the scope — different period, different filter, a different table, or is empty actually the expected answer?`,
+        source: "detector" as const
+      }
+    ]
+  }
 }

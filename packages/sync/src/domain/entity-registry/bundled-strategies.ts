@@ -41,7 +41,7 @@ const MYMI_SCD2: Scd2Strategy = {
   version: BUNDLED_VERSION,
   versionLabel: "initial",
   createdBy: BUNDLED_CREATED_BY,
-  createdAt: BUNDLED_CREATED_AT,
+  createdAt: BUNDLED_CREATED_AT
 }
 
 /**
@@ -66,7 +66,7 @@ const GENERIC_SCD2: Scd2Strategy = {
   version: BUNDLED_VERSION,
   versionLabel: "initial",
   createdBy: BUNDLED_CREATED_BY,
-  createdAt: BUNDLED_CREATED_AT,
+  createdAt: BUNDLED_CREATED_AT
 }
 
 /**
@@ -91,7 +91,7 @@ const NONE: Scd2Strategy = {
   version: BUNDLED_VERSION,
   versionLabel: "initial",
   createdBy: BUNDLED_CREATED_BY,
-  createdAt: BUNDLED_CREATED_AT,
+  createdAt: BUNDLED_CREATED_AT
 }
 
 /**
@@ -117,14 +117,14 @@ const AUDIT_COLS_ONLY: Scd2Strategy = {
   version: BUNDLED_VERSION,
   versionLabel: "initial",
   createdBy: BUNDLED_CREATED_BY,
-  createdAt: BUNDLED_CREATED_AT,
+  createdAt: BUNDLED_CREATED_AT
 }
 
 export const BUNDLED_SCD2_STRATEGIES: readonly Scd2Strategy[] = Object.freeze([
   MYMI_SCD2,
   GENERIC_SCD2,
   NONE,
-  AUDIT_COLS_ONLY,
+  AUDIT_COLS_ONLY
 ])
 
 export function bundledStrategyById(id: string): Scd2Strategy | undefined {

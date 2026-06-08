@@ -81,7 +81,7 @@ export function mintHandoff(input: {
     status: HandoffStatus.Pending,
     createdAt: now,
     expiresAt: now + (input.ttlMs ?? TTL_MS_DEFAULT),
-    resolvedAt: null,
+    resolvedAt: null
   }
   records.set(id, rec)
   tokenIndex.set(token, id)

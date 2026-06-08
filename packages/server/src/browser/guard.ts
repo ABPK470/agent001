@@ -25,7 +25,7 @@ export function createGuardForUpn(ownerUpn: string): BrowserGuard {
           action: "browse_web.navigate",
           targetUrl: url,
           decision: "deny",
-          detail: decision.reason,
+          detail: decision.reason
         })
         return { allow: false, reason: decision.reason }
       }
@@ -44,12 +44,12 @@ export function createGuardForUpn(ownerUpn: string): BrowserGuard {
           action: "browse_web.navigate",
           targetUrl: url,
           decision: "deny",
-          detail: `rate limit exceeded for ${host}`,
+          detail: `rate limit exceeded for ${host}`
         })
         return {
           allow: false,
           reason: `rate limit exceeded for ${host}`,
-          retryAfterMs: tok.retryAfterMs,
+          retryAfterMs: tok.retryAfterMs
         }
       }
       return { allow: true, reason: "" }
@@ -62,12 +62,12 @@ export function createGuardForUpn(ownerUpn: string): BrowserGuard {
           action: input.action,
           targetUrl: input.url ?? null,
           detail: input.detail ?? null,
-          decision: "allow",
+          decision: "allow"
         })
       } catch {
         // best-effort — never break the agent because of an audit-log
         // write failure.
       }
-    },
+    }
   }
 }

@@ -6,22 +6,30 @@
 
 import { DelegationOutputValidationCode } from "../../../../domain/enums/delegation.js"
 import {
-    BLOCKED_PHASE_RE,
-    classifyTaskIntent,
-    COMPLETION_CLAIM_RE,
-    EMPTY_VALUES,
-    specRequiresFileMutationEvidence,
-    UNRESOLVED_HANDOFF_RE,
+  BLOCKED_PHASE_RE,
+  classifyTaskIntent,
+  COMPLETION_CLAIM_RE,
+  EMPTY_VALUES,
+  specRequiresFileMutationEvidence,
+  UNRESOLVED_HANDOFF_RE
 } from "../validation-patterns/index.js"
 import type { DelegationOutputValidationResult, GateParams } from "./types.js"
 
 export function gatePresence(p: GateParams): DelegationOutputValidationResult | null {
   const { trimmed } = p
   if (trimmed.length === 0) {
-    return { ok: false, code: DelegationOutputValidationCode.EmptyOutput, message: "Child agent produced no output" }
+    return {
+      ok: false,
+      code: DelegationOutputValidationCode.EmptyOutput,
+      message: "Child agent produced no output"
+    }
   }
   if (EMPTY_VALUES.has(trimmed)) {
-    return { ok: false, code: DelegationOutputValidationCode.EmptyStructuredPayload, message: `Child output is empty value: ${trimmed}` }
+    return {
+      ok: false,
+      code: DelegationOutputValidationCode.EmptyStructuredPayload,
+      message: `Child output is empty value: ${trimmed}`
+    }
   }
   return null
 }
@@ -36,7 +44,7 @@ export function gateBlockedPhase(p: GateParams): DelegationOutputValidationResul
       return {
         ok: false,
         code: DelegationOutputValidationCode.BlockedPhaseOutput,
-        message: `Child agent reported blocked/incomplete state: "${firstMatch?.[0]}"`,
+        message: `Child agent reported blocked/incomplete state: "${firstMatch?.[0]}"`
       }
     }
   }
@@ -52,7 +60,7 @@ export function gateUnresolvedHandoff(p: GateParams): DelegationOutputValidation
     return {
       ok: false,
       code: DelegationOutputValidationCode.UnresolvedHandoffOutput,
-      message: `Output contains unresolved handoff/partial language: "${handoffMatch?.[0]}"`,
+      message: `Output contains unresolved handoff/partial language: "${handoffMatch?.[0]}"`
     }
   }
   return null

@@ -9,13 +9,7 @@ import { StepRole, VerificationMode } from "../../domain/index.js"
  */
 
 import { mostFrequent, normalizePlanOutputDirectory, uniqueList } from "../normalize/index.js"
-import type {
-    Plan,
-    PlanDiagnostic,
-    PlanEdge,
-    PlanStep,
-    SubagentTaskStep,
-} from "../types.js"
+import type { Plan, PlanDiagnostic, PlanEdge, PlanStep, SubagentTaskStep } from "../types.js"
 
 export function inferOutputDir(steps: readonly SubagentTaskStep[]): string | null {
   const dirs: string[] = []
@@ -34,7 +28,7 @@ export function inferOutputDir(steps: readonly SubagentTaskStep[]): string | nul
 
 function mergeEffectClass(
   left: SubagentTaskStep["executionContext"]["effectClass"],
-  right: SubagentTaskStep["executionContext"]["effectClass"],
+  right: SubagentTaskStep["executionContext"]["effectClass"]
 ): SubagentTaskStep["executionContext"]["effectClass"] {
   if (left === right) return left
   if (left === "mixed" || right === "mixed") return "mixed"
@@ -47,14 +41,14 @@ function mergeEffectClass(
 
 function mergeVerificationMode(
   left: SubagentTaskStep["executionContext"]["verificationMode"],
-  right: SubagentTaskStep["executionContext"]["verificationMode"],
+  right: SubagentTaskStep["executionContext"]["verificationMode"]
 ): SubagentTaskStep["executionContext"]["verificationMode"] {
   const precedence: readonly SubagentTaskStep["executionContext"]["verificationMode"][] = [
     "browser_check",
     "run_tests",
     "deterministic_followup",
     "mutation_required",
-    "none",
+    "none"
   ]
   for (const mode of precedence) {
     if (left === mode || right === mode) return mode
@@ -104,53 +98,64 @@ function mergeSubagentSteps(plan: Plan, primaryStepName: string, secondaryStepNa
   const secondary = mutableSteps[secondaryIndex]
   if (primary.stepType !== "subagent_task" || secondary.stepType !== "subagent_task") return false
 
-  const mergedDependsOn = uniqueList([
-    ...(primary.dependsOn ?? []),
-    ...(secondary.dependsOn ?? []),
-  ].filter((name) => name !== primary.name && name !== secondary.name))
+  const mergedDependsOn = uniqueList(
+    [...(primary.dependsOn ?? []), ...(secondary.dependsOn ?? [])].filter(
+      (name) => name !== primary.name && name !== secondary.name
+    )
+  )
 
   const mergedTargetArtifacts = uniqueList([
     ...primary.executionContext.targetArtifacts,
-    ...secondary.executionContext.targetArtifacts,
+    ...secondary.executionContext.targetArtifacts
   ])
 
   const mergedExecutionContext: SubagentTaskStep["executionContext"] = {
     ...primary.executionContext,
     allowedReadRoots: uniqueList([
       ...primary.executionContext.allowedReadRoots,
-      ...secondary.executionContext.allowedReadRoots,
+      ...secondary.executionContext.allowedReadRoots
     ]),
     allowedWriteRoots: uniqueList([
       ...primary.executionContext.allowedWriteRoots,
-      ...secondary.executionContext.allowedWriteRoots,
+      ...secondary.executionContext.allowedWriteRoots
     ]),
     allowedTools: uniqueList([
       ...primary.executionContext.allowedTools,
-      ...secondary.executionContext.allowedTools,
+      ...secondary.executionContext.allowedTools
     ]),
     requiredSourceArtifacts: uniqueList([
       ...primary.executionContext.requiredSourceArtifacts,
-      ...secondary.executionContext.requiredSourceArtifacts,
+      ...secondary.executionContext.requiredSourceArtifacts
     ]),
     targetArtifacts: mergedTargetArtifacts,
-    effectClass: mergeEffectClass(primary.executionContext.effectClass, secondary.executionContext.effectClass),
-    verificationMode: mergeVerificationMode(primary.executionContext.verificationMode, secondary.executionContext.verificationMode),
+    effectClass: mergeEffectClass(
+      primary.executionContext.effectClass,
+      secondary.executionContext.effectClass
+    ),
+    verificationMode: mergeVerificationMode(
+      primary.executionContext.verificationMode,
+      secondary.executionContext.verificationMode
+    ),
     artifactRelations: [
       ...new Map(
         [
           ...primary.executionContext.artifactRelations,
           ...secondary.executionContext.artifactRelations,
-          ...mergedTargetArtifacts.map((artifactPath) => ({ relationType: "write_owner" as const, artifactPath })),
-        ].map((relation) => [`${relation.relationType}:${relation.artifactPath}`, relation]),
-      ).values(),
+          ...mergedTargetArtifacts.map((artifactPath) => ({
+            relationType: "write_owner" as const,
+            artifactPath
+          }))
+        ].map((relation) => [`${relation.relationType}:${relation.artifactPath}`, relation])
+      ).values()
     ],
     role: primary.executionContext.role ?? secondary.executionContext.role,
-    sharedStateContract: primary.executionContext.sharedStateContract ?? secondary.executionContext.sharedStateContract,
+    sharedStateContract:
+      primary.executionContext.sharedStateContract ?? secondary.executionContext.sharedStateContract
   }
 
   const mergedWorkflowRelations = [
     ...(primary.workflowStep?.artifactRelations ?? []),
-    ...(secondary.workflowStep?.artifactRelations ?? []),
+    ...(secondary.workflowStep?.artifactRelations ?? [])
   ]
 
   const mergedStep: SubagentTaskStep = {
@@ -158,29 +163,34 @@ function mergeSubagentSteps(plan: Plan, primaryStepName: string, secondaryStepNa
     dependsOn: mergedDependsOn,
     objective: `${primary.objective}\n\nAlso complete the integration follow-up originally scoped to ${secondary.name}: ${secondary.objective}`,
     inputContract: uniqueList([primary.inputContract, secondary.inputContract]).join("\n\n"),
-    acceptanceCriteria: uniqueList([
-      ...primary.acceptanceCriteria,
-      ...secondary.acceptanceCriteria,
-    ]),
+    acceptanceCriteria: uniqueList([...primary.acceptanceCriteria, ...secondary.acceptanceCriteria]),
     requiredToolCapabilities: uniqueList([
       ...primary.requiredToolCapabilities,
-      ...secondary.requiredToolCapabilities,
+      ...secondary.requiredToolCapabilities
     ]),
-    contextRequirements: uniqueList([
-      ...primary.contextRequirements,
-      ...secondary.contextRequirements,
-    ]),
+    contextRequirements: uniqueList([...primary.contextRequirements, ...secondary.contextRequirements]),
     executionContext: mergedExecutionContext,
     maxBudgetHint: primary.maxBudgetHint,
     canRunParallel: false,
-    workflowStep: mergedWorkflowRelations.length > 0
-      ? {
-        role: primary.workflowStep?.role ?? secondary.workflowStep?.role ?? primary.executionContext.role ?? secondary.executionContext.role ?? StepRole.Writer,
-        artifactRelations: [
-          ...new Map(mergedWorkflowRelations.map((relation) => [`${relation.relationType}:${relation.artifactPath}`, relation])).values(),
-        ],
-      }
-      : primary.workflowStep,
+    workflowStep:
+      mergedWorkflowRelations.length > 0
+        ? {
+            role:
+              primary.workflowStep?.role ??
+              secondary.workflowStep?.role ??
+              primary.executionContext.role ??
+              secondary.executionContext.role ??
+              StepRole.Writer,
+            artifactRelations: [
+              ...new Map(
+                mergedWorkflowRelations.map((relation) => [
+                  `${relation.relationType}:${relation.artifactPath}`,
+                  relation
+                ])
+              ).values()
+            ]
+          }
+        : primary.workflowStep
   }
 
   mutableSteps[primaryIndex] = mergedStep
@@ -188,8 +198,9 @@ function mergeSubagentSteps(plan: Plan, primaryStepName: string, secondaryStepNa
 
   for (const step of mutableSteps) {
     if (!step.dependsOn || step.dependsOn.length === 0) continue
-    const rewritten = uniqueList(step.dependsOn.map((dep) => dep === secondaryStepName ? primaryStepName : dep))
-      .filter((dep) => dep !== step.name)
+    const rewritten = uniqueList(
+      step.dependsOn.map((dep) => (dep === secondaryStepName ? primaryStepName : dep))
+    ).filter((dep) => dep !== step.name)
     ;(step as { dependsOn?: string[] }).dependsOn = rewritten.length > 0 ? rewritten : undefined
   }
 
@@ -197,12 +208,12 @@ function mergeSubagentSteps(plan: Plan, primaryStepName: string, secondaryStepNa
   const rewrittenEdges = mutableEdges
     .map((edge) => ({
       from: edge.from === secondaryStepName ? primaryStepName : edge.from,
-      to: edge.to === secondaryStepName ? primaryStepName : edge.to,
+      to: edge.to === secondaryStepName ? primaryStepName : edge.to
     }))
     .filter((edge) => edge.from !== edge.to)
 
   ;(plan as unknown as { edges: PlanEdge[] }).edges = [
-    ...new Map(rewrittenEdges.map((edge) => [`${edge.from}->${edge.to}`, edge])).values(),
+    ...new Map(rewrittenEdges.map((edge) => [`${edge.from}->${edge.to}`, edge])).values()
   ]
 
   return true
@@ -210,7 +221,7 @@ function mergeSubagentSteps(plan: Plan, primaryStepName: string, secondaryStepNa
 
 function remediateSharedTargetArtifactWriters(plan: Plan): boolean {
   const subagentSteps = plan.steps.filter(
-    (step): step is SubagentTaskStep => step.stepType === "subagent_task",
+    (step): step is SubagentTaskStep => step.stepType === "subagent_task"
   )
   const writersByArtifact = new Map<string, string[]>()
 
@@ -249,9 +260,7 @@ function remediateSharedTargetArtifactWriters(plan: Plan): boolean {
 
 export function remediateValidationErrors(plan: Plan, errors: readonly PlanDiagnostic[]): boolean {
   let changed = false
-  const subagentSteps = plan.steps.filter(
-    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
-  )
+  const subagentSteps = plan.steps.filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
 
   if (errors.some((e) => e.code === "inconsistent_output_directory" || e.code === "mixed_root_and_subdir")) {
     normalizePlanOutputDirectory(plan)
@@ -263,15 +272,16 @@ export function remediateValidationErrors(plan: Plan, errors: readonly PlanDiagn
   }
 
   const premature = errors.filter(
-    (e) => e.code === "premature_browser_verification" && typeof e.stepName === "string",
+    (e) => e.code === "premature_browser_verification" && typeof e.stepName === "string"
   )
 
   if (premature.length > 0) {
     for (const diag of premature) {
-      const step = subagentSteps.find(s => s.name === diag.stepName)
+      const step = subagentSteps.find((s) => s.name === diag.stepName)
       if (!step) continue
       if (step.executionContext.verificationMode === VerificationMode.BrowserCheck) {
-        ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode = VerificationMode.None
+        ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode =
+          VerificationMode.None
         changed = true
       }
     }
@@ -279,20 +289,24 @@ export function remediateValidationErrors(plan: Plan, errors: readonly PlanDiagn
 
   for (const step of subagentSteps) {
     if (step.executionContext.verificationMode !== VerificationMode.BrowserCheck) continue
-    const hasBrowserEntry = step.executionContext.targetArtifacts.some(a => /\.(?:html?|xhtml)$/i.test(a))
+    const hasBrowserEntry = step.executionContext.targetArtifacts.some((a) => /\.(?:html?|xhtml)$/i.test(a))
     if (!hasBrowserEntry) continue
 
-    const ownsRuntime = step.executionContext.targetArtifacts.some(
-      a => /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i.test(a),
+    const ownsRuntime = step.executionContext.targetArtifacts.some((a) =>
+      /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i.test(a)
     )
     if (ownsRuntime) continue
 
     const hasForeignRuntime = subagentSteps.some(
-      s => s.name !== step.name && s.executionContext.targetArtifacts.some(a => /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i.test(a)),
+      (s) =>
+        s.name !== step.name &&
+        s.executionContext.targetArtifacts.some((a) =>
+          /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i.test(a)
+        )
     )
     if (!hasForeignRuntime) continue
-
-    ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode = VerificationMode.None
+    ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode =
+      VerificationMode.None
     changed = true
   }
 

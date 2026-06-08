@@ -9,7 +9,7 @@ import type { RenderedBody } from "../templates.js"
 
 export interface SlackDeliveryInput {
   target: string
-  body:   RenderedBody
+  body: RenderedBody
 }
 
 export async function deliverSlack(i: SlackDeliveryInput): Promise<void> {
@@ -18,13 +18,13 @@ export async function deliverSlack(i: SlackDeliveryInput): Promise<void> {
     text: i.body.subject,
     blocks: [
       { type: "header", text: { type: "plain_text", text: i.body.subject.slice(0, 150) } },
-      { type: "section", text: { type: "mrkdwn", text: "```" + i.body.text.slice(0, 2900) + "```" } },
-    ],
+      { type: "section", text: { type: "mrkdwn", text: "```" + i.body.text.slice(0, 2900) + "```" } }
+    ]
   }
   const r = await fetch(i.target, {
-    method:  "POST",
+    method: "POST",
     headers: { "content-type": "application/json" },
-    body:    JSON.stringify(payload),
+    body: JSON.stringify(payload)
   })
   if (!r.ok) {
     const txt = await safeText(r)
@@ -33,5 +33,9 @@ export async function deliverSlack(i: SlackDeliveryInput): Promise<void> {
 }
 
 async function safeText(r: Response): Promise<string> {
-  try { return (await r.text()).slice(0, 500) } catch { return "<no body>" }
+  try {
+    return (await r.text()).slice(0, 500)
+  } catch {
+    return "<no body>"
+  }
 }

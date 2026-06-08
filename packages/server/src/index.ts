@@ -18,7 +18,7 @@ import { resolve } from "node:path"
 const _pkgRoot = process.env["MIA_PACKAGE_ROOT"]
 const _projectRoot = _pkgRoot ? process.cwd() : resolve(import.meta.dirname, "../../..")
 config({
-  path: resolve(_projectRoot, ".env"),
+  path: resolve(_projectRoot, ".env")
 })
 
 import cookie from "@fastify/cookie"
@@ -26,16 +26,15 @@ import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
   EventType,
-  buildCatalog, closeMssqlPool,
+  buildCatalog,
+  closeMssqlPool,
   configureAgent,
   getMssqlConfig,
   type AgentHost,
   type BrowserClient,
-  type ShellClient,
+  type ShellClient
 } from "@mia/agent"
-import {
-  configurePlanStore,
-} from "@mia/sync"
+import { configurePlanStore } from "@mia/sync"
 import Fastify from "fastify"
 import { registerIdentity } from "./adapters/auth/identity.js"
 import { bootstrapAdminFromEnv } from "./adapters/auth/users.js"
@@ -45,7 +44,26 @@ import { serverBrowserContextProvider } from "./adapters/browser/provider.js"
 import { createLlmCompletionAdapter } from "./adapters/llm/index.js"
 import { buildLlmClient } from "./adapters/llm/registry.js"
 import { pruneExpiredAttachments, serverAttachmentService } from "./adapters/persistence/attachments.js"
-import { clearTransactionalData, getDb, getDbPath, getDbStats, getLlmConfig, getSyncRunPlanJson, listFreezeWindowDefinitionsForTenant, migrateApiRequests, migrateEventLog, migrateNotifications, migrateWebhookDrains, normaliseUnknownRunStatuses, pruneOldData, recordSyncRunFinish, recordSyncRunPreview, recordSyncRunStart, saveApiRequest, tryBuildSignerFromEnv } from "./adapters/persistence/index.js"
+import {
+  clearTransactionalData,
+  getDb,
+  getDbPath,
+  getDbStats,
+  getLlmConfig,
+  getSyncRunPlanJson,
+  listFreezeWindowDefinitionsForTenant,
+  migrateApiRequests,
+  migrateEventLog,
+  migrateNotifications,
+  migrateWebhookDrains,
+  normaliseUnknownRunStatuses,
+  pruneOldData,
+  recordSyncRunFinish,
+  recordSyncRunPreview,
+  recordSyncRunStart,
+  saveApiRequest,
+  tryBuildSignerFromEnv
+} from "./adapters/persistence/index.js"
 import { migrateMemory, prune as pruneMemory } from "./adapters/persistence/memory.js"
 import { touchSession } from "./adapters/persistence/sessions.js"
 import { initSandbox } from "./adapters/sandbox/index.js"
@@ -57,7 +75,7 @@ import {
   SqliteQueueStore,
   TeamsChannel,
   listChannelConfigs,
-  migrateChannels,
+  migrateChannels
 } from "./api/channels/index.js"
 import {
   registerAdminRoutes,
@@ -85,7 +103,7 @@ import {
   registerSyncRoutes,
   registerToolCacheRoutes,
   registerUsageRoutes,
-  registerWebhookRoutes,
+  registerWebhookRoutes
 } from "./api/http-routes.js"
 import { dispatchNotification } from "./api/notifications/router.js"
 import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
@@ -105,7 +123,8 @@ async function main() {
   initDatabase()
 
   let currentWorkspace = resolveWorkspace()
-  const { sandbox, shellClient, shellSandboxStrict, browserCheckMode, browserCheckClient } = await configureSandbox(() => currentWorkspace)
+  const { sandbox, shellClient, shellSandboxStrict, browserCheckMode, browserCheckClient } =
+    await configureSandbox(() => currentWorkspace)
 
   const mssqlSetup = setupMssql(_projectRoot)
   const syncEnvironments = loadPersistedSyncEnvironments(_projectRoot, mssqlSetup.configs)
@@ -115,10 +134,18 @@ async function main() {
   }
   const syncRunSink: AgentHost["sync"]["runs"]["sink"] = {
     start: (i) => {
-      try { recordSyncRunStart(i) } catch (e) { console.warn("[sync] recordSyncRunStart failed:", e) }
+      try {
+        recordSyncRunStart(i)
+      } catch (e) {
+        console.warn("[sync] recordSyncRunStart failed:", e)
+      }
     },
     finish: (i) => {
-      try { recordSyncRunFinish(i) } catch (e) { console.warn("[sync] recordSyncRunFinish failed:", e) }
+      try {
+        recordSyncRunFinish(i)
+      } catch (e) {
+        console.warn("[sync] recordSyncRunFinish failed:", e)
+      }
     },
     // Durable plan-body persistence — survives restarts so the History modal
     // can re-hydrate the diff for any past sync run (UI- or agent-initiated).
@@ -133,16 +160,21 @@ async function main() {
           target: plan.target,
           actorUpn: null,
           previewTotals: plan.totals,
-          planJson: JSON.stringify(plan),
+          planJson: JSON.stringify(plan)
         })
-      } catch (e) { console.warn("[sync] recordSyncRunPreview failed:", e) }
+      } catch (e) {
+        console.warn("[sync] recordSyncRunPreview failed:", e)
+      }
     },
     loadPlan: (planId) => {
       try {
         const json = getSyncRunPlanJson(planId)
         return json ? JSON.parse(json) : null
-      } catch (e) { console.warn("[sync] getSyncRunPlanJson failed:", e); return null }
-    },
+      } catch (e) {
+        console.warn("[sync] getSyncRunPlanJson failed:", e)
+        return null
+      }
+    }
   }
 
   // Shared catalog registry: same Map threaded into the boot host and every
@@ -159,8 +191,8 @@ async function main() {
       runs: { sink: syncRunSink },
       environments: { items: syncEnvironments.environments },
       project: { dbProjectRoot: _projectRoot },
-      governance: { freezeWindowsReader: () => listFreezeWindowDefinitionsForTenant() },
-    },
+      governance: { freezeWindowsReader: () => listFreezeWindowDefinitionsForTenant() }
+    }
   })
   const mssqlSummary = mssqlSetup.summary
 
@@ -179,7 +211,9 @@ async function main() {
   if (syncEnvironments.source === "db") {
     console.log(`ABI environments (from persisted DB): ${syncEnvironments.summary}`)
   } else if (syncEnvironments.source === "file") {
-    console.log(`ABI environments seeded from deploy/sync/sync-environments.json: ${syncEnvironments.summary}`)
+    console.log(
+      `ABI environments seeded from deploy/sync/sync-environments.json: ${syncEnvironments.summary}`
+    )
   } else if (syncEnvironments.source === "mssql") {
     console.log(`ABI environments seeded from MSSQL_DATABASES: ${syncEnvironments.summary}`)
   }
@@ -195,7 +229,9 @@ async function main() {
   const evidenceStorageRoot = resolve(_projectRoot, "packages/server/data/evidence")
   const signerResult = tryBuildSignerFromEnv()
   if (!signerResult.ok) {
-    console.warn(`[evidence] signer not configured (kind=${signerResult.error.kind}): ${signerResult.error.message}`)
+    console.warn(
+      `[evidence] signer not configured (kind=${signerResult.error.kind}): ${signerResult.error.message}`
+    )
   } else {
     console.log(`[evidence] signer ready: ${signerResult.signer.id} (${signerResult.signer.alg})`)
   }
@@ -225,11 +261,11 @@ async function main() {
       const tenantId = (typeof data["tenantId"] === "string" ? data["tenantId"] : null) ?? "_default"
       dispatchNotification({
         tenantId,
-        eventType:  ev.type,
-        riskTier:   typeof data["riskTier"]   === "string" ? data["riskTier"]   as string : undefined,
-        envPair:    typeof data["envPair"]    === "string" ? data["envPair"]    as string : undefined,
-        entityType: typeof data["entityType"] === "string" ? data["entityType"] as string : undefined,
-        context:    { ...data, eventType: ev.type },
+        eventType: ev.type,
+        riskTier: typeof data["riskTier"] === "string" ? (data["riskTier"] as string) : undefined,
+        envPair: typeof data["envPair"] === "string" ? (data["envPair"] as string) : undefined,
+        entityType: typeof data["entityType"] === "string" ? (data["entityType"] as string) : undefined,
+        context: { ...data, eventType: ev.type }
       })
     } catch (e) {
       // never let notification dispatch take down the broadcaster
@@ -254,25 +290,25 @@ async function main() {
         providers: {
           contextReader: serverBrowserContextProvider,
           credentialReader: serverBrowserCredentialProvider,
-          handoffStore: serverBrowserHandoffProvider,
-        },
+          handoffStore: serverBrowserHandoffProvider
+        }
       },
       shell: {
         mode: shellClient ? "sandbox" : "host",
         client: shellClient,
-        sandboxStrict: shellSandboxStrict,
+        sandboxStrict: shellSandboxStrict
       },
       browserCheck: {
         mode: browserCheckMode,
-        client: browserCheckClient,
+        client: browserCheckClient
       },
       mssql: {
         databases: bootHost.mssql.databases,
-        defaultConnection: bootHost.mssql.defaultConnection,
+        defaultConnection: bootHost.mssql.defaultConnection
       },
       catalog: {
         instances: bootHost.catalog.instances,
-        defaultCachePath: bootHost.catalog.defaultCachePath,
+        defaultCachePath: bootHost.catalog.defaultCachePath
       },
       sync: {
         events: bootHost.sync.events,
@@ -280,9 +316,9 @@ async function main() {
         governance: bootHost.sync.governance,
         environments: bootHost.sync.environments,
         plans: bootHost.sync.plans,
-        project: bootHost.sync.project,
-      },
-    },
+        project: bootHost.sync.project
+      }
+    }
   })
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)
   const uiDist = resolveUiDist()
@@ -293,11 +329,14 @@ async function main() {
     messageRouter,
     uiDist,
     getWorkspace: () => currentWorkspace,
-    setWorkspace: (w) => { currentWorkspace = w; applyWorkspace(w, orchestrator) },
+    setWorkspace: (w) => {
+      currentWorkspace = w
+      applyWorkspace(w, orchestrator)
+    },
     evidenceStorageRoot,
     evidenceSigner,
     llmPortHolder,
-    bootHost,
+    bootHost
   })
 
   await app.listen({ port: PORT, host: HOST })
@@ -309,9 +348,7 @@ async function main() {
 // ── Bootstrap phase functions ─────────────────────────────────
 
 function resolveUiDist(): string {
-  return _pkgRoot
-    ? resolve(_pkgRoot, "dist/ui")
-    : resolve(import.meta.dirname, "../../../packages/ui/dist")
+  return _pkgRoot ? resolve(_pkgRoot, "dist/ui") : resolve(import.meta.dirname, "../../../packages/ui/dist")
 }
 
 function applyWorkspace(w: string, orchestrator: AgentOrchestrator): void {
@@ -325,7 +362,15 @@ function recoverStaleRuns(orchestrator: AgentOrchestrator): void {
   }
 }
 
-function registerShutdown({ sandbox, messageQueue, bootHost }: { sandbox: ReturnType<typeof initSandbox>; messageQueue: MessageQueue; bootHost: AgentHost }): void {
+function registerShutdown({
+  sandbox,
+  messageQueue,
+  bootHost
+}: {
+  sandbox: ReturnType<typeof initSandbox>
+  messageQueue: MessageQueue
+  bootHost: AgentHost
+}): void {
   for (const sig of ["SIGTERM", "SIGINT"] as const) {
     process.on(sig, async () => {
       messageQueue.stop()
@@ -357,7 +402,9 @@ function initDatabase(): void {
 
   const pruneResult = pruneOldData()
   if (pruneResult.prunedRuns > 0 || pruneResult.prunedApiRequests > 0) {
-    console.log(`Pruned ${pruneResult.prunedRuns} old runs, ${pruneResult.prunedApiRequests} API request logs`)
+    console.log(
+      `Pruned ${pruneResult.prunedRuns} old runs, ${pruneResult.prunedApiRequests} API request logs`
+    )
   }
 
   const attachmentPrune = pruneExpiredAttachments()
@@ -397,11 +444,12 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
   browserCheckMode: "host" | "sandbox"
   browserCheckClient: BrowserClient | null
 }> {
-  const sandboxMode = process.env["SANDBOX_MODE"] === "host"
-    ? "host" as const
-    : process.env["SANDBOX_MODE"] === "all"
-      ? "all" as const
-      : "docker" as const
+  const sandboxMode =
+    process.env["SANDBOX_MODE"] === "host"
+      ? ("host" as const)
+      : process.env["SANDBOX_MODE"] === "all"
+        ? ("all" as const)
+        : ("docker" as const)
   const sandbox = initSandbox({ mode: sandboxMode })
   const dockerReady = await sandbox.isDockerAvailable()
 
@@ -434,7 +482,10 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
         const result = await sandbox.browserExec(script, cwd || getWorkspace(), { timeout: 30_000 })
         if (result.stderr === "FALLBACK_TO_HOST") throw new Error("Browser image not available")
         if (result.exitCode !== 0) {
-          return { report: `Error: ${result.stderr || result.stdout || "Browser check failed in container"}`, sandboxed: true }
+          return {
+            report: `Error: ${result.stderr || result.stdout || "Browser check failed in container"}`,
+            sandboxed: true
+          }
         }
         try {
           return { report: formatBrowserReport(JSON.parse(result.stdout)), sandboxed: true }
@@ -451,9 +502,11 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
       console.error("SANDBOX_MODE=all requires Docker but Docker is not available. Aborting.")
       process.exit(1)
     }
-    console.log(sandbox.mode === "host"
-      ? "Docker sandbox: BYPASSED (commands run on host with filtered env)"
-      : "Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
+    console.log(
+      sandbox.mode === "host"
+        ? "Docker sandbox: BYPASSED (commands run on host with filtered env)"
+        : "Docker sandbox: UNAVAILABLE (commands run on host with filtered env)"
+    )
   }
 
   return { sandbox, shellClient, shellSandboxStrict, browserCheckMode, browserCheckClient }
@@ -476,16 +529,21 @@ async function buildLlmAndCatalog(host: AgentHost, mssqlSummary: string) {
       const conns = configs.length > 0 ? configs.map((c) => c.name) : ["default"]
 
       for (const conn of conns) {
-        const cachePath = conns.length === 1
-          ? baseCachePath
-          : baseCachePath.replace(/\.json$/i, `.${conn}.json`)
+        const cachePath =
+          conns.length === 1 ? baseCachePath : baseCachePath.replace(/\.json$/i, `.${conn}.json`)
         console.log(`Loading schema catalog for "${conn}" (cache: ${cachePath}, max age: ${maxAgeHours}h)...`)
         try {
-          const catalog = await buildCatalog(host, { connection: conn, cachePath, maxAgeMs: maxAgeHours * 3600_000 })
+          const catalog = await buildCatalog(host, {
+            connection: conn,
+            cachePath,
+            maxAgeMs: maxAgeHours * 3600_000
+          })
           const s = catalog.stats()
           const ageH = Math.round((Date.now() - catalog.builtAt.getTime()) / 3600000)
           const source = ageH < 1 ? "built fresh from MSSQL" : `loaded from cache (${ageH}h old)`
-          console.log(`Catalog [${conn}] ${source}: ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs`)
+          console.log(
+            `Catalog [${conn}] ${source}: ${s.schemas} schemas, ${s.tables} tables, ${s.views} views, ${s.columns} columns, ${s.fks} FKs`
+          )
         } catch (e) {
           console.warn(`Failed to build catalog for "${conn}":`, e instanceof Error ? e.message : e)
         }
@@ -503,7 +561,7 @@ function initMessaging(orchestrator: AgentOrchestrator) {
   const conversationStore = new SqliteConversationStore()
   const messageQueue = new MessageQueue(queueStore)
   const messageRouter = new MessageRouter(messageQueue, conversationStore, {
-    startRun: (goal, session) => orchestrator.startRun(goal, undefined, session ?? null),
+    startRun: (goal, session) => orchestrator.startRun(goal, undefined, session ?? null)
   })
   orchestrator.setMessageRouter(messageRouter)
 
@@ -537,8 +595,18 @@ interface AppOpts {
 }
 
 async function buildApp(opts: AppOpts) {
-  const { orchestrator, messageQueue, messageRouter, uiDist, getWorkspace, setWorkspace,
-          evidenceStorageRoot, evidenceSigner, llmPortHolder, bootHost } = opts
+  const {
+    orchestrator,
+    messageQueue,
+    messageRouter,
+    uiDist,
+    getWorkspace,
+    setWorkspace,
+    evidenceStorageRoot,
+    evidenceSigner,
+    llmPortHolder,
+    bootHost
+  } = opts
 
   // trustProxy: when behind a corporate HTTPS terminator (proxy-https, IIS,
   // nginx) Fastify needs to honour X-Forwarded-* headers so req.ip reflects
@@ -561,7 +629,11 @@ async function buildApp(opts: AppOpts) {
     done()
   })
   app.addHook("onResponse", (req, reply, done) => {
-    if (req.url.startsWith("/api/events/stream") || req.url.endsWith("/stream") || (!req.url.startsWith("/api") && !req.url.startsWith("/webhooks"))) {
+    if (
+      req.url.startsWith("/api/events/stream") ||
+      req.url.endsWith("/stream") ||
+      (!req.url.startsWith("/api") && !req.url.startsWith("/webhooks"))
+    ) {
       done()
       return
     }
@@ -573,15 +645,22 @@ async function buildApp(opts: AppOpts) {
       duration_ms: duration,
       request_body: req.body ? JSON.stringify(req.body).slice(0, 2048) : null,
       response_summary: null,
-      created_at: new Date().toISOString(),
+      created_at: new Date().toISOString()
     }
     try {
       saveApiRequest(entry)
       broadcast({ type: EventType.ApiRequest, data: toBroadcastData(entry) })
-    } catch { /* don't break responses if logging fails */ }
+    } catch {
+      /* don't break responses if logging fails */
+    }
     // Multi-user observability: stamp user identity on console for ops greppability.
     // Skip auth/whoami polling noise + admin observability endpoints.
-    if (!req.url.startsWith("/api/auth/whoami") && !req.url.startsWith("/api/admin/sessions") && !req.url.startsWith("/api/admin/active-runs") && !req.url.startsWith("/api/admin/users")) {
+    if (
+      !req.url.startsWith("/api/auth/whoami") &&
+      !req.url.startsWith("/api/admin/sessions") &&
+      !req.url.startsWith("/api/admin/active-runs") &&
+      !req.url.startsWith("/api/admin/users")
+    ) {
       const s = (req as { session?: { upn?: string; displayName?: string; sid?: string } }).session
       const who = s?.upn ?? s?.displayName ?? s?.sid?.slice(0, 12) ?? "—"
       console.log(`[${who}] ${req.method} ${req.url} → ${reply.statusCode} (${duration}ms)`)
@@ -618,7 +697,7 @@ async function buildApp(opts: AppOpts) {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
-      "X-Accel-Buffering": "no",
+      "X-Accel-Buffering": "no"
     })
     // Disable Nagle's algorithm so each SSE frame is sent immediately
     // instead of being coalesced with subsequent writes into one TCP packet.
@@ -629,9 +708,9 @@ async function buildApp(opts: AppOpts) {
     // fallbacks here — a missing session would indicate the identity hook is
     // broken and we want that to surface loudly, not be masked by "anon".
     const dispose = addSseClient(reply.raw, {
-      upn:     req.session.upn,
-      sid:     req.session.sid,
-      isAdmin: req.session.isAdmin,
+      upn: req.session.upn,
+      sid: req.session.sid,
+      isAdmin: req.session.isAdmin
     })
 
     // ── Liveness ────────────────────────────────────────────────
@@ -644,17 +723,32 @@ async function buildApp(opts: AppOpts) {
     const sid = req.session.sid
     const isRealSession = typeof sid === "string" && !sid.startsWith("anon:")
     if (isRealSession) {
-      try { touchSession(sid) } catch { /* observability only */ }
+      try {
+        touchSession(sid)
+      } catch {
+        /* observability only */
+      }
     }
     // Heartbeat every 25s — keeps intermediaries from idle-closing the
     // stream AND doubles as the liveness ping for the session row.
     const heartbeat = setInterval(() => {
-      try { reply.raw.write(`: ping\n\n`) } catch { /* dropped */ }
+      try {
+        reply.raw.write(`: ping\n\n`)
+      } catch {
+        /* dropped */
+      }
       if (isRealSession) {
-        try { touchSession(sid) } catch { /* observability only */ }
+        try {
+          touchSession(sid)
+        } catch {
+          /* observability only */
+        }
       }
     }, 25_000)
-    req.raw.on("close", () => { clearInterval(heartbeat); dispose() })
+    req.raw.on("close", () => {
+      clearInterval(heartbeat)
+      dispose()
+    })
   })
 
   registerRunRoutes(app, orchestrator)
@@ -694,13 +788,16 @@ async function buildApp(opts: AppOpts) {
     active: orchestrator.getActiveRunIds().length,
     channels: messageRouter.listChannels(),
     queuePending: messageQueue.pendingCount,
-    runQueue: orchestrator.getQueueStats(),
+    runQueue: orchestrator.getQueueStats()
   }))
 
   app.get("/api/workspace", async () => ({ path: getWorkspace() }))
 
   app.put<{ Body: { path: string } }>("/api/workspace", async (req, reply) => {
-    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
     const { path: newPath } = req.body
     if (!newPath || typeof newPath !== "string") {
       reply.code(400)
@@ -717,22 +814,31 @@ async function buildApp(opts: AppOpts) {
   })
 
   app.delete("/api/data", async (req, reply) => {
-    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
     clearTransactionalData()
     return { ok: true }
   })
 
   app.get("/api/db/stats", async (req, reply) => {
-    if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
     return getDbStats()
   })
 
   app.post<{ Body: { keepRuns?: number; keepApiRequests?: number; keepNotifications?: number } }>(
     "/api/db/prune",
     async (req, reply) => {
-      if (!req.session?.isAdmin) { reply.code(403); return { error: "admin only" } }
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { error: "admin only" }
+      }
       return { ok: true, ...pruneOldData(req.body ?? {}) }
-    },
+    }
   )
 
   // ── Presence tick ────────────────────────────────────────────────
@@ -745,16 +851,24 @@ async function buildApp(opts: AppOpts) {
   const presenceTickHandle = setInterval(() => {
     try {
       broadcast({ type: EventType.SessionPresenceTick, data: {} })
-    } catch { /* observability only */ }
+    } catch {
+      /* observability only */
+    }
   }, 30_000)
   // Don't keep the event loop alive solely for this timer.
   if (typeof presenceTickHandle.unref === "function") presenceTickHandle.unref()
-  app.addHook("onClose", async () => { clearInterval(presenceTickHandle) })
+  app.addHook("onClose", async () => {
+    clearInterval(presenceTickHandle)
+  })
 
   return app
 }
 
-function printBanner({ mssqlSummary, channelConfigs, uiDist }: {
+function printBanner({
+  mssqlSummary,
+  channelConfigs,
+  uiDist
+}: {
   mssqlSummary: string
   channelConfigs: Array<{ type: string }>
   uiDist: string
@@ -766,15 +880,21 @@ function printBanner({ mssqlSummary, channelConfigs, uiDist }: {
   console.log(`  Server:    http://localhost:${PORT}`)
   console.log(`  Events:    http://localhost:${PORT}/api/events/stream  (SSE)`)
   console.log(`  API:       http://localhost:${PORT}/api`)
-  console.log(`  Teams:     ${uiExists ? `https://<host>/webhooks/teams` : `http://localhost:${PORT}/webhooks/teams`}`)
+  console.log(
+    `  Teams:     ${uiExists ? `https://<host>/webhooks/teams` : `http://localhost:${PORT}/webhooks/teams`}`
+  )
   console.log(`  Dashboard: ${uiExists ? `http://localhost:${PORT}` : "http://localhost:5179 (dev)"}`)
-  console.log(`  Channels:  ${channelConfigs.length > 0 ? channelConfigs.map(c => c.type).join(", ") : "none (configure via POST /api/channels)"}`)
+  console.log(
+    `  Channels:  ${channelConfigs.length > 0 ? channelConfigs.map((c) => c.type).join(", ") : "none (configure via POST /api/channels)"}`
+  )
   console.log(`  MSSQL:     ${mssqlSummary}`)
   // Profile is the single rollout switch (AGENT_HOSTED_MODE). Surfacing it
   // on the banner makes it impossible to operate a deployment in the wrong
   // mode by accident.
   const profile = getRunProfile()
-  console.log(`  Profile:   ${profile === "hosted" ? "HOSTED (sandbox-only, attachments mandatory)" : "developer (legacy local mode)"}`)
+  console.log(
+    `  Profile:   ${profile === "hosted" ? "HOSTED (sandbox-only, attachments mandatory)" : "developer (legacy local mode)"}`
+  )
   console.log(`${"═".repeat(50)}\n`)
 }
 

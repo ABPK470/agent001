@@ -100,8 +100,13 @@ interface Fixture {
   /** Run a single turn end-to-end at the same abstraction level run-executor uses. */
   simulateTurn(inputs: TurnInputs): Promise<SimulatedTurn>
   /** Just retrieve context, mirroring run-executor.ts:300 EXACTLY. */
-  retrieve(args: { goal: string; sessionId: string; upn: string | null; runId: string; agentId?: string | null }):
-    Promise<{ perTier: { working: string; episodic: string; semantic: string } }>
+  retrieve(args: {
+    goal: string
+    sessionId: string
+    upn: string | null
+    runId: string
+    agentId?: string | null
+  }): Promise<{ perTier: { working: string; episodic: string; semantic: string } }>
   /** Cleanup hook for afterEach. */
   cleanup(): void
 }
@@ -133,7 +138,11 @@ export async function buildFixture(): Promise<Fixture> {
   mem.migrateMemory()
 
   const cleanup = (): void => {
-    try { db.close() } catch { /* already closed */ }
+    try {
+      db.close()
+    } catch {
+      /* already closed */
+    }
     rmSync(dataDir, { recursive: true, force: true })
     if (originalDataDir === undefined) delete process.env["MIA_DATA_DIR"]
     else process.env["MIA_DATA_DIR"] = originalDataDir
@@ -145,12 +154,18 @@ export async function buildFixture(): Promise<Fixture> {
    * B1/B2 tests will catch it statically AND every Layer A test calling
    * this helper will start failing with a clear "memory miss" signal.
    */
-  async function retrieve(args: { goal: string; sessionId: string; upn: string | null; runId: string; agentId?: string | null }) {
+  async function retrieve(args: {
+    goal: string
+    sessionId: string
+    upn: string | null
+    runId: string
+    agentId?: string | null
+  }) {
     const sessionId = args.sessionId ?? args.agentId ?? "default"
     return mem.retrieveContext(args.goal, {
       sessionId,
       runId: args.runId,
-      upn: args.upn,
+      upn: args.upn
     })
   }
 
@@ -169,7 +184,7 @@ export async function buildFixture(): Promise<Fixture> {
       tools: [],
       stepCount: 1,
       trace: (inputs.trace ?? []) as Array<{ kind: string; tool?: string; text?: string }>,
-      upn: inputs.upn ?? null,
+      upn: inputs.upn ?? null
     })
   }
 
@@ -186,7 +201,7 @@ export async function buildFixture(): Promise<Fixture> {
       sessionId: inputs.sessionId,
       upn: inputs.upn,
       runId,
-      agentId: inputs.agentId ?? null,
+      agentId: inputs.agentId ?? null
     })
     ingest(runId, inputs)
     return { runId, retrievedContext, answer: inputs.answer }

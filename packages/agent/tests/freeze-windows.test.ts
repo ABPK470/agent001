@@ -6,27 +6,27 @@
  */
 
 import {
-    evaluateFreezeWindows,
-    installFreezeWindowRegistry,
-    listFreezeWindows,
-    type FreezeWindowDefinition,
+  evaluateFreezeWindows,
+  installFreezeWindowRegistry,
+  listFreezeWindows,
+  type FreezeWindowDefinition
 } from "@mia/sync"
 import { describe, expect, it } from "vitest"
 
 const WINDOW_A: FreezeWindowDefinition = {
-  id:          "month-end",
+  id: "month-end",
   displayName: "Month-end reporting",
   description: "Reporting team locks tables Mon–Fri of EOM week.",
-  startsAt:    "2025-01-27T00:00:00.000Z",
-  endsAt:      "2025-02-01T00:00:00.000Z",
+  startsAt: "2025-01-27T00:00:00.000Z",
+  endsAt: "2025-02-01T00:00:00.000Z"
 }
 
 const WINDOW_B: FreezeWindowDefinition = {
-  id:          "release-week",
+  id: "release-week",
   displayName: "Release week",
   description: "",
-  startsAt:    "2026-06-01T00:00:00.000Z",
-  endsAt:      "2026-06-08T00:00:00.000Z",
+  startsAt: "2026-06-01T00:00:00.000Z",
+  endsAt: "2026-06-08T00:00:00.000Z"
 }
 
 describe("freeze-windows", () => {

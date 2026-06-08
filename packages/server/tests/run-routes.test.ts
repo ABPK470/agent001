@@ -9,7 +9,7 @@ function fakeSession(over: Partial<CurrentSession> = {}): CurrentSession {
     upn: over.upn ?? "browser.user@example.com",
     isAdmin: over.isAdmin ?? false,
     ip: over.ip ?? "127.0.0.1",
-    userAgent: over.userAgent ?? "vitest",
+    userAgent: over.userAgent ?? "vitest"
   }
 }
 
@@ -25,7 +25,7 @@ async function buildApp(session: CurrentSession | null) {
 
   registerRunRoutes(app, {
     startRun,
-    getRunWorkspaceDiff: () => null,
+    getRunWorkspaceDiff: () => null
   } as unknown as import("../src/application/shell/agent-orchestrator.js").AgentOrchestrator)
 
   await app.ready()
@@ -52,7 +52,7 @@ describe("run routes", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/runs",
-      payload: { goal: "continue the last revenue analysis" },
+      payload: { goal: "continue the last revenue analysis" }
     })
 
     expect(res.statusCode).toBe(201)
@@ -63,7 +63,7 @@ describe("run routes", () => {
     expect(forwardedSession).toMatchObject({
       sid: "sid-browser-1",
       upn: "alice@corp",
-      displayName: "Alice",
+      displayName: "Alice"
     })
   })
 
@@ -74,7 +74,7 @@ describe("run routes", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/runs",
-      payload: { goal: "anonymous run" },
+      payload: { goal: "anonymous run" }
     })
 
     expect(res.statusCode).toBe(201)

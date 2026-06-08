@@ -34,9 +34,21 @@ interface QueueEntry {
 
 export interface QueueStore {
   save(msg: OutboundMessage): void
-  updateStatus(id: string, status: DeliveryStatus, error: string | null, nextRetryAt: Date | null, deliveredAt: Date | null): void
+  updateStatus(
+    id: string,
+    status: DeliveryStatus,
+    error: string | null,
+    nextRetryAt: Date | null,
+    deliveredAt: Date | null
+  ): void
   loadPending(): OutboundMessage[]
-  saveAttempt(messageId: string, attempt: number, status: "success" | typeof DeliveryStatus.Failed, error: string | null, durationMs: number): void
+  saveAttempt(
+    messageId: string,
+    attempt: number,
+    status: "success" | typeof DeliveryStatus.Failed,
+    error: string | null,
+    durationMs: number
+  ): void
 }
 
 // ── Message Queue ────────────────────────────────────────────────
@@ -87,7 +99,7 @@ export class MessageQueue {
     channelType: ChannelType,
     recipientId: string,
     text: string,
-    conversationId: string,
+    conversationId: string
   ): Promise<OutboundMessage> {
     const msg: OutboundMessage = {
       id: randomUUID(),
@@ -100,7 +112,7 @@ export class MessageQueue {
       nextRetryAt: null,
       lastError: null,
       createdAt: new Date(),
-      deliveredAt: null,
+      deliveredAt: null
     }
 
     this.store.save(msg)
@@ -118,7 +130,7 @@ export class MessageQueue {
     }
     this.queues.get(key)!.push({
       message: msg,
-      resolve: resolve ?? (() => {}),
+      resolve: resolve ?? (() => {})
     })
     this.processQueue(key)
   }
@@ -161,7 +173,10 @@ export class MessageQueue {
       message.status = DeliveryStatus.Failed
       message.lastError = `No channel registered for type "${message.channelType}"`
       this.store.updateStatus(message.id, DeliveryStatus.Failed, message.lastError, null, null)
-      broadcast({ type: EventType.MessageFailed, data: { messageId: message.id, error: message.lastError } })
+      broadcast({
+        type: EventType.MessageFailed,
+        data: { messageId: message.id, error: message.lastError }
+      })
       entry.resolve(message)
       return
     }
@@ -172,7 +187,7 @@ export class MessageQueue {
     const startTime = Date.now()
     const result = await withRetry(
       () => channel.sendMessage(message.recipientId, message.text),
-      this.retryPolicy,
+      this.retryPolicy
     )
     const durationMs = Date.now() - startTime
 
@@ -186,17 +201,28 @@ export class MessageQueue {
 
       broadcast({
         type: EventType.MessageDelivered,
-        data: { messageId: message.id, channelType: message.channelType, recipientId: message.recipientId, attempts: result.attempts },
+        data: {
+          messageId: message.id,
+          channelType: message.channelType,
+          recipientId: message.recipientId,
+          attempts: result.attempts
+        }
       })
     } else {
       message.status = DeliveryStatus.Failed
       message.lastError = result.lastError?.message ?? "Unknown error"
       this.store.updateStatus(message.id, DeliveryStatus.Failed, message.lastError, null, null)
-      this.store.saveAttempt(message.id, result.attempts, DeliveryStatus.Failed, message.lastError, durationMs)
+      this.store.saveAttempt(
+        message.id,
+        result.attempts,
+        DeliveryStatus.Failed,
+        message.lastError,
+        durationMs
+      )
 
       broadcast({
         type: EventType.MessageFailed,
-        data: { messageId: message.id, error: message.lastError, attempts: result.attempts },
+        data: { messageId: message.id, error: message.lastError, attempts: result.attempts }
       })
     }
 

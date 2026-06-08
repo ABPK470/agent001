@@ -4,11 +4,11 @@
 
 /** Output format for the export-query-to-file tool. */
 export const ExportFormat = {
-  Csv:   "csv",
-  Tsv:   "tsv",
-  Json:  "json",
+  Csv: "csv",
+  Tsv: "tsv",
+  Json: "json",
   Jsonl: "jsonl",
-  Txt:   "txt",
+  Txt: "txt"
 } as const
 
 export type ExportFormat = (typeof ExportFormat)[keyof typeof ExportFormat]

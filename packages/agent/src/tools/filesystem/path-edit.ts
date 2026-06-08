@@ -21,21 +21,24 @@ const REPLACE_IN_FILE_PARAMETERS = {
   type: "object",
   properties: {
     path: { type: "string", description: "Path to the file to edit" },
-    old_string: { type: "string", description: "The exact text to find in the file (must match exactly, including whitespace)" },
-    new_string: { type: "string", description: "The replacement text" },
+    old_string: {
+      type: "string",
+      description: "The exact text to find in the file (must match exactly, including whitespace)"
+    },
+    new_string: { type: "string", description: "The replacement text" }
   },
-  required: ["path", "old_string", "new_string"],
+  required: ["path", "old_string", "new_string"]
 } as const
 
 export const replaceInFileToolMetadata: ToolMetadata = {
   name: "replace_in_file",
   description: REPLACE_IN_FILE_DESCRIPTION,
-  parameters: REPLACE_IN_FILE_PARAMETERS,
+  parameters: REPLACE_IN_FILE_PARAMETERS
 }
 
 async function executeReplaceInFile(
   args: Record<string, unknown>,
-  resolveSafe: (p: string) => Promise<string>,
+  resolveSafe: (p: string) => Promise<string>
 ) {
   try {
     const target = await resolveSafe(String(args.path))
@@ -86,8 +89,9 @@ async function executeReplaceInFile(
       if (stubFindings.length > 0) {
         integrityWarnings.push(
           `STUB/PLACEHOLDER in replaced section:\n` +
-          stubFindings.map(f => `    • ${f}`).join("\n") + "\n" +
-          `  Fix these NOW. The verifier WILL reject stub functions.`
+            stubFindings.map((f) => `    • ${f}`).join("\n") +
+            "\n" +
+            `  Fix these NOW. The verifier WILL reject stub functions.`
         )
       }
     }
@@ -100,15 +104,20 @@ async function executeReplaceInFile(
           severity: ToolOutcomeSeverity.Fatal,
           directive: ToolControlDirective.AbortRound,
           errorCode: "artifact_integrity_violation",
-          details: [...integrityWarnings, "Use read_file to inspect the current file before another replacement attempt."],
-          artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
-        },
+          details: [
+            ...integrityWarnings,
+            "Use read_file to inspect the current file before another replacement attempt."
+          ],
+          artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }]
+        }
       )
     }
 
-    const onlyStubDetections = integrityWarnings.length > 0 && integrityWarnings.every(w =>
-      /STUB|PLACEHOLDER|degeneration|deferred-work|catch-all|inconsistent branch/i.test(w),
-    )
+    const onlyStubDetections =
+      integrityWarnings.length > 0 &&
+      integrityWarnings.every((w) =>
+        /STUB|PLACEHOLDER|degeneration|deferred-work|catch-all|inconsistent branch/i.test(w)
+      )
 
     if (isCodeFile && onlyStubDetections) {
       return buildToolOutcome(
@@ -121,10 +130,10 @@ async function executeReplaceInFile(
           details: [
             ...integrityWarnings,
             "The existing file was kept unchanged.",
-            "Read the current file and replace the incomplete section with fully implemented logic in one pass.",
+            "Read the current file and replace the incomplete section with fully implemented logic in one pass."
           ],
-          artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
-        },
+          artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }]
+        }
       )
     }
 
@@ -139,8 +148,8 @@ async function executeReplaceInFile(
           directive: ToolControlDirective.AbortRound,
           errorCode: "artifact_incomplete_mutation",
           details: integrityWarnings,
-          artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: true }],
-        },
+          artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: true }]
+        }
       )
     }
 
@@ -148,7 +157,7 @@ async function executeReplaceInFile(
       ok: true,
       severity: ToolOutcomeSeverity.Info,
       directive: ToolControlDirective.Continue,
-      artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: false }],
+      artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: false }]
     })
   } catch (err) {
     return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -161,7 +170,7 @@ export function createReplaceInFileTool(host: AgentHost): ExecutableTool {
     ...replaceInFileToolMetadata,
     async execute(args) {
       return executeReplaceInFile(args, (p) => safePathResolvedWith(host, p))
-    },
+    }
   }
 }
 
@@ -176,21 +185,18 @@ const LIST_DIRECTORY_PARAMETERS = {
   properties: {
     path: {
       type: "string",
-      description: "Directory path (default: current directory)",
-    },
-  },
+      description: "Directory path (default: current directory)"
+    }
+  }
 } as const
 
 export const listDirectoryToolMetadata: ToolMetadata = {
   name: "list_directory",
   description: LIST_DIRECTORY_DESCRIPTION,
-  parameters: LIST_DIRECTORY_PARAMETERS,
+  parameters: LIST_DIRECTORY_PARAMETERS
 }
 
-async function executeListDirectory(
-  args: Record<string, unknown>,
-  host: AgentHost,
-) {
+async function executeListDirectory(args: Record<string, unknown>, host: AgentHost) {
   try {
     const dir = await safePathResolvedWith(host, String(args.path ?? "."))
     const entries = await readdir(dir)
@@ -229,6 +235,6 @@ export function createListDirectoryTool(host: AgentHost): ExecutableTool {
     ...listDirectoryToolMetadata,
     async execute(args) {
       return executeListDirectory(args, host)
-    },
+    }
   }
 }

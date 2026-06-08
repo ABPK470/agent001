@@ -64,7 +64,8 @@ export function loadPriorTurns(opts: LoadPriorTurnsOptions): PriorTurn[] {
   // Top-level only: `parent_run_id IS NULL` keeps delegated child runs
   // (which inherit the session id) out of the anchor.
   const rows = getDb()
-    .prepare(`
+    .prepare(
+      `
       SELECT id, goal, status, answer, created_at, completed_at, parent_run_id, upn
       FROM runs
       WHERE session_id = @sessionId
@@ -74,21 +75,23 @@ export function loadPriorTurns(opts: LoadPriorTurnsOptions): PriorTurn[] {
         AND (@excludeRunId IS NULL OR id != @excludeRunId)
       ORDER BY COALESCE(completed_at, created_at) DESC
       LIMIT @limit
-    `)
+    `
+    )
     .all({
-      sessionId:     opts.sessionId,
-      excludeRunId:  opts.excludeRunId ?? null,
-      upn:           opts.upn,
-      limit,
+      sessionId: opts.sessionId,
+      excludeRunId: opts.excludeRunId ?? null,
+      upn: opts.upn,
+      limit
     }) as Pick<DbRun, "id" | "goal" | "status" | "answer" | "created_at" | "completed_at">[]
 
   return rows.map((row) => ({
-    runId:  row.id,
-    goal:   row.goal,
-    answer: row.answer == null
-      ? null
-      : truncateAtBoundary(row.answer, PRIOR_TURN_ANSWER_MAX_CHARS, "\u2026 [truncated]"),
+    runId: row.id,
+    goal: row.goal,
+    answer:
+      row.answer == null
+        ? null
+        : truncateAtBoundary(row.answer, PRIOR_TURN_ANSWER_MAX_CHARS, "\u2026 [truncated]"),
     status: row.status,
-    ranAt:  row.completed_at ?? row.created_at,
+    ranAt: row.completed_at ?? row.created_at
   }))
 }

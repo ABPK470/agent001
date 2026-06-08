@@ -5,7 +5,7 @@
 /** LLM provider identifier persisted in agents.llm_provider. */
 export const LlmProvider = {
   CopilotChat: "copilot-chat",
-  Databricks:  "databricks",
+  Databricks: "databricks"
 } as const
 
 export type LlmProvider = (typeof LlmProvider)[keyof typeof LlmProvider]

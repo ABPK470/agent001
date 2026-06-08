@@ -52,19 +52,31 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
     // Use distinct salient phrases so FTS hits each entry deterministically.
     mem.ingestTurn({
-      tier: "semantic", role: "summary",
-      content: "Important: alpha-tenant secret config XYZQ123 lives in vault path /alpha/very-distinctive-marker-keyword-aaaa",
-      source: "system", confidence: 0.9, runId: "r-a", upn: "alice@corp",
+      tier: "semantic",
+      role: "summary",
+      content:
+        "Important: alpha-tenant secret config XYZQ123 lives in vault path /alpha/very-distinctive-marker-keyword-aaaa",
+      source: "system",
+      confidence: 0.9,
+      runId: "r-a",
+      upn: "alice@corp"
     })
     mem.ingestTurn({
-      tier: "semantic", role: "summary",
-      content: "Important: bravo-tenant secret config WXYZ987 lives in vault path /bravo/very-distinctive-marker-keyword-bbbb",
-      source: "system", confidence: 0.9, runId: "r-b", upn: "bob@corp",
+      tier: "semantic",
+      role: "summary",
+      content:
+        "Important: bravo-tenant secret config WXYZ987 lives in vault path /bravo/very-distinctive-marker-keyword-bbbb",
+      source: "system",
+      confidence: 0.9,
+      runId: "r-b",
+      upn: "bob@corp"
     })
 
     // Alice queries semantic \u2014 should see only her row.
     const aliceHits = await mem.searchEntries("very-distinctive-marker-keyword", {
-      tier: "semantic", budget: { maxTokens: 4000, maxItems: 10 }, upn: "alice@corp",
+      tier: "semantic",
+      budget: { maxTokens: 4000, maxItems: 10 },
+      upn: "alice@corp"
     })
     expect(aliceHits.length).toBe(1)
     expect(aliceHits[0]!.entry.content).toContain("alpha-tenant")
@@ -72,7 +84,9 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
     // Bob queries the same term \u2014 only his row.
     const bobHits = await mem.searchEntries("very-distinctive-marker-keyword", {
-      tier: "semantic", budget: { maxTokens: 4000, maxItems: 10 }, upn: "bob@corp",
+      tier: "semantic",
+      budget: { maxTokens: 4000, maxItems: 10 },
+      upn: "bob@corp"
     })
     expect(bobHits.length).toBe(1)
     expect(bobHits[0]!.entry.content).toContain("bravo-tenant")
@@ -86,24 +100,40 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     // deterministically regardless of content length / keyword density.
     for (const tier of ["working", "episodic", "semantic"] as const) {
       mem.ingestTurn({
-        tier, role: "system",
+        tier,
+        role: "system",
         content: `cross-tier-leak-canary alpha shared-keyword tier=${tier}`,
-        source: "agent", confidence: 0.9, runId: `r-a-${tier}`, sessionId: "default", upn: "alice@corp",
+        source: "agent",
+        confidence: 0.9,
+        runId: `r-a-${tier}`,
+        sessionId: "default",
+        upn: "alice@corp"
       })
       mem.ingestTurn({
-        tier, role: "system",
+        tier,
+        role: "system",
         content: `cross-tier-leak-canary bravo shared-keyword tier=${tier}`,
-        source: "agent", confidence: 0.9, runId: `r-b-${tier}`, sessionId: "default", upn: "bob@corp",
+        source: "agent",
+        confidence: 0.9,
+        runId: `r-b-${tier}`,
+        sessionId: "default",
+        upn: "bob@corp"
       })
     }
 
-    const aliceCtx = await mem.retrieveContext("cross-tier-leak-canary shared-keyword", { upn: "alice@corp", sessionId: "default" })
+    const aliceCtx = await mem.retrieveContext("cross-tier-leak-canary shared-keyword", {
+      upn: "alice@corp",
+      sessionId: "default"
+    })
     for (const r of aliceCtx.results) {
       expect(r.entry.content).not.toContain("bravo")
       expect(r.entry.upn === "alice@corp" || r.entry.shared).toBeTruthy()
     }
 
-    const bobCtx = await mem.retrieveContext("cross-tier-leak-canary shared-keyword", { upn: "bob@corp", sessionId: "default" })
+    const bobCtx = await mem.retrieveContext("cross-tier-leak-canary shared-keyword", {
+      upn: "bob@corp",
+      sessionId: "default"
+    })
     for (const r of bobCtx.results) {
       expect(r.entry.content).not.toContain("alpha")
     }
@@ -113,16 +143,25 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const mem = await setupMemory()
 
     mem.ingestTurn({
-      tier: "semantic", role: "system",
+      tier: "semantic",
+      role: "system",
       content: "Operator note: org-wide policy applies to everyone unique-shared-marker-zzz",
-      source: "system", confidence: 0.95, runId: "r-shared", upn: null, shared: true,
+      source: "system",
+      confidence: 0.95,
+      runId: "r-shared",
+      upn: null,
+      shared: true
     })
 
     const aliceHits = await mem.searchEntries("unique-shared-marker-zzz", {
-      tier: "semantic", budget: { maxTokens: 4000, maxItems: 5 }, upn: "alice@corp",
+      tier: "semantic",
+      budget: { maxTokens: 4000, maxItems: 5 },
+      upn: "alice@corp"
     })
     const bobHits = await mem.searchEntries("unique-shared-marker-zzz", {
-      tier: "semantic", budget: { maxTokens: 4000, maxItems: 5 }, upn: "bob@corp",
+      tier: "semantic",
+      budget: { maxTokens: 4000, maxItems: 5 },
+      upn: "bob@corp"
     })
     expect(aliceHits.length).toBe(1)
     expect(bobHits.length).toBe(1)
@@ -134,13 +173,21 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
     mem.storeProcedural({
       trigger: "list customer revenue alpha-procedural-trigger-keyword",
-      toolSequence: [{ tool: "mssql_query", argsPattern: { sql: "SELECT" } }, { tool: "format_csv", argsPattern: {} }],
-      runId: "ra", upn: "alice@corp",
+      toolSequence: [
+        { tool: "mssql_query", argsPattern: { sql: "SELECT" } },
+        { tool: "format_csv", argsPattern: {} }
+      ],
+      runId: "ra",
+      upn: "alice@corp"
     })
     mem.storeProcedural({
       trigger: "list customer revenue bravo-procedural-trigger-keyword",
-      toolSequence: [{ tool: "mssql_query", argsPattern: { sql: "SELECT" } }, { tool: "format_csv", argsPattern: {} }],
-      runId: "rb", upn: "bob@corp",
+      toolSequence: [
+        { tool: "mssql_query", argsPattern: { sql: "SELECT" } },
+        { tool: "format_csv", argsPattern: {} }
+      ],
+      runId: "rb",
+      upn: "bob@corp"
     })
 
     expect(mem.searchProcedures("alpha-procedural-trigger-keyword", 5, "alice@corp").length).toBe(1)
@@ -155,14 +202,24 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     // role='system' bypasses the salience filter so we measure dedup, not
     // ingestion thresholds.
     const aliceFirst = mem.ingestTurn({
-      tier: "working", role: "system",
+      tier: "working",
+      role: "system",
       content: "exact same text body across users uniqueA-dedup-text-marker",
-      source: "tool", confidence: 0.7, runId: "ra", sessionId: "default", upn: "alice@corp",
+      source: "tool",
+      confidence: 0.7,
+      runId: "ra",
+      sessionId: "default",
+      upn: "alice@corp"
     })
     const bobFirst = mem.ingestTurn({
-      tier: "working", role: "system",
+      tier: "working",
+      role: "system",
       content: "exact same text body across users uniqueA-dedup-text-marker",
-      source: "tool", confidence: 0.7, runId: "rb", sessionId: "default", upn: "bob@corp",
+      source: "tool",
+      confidence: 0.7,
+      runId: "rb",
+      sessionId: "default",
+      upn: "bob@corp"
     })
 
     expect(aliceFirst).not.toBeNull()
@@ -171,9 +228,14 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
     // Same tenant: identical second insert IS deduplicated.
     const aliceSecond = mem.ingestTurn({
-      tier: "working", role: "system",
+      tier: "working",
+      role: "system",
       content: "exact same text body across users uniqueA-dedup-text-marker",
-      source: "tool", confidence: 0.7, runId: "ra", sessionId: "default", upn: "alice@corp",
+      source: "tool",
+      confidence: 0.7,
+      runId: "ra",
+      sessionId: "default",
+      upn: "alice@corp"
     })
     expect(aliceSecond).toBeNull()
   })
@@ -182,18 +244,28 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const mem = await setupMemory()
 
     mem.ingestTurn({
-      tier: "semantic", role: "system",
+      tier: "semantic",
+      role: "system",
       content: "alpha-only secret marker-anon-test-aaa",
-      source: "system", confidence: 0.9, runId: "ra", upn: "alice@corp",
+      source: "system",
+      confidence: 0.9,
+      runId: "ra",
+      upn: "alice@corp"
     })
     mem.ingestTurn({
-      tier: "semantic", role: "system",
+      tier: "semantic",
+      role: "system",
       content: "legacy unowned row marker-anon-test-aaa",
-      source: "system", confidence: 0.9, runId: "r-legacy", upn: null,
+      source: "system",
+      confidence: 0.9,
+      runId: "r-legacy",
+      upn: null
     })
 
     const anonHits = await mem.searchEntries("marker-anon-test-aaa", {
-      tier: "semantic", budget: { maxTokens: 4000, maxItems: 5 }, upn: null,
+      tier: "semantic",
+      budget: { maxTokens: 4000, maxItems: 5 },
+      upn: null
     })
     // Anonymous should see the legacy row (upn IS NULL) but NOT alice's row.
     expect(anonHits.length).toBe(1)
@@ -204,25 +276,42 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const mem = await setupMemory()
 
     mem.ingestRunTurns({
-      id: "ra", goal: "compute monthly KPI report", answer: "Bob's correct answer",
-      status: "completed", agentId: null, tools: ["mssql"], stepCount: 3,
-      trace: [], upn: "bob@corp",
+      id: "ra",
+      goal: "compute monthly KPI report",
+      answer: "Bob's correct answer",
+      status: "completed",
+      agentId: null,
+      tools: ["mssql"],
+      stepCount: 3,
+      trace: [],
+      upn: "bob@corp"
     })
     mem.ingestRunTurns({
-      id: "rb", goal: "compute monthly KPI report", answer: null,
-      status: "failed", agentId: null, tools: ["mssql"], stepCount: 1,
-      error: "boom", trace: [], upn: "alice@corp",
+      id: "rb",
+      goal: "compute monthly KPI report",
+      answer: null,
+      status: "failed",
+      agentId: null,
+      tools: ["mssql"],
+      stepCount: 1,
+      error: "boom",
+      trace: [],
+      upn: "alice@corp"
     })
 
     // Bob's episodic entry must still carry the successful answer.
     const bobEpisodic = await mem.searchEntries("compute monthly KPI report", {
-      tier: "episodic", budget: { maxTokens: 4000, maxItems: 5 }, upn: "bob@corp",
+      tier: "episodic",
+      budget: { maxTokens: 4000, maxItems: 5 },
+      upn: "bob@corp"
     })
     expect(bobEpisodic.some((r) => r.entry.content.includes("Bob's correct answer"))).toBe(true)
 
     // Alice's episodic entry exists separately as a failure.
     const aliceEpisodic = await mem.searchEntries("compute monthly KPI report", {
-      tier: "episodic", budget: { maxTokens: 4000, maxItems: 5 }, upn: "alice@corp",
+      tier: "episodic",
+      budget: { maxTokens: 4000, maxItems: 5 },
+      upn: "alice@corp"
     })
     expect(aliceEpisodic.some((r) => r.entry.content.includes("Status: failed"))).toBe(true)
   })
@@ -232,21 +321,41 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const { getDb } = await import("../src/adapters/persistence/db/index.js")
 
     mem.ingestRunTurns({
-      id: "anon-a", goal: "draft deployment checklist", answer: "Session A answer",
-      status: "completed", agentId: null, sessionId: "sid-a", tools: ["fs"], stepCount: 2,
-      trace: [], upn: null,
+      id: "anon-a",
+      goal: "draft deployment checklist",
+      answer: "Session A answer",
+      status: "completed",
+      agentId: null,
+      sessionId: "sid-a",
+      tools: ["fs"],
+      stepCount: 2,
+      trace: [],
+      upn: null
     })
     mem.ingestRunTurns({
-      id: "anon-b", goal: "draft deployment checklist", answer: "Session B answer",
-      status: "completed", agentId: null, sessionId: "sid-b", tools: ["fs"], stepCount: 2,
-      trace: [], upn: null,
+      id: "anon-b",
+      goal: "draft deployment checklist",
+      answer: "Session B answer",
+      status: "completed",
+      agentId: null,
+      sessionId: "sid-b",
+      tools: ["fs"],
+      stepCount: 2,
+      trace: [],
+      upn: null
     })
 
     const aHits = await mem.searchEntries("draft deployment checklist", {
-      tier: "episodic", budget: { maxTokens: 4000, maxItems: 5 }, upn: null, sessionId: "sid-a",
+      tier: "episodic",
+      budget: { maxTokens: 4000, maxItems: 5 },
+      upn: null,
+      sessionId: "sid-a"
     })
     const bHits = await mem.searchEntries("draft deployment checklist", {
-      tier: "episodic", budget: { maxTokens: 4000, maxItems: 5 }, upn: null, sessionId: "sid-b",
+      tier: "episodic",
+      budget: { maxTokens: 4000, maxItems: 5 },
+      upn: null,
+      sessionId: "sid-b"
     })
 
     expect(aHits.length).toBe(1)
@@ -254,11 +363,17 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     expect(bHits.length).toBe(1)
     expect(bHits[0]!.entry.content).toContain("Session B answer")
 
-    const stored = getDb().prepare(`
+    const stored = getDb()
+      .prepare(
+        `
       SELECT session_id FROM memory_entries
       WHERE tier = 'episodic' AND role = 'summary' AND substr(content, 1, ?) = ?
       ORDER BY session_id ASC
-    `).all("Goal: draft deployment checklist\n".length, "Goal: draft deployment checklist\n") as Array<{ session_id: string | null }>
+    `
+      )
+      .all("Goal: draft deployment checklist\n".length, "Goal: draft deployment checklist\n") as Array<{
+      session_id: string | null
+    }>
     expect(stored.map((row) => row.session_id)).toEqual(["sid-a", "sid-b"])
   })
 
@@ -267,19 +382,31 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
     mem.storeProcedural({
       trigger: "export weekly release notes anon-proc-keyword",
-      toolSequence: [{ tool: "read_file", argsPattern: { path: "a.md" } }, { tool: "write_file", argsPattern: {} }],
-      runId: "ra", upn: null, sessionId: "sid-a",
+      toolSequence: [
+        { tool: "read_file", argsPattern: { path: "a.md" } },
+        { tool: "write_file", argsPattern: {} }
+      ],
+      runId: "ra",
+      upn: null,
+      sessionId: "sid-a"
     })
     mem.storeProcedural({
       trigger: "export weekly release notes anon-proc-keyword",
-      toolSequence: [{ tool: "read_file", argsPattern: { path: "b.md" } }, { tool: "write_file", argsPattern: {} }],
-      runId: "rb", upn: null, sessionId: "sid-b",
+      toolSequence: [
+        { tool: "read_file", argsPattern: { path: "b.md" } },
+        { tool: "write_file", argsPattern: {} }
+      ],
+      runId: "rb",
+      upn: null,
+      sessionId: "sid-b"
     })
 
     expect(mem.searchProcedures("anon-proc-keyword", 5, null, "sid-a").length).toBe(1)
     expect(mem.searchProcedures("anon-proc-keyword", 5, null, "sid-b").length).toBe(1)
-    const aFirstTool = mem.searchProcedures("anon-proc-keyword", 5, null, "sid-a")[0]!.toolSequence[0]!.argsPattern
-    const bFirstTool = mem.searchProcedures("anon-proc-keyword", 5, null, "sid-b")[0]!.toolSequence[0]!.argsPattern
+    const aFirstTool = mem.searchProcedures("anon-proc-keyword", 5, null, "sid-a")[0]!.toolSequence[0]!
+      .argsPattern
+    const bFirstTool = mem.searchProcedures("anon-proc-keyword", 5, null, "sid-b")[0]!.toolSequence[0]!
+      .argsPattern
     expect(aFirstTool).toEqual({ path: "a.md" })
     expect(bFirstTool).toEqual({ path: "b.md" })
   })
@@ -293,19 +420,28 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const inserted: Array<{ id: string; upn: string | null; shared: number }> = []
     function plant(upn: string | null, content: string, shared = false) {
       const e = mem.ingestTurn({
-        tier: "semantic", role: "system",
-        content, source: "system", confidence: 0.9, runId: `r-${upn ?? "anon"}-${Math.random()}`,
-        upn, shared,
+        tier: "semantic",
+        role: "system",
+        content,
+        source: "system",
+        confidence: 0.9,
+        runId: `r-${upn ?? "anon"}-${Math.random()}`,
+        upn,
+        shared
       })
       if (!e) throw new Error("ingestTurn returned null \u2014 fixture invalid")
       inserted.push({ id: e.id, upn, shared: shared ? 1 : 0 })
       // Stamp a tiny deterministic embedding manually (3-D suffices) so the
       // SQL JOIN + filter is exercised even without Ollama.
       const buf = Buffer.from(new Float32Array([1, 0, 0]).buffer)
-      getDb().prepare(`
+      getDb()
+        .prepare(
+          `
         INSERT OR REPLACE INTO memory_vectors (entry_id, embedding, dimension, upn, shared)
         VALUES (?, ?, ?, ?, ?)
-      `).run(e.id, buf, 3, upn, shared ? 1 : 0)
+      `
+        )
+        .run(e.id, buf, 3, upn, shared ? 1 : 0)
     }
 
     plant("alice@corp", "alice vector content marker-vec-alpha")
@@ -315,9 +451,9 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     plant(null, "shared org policy marker-vec-shared", true)
 
     // Verify mirror columns are populated as expected.
-    const vecRows = getDb().prepare("SELECT entry_id, upn, shared FROM memory_vectors ORDER BY upn").all() as Array<
-      { entry_id: string; upn: string | null; shared: number }
-    >
+    const vecRows = getDb()
+      .prepare("SELECT entry_id, upn, shared FROM memory_vectors ORDER BY upn")
+      .all() as Array<{ entry_id: string; upn: string | null; shared: number }>
     expect(vecRows.length).toBe(5)
     const aliceVecs = vecRows.filter((r) => r.upn === "alice@corp")
     expect(aliceVecs.length).toBe(3)
@@ -327,10 +463,14 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
     // Quick SQL probe of the tenant filter (mirrors vectors.ts WHERE clause)
     // \u2014 bob@corp must see only his row + the shared row, never alice's.
-    const bobVisible = getDb().prepare(`
+    const bobVisible = getDb()
+      .prepare(
+        `
       SELECT entry_id FROM memory_vectors
       WHERE (upn = ? OR shared = 1)
-    `).all("bob@corp") as Array<{ entry_id: string }>
+    `
+      )
+      .all("bob@corp") as Array<{ entry_id: string }>
     expect(bobVisible.length).toBe(2)
     const visibleIds = new Set(bobVisible.map((r) => r.entry_id))
     for (const a of inserted.filter((r) => r.upn === "alice@corp")) {
@@ -338,10 +478,14 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     }
 
     // Anonymous (upn IS NULL) probe must see ONLY the legacy/shared row.
-    const anonVisible = getDb().prepare(`
+    const anonVisible = getDb()
+      .prepare(
+        `
       SELECT entry_id FROM memory_vectors
       WHERE (upn IS NULL OR shared = 1)
-    `).all() as Array<{ entry_id: string }>
+    `
+      )
+      .all() as Array<{ entry_id: string }>
     expect(anonVisible.length).toBe(1)
     expect(anonVisible[0].entry_id).toBe(sharedVec!.entry_id)
   })
@@ -368,24 +512,35 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     // keywords) so we measure sessionId routing, not the unrelated salience
     // gate. computeSalience: lengthScore(0.35) + actionScore(0.40) + structureScore(0.25).
     mem.ingestRunTurns({
-      id: "run-1", goal: "summarize the deployment runbook for the platform",
-      answer: "Deployment runbook summary deeply-distinctive-roundtrip-marker-XYZ. " +
+      id: "run-1",
+      goal: "summarize the deployment runbook for the platform",
+      answer:
+        "Deployment runbook summary deeply-distinctive-roundtrip-marker-XYZ. " +
         "We configure the build, install dependencies, run the migration, execute the smoke test, " +
         "and write the release tag. Update the changelog after each completed step. " +
         "Refactor any failed scripts and migrate the data on success.",
-      status: "completed", agentId: null, sessionId: sid,
-      tools: ["read_file"], stepCount: 4, trace: [], upn: null,
+      status: "completed",
+      agentId: null,
+      sessionId: sid,
+      tools: ["read_file"],
+      stepCount: 4,
+      trace: [],
+      upn: null
     })
 
     // Same session, FTS-matchable goal → working memory must surface the answer.
     const sameSession = await mem.retrieveContext("deeply-distinctive-roundtrip-marker-XYZ", {
-      sessionId: sid, runId: "run-2", upn: null,
+      sessionId: sid,
+      runId: "run-2",
+      upn: null
     })
     expect(sameSession.perTier.working).toContain("deeply-distinctive-roundtrip-marker-XYZ")
 
     // Different session → must NOT see it (isolation still holds).
     const otherSession = await mem.retrieveContext("deeply-distinctive-roundtrip-marker-XYZ", {
-      sessionId: "different-session-zzz", runId: "run-3", upn: null,
+      sessionId: "different-session-zzz",
+      runId: "run-3",
+      upn: null
     })
     expect(otherSession.perTier.working).toBe("")
   })
@@ -398,13 +553,20 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     // memory. The recency-fallback path (one-word goals) does not apply FTS
     // matching, so any salient row in the same session must surface.
     mem.ingestRunTurns({
-      id: "run-prev", goal: "should I rebuild the index now?",
-      answer: "Yes, proceed. We will run the rebuild, execute the index migration, " +
+      id: "run-prev",
+      goal: "should I rebuild the index now?",
+      answer:
+        "Yes, proceed. We will run the rebuild, execute the index migration, " +
         "update statistics, and write the completed status. The configure step finishes " +
         "after the rebuilding-now-will-take-roundtrip-marker step. " +
         "This refactor reclaims about 12 percent of the heap on success.",
-      status: "completed", agentId: null, sessionId: sid,
-      tools: ["mssql"], stepCount: 2, trace: [], upn: null,
+      status: "completed",
+      agentId: null,
+      sessionId: sid,
+      tools: ["mssql"],
+      stepCount: 2,
+      trace: [],
+      upn: null
     })
 
     // The exact failure mode reported by the user: a one-word follow-up.
@@ -412,13 +574,17 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     // back to getRecentEntries(tier, maxItems, sessionId, upn). That path
     // MUST find the prior assistant answer in the same session.
     const followup = await mem.retrieveContext("yes", {
-      sessionId: sid, runId: "run-followup", upn: null,
+      sessionId: sid,
+      runId: "run-followup",
+      upn: null
     })
     expect(followup.perTier.working).toContain("rebuilding-now-will-take-roundtrip-marker")
 
     // Cross-session "yes" must remain empty (no leakage between browser tabs).
     const crossSession = await mem.retrieveContext("yes", {
-      sessionId: "another-session", runId: "run-other", upn: null,
+      sessionId: "another-session",
+      runId: "run-other",
+      upn: null
     })
     expect(crossSession.perTier.working).toBe("")
   })
@@ -436,25 +602,36 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const mem = await setupMemory()
 
     mem.ingestRunTurns({
-      id: "run-alice-1", goal: "draft the alpha launch checklist for the platform",
-      answer: "Alpha launch checklist alpha-upn-roundtrip-marker-AAAA. " +
+      id: "run-alice-1",
+      goal: "draft the alpha launch checklist for the platform",
+      answer:
+        "Alpha launch checklist alpha-upn-roundtrip-marker-AAAA. " +
         "We configure the staging stack, install the release scripts, run the smoke test, " +
         "execute the migration, write the announcement, and update the dashboard. " +
         "Refactor any failed steps until success is completed.",
-      status: "completed", agentId: null, sessionId: "sid-alice",
-      tools: ["fs"], stepCount: 3, trace: [], upn: "alice@corp",
+      status: "completed",
+      agentId: null,
+      sessionId: "sid-alice",
+      tools: ["fs"],
+      stepCount: 3,
+      trace: [],
+      upn: "alice@corp"
     })
 
     // Alice retrieves with her own upn → must surface her answer.
     const aliceCtx = await mem.retrieveContext("alpha-upn-roundtrip-marker-AAAA", {
-      sessionId: "sid-alice", runId: "run-alice-2", upn: "alice@corp",
+      sessionId: "sid-alice",
+      runId: "run-alice-2",
+      upn: "alice@corp"
     })
     expect(aliceCtx.perTier.working).toContain("alpha-upn-roundtrip-marker-AAAA")
 
     // Bob retrieves the same content → must NOT see Alice's row even with the
     // same sessionId, because the upn predicate isolates tenants across all tiers.
     const bobCtx = await mem.retrieveContext("alpha-upn-roundtrip-marker-AAAA", {
-      sessionId: "sid-alice", runId: "run-bob-1", upn: "bob@corp",
+      sessionId: "sid-alice",
+      runId: "run-bob-1",
+      upn: "bob@corp"
     })
     expect(bobCtx.perTier.working).toBe("")
   })
@@ -465,35 +642,53 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     // Two tenants share the same browser session id (same shared workstation,
     // different SSO accounts) — the recency fallback must still isolate by upn.
     mem.ingestRunTurns({
-      id: "run-alice-prev", goal: "should I deploy alpha now?",
-      answer: "Alice approves, proceed with the deploy. We will run the rollout, " +
+      id: "run-alice-prev",
+      goal: "should I deploy alpha now?",
+      answer:
+        "Alice approves, proceed with the deploy. We will run the rollout, " +
         "execute the verification, update the status page, write the changelog, " +
         "configure monitoring, refactor failed checks, migrate the data on success " +
         "alpha-followup-roundtrip-marker.",
-      status: "completed", agentId: null, sessionId: "shared-sid",
-      tools: ["mssql"], stepCount: 2, trace: [], upn: "alice@corp",
+      status: "completed",
+      agentId: null,
+      sessionId: "shared-sid",
+      tools: ["mssql"],
+      stepCount: 2,
+      trace: [],
+      upn: "alice@corp"
     })
     mem.ingestRunTurns({
-      id: "run-bob-prev", goal: "should I deploy bravo now?",
-      answer: "Bob approves, proceed with the deploy. We will run the rollout, " +
+      id: "run-bob-prev",
+      goal: "should I deploy bravo now?",
+      answer:
+        "Bob approves, proceed with the deploy. We will run the rollout, " +
         "execute the verification, update the status page, write the changelog, " +
         "configure monitoring, refactor failed checks, migrate the data on success " +
         "bravo-followup-roundtrip-marker.",
-      status: "completed", agentId: null, sessionId: "shared-sid",
-      tools: ["mssql"], stepCount: 2, trace: [], upn: "bob@corp",
+      status: "completed",
+      agentId: null,
+      sessionId: "shared-sid",
+      tools: ["mssql"],
+      stepCount: 2,
+      trace: [],
+      upn: "bob@corp"
     })
 
     // Empty-FTS recency fallback (the "yes" path) for Alice — must surface her
     // answer ONLY, never bleed Bob's content even though they share sessionId.
     const aliceFollow = await mem.retrieveContext("yes", {
-      sessionId: "shared-sid", runId: "run-alice-followup", upn: "alice@corp",
+      sessionId: "shared-sid",
+      runId: "run-alice-followup",
+      upn: "alice@corp"
     })
     expect(aliceFollow.perTier.working).toContain("alpha-followup-roundtrip-marker")
     expect(aliceFollow.perTier.working).not.toContain("bravo-followup-roundtrip-marker")
 
     // Mirror for Bob.
     const bobFollow = await mem.retrieveContext("yes", {
-      sessionId: "shared-sid", runId: "run-bob-followup", upn: "bob@corp",
+      sessionId: "shared-sid",
+      runId: "run-bob-followup",
+      upn: "bob@corp"
     })
     expect(bobFollow.perTier.working).toContain("bravo-followup-roundtrip-marker")
     expect(bobFollow.perTier.working).not.toContain("alpha-followup-roundtrip-marker")
@@ -513,7 +708,10 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const { fileURLToPath } = await import("node:url")
     const { dirname, join } = await import("node:path")
     const here = dirname(fileURLToPath(import.meta.url))
-    const src = readFileSync(join(here, "..", "src", "application", "shell", "execution", "run-executor.ts"), "utf8")
+    const src = readFileSync(
+      join(here, "..", "src", "application", "shell", "execution", "run-executor.ts"),
+      "utf8"
+    )
 
     // Collect every retrieveContext({...}) call's sessionId / upn assignment.
     const retrieveCalls = [...src.matchAll(/retrieveContext\([^)]*?\{([\s\S]*?)\}\s*\)/g)]
@@ -550,20 +748,20 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const upnAnchor = "activeRun?.ownerUpn"
 
     for (const expr of retrieveSessionIds) {
-      expect(expr, "retrieveContext sessionId expression must reference activeRun?.sessionId")
-        .toContain(sessionIdAnchor)
+      expect(expr, "retrieveContext sessionId expression must reference activeRun?.sessionId").toContain(
+        sessionIdAnchor
+      )
     }
     for (const expr of ingestSessionIds) {
-      expect(expr, "ingestRunTurns sessionId expression must reference activeRun?.sessionId")
-        .toContain(sessionIdAnchor)
+      expect(expr, "ingestRunTurns sessionId expression must reference activeRun?.sessionId").toContain(
+        sessionIdAnchor
+      )
     }
     for (const expr of retrieveUpns) {
-      expect(expr, "retrieveContext upn expression must reference activeRun?.ownerUpn")
-        .toContain(upnAnchor)
+      expect(expr, "retrieveContext upn expression must reference activeRun?.ownerUpn").toContain(upnAnchor)
     }
     for (const expr of ingestUpns) {
-      expect(expr, "ingestRunTurns upn expression must reference activeRun?.ownerUpn")
-        .toContain(upnAnchor)
+      expect(expr, "ingestRunTurns upn expression must reference activeRun?.ownerUpn").toContain(upnAnchor)
     }
   })
 })

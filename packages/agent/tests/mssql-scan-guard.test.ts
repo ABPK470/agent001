@@ -9,11 +9,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import {
-    hasWhereClause,
-    isUnsafeScan,
-    referencedLargeObjects,
-} from "../src/tools/index.js"
+import { hasWhereClause, isUnsafeScan, referencedLargeObjects } from "../src/tools/index.js"
 import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
 const catalog = canonicalFixtureCatalog()
@@ -31,7 +27,9 @@ describe("referencedLargeObjects", () => {
   })
 
   it("detects large fact table", () => {
-    expect(referencedLargeObjects("SELECT TOP 10 * FROM fact.UnoTranspose WHERE x=1", accessor)).toContain("fact.unotranspose")
+    expect(referencedLargeObjects("SELECT TOP 10 * FROM fact.UnoTranspose WHERE x=1", accessor)).toContain(
+      "fact.unotranspose"
+    )
   })
 
   it("returns empty for small/unknown tables", () => {
@@ -42,7 +40,7 @@ describe("referencedLargeObjects", () => {
   it("detects multiple large objects in one query", () => {
     const refs = referencedLargeObjects(
       "SELECT * FROM publish.Revenue r JOIN dim.Client c ON r.pkClient = c.pkClient",
-      accessor,
+      accessor
     )
     expect(refs).toContain("publish.revenue")
     expect(refs).toContain("dim.client")
@@ -109,21 +107,19 @@ describe("isUnsafeScan — should ALLOW these queries", () => {
   }
 
   it("allows query with WHERE clause on large view", () => {
-    expect(allow(
-      "SELECT TOP 5 pkMonth FROM publish.Revenue WITH (NOLOCK) WHERE pkMonth = 733",
-    )).toBeNull()
+    expect(allow("SELECT TOP 5 pkMonth FROM publish.Revenue WITH (NOLOCK) WHERE pkMonth = 733")).toBeNull()
   })
 
   it("allows aggregation WITH WHERE on large view", () => {
-    expect(allow(
-      "SELECT TOP 20 pkClient, SUM(RevenueZARMTD) FROM publish.Revenue WHERE pkMonth BETWEEN 733 AND 744 GROUP BY pkClient",
-    )).toBeNull()
+    expect(
+      allow(
+        "SELECT TOP 20 pkClient, SUM(RevenueZARMTD) FROM publish.Revenue WHERE pkMonth BETWEEN 733 AND 744 GROUP BY pkClient"
+      )
+    ).toBeNull()
   })
 
   it("allows MIN on dim.Date (not a large object)", () => {
-    expect(allow(
-      "SELECT MIN(pkDate) FROM dim.Date WITH (NOLOCK) WHERE calYear = 2025",
-    )).toBeNull()
+    expect(allow("SELECT MIN(pkDate) FROM dim.Date WITH (NOLOCK) WHERE calYear = 2025")).toBeNull()
   })
 
   it("allows any query on small/unknown tables", () => {
@@ -132,11 +128,13 @@ describe("isUnsafeScan — should ALLOW these queries", () => {
   })
 
   it("allows CTEs that provide a WHERE in the outer query", () => {
-    expect(allow(`
+    expect(
+      allow(`
       WITH months AS (SELECT MIN(pkDate) AS m FROM dim.Date WHERE calYear=2025)
       SELECT pkClient, SUM(RevenueZARMTD) FROM publish.Revenue
       WHERE pkMonth = (SELECT m FROM months)
       GROUP BY pkClient
-    `)).toBeNull()
+    `)
+    ).toBeNull()
   })
 })

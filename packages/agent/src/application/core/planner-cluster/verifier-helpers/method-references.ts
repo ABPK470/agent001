@@ -7,30 +7,148 @@
  */
 
 const BUILTIN_METHODS = new Set([
-  "toString", "valueOf", "hasOwnProperty", "constructor",
-  "push", "pop", "shift", "unshift", "splice", "sort", "reverse", "fill",
-  "map", "filter", "reduce", "forEach", "find", "findIndex", "some", "every",
-  "includes", "indexOf", "lastIndexOf", "flat", "flatMap", "slice", "concat", "join",
-  "toLowerCase", "toUpperCase", "trim", "split", "replace", "match", "startsWith",
-  "endsWith", "includes", "charAt", "substring", "padStart", "padEnd",
-  "add", "delete", "has", "get", "set", "clear", "keys", "values", "entries",
-  "addEventListener", "removeEventListener", "querySelector", "querySelectorAll",
-  "getElementById", "getElementsByClassName", "createElement", "appendChild",
-  "removeChild", "setAttribute", "getAttribute", "classList", "dispatchEvent",
-  "preventDefault", "stopPropagation",
-  "bind", "call", "apply", "then", "catch", "finally", "emit", "on", "off",
-  "log", "warn", "error", "info",
+  "toString",
+  "valueOf",
+  "hasOwnProperty",
+  "constructor",
+  "push",
+  "pop",
+  "shift",
+  "unshift",
+  "splice",
+  "sort",
+  "reverse",
+  "fill",
+  "map",
+  "filter",
+  "reduce",
+  "forEach",
+  "find",
+  "findIndex",
+  "some",
+  "every",
+  "includes",
+  "indexOf",
+  "lastIndexOf",
+  "flat",
+  "flatMap",
+  "slice",
+  "concat",
+  "join",
+  "toLowerCase",
+  "toUpperCase",
+  "trim",
+  "split",
+  "replace",
+  "match",
+  "startsWith",
+  "endsWith",
+  "includes",
+  "charAt",
+  "substring",
+  "padStart",
+  "padEnd",
+  "add",
+  "delete",
+  "has",
+  "get",
+  "set",
+  "clear",
+  "keys",
+  "values",
+  "entries",
+  "addEventListener",
+  "removeEventListener",
+  "querySelector",
+  "querySelectorAll",
+  "getElementById",
+  "getElementsByClassName",
+  "createElement",
+  "appendChild",
+  "removeChild",
+  "setAttribute",
+  "getAttribute",
+  "classList",
+  "dispatchEvent",
+  "preventDefault",
+  "stopPropagation",
+  "bind",
+  "call",
+  "apply",
+  "then",
+  "catch",
+  "finally",
+  "emit",
+  "on",
+  "off",
+  "log",
+  "warn",
+  "error",
+  "info"
 ])
 
 const RESERVED_CALL_IDENTIFIERS = new Set([
-  "if", "for", "while", "switch", "catch", "return", "typeof", "new", "delete", "void",
-  "function", "class", "super", "this", "await", "yield", "import", "export", "default",
-  "require", "console", "document", "window", "globalThis", "Math", "JSON", "Object", "Array",
-  "String", "Number", "Boolean", "Date", "Promise", "Map", "Set", "WeakMap", "WeakSet", "Symbol",
-  "RegExp", "Error", "URL", "fetch", "parseInt", "parseFloat", "isNaN", "isFinite", "setTimeout",
-  "setInterval", "clearTimeout", "clearInterval", "requestAnimationFrame", "cancelAnimationFrame",
-  "addEventListener", "removeEventListener", "querySelector", "querySelectorAll", "getElementById",
-  "createElement", "alert", "confirm", "prompt",
+  "if",
+  "for",
+  "while",
+  "switch",
+  "catch",
+  "return",
+  "typeof",
+  "new",
+  "delete",
+  "void",
+  "function",
+  "class",
+  "super",
+  "this",
+  "await",
+  "yield",
+  "import",
+  "export",
+  "default",
+  "require",
+  "console",
+  "document",
+  "window",
+  "globalThis",
+  "Math",
+  "JSON",
+  "Object",
+  "Array",
+  "String",
+  "Number",
+  "Boolean",
+  "Date",
+  "Promise",
+  "Map",
+  "Set",
+  "WeakMap",
+  "WeakSet",
+  "Symbol",
+  "RegExp",
+  "Error",
+  "URL",
+  "fetch",
+  "parseInt",
+  "parseFloat",
+  "isNaN",
+  "isFinite",
+  "setTimeout",
+  "setInterval",
+  "clearTimeout",
+  "clearInterval",
+  "requestAnimationFrame",
+  "cancelAnimationFrame",
+  "addEventListener",
+  "removeEventListener",
+  "querySelector",
+  "querySelectorAll",
+  "getElementById",
+  "createElement",
+  "alert",
+  "confirm",
+  "prompt"
 ])
 
 export function escapeRegExp(s: string): string {
@@ -95,7 +213,10 @@ export function detectUnresolvedBareHelpers(code: string): string[] {
   while ((match = importNamedRe.exec(code)) !== null) {
     const entries = match[1].split(",")
     for (const entry of entries) {
-      const localName = entry.split(/\s+as\s+/i).pop()?.trim()
+      const localName = entry
+        .split(/\s+as\s+/i)
+        .pop()
+        ?.trim()
       if (localName) imports.add(localName)
     }
   }
@@ -109,7 +230,13 @@ export function detectUnresolvedBareHelpers(code: string): string[] {
     if (!name) continue
     const prevChar = code[Math.max(0, match.index - 1)]
     if (prevChar && /[.\w$]/.test(prevChar)) continue
-    if (definitions.has(name) || imports.has(name) || RESERVED_CALL_IDENTIFIERS.has(name) || BUILTIN_METHODS.has(name)) continue
+    if (
+      definitions.has(name) ||
+      imports.has(name) ||
+      RESERVED_CALL_IDENTIFIERS.has(name) ||
+      BUILTIN_METHODS.has(name)
+    )
+      continue
 
     const before = code.slice(Math.max(0, match.index - 24), match.index + name.length + 1)
     if (/(?:function|class|new|if|for|while|switch|catch)\s+$/.test(before)) continue
@@ -143,7 +270,9 @@ export function detectPotentialUseBeforeDeclaration(code: string): string[] {
       if (!m) continue
       if (m[1] === "'" || m[1] === '"' || m[1] === "`") continue
       if (new RegExp(`\b(?:const|let|var|function|class)\s+${escapeRegExp(name)}\b`).test(line)) continue
-      issues.push(`${name} is referenced before its const/let declaration (line ${i + 1} before line ${declLine + 1})`)
+      issues.push(
+        `${name} is referenced before its const/let declaration (line ${i + 1} before line ${declLine + 1})`
+      )
       break
     }
   }

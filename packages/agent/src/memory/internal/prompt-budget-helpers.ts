@@ -36,15 +36,24 @@ export function estimateMessageChars(message: Message): number {
 
 export function getSectionCap(caps: PromptBudgetCaps, section: PromptBudgetSection): number {
   switch (section) {
-    case "system_law": return caps.systemLawChars
-    case "system_anchor": return caps.systemAnchorChars
-    case "system_runtime": return caps.systemRuntimeChars
-    case "memory_working": return caps.memoryWorkingChars
-    case "memory_episodic": return caps.memoryEpisodicChars
-    case "memory_semantic": return caps.memorySemanticChars
-    case "history": return caps.historyChars
-    case "user": return caps.userChars
-    default: return caps.otherChars
+    case "system_law":
+      return caps.systemLawChars
+    case "system_anchor":
+      return caps.systemAnchorChars
+    case "system_runtime":
+      return caps.systemRuntimeChars
+    case "memory_working":
+      return caps.memoryWorkingChars
+    case "memory_episodic":
+      return caps.memoryEpisodicChars
+    case "memory_semantic":
+      return caps.memorySemanticChars
+    case "history":
+      return caps.historyChars
+    case "user":
+      return caps.userChars
+    default:
+      return caps.otherChars
   }
 }
 
@@ -60,7 +69,7 @@ export function createSectionCapMap(caps: PromptBudgetCaps): Record<PromptBudget
 
 export function rebalanceSectionCaps(
   baseCaps: Record<PromptBudgetSection, number>,
-  beforeChars: Record<PromptBudgetSection, number>,
+  beforeChars: Record<PromptBudgetSection, number>
 ): Record<PromptBudgetSection, number> {
   const effective = { ...baseCaps }
   let slack = 0
@@ -78,7 +87,7 @@ export function rebalanceSectionCaps(
     "memory_episodic",
     "memory_semantic",
     "user",
-    "system_anchor",
+    "system_anchor"
   ]
   for (const section of deficitOrder) {
     if (slack <= 0) break

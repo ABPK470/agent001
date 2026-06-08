@@ -23,45 +23,51 @@ import { renderNotificationBody } from "./templates.js"
 export const NotificationChannel = {
   Email: "email",
   Teams: "teams",
-  Slack: "slack",
+  Slack: "slack"
 } as const
 export type NotificationChannel = (typeof NotificationChannel)[keyof typeof NotificationChannel]
 
 export interface NotificationRoute {
-  id:         string
-  tenantId:   string
-  eventType:  string
-  filter:     NotificationFilter
-  channel:    NotificationChannel
-  target:     string
-  enabled:    boolean
-  updatedAt:  string
-  updatedBy:  string
+  id: string
+  tenantId: string
+  eventType: string
+  filter: NotificationFilter
+  channel: NotificationChannel
+  target: string
+  enabled: boolean
+  updatedAt: string
+  updatedBy: string
 }
 
 export interface NotificationFilter {
-  riskTier?:   readonly string[]
-  envPair?:    readonly string[]
+  riskTier?: readonly string[]
+  envPair?: readonly string[]
   entityType?: readonly string[]
 }
 
 interface RouteRow {
-  id: string; tenant_id: string; event_type: string; filter_json: string;
-  channel: NotificationChannel; target: string; enabled: number;
-  updated_at: string; updated_by: string;
+  id: string
+  tenant_id: string
+  event_type: string
+  filter_json: string
+  channel: NotificationChannel
+  target: string
+  enabled: number
+  updated_at: string
+  updated_by: string
 }
 
 const RETRY_DELAYS_MS = [2_000, 10_000, 60_000] as const
 const MAX_ATTEMPTS = RETRY_DELAYS_MS.length + 1
 
 export interface DispatchEvent {
-  tenantId:   string
-  eventType:  string
-  riskTier?:  string
-  envPair?:   string
+  tenantId: string
+  eventType: string
+  riskTier?: string
+  envPair?: string
   entityType?: string
   /** Free-form context object passed verbatim to the template. */
-  context:    Record<string, unknown>
+  context: Record<string, unknown>
 }
 
 /**
@@ -72,15 +78,21 @@ export interface DispatchEvent {
 export function dispatchNotification(ev: DispatchEvent): void {
   const routes = listMatchingRoutes(ev)
   for (const r of routes) {
-    void deliverWithRetry(r, ev).catch(() => { /* logged in row */ })
+    void deliverWithRetry(r, ev).catch(() => {
+      /* logged in row */
+    })
   }
 }
 
 export function listMatchingRoutes(ev: DispatchEvent): NotificationRoute[] {
-  const rows = getDb().prepare(`
+  const rows = getDb()
+    .prepare(
+      `
     SELECT * FROM notification_routes
      WHERE tenant_id = ? AND event_type = ? AND enabled = 1
-  `).all(ev.tenantId, ev.eventType) as RouteRow[]
+  `
+    )
+    .all(ev.tenantId, ev.eventType) as RouteRow[]
   return rows.map(rowToRoute).filter((r) => matches(r.filter, ev))
 }
 
@@ -98,19 +110,31 @@ async function deliverWithRetry(route: NotificationRoute, ev: DispatchEvent): Pr
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     try {
       switch (route.channel) {
-        case "email": await deliverEmail({ target: route.target, body }); break
-        case "teams": await deliverTeams({ target: route.target, body }); break
-        case "slack": await deliverSlack({ target: route.target, body }); break
+        case "email":
+          await deliverEmail({ target: route.target, body })
+          break
+        case "teams":
+          await deliverTeams({ target: route.target, body })
+          break
+        case "slack":
+          await deliverSlack({ target: route.target, body })
+          break
       }
       markLogSent(logId, attempt)
-      broadcast({ type: EventType.SyncNotificationDelivered, data: { routeId: route.id, channel: route.channel, eventType: ev.eventType } })
+      broadcast({
+        type: EventType.SyncNotificationDelivered,
+        data: { routeId: route.id, channel: route.channel, eventType: ev.eventType }
+      })
       return
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       const isLast = attempt === MAX_ATTEMPTS
       markLogAttempt(logId, attempt, msg, isLast ? "dlq" : "retrying")
       if (isLast) {
-        broadcast({ type: EventType.SyncNotificationFailed, data: { routeId: route.id, channel: route.channel, error: msg } })
+        broadcast({
+          type: EventType.SyncNotificationFailed,
+          data: { routeId: route.id, channel: route.channel, error: msg }
+        })
         return
       }
       await sleep(RETRY_DELAYS_MS[attempt - 1] ?? 60_000)
@@ -118,55 +142,74 @@ async function deliverWithRetry(route: NotificationRoute, ev: DispatchEvent): Pr
   }
 }
 
-function sleep(ms: number): Promise<void> { return new Promise((r) => setTimeout(r, ms)) }
+function sleep(ms: number): Promise<void> {
+  return new Promise((r) => setTimeout(r, ms))
+}
 
 // ── persistence ────────────────────────────────────────────────
 
-function appendLogRow(route: NotificationRoute, ev: DispatchEvent, body: { subject: string; text: string }): number {
-  const r = getDb().prepare(`
+function appendLogRow(
+  route: NotificationRoute,
+  ev: DispatchEvent,
+  body: { subject: string; text: string }
+): number {
+  const r = getDb()
+    .prepare(
+      `
     INSERT INTO notification_log (route_id, event_type, channel, target, payload_json, status, attempts)
     VALUES (?, ?, ?, ?, ?, 'retrying', 0)
-  `).run(route.id, ev.eventType, route.channel, route.target, JSON.stringify({ ev, body }))
+  `
+    )
+    .run(route.id, ev.eventType, route.channel, route.target, JSON.stringify({ ev, body }))
   return Number(r.lastInsertRowid)
 }
 
 function markLogAttempt(id: number, attempts: number, error: string, status: "retrying" | "dlq"): void {
-  getDb().prepare(
-    `UPDATE notification_log SET attempts = ?, last_error = ?, status = ? WHERE id = ?`,
-  ).run(attempts, error, status, id)
+  getDb()
+    .prepare(`UPDATE notification_log SET attempts = ?, last_error = ?, status = ? WHERE id = ?`)
+    .run(attempts, error, status, id)
 }
 
 function markLogSent(id: number, attempts: number): void {
-  getDb().prepare(
-    `UPDATE notification_log SET attempts = ?, status = 'sent', sent_at = datetime('now'), last_error = NULL WHERE id = ?`,
-  ).run(attempts, id)
+  getDb()
+    .prepare(
+      `UPDATE notification_log SET attempts = ?, status = 'sent', sent_at = datetime('now'), last_error = NULL WHERE id = ?`
+    )
+    .run(attempts, id)
 }
 
 // ── CRUD ───────────────────────────────────────────────────────
 
 function rowToRoute(r: RouteRow): NotificationRoute {
   return {
-    id: r.id, tenantId: r.tenant_id, eventType: r.event_type,
+    id: r.id,
+    tenantId: r.tenant_id,
+    eventType: r.event_type,
     filter: JSON.parse(r.filter_json) as NotificationFilter,
-    channel: r.channel, target: r.target,
-    enabled: r.enabled === 1, updatedAt: r.updated_at, updatedBy: r.updated_by,
+    channel: r.channel,
+    target: r.target,
+    enabled: r.enabled === 1,
+    updatedAt: r.updated_at,
+    updatedBy: r.updated_by
   }
 }
 
 export interface UpsertRouteInput {
-  id?:        string
-  tenantId:   string
-  eventType:  string
-  filter:     NotificationFilter
-  channel:    NotificationChannel
-  target:     string
-  enabled:    boolean
-  actor:      string
+  id?: string
+  tenantId: string
+  eventType: string
+  filter: NotificationFilter
+  channel: NotificationChannel
+  target: string
+  enabled: boolean
+  actor: string
 }
 
 export function upsertNotificationRoute(i: UpsertRouteInput): NotificationRoute {
   const id = i.id ?? randomUUID()
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO notification_routes (id, tenant_id, event_type, filter_json, channel, target, enabled, updated_at, updated_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
     ON CONFLICT(id) DO UPDATE SET
@@ -178,15 +221,26 @@ export function upsertNotificationRoute(i: UpsertRouteInput): NotificationRoute 
       enabled     = excluded.enabled,
       updated_at  = excluded.updated_at,
       updated_by  = excluded.updated_by
-  `).run(id, i.tenantId, i.eventType, JSON.stringify(i.filter), i.channel, i.target, i.enabled ? 1 : 0, i.actor)
+  `
+    )
+    .run(
+      id,
+      i.tenantId,
+      i.eventType,
+      JSON.stringify(i.filter),
+      i.channel,
+      i.target,
+      i.enabled ? 1 : 0,
+      i.actor
+    )
   const row = getDb().prepare(`SELECT * FROM notification_routes WHERE id = ?`).get(id) as RouteRow
   return rowToRoute(row)
 }
 
 export function listNotificationRoutes(tenantId: string): NotificationRoute[] {
-  const rows = getDb().prepare(
-    `SELECT * FROM notification_routes WHERE tenant_id = ? ORDER BY event_type, channel`,
-  ).all(tenantId) as RouteRow[]
+  const rows = getDb()
+    .prepare(`SELECT * FROM notification_routes WHERE tenant_id = ? ORDER BY event_type, channel`)
+    .all(tenantId) as RouteRow[]
   return rows.map(rowToRoute)
 }
 
@@ -195,22 +249,35 @@ export function deleteNotificationRoute(id: string): void {
 }
 
 export interface NotificationLogRow {
-  id: number; route_id: string | null; event_type: string;
-  channel: NotificationChannel; target: string; payload_json: string;
-  status: "sent" | "retrying" | "dlq" | "suppressed";
-  attempts: number; last_error: string | null;
-  created_at: string; sent_at: string | null
+  id: number
+  route_id: string | null
+  event_type: string
+  channel: NotificationChannel
+  target: string
+  payload_json: string
+  status: "sent" | "retrying" | "dlq" | "suppressed"
+  attempts: number
+  last_error: string | null
+  created_at: string
+  sent_at: string | null
 }
 
 export function listNotificationLog(
-  filter: { status?: NotificationLogRow["status"]; limit?: number } = {},
+  filter: { status?: NotificationLogRow["status"]; limit?: number } = {}
 ): NotificationLogRow[] {
   const where: string[] = []
-  const args:  unknown[] = []
-  if (filter.status) { where.push("status = ?"); args.push(filter.status) }
-  return getDb().prepare(`
+  const args: unknown[] = []
+  if (filter.status) {
+    where.push("status = ?")
+    args.push(filter.status)
+  }
+  return getDb()
+    .prepare(
+      `
     SELECT * FROM notification_log
     ${where.length ? "WHERE " + where.join(" AND ") : ""}
     ORDER BY created_at DESC LIMIT ?
-  `).all(...args, filter.limit ?? 100) as NotificationLogRow[]
+  `
+    )
+    .all(...args, filter.limit ?? 100) as NotificationLogRow[]
 }

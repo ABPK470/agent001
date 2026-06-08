@@ -77,7 +77,7 @@ import {
   type ExecutableTool,
   type GovernToolOptions,
   type RunContext,
-  type ToolMetadata,
+  type ToolMetadata
 } from "@mia/agent"
 import {
   compareCatalogsTool,
@@ -87,10 +87,14 @@ import {
   createSyncPreviewTool,
   listEnvironmentsTool,
   syncExecuteTool,
-  syncPreviewTool,
+  syncPreviewTool
 } from "@mia/sync"
 import { ingestAgentNote, recordTableVerdict } from "./adapters/persistence/memory.js"
-import { getToolResult, isRecallableToolResult, loadRecentToolResults } from "./adapters/persistence/tool-results.js"
+import {
+  getToolResult,
+  isRecallableToolResult,
+  loadRecentToolResults
+} from "./adapters/persistence/tool-results.js"
 import { AgentBus, createBusTools } from "./agent-bus.js"
 
 export { thinkTool }
@@ -141,13 +145,13 @@ const STATIC_TOOL_BINDERS: readonly StaticToolBinder[] = [
   { metadata: listAttachmentsToolMetadata, bind: (host) => createListAttachmentsTool(host) },
   { metadata: readAttachmentToolMetadata, bind: (host) => createReadAttachmentTool(host) },
   { metadata: importAttachmentToolMetadata, bind: (host) => createImportAttachmentTool(host) },
-  { metadata: promoteAttachmentToolMetadata, bind: (host) => createPromoteAttachmentTool(host) },
+  { metadata: promoteAttachmentToolMetadata, bind: (host) => createPromoteAttachmentTool(host) }
 ]
 
 const CATALOG_ONLY_TOOLS: readonly ToolMetadata[] = [
   noteToolMetadata,
   recallPriorResultToolMetadata,
-  recordTableVerdictToolMetadata,
+  recordTableVerdictToolMetadata
 ]
 
 const DELEGATE_TOOL_CATALOG: readonly ToolMetadata[] = [
@@ -161,12 +165,19 @@ const DELEGATE_TOOL_CATALOG: readonly ToolMetadata[] = [
       properties: {
         goal: { type: "string", description: "Clear, specific goal for the child agent." },
         agentId: { type: "string", description: "Optional ID of a named agent definition to use." },
-        instructions: { type: "string", description: "Optional system-level instructions for the child." },
-        tools: { type: "array", items: { type: "string" }, description: "Optional subset of tool names." },
-        maxIterations: { type: "number", description: "Optional iteration cap for the child agent." },
+        instructions: {
+          type: "string",
+          description: "Optional system-level instructions for the child."
+        },
+        tools: {
+          type: "array",
+          items: { type: "string" },
+          description: "Optional subset of tool names."
+        },
+        maxIterations: { type: "number", description: "Optional iteration cap for the child agent." }
       },
-      required: ["goal"],
-    },
+      required: ["goal"]
+    }
   },
   {
     name: "delegate_parallel",
@@ -184,16 +195,20 @@ const DELEGATE_TOOL_CATALOG: readonly ToolMetadata[] = [
               goal: { type: "string", description: "Specific goal for this child agent." },
               agentId: { type: "string", description: "Optional agent definition ID." },
               instructions: { type: "string", description: "Optional child instructions." },
-              tools: { type: "array", items: { type: "string" }, description: "Optional tool subset." },
-              maxIterations: { type: "number", description: "Optional iteration cap." },
+              tools: {
+                type: "array",
+                items: { type: "string" },
+                description: "Optional tool subset."
+              },
+              maxIterations: { type: "number", description: "Optional iteration cap." }
             },
-            required: ["goal"],
-          },
-        },
+            required: ["goal"]
+          }
+        }
       },
-      required: ["tasks"],
-    },
-  },
+      required: ["tasks"]
+    }
+  }
 ]
 
 const BUS_TOOL_CATALOG: readonly ToolMetadata[] = [
@@ -208,12 +223,12 @@ const BUS_TOOL_CATALOG: readonly ToolMetadata[] = [
         protocol: {
           type: "string",
           enum: ["status", "result", "help", "question", "answer", "broadcast"],
-          description: "Coordination intent for the message.",
+          description: "Coordination intent for the message."
         },
-        reply_to: { type: "string", description: "Required when protocol='answer'." },
+        reply_to: { type: "string", description: "Required when protocol='answer'." }
       },
-      required: ["topic", "content"],
-    },
+      required: ["topic", "content"]
+    }
   },
   {
     name: "check_messages",
@@ -225,11 +240,11 @@ const BUS_TOOL_CATALOG: readonly ToolMetadata[] = [
         protocol: {
           type: "string",
           enum: ["status", "result", "help", "question", "answer", "broadcast"],
-          description: "Optional protocol filter.",
-        },
+          description: "Optional protocol filter."
+        }
       },
-      required: [],
-    },
+      required: []
+    }
   },
   {
     name: "wait_for_response",
@@ -238,11 +253,11 @@ const BUS_TOOL_CATALOG: readonly ToolMetadata[] = [
       type: "object",
       properties: {
         message_id: { type: "string", description: "ID of the question message to wait on." },
-        timeout_ms: { type: "number", description: "Optional timeout in milliseconds." },
+        timeout_ms: { type: "number", description: "Optional timeout in milliseconds." }
       },
-      required: ["message_id"],
-    },
-  },
+      required: ["message_id"]
+    }
+  }
 ]
 
 /**
@@ -284,7 +299,11 @@ function listRuntimeCatalogTools(): ToolMetadata[] {
  * When you add a new guard message that says "use X instead", add X here.
  */
 const GUARD_REFERENCED_TOOLS: ReadonlyArray<{ name: string; referencedBy: string }> = [
-  { name: "export_query_to_file", referencedBy: "mssql formatter ROW LIMIT/TRUNCATION warnings, query_mssql tool description, write_file anti-paste guard" },
+  {
+    name: "export_query_to_file",
+    referencedBy:
+      "mssql formatter ROW LIMIT/TRUNCATION warnings, query_mssql tool description, write_file anti-paste guard"
+  }
 ]
 
 /**
@@ -298,9 +317,9 @@ function warnOnMissingGuardTools(resolvedNames: ReadonlySet<string>): void {
       // eslint-disable-next-line no-console
       console.warn(
         `[tools] WARNING: tool "${name}" is NOT in this agent's whitelist, ` +
-        `but is referenced by: ${referencedBy}. ` +
-        `The model will be told to call "${name}" as a fallback and will loop because the tool is unavailable. ` +
-        `Either add "${name}" to the agent's tools, or remove the guard reference.`,
+          `but is referenced by: ${referencedBy}. ` +
+          `The model will be told to call "${name}" as a fallback and will loop because the tool is unavailable. ` +
+          `Either add "${name}" to the agent's tools, or remove the guard reference.`
       )
     }
   }
@@ -369,7 +388,7 @@ const VISITOR_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_attachments",
   "read_attachment",
   "import_attachment",
-  "promote_attachment",
+  "promote_attachment"
 ])
 
 /** Filter a tool list down to the visitor allowlist. */
@@ -445,10 +464,10 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
           const options = Array.isArray(args["options"]) ? args["options"].map(String) : undefined
           const sensitive = Boolean(args["sensitive"])
           return ctx.askUserResolve(question, options, sensitive)
-        },
+        }
       },
-      { timeoutMs: 0 },
-    ),
+      { timeoutMs: 0 }
+    )
   ],
   // note — agent-authored memory write. Closes over run ids + tenant so the
   // server's ingestAgentNote stamps the entry with correct provenance.
@@ -463,12 +482,12 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
           category: payload.category,
           sessionId: ctx.sessionId,
           runId: ctx.runId,
-          upn: ctx.upn,
+          upn: ctx.upn
         })
         if (res.ok) return { ok: true, noteId: res.id }
         return { ok: false, reason: res.reason }
-      }),
-    ),
+      })
+    )
   ],
   // record_table_verdict — Plan v3 Phase 5. Persists a structured role
   // classification (canonical / subset / staging / archive / rules /
@@ -486,14 +505,14 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
             observedFromGoal: payload.observedFromGoal,
             sessionId: ctx.sessionId,
             runId: ctx.runId,
-            upn: ctx.upn,
+            upn: ctx.upn
           })
           return { ok: true, verdictId: v.id }
         } catch (err) {
           return { ok: false, reason: (err as Error).message }
         }
-      }),
-    ),
+      })
+    )
   ],
   // recall_prior_result — no-amnesia Phase 9. Fetches the full payload of a
   // tool call from an earlier turn in the same session. Backed by the
@@ -505,37 +524,50 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
           // Path 1: explicit evidence-tag lookup.
           if (payload.runId && payload.toolCallId) {
             const row = getToolResult(payload.runId, payload.toolCallId)
-            if (!row) return { ok: false, reason: `no tool result for run=${payload.runId} tool_call=${payload.toolCallId}` }
+            if (!row)
+              return {
+                ok: false,
+                reason: `no tool result for run=${payload.runId} tool_call=${payload.toolCallId}`
+              }
             if (!isRecallableToolResult(row)) {
-              return { ok: false, reason: `tool result for run=${payload.runId} tool_call=${payload.toolCallId} is not recallable in this context` }
+              return {
+                ok: false,
+                reason: `tool result for run=${payload.runId} tool_call=${payload.toolCallId} is not recallable in this context`
+              }
             }
             return formatRecall(row, payload.full === true)
           }
           // Path 2: turn-relative lookup. Requires a session.
           if (!ctx.sessionId) {
-            return { ok: false, reason: "no session bound to this run; pass runId + toolCallId from <prior_results> instead" }
+            return {
+              ok: false,
+              reason: "no session bound to this run; pass runId + toolCallId from <prior_results> instead"
+            }
           }
           const limit = Math.abs(payload.turn ?? -1)
           const toolNames = payload.toolName ? [payload.toolName] : undefined
           const rows = loadRecentToolResults({
             sessionId: ctx.sessionId,
             limit: Math.max(limit, 25),
-            ...(toolNames ? { toolNames } : {}),
+            ...(toolNames ? { toolNames } : {})
           })
           // loadRecentToolResults returns newest-first; turn=-1 → rows[0], -2 → rows[1].
           // Exclude the current run so the model never recalls its own in-flight call.
           const filtered = rows.filter((r) => r.run_id !== ctx.runId && isRecallableToolResult(r))
           const target = filtered[limit - 1]
           if (!target) {
-            return { ok: false, reason: `no prior result at turn=${payload.turn ?? -1}${payload.toolName ? ` for tool ${payload.toolName}` : ""}` }
+            return {
+              ok: false,
+              reason: `no prior result at turn=${payload.turn ?? -1}${payload.toolName ? ` for tool ${payload.toolName}` : ""}`
+            }
           }
           return formatRecall(target, payload.full === true)
         } catch (err) {
           return { ok: false, reason: (err as Error).message }
         }
-      }),
-    ),
-  ],
+      })
+    )
+  ]
 ]
 
 /** Maximum chars returned when `full=false`. Still much larger than the
@@ -547,11 +579,23 @@ const RECALL_FULL_CAP = 48 * 1024
 
 function formatRecall(
   row: import("./adapters/persistence/tool-results.js").DbToolResult,
-  full: boolean,
-): { ok: true; result: string; toolName: string; runId: string; toolCallId: string; rowCount: number | null; truncated: boolean } {
+  full: boolean
+): {
+  ok: true
+  result: string
+  toolName: string
+  runId: string
+  toolCallId: string
+  rowCount: number | null
+  truncated: boolean
+} {
   const text = extractStoredText(row.result_json)
   const cap = full ? RECALL_FULL_CAP : RECALL_DEFAULT_CAP
-  const clipped = text.length > cap ? text.slice(0, cap) + "\n\n…[recall_prior_result clipped; re-run the original tool for the full payload]…" : text
+  const clipped =
+    text.length > cap
+      ? text.slice(0, cap) +
+        "\n\n…[recall_prior_result clipped; re-run the original tool for the full payload]…"
+      : text
   return {
     ok: true,
     result: clipped,
@@ -559,7 +603,7 @@ function formatRecall(
     runId: row.run_id,
     toolCallId: row.tool_call_id,
     rowCount: row.row_count,
-    truncated: row.truncated === 1 || text.length > cap,
+    truncated: row.truncated === 1 || text.length > cap
   }
 }
 
@@ -567,7 +611,9 @@ function extractStoredText(json: string): string {
   try {
     const parsed = JSON.parse(json) as { text?: unknown }
     if (typeof parsed.text === "string") return parsed.text
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   return json
 }
 
@@ -576,6 +622,9 @@ function extractStoredText(json: string): string {
  * registry tools after effect-wrapping and governance; this function
  * appends the output of every per-run factory in order.
  */
-export function composePerRunTools(governedStaticTools: ExecutableTool[], ctx: PerRunToolContext): ExecutableTool[] {
+export function composePerRunTools(
+  governedStaticTools: ExecutableTool[],
+  ctx: PerRunToolContext
+): ExecutableTool[] {
   return [...governedStaticTools, ...PER_RUN_FACTORIES.flatMap((f) => f(ctx))]
 }

@@ -5,11 +5,7 @@
  * @module
  */
 
-export function compactToolResult(
-  toolName: string,
-  filePath: string | null,
-  content: string,
-): string {
+export function compactToolResult(toolName: string, filePath: string | null, content: string): string {
   const lineCount = content.split("\n").length
   const charCount = content.length
   const pathLabel = filePath ? ` ${filePath}` : ""
@@ -48,18 +44,16 @@ export function buildCompactedSemanticSuffix(filePath: string | null, content: s
   if (defs) return ` — symbols: ${defs}`
   const excerpt = extractCompactExcerpt(content)
   if (!excerpt) return ""
-  const label = filePath && /\.(?:json|ya?ml|toml|md|txt|rst|adoc)$/i.test(filePath)
-    ? "summary"
-    : "excerpt"
+  const label = filePath && /\.(?:json|ya?ml|toml|md|txt|rst|adoc)$/i.test(filePath) ? "summary" : "excerpt"
   return ` — ${label}: ${excerpt}`
 }
 
 export function extractCompactExcerpt(content: string, maxLen = 160): string {
-  const firstMeaningfulLine = content
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find((line) => line.length > 8 && !/^[/#*\-_=]{3,}$/.test(line))
-    ?? ""
+  const firstMeaningfulLine =
+    content
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line.length > 8 && !/^[/#*\-_=]{3,}$/.test(line)) ?? ""
   if (!firstMeaningfulLine) return ""
   const normalized = firstMeaningfulLine.replace(/\s+/g, " ")
   return normalized.length > maxLen ? `${normalized.slice(0, maxLen)}...` : normalized
@@ -78,7 +72,7 @@ export function extractDefinitionSummary(code: string): string | null {
     /export\s+(?:interface|type|enum)\s+([A-Za-z_$][\w$]*)/g,
     /(?:^|\n)\s*(?:interface|type|enum)\s+([A-Za-z_$][\w$]*)/g,
     /(?:^|\n)\s*def\s+([A-Za-z_][\w]*)\s*\(/g,
-    /(?:^|\n)\s*class\s+([A-Za-z_][\w]*)\s*(?:\(|:)/g,
+    /(?:^|\n)\s*class\s+([A-Za-z_][\w]*)\s*(?:\(|:)/g
   ]
 
   for (const re of patterns) {

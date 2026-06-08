@@ -21,15 +21,15 @@ import { EventType } from "@mia/agent"
 
 function payloadFor(row: AttachmentRow): Record<string, unknown> {
   return {
-    id:             row.id,
-    scope:          row.scope,
-    ownerUpn:       row.owner_upn,
-    runId:          row.run_id,
-    sessionId:      row.session_id,
-    sizeBytes:      row.size_bytes,
-    mediaType:      row.media_type,
-    source:         row.source,
-    normalizedName: row.normalized_name,
+    id: row.id,
+    scope: row.scope,
+    ownerUpn: row.owner_upn,
+    runId: row.run_id,
+    sessionId: row.session_id,
+    sizeBytes: row.size_bytes,
+    mediaType: row.media_type,
+    source: row.source,
+    normalizedName: row.normalized_name
   }
 }
 
@@ -40,7 +40,7 @@ export function auditAttachmentUploaded(row: AttachmentRow): void {
 export function auditAttachmentImported(row: AttachmentRow, sandboxPath: string): void {
   broadcast({
     type: EventType.AttachmentImported,
-    data: { ...payloadFor(row), sandboxPath },
+    data: { ...payloadFor(row), sandboxPath }
   })
 }
 
@@ -55,7 +55,7 @@ export function auditAttachmentDeleted(opts: {
 }): void {
   broadcast({
     type: EventType.AttachmentDeleted,
-    data: { id: opts.id, ownerUpn: opts.ownerUpn, reason: opts.reason },
+    data: { id: opts.id, ownerUpn: opts.ownerUpn, reason: opts.reason }
   })
 }
 

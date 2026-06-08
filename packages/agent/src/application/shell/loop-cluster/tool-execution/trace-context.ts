@@ -7,7 +7,10 @@ export interface ToolTraceContext {
 
 export const TOOL_TRACE_ARG = "__plannerTrace"
 
-export function withToolTraceArgs(args: Record<string, unknown>, ctx: ToolTraceContext): Record<string, unknown> {
+export function withToolTraceArgs(
+  args: Record<string, unknown>,
+  ctx: ToolTraceContext
+): Record<string, unknown> {
   return { ...args, [TOOL_TRACE_ARG]: ctx }
 }
 
@@ -22,15 +25,18 @@ export function readToolTraceContext(args: Record<string, unknown>): ToolTraceCo
     toolCallId: candidate.toolCallId,
     toolName: candidate.toolName,
     iteration: candidate.iteration,
-    emit: typeof candidate.emit === "function" ? candidate.emit : undefined,
+    emit: typeof candidate.emit === "function" ? candidate.emit : undefined
   }
 }
 
-export function emitToolTrace(ctx: ToolTraceContext | null | undefined, entry: Record<string, unknown>): void {
+export function emitToolTrace(
+  ctx: ToolTraceContext | null | undefined,
+  entry: Record<string, unknown>
+): void {
   ctx?.emit?.({
     toolCallId: ctx.toolCallId,
     toolName: ctx.toolName,
     iteration: ctx.iteration,
-    ...entry,
+    ...entry
   })
 }

@@ -16,7 +16,7 @@ import type { VerifierDecision, VerifierStepAssessment } from "../types.js"
 
 export function parseLLMVerification(
   raw: string,
-  fallbackAssessments: readonly VerifierStepAssessment[],
+  fallbackAssessments: readonly VerifierStepAssessment[]
 ): VerifierDecision {
   let jsonStr = raw.trim()
   const codeBlockMatch = jsonStr.match(/```(?:json)?\s*([\s\S]*?)```/)
@@ -28,16 +28,16 @@ export function parseLLMVerification(
     const obj = JSON.parse(jsonStr) as Record<string, unknown>
 
     const steps: VerifierStepAssessment[] = Array.isArray(obj.steps)
-      ? (obj.steps as Array<Record<string, unknown>>).map(s => {
+      ? (obj.steps as Array<Record<string, unknown>>).map((s) => {
           const rawIssues: string[] = Array.isArray(s.issues) ? s.issues.map(String) : []
-          const cleanIssues = rawIssues.filter(i => !isLLMGibberish(i))
+          const cleanIssues = rawIssues.filter((i) => !isLLMGibberish(i))
 
           return {
             stepName: String(s.stepName ?? ""),
             outcome: parseOutcome(s.outcome),
             confidence: typeof s.confidence === "number" ? s.confidence : 0.5,
             issues: cleanIssues,
-            retryable: Boolean(s.retryable ?? true),
+            retryable: Boolean(s.retryable ?? true)
           }
         })
       : [...fallbackAssessments]
@@ -46,7 +46,7 @@ export function parseLLMVerification(
       overall: parseOutcome(obj.overall),
       confidence: typeof obj.confidence === "number" ? obj.confidence : 0.5,
       steps,
-      unresolvedItems: Array.isArray(obj.unresolvedItems) ? obj.unresolvedItems.map(String) : [],
+      unresolvedItems: Array.isArray(obj.unresolvedItems) ? obj.unresolvedItems.map(String) : []
     }
   } catch {
     return buildFallbackDecision(fallbackAssessments)
@@ -59,18 +59,16 @@ export function parseOutcome(value: unknown): VerifierOutcome {
   return VerifierOutcome.Pass
 }
 
-export function buildFallbackDecision(
-  assessments: readonly VerifierStepAssessment[],
-): VerifierDecision {
-  const anyFail = assessments.some(a => a.outcome === VerifierOutcome.Fail)
-  const anyRetry = assessments.some(a => a.outcome === VerifierOutcome.Retry)
-  const allIssues = assessments.flatMap(a => a.issues)
+export function buildFallbackDecision(assessments: readonly VerifierStepAssessment[]): VerifierDecision {
+  const anyFail = assessments.some((a) => a.outcome === VerifierOutcome.Fail)
+  const anyRetry = assessments.some((a) => a.outcome === VerifierOutcome.Retry)
+  const allIssues = assessments.flatMap((a) => a.issues)
 
   return {
     overall: anyFail ? VerifierOutcome.Fail : anyRetry ? VerifierOutcome.Retry : VerifierOutcome.Pass,
-    confidence: Math.min(1.0, ...assessments.map(a => a.confidence)),
+    confidence: Math.min(1.0, ...assessments.map((a) => a.confidence)),
     steps: [...assessments],
-    unresolvedItems: allIssues,
+    unresolvedItems: allIssues
   }
 }
 
@@ -79,7 +77,7 @@ export function buildFallbackDecision(
 // ============================================================================
 
 export function computeGibberishScore(text: string): number {
-  const words = text.split(/\s+/).filter(w => w.length > 0)
+  const words = text.split(/\s+/).filter((w) => w.length > 0)
   if (words.length < 5) return 0
 
   let score = 0
@@ -94,17 +92,21 @@ export function computeGibberishScore(text: string): number {
   if (functionWordRatio === 0 && wordCount >= 8) score += 0.4
   else if (functionWordRatio < 0.05) score += 0.3
 
-  const sentenceEnders = (text.match(/[.!?]\s/g) ?? []).length + (text.endsWith(".") || text.endsWith("!") || text.endsWith("?") ? 1 : 0)
+  const sentenceEnders =
+    (text.match(/[.!?]\s/g) ?? []).length +
+    (text.endsWith(".") || text.endsWith("!") || text.endsWith("?") ? 1 : 0)
   if (sentenceEnders === 0 && wordCount >= 8) score += 0.2
 
-  const hasCodeIndicators = /[/\\]|\.(?:js|ts|html|css|py)\b|`[^`]+`|\bfunction\b|\bclass\b|\bconst\b/i.test(text)
+  const hasCodeIndicators = /[/\\]|\.(?:js|ts|html|css|py)\b|`[^`]+`|\bfunction\b|\bclass\b|\bconst\b/i.test(
+    text
+  )
   if (!hasCodeIndicators && wordCount >= 8) score += 0.2
 
   return Math.min(1, score)
 }
 
 export function isLLMGibberish(issue: string): boolean {
-  const words = issue.split(/\s+/).filter(w => w.length > 0)
+  const words = issue.split(/\s+/).filter((w) => w.length > 0)
   if (words.length < 8) return false
 
   let score = 0
@@ -113,15 +115,24 @@ export function isLLMGibberish(issue: string): boolean {
   if (compoundCount >= 3) score += 0.4
   else if (compoundCount >= 2) score += 0.2
 
-  const functionWords = (issue.match(/\b(the|is|a|an|and|to|of|in|for|with|that|was|it|this|are|not|but|be|has|have|can|does|should|must)\b/gi) ?? []).length
+  const functionWords = (
+    issue.match(
+      /\b(the|is|a|an|and|to|of|in|for|with|that|was|it|this|are|not|but|be|has|have|can|does|should|must)\b/gi
+    ) ?? []
+  ).length
   const ratio = functionWords / words.length
   if (ratio < 0.04 && words.length >= 15) score += 0.4
   else if (ratio < 0.06 && words.length >= 12) score += 0.2
 
-  const hasCodeRefs = /[/\\]|\.(?:js|ts|html|css|py)\b|`[^`]+`|\bfunction\b|\bclass\b|\bconst\b|\bread_file\b|\bwrite_file\b|\breplace_in_file\b|\bstub\b|\bplaceholder\b/i.test(issue)
+  const hasCodeRefs =
+    /[/\\]|\.(?:js|ts|html|css|py)\b|`[^`]+`|\bfunction\b|\bclass\b|\bconst\b|\bread_file\b|\bwrite_file\b|\breplace_in_file\b|\bstub\b|\bplaceholder\b/i.test(
+      issue
+    )
   if (!hasCodeRefs && words.length >= 10) score += 0.2
 
-  const sentenceEnders = (issue.match(/[.!?]\s/g) ?? []).length + (issue.endsWith(".") || issue.endsWith("!") || issue.endsWith("?") ? 1 : 0)
+  const sentenceEnders =
+    (issue.match(/[.!?]\s/g) ?? []).length +
+    (issue.endsWith(".") || issue.endsWith("!") || issue.endsWith("?") ? 1 : 0)
   if (sentenceEnders === 0 && words.length >= 12) score += 0.1
 
   return score >= 0.6
@@ -154,14 +165,16 @@ export function detectCodeCorruption(code: string): string[] {
 
   const nonsenseTokenRe = /\b[a-z]+(?:\/[a-z])+\b/gi
   const nonsenseMatches = code.match(nonsenseTokenRe) ?? []
-  const suspiciousNonsense = nonsenseMatches.filter(m =>
-    !SOURCE_LIKE_PATH_RE.test(m) && m.length > 3
-  )
+  const suspiciousNonsense = nonsenseMatches.filter((m) => !SOURCE_LIKE_PATH_RE.test(m) && m.length > 3)
   if (suspiciousNonsense.length >= 2) {
     findings.push(`Suspicious word/symbol fragments: "${suspiciousNonsense.slice(0, 3).join('", "')}"`)
   }
 
-  const lastMeaningfulLine = lines.filter(l => l.trim().length > 0).pop()?.trim() ?? ""
+  const lastMeaningfulLine =
+    lines
+      .filter((l) => l.trim().length > 0)
+      .pop()
+      ?.trim() ?? ""
   if (
     code.length > 100 &&
     lastMeaningfulLine.length > 0 &&
@@ -175,7 +188,9 @@ export function detectCodeCorruption(code: string): string[] {
     const opens = (code.match(/{/g) ?? []).length
     const closes = (code.match(/}/g) ?? []).length
     if (opens > closes + 1) {
-      findings.push(`File appears truncated/corrupted: ${opens - closes} unclosed brace(s), ends with "${lastMeaningfulLine.slice(-60)}"`)
+      findings.push(
+        `File appears truncated/corrupted: ${opens - closes} unclosed brace(s), ends with "${lastMeaningfulLine.slice(-60)}"`
+      )
     }
   }
 
@@ -187,18 +202,28 @@ export function detectHtmlCorruption(html: string): string[] {
 
   const corruptAttrRe = /\w+="[^"]*[{};][^"]*"/g
   const corruptAttrs = html.match(corruptAttrRe) ?? []
-  const suspiciousAttrs = corruptAttrs.filter(a => {
+  const suspiciousAttrs = corruptAttrs.filter((a) => {
     if (/^style="/i.test(a)) return false
     return true
   })
   if (suspiciousAttrs.length > 0) {
-    findings.push(`Corrupted HTML attribute(s): ${suspiciousAttrs.slice(0, 3).map(a => `"${a.slice(0, 60)}"`).join(", ")}`)
+    findings.push(
+      `Corrupted HTML attribute(s): ${suspiciousAttrs
+        .slice(0, 3)
+        .map((a) => `"${a.slice(0, 60)}"`)
+        .join(", ")}`
+    )
   }
 
   const unclosedAttrRe = /\w+="[^"]{10,}(?:>|\n|$)/gm
   const unclosedAttrs = html.match(unclosedAttrRe) ?? []
   if (unclosedAttrs.length > 0) {
-    findings.push(`Unclosed HTML attribute value(s): ${unclosedAttrs.slice(0, 3).map(a => `"${a.trim().slice(0, 60)}"`).join(", ")}`)
+    findings.push(
+      `Unclosed HTML attribute value(s): ${unclosedAttrs
+        .slice(0, 3)
+        .map((a) => `"${a.trim().slice(0, 60)}"`)
+        .join(", ")}`
+    )
   }
 
   const unclosedTagRe = /<\w+[^>]*(?:\n[^>]*){5,}/g
@@ -223,7 +248,10 @@ export function detectHtmlCorruption(html: string): string[] {
 // ============================================================================
 
 export {
-    detectPotentialUseBeforeDeclaration, detectUnresolvedBareHelpers, detectUnresolvedMethods, escapeRegExp
+  detectPotentialUseBeforeDeclaration,
+  detectUnresolvedBareHelpers,
+  detectUnresolvedMethods,
+  escapeRegExp
 } from "./method-references.js"
 
 export * from "../internal/verifier-helpers-dom.js"

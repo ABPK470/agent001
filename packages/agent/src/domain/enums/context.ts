@@ -4,11 +4,11 @@
 
 /** Top-level section of a prompt that participates in the budget plan. */
 export const BaseSectionKey = {
-  System:  "system",
-  Memory:  "memory",
+  System: "system",
+  Memory: "memory",
   History: "history",
-  User:    "user",
-  Other:   "other",
+  User: "user",
+  Other: "other"
 } as const
 
 export type BaseSectionKey = (typeof BaseSectionKey)[keyof typeof BaseSectionKey]

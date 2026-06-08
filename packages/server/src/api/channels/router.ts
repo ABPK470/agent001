@@ -54,11 +54,7 @@ export class MessageRouter {
    */
   private readonly runToConv = new Map<string, string>()
 
-  constructor(
-    queue: MessageQueue,
-    store: ConversationStore,
-    runTrigger: RunTrigger,
-  ) {
+  constructor(queue: MessageQueue, store: ConversationStore, runTrigger: RunTrigger) {
     this.queue = queue
     this.store = store
     this.runTrigger = runTrigger
@@ -94,7 +90,7 @@ export class MessageRouter {
         senderName: message.senderName ?? null,
         activeRunId: null,
         createdAt: new Date(),
-        updatedAt: new Date(),
+        updatedAt: new Date()
       }
       this.store.save(conv)
     }
@@ -120,8 +116,8 @@ export class MessageRouter {
         senderName: message.senderName ?? null,
         text: message.text,
         direction: "inbound",
-        runId,
-      },
+        runId
+      }
     })
 
     return { conversationId: conv.id, runId }
@@ -158,8 +154,8 @@ export class MessageRouter {
         senderId: conv.senderId,
         text,
         direction: "outbound",
-        runId,
-      },
+        runId
+      }
     })
   }
 
@@ -172,7 +168,7 @@ export class MessageRouter {
   listChannels(): { type: ChannelType; connected: boolean }[] {
     return [...this.channels.entries()].map(([type]) => ({
       type,
-      connected: true,
+      connected: true
     }))
   }
 }
@@ -185,7 +181,7 @@ function buildChannelSession(message: InboundMessage): CurrentSession {
     displayName: message.senderName?.trim() || `${message.channelType} user`,
     isAdmin: false,
     ip: `${message.channelType}:inbound`,
-    userAgent: `${message.channelType}:channel`,
+    userAgent: `${message.channelType}:channel`
   }
 }
 

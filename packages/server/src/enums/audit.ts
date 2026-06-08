@@ -10,8 +10,8 @@
  */
 
 export const AuditActor = {
-  User:  "user",
-  Agent: "agent",
+  User: "user",
+  Agent: "agent"
 } as const
 
 export type AuditActor = (typeof AuditActor)[keyof typeof AuditActor]

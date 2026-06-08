@@ -27,10 +27,7 @@ import { MemoryRole, MemorySource, MemoryTier } from "../../../enums/memory.js"
  * tools are intentionally EXCLUDED because they are already mirrored into
  * `tool_knowledge` with semantic indexing.
  */
-const CAPTURED_TOOLS = new Set<string>([
-  "query_mssql",
-  "export_query_to_file",
-])
+const CAPTURED_TOOLS = new Set<string>(["query_mssql", "export_query_to_file"])
 
 /** Per-call payload cap. 64 KB matches the truncation budget in the plan. */
 const PERSIST_BYTES_CAP = 64 * 1024
@@ -74,20 +71,20 @@ export function persistToolResult(input: PersistToolResultInput): boolean {
     const rowCount = estimateRowCount(input.toolName, storedText)
 
     saveToolResult({
-      run_id:       input.runId,
-      session_id:   input.sessionId,
+      run_id: input.runId,
+      session_id: input.sessionId,
       tool_call_id: input.toolCallId,
-      tool_name:    input.toolName,
-      args_json:    safeStringify(input.args),
+      tool_name: input.toolName,
+      args_json: safeStringify(input.args),
       // Wrap raw text in a JSON object so the schema (TEXT NOT NULL) holds
       // valid JSON. Future structured-row enhancements (Phase A2) populate
       // a `rows` array alongside `text`.
-      result_json:  JSON.stringify({ text: storedText, isError: input.isError }),
-      row_count:    rowCount,
-      bytes:        Buffer.byteLength(storedText, "utf8"),
-      truncated:    truncated ? 1 : 0,
+      result_json: JSON.stringify({ text: storedText, isError: input.isError }),
+      row_count: rowCount,
+      bytes: Buffer.byteLength(storedText, "utf8"),
+      truncated: truncated ? 1 : 0,
       goal_excerpt: input.goal.slice(0, GOAL_EXCERPT_CAP),
-      created_at:   new Date().toISOString(),
+      created_at: new Date().toISOString()
     })
     maybePersistReferableArtifact({
       runId: input.runId,
@@ -98,7 +95,7 @@ export function persistToolResult(input: PersistToolResultInput): boolean {
       toolName: input.toolName,
       rowCount,
       text: storedText,
-      isError: input.isError,
+      isError: input.isError
     })
     return true
   } catch (err) {
@@ -135,14 +132,14 @@ function maybePersistReferableArtifact(input: ReferableArtifactInput): void {
       toolName: input.toolName,
       toolCallId: input.toolCallId,
       rowCount: input.rowCount,
-      goal: input.goal,
+      goal: input.goal
     },
     source: MemorySource.Tool,
     confidence: 0.82,
     sessionId: input.sessionId,
     runId: input.runId,
     upn: input.upn,
-    minSalience: 0.05,
+    minSalience: 0.05
   })
 }
 
@@ -159,14 +156,14 @@ function summarizeReferableArtifact(input: ReferableArtifactInput): string | nul
       .slice(0, 6)
       .map((row) => {
         const label = row[labelIndex] ?? row[0] ?? ""
-        const value = valueIndex >= 0 ? row[valueIndex] ?? "" : ""
+        const value = valueIndex >= 0 ? (row[valueIndex] ?? "") : ""
         return value ? `${label}=${value}` : label
       })
       .filter(Boolean)
 
     const lines = [
       `[artifact:data_result] goal=${JSON.stringify(truncateOneLine(goal, 180))}`,
-      `tool=${input.toolName} rows=${input.rowCount ?? table.rows.length} columns=${headers.join(", ")}`,
+      `tool=${input.toolName} rows=${input.rowCount ?? table.rows.length} columns=${headers.join(", ")}`
     ]
     if (referents.length > 0) lines.push(`referents: ${referents.join("; ")}`)
     return lines.join("\n")
@@ -178,7 +175,7 @@ function summarizeReferableArtifact(input: ReferableArtifactInput): string | nul
     return [
       `[artifact:data_export] goal=${JSON.stringify(truncateOneLine(goal, 180))}`,
       `tool=${input.toolName} rows=${input.rowCount ?? "unknown"}`,
-      `summary: ${oneLine}`,
+      `summary: ${oneLine}`
     ].join("\n")
   }
 

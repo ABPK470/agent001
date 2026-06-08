@@ -7,18 +7,25 @@ import { DiagnosticCategory, DiagnosticSeverity, EffectClass, VerificationMode }
  * @module
  */
 
-import type { DeterministicToolStep, Plan, PlanDiagnostic, PlanEdge, PlanStep, SubagentTaskStep } from "../types.js"
+import type {
+  DeterministicToolStep,
+  Plan,
+  PlanDiagnostic,
+  PlanEdge,
+  PlanStep,
+  SubagentTaskStep
+} from "../types.js"
 import {
-    deduplicateWriteOwnership,
-    ensureVerificationCoverage,
-    isValidArtifactPath,
-    normalizeArtifactDirectories,
-    parseArtifactRelations,
-    parseEffectClass,
-    parseStepRole,
-    parseVerificationMode,
-    safeStringArray,
-    stripRedundantVerificationSteps,
+  deduplicateWriteOwnership,
+  ensureVerificationCoverage,
+  isValidArtifactPath,
+  normalizeArtifactDirectories,
+  parseArtifactRelations,
+  parseEffectClass,
+  parseStepRole,
+  parseVerificationMode,
+  safeStringArray,
+  stripRedundantVerificationSteps
 } from "./helpers.js"
 
 // ============================================================================
@@ -43,18 +50,20 @@ export function parsePlanFromResponse(raw: string): {
     obj = JSON.parse(jsonStr)
   } catch {
     diagnostics.push({
-      category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
+      category: DiagnosticCategory.Parse,
+      severity: DiagnosticSeverity.Error,
       code: "invalid_json",
-      message: "Response is not valid JSON. Respond with ONLY a JSON object, no markdown.",
+      message: "Response is not valid JSON. Respond with ONLY a JSON object, no markdown."
     })
     return { plan: null, diagnostics }
   }
 
   if (typeof obj !== "object" || obj === null || Array.isArray(obj)) {
     diagnostics.push({
-      category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
+      category: DiagnosticCategory.Parse,
+      severity: DiagnosticSeverity.Error,
       code: "not_object",
-      message: "Response must be a JSON object with { reason, steps, edges }.",
+      message: "Response must be a JSON object with { reason, steps, edges }."
     })
     return { plan: null, diagnostics }
   }
@@ -64,9 +73,10 @@ export function parsePlanFromResponse(raw: string): {
   // Validate required fields
   if (!Array.isArray(data.steps) || data.steps.length === 0) {
     diagnostics.push({
-      category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
+      category: DiagnosticCategory.Parse,
+      severity: DiagnosticSeverity.Error,
       code: "missing_steps",
-      message: "Plan must have a non-empty 'steps' array.",
+      message: "Plan must have a non-empty 'steps' array."
     })
     return { plan: null, diagnostics }
   }
@@ -78,9 +88,10 @@ export function parsePlanFromResponse(raw: string): {
     const raw = data.steps[i] as Record<string, unknown>
     if (!raw || typeof raw !== "object") {
       diagnostics.push({
-        category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
+        category: DiagnosticCategory.Parse,
+        severity: DiagnosticSeverity.Error,
         code: "invalid_step",
-        message: `Step ${i} is not an object.`,
+        message: `Step ${i} is not an object.`
       })
       return { plan: null, diagnostics }
     }
@@ -88,9 +99,10 @@ export function parsePlanFromResponse(raw: string): {
     const name = String(raw.name ?? `step_${i}`)
     if (stepNames.has(name)) {
       diagnostics.push({
-        category: DiagnosticCategory.Graph, severity: DiagnosticSeverity.Error,
+        category: DiagnosticCategory.Graph,
+        severity: DiagnosticSeverity.Error,
         code: "duplicate_step_name",
-        message: `Duplicate step name "${name}". Each step must have a unique name.`,
+        message: `Duplicate step name "${name}". Each step must have a unique name.`
       })
       return { plan: null, diagnostics }
     }
@@ -108,9 +120,10 @@ export function parsePlanFromResponse(raw: string): {
       steps.push(parsed.step!)
     } else {
       diagnostics.push({
-        category: DiagnosticCategory.Parse, severity: DiagnosticSeverity.Error,
+        category: DiagnosticCategory.Parse,
+        severity: DiagnosticSeverity.Error,
         code: "unknown_step_type",
-        message: `Step "${name}" has unknown stepType "${stepType}". Must be "deterministic_tool" or "subagent_task".`,
+        message: `Step "${name}" has unknown stepType "${stepType}". Must be "deterministic_tool" or "subagent_task".`
       })
       return { plan: null, diagnostics }
     }
@@ -125,17 +138,19 @@ export function parsePlanFromResponse(raw: string): {
       const to = String(edge.to ?? "")
       if (!stepNames.has(from)) {
         diagnostics.push({
-          category: DiagnosticCategory.Graph, severity: DiagnosticSeverity.Error,
+          category: DiagnosticCategory.Graph,
+          severity: DiagnosticSeverity.Error,
           code: "edge_unknown_source",
-          message: `Edge from "${from}" → "${to}": source step "${from}" not found.`,
+          message: `Edge from "${from}" → "${to}": source step "${from}" not found.`
         })
         continue
       }
       if (!stepNames.has(to)) {
         diagnostics.push({
-          category: DiagnosticCategory.Graph, severity: DiagnosticSeverity.Error,
+          category: DiagnosticCategory.Graph,
+          severity: DiagnosticSeverity.Error,
           code: "edge_unknown_target",
-          message: `Edge from "${from}" → "${to}": target step "${to}" not found.`,
+          message: `Edge from "${from}" → "${to}": target step "${to}" not found.`
         })
         continue
       }
@@ -149,11 +164,12 @@ export function parsePlanFromResponse(raw: string): {
       for (const dep of step.dependsOn) {
         if (!stepNames.has(dep)) {
           diagnostics.push({
-            category: DiagnosticCategory.Graph, severity: DiagnosticSeverity.Error,
+            category: DiagnosticCategory.Graph,
+            severity: DiagnosticSeverity.Error,
             code: "dependency_not_found",
-            message: `Step "${step.name}" depends on "${dep}", which doesn't exist.`,
+            message: `Step "${step.name}" depends on "${dep}", which doesn't exist.`
           })
-        } else if (!edges.some(e => e.from === dep && e.to === step.name)) {
+        } else if (!edges.some((e) => e.from === dep && e.to === step.name)) {
           edges.push({ from: dep, to: step.name })
         }
       }
@@ -171,40 +187,39 @@ export function parsePlanFromResponse(raw: string): {
     confidence: typeof data.confidence === "number" ? data.confidence : undefined,
     requiresSynthesis: Boolean(data.requiresSynthesis),
     steps,
-    edges,
+    edges
   }
 
   return { plan, diagnostics }
 }
 
-function parseDeterministicStep(
-  name: string,
-  raw: Record<string, unknown>,
-): DeterministicToolStep {
+function parseDeterministicStep(name: string, raw: Record<string, unknown>): DeterministicToolStep {
   return {
     name,
     stepType: "deterministic_tool",
     dependsOn: safeStringArray(raw.dependsOn),
     tool: String(raw.tool ?? ""),
-    args: (typeof raw.args === "object" && raw.args !== null && !Array.isArray(raw.args))
-      ? raw.args as Record<string, unknown>
-      : {},
+    args:
+      typeof raw.args === "object" && raw.args !== null && !Array.isArray(raw.args)
+        ? (raw.args as Record<string, unknown>)
+        : {},
     onError: raw.onError === "skip" ? "skip" : raw.onError === "abort" ? "abort" : "retry",
-    maxRetries: typeof raw.maxRetries === "number" ? raw.maxRetries : 2,
+    maxRetries: typeof raw.maxRetries === "number" ? raw.maxRetries : 2
   }
 }
 
 function parseSubagentStep(
   name: string,
-  raw: Record<string, unknown>,
+  raw: Record<string, unknown>
 ): { step: SubagentTaskStep | null; diagnostics: PlanDiagnostic[] } {
   const diagnostics: PlanDiagnostic[] = []
 
   if (!raw.objective || typeof raw.objective !== "string") {
     diagnostics.push({
-      category: DiagnosticCategory.Contract, severity: DiagnosticSeverity.Error,
+      category: DiagnosticCategory.Contract,
+      severity: DiagnosticSeverity.Error,
       code: "missing_objective",
-      message: `Subagent step "${name}" must have a string 'objective'.`,
+      message: `Subagent step "${name}" must have a string 'objective'.`
     })
     return { step: null, diagnostics }
   }
@@ -212,35 +227,38 @@ function parseSubagentStep(
   const acceptanceCriteria = safeStringArray(raw.acceptanceCriteria)
   if (acceptanceCriteria.length === 0) {
     diagnostics.push({
-      category: DiagnosticCategory.Contract, severity: DiagnosticSeverity.Error,
+      category: DiagnosticCategory.Contract,
+      severity: DiagnosticSeverity.Error,
       code: "missing_acceptance_criteria",
-      message: `Subagent step "${name}" must have non-empty 'acceptanceCriteria' array.`,
+      message: `Subagent step "${name}" must have non-empty 'acceptanceCriteria' array.`
     })
     return { step: null, diagnostics }
   }
 
   const execCtx = raw.executionContext as Record<string, unknown> | undefined
-  const executionContext = execCtx ? {
-    workspaceRoot: String(execCtx.workspaceRoot ?? "."),
-    allowedReadRoots: safeStringArray(execCtx.allowedReadRoots),
-    allowedWriteRoots: safeStringArray(execCtx.allowedWriteRoots),
-    allowedTools: safeStringArray(execCtx.allowedTools),
-    requiredSourceArtifacts: safeStringArray(execCtx.requiredSourceArtifacts),
-    targetArtifacts: safeStringArray(execCtx.targetArtifacts).filter(isValidArtifactPath),
-    effectClass: parseEffectClass(execCtx.effectClass),
-    verificationMode: parseVerificationMode(execCtx.verificationMode),
-    artifactRelations: parseArtifactRelations(execCtx.artifactRelations),
-  } : {
-    workspaceRoot: ".",
-    allowedReadRoots: ["."],
-    allowedWriteRoots: ["."],
-    allowedTools: [],
-    requiredSourceArtifacts: [],
-    targetArtifacts: [],
-    effectClass: EffectClass.FilesystemWrite,
-    verificationMode: VerificationMode.None,
-    artifactRelations: [],
-  }
+  const executionContext = execCtx
+    ? {
+        workspaceRoot: String(execCtx.workspaceRoot ?? "."),
+        allowedReadRoots: safeStringArray(execCtx.allowedReadRoots),
+        allowedWriteRoots: safeStringArray(execCtx.allowedWriteRoots),
+        allowedTools: safeStringArray(execCtx.allowedTools),
+        requiredSourceArtifacts: safeStringArray(execCtx.requiredSourceArtifacts),
+        targetArtifacts: safeStringArray(execCtx.targetArtifacts).filter(isValidArtifactPath),
+        effectClass: parseEffectClass(execCtx.effectClass),
+        verificationMode: parseVerificationMode(execCtx.verificationMode),
+        artifactRelations: parseArtifactRelations(execCtx.artifactRelations)
+      }
+    : {
+        workspaceRoot: ".",
+        allowedReadRoots: ["."],
+        allowedWriteRoots: ["."],
+        allowedTools: [],
+        requiredSourceArtifacts: [],
+        targetArtifacts: [],
+        effectClass: EffectClass.FilesystemWrite,
+        verificationMode: VerificationMode.None,
+        artifactRelations: []
+      }
 
   const ws = raw.workflowStep as Record<string, unknown> | undefined
 
@@ -256,10 +274,12 @@ function parseSubagentStep(
     executionContext,
     maxBudgetHint: String(raw.maxBudgetHint ?? "20 iterations"),
     canRunParallel: Boolean(raw.canRunParallel),
-    workflowStep: ws ? {
-      role: parseStepRole(ws.role),
-      artifactRelations: parseArtifactRelations(ws.artifactRelations),
-    } : undefined,
+    workflowStep: ws
+      ? {
+          role: parseStepRole(ws.role),
+          artifactRelations: parseArtifactRelations(ws.artifactRelations)
+        }
+      : undefined
   }
 
   return { step, diagnostics }

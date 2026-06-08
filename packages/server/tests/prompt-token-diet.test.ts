@@ -15,21 +15,28 @@
 import type { AgentHost, Tool } from "@mia/agent"
 import { configureAgent, resetTenantConfig, setMssqlConfigs } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { _resetDecideSectionsCache, decideSections, filterToolsByGoal, scoreDbLikelihood } from "../src/application/core/decide-sections.js"
+import {
+  _resetDecideSectionsCache,
+  decideSections,
+  filterToolsByGoal,
+  scoreDbLikelihood
+} from "../src/application/core/decide-sections.js"
 import { buildToolContext } from "../src/application/core/prompt/builder.js"
 import { buildSystemMessages } from "../src/application/core/system-messages.js"
 import type { RunWorkspaceContext } from "../src/application/shell/workspace/run-workspace.js"
 
 const RW: RunWorkspaceContext = {
-  runId:         "run-x",
-  sourceRoot:    "/tmp/agent-test-src",
+  runId: "run-x",
+  sourceRoot: "/tmp/agent-test-src",
   executionRoot: "/tmp/agent-test-src",
-  taskType:      "analysis_or_chat",
-  isolated:      false,
-  profile:       "developer",
+  taskType: "analysis_or_chat",
+  isolated: false,
+  profile: "developer"
 }
 
-function emptyTier() { return { working: "", episodic: "", semantic: "" } }
+function emptyTier() {
+  return { working: "", episodic: "", semantic: "" }
+}
 
 // Shared host carrying a single mssql Map for the whole file. Recreated
 // once at module load; setMssqlConfigs(host, ...) populates the same Map
@@ -54,11 +61,11 @@ beforeEach(() => {
 describe("decideSections", () => {
   it("turns OFF every gate for a casual / log-inspection goal", () => {
     const d = decideSections({ goal: "what can you tell me about these logs?", memory: emptyTier() })
-    expect(d.includeMssqlGuidance ).toBe(false)
+    expect(d.includeMssqlGuidance).toBe(false)
     expect(d.includeMssqlKnowledge).toBe(false)
-    expect(d.includeMssqlCatalog  ).toBe(false)
+    expect(d.includeMssqlCatalog).toBe(false)
     expect(d.includeChartCatalogue).toBe(false)
-    expect(d.includeAbiSync       ).toBe(false)
+    expect(d.includeAbiSync).toBe(false)
     expect(d.includeMemoryGuidance).toBe(false)
   })
 
@@ -71,12 +78,12 @@ describe("decideSections", () => {
       "render the table again, sorted by lines of code",
       "make the table prettier",
       "show me a table of the top files by size",
-      "paste that table into the README",
+      "paste that table into the README"
     ]) {
       const d = decideSections({ goal, memory: emptyTier() })
       expect(d.includeMssqlKnowledge, `goal: ${goal}`).toBe(false)
-      expect(d.includeMssqlCatalog,   `goal: ${goal}`).toBe(false)
-      expect(d.includeMssqlGuidance,  `goal: ${goal}`).toBe(false)
+      expect(d.includeMssqlCatalog, `goal: ${goal}`).toBe(false)
+      expect(d.includeMssqlGuidance, `goal: ${goal}`).toBe(false)
     }
   })
 
@@ -85,7 +92,7 @@ describe("decideSections", () => {
       "list every table in the database",
       "describe table publish.Revenue",
       "which tables join to dim.Client?",
-      "rows in the dim.Client table",
+      "rows in the dim.Client table"
     ]) {
       const d = decideSections({ goal, memory: emptyTier() })
       expect(d.includeMssqlKnowledge, `goal: ${goal}`).toBe(true)
@@ -96,34 +103,49 @@ describe("decideSections", () => {
     // DB-shaped goal without explicit visual intent must NOT ship the
     // chart catalogue. The model can fetch it via `get_chart_specs` if
     // it decides a visualisation is warranted.
-    const d = decideSections({ goal: "select the top 10 clients from publish.Revenue", memory: emptyTier() })
-    expect(d.includeMssqlGuidance ).toBe(true)
+    const d = decideSections({
+      goal: "select the top 10 clients from publish.Revenue",
+      memory: emptyTier()
+    })
+    expect(d.includeMssqlGuidance).toBe(true)
     expect(d.includeMssqlKnowledge).toBe(true)
-    expect(d.includeMssqlCatalog  ).toBe(true)
+    expect(d.includeMssqlCatalog).toBe(true)
     expect(d.includeChartCatalogue).toBe(false)
-    expect(d.includeAbiSync       ).toBe(false)
+    expect(d.includeAbiSync).toBe(false)
   })
 
   it("DB goal WITH an explicit chart word still ships the catalogue", () => {
-    const d = decideSections({ goal: "chart the top 10 clients from publish.Revenue", memory: emptyTier() })
-    expect(d.includeMssqlGuidance ).toBe(true)
+    const d = decideSections({
+      goal: "chart the top 10 clients from publish.Revenue",
+      memory: emptyTier()
+    })
+    expect(d.includeMssqlGuidance).toBe(true)
     expect(d.includeChartCatalogue).toBe(true)
   })
 
   it("turns ON ABI sync for explicit sync intent", () => {
-    const d = decideSections({ goal: "sync_preview entity=dataset source=uat target=prod", memory: emptyTier() })
-    expect(d.includeAbiSync       ).toBe(true)
-    expect(d.includeMssqlGuidance ).toBe(true)
+    const d = decideSections({
+      goal: "sync_preview entity=dataset source=uat target=prod",
+      memory: emptyTier()
+    })
+    expect(d.includeAbiSync).toBe(true)
+    expect(d.includeMssqlGuidance).toBe(true)
   })
 
   it("turns ON chart catalogue for an explicit chart request", () => {
-    const d = decideSections({ goal: "render a relationships diagram of the order schema", memory: emptyTier() })
+    const d = decideSections({
+      goal: "render a relationships diagram of the order schema",
+      memory: emptyTier()
+    })
     expect(d.includeChartCatalogue).toBe(true)
   })
 
   it("includes memory guidance only when at least one tier is present", () => {
-    expect(decideSections({ goal: "hi", memory: emptyTier()                                }).includeMemoryGuidance).toBe(false)
-    expect(decideSections({ goal: "hi", memory: { working: "x", episodic: "", semantic: "" } }).includeMemoryGuidance).toBe(true)
+    expect(decideSections({ goal: "hi", memory: emptyTier() }).includeMemoryGuidance).toBe(false)
+    expect(
+      decideSections({ goal: "hi", memory: { working: "x", episodic: "", semantic: "" } })
+        .includeMemoryGuidance
+    ).toBe(true)
   })
 })
 
@@ -135,14 +157,17 @@ describe("decideSections contextual gating (conversation-level signals)", () => 
   // would drop query_mssql + 10 other DB tools on every such turn.
 
   it("scores follow-up turn as DB-like when context contains DB keywords", () => {
-    const lean = decideSections({ goal: "could you run it and return me the results?", memory: emptyTier() })
+    const lean = decideSections({
+      goal: "could you run it and return me the results?",
+      memory: emptyTier()
+    })
     expect(lean.dbScore ?? 0).toBeLessThan(2)
     expect(lean.includeMssqlGuidance).toBe(false)
 
     const withContext = decideSections({
       goal: "could you run it and return me the results?",
       memory: emptyTier(),
-      context: "Prior turn: select top 5 from publish.Revenue group by pkClient",
+      context: "Prior turn: select top 5 from publish.Revenue group by pkClient"
     })
     expect(withContext.dbScore ?? 0).toBeGreaterThanOrEqual(2)
     expect(withContext.includeMssqlGuidance).toBe(true)
@@ -152,7 +177,11 @@ describe("decideSections contextual gating (conversation-level signals)", () => 
   it("treats prior DB tool calls in working memory as a strong DB signal", () => {
     const d = decideSections({
       goal: "and the same for February?",
-      memory: { working: "Step 3: query_mssql({connection: 'dev', sql: 'select ...'})", episodic: "", semantic: "" },
+      memory: {
+        working: "Step 3: query_mssql({connection: 'dev', sql: 'select ...'})",
+        episodic: "",
+        semantic: ""
+      }
     })
     // No `context` arg supplied — decideSections auto-derives it from
     // memory.working + memory.episodic. The presence of query_mssql in
@@ -166,7 +195,7 @@ describe("decideSections contextual gating (conversation-level signals)", () => 
     // non-DB task (Monte Carlo) must NOT keep the DB blocks on.
     const d = decideSections({
       goal: "actually let's switch gears — Monte Carlo simulation with Brownian motion",
-      memory: { working: "earlier: select * from publish.Revenue", episodic: "", semantic: "" },
+      memory: { working: "earlier: select * from publish.Revenue", episodic: "", semantic: "" }
     })
     expect(d.triggers?.nonDb).toBe(true)
     // The +2 from priorDbToolCall (matched in working memory) can be
@@ -201,13 +230,13 @@ describe("DB gating with rendering language (must trigger DB blocks)", () => {
     "Render a chart of clients by RWA bucket",
     "Show me a dashboard of top 10 merchants this quarter",
     "Animated revenue dashboard with monthly trend",
-    "Pie chart of country exposures",
+    "Pie chart of country exposures"
   ]) {
     it(`fires DB gate for: ${goal}`, () => {
       const d = decideSections({ goal, memory: emptyTier() })
       expect(d.includeMssqlKnowledge, `goal: ${goal}`).toBe(true)
-      expect(d.includeMssqlGuidance,  `goal: ${goal}`).toBe(true)
-      expect(d.includeMssqlCatalog,   `goal: ${goal}`).toBe(true)
+      expect(d.includeMssqlGuidance, `goal: ${goal}`).toBe(true)
+      expect(d.includeMssqlCatalog, `goal: ${goal}`).toBe(true)
       expect(d.includeChartCatalogue, `goal: ${goal}`).toBe(true)
     })
   }
@@ -220,13 +249,13 @@ describe("DB gating false-positives (must NOT trigger DB blocks)", () => {
     "Build an animated finance simulation HTML page",
     "Show me a markets trading screen mockup with order history",
     "Compute a Sharpe ratio over these returns",
-    "Wireframe for a banking dashboard",
+    "Wireframe for a banking dashboard"
   ]) {
     it(`does NOT fire DB gate for: ${goal}`, () => {
       const d = decideSections({ goal, memory: emptyTier() })
       expect(d.includeMssqlKnowledge, `goal: ${goal}`).toBe(false)
-      expect(d.includeMssqlCatalog,   `goal: ${goal}`).toBe(false)
-      expect(d.includeMssqlGuidance,  `goal: ${goal}`).toBe(false)
+      expect(d.includeMssqlCatalog, `goal: ${goal}`).toBe(false)
+      expect(d.includeMssqlGuidance, `goal: ${goal}`).toBe(false)
     })
   }
 
@@ -235,10 +264,10 @@ describe("DB gating false-positives (must NOT trigger DB blocks)", () => {
     // must still fire — operational beats the NON_DB down-score.
     const d = decideSections({
       goal: "select top 1 from fact.X where simulation_id = 7",
-      memory: emptyTier(),
+      memory: emptyTier()
     })
     expect(d.includeMssqlKnowledge).toBe(true)
-    expect(d.includeMssqlGuidance ).toBe(true)
+    expect(d.includeMssqlGuidance).toBe(true)
   })
 })
 
@@ -258,14 +287,14 @@ describe("DB gating: universal BI / business vocabulary (no SQL keywords)", () =
     "top 10 invoices in May 2025",
     "biggest merchants by transaction volume",
     "YTD profit by region",
-    "rank bankers by revenue last 4 quarters",
+    "rank bankers by revenue last 4 quarters"
   ]) {
     it(`fires DB gate for: ${goal}`, () => {
       const d = decideSections({ goal, memory: emptyTier() })
       expect(d.dbScore, `dbScore for: ${goal}`).toBeGreaterThanOrEqual(2)
       expect(d.triggers?.bi, `bi trigger for: ${goal}`).toBe(true)
       expect(d.includeMssqlKnowledge, `mssql knowledge for: ${goal}`).toBe(true)
-      expect(d.includeMssqlCatalog,   `mssql catalog for: ${goal}`).toBe(true)
+      expect(d.includeMssqlCatalog, `mssql catalog for: ${goal}`).toBe(true)
     })
 
     it(`keeps DB discovery tools for: ${goal}`, () => {
@@ -275,7 +304,7 @@ describe("DB gating: universal BI / business vocabulary (no SQL keywords)", () =
         { name: "search_catalog" },
         { name: "explore_mssql_schema" },
         { name: "discover_relationships" },
-        { name: "inspect_definition" },
+        { name: "inspect_definition" }
       ]
       const res = filterToolsByGoal(tools, d)
       expect(res.dropped, `dropped tools for: ${goal}`).toEqual([])
@@ -288,7 +317,7 @@ describe("DB gating: universal BI / business vocabulary (no SQL keywords)", () =
     // but the simulation cue (NON_DB) wins: 0 op + 2 bi − 3 nonDb = −1.
     const d = decideSections({
       goal: "Monte Carlo portfolio simulation with risk and volatility",
-      memory: emptyTier(),
+      memory: emptyTier()
     })
     expect(d.triggers?.bi).toBe(true)
     expect(d.triggers?.nonDb).toBe(true)
@@ -301,7 +330,7 @@ describe("DB gating: universal BI / business vocabulary (no SQL keywords)", () =
     expect(d.dbScore).toBeLessThan(2)
     const res = filterToolsByGoal(
       [{ name: "query_mssql" }, { name: "search_catalog" }, { name: "render_html" }],
-      d,
+      d
     )
     expect(res.dropped).toContain("query_mssql")
     expect(res.dropped).toContain("search_catalog")
@@ -311,16 +340,19 @@ describe("DB gating: universal BI / business vocabulary (no SQL keywords)", () =
 
 describe("scoreDbLikelihood telemetry", () => {
   it("exposes dbScore and triggers on the decision object", () => {
-    const d = decideSections({ goal: "select top 10 from publish.Revenue grouped by pkClient", memory: emptyTier() })
+    const d = decideSections({
+      goal: "select top 10 from publish.Revenue grouped by pkClient",
+      memory: emptyTier()
+    })
     expect(d.dbScore).toBeGreaterThanOrEqual(2)
     expect(d.triggers?.operational).toBe(true)
     // `domain` is per-tenant (built from tenant.routingKeywords.domain) and
     // is null under the cold-start fixture this file enforces — so we
     // assert it's false here. The universal BI signal carries the load
     // for business vocabulary in the absence of tenant config.
-    expect(d.triggers?.domain     ).toBe(false)
-    expect(d.triggers?.bi         ).toBe(true)  // "Revenue" matches BI_DOMAIN_RE
-    expect(d.triggers?.nonDb      ).toBe(false)
+    expect(d.triggers?.domain).toBe(false)
+    expect(d.triggers?.bi).toBe(true) // "Revenue" matches BI_DOMAIN_RE
+    expect(d.triggers?.nonDb).toBe(false)
   })
 
   it("when tenant routingKeywords.domain is configured, the domain trigger fires", async () => {
@@ -330,7 +362,10 @@ describe("scoreDbLikelihood telemetry", () => {
     const { setTenantConfig } = await import("@mia/agent")
     setTenantConfig({ routingKeywords: { schemas: [], domain: ["pkclient"], sync: [] } })
     _resetDecideSectionsCache()
-    const d = decideSections({ goal: "select top 10 from publish.Revenue grouped by pkClient", memory: emptyTier() })
+    const d = decideSections({
+      goal: "select top 10 from publish.Revenue grouped by pkClient",
+      memory: emptyTier()
+    })
     expect(d.triggers?.domain).toBe(true)
   })
 
@@ -345,8 +380,8 @@ describe("scoreDbLikelihood telemetry", () => {
 describe("buildToolContext gates", () => {
   beforeEach(() => {
     setMssqlConfigs(host, [
-      { name: "uat",  server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
-      { name: "prod", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
+      { name: "uat", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
+      { name: "prod", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" }
     ])
   })
   afterEach(() => {
@@ -354,7 +389,12 @@ describe("buildToolContext gates", () => {
   })
 
   it("emits each unique knowledge body exactly once (single-group case omits the env header)", () => {
-    const out = buildToolContext([{ name: "query_mssql" } as Tool], { host, includeMssqlKnowledge: true, includeMssqlCatalog: false, includeMssqlGuidance: false })
+    const out = buildToolContext([{ name: "query_mssql" } as Tool], {
+      host,
+      includeMssqlKnowledge: true,
+      includeMssqlCatalog: false,
+      includeMssqlGuidance: false
+    })
     const occurrences = out.split("ALPHA-KNOWLEDGE-BODY").length - 1
     expect(occurrences).toBe(1)
     // When every connection shares the same body, the per-env header is
@@ -364,11 +404,16 @@ describe("buildToolContext gates", () => {
 
   it("emits a per-group env header when bodies differ across connections", () => {
     setMssqlConfigs(host, [
-      { name: "uat",  server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
+      { name: "uat", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
       { name: "prod", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
-      { name: "dev",  server: "h", database: "d", knowledge: "BETA-DEV-ONLY-BODY" },
+      { name: "dev", server: "h", database: "d", knowledge: "BETA-DEV-ONLY-BODY" }
     ])
-    const out = buildToolContext([{ name: "query_mssql" } as Tool], { host, includeMssqlKnowledge: true, includeMssqlCatalog: false, includeMssqlGuidance: false })
+    const out = buildToolContext([{ name: "query_mssql" } as Tool], {
+      host,
+      includeMssqlKnowledge: true,
+      includeMssqlCatalog: false,
+      includeMssqlGuidance: false
+    })
     expect(out.split("ALPHA-KNOWLEDGE-BODY").length - 1).toBe(1)
     expect(out.split("BETA-DEV-ONLY-BODY").length - 1).toBe(1)
     expect(out).toMatch(/\[uat,\s*prod\]/)
@@ -376,13 +421,23 @@ describe("buildToolContext gates", () => {
   })
 
   it("omits the knowledge block when includeMssqlKnowledge is false", () => {
-    const out = buildToolContext([{ name: "query_mssql" } as Tool], { host, includeMssqlKnowledge: false, includeMssqlCatalog: false, includeMssqlGuidance: false })
+    const out = buildToolContext([{ name: "query_mssql" } as Tool], {
+      host,
+      includeMssqlKnowledge: false,
+      includeMssqlCatalog: false,
+      includeMssqlGuidance: false
+    })
     expect(out).not.toContain("ALPHA-KNOWLEDGE-BODY")
     expect(out).not.toContain("DATABASE KNOWLEDGE")
   })
 
   it("omits the SCALE CONTEXT / DATA TOOLS guidance when includeMssqlGuidance is false", () => {
-    const out = buildToolContext([{ name: "query_mssql" } as Tool], { host, includeMssqlKnowledge: false, includeMssqlCatalog: false, includeMssqlGuidance: false })
+    const out = buildToolContext([{ name: "query_mssql" } as Tool], {
+      host,
+      includeMssqlKnowledge: false,
+      includeMssqlCatalog: false,
+      includeMssqlGuidance: false
+    })
     expect(out).not.toContain("SCALE CONTEXT")
     expect(out).not.toContain("DATA TOOLS")
   })
@@ -391,7 +446,13 @@ describe("buildToolContext gates", () => {
 describe("buildSystemMessages cache hint + section budget", () => {
   it("marks the LAST system message with cacheHint=ephemeral", async () => {
     const messages = await buildSystemMessages({
-      goal: "hello", host, systemPrompt: undefined, allTools: [], runWorkspace: RW, perTier: emptyTier(), runId: "run-x",
+      goal: "hello",
+      host,
+      systemPrompt: undefined,
+      allTools: [],
+      runWorkspace: RW,
+      perTier: emptyTier(),
+      runId: "run-x"
     })
     expect(messages.length).toBeGreaterThan(0)
     expect(messages[messages.length - 1].cacheHint).toBe("ephemeral")
@@ -407,14 +468,31 @@ describe("buildSystemMessages cache hint + section budget", () => {
     // gates only differ by the now-removed chart catalogue, and casual
     // vs DB would be byte-identical.
     setMssqlConfigs(host, [
-      { name: "uat",  server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
-      { name: "prod", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
+      { name: "uat", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
+      { name: "prod", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" }
     ])
     try {
       const tools = [{ name: "query_mssql" } as Tool]
-      const casual = await buildSystemMessages({ goal: "what can you tell me about these logs?", host, systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
-      const db     = await buildSystemMessages({ goal: "select top 10 from publish.Revenue",      host, systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
-      const len = (ms: typeof casual) => ms.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)
+      const casual = await buildSystemMessages({
+        goal: "what can you tell me about these logs?",
+        host,
+        systemPrompt: undefined,
+        allTools: tools,
+        runWorkspace: RW,
+        perTier: emptyTier(),
+        runId: "r"
+      })
+      const db = await buildSystemMessages({
+        goal: "select top 10 from publish.Revenue",
+        host,
+        systemPrompt: undefined,
+        allTools: tools,
+        runWorkspace: RW,
+        perTier: emptyTier(),
+        runId: "r"
+      })
+      const len = (ms: typeof casual) =>
+        ms.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)
       expect(len(casual)).toBeLessThan(len(db))
     } finally {
       setMssqlConfigs(host, [])
@@ -422,14 +500,29 @@ describe("buildSystemMessages cache hint + section budget", () => {
   })
 
   it("a DB goal WITHOUT explicit chart intent ships a SHORTER prompt than the same goal WITH 'chart' (catalogue gate is strict)", async () => {
-    setMssqlConfigs(host, [
-      { name: "uat", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" },
-    ])
+    setMssqlConfigs(host, [{ name: "uat", server: "h", database: "d", knowledge: "ALPHA-KNOWLEDGE-BODY" }])
     try {
       const tools = [{ name: "query_mssql" } as Tool]
-      const dbOnly  = await buildSystemMessages({ goal: "select top 10 from publish.Revenue",       host, systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
-      const dbChart = await buildSystemMessages({ goal: "chart the top 10 from publish.Revenue",    host, systemPrompt: undefined, allTools: tools, runWorkspace: RW, perTier: emptyTier(), runId: "r" })
-      const len = (ms: typeof dbOnly) => ms.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)
+      const dbOnly = await buildSystemMessages({
+        goal: "select top 10 from publish.Revenue",
+        host,
+        systemPrompt: undefined,
+        allTools: tools,
+        runWorkspace: RW,
+        perTier: emptyTier(),
+        runId: "r"
+      })
+      const dbChart = await buildSystemMessages({
+        goal: "chart the top 10 from publish.Revenue",
+        host,
+        systemPrompt: undefined,
+        allTools: tools,
+        runWorkspace: RW,
+        perTier: emptyTier(),
+        runId: "r"
+      })
+      const len = (ms: typeof dbOnly) =>
+        ms.reduce((n, m) => n + (typeof m.content === "string" ? m.content.length : 0), 0)
       expect(len(dbOnly)).toBeLessThan(len(dbChart))
     } finally {
       setMssqlConfigs(host, [])

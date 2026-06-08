@@ -19,12 +19,18 @@ function mockTarget(): { calls: MockCall[]; target: Parameters<typeof resolveLoc
   const calls: MockCall[] = []
   const sentinel = { __isMockLocator: true } as unknown as import("playwright").Locator
   const target = {
-    locator: (s: string): unknown => { calls.push({ method: "locator", arg1: s }); return sentinel },
-    getByText: (s: string): unknown => { calls.push({ method: "getByText", arg1: s }); return sentinel },
+    locator: (s: string): unknown => {
+      calls.push({ method: "locator", arg1: s })
+      return sentinel
+    },
+    getByText: (s: string): unknown => {
+      calls.push({ method: "getByText", arg1: s })
+      return sentinel
+    },
     getByRole: (role: string, opts?: unknown): unknown => {
       calls.push({ method: "getByRole", arg1: role, arg2: opts })
       return sentinel
-    },
+    }
   } as unknown as Parameters<typeof resolveLocator>[0]
   return { calls, target }
 }

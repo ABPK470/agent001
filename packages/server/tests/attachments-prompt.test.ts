@@ -41,21 +41,40 @@ describe("attachments in system prompt", () => {
     const { buildSystemMessages } = await import("../src/application/core/system-messages.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
     const { seedRun } = await import("./_fk-helpers.js")
     seedRun(testDb, "r1")
 
-    const a = await uploadAttachment({ scope: "run", runId: "r1", ownerUpn: "u@x", originalName: "spec.csv", mediaType: "text/csv", bytes: new TextEncoder().encode("a,b\n1,2\n") })
-    const b = await uploadAttachment({ scope: "run", runId: "r1", ownerUpn: "u@x", originalName: "image.png", mediaType: "image/png", bytes: new Uint8Array([0, 1, 2, 3]) })
+    const a = await uploadAttachment({
+      scope: "run",
+      runId: "r1",
+      ownerUpn: "u@x",
+      originalName: "spec.csv",
+      mediaType: "text/csv",
+      bytes: new TextEncoder().encode("a,b\n1,2\n")
+    })
+    const b = await uploadAttachment({
+      scope: "run",
+      runId: "r1",
+      ownerUpn: "u@x",
+      originalName: "image.png",
+      mediaType: "image/png",
+      bytes: new Uint8Array([0, 1, 2, 3])
+    })
 
     const messages = await buildSystemMessages({
       goal: "summarise the inputs",
       systemPrompt: "BASE PROMPT",
       allTools: [],
-      runWorkspace: { profile: "developer", executionRoot: null, sourceRoot: null, isolated: false } as never,
+      runWorkspace: {
+        profile: "developer",
+        executionRoot: null,
+        sourceRoot: null,
+        isolated: false
+      } as never,
       perTier: { working: "", episodic: "", semantic: "" },
       runId: "r1",
-      attachmentIds: [a.id, b.id, "missing-id-should-be-ignored"],
+      attachmentIds: [a.id, b.id, "missing-id-should-be-ignored"]
     })
     const blob = messages.map((m) => m.content).join("\n\n")
 
@@ -76,16 +95,21 @@ describe("attachments in system prompt", () => {
     const { buildSystemMessages } = await import("../src/application/core/system-messages.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
 
     const messages = await buildSystemMessages({
       goal: "x",
       systemPrompt: "BASE",
       allTools: [],
-      runWorkspace: { profile: "developer", executionRoot: null, sourceRoot: null, isolated: false } as never,
+      runWorkspace: {
+        profile: "developer",
+        executionRoot: null,
+        sourceRoot: null,
+        isolated: false
+      } as never,
       perTier: { working: "", episodic: "", semantic: "" },
       runId: "r1",
-      attachmentIds: [],
+      attachmentIds: []
     })
     const blob = messages.map((m) => m.content).join("\n\n")
     expect(blob).not.toContain("Attached files for this run")

@@ -48,8 +48,12 @@ export class ClarificationsRegistry implements ClarificationsRegistryPort {
     const byId = new Map(cur.map((r) => [r.findingId, r]))
     for (const f of findings) {
       byId.set(f.id, {
-        findingId: f.id, kind: f.kind, subject: f.subject,
-        suggestedQuestion: f.suggestedQuestion, uiOptions: f.uiOptions, round,
+        findingId: f.id,
+        kind: f.kind,
+        subject: f.subject,
+        suggestedQuestion: f.suggestedQuestion,
+        uiOptions: f.uiOptions,
+        round
       })
     }
     this.emitted.set(runId, [...byId.values()])
@@ -99,7 +103,7 @@ export class ClarificationsRegistry implements ClarificationsRegistryPort {
       subject: pending.subject,
       question: pending.askedQuestion,
       answer,
-      resolvedAtRound: atRound,
+      resolvedAtRound: atRound
     }
     const list = this.resolvedByRun.get(runId) ?? []
     list.push(resolved)
@@ -123,11 +127,52 @@ export class ClarificationsRegistry implements ClarificationsRegistryPort {
 // ── Matching helpers ─────────────────────────────────────────────
 
 const MATCH_STOPWORDS = new Set([
-  "a", "an", "the", "and", "or", "of", "in", "on", "to", "for", "with",
-  "by", "as", "is", "are", "was", "were", "what", "which", "who", "when",
-  "where", "why", "how", "do", "does", "did", "you", "your", "i", "me",
-  "my", "we", "us", "our", "it", "this", "that",
-  "did", "mean", "meant", "could", "would", "should", "can", "please",
+  "a",
+  "an",
+  "the",
+  "and",
+  "or",
+  "of",
+  "in",
+  "on",
+  "to",
+  "for",
+  "with",
+  "by",
+  "as",
+  "is",
+  "are",
+  "was",
+  "were",
+  "what",
+  "which",
+  "who",
+  "when",
+  "where",
+  "why",
+  "how",
+  "do",
+  "does",
+  "did",
+  "you",
+  "your",
+  "i",
+  "me",
+  "my",
+  "we",
+  "us",
+  "our",
+  "it",
+  "this",
+  "that",
+  "did",
+  "mean",
+  "meant",
+  "could",
+  "would",
+  "should",
+  "can",
+  "please"
 ])
 
 function tokenise(text: string): Set<string> {

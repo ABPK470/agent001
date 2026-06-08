@@ -49,20 +49,14 @@ function inferFormat(path: string, explicit?: string): ExportFormat {
 /** CSV-escape a single field. */
 function csvField(v: unknown): string {
   if (v === null || v === undefined) return ""
-  const s =
-    v instanceof Date ? v.toISOString()
-    : typeof v === "object" ? JSON.stringify(v)
-    : String(v)
+  const s = v instanceof Date ? v.toISOString() : typeof v === "object" ? JSON.stringify(v) : String(v)
   if (/[",\n\r]/.test(s)) return `"${s.replace(/"/g, '""')}"`
   return s
 }
 
 function tsvField(v: unknown): string {
   if (v === null || v === undefined) return ""
-  const s =
-    v instanceof Date ? v.toISOString()
-    : typeof v === "object" ? JSON.stringify(v)
-    : String(v)
+  const s = v instanceof Date ? v.toISOString() : typeof v === "object" ? JSON.stringify(v) : String(v)
   // TSV: strip embedded tabs/newlines (best-effort)
   return s.replace(/[\t\r\n]+/g, " ")
 }
@@ -85,7 +79,7 @@ function formatBytes(n: number): string {
 const EXPORT_QUERY_TO_FILE_DESCRIPTION =
   "Run a SELECT against MSSQL and stream the FULL result set directly to a file. " +
   "Use this whenever the user asks for a complete list/export of many rows " +
-  "(e.g. \"give me all 4000 dataset names\", \"export the table\", \"save the results\"). " +
+  '(e.g. "give me all 4000 dataset names", "export the table", "save the results"). ' +
   "Do NOT use query_mssql + write_file for the same purpose — that forces the model to " +
   "retype every row and almost always truncates the output. " +
   "The tool writes the full dataset to disk and returns only a short summary plus the first " +
@@ -98,35 +92,39 @@ const EXPORT_QUERY_TO_FILE_PARAMETERS = {
   properties: {
     query: {
       type: "string",
-      description: "T-SQL SELECT statement. Read-only — INSERT/UPDATE/DELETE etc. are rejected.",
+      description: "T-SQL SELECT statement. Read-only — INSERT/UPDATE/DELETE etc. are rejected."
     },
     path: {
       type: "string",
-      description: "Destination file path relative to the workspace root (e.g. 'datasets.csv'). Parent directories are created automatically.",
+      description:
+        "Destination file path relative to the workspace root (e.g. 'datasets.csv'). Parent directories are created automatically."
     },
     format: {
       type: "string",
       enum: EXPORT_FORMATS,
-      description: "Optional explicit format. If omitted, inferred from the path extension. " +
+      description:
+        "Optional explicit format. If omitted, inferred from the path extension. " +
         "csv = comma-separated with header. tsv = tab-separated with header. " +
         "json = single JSON array. jsonl = one JSON object per line. " +
-        "txt = one row per line, fields joined with ' | ' (or just the value for single-column queries).",
+        "txt = one row per line, fields joined with ' | ' (or just the value for single-column queries)."
     },
     connection: {
       type: "string",
-      description: "Named server/pool to connect to (e.g. 'prod', 'uat'). Omit to use the default. Do NOT pass environment names as 'database'.",
+      description:
+        "Named server/pool to connect to (e.g. 'prod', 'uat'). Omit to use the default. Do NOT pass environment names as 'database'."
     },
     database: {
       type: "string",
-      description: "Optional: switch catalog database on the current server (generates USE [database]). Not for selecting environments.",
-    },
+      description:
+        "Optional: switch catalog database on the current server (generates USE [database]). Not for selecting environments."
+    }
   },
-  required: ["query", "path"],
+  required: ["query", "path"]
 } as const
 
 async function executeExportQueryToFile(
   args: Record<string, unknown>,
-  opts: { resolveSafe: (p: string) => Promise<string>; host: AgentHost; run?: RunContext },
+  opts: { resolveSafe: (p: string) => Promise<string>; host: AgentHost; run?: RunContext }
 ): Promise<string> {
   const query = String(args.query ?? "").trim()
   const pathArg = String(args.path ?? "").trim()
@@ -159,17 +157,20 @@ async function executeExportQueryToFile(
   // connection allows writes we don't want this tool used for them.
   const validation = validateQueryDetailed(query, /* writeEnabled */ false && writeEnabled, {
     accessor,
-    profiledTables: opts.run?.mssqlProfileCalls ?? null,
+    profiledTables: opts.run?.mssqlProfileCalls ?? null
   })
   if (!validation.ok) {
-    emitMssqlQualityTrace({
-      toolMode: "export",
-      phase: "blocked",
-      query,
-      connection: connectionName,
-      database: args.database ? String(args.database).trim() : null,
-      validation,
-    }, toolTrace)
+    emitMssqlQualityTrace(
+      {
+        toolMode: "export",
+        phase: "blocked",
+        query,
+        connection: connectionName,
+        database: args.database ? String(args.database).trim() : null,
+        validation
+      },
+      toolTrace
+    )
     const lesson = validation.lesson
     if (lesson) {
       try {
@@ -203,7 +204,9 @@ async function executeExportQueryToFile(
 
   const request = pool.request()
   const killSignal = opts.run?.signal ?? null
-  const onKill = (): void => { request.cancel() }
+  const onKill = (): void => {
+    request.cancel()
+  }
   if (killSignal) {
     if (killSignal.aborted) return "Error: Tool execution cancelled"
     killSignal.addEventListener("abort", onKill, { once: true })
@@ -220,8 +223,10 @@ async function executeExportQueryToFile(
       return `Query executed but returned 0 rows. No file written to ${pathArg}.`
     }
     if (totalRows > MAX_EXPORT_ROWS) {
-      return `Error: query returned ${totalRows} rows (max ${MAX_EXPORT_ROWS}). ` +
+      return (
+        `Error: query returned ${totalRows} rows (max ${MAX_EXPORT_ROWS}). ` +
         `Add a WHERE clause or paginate.`
+      )
     }
 
     const columns = Object.keys(rs[0] as Record<string, unknown>)
@@ -285,37 +290,45 @@ async function executeExportQueryToFile(
     const summary =
       `Exported ${totalRows} row${totalRows === 1 ? "" : "s"} to ${pathArg} ` +
       `(${formatBytes(content.length)}, format=${format}).`
-    const previewLabel = totalRows > PREVIEW_ROWS
-      ? `\nFirst ${PREVIEW_ROWS} rows (full data is in the file):`
-      : `\nAll rows:`
+    const previewLabel =
+      totalRows > PREVIEW_ROWS ? `\nFirst ${PREVIEW_ROWS} rows (full data is in the file):` : `\nAll rows:`
 
     const warn = getQueryWarnings(query, {
-      branchAccessor: accessor as () => { getUnionParents(qualifiedName: string): string[]; getUnionBranches(qualifiedName: string): string[] } | null,
-      profiledTables: opts.run?.mssqlProfileCalls ?? null,
+      branchAccessor: accessor as () => {
+        getUnionParents(qualifiedName: string): string[]
+        getUnionBranches(qualifiedName: string): string[]
+      } | null,
+      profiledTables: opts.run?.mssqlProfileCalls ?? null
     })
     const body = `${summary}${previewLabel}\n${previewLines.join("\n")}`
-    emitMssqlQualityTrace({
-      toolMode: "export",
-      phase: "executed",
-      query,
-      connection: connectionName,
-      database: db,
-      validation,
-      durationMs: Date.now() - startedAt,
-      rowCount: totalRows,
-    }, toolTrace)
+    emitMssqlQualityTrace(
+      {
+        toolMode: "export",
+        phase: "executed",
+        query,
+        connection: connectionName,
+        database: db,
+        validation,
+        durationMs: Date.now() - startedAt,
+        rowCount: totalRows
+      },
+      toolTrace
+    )
     return warn ? `${warn}\n${body}` : body
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err)
-    emitMssqlQualityTrace({
-      toolMode: "export",
-      phase: "failed",
-      query,
-      connection: connectionName,
-      database: db,
-      validation,
-      error: msg,
-    }, toolTrace)
+    emitMssqlQualityTrace(
+      {
+        toolMode: "export",
+        phase: "failed",
+        query,
+        connection: connectionName,
+        database: db,
+        validation,
+        error: msg
+      },
+      toolTrace
+    )
     // Fix #3 (2026-05-23): append catalog-derived column map on `Invalid
     // column name 'X'` so the model gets concrete names instead of guessing.
     const enriched = enrichInvalidColumnError(opts.host, msg, query, connectionName)
@@ -334,7 +347,7 @@ async function executeExportQueryToFile(
 export const exportQueryToFileToolMetadata: ToolMetadata = {
   name: "export_query_to_file",
   description: EXPORT_QUERY_TO_FILE_DESCRIPTION,
-  parameters: EXPORT_QUERY_TO_FILE_PARAMETERS,
+  parameters: EXPORT_QUERY_TO_FILE_PARAMETERS
 }
 
 export const exportQueryToFileTool = exportQueryToFileToolMetadata
@@ -347,8 +360,8 @@ export function createExportQueryToFileTool(host: AgentHost, run?: RunContext): 
       return executeExportQueryToFile(args, {
         resolveSafe: (p) => safePathResolvedWith(host, p),
         host,
-        run,
+        run
       })
-    },
+    }
   }
 }

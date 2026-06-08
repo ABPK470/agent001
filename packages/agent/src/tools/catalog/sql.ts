@@ -156,4 +156,3 @@ export const Q_LINEAGE_PROPERTIES = `
     AND ep.name IN ('MS_Description', 'lineage_dim_joins', 'lineage_feeds')
   ORDER BY s.name, o.name
 `
-

@@ -14,7 +14,11 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import { configureAgent, type BrowserCheckResult, type ShellExecResult } from "../src/application/shell/runtime.js"
+import {
+  configureAgent,
+  type BrowserCheckResult,
+  type ShellExecResult
+} from "../src/application/shell/runtime.js"
 import { createBrowserCheckTool } from "../src/tools/browser-check/index.js"
 import { createShellTool } from "../src/tools/shell/index.js"
 
@@ -22,23 +26,23 @@ const playwrightMocks = vi.hoisted(() => {
   const page = {
     on: vi.fn(),
     goto: vi.fn(async () => ({ ok: () => true })),
-    click: vi.fn(async () => {}),
+    click: vi.fn(async () => {})
   }
   const browser = {
     newPage: vi.fn(async () => page),
-    close: vi.fn(async () => {}),
+    close: vi.fn(async () => {})
   }
   return {
     chromiumLaunch: vi.fn(async () => browser),
     page,
-    browser,
+    browser
   }
 })
 
 vi.mock("playwright", () => ({
   chromium: {
-    launch: playwrightMocks.chromiumLaunch,
-  },
+    launch: playwrightMocks.chromiumLaunch
+  }
 }))
 
 let sandboxA: string
@@ -66,13 +70,15 @@ describe("createShellTool — Phase 4 item 5", () => {
   })
 
   it("routes commands through host.shell.client with configured cwd", async () => {
-    const exec = vi.fn(async (_cmd: string, _cwd: string): Promise<ShellExecResult> => ({
-      stdout: "hi",
-      stderr: "",
-      exitCode: 0,
-      timedOut: false,
-      sandboxed: true,
-    }))
+    const exec = vi.fn(
+      async (_cmd: string, _cwd: string): Promise<ShellExecResult> => ({
+        stdout: "hi",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+        sandboxed: true
+      })
+    )
     const host = configureAgent({ shellCwd: sandboxA, shellClient: exec })
     const tool = createShellTool(host)
 
@@ -94,13 +100,19 @@ describe("createShellTool — Phase 4 item 5", () => {
   })
 
   it("sandboxStrict=true skips host-only deny rules", async () => {
-    const exec = vi.fn(async (): Promise<ShellExecResult> => ({
-      stdout: "ok", stderr: "", exitCode: 0, timedOut: false, sandboxed: true,
-    }))
+    const exec = vi.fn(
+      async (): Promise<ShellExecResult> => ({
+        stdout: "ok",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+        sandboxed: true
+      })
+    )
     const host = configureAgent({
       shellCwd: sandboxA,
       shellClient: exec,
-      shellSandboxStrict: true,
+      shellSandboxStrict: true
     })
     const tool = createShellTool(host)
 
@@ -111,12 +123,24 @@ describe("createShellTool — Phase 4 item 5", () => {
   })
 
   it("two hosts with different cwds remain isolated", async () => {
-    const execA = vi.fn(async (_c: string, _w: string): Promise<ShellExecResult> => ({
-      stdout: "A", stderr: "", exitCode: 0, timedOut: false, sandboxed: true,
-    }))
-    const execB = vi.fn(async (_c: string, _w: string): Promise<ShellExecResult> => ({
-      stdout: "B", stderr: "", exitCode: 0, timedOut: false, sandboxed: true,
-    }))
+    const execA = vi.fn(
+      async (_c: string, _w: string): Promise<ShellExecResult> => ({
+        stdout: "A",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+        sandboxed: true
+      })
+    )
+    const execB = vi.fn(
+      async (_c: string, _w: string): Promise<ShellExecResult> => ({
+        stdout: "B",
+        stderr: "",
+        exitCode: 0,
+        timedOut: false,
+        sandboxed: true
+      })
+    )
     const hostA = configureAgent({ shellCwd: sandboxA, shellClient: execA })
     const hostB = configureAgent({ shellCwd: sandboxB, shellClient: execB })
 
@@ -163,7 +187,7 @@ describe("createBrowserCheckTool — Phase 4 item 6", () => {
 
     const host = configureAgent({
       browserCheckCwd: sandboxA,
-      browserCheckMode: "host",
+      browserCheckMode: "host"
     })
     const tool = createBrowserCheckTool(host)
 
@@ -179,7 +203,7 @@ describe("createBrowserCheckTool — Phase 4 item 6", () => {
 
     const host = configureAgent({
       browserCheckCwd: sandboxA,
-      browserCheckMode: "disabled",
+      browserCheckMode: "disabled"
     })
     const tool = createBrowserCheckTool(host)
 
@@ -195,13 +219,13 @@ describe("createBrowserCheckTool — Phase 4 item 6", () => {
     const client = vi.fn(
       async (_html: string, _clicks: string[], _wait: number, _cwd: string): Promise<BrowserCheckResult> => ({
         report: "OK from sandbox",
-        sandboxed: true,
-      }),
+        sandboxed: true
+      })
     )
     const host = configureAgent({
       browserCheckCwd: sandboxA,
       browserCheckMode: "sandbox",
-      browserCheckClient: client,
+      browserCheckClient: client
     })
     const tool = createBrowserCheckTool(host)
 

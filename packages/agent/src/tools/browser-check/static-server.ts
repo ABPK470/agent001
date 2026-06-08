@@ -24,14 +24,16 @@ export const MIME: Record<string, string> = {
   ".ico": "image/x-icon",
   ".woff": "font/woff",
   ".woff2": "font/woff2",
-  ".ttf": "font/ttf",
+  ".ttf": "font/ttf"
 }
 
 /**
  * Spin up a minimal static file server rooted at `dir`.
  * Returns the server + the URL it's listening on.
  */
-export function startStaticServer(dir: string): Promise<{ server: ReturnType<typeof createServer>; url: string }> {
+export function startStaticServer(
+  dir: string
+): Promise<{ server: ReturnType<typeof createServer>; url: string }> {
   return new Promise((resolve, reject) => {
     const server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
       const urlPath = decodeURIComponent(req.url?.split("?")[0] ?? "/")

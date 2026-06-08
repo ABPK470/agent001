@@ -17,11 +17,19 @@ export function buildSystemChecks(decision: VerifierDecision): VerifierSystemChe
   if (ambiguousIssues.length > 0) {
     checks.push({
       code: "system_ownership_ambiguity",
-      severity: ambiguousIssues.some((issue) => issue.severity === "fatal") ? VerifierIssueSeverity.Fatal : VerifierIssueSeverity.Error,
+      severity: ambiguousIssues.some((issue) => issue.severity === "fatal")
+        ? VerifierIssueSeverity.Fatal
+        : VerifierIssueSeverity.Error,
       summary: `Multiple issues have ambiguous/shared ownership (${ambiguousIssues.length} issue(s)); repair convergence depends on coordination across suspected owners.`,
-      confidence: Math.max(0.4, Math.min(0.9, ambiguousIssues.reduce((acc, issue) => acc + issue.confidence, 0) / ambiguousIssues.length)),
+      confidence: Math.max(
+        0.4,
+        Math.min(
+          0.9,
+          ambiguousIssues.reduce((acc, issue) => acc + issue.confidence, 0) / ambiguousIssues.length
+        )
+      ),
       affectedStepNames: uniqueStrings(ambiguousIssues.flatMap((issue) => issue.suspectedOwners)),
-      affectedArtifacts: uniqueStrings(ambiguousIssues.flatMap((issue) => issue.affectedArtifacts)),
+      affectedArtifacts: uniqueStrings(ambiguousIssues.flatMap((issue) => issue.affectedArtifacts))
     })
   }
 
@@ -33,7 +41,7 @@ export function buildSystemChecks(decision: VerifierDecision): VerifierSystemChe
       summary: `Cross-step integration invariants are failing across ${uniqueStrings(integrationArtifacts.flatMap((issue) => issue.affectedArtifacts)).length} artifact(s).`,
       confidence: 0.78,
       affectedStepNames: uniqueStrings(integrationArtifacts.flatMap((issue) => issue.suspectedOwners)),
-      affectedArtifacts: uniqueStrings(integrationArtifacts.flatMap((issue) => issue.affectedArtifacts)),
+      affectedArtifacts: uniqueStrings(integrationArtifacts.flatMap((issue) => issue.affectedArtifacts))
     })
   }
 

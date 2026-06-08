@@ -26,7 +26,7 @@ export function createCircuitBreaker(): CircuitBreakerState {
   return {
     failures: new Map(),
     open: false,
-    reason: undefined,
+    reason: undefined
   }
 }
 
@@ -40,7 +40,7 @@ export function buildSemanticKey(toolName: string, args: Record<string, unknown>
   let hash = 0
   for (let i = 0; i < sortedArgs.length; i++) {
     const char = sortedArgs.charCodeAt(i)
-    hash = ((hash << 5) - hash) + char
+    hash = (hash << 5) - hash + char
     hash = hash & hash // Convert to 32-bit int
   }
   return `${toolName}:${hash.toString(36)}`
@@ -54,7 +54,7 @@ export function recordFailure(
   state: CircuitBreakerState,
   toolName: string,
   args: Record<string, unknown>,
-  threshold: number = DEFAULT_FAILURE_THRESHOLD,
+  threshold: number = DEFAULT_FAILURE_THRESHOLD
 ): CircuitBreakerState {
   const key = buildSemanticKey(toolName, args)
   const newFailures = new Map(state.failures)
@@ -66,9 +66,7 @@ export function recordFailure(
   return {
     failures: newFailures,
     open: state.open || shouldOpen,
-    reason: shouldOpen
-      ? `Tool "${toolName}" failed ${count} times with same arguments`
-      : state.reason,
+    reason: shouldOpen ? `Tool "${toolName}" failed ${count} times with same arguments` : state.reason
   }
 }
 
@@ -78,19 +76,19 @@ export function recordFailure(
 export function recordSuccess(
   state: CircuitBreakerState,
   toolName: string,
-  args: Record<string, unknown>,
+  args: Record<string, unknown>
 ): CircuitBreakerState {
   const key = buildSemanticKey(toolName, args)
   const newFailures = new Map(state.failures)
   newFailures.delete(key)
 
   // If no failures remain, close the circuit
-  const open = [...newFailures.values()].some(c => c >= DEFAULT_FAILURE_THRESHOLD)
+  const open = [...newFailures.values()].some((c) => c >= DEFAULT_FAILURE_THRESHOLD)
 
   return {
     failures: newFailures,
     open,
-    reason: open ? state.reason : undefined,
+    reason: open ? state.reason : undefined
   }
 }
 
@@ -101,7 +99,7 @@ export function isBlocked(
   state: CircuitBreakerState,
   toolName: string,
   args: Record<string, unknown>,
-  threshold: number = DEFAULT_FAILURE_THRESHOLD,
+  threshold: number = DEFAULT_FAILURE_THRESHOLD
 ): boolean {
   const key = buildSemanticKey(toolName, args)
   return (state.failures.get(key) ?? 0) >= threshold
@@ -136,7 +134,7 @@ export function createBudgetState(baseBudget: number, totalSteps: number): Budge
     completedSteps: 0,
     totalSteps,
     extensions: 0,
-    maxExtensions: 3,
+    maxExtensions: 3
   }
 }
 
@@ -146,10 +144,7 @@ export function createBudgetState(baseBudget: number, totalSteps: number): Budge
  * Logic: if completedSteps increased since last check and we haven't exceeded
  * max extensions, add 25% more iterations to the budget.
  */
-export function maybeExtendBudget(
-  state: BudgetState,
-  newCompletedSteps: number,
-): BudgetState {
+export function maybeExtendBudget(state: BudgetState, newCompletedSteps: number): BudgetState {
   if (newCompletedSteps <= state.completedSteps) {
     // No progress — don't extend
     return { ...state, completedSteps: newCompletedSteps }
@@ -166,6 +161,6 @@ export function maybeExtendBudget(
     ...state,
     completedSteps: newCompletedSteps,
     effectiveBudget: state.effectiveBudget + extension,
-    extensions: state.extensions + 1,
+    extensions: state.extensions + 1
   }
 }

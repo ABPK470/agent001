@@ -56,7 +56,9 @@ const VERSION = "1.0.0"
  * reason about, unit-test, and reuse without an import-graph dance.
  */
 function looksCoreferential(goal: string): boolean {
-  return /\b(it|this|that|these|those|the\s+(data|result|results|report|chart|output|table|rows|answer|response))\b/i.test(goal)
+  return /\b(it|this|that|these|those|the\s+(data|result|results|report|chart|output|table|rows|answer|response))\b/i.test(
+    goal
+  )
 }
 
 /** Walks newest-last messages; returns true on first non-empty assistant content. */
@@ -94,24 +96,26 @@ export const anaphoraUngroundedDetector: Detector = {
     if (ctx.priorResultsCount > 0) return []
 
     // Otherwise: goal points back, prior turn exists, no payload survived.
-    return [{
-      id: makeFindingId("anaphora-ungrounded", "prior-turn"),
-      kind: "anaphora-ungrounded" as const,
-      severity: "warn" as const,
-      subject: "prior-turn data",
-      reasoning:
-        "The goal refers back to a previous turn's data, but no structured " +
-        "tool payload from that turn is recallable this round — only the " +
-        "assistant's own narrative paraphrase in <prior_turns> survives. " +
-        "Quoting specific numbers, rows or names from that paraphrase is " +
-        "the no-amnesia trap; re-run the underlying query (or call " +
-        "recall_prior_result with an explicit run/tool-call id) instead of " +
-        "fabricating values to keep the answer flowing.",
-      suggestedQuestion:
-        "I don't have the rows from the previous step stored — should I " +
-        "re-run the query that produced them, or would you like to point me " +
-        "at a different source?",
-      source: "detector" as const,
-    }]
-  },
+    return [
+      {
+        id: makeFindingId("anaphora-ungrounded", "prior-turn"),
+        kind: "anaphora-ungrounded" as const,
+        severity: "warn" as const,
+        subject: "prior-turn data",
+        reasoning:
+          "The goal refers back to a previous turn's data, but no structured " +
+          "tool payload from that turn is recallable this round — only the " +
+          "assistant's own narrative paraphrase in <prior_turns> survives. " +
+          "Quoting specific numbers, rows or names from that paraphrase is " +
+          "the no-amnesia trap; re-run the underlying query (or call " +
+          "recall_prior_result with an explicit run/tool-call id) instead of " +
+          "fabricating values to keep the answer flowing.",
+        suggestedQuestion:
+          "I don't have the rows from the previous step stored — should I " +
+          "re-run the query that produced them, or would you like to point me " +
+          "at a different source?",
+        source: "detector" as const
+      }
+    ]
+  }
 }

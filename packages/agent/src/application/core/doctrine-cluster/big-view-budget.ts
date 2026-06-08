@@ -18,14 +18,12 @@ export const bigViewBudgetDoctrine: DoctrineModule = {
   summaryBudgetBytes: 480,
   summary(): string {
     const samples = [...listLargeObjects()].slice(0, 3)
-    const exampleList = samples.length > 0
-      ? samples.join(", ")
-      : "the live catalog's largest tables/views"
+    const exampleList = samples.length > 0 ? samples.join(", ") : "the live catalog's largest tables/views"
     return [
       "Big-view touch budget (enforced):",
       `- Touch each large object (e.g. ${exampleList}) at most TWICE per task.`,
       "- Stage 1: narrow keys into #temp (one touch). Stage 2: fetch detail rows for those keys (second touch).",
-      "- Derive every remaining metric from #temp only. The tool BLOCKS queries with >2 references to any large object.",
+      "- Derive every remaining metric from #temp only. The tool BLOCKS queries with >2 references to any large object."
     ].join("\n")
   },
   enforce(query: string) {
@@ -33,10 +31,12 @@ export const bigViewBudgetDoctrine: DoctrineModule = {
     const offenders = Array.from(counts.entries()).filter(([, count]) => count > 2)
     if (offenders.length === 0) return []
     const list = offenders.map(([name, count]) => `${name} (${count})`).join(", ")
-    return [{
-      code: "large_object_overused",
-      severity: "block" as const,
-      message: `Large object referenced more than twice: ${list}.`,
-    }]
-  },
+    return [
+      {
+        code: "large_object_overused",
+        severity: "block" as const,
+        message: `Large object referenced more than twice: ${list}.`
+      }
+    ]
+  }
 }

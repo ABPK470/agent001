@@ -26,10 +26,10 @@ export interface PolishFailureInput {
   readonly operatorSummary: string
   /** Failure category — drives tone (capability vs config vs verification). */
   readonly failureKind:
-    | "platform_unconfigured"   // operator config missing
-    | "capability_missing"      // tool / feature isn't implemented
-    | "verification_failed"     // agent tried but couldn't satisfy criteria
-    | "internal"                // catch-all
+    | "platform_unconfigured" // operator config missing
+    | "capability_missing" // tool / feature isn't implemented
+    | "verification_failed" // agent tried but couldn't satisfy criteria
+    | "internal" // catch-all
   /** Run reference the user can forward to an admin. */
   readonly runRef: string
 }
@@ -45,15 +45,18 @@ const SYSTEM_PROMPT = [
   "- Do NOT apologise more than once.",
   "- Do NOT add headings, lists, or markdown formatting.",
   "- Tone: warm, direct, professional, like a helpful colleague.",
-  "- Always end with the run reference on its own line, prefixed with 'Reference: ' (no other formatting).",
+  "- Always end with the run reference on its own line, prefixed with 'Reference: ' (no other formatting)."
 ].join("\n")
 
 function buildUserPrompt(input: PolishFailureInput): string {
   const reasonGuidance = {
-    platform_unconfigured: "A backend integration this request needs is not set up on this server. Suggest the user share the reference with an admin so they can configure it.",
-    capability_missing:    "This specific capability is not implemented yet — there is no tool that can perform what was asked. Politely say it's not something the assistant can do right now.",
-    verification_failed:   "The assistant attempted the work but couldn't produce a result that meets the requirements. Acknowledge the attempt and that it didn't pan out.",
-    internal:              "An internal problem prevented completion. Keep it generic.",
+    platform_unconfigured:
+      "A backend integration this request needs is not set up on this server. Suggest the user share the reference with an admin so they can configure it.",
+    capability_missing:
+      "This specific capability is not implemented yet — there is no tool that can perform what was asked. Politely say it's not something the assistant can do right now.",
+    verification_failed:
+      "The assistant attempted the work but couldn't produce a result that meets the requirements. Acknowledge the attempt and that it didn't pan out.",
+    internal: "An internal problem prevented completion. Keep it generic."
   }[input.failureKind]
 
   return [
@@ -65,19 +68,19 @@ function buildUserPrompt(input: PolishFailureInput): string {
     "",
     `Run reference to include at the end: ${input.runRef}`,
     "",
-    "Write the reply now.",
+    "Write the reply now."
   ].join("\n")
 }
 
 const LEAK_PATTERNS = [
   /\b(env|environment)\s+var(iable)?s?\b/i,
   /\bMSSQL\w*\b/,
-  /\b[A-Z][A-Z0-9_]{4,}\b/,           // SCREAMING_SNAKE_CASE identifiers
+  /\b[A-Z][A-Z0-9_]{4,}\b/, // SCREAMING_SNAKE_CASE identifiers
   /\bplanner_failure\b/i,
   /\b(stack\s*trace|exception|TypeError|ReferenceError)\b/i,
   /\.(ts|js|tsx|jsx|json|env)\b/i,
   /\b(tool|function)\s+["'`]?\w+["'`]?\s+(?:not|is)\s+(?:available|configured|implemented)/i,
-  /^\s*[{[]/m,                         // looks like JSON
+  /^\s*[{[]/m // looks like JSON
 ]
 
 function looksLeaky(text: string): boolean {
@@ -88,7 +91,7 @@ function looksLeaky(text: string): boolean {
 /** Map the operator-facing internal-failure kind onto the prompt's category. */
 export function mapFailureKindForPolish(internalKind: string): PolishFailureInput["failureKind"] {
   if (internalKind.startsWith("platform_unconfigured")) return "platform_unconfigured"
-  if (internalKind.startsWith("planner_failure:validation")) return "capability_missing"  // unknown_tool, etc.
+  if (internalKind.startsWith("planner_failure:validation")) return "capability_missing" // unknown_tool, etc.
   if (internalKind.startsWith("planner_failure")) return "internal"
   if (internalKind === "task_failed") return "verification_failed"
   return "internal"
@@ -103,20 +106,18 @@ export function mapFailureKindForPolish(internalKind: string): PolishFailureInpu
 export async function polishFailureForUser(
   llm: LLMClient,
   input: PolishFailureInput,
-  opts?: { signal?: AbortSignal; timeoutMs?: number },
+  opts?: { signal?: AbortSignal; timeoutMs?: number }
 ): Promise<string | null> {
   const messages: Message[] = [
     { role: MessageRole.System, content: SYSTEM_PROMPT },
-    { role: MessageRole.User,   content: buildUserPrompt(input) },
+    { role: MessageRole.User, content: buildUserPrompt(input) }
   ]
 
   // Hard deadline so a slow LLM doesn't keep the user staring at "Thinking".
   const timeoutMs = opts?.timeoutMs ?? 8000
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
-  const signal = opts?.signal
-    ? anySignal([opts.signal, controller.signal])
-    : controller.signal
+  const signal = opts?.signal ? anySignal([opts.signal, controller.signal]) : controller.signal
 
   try {
     const response = await llm.chat(messages, [], { signal, maxTokens: 200 })
@@ -145,7 +146,10 @@ function anySignal(signals: AbortSignal[]): AbortSignal {
   }
   const ctrl = new AbortController()
   for (const s of signals) {
-    if (s.aborted) { ctrl.abort(); break }
+    if (s.aborted) {
+      ctrl.abort()
+      break
+    }
     s.addEventListener("abort", () => ctrl.abort(), { once: true })
   }
   return ctrl.signal

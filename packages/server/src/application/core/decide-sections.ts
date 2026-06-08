@@ -25,15 +25,15 @@ import { defaultCatalogAccessor, getTenantConfig, listSchemas } from "@mia/agent
 
 export interface SectionDecision {
   /** Inject the ABI-sync SME block. */
-  includeAbiSync:        boolean
+  includeAbiSync: boolean
   /** Include the MSSQL "DATA TOOLS / RULES / EFFICIENCY" guidance prose. */
-  includeMssqlGuidance:  boolean
+  includeMssqlGuidance: boolean
   /**
    * Include the big-table / micro-ETL discipline section (canonical
    * #temp staging pattern + anti-patterns). Same trigger as
    * `includeMssqlGuidance` — fires whenever the goal looks DB-shaped.
    */
-  includeBigTableEtl:    boolean
+  includeBigTableEtl: boolean
   /** Include the per-connection knowledge body (the largest single block). */
   includeMssqlKnowledge: boolean
   /**
@@ -48,9 +48,9 @@ export interface SectionDecision {
    *               where mentioning the warehouse is plausible but a 5-15 KB
    *               prose dump is overkill.
    */
-  mssqlKnowledgeMode:    "full" | "header"
+  mssqlKnowledgeMode: "full" | "header"
   /** Include the live schema-catalog summary. */
-  includeMssqlCatalog:   boolean
+  includeMssqlCatalog: boolean
   /**
    * Include the chart-kinds reference. True ONLY when the goal explicitly
    * mentions a chart / graph / plot / dashboard / etc.; otherwise the model
@@ -69,7 +69,7 @@ export interface SectionDecision {
    * DB-shaped, chart-shaped, or sync-shaped. Generic engineering / coding
    * tasks skip it — they get the generic operating manual only.
    */
-  includeDataPersona:    boolean
+  includeDataPersona: boolean
   /**
    * Optional debug payload. Additive — kept here so tests and the run
    * trace can assert on / log *why* a gate fired. Not consumed by the
@@ -78,15 +78,16 @@ export interface SectionDecision {
   dbScore?: number
   triggers?: {
     operational: boolean
-    domain:      boolean
-    tableHint:   boolean
-    nonDb:       boolean
-    sync:        boolean
-    bi:          boolean
+    domain: boolean
+    tableHint: boolean
+    nonDb: boolean
+    sync: boolean
+    bi: boolean
   }
 }
 
-const SYNC_SHAPE_RE = /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsync.preview\b|\bsync.execute\b|\blist.environments\b|\bcompare.catalog|\bsync.contract\b|\bcontract.sync\b|\bsync.recipe\b|\bsync.entity\b|\benv.sync\b/i
+const SYNC_SHAPE_RE =
+  /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsync.preview\b|\bsync.execute\b|\blist.environments\b|\bcompare.catalog|\bsync.contract\b|\bcontract.sync\b|\bsync.recipe\b|\bsync.entity\b|\benv.sync\b/i
 
 // ── DB gate — two-signal scorer ────────────────────────────────────
 //
@@ -122,7 +123,8 @@ const SYNC_SHAPE_RE = /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsy
 // Universal SQL / discovery-tool tokens. NO customer-specific schema
 // or table names — those flow in via `DB_OPERATIONAL_SCHEMA_RE`,
 // rebuilt per-call from the live catalog.
-const DB_OPERATIONAL_CORE_RE = /\b(sql|t-sql|tsql|mssql|sqlserver|select|from\s+\w|where\s+\w|group\s+by|order\s+by|join(s|ed|ing)?|query|queries|schema|columns?|rows?|view(s)?|stored?\s+proc|catalog|lineage|search_catalog|explore_mssql|inspect_definition|discover_relationships|query_mssql|profile_data|export_query|dwh|warehouse|etl|dataset(s)?|pipeline\s+(run|status)|recipe|database)\b/i
+const DB_OPERATIONAL_CORE_RE =
+  /\b(sql|t-sql|tsql|mssql|sqlserver|select|from\s+\w|where\s+\w|group\s+by|order\s+by|join(s|ed|ing)?|query|queries|schema|columns?|rows?|view(s)?|stored?\s+proc|catalog|lineage|search_catalog|explore_mssql|inspect_definition|discover_relationships|query_mssql|profile_data|export_query|dwh|warehouse|etl|dataset(s)?|pipeline\s+(run|status)|recipe|database)\b/i
 
 // ── Universal BI / business-question vocabulary ─────────────────────
 //
@@ -169,16 +171,18 @@ const BI_DOMAIN_RE = new RegExp(
     "|\\b(?:fiscal|quarterly|monthly|annually|year[- ]over[- ]year|month[- ]over[- ]month)\\b",
     "|\\blast\\s+\\d+\\s+(?:days?|weeks?|months?|quarters?|years?)\\b",
     "|\\b(?:january|february|march|april|may|june|july|august|september|october|november|december)\\s+(?:19|20)\\d{2}\\b",
-    "|\\bQ[1-4]\\s+(?:19|20)\\d{2}\\b",
+    "|\\bQ[1-4]\\s+(?:19|20)\\d{2}\\b"
   ].join(""),
-  "i",
+  "i"
 )
 
 // "Non-DB task type" cues only. NEVER add rendering verbs here.
-const NON_DB_RE = /\b(monte\s*carlo|simulation|mockup|mock-up|wireframe|prototype|sharpe\s+ratio|black.scholes|brownian|stochastic\s+process|geometric\s+brownian)\b/i
+const NON_DB_RE =
+  /\b(monte\s*carlo|simulation|mockup|mock-up|wireframe|prototype|sharpe\s+ratio|black.scholes|brownian|stochastic\s+process|geometric\s+brownian)\b/i
 
 // "Visual" intent — any of these usually benefits from the chart catalogue.
-const CHART_RE = /\b(chart|charts|graph|graphs|graphed|plot|plots|plotted|visuali[sz]e|visuali[sz]ation|dashboard|kpi|kpis|trend(s)?|distribution|breakdown|histogram|heatmap|relationship\s+map|diagram|figure|render)\b/i
+const CHART_RE =
+  /\b(chart|charts|graph|graphs|graphed|plot|plots|plotted|visuali[sz]e|visuali[sz]ation|dashboard|kpi|kpis|trend(s)?|distribution|breakdown|histogram|heatmap|relationship\s+map|diagram|figure|render)\b/i
 
 /** Regex word-escape; keeps alphanumeric tokens safe to splice into a regex. */
 function escapeRe(s: string): string {
@@ -192,10 +196,10 @@ function escapeRe(s: string): string {
  */
 interface DynamicGateRegexes {
   operationalSchemaRe: RegExp | null
-  domainRe:            RegExp | null
-  tableSchemaRe:       RegExp | null
-  schemaTableRe:       RegExp | null
-  syncExtraRe:         RegExp | null
+  domainRe: RegExp | null
+  tableSchemaRe: RegExp | null
+  schemaTableRe: RegExp | null
+  syncExtraRe: RegExp | null
 }
 let _gateCache: { key: string; re: DynamicGateRegexes } | null = null
 function buildGateRegexes(): DynamicGateRegexes {
@@ -211,47 +215,47 @@ function buildGateRegexes(): DynamicGateRegexes {
   const key = JSON.stringify([schemaTokens, domain, sync])
   if (_gateCache && _gateCache.key === key) return _gateCache.re
 
-  const schemaAlt = schemaTokens.length > 0
-    ? schemaTokens.map(escapeRe).join("|")
-    : null
-  const operationalSchemaRe = schemaAlt
-    ? new RegExp(`\\b(?:${schemaAlt})\\.`, "i")
-    : null
+  const schemaAlt = schemaTokens.length > 0 ? schemaTokens.map(escapeRe).join("|") : null
+  const operationalSchemaRe = schemaAlt ? new RegExp(`\\b(?:${schemaAlt})\\.`, "i") : null
   const tableSchemaRe = schemaAlt
-    ? new RegExp(`\\b(?:table(?:s)?)\\b[^.\\n]{0,80}\\b(?:in\\s+(?:the\\s+)?(?:database|schema|db)|schema|sql|database|db|join|column|row|query|${schemaAlt})\\b`, "i")
+    ? new RegExp(
+        `\\b(?:table(?:s)?)\\b[^.\\n]{0,80}\\b(?:in\\s+(?:the\\s+)?(?:database|schema|db)|schema|sql|database|db|join|column|row|query|${schemaAlt})\\b`,
+        "i"
+      )
     : /\b(?:table(?:s)?)\b[^.\n]{0,80}\b(?:in\s+(?:the\s+)?(?:database|schema|db)|schema|sql|database|db|join|column|row|query)\b/i
   const schemaTableRe = schemaAlt
-    ? new RegExp(`\\b(?:database|schema|sql|join|column|row|query|${schemaAlt})\\b[^.\\n]{0,80}\\b(?:table(?:s)?)\\b`, "i")
+    ? new RegExp(
+        `\\b(?:database|schema|sql|join|column|row|query|${schemaAlt})\\b[^.\\n]{0,80}\\b(?:table(?:s)?)\\b`,
+        "i"
+      )
     : /\b(?:database|schema|sql|join|column|row|query)\b[^.\n]{0,80}\b(?:table(?:s)?)\b/i
-  const domainRe = domain.length > 0
-    ? new RegExp(`\\b(?:${domain.map(escapeRe).join("|")})\\b`, "i")
-    : null
-  const syncExtraRe = sync.length > 0
-    ? new RegExp(`\\b(?:${sync.map(escapeRe).join("|")})\\b`, "i")
-    : null
+  const domainRe = domain.length > 0 ? new RegExp(`\\b(?:${domain.map(escapeRe).join("|")})\\b`, "i") : null
+  const syncExtraRe = sync.length > 0 ? new RegExp(`\\b(?:${sync.map(escapeRe).join("|")})\\b`, "i") : null
 
   const re: DynamicGateRegexes = {
     operationalSchemaRe,
     domainRe,
     tableSchemaRe,
     schemaTableRe,
-    syncExtraRe,
+    syncExtraRe
   }
   _gateCache = { key, re }
   return re
 }
 /** Test-only reset hook so regex memoisation cannot leak across tests. */
-export function _resetDecideSectionsCache(): void { _gateCache = null }
+export function _resetDecideSectionsCache(): void {
+  _gateCache = null
+}
 
 export interface DbScoreResult {
-  score:       number
+  score: number
   operational: boolean
-  domain:      boolean
-  tableHint:   boolean
-  nonDb:       boolean
-  sync:        boolean
+  domain: boolean
+  tableHint: boolean
+  nonDb: boolean
+  sync: boolean
   /** True when the goal matches the universal BI/business vocabulary. */
-  bi:          boolean
+  bi: boolean
 }
 
 /**
@@ -267,7 +271,8 @@ export interface DbScoreResult {
  * Kept in sync with `DB_DISCOVERY_TOOL_NAMES` + `SYNC_TOOL_NAMES`
  * below; centralised here so the scorer never has to import them.
  */
-const DB_TOOL_TRACE_RE = /\b(?:query_mssql|explore_mssql_schema|search_catalog|inspect_definition|discover_relationships|profile_data|export_query_to_file|compare_catalogs|sync_preview|sync_execute|list_environments)\b/i
+const DB_TOOL_TRACE_RE =
+  /\b(?:query_mssql|explore_mssql_schema|search_catalog|inspect_definition|discover_relationships|profile_data|export_query_to_file|compare_catalogs|sync_preview|sync_execute|list_environments)\b/i
 
 /** Cap on how much context text the scorer scans — keeps regex cost bounded. */
 const CONTEXT_SCAN_CAP = 8000
@@ -292,52 +297,48 @@ const CONTEXT_SCAN_CAP = 8000
  *
  * Exported for telemetry / tests.
  */
-export function scoreDbLikelihood(
-  goal: string,
-  context?: string,
-): DbScoreResult {
+export function scoreDbLikelihood(goal: string, context?: string): DbScoreResult {
   const dyn = buildGateRegexes()
   const ctx = (context ?? "").slice(0, CONTEXT_SCAN_CAP)
   // Scan goal + context for positive DB signals.
   const probe = ctx ? `${goal}\n${ctx}` : goal
 
-  const operational = DB_OPERATIONAL_CORE_RE.test(probe)
-    || (dyn.operationalSchemaRe?.test(probe) ?? false)
-  const domain      = dyn.domainRe?.test(probe) ?? false
-  const tableHint   = (dyn.tableSchemaRe?.test(probe) ?? false) || (dyn.schemaTableRe?.test(probe) ?? false)
+  const operational = DB_OPERATIONAL_CORE_RE.test(probe) || (dyn.operationalSchemaRe?.test(probe) ?? false)
+  const domain = dyn.domainRe?.test(probe) ?? false
+  const tableHint = (dyn.tableSchemaRe?.test(probe) ?? false) || (dyn.schemaTableRe?.test(probe) ?? false)
   // Universal BI / business-vocabulary signal — catches archetypal
   // warehouse questions phrased in business language ("top 3 products
   // by revenue for April 2025") that contain ZERO SQL keywords. Goal-
   // only, never context: a prior turn discussing "products" doesn't
   // make THIS turn's "hi" a DB question.
-  const bi          = BI_DOMAIN_RE.test(goal)
+  const bi = BI_DOMAIN_RE.test(goal)
   // Non-DB intent must come from the GOAL only — context might legitimately
   // mention a Monte-Carlo discussion from earlier without the current turn
   // being non-DB. Honouring explicit current intent here.
-  const nonDb       = NON_DB_RE.test(goal)
-  const sync        = SYNC_SHAPE_RE.test(probe) || (dyn.syncExtraRe?.test(probe) ?? false)
+  const nonDb = NON_DB_RE.test(goal)
+  const sync = SYNC_SHAPE_RE.test(probe) || (dyn.syncExtraRe?.test(probe) ?? false)
   // Strong evidence: the agent already called DB tools in this session.
   // Only counted when found in CONTEXT (not goal) — the goal mentioning
   // a tool name is just a string, but working-memory trace is a fact.
   const priorDbToolCall = ctx ? DB_TOOL_TRACE_RE.test(ctx) : false
 
   let score = 0
-  if (operational)             score += 2
-  if (domain)                  score += 2
-  if (tableHint)               score += 1
-  if (bi)                      score += 2
-  if (sync)                    score += 3
-  if (priorDbToolCall)         score += 2
+  if (operational) score += 2
+  if (domain) score += 2
+  if (tableHint) score += 1
+  if (bi) score += 2
+  if (sync) score += 3
+  if (priorDbToolCall) score += 2
   // NB: bi does NOT cancel nonDb — `Monte Carlo portfolio simulation`
   // legitimately matches BI vocab (`portfolio`) but the simulation cue
   // still wins. Operational SQL keywords remain the only nonDb cancel.
-  if (nonDb && !operational)   score -= 3
+  if (nonDb && !operational) score -= 3
 
   return { score, operational, domain, tableHint, nonDb, sync, bi }
 }
 
 export function decideSections(opts: {
-  goal:    string
+  goal: string
   memory?: { working?: string; episodic?: string; semantic?: string }
   /**
    * Conversation-level context (recent messages + memory) used to
@@ -346,42 +347,41 @@ export function decideSections(opts: {
    */
   context?: string
 }): SectionDecision {
-  const goal       = opts.goal ?? ""
+  const goal = opts.goal ?? ""
   // Auto-derive context from `memory` when no explicit context is supplied,
   // so existing callers that only pass `memory` still get the benefit.
-  const derived = opts.context
-    ?? [opts.memory?.working, opts.memory?.episodic].filter(Boolean).join("\n")
-  const db         = scoreDbLikelihood(goal, derived || undefined)
-  const isDbLike   = db.score >= 2
+  const derived = opts.context ?? [opts.memory?.working, opts.memory?.episodic].filter(Boolean).join("\n")
+  const db = scoreDbLikelihood(goal, derived || undefined)
+  const isDbLike = db.score >= 2
   // Chart catalogue requires EXPLICIT visual intent. DB-shaped goals no
   // longer auto-include it — the model can call `get_chart_specs` if it
   // decides a visualisation is warranted.
-  const isVisual   = CHART_RE.test(goal)
-  const hasMemory  = !!(opts.memory && (opts.memory.working || opts.memory.episodic || opts.memory.semantic))
+  const isVisual = CHART_RE.test(goal)
+  const hasMemory = !!(opts.memory && (opts.memory.working || opts.memory.episodic || opts.memory.semantic))
 
   return {
-    includeAbiSync:        db.sync,
-    includeMssqlGuidance:  isDbLike,
+    includeAbiSync: db.sync,
+    includeMssqlGuidance: isDbLike,
     includeMssqlKnowledge: isDbLike,
     // Strong DB intent (score ≥ 4) or any sync goal → full knowledge body;
     // borderline DB intent → header-only. Single-signal hits (score 2-3:
     // e.g. just "join" or just "schema" in the goal) shouldn't ship the
     // full warehouse manual.
-    mssqlKnowledgeMode:    (db.score >= 4 || db.sync) ? "full" : "header",
-    includeMssqlCatalog:   isDbLike,
-    includeBigTableEtl:    isDbLike,
+    mssqlKnowledgeMode: db.score >= 4 || db.sync ? "full" : "header",
+    includeMssqlCatalog: isDbLike,
+    includeBigTableEtl: isDbLike,
     includeChartCatalogue: isVisual,
     includeMemoryGuidance: hasMemory,
-    includeDataPersona:    isDbLike || isVisual || db.sync,
-    dbScore:               db.score,
+    includeDataPersona: isDbLike || isVisual || db.sync,
+    dbScore: db.score,
     triggers: {
       operational: db.operational,
-      domain:      db.domain,
-      tableHint:   db.tableHint,
-      nonDb:       db.nonDb,
-      sync:        db.sync,
-      bi:          db.bi,
-    },
+      domain: db.domain,
+      tableHint: db.tableHint,
+      nonDb: db.nonDb,
+      sync: db.sync,
+      bi: db.bi
+    }
   }
 }
 
@@ -415,19 +415,19 @@ const DB_DISCOVERY_TOOL_NAMES: ReadonlySet<string> = new Set([
   "profile_data",
   "inspect_definition",
   "query_mssql",
-  "export_query_to_file",
+  "export_query_to_file"
 ])
 
 const SYNC_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_environments",
   "sync_preview",
   "sync_execute",
-  "compare_catalogs",
+  "compare_catalogs"
 ])
 
 export interface ToolFilterResult<T extends { name: string }> {
   /** Final tool list to advertise to the LLM. */
-  tools:   T[]
+  tools: T[]
   /** Names dropped for this run. Used for the observability log line. */
   dropped: string[]
   /** True when no filtering occurred (borderline / DB-shaped / sync goals). */
@@ -444,11 +444,11 @@ export interface ToolFilterResult<T extends { name: string }> {
  */
 export function filterToolsByGoal<T extends { name: string }>(
   tools: T[],
-  decision: SectionDecision,
+  decision: SectionDecision
 ): ToolFilterResult<T> {
   const score = decision.dbScore ?? 0
   const isDbLike = score >= 2
-  const isSync   = !!decision.triggers?.sync
+  const isSync = !!decision.triggers?.sync
   if (isDbLike || isSync) {
     return { tools, dropped: [], passThrough: true }
   }

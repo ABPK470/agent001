@@ -49,15 +49,19 @@ export function extractReferencedCssClassesFromHtml(html: string): string[] {
 
 export function detectPotentialLinearGridStriping(css: string): string[] {
   const issues: string[] = []
-  const hasGridColumns = /grid-template-columns\s*:\s*repeat\s*\(\s*([2-9]|\d{2,})\s*,/i.test(css)
-    || /grid-template-columns\s*:\s*(?:[^;]*\s){1,}[0-9.]+(?:fr|px|rem|em|%)\b/i.test(css)
+  const hasGridColumns =
+    /grid-template-columns\s*:\s*repeat\s*\(\s*([2-9]|\d{2,})\s*,/i.test(css) ||
+    /grid-template-columns\s*:\s*(?:[^;]*\s){1,}[0-9.]+(?:fr|px|rem|em|%)\b/i.test(css)
   const usesFlatOddEven = /:nth-child\(odd\)/i.test(css) && /:nth-child\(even\)/i.test(css)
-  const usesCoordinateAwareSelectors = /:nth-child\(\s*\d+n\s*[+-]\s*\d+\s*\)/i.test(css)
-    || /\[(?:data-|aria-)[^\]]*(?:row|col|x|y|cell)/i.test(css)
-    || /--(?:row|col|x|y)/i.test(css)
+  const usesCoordinateAwareSelectors =
+    /:nth-child\(\s*\d+n\s*[+-]\s*\d+\s*\)/i.test(css) ||
+    /\[(?:data-|aria-)[^\]]*(?:row|col|x|y|cell)/i.test(css) ||
+    /--(?:row|col|x|y)/i.test(css)
 
   if (hasGridColumns && usesFlatOddEven && !usesCoordinateAwareSelectors) {
-    issues.push("alternating cell styling appears to rely on flat :nth-child(odd/even) selectors inside a multi-column grid, which often produces striping instead of true 2D alternation")
+    issues.push(
+      "alternating cell styling appears to rely on flat :nth-child(odd/even) selectors inside a multi-column grid, which often produces striping instead of true 2D alternation"
+    )
   }
 
   return issues
@@ -69,7 +73,7 @@ export function detectPotentialLinearGridStriping(css: string): string[] {
 
 export function outputIntersectsArtifacts(outputLower: string, artifacts: readonly string[]): boolean {
   if (artifacts.length === 0) return true
-  return artifacts.some(artifact => {
+  return artifacts.some((artifact) => {
     const normalizedArtifact = artifact.toLowerCase().replace(/^\.\//, "")
     const basename = normalizedArtifact.split("/").pop() ?? normalizedArtifact
     return outputLower.includes(basename) || outputLower.includes(normalizedArtifact)

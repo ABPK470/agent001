@@ -21,7 +21,7 @@ import {
   formatOpenAICompatibleMessage,
   formatOpenAICompatibleTools,
   OpenAICompatibleClient,
-  parseOpenAICompatibleResponse,
+  parseOpenAICompatibleResponse
 } from "./openai-compat.js"
 
 export class DatabricksClient implements LLMClient {
@@ -30,9 +30,9 @@ export class DatabricksClient implements LLMClient {
   private readonly getToken: () => Promise<string>
 
   constructor(opts: {
-    host: string                      // e.g. "https://dbc-...cloud.databricks.com"
-    endpoint: string                  // serving-endpoint name
-    getToken: () => Promise<string>   // returns a fresh M2M bearer
+    host: string // e.g. "https://dbc-...cloud.databricks.com"
+    endpoint: string // serving-endpoint name
+    getToken: () => Promise<string> // returns a fresh M2M bearer
   }) {
     this.host = opts.host.replace(/\/$/, "")
     this.endpoint = opts.endpoint
@@ -42,7 +42,12 @@ export class DatabricksClient implements LLMClient {
   async chat(
     messages: Message[],
     tools: Tool[],
-    opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void },
+    opts?: {
+      signal?: AbortSignal
+      maxTokens?: number
+      temperature?: number
+      onToken?: (token: string) => void
+    }
   ): Promise<LLMResponse> {
     const token = await this.getToken()
     // Databricks serving endpoints expose an OpenAI-compatible API at
@@ -60,7 +65,7 @@ export class DatabricksClient implements LLMClient {
       apiKey: token,
       model: this.endpoint,
       baseUrl: base,
-      enablePromptCaching: true,
+      enablePromptCaching: true
     })
 
     try {
@@ -70,7 +75,9 @@ export class DatabricksClient implements LLMClient {
       // If Databricks indicates the OpenAI-compatible alias is not present,
       // fall back to the older /invocations path which many workspaces use.
       if (msg.includes("ENDPOINT_NOT_FOUND") || msg.includes("/invocations") || msg.includes("404")) {
-        console.warn(`[databricks] OpenAI-compatible path failed for ${base}/v1/chat/completions — falling back to ${base}/invocations: ${msg}`)
+        console.warn(
+          `[databricks] OpenAI-compatible path failed for ${base}/v1/chat/completions — falling back to ${base}/invocations: ${msg}`
+        )
         return await this.invocationsChat(messages, tools, opts, token)
       }
       throw err
@@ -80,23 +87,34 @@ export class DatabricksClient implements LLMClient {
   private async invocationsChat(
     messages: Message[],
     tools: Tool[],
-    opts: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void } | undefined,
-    token: string,
+    opts:
+      | {
+          signal?: AbortSignal
+          maxTokens?: number
+          temperature?: number
+          onToken?: (token: string) => void
+        }
+      | undefined,
+    token: string
   ): Promise<LLMResponse> {
     const url = `${this.host}/serving-endpoints/${this.endpoint}/invocations`
     const body: Record<string, unknown> = {
       model: this.endpoint,
       messages: messages.map((m) => formatOpenAICompatibleMessage(m, true)),
-      max_completion_tokens: opts?.maxTokens ?? 16384,
+      max_completion_tokens: opts?.maxTokens ?? 16384
     }
     if (opts?.temperature !== undefined) body.temperature = opts.temperature
     if (tools.length > 0) body.tools = formatOpenAICompatibleTools(tools)
 
     const res = await fetch(url, {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}`, Accept: "application/json" },
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        Accept: "application/json"
+      },
       body: JSON.stringify(body),
-      signal: opts?.signal,
+      signal: opts?.signal
     })
 
     const text = await res.text()
@@ -105,7 +123,11 @@ export class DatabricksClient implements LLMClient {
     }
 
     let parsed: unknown = text
-    try { parsed = JSON.parse(text) } catch { /* keep raw text */ }
+    try {
+      parsed = JSON.parse(text)
+    } catch {
+      /* keep raw text */
+    }
 
     if (parsed && typeof parsed === "object" && "choices" in parsed) {
       const response = parseOpenAICompatibleResponse(parsed)

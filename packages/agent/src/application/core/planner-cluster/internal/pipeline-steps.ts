@@ -12,21 +12,11 @@ import { DelegationOutputValidationCode, PipelineStatus } from "../../domain/ind
 
 import { executeDeterministicStep } from "../pipeline-steps/deterministic.js"
 import { runSubagentMandatoryRetry } from "../pipeline-steps/subagent-retry.js"
-import {
-    runPostStepSyntaxValidation,
-    validateSubagentCompletion,
-} from "../pipeline-validation/index.js"
+import { runPostStepSyntaxValidation, validateSubagentCompletion } from "../pipeline-validation/index.js"
 import type { DelegateFn, ToolExecFn } from "../pipeline/index.js"
 import { detectPlatformUnconfigured } from "../platform-errors.js"
-import type {
-    PipelineStepResult,
-    PlanStep,
-    SubagentTaskStep,
-} from "../types.js"
-import {
-    isBlueprintLikeStep,
-    type SubagentStepValidationContext,
-} from "./pipeline-repair.js"
+import type { PipelineStepResult, PlanStep, SubagentTaskStep } from "../types.js"
+import { isBlueprintLikeStep, type SubagentStepValidationContext } from "./pipeline-repair.js"
 
 // ============================================================================
 // Step dispatch
@@ -37,7 +27,7 @@ export async function executeStep(
   toolExecFn: ToolExecFn,
   delegateFn: DelegateFn,
   signal?: AbortSignal,
-  validationCtx?: SubagentStepValidationContext,
+  validationCtx?: SubagentStepValidationContext
 ): Promise<PipelineStepResult> {
   const t0 = Date.now()
 
@@ -56,10 +46,16 @@ async function executeSubagentStep(
   delegateFn: DelegateFn,
   t0: number,
   signal?: AbortSignal,
-  validationCtx?: SubagentStepValidationContext,
+  validationCtx?: SubagentStepValidationContext
 ): Promise<PipelineStepResult> {
   if (signal?.aborted) {
-    return { name: step.name, status: PipelineStatus.Failed, error: "Aborted", failureClass: "cancelled", durationMs: Date.now() - t0 }
+    return {
+      name: step.name,
+      status: PipelineStatus.Failed,
+      error: "Aborted",
+      failureClass: "cancelled",
+      durationMs: Date.now() - t0
+    }
   }
 
   try {
@@ -81,7 +77,15 @@ async function executeSubagentStep(
 
     if (output.startsWith("Delegation failed:")) {
       const isSpawnError = output.includes("not found") || output.includes("spawn")
-      return failed(step, output, isSpawnError ? "spawn_error" : "unknown", "rejected", t0, childToolCalls, childExecution)
+      return failed(
+        step,
+        output,
+        isSpawnError ? "spawn_error" : "unknown",
+        "rejected",
+        t0,
+        childToolCalls,
+        childExecution
+      )
     }
     if (output.includes("DELEGATION INCOMPLETE")) {
       return failed(step, output, "budget_exceeded", "repair_required", t0, childToolCalls, childExecution)
@@ -93,26 +97,21 @@ async function executeSubagentStep(
       return failed(step, output, "cancelled", "rejected", t0, childToolCalls, childExecution)
     }
 
-    const strictFailure = await validateSubagentCompletion(
-      step,
-      output,
-      childToolCalls,
-      validationCtx,
-    )
+    const strictFailure = await validateSubagentCompletion(step, output, childToolCalls, validationCtx)
     if (strictFailure) {
       // Trigger a single mandatory-retry path when the step required file
       // mutations (or BLUEPRINT contract) but produced none.
       const eligibleForRetry =
-        (strictFailure.code === DelegationOutputValidationCode.MissingFileMutationEvidence
-          || (isBlueprintLikeStep(step) && /BLUEPRINT/i.test(strictFailure.message)))
-        && step.executionContext.targetArtifacts.length > 0
+        (strictFailure.code === DelegationOutputValidationCode.MissingFileMutationEvidence ||
+          (isBlueprintLikeStep(step) && /BLUEPRINT/i.test(strictFailure.message))) &&
+        step.executionContext.targetArtifacts.length > 0
       if (eligibleForRetry) {
         return runSubagentMandatoryRetry({
           step,
           originalFailureMessage: strictFailure.message,
           delegateFn,
           validationCtx,
-          t0,
+          t0
         })
       }
 
@@ -122,23 +121,22 @@ async function executeSubagentStep(
         executionState: "failed",
         acceptanceState: "repair_required",
         error: strictFailure.message,
-        failureClass: isBlueprintLikeStep(step) && /BLUEPRINT/i.test(strictFailure.message) ? "blueprint_contract" : "unknown",
+        failureClass:
+          isBlueprintLikeStep(step) && /BLUEPRINT/i.test(strictFailure.message)
+            ? "blueprint_contract"
+            : "unknown",
         durationMs: Date.now() - t0,
         toolCalls: childToolCalls,
         childResult: childExecution,
         producedArtifacts: childExecution?.producedArtifacts,
         modifiedArtifacts: childExecution?.modifiedArtifacts,
         verificationAttempts: childExecution?.verificationAttempts,
-        validationCode: strictFailure.code,
+        validationCode: strictFailure.code
       }
     }
 
     // ── Post-step syntax validation ──
-    const syntaxErrors = await runPostStepSyntaxValidation(
-      step,
-      childToolCalls ?? [],
-      validationCtx,
-    )
+    const syntaxErrors = await runPostStepSyntaxValidation(step, childToolCalls ?? [], validationCtx)
     if (syntaxErrors.length > 0) {
       return {
         name: step.name,
@@ -152,7 +150,7 @@ async function executeSubagentStep(
         childResult: childExecution,
         producedArtifacts: childExecution?.producedArtifacts,
         modifiedArtifacts: childExecution?.modifiedArtifacts,
-        verificationAttempts: childExecution?.verificationAttempts,
+        verificationAttempts: childExecution?.verificationAttempts
       }
     }
 
@@ -167,7 +165,7 @@ async function executeSubagentStep(
       childResult: childExecution,
       producedArtifacts: childExecution?.producedArtifacts,
       modifiedArtifacts: childExecution?.modifiedArtifacts,
-      verificationAttempts: childExecution?.verificationAttempts,
+      verificationAttempts: childExecution?.verificationAttempts
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
@@ -179,7 +177,7 @@ async function executeSubagentStep(
       acceptanceState: "rejected",
       error: errMsg,
       failureClass: isTransient ? "transient_provider_error" : "unknown",
-      durationMs: Date.now() - t0,
+      durationMs: Date.now() - t0
     }
   }
 }
@@ -191,7 +189,7 @@ function failed(
   acceptanceState: PipelineStepResult["acceptanceState"],
   t0: number,
   toolCalls: PipelineStepResult["toolCalls"],
-  childExec: PipelineStepResult["childResult"],
+  childExec: PipelineStepResult["childResult"]
 ): PipelineStepResult {
   return {
     name: step.name,
@@ -205,6 +203,6 @@ function failed(
     childResult: childExec,
     producedArtifacts: childExec?.producedArtifacts,
     modifiedArtifacts: childExec?.modifiedArtifacts,
-    verificationAttempts: childExec?.verificationAttempts,
+    verificationAttempts: childExec?.verificationAttempts
   }
 }

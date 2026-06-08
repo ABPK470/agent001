@@ -29,7 +29,7 @@ export interface DbToolResult {
   result_json: string
   row_count: number | null
   bytes: number
-  truncated: number   // 0 | 1 — SQLite has no bool
+  truncated: number // 0 | 1 — SQLite has no bool
   goal_excerpt: string | null
   created_at: string
 }
@@ -37,7 +37,7 @@ export interface DbToolResult {
 const NON_RECALLABLE_RESULT_PATTERNS = [
   /^DENIED:\s*Policy\b/i,
   /forbidden by governance policy/i,
-  /governance-blocked/i,
+  /governance-blocked/i
 ] as const
 
 /** Write one tool-call result. Idempotent on (run_id, tool_call_id). */
@@ -52,23 +52,27 @@ export function saveToolResult(record: Omit<DbToolResult, "id">): void {
     .prepare("SELECT id FROM tool_results WHERE run_id = ? AND tool_call_id = ? LIMIT 1")
     .get(record.run_id, record.tool_call_id) as { id: number } | undefined
   if (existing) {
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE tool_results
       SET tool_name=@tool_name, args_json=@args_json, result_json=@result_json,
           row_count=@row_count, bytes=@bytes, truncated=@truncated,
           goal_excerpt=@goal_excerpt, session_id=@session_id, created_at=@created_at
       WHERE id=@id
-    `).run({ ...record, id: existing.id })
+    `
+    ).run({ ...record, id: existing.id })
     return
   }
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO tool_results
       (run_id, session_id, tool_call_id, tool_name, args_json, result_json,
        row_count, bytes, truncated, goal_excerpt, created_at)
     VALUES
       (@run_id, @session_id, @tool_call_id, @tool_name, @args_json, @result_json,
        @row_count, @bytes, @truncated, @goal_excerpt, @created_at)
-  `).run(record)
+  `
+  ).run(record)
 }
 
 /**
@@ -85,19 +89,27 @@ export function loadRecentToolResults(opts: {
   const db = getDb()
   if (opts.toolNames && opts.toolNames.length > 0) {
     const placeholders = opts.toolNames.map(() => "?").join(",")
-    return db.prepare(`
+    return db
+      .prepare(
+        `
       SELECT * FROM tool_results
       WHERE session_id = ? AND tool_name IN (${placeholders})
       ORDER BY id DESC
       LIMIT ?
-    `).all(opts.sessionId, ...opts.toolNames, limit) as DbToolResult[]
+    `
+      )
+      .all(opts.sessionId, ...opts.toolNames, limit) as DbToolResult[]
   }
-  return db.prepare(`
+  return db
+    .prepare(
+      `
     SELECT * FROM tool_results
     WHERE session_id = ?
     ORDER BY id DESC
     LIMIT ?
-  `).all(opts.sessionId, limit) as DbToolResult[]
+  `
+    )
+    .all(opts.sessionId, limit) as DbToolResult[]
 }
 
 /**
@@ -115,9 +127,11 @@ export function loadToolResultsForRun(runId: string): DbToolResult[] {
  * recall_prior_result tool when the model passes an explicit reference.
  */
 export function getToolResult(runId: string, toolCallId: string): DbToolResult | null {
-  return (getDb()
-    .prepare("SELECT * FROM tool_results WHERE run_id = ? AND tool_call_id = ?")
-    .get(runId, toolCallId) as DbToolResult | undefined) ?? null
+  return (
+    (getDb()
+      .prepare("SELECT * FROM tool_results WHERE run_id = ? AND tool_call_id = ?")
+      .get(runId, toolCallId) as DbToolResult | undefined) ?? null
+  )
 }
 
 export function extractToolResultText(json: string): string {

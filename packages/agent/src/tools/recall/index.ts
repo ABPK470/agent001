@@ -30,10 +30,16 @@ export interface RecallPriorResultPayload {
 }
 
 /** Handler signature injected by the server factory. */
-export type RecallPriorResultHandler = (
-  payload: RecallPriorResultPayload,
-) => Promise<
-  | { ok: true; result: string; toolName: string; runId: string; toolCallId: string; rowCount: number | null; truncated: boolean }
+export type RecallPriorResultHandler = (payload: RecallPriorResultPayload) => Promise<
+  | {
+      ok: true
+      result: string
+      toolName: string
+      runId: string
+      toolCallId: string
+      rowCount: number | null
+      truncated: boolean
+    }
   | { ok: false; reason: string }
 >
 
@@ -53,31 +59,31 @@ export const recallPriorResultToolMetadata: ToolMetadata = {
     properties: {
       runId: {
         type: "string",
-        description: "Run id from a <prior_results> evidence tag. Pair with toolCallId.",
+        description: "Run id from a <prior_results> evidence tag. Pair with toolCallId."
       },
       toolCallId: {
         type: "string",
-        description: "Tool-call id from a <prior_results> evidence tag. Pair with runId.",
+        description: "Tool-call id from a <prior_results> evidence tag. Pair with runId."
       },
       turn: {
         type: "integer",
         description:
           "Relative turn index when you don't have an evidence tag: " +
           "-1 = most recent prior result, -2 = the one before, etc. " +
-          "Default: -1 if runId/toolCallId are both omitted.",
+          "Default: -1 if runId/toolCallId are both omitted."
       },
       toolName: {
         type: "string",
-        description: "Optional filter for turn-relative lookup. Example: 'query_mssql'.",
+        description: "Optional filter for turn-relative lookup. Example: 'query_mssql'."
       },
       full: {
         type: "boolean",
         description:
           "When true, return the entire stored payload. Default false — the handler " +
-          "still returns more than <prior_results> clipped, but caps very large payloads.",
-      },
-    },
-  },
+          "still returns more than <prior_results> clipped, but caps very large payloads."
+      }
+    }
+  }
 }
 
 export const recallPriorResultTool = recallPriorResultToolMetadata
@@ -94,16 +100,20 @@ export const recallPriorResultToolDefinition: ToolDefinition<RecallPriorResultHa
         const toolNameRaw = args["toolName"]
         const fullRaw = args["full"]
 
-        const runId       = typeof runIdRaw       === "string" && runIdRaw.trim()       ? runIdRaw.trim()       : undefined
-        const toolCallId  = typeof toolCallIdRaw  === "string" && toolCallIdRaw.trim()  ? toolCallIdRaw.trim()  : undefined
-        const toolName    = typeof toolNameRaw    === "string" && toolNameRaw.trim()    ? toolNameRaw.trim()    : undefined
-        const full        = fullRaw === true
-        let   turn: number | undefined =
+        const runId = typeof runIdRaw === "string" && runIdRaw.trim() ? runIdRaw.trim() : undefined
+        const toolCallId =
+          typeof toolCallIdRaw === "string" && toolCallIdRaw.trim() ? toolCallIdRaw.trim() : undefined
+        const toolName =
+          typeof toolNameRaw === "string" && toolNameRaw.trim() ? toolNameRaw.trim() : undefined
+        const full = fullRaw === true
+        let turn: number | undefined =
           typeof turnRaw === "number" && Number.isFinite(turnRaw) ? Math.trunc(turnRaw) : undefined
 
         if ((runId && !toolCallId) || (!runId && toolCallId)) {
-          return "Error: runId and toolCallId must be provided together (they come as a pair " +
+          return (
+            "Error: runId and toolCallId must be provided together (they come as a pair " +
             "from a <prior_results> evidence tag)."
+          )
         }
 
         if (!runId && !toolCallId && turn === undefined) turn = -1
@@ -127,9 +137,9 @@ export const recallPriorResultToolDefinition: ToolDefinition<RecallPriorResultHa
           (result.rowCount != null ? ` rows=${result.rowCount}` : "") +
           (result.truncated ? " [truncated]" : "")
         return `${header}\n\n${result.result}`
-      },
+      }
     }
-  },
+  }
 }
 
 /**
@@ -145,5 +155,7 @@ export function bindRecallPriorResultTool(handler: RecallPriorResultHandler): Ex
 import type { AgentHost } from "../../application/shell/runtime.js"
 
 export function createRecallPriorResultTool(_host: AgentHost): never {
-  throw new Error("recall_prior_result requires per-run binding via bindRecallPriorResultTool(handler); metadata is available via recallPriorResultToolMetadata")
+  throw new Error(
+    "recall_prior_result requires per-run binding via bindRecallPriorResultTool(handler); metadata is available via recallPriorResultToolMetadata"
+  )
 }

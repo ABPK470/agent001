@@ -13,28 +13,28 @@ export { DiagnosticCategory, DiagnosticSeverity }
 
 // Re-export decision and execution envelope types from extracted modules.
 export type {
-    ArchitecturePreservationStatus,
-    CoherentArchitectureArtifact,
-    CoherentSharedContract,
-    CoherentSolutionArtifact,
-    CoherentSolutionBundle,
-    CoherentSystemInvariant,
-    PlannerCoherentBootstrap,
-    PlannerDecision,
-    PlannerNeedLevel,
-    PlannerRoute,
-    RoutingConfidence
+  ArchitecturePreservationStatus,
+  CoherentArchitectureArtifact,
+  CoherentSharedContract,
+  CoherentSolutionArtifact,
+  CoherentSolutionBundle,
+  CoherentSystemInvariant,
+  PlannerCoherentBootstrap,
+  PlannerDecision,
+  PlannerNeedLevel,
+  PlannerRoute,
+  RoutingConfidence
 } from "./internal/types-decision.js"
 export type {
-    ArtifactRelation,
-    ChildRepairGoal,
-    ChildRepairPayload,
-    EffectClass,
-    ExecutionEnvelope,
-    SharedStateContract,
-    StepRole,
-    VerificationMode,
-    WorkflowStepContract
+  ArtifactRelation,
+  ChildRepairGoal,
+  ChildRepairPayload,
+  EffectClass,
+  ExecutionEnvelope,
+  SharedStateContract,
+  StepRole,
+  VerificationMode,
+  WorkflowStepContract
 } from "./internal/types-execution.js"
 
 // ============================================================================
@@ -144,7 +144,12 @@ export interface ArtifactOwnershipNode {
 
 export interface RuntimeEntityDescriptor {
   readonly id: string
-  readonly entityType: "planner_run" | "pipeline_step" | "delegated_worker" | "verification_pass" | "repair_cycle"
+  readonly entityType:
+    | "planner_run"
+    | "pipeline_step"
+    | "delegated_worker"
+    | "verification_pass"
+    | "repair_cycle"
   readonly parentId?: string
   readonly stepName?: string
 }
@@ -173,6 +178,5 @@ export interface PlanDiagnostic {
   readonly stepName?: string
   readonly details?: Record<string, unknown>
 }
-
 
 export * from "./internal/types-pipeline.js"

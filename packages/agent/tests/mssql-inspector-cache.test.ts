@@ -20,18 +20,26 @@ function makeFixture(): {
   const toolKnowledge: NonNullable<AgentHost["toolKnowledge"]> = {
     lookup: () => ({ hit: false as const, reason: "miss" as const }),
     save: () => undefined,
-    renderHeader: () => "",
+    renderHeader: () => ""
   }
   const host = configureAgent({
     mssqlDatabases: databases,
     catalogInstances,
-    toolKnowledge,
+    toolKnowledge
   })
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
-    pool: { request: () => ({ input: () => undefined, cancel: () => undefined, query: async () => ({ recordset: [] }) }), connected: true, close: async () => undefined } as never,
+    pool: {
+      request: () => ({
+        input: () => undefined,
+        cancel: () => undefined,
+        query: async () => ({ recordset: [] })
+      }),
+      connected: true,
+      close: async () => undefined
+    } as never,
     writeEnabled: false,
-    knowledge: null,
+    knowledge: null
   })
   catalogInstances.set("default", canonicalFixtureCatalog())
   return { toolKnowledge, tool: createInspectDefinitionTool(host) }
@@ -45,13 +53,14 @@ describe("inspect_definition cache integration", () => {
       hit: true as const,
       payload: "T-SQL source for dim.Date:\nCREATE VIEW ...",
       ageMs: 1,
-      profiledAt: 0,
+      profiledAt: 0
     }))
     toolKnowledge.lookup = lookup
     toolKnowledge.save = vi.fn()
-    toolKnowledge.renderHeader = () => "[cached from 2026-05-01, mode=definition, ageHours=1, source=tool_knowledge]"
+    toolKnowledge.renderHeader = () =>
+      "[cached from 2026-05-01, mode=definition, ageHours=1, source=tool_knowledge]"
 
-    const out = await inspectDefinitionTool.execute({ object: "dim.Date" }) as string
+    const out = (await inspectDefinitionTool.execute({ object: "dim.Date" })) as string
     expect(out).toMatch(/^\[cached from 2026-05-01.*mode=definition/)
     expect(out).toContain("T-SQL source for dim.Date")
     expect(lookup).toHaveBeenCalledTimes(1)
@@ -74,7 +83,7 @@ describe("inspect_definition cache integration", () => {
       { missing_indexes: true },
       { index_usage: "dim.Date" },
       { search: "Revenue" },
-      { depends_on: "dim.Date" },
+      { depends_on: "dim.Date" }
     ]) {
       try {
         await inspectDefinitionTool.execute(args)
@@ -91,7 +100,9 @@ describe("inspect_definition cache integration", () => {
     toolKnowledge.lookup = lookup
     try {
       await inspectDefinitionTool.execute({ object: "mystery.Unknown" })
-    } catch { /* live path may fail against the stub pool */ }
+    } catch {
+      /* live path may fail against the stub pool */
+    }
     expect(lookup).not.toHaveBeenCalled()
   })
 })

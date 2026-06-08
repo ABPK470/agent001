@@ -9,18 +9,18 @@
 
 import { BASE_SECTION_KEYS } from "../../domain/enums/context.js"
 import {
-    BASE_SECTION_SPECS,
-    DEFAULT_CHAR_PER_TOKEN,
-    DEFAULT_CONTEXT_WINDOW_TOKENS,
-    DEFAULT_HARD_MAX_PROMPT_CHARS,
-    DEFAULT_MAX_OUTPUT_TOKENS,
-    DEFAULT_SAFETY_MARGIN_TOKENS,
-    MAX_PROMPT_CHAR_BUDGET,
-    MIN_PROMPT_CHAR_BUDGET,
-    type BaseSectionKey,
-    type PromptBudgetConfig,
-    type PromptBudgetPlan,
-    type SectionSpec,
+  BASE_SECTION_SPECS,
+  DEFAULT_CHAR_PER_TOKEN,
+  DEFAULT_CONTEXT_WINDOW_TOKENS,
+  DEFAULT_HARD_MAX_PROMPT_CHARS,
+  DEFAULT_MAX_OUTPUT_TOKENS,
+  DEFAULT_SAFETY_MARGIN_TOKENS,
+  MAX_PROMPT_CHAR_BUDGET,
+  MIN_PROMPT_CHAR_BUDGET,
+  type BaseSectionKey,
+  type PromptBudgetConfig,
+  type PromptBudgetPlan,
+  type SectionSpec
 } from "../prompt-budget-types.js"
 
 export function clamp(value: number, min: number, max: number): number {
@@ -30,7 +30,7 @@ export function clamp(value: number, min: number, max: number): number {
 export function normalizeCaps(
   rawCaps: Record<BaseSectionKey, number>,
   specs: readonly SectionSpec[],
-  totalChars: number,
+  totalChars: number
 ): Record<BaseSectionKey, number> {
   const normalized = { ...rawCaps }
   const rawTotal = BASE_SECTION_KEYS.reduce((sum, key) => sum + normalized[key], 0)
@@ -70,32 +70,32 @@ export function derivePromptBudgetPlan(config?: PromptBudgetConfig): PromptBudge
   const contextWindowTokens = clamp(
     Math.floor(config?.contextWindowTokens ?? DEFAULT_CONTEXT_WINDOW_TOKENS),
     2_048,
-    2_000_000,
+    2_000_000
   )
   const maxOutputTokens = clamp(
     Math.floor(config?.maxOutputTokens ?? DEFAULT_MAX_OUTPUT_TOKENS),
     128,
-    Math.max(256, contextWindowTokens - 1_024),
+    Math.max(256, contextWindowTokens - 1_024)
   )
   const safetyMarginTokens = clamp(
     Math.floor(
       config?.safetyMarginTokens ??
-        Math.max(DEFAULT_SAFETY_MARGIN_TOKENS, Math.floor(contextWindowTokens * 0.05)),
+        Math.max(DEFAULT_SAFETY_MARGIN_TOKENS, Math.floor(contextWindowTokens * 0.05))
     ),
     256,
-    Math.max(512, Math.floor(contextWindowTokens * 0.5)),
+    Math.max(512, Math.floor(contextWindowTokens * 0.5))
   )
   const promptTokenBudget = Math.max(1_024, contextWindowTokens - maxOutputTokens - safetyMarginTokens)
   const charPerToken = clamp(Math.floor(config?.charPerToken ?? DEFAULT_CHAR_PER_TOKEN), 2, 8)
   const hardMaxPromptChars = clamp(
     Math.floor(config?.hardMaxPromptChars ?? DEFAULT_HARD_MAX_PROMPT_CHARS),
     MIN_PROMPT_CHAR_BUDGET,
-    MAX_PROMPT_CHAR_BUDGET,
+    MAX_PROMPT_CHAR_BUDGET
   )
   const totalChars = clamp(
     Math.floor(promptTokenBudget * charPerToken),
     MIN_PROMPT_CHAR_BUDGET,
-    hardMaxPromptChars,
+    hardMaxPromptChars
   )
 
   const rawCaps: Record<BaseSectionKey, number> = { system: 0, memory: 0, history: 0, user: 0, other: 0 }
@@ -110,15 +110,16 @@ export function derivePromptBudgetPlan(config?: PromptBudgetConfig): PromptBudge
   // system_law sits OUTSIDE the system pool: a small dedicated allocation for
   // catalog-resolved facts + doctrine SSoT. Keeping it separate ensures it
   // cannot be squeezed by long persona/ETL prose under budget pressure.
-  const systemLawChars = clamp(Math.floor(normalizedBase.system * 0.10), 256, 4_096)
+  const systemLawChars = clamp(Math.floor(normalizedBase.system * 0.1), 256, 4_096)
 
   // Split memory budget: working 45%, episodic 30%, semantic 25%
   const memoryTotal = normalizedBase.memory
   const memoryWorkingChars = Math.floor(memoryTotal * 0.45)
-  const memoryEpisodicChars = Math.floor(memoryTotal * 0.30)
+  const memoryEpisodicChars = Math.floor(memoryTotal * 0.3)
   const memorySemanticChars = Math.max(0, memoryTotal - memoryWorkingChars - memoryEpisodicChars)
 
-  const usedByTop = normalizedBase.system + normalizedBase.memory + normalizedBase.history + normalizedBase.user
+  const usedByTop =
+    normalizedBase.system + normalizedBase.memory + normalizedBase.history + normalizedBase.user
   const otherChars = Math.max(0, totalChars - usedByTop)
 
   return {
@@ -127,7 +128,7 @@ export function derivePromptBudgetPlan(config?: PromptBudgetConfig): PromptBudge
       maxOutputTokens,
       safetyMarginTokens,
       promptTokenBudget,
-      charPerToken,
+      charPerToken
     },
     caps: {
       totalChars,
@@ -141,7 +142,7 @@ export function derivePromptBudgetPlan(config?: PromptBudgetConfig): PromptBudge
       memorySemanticChars,
       historyChars: normalizedBase.history,
       userChars: normalizedBase.user,
-      otherChars,
-    },
+      otherChars
+    }
   }
 }

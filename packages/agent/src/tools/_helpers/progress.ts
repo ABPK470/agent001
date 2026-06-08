@@ -21,20 +21,41 @@ const ANSI_ESCAPE_RE =
 
 /** Tokens that indicate a verification/check command. */
 const VERIFICATION_TOKENS = new Set([
-  "build", "check", "compile", "coverage", "lint", "test", "typecheck", "verify",
+  "build",
+  "check",
+  "compile",
+  "coverage",
+  "lint",
+  "test",
+  "typecheck",
+  "verify"
 ])
 
 /** Commands that, when leading, indicate a verification invocation. */
 const VERIFICATION_COMMANDS = new Set([
-  "cargo", "deno", "go", "gradle", "jest", "mvn", "node", "npm", "npx",
-  "pnpm", "python", "python3", "pytest", "ruff", "tsc", "uv", "vitest",
-  "yarn", "bun",
+  "cargo",
+  "deno",
+  "go",
+  "gradle",
+  "jest",
+  "mvn",
+  "node",
+  "npm",
+  "npx",
+  "pnpm",
+  "python",
+  "python3",
+  "pytest",
+  "ruff",
+  "tsc",
+  "uv",
+  "vitest",
+  "yarn",
+  "bun"
 ])
 
 /** Commands that indicate workspace mutations. */
-const MUTATING_COMMANDS = new Set([
-  "cp", "git", "install", "mkdir", "mv", "perl", "rm", "sed", "touch",
-])
+const MUTATING_COMMANDS = new Set(["cp", "git", "install", "mkdir", "mv", "perl", "rm", "sed", "touch"])
 
 // ============================================================================
 // Progress summary
@@ -65,7 +86,7 @@ export function summarizeToolRoundProgress(
   roundCalls: readonly ToolCallRecord[],
   durationMs: number,
   seenSuccessfulSemanticKeys: Set<string>,
-  seenVerificationFailureDiagnosticKeys: Set<string>,
+  seenVerificationFailureDiagnosticKeys: Set<string>
 ): ToolRoundProgressSummary {
   let successfulCalls = 0
   let newSuccessfulSemanticKeys = 0
@@ -109,7 +130,7 @@ export function summarizeToolRoundProgress(
     hadSuccessfulMutation,
     hadVerificationCall,
     hadReadCall,
-    hadMaterialProgress: newSuccessfulSemanticKeys > 0 || newVerificationFailureDiagnosticKeys > 0,
+    hadMaterialProgress: newSuccessfulSemanticKeys > 0 || newVerificationFailureDiagnosticKeys > 0
   }
 }
 
@@ -151,16 +172,37 @@ export function evaluateToolRoundBudgetExtension(params: {
   const { currentLimit, maxAbsoluteLimit, recentRounds, remainingToolBudget } = params
 
   if (currentLimit >= maxAbsoluteLimit) {
-    return { decision: "capped", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false, repairCycleDetected: false }
+    return {
+      decision: "capped",
+      extensionRounds: 0,
+      newLimit: currentLimit,
+      recentProgressRate: 0,
+      latestRoundHadMaterialProgress: false,
+      repairCycleDetected: false
+    }
   }
   if (recentRounds.length === 0) {
-    return { decision: "not_needed", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false, repairCycleDetected: false }
+    return {
+      decision: "not_needed",
+      extensionRounds: 0,
+      newLimit: currentLimit,
+      recentProgressRate: 0,
+      latestRoundHadMaterialProgress: false,
+      repairCycleDetected: false
+    }
   }
 
   if (params.startTimeMs != null && params.maxWallClockMs != null) {
     const elapsedMs = Date.now() - params.startTimeMs
     if (elapsedMs > params.maxWallClockMs * 0.85) {
-      return { decision: "not_needed", extensionRounds: 0, newLimit: currentLimit, recentProgressRate: 0, latestRoundHadMaterialProgress: false, repairCycleDetected: false }
+      return {
+        decision: "not_needed",
+        extensionRounds: 0,
+        newLimit: currentLimit,
+        recentProgressRate: 0,
+        latestRoundHadMaterialProgress: false,
+        repairCycleDetected: false
+      }
     }
   }
 
@@ -200,7 +242,7 @@ export function evaluateToolRoundBudgetExtension(params: {
       newLimit: currentLimit,
       recentProgressRate,
       latestRoundHadMaterialProgress: latestRound.hadMaterialProgress,
-      repairCycleDetected,
+      repairCycleDetected
     }
   }
 
@@ -211,17 +253,28 @@ export function evaluateToolRoundBudgetExtension(params: {
   extensionRounds = newLimit - currentLimit
 
   if (extensionRounds <= 0) {
-    return { decision: "capped", extensionRounds: 0, newLimit: currentLimit, recentProgressRate, latestRoundHadMaterialProgress: latestRound.hadMaterialProgress, repairCycleDetected }
+    return {
+      decision: "capped",
+      extensionRounds: 0,
+      newLimit: currentLimit,
+      recentProgressRate,
+      latestRoundHadMaterialProgress: latestRound.hadMaterialProgress,
+      repairCycleDetected
+    }
   }
 
   return {
     decision: "extended",
     extensionRounds,
     newLimit,
-    extensionReason: repairCycleDetected ? "repair_episode" : (isInRoundRepair ? "repair_cycle_active" : "sustained_progress"),
+    extensionReason: repairCycleDetected
+      ? "repair_episode"
+      : isInRoundRepair
+        ? "repair_cycle_active"
+        : "sustained_progress",
     recentProgressRate,
     latestRoundHadMaterialProgress: latestRound.hadMaterialProgress,
-    repairCycleDetected,
+    repairCycleDetected
   }
 }
 
@@ -243,7 +296,10 @@ function buildFailureDiagnosticKey(call: ToolCallRecord): string | null {
 function extractCommandTokens(args: Record<string, unknown>): string[] {
   const command = typeof args.command === "string" ? args.command : ""
   if (command.trim().length === 0) return []
-  return command.trim().split(/\s+/).map(t => t.toLowerCase())
+  return command
+    .trim()
+    .split(/\s+/)
+    .map((t) => t.toLowerCase())
 }
 
 function isVerificationToolCall(call: ToolCallRecord): boolean {
@@ -253,31 +309,32 @@ function isVerificationToolCall(call: ToolCallRecord): boolean {
   const [command, ...rest] = tokens
   if (VERIFICATION_COMMANDS.has(command)) {
     if (command === "npm" || command === "pnpm" || command === "yarn" || command === "bun") {
-      return rest.some(t => VERIFICATION_TOKENS.has(t))
+      return rest.some((t) => VERIFICATION_TOKENS.has(t))
     }
     if (command === "npx" || command === "uv") {
-      return rest.some(t => VERIFICATION_COMMANDS.has(t) || VERIFICATION_TOKENS.has(t))
+      return rest.some((t) => VERIFICATION_COMMANDS.has(t) || VERIFICATION_TOKENS.has(t))
     }
     return true
   }
-  return tokens.some(t => VERIFICATION_TOKENS.has(t))
+  return tokens.some((t) => VERIFICATION_TOKENS.has(t))
 }
 
 function isSuccessfulMutationToolCall(call: ToolCallRecord): boolean {
   if (didToolCallFail(call.isError, call.result)) return false
-  if (call.name === "write_file" || call.name === "replace_in_file" || call.name === "append_file") return true
+  if (call.name === "write_file" || call.name === "replace_in_file" || call.name === "append_file")
+    return true
   if (call.name !== "run_command") return false
   const tokens = extractCommandTokens(call.args)
   if (tokens.length === 0) return false
   const [command, ...rest] = tokens
   if (command === "git") {
-    return rest.some(t => ["apply", "checkout", "mv", "restore", "rm"].includes(t))
+    return rest.some((t) => ["apply", "checkout", "mv", "restore", "rm"].includes(t))
   }
   if (command === "npm" || command === "pnpm" || command === "yarn" || command === "bun") {
-    return rest.some(t => ["add", "dedupe", "install", "remove", "uninstall", "update"].includes(t))
+    return rest.some((t) => ["add", "dedupe", "install", "remove", "uninstall", "update"].includes(t))
   }
   if (command === "sed" || command === "perl") {
-    return rest.some(t => t === "-i" || t.startsWith("-i"))
+    return rest.some((t) => t === "-i" || t.startsWith("-i"))
   }
   return MUTATING_COMMANDS.has(command)
 }

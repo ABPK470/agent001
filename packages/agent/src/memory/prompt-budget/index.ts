@@ -9,19 +9,19 @@
 
 import type { Message, PromptBudgetSection } from "../../domain/agent-types.js"
 import {
-    createSectionCapMap,
-    estimateMessageChars,
-    rebalanceSectionCaps,
-    resolveSections,
-    truncateMessage,
-    type WorkingEntry,
+  createSectionCapMap,
+  estimateMessageChars,
+  rebalanceSectionCaps,
+  resolveSections,
+  truncateMessage,
+  type WorkingEntry
 } from "../internal/prompt-budget-helpers.js"
 import {
-    SECTION_BEHAVIOR,
-    SECTION_ORDER,
-    type PromptBudgetAllocationResult,
-    type PromptBudgetConfig,
-    type PromptBudgetSectionStats,
+  SECTION_BEHAVIOR,
+  SECTION_ORDER,
+  type PromptBudgetAllocationResult,
+  type PromptBudgetConfig,
+  type PromptBudgetSectionStats
 } from "../prompt-budget-types.js"
 import { derivePromptBudgetPlan } from "./derive-plan.js"
 import { tokensBySection } from "../tokens.js"
@@ -31,13 +31,13 @@ export { derivePromptBudgetPlan } from "./derive-plan.js"
 
 // Re-export all types for backwards compatibility
 export type {
-    PromptBudgetAllocationResult,
-    PromptBudgetCaps,
-    PromptBudgetConfig,
-    PromptBudgetDiagnostics,
-    PromptBudgetModelProfile,
-    PromptBudgetPlan,
-    PromptBudgetSectionStats
+  PromptBudgetAllocationResult,
+  PromptBudgetCaps,
+  PromptBudgetConfig,
+  PromptBudgetDiagnostics,
+  PromptBudgetModelProfile,
+  PromptBudgetPlan,
+  PromptBudgetSectionStats
 } from "../prompt-budget-types.js"
 
 // ============================================================================
@@ -46,7 +46,7 @@ export type {
 
 export function applyPromptBudget(
   messages: readonly Message[],
-  config?: PromptBudgetConfig,
+  config?: PromptBudgetConfig
 ): PromptBudgetAllocationResult {
   const plan = derivePromptBudgetPlan(config)
   const sections = resolveSections(messages)
@@ -57,7 +57,7 @@ export function applyPromptBudget(
     section: sections[index],
     message: msg,
     dropped: false,
-    truncated: false,
+    truncated: false
   }))
 
   // Group by section
@@ -131,19 +131,16 @@ export function applyPromptBudget(
         const entry = ordered[i]
         const remainingEntries = ordered.length - i
         const remainingBudget = Math.max(0, cap - used)
-        const perMessageBudget = remainingEntries > 0
-          ? Math.max(16, Math.floor(remainingBudget / remainingEntries))
-          : 16
+        const perMessageBudget =
+          remainingEntries > 0 ? Math.max(16, Math.floor(remainingBudget / remainingEntries)) : 16
         truncateMessage(entry, perMessageBudget)
         used += estimateMessageChars(entry.message)
       }
     }
   }
 
-  const finalEntries = working
-    .filter(e => !e.dropped)
-    .sort((a, b) => a.index - b.index)
-  const finalMessages = finalEntries.map(e => e.message)
+  const finalEntries = working.filter((e) => !e.dropped).sort((a, b) => a.index - b.index)
+  const finalMessages = finalEntries.map((e) => e.message)
 
   const totalAfterChars = finalEntries.reduce((sum, e) => sum + estimateMessageChars(e.message), 0)
 
@@ -152,9 +149,12 @@ export function applyPromptBudget(
   for (const section of SECTION_ORDER) {
     sectionStats[section] = {
       capChars: sectionCaps[section],
-      beforeMessages: 0, afterMessages: 0,
-      beforeChars: 0, afterChars: 0,
-      droppedMessages: 0, truncatedMessages: 0,
+      beforeMessages: 0,
+      afterMessages: 0,
+      beforeChars: 0,
+      afterChars: 0,
+      droppedMessages: 0,
+      truncatedMessages: 0
     }
   }
   for (const entry of working) {
@@ -164,7 +164,7 @@ export function applyPromptBudget(
       beforeMessages: s.beforeMessages + 1,
       beforeChars: s.beforeChars + entry.beforeChars,
       droppedMessages: s.droppedMessages + (entry.dropped ? 1 : 0),
-      truncatedMessages: s.truncatedMessages + (entry.truncated ? 1 : 0),
+      truncatedMessages: s.truncatedMessages + (entry.truncated ? 1 : 0)
     }
   }
   for (const entry of finalEntries) {
@@ -172,18 +172,18 @@ export function applyPromptBudget(
     sectionStats[entry.section] = {
       ...s,
       afterMessages: s.afterMessages + 1,
-      afterChars: s.afterChars + estimateMessageChars(entry.message),
+      afterChars: s.afterChars + estimateMessageChars(entry.message)
     }
   }
 
-  const droppedSections = SECTION_ORDER.filter(s => {
+  const droppedSections = SECTION_ORDER.filter((s) => {
     const stats = sectionStats[s]
     return stats.beforeChars > 0 && stats.afterChars === 0
   })
   const constrained =
     totalAfterChars < totalBeforeChars ||
     droppedSections.length > 0 ||
-    SECTION_ORDER.some(s => sectionStats[s].truncatedMessages > 0)
+    SECTION_ORDER.some((s) => sectionStats[s].truncatedMessages > 0)
 
   if (config?.onSectionSizes) {
     try {
@@ -202,7 +202,7 @@ export function applyPromptBudget(
       totalAfterChars,
       constrained,
       droppedSections,
-      sections: sectionStats,
-    },
+      sections: sectionStats
+    }
   }
 }

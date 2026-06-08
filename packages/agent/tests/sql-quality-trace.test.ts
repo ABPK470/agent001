@@ -17,7 +17,7 @@ describe("SQL quality analysis", () => {
       "",
       "SELECT tc.pkClient,",
       "       (SELECT COUNT(*) FROM #topClients_a3f91c08 t2 WHERE t2.pkClient = tc.pkClient) AS ClientCount",
-      "FROM #topClients_a3f91c08 tc;",
+      "FROM #topClients_a3f91c08 tc;"
     ].join("\n")
 
     const analysis = analyzeMssqlQueryQuality(query)
@@ -39,7 +39,7 @@ describe("SQL quality analysis", () => {
       "  (SELECT COUNT(*) FROM #revLines_a3f91c08 r WHERE r.pkClient = base.pkClient) AS ProductCount,",
       "  (SELECT SUM(r.RevenueZARMTD) FROM #revLines_a3f91c08 r WHERE r.pkClient = base.pkClient) AS RevenueZAR",
       "FROM #revLines_a3f91c08 base;",
-      "DROP TABLE #revLines_a3f91c08;",
+      "DROP TABLE #revLines_a3f91c08;"
     ].join("\n")
 
     const validation = validateQueryDetailed(query, false)
@@ -68,7 +68,7 @@ describe("SQL quality analysis", () => {
       "FROM publish.Balances WITH (NOLOCK)",
       "WHERE pkMonth = 202501",
       "  AND pkClient IN (SELECT pkClient FROM #topClients_b71ac2e4);",
-      "DROP TABLE #balLines_b71ac2e4; DROP TABLE #revLines_b71ac2e4; DROP TABLE #topClients_b71ac2e4;",
+      "DROP TABLE #balLines_b71ac2e4; DROP TABLE #revLines_b71ac2e4; DROP TABLE #topClients_b71ac2e4;"
     ].join("\n")
 
     const analysis = analyzeMssqlQueryQuality(query)
@@ -92,7 +92,7 @@ describe("SQL quality analysis", () => {
       ")",
       "SELECT rc.pkClient, rc.Revenue, pr.pkProduct",
       "FROM revClient rc LEFT JOIN prodRank pr ON pr.pkClient = rc.pkClient AND pr.rn = 1;",
-      "DROP TABLE #revLines_x;",
+      "DROP TABLE #revLines_x;"
     ].join("\n")
 
     const analysis = analyzeMssqlQueryQuality(query)
@@ -104,7 +104,7 @@ describe("SQL quality analysis", () => {
       "SELECT pkClient INTO #t FROM publish.Revenue WHERE pkMonth = 202501 GROUP BY pkClient;",
       "SELECT x.pkClient, x.cnt",
       "FROM (SELECT pkClient, COUNT(*) AS cnt FROM #t GROUP BY pkClient) x;",
-      "DROP TABLE #t;",
+      "DROP TABLE #t;"
     ].join("\n")
 
     const analysis = analyzeMssqlQueryQuality(query)
@@ -117,7 +117,7 @@ describe("SQL quality analysis", () => {
       "SELECT c.pkClient, c.ClientName",
       "FROM publish.Client c WITH (NOLOCK)",
       "WHERE EXISTS (SELECT 1 FROM #t WHERE #t.pkClient = c.pkClient);",
-      "DROP TABLE #t;",
+      "DROP TABLE #t;"
     ].join("\n")
 
     const analysis = analyzeMssqlQueryQuality(query)
@@ -131,7 +131,7 @@ describe("SQL quality analysis", () => {
       "       (SELECT SUM(r.RevenueZARMTD) FROM #r r WHERE r.pkClient = base.pkClient) AS Revenue,",
       "       (SELECT COUNT(*) FROM #r r WHERE r.pkClient = base.pkClient) AS Lines",
       "FROM #r base;",
-      "DROP TABLE #r;",
+      "DROP TABLE #r;"
     ].join("\n")
 
     const analysis = analyzeMssqlQueryQuality(query)
@@ -157,7 +157,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "WHERE r.pkMonth BETWEEN 202501 AND 202501",
       "  AND r.pkClient IS NOT NULL",
       "GROUP BY r.pkClient",
-      "ORDER BY SUM(r.RevenueZARMTD) DESC, r.pkClient;",
+      "ORDER BY SUM(r.RevenueZARMTD) DESC, r.pkClient;"
     ].join("\n")
     const v = validateQueryDetailed(query, false)
     expect(v.ok).toBe(false)
@@ -174,7 +174,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "FROM publish.Balances b WITH (NOLOCK)",
       "WHERE b.pkMonth = 202501",
       "GROUP BY b.pkAccount",
-      "ORDER BY AVG(b.AverageCreditBalanceZARMTD) DESC, b.pkAccount;",
+      "ORDER BY AVG(b.AverageCreditBalanceZARMTD) DESC, b.pkAccount;"
     ].join("\n")
     const v = validateQueryDetailed(query, false)
     expect(v.ok).toBe(false)
@@ -198,7 +198,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "    GROUP BY pkClient",
       ") x",
       "GROUP BY x.pkClient",
-      "ORDER BY SUM(x.RevenueZAR) DESC, x.pkClient;",
+      "ORDER BY SUM(x.RevenueZAR) DESC, x.pkClient;"
     ].join("\n")
     const v = validateQueryDetailed(query, false)
     if (!v.ok) {
@@ -215,7 +215,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "INTO #revLines_8e5a1c2f",
       "FROM publish.Revenue r WITH (NOLOCK)",
       "JOIN #range_8e5a1c2f rg ON r.pkMonth BETWEEN rg.pkMonthFrom AND rg.pkMonthTo",
-      "WHERE r.pkClient IN (SELECT pkClient FROM #topClients_8e5a1c2f);",
+      "WHERE r.pkClient IN (SELECT pkClient FROM #topClients_8e5a1c2f);"
     ].join("\n")
     const v = validateQueryDetailed(query, false)
     if (!v.ok) {
@@ -229,7 +229,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "FROM publish.Revenue WITH (NOLOCK)",
       "WHERE pkMonth BETWEEN 202501 AND 202512",
       "GROUP BY pkMonth",
-      "ORDER BY pkMonth;",
+      "ORDER BY pkMonth;"
     ].join("\n")
     const v = validateQueryDetailed(query, false)
     if (!v.ok) {
@@ -250,7 +250,7 @@ describe("publish.Revenue / publish.Balances branch-aggregation guard", () => {
       "  WHERE r.pkMonth BETWEEN 202501 AND 202512",
       "  GROUP BY r.pkClient",
       "  ORDER BY SUM(r.RevenueZARMTD) DESC;",
-      "DROP TABLE #scope_a1b2c3d4;",
+      "DROP TABLE #scope_a1b2c3d4;"
     ].join("\n")
     const v = validateQueryDetailed(query, false)
     if (!v.ok) {
@@ -267,7 +267,7 @@ describe("AVG(COALESCE/ISNULL(col, 0)) statistical guard", () => {
       "SELECT pkClient,",
       "  AVG(COALESCE(b.AverageCreditBalanceZARMTD, 0)) AS AvgCreditBal",
       "FROM #balLines_x b",
-      "GROUP BY pkClient;",
+      "GROUP BY pkClient;"
     ].join("\n")
     const v = validateQueryDetailed(query, false)
     expect(v.ok).toBe(false)
@@ -292,15 +292,16 @@ describe("AVG(COALESCE/ISNULL(col, 0)) statistical guard", () => {
   it("ALLOWS COALESCE(col, 0) outside an AVG aggregate", () => {
     const query = [
       "SELECT pkClient,",
-      "  SUM(COALESCE(b.RevenueZARMTD, 0)) AS TotalRevenue",  // explicit zero-fill in SUM is OK
-      "FROM #r b GROUP BY pkClient;",
+      "  SUM(COALESCE(b.RevenueZARMTD, 0)) AS TotalRevenue", // explicit zero-fill in SUM is OK
+      "FROM #r b GROUP BY pkClient;"
     ].join("\n")
     const v = validateQueryDetailed(query, false)
     if (!v.ok) expect(v.code).not.toBe("avg_of_coalesce_zero")
   })
 
   it("ALLOWS AVG(COALESCE(col, otherCol)) — non-zero fallback is a real fallback", () => {
-    const query = "SELECT AVG(COALESCE(b.SpotCreditBalanceZARMTD, b.AverageCreditBalanceZARMTD)) AS AvgBal FROM #b b;"
+    const query =
+      "SELECT AVG(COALESCE(b.SpotCreditBalanceZARMTD, b.AverageCreditBalanceZARMTD)) AS AvgBal FROM #b b;"
     const v = validateQueryDetailed(query, false)
     if (!v.ok) expect(v.code).not.toBe("avg_of_coalesce_zero")
   })
@@ -319,23 +320,36 @@ describe("SQL quality trace emission", () => {
         const sql = String(args.query)
         const validation = validateQueryDetailed(sql, false)
         const toolTrace = readToolTraceContext(args)
-        emitMssqlQualityTrace({
-          toolMode: "query",
-          phase: validation.ok ? "executed" : "blocked",
-          query: sql,
-          connection: "default",
-          validation,
-        }, toolTrace)
+        emitMssqlQualityTrace(
+          {
+            toolMode: "query",
+            phase: validation.ok ? "executed" : "blocked",
+            query: sql,
+            connection: "default",
+            validation
+          },
+          toolTrace
+        )
         return validation.error ?? "ok"
-      },
+      }
     }
 
     const state = createAgentLoopState(3)
-    const messages: Array<{ role: "tool" | "system" | "assistant" | "user"; content: string | null; toolCallId?: string; section?: "history" | "user" | "system_anchor" | "system_runtime" | "memory_working" | "memory_episodic" | "memory_semantic" }> = []
+    const messages: Array<{
+      role: "tool" | "system" | "assistant" | "user"
+      content: string | null
+      toolCallId?: string
+      section?:
+        | "history"
+        | "user"
+        | "system_anchor"
+        | "system_runtime"
+        | "memory_working"
+        | "memory_episodic"
+        | "memory_semantic"
+    }> = []
 
-    await executeToolRound([
-      { id: "tc-sql", name: "query_mssql", arguments: { query } },
-    ], {
+    await executeToolRound([{ id: "tc-sql", name: "query_mssql", arguments: { query } }], {
       tools: new Map([[tracingQueryTool.name, tracingQueryTool]]),
       toolList: [tracingQueryTool],
       state,
@@ -344,10 +358,10 @@ describe("SQL quality trace emission", () => {
         signal: undefined,
         toolKillManager: undefined,
         onPlannerTrace: (entry) => plannerTrace.push(entry),
-        verbose: false,
+        verbose: false
       },
       iteration: 2,
-      allToolCalls: [],
+      allToolCalls: []
     })
 
     expect(plannerTrace).toHaveLength(1)
@@ -361,7 +375,7 @@ describe("SQL quality trace emission", () => {
       validationOk: false,
       validationCode: "unsafe_large_object_scan",
       missingPersistedMirrorCandidates: ["publish.revenue"],
-      sqlLength: query.length,
+      sqlLength: query.length
     })
     expect(plannerTrace[0]["largeObjectRefs"]).toEqual([{ name: "publish.revenue", count: 1 }])
   })

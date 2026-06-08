@@ -47,11 +47,7 @@ function validateUrl(url: string): void {
   }
 }
 
-export function setProxyConfig(input: {
-  ownerUpn: string
-  server: string
-  bypass?: string
-}): ProxyConfig {
+export function setProxyConfig(input: { ownerUpn: string; server: string; bypass?: string }): ProxyConfig {
   validateUrl(input.server)
   const db = getDb()
   const sealed = seal(input.server)
@@ -63,34 +59,26 @@ export function setProxyConfig(input: {
        iv         = excluded.iv,
        auth_tag   = excluded.auth_tag,
        bypass     = excluded.bypass,
-       updated_at = datetime('now')`,
-  ).run(
-    input.ownerUpn,
-    sealed.encPayload,
-    sealed.iv,
-    sealed.authTag,
-    input.bypass ?? "",
-  )
+       updated_at = datetime('now')`
+  ).run(input.ownerUpn, sealed.encPayload, sealed.iv, sealed.authTag, input.bypass ?? "")
   return getProxyConfig(input.ownerUpn)!
 }
 
 export function getProxyConfig(ownerUpn: string): ProxyConfig | null {
-  const row = getDb()
-    .prepare("SELECT * FROM browser_proxy_config WHERE owner_upn = ?")
-    .get(ownerUpn) as Row | undefined
+  const row = getDb().prepare("SELECT * FROM browser_proxy_config WHERE owner_upn = ?").get(ownerUpn) as
+    | Row
+    | undefined
   if (!row) return null
   const server = open({ encPayload: row.enc_url, iv: row.iv, authTag: row.auth_tag })
   return {
     ownerUpn: row.owner_upn,
     server,
     bypass: row.bypass,
-    updatedAt: row.updated_at,
+    updatedAt: row.updated_at
   }
 }
 
 export function deleteProxyConfig(ownerUpn: string): boolean {
-  const res = getDb()
-    .prepare("DELETE FROM browser_proxy_config WHERE owner_upn = ?")
-    .run(ownerUpn)
+  const res = getDb().prepare("DELETE FROM browser_proxy_config WHERE owner_upn = ?").run(ownerUpn)
   return res.changes > 0
 }

@@ -8,5 +8,5 @@ export {
   isHumanHandoffReason,
   UserInputStatus,
   USER_INPUT_STATUS_VALUES,
-  isUserInputStatus,
+  isUserInputStatus
 } from "@mia/shared-enums"

@@ -36,9 +36,7 @@ export interface DimJoinNullFinding {
  * `result.recordsets[i]`). Returns one finding per offending column,
  * sorted by descending null-fraction. Empty array ⇒ no findings.
  */
-export function detectDimJoinNullRot(
-  rows: ReadonlyArray<Record<string, unknown>>,
-): DimJoinNullFinding[] {
+export function detectDimJoinNullRot(rows: ReadonlyArray<Record<string, unknown>>): DimJoinNullFinding[] {
   if (rows.length < MIN_ROWS_FOR_SIGNAL) return []
   const sample = rows[0]
   if (!sample || typeof sample !== "object") return []
@@ -62,22 +60,23 @@ export function detectDimJoinNullRot(
  * Render a banner describing the findings, suitable for prepending to
  * the formatted result body. Returns `null` if there are no findings.
  */
-export function renderDimJoinNullBanner(
-  findings: ReadonlyArray<DimJoinNullFinding>,
-): string | null {
+export function renderDimJoinNullBanner(findings: ReadonlyArray<DimJoinNullFinding>): string | null {
   if (findings.length === 0) return null
-  const lines = [
-    `⚠ JOIN-KEY LIKELY WRONG — review BEFORE trusting the row labels below:`,
-    ``,
-  ]
+  const lines = [`⚠ JOIN-KEY LIKELY WRONG — review BEFORE trusting the row labels below:`, ``]
   for (const f of findings) {
     const pct = Math.round(f.nullFraction * 100)
     lines.push(`  • column \`${f.column}\` is NULL in ${f.nullCount} of ${f.totalRows} rows (${pct}%)`)
   }
   lines.push(``)
-  lines.push(`This usually means the dim-join key is wrong (e.g. joining on \`pkClient\` when the fact uses \`pkClientHistory\`).`)
-  lines.push(`Fix: call \`explore_mssql_schema table='<dim>'\` to confirm the PK, then re-run the query with the correct join column.`)
-  lines.push(`If the NULLs are expected (e.g. unassigned/placeholder rows), state that explicitly in the answer.`)
+  lines.push(
+    `This usually means the dim-join key is wrong (e.g. joining on \`pkClient\` when the fact uses \`pkClientHistory\`).`
+  )
+  lines.push(
+    `Fix: call \`explore_mssql_schema table='<dim>'\` to confirm the PK, then re-run the query with the correct join column.`
+  )
+  lines.push(
+    `If the NULLs are expected (e.g. unassigned/placeholder rows), state that explicitly in the answer.`
+  )
   lines.push(`---`)
   return lines.join("\n")
 }

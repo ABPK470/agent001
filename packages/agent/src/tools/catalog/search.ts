@@ -33,7 +33,7 @@ export function searchCatalog(
   query: string,
   limit: number,
   viewSourceRows?: Map<string, number>,
-  tableVerdicts?: TableVerdictsReader | null,
+  tableVerdicts?: TableVerdictsReader | null
 ): CatalogSearchHit[] {
   const tokens = tokenize(query)
   if (tokens.length === 0) return []
@@ -85,7 +85,7 @@ export function searchCatalog(
   // Computed once per call across the candidate set so they are O(N²)
   // in candidate count (not catalog size). Cheap because N ≤ a few
   // dozen for any realistic query.
-  const candidateKeys = [...scores.keys()].filter(k => tables.has(k))
+  const candidateKeys = [...scores.keys()].filter((k) => tables.has(k))
   const subsetBonus = computeSubsetOfCandidateSignals(candidateKeys, tables)
   const nameClusterBonus = computeNameClusterBareBonus(candidateKeys, tables)
   // Memory verdicts (Plan v3 Phase 4): consult prior runs' role
@@ -97,7 +97,7 @@ export function searchCatalog(
   const hits: CatalogSearchHit[] = []
   for (const [key, { nameScore, colMatches }] of scores) {
     const table = tables.get(key)
-    if (!table) continue  // concept-graph key may reference a table not in the catalog
+    if (!table) continue // concept-graph key may reference a table not in the catalog
     const colScore = colMatches.length * 10
     const rowBonus = table.rowCount ? Math.min(Math.log10(table.rowCount + 1) * 2, 20) : 0
 
@@ -121,9 +121,7 @@ export function searchCatalog(
     // ── First-principles signals (Plan v3 Phase 1) ────────────────
     // Fan-in: VIEWs aggregating many source-table rows are canonical.
     const fanInRows = viewSourceRows?.get(table.qualifiedName) ?? 0
-    const fanInBonus = fanInRows > 0
-      ? Math.min(Math.log10(fanInRows + 1) * 8, 40)
-      : 0
+    const fanInBonus = fanInRows > 0 ? Math.min(Math.log10(fanInRows + 1) * 8, 40) : 0
     // Subset-of-candidate: parent +30, branch −40 (relative to other candidates only).
     const subsetSignal = subsetBonus.get(key) ?? 0
     // Bare-name preference among siblings sharing a prefix.
@@ -131,15 +129,26 @@ export function searchCatalog(
     // Memory verdict bonus: durable role classification from prior runs.
     const memorySignal = verdictBonus.get(key) ?? 0
 
-    const score = nameScore + colScore + rowBonus + schemaBoost + viewBonus +
-      incomingFkBonus + colRichness + connectivityBonus + conceptBonus +
-      fanInBonus + subsetSignal + nameClusterSignal + memorySignal
+    const score =
+      nameScore +
+      colScore +
+      rowBonus +
+      schemaBoost +
+      viewBonus +
+      incomingFkBonus +
+      colRichness +
+      connectivityBonus +
+      conceptBonus +
+      fanInBonus +
+      subsetSignal +
+      nameClusterSignal +
+      memorySignal
 
     hits.push({
       table,
       matchType: nameScore > 0 ? "name" : "column",
       matchedColumns: colMatches,
-      score,
+      score
     })
   }
 
@@ -193,7 +202,7 @@ function schemaWeightFor(schema: string): number {
  */
 function computeSubsetOfCandidateSignals(
   candidateKeys: string[],
-  tables: Map<string, CatalogTable>,
+  tables: Map<string, CatalogTable>
 ): Map<string, number> {
   const bonus = new Map<string, number>()
   if (candidateKeys.length < 2) return bonus
@@ -212,7 +221,7 @@ function computeSubsetOfCandidateSignals(
     for (const [branchQname, branchKey] of qnameToKey) {
       if (branchKey === parentKey) continue
       // Word-bounded FROM/JOIN reference. Escape dot in qname.
-      const escaped = branchQname.replace(/[.[\]]/g, ch => "\\" + ch)
+      const escaped = branchQname.replace(/[.[\]]/g, (ch) => "\\" + ch)
       const pattern = new RegExp(`(?:from|join)\\s+${escaped}\\b`, "i")
       if (pattern.test(def)) {
         bonus.set(parentKey, (bonus.get(parentKey) ?? 0) + 30)
@@ -237,7 +246,7 @@ function computeSubsetOfCandidateSignals(
  */
 function computeNameClusterBareBonus(
   candidateKeys: string[],
-  tables: Map<string, CatalogTable>,
+  tables: Map<string, CatalogTable>
 ): Map<string, number> {
   const bonus = new Map<string, number>()
   if (candidateKeys.length < 2) return bonus
@@ -295,7 +304,7 @@ function computeNameClusterBareBonus(
 function computeMemoryVerdictBonus(
   candidateKeys: string[],
   tables: Map<string, CatalogTable>,
-  tableVerdicts?: TableVerdictsReader | null,
+  tableVerdicts?: TableVerdictsReader | null
 ): Map<string, number> {
   const bonus = new Map<string, number>()
   if (candidateKeys.length === 0) return bonus
@@ -332,11 +341,17 @@ function computeMemoryVerdictBonus(
 
 function verdictBonusForRole(role: string): number {
   switch (role) {
-    case "canonical": return +200
-    case "subset": return -150
-    case "rules": return -120
-    case "staging": return -80
-    case "archive": return -60
-    default: return 0
+    case "canonical":
+      return +200
+    case "subset":
+      return -150
+    case "rules":
+      return -120
+    case "staging":
+      return -80
+    case "archive":
+      return -60
+    default:
+      return 0
   }
 }

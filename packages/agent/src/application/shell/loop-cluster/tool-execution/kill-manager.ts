@@ -18,7 +18,7 @@ export async function executeWithKillManager(
     toolKillManager: AgentConfig["toolKillManager"]
     onPlannerTrace?: AgentConfig["onPlannerTrace"]
     iteration: number
-  },
+  }
 ): Promise<{
   result: Awaited<ReturnType<typeof executeToolWithTimeout>>
   killed: boolean
@@ -35,38 +35,45 @@ export async function executeWithKillManager(
       toolCallId: call.id,
       toolName: call.name,
       iteration: config.iteration,
-      emit: config.onPlannerTrace,
+      emit: config.onPlannerTrace
     })
-    return (
-      killManager?.wrap
-        ? killManager.wrap(call.id, () => tool.execute(tracedArgs))
-        : tool.execute(tracedArgs)
-    )
+    return killManager?.wrap
+      ? killManager.wrap(call.id, () => tool.execute(tracedArgs))
+      : tool.execute(tracedArgs)
   }
 
   if (killPromise) {
     const raceResult = await Promise.race([
-      executeToolWithTimeout(
-        call.name, call.arguments, runExecute,
-        { toolCallTimeoutMs: 0, maxRetries: 1, signal: config.signal },
-      ).then((r) => ({ kind: "exec" as const, value: r })),
-      killPromise.then((msg: string) => ({ kind: "kill" as const, value: msg })),
+      executeToolWithTimeout(call.name, call.arguments, runExecute, {
+        toolCallTimeoutMs: 0,
+        maxRetries: 1,
+        signal: config.signal
+      }).then((r) => ({ kind: "exec" as const, value: r })),
+      killPromise.then((msg: string) => ({ kind: "kill" as const, value: msg }))
     ])
     killManager!.unregister(call.id)
 
     if (raceResult.kind === "kill") {
       return {
-        result: { result: "", isError: true, timedOut: false, retryCount: 0, toolFailed: false, durationMs: 0 },
+        result: {
+          result: "",
+          isError: true,
+          timedOut: false,
+          retryCount: 0,
+          toolFailed: false,
+          durationMs: 0
+        },
         killed: true,
-        killMessage: raceResult.value,
+        killMessage: raceResult.value
       }
     }
     return { result: raceResult.value, killed: false, killMessage: "" }
   }
 
-  const result = await executeToolWithTimeout(
-    call.name, call.arguments, runExecute,
-    { toolCallTimeoutMs: 0, maxRetries: 1, signal: config.signal },
-  )
+  const result = await executeToolWithTimeout(call.name, call.arguments, runExecute, {
+    toolCallTimeoutMs: 0,
+    maxRetries: 1,
+    signal: config.signal
+  })
   return { result, killed: false, killMessage: "" }
 }

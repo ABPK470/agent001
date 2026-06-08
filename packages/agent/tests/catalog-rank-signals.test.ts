@@ -24,12 +24,16 @@ function col(name: string, dataType = "int"): CatalogColumn {
   return { name, dataType, maxLength: null, nullable: false, isPK: false }
 }
 
-function table(schema: string, name: string, opts: {
-  type?: "TABLE" | "VIEW"
-  rowCount?: number | null
-  columns?: CatalogColumn[]
-  viewDefinition?: string
-} = {}): CatalogTable {
+function table(
+  schema: string,
+  name: string,
+  opts: {
+    type?: "TABLE" | "VIEW"
+    rowCount?: number | null
+    columns?: CatalogColumn[]
+    viewDefinition?: string
+  } = {}
+): CatalogTable {
   return {
     schema,
     name,
@@ -39,13 +43,13 @@ function table(schema: string, name: string, opts: {
     columns: opts.columns ?? [col("Revenue", "decimal"), col("Date", "date")],
     fkOutgoing: [],
     fkIncoming: [],
-    viewDefinition: opts.viewDefinition,
+    viewDefinition: opts.viewDefinition
   }
 }
 
 function buildGraph(
   tables: CatalogTable[],
-  viewSourceRows: Array<{ name: string; sourceRows: number }> = [],
+  viewSourceRows: Array<{ name: string; sourceRows: number }> = []
 ): CatalogGraph {
   return CatalogGraph.fromSnapshot({
     version: 7,
@@ -54,7 +58,7 @@ function buildGraph(
     tables,
     implicitEdges: [],
     viewSourceRows,
-    sysCatalog: [],
+    sysCatalog: []
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
 }
 
@@ -71,8 +75,8 @@ describe("searchCatalog — fan-in signal (viewSourceRows)", () => {
       [revenue, subset],
       [
         { name: "publish.Revenue", sourceRows: 270_000_000 },
-        { name: "publish.Revenue1Subset", sourceRows: 1_000_000 },
-      ],
+        { name: "publish.Revenue1Subset", sourceRows: 1_000_000 }
+      ]
     )
     const hits = g.search("revenue", 10)
     expect(hits[0]?.table.qualifiedName).toBe("publish.Revenue")
@@ -100,15 +104,15 @@ describe("searchCatalog — subset-of-candidate signal", () => {
         SELECT * FROM publish.RevenueESGRules
         UNION ALL
         SELECT * FROM publish.RevenueRWARules
-      `,
+      `
     })
     const branch = table("publish", "RevenueESGRules", { type: "VIEW" })
     const sibling = table("publish", "RevenueRWARules", { type: "VIEW" })
     const g = buildGraph([parent, branch, sibling])
     const hits = g.search("revenue", 10)
     expect(hits[0]?.table.qualifiedName).toBe("publish.Revenue")
-    const parentScore = hits.find(h => h.table.name === "Revenue")!.score
-    const branchScore = hits.find(h => h.table.name === "RevenueESGRules")!.score
+    const parentScore = hits.find((h) => h.table.name === "Revenue")!.score
+    const branchScore = hits.find((h) => h.table.name === "RevenueESGRules")!.score
     // Parent +30, branch −40, plus +25 bare-cluster on parent →
     // gap of at least ~95.
     expect(parentScore - branchScore).toBeGreaterThanOrEqual(70)
@@ -120,21 +124,21 @@ describe("searchCatalog — subset-of-candidate signal", () => {
       viewDefinition: `
         SELECT r.* FROM publish.RevenueRaw r
         JOIN publish.RevenueAdjustments a ON a.Id = r.Id
-      `,
+      `
     })
     const branch1 = table("publish", "RevenueRaw", { type: "VIEW" })
     const branch2 = table("publish", "RevenueAdjustments", { type: "VIEW" })
     const g = buildGraph([parent, branch1, branch2])
     const hits = g.search("revenue", 10)
-    const parentScore = hits.find(h => h.table.name === "RevenueWithDim")!.score
-    const branch1Score = hits.find(h => h.table.name === "RevenueRaw")!.score
+    const parentScore = hits.find((h) => h.table.name === "RevenueWithDim")!.score
+    const branch1Score = hits.find((h) => h.table.name === "RevenueRaw")!.score
     expect(parentScore).toBeGreaterThan(branch1Score)
   })
 
   it("does NOT trigger on lookalike prose inside comments without FROM/JOIN", () => {
     const a = table("publish", "Revenue", {
       type: "VIEW",
-      viewDefinition: `-- this view replaces publish.RevenueOld\nSELECT 1 AS x`,
+      viewDefinition: `-- this view replaces publish.RevenueOld\nSELECT 1 AS x`
     })
     const b = table("publish", "RevenueOld", { type: "VIEW" })
     const g = buildGraph([a, b])
@@ -171,8 +175,8 @@ describe("searchCatalog — name-cluster bare bonus", () => {
     const b = table("publish", "TaxRules", { type: "VIEW" })
     const g = buildGraph([a, b])
     const hits = g.search("tax", 10)
-    const aScore = hits.find(h => h.table.name === "Tax")!.score
-    const bScore = hits.find(h => h.table.name === "TaxRules")!.score
+    const aScore = hits.find((h) => h.table.name === "Tax")!.score
+    const bScore = hits.find((h) => h.table.name === "TaxRules")!.score
     // Without the bare bonus, the two tables score equally on
     // nameScore+colScore; bare-cluster signal must NOT fire.
     expect(Math.abs(aScore - bScore)).toBeLessThan(25)
@@ -191,7 +195,7 @@ describe("searchCatalog — combined signals (failing-trace replay)", () => {
         SELECT * FROM publish.RevenueESGRules
         UNION ALL SELECT * FROM publish.RevenueRWARules
         UNION ALL SELECT * FROM publish.RevenueBackfill
-      `,
+      `
     })
     const esgRules = table("publish", "RevenueESGRules", { type: "VIEW" })
     const rwaRules = table("publish", "RevenueRWARules", { type: "VIEW" })
@@ -202,8 +206,8 @@ describe("searchCatalog — combined signals (failing-trace replay)", () => {
         { name: "publish.Revenue", sourceRows: 270_000_000 },
         { name: "publish.RevenueESGRules", sourceRows: 12_000_000 },
         { name: "publish.RevenueRWARules", sourceRows: 8_000_000 },
-        { name: "publish.RevenueBackfill", sourceRows: 5_000_000 },
-      ],
+        { name: "publish.RevenueBackfill", sourceRows: 5_000_000 }
+      ]
     )
     const hits = g.search("revenue", 10)
     expect(hits[0]?.table.qualifiedName).toBe("publish.Revenue")

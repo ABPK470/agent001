@@ -41,19 +41,31 @@ describe("attachments DB layer", () => {
     // load time; vitest gives every test a fresh module graph here because
     // each beforeEach mutates env *before* the dynamic import.
     const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { uploadAttachment, normalizeName, listAttachments, getAttachment, resolveStorageUri }
-      = await import("../src/adapters/persistence/attachments/index.js")
+    const { uploadAttachment, normalizeName, listAttachments, getAttachment, resolveStorageUri } =
+      await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
 
     expect(normalizeName("../../etc/passwd")).toBe("passwd")
     expect(normalizeName("My Report (final).PDF")).toBe("My_Report_final.pdf")
     expect(normalizeName("...")).toBe("attachment")
 
     const bytesA = new TextEncoder().encode("hello world")
-    const a1 = await uploadAttachment({ scope: "session", ownerUpn: "u@x", originalName: "a.txt", mediaType: "text/plain", bytes: bytesA })
-    const a2 = await uploadAttachment({ scope: "session", ownerUpn: "u@x", originalName: "b.txt", mediaType: "text/plain", bytes: bytesA })
+    const a1 = await uploadAttachment({
+      scope: "session",
+      ownerUpn: "u@x",
+      originalName: "a.txt",
+      mediaType: "text/plain",
+      bytes: bytesA
+    })
+    const a2 = await uploadAttachment({
+      scope: "session",
+      ownerUpn: "u@x",
+      originalName: "b.txt",
+      mediaType: "text/plain",
+      bytes: bytesA
+    })
 
     // Same content → same hash and storage URI; different metadata rows.
     expect(a1.content_hash).toBe(a2.content_hash)
@@ -68,7 +80,13 @@ describe("attachments DB layer", () => {
 
     // Distinct content gets a new blob.
     const bytesB = new TextEncoder().encode("different")
-    const b = await uploadAttachment({ scope: "session", ownerUpn: "u@x", originalName: "c.bin", mediaType: "application/octet-stream", bytes: bytesB })
+    const b = await uploadAttachment({
+      scope: "session",
+      ownerUpn: "u@x",
+      originalName: "c.bin",
+      mediaType: "application/octet-stream",
+      bytes: bytesB
+    })
     expect(b.content_hash).not.toBe(a1.content_hash)
     expect(b.ingestion_mode).toBe("binary_reference")
 
@@ -82,17 +100,36 @@ describe("attachments DB layer", () => {
 
   it("filters by run, soft-deletes, and records imports", async () => {
     const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { uploadAttachment, listAttachments, softDeleteAttachment, recordAttachmentImport, listAttachmentImports }
-      = await import("../src/adapters/persistence/attachments/index.js")
+    const {
+      uploadAttachment,
+      listAttachments,
+      softDeleteAttachment,
+      recordAttachmentImport,
+      listAttachmentImports
+    } = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
     const { seedRuns } = await import("./_fk-helpers.js")
     seedRuns(testDb, ["run-1", "run-2"])
 
     const bytes = new TextEncoder().encode("payload")
-    const r1 = await uploadAttachment({ scope: "run", runId: "run-1", ownerUpn: "u@x", originalName: "x.txt", mediaType: "text/plain", bytes })
-    const r2 = await uploadAttachment({ scope: "run", runId: "run-2", ownerUpn: "u@x", originalName: "y.txt", mediaType: "text/plain", bytes })
+    const r1 = await uploadAttachment({
+      scope: "run",
+      runId: "run-1",
+      ownerUpn: "u@x",
+      originalName: "x.txt",
+      mediaType: "text/plain",
+      bytes
+    })
+    const r2 = await uploadAttachment({
+      scope: "run",
+      runId: "run-2",
+      ownerUpn: "u@x",
+      originalName: "y.txt",
+      mediaType: "text/plain",
+      bytes
+    })
 
     expect(listAttachments({ runId: "run-1" }).map((r) => r.id)).toEqual([r1.id])
     expect(listAttachments({ runId: "run-2" }).map((r) => r.id)).toEqual([r2.id])
@@ -105,7 +142,7 @@ describe("attachments DB layer", () => {
       runId: "run-2",
       sandboxPath: "sandbox://run-2/y.txt",
       importMode: "copy",
-      importedByToolCall: "tool-42",
+      importedByToolCall: "tool-42"
     })
     expect(imp.attachment_id).toBe(r2.id)
     expect(listAttachmentImports("run-2").map((i) => i.id)).toEqual([imp.id])

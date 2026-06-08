@@ -16,11 +16,7 @@ export type PlannerRoute =
   | "planner_with_coherent_bootstrap"
   | "full_planner_decomposition"
 
-export type ArchitecturePreservationStatus =
-  | "frozen"
-  | "preserved"
-  | "repairing_in_place"
-  | "abandoned"
+export type ArchitecturePreservationStatus = "frozen" | "preserved" | "repairing_in_place" | "abandoned"
 
 export interface CoherentSolutionArtifact {
   readonly path: string

@@ -19,12 +19,8 @@
  * the named env and re-inserts the freshly-derived ones.
  */
 
-import {
-    type AgentHost,
-} from "@mia/agent"
-import {
-    getEnvironments,
-} from "@mia/sync"
+import { type AgentHost } from "@mia/agent"
+import { getEnvironments } from "@mia/sync"
 import * as db from "../../adapters/persistence/sqlite.js"
 import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "./hosted-defaults.js"
 
@@ -44,30 +40,32 @@ export function seedDefaultPoliciesIfMissing(host: AgentHost): { hostedDefault: 
 
   for (const r of hostedDefaultPolicyRules()) {
     const inserted = db.seedPolicyRuleIfMissing({
-      name:       r.name,
-      effect:     r.effect,
-      condition:  r.condition,
+      name: r.name,
+      effect: r.effect,
+      condition: r.condition,
       parameters: JSON.stringify(r.parameters ?? {}),
       created_at: now,
-      source:     db.PolicySource.HostedDefault,
+      source: db.PolicySource.HostedDefault
     })
     if (inserted) hostedDefault++
   }
 
   for (const r of policyRulesFromEnvironments(getEnvironments(host))) {
     const inserted = db.seedPolicyRuleIfMissing({
-      name:       r.name,
-      effect:     r.effect,
-      condition:  r.condition,
+      name: r.name,
+      effect: r.effect,
+      condition: r.condition,
       parameters: JSON.stringify(r.parameters ?? {}),
       created_at: now,
-      source:     db.PolicySource.EnvDerived,
+      source: db.PolicySource.EnvDerived
     })
     if (inserted) envDerived++
   }
 
   if (hostedDefault || envDerived) {
-    console.log(`[policy-seeder] seeded ${hostedDefault} hosted_default + ${envDerived} env_derived policy rule(s)`)
+    console.log(
+      `[policy-seeder] seeded ${hostedDefault} hosted_default + ${envDerived} env_derived policy rule(s)`
+    )
   }
   return { hostedDefault, envDerived }
 }
@@ -80,7 +78,9 @@ export function seedDefaultPoliciesIfMissing(host: AgentHost): { hostedDefault: 
  */
 export function refreshEnvDerivedPolicies(host: AgentHost, envName: string): void {
   const prefix = `env_${envName}_`
-  const existing = db.listPolicyRules().filter((r) => r.source === db.PolicySource.EnvDerived && r.name.startsWith(prefix))
+  const existing = db
+    .listPolicyRules()
+    .filter((r) => r.source === db.PolicySource.EnvDerived && r.name.startsWith(prefix))
   for (const r of existing) db.deletePolicyRule(r.name)
 
   const env = getEnvironments(host).find((e) => e.name === envName)
@@ -88,12 +88,12 @@ export function refreshEnvDerivedPolicies(host: AgentHost, envName: string): voi
   const now = new Date().toISOString()
   for (const r of policyRulesFromEnvironments([env])) {
     db.savePolicyRule({
-      name:       r.name,
-      effect:     r.effect,
-      condition:  r.condition,
+      name: r.name,
+      effect: r.effect,
+      condition: r.condition,
       parameters: JSON.stringify(r.parameters ?? {}),
       created_at: now,
-      source:     db.PolicySource.EnvDerived,
+      source: db.PolicySource.EnvDerived
     })
   }
 }

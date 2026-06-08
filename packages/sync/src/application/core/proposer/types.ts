@@ -15,11 +15,11 @@
 
 export const ProposalKind = {
   /** Catalog drift between source and target (missing/extra/changed columns). */
-  Drift:      "drift",
+  Drift: "drift",
   /** Rows present in source whose target equivalents differ. */
-  OutOfSync:  "out_of_sync",
+  OutOfSync: "out_of_sync",
   /** Entity rows present on source but not at all on target. */
-  New:        "new",
+  New: "new"
 } as const
 
 export type ProposalKind = (typeof ProposalKind)[keyof typeof ProposalKind]
@@ -27,33 +27,33 @@ export type ProposalKind = (typeof ProposalKind)[keyof typeof ProposalKind]
 // ── Risk tiers — produced by the annotator (F1.3) ────────────────
 
 export const RiskTier = {
-  Low:      "low",
-  Medium:   "medium",
-  High:     "high",
-  Critical: "critical",
+  Low: "low",
+  Medium: "medium",
+  High: "high",
+  Critical: "critical"
 } as const
 
 export type RiskTier = (typeof RiskTier)[keyof typeof RiskTier]
 
 /** Documented rubric for `riskScore` numeric breakdown by tier. */
 export const RISK_SCORE_BANDS: Readonly<Record<RiskTier, readonly [number, number]>> = {
-  low:      [0,  24],
-  medium:   [25, 54],
-  high:     [55, 79],
-  critical: [80, 100],
+  low: [0, 24],
+  medium: [25, 54],
+  high: [55, 79],
+  critical: [80, 100]
 } as const
 
 // ── Proposal lifecycle ───────────────────────────────────────────
 
 export const ProposalStatus = {
-  Open:             "open",
+  Open: "open",
   AwaitingApproval: "awaiting_approval",
-  Previewed:        "previewed",
-  Executed:         "executed",
-  Dismissed:        "dismissed",
-  Snoozed:          "snoozed",
-  Superseded:       "superseded",
-  Failed:           "failed",
+  Previewed: "previewed",
+  Executed: "executed",
+  Dismissed: "dismissed",
+  Snoozed: "snoozed",
+  Superseded: "superseded",
+  Failed: "failed"
 } as const
 
 export type ProposalStatus = (typeof ProposalStatus)[keyof typeof ProposalStatus]
@@ -63,18 +63,21 @@ export type ProposalStatus = (typeof ProposalStatus)[keyof typeof ProposalStatus
  * rejected by `assertTransition()` (used at every persistence call).
  */
 export const PROPOSAL_TRANSITIONS: Readonly<Record<ProposalStatus, readonly ProposalStatus[]>> = {
-  open:               ["awaiting_approval", "previewed", "dismissed", "snoozed", "superseded", "executed", "failed"],
-  awaiting_approval:  ["previewed", "executed", "dismissed", "failed", "superseded"],
-  previewed:          ["awaiting_approval", "executed", "dismissed", "snoozed", "superseded", "failed"],
-  snoozed:            ["open", "dismissed", "superseded"],
-  executed:           [],
-  dismissed:          [],
-  superseded:         [],
-  failed:             ["open", "dismissed"],
+  open: ["awaiting_approval", "previewed", "dismissed", "snoozed", "superseded", "executed", "failed"],
+  awaiting_approval: ["previewed", "executed", "dismissed", "failed", "superseded"],
+  previewed: ["awaiting_approval", "executed", "dismissed", "snoozed", "superseded", "failed"],
+  snoozed: ["open", "dismissed", "superseded"],
+  executed: [],
+  dismissed: [],
+  superseded: [],
+  failed: ["open", "dismissed"]
 } as const
 
 export class IllegalProposalTransitionError extends Error {
-  constructor(public from: ProposalStatus, public to: ProposalStatus) {
+  constructor(
+    public from: ProposalStatus,
+    public to: ProposalStatus
+  ) {
     super(`Illegal proposal status transition: ${from} → ${to}`)
   }
 }
@@ -141,55 +144,55 @@ export interface ProposerNewEntityDetail {
 }
 
 export type ProposerFindingDetail =
-  | { kind: "drift";        drift:       ProposerDriftDetail }
-  | { kind: "out_of_sync";  outOfSync:   ProposerOutOfSyncDetail }
-  | { kind: "new";          newEntities: ProposerNewEntityDetail }
+  | { kind: "drift"; drift: ProposerDriftDetail }
+  | { kind: "out_of_sync"; outOfSync: ProposerOutOfSyncDetail }
+  | { kind: "new"; newEntities: ProposerNewEntityDetail }
 
 export interface ProposerFinding {
-  envPair:      EnvPair
+  envPair: EnvPair
   /** Entity machine id (from the registry); not a compile-time union. */
-  entityType:   string
+  entityType: string
   /** Specific row id within the entity (e.g. a Contract's ContractId). */
-  entityId:     string
+  entityId: string
   /** Human-friendly label captured at scan time so the UI doesn't need to refetch. */
-  entityLabel:  string
-  kind:         ProposalKind
-  counts:       ProposalCounts
-  detail:       ProposerFindingDetail
+  entityLabel: string
+  kind: ProposalKind
+  counts: ProposalCounts
+  detail: ProposerFindingDetail
   /** SHA-256 over the canonical-JSON payload — used for dedup against open proposals. */
-  fingerprint:  string
+  fingerprint: string
   /** Snapshot of the entity-definition version that produced this finding. */
   entityDefVersion: number | null
   /** Time the deterministic pass observed this divergence. */
-  observedAt:   string
+  observedAt: string
 }
 
 // ── Proposer run — F1.5 unit of work ─────────────────────────────
 
 export const ProposerRunStatus = {
-  Pending:   "pending",
-  Running:   "running",
+  Pending: "pending",
+  Running: "running",
   Completed: "completed",
-  Failed:    "failed",
-  Cancelled: "cancelled",
+  Failed: "failed",
+  Cancelled: "cancelled"
 } as const
 
 export type ProposerRunStatus = (typeof ProposerRunStatus)[keyof typeof ProposerRunStatus]
 
 export interface ProposerRunCounts {
-  scanned:  number
+  scanned: number
   produced: number
-  errors:   number
+  errors: number
 }
 
 export interface ProposerRun {
-  id:           string
-  envPair:      EnvPair
-  startedAt:    string
-  finishedAt:   string | null
-  status:       ProposerRunStatus
-  counts:       ProposerRunCounts
-  error:        string | null
-  triggeredBy:  string
-  trigger:      "schedule" | "manual" | "retry"
+  id: string
+  envPair: EnvPair
+  startedAt: string
+  finishedAt: string | null
+  status: ProposerRunStatus
+  counts: ProposerRunCounts
+  error: string | null
+  triggeredBy: string
+  trigger: "schedule" | "manual" | "retry"
 }

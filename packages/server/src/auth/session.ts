@@ -21,7 +21,7 @@
 import { createHmac, randomBytes, timingSafeEqual } from "node:crypto"
 
 export const SESSION_COOKIE = "mia_sid"
-export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30   // 30 days
+export const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30 // 30 days
 
 function getSecret(): Buffer {
   const raw = process.env["MIA_COOKIE_SECRET"]
@@ -59,14 +59,20 @@ export function verifySid(raw: string | undefined): string | null {
   const [body, sigB64] = parts
   const expected = createHmac("sha256", getSecret()).update(body).digest()
   let actual: Buffer
-  try { actual = b64urlDecode(sigB64) } catch { return null }
+  try {
+    actual = b64urlDecode(sigB64)
+  } catch {
+    return null
+  }
   if (actual.length !== expected.length) return null
   if (!timingSafeEqual(actual, expected)) return null
   try {
     const sid = b64urlDecode(body).toString("utf8")
     if (!sid) return null
     return sid
-  } catch { return null }
+  } catch {
+    return null
+  }
 }
 
 export function newSid(): string {

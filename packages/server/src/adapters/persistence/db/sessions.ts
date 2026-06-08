@@ -29,26 +29,24 @@ export interface DbSession {
 
 export interface SessionWithUser extends DbSession {
   display_name: string
-  is_admin: number   // 0 | 1
+  is_admin: number // 0 | 1
 }
 
-export function createSession(args: {
-  upn: string
-  ip: string
-  userAgent: string
-}): string {
+export function createSession(args: { upn: string; ip: string; userAgent: string }): string {
   const sid = newSid()
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO sessions (sid, upn, ip, user_agent, created_at, last_seen_at)
     VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
-  `).run(sid, args.upn.toLowerCase(), args.ip, args.userAgent)
+  `
+    )
+    .run(sid, args.upn.toLowerCase(), args.ip, args.userAgent)
   return sid
 }
 
 export function touchSession(sid: string): void {
-  getDb()
-    .prepare("UPDATE sessions SET last_seen_at = datetime('now') WHERE sid = ?")
-    .run(sid)
+  getDb().prepare("UPDATE sessions SET last_seen_at = datetime('now') WHERE sid = ?").run(sid)
 }
 
 export function deleteSession(sid: string): void {
@@ -56,9 +54,7 @@ export function deleteSession(sid: string): void {
 }
 
 export function deleteSessionsForUser(upn: string): void {
-  getDb()
-    .prepare("DELETE FROM sessions WHERE upn = ?")
-    .run(upn.toLowerCase())
+  getDb().prepare("DELETE FROM sessions WHERE upn = ?").run(upn.toLowerCase())
 }
 
 /**
@@ -67,20 +63,22 @@ export function deleteSessionsForUser(upn: string): void {
  * hook on every request.
  */
 export function getSessionWithUser(sid: string): SessionWithUser | null {
-  const row = getDb().prepare(`
+  const row = getDb()
+    .prepare(
+      `
     SELECT s.sid, s.upn, s.ip, s.user_agent, s.created_at, s.last_seen_at,
            u.display_name, u.is_admin
     FROM sessions s
     JOIN users u ON u.upn = s.upn
     WHERE s.sid = ?
-  `).get(sid) as SessionWithUser | undefined
+  `
+    )
+    .get(sid) as SessionWithUser | undefined
   return row ?? null
 }
 
 export function getSession(sid: string): DbSession | undefined {
-  return getDb()
-    .prepare("SELECT * FROM sessions WHERE sid = ?")
-    .get(sid) as DbSession | undefined
+  return getDb().prepare("SELECT * FROM sessions WHERE sid = ?").get(sid) as DbSession | undefined
 }
 
 export function listSessions(opts?: { sinceSeconds?: number }): SessionWithUser[] {
@@ -94,8 +92,8 @@ export function listSessions(opts?: { sinceSeconds?: number }): SessionWithUser[
     ORDER BY s.last_seen_at DESC
   `
   return since !== undefined
-    ? getDb().prepare(sql).all(`-${since} seconds`) as SessionWithUser[]
-    : getDb().prepare(sql).all() as SessionWithUser[]
+    ? (getDb().prepare(sql).all(`-${since} seconds`) as SessionWithUser[])
+    : (getDb().prepare(sql).all() as SessionWithUser[])
 }
 
 // ── Per-user aggregations (admin observability) ──────────────────
@@ -132,7 +130,9 @@ export function listUsersWithStats(opts?: {
 }): UserStatsRow[] {
   const sinceSeconds = opts?.sinceSeconds ?? 604_800
   const activityWindow = opts?.activityWindowSeconds ?? 86_400
-  const rows = getDb().prepare(`
+  const rows = getDb()
+    .prepare(
+      `
     WITH grouped_sessions AS (
       SELECT
         u.upn                  AS upn,
@@ -198,39 +198,50 @@ export function listUsersWithStats(opts?: {
     LEFT JOIN token_totals tt ON tt.upn = g.upn
     LEFT JOIN last_models  lm ON lm.upn = g.upn
     ORDER BY g.last_seen_at DESC
-  `).all(
-    `-${sinceSeconds} seconds`,
-    `-${activityWindow} seconds`,
-    `-${activityWindow} seconds`,
-    `-${activityWindow} seconds`,
-  ) as Array<{
-    upn: string; display_name: string; is_admin: number
-    session_count: number; first_seen_at: string | null; last_seen_at: string | null
-    last_ip: string | null; last_user_agent: string | null
-    total_runs: number; runs_24h: number; runs_failed_24h: number
-    total_tokens_24h: number; total_llm_calls_24h: number
-    last_run_at: string | null; last_model: string | null
+  `
+    )
+    .all(
+      `-${sinceSeconds} seconds`,
+      `-${activityWindow} seconds`,
+      `-${activityWindow} seconds`,
+      `-${activityWindow} seconds`
+    ) as Array<{
+    upn: string
+    display_name: string
+    is_admin: number
+    session_count: number
+    first_seen_at: string | null
+    last_seen_at: string | null
+    last_ip: string | null
+    last_user_agent: string | null
+    total_runs: number
+    runs_24h: number
+    runs_failed_24h: number
+    total_tokens_24h: number
+    total_llm_calls_24h: number
+    last_run_at: string | null
+    last_model: string | null
   }>
 
   const onlineCutoff = Date.now() - 60_000
   return rows.map((r) => ({
-    identifier:       r.upn,
-    upn:              r.upn,
-    displayName:      r.display_name,
-    isAdmin:          r.is_admin === 1,
-    sessionCount:     r.session_count,
-    firstSeenAt:      r.first_seen_at ?? "",
-    lastSeenAt:       r.last_seen_at ?? "",
-    online:           r.last_seen_at ? Date.parse(r.last_seen_at + "Z") >= onlineCutoff : false,
-    lastIp:           r.last_ip,
-    lastUserAgent:    r.last_user_agent,
-    totalRuns:        r.total_runs,
-    runs24h:          r.runs_24h,
-    runsFailed24h:    r.runs_failed_24h,
-    totalTokens24h:   r.total_tokens_24h,
+    identifier: r.upn,
+    upn: r.upn,
+    displayName: r.display_name,
+    isAdmin: r.is_admin === 1,
+    sessionCount: r.session_count,
+    firstSeenAt: r.first_seen_at ?? "",
+    lastSeenAt: r.last_seen_at ?? "",
+    online: r.last_seen_at ? Date.parse(r.last_seen_at + "Z") >= onlineCutoff : false,
+    lastIp: r.last_ip,
+    lastUserAgent: r.last_user_agent,
+    totalRuns: r.total_runs,
+    runs24h: r.runs_24h,
+    runsFailed24h: r.runs_failed_24h,
+    totalTokens24h: r.total_tokens_24h,
     totalLlmCalls24h: r.total_llm_calls_24h,
-    lastRunAt:        r.last_run_at,
-    lastModel:        r.last_model,
+    lastRunAt: r.last_run_at,
+    lastModel: r.last_model
   }))
 }
 
@@ -252,14 +263,20 @@ export interface UserHistoryRunRow {
  * Recent runs for a single user (looked up by UPN). Joined with
  * token_usage so the widget can render tokens / model in one round-trip.
  */
-export function listUserHistory(identifier: string, limit = 25, offset = 0): { runs: UserHistoryRunRow[]; total: number } {
+export function listUserHistory(
+  identifier: string,
+  limit = 25,
+  offset = 0
+): { runs: UserHistoryRunRow[]; total: number } {
   // v19: identifier is always a UPN (anonymous "sid:..." identifiers are gone).
   // We strip the legacy "sid:" prefix defensively so older client links keep working.
   const upn = identifier.startsWith("sid:") ? identifier.slice(4) : identifier
-  const total = (getDb()
-    .prepare("SELECT COUNT(*) AS cnt FROM runs WHERE upn = ?")
-    .get(upn) as { cnt: number }).cnt
-  const rows = getDb().prepare(`
+  const total = (
+    getDb().prepare("SELECT COUNT(*) AS cnt FROM runs WHERE upn = ?").get(upn) as { cnt: number }
+  ).cnt
+  const rows = getDb()
+    .prepare(
+      `
     SELECT
       r.id, r.goal, r.status, r.step_count, r.created_at, r.completed_at, r.error,
       t.total_tokens, t.llm_calls, t.model
@@ -268,31 +285,40 @@ export function listUserHistory(identifier: string, limit = 25, offset = 0): { r
     WHERE r.upn = ?
     ORDER BY r.created_at DESC
     LIMIT ? OFFSET ?
-  `).all(upn, limit, offset) as Array<{
-    id: string; goal: string; status: string; step_count: number
-    created_at: string; completed_at: string | null; error: string | null
-    total_tokens: number | null; llm_calls: number | null; model: string | null
+  `
+    )
+    .all(upn, limit, offset) as Array<{
+    id: string
+    goal: string
+    status: string
+    step_count: number
+    created_at: string
+    completed_at: string | null
+    error: string | null
+    total_tokens: number | null
+    llm_calls: number | null
+    model: string | null
   }>
   return {
     total,
     runs: rows.map((r) => {
       const parseTs = (s: string) =>
         /[zZ]|[+-]\d\d:?\d\d$/.test(s) ? Date.parse(s) : Date.parse(s.replace(" ", "T") + "Z")
-      const startedMs   = parseTs(r.created_at)
+      const startedMs = parseTs(r.created_at)
       const completedMs = r.completed_at ? parseTs(r.completed_at) : null
       return {
-        runId:       r.id,
-        goal:        r.goal,
-        status:      r.status,
-        stepCount:   r.step_count,
-        createdAt:   r.created_at,
+        runId: r.id,
+        goal: r.goal,
+        status: r.status,
+        stepCount: r.step_count,
+        createdAt: r.created_at,
         completedAt: r.completed_at,
-        durationMs:  completedMs ? completedMs - startedMs : null,
+        durationMs: completedMs ? completedMs - startedMs : null,
         totalTokens: r.total_tokens,
-        llmCalls:    r.llm_calls,
-        model:       r.model,
-        error:       r.error,
+        llmCalls: r.llm_calls,
+        model: r.model,
+        error: r.error
       }
-    }),
+    })
   }
 }

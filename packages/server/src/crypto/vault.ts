@@ -19,11 +19,7 @@
  * @module
  */
 
-import {
-    createCipheriv,
-    createDecipheriv,
-    randomBytes,
-} from "node:crypto"
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto"
 import { chmodSync, existsSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -51,7 +47,7 @@ export function getVaultKey(): Buffer {
     const buf = Buffer.from(fromEnv.trim(), "hex")
     if (buf.length !== KEY_LENGTH) {
       throw new Error(
-        `MIA_VAULT_KEY is set but is ${buf.length} bytes after hex decode; expected ${KEY_LENGTH}.`,
+        `MIA_VAULT_KEY is set but is ${buf.length} bytes after hex decode; expected ${KEY_LENGTH}.`
       )
     }
     cachedKey = buf
@@ -63,7 +59,7 @@ export function getVaultKey(): Buffer {
     const buf = readFileSync(path)
     if (buf.length !== KEY_LENGTH) {
       throw new Error(
-        `Vault key at ${path} is ${buf.length} bytes; expected ${KEY_LENGTH}. Restore from backup or delete to regenerate (will lose access to existing encrypted data).`,
+        `Vault key at ${path} is ${buf.length} bytes; expected ${KEY_LENGTH}. Restore from backup or delete to regenerate (will lose access to existing encrypted data).`
       )
     }
     cachedKey = buf
@@ -74,9 +70,15 @@ export function getVaultKey(): Buffer {
   // realise this key MUST be backed up — losing it loses every credential.
   const fresh = randomBytes(KEY_LENGTH)
   writeFileSync(path, fresh, { mode: 0o600 })
-  try { chmodSync(path, 0o600) } catch { /* best-effort on Windows */ }
+  try {
+    chmodSync(path, 0o600)
+  } catch {
+    /* best-effort on Windows */
+  }
   // eslint-disable-next-line no-console
-  console.warn(`[vault] generated new master key at ${path} (mode 0600). Back it up — losing this key will permanently lose all encrypted credentials.`)
+  console.warn(
+    `[vault] generated new master key at ${path} (mode 0600). Back it up — losing this key will permanently lose all encrypted credentials.`
+  )
   cachedKey = fresh
   return cachedKey
 }
@@ -112,10 +114,7 @@ export function open(sealed: SealedSecret): string {
   const key = getVaultKey()
   const decipher = createDecipheriv("aes-256-gcm", key, sealed.iv)
   decipher.setAuthTag(sealed.authTag)
-  const plaintext = Buffer.concat([
-    decipher.update(sealed.encPayload),
-    decipher.final(),
-  ])
+  const plaintext = Buffer.concat([decipher.update(sealed.encPayload), decipher.final()])
   return plaintext.toString("utf8")
 }
 

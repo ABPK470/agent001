@@ -42,7 +42,7 @@ export function truncateMessages(messages: Message[], modelHint?: string): Trunc
       maxOutputTokens: 4096,
       charPerToken: 4,
       hardMaxPromptChars: MAX_CONTEXT_TOKENS * 4,
-      model: modelHint,
+      model: modelHint
     })
     if (budgetResult.messages.length > 0) {
       // Second pass — distribute the *history* section budget across
@@ -52,7 +52,7 @@ export function truncateMessages(messages: Message[], modelHint?: string): Trunc
       // in this iteration.
       const finalMessages = enforcePerToolResultCap(
         budgetResult.messages,
-        budgetResult.diagnostics.caps.historyChars,
+        budgetResult.diagnostics.caps.historyChars
       )
       return { messages: finalMessages, budgetDiagnostics: budgetResult.diagnostics }
     }
@@ -76,13 +76,16 @@ function enforcePerToolResultCap(messages: Message[], historyBudgetChars: number
   if (toolMsgCount === 0) return messages
   const perResultCap = Math.min(
     PER_RESULT_MAX,
-    Math.max(PER_RESULT_MIN, Math.floor(historyBudgetChars / toolMsgCount)),
+    Math.max(PER_RESULT_MIN, Math.floor(historyBudgetChars / toolMsgCount))
   )
   let mutated = false
   const out = messages.map((m) => {
     if (m.role !== MessageRole.Tool || !m.content || m.content.length <= perResultCap) return m
     mutated = true
-    return { ...m, content: m.content.slice(0, perResultCap) + "\n... (output truncated by section budget)" }
+    return {
+      ...m,
+      content: m.content.slice(0, perResultCap) + "\n... (output truncated by section budget)"
+    }
   })
   return mutated ? out : messages
 }
@@ -109,12 +112,19 @@ function truncateBySection(messages: Message[]): Message[] {
 
 function dropOldestHistory(messages: Message[]): Message[] {
   const systemEnd = messages.findIndex(
-    (m) => m.role !== "system" && m.section !== "system_anchor" && m.section !== "system_runtime"
-      && m.section !== "memory_working" && m.section !== "memory_episodic" && m.section !== "memory_semantic",
+    (m) =>
+      m.role !== "system" &&
+      m.section !== "system_anchor" &&
+      m.section !== "system_runtime" &&
+      m.section !== "memory_working" &&
+      m.section !== "memory_episodic" &&
+      m.section !== "memory_semantic"
   )
   if (systemEnd < 0) return messages
 
-  const userIdx = messages.findIndex((m) => m.section === "user" || (m.role === MessageRole.User && !m.section))
+  const userIdx = messages.findIndex(
+    (m) => m.section === "user" || (m.role === MessageRole.User && !m.section)
+  )
   const historyStart = Math.max(systemEnd, userIdx + 1)
 
   const head = messages.slice(0, historyStart)
@@ -131,7 +141,7 @@ function dropOldestHistory(messages: Message[]): Message[] {
   return [
     ...head,
     { role: MessageRole.System, content: summary, section: "history" as PromptBudgetSection },
-    ...keptTail,
+    ...keptTail
   ]
 }
 
@@ -154,7 +164,7 @@ function buildDroppedHistorySummary(dropped: Message[]): string {
       toolCallMeta.set(tc.id, {
         name: tc.name,
         path,
-        command: typeof args.command === "string" ? args.command : null,
+        command: typeof args.command === "string" ? args.command : null
       })
 
       switch (tc.name) {
@@ -174,9 +184,7 @@ function buildDroppedHistorySummary(dropped: Message[]): string {
           }
           break
         case "run_command": {
-          const cmd = typeof args.command === "string"
-            ? args.command.slice(0, 60)
-            : "command"
+          const cmd = typeof args.command === "string" ? args.command.slice(0, 60) : "command"
           actions.push(`ran: ${cmd}`)
           break
         }
@@ -201,7 +209,12 @@ function buildDroppedHistorySummary(dropped: Message[]): string {
     const short = normalized.length > 120 ? `${normalized.slice(0, 120)}...` : normalized
     const pathLabel = meta.path ? ` ${meta.path}` : ""
 
-    if (/^Error:|\b(?:failed|exception|traceback|syntax error|enoent|eacces|permission denied)\b/i.test(normalized) && !/\bno errors\b/i.test(normalized)) {
+    if (
+      /^Error:|\b(?:failed|exception|traceback|syntax error|enoent|eacces|permission denied)\b/i.test(
+        normalized
+      ) &&
+      !/\bno errors\b/i.test(normalized)
+    ) {
       notableResults.push(`${meta.name}${pathLabel} failed: ${short}`)
       continue
     }
@@ -211,7 +224,10 @@ function buildDroppedHistorySummary(dropped: Message[]): string {
       continue
     }
 
-    if (meta.name === "run_command" && /\b(?:passed|success|0 failed|build succeeded|compiled successfully)\b/i.test(normalized)) {
+    if (
+      meta.name === "run_command" &&
+      /\b(?:passed|success|0 failed|build succeeded|compiled successfully)\b/i.test(normalized)
+    ) {
       const commandLabel = meta.command ? meta.command.slice(0, 50) : "command"
       notableResults.push(`run_command succeeded: ${commandLabel}`)
     }
@@ -221,12 +237,12 @@ function buildDroppedHistorySummary(dropped: Message[]): string {
     return "[Earlier conversation truncated to save context budget.]"
   }
 
-  const displayed = actions.length <= 15
-    ? actions
-    : [...actions.slice(0, 12), `... and ${actions.length - 12} more actions`]
-  const displayedResults = notableResults.length <= 8
-    ? notableResults
-    : [...notableResults.slice(0, 6), `... and ${notableResults.length - 6} more notable results`]
+  const displayed =
+    actions.length <= 15 ? actions : [...actions.slice(0, 12), `... and ${actions.length - 12} more actions`]
+  const displayedResults =
+    notableResults.length <= 8
+      ? notableResults
+      : [...notableResults.slice(0, 6), `... and ${notableResults.length - 6} more notable results`]
 
   return (
     "[Earlier conversation truncated. Here is what you already did:]\n" +
@@ -253,9 +269,5 @@ function truncateLegacy(messages: Message[]): Message[] {
   }
   const dropped = messages.slice(2, messages.length - tailSize)
   const summary = buildDroppedHistorySummary(dropped)
-  return [
-    ...head,
-    { role: MessageRole.System, content: summary },
-    ...messages.slice(-tailSize),
-  ]
+  return [...head, { role: MessageRole.System, content: summary }, ...messages.slice(-tailSize)]
 }

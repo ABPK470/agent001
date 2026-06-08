@@ -11,55 +11,53 @@
  * and ranks the queue in-place.
  */
 
-import {
-    type AgentHost,
-} from "@mia/agent"
+import { type AgentHost } from "@mia/agent"
 import { EventType } from "@mia/shared-enums"
 import {
-    annotateProposal,
-    detectCatalogDrift,
-    emptyCounts,
-    getPublishedSyncRecipe,
-    listPublishedSyncDefinitionsForHost,
-    rankProposals,
-    runProposerPass,
-    type EntityDescriptor,
-    type EnvPair,
-    type LlmCompletionPort,
-    type ProposerFinding,
-    type ProposerPassDeps,
-    type ProposerPassOptions,
-    type ProposerPassResult,
-    type RankableProposal,
+  annotateProposal,
+  detectCatalogDrift,
+  emptyCounts,
+  getPublishedSyncRecipe,
+  listPublishedSyncDefinitionsForHost,
+  rankProposals,
+  runProposerPass,
+  type EntityDescriptor,
+  type EnvPair,
+  type LlmCompletionPort,
+  type ProposerFinding,
+  type ProposerPassDeps,
+  type ProposerPassOptions,
+  type ProposerPassResult,
+  type RankableProposal
 } from "@mia/sync"
 import {
-    createProposerRun,
-    finishProposerRun,
-    ingestFindings,
-    listProposals,
-    markProposerRunRunning,
-    parseAnnotation,
-    saveAnnotation,
-    saveRankScore,
-    type ProposalRow,
+  createProposerRun,
+  finishProposerRun,
+  ingestFindings,
+  listProposals,
+  markProposerRunRunning,
+  parseAnnotation,
+  saveAnnotation,
+  saveRankScore,
+  type ProposalRow
 } from "../../../adapters/persistence/proposals.js"
 import { broadcast } from "../../../event-broadcaster.js"
 import { probeRowDivergence } from "../../core/proposer/divergence-probe.js"
 
 export interface ProposerRunnerOptions extends ProposerPassOptions {
-  tenantId:    string
+  tenantId: string
   triggeredBy: string
-  trigger:     "schedule" | "manual" | "retry"
+  trigger: "schedule" | "manual" | "retry"
   /** Inject the LLM port when annotation should run; null/undefined skips it. */
-  llm?:        LlmCompletionPort | null
+  llm?: LlmCompletionPort | null
 }
 
 export interface ProposerRunnerResult {
-  runId:          string
-  passResult:     ProposerPassResult
-  insertedIds:    readonly string[]
+  runId: string
+  passResult: ProposerPassResult
+  insertedIds: readonly string[]
   annotatedCount: number
-  rankedCount:    number
+  rankedCount: number
 }
 
 /**
@@ -68,19 +66,22 @@ export interface ProposerRunnerResult {
  * scheduler enforces "one run per pair at a time").
  */
 export async function runProposer(
-  host:     AgentHost,
-  envPair:  EnvPair,
-  options:  ProposerRunnerOptions,
+  host: AgentHost,
+  envPair: EnvPair,
+  options: ProposerRunnerOptions
 ): Promise<ProposerRunnerResult> {
   const runId = createProposerRun({
-    tenantId:    options.tenantId,
-    source:      envPair.source,
-    target:      envPair.target,
+    tenantId: options.tenantId,
+    source: envPair.source,
+    target: envPair.target,
     triggeredBy: options.triggeredBy,
-    trigger:     options.trigger,
+    trigger: options.trigger
   })
   markProposerRunRunning(runId)
-  broadcast({ type: EventType.SyncProposerRunStarted, data: { runId, envPair, triggeredBy: options.triggeredBy } })
+  broadcast({
+    type: EventType.SyncProposerRunStarted,
+    data: { runId, envPair, triggeredBy: options.triggeredBy }
+  })
 
   const deps = buildPassDeps(host, options.tenantId)
   let passResult: ProposerPassResult
@@ -89,8 +90,11 @@ export async function runProposer(
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e)
     finishProposerRun({
-      id: runId, status: "failed",
-      counts: { scanned: 0, produced: 0, errors: 1 }, durationMs: 0, error: msg,
+      id: runId,
+      status: "failed",
+      counts: { scanned: 0, produced: 0, errors: 1 },
+      durationMs: 0,
+      error: msg
     })
     broadcast({ type: EventType.SyncProposerRunFailed, data: { runId, error: msg } })
     throw e
@@ -106,12 +110,21 @@ export async function runProposer(
   const rankedCount = rerankOpenQueue(options.tenantId)
 
   finishProposerRun({
-    id: runId, status: "completed",
-    counts: passResult.counts, durationMs: passResult.durationMs, error: null,
+    id: runId,
+    status: "completed",
+    counts: passResult.counts,
+    durationMs: passResult.durationMs,
+    error: null
   })
   broadcast({
     type: EventType.SyncProposerRunCompleted,
-    data: { runId, envPair, counts: passResult.counts, inserted: insertedIds.length, annotated: annotatedCount },
+    data: {
+      runId,
+      envPair,
+      counts: passResult.counts,
+      inserted: insertedIds.length,
+      annotated: annotatedCount
+    }
   })
 
   return { runId, passResult, insertedIds, annotatedCount, rankedCount }
@@ -127,7 +140,7 @@ function buildPassDeps(host: AgentHost, tenantId: string): ProposerPassDeps {
       return listPublishedSyncDefinitionsForHost(host).map<EntityDescriptor>((definition) => ({
         id: definition.id,
         label: definition.displayName ?? definition.id,
-        defVersion: null,
+        defVersion: null
       }))
     },
     probeCatalogDrift: async (envPair, ent) => {
@@ -135,7 +148,13 @@ function buildPassDeps(host: AgentHost, tenantId: string): ProposerPassDeps {
       const recipe = getPublishedSyncRecipe(host, ent.id)
       const allowedSchemas = uniqueSchemasFromRecipe(recipe.tables.map((t) => t.name))
       try {
-        const r = await detectCatalogDrift(host, envPair.source, envPair.target, recipe.tables.map((t) => t.name), allowedSchemas)
+        const r = await detectCatalogDrift(
+          host,
+          envPair.source,
+          envPair.target,
+          recipe.tables.map((t) => t.name),
+          allowedSchemas
+        )
         return { issues: r.issues }
       } catch (e) {
         return { issues: [`catalog probe failed: ${e instanceof Error ? e.message : String(e)}`] }
@@ -143,7 +162,7 @@ function buildPassDeps(host: AgentHost, tenantId: string): ProposerPassDeps {
     },
     scanDivergentRows: async (envPair, ent) => {
       return probeRowDivergence({ host, tenantId, envPair, entityId: ent.id, entityLabel: ent.label })
-    },
+    }
   }
 }
 
@@ -160,8 +179,8 @@ function uniqueSchemasFromRecipe(tables: readonly string[]): readonly string[] {
 
 async function annotateInserted(
   tenantId: string,
-  ids:      readonly string[],
-  llm:      LlmCompletionPort,
+  ids: readonly string[],
+  llm: LlmCompletionPort
 ): Promise<number> {
   const rows = listProposals({ tenantId, status: ["open"], limit: 1000 })
   const subset = rows.filter((r) => ids.includes(r.id))
@@ -174,12 +193,18 @@ async function annotateInserted(
       n++
     } catch (e) {
       // Hard failure: persist a critical "annotator-error" stamp so reviewers see it.
-      saveAnnotation(r.id, {
-        riskTier: "critical", riskScore: 95,
-        rationale: `Annotator threw: ${e instanceof Error ? e.message : String(e)}. Manual review required.`,
-        recommendedWindow: "any", dependsOn: [],
-        warnings: [{ kind: "unverified-table", message: "Annotator unavailable" }],
-      }, true)
+      saveAnnotation(
+        r.id,
+        {
+          riskTier: "critical",
+          riskScore: 95,
+          rationale: `Annotator threw: ${e instanceof Error ? e.message : String(e)}. Manual review required.`,
+          recommendedWindow: "any",
+          dependsOn: [],
+          warnings: [{ kind: "unverified-table", message: "Annotator unavailable" }]
+        },
+        true
+      )
     }
   }
   return n
@@ -189,13 +214,13 @@ function rerankOpenQueue(tenantId: string): number {
   const open = listProposals({
     tenantId,
     status: ["open", "awaiting_approval", "previewed", "snoozed"],
-    limit: 5000,
+    limit: 5000
   })
   const rankable: RankableProposal[] = open.map((r) => ({
-    id:         r.id,
-    finding:    rowToFinding(r),
+    id: r.id,
+    finding: rowToFinding(r),
     annotation: parseAnnotation(r),
-    enqueuedAt: r.enqueued_at,
+    enqueuedAt: r.enqueued_at
   }))
   const { ranked } = rankProposals(rankable)
   for (const item of ranked) saveRankScore(item.id, item.score)
@@ -204,15 +229,15 @@ function rerankOpenQueue(tenantId: string): number {
 
 function rowToFinding(r: ProposalRow): ProposerFinding {
   return {
-    envPair:    { source: r.source, target: r.target },
+    envPair: { source: r.source, target: r.target },
     entityType: r.entity_type,
-    entityId:   r.entity_id,
+    entityId: r.entity_id,
     entityLabel: r.entity_label,
-    kind:       r.kind,
-    counts:     r.counts_json ? JSON.parse(r.counts_json) : emptyCounts(),
-    detail:     JSON.parse(r.detail_json),
+    kind: r.kind,
+    counts: r.counts_json ? JSON.parse(r.counts_json) : emptyCounts(),
+    detail: JSON.parse(r.detail_json),
     fingerprint: r.fingerprint,
     entityDefVersion: r.entity_def_version,
-    observedAt: r.observed_at,
+    observedAt: r.observed_at
   }
 }

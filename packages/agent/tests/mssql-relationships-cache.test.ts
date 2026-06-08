@@ -25,18 +25,26 @@ function makeFixture(): {
   const toolKnowledge: NonNullable<AgentHost["toolKnowledge"]> = {
     lookup: () => ({ hit: false as const, reason: "miss" as const }),
     save: () => undefined,
-    renderHeader: () => "",
+    renderHeader: () => ""
   }
   const host = configureAgent({
     mssqlDatabases: databases,
     catalogInstances,
-    toolKnowledge,
+    toolKnowledge
   })
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
-    pool: { request: () => ({ input: () => ({ query: async () => ({ recordset: [] }) }), query: async () => ({ recordset: [] }), cancel: () => undefined }), connected: true, close: async () => undefined } as never,
+    pool: {
+      request: () => ({
+        input: () => ({ query: async () => ({ recordset: [] }) }),
+        query: async () => ({ recordset: [] }),
+        cancel: () => undefined
+      }),
+      connected: true,
+      close: async () => undefined
+    } as never,
     writeEnabled: false,
-    knowledge: null,
+    knowledge: null
   })
   catalogInstances.set("default", canonicalFixtureCatalog())
   return { toolKnowledge, tool: createDiscoverRelationshipsTool(host) }
@@ -45,12 +53,17 @@ function makeFixture(): {
 describe("discover_relationships cache integration", () => {
   it("serves a cached payload + header for table= mode (key=qname, mode=fk)", async () => {
     const { toolKnowledge, tool: discoverRelationshipsTool } = makeFixture()
-    const lookup = vi.fn(() => ({ hit: true as const, payload: "FK graph for dim.Date", ageMs: 1, profiledAt: 0 }))
+    const lookup = vi.fn(() => ({
+      hit: true as const,
+      payload: "FK graph for dim.Date",
+      ageMs: 1,
+      profiledAt: 0
+    }))
     toolKnowledge.lookup = lookup
     toolKnowledge.renderHeader = () => "[cached from 2026-05-01, mode=fk, ageHours=1, source=tool_knowledge]"
     toolKnowledge.save = vi.fn()
 
-    const out = await discoverRelationshipsTool.execute({ table: "dim.Date" }) as string
+    const out = (await discoverRelationshipsTool.execute({ table: "dim.Date" })) as string
     expect(out).toMatch(/^\[cached from .*mode=fk/)
     expect(out).toContain("FK graph for dim.Date")
     const args = lookup.mock.calls[0]![0]
@@ -87,7 +100,12 @@ describe("discover_relationships cache integration", () => {
 
   it("uses column= name as the cache key (mode=column)", async () => {
     const { toolKnowledge, tool: discoverRelationshipsTool } = makeFixture()
-    const lookup = vi.fn(() => ({ hit: true as const, payload: "shared col list", ageMs: 1, profiledAt: 0 }))
+    const lookup = vi.fn(() => ({
+      hit: true as const,
+      payload: "shared col list",
+      ageMs: 1,
+      profiledAt: 0
+    }))
     toolKnowledge.lookup = lookup
     toolKnowledge.renderHeader = () => "[hdr]"
     toolKnowledge.save = vi.fn()
@@ -103,7 +121,9 @@ describe("discover_relationships cache integration", () => {
     toolKnowledge.lookup = null as unknown as NonNullable<AgentHost["toolKnowledge"]>["lookup"]
     try {
       await discoverRelationshipsTool.execute({ table: "dim.Date" })
-    } catch { /* live SQL stub may throw; fall-through is what matters */ }
+    } catch {
+      /* live SQL stub may throw; fall-through is what matters */
+    }
     expect(true).toBe(true)
   })
 })

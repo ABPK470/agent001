@@ -25,7 +25,7 @@ import type { RenderedBody } from "../templates.js"
 
 export interface EmailDeliveryInput {
   target: string
-  body:   RenderedBody
+  body: RenderedBody
 }
 
 export async function deliverEmail(i: EmailDeliveryInput): Promise<void> {
@@ -39,16 +39,29 @@ export async function deliverEmail(i: EmailDeliveryInput): Promise<void> {
   const pass = process.env["SMTP_PASS"] ?? null
 
   const dialog = await runSmtp({
-    host, port, useTls, user, pass, from, to: i.target,
-    subject: i.body.subject, text: i.body.text,
+    host,
+    port,
+    useTls,
+    user,
+    pass,
+    from,
+    to: i.target,
+    subject: i.body.subject,
+    text: i.body.text
   })
   if (!dialog.ok) throw new Error(`SMTP failed: ${dialog.message}`)
 }
 
 interface SmtpInput {
-  host: string; port: number; useTls: boolean;
-  user: string | null; pass: string | null;
-  from: string; to: string; subject: string; text: string;
+  host: string
+  port: number
+  useTls: boolean
+  user: string | null
+  pass: string | null
+  from: string
+  to: string
+  subject: string
+  text: string
 }
 
 async function runSmtp(i: SmtpInput): Promise<{ ok: boolean; message: string }> {
@@ -59,9 +72,25 @@ async function runSmtp(i: SmtpInput): Promise<{ ok: boolean; message: string }> 
   return new Promise((resolve) => {
     const buffer: string[] = []
     let step = 0
-    const fail = (msg: string): void => { try { socket.destroy() } catch { /* noop */ } resolve({ ok: false, message: msg }) }
-    const ok   = (): void => { try { socket.destroy() } catch { /* noop */ } resolve({ ok: true, message: "delivered" }) }
-    const send = (line: string): void => { socket.write(line + "\r\n") }
+    const fail = (msg: string): void => {
+      try {
+        socket.destroy()
+      } catch {
+        /* noop */
+      }
+      resolve({ ok: false, message: msg })
+    }
+    const ok = (): void => {
+      try {
+        socket.destroy()
+      } catch {
+        /* noop */
+      }
+      resolve({ ok: true, message: "delivered" })
+    }
+    const send = (line: string): void => {
+      socket.write(line + "\r\n")
+    }
 
     socket.setEncoding("utf-8")
     socket.setTimeout(20_000, () => fail("SMTP timeout"))
@@ -72,8 +101,11 @@ async function runSmtp(i: SmtpInput): Promise<{ ok: boolean; message: string }> 
       const code = parseSmtpCode(text)
       if (!code) return
       if (code >= 500) return fail(`server: ${text.trim()}`)
-      try { advance(code, send, i, step) }
-      catch (e) { return fail(e instanceof Error ? e.message : String(e)) }
+      try {
+        advance(code, send, i, step)
+      } catch (e) {
+        return fail(e instanceof Error ? e.message : String(e))
+      }
       step++
       if (step >= STEP_COUNT_END) ok()
     })
@@ -91,29 +123,45 @@ function advance(code: number, send: (s: string) => void, i: SmtpInput, step: nu
   // We treat each server line as one step; this is intentionally simple
   // and only works against well-behaved relays.
   switch (step) {
-    case 0: { // greeting
+    case 0: {
+      // greeting
       if (code !== 220) throw new Error(`unexpected greeting: ${code}`)
-      send(`EHLO ${safeHostname()}`); return
+      send(`EHLO ${safeHostname()}`)
+      return
     }
-    case 1: { // EHLO response
-      if (i.user && i.pass) { send("AUTH LOGIN") } else { send(`MAIL FROM:<${i.from}>`) }
+    case 1: {
+      // EHLO response
+      if (i.user && i.pass) {
+        send("AUTH LOGIN")
+      } else {
+        send(`MAIL FROM:<${i.from}>`)
+      }
       return
     }
     case 2: {
-      if (i.user && i.pass) { send(Buffer.from(i.user, "utf-8").toString("base64")); return }
+      if (i.user && i.pass) {
+        send(Buffer.from(i.user, "utf-8").toString("base64"))
+        return
+      }
       // MAIL FROM accepted → RCPT TO
       if (code !== 250) throw new Error(`MAIL FROM rejected: ${code}`)
-      send(`RCPT TO:<${i.to}>`); return
+      send(`RCPT TO:<${i.to}>`)
+      return
     }
     case 3: {
-      if (i.user && i.pass) { send(Buffer.from(i.pass, "utf-8").toString("base64")); return }
+      if (i.user && i.pass) {
+        send(Buffer.from(i.pass, "utf-8").toString("base64"))
+        return
+      }
       if (code !== 250) throw new Error(`RCPT TO rejected: ${code}`)
-      send("DATA"); return
+      send("DATA")
+      return
     }
     case 4: {
       if (i.user && i.pass) {
         if (code !== 235) throw new Error(`AUTH rejected: ${code}`)
-        send(`MAIL FROM:<${i.from}>`); return
+        send(`MAIL FROM:<${i.from}>`)
+        return
       }
       if (code !== 354) throw new Error(`DATA expected 354 got ${code}`)
       send(buildMimeMessage(i) + "\r\n.")
@@ -122,15 +170,18 @@ function advance(code: number, send: (s: string) => void, i: SmtpInput, step: nu
     case 5: {
       if (i.user && i.pass) {
         if (code !== 250) throw new Error(`MAIL FROM rejected: ${code}`)
-        send(`RCPT TO:<${i.to}>`); return
+        send(`RCPT TO:<${i.to}>`)
+        return
       }
       if (code !== 250) throw new Error(`message rejected: ${code}`)
-      send("QUIT"); return
+      send("QUIT")
+      return
     }
     case 6: {
       if (i.user && i.pass) {
         if (code !== 250) throw new Error(`RCPT TO rejected: ${code}`)
-        send("DATA"); return
+        send("DATA")
+        return
       }
       // QUIT response — done
       return
@@ -160,7 +211,7 @@ function buildMimeMessage(i: SmtpInput): string {
     `MIME-Version: 1.0`,
     `Content-Type: text/plain; charset=utf-8`,
     ``,
-    i.text.replace(/\r?\n\./g, "\r\n.."), // dot-stuff
+    i.text.replace(/\r?\n\./g, "\r\n..") // dot-stuff
   ].join("\r\n")
 }
 

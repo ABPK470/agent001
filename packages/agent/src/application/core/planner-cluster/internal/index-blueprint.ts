@@ -10,12 +10,7 @@ import { EffectClass, StepRole, VerificationMode } from "../../domain/index.js"
 
 import { buildBlueprintSeedTemplate, getPlannedBlueprintArtifacts } from "../blueprint-contract/index.js"
 import { inferOutputDir } from "../normalize/index.js"
-import type {
-    Plan,
-    PlanEdge,
-    PlanStep,
-    SubagentTaskStep,
-} from "../types.js"
+import type { Plan, PlanEdge, PlanStep, SubagentTaskStep } from "../types.js"
 
 // ============================================================================
 // Blueprint step injection
@@ -29,16 +24,12 @@ export function isBlueprintLikeStep(step: PlanStep): step is SubagentTaskStep {
 }
 
 export function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOutputDir: string | null): void {
-  const subagentSteps = plan.steps.filter(
-    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
-  )
+  const subagentSteps = plan.steps.filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
 
-  const stepsWithArtifacts = subagentSteps.filter(s =>
-    s.executionContext.targetArtifacts.length > 0,
-  )
+  const stepsWithArtifacts = subagentSteps.filter((s) => s.executionContext.targetArtifacts.length > 0)
   if (stepsWithArtifacts.length < 2) return
 
-  if (plan.steps.some(s => s.name === "generate_blueprint" || s.name.includes("blueprint"))) return
+  if (plan.steps.some((s) => s.name === "generate_blueprint" || s.name.includes("blueprint"))) return
 
   const outputDir = forcedOutputDir ?? inferOutputDir(subagentSteps) ?? "tmp"
   const blueprintPath = `${outputDir}/BLUEPRINT.md`
@@ -116,7 +107,7 @@ export function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOut
       "Each function handling complex logic includes a complete algorithmic contract listing all cases/rules it must handle",
       "Shared data structures include all metadata needed for the declared rules and edge cases",
       "No function contract is a one-line summary like 'returns true if valid' — every contract specifies what makes the result correct",
-      "No implementation code — only signatures, types, and descriptions",
+      "No implementation code — only signatures, types, and descriptions"
     ],
     requiredToolCapabilities: ["write_file", "think"],
     contextRequirements: [],
@@ -130,14 +121,14 @@ export function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOut
       effectClass: EffectClass.FilesystemWrite,
       verificationMode: VerificationMode.None,
       artifactRelations: [{ relationType: "write_owner", artifactPath: blueprintPath }],
-      role: StepRole.Writer,
+      role: StepRole.Writer
     },
     maxBudgetHint: "10 iterations",
     canRunParallel: false,
     workflowStep: {
       role: StepRole.Grounding,
-      artifactRelations: [{ relationType: "write_owner", artifactPath: blueprintPath }],
-    },
+      artifactRelations: [{ relationType: "write_owner", artifactPath: blueprintPath }]
+    }
   }
 
   ;(plan as unknown as { steps: PlanStep[] }).steps = [blueprintStep, ...plan.steps]
@@ -158,8 +149,9 @@ export function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOut
 
     const sources = new Set(step.executionContext.requiredSourceArtifacts)
     sources.add(blueprintPath)
-    ;(step.executionContext as unknown as { requiredSourceArtifacts: string[] }).requiredSourceArtifacts = [...sources]
-
+    ;(step.executionContext as unknown as { requiredSourceArtifacts: string[] }).requiredSourceArtifacts = [
+      ...sources
+    ]
     ;(step as { objective: string }).objective =
       `${step.objective}\n\n` +
       `📋 MANDATORY: Read "${blueprintPath}" FIRST. Follow the function signatures defined there EXACTLY — ` +
@@ -172,21 +164,34 @@ export function injectBlueprintStep(plan: Plan, workspaceRoot: string, forcedOut
 // Blueprint strengthening
 // ============================================================================
 
-export function strengthenExistingBlueprintSteps(plan: Plan, workspaceRoot: string, forcedOutputDir: string | null): void {
+export function strengthenExistingBlueprintSteps(
+  plan: Plan,
+  workspaceRoot: string,
+  forcedOutputDir: string | null
+): void {
   const blueprintSteps = plan.steps.filter(isBlueprintLikeStep)
   if (blueprintSteps.length === 0) return
 
   const outputDir = forcedOutputDir ?? inferOutputDir(blueprintSteps) ?? "tmp"
-  const blueprintPath = blueprintSteps[0].executionContext.targetArtifacts.find((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
-    ?? `${outputDir}/BLUEPRINT.md`
+  const blueprintPath =
+    blueprintSteps[0].executionContext.targetArtifacts.find((artifact) =>
+      /(?:^|\/)BLUEPRINT\.md$/i.test(artifact)
+    ) ?? `${outputDir}/BLUEPRINT.md`
 
   for (const step of blueprintSteps) {
     const criteria = new Set(step.acceptanceCriteria)
-    criteria.add("Defines complete function signatures for ALL planned modules — every function that will be called across files must appear with exact parameter names and types")
-    criteria.add("Specifies shared data types used across files — including all state metadata needed for the declared rules and edge cases")
-    criteria.add("Each function handling complex logic includes a complete algorithmic contract listing all cases/rules it must handle")
-    criteria.add("No function contract is a one-line summary like 'returns true if valid' — every contract specifies what makes the result correct")
-
+    criteria.add(
+      "Defines complete function signatures for ALL planned modules — every function that will be called across files must appear with exact parameter names and types"
+    )
+    criteria.add(
+      "Specifies shared data types used across files — including all state metadata needed for the declared rules and edge cases"
+    )
+    criteria.add(
+      "Each function handling complex logic includes a complete algorithmic contract listing all cases/rules it must handle"
+    )
+    criteria.add(
+      "No function contract is a one-line summary like 'returns true if valid' — every contract specifies what makes the result correct"
+    )
     ;(step as unknown as { acceptanceCriteria: string[] }).acceptanceCriteria = [...criteria]
     if (!step.objective.includes("BLUEPRINT DEPTH REQUIREMENTS:")) {
       const plannedArtifacts = getPlannedBlueprintArtifacts(plan)
@@ -205,17 +210,28 @@ export function strengthenExistingBlueprintSteps(plan: Plan, workspaceRoot: stri
         `- Use the exact seeded template below; replace TODOs only, preserve the fence name \`blueprint-contract\`, and preserve the exact planned paths.\n\n` +
         `${blueprintTemplate}`
     }
-    ;(step.executionContext as unknown as { workspaceRoot: string }).workspaceRoot = step.executionContext.workspaceRoot || workspaceRoot
+    ;(step.executionContext as unknown as { workspaceRoot: string }).workspaceRoot =
+      step.executionContext.workspaceRoot || workspaceRoot
     if (!step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))) {
-      ;(step.executionContext as unknown as { targetArtifacts: string[] }).targetArtifacts = [blueprintPath, ...step.executionContext.targetArtifacts]
+      ;(step.executionContext as unknown as { targetArtifacts: string[] }).targetArtifacts = [
+        blueprintPath,
+        ...step.executionContext.targetArtifacts
+      ]
     }
     if (!step.executionContext.allowedTools.includes("read_file")) {
-      ;(step.executionContext as unknown as { allowedTools: string[] }).allowedTools = [...step.executionContext.allowedTools, "read_file"]
+      ;(step.executionContext as unknown as { allowedTools: string[] }).allowedTools = [
+        ...step.executionContext.allowedTools,
+        "read_file"
+      ]
     }
     if (!step.requiredToolCapabilities.includes("read_file")) {
-      ;(step as unknown as { requiredToolCapabilities: string[] }).requiredToolCapabilities = [...step.requiredToolCapabilities, "read_file"]
+      ;(step as unknown as { requiredToolCapabilities: string[] }).requiredToolCapabilities = [
+        ...step.requiredToolCapabilities,
+        "read_file"
+      ]
     }
-    ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode = VerificationMode.None
+    ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode =
+      VerificationMode.None
   }
 
   for (const step of plan.steps) {
@@ -230,6 +246,8 @@ export function strengthenExistingBlueprintSteps(plan: Plan, workspaceRoot: stri
 
     const sources = new Set(sa.executionContext.requiredSourceArtifacts)
     sources.add(blueprintPath)
-    ;(sa.executionContext as unknown as { requiredSourceArtifacts: string[] }).requiredSourceArtifacts = [...sources]
+    ;(sa.executionContext as unknown as { requiredSourceArtifacts: string[] }).requiredSourceArtifacts = [
+      ...sources
+    ]
   }
 }

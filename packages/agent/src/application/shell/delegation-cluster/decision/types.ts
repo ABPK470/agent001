@@ -102,7 +102,7 @@ export const DEFAULT_HARD_BLOCKED_TASK_CLASSES: readonly DelegationHardBlockedTa
   "wallet_signing",
   "wallet_transfer",
   "stake_or_rewards",
-  "credential_exfiltration",
+  "credential_exfiltration"
 ]
 
 // ── Numeric helpers ────────────────────────────────────────
@@ -113,7 +113,11 @@ export function clamp01(value: number): number {
 }
 
 export function isValidHardBlockedClass(value: string): value is DelegationHardBlockedTaskClass {
-  return value === "wallet_signing" || value === "wallet_transfer" ||
-    value === "stake_or_rewards" || value === "destructive_host_mutation" ||
+  return (
+    value === "wallet_signing" ||
+    value === "wallet_transfer" ||
+    value === "stake_or_rewards" ||
+    value === "destructive_host_mutation" ||
     value === "credential_exfiltration"
+  )
 }

@@ -9,17 +9,18 @@
  */
 
 export const NotificationActionType = {
-  ViewRun:      "view-run",
-  RollbackRun:  "rollback-run",
-  ResumeRun:    "resume-run",
+  ViewRun: "view-run",
+  RollbackRun: "rollback-run",
+  ResumeRun: "resume-run",
   ApplyRunDiff: "apply-run-diff",
-  CancelRun:    "cancel-run",
-  OpenPolicies: "open-policies",
+  CancelRun: "cancel-run",
+  OpenPolicies: "open-policies"
 } as const
 
 export type NotificationActionType = (typeof NotificationActionType)[keyof typeof NotificationActionType]
 
-export const NOTIFICATION_ACTION_TYPES: ReadonlyArray<NotificationActionType> = Object.values(NotificationActionType)
+export const NOTIFICATION_ACTION_TYPES: ReadonlyArray<NotificationActionType> =
+  Object.values(NotificationActionType)
 
 export const isNotificationActionType = (value: unknown): value is NotificationActionType =>
   typeof value === "string" && (NOTIFICATION_ACTION_TYPES as readonly string[]).includes(value)

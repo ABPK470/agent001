@@ -8,7 +8,9 @@ import { getDb } from "./connection.js"
 
 function resolveExistingSessionId(sessionId: string | null | undefined): string | null {
   if (!sessionId) return null
-  const row = getDb().prepare("SELECT sid FROM sessions WHERE sid = ?").get(sessionId) as { sid: string } | undefined
+  const row = getDb().prepare("SELECT sid FROM sessions WHERE sid = ?").get(sessionId) as
+    | { sid: string }
+    | undefined
   return row?.sid ?? null
 }
 
@@ -42,7 +44,8 @@ export interface DbRun {
 // audit log, and stored logs for that run — leaving every UI widget
 // (MIA-CHAT, IOE, StepTimeline, AgentViz, …) blank. ON CONFLICT DO UPDATE
 // updates the row in place and does not fire cascade deletes.
-const upsertRun = () => getDb().prepare(`
+const upsertRun = () =>
+  getDb().prepare(`
   INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, upn, display_name)
   VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @created_at, @completed_at, @session_id, @upn, @display_name)
   ON CONFLICT(id) DO UPDATE SET
@@ -67,19 +70,20 @@ export function saveRun(run: DbRun): void {
   // types — so we still validate at runtime to make drift impossible.
   if (!isRunStatus(run.status)) {
     throw new Error(
-      `runs.status must be one of [${RUN_STATUSES.join(", ")}]; got "${String(run.status)}" for run ${run.id}`,
+      `runs.status must be one of [${RUN_STATUSES.join(", ")}]; got "${String(run.status)}" for run ${run.id}`
     )
   }
   // Stamp session/upn from AsyncLocalStorage if the caller didn't provide them.
   // Existing rows keep their stamp on update (we read first via getRun and merge).
-  const existing = getDb().prepare("SELECT session_id, upn, display_name FROM runs WHERE id = ?").get(run.id) as
-    { session_id: string | null; upn: string | null; display_name: string | null } | undefined
+  const existing = getDb()
+    .prepare("SELECT session_id, upn, display_name FROM runs WHERE id = ?")
+    .get(run.id) as { session_id: string | null; upn: string | null; display_name: string | null } | undefined
   const resolvedSessionId = resolveExistingSessionId(run.session_id ?? existing?.session_id ?? null)
   upsertRun().run({
     ...run,
-    session_id:   resolvedSessionId,
-    upn:          run.upn          ?? existing?.upn          ?? null,
-    display_name: run.display_name ?? existing?.display_name ?? null,
+    session_id: resolvedSessionId,
+    upn: run.upn ?? existing?.upn ?? null,
+    display_name: run.display_name ?? existing?.display_name ?? null
   })
 }
 
@@ -120,34 +124,36 @@ export interface RunWireExtras {
 
 export function dbRunToWire(row: DbRun, extras: RunWireExtras): Run {
   return {
-    id:                      row.id,
-    goal:                    row.goal,
-    status:                   row.status,
-    answer:                  row.answer,
-    stepCount:               row.step_count,
-    error:                   row.error,
-    parentRunId:             row.parent_run_id,
-    agentId:                 row.agent_id ?? null,
-    createdAt:               row.created_at,
-    completedAt:             row.completed_at,
-    totalTokens:             extras.totalTokens,
-    promptTokens:            extras.promptTokens,
-    completionTokens:        extras.completionTokens,
-    llmCalls:                extras.llmCalls,
+    id: row.id,
+    goal: row.goal,
+    status: row.status,
+    answer: row.answer,
+    stepCount: row.step_count,
+    error: row.error,
+    parentRunId: row.parent_run_id,
+    agentId: row.agent_id ?? null,
+    createdAt: row.created_at,
+    completedAt: row.completed_at,
+    totalTokens: extras.totalTokens,
+    promptTokens: extras.promptTokens,
+    completionTokens: extras.completionTokens,
+    llmCalls: extras.llmCalls,
     pendingWorkspaceChanges: extras.pendingWorkspaceChanges,
-    upn:                     row.upn ?? null,
-    displayName:             row.display_name ?? null,
+    upn: row.upn ?? null,
+    displayName: row.display_name ?? null
   }
 }
 
 export function listRunsWithUsage(limit = 100, offset = 0): DbRunWithUsage[] {
   return getDb()
-    .prepare(`
+    .prepare(
+      `
       SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
       FROM runs r
       LEFT JOIN token_usage t ON t.run_id = r.id
       ORDER BY r.created_at DESC LIMIT ? OFFSET ?
-    `)
+    `
+    )
     .all(limit, offset) as DbRunWithUsage[]
 }
 
@@ -159,7 +165,7 @@ export function listRunsWithUsage(limit = 100, offset = 0): DbRunWithUsage[] {
 export function listRunsWithUsageForUser(
   opts: { upn?: string | null; sid?: string | null; sessionOnly?: boolean },
   limit = 100,
-  offset = 0,
+  offset = 0
 ): DbRunWithUsage[] {
   const { upn, sid, sessionOnly } = opts
   if (!upn && !sid) return []
@@ -169,24 +175,28 @@ export function listRunsWithUsageForUser(
   // without a stable identity.
   if (sessionOnly && sid) {
     return getDb()
-      .prepare(`
+      .prepare(
+        `
         SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
         FROM runs r
         LEFT JOIN token_usage t ON t.run_id = r.id
         WHERE r.session_id = @sid
         ORDER BY r.created_at DESC LIMIT @limit OFFSET @offset
-      `)
+      `
+      )
       .all({ sid, limit, offset }) as DbRunWithUsage[]
   }
   return getDb()
-    .prepare(`
+    .prepare(
+      `
       SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
       FROM runs r
       LEFT JOIN token_usage t ON t.run_id = r.id
       WHERE (@upn IS NOT NULL AND r.upn = @upn)
          OR (@upn IS NULL AND @sid IS NOT NULL AND r.session_id = @sid)
       ORDER BY r.created_at DESC LIMIT @limit OFFSET @offset
-    `)
+    `
+    )
     .all({ upn: upn ?? null, sid: sid ?? null, limit, offset }) as DbRunWithUsage[]
 }
 
@@ -196,7 +206,7 @@ const NON_TERMINAL_RUN_STATUSES = [
   RunStatus.Pending,
   RunStatus.Planning,
   RunStatus.Running,
-  RunStatus.WaitingForApproval,
+  RunStatus.WaitingForApproval
 ] as const
 
 export function findStaleRuns(): DbRun[] {
@@ -207,9 +217,11 @@ export function findStaleRuns(): DbRun[] {
 }
 
 export function markRunCrashed(runId: string): void {
-  getDb().prepare(
-    "UPDATE runs SET status = ?, error = 'Server restarted \u2014 run interrupted', completed_at = datetime('now') WHERE id = ?"
-  ).run(RunStatus.Crashed, runId)
+  getDb()
+    .prepare(
+      "UPDATE runs SET status = ?, error = 'Server restarted \u2014 run interrupted', completed_at = datetime('now') WHERE id = ?"
+    )
+    .run(RunStatus.Crashed, runId)
 }
 
 /** Boot-time hygiene: any row whose status is NOT a known RunStatus
@@ -218,9 +230,11 @@ export function markRunCrashed(runId: string): void {
  *  invariants downstream code relies on remain true. */
 export function normaliseUnknownRunStatuses(): number {
   const placeholders = RUN_STATUSES.map(() => "?").join(", ")
-  const res = getDb().prepare(
-    `UPDATE runs SET status = ?, error = COALESCE(error, 'Unknown legacy status \u2014 normalised on boot'), completed_at = COALESCE(completed_at, datetime('now')) WHERE status NOT IN (${placeholders})`,
-  ).run(RunStatus.Failed, ...RUN_STATUSES)
+  const res = getDb()
+    .prepare(
+      `UPDATE runs SET status = ?, error = COALESCE(error, 'Unknown legacy status \u2014 normalised on boot'), completed_at = COALESCE(completed_at, datetime('now')) WHERE status NOT IN (${placeholders})`
+    )
+    .run(RunStatus.Failed, ...RUN_STATUSES)
   return res.changes
 }
 
@@ -238,9 +252,11 @@ export function normaliseUnknownRunStatuses(): number {
  */
 export function markRunCancelled(runId: string): void {
   const placeholders = NON_TERMINAL_RUN_STATUSES.map(() => "?").join(", ")
-  getDb().prepare(
-    `UPDATE runs SET status = ?, completed_at = COALESCE(completed_at, datetime('now')) WHERE id = ? AND status IN (${placeholders})`,
-  ).run(RunStatus.Cancelled, runId, ...NON_TERMINAL_RUN_STATUSES)
+  getDb()
+    .prepare(
+      `UPDATE runs SET status = ?, completed_at = COALESCE(completed_at, datetime('now')) WHERE id = ? AND status IN (${placeholders})`
+    )
+    .run(RunStatus.Cancelled, runId, ...NON_TERMINAL_RUN_STATUSES)
 }
 
 // ── Audit queries ────────────────────────────────────────────────
@@ -262,22 +278,26 @@ export function saveAudit(
   entry: Omit<DbAudit, "id" | "scope_type" | "scope_id"> & {
     scope_type?: AuditScopeType
     scope_id?: string | null
-  },
+  }
 ): void {
   const scopeType: AuditScopeType = entry.scope_type ?? (entry.run_id ? "run" : "admin")
   const scopeId = entry.scope_id ?? (scopeType === "run" ? entry.run_id : "platform")
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO audit_log (run_id, scope_type, scope_id, actor, action, detail, timestamp)
     VALUES (@run_id, @scope_type, @scope_id, @actor, @action, @detail, @timestamp)
-  `).run({
-    ...entry,
-    scope_type: scopeType,
-    scope_id: scopeId,
-  })
+  `
+    )
+    .run({
+      ...entry,
+      scope_type: scopeType,
+      scope_id: scopeId
+    })
 }
 
 export function saveAdminAudit(
-  entry: Omit<DbAudit, "id" | "run_id" | "scope_type"> & { scope_id?: string | null },
+  entry: Omit<DbAudit, "id" | "run_id" | "scope_type"> & { scope_id?: string | null }
 ): void {
   saveAudit({
     run_id: null,
@@ -286,7 +306,7 @@ export function saveAdminAudit(
     detail: entry.detail,
     timestamp: entry.timestamp,
     scope_type: "admin",
-    scope_id: entry.scope_id ?? "platform",
+    scope_id: entry.scope_id ?? "platform"
   })
 }
 
@@ -307,16 +327,18 @@ export interface DbCheckpoint {
 }
 
 export function saveCheckpoint(cp: DbCheckpoint): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO checkpoints (run_id, messages, iteration, step_counter, updated_at)
     VALUES (@run_id, @messages, @iteration, @step_counter, @updated_at)
-  `).run(cp)
+  `
+    )
+    .run(cp)
 }
 
 export function getCheckpoint(runId: string): DbCheckpoint | undefined {
-  return getDb()
-    .prepare("SELECT * FROM checkpoints WHERE run_id = ?")
-    .get(runId) as DbCheckpoint | undefined
+  return getDb().prepare("SELECT * FROM checkpoints WHERE run_id = ?").get(runId) as DbCheckpoint | undefined
 }
 
 // ── Log queries ──────────────────────────────────────────────────
@@ -330,10 +352,14 @@ export interface DbLog {
 }
 
 export function saveLog(entry: Omit<DbLog, "id">): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO logs (run_id, level, message, timestamp)
     VALUES (@run_id, @level, @message, @timestamp)
-  `).run(entry)
+  `
+    )
+    .run(entry)
 }
 
 export function getLogs(runId: string, level?: string): DbLog[] {
@@ -342,9 +368,7 @@ export function getLogs(runId: string, level?: string): DbLog[] {
       .prepare("SELECT * FROM logs WHERE run_id = ? AND level = ? ORDER BY timestamp")
       .all(runId, level) as DbLog[]
   }
-  return getDb()
-    .prepare("SELECT * FROM logs WHERE run_id = ? ORDER BY timestamp")
-    .all(runId) as DbLog[]
+  return getDb().prepare("SELECT * FROM logs WHERE run_id = ? ORDER BY timestamp").all(runId) as DbLog[]
 }
 
 // ── Trace entry queries ──────────────────────────────────────────
@@ -358,10 +382,14 @@ export interface DbTraceEntry {
 }
 
 export function saveTraceEntry(entry: Omit<DbTraceEntry, "id">): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO trace_entries (run_id, seq, data, created_at)
     VALUES (@run_id, @seq, @data, @created_at)
-  `).run(entry)
+  `
+    )
+    .run(entry)
 }
 
 export function getTraceEntries(runId: string): DbTraceEntry[] {
@@ -383,16 +411,18 @@ export interface DbTokenUsage {
 }
 
 export function saveTokenUsage(usage: DbTokenUsage): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO token_usage (run_id, prompt_tokens, completion_tokens, total_tokens, llm_calls, model, created_at)
     VALUES (@run_id, @prompt_tokens, @completion_tokens, @total_tokens, @llm_calls, @model, @created_at)
-  `).run(usage)
+  `
+    )
+    .run(usage)
 }
 
 export function getTokenUsage(runId: string): DbTokenUsage | undefined {
-  return getDb()
-    .prepare("SELECT * FROM token_usage WHERE run_id = ?")
-    .get(runId) as DbTokenUsage | undefined
+  return getDb().prepare("SELECT * FROM token_usage WHERE run_id = ?").get(runId) as DbTokenUsage | undefined
 }
 
 export function listTokenUsage(limit = 100): DbTokenUsage[] {
@@ -413,10 +443,14 @@ export interface UsageTotals {
 
 export function getUsageTotals(): UsageTotals {
   const tokens = getDb()
-    .prepare("SELECT COALESCE(SUM(prompt_tokens),0) as total_prompt_tokens, COALESCE(SUM(completion_tokens),0) as total_completion_tokens, COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(llm_calls),0) as total_llm_calls FROM token_usage")
+    .prepare(
+      "SELECT COALESCE(SUM(prompt_tokens),0) as total_prompt_tokens, COALESCE(SUM(completion_tokens),0) as total_completion_tokens, COALESCE(SUM(total_tokens),0) as total_tokens, COALESCE(SUM(llm_calls),0) as total_llm_calls FROM token_usage"
+    )
     .get() as Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">
   const runStats = getDb()
-    .prepare("SELECT COUNT(*) as run_count, COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END),0) as completed_runs, COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END),0) as failed_runs FROM runs")
+    .prepare(
+      "SELECT COUNT(*) as run_count, COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END),0) as completed_runs, COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END),0) as failed_runs FROM runs"
+    )
     .get() as { run_count: number; completed_runs: number; failed_runs: number }
   return { ...tokens, ...runStats }
 }

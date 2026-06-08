@@ -37,12 +37,12 @@ import { MemoryRole, MemorySource, MemoryTier } from "./types.js"
  * `memoryVerdictBonus` in search_catalog ranking.
  */
 export type TableVerdictRole =
-  | "canonical"   // the wide UNION/aggregator view that answers the metric
-  | "subset"      // a branch view of the canonical (smaller scope)
-  | "staging"     // ETL intermediate; not for end-user queries
-  | "archive"     // historical/frozen snapshot
-  | "rules"       // a rules-derivation subset (e.g. *ESGRules, *RWARules)
-  | "unknown"     // role observed but no confident classification
+  | "canonical" // the wide UNION/aggregator view that answers the metric
+  | "subset" // a branch view of the canonical (smaller scope)
+  | "staging" // ETL intermediate; not for end-user queries
+  | "archive" // historical/frozen snapshot
+  | "rules" // a rules-derivation subset (e.g. *ESGRules, *RWARules)
+  | "unknown" // role observed but no confident classification
 
 export interface TableVerdictInput {
   /** Schema-qualified object name (e.g. "publish.Revenue"). Case is preserved. */
@@ -114,12 +114,14 @@ export function recordTableVerdict(input: TableVerdictInput): TableVerdict {
     role,
     evidence,
     observedFromGoal,
-    connection,
+    connection
   }
 
   const now = new Date().toISOString()
   const id = randomUUID()
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO memory_entries (
       id, tier, role, content, metadata, source, confidence, salience,
       access_count, session_id, run_id, parent_id, upn, shared,
@@ -129,24 +131,26 @@ export function recordTableVerdict(input: TableVerdictInput): TableVerdict {
       0, @session_id, @run_id, NULL, @upn, @shared,
       @created_at, @updated_at
     )
-  `).run({
-    id,
-    tier: MemoryTier.Semantic,
-    role: MemoryRole.Summary,
-    content,
-    metadata: JSON.stringify(metadata),
-    source: MemorySource.Agent,
-    confidence,
-    // Verdicts are inherently high-value: a deliberate role classification
-    // is worth more than the prose-length salience heuristic would award.
-    salience: 0.9,
-    session_id: input.sessionId ?? null,
-    run_id: input.runId ?? null,
-    upn: input.upn ?? null,
-    shared: (input.shared ?? true) ? 1 : 0,
-    created_at: now,
-    updated_at: now,
-  })
+  `
+    )
+    .run({
+      id,
+      tier: MemoryTier.Semantic,
+      role: MemoryRole.Summary,
+      content,
+      metadata: JSON.stringify(metadata),
+      source: MemorySource.Agent,
+      confidence,
+      // Verdicts are inherently high-value: a deliberate role classification
+      // is worth more than the prose-length salience heuristic would award.
+      salience: 0.9,
+      session_id: input.sessionId ?? null,
+      run_id: input.runId ?? null,
+      upn: input.upn ?? null,
+      shared: (input.shared ?? true) ? 1 : 0,
+      created_at: now,
+      updated_at: now
+    })
 
   return {
     id,
@@ -156,7 +160,7 @@ export function recordTableVerdict(input: TableVerdictInput): TableVerdict {
     observedFromGoal,
     connection,
     confidence,
-    createdAt: now,
+    createdAt: now
   }
 }
 
@@ -189,14 +193,18 @@ export function listTableVerdicts(options: ListTableVerdictsOptions = {}): Table
   // We can't easily JSON-extract in a portable way that uses an index,
   // but the semantic tier is small. Filter in SQL by tier + JSON LIKE,
   // then refine in JS.
-  const rows = getDb().prepare(`
+  const rows = getDb()
+    .prepare(
+      `
     SELECT id, content, metadata, confidence, created_at, upn
     FROM memory_entries
     WHERE tier = 'semantic'
       AND metadata LIKE '%"kind":"table_verdict"%'
       AND ((upn IS NULL AND ? IS NULL) OR upn = ? OR shared = 1)
     ORDER BY created_at DESC
-  `).all(options.upn ?? null, options.upn ?? null) as Array<{
+  `
+    )
+    .all(options.upn ?? null, options.upn ?? null) as Array<{
     id: string
     content: string
     metadata: string
@@ -208,7 +216,13 @@ export function listTableVerdicts(options: ListTableVerdictsOptions = {}): Table
   const seen = new Set<string>() // lowercased qname
   const out: TableVerdict[] = []
   for (const row of rows) {
-    let meta: { qname?: string; role?: TableVerdictRole; evidence?: string[]; observedFromGoal?: string | null; connection?: string }
+    let meta: {
+      qname?: string
+      role?: TableVerdictRole
+      evidence?: string[]
+      observedFromGoal?: string | null
+      connection?: string
+    }
     try {
       meta = JSON.parse(row.metadata)
     } catch {
@@ -229,7 +243,7 @@ export function listTableVerdicts(options: ListTableVerdictsOptions = {}): Table
       observedFromGoal: meta.observedFromGoal ?? null,
       connection: metaConn,
       confidence: row.confidence,
-      createdAt: row.created_at,
+      createdAt: row.created_at
     })
     if (out.length >= limit) break
   }

@@ -34,9 +34,7 @@ const JWKS_TTL_MS = 60 * 60 * 1000 // refresh keys once per hour
 async function getPublicKey(kid: string): Promise<ReturnType<typeof createPublicKey> | null> {
   const now = Date.now()
   if (!_jwksCache || now - _jwksCache.fetchedAt > JWKS_TTL_MS) {
-    const oidcRes = await fetch(
-      "https://login.botframework.com/v1/.well-known/openidconfiguration",
-    )
+    const oidcRes = await fetch("https://login.botframework.com/v1/.well-known/openidconfiguration")
     if (!oidcRes.ok) return null
     const oidc = (await oidcRes.json()) as { jwks_uri: string }
 
@@ -75,20 +73,16 @@ async function getPublicKey(kid: string): Promise<ReturnType<typeof createPublic
  *          issuer    = Bot Framework or Azure AD
  *          expiry
  */
-export async function validateBotFrameworkToken(
-  token: string,
-  appId: string,
-): Promise<boolean> {
+export async function validateBotFrameworkToken(token: string, appId: string): Promise<boolean> {
   try {
     const parts = token.split(".")
     if (parts.length !== 3) return false
 
-    const header = JSON.parse(
-      Buffer.from(parts[0]!, "base64url").toString("utf8"),
-    ) as { kid?: string; alg?: string }
-    const payload = JSON.parse(
-      Buffer.from(parts[1]!, "base64url").toString("utf8"),
-    ) as {
+    const header = JSON.parse(Buffer.from(parts[0]!, "base64url").toString("utf8")) as {
+      kid?: string
+      alg?: string
+    }
+    const payload = JSON.parse(Buffer.from(parts[1]!, "base64url").toString("utf8")) as {
       aud?: string
       iss?: string
       exp?: number
@@ -104,7 +98,7 @@ export async function validateBotFrameworkToken(
       // Azure AD v1 (Government: d6d49420-f39b-4df7-a1dc-d59a935871db)
       `https://sts.windows.net/${payload.tid ?? ""}/`,
       // Azure AD v2
-      `https://login.microsoftonline.com/${payload.tid ?? ""}/v2.0`,
+      `https://login.microsoftonline.com/${payload.tid ?? ""}/v2.0`
     ]
     if (!validIssuers.includes(payload.iss ?? "")) return false
 
@@ -137,33 +131,26 @@ async function fetchBotToken(appId: string, appPassword: string): Promise<string
   // Refresh 60 s before expiry
   if (cached && Date.now() < cached.expiresAt - 60_000) return cached.token
 
-  const res = await fetch(
-    "https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token",
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/x-www-form-urlencoded" },
-      body: new URLSearchParams({
-        grant_type: "client_credentials",
-        client_id: appId,
-        client_secret: appPassword,
-        scope: "https://api.botframework.com/.default",
-      }),
-    },
-  )
+  const res = await fetch("https://login.microsoftonline.com/botframework.com/oauth2/v2.0/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: appId,
+      client_secret: appPassword,
+      scope: "https://api.botframework.com/.default"
+    })
+  })
 
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new ChannelApiError(
-      `Teams OAuth error ${res.status}: ${JSON.stringify(body)}`,
-      res.status,
-      body,
-    )
+    throw new ChannelApiError(`Teams OAuth error ${res.status}: ${JSON.stringify(body)}`, res.status, body)
   }
 
   const data = (await res.json()) as { access_token: string; expires_in: number }
   const entry: TokenCache = {
     token: data.access_token,
-    expiresAt: Date.now() + data.expires_in * 1000,
+    expiresAt: Date.now() + data.expires_in * 1000
   }
   _tokenCache.set(appId, entry)
   return entry.token
@@ -213,23 +200,19 @@ export class TeamsChannel implements Channel {
       method: "POST",
       headers: {
         Authorization: `Bearer ${token}`,
-        "Content-Type": "application/json",
+        "Content-Type": "application/json"
       },
       body: JSON.stringify({
         type: "message",
         from: { id: this.config.platformId },
         recipient: { id: ref.userId },
-        text,
-      }),
+        text
+      })
     })
 
     if (!res.ok) {
       const body = await res.json().catch(() => ({}))
-      throw new ChannelApiError(
-        `Teams API error ${res.status}: ${JSON.stringify(body)}`,
-        res.status,
-        body,
-      )
+      throw new ChannelApiError(`Teams API error ${res.status}: ${JSON.stringify(body)}`, res.status, body)
     }
 
     const result = (await res.json()) as { id?: string }
@@ -260,7 +243,7 @@ export class TeamsChannel implements Channel {
     const ref: TeamsConversationRef = {
       serviceUrl: activity.serviceUrl ?? "",
       conversationId: activity.conversation?.id ?? "",
-      userId,
+      userId
     }
 
     return [
@@ -271,8 +254,8 @@ export class TeamsChannel implements Channel {
         senderName: activity.from?.name,
         text: activity.text.trim(),
         raw: activity,
-        receivedAt: new Date(),
-      },
+        receivedAt: new Date()
+      }
     ]
   }
 }

@@ -22,7 +22,7 @@ export function createServerBrowserHandoffProvider(ownerUpn: string | null): Bro
         ownerUpn,
         browserSessionId: input.browserSessionId,
         reason: input.reason,
-        ...(input.ttlMs ? { ttlMs: input.ttlMs } : {}),
+        ...(input.ttlMs ? { ttlMs: input.ttlMs } : {})
       })
       return { id: rec.id, url: rec.url, expiresAt: rec.expiresAt }
     },
@@ -32,7 +32,7 @@ export function createServerBrowserHandoffProvider(ownerUpn: string | null): Bro
       if (rec.status === HandoffStatus.Completed) return { status: UserInputStatus.Completed }
       if (rec.status === HandoffStatus.Expired) return { status: UserInputStatus.Expired }
       return { status: UserInputStatus.Revoked }
-    },
+    }
   }
 }
 

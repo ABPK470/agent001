@@ -21,7 +21,7 @@ function adminSession(): CurrentSession {
     upn: "admin@example.com",
     isAdmin: true,
     ip: "127.0.0.1",
-    userAgent: "vitest",
+    userAgent: "vitest"
   }
 }
 
@@ -29,7 +29,7 @@ function createHost(root: string): AgentHost {
   return {
     mssql: {
       databases: new Map(),
-      defaultConnection: { value: "DEV" },
+      defaultConnection: { value: "DEV" }
     },
     sync: {
       events: { sink: () => {} },
@@ -39,9 +39,9 @@ function createHost(root: string): AgentHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: root,
-        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
-      },
-    },
+        publishedDefinitions: createPublishedSyncDefinitionRegistry()
+      }
+    }
   } as unknown as AgentHost
 }
 
@@ -59,7 +59,7 @@ async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance
     ;(req as unknown as { session: CurrentSession }).session = session
     seedUser(testDb, session.upn, {
       displayName: session.displayName,
-      isAdmin: session.isAdmin,
+      isAdmin: session.isAdmin
     })
     seedSession(testDb, session.sid, session.upn)
   })
@@ -76,47 +76,66 @@ beforeEach(() => {
   mkdirSync(join(projectRoot, "sync-definitions", "published"), { recursive: true })
   writeFileSync(
     join(projectRoot, "deploy", "sync", "artifacts", "flow-templates.json"),
-    readFileSync(new URL("../../../deploy/sync/artifacts/flow-templates.json", import.meta.url), "utf-8"),
+    readFileSync(new URL("../../../deploy/sync/artifacts/flow-templates.json", import.meta.url), "utf-8")
   )
-  writeFileSync(join(projectRoot, "sync-definitions", "entities", "pipelineActivity.json"), JSON.stringify({
-    schemaVersion: 1,
-    id: "pipelineActivity",
-    displayName: "Pipeline Activity",
-    description: "Test definition",
-    rootTable: "core.PipelineActivity",
-    idColumn: "pipelineActivityId",
-    labelColumn: null,
-    selfJoinColumn: null,
-    legacy: { pipelineId: null, entrySproc: null },
-    governance: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
-    strategy: { strategyId: "mymi-scd2", strategyVersion: "latest" },
-    bindings: { serviceProfileRef: "default", environmentPolicyRef: "default" },
-    ownership: { team: "sync-platform", owner: null, reviewStatus: "reviewed", notes: ["test"] },
-    metadata: {
-      tables: [
-        {
-          name: "core.PipelineActivity",
-          scopeColumn: "pipelineActivityId",
-          predicate: "pipelineActivityId = {id}",
-          source: "manual",
-          verified: true,
-          groundedByPipeline: false,
-          enabledByDefault: true,
-          userControllable: false,
+  writeFileSync(
+    join(projectRoot, "sync-definitions", "entities", "pipelineActivity.json"),
+    JSON.stringify(
+      {
+        schemaVersion: 1,
+        id: "pipelineActivity",
+        displayName: "Pipeline Activity",
+        description: "Test definition",
+        rootTable: "core.PipelineActivity",
+        idColumn: "pipelineActivityId",
+        labelColumn: null,
+        selfJoinColumn: null,
+        legacy: { pipelineId: null, entrySproc: null },
+        governance: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
+        strategy: { strategyId: "mymi-scd2", strategyVersion: "latest" },
+        bindings: { serviceProfileRef: "default", environmentPolicyRef: "default" },
+        ownership: { team: "sync-platform", owner: null, reviewStatus: "reviewed", notes: ["test"] },
+        metadata: {
+          tables: [
+            {
+              name: "core.PipelineActivity",
+              scopeColumn: "pipelineActivityId",
+              predicate: "pipelineActivityId = {id}",
+              source: "manual",
+              verified: true,
+              groundedByPipeline: false,
+              enabledByDefault: true,
+              userControllable: false
+            }
+          ],
+          executionOrder: ["core.PipelineActivity"],
+          reverseOrder: ["core.PipelineActivity"],
+          discrepancies: []
         },
-      ],
-      executionOrder: ["core.PipelineActivity"],
-      reverseOrder: ["core.PipelineActivity"],
-      discrepancies: [],
-    },
-    executionFlow: {
-      steps: [
-        { id: "metadata-sync", phase: "metadata", kind: "metadataSync", title: "Metadata sync", description: "Apply metadata." },
-        { id: "pipeline-register", phase: "post-metadata", kind: "pipelineRegister", title: "Pipeline register", description: "Register pipeline." },
-      ],
-    },
-    provenance: { kind: "manual", sourceArtifact: "test", sourceVersion: "1" },
-  }, null, 2))
+        executionFlow: {
+          steps: [
+            {
+              id: "metadata-sync",
+              phase: "metadata",
+              kind: "metadataSync",
+              title: "Metadata sync",
+              description: "Apply metadata."
+            },
+            {
+              id: "pipeline-register",
+              phase: "post-metadata",
+              kind: "pipelineRegister",
+              title: "Pipeline register",
+              description: "Register pipeline."
+            }
+          ]
+        },
+        provenance: { kind: "manual", sourceArtifact: "test", sourceVersion: "1" }
+      },
+      null,
+      2
+    )
+  )
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
@@ -159,8 +178,8 @@ describe("sync routes", () => {
           userControllable: false,
           archiveTable: "coreArchive.PipelineActivity",
           note: null,
-          provenance: { kind: "manual" },
-        },
+          provenance: { kind: "manual" }
+        }
       ],
       policies: { freezeWindowIds: [], riskMultiplier: 1 },
       scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
@@ -174,13 +193,18 @@ describe("sync routes", () => {
       createdBy: "admin@example.com",
       reason: "seed",
       createdAt: new Date().toISOString(),
-      retiredAt: null,
+      retiredAt: null
     }
-    saveEntityDefinition({ tenantId: "_default", def: entityDefinition, actor: "admin@example.com", reason: "seed" })
+    saveEntityDefinition({
+      tenantId: "_default",
+      def: entityDefinition,
+      actor: "admin@example.com",
+      reason: "seed"
+    })
 
     const publish = await app.inject({
       method: "POST",
-      url: "/api/sync/definitions/publish",
+      url: "/api/sync/definitions/publish"
     })
 
     expect(publish.statusCode).toBe(200)
@@ -191,7 +215,9 @@ describe("sync routes", () => {
     expect(publishBody.definitionCount).toBe(1)
     expect(publishBody.publishedBundlePath).toBe("sync-definitions/published/definitions.bundle.json")
 
-    const publishedBundle = JSON.parse(readFileSync(join(projectRoot, "sync-definitions", "published", "definitions.bundle.json"), "utf-8")) as {
+    const publishedBundle = JSON.parse(
+      readFileSync(join(projectRoot, "sync-definitions", "published", "definitions.bundle.json"), "utf-8")
+    ) as {
       definitions: Record<string, { id: string; publishedVersion: string }>
     }
     expect(publishedBundle.definitions.pipeline_activity?.id).toBe("pipeline_activity")
@@ -199,7 +225,7 @@ describe("sync routes", () => {
 
     const definitions = await app.inject({
       method: "GET",
-      url: "/api/sync/definitions",
+      url: "/api/sync/definitions"
     })
     expect(definitions.statusCode).toBe(200)
     const body = definitions.json() as Array<{ id: string; publishedVersion: string }>

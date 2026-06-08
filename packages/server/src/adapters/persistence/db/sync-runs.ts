@@ -33,7 +33,11 @@ export interface SyncRunRow {
   duration_ms: number | null
 }
 
-interface CountTriple { insert?: number; update?: number; delete?: number }
+interface CountTriple {
+  insert?: number
+  update?: number
+  delete?: number
+}
 
 function asCounts(totals: unknown): CountTriple {
   if (totals && typeof totals === "object") {
@@ -41,7 +45,7 @@ function asCounts(totals: unknown): CountTriple {
     return {
       insert: typeof t["insert"] === "number" ? (t["insert"] as number) : 0,
       update: typeof t["update"] === "number" ? (t["update"] as number) : 0,
-      delete: typeof t["delete"] === "number" ? (t["delete"] as number) : 0,
+      delete: typeof t["delete"] === "number" ? (t["delete"] as number) : 0
     }
   }
   return { insert: 0, update: 0, delete: 0 }
@@ -66,7 +70,7 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
        (plan_id, entity_type, entity_id, entity_display_name, source, target,
         actor_upn, preview_inserts, preview_updates, preview_deletes,
         preview_totals_json, status, started_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
     )
     .run(
       i.planId,
@@ -80,7 +84,7 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
       c.update ?? 0,
       c.delete ?? 0,
       JSON.stringify(i.previewTotals),
-      SyncRunStatus.Started,
+      SyncRunStatus.Started
     )
 }
 
@@ -94,9 +98,12 @@ export interface RecordSyncRunFinishInput {
 }
 
 export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
-  if (!isSyncRunStatus(i.status) || (i.status !== SyncRunStatus.Success && i.status !== SyncRunStatus.Failed)) {
+  if (
+    !isSyncRunStatus(i.status) ||
+    (i.status !== SyncRunStatus.Success && i.status !== SyncRunStatus.Failed)
+  ) {
     throw new Error(
-      `recordSyncRunFinish.status must be 'success' or 'failed' (one of [${SYNC_RUN_STATUSES.join(", ")}]); got "${String(i.status)}" for plan ${i.planId}`,
+      `recordSyncRunFinish.status must be 'success' or 'failed' (one of [${SYNC_RUN_STATUSES.join(", ")}]); got "${String(i.status)}" for plan ${i.planId}`
     )
   }
   const c = i.executeTotals ? asCounts(i.executeTotals) : null
@@ -106,7 +113,7 @@ export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
        SET status = ?, error = ?, execute_totals_json = ?,
            executed_inserts = ?, executed_updates = ?, executed_deletes = ?,
            drift_detected_pct = ?, finished_at = datetime('now'), duration_ms = ?
-       WHERE plan_id = ?`,
+       WHERE plan_id = ?`
     )
     .run(
       i.status,
@@ -117,7 +124,7 @@ export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
       c?.delete ?? null,
       i.driftDetectedPct ?? null,
       i.durationMs,
-      i.planId,
+      i.planId
     )
 }
 
@@ -128,9 +135,7 @@ export function listSyncRuns(limit = 50): SyncRunRow[] {
 }
 
 export function getSyncRun(planId: string): SyncRunRow | undefined {
-  return getDb()
-    .prepare(`SELECT * FROM sync_runs WHERE plan_id = ?`)
-    .get(planId) as SyncRunRow | undefined
+  return getDb().prepare(`SELECT * FROM sync_runs WHERE plan_id = ?`).get(planId) as SyncRunRow | undefined
 }
 
 /**
@@ -171,7 +176,7 @@ export function recordSyncRunPreview(i: {
          preview_inserts = excluded.preview_inserts,
          preview_updates = excluded.preview_updates,
          preview_deletes = excluded.preview_deletes,
-         entity_display_name = COALESCE(excluded.entity_display_name, sync_runs.entity_display_name)`,
+         entity_display_name = COALESCE(excluded.entity_display_name, sync_runs.entity_display_name)`
     )
     .run(
       i.planId,
@@ -186,14 +191,14 @@ export function recordSyncRunPreview(i: {
       c.delete ?? 0,
       JSON.stringify(i.previewTotals),
       i.planJson,
-      SyncRunStatus.Preview,
+      SyncRunStatus.Preview
     )
 }
 
 /** Re-hydrate the full plan body for a given planId, or null if absent. */
 export function getSyncRunPlanJson(planId: string): string | null {
-  const row = getDb()
-    .prepare(`SELECT plan_json FROM sync_runs WHERE plan_id = ?`)
-    .get(planId) as { plan_json: string | null } | undefined
+  const row = getDb().prepare(`SELECT plan_json FROM sync_runs WHERE plan_id = ?`).get(planId) as
+    | { plan_json: string | null }
+    | undefined
   return row?.plan_json ?? null
 }

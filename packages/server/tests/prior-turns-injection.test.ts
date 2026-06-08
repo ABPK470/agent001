@@ -19,35 +19,42 @@ import { ClarificationsRegistry } from "../src/application/shell/execution/clari
 import type { RunWorkspaceContext } from "../src/application/shell/workspace/run-workspace.js"
 
 const RW: RunWorkspaceContext = {
-  runId:         "run-x",
-  sourceRoot:    "/tmp/agent-test-src",
+  runId: "run-x",
+  sourceRoot: "/tmp/agent-test-src",
   executionRoot: "/tmp/agent-test-src",
-  taskType:      "analysis_or_chat",
-  isolated:      false,
-  profile:       "developer",
+  taskType: "analysis_or_chat",
+  isolated: false,
+  profile: "developer"
 }
-function emptyTier() { return { working: "", episodic: "", semantic: "" } }
+function emptyTier() {
+  return { working: "", episodic: "", semantic: "" }
+}
 
 const TURN_T1: PriorTurn = {
-  runId:  "r1",
-  goal:   "select top 5 clients from publish.Revenue for January 2025",
+  runId: "r1",
+  goal: "select top 5 clients from publish.Revenue for January 2025",
   answer: "Here are the top 5 clients from publish.Revenue for January 2025: A=10, B=9, C=8, D=7, E=6.",
   status: "completed",
-  ranAt:  "2026-05-22T10:00:00Z",
+  ranAt: "2026-05-22T10:00:00Z"
 }
 const TURN_T2: PriorTurn = {
-  runId:  "r2",
-  goal:   "and Africa only please",
+  runId: "r2",
+  goal: "and Africa only please",
   answer: "Filtered to Africa: A=4, B=3, C=2.",
   status: "completed",
-  ranAt:  "2026-05-22T10:05:00Z",
+  ranAt: "2026-05-22T10:05:00Z"
 }
 
 describe("buildSystemMessages — <prior_turns> injection", () => {
   it("does NOT inject the block when priorTurns is empty", async () => {
     const msgs = await buildSystemMessages({
-      goal: "hello", systemPrompt: undefined, allTools: [], runWorkspace: RW,
-      perTier: emptyTier(), runId: "run-x", priorTurns: [],
+      goal: "hello",
+      systemPrompt: undefined,
+      allTools: [],
+      runWorkspace: RW,
+      perTier: emptyTier(),
+      runId: "run-x",
+      priorTurns: []
     })
     const all = msgs.map((m) => String(m.content)).join("\n")
     expect(all).not.toContain("<prior_turns>")
@@ -56,9 +63,12 @@ describe("buildSystemMessages — <prior_turns> injection", () => {
   it("injects the <prior_turns> block as a system_anchor when priorTurns is non-empty", async () => {
     const msgs = await buildSystemMessages({
       goal: "ok, can you create a nice visualization for this data?",
-      systemPrompt: undefined, allTools: [], runWorkspace: RW,
-      perTier: emptyTier(), runId: "run-x",
-      priorTurns: [TURN_T1],
+      systemPrompt: undefined,
+      allTools: [],
+      runWorkspace: RW,
+      perTier: emptyTier(),
+      runId: "run-x",
+      priorTurns: [TURN_T1]
     })
     const block = msgs.find((m) => String(m.content).includes("<prior_turns>"))
     expect(block).toBeTruthy()
@@ -77,9 +87,12 @@ describe("buildSystemMessages — <prior_turns> injection", () => {
     // We pass [TURN_T2, TURN_T1] (newest-first as loadPriorTurns returns them).
     const msgs = await buildSystemMessages({
       goal: "plot it",
-      systemPrompt: undefined, allTools: [], runWorkspace: RW,
-      perTier: emptyTier(), runId: "run-x",
-      priorTurns: [TURN_T2, TURN_T1],
+      systemPrompt: undefined,
+      allTools: [],
+      runWorkspace: RW,
+      perTier: emptyTier(),
+      runId: "run-x",
+      priorTurns: [TURN_T2, TURN_T1]
     })
     const block = msgs.find((m) => String(m.content).includes("<prior_turns>"))!
     const content = String(block.content)
@@ -93,10 +106,21 @@ describe("buildSystemMessages — <prior_turns> injection", () => {
   })
 
   it("tags failed turns with [FAILED] and renders '(no answer recorded)' when answer is null", async () => {
-    const failed: PriorTurn = { runId: "rF", goal: "do the thing", answer: null, status: "failed", ranAt: "2026-05-22T11:00:00Z" }
+    const failed: PriorTurn = {
+      runId: "rF",
+      goal: "do the thing",
+      answer: null,
+      status: "failed",
+      ranAt: "2026-05-22T11:00:00Z"
+    }
     const msgs = await buildSystemMessages({
-      goal: "what went wrong?", systemPrompt: undefined, allTools: [], runWorkspace: RW,
-      perTier: emptyTier(), runId: "run-x", priorTurns: [failed],
+      goal: "what went wrong?",
+      systemPrompt: undefined,
+      allTools: [],
+      runWorkspace: RW,
+      perTier: emptyTier(),
+      runId: "run-x",
+      priorTurns: [failed]
     })
     const content = String(msgs.find((m) => String(m.content).includes("<prior_turns>"))!.content)
     expect(content).toContain("[FAILED]")
@@ -105,9 +129,13 @@ describe("buildSystemMessages — <prior_turns> injection", () => {
 
   it("includes the block BEFORE memory tiers in the message order", async () => {
     const msgs = await buildSystemMessages({
-      goal: "plot it", systemPrompt: undefined, allTools: [], runWorkspace: RW,
+      goal: "plot it",
+      systemPrompt: undefined,
+      allTools: [],
+      runWorkspace: RW,
       perTier: { working: "WORKING_BLOB", episodic: "", semantic: "" },
-      runId: "run-x", priorTurns: [TURN_T1],
+      runId: "run-x",
+      priorTurns: [TURN_T1]
     })
     const priorIdx = msgs.findIndex((m) => String(m.content).includes("<prior_turns>"))
     const workingIdx = msgs.findIndex((m) => String(m.content).includes("WORKING_BLOB"))
@@ -129,7 +157,9 @@ describe("buildSystemMessages — clarification ctx is fed prior-turns transcrip
     // presence of a finding.
     originalCatalog = null
   })
-  afterEach(() => { originalCatalog = null /* keep clean */ })
+  afterEach(() => {
+    originalCatalog = null /* keep clean */
+  })
 
   it("does NOT emit a schema-match clarification on a pronoun follow-up when priorTurns are present", async () => {
     // Without the fix, a goal like this could plausibly fire schema-match
@@ -147,24 +177,32 @@ describe("buildSystemMessages — clarification ctx is fed prior-turns transcrip
     const registry = new ClarificationsRegistry()
     const msgs = await buildSystemMessages({
       goal: "ok, can you create a nice visualization for this data?",
-      systemPrompt: undefined, allTools: [] as Tool[], runWorkspace: RW,
-      perTier: emptyTier(), runId: "run-clarify",
+      systemPrompt: undefined,
+      allTools: [] as Tool[],
+      runWorkspace: RW,
+      perTier: emptyTier(),
+      runId: "run-clarify",
       priorTurns: [TURN_T1],
-      priorResults: [{
-        id: 1,
-        run_id: "r1",
-        session_id: "s1",
-        tool_call_id: "tc-1",
-        tool_name: "query_mssql",
-        args_json: "{}",
-        result_json: JSON.stringify({ text: "Top 5 clients: A=10, B=9, C=8, D=7, E=6.", isError: false }),
-        row_count: 5,
-        bytes: 60,
-        truncated: 0,
-        goal_excerpt: TURN_T1.goal,
-        created_at: TURN_T1.ranAt ?? "2026-05-22T10:00:00Z",
-      }],
-      clarifications: registry,
+      priorResults: [
+        {
+          id: 1,
+          run_id: "r1",
+          session_id: "s1",
+          tool_call_id: "tc-1",
+          tool_name: "query_mssql",
+          args_json: "{}",
+          result_json: JSON.stringify({
+            text: "Top 5 clients: A=10, B=9, C=8, D=7, E=6.",
+            isError: false
+          }),
+          row_count: 5,
+          bytes: 60,
+          truncated: 0,
+          goal_excerpt: TURN_T1.goal,
+          created_at: TURN_T1.ranAt ?? "2026-05-22T10:00:00Z"
+        }
+      ],
+      clarifications: registry
       // No llmForClarification → planner cannot run; we only test the
       // deterministic path which is the one that previously misfired.
     })

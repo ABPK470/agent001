@@ -1,9 +1,9 @@
 import { describe, expect, it } from "vitest"
 import {
-    DOCTRINE_BLOCK_BUDGET_BYTES,
-    MSSQL_DOCTRINES,
-    assembleDoctrineBlock,
-    enforceDoctrines,
+  DOCTRINE_BLOCK_BUDGET_BYTES,
+  MSSQL_DOCTRINES,
+  assembleDoctrineBlock,
+  enforceDoctrines
 } from "../src/application/core/doctrine.js"
 
 describe("doctrine registry", () => {
@@ -48,21 +48,23 @@ describe("doctrine registry", () => {
       "FROM publish.Revenue a",
       "JOIN publish.Revenue b ON b.pkClient = a.pkClient",
       "JOIN publish.Revenue c ON c.pkClient = a.pkClient",
-      "WHERE a.pkMonth = 202501",
+      "WHERE a.pkMonth = 202501"
     ].join("\n")
     const diags = enforceDoctrines(sql)
     expect(diags.some((d) => d.code === "large_object_overused")).toBe(true)
   })
 
   it("enforceDoctrines flags an aggregate ↔ alias mismatch", () => {
-    const sql = "SELECT SUM(b.AverageCreditBalanceZARMTD) AS AvgCreditBalZAR FROM #x_a3f91c08 b WHERE b.pkMonth = 1"
+    const sql =
+      "SELECT SUM(b.AverageCreditBalanceZARMTD) AS AvgCreditBalZAR FROM #x_a3f91c08 b WHERE b.pkMonth = 1"
     const diags = enforceDoctrines(sql)
     expect(diags.some((d) => d.code === "aggregate_semantic_mismatch")).toBe(true)
   })
 
   it("enforceDoctrines flags malformed temp suffix", () => {
     // 7-hex suffix instead of the required 8 — malformed length, all chars are hex.
-    const sql = "CREATE TABLE #range_a3f91c0 (x int); SELECT * FROM #range_a3f91c0; DROP TABLE #range_a3f91c0;"
+    const sql =
+      "CREATE TABLE #range_a3f91c0 (x int); SELECT * FROM #range_a3f91c0; DROP TABLE #range_a3f91c0;"
     const diags = enforceDoctrines(sql)
     expect(diags.some((d) => d.code === "temp_table_integrity")).toBe(true)
   })

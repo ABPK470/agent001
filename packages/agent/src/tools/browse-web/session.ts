@@ -53,8 +53,7 @@ export function startBrowseSessionCleanup(host: AgentHost): void {
     for (const [id, session] of browser.activeSessions) {
       if (now - session.lastUsed > SESSION_TIMEOUT) {
         // Best-effort persistence before close.
-        persistSessionState(session)
-          .finally(() => session.browser.close().catch(() => {}))
+        persistSessionState(session).finally(() => session.browser.close().catch(() => {}))
         browser.activeSessions.delete(id)
       }
     }
@@ -80,7 +79,7 @@ export function stopBrowseSessionCleanup(host: AgentHost): void {
 export function withKillGuard<T>(
   page: import("playwright").Page,
   fn: () => Promise<T>,
-  signal?: AbortSignal | null,
+  signal?: AbortSignal | null
 ): Promise<T> {
   const sig = getKillSignal(signal)
   if (!sig) return fn()
@@ -92,8 +91,14 @@ export function withKillGuard<T>(
     }
     sig.addEventListener("abort", onAbort, { once: true })
     fn().then(
-      (v) => { sig.removeEventListener("abort", onAbort); resolve(v) },
-      (e) => { sig.removeEventListener("abort", onAbort); reject(e) },
+      (v) => {
+        sig.removeEventListener("abort", onAbort)
+        resolve(v)
+      },
+      (e) => {
+        sig.removeEventListener("abort", onAbort)
+        reject(e)
+      }
     )
   })
 }
@@ -129,7 +134,7 @@ async function resolveStealthChromium(): Promise<typeof import("playwright").chr
 export async function launchSession(
   host: AgentHost,
   visible = false,
-  options: { tenantSeed?: string } = {},
+  options: { tenantSeed?: string } = {}
 ): Promise<{ session: BrowserSession; id: string } | string> {
   // Lazily start the per-host idle-session cleanup timer.
   startBrowseSessionCleanup(host)
@@ -151,7 +156,11 @@ export async function launchSession(
   const provider = host.browser.providers.contextReader
   let handle: BrowserContextHandle | null = null
   if (provider) {
-    try { handle = await provider.acquire() } catch { handle = null }
+    try {
+      handle = await provider.acquire()
+    } catch {
+      handle = null
+    }
   }
 
   // Fingerprint seed precedence: explicit tenantSeed > handle seed > undefined.
@@ -160,7 +169,7 @@ export async function launchSession(
 
   const launchOpts: import("playwright").LaunchOptions = {
     headless: !visible,
-    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"],
+    args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage", "--disable-gpu"]
   }
   if (handle?.proxy?.server) {
     // BYO upstream proxy for this tenant. Playwright accepts http(s) and
@@ -169,7 +178,7 @@ export async function launchSession(
       server: handle.proxy.server,
       ...(handle.proxy.bypass ? { bypass: handle.proxy.bypass } : {}),
       ...(handle.proxy.username ? { username: handle.proxy.username } : {}),
-      ...(handle.proxy.password ? { password: handle.proxy.password } : {}),
+      ...(handle.proxy.password ? { password: handle.proxy.password } : {})
     }
   }
   const browser = await chromium.launch(launchOpts)
@@ -177,10 +186,11 @@ export async function launchSession(
     userAgent: fingerprint.userAgent,
     viewport: fingerprint.viewport,
     locale: fingerprint.locale,
-    timezoneId: fingerprint.timezoneId,
+    timezoneId: fingerprint.timezoneId
   }
   if (handle?.storageState) {
-    contextOpts.storageState = handle.storageState as import("playwright").BrowserContextOptions["storageState"]
+    contextOpts.storageState =
+      handle.storageState as import("playwright").BrowserContextOptions["storageState"]
   }
   const context = await browser.newContext(contextOpts)
   const page = await context.newPage()
@@ -196,7 +206,7 @@ export async function launchSession(
     url: "",
     visible,
     fingerprint,
-    contextHandle: handle,
+    contextHandle: handle
   }
   host.browser.runtime.activeSessions.set(id, session)
   return { session, id }
@@ -231,8 +241,7 @@ export function deleteSession(host: AgentHost, sessionId: string): void {
 /** Force-close all open browser sessions on this host (for cleanup on server shutdown). */
 export function closeAllBrowserSessions(host: AgentHost): void {
   for (const [id, session] of host.browser.runtime.activeSessions) {
-    persistSessionState(session)
-      .finally(() => session.browser.close().catch(() => {}))
+    persistSessionState(session).finally(() => session.browser.close().catch(() => {}))
     host.browser.runtime.activeSessions.delete(id)
   }
 }

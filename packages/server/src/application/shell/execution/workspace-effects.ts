@@ -20,20 +20,21 @@ import { applyWorkspaceDiff, cleanupRunWorkspace, computeWorkspaceDiff } from ".
  * AgentHost + RunContext wiring around `agent.run()`; no global
  * serialization needed.
  */
-export function wrapWithEffects(
-  tool: Tool,
-  runId: string,
-  workspaceRoot: string,
-): Tool {
+export function wrapWithEffects(tool: Tool, runId: string, workspaceRoot: string): Tool {
   if (tool.name === "write_file") {
     return {
       ...tool,
       execute: async (args) => {
         const { resolve } = await import("node:path")
         const absPath = resolve(workspaceRoot, String(args.path))
-        await recordFileWrite({ runId, tool: "write_file", filePath: absPath, newContent: String(args.content) })
+        await recordFileWrite({
+          runId,
+          tool: "write_file",
+          filePath: absPath,
+          newContent: String(args.content)
+        })
         return tool.execute(args)
-      },
+      }
     }
   }
 
@@ -42,9 +43,15 @@ export function wrapWithEffects(
       ...tool,
       execute: async (args) => {
         const result = await tool.execute(args)
-        recordEffect({ runId, kind: EffectKind.Command, tool: "run_command", target: String(args.command ?? args.cmd ?? ""), metadata: { output: String(result).slice(0, 1000) } })
+        recordEffect({
+          runId,
+          kind: EffectKind.Command,
+          tool: "run_command",
+          target: String(args.command ?? args.cmd ?? ""),
+          metadata: { output: String(result).slice(0, 1000) }
+        })
         return result
-      },
+      }
     }
   }
 
@@ -59,7 +66,7 @@ export async function captureRunWorkspaceDiff(
   completedRunWorkspaces: Map<string, RunWorkspaceContext>,
   completedRunDiffs: Map<string, WorkspaceDiff>,
   saveTrace: (runId: string, entry: Record<string, unknown>) => void,
-  createNotification: (opts: NotificationOpts) => void,
+  createNotification: (opts: NotificationOpts) => void
 ): Promise<void> {
   const run = activeRuns.get(runId)
   if (!run?.workspace?.isolated) return
@@ -94,8 +101,8 @@ export async function captureRunWorkspaceDiff(
     runId,
     actions: [
       { label: "Review", action: NotificationActionType.ViewRun, data: { runId } },
-      { label: "Apply", action: NotificationActionType.ApplyRunDiff, data: { runId } },
-    ],
+      { label: "Apply", action: NotificationActionType.ApplyRunDiff, data: { runId } }
+    ]
   })
 }
 
@@ -104,7 +111,7 @@ export async function applyRunWorkspaceDiff(
   completedRunWorkspaces: Map<string, RunWorkspaceContext>,
   completedRunDiffs: Map<string, WorkspaceDiff>,
   saveTrace: (runId: string, entry: Record<string, unknown>) => void,
-  createNotification: (opts: NotificationOpts) => void,
+  createNotification: (opts: NotificationOpts) => void
 ): Promise<{ added: number; modified: number; deleted: number } | null> {
   const context = completedRunWorkspaces.get(runId)
   const diff = completedRunDiffs.get(runId)
@@ -113,7 +120,7 @@ export async function applyRunWorkspaceDiff(
   const summary = await applyWorkspaceDiff({
     sourceRoot: context.sourceRoot,
     executionRoot: context.executionRoot,
-    diff,
+    diff
   })
   await cleanupRunWorkspace(context)
   completedRunWorkspaces.delete(runId)
@@ -126,7 +133,7 @@ export async function applyRunWorkspaceDiff(
     title: "Run changes applied",
     message: `Applied ${summary.added + summary.modified + summary.deleted} file changes from isolated run ${runId.slice(0, 8)}.`,
     runId,
-    actions: [{ label: "View", action: NotificationActionType.ViewRun, data: { runId } }],
+    actions: [{ label: "View", action: NotificationActionType.ViewRun, data: { runId } }]
   })
 
   return summary

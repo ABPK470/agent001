@@ -8,20 +8,14 @@
 
 import type { Tool } from "../../types.js"
 import {
-    buildAutonomousRepairBlock,
-    buildBlueprintRetryGuidance,
-    getUnresolvedAcceptanceBlockers,
-    summarizeRepairTask,
+  buildAutonomousRepairBlock,
+  buildBlueprintRetryGuidance,
+  getUnresolvedAcceptanceBlockers,
+  summarizeRepairTask
 } from "../internal/pipeline-repair.js"
 import { isGibberishIssue } from "../pipeline-validation/index.js"
 import type { PipelineExecutorOptions } from "../pipeline/index.js"
-import type {
-    PipelineStepResult,
-    Plan,
-    PlannerRuntimeModel,
-    RepairPlan,
-    SubagentTaskStep,
-} from "../types.js"
+import type { PipelineStepResult, Plan, PlannerRuntimeModel, RepairPlan, SubagentTaskStep } from "../types.js"
 import { buildChildRepairPayload } from "../verification-model/index.js"
 
 export function buildRepairStep(
@@ -32,14 +26,14 @@ export function buildRepairStep(
   acceptedArtifacts: ReadonlySet<string>,
   toolMap: Map<string, Tool>,
   plan: Plan,
-  opts?: PipelineExecutorOptions,
+  opts?: PipelineExecutorOptions
 ): SubagentTaskStep {
   const typedFeedback = summarizeRepairTask(repairTask)
   const primaryFeedback = typedFeedback.primary.filter((issue) => !isGibberishIssue(issue))
   const referenceFeedback = typedFeedback.reference.filter((issue) => !isGibberishIssue(issue))
   const priorStep = opts?.priorResults?.get(name) as PipelineStepResult | undefined
   const priorReplaceMisses = (priorStep?.toolCalls ?? []).filter(
-    c => c.name === "replace_in_file" && /old_string not found/i.test(c.result),
+    (c) => c.name === "replace_in_file" && /old_string not found/i.test(c.result)
   ).length
   const avoidReplaceInFile = priorReplaceMisses >= 2
 
@@ -48,40 +42,54 @@ export function buildRepairStep(
     existingSource.add(artifact)
   }
 
-  const hasStubIssues = primaryFeedback.some(f =>
-    /stub|placeholder|empty array|empty object|returns constant|catch-all|trivial return|degeneration/i.test(f),
+  const hasStubIssues = primaryFeedback.some((f) =>
+    /stub|placeholder|empty array|empty object|returns constant|catch-all|trivial return|degeneration/i.test(
+      f
+    )
   )
   const stubRemediationBlock = hasStubIssues
     ? `\n\n⚠️ STUB FUNCTION REMEDIATION — THIS IS YOUR PRIMARY TASK:\nThe verifier detected functions that are stubs or contain degeneration comments (e.g. "// Other code as per existing logic", "// rest of the code here", "// same as above"). These comments mean NO CODE WAS ACTUALLY WRITTEN — the function body is empty/incomplete.\nFor EACH stub/degenerated function you MUST:\n1. Read the file that contains it\n2. Locate the function by name\n3. Replace the stub body with a REAL, COMPLETE algorithm — DO NOT use comments like "existing logic" or "same as above"\n4. The function NAME tells you WHAT it must do — implement the FULL algorithm. Example: "getLegalMoves" must compute legal moves for ALL piece types with proper board bounds checking.\n5. Do NOT change the function signature — only replace the body\n6. After implementing, re-read the file and verify the stub is gone`
     : ""
   const autonomousRepairBlock = buildAutonomousRepairBlock(sa, primaryFeedback)
-  const contextualFeedbackBlock = referenceFeedback.length > 0
-    ? `\n\nReference context from verifier (do not treat these as your primary owned fixes unless you confirm they require integration work from your step):\n${referenceFeedback.map(f => `- ${f}`).join("\n")}`
-    : ""
+  const contextualFeedbackBlock =
+    referenceFeedback.length > 0
+      ? `\n\nReference context from verifier (do not treat these as your primary owned fixes unless you confirm they require integration work from your step):\n${referenceFeedback.map((f) => `- ${f}`).join("\n")}`
+      : ""
 
   const hasReplaceInFile = toolMap.has("replace_in_file")
-  const docsOnlyTargets = sa.executionContext.targetArtifacts.length > 0 &&
+  const docsOnlyTargets =
+    sa.executionContext.targetArtifacts.length > 0 &&
     sa.executionContext.targetArtifacts.every((artifact) => /\.(?:md|markdown|txt|rst|adoc)$/i.test(artifact))
-  const blueprintRetryGuidance = docsOnlyTargets || /blueprint/i.test(sa.name)
-    ? `\n\n⚠️ BLUEPRINT/DOCUMENT RETRY GUIDANCE:\n- Do NOT mutate the document to add fake runtime-verification, test-plan, or execution-history sections.\n- Verification for this step is deterministic artifact inspection: write the document, then use read_file on the written artifact and confirm the required contracts are present.\n- Fix only the missing architectural depth: signatures, shared data, dependencies, algorithmic contracts, and edge cases.\n- Do NOT claim runtime behavior for a documentation-only step.${buildBlueprintRetryGuidance(sa, plan, primaryFeedback)}`
-    : ""
+  const blueprintRetryGuidance =
+    docsOnlyTargets || /blueprint/i.test(sa.name)
+      ? `\n\n⚠️ BLUEPRINT/DOCUMENT RETRY GUIDANCE:\n- Do NOT mutate the document to add fake runtime-verification, test-plan, or execution-history sections.\n- Verification for this step is deterministic artifact inspection: write the document, then use read_file on the written artifact and confirm the required contracts are present.\n- Fix only the missing architectural depth: signatures, shared data, dependencies, algorithmic contracts, and edge cases.\n- Do NOT claim runtime behavior for a documentation-only step.${buildBlueprintRetryGuidance(sa, plan, primaryFeedback)}`
+      : ""
   const retryRules = buildRetryRules(docsOnlyTargets, sa, hasReplaceInFile, avoidReplaceInFile)
 
-  const unresolvedDependencyBlockers = getUnresolvedAcceptanceBlockers(name, runtimeModel, repairTask, acceptedArtifacts)
+  const unresolvedDependencyBlockers = getUnresolvedAcceptanceBlockers(
+    name,
+    runtimeModel,
+    repairTask,
+    acceptedArtifacts
+  )
   return {
     ...sa,
-    objective: `${sa.objective}\n\n[RETRY — fix these step-owned issues from the previous attempt]:\n${primaryFeedback.map(f => `- ${f}`).join("\n")}${contextualFeedbackBlock}${autonomousRepairBlock}${stubRemediationBlock}${blueprintRetryGuidance}\n\n${retryRules}`,
+    objective: `${sa.objective}\n\n[RETRY — fix these step-owned issues from the previous attempt]:\n${primaryFeedback.map((f) => `- ${f}`).join("\n")}${contextualFeedbackBlock}${autonomousRepairBlock}${stubRemediationBlock}${blueprintRetryGuidance}\n\n${retryRules}`,
     executionContext: {
       ...sa.executionContext,
       requiredSourceArtifacts: [...existingSource],
-      forbiddenArtifacts: [...new Set([...runtimeModel.ownershipGraph.values()]
-        .filter((artifact) => artifact.ownerStepName && artifact.ownerStepName !== sa.name)
-        .map((artifact) => artifact.artifactPath))],
+      forbiddenArtifacts: [
+        ...new Set(
+          [...runtimeModel.ownershipGraph.values()]
+            .filter((artifact) => artifact.ownerStepName && artifact.ownerStepName !== sa.name)
+            .map((artifact) => artifact.artifactPath)
+        )
+      ],
       requiredChecks: [sa.executionContext.verificationMode, ...sa.acceptanceCriteria],
       upstreamAcceptedArtifacts: [...acceptedArtifacts],
       unresolvedDependencyBlockers,
-      repairContext: buildChildRepairPayload(repairTask),
-    },
+      repairContext: buildChildRepairPayload(repairTask)
+    }
   }
 }
 
@@ -89,7 +97,7 @@ function buildRetryRules(
   docsOnlyTargets: boolean,
   sa: SubagentTaskStep,
   hasReplaceInFile: boolean,
-  avoidReplaceInFile: boolean,
+  avoidReplaceInFile: boolean
 ): string {
   if (docsOnlyTargets || /blueprint/i.test(sa.name)) {
     return hasReplaceInFile

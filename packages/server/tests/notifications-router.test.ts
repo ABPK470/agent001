@@ -43,9 +43,13 @@ describe("notifications router (F1.10)", () => {
   it("upsert + list + delete CRUD", async () => {
     const m = await setup()
     const r = m.upsertNotificationRoute({
-      tenantId: "_default", eventType: "sync.proposal.created",
-      filter: { riskTier: ["high"] }, channel: "slack",
-      target: "https://hooks/example", enabled: true, actor: "admin",
+      tenantId: "_default",
+      eventType: "sync.proposal.created",
+      filter: { riskTier: ["high"] },
+      channel: "slack",
+      target: "https://hooks/example",
+      enabled: true,
+      actor: "admin"
     })
     expect(r.id).toBeDefined()
     expect(m.listNotificationRoutes("_default")).toHaveLength(1)
@@ -56,33 +60,80 @@ describe("notifications router (F1.10)", () => {
   it("filter matching: riskTier exact match", async () => {
     const m = await setup()
     m.upsertNotificationRoute({
-      tenantId: "_default", eventType: "sync.proposal.created",
-      filter: { riskTier: ["high", "critical"] }, channel: "slack",
-      target: "x", enabled: true, actor: "admin",
+      tenantId: "_default",
+      eventType: "sync.proposal.created",
+      filter: { riskTier: ["high", "critical"] },
+      channel: "slack",
+      target: "x",
+      enabled: true,
+      actor: "admin"
     })
-    expect(m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", riskTier: "high",   context: {} })).toHaveLength(1)
-    expect(m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", riskTier: "low",    context: {} })).toHaveLength(0)
-    expect(m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created",                    context: {} })).toHaveLength(1) // missing riskTier ⇒ pass
+    expect(
+      m.listMatchingRoutes({
+        tenantId: "_default",
+        eventType: "sync.proposal.created",
+        riskTier: "high",
+        context: {}
+      })
+    ).toHaveLength(1)
+    expect(
+      m.listMatchingRoutes({
+        tenantId: "_default",
+        eventType: "sync.proposal.created",
+        riskTier: "low",
+        context: {}
+      })
+    ).toHaveLength(0)
+    expect(
+      m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", context: {} })
+    ).toHaveLength(1) // missing riskTier ⇒ pass
   })
 
   it("filter matching: AND across clauses", async () => {
     const m = await setup()
     m.upsertNotificationRoute({
-      tenantId: "_default", eventType: "sync.proposal.created",
+      tenantId: "_default",
+      eventType: "sync.proposal.created",
       filter: { riskTier: ["high"], envPair: ["uat→prod"] },
-      channel: "email", target: "ops@example.com", enabled: true, actor: "admin",
+      channel: "email",
+      target: "ops@example.com",
+      enabled: true,
+      actor: "admin"
     })
-    expect(m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", riskTier: "high", envPair: "uat→prod", context: {} })).toHaveLength(1)
-    expect(m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", riskTier: "high", envPair: "uat→qa",   context: {} })).toHaveLength(0)
+    expect(
+      m.listMatchingRoutes({
+        tenantId: "_default",
+        eventType: "sync.proposal.created",
+        riskTier: "high",
+        envPair: "uat→prod",
+        context: {}
+      })
+    ).toHaveLength(1)
+    expect(
+      m.listMatchingRoutes({
+        tenantId: "_default",
+        eventType: "sync.proposal.created",
+        riskTier: "high",
+        envPair: "uat→qa",
+        context: {}
+      })
+    ).toHaveLength(0)
   })
 
   it("disabled routes are not returned by listMatchingRoutes", async () => {
     const m = await setup()
     m.upsertNotificationRoute({
-      tenantId: "_default", eventType: "sync.proposal.created",
-      filter: {}, channel: "slack", target: "x", enabled: false, actor: "admin",
+      tenantId: "_default",
+      eventType: "sync.proposal.created",
+      filter: {},
+      channel: "slack",
+      target: "x",
+      enabled: false,
+      actor: "admin"
     })
-    expect(m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", context: {} })).toHaveLength(0)
+    expect(
+      m.listMatchingRoutes({ tenantId: "_default", eventType: "sync.proposal.created", context: {} })
+    ).toHaveLength(0)
   })
 
   it("listNotificationLog filters by status + limit", async () => {

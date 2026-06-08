@@ -7,11 +7,7 @@
 // detector registration order — but in practice each id is owned by one
 // kind), (c) stable ordering for snapshot tests.
 
-import type {
-    AmbiguityFinding,
-    ClarifyContext,
-    Detector,
-} from "./types.js"
+import type { AmbiguityFinding, ClarifyContext, Detector } from "./types.js"
 
 /**
  * Run every detector in order, suppress resolved-finding ids, dedupe by
@@ -25,10 +21,7 @@ import type {
  * a buggy detector does not break the entire round, but the runner does
  * not silently swallow.
  */
-export function runDetectors(
-  ctx: ClarifyContext,
-  detectors: readonly Detector[],
-): AmbiguityFinding[] {
+export function runDetectors(ctx: ClarifyContext, detectors: readonly Detector[]): AmbiguityFinding[] {
   const resolved = new Set(ctx.resolved.map((r) => r.findingId))
   const seen = new Set<string>()
   const out: AmbiguityFinding[] = []

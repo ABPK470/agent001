@@ -29,14 +29,11 @@ export const BUNDLED_ENTITY_IDS = [
   "rule",
   "pipelineActivity",
   "gateMetadata",
-  "content",
+  "content"
 ] as const
 
 /** How a given table was discovered as part of an entity's dependency closure. */
-import {
-    DiscoverySource,
-    SyncRecipeDiscrepancyKind,
-} from "./enums.js"
+import { DiscoverySource, SyncRecipeDiscrepancyKind } from "./enums.js"
 
 export interface SyncPostMetadataAction {
   kind: import("./enums.js").PostMetadataActionKind
@@ -143,7 +140,7 @@ export function getRecipe(bundle: SyncRecipeBundle, type: EntityType): SyncRecip
   const r = bundle.recipes[type]
   if (!r) {
     throw new Error(
-      `No sync recipe defined for entity type "${type}" in the published definitions projection.`,
+      `No sync recipe defined for entity type "${type}" in the published definitions projection.`
     )
   }
   return r
@@ -151,7 +148,7 @@ export function getRecipe(bundle: SyncRecipeBundle, type: EntityType): SyncRecip
 
 export function selectRecipeTables(
   recipe: SyncRecipe,
-  enabledOptionalTables: string[] | undefined,
+  enabledOptionalTables: string[] | undefined
 ): ActiveSyncRecipeSelection {
   const enabledOptional = new Set(enabledOptionalTables ?? [])
   const tables = recipe.tables.filter((table) => isRecipeTableEnabled(table, enabledOptional))
@@ -159,7 +156,7 @@ export function selectRecipeTables(
   return {
     tables,
     executionOrder: recipe.executionOrder.filter((tableName) => activeNames.has(tableName)),
-    reverseOrder: recipe.reverseOrder.filter((tableName) => activeNames.has(tableName)),
+    reverseOrder: recipe.reverseOrder.filter((tableName) => activeNames.has(tableName))
   }
 }
 
@@ -171,7 +168,7 @@ function normalizeRecipeTable(table: SyncRecipeTable): SyncRecipeTable {
     ...table,
     groundedByPipeline,
     userControllable,
-    enabledByDefault,
+    enabledByDefault
   }
 }
 
@@ -187,9 +184,7 @@ function isRecipeTableEnabled(table: SyncRecipeTable, enabledOptional: Set<strin
 export function instantiatePredicate(predicate: string, entityId: string | number): string {
   // Quote string ids; numerics pass through.
   const literal =
-    typeof entityId === "number"
-      ? String(entityId)
-      : `'${String(entityId).replace(/'/g, "''")}'`
+    typeof entityId === "number" ? String(entityId) : `'${String(entityId).replace(/'/g, "''")}'`
   return predicate.replace(/\{id\}/g, literal)
 }
 
@@ -200,22 +195,18 @@ export function instantiatePredicate(predicate: string, entityId: string | numbe
 export function instantiatePredicateWithTree(
   predicate: string,
   entityId: string | number,
-  expandedIds: Array<string | number> | null,
+  expandedIds: Array<string | number> | null
 ): string {
   const literal =
-    typeof entityId === "number"
-      ? String(entityId)
-      : `'${String(entityId).replace(/'/g, "''")}'`
+    typeof entityId === "number" ? String(entityId) : `'${String(entityId).replace(/'/g, "''")}'`
 
   // Build the {ids} literal list — e.g. "1, 2, 3" or "'a', 'b'"
   const effectiveIds = expandedIds && expandedIds.length > 0 ? expandedIds : [entityId]
-  const idsLiteral = effectiveIds.map((id) =>
-    typeof id === "number" ? String(id) : `'${String(id).replace(/'/g, "''")}'`,
-  ).join(", ")
+  const idsLiteral = effectiveIds
+    .map((id) => (typeof id === "number" ? String(id) : `'${String(id).replace(/'/g, "''")}'`))
+    .join(", ")
 
-  return predicate
-    .replace(/\{ids\}/g, idsLiteral)
-    .replace(/\{id\}/g, literal)
+  return predicate.replace(/\{ids\}/g, idsLiteral).replace(/\{id\}/g, literal)
 }
 
 // ── Archive table derivation ─────────────────────────────────────

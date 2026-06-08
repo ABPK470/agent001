@@ -21,7 +21,7 @@ export const DEFAULT_BUDGET: MemoryBudget = { maxTokens: 3000, maxItems: 15 }
 export const TIER_BUDGET: Record<MemoryTier, number> = {
   working: 0.34,
   episodic: 0.22,
-  semantic: 0.44,
+  semantic: 0.44
 }
 
 export const SOURCE_WEIGHT: Record<MemorySource, number> = {
@@ -29,18 +29,48 @@ export const SOURCE_WEIGHT: Record<MemorySource, number> = {
   tool: 0.85,
   user: 0.7,
   agent: 0.55,
-  external: 0.4,
+  external: 0.4
 }
 
 // ── Salience scoring ─────────────────────────────────────────────
 
 const ACTION_KEYWORDS = new Set([
-  "create", "created", "build", "built", "deploy", "deployed",
-  "fix", "fixed", "debug", "debugged", "implement", "implemented",
-  "decide", "decided", "configure", "configured", "install", "installed",
-  "write", "wrote", "delete", "deleted", "update", "updated",
-  "run", "execute", "test", "tested", "refactor", "refactored",
-  "error", "failed", "success", "completed", "migrate", "migrated",
+  "create",
+  "created",
+  "build",
+  "built",
+  "deploy",
+  "deployed",
+  "fix",
+  "fixed",
+  "debug",
+  "debugged",
+  "implement",
+  "implemented",
+  "decide",
+  "decided",
+  "configure",
+  "configured",
+  "install",
+  "installed",
+  "write",
+  "wrote",
+  "delete",
+  "deleted",
+  "update",
+  "updated",
+  "run",
+  "execute",
+  "test",
+  "tested",
+  "refactor",
+  "refactored",
+  "error",
+  "failed",
+  "success",
+  "completed",
+  "migrate",
+  "migrated"
 ])
 
 export function computeSalience(content: string, role: MemoryRole): number {
@@ -51,7 +81,7 @@ export function computeSalience(content: string, role: MemoryRole): number {
 
   const words = content.toLowerCase().split(/\s+/)
   const actionHits = words.filter((w) => ACTION_KEYWORDS.has(w)).length
-  const actionScore = Math.min(1, actionHits / 3) * 0.40
+  const actionScore = Math.min(1, actionHits / 3) * 0.4
 
   let structureScore = 0
   if (/```/.test(content)) structureScore += 0.4
@@ -75,7 +105,7 @@ export function truncateAtBoundary(text: string, maxLen: number, suffix = ""): s
   const lastSentence = Math.max(
     text.lastIndexOf(". ", maxLen),
     text.lastIndexOf("! ", maxLen),
-    text.lastIndexOf("? ", maxLen),
+    text.lastIndexOf("? ", maxLen)
   )
   if (lastSentence > maxLen * 0.5) {
     return text.slice(0, lastSentence + 1) + suffix
@@ -90,7 +120,12 @@ export function truncateAtBoundary(text: string, maxLen: number, suffix = ""): s
 // ── Deduplication ────────────────────────────────────────────────
 
 export function tokenize(text: string): Set<string> {
-  return new Set(text.toLowerCase().split(/\s+/).filter((t) => t.length > 2))
+  return new Set(
+    text
+      .toLowerCase()
+      .split(/\s+/)
+      .filter((t) => t.length > 2)
+  )
 }
 
 export function jaccardSimilarity(a: Set<string>, b: Set<string>): number {

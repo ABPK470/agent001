@@ -66,10 +66,14 @@ function loadPrompt(name: string): string {
       body = readFileSync(p, "utf8")
       chosenPath = p
       break
-    } catch (err) { lastErr = err }
+    } catch (err) {
+      lastErr = err
+    }
   }
   if (body === null || chosenPath === null) {
-    throw new Error(`prompt asset not found: ${name} (tried ${candidates.join(", ")}) — last error: ${String(lastErr)}`)
+    throw new Error(
+      `prompt asset not found: ${name} (tried ${candidates.join(", ")}) — last error: ${String(lastErr)}`
+    )
   }
 
   // Boot log: makes it trivial to see which file actually loaded — answers
@@ -87,9 +91,13 @@ function loadPrompt(name: string): string {
       const otherSha = createHash("sha1").update(readFileSync(p, "utf8")).digest("hex").slice(0, 8)
       if (otherSha !== sha) {
         // eslint-disable-next-line no-console
-        console.warn(`[prompt] drift: ${name} also exists at ${p} (sha=${otherSha}) — using ${chosenPath} (sha=${sha})`)
+        console.warn(
+          `[prompt] drift: ${name} also exists at ${p} (sha=${otherSha}) — using ${chosenPath} (sha=${sha})`
+        )
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
 
   return body

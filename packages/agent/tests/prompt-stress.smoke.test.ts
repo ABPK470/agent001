@@ -22,7 +22,7 @@ describeMaybe("prompt diet stress (50-iteration synthetic run)", () => {
   it("keeps prompt < 100K tokens across escalating payload sizes", () => {
     const messages: Message[] = [
       { role: MessageRole.System, content: "You are a test agent.", section: "system_anchor" },
-      { role: MessageRole.User, content: "synthetic stress goal", section: "user" },
+      { role: MessageRole.User, content: "synthetic stress goal", section: "user" }
     ]
 
     const tokensPerCall: number[] = []
@@ -36,13 +36,13 @@ describeMaybe("prompt diet stress (50-iteration synthetic run)", () => {
         role: MessageRole.Assistant,
         content: `Iteration ${i} reasoning.`,
         toolCalls: [{ id: `call-${i}`, name: "read_file", arguments: { path: `/tmp/f${i}.txt` } }],
-        section: "history",
+        section: "history"
       })
       messages.push({
         role: MessageRole.Tool,
         content: payload,
         toolCallId: `call-${i}`,
-        section: "history",
+        section: "history"
       })
 
       const compacted = compactMessages(messages)

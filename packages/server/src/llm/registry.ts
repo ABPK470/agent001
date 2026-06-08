@@ -22,21 +22,18 @@ import { getDatabricksHost, getDatabricksToken, isDatabricksConfigured } from ".
 export const DEFAULT_MODEL = "gpt-5.4"
 
 /** Default models per provider shown in the UI picker. */
-export const PROVIDER_DEFAULTS: Record<
-    string,
-    { model: string; baseUrl: string; placeholder: string }
-> = {
-    "copilot-chat": {
-        model: DEFAULT_MODEL,
-        baseUrl: "",
-        placeholder: "Automatic (Device Flow — authorize once)",
-    },
-    databricks: {
-        model: "databricks-gpt-5-4",
-        baseUrl: "",
-        placeholder: "Automatic (M2M OAuth from .env)",
-    },
-};
+export const PROVIDER_DEFAULTS: Record<string, { model: string; baseUrl: string; placeholder: string }> = {
+  "copilot-chat": {
+    model: DEFAULT_MODEL,
+    baseUrl: "",
+    placeholder: "Automatic (Device Flow — authorize once)"
+  },
+  databricks: {
+    model: "databricks-gpt-5-4",
+    baseUrl: "",
+    placeholder: "Automatic (M2M OAuth from .env)"
+  }
+}
 
 /**
  * Build an LLMClient from a persisted config row.
@@ -49,23 +46,20 @@ export function buildLlmClient(cfg: DbLlmConfig): LLMClient {
     case "copilot-chat":
       return new CopilotChatClient({
         token: api_key || undefined,
-        model: model || DEFAULT_MODEL,
+        model: model || DEFAULT_MODEL
       })
 
     case "databricks":
       if (!isDatabricksConfigured()) {
         throw new Error(
-          "Databricks provider selected but DATABRICKS_HOST / DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET are not set in .env",
+          "Databricks provider selected but DATABRICKS_HOST / DATABRICKS_CLIENT_ID / DATABRICKS_CLIENT_SECRET are not set in .env"
         )
       }
       return new DatabricksClient({
-          host: base_url || getDatabricksHost(),
-          endpoint:
-              model ||
-              process.env["DATABRICKS_DEFAULT_ENDPOINT"] ||
-              "databricks-gpt-5-4-mini",
-          getToken: getDatabricksToken,
-      });
+        host: base_url || getDatabricksHost(),
+        endpoint: model || process.env["DATABRICKS_DEFAULT_ENDPOINT"] || "databricks-gpt-5-4-mini",
+        getToken: getDatabricksToken
+      })
 
     default:
       throw new Error(`Unknown LLM provider: ${provider}. Allowed: copilot-chat, databricks.`)

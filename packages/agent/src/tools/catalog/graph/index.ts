@@ -3,15 +3,15 @@ import { tokenize } from "../helpers.js"
 import { findFkPath } from "../paths.js"
 import { searchCatalog } from "../search.js"
 import type {
-    CatalogBuildOptions,
-    CatalogColumn,
-    CatalogFK,
-    CatalogSearchHit,
-    CatalogSnapshot,
-    CatalogStats,
-    CatalogTable,
-    ImplicitEdge,
-    SysEntry,
+  CatalogBuildOptions,
+  CatalogColumn,
+  CatalogFK,
+  CatalogSearchHit,
+  CatalogSnapshot,
+  CatalogStats,
+  CatalogTable,
+  ImplicitEdge,
+  SysEntry
 } from "../types.js"
 import { loadCatalogFromDb } from "./build.js"
 import { loadCatalogFromSnapshot } from "./snapshot.js"
@@ -65,7 +65,7 @@ export class CatalogGraph {
     implicitEdges: ImplicitEdge[],
     builtAt?: Date,
     viewSourceRows?: Map<string, number>,
-    sysCatalog?: SysEntry[],
+    sysCatalog?: SysEntry[]
   ) {
     this.tables = tables
     this.tablesLower = new Map()
@@ -95,11 +95,20 @@ export class CatalogGraph {
 
   // ── Build ─────────────────────────────────────────────────────
 
-  static async build(host: import("../../../application/shell/runtime.js").AgentHost, connection?: string): Promise<CatalogGraph> {
+  static async build(
+    host: import("../../../application/shell/runtime.js").AgentHost,
+    connection?: string
+  ): Promise<CatalogGraph> {
     const r = await loadCatalogFromDb(host, connection)
     return new CatalogGraph(
-      r.tables, r.nameIndex, r.columnIndex, r.adjacency, r.implicitEdges,
-      undefined, r.viewSourceRows, r.sysCatalog,
+      r.tables,
+      r.nameIndex,
+      r.columnIndex,
+      r.adjacency,
+      r.implicitEdges,
+      undefined,
+      r.viewSourceRows,
+      r.sysCatalog
     )
   }
 
@@ -121,8 +130,11 @@ export class CatalogGraph {
       source,
       tables: [...this.tables.values()],
       implicitEdges: this.implicitEdges,
-      viewSourceRows: [...this.viewSourceRows.entries()].map(([name, sourceRows]) => ({ name, sourceRows })),
-      sysCatalog: [...this.sysCatalog.values()],
+      viewSourceRows: [...this.viewSourceRows.entries()].map(([name, sourceRows]) => ({
+        name,
+        sourceRows
+      })),
+      sysCatalog: [...this.sysCatalog.values()]
     }
   }
 
@@ -130,10 +142,14 @@ export class CatalogGraph {
   static fromSnapshot(snap: CatalogSnapshot): CatalogGraph {
     const r = loadCatalogFromSnapshot(snap)
     return new CatalogGraph(
-      r.tables, r.nameIndex, r.columnIndex, r.adjacency,
-      snap.implicitEdges, new Date(snap.builtAt),
+      r.tables,
+      r.nameIndex,
+      r.columnIndex,
+      r.adjacency,
+      snap.implicitEdges,
+      new Date(snap.builtAt),
       r.viewSourceRows,
-      r.sysCatalog,
+      r.sysCatalog
     )
   }
 
@@ -142,10 +158,14 @@ export class CatalogGraph {
   /** Keyword search across table names and column names. Returns ranked results. */
   search(query: string, limit = 15, tableVerdicts?: TableVerdictsReader | null): CatalogSearchHit[] {
     return searchCatalog(
-      this.tables, this.nameIndex, this.columnIndex,
-      this.implicitJoinIndex, query, limit,
+      this.tables,
+      this.nameIndex,
+      this.columnIndex,
+      this.implicitJoinIndex,
+      query,
+      limit,
       this.viewSourceRows,
-      tableVerdicts,
+      tableVerdicts
     )
   }
 
@@ -246,7 +266,10 @@ export class CatalogGraph {
   }
 
   /** Find all tables that have a column with this exact name. */
-  findTablesWithColumn(columnName: string, limit = 20): Array<{ table: CatalogTable; column: CatalogColumn }> {
+  findTablesWithColumn(
+    columnName: string,
+    limit = 20
+  ): Array<{ table: CatalogTable; column: CatalogColumn }> {
     const colLower = columnName.toLowerCase()
     const keys = this.columnIndex.get(colLower) ?? new Set()
     const results: Array<{ table: CatalogTable; column: CatalogColumn }> = []
@@ -290,7 +313,10 @@ export class CatalogGraph {
   schemaFingerprint(): string {
     const sorted = [...this.tables.values()]
       .map((t) => {
-        const cols = t.columns.map((c) => c.name).sort().join(",")
+        const cols = t.columns
+          .map((c) => c.name)
+          .sort()
+          .join(",")
         return `${t.qualifiedName}(${cols})`
       })
       .sort()
@@ -304,7 +330,7 @@ export class CatalogGraph {
       h1 = Math.imul(h1 ^ c, 0x01000193) >>> 0
       h2 = Math.imul(h2 ^ c, 0x01000193) >>> 0
     }
-    const hex = (h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0"))
+    const hex = h1.toString(16).padStart(8, "0") + h2.toString(16).padStart(8, "0")
     return `sha1:${hex}`
   }
 }

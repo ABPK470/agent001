@@ -10,7 +10,7 @@ import type { PlanDiagnostic, PlanStep, SubagentTaskStep } from "../types.js"
 export function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnostic[] {
   const diagnostics: PlanDiagnostic[] = []
 
-  const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
+  const subagentSteps = steps.filter((s) => s.stepType === "subagent_task") as SubagentTaskStep[]
 
   // Collect all target artifact directories
   const artifactDirs = new Map<string, string>()
@@ -44,20 +44,20 @@ export function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnos
   for (const [filename, paths] of filesByName) {
     const uniquePaths = [...new Set(paths)]
     if (uniquePaths.length > 1) {
-      const dirs = uniquePaths.map(p => p.split("/").slice(0, -1).join("/") || "(root)")
+      const dirs = uniquePaths.map((p) => p.split("/").slice(0, -1).join("/") || "(root)")
       diagnostics.push({
         category: DiagnosticCategory.Graph,
         severity: DiagnosticSeverity.Error,
         code: "inconsistent_output_directory",
-        message: `File "${filename}" appears under different directories: ${dirs.join(", ")}. All steps MUST use the same output directory. Pick one directory and use it consistently for ALL targetArtifacts across all steps.`,
+        message: `File "${filename}" appears under different directories: ${dirs.join(", ")}. All steps MUST use the same output directory. Pick one directory and use it consistently for ALL targetArtifacts across all steps.`
       })
     }
   }
 
   // Mixed root + subdir
   const hasDir = allDirs.length > 0
-  const rootFiles = subagentSteps.flatMap(s =>
-    (s.executionContext?.targetArtifacts ?? []).filter(a => !a.includes("/"))
+  const rootFiles = subagentSteps.flatMap((s) =>
+    (s.executionContext?.targetArtifacts ?? []).filter((a) => !a.includes("/"))
   )
   if (hasDir && rootFiles.length > 0) {
     const commonDir = allDirs[0]
@@ -65,7 +65,7 @@ export function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnos
       category: DiagnosticCategory.Graph,
       severity: DiagnosticSeverity.Error,
       code: "mixed_root_and_subdir",
-      message: `Some artifacts are in subdirectory "${commonDir}/" but others (${rootFiles.join(", ")}) are at the root. Move all artifacts into the same directory.`,
+      message: `Some artifacts are in subdirectory "${commonDir}/" but others (${rootFiles.join(", ")}) are at the root. Move all artifacts into the same directory.`
     })
   }
 
@@ -74,21 +74,38 @@ export function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnos
     allDirs.map((d) => {
       const root = d.split("/")[0]
       return root && root.length > 0 ? root : "(root)"
-    }),
+    })
   )
   if (uniqueRootDirs.size > 1) {
     diagnostics.push({
       category: DiagnosticCategory.Graph,
       severity: DiagnosticSeverity.Error,
       code: "inconsistent_output_directory",
-      message: `Steps use ${uniqueRootDirs.size} different root output directories: ${[...uniqueRootDirs].join(", ")}. ` +
-        `ALL steps MUST write to the SAME directory tree. Pick one and use it for all targetArtifacts.`,
+      message:
+        `Steps use ${uniqueRootDirs.size} different root output directories: ${[...uniqueRootDirs].join(", ")}. ` +
+        `ALL steps MUST write to the SAME directory tree. Pick one and use it for all targetArtifacts.`
     })
   }
 
   // Divergent project namespaces under shared root
   const FUNCTIONAL_SUBDIRS = new Set([
-    "src", "lib", "app", "apps", "public", "assets", "static", "styles", "style", "css", "js", "scripts", "img", "images", "fonts", "tests", "test",
+    "src",
+    "lib",
+    "app",
+    "apps",
+    "public",
+    "assets",
+    "static",
+    "styles",
+    "style",
+    "css",
+    "js",
+    "scripts",
+    "img",
+    "images",
+    "fonts",
+    "tests",
+    "test"
   ])
   const extractNamespace = (dir: string): string => {
     const parts = dir.split("/").filter(Boolean)
@@ -99,18 +116,15 @@ export function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnos
     }
     return ""
   }
-  const namespaces = new Set(
-    allDirs
-      .map((d) => extractNamespace(d))
-      .filter((n) => n.length > 0),
-  )
+  const namespaces = new Set(allDirs.map((d) => extractNamespace(d)).filter((n) => n.length > 0))
   if (uniqueRootDirs.size === 1 && namespaces.size > 1) {
     diagnostics.push({
       category: DiagnosticCategory.Graph,
       severity: DiagnosticSeverity.Error,
       code: "inconsistent_output_directory",
-      message: `Steps diverge into different project namespaces under one root: ${[...namespaces].join(", ")}. ` +
-        `ALL steps must write to one coherent project tree (same namespace) to avoid broken cross-file wiring.`,
+      message:
+        `Steps diverge into different project namespaces under one root: ${[...namespaces].join(", ")}. ` +
+        `ALL steps must write to one coherent project tree (same namespace) to avoid broken cross-file wiring.`
     })
   }
 
@@ -129,9 +143,10 @@ export function validatePathConsistency(steps: readonly PlanStep[]): PlanDiagnos
         category: DiagnosticCategory.Ownership,
         severity: DiagnosticSeverity.Error,
         code: "shared_target_artifact",
-        message: `File "${artifact}" is a targetArtifact of ${writers.length} steps: [${writers.join(", ")}]. ` +
+        message:
+          `File "${artifact}" is a targetArtifact of ${writers.length} steps: [${writers.join(", ")}]. ` +
           `Each step does a full file rewrite, so later steps will overwrite earlier steps' changes. ` +
-          `COMBINE these steps into a single step, or ensure only one step writes to this file.`,
+          `COMBINE these steps into a single step, or ensure only one step writes to this file.`
       })
     }
   }

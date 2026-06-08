@@ -46,13 +46,13 @@ describe("Context compaction", () => {
       assistantWithTools(readCall),
       toolResult(readCall, BIG_FILE),
       assistantWithTools(writeCall),
-      toolResult(writeCall, "File written: game.js"),
+      toolResult(writeCall, "File written: game.js")
     ]
 
     const result = compactMessages(messages)
 
     // The read result should be compacted (it's stale)
-    const readResult = result.find(m => m.toolCallId === readCall.id)!
+    const readResult = result.find((m) => m.toolCallId === readCall.id)!
     expect(readResult.content).toContain("[compacted")
     expect(readResult.content).toContain("superseded")
     expect(readResult.content).not.toContain("function foo")
@@ -70,17 +70,17 @@ describe("Context compaction", () => {
       assistantWithTools(write1),
       toolResult(write1, BIG_FILE),
       assistantWithTools(write2),
-      toolResult(write2, "function bar() { return 2; }\n".repeat(30)),
+      toolResult(write2, "function bar() { return 2; }\n".repeat(30))
     ]
 
     const result = compactMessages(messages)
 
     // First write compacted, second preserved
-    const write1Result = result.find(m => m.toolCallId === write1.id)!
+    const write1Result = result.find((m) => m.toolCallId === write1.id)!
     expect(write1Result.content).toContain("[compacted")
     expect(write1Result.content).toContain("superseded")
 
-    const write2Result = result.find(m => m.toolCallId === write2.id)!
+    const write2Result = result.find((m) => m.toolCallId === write2.id)!
     expect(write2Result.content).toContain("function bar")
   })
 
@@ -91,12 +91,12 @@ describe("Context compaction", () => {
       tc("read_file", { path: "b.js" }),
       tc("read_file", { path: "c.js" }),
       tc("read_file", { path: "d.js" }),
-      tc("read_file", { path: "e.js" }),
+      tc("read_file", { path: "e.js" })
     ]
 
     const messages: Message[] = [
       { role: "system", content: "You are an agent", section: "system_anchor" },
-      { role: "user", content: "Read files", section: "user" },
+      { role: "user", content: "Read files", section: "user" }
     ]
 
     // Each read is a separate iteration
@@ -108,11 +108,11 @@ describe("Context compaction", () => {
     const result = compactMessages(messages)
 
     // First call (4 iterations ago → compacted)
-    const firstResult = result.find(m => m.toolCallId === calls[0].id)!
+    const firstResult = result.find((m) => m.toolCallId === calls[0].id)!
     expect(firstResult.content).toContain("[compacted")
 
     // Last call (0 iterations ago → preserved)
-    const lastResult = result.find(m => m.toolCallId === calls[4].id)!
+    const lastResult = result.find((m) => m.toolCallId === calls[4].id)!
     expect(lastResult.content).toContain("function foo")
   })
 
@@ -125,8 +125,10 @@ describe("Context compaction", () => {
       "}",
       "export class Engine {",
       "  run(): void {}",
-      "}",
-    ].join("\n").repeat(12)
+      "}"
+    ]
+      .join("\n")
+      .repeat(12)
 
     const newerA = tc("read_file", { path: "a.js" })
     const newerB = tc("read_file", { path: "b.js" })
@@ -144,11 +146,11 @@ describe("Context compaction", () => {
       assistantWithTools(newerC),
       toolResult(newerC, "c"),
       assistantWithTools(newerD),
-      toolResult(newerD, "d"),
+      toolResult(newerD, "d")
     ]
 
     const result = compactMessages(messages)
-    const summary = result.find(m => m.toolCallId === oldRead.id)!
+    const summary = result.find((m) => m.toolCallId === oldRead.id)!
     expect(summary.content).toContain("symbols:")
     expect(summary.content).toContain("GameState")
     expect(summary.content).toContain("validateMove")
@@ -171,13 +173,13 @@ describe("Context compaction", () => {
       assistantWithTools(tc("write_file", { path: "x4.js" })),
       toolResult(tc("write_file", { path: "x4.js" }), "ok"),
       assistantWithTools(call),
-      toolResult(call, SMALL_RESULT),
+      toolResult(call, SMALL_RESULT)
     ]
 
     const result = compactMessages(messages)
 
     // Small result preserved even if old
-    const readResult = result.find(m => m.toolCallId === call.id)!
+    const readResult = result.find((m) => m.toolCallId === call.id)!
     expect(readResult.content).toBe(SMALL_RESULT)
   })
 
@@ -192,15 +194,15 @@ describe("Context compaction", () => {
       assistantWithTools(read1),
       toolResult(read1, BIG_FILE),
       assistantWithTools(read2),
-      toolResult(read2, BIG_FILE),
+      toolResult(read2, BIG_FILE)
     ]
 
     const result = compactMessages(messages)
 
     // Both should be preserved — only 2 iterations
-    const r1 = result.find(m => m.toolCallId === read1.id)!
+    const r1 = result.find((m) => m.toolCallId === read1.id)!
     expect(r1.content).toContain("function foo")
-    const r2 = result.find(m => m.toolCallId === read2.id)!
+    const r2 = result.find((m) => m.toolCallId === read2.id)!
     expect(r2.content).toContain("function foo")
   })
 
@@ -222,14 +224,14 @@ describe("Context compaction", () => {
       assistantWithTools(tc("read_file", { path: "c.js" })),
       toolResult(tc("read_file", { path: "c.js" }), "c"),
       assistantWithTools(tc("read_file", { path: "d.js" })),
-      toolResult(tc("read_file", { path: "d.js" }), "d"),
+      toolResult(tc("read_file", { path: "d.js" }), "d")
     ]
 
     const result = compactMessages(messages)
-    const cmdResult = result.find(m => m.toolCallId === call.id)!
+    const cmdResult = result.find((m) => m.toolCallId === call.id)!
     expect(cmdResult.content).toContain("[compacted] run_command")
-    expect(cmdResult.content).toContain("line 0")  // head preserved
-    expect(cmdResult.content).toContain("line 99")  // tail preserved
+    expect(cmdResult.content).toContain("line 0") // head preserved
+    expect(cmdResult.content).toContain("line 99") // tail preserved
     expect(cmdResult.content.length).toBeLessThan(longOutput.length)
   })
 
@@ -243,7 +245,7 @@ describe("Context compaction", () => {
       assistantWithTools(read1),
       toolResult(read1, BIG_FILE),
       assistantWithTools(write1),
-      toolResult(write1, BIG_FILE),
+      toolResult(write1, BIG_FILE)
     ]
 
     const result = compactMessages(messages)
@@ -268,7 +270,7 @@ describe("Context compaction", () => {
       assistantWithTools(tc("read_file", { path: "c.js" })),
       toolResult(tc("read_file", { path: "c.js" }), "c"),
       assistantWithTools(tc("read_file", { path: "d.js" })),
-      toolResult(tc("read_file", { path: "d.js" }), "d"),
+      toolResult(tc("read_file", { path: "d.js" }), "d")
     ]
 
     const result = compactMessages(messages)
@@ -293,7 +295,7 @@ describe("Context compaction", () => {
       assistantWithTools(write1),
       toolResult(write1, "File written"),
       assistantWithTools(write2),
-      toolResult(write2, "File written"),
+      toolResult(write2, "File written")
     ]
 
     const result = compactMessages(messages)
@@ -315,7 +317,7 @@ describe("Context compaction", () => {
       { role: "system", content: "You are an agent", section: "system_anchor" },
       { role: "user", content: "Build", section: "user" },
       assistantWithTools(write1),
-      toolResult(write1, "File written"),
+      toolResult(write1, "File written")
     ]
 
     const result = compactMessages(messages)

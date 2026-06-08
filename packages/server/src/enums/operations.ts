@@ -10,5 +10,5 @@ export {
   isOperationKind,
   OperationStatus,
   OPERATION_STATUSES,
-  isOperationStatus,
+  isOperationStatus
 } from "@mia/shared-enums"

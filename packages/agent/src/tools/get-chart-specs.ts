@@ -26,8 +26,8 @@ export const getChartSpecsToolMetadata: ToolMetadata = {
     "block when the catalogue is not already in your context.",
   parameters: {
     type: "object",
-    properties: {},
-  },
+    properties: {}
+  }
 }
 
 export const getChartSpecsTool: Tool = {
@@ -35,5 +35,5 @@ export const getChartSpecsTool: Tool = {
 
   async execute() {
     return renderPromptVars(CHART_CATALOGUE_SECTION)
-  },
+  }
 }

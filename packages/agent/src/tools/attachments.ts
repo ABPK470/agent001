@@ -21,7 +21,7 @@ function requireServiceFromHost(host: AgentHost): AttachmentStore {
   if (!host.attachments) {
     throw new Error(
       "Attachment service is not configured on this AgentHost. " +
-      "Pass `attachments` to `configureAgent({...})`.",
+        "Pass `attachments` to `configureAgent({...})`."
     )
   }
   return host.attachments
@@ -40,14 +40,14 @@ const LIST_ATTACHMENTS_DESCRIPTION =
 const LIST_ATTACHMENTS_PARAMETERS = {
   type: "object",
   properties: {
-    q: { type: "string", description: "Optional substring filter on name / purpose tag." },
-  },
+    q: { type: "string", description: "Optional substring filter on name / purpose tag." }
+  }
 } as const
 
 export const listAttachmentsToolMetadata: ToolMetadata = {
   name: "list_attachments",
   description: LIST_ATTACHMENTS_DESCRIPTION,
-  parameters: LIST_ATTACHMENTS_PARAMETERS,
+  parameters: LIST_ATTACHMENTS_PARAMETERS
 }
 
 const READ_ATTACHMENT_DESCRIPTION =
@@ -60,17 +60,21 @@ const READ_ATTACHMENT_DESCRIPTION =
 const READ_ATTACHMENT_PARAMETERS = {
   type: "object",
   properties: {
-    id:       { type: "string", description: "Attachment id (from list_attachments)." },
+    id: { type: "string", description: "Attachment id (from list_attachments)." },
     maxBytes: { type: "number", description: "Truncate at this many bytes. Defaults to 262144." },
-    offset:   { type: "number", description: "Byte offset to start reading from. Use the `nextOffset` returned by a previous call to page through large attachments." },
+    offset: {
+      type: "number",
+      description:
+        "Byte offset to start reading from. Use the `nextOffset` returned by a previous call to page through large attachments."
+    }
   },
-  required: ["id"],
+  required: ["id"]
 } as const
 
 export const readAttachmentToolMetadata: ToolMetadata = {
   name: "read_attachment",
   description: READ_ATTACHMENT_DESCRIPTION,
-  parameters: READ_ATTACHMENT_PARAMETERS,
+  parameters: READ_ATTACHMENT_PARAMETERS
 }
 
 const IMPORT_ATTACHMENT_DESCRIPTION =
@@ -81,16 +85,19 @@ const IMPORT_ATTACHMENT_DESCRIPTION =
 const IMPORT_ATTACHMENT_PARAMETERS = {
   type: "object",
   properties: {
-    id:           { type: "string", description: "Attachment id (from list_attachments)." },
-    destination:  { type: "string", description: "Sandbox-relative destination path, e.g. 'inputs/data.csv'." },
+    id: { type: "string", description: "Attachment id (from list_attachments)." },
+    destination: {
+      type: "string",
+      description: "Sandbox-relative destination path, e.g. 'inputs/data.csv'."
+    }
   },
-  required: ["id", "destination"],
+  required: ["id", "destination"]
 } as const
 
 export const importAttachmentToolMetadata: ToolMetadata = {
   name: "import_attachment",
   description: IMPORT_ATTACHMENT_DESCRIPTION,
-  parameters: IMPORT_ATTACHMENT_PARAMETERS,
+  parameters: IMPORT_ATTACHMENT_PARAMETERS
 }
 
 const PROMOTE_ATTACHMENT_DESCRIPTION =
@@ -104,16 +111,22 @@ const PROMOTE_ATTACHMENT_PARAMETERS = {
   type: "object",
   properties: {
     sandboxPath: { type: "string", description: "Sandbox-relative path of the produced file." },
-    mediaType:   { type: "string", description: "Optional MIME type override; inferred from extension if omitted." },
-    purposeTag:  { type: "string", description: "Optional short label for the promotion (e.g. 'final-report')." },
+    mediaType: {
+      type: "string",
+      description: "Optional MIME type override; inferred from extension if omitted."
+    },
+    purposeTag: {
+      type: "string",
+      description: "Optional short label for the promotion (e.g. 'final-report')."
+    }
   },
-  required: ["sandboxPath"],
+  required: ["sandboxPath"]
 } as const
 
 export const promoteAttachmentToolMetadata: ToolMetadata = {
   name: "promote_attachment",
   description: PROMOTE_ATTACHMENT_DESCRIPTION,
-  parameters: PROMOTE_ATTACHMENT_PARAMETERS,
+  parameters: PROMOTE_ATTACHMENT_PARAMETERS
 }
 
 // ── Closure factories (no ambient state) ──────────────────────────
@@ -127,11 +140,12 @@ export function createListAttachmentsTool(host: AgentHost): ExecutableTool {
       const q = typeof args["q"] === "string" ? (args["q"] as string) : undefined
       const rows = await svc.list(q ? { q } : undefined)
       if (rows.length === 0) return "No attachments are bound to this run."
-      const lines = rows.map((r) =>
-        `- id=${r.id}  name=${r.normalizedName}  type=${r.mediaType}  size=${r.sizeBytes}B  mode=${r.ingestionMode}`,
+      const lines = rows.map(
+        (r) =>
+          `- id=${r.id}  name=${r.normalizedName}  type=${r.mediaType}  size=${r.sizeBytes}B  mode=${r.ingestionMode}`
       )
       return [`Attachments (${rows.length}):`, ...lines].join("\n")
-    },
+    }
   }
 }
 
@@ -143,22 +157,22 @@ export function createReadAttachmentTool(host: AgentHost): ExecutableTool {
       const svc = requireServiceFromHost(host)
       const id = String(args["id"] ?? "")
       if (!id) throw new Error("id is required")
-      const maxBytes = typeof args["maxBytes"] === "number" ? Math.max(1, args["maxBytes"] as number) : DEFAULT_READ_LIMIT_BYTES
-      const offset   = typeof args["offset"]   === "number" ? Math.max(0, args["offset"]   as number) : 0
+      const maxBytes =
+        typeof args["maxBytes"] === "number"
+          ? Math.max(1, args["maxBytes"] as number)
+          : DEFAULT_READ_LIMIT_BYTES
+      const offset = typeof args["offset"] === "number" ? Math.max(0, args["offset"] as number) : 0
       const result = await svc.read(id, { maxBytes, offset })
       if (result.kind === "binary") {
         return `Attachment ${id} is binary (${result.sizeBytes} bytes). Use import_attachment to copy it into the sandbox.`
       }
       const sliceEnd = result.offset + (result.text?.length ?? 0)
-      const headerParts = [
-        `Attachment ${id} (${result.sizeBytes}B`,
-        `bytes ${result.offset}-${sliceEnd}`,
-      ]
+      const headerParts = [`Attachment ${id} (${result.sizeBytes}B`, `bytes ${result.offset}-${sliceEnd}`]
       if (result.nextOffset !== null) headerParts.push(`nextOffset=${result.nextOffset}`)
-      else                            headerParts.push(`EOF`)
+      else headerParts.push(`EOF`)
       const header = headerParts.join(", ") + "):"
       return [header, result.text ?? ""].join("\n")
-    },
+    }
   }
 }
 
@@ -168,13 +182,13 @@ export function createImportAttachmentTool(host: AgentHost): ExecutableTool {
     ...importAttachmentToolMetadata,
     async execute(args) {
       const svc = requireServiceFromHost(host)
-      const id          = String(args["id"] ?? "")
+      const id = String(args["id"] ?? "")
       const destination = String(args["destination"] ?? "")
-      if (!id)          throw new Error("id is required")
+      if (!id) throw new Error("id is required")
       if (!destination) throw new Error("destination is required")
       const result = await svc.importToSandbox(id, destination)
       return `Imported ${id} → ${result.sandboxPath} (${result.sizeBytes} bytes).`
-    },
+    }
   }
 }
 
@@ -186,13 +200,13 @@ export function createPromoteAttachmentTool(host: AgentHost): ExecutableTool {
       const svc = requireServiceFromHost(host)
       const sandboxPath = String(args["sandboxPath"] ?? "")
       if (!sandboxPath) throw new Error("sandboxPath is required")
-      const mediaType  = typeof args["mediaType"]  === "string" ? (args["mediaType"]  as string) : undefined
+      const mediaType = typeof args["mediaType"] === "string" ? (args["mediaType"] as string) : undefined
       const purposeTag = typeof args["purposeTag"] === "string" ? (args["purposeTag"] as string) : undefined
       const meta = await svc.promoteFromSandbox(sandboxPath, {
-        ...(mediaType  !== undefined ? { mediaType } : {}),
-        ...(purposeTag !== undefined ? { purposeTag } : {}),
+        ...(mediaType !== undefined ? { mediaType } : {}),
+        ...(purposeTag !== undefined ? { purposeTag } : {})
       })
       return `Promoted ${sandboxPath} → attachment id=${meta.id} (${meta.normalizedName}, ${meta.sizeBytes}B, ${meta.mediaType}).`
-    },
+    }
   }
 }

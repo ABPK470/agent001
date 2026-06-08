@@ -23,7 +23,11 @@
  */
 
 import type { DbToolResult } from "../../../adapters/persistence/tool-results.js"
-import { extractToolResultText, isRecallableToolResult, loadRecentToolResults } from "../../../adapters/persistence/tool-results.js"
+import {
+  extractToolResultText,
+  isRecallableToolResult,
+  loadRecentToolResults
+} from "../../../adapters/persistence/tool-results.js"
 
 /** Tools whose results we surface in <prior_results>. Mirrors the writer. */
 const SURFACED_TOOLS = ["query_mssql", "export_query_to_file"] as const
@@ -49,7 +53,7 @@ export function loadPriorResults(opts: LoadPriorResultsOptions): DbToolResult[] 
   const rows = loadRecentToolResults({
     sessionId: opts.sessionId,
     limit: MAX_RESULTS * 4, // pull a window, then filter
-    toolNames: SURFACED_TOOLS,
+    toolNames: SURFACED_TOOLS
   })
   const excludeRunId = opts.excludeRunId ?? null
   return rows.filter((r) => r.run_id !== excludeRunId && isRecallableToolResult(r)).slice(0, MAX_RESULTS)
@@ -70,21 +74,24 @@ export function renderPriorResultsBlock(results: readonly DbToolResult[]): strin
     "chart from before'), you MUST ground on these payloads via the evidence",
     "tag, OR call recall_prior_result() for the full version, OR re-run the",
     "tool. Quoting numbers from <prior_turns> prose is a doctrine violation.",
-    "",
+    ""
   ]
   results.forEach((r, i) => {
     const label = `Result -${i + 1}`
     const truncMarker = r.truncated ? " [truncated]" : ""
     const rowCountStr = r.row_count != null ? ` rows=${r.row_count}` : ""
-    lines.push(`${label} [evidence: run=${r.run_id}, tool_call=${r.tool_call_id}]${truncMarker}${rowCountStr}`)
+    lines.push(
+      `${label} [evidence: run=${r.run_id}, tool_call=${r.tool_call_id}]${truncMarker}${rowCountStr}`
+    )
     lines.push(`  Tool: ${r.tool_name}`)
     if (r.goal_excerpt) lines.push(`  Goal: ${oneLine(r.goal_excerpt)}`)
     const args = oneLine(r.args_json)
     if (args && args !== "{}") lines.push(`  Args: ${args.slice(0, 240)}`)
     const text = extractToolResultText(r.result_json)
-    const clipped = text.length > PER_RESULT_CHARS
-      ? text.slice(0, PER_RESULT_CHARS) + "\n    …[clipped — call recall_prior_result for full payload]…"
-      : text
+    const clipped =
+      text.length > PER_RESULT_CHARS
+        ? text.slice(0, PER_RESULT_CHARS) + "\n    …[clipped — call recall_prior_result for full payload]…"
+        : text
     lines.push("  Payload:")
     for (const ln of clipped.split("\n")) lines.push(`    ${ln}`)
     lines.push("")
@@ -96,4 +103,3 @@ export function renderPriorResultsBlock(results: readonly DbToolResult[]): strin
 function oneLine(s: string): string {
   return s.replace(/\s+/g, " ").trim()
 }
-

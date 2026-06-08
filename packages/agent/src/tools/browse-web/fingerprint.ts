@@ -25,7 +25,7 @@ const POOL: Fingerprint[] = [
     viewport: { width: 1440, height: 900 },
     locale: "en-US",
     timezoneId: "America/New_York",
-    platform: "MacIntel",
+    platform: "MacIntel"
   },
   {
     userAgent:
@@ -33,7 +33,7 @@ const POOL: Fingerprint[] = [
     viewport: { width: 1680, height: 1050 },
     locale: "en-GB",
     timezoneId: "Europe/London",
-    platform: "MacIntel",
+    platform: "MacIntel"
   },
   {
     userAgent:
@@ -41,7 +41,7 @@ const POOL: Fingerprint[] = [
     viewport: { width: 1920, height: 1080 },
     locale: "en-US",
     timezoneId: "America/Los_Angeles",
-    platform: "Win32",
+    platform: "Win32"
   },
   {
     userAgent:
@@ -49,7 +49,7 @@ const POOL: Fingerprint[] = [
     viewport: { width: 1366, height: 768 },
     locale: "en-US",
     timezoneId: "America/Chicago",
-    platform: "Win32",
+    platform: "Win32"
   },
   {
     userAgent:
@@ -57,7 +57,7 @@ const POOL: Fingerprint[] = [
     viewport: { width: 1600, height: 900 },
     locale: "en-US",
     timezoneId: "Europe/Berlin",
-    platform: "Linux x86_64",
+    platform: "Linux x86_64"
   },
   {
     userAgent:
@@ -65,8 +65,8 @@ const POOL: Fingerprint[] = [
     viewport: { width: 1536, height: 864 },
     locale: "en-ZA",
     timezoneId: "Africa/Johannesburg",
-    platform: "Win32",
-  },
+    platform: "Win32"
+  }
 ]
 
 /**
@@ -89,9 +89,7 @@ function fnv1a(input: string): number {
  */
 export function pickFingerprint(seed?: string): Fingerprint {
   const idx =
-    seed !== undefined && seed !== ""
-      ? fnv1a(seed) % POOL.length
-      : Math.floor(Math.random() * POOL.length)
+    seed !== undefined && seed !== "" ? fnv1a(seed) % POOL.length : Math.floor(Math.random() * POOL.length)
   // Defensive copy — callers may mutate viewport.
   const fp = POOL[idx]!
   return { ...fp, viewport: { ...fp.viewport } }

@@ -17,7 +17,7 @@ describe("summarizeCachedPayload — explore_mssql_schema", () => {
       "------------+-----------+-------------+-------+-------------",
       "Id          | int       | NO          | 1     | NULL",
       "CustomerId  | int       | NO          | 0     | dim.Customer.Id",
-      "Amount      | decimal   | YES         | 0     | NULL",
+      "Amount      | decimal   | YES         | 0     | NULL"
     ].join("\n")
     const out = summarizeCachedPayload("explore_mssql_schema", "columns", payload)
     expect(out).toContain("Id(int [PK])")
@@ -29,12 +29,20 @@ describe("summarizeCachedPayload — explore_mssql_schema", () => {
   it("truncates with ellipsis when the column count exceeds the per-section cap", () => {
     const rows = ["COLUMN_NAME | DATA_TYPE", "------------+----------"]
     for (let i = 0; i < 30; i++) rows.push(`Col${i} | int`)
-    const out = summarizeCachedPayload("explore_mssql_schema", "columns", `Columns for x.y:\n${rows.join("\n")}`)
+    const out = summarizeCachedPayload(
+      "explore_mssql_schema",
+      "columns",
+      `Columns for x.y:\n${rows.join("\n")}`
+    )
     expect(out).toMatch(/, …$/)
   })
 
   it("falls back to [raw] when the header isn't present", () => {
-    const out = summarizeCachedPayload("explore_mssql_schema", "columns", "Just a freeform note about something")
+    const out = summarizeCachedPayload(
+      "explore_mssql_schema",
+      "columns",
+      "Just a freeform note about something"
+    )
     expect(out.startsWith("[raw]")).toBe(true)
   })
 
@@ -53,7 +61,7 @@ describe("summarizeCachedPayload — explore_mssql_schema", () => {
       "",
       "Value ranges (surrogate keys, from sys.stats histogram):",
       "  pkMonth: 1..612",
-      "  NOTE: these are real value ranges. A surrogate-key int does NOT encode YYYYMM/dates/business codes — filter via a JOIN to the dimension on its natural attributes (Year, MonthNo, …), not by the surrogate value.",
+      "  NOTE: these are real value ranges. A surrogate-key int does NOT encode YYYYMM/dates/business codes — filter via a JOIN to the dimension on its natural attributes (Year, MonthNo, …), not by the surrogate value."
     ].join("\n")
     const out = summarizeCachedPayload("explore_mssql_schema", "columns", payload)
     expect(out).toContain("pkMonth(int 1..612 [PK])")
@@ -85,7 +93,7 @@ describe("summarizeCachedPayload — profile_data fast", () => {
       "  Date (datetime, NOT NULL)",
       "",
       "Sample rows (5):",
-      "  ...",
+      "  ..."
     ].join("\n")
     const out = summarizeCachedPayload("profile_data", "fast", payload)
     expect(out).toContain("rows=1,234,567")
@@ -105,7 +113,7 @@ describe("summarizeCachedPayload — profile_data fast", () => {
       "",
       "Columns (2):",
       "  A (int, NOT NULL)",
-      "  B (varchar, nullable)",
+      "  B (varchar, nullable)"
     ].join("\n")
     const out = summarizeCachedPayload("profile_data", "fast", payload)
     expect(out).toContain("type=view")
@@ -131,7 +139,7 @@ describe("summarizeCachedPayload — profile_data fast", () => {
       "    Min: 1970 | Max: 2030  (stats updated 2025-09-01, 0 mods since)",
       "  MonthNo (smallint, NOT NULL)",
       "    Min: 1 | Max: 12  (stats updated 2025-09-01, 0 mods since)",
-      "  MonthName (varchar, nullable)",
+      "  MonthName (varchar, nullable)"
     ].join("\n")
     const out = summarizeCachedPayload("profile_data", "fast", payload)
     expect(out).toContain("pkMonth(int 1..612)")
@@ -161,7 +169,7 @@ describe("summarizeCachedPayload — profile_data deep", () => {
       "    Nulls: 200,000 (20.0%)",
       "  Amount (decimal, nullable)",
       "    Distinct: 80,000 (8.0%)",
-      "    Nulls: 0 (0.0%)",
+      "    Nulls: 0 (0.0%)"
     ].join("\n")
     const out = summarizeCachedPayload("profile_data", "deep", payload)
     expect(out.startsWith("deep")).toBe(true)
@@ -181,7 +189,7 @@ describe("summarizeCachedPayload — inspect_definition", () => {
       "Columns (14)",
       "Primary key: Id",
       "Foreign keys (2)",
-      "Indexes (3)",
+      "Indexes (3)"
     ].join("\n")
     const out = summarizeCachedPayload("inspect_definition", "definition", payload)
     expect(out).toContain("TABLE")
@@ -204,7 +212,7 @@ describe("summarizeCachedPayload — discover_relationships", () => {
       "  publish.Revenue.CustomerId → dim.Customer.Id",
       "  publish.Revenue.ProductId  → dim.Product.Id",
       "  (some prose)",
-      "  publish.Revenue.BranchId   -> dim.Branch.Id",
+      "  publish.Revenue.BranchId   -> dim.Branch.Id"
     ].join("\n")
     const out = summarizeCachedPayload("discover_relationships", "fk", payload)
     expect(out).toMatch(/^rels\(3\):/)

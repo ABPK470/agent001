@@ -22,11 +22,11 @@ import type { ProposerFinding, RiskTier } from "./types.js"
 
 export interface RankableProposal {
   /** Persistent proposal id (from F1.2 storage). */
-  id:          string
-  finding:     ProposerFinding
-  annotation:  RiskAnnotation | null
+  id: string
+  finding: ProposerFinding
+  annotation: RiskAnnotation | null
   /** ISO time the proposal entered the queue. */
-  enqueuedAt:  string
+  enqueuedAt: string
 }
 
 export interface RankerDeps {
@@ -35,42 +35,43 @@ export interface RankerDeps {
 }
 
 export interface RankedProposal extends RankableProposal {
-  score:   number
-  rank:    number
+  score: number
+  rank: number
   /** entityType bucket — UI groups by this so reviewers can ack a batch. */
   groupId: string
 }
 
 export interface RankResult {
-  ranked:          readonly RankedProposal[]
-  cycleDetected:   boolean
+  ranked: readonly RankedProposal[]
+  cycleDetected: boolean
 }
 
 const TIER_BASELINE: Readonly<Record<RiskTier, number>> = {
   critical: 80,
-  high:     60,
-  medium:   35,
-  low:      10,
+  high: 60,
+  medium: 35,
+  low: 10
 } as const
 
 const BLOCKING_WARNINGS: ReadonlySet<string> = new Set([
   "regulatory-downstream",
   "freeze-window-violation",
-  "large-delete-batch",
+  "large-delete-batch"
 ])
 
 export function rankProposals(
   proposals: readonly RankableProposal[],
   now: () => Date = () => new Date(),
-  deps: RankerDeps = {},
+  deps: RankerDeps = {}
 ): RankResult {
   const scored = proposals.map((p) => ({ p, score: scoreOne(p, now(), deps) }))
 
   // Order by score DESC, tiebreak by entityType ASC, then by id ASC
-  scored.sort((a, b) =>
-    b.score - a.score ||
-    a.p.finding.entityType.localeCompare(b.p.finding.entityType) ||
-    a.p.id.localeCompare(b.p.id),
+  scored.sort(
+    (a, b) =>
+      b.score - a.score ||
+      a.p.finding.entityType.localeCompare(b.p.finding.entityType) ||
+      a.p.id.localeCompare(b.p.id)
   )
 
   // Topological hoist: for each proposal whose annotation.dependsOn refs
@@ -79,8 +80,8 @@ export function rankProposals(
 
   const ranked: RankedProposal[] = hoisted.list.map((item, idx) => ({
     ...item,
-    rank:    idx + 1,
-    groupId: item.finding.entityType,
+    rank: idx + 1,
+    groupId: item.finding.entityType
   }))
 
   return { ranked, cycleDetected: hoisted.cycleDetected }
@@ -92,7 +93,7 @@ function scoreOne(p: RankableProposal, now: Date, deps: RankerDeps): number {
   let s = 0
   if (p.annotation) {
     s += TIER_BASELINE[p.annotation.riskTier]
-    s += p.annotation.riskScore * 0.40
+    s += p.annotation.riskScore * 0.4
     if (p.annotation.warnings.some((w) => BLOCKING_WARNINGS.has(w.kind))) s += 25
   } else {
     // No annotation yet (annotator failed open or pending) → treat as
@@ -139,7 +140,10 @@ function topoHoist(items: readonly ScoredItem[]): { list: ScoredItem[]; cycleDet
 
   const visit = (type: string): void => {
     if (visited.has(type)) return
-    if (onStack.has(type)) { cycleDetected = true; return }
+    if (onStack.has(type)) {
+      cycleDetected = true
+      return
+    }
     onStack.add(type)
     const bucket = byType.get(type) ?? []
     for (const it of bucket) {

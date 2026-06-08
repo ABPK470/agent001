@@ -2,10 +2,7 @@ import { mkdtemp, rm, stat } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import {
-    getSandboxBackend,
-    resolveSandboxBackendKind,
-} from "../src/sandbox/backend.js"
+import { getSandboxBackend, resolveSandboxBackendKind } from "../src/sandbox/backend.js"
 
 const created: string[] = []
 
@@ -57,17 +54,16 @@ describe("sandbox backend", () => {
   it("host backend rejects cwd that escapes the sandbox root", async () => {
     const sandbox = await createSandbox()
     const backend = getSandboxBackend("host")
-    await expect(backend.exec("echo nope", sandbox, { cwd: "../../../etc" }))
-      .rejects.toThrow(/escapes sandbox root/)
+    await expect(backend.exec("echo nope", sandbox, { cwd: "../../../etc" })).rejects.toThrow(
+      /escapes sandbox root/
+    )
   })
 
   it("host backend writes inside the sandbox stay inside the sandbox", async () => {
     const sandbox = await createSandbox()
     const backend = getSandboxBackend("host")
     const isWindows = process.platform === "win32"
-    const cmd = isWindows
-      ? `echo hosted > ${join(sandbox, "marker.txt")}`
-      : `printf 'hosted' > marker.txt`
+    const cmd = isWindows ? `echo hosted > ${join(sandbox, "marker.txt")}` : `printf 'hosted' > marker.txt`
     const result = await backend.exec(cmd, sandbox, { timeout: 5_000 })
     expect(result.exitCode).toBe(0)
     const info = await stat(join(sandbox, "marker.txt"))

@@ -20,7 +20,7 @@ export const aggregateNamingDoctrine: DoctrineModule = {
       "- The aggregate function and the output column alias MUST agree (SUM→Total/Sum, AVG→Avg/Mean, COUNT→Count).",
       "- SUM(x) AS Avg… or AVG(x) AS Total… is BLOCKED — silently returns N× the real value.",
       "- Snapshot/pre-averaged cols (Average/Avg/Mean/Spot/EOM/Latest/Snapshot/AsOf): AVG, not SUM. MTD/YTD/QTD/WTD = row-grain period slices — SUM within their period key.",
-      "- Confirm with `profile_data`; record with `note` (category=column_semantics).",
+      "- Confirm with `profile_data`; record with `note` (category=column_semantics)."
     ].join("\n")
   },
   enforce(query: string) {
@@ -34,9 +34,9 @@ export const aggregateNamingDoctrine: DoctrineModule = {
           ``,
           `    ${issue.snippet}`,
           ``,
-          issue.message,
+          issue.message
         ].join("\n"),
-        fixHint: DOCTRINE_FIX_HINTS.aggregate_semantic_mismatch,
+        fixHint: DOCTRINE_FIX_HINTS.aggregate_semantic_mismatch
       }))
-  },
+  }
 }

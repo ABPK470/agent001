@@ -26,16 +26,23 @@ function col(name: string, dataType = "int"): CatalogColumn {
   return { name, dataType, nullable: false, isPK: false, maxLength: null }
 }
 
-function table(schema: string, name: string, columns: CatalogColumn[] = [], type: "TABLE" | "VIEW" = "TABLE", viewDefinition?: string): CatalogTable {
+function table(
+  schema: string,
+  name: string,
+  columns: CatalogColumn[] = [],
+  type: "TABLE" | "VIEW" = "TABLE",
+  viewDefinition?: string
+): CatalogTable {
   return {
-    schema, name,
+    schema,
+    name,
     qualifiedName: `${schema}.${name}`,
     type,
     rowCount: type === "TABLE" ? 1000 : null,
     columns,
     fkOutgoing: [],
     fkIncoming: [],
-    viewDefinition,
+    viewDefinition
   }
 }
 
@@ -48,7 +55,7 @@ function catalogFrom(tables: CatalogTable[]): CatalogGraph {
     implicitEdges: [],
     lineage: [],
     viewSourceRows: [],
-    sysCatalog: [],
+    sysCatalog: []
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
 }
 
@@ -59,7 +66,7 @@ function ctx(overrides: Partial<ClarifyContext> & Pick<ClarifyContext, "goal">):
     messages: [],
     resolved: [],
     round: 1,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -70,13 +77,15 @@ describe("schemaMatchDetector", () => {
     const cat = catalogFrom([
       table("publish", "Revenue", [col("amount", "decimal")]),
       table("core", "RevenueRaw", [col("amount", "decimal")]),
-      table("staging", "RevenueIn", [col("amount", "decimal")]),
+      table("staging", "RevenueIn", [col("amount", "decimal")])
     ])
     const findings = schemaMatchDetector.detect(ctx({ goal: "show top revenue", catalog: cat }))
     expect(findings).toHaveLength(1)
     expect(findings[0]!.id).toBe("schema-match:revenue")
     expect(findings[0]!.severity).toBe("block")
-    expect(findings[0]!.candidates).toEqual(expect.arrayContaining(["publish.Revenue", "core.RevenueRaw", "staging.RevenueIn"]))
+    expect(findings[0]!.candidates).toEqual(
+      expect.arrayContaining(["publish.Revenue", "core.RevenueRaw", "staging.RevenueIn"])
+    )
   })
 
   it("stays silent when a token matches exactly one identifier", () => {
@@ -93,7 +102,7 @@ describe("schemaMatchDetector", () => {
     // the detector should not fire on framing language.
     const cat = catalogFrom([
       table("a", "Foo", [col("show", "int")]),
-      table("b", "Bar", [col("show", "int")]),
+      table("b", "Bar", [col("show", "int")])
     ])
     expect(schemaMatchDetector.detect(ctx({ goal: "show me data", catalog: cat }))).toEqual([])
   })
@@ -103,13 +112,19 @@ describe("schemaMatchDetector", () => {
       table("publish", "Revenue", [col("RevenueZARMTD", "decimal"), col("pkProduct", "int")], "VIEW"),
       table("core", "RevenueRaw", [col("RevenueAmount", "decimal"), col("ProductName", "nvarchar")]),
       table("dim", "Product", [col("Product", "nvarchar")]),
-      table("archive", "CustomerExperience", [col("Using", "nvarchar"), col("Keep", "nvarchar"), col("DatabaseName", "nvarchar")]),
+      table("archive", "CustomerExperience", [
+        col("Using", "nvarchar"),
+        col("Keep", "nvarchar"),
+        col("DatabaseName", "nvarchar")
+      ])
     ])
 
-    const findings = schemaMatchDetector.detect(ctx({
-      goal: "Using the database, return a simple ranked table of the top 10 products by revenue. Keep it concise.",
-      catalog: cat,
-    }))
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "Using the database, return a simple ranked table of the top 10 products by revenue. Keep it concise.",
+        catalog: cat
+      })
+    )
 
     expect(findings).toEqual([])
   })
@@ -121,13 +136,15 @@ describe("schemaMatchDetector", () => {
       table("archive", "PrimaryBankingProducts", [col("Name", "nvarchar")]),
       table("archive", "UNOProducts", [col("Name", "nvarchar")]),
       table("dim", "Calendar", [col("CalendarCode", "nvarchar")]),
-      table("archive", "Calendar", [col("CalendarCode", "nvarchar")]),
+      table("archive", "Calendar", [col("CalendarCode", "nvarchar")])
     ])
 
-    const findings = schemaMatchDetector.detect(ctx({
-      goal: "Use publish.Revenue joined to dim.Product and dim.Date. Return a simple ranked table of the top 10 products by RevenueZARMTD for calendar year 2025.",
-      catalog: cat,
-    }))
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "Use publish.Revenue joined to dim.Product and dim.Date. Return a simple ranked table of the top 10 products by RevenueZARMTD for calendar year 2025.",
+        catalog: cat
+      })
+    )
 
     expect(findings).toEqual([])
   })
@@ -139,13 +156,15 @@ describe("schemaMatchDetector", () => {
       table("dim", "Date", [col("Year", "int")]),
       table("archive", "NamesTestLoad", [col("Name", "nvarchar")]),
       table("archive", "NamesTestLoadSales", [col("Name", "nvarchar")]),
-      table("etl", "ETL0_FileNames", [col("FileName", "nvarchar")]),
+      table("etl", "ETL0_FileNames", [col("FileName", "nvarchar")])
     ])
 
-    const findings = schemaMatchDetector.detect(ctx({
-      goal: "Run a SQL query on dev that returns the top 10 product names by SUM(RevenueZARMTD) for d.Year = 2025 using publish.Revenue joined to dim.Product and dim.Date. Return the result as a compact markdown table.",
-      catalog: cat,
-    }))
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "Run a SQL query on dev that returns the top 10 product names by SUM(RevenueZARMTD) for d.Year = 2025 using publish.Revenue joined to dim.Product and dim.Date. Return the result as a compact markdown table.",
+        catalog: cat
+      })
+    )
 
     expect(findings).toEqual([])
   })
@@ -157,13 +176,15 @@ describe("schemaMatchDetector", () => {
       table("ext", "ChequeInterestColumnsMonthly", [col("name", "nvarchar")]),
       table("fact", "ChequeInterestColumnsMonthly", [col("name", "nvarchar")]),
       table("archive", "SalesCreditsAROGoLiveDates", [col("name", "nvarchar")]),
-      table("list", "SalesCreditsAROGoLiveDates", [col("name", "nvarchar")]),
+      table("list", "SalesCreditsAROGoLiveDates", [col("name", "nvarchar")])
     ])
 
-    const findings = schemaMatchDetector.detect(ctx({
-      goal: "connect to our UAT env and find out what are the columns for gate.Content table. Use live / true db table not some residual / pre-saved knowledge",
-      catalog: cat,
-    }))
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "connect to our UAT env and find out what are the columns for gate.Content table. Use live / true db table not some residual / pre-saved knowledge",
+        catalog: cat
+      })
+    )
 
     expect(findings).toEqual([])
   })
@@ -182,7 +203,7 @@ describe("schemaMatchDetector", () => {
         table("core", "RevenueRaw", [col("amount", "decimal")]),
         table("staging", "RevenueIn", [col("amount", "decimal")]),
         table("publish", "Sales", [col("amount", "decimal")]),
-        table("publish", "Balances", [col("amount", "decimal")]),
+        table("publish", "Balances", [col("amount", "decimal")])
       ])
       const findings = schemaMatchDetector.detect(ctx({ goal: "use publish.Revenue", catalog: cat }))
       expect(findings).toEqual([])
@@ -192,10 +213,14 @@ describe("schemaMatchDetector", () => {
       const cat = catalogFrom([
         table("publish", "Revenue", [col("amount", "decimal")], "VIEW"),
         table("core", "RevenueRaw", [col("amount", "decimal")]),
-        table("staging", "RevenueIn", [col("amount", "decimal")]),
+        table("staging", "RevenueIn", [col("amount", "decimal")])
       ])
       // Lowercase form — matches the trace exactly.
-      expect(schemaMatchDetector.detect(ctx({ goal: "list top 3 from publish.revenue for April 2025", catalog: cat }))).toEqual([])
+      expect(
+        schemaMatchDetector.detect(
+          ctx({ goal: "list top 3 from publish.revenue for April 2025", catalog: cat })
+        )
+      ).toEqual([])
       // Mixed case still works.
       expect(schemaMatchDetector.detect(ctx({ goal: "use PUBLISH.REVENUE today", catalog: cat }))).toEqual([])
     })
@@ -206,7 +231,7 @@ describe("schemaMatchDetector", () => {
       const cat = catalogFrom([
         table("publish", "Revenue", [col("amount", "decimal")], "VIEW"),
         table("publish", "Sales", [col("amount", "decimal")]),
-        table("publish", "Balances", [col("amount", "decimal")]),
+        table("publish", "Balances", [col("amount", "decimal")])
       ])
       const findings = schemaMatchDetector.detect(ctx({ goal: "use publish.WhoKnows please", catalog: cat }))
       // "publish" should still be flagged because it matches >=2 things
@@ -220,9 +245,11 @@ describe("schemaMatchDetector", () => {
       const cat = catalogFrom([
         table("publish", "Revenue", [col("amount", "decimal")], "VIEW"),
         table("a", "Margin", [col("amount", "decimal")]),
-        table("b", "MarginRaw", [col("amount", "decimal")]),
+        table("b", "MarginRaw", [col("amount", "decimal")])
       ])
-      const findings = schemaMatchDetector.detect(ctx({ goal: "use publish.Revenue for margin", catalog: cat }))
+      const findings = schemaMatchDetector.detect(
+        ctx({ goal: "use publish.Revenue for margin", catalog: cat })
+      )
       expect(findings.map((f) => f.subject)).toEqual(["margin"])
     })
   })
@@ -233,7 +260,9 @@ describe("schemaMatchDetector", () => {
 describe("termUndefinedDetector", () => {
   it("fires when a capitalised phrase has no catalog or tenant grounding", () => {
     const cat = catalogFrom([table("publish", "Sales", [col("amount", "decimal")])])
-    const findings = termUndefinedDetector.detect(ctx({ goal: "Give me Corporate Banking results", catalog: cat }))
+    const findings = termUndefinedDetector.detect(
+      ctx({ goal: "Give me Corporate Banking results", catalog: cat })
+    )
     expect(findings).toHaveLength(1)
     expect(findings[0]!.subject).toBe("Corporate Banking")
     expect(findings[0]!.severity).toBe("block")
@@ -241,8 +270,13 @@ describe("termUndefinedDetector", () => {
 
   it("stays silent when the phrase is in tenant routingKeywords.domain", () => {
     const cat = catalogFrom([table("publish", "Sales", [col("amount", "decimal")])])
-    const tenant: TenantConfig = { ...DEFAULT_TENANT_CONFIG, routingKeywords: { schemas: [], domain: ["corporate"], sync: [] } }
-    expect(termUndefinedDetector.detect(ctx({ goal: "Give me Corporate results", catalog: cat, tenant }))).toEqual([])
+    const tenant: TenantConfig = {
+      ...DEFAULT_TENANT_CONFIG,
+      routingKeywords: { schemas: [], domain: ["corporate"], sync: [] }
+    }
+    expect(
+      termUndefinedDetector.detect(ctx({ goal: "Give me Corporate results", catalog: cat, tenant }))
+    ).toEqual([])
   })
 
   it("stays silent when a token of the phrase matches a catalog identifier", () => {
@@ -285,12 +319,18 @@ describe("metricUndefinedDetector", () => {
 describe("grainUndefinedDetector", () => {
   it("fires when a period word matches multiple grain columns", () => {
     const cat = catalogFrom([
-      table("dim", "Date", [col("pkMonth", "int"), col("pkAccountingMonth", "int"), col("pkReportingMonth", "int")]),
+      table("dim", "Date", [
+        col("pkMonth", "int"),
+        col("pkAccountingMonth", "int"),
+        col("pkReportingMonth", "int")
+      ])
     ])
     const findings = grainUndefinedDetector.detect(ctx({ goal: "summarise revenue monthly", catalog: cat }))
     expect(findings).toHaveLength(1)
     expect(findings[0]!.subject).toBe("month")
-    expect(findings[0]!.candidates).toEqual(expect.arrayContaining(["pkmonth", "pkaccountingmonth", "pkreportingmonth"]))
+    expect(findings[0]!.candidates).toEqual(
+      expect.arrayContaining(["pkmonth", "pkaccountingmonth", "pkreportingmonth"])
+    )
   })
 
   it("stays silent when only one grain column matches", () => {
@@ -322,7 +362,9 @@ describe("timeRangeDetector", () => {
   })
 
   it("stays silent on precise ISO date ranges", () => {
-    expect(timeRangeDetector.detect(ctx({ goal: "show recent revenue between 2024-01-01 and 2024-12-31" }))).toEqual([])
+    expect(
+      timeRangeDetector.detect(ctx({ goal: "show recent revenue between 2024-01-01 and 2024-12-31" }))
+    ).toEqual([])
   })
 })
 
@@ -349,35 +391,47 @@ describe("outputFormatDetector", () => {
 
 describe("writeConfirmationDetector", () => {
   it("fires on INSERT INTO a real table", () => {
-    const findings = writeConfirmationDetector.detect(ctx({
-      goal: "load data",
-      lastSqlText: "INSERT INTO publish.Audit (msg) VALUES ('hi')",
-    }))
+    const findings = writeConfirmationDetector.detect(
+      ctx({
+        goal: "load data",
+        lastSqlText: "INSERT INTO publish.Audit (msg) VALUES ('hi')"
+      })
+    )
     expect(findings).toHaveLength(1)
     expect(findings[0]!.severity).toBe("block")
     expect(findings[0]!.subject).toMatch(/INSERT INTO publish\.Audit/i)
   })
 
   it("stays silent on INSERT INTO a #temp table", () => {
-    expect(writeConfirmationDetector.detect(ctx({
-      goal: "stage data",
-      lastSqlText: "INSERT INTO #stage (msg) VALUES ('hi')",
-    }))).toEqual([])
+    expect(
+      writeConfirmationDetector.detect(
+        ctx({
+          goal: "stage data",
+          lastSqlText: "INSERT INTO #stage (msg) VALUES ('hi')"
+        })
+      )
+    ).toEqual([])
   })
 
   it("fires on DROP TABLE", () => {
-    const findings = writeConfirmationDetector.detect(ctx({
-      goal: "clean up",
-      lastSqlText: "DROP TABLE publish.LegacyArchive",
-    }))
+    const findings = writeConfirmationDetector.detect(
+      ctx({
+        goal: "clean up",
+        lastSqlText: "DROP TABLE publish.LegacyArchive"
+      })
+    )
     expect(findings).toHaveLength(1)
   })
 
   it("stays silent on pure SELECT", () => {
-    expect(writeConfirmationDetector.detect(ctx({
-      goal: "show",
-      lastSqlText: "SELECT TOP 10 * FROM publish.Revenue",
-    }))).toEqual([])
+    expect(
+      writeConfirmationDetector.detect(
+        ctx({
+          goal: "show",
+          lastSqlText: "SELECT TOP 10 * FROM publish.Revenue"
+        })
+      )
+    ).toEqual([])
   })
 
   it("stays silent when there is no lastSqlText", () => {
@@ -389,21 +443,29 @@ describe("writeConfirmationDetector", () => {
 
 describe("emptyResultDetector", () => {
   it("fires on '0 rows' result text", () => {
-    const findings = emptyResultDetector.detect(ctx({ goal: "show revenue", lastToolResultText: "Query returned 0 rows." }))
+    const findings = emptyResultDetector.detect(
+      ctx({ goal: "show revenue", lastToolResultText: "Query returned 0 rows." })
+    )
     expect(findings).toHaveLength(1)
     expect(findings[0]!.severity).toBe("warn")
   })
 
   it("fires on 'no results' phrasing", () => {
-    expect(emptyResultDetector.detect(ctx({ goal: "show revenue", lastToolResultText: "no results found" }))).toHaveLength(1)
+    expect(
+      emptyResultDetector.detect(ctx({ goal: "show revenue", lastToolResultText: "no results found" }))
+    ).toHaveLength(1)
   })
 
   it("fires on empty JSON array literal", () => {
-    expect(emptyResultDetector.detect(ctx({ goal: "show revenue", lastToolResultText: "[]" }))).toHaveLength(1)
+    expect(emptyResultDetector.detect(ctx({ goal: "show revenue", lastToolResultText: "[]" }))).toHaveLength(
+      1
+    )
   })
 
   it("stays silent on non-empty result text", () => {
-    expect(emptyResultDetector.detect(ctx({ goal: "show revenue", lastToolResultText: "12 rows returned" }))).toEqual([])
+    expect(
+      emptyResultDetector.detect(ctx({ goal: "show revenue", lastToolResultText: "12 rows returned" }))
+    ).toEqual([])
   })
 
   it("stays silent when there is no lastToolResultText", () => {

@@ -41,10 +41,10 @@ const FETCH_URL_PARAMETERS = {
     url: { type: "string", description: "The URL to fetch" },
     max_length: {
       type: "number",
-      description: "Max characters to return (default 10000)",
-    },
+      description: "Max characters to return (default 10000)"
+    }
   },
-  required: ["url"],
+  required: ["url"]
 } as const
 
 async function executeFetchUrl(args: Record<string, unknown>, run?: RunContext): Promise<string> {
@@ -70,9 +70,11 @@ async function executeFetchUrl(args: Record<string, unknown>, run?: RunContext):
     const ipErr = checkResolvedIp(resolved.address)
     if (ipErr) return ipErr
   } catch {
-    return `Error: hostname "${parsed.hostname}" does not resolve (DNS lookup failed). ` +
+    return (
+      `Error: hostname "${parsed.hostname}" does not resolve (DNS lookup failed). ` +
       `DO NOT guess URLs. Search first via https://www.google.com/search?q=<your+query> ` +
       `or https://duckduckgo.com/?q=<your+query> and follow real result links.`
+    )
   }
 
   let currentUrl = url
@@ -82,9 +84,7 @@ async function executeFetchUrl(args: Record<string, unknown>, run?: RunContext):
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 15_000)
     const killSignal = run?.signal ?? null
-    const signal = killSignal
-      ? AbortSignal.any([controller.signal, killSignal])
-      : controller.signal
+    const signal = killSignal ? AbortSignal.any([controller.signal, killSignal]) : controller.signal
 
     try {
       response = await fetch(currentUrl, {
@@ -99,8 +99,8 @@ async function executeFetchUrl(args: Record<string, unknown>, run?: RunContext):
           "Sec-Fetch-Dest": "document",
           "Sec-Fetch-Mode": "navigate",
           "Sec-Fetch-Site": "none",
-          "Sec-Fetch-User": "?1",
-        },
+          "Sec-Fetch-User": "?1"
+        }
       })
     } catch (err) {
       if (err instanceof Error && err.name === "AbortError") {
@@ -154,10 +154,12 @@ async function executeFetchUrl(args: Record<string, unknown>, run?: RunContext):
 
   if (!response.ok) {
     if (response.status >= 400 && response.status < 500) {
-      return `Error: HTTP ${response.status} ${response.statusText} for ${currentUrl}. ` +
+      return (
+        `Error: HTTP ${response.status} ${response.statusText} for ${currentUrl}. ` +
         `This URL likely does not exist — do NOT guess another similar URL. ` +
         `Search for the topic first via https://www.google.com/search?q=<your+query> ` +
         `or https://duckduckgo.com/?q=<your+query>, then fetch a real result link.`
+      )
     }
     return `Error: HTTP ${response.status} ${response.statusText}`
   }
@@ -192,7 +194,7 @@ async function executeFetchUrl(args: Record<string, unknown>, run?: RunContext):
 export const fetchUrlToolMetadata: ToolMetadata = {
   name: "fetch_url",
   description: FETCH_URL_DESCRIPTION,
-  parameters: FETCH_URL_PARAMETERS,
+  parameters: FETCH_URL_PARAMETERS
 }
 
 export const fetchUrlTool = fetchUrlToolMetadata
@@ -202,7 +204,6 @@ export function createFetchUrlTool(run?: RunContext): ExecutableTool {
     ...fetchUrlToolMetadata,
     async execute(args) {
       return executeFetchUrl(args, run)
-    },
+    }
   }
 }
-

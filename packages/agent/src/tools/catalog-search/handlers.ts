@@ -17,7 +17,7 @@ import { fmtPath, fmtRow } from "./formatters.js"
  */
 function resolveTable(
   catalog: CatalogGraph,
-  qualifiedName: string,
+  qualifiedName: string
 ): { table: CatalogTable; resolvedVia: "direct" | "mirror" } | null {
   const direct = catalog.getTable(qualifiedName)
   if (direct) return { table: direct, resolvedVia: "direct" }
@@ -37,7 +37,7 @@ export function handleStats(catalog: CatalogGraph): string {
     `  Columns: ${s.columns} | FK relationships: ${s.fks}`,
     `  Total rows: ~${(s.totalRows / 1e6).toFixed(0)}M`,
     "",
-    "Largest tables:",
+    "Largest tables:"
   ]
   for (const t of s.largestTables) {
     lines.push(`  ${t.name}: ${fmtRow(t.rows)}`)
@@ -62,17 +62,16 @@ export function handleTable(catalog: CatalogGraph, tableName: string): string {
     return `Table '${tableName}' not found in catalog. Use search_catalog(search='keyword') to find it.`
   }
   const t = resolved.table
-  const header = resolved.resolvedVia === "mirror"
-    ? `${t.qualifiedName} (${t.type}${t.rowCount != null ? `, ${fmtRow(t.rowCount)}` : ""}) — resolved via mirror (input was '${tableName}')`
-    : `${t.qualifiedName} (${t.type}${t.rowCount != null ? `, ${fmtRow(t.rowCount)}` : ""})`
-  const lines = [
-    header,
-    "",
-    "Columns:",
-  ]
+  const header =
+    resolved.resolvedVia === "mirror"
+      ? `${t.qualifiedName} (${t.type}${t.rowCount != null ? `, ${fmtRow(t.rowCount)}` : ""}) — resolved via mirror (input was '${tableName}')`
+      : `${t.qualifiedName} (${t.type}${t.rowCount != null ? `, ${fmtRow(t.rowCount)}` : ""})`
+  const lines = [header, "", "Columns:"]
   for (const c of t.columns) {
     const flags = [c.isPK ? "PK" : "", c.nullable ? "nullable" : "NOT NULL"].filter(Boolean).join(", ")
-    lines.push(`  ${c.name} (${c.dataType}${c.maxLength && c.maxLength > 0 ? `(${c.maxLength})` : ""}) [${flags}]`)
+    lines.push(
+      `  ${c.name} (${c.dataType}${c.maxLength && c.maxLength > 0 ? `(${c.maxLength})` : ""}) [${flags}]`
+    )
   }
   if (t.fkOutgoing.length > 0) {
     lines.push("", "FK Outgoing (this table references):")
@@ -88,7 +87,10 @@ export function handleTable(catalog: CatalogGraph, tableName: string): string {
     if (t.fkIncoming.length > 10) lines.push(`  ... +${t.fkIncoming.length - 10} more`)
   }
   if (t.viewDefinition) {
-    lines.push("", `View SQL: available (${t.viewDefinition.length} chars) — use inspect_definition(object='${t.qualifiedName}') to read the full T-SQL with duplicate-join analysis.`)
+    lines.push(
+      "",
+      `View SQL: available (${t.viewDefinition.length} chars) — use inspect_definition(object='${t.qualifiedName}') to read the full T-SQL with duplicate-join analysis.`
+    )
   }
   return lines.join("\n")
 }
@@ -103,9 +105,10 @@ export function handleJoins(catalog: CatalogGraph, key: string): string {
     return `Table '${key}' not found in catalog.`
   }
   const t = resolved.table
-  const header = resolved.resolvedVia === "mirror"
-    ? `Join edges for ${t.qualifiedName} (resolved via mirror from '${key}'):`
-    : `Join edges for ${t.qualifiedName}:`
+  const header =
+    resolved.resolvedVia === "mirror"
+      ? `Join edges for ${t.qualifiedName} (resolved via mirror from '${key}'):`
+      : `Join edges for ${t.qualifiedName}:`
   const lines = [header]
 
   if (t.fkOutgoing.length > 0) {
@@ -127,7 +130,9 @@ export function handleJoins(catalog: CatalogGraph, key: string): string {
     lines.push("", `IMPLICIT JOINS (${implicit.length} shared columns with other tables):`)
     for (const edge of implicit) {
       const others = edge.tables.filter((tk) => tk !== t.qualifiedName).slice(0, 8)
-      lines.push(`  ${edge.column} (${edge.dataType}) → ${others.join(", ")}${edge.tables.length > 9 ? ` (+${edge.tables.length - 9} more)` : ""}`)
+      lines.push(
+        `  ${edge.column} (${edge.dataType}) → ${others.join(", ")}${edge.tables.length > 9 ? ` (+${edge.tables.length - 9} more)` : ""}`
+      )
     }
   }
 
@@ -144,7 +149,9 @@ export function handleColumn(catalog: CatalogGraph, colName: string): string {
   }
   const lines = [`Tables with column '${colName}' (${matches.length} found):`, ""]
   for (const { table, column } of matches) {
-    lines.push(`  ${table.qualifiedName} (${table.type}${table.rowCount != null ? ", " + fmtRow(table.rowCount) : ""})`)
+    lines.push(
+      `  ${table.qualifiedName} (${table.type}${table.rowCount != null ? ", " + fmtRow(table.rowCount) : ""})`
+    )
     lines.push(`    ${column.name} (${column.dataType}${column.isPK ? " PK" : ""})`)
   }
   lines.push("", "These tables can be JOINed on this column.")

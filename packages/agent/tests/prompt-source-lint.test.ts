@@ -13,7 +13,13 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { ABI_SYNC_SECTION, BIG_TABLE_ETL_SECTION, CHART_CATALOGUE_SECTION, DEFAULT_SYSTEM_PROMPT, MIA_DATA_PERSONA_SECTION } from "../src/application/shell/loop-cluster/system-prompt.js"
+import {
+  ABI_SYNC_SECTION,
+  BIG_TABLE_ETL_SECTION,
+  CHART_CATALOGUE_SECTION,
+  DEFAULT_SYSTEM_PROMPT,
+  MIA_DATA_PERSONA_SECTION
+} from "../src/application/shell/loop-cluster/system-prompt.js"
 
 const KB = 1024
 
@@ -48,11 +54,11 @@ describe("prompt source-of-truth — byte ceilings", () => {
     expect(BIG_TABLE_ETL_SECTION).toMatch(/2\s*minutes?|120\s*s/i)
     // Unique 8-hex suffix on every #temp (collision-proof on pooled SPIDs).
     expect(BIG_TABLE_ETL_SECTION).toMatch(/8[-\s]?hex/i)
-    expect(BIG_TABLE_ETL_SECTION).toMatch(/#\w+_a3f91c08/)  // example suffix appears in canonical SQL
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/#\w+_a3f91c08/) // example suffix appears in canonical SQL
     // Correctness traps the agent must internalise.
-    expect(BIG_TABLE_ETL_SECTION).toMatch(/SUM\([^)]*Average/i)            // warns about SUM(Average…)
-    expect(BIG_TABLE_ETL_SECTION).toMatch(/OUTER APPLY/i)                   // names the per-row anti-pattern
-    expect(BIG_TABLE_ETL_SECTION).toMatch(/deterministic|tiebreaker/i)      // TOP n needs a tiebreaker
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/SUM\([^)]*Average/i) // warns about SUM(Average…)
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/OUTER APPLY/i) // names the per-row anti-pattern
+    expect(BIG_TABLE_ETL_SECTION).toMatch(/deterministic|tiebreaker/i) // TOP n needs a tiebreaker
     // Note: the structural anti-pattern statements (find-all on every #temp,
     // ≤ 2× large-object touches) moved into the doctrine SSoT
     // (packages/agent/src/application/core/doctrine-cluster/) — see doctrine-registry tests. The prompt
@@ -69,7 +75,7 @@ describe("prompt source-of-truth — no duplication across blocks", () => {
     // double-bill every call.
     expect(DEFAULT_SYSTEM_PROMPT).not.toContain("Available chart kinds (each used as the language tag")
     // A signature line from one of the chart kinds:
-    expect(DEFAULT_SYSTEM_PROMPT).not.toContain("\"orientation\": \"vertical\"")
+    expect(DEFAULT_SYSTEM_PROMPT).not.toContain('"orientation": "vertical"')
     expect(DEFAULT_SYSTEM_PROMPT).not.toContain("colorScale")
   })
 
@@ -120,12 +126,13 @@ describe("prompt source-of-truth — no hardcoded tenant identifiers", () => {
   // `renderPromptVars()` (loop/prompt-vars.ts). This guard catches
   // regressions where somebody re-introduces a `publish.Revenue`
   // example because it's familiar.
-  const FORBIDDEN = /publish\.|persistedView\b|pkClient\b|pkMonth\b|pkAccount\b|pkProduct\b|pkDate\b|RevenueZAR\b|UnoTranspose\b|MappingTransactional|AfricaFlex|FrontArena|\bdim\.(?:Client|Account|Date|Product)\b|\bfact\.(?:UnoTranspose|RWA)\b/
+  const FORBIDDEN =
+    /publish\.|persistedView\b|pkClient\b|pkMonth\b|pkAccount\b|pkProduct\b|pkDate\b|RevenueZAR\b|UnoTranspose\b|MappingTransactional|AfricaFlex|FrontArena|\bdim\.(?:Client|Account|Date|Product)\b|\bfact\.(?:UnoTranspose|RWA)\b/
   const PROMPTS: Array<[string, string]> = [
-    ["DEFAULT_SYSTEM_PROMPT",     DEFAULT_SYSTEM_PROMPT],
-    ["MIA_DATA_PERSONA_SECTION",  MIA_DATA_PERSONA_SECTION],
-    ["BIG_TABLE_ETL_SECTION",     BIG_TABLE_ETL_SECTION],
-    ["CHART_CATALOGUE_SECTION",   CHART_CATALOGUE_SECTION],
+    ["DEFAULT_SYSTEM_PROMPT", DEFAULT_SYSTEM_PROMPT],
+    ["MIA_DATA_PERSONA_SECTION", MIA_DATA_PERSONA_SECTION],
+    ["BIG_TABLE_ETL_SECTION", BIG_TABLE_ETL_SECTION],
+    ["CHART_CATALOGUE_SECTION", CHART_CATALOGUE_SECTION]
   ]
   for (const [name, body] of PROMPTS) {
     it(`${name} contains no customer-specific schema / table / column literals`, () => {

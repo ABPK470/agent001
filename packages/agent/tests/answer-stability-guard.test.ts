@@ -8,8 +8,8 @@
 import { describe, expect, it } from "vitest"
 
 import {
-    checkAnswerStability,
-    computeAnswerSignature,
+  checkAnswerStability,
+  computeAnswerSignature
 } from "../src/application/shell/loop-cluster/completion-guards/answer-stability-guard.js"
 import type { CompletionGuardContext } from "../src/application/shell/loop-cluster/completion-guards/index.js"
 import { createAgentLoopState } from "../src/application/shell/loop-cluster/state.js"
@@ -24,7 +24,7 @@ const ANSWER_WITH_TABLE = [
   "",
   "## Recommendation",
   "",
-  "The next step is to renew Acme's contract before EOQ.",
+  "The next step is to renew Acme's contract before EOQ."
 ].join("\n")
 
 function makeCtx(overrides: Partial<CompletionGuardContext> = {}): CompletionGuardContext {
@@ -41,12 +41,12 @@ function makeCtx(overrides: Partial<CompletionGuardContext> = {}): CompletionGua
       plannerDelegateFn: undefined,
       completionValidator: undefined,
       verbose: false,
-      enableAnswerStabilityGuard: true,
+      enableAnswerStabilityGuard: true
     },
     runCoherentVerification: async () => null,
     createPlannerContext: () => ({}) as never,
     onPlannerTrace: undefined,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -60,7 +60,10 @@ describe("computeAnswerSignature", () => {
   })
 
   it("returns null when the answer has no conclusion keyword", () => {
-    const noConclusion = ANSWER_WITH_TABLE.replace(/Recommendation/, "Details").replace(/next step/, "more data")
+    const noConclusion = ANSWER_WITH_TABLE.replace(/Recommendation/, "Details").replace(
+      /next step/,
+      "more data"
+    )
     expect(computeAnswerSignature(noConclusion)).toBeNull()
   })
 
@@ -116,8 +119,8 @@ describe("checkAnswerStability", () => {
         plannerDelegateFn: undefined,
         completionValidator: undefined,
         verbose: false,
-        enableAnswerStabilityGuard: false,
-      },
+        enableAnswerStabilityGuard: false
+      }
     })
     expect(checkAnswerStability(ctx)).toBe(false)
     expect(checkAnswerStability(ctx)).toBe(false)

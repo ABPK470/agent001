@@ -15,10 +15,7 @@
  */
 
 import { MAX_RUNTIME_SYSTEM_HINTS } from "../../../domain/agent-constants.js"
-import {
-    didToolCallFail,
-    type ToolCallRecord,
-} from "../../../tools/index.js"
+import { didToolCallFail, type ToolCallRecord } from "../../../tools/index.js"
 import { inferRecoveryHint } from "./internal/build-per-call-hints.js"
 
 // ============================================================================
@@ -42,7 +39,7 @@ export interface RecoveryHint {
  */
 export function buildRecoveryHints(
   roundCalls: readonly ToolCallRecord[],
-  emittedHints: Set<string>,
+  emittedHints: Set<string>
 ): RecoveryHint[] {
   const hints: RecoveryHint[] = []
 
@@ -72,7 +69,7 @@ export function buildRecoveryHints(
 
 function inferRoundRecoveryHint(roundCalls: readonly ToolCallRecord[]): RecoveryHint | undefined {
   // Detect delegation results that indicate the child needs decomposition
-  const delegationNeedsDecomposition = roundCalls.find(call => {
+  const delegationNeedsDecomposition = roundCalls.find((call) => {
     if (call.name !== "delegate" && call.name !== "delegate_parallel") return false
     if (!call.result.includes("Agent stopped after")) return false
     return true
@@ -84,19 +81,19 @@ function inferRoundRecoveryHint(roundCalls: readonly ToolCallRecord[]): Recovery
         "A delegated child agent exhausted its iteration budget without completing the task. " +
         "The objective was too large for a single child. Split it into smaller, more focused " +
         "delegate calls, each with a narrower scope and clear acceptance criteria. " +
-        "Do not retry the same combined task — decompose it.",
+        "Do not retry the same combined task — decompose it."
     }
   }
 
   // Detect all-fail rounds
-  const allFailed = roundCalls.length > 0 && roundCalls.every(c => didToolCallFail(c.isError, c.result))
+  const allFailed = roundCalls.length > 0 && roundCalls.every((c) => didToolCallFail(c.isError, c.result))
   if (allFailed && roundCalls.length >= 2) {
     return {
       key: "round-all-tools-failed",
       message:
         "Every tool call in this round failed. Stop and reassess your entire approach. " +
         "You may be working in the wrong directory, missing dependencies, or using the wrong tools. " +
-        "Use list_directory or read_file to understand your current state before trying again.",
+        "Use list_directory or read_file to understand your current state before trying again."
     }
   }
 

@@ -76,7 +76,7 @@ function refill(b: Bucket, now: number): void {
  */
 export function tryConsumeDomainToken(
   ownerUpn: string,
-  host: string,
+  host: string
 ): { allowed: true } | { allowed: false; retryAfterMs: number } {
   const key = bucketKey(ownerUpn, host)
   const now = Date.now()
@@ -109,5 +109,5 @@ export function _userInFlight(ownerUpn: string): number {
 /** Configured limits — exposed for diagnostics + tests. */
 export const limitsConfig = {
   maxPerUser: MAX_PER_USER,
-  domainRpm: DOMAIN_RPM,
+  domainRpm: DOMAIN_RPM
 }

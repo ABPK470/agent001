@@ -65,7 +65,7 @@ const REFLECTION_TOOLS_TO_SCAN: ReadonlySet<string> = new Set([
   "search_catalog",
   "profile_data",
   "inspect_definition",
-  "discover_relationships",
+  "discover_relationships"
 ])
 
 /** Extract distinct schema.Table candidates from the steps' inputs+outputs. */
@@ -75,7 +75,7 @@ export function extractObservedQnames(steps: readonly ReflectionStep[]): string[
     if (!REFLECTION_TOOLS_TO_SCAN.has(step.action)) continue
     const blob = [
       JSON.stringify(step.input ?? {}),
-      typeof step.output === "string" ? step.output : JSON.stringify(step.output ?? ""),
+      typeof step.output === "string" ? step.output : JSON.stringify(step.output ?? "")
     ].join(" ")
     for (const m of blob.matchAll(QNAME_RE)) {
       seen.add(`${m[1]}.${m[2]}`)
@@ -121,7 +121,7 @@ function buildReflectionUserMessage(input: RunReflectionInput, qnames: string[])
     "",
     `MSSQL OBJECTS REFERENCED THIS RUN: ${qnamesBlock}`,
     "",
-    "Record a table_verdict ONLY for objects in the list above, ONLY with concrete evidence visible in this summary. Otherwise reply: no-update",
+    "Record a table_verdict ONLY for objects in the list above, ONLY with concrete evidence visible in this summary. Otherwise reply: no-update"
   ].join("\n")
 }
 
@@ -138,13 +138,13 @@ export async function runReflectionTurn(input: RunReflectionInput): Promise<RunR
       outcome: "skipped",
       verdictsRecorded: 0,
       toolResults: [],
-      detail: "no schema-qualified objects extracted from tool trace",
+      detail: "no schema-qualified objects extracted from tool trace"
     }
   }
 
   const messages: Message[] = [
     { role: "system", content: REFLECTION_SYSTEM },
-    { role: "user", content: buildReflectionUserMessage(input, qnames) },
+    { role: "user", content: buildReflectionUserMessage(input, qnames) }
   ]
   const tools: Tool[] = [input.recordVerdictTool]
 
@@ -153,14 +153,14 @@ export async function runReflectionTurn(input: RunReflectionInput): Promise<RunR
     response = await input.llm.chat(messages, tools, {
       signal: input.signal,
       maxTokens: 400,
-      temperature: 0,
+      temperature: 0
     })
   } catch (err) {
     return {
       outcome: "error",
       verdictsRecorded: 0,
       toolResults: [],
-      detail: `llm.chat failed: ${(err as Error).message}`,
+      detail: `llm.chat failed: ${(err as Error).message}`
     }
   }
 
@@ -172,7 +172,7 @@ export async function runReflectionTurn(input: RunReflectionInput): Promise<RunR
       outcome: text.startsWith("no-update") ? "no-update" : "skipped",
       verdictsRecorded: 0,
       toolResults: [],
-      detail: text ? `model replied: ${text.slice(0, 120)}` : "no text, no tool calls",
+      detail: text ? `model replied: ${text.slice(0, 120)}` : "no text, no tool calls"
     }
   }
 
@@ -197,6 +197,6 @@ export async function runReflectionTurn(input: RunReflectionInput): Promise<RunR
     outcome: recorded > 0 ? "recorded" : "no-update",
     verdictsRecorded: recorded,
     toolResults,
-    detail: `${recorded}/${toolCalls.length} verdict(s) recorded`,
+    detail: `${recorded}/${toolCalls.length} verdict(s) recorded`
   }
 }

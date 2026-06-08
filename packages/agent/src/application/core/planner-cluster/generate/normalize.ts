@@ -14,7 +14,7 @@ import type { Plan, PlanStep, SubagentTaskStep } from "../types.js"
  * relative paths, or host paths that don't match the container).
  */
 export function normalizeWorkspaceRoots(plan: Plan, actualRoot: string): Plan {
-  const normalizedSteps: PlanStep[] = plan.steps.map(step => {
+  const normalizedSteps: PlanStep[] = plan.steps.map((step) => {
     if (step.stepType !== "subagent_task") return step
 
     const sa = step as SubagentTaskStep
@@ -25,11 +25,12 @@ export function normalizeWorkspaceRoots(plan: Plan, actualRoot: string): Plan {
     // targetArtifacts and other paths are relative to THAT subdirectory.
     // When we replace workspaceRoot with the actual root, we must prefix those
     // paths so they remain correct.
-    const needsPrefix = originalRoot
-      && originalRoot !== "."
-      && originalRoot !== ""
-      && !originalRoot.startsWith("/")
-      && originalRoot !== actualRoot
+    const needsPrefix =
+      originalRoot &&
+      originalRoot !== "." &&
+      originalRoot !== "" &&
+      !originalRoot.startsWith("/") &&
+      originalRoot !== actualRoot
 
     const prefixPath = (p: string): string => {
       if (!needsPrefix) return p
@@ -45,29 +46,31 @@ export function normalizeWorkspaceRoots(plan: Plan, actualRoot: string): Plan {
       executionContext: {
         ...sa.executionContext,
         workspaceRoot: actualRoot,
-        allowedReadRoots: sa.executionContext.allowedReadRoots.map(r =>
-          r === "." || r === "./" ? actualRoot : r,
+        allowedReadRoots: sa.executionContext.allowedReadRoots.map((r) =>
+          r === "." || r === "./" ? actualRoot : r
         ),
-        allowedWriteRoots: sa.executionContext.allowedWriteRoots.map(r =>
-          r === "." || r === "./" ? actualRoot : r,
+        allowedWriteRoots: sa.executionContext.allowedWriteRoots.map((r) =>
+          r === "." || r === "./" ? actualRoot : r
         ),
         targetArtifacts: sa.executionContext.targetArtifacts.map(prefixPath),
         requiredSourceArtifacts: sa.executionContext.requiredSourceArtifacts.map(prefixPath),
-        artifactRelations: sa.executionContext.artifactRelations.map(rel => ({
+        artifactRelations: sa.executionContext.artifactRelations.map((rel) => ({
           ...rel,
-          artifactPath: prefixPath(rel.artifactPath),
-        })),
+          artifactPath: prefixPath(rel.artifactPath)
+        }))
       },
       // Also fix workflowStep artifact relations if present
-      ...(sa.workflowStep ? {
-        workflowStep: {
-          ...sa.workflowStep,
-          artifactRelations: sa.workflowStep.artifactRelations.map(rel => ({
-            ...rel,
-            artifactPath: prefixPath(rel.artifactPath),
-          })),
-        },
-      } : {}),
+      ...(sa.workflowStep
+        ? {
+            workflowStep: {
+              ...sa.workflowStep,
+              artifactRelations: sa.workflowStep.artifactRelations.map((rel) => ({
+                ...rel,
+                artifactPath: prefixPath(rel.artifactPath)
+              }))
+            }
+          }
+        : {})
     }
   })
 
@@ -91,7 +94,9 @@ export function salvagePlanFromMalformedResponse(raw: string, _workspaceRoot: st
           const inner = parsePlanFromResponse(candidate)
           if (inner.plan) return inner.plan
         }
-      } catch { /* skip */ }
+      } catch {
+        /* skip */
+      }
     }
   }
 

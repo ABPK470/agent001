@@ -16,9 +16,9 @@
 
 import { describe, expect, it, vi } from "vitest"
 import {
-    DOCTRINE_FIX_HINTS,
-    DOCTRINE_LESSON_TEMPLATES,
-    getDoctrineLessonTemplate,
+  DOCTRINE_FIX_HINTS,
+  DOCTRINE_LESSON_TEMPLATES,
+  getDoctrineLessonTemplate
 } from "../src/application/core/doctrine-cluster/fix-hints.js"
 import { configureAgent, makeRunContext, type RunMemoryWriter } from "../src/application/shell/runtime.js"
 import { createMssqlTool } from "../src/tools/mssql/tools.js"
@@ -34,9 +34,13 @@ function makeFixtureWithPool(memory: RunMemoryWriter | null = null): {
   const host = configureAgent({ mssqlDatabases: databases })
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
-    pool: { request: () => ({ cancel: () => undefined, query: async () => ({ recordset: [] }) }), connected: true, close: async () => undefined } as never,
+    pool: {
+      request: () => ({ cancel: () => undefined, query: async () => ({ recordset: [] }) }),
+      connected: true,
+      close: async () => undefined
+    } as never,
     writeEnabled: false,
-    knowledge: null,
+    knowledge: null
   })
   const run = makeRunContext({ memory })
   return { tool: createMssqlTool(host, run), run }
@@ -50,7 +54,7 @@ describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
       "invented_column",
       "publish_view_topn_without_branch_aggregation",
       "temp_scalar_subquery_overused",
-      "temp_table_integrity",
+      "temp_table_integrity"
     ])
   })
 
@@ -67,7 +71,7 @@ describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
   it("lesson templates produce payloads with stable subject prefixes", () => {
     const agg = DOCTRINE_LESSON_TEMPLATES.aggregate_semantic_mismatch!({
       query: "SELECT SUM(x) AS Avg_y FROM t",
-      detail: "SUM(x) AS Avg_y",
+      detail: "SUM(x) AS Avg_y"
     })
     expect(agg).not.toBeNull()
     expect(agg!.subject).toMatch(/^doctrine:aggregate-semantic-mismatch:/)
@@ -76,7 +80,7 @@ describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
 
     const tmp = DOCTRINE_LESSON_TEMPLATES.temp_table_integrity!({
       query: "SELECT * FROM #x_a3f91c08",
-      detail: "Query blocked: #x referenced without being created.",
+      detail: "Query blocked: #x referenced without being created."
     })
     expect(tmp).not.toBeNull()
     expect(tmp!.subject).toMatch(/^doctrine:temp-table-integrity:/)
@@ -84,7 +88,7 @@ describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
 
     const scal = DOCTRINE_LESSON_TEMPLATES.temp_scalar_subquery_overused!({
       query: "SELECT ... FROM #t",
-      detail: "#s_a3f91c08 (2 scalar probes)",
+      detail: "#s_a3f91c08 (2 scalar probes)"
     })
     expect(scal).not.toBeNull()
     expect(scal!.subject).toMatch(/^doctrine:temp-scalar-subquery:/)
@@ -105,7 +109,7 @@ describe("validateQueryDetailed attaches lesson on blocking diagnostics", () => 
   it("temp-table integrity violation yields a lesson", () => {
     const out = validateQueryDetailed(
       "CREATE TABLE #created_a3f91c08 (x int);\nSELECT * FROM #missing_a3f91c08;",
-      false,
+      false
     )
     expect(out.ok).toBe(false)
     expect(out.code).toBe("temp_table_integrity")
@@ -119,9 +123,9 @@ describe("validateQueryDetailed attaches lesson on blocking diagnostics", () => 
         "SELECT t.k,",
         "  (SELECT COUNT(*) FROM #s_a3f91c08 s WHERE s.k = t.k) AS c1,",
         "  (SELECT SUM(v)   FROM #s_a3f91c08 s WHERE s.k = t.k) AS c2",
-        "FROM #t_a3f91c08 t",
+        "FROM #t_a3f91c08 t"
       ].join("\n"),
-      false,
+      false
     )
     expect(out.ok).toBe(false)
     expect(out.code).toBe("temp_scalar_subquery_overused")
@@ -145,7 +149,7 @@ describe("mssqlTool wires lesson into run.memory.writeNote on block", () => {
     const { tool: mssqlTool } = makeFixtureWithPool({ writeNote })
 
     const result = await mssqlTool.execute({
-      query: "SELECT SUM(x) AS Avg_y FROM t",
+      query: "SELECT SUM(x) AS Avg_y FROM t"
     })
 
     expect(typeof result).toBe("string")
@@ -160,11 +164,13 @@ describe("mssqlTool wires lesson into run.memory.writeNote on block", () => {
 
   it("swallows writeNote exceptions silently (block error still returned)", async () => {
     const { tool: mssqlTool } = makeFixtureWithPool({
-      writeNote: () => { throw new Error("boom") },
+      writeNote: () => {
+        throw new Error("boom")
+      }
     })
 
     const result = await mssqlTool.execute({
-      query: "SELECT SUM(x) AS Avg_y FROM t",
+      query: "SELECT SUM(x) AS Avg_y FROM t"
     })
     expect(typeof result).toBe("string")
     expect(result).toMatch(/aggregate-semantic mismatch/i)

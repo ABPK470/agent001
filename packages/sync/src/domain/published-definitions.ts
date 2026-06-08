@@ -1,6 +1,14 @@
 import type { SyncProjectRootHost } from "../ports/index.js"
-import { PostMetadataActionKind, type PostMetadataActionKind as PostMetadataActionKindValue } from "./enums.js"
-import { deriveArchiveTable, type SyncRecipe, type SyncRecipeDiscrepancy, type SyncRecipeTable } from "./recipes.js"
+import {
+  PostMetadataActionKind,
+  type PostMetadataActionKind as PostMetadataActionKindValue
+} from "./enums.js"
+import {
+  deriveArchiveTable,
+  type SyncRecipe,
+  type SyncRecipeDiscrepancy,
+  type SyncRecipeTable
+} from "./recipes.js"
 
 const DEFAULT_PUBLISHED_DEFINITIONS_PATH = "sync-definitions/published/definitions.bundle.json"
 
@@ -81,7 +89,7 @@ export interface PublishedSyncDefinitionBundle {
 export function loadPublishedSyncDefinitionBundle(
   host: SyncProjectRootHost,
   projectRoot: string,
-  relPath = DEFAULT_PUBLISHED_DEFINITIONS_PATH,
+  relPath = DEFAULT_PUBLISHED_DEFINITIONS_PATH
 ): PublishedSyncDefinitionBundle {
   return host.sync.project.publishedDefinitions.loadBundle(projectRoot, relPath)
 }
@@ -89,7 +97,7 @@ export function loadPublishedSyncDefinitionBundle(
 export function getPublishedSyncDefinition(
   host: SyncProjectRootHost,
   projectRoot: string,
-  entityId: string,
+  entityId: string
 ): PublishedSyncDefinition {
   const bundle = loadPublishedSyncDefinitionBundle(host, projectRoot)
   const definition = bundle.definitions[entityId]
@@ -101,15 +109,16 @@ export function getPublishedSyncDefinition(
 
 export function listPublishedSyncDefinitions(
   host: SyncProjectRootHost,
-  projectRoot: string,
+  projectRoot: string
 ): PublishedSyncDefinition[] {
-  return Object.values(loadPublishedSyncDefinitionBundle(host, projectRoot).definitions)
-    .filter((definition): definition is PublishedSyncDefinition => definition !== null)
+  return Object.values(loadPublishedSyncDefinitionBundle(host, projectRoot).definitions).filter(
+    (definition): definition is PublishedSyncDefinition => definition !== null
+  )
 }
 
 export function getPublishedSyncDefinitionForHost(
   host: SyncProjectRootHost,
-  entityId: string,
+  entityId: string
 ): PublishedSyncDefinition {
   return getPublishedSyncDefinition(host, requireProjectRoot(host), entityId)
 }
@@ -139,7 +148,7 @@ export function definitionToSyncRecipe(definition: PublishedSyncDefinition): Syn
       .flatMap((step) => toPostMetadataAction(step.kind)),
     archiveTables: definition.metadata.tables.map((table) => deriveArchiveTable(table.name)),
     discrepancies: definition.metadata.discrepancies,
-    generatedAt: definition.publishedAt,
+    generatedAt: definition.publishedAt
   }
 }
 

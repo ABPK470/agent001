@@ -10,7 +10,7 @@
 
 export const UserSource = {
   Local: "local",
-  Sso:   "sso",
+  Sso: "sso"
 } as const
 
 export type UserSource = (typeof UserSource)[keyof typeof UserSource]

@@ -110,7 +110,7 @@ export function bfs(
   adj: Map<string, Array<{ target: string; edge: FkEdge }>>,
   start: string,
   end: string,
-  maxDepth: number,
+  maxDepth: number
 ): FkEdge[][] {
   const paths: FkEdge[][] = []
   const queue: Array<{ node: string; path: FkEdge[] }> = [{ node: start, path: [] }]
@@ -129,11 +129,14 @@ export function bfs(
 
     const neighbors = adj.get(node) ?? []
     for (const { target, edge } of neighbors) {
-      if (path.some((e) => {
-        const eFrom = `${e.parentSchema}.${e.parentTable}`
-        const eTo = `${e.refSchema}.${e.refTable}`
-        return (eFrom === target || eTo === target) && target !== end
-      })) continue
+      if (
+        path.some((e) => {
+          const eFrom = `${e.parentSchema}.${e.parentTable}`
+          const eTo = `${e.refSchema}.${e.refTable}`
+          return (eFrom === target || eTo === target) && target !== end
+        })
+      )
+        continue
       queue.push({ node: target, path: [...path, edge] })
     }
   }
@@ -145,7 +148,7 @@ export function formatPath(path: FkEdge[]): string {
   const steps: string[] = []
   for (const e of path) {
     steps.push(
-      `  ${e.parentSchema}.${e.parentTable}.${e.parentColumn} → ${e.refSchema}.${e.refTable}.${e.refColumn}`,
+      `  ${e.parentSchema}.${e.parentTable}.${e.parentColumn} → ${e.refSchema}.${e.refTable}.${e.refColumn}`
     )
   }
   return steps.join("\n")

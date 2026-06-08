@@ -6,18 +6,30 @@ export type {
   MemorySource,
   MemoryTier,
   ProceduralMemory,
-  UnifiedSearchResult,
+  UnifiedSearchResult
 } from "./types.js"
 
 export { consolidate } from "./consolidation.js"
 export { flagRunMemory, ingestAgentNote, ingestRunTurns, ingestTurn } from "./ingestion.js"
-export { clearAllMemories, deleteMemory, getMemory, getMemoryStats, listMemories, prune } from "./maintenance.js"
+export {
+  clearAllMemories,
+  deleteMemory,
+  getMemory,
+  getMemoryStats,
+  listMemories,
+  prune
+} from "./maintenance.js"
 export { extractProcedural, markProceduralFailed, searchProcedures, storeProcedural } from "./procedural.js"
 export { retrieveContext, searchEntries } from "./retrieval.js"
 export { migrateMemory, rowToEntry } from "./schema.js"
 export { truncateAtBoundary } from "./scoring.js"
 export { listTableVerdicts, recordTableVerdict } from "./table-verdict.js"
-export type { ListTableVerdictsOptions, TableVerdict, TableVerdictInput, TableVerdictRole } from "./table-verdict.js"
+export type {
+  ListTableVerdictsOptions,
+  TableVerdict,
+  TableVerdictInput,
+  TableVerdictRole
+} from "./table-verdict.js"
 export { summarizeCachedPayload } from "./tool-knowledge-summarizer.js"
 export {
   fingerprintFromCatalogTable,
@@ -27,7 +39,7 @@ export {
   renderCachedHeader,
   saveToolKnowledge,
   TOOL_KNOWLEDGE_TTL,
-  ttlForToolMode,
+  ttlForToolMode
 } from "./tool-knowledge.js"
 export type {
   CachedTool,
@@ -37,6 +49,6 @@ export type {
   ToolKnowledgeMiss,
   PruneOptions as ToolKnowledgePruneOptions,
   ToolKnowledgeResult,
-  SaveOptions as ToolKnowledgeSaveOptions,
+  SaveOptions as ToolKnowledgeSaveOptions
 } from "./tool-knowledge.js"
 export { vectorSearch } from "./vectors.js"

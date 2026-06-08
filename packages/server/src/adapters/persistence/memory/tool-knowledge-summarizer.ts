@@ -64,7 +64,7 @@ export function summarizeCachedPayload(
   tool: CachedTool,
   mode: string,
   payload: string,
-  opts: SummarizeOptions = {},
+  opts: SummarizeOptions = {}
 ): string {
   const cap = Math.max(80, Math.min(opts.maxChars ?? PER_SUMMARY_CHAR_CAP, 2000))
   try {
@@ -74,9 +74,7 @@ export function summarizeCachedPayload(
         summary = summarizeExploreSchema(payload)
         break
       case "profile_data":
-        summary = mode === "deep"
-          ? summarizeProfileDeep(payload)
-          : summarizeProfileFast(payload)
+        summary = mode === "deep" ? summarizeProfileDeep(payload) : summarizeProfileFast(payload)
         break
       case "inspect_definition":
         summary = summarizeInspectDefinition(payload)
@@ -128,8 +126,8 @@ function summarizeExploreSchema(payload: string): string {
   const hdrCells = splitPipeRow(lines[hdrIdx]!)
   const idxName = hdrCells.findIndex((c) => /^COLUMN_NAME$/i.test(c))
   const idxType = hdrCells.findIndex((c) => /^DATA_TYPE$/i.test(c))
-  const idxPk   = hdrCells.findIndex((c) => /^IS_PK$/i.test(c))
-  const idxFk   = hdrCells.findIndex((c) => /^FK_REFERENCE$/i.test(c))
+  const idxPk = hdrCells.findIndex((c) => /^IS_PK$/i.test(c))
+  const idxFk = hdrCells.findIndex((c) => /^FK_REFERENCE$/i.test(c))
   if (idxName < 0 || idxType < 0) return rawFallback(payload)
 
   const ranges = extractSurrogateRanges(payload)
@@ -142,7 +140,7 @@ function summarizeExploreSchema(payload: string): string {
     if (/^[\s|+-]+$/.test(row)) continue
     const cells = splitPipeRow(row)
     const name = cells[idxName]
-    const dt   = cells[idxType]
+    const dt = cells[idxType]
     if (!name || !dt) continue
     const pk = idxPk >= 0 && /^(1|true|yes)$/i.test(cells[idxPk] ?? "") ? " [PK]" : ""
     const fk = idxFk >= 0 && cells[idxFk] && cells[idxFk] !== "NULL" ? ` [FK→${cells[idxFk]}]` : ""
@@ -198,7 +196,7 @@ function summarizeProfileDeep(payload: string): string {
     const colName = blocks[i]!
     const body = blocks[i + 1]!
     const distinct = body.match(/Distinct:\s*[\d,]+\s*\((\d+(?:\.\d+)?)%\)/)
-    const nulls    = body.match(/Nulls?:\s*[\d,]+\s*\((\d+(?:\.\d+)?)%\)/)
+    const nulls = body.match(/Nulls?:\s*[\d,]+\s*\((\d+(?:\.\d+)?)%\)/)
     const dPct = distinct ? parseFloat(distinct[1]!) : NaN
     const nPct = nulls ? parseFloat(nulls[1]!) : NaN
     if (dPct >= 30) notes.push(`${colName} distinct=${dPct}%`)
@@ -217,8 +215,8 @@ function summarizeInspectDefinition(payload: string): string {
   const firstLine = (payload.split(/\r?\n/).find((l) => l.trim().length > 0) ?? "").trim()
   const typeM = firstLine.match(/\b(TABLE|VIEW|PROCEDURE|FUNCTION)\b/i)
   const colCount = extractCount(payload, /^Columns \((\d+)\)/m)
-  const fkCount  = extractCount(payload, /^Foreign keys?\s*\((\d+)\)/im)
-  const ixCount  = extractCount(payload, /^Indexes \((\d+)\)/m)
+  const fkCount = extractCount(payload, /^Foreign keys?\s*\((\d+)\)/im)
+  const ixCount = extractCount(payload, /^Indexes \((\d+)\)/m)
   const pkM = payload.match(/Primary key:\s*([^\n]+)/i)
 
   const parts: string[] = []
@@ -311,7 +309,8 @@ function extractProfileColumns(payload: string): string[] {
   // Match a column header line, optionally followed (on the next line)
   // by its Min/Max line. The Min/Max group is optional so columns
   // without stats still parse.
-  const re = /^ {2}(\S+) \((\w+),\s*(?:nullable|NOT NULL)\)(?:\r?\n {4}Min:\s*([^|\r\n]+?)\s*\|\s*Max:\s*([^\r\n(]+?)(?=\s*(?:\(|\r|\n|$)))?/gm
+  const re =
+    /^ {2}(\S+) \((\w+),\s*(?:nullable|NOT NULL)\)(?:\r?\n {4}Min:\s*([^|\r\n]+?)\s*\|\s*Max:\s*([^\r\n(]+?)(?=\s*(?:\(|\r|\n|$)))?/gm
   let m: RegExpExecArray | null
   while ((m = re.exec(payload)) !== null) {
     if (out.length >= MAX_LINES_PER_SECTION) break

@@ -54,9 +54,7 @@ export interface PlannerRoutingContext {
  * handles the entire goal, otherwise returns undefined (fall through
  * to the direct tool loop).
  */
-export async function attemptPlannerRouting(
-  ctx: PlannerRoutingContext,
-): Promise<PlannerRoutingResult> {
+export async function attemptPlannerRouting(ctx: PlannerRoutingContext): Promise<PlannerRoutingResult> {
   const { goal, messages, config } = ctx
 
   if (!config.enablePlanner || !config.plannerDelegateFn) return {}
@@ -68,14 +66,14 @@ export async function attemptPlannerRouting(
     route: routingDecision.route,
     reason: routingDecision.reason,
     coherenceNeed: routingDecision.coherenceNeed,
-    coordinationNeed: routingDecision.coordinationNeed,
+    coordinationNeed: routingDecision.coordinationNeed
   })
 
   if (routingDecision.route === "direct" || routingDecision.route === "single_artifact_direct_burst") {
     config.onPlannerTrace?.({
       kind: PlannerTraceKind.DirectLoopFallback,
       source: "planner_declined",
-      reason: `route=${routingDecision.route} score=${routingDecision.score} (${routingDecision.reason})`,
+      reason: `route=${routingDecision.route} score=${routingDecision.score} (${routingDecision.reason})`
     })
     return {}
   }
@@ -86,9 +84,10 @@ export async function attemptPlannerRouting(
   const plannerCtx = ctx.createPlannerContext()
 
   // ── Execute planner path ──
-  const plannerResult = routingDecision.route === "bounded_coherent_generation"
-    ? { handled: false as const }
-    : await executePlannerPath(goal, plannerCtx, config.plannerDelegateFn)
+  const plannerResult =
+    routingDecision.route === "bounded_coherent_generation"
+      ? { handled: false as const }
+      : await executePlannerPath(goal, plannerCtx, config.plannerDelegateFn)
 
   if (plannerResult.handled) {
     const answer = plannerResult.answer ?? "(planner produced no answer)"
@@ -109,7 +108,7 @@ export async function attemptPlannerRouting(
       config.onPlannerTrace?.({
         kind: CoherentGenerationTraceKind.Failed,
         stage: "llm_error",
-        diagnostics: [String(err)],
+        diagnostics: [String(err)]
       })
       coherentResult = { failed: true }
     }
@@ -124,12 +123,11 @@ export async function attemptPlannerRouting(
       kind: PlannerTraceKind.ArchitectureState,
       lane: "full_planner_decomposition",
       status: "repairing_in_place",
-      reason: "coherent_generation_failed_escalating_to_planner",
+      reason: "coherent_generation_failed_escalating_to_planner"
     })
-    const escalatedResult = await executePlannerPath(
-      goal, plannerCtx, config.plannerDelegateFn,
-      { forceRoute: "full_planner_decomposition" },
-    )
+    const escalatedResult = await executePlannerPath(goal, plannerCtx, config.plannerDelegateFn, {
+      forceRoute: "full_planner_decomposition"
+    })
     if (escalatedResult.handled) {
       const answer = escalatedResult.answer ?? "(planner produced no answer)"
       if (config.verbose) log.logFinalAnswer(answer)
@@ -143,9 +141,7 @@ export async function attemptPlannerRouting(
   }
 
   if (plannerResult.verifierDecision && plannerResult.verifierDecision.overall !== VerifierOutcome.Pass) {
-    const remediationAnswer = await handleVerificationFailure(
-      ctx, plannerResult, plannerCtx,
-    )
+    const remediationAnswer = await handleVerificationFailure(ctx, plannerResult, plannerCtx)
     if (remediationAnswer) {
       return { finalAnswer: remediationAnswer }
     }
@@ -155,7 +151,7 @@ export async function attemptPlannerRouting(
     config.onPlannerTrace?.({
       kind: PlannerTraceKind.DirectLoopFallback,
       source: "planner_declined",
-      reason: plannerResult.skipReason ?? "Planner declined — continuing in the direct tool loop.",
+      reason: plannerResult.skipReason ?? "Planner declined — continuing in the direct tool loop."
     })
   }
 

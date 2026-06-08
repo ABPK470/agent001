@@ -35,11 +35,7 @@
  * live UAT mymi DB). All earlier hash-column logic was based on a false assumption.
  */
 
-import type {
-    SyncPlanGraph,
-    SyncPlanTable,
-    SyncPlanTableCounts,
-} from "../../application/shell/plan-store.js"
+import type { SyncPlanGraph, SyncPlanTable, SyncPlanTableCounts } from "../../application/shell/plan-store.js"
 import { getPool, type SyncRuntimeHost } from "../../ports/index.js"
 import { SyncPlanChangeType } from "../enums.js"
 import type { SyncRecipe, SyncRecipeTable } from "../recipes.js"
@@ -59,14 +55,14 @@ export async function diffTable(
   sourceConn: string,
   targetConn: string,
   pkColumns: string[],
-  opts: DiffOptions = {},
+  opts: DiffOptions = {}
 ): Promise<SyncPlanTable> {
   const o = {
     rowCap: DEFAULT_OPTS.rowCap ?? 5_000_000,
     sampleSize: DEFAULT_OPTS.sampleSize ?? 50,
     expandedIds: DEFAULT_OPTS.expandedIds ?? null,
     telemetryContext: DEFAULT_OPTS.telemetryContext,
-    ...opts,
+    ...opts
   }
   const t0 = Date.now()
   const predicate = o.expandedIds
@@ -82,21 +78,28 @@ export async function diffTable(
   const { pool: srcPool } = await getPool(host, sourceConn)
   const colInfo = await fetchTableColumns(host, srcPool, table.name, o.telemetryContext)
   if (colInfo.hashColumns.length === 0) {
-    return emptyResult(table, predicate, [`Table ${table.name} has no comparable non-meta columns — diff skipped.`], Date.now() - t0)
+    return emptyResult(
+      table,
+      predicate,
+      [`Table ${table.name} has no comparable non-meta columns — diff skipped.`],
+      Date.now() - t0
+    )
   }
 
   // 2–3. Pull pk + rowHash from BOTH environments in parallel.
   const { pool: tgtPool } = await getPool(host, targetConn)
   const [srcRows, tgtRows] = await Promise.all([
     fetchPkHash(host, srcPool, table.name, predicate, pkColumns, colInfo, o.telemetryContext),
-    fetchPkHash(host, tgtPool, table.name, predicate, pkColumns, colInfo, o.telemetryContext),
+    fetchPkHash(host, tgtPool, table.name, predicate, pkColumns, colInfo, o.telemetryContext)
   ])
   if (srcRows.length > o.rowCap) {
     return emptyResult(
       table,
       predicate,
-      [`Row cap exceeded: ${srcRows.length.toLocaleString()} > ${o.rowCap.toLocaleString()}. Refuse to plan; pass force=true to override.`],
-      Date.now() - t0,
+      [
+        `Row cap exceeded: ${srcRows.length.toLocaleString()} > ${o.rowCap.toLocaleString()}. Refuse to plan; pass force=true to override.`
+      ],
+      Date.now() - t0
     )
   }
 
@@ -110,7 +113,10 @@ export async function diffTable(
 
   for (const [pk, src] of srcByPk) {
     const tgt = tgtByPk.get(pk)
-    if (!tgt) { inserts.push(src); continue }
+    if (!tgt) {
+      inserts.push(src)
+      continue
+    }
     if (src.rowHash === tgt.rowHash) unchanged++
     else updates.push(src)
   }
@@ -138,7 +144,7 @@ export async function diffTable(
     pkColumns,
     inserts,
     o.sampleSize,
-    o.telemetryContext,
+    o.telemetryContext
   )
 
   // Demote conflicting rows OUT of the insert bucket — they can't be inserted.
@@ -149,15 +155,23 @@ export async function diffTable(
     inserts.push(...remainingInserts)
     warnings.push(
       `${conflicts.length} row(s) blocked by scope misattribution. ` +
-      `Execute will refuse to run until target metadata is fixed.`,
+        `Execute will refuse to run until target metadata is fixed.`
     )
   }
 
   // 5. Sample rows — batched queries + parallelized across pools.
   const [insertSamples, updateSamples, deleteSamples] = await Promise.all([
     fetchSamples(host, srcPool, table.name, inserts.slice(0, o.sampleSize), pkColumns, o.telemetryContext),
-    fetchUpdateSamples(host, srcPool, tgtPool, table.name, updates.slice(0, o.sampleSize), pkColumns, o.telemetryContext),
-    fetchSamples(host, tgtPool, table.name, deletes.slice(0, o.sampleSize), pkColumns, o.telemetryContext),
+    fetchUpdateSamples(
+      host,
+      srcPool,
+      tgtPool,
+      table.name,
+      updates.slice(0, o.sampleSize),
+      pkColumns,
+      o.telemetryContext
+    ),
+    fetchSamples(host, tgtPool, table.name, deletes.slice(0, o.sampleSize), pkColumns, o.telemetryContext)
   ])
   const samples = { insert: insertSamples, update: updateSamples, delete: deleteSamples }
 
@@ -167,7 +181,7 @@ export async function diffTable(
     delete: deletes.length,
     unchanged,
     lowConfidence: 0, // No longer applicable with HASHBYTES (never NULL).
-    conflicts: conflicts.length,
+    conflicts: conflicts.length
   }
 
   return {
@@ -177,11 +191,16 @@ export async function diffTable(
     samples,
     conflicts,
     warnings,
-    diffDurationMs: Date.now() - t0,
+    diffDurationMs: Date.now() - t0
   }
 }
 
-function emptyResult(table: SyncRecipeTable, predicate: string, warnings: string[], ms: number): SyncPlanTable {
+function emptyResult(
+  table: SyncRecipeTable,
+  predicate: string,
+  warnings: string[],
+  ms: number
+): SyncPlanTable {
   return {
     table: table.name,
     scopePredicate: predicate,
@@ -189,20 +208,24 @@ function emptyResult(table: SyncRecipeTable, predicate: string, warnings: string
     samples: { insert: [], update: [], delete: [] },
     conflicts: [],
     warnings,
-    diffDurationMs: ms,
+    diffDurationMs: ms
   }
 }
 
 // ── Build a dependency graph from per-table results ──────────────
 
-export function buildDependencyGraph(
-  recipe: SyncRecipe,
-  tableResults: SyncPlanTable[],
-): SyncPlanGraph {
+export function buildDependencyGraph(recipe: SyncRecipe, tableResults: SyncPlanTable[]): SyncPlanGraph {
   const byName = new Map(tableResults.map((t) => [t.table, t]))
   const nodes: SyncPlanGraph["nodes"] = recipe.tables.map((t: SyncRecipeTable) => {
     const r = byName.get(t.name)
-    const counts = r?.counts ?? { insert: 0, update: 0, delete: 0, unchanged: 0, lowConfidence: 0, conflicts: 0 }
+    const counts = r?.counts ?? {
+      insert: 0,
+      update: 0,
+      delete: 0,
+      unchanged: 0,
+      lowConfidence: 0,
+      conflicts: 0
+    }
     let status: SyncPlanGraph["nodes"][number]["status"] = SyncPlanChangeType.Unchanged
     if (counts.delete > 0) status = SyncPlanChangeType.Deletes
     else if (counts.insert > 0) status = SyncPlanChangeType.Inserts

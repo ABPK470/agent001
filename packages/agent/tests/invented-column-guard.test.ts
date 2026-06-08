@@ -9,10 +9,7 @@
  */
 import { describe, expect, it } from "vitest"
 
-import {
-    detectInventedColumns,
-    validateQueryDetailed,
-} from "../src/tools/mssql/validation.js"
+import { detectInventedColumns, validateQueryDetailed } from "../src/tools/mssql/validation.js"
 
 // ── fake catalog ────────────────────────────────────────────────
 type Col = { name: string; dataType?: string }
@@ -26,17 +23,25 @@ function makeCatalog(tables: Record<string, string[]>) {
   return {
     getTable(qn: string): Table | null {
       return map.get(qn) ?? null
-    },
+    }
   }
 }
 
 const REVENUE_COLS = [
-  "pkClient", "pkProduct", "pkAccount", "pkMonth", "pkOfficer",
-  "RevenueZARMTD", "RevenueUSDMTD",
+  "pkClient",
+  "pkProduct",
+  "pkAccount",
+  "pkMonth",
+  "pkOfficer",
+  "RevenueZARMTD",
+  "RevenueUSDMTD"
 ]
 const BALANCES_COLS = [
-  "pkClient", "pkAccount", "pkMonth",
-  "AverageCreditBalanceZARMTD", "SpotCreditBalanceZARMTD",
+  "pkClient",
+  "pkAccount",
+  "pkMonth",
+  "AverageCreditBalanceZARMTD",
+  "SpotCreditBalanceZARMTD"
 ]
 const CLIENT_COLS = ["pkClient", "ClientName", "Segment", "Status"]
 const OFFICER_COLS = ["pkOfficer", "OfficerName", "Email"]
@@ -47,7 +52,7 @@ const accessor = () =>
     "publish.Balances": BALANCES_COLS,
     "publish.Officer": OFFICER_COLS,
     "dim.Client": CLIENT_COLS,
-    "dim.Officer": OFFICER_COLS,
+    "dim.Officer": OFFICER_COLS
   })
 
 describe("detectInventedColumns — positive blocks", () => {
@@ -55,23 +60,20 @@ describe("detectInventedColumns — positive blocks", () => {
     const query = [
       "SELECT r.pkClient, r.ClientName, r.RevenueZARMTD",
       "FROM publish.Revenue r WITH (NOLOCK)",
-      "WHERE r.pkMonth = 202501",
+      "WHERE r.pkMonth = 202501"
     ].join("\n")
     const offenders = detectInventedColumns(query, accessor)
     expect(offenders).toHaveLength(1)
     expect(offenders[0]).toMatchObject({
       reference: "r.ClientName",
       table: "publish.Revenue",
-      column: "ClientName",
+      column: "ClientName"
     })
     expect(offenders[0].suggestions.length).toBeGreaterThan(0)
   })
 
   it("flags a 3-part qualified column publish.Officer.fullName", () => {
-    const query = [
-      "SELECT o.pkOfficer, publish.Officer.fullName",
-      "FROM publish.Officer o",
-    ].join("\n")
+    const query = ["SELECT o.pkOfficer, publish.Officer.fullName", "FROM publish.Officer o"].join("\n")
     const offenders = detectInventedColumns(query, accessor)
     expect(offenders.some((o) => o.reference === "publish.Officer.fullName")).toBe(true)
   })
@@ -82,7 +84,7 @@ describe("detectInventedColumns — positive blocks", () => {
       "FROM publish.Revenue r WITH (NOLOCK)",
       "JOIN publish.Balances b ON b.pkClient = r.pkClient AND b.pkMonth = r.pkMonth",
       "JOIN dim.Client c ON c.pkClient = r.pkClient",
-      "WHERE r.pkMonth = 202501",
+      "WHERE r.pkMonth = 202501"
     ].join("\n")
     const offenders = detectInventedColumns(query, accessor)
     const refs = offenders.map((o) => o.reference).sort()
@@ -95,7 +97,7 @@ describe("detectInventedColumns — positive blocks", () => {
     const query = [
       "SELECT r.ClientName, r.ClientName AS dup",
       "FROM publish.Revenue r",
-      "WHERE r.ClientName IS NOT NULL",
+      "WHERE r.ClientName IS NOT NULL"
     ].join("\n")
     const offenders = detectInventedColumns(query, accessor)
     expect(offenders).toHaveLength(1)
@@ -108,7 +110,7 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
     const query = [
       "SELECT r.pkClient, r.RevenueZARMTD",
       "FROM publish.Revenue r WITH (NOLOCK)",
-      "WHERE r.pkMonth = 202501",
+      "WHERE r.pkMonth = 202501"
     ].join("\n")
     expect(detectInventedColumns(query, accessor)).toEqual([])
   })
@@ -122,7 +124,7 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
       "WITH ranked AS (",
       "  SELECT r.pkClient, SUM(r.RevenueZARMTD) AS rev FROM publish.Revenue r GROUP BY r.pkClient",
       ")",
-      "SELECT ranked.ClientName FROM ranked",
+      "SELECT ranked.ClientName FROM ranked"
     ].join("\n")
     expect(detectInventedColumns(query, accessor)).toEqual([])
   })
@@ -142,16 +144,14 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
       ")",
       "SELECT r.pkClient, r.RevenueUSDInvented",
       "FROM publish.Revenue r WITH (NOLOCK)",
-      "JOIN top_clients tc ON tc.pkClient = r.pkClient",
+      "JOIN top_clients tc ON tc.pkClient = r.pkClient"
     ].join("\n")
     const offenders = detectInventedColumns(query, accessor)
     expect(offenders.some((o) => o.column === "RevenueUSDInvented")).toBe(true)
   })
 
   it("skips statements with a derived table in FROM", () => {
-    const query = [
-      "SELECT x.ClientName FROM (SELECT pkClient FROM publish.Revenue) x",
-    ].join("\n")
+    const query = ["SELECT x.ClientName FROM (SELECT pkClient FROM publish.Revenue) x"].join("\n")
     expect(detectInventedColumns(query, accessor)).toEqual([])
   })
 
@@ -159,7 +159,7 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
     const query = [
       "SELECT r.ClientName FROM publish.Revenue r",
       "UNION ALL",
-      "SELECT b.ClientName FROM publish.Balances b",
+      "SELECT b.ClientName FROM publish.Balances b"
     ].join("\n")
     expect(detectInventedColumns(query, accessor)).toEqual([])
   })
@@ -170,10 +170,9 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
   })
 
   it("ignores aliases whose base table is NOT in the catalog (#temp, unknown)", () => {
-    const query = [
-      "SELECT t.MysteryColumn FROM #scratch t",
-      "JOIN dbo.UnknownTable u ON u.id = t.id",
-    ].join("\n")
+    const query = ["SELECT t.MysteryColumn FROM #scratch t", "JOIN dbo.UnknownTable u ON u.id = t.id"].join(
+      "\n"
+    )
     expect(detectInventedColumns(query, accessor)).toEqual([])
   })
 

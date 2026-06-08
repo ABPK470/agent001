@@ -26,13 +26,13 @@ export class Learner {
     if (records.length === 0) {
       return { total: 0, successes: 0, failures: 0, avgDurationMs: 0 }
     }
-    const successes = records.filter(r => r.success).length
+    const successes = records.filter((r) => r.success).length
     const totalMs = records.reduce((sum, r) => sum + r.durationMs, 0)
     return {
       total: records.length,
       successes,
       failures: records.length - successes,
-      avgDurationMs: totalMs / records.length,
+      avgDurationMs: totalMs / records.length
     }
   }
 }

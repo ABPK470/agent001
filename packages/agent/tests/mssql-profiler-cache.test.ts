@@ -27,19 +27,23 @@ function makeFixture(): {
   const toolKnowledge: NonNullable<AgentHost["toolKnowledge"]> = {
     lookup: () => ({ hit: false as const, reason: "miss" as const }),
     save: () => undefined,
-    renderHeader: () => "",
+    renderHeader: () => ""
   }
   const host = configureAgent({
     mssqlDatabases: databases,
     catalogInstances,
-    toolKnowledge,
+    toolKnowledge
   })
   const run = makeRunContext()
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
-    pool: { request: () => ({ cancel: () => undefined, query: async () => ({ recordset: [] }) }), connected: true, close: async () => undefined } as never,
+    pool: {
+      request: () => ({ cancel: () => undefined, query: async () => ({ recordset: [] }) }),
+      connected: true,
+      close: async () => undefined
+    } as never,
     writeEnabled: false,
-    knowledge: null,
+    knowledge: null
   })
   catalogInstances.set("default", canonicalFixtureCatalog())
   return { host, run, toolKnowledge, tool: createProfileDataTool(host, run), databases }
@@ -53,7 +57,7 @@ describe("profile_data cache integration", () => {
       hit: true as const,
       payload: "Profile for dim.Date:\nTotal rows: 12,345\n  ...",
       ageMs: 60 * 60 * 1000,
-      profiledAt: Date.UTC(2026, 4, 1),
+      profiledAt: Date.UTC(2026, 4, 1)
     }))
     const save = vi.fn()
     const renderHeader = vi.fn(() => "[cached from 2026-05-01, mode=fast, ageHours=1, source=tool_knowledge]")
@@ -80,7 +84,7 @@ describe("profile_data cache integration", () => {
       hit: true as const,
       payload: "cached",
       ageMs: 1,
-      profiledAt: 0,
+      profiledAt: 0
     })
     toolKnowledge.renderHeader = () => "[hdr]"
     toolKnowledge.save = vi.fn()
@@ -98,11 +102,11 @@ describe("profile_data cache integration", () => {
       hit: true as const,
       payload: "Profile for publish.Revenue:\n(deep, cached)",
       ageMs: 1,
-      profiledAt: 0,
+      profiledAt: 0
     })
     toolKnowledge.renderHeader = () => "[cached]"
 
-    const out = await profileDataTool.execute({ table: "publish.Revenue", mode: "deep" }) as string
+    const out = (await profileDataTool.execute({ table: "publish.Revenue", mode: "deep" })) as string
     expect(out).toContain("(deep, cached)")
     expect(out).not.toMatch(/refusing DEEP profile/i)
   })
@@ -123,21 +127,37 @@ describe("profile_data cache integration", () => {
       const text = sqlText.toLowerCase()
       if (text.includes("dm_db_partition_stats")) return Promise.resolve({ recordset: [{ row_count: 100 }] })
       if (text.includes("information_schema.columns")) {
-        return Promise.resolve({ recordset: [
-          { COLUMN_NAME: "Id",   DATA_TYPE: "int",     IS_NULLABLE: "NO",  CHARACTER_MAXIMUM_LENGTH: null },
-          { COLUMN_NAME: "Name", DATA_TYPE: "varchar", IS_NULLABLE: "YES", CHARACTER_MAXIMUM_LENGTH: 50 },
-        ] })
+        return Promise.resolve({
+          recordset: [
+            {
+              COLUMN_NAME: "Id",
+              DATA_TYPE: "int",
+              IS_NULLABLE: "NO",
+              CHARACTER_MAXIMUM_LENGTH: null
+            },
+            {
+              COLUMN_NAME: "Name",
+              DATA_TYPE: "varchar",
+              IS_NULLABLE: "YES",
+              CHARACTER_MAXIMUM_LENGTH: 50
+            }
+          ]
+        })
       }
       return Promise.resolve({ recordset: [] })
     }
     databases.set("default", {
       config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
-      pool: { request: () => ({ input: () => undefined, cancel: () => undefined, query: fakeQuery }), connected: true, close: async () => undefined } as never,
+      pool: {
+        request: () => ({ input: () => undefined, cancel: () => undefined, query: fakeQuery }),
+        connected: true,
+        close: async () => undefined
+      } as never,
       writeEnabled: false,
-      knowledge: null,
+      knowledge: null
     })
 
-    const out = await profileDataTool.execute({ table: "dim.Date", mode: "fast" }) as string
+    const out = (await profileDataTool.execute({ table: "dim.Date", mode: "fast" })) as string
     expect(typeof out).toBe("string")
     expect(out).not.toMatch(/^SQL Error/)
     expect(out).not.toMatch(/^Error/)
@@ -162,12 +182,20 @@ describe("profile_data cache integration", () => {
     // Stub so getPool resolves but runFastProfile throws -> returns "SQL Error: ..."
     databases.set("default", {
       config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
-      pool: { request: () => ({ input: () => undefined, cancel: () => undefined, query: () => Promise.reject(new Error("boom")) }), connected: true, close: async () => undefined } as never,
+      pool: {
+        request: () => ({
+          input: () => undefined,
+          cancel: () => undefined,
+          query: () => Promise.reject(new Error("boom"))
+        }),
+        connected: true,
+        close: async () => undefined
+      } as never,
       writeEnabled: false,
-      knowledge: null,
+      knowledge: null
     })
 
-    const out = await profileDataTool.execute({ table: "dim.Date", mode: "fast" }) as string
+    const out = (await profileDataTool.execute({ table: "dim.Date", mode: "fast" })) as string
     expect(out).toMatch(/^SQL Error/)
     expect(save).not.toHaveBeenCalled()
   })
@@ -180,7 +208,7 @@ describe("profile_data cache integration", () => {
 
     // Cheap pool stub that returns an empty recordset — runFastProfile
     // will emit "No columns found ..." which the tool returns as a string.
-    const out = await profileDataTool.execute({ table: "dim.Date", mode: "fast" }) as string
+    const out = (await profileDataTool.execute({ table: "dim.Date", mode: "fast" })) as string
     expect(typeof out).toBe("string")
     // Whether the result is an error string or a partial render, the key
     // assertion is that the absence of cache wiring did not throw.
@@ -188,7 +216,12 @@ describe("profile_data cache integration", () => {
 
   it("skips the cache when the catalog has no entry for the qname (no fingerprint = no cache)", async () => {
     const { toolKnowledge, tool: profileDataTool } = makeFixture()
-    const lookup = vi.fn(() => ({ hit: true as const, payload: "should-not-be-used", ageMs: 0, profiledAt: 0 }))
+    const lookup = vi.fn(() => ({
+      hit: true as const,
+      payload: "should-not-be-used",
+      ageMs: 0,
+      profiledAt: 0
+    }))
     toolKnowledge.lookup = lookup
 
     // mystery.Unknown does not exist in the fixture catalog -> fingerprint=null

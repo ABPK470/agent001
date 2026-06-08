@@ -8,12 +8,7 @@ import { PipelineStatus } from "../../domain/index.js"
 
 import { normalizeToolExecutionOutput } from "../../tools/index.js"
 import type { Tool } from "../../types.js"
-import type {
-    PipelineResult,
-    PipelineStepResult,
-    Plan,
-    PlanStep,
-} from "../types.js"
+import type { PipelineResult, PipelineStepResult, Plan, PlanStep } from "../types.js"
 
 export interface Graph {
   adj: Map<string, string[]>
@@ -44,15 +39,15 @@ export function buildResult(
   stepResults: Map<string, PipelineStepResult>,
   totalSteps: number,
   status: PipelineStatus,
-  error?: string,
+  error?: string
 ): PipelineResult {
-  const completedSteps = [...stepResults.values()].filter(r => r.status === PipelineStatus.Completed).length
+  const completedSteps = [...stepResults.values()].filter((r) => r.status === PipelineStatus.Completed).length
   return {
     status,
     stepResults,
     completedSteps,
     totalSteps,
-    error,
+    error
   }
 }
 

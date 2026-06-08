@@ -59,10 +59,11 @@ function disambiguatedTokens(goal: string, catalog: CatalogGraph): Set<string> {
     const qname = m[0]
     const schema = m[1]!.toLowerCase()
     const object = m[2]!.toLowerCase()
-    const resolved = catalog.getTable(qname)
-      ?? (mirrorSchema && !schema.startsWith(`${mirrorSchema.toLowerCase()}.`)
-            ? catalog.getTable(`${mirrorSchema}.${qname}`)
-            : null)
+    const resolved =
+      catalog.getTable(qname) ??
+      (mirrorSchema && !schema.startsWith(`${mirrorSchema.toLowerCase()}.`)
+        ? catalog.getTable(`${mirrorSchema}.${qname}`)
+        : null)
     if (resolved) {
       out.add(schema)
       out.add(object)
@@ -100,7 +101,9 @@ const MIN_TOKEN_LEN = 4
  * in chat ("plot it", "filter that", "for this data", "the result").
  */
 function looksCoreferential(goal: string): boolean {
-  return /\b(it|this|that|these|those|the\s+(data|result|results|report|chart|output|table|rows|answer|response))\b/i.test(goal)
+  return /\b(it|this|that|these|those|the\s+(data|result|results|report|chart|output|table|rows|answer|response))\b/i.test(
+    goal
+  )
 }
 
 function hasRecentAssistantTurn(messages: readonly ClarifyContext["messages"][number][]): boolean {
@@ -175,9 +178,9 @@ export const schemaMatchDetector: Detector = {
         reasoning: `"${token}" matches ${totalCount} catalog objects — the agent cannot pick one without input.`,
         candidates,
         suggestedQuestion: `When you say "${token}", which of these did you mean?\n${candidates.map((c) => `  • ${c}`).join("\n")}${more}`,
-        source: "detector" as const,
+        source: "detector" as const
       })
     }
     return out
-  },
+  }
 }

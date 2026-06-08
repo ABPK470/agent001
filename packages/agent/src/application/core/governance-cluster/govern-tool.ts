@@ -45,7 +45,7 @@ export function governTool(
   tool: ExecutableTool,
   services: EngineServices,
   state: RunState,
-  options?: GovernToolOptions,
+  options?: GovernToolOptions
 ): ExecutableTool {
   const retryPolicy = options?.retryPolicy ?? TOOL_RETRY_POLICY
   const timeoutMs = options?.timeoutMs ?? DEFAULT_TOOL_TIMEOUT_MS
@@ -64,7 +64,7 @@ export function governTool(
         const policyResult = await services.policyEvaluator.evaluatePreStep(
           state.run,
           step,
-          options?.policyContext ?? null,
+          options?.policyContext ?? null
         )
         if (policyResult !== null) {
           // Approval required — block and emit event for notification
@@ -75,11 +75,11 @@ export function governTool(
             action: "tool.blocked",
             resourceType: "AgentRun",
             resourceId: state.run.id,
-            detail: { tool: tool.name, reason: policyResult, stepId: step.id },
+            detail: { tool: tool.name, reason: policyResult, stepId: step.id }
           })
           // Emit approval.required event so the orchestrator can create a notification
           await services.eventBus.publish(
-            approvalRequired(state.run.id, step.id, tool.name, args, policyResult),
+            approvalRequired(state.run.id, step.id, tool.name, args, policyResult)
           )
           await services.runRepo.save(state.run)
           return `BLOCKED: ${policyResult}. This tool call was prevented by a governance policy. The user has been notified and may adjust policies and resume the run.`
@@ -93,7 +93,7 @@ export function governTool(
             action: "tool.denied",
             resourceType: "AgentRun",
             resourceId: state.run.id,
-            detail: { tool: tool.name, reason: err.message, stepId: step.id },
+            detail: { tool: tool.name, reason: err.message, stepId: step.id }
           })
           await services.runRepo.save(state.run)
           return `DENIED: ${err.message}. This action is forbidden by governance policy.`
@@ -111,38 +111,51 @@ export function governTool(
         action: "tool.invoked",
         resourceType: "AgentRun",
         resourceId: state.run.id,
-        detail: { tool: tool.name, args, stepId: step.id },
+        detail: { tool: tool.name, args, stepId: step.id }
       })
 
       // 4. Execute the tool — with timeout + abort + retry on transient errors
       const startTime = performance.now()
       const abortSignal = options?.signal
       try {
-        const retryResult = await withToolRetry(async () => {
-          // Race: tool execution vs timeout vs abort
-          const racers: Promise<string>[] = [
-            tool.execute(args).then(value => normalizeToolExecutionOutput(value).result),
-            ...(timeoutMs > 0 ? [new Promise<never>((_, reject) => {
-              const id = setTimeout(() => reject(new Error(`Tool "${tool.name}" timed out after ${timeoutMs}ms`)), timeoutMs)
-              // If tool finishes first, prevent dangling timer
-              if (typeof id === "object" && "unref" in id) (id as NodeJS.Timeout).unref()
-            })] : []),
-          ]
+        const retryResult = await withToolRetry(
+          async () => {
+            // Race: tool execution vs timeout vs abort
+            const racers: Promise<string>[] = [
+              tool.execute(args).then((value) => normalizeToolExecutionOutput(value).result),
+              ...(timeoutMs > 0
+                ? [
+                    new Promise<never>((_, reject) => {
+                      const id = setTimeout(
+                        () => reject(new Error(`Tool "${tool.name}" timed out after ${timeoutMs}ms`)),
+                        timeoutMs
+                      )
+                      // If tool finishes first, prevent dangling timer
+                      if (typeof id === "object" && "unref" in id) (id as NodeJS.Timeout).unref()
+                    })
+                  ]
+                : [])
+            ]
 
-          // If we have an abort signal, add it to the race
-          if (abortSignal) {
-            racers.push(new Promise<never>((_, reject) => {
-              if (abortSignal.aborted) {
-                reject(new Error(`Tool "${tool.name}" cancelled`))
-                return
-              }
-              const onAbort = () => reject(new Error(`Tool "${tool.name}" cancelled`))
-              abortSignal.addEventListener("abort", onAbort, { once: true })
-            }))
-          }
+            // If we have an abort signal, add it to the race
+            if (abortSignal) {
+              racers.push(
+                new Promise<never>((_, reject) => {
+                  if (abortSignal.aborted) {
+                    reject(new Error(`Tool "${tool.name}" cancelled`))
+                    return
+                  }
+                  const onAbort = () => reject(new Error(`Tool "${tool.name}" cancelled`))
+                  abortSignal.addEventListener("abort", onAbort, { once: true })
+                })
+              )
+            }
 
-          return Promise.race(racers)
-        }, retryPolicy, abortSignal)
+            return Promise.race(racers)
+          },
+          retryPolicy,
+          abortSignal
+        )
 
         const durationMs = Math.round(performance.now() - startTime)
 
@@ -150,9 +163,7 @@ export function governTool(
           // All retries exhausted — fail the step
           const errMsg = retryResult.lastError?.message ?? "Tool execution failed"
           failStep(step, errMsg)
-          await services.eventBus.publish(
-            stepFailed(state.run.id, step.id, errMsg),
-          )
+          await services.eventBus.publish(stepFailed(state.run.id, step.id, errMsg))
 
           const record: ExecutionRecord = {
             id: randomUUID(),
@@ -163,7 +174,7 @@ export function governTool(
             durationMs,
             result: {},
             error: errMsg,
-            recordedAt: new Date(),
+            recordedAt: new Date()
           }
           await services.learner.record(record)
 
@@ -178,8 +189,8 @@ export function governTool(
               error: errMsg,
               durationMs,
               attempts: retryResult.attempts,
-              retried: retryResult.attempts > 1,
-            },
+              retried: retryResult.attempts > 1
+            }
           })
 
           await services.runRepo.save(state.run)
@@ -202,7 +213,7 @@ export function governTool(
           durationMs,
           result: { truncated: result.slice(0, 500) },
           error: null,
-          recordedAt: new Date(),
+          recordedAt: new Date()
         }
         await services.learner.record(record)
 
@@ -217,8 +228,8 @@ export function governTool(
             stepId: step.id,
             durationMs,
             resultLength: result.length,
-            ...(retryResult.attempts > 1 ? { attempts: retryResult.attempts, retried: true } : {}),
-          },
+            ...(retryResult.attempts > 1 ? { attempts: retryResult.attempts, retried: true } : {})
+          }
         })
 
         await services.runRepo.save(state.run)
@@ -230,9 +241,7 @@ export function governTool(
         // Only fail step if not already failed by retry handler above
         if (step.status !== StepStatus.Failed) {
           failStep(step, errMsg)
-          await services.eventBus.publish(
-            stepFailed(state.run.id, step.id, errMsg),
-          )
+          await services.eventBus.publish(stepFailed(state.run.id, step.id, errMsg))
 
           const record: ExecutionRecord = {
             id: randomUUID(),
@@ -243,7 +252,7 @@ export function governTool(
             durationMs,
             result: {},
             error: errMsg,
-            recordedAt: new Date(),
+            recordedAt: new Date()
           }
           await services.learner.record(record)
 
@@ -252,7 +261,7 @@ export function governTool(
             action: "tool.failed",
             resourceType: "AgentRun",
             resourceId: state.run.id,
-            detail: { tool: tool.name, stepId: step.id, error: errMsg, durationMs },
+            detail: { tool: tool.name, stepId: step.id, error: errMsg, durationMs }
           })
 
           await services.runRepo.save(state.run)
@@ -260,6 +269,6 @@ export function governTool(
 
         throw err
       }
-    },
+    }
   }
 }

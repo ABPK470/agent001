@@ -4,7 +4,7 @@
 
 /** Messaging platform identifier for a Channel. */
 export const ChannelType = {
-  Teams: "teams",
+  Teams: "teams"
 } as const
 
 export type ChannelType = (typeof ChannelType)[keyof typeof ChannelType]
@@ -16,11 +16,11 @@ export const isChannelType = (value: unknown): value is ChannelType =>
 
 /** Lifecycle of an outbound message in the delivery queue. */
 export const DeliveryStatus = {
-  Queued:    "queued",
-  Sending:   "sending",
+  Queued: "queued",
+  Sending: "sending",
   Delivered: "delivered",
-  Failed:    "failed",
-  Retrying:  "retrying",
+  Failed: "failed",
+  Retrying: "retrying"
 } as const
 
 export type DeliveryStatus = (typeof DeliveryStatus)[keyof typeof DeliveryStatus]

@@ -19,7 +19,7 @@ import type { TenantConfig } from "../src/application/shell/tenant-config.js"
 import { MessageRole } from "../src/domain/enums/message.js"
 
 const TENANT: TenantConfig = {
-  routingKeywords: { schemas: [], domain: [], sync: [] },
+  routingKeywords: { schemas: [], domain: [], sync: [] }
 } as unknown as TenantConfig
 
 function ctx(over: Partial<ClarifyContext> & Pick<ClarifyContext, "goal">): ClarifyContext {
@@ -30,54 +30,67 @@ function ctx(over: Partial<ClarifyContext> & Pick<ClarifyContext, "goal">): Clar
     messages: over.messages ?? [],
     resolved: over.resolved ?? [],
     round: over.round ?? 2,
-    priorResultsCount: over.priorResultsCount,
+    priorResultsCount: over.priorResultsCount
   }
 }
 
-const assistantTurn = { role: MessageRole.Assistant, content: "Top 5 clients: A=10, B=9, C=8, D=7, E=6." } as const
+const assistantTurn = {
+  role: MessageRole.Assistant,
+  content: "Top 5 clients: A=10, B=9, C=8, D=7, E=6."
+} as const
 
 describe("anaphora-ungrounded detector", () => {
   it("does NOT fire when priorResultsCount is undefined (CLI / no orchestrator)", () => {
-    const f = anaphoraUngroundedDetector.detect(ctx({
-      goal: "now plot it as a bar chart",
-      messages: [assistantTurn],
-    }))
+    const f = anaphoraUngroundedDetector.detect(
+      ctx({
+        goal: "now plot it as a bar chart",
+        messages: [assistantTurn]
+      })
+    )
     expect(f).toEqual([])
   })
 
   it("does NOT fire on a fresh (non-coreferential) goal", () => {
-    const f = anaphoraUngroundedDetector.detect(ctx({
-      goal: "show total revenue for 2025",
-      messages: [assistantTurn],
-      priorResultsCount: 0,
-    }))
+    const f = anaphoraUngroundedDetector.detect(
+      ctx({
+        goal: "show total revenue for 2025",
+        messages: [assistantTurn],
+        priorResultsCount: 0
+      })
+    )
     expect(f).toEqual([])
   })
 
   it("does NOT fire when no prior assistant turn exists (first turn)", () => {
-    const f = anaphoraUngroundedDetector.detect(ctx({
-      goal: "filter that to Africa only",
-      messages: [],
-      priorResultsCount: 0,
-    }))
+    const f = anaphoraUngroundedDetector.detect(
+      ctx({
+        goal: "filter that to Africa only",
+        messages: [],
+        priorResultsCount: 0
+      })
+    )
     expect(f).toEqual([])
   })
 
   it("does NOT fire when prior_results has at least one entry (grounded path)", () => {
-    const f = anaphoraUngroundedDetector.detect(ctx({
-      goal: "plot it as a bar chart",
-      messages: [assistantTurn],
-      priorResultsCount: 1,
-    }))
+    const f = anaphoraUngroundedDetector.detect(
+      ctx({
+        goal: "plot it as a bar chart",
+        messages: [assistantTurn],
+        priorResultsCount: 1
+      })
+    )
     expect(f).toEqual([])
   })
 
   it("FIRES warn when goal is coreferential, prior turn exists, prior_results is empty", () => {
-    const f = anaphoraUngroundedDetector.detect(ctx({
-      goal: "now plot those clients on a pie chart",
-      messages: [assistantTurn],
-      priorResultsCount: 0,
-    }))
+    const f = anaphoraUngroundedDetector.detect(
+      ctx({
+        goal: "now plot those clients on a pie chart",
+        messages: [assistantTurn],
+        priorResultsCount: 0
+      })
+    )
     expect(f).toHaveLength(1)
     expect(f[0]!.kind).toBe("anaphora-ungrounded")
     expect(f[0]!.severity).toBe("warn")
@@ -88,21 +101,34 @@ describe("anaphora-ungrounded detector", () => {
   })
 
   it("recognises a range of anaphoric triggers", () => {
-    const triggers = ["plot it", "filter those", "and that one too", "summarise the data", "export the result", "show the chart again"]
+    const triggers = [
+      "plot it",
+      "filter those",
+      "and that one too",
+      "summarise the data",
+      "export the result",
+      "show the chart again"
+    ]
     for (const goal of triggers) {
-      const f = anaphoraUngroundedDetector.detect(ctx({
-        goal, messages: [assistantTurn], priorResultsCount: 0,
-      }))
+      const f = anaphoraUngroundedDetector.detect(
+        ctx({
+          goal,
+          messages: [assistantTurn],
+          priorResultsCount: 0
+        })
+      )
       expect(f, `expected ${JSON.stringify(goal)} to fire`).toHaveLength(1)
     }
   })
 
   it("ignores empty-content assistant turns when scanning for a prior turn", () => {
-    const f = anaphoraUngroundedDetector.detect(ctx({
-      goal: "plot it",
-      messages: [{ role: MessageRole.Assistant, content: "   " }],
-      priorResultsCount: 0,
-    }))
+    const f = anaphoraUngroundedDetector.detect(
+      ctx({
+        goal: "plot it",
+        messages: [{ role: MessageRole.Assistant, content: "   " }],
+        priorResultsCount: 0
+      })
+    )
     expect(f).toEqual([])
   })
 })

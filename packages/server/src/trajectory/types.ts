@@ -103,7 +103,12 @@ export interface LlmRequestEvent {
   iteration: number
   messageCount: number
   toolCount: number
-  messages: Array<{ role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }>
+  messages: Array<{
+    role: string
+    content: string | null
+    toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>
+    toolCallId: string | null
+  }>
 }
 
 export interface LlmResponseEvent {

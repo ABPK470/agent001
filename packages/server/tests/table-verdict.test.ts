@@ -49,14 +49,14 @@ describe("recordTableVerdict — write path", () => {
       qname: "publish.Revenue",
       role: "canonical",
       evidence: ["fanIn=59", "incomingFK=12"],
-      observedFromGoal: "list top 3 products by revenue April 2025",
+      observedFromGoal: "list top 3 products by revenue April 2025"
     })
     expect(v.id).toMatch(/^[0-9a-f-]{36}$/)
     expect(v.role).toBe("canonical")
 
-    const row = testDb.prepare(
-      `SELECT tier, content, metadata FROM memory_entries WHERE id = ?`,
-    ).get(v.id) as { tier: string; content: string; metadata: string }
+    const row = testDb
+      .prepare(`SELECT tier, content, metadata FROM memory_entries WHERE id = ?`)
+      .get(v.id) as { tier: string; content: string; metadata: string }
     expect(row.tier).toBe("semantic")
     expect(row.content).toContain("[table_verdict:canonical]")
     expect(row.content).toContain("publish.Revenue")
@@ -92,9 +92,9 @@ describe("recordTableVerdict — write path", () => {
     const mem = await setupMemory()
     mem.recordTableVerdict({ qname: "publish.Revenue", role: "unknown" })
     mem.recordTableVerdict({ qname: "publish.Revenue", role: "canonical" })
-    const all = testDb.prepare(
-      `SELECT COUNT(*) AS n FROM memory_entries WHERE metadata LIKE '%"kind":"table_verdict"%'`,
-    ).get() as { n: number }
+    const all = testDb
+      .prepare(`SELECT COUNT(*) AS n FROM memory_entries WHERE metadata LIKE '%"kind":"table_verdict"%'`)
+      .get() as { n: number }
     expect(all.n).toBe(2)
   })
 })
@@ -119,7 +119,7 @@ describe("listTableVerdicts — read path", () => {
     mem.recordTableVerdict({ qname: "publish.RevenueRWARules", role: "rules" })
 
     const out = mem.listTableVerdicts({
-      qnames: ["publish.Revenue", "publish.RevenueESGRules", "publish.RevenueRWARules"],
+      qnames: ["publish.Revenue", "publish.RevenueESGRules", "publish.RevenueRWARules"]
     })
     expect(out).toHaveLength(3)
     const roles = new Map(out.map((v) => [v.qname, v.role]))
@@ -156,7 +156,7 @@ describe("listTableVerdicts — read path", () => {
       qname: "publish.Revenue",
       role: "canonical",
       evidence: ["fanIn=59", "containsBranch:publish.RevenueESGRules"],
-      observedFromGoal: "top 3 products by revenue",
+      observedFromGoal: "top 3 products by revenue"
     })
     const [v] = mem.listTableVerdicts({ qnames: ["publish.Revenue"] })
     expect(v!.evidence).toEqual(["fanIn=59", "containsBranch:publish.RevenueESGRules"])

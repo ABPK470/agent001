@@ -25,20 +25,24 @@ import { extractActualPaths, probeArtifact, readArtifactContent } from "../inter
 import { runLLMVerification } from "../internal/verifier-llm.js"
 import { runDeterministicProbes } from "../internal/verifier-probes.js"
 import type {
-    PipelineResult,
-    Plan,
-    SubagentTaskStep,
-    VerificationEvidence,
-    VerifierDecision,
-    VerifierStepAssessment,
+  PipelineResult,
+  Plan,
+  SubagentTaskStep,
+  VerificationEvidence,
+  VerifierDecision,
+  VerifierStepAssessment
 } from "../types.js"
-import { buildSystemChecks, collectVerificationEvidence, deriveIssuesFromEvidence } from "../verification-model/index.js"
+import {
+  buildSystemChecks,
+  collectVerificationEvidence,
+  deriveIssuesFromEvidence
+} from "../verification-model/index.js"
 import { buildFallbackDecision } from "../verifier-helpers/index.js"
 import { runContractValidation } from "./contract-check.js"
 import {
-    collectFollowupEvidence,
-    mergeFollowupIntoAssessments,
-    needsFollowupVerification,
+  collectFollowupEvidence,
+  mergeFollowupIntoAssessments,
+  needsFollowupVerification
 } from "./followup.js"
 
 // ============================================================================
@@ -62,18 +66,22 @@ export async function verify(
   plan: Plan,
   pipelineResult: PipelineResult,
   tools: readonly Tool[],
-  opts?: { signal?: AbortSignal; onTrace?: (entry: Record<string, unknown>) => void; skipContractValidation?: boolean },
+  opts?: {
+    signal?: AbortSignal
+    onTrace?: (entry: Record<string, unknown>) => void
+    skipContractValidation?: boolean
+  }
 ): Promise<VerifierDecision> {
   const finalizeAssessments = (
     assessments: readonly VerifierStepAssessment[],
-    source: VerificationEvidence["source"],
+    source: VerificationEvidence["source"]
   ): VerifierStepAssessment[] => {
     const evidenceByStep = collectVerificationEvidence(plan, assessments, source)
     const issuesByStep = deriveIssuesFromEvidence(plan, assessments, evidenceByStep)
     return assessments.map((assessment) => ({
       ...assessment,
       evidence: [...(evidenceByStep.get(assessment.stepName) ?? [])],
-      issueDetails: [...(issuesByStep.get(assessment.stepName) ?? [])],
+      issueDetails: [...(issuesByStep.get(assessment.stepName) ?? [])]
     }))
   }
 
@@ -91,34 +99,42 @@ export async function verify(
     const allSteps: VerifierStepAssessment[] = []
     for (const step of plan.steps) {
       if (step.stepType !== "subagent_task") continue
-      const contractFail = contractFailures.find(cf => cf.stepName === step.name)
+      const contractFail = contractFailures.find((cf) => cf.stepName === step.name)
       if (contractFail) {
         allSteps.push(contractFail)
       } else {
         const sr = pipelineResult.stepResults.get(step.name)
         if (sr && sr.status === PipelineStatus.Completed) {
-          allSteps.push({ stepName: step.name, outcome: VerifierOutcome.Pass, confidence: 0.8, issues: [], retryable: false })
+          allSteps.push({
+            stepName: step.name,
+            outcome: VerifierOutcome.Pass,
+            confidence: 0.8,
+            issues: [],
+            retryable: false
+          })
         }
       }
     }
     const enrichedSteps = finalizeAssessments(allSteps, "contract")
     return {
       overall: VerifierOutcome.Retry,
-      confidence: Math.min(...enrichedSteps.map(s => s.confidence)),
+      confidence: Math.min(...enrichedSteps.map((s) => s.confidence)),
       steps: enrichedSteps,
-      unresolvedItems: contractFailures.map(cf => cf.issues[0]),
+      unresolvedItems: contractFailures.map((cf) => cf.issues[0])
     }
   }
 
   // Phase 1: Deterministic probes
   const detAssessments = finalizeAssessments(
     await runDeterministicProbes(plan, pipelineResult, tools),
-    "deterministic",
+    "deterministic"
   )
 
   // If deterministic probes already show clear failure, skip LLM verification
-  const detFails = detAssessments.filter(a => a.outcome === VerifierOutcome.Fail || a.outcome === VerifierOutcome.Retry)
-  if (detFails.length > 0 && detFails.some(a => a.outcome === VerifierOutcome.Fail)) {
+  const detFails = detAssessments.filter(
+    (a) => a.outcome === VerifierOutcome.Fail || a.outcome === VerifierOutcome.Retry
+  )
+  if (detFails.length > 0 && detFails.some((a) => a.outcome === VerifierOutcome.Fail)) {
     return buildFallbackDecision(detAssessments)
   }
 
@@ -128,7 +144,7 @@ export async function verify(
   // the deterministic-probe phase and this LLM-prep phase.
   const artifactContents = new Map<string, string>()
   const stepSpecEvidence = new Map<string, StepSpecEvidence>()
-  const toolMap = new Map(tools.map(t => [t.name, t]))
+  const toolMap = new Map(tools.map((t) => [t.name, t]))
   const readFile = toolMap.get("read_file")
   const runCommand = toolMap.get("run_command")
   // Content cache: populated on first read, reused on subsequent reads.
@@ -146,17 +162,28 @@ export async function verify(
       const stepResult = pipelineResult.stepResults.get(step.name)
       if (stepResult?.status === PipelineStatus.Completed) {
         const actualPaths = stepResult.output ? extractActualPaths(stepResult.output) : []
-        const specEvidence = await buildStepSpecEvidence(sa, stepResult, plan, readFile, readArtifactContent, probeArtifact, runCommand, actualPaths)
+        const specEvidence = await buildStepSpecEvidence(
+          sa,
+          stepResult,
+          plan,
+          readFile,
+          readArtifactContent,
+          probeArtifact,
+          runCommand,
+          actualPaths
+        )
         if (specEvidence) stepSpecEvidence.set(step.name, specEvidence)
       }
       const actualPaths = stepResult?.output ? extractActualPaths(stepResult.output) : []
       for (const artifact of sa.executionContext.targetArtifacts) {
         if (!/\.(js|jsx|ts|tsx|html|css|py)$/i.test(artifact)) continue
         const probe = await probeArtifact(
-          readFile, artifact, actualPaths,
+          readFile,
+          artifact,
+          actualPaths,
           sa.executionContext.workspaceRoot || undefined,
           runCommand,
-          sa.executionContext.allowedWriteRoots,
+          sa.executionContext.allowedWriteRoots
         )
         if (probe.found) {
           try {
@@ -164,7 +191,9 @@ export async function verify(
             if (typeof content === "string" && content.length > 0) {
               artifactContents.set(artifact, content)
             }
-          } catch { /* skip */ }
+          } catch {
+            /* skip */
+          }
         }
       }
     }
@@ -175,14 +204,14 @@ export async function verify(
     signal: opts?.signal,
     onTrace: opts?.onTrace,
     artifactContents,
-    stepSpecEvidence,
+    stepSpecEvidence
   })
 
   // Merge: if deterministic says "retry" but LLM says "pass", trust deterministic
-  const mergedSteps = decision.steps.map(llmStep => {
-    const detStep = detAssessments.find(d => d.stepName === llmStep.stepName)
+  const mergedSteps = decision.steps.map((llmStep) => {
+    const detStep = detAssessments.find((d) => d.stepName === llmStep.stepName)
     if (detStep && detStep.outcome !== VerifierOutcome.Pass && llmStep.outcome === VerifierOutcome.Pass) {
-      const allNonBlocking = detStep.issues.every(i => i.startsWith("[non-blocking]"))
+      const allNonBlocking = detStep.issues.every((i) => i.startsWith("[non-blocking]"))
       if (allNonBlocking && detStep.issues.length > 0) {
         return { ...llmStep, issues: [...llmStep.issues, ...detStep.issues] }
       }
@@ -191,8 +220,8 @@ export async function verify(
     return llmStep
   })
 
-  const anyRetry = mergedSteps.some(s => s.outcome === VerifierOutcome.Retry)
-  const anyFail = mergedSteps.some(s => s.outcome === VerifierOutcome.Fail)
+  const anyRetry = mergedSteps.some((s) => s.outcome === VerifierOutcome.Retry)
+  const anyFail = mergedSteps.some((s) => s.outcome === VerifierOutcome.Fail)
   let enrichedMergedSteps = finalizeAssessments(mergedSteps, "llm")
   const followupCandidates = needsFollowupVerification(enrichedMergedSteps)
   if (followupCandidates.length > 0) {
@@ -202,8 +231,10 @@ export async function verify(
       reasons: followupCandidates.map((assessment) => ({
         stepName: assessment.stepName,
         confidence: assessment.confidence,
-        ambiguousIssues: (assessment.issueDetails ?? []).filter((issue) => issue.ownershipMode !== "deterministic_owner").map((issue) => issue.code),
-      })),
+        ambiguousIssues: (assessment.issueDetails ?? [])
+          .filter((issue) => issue.ownershipMode !== "deterministic_owner")
+          .map((issue) => issue.code)
+      }))
     })
     const followupEvidenceByStep = collectFollowupEvidence(plan, pipelineResult, followupCandidates)
     enrichedMergedSteps = mergeFollowupIntoAssessments(plan, enrichedMergedSteps, followupEvidenceByStep)
@@ -211,16 +242,19 @@ export async function verify(
 
   const systemChecks = buildSystemChecks({
     overall: anyFail ? VerifierOutcome.Fail : anyRetry ? VerifierOutcome.Retry : VerifierOutcome.Pass,
-    confidence: Math.min(decision.confidence, ...enrichedMergedSteps.map(s => s.confidence)),
+    confidence: Math.min(decision.confidence, ...enrichedMergedSteps.map((s) => s.confidence)),
     steps: enrichedMergedSteps,
-    unresolvedItems: decision.unresolvedItems,
+    unresolvedItems: decision.unresolvedItems
   })
 
   return {
     overall: anyFail ? VerifierOutcome.Fail : anyRetry ? VerifierOutcome.Retry : VerifierOutcome.Pass,
-    confidence: Math.min(decision.confidence, ...enrichedMergedSteps.map(s => s.confidence)),
+    confidence: Math.min(decision.confidence, ...enrichedMergedSteps.map((s) => s.confidence)),
     steps: enrichedMergedSteps,
-    unresolvedItems: uniqueStrings([...decision.unresolvedItems, ...systemChecks.map((check) => check.summary)]),
-    systemChecks,
+    unresolvedItems: uniqueStrings([
+      ...decision.unresolvedItems,
+      ...systemChecks.map((check) => check.summary)
+    ]),
+    systemChecks
   }
 }

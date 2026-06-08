@@ -127,7 +127,7 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
   // Children are workers — they execute, they don't re-delegate.
   if (ctx.depth > 0) return []
 
-  const toolNames = ctx.availableTools.map(t => t.name).join(", ")
+  const toolNames = ctx.availableTools.map((t) => t.name).join(", ")
 
   const delegateTool: Tool = {
     name: "delegate",
@@ -144,27 +144,29 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
       properties: {
         goal: {
           type: "string",
-          description: "Clear, specific goal for the child agent. Be precise — the child has no context beyond this.",
+          description:
+            "Clear, specific goal for the child agent. Be precise — the child has no context beyond this."
         },
         agentId: {
           type: "string",
-          description: "Optional ID of a named agent definition to use. The child inherits that agent's system prompt and tools.",
+          description:
+            "Optional ID of a named agent definition to use. The child inherits that agent's system prompt and tools."
         },
         instructions: {
           type: "string",
-          description: "Optional system-level instructions for the child. Ignored if agentId is provided.",
+          description: "Optional system-level instructions for the child. Ignored if agentId is provided."
         },
         tools: {
           type: "array",
           items: { type: "string" },
-          description: `Optional subset of tool names. Ignored if agentId is provided. Available: ${toolNames}.`,
+          description: `Optional subset of tool names. Ignored if agentId is provided. Available: ${toolNames}.`
         },
         maxIterations: {
           type: "number",
-          description: `Max iterations for the child (default: ${DEFAULT_CHILD_ITERATIONS}, max: ${MAX_CHILD_ITERATIONS}).`,
-        },
+          description: `Max iterations for the child (default: ${DEFAULT_CHILD_ITERATIONS}, max: ${MAX_CHILD_ITERATIONS}).`
+        }
       },
-      required: ["goal"],
+      required: ["goal"]
     },
 
     async execute(args) {
@@ -174,12 +176,12 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
         agentId: args.agentId ? String(args.agentId) : undefined,
         instructions: args.instructions ? String(args.instructions) : undefined,
         tools: Array.isArray(args.tools) ? args.tools.map(String) : undefined,
-        maxIterations: args.maxIterations ? Number(args.maxIterations) : undefined,
+        maxIterations: args.maxIterations ? Number(args.maxIterations) : undefined
       }
 
       const result = await spawnChild(ctx, spec)
       return result
-    },
+    }
   }
 
   const delegateParallelTool: Tool = {
@@ -204,15 +206,22 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
               goal: { type: "string", description: "Specific goal for this child agent." },
               agentId: { type: "string", description: "Optional agent definition ID." },
               instructions: { type: "string", description: "Optional child instructions." },
-              tools: { type: "array", items: { type: "string" }, description: "Optional tool subset." },
-              maxIterations: { type: "number", description: `Max iterations (default: ${DEFAULT_CHILD_ITERATIONS}, max: ${MAX_CHILD_ITERATIONS}).` },
+              tools: {
+                type: "array",
+                items: { type: "string" },
+                description: "Optional tool subset."
+              },
+              maxIterations: {
+                type: "number",
+                description: `Max iterations (default: ${DEFAULT_CHILD_ITERATIONS}, max: ${MAX_CHILD_ITERATIONS}).`
+              }
             },
-            required: ["goal"],
+            required: ["goal"]
           },
-          description: "Array of sub-tasks to run in parallel. Each gets its own child agent.",
-        },
+          description: "Array of sub-tasks to run in parallel. Each gets its own child agent."
+        }
       },
-      required: ["tasks"],
+      required: ["tasks"]
     },
 
     async execute(args) {
@@ -232,7 +241,7 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
         kind: DelegationTraceKind.ParallelStart,
         depth: ctx.depth + 1,
         taskCount: tasks.length,
-        goals: tasks.map(t => t.goal),
+        goals: tasks.map((t) => t.goal)
       })
 
       // Run all children concurrently with Promise.allSettled
@@ -243,17 +252,17 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
             agentId: task.agentId ? String(task.agentId) : undefined,
             instructions: task.instructions ? String(task.instructions) : undefined,
             tools: task.tools?.map(String),
-            maxIterations: task.maxIterations ? Number(task.maxIterations) : undefined,
-          }),
-        ),
+            maxIterations: task.maxIterations ? Number(task.maxIterations) : undefined
+          })
+        )
       )
 
       ctx.onChildTrace?.({
         kind: DelegationTraceKind.ParallelEnd,
         depth: ctx.depth + 1,
         taskCount: tasks.length,
-        fulfilled: results.filter(r => r.status === "fulfilled").length,
-        rejected: results.filter(r => r.status === "rejected").length,
+        fulfilled: results.filter((r) => r.status === "fulfilled").length,
+        rejected: results.filter((r) => r.status === "rejected").length
       })
 
       // Format results as a structured report
@@ -266,7 +275,7 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
       })
 
       return lines.join("\n\n---\n\n")
-    },
+    }
   }
 
   return [delegateTool, delegateParallelTool]
@@ -277,14 +286,12 @@ export function createDelegateTools(ctx: DelegateContext): Tool[] {
  */
 export function createDelegateTool(ctx: DelegateContext): Tool | null {
   const tools = createDelegateTools(ctx)
-  return tools.find(t => t.name === "delegate") ?? null
+  return tools.find((t) => t.name === "delegate") ?? null
 }
 
 // ── Internal: spawn a single child agent ─────────────────────────
-
 
 // Re-exports from extraction modules
 export { computePlannerChildBudgetMetrics, computePlannerChildMaxIterations } from "../delegate-paths.js"
 export type { PlannerChildBudgetMetrics } from "../delegate-paths.js"
 export { spawnChild, spawnChildForPlan } from "../delegate-spawn/index.js"
-

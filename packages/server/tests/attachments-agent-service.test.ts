@@ -40,18 +40,18 @@ afterEach(() => {
 
 function makeCtx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext {
   return {
-    runId:       over.runId       ?? "run-1",
-    runMode:     over.runMode     ?? "hosted",
-    role:        over.role        ?? "hosted_user",
+    runId: over.runId ?? "run-1",
+    runMode: over.runMode ?? "hosted",
+    role: over.role ?? "hosted_user",
     sandboxRoot: over.sandboxRoot ?? sandboxRoot,
-    actorUpn:    over.actorUpn    ?? null,
-    sessionId:   over.sessionId   ?? null,
+    actorUpn: over.actorUpn ?? null,
+    sessionId: over.sessionId ?? null
   }
 }
 
 async function withAttachmentService<T>(
   ctx: HostedPolicyContext,
-  fn: (service: import("@mia/agent").AttachmentService) => Promise<T>,
+  fn: (service: import("@mia/agent").AttachmentService) => Promise<T>
 ): Promise<T> {
   const { createServerAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
   return fn(createServerAttachmentService(() => ctx))
@@ -60,16 +60,21 @@ async function withAttachmentService<T>(
 describe("server attachment service", () => {
   it("rejects path-traversal and absolute destinations", async () => {
     const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { uploadAttachment, serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
+    const { uploadAttachment, serverAttachmentService } =
+      await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
     const { seedRun } = await import("./_fk-helpers.js")
     seedRun(testDb, "run-1")
 
     const a = await uploadAttachment({
-      scope: "run", runId: "run-1", ownerUpn: "u@x", originalName: "x.txt", mediaType: "text/plain",
-      bytes: new TextEncoder().encode("hello"),
+      scope: "run",
+      runId: "run-1",
+      ownerUpn: "u@x",
+      originalName: "x.txt",
+      mediaType: "text/plain",
+      bytes: new TextEncoder().encode("hello")
     })
 
     await withAttachmentService(makeCtx(), async (service) => {
@@ -82,21 +87,25 @@ describe("server attachment service", () => {
 
   it("imports a file into the sandbox and records the import", async () => {
     const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { uploadAttachment, serverAttachmentService, listAttachmentImports }
-      = await import("../src/adapters/persistence/attachments/index.js")
+    const { uploadAttachment, serverAttachmentService, listAttachmentImports } =
+      await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
     const { seedRun } = await import("./_fk-helpers.js")
     seedRun(testDb, "run-1")
 
     const a = await uploadAttachment({
-      scope: "run", runId: "run-1", ownerUpn: "u@x", originalName: "data.csv", mediaType: "text/csv",
-      bytes: new TextEncoder().encode("a,b\n1,2\n"),
+      scope: "run",
+      runId: "run-1",
+      ownerUpn: "u@x",
+      originalName: "data.csv",
+      mediaType: "text/csv",
+      bytes: new TextEncoder().encode("a,b\n1,2\n")
     })
 
     const result = await withAttachmentService(makeCtx(), (service) =>
-      service.importToSandbox(a.id, "inputs/data.csv"),
+      service.importToSandbox(a.id, "inputs/data.csv")
     )
     expect(result.sandboxPath).toBe(join(sandboxRoot, "inputs/data.csv"))
     expect(result.sizeBytes).toBe(8)
@@ -109,20 +118,29 @@ describe("server attachment service", () => {
 
   it("read() returns text for text-media and binary for the rest, honouring maxBytes", async () => {
     const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { uploadAttachment, serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
+    const { uploadAttachment, serverAttachmentService } =
+      await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
     const { seedRun } = await import("./_fk-helpers.js")
     seedRun(testDb, "run-1")
 
     const text = await uploadAttachment({
-      scope: "run", runId: "run-1", ownerUpn: "u@x", originalName: "n.txt", mediaType: "text/plain",
-      bytes: new TextEncoder().encode("abcdefghij"),
+      scope: "run",
+      runId: "run-1",
+      ownerUpn: "u@x",
+      originalName: "n.txt",
+      mediaType: "text/plain",
+      bytes: new TextEncoder().encode("abcdefghij")
     })
     const bin = await uploadAttachment({
-      scope: "run", runId: "run-1", ownerUpn: "u@x", originalName: "n.bin", mediaType: "application/octet-stream",
-      bytes: new Uint8Array([1, 2, 3, 4, 5]),
+      scope: "run",
+      runId: "run-1",
+      ownerUpn: "u@x",
+      originalName: "n.bin",
+      mediaType: "application/octet-stream",
+      bytes: new Uint8Array([1, 2, 3, 4, 5])
     })
 
     await withAttachmentService(makeCtx(), async (service) => {
@@ -141,19 +159,32 @@ describe("server attachment service", () => {
 
   it("list() defaults to the active run when no filter is supplied", async () => {
     const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { uploadAttachment, serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
+    const { uploadAttachment, serverAttachmentService } =
+      await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
     const { seedRuns } = await import("./_fk-helpers.js")
     seedRuns(testDb, ["run-1", "run-other"])
 
-    await uploadAttachment({ scope: "run", runId: "run-1", ownerUpn: "u@x", originalName: "a.txt", mediaType: "text/plain", bytes: new TextEncoder().encode("x") })
-    await uploadAttachment({ scope: "run", runId: "run-other", ownerUpn: "u@x", originalName: "b.txt", mediaType: "text/plain", bytes: new TextEncoder().encode("y") })
+    await uploadAttachment({
+      scope: "run",
+      runId: "run-1",
+      ownerUpn: "u@x",
+      originalName: "a.txt",
+      mediaType: "text/plain",
+      bytes: new TextEncoder().encode("x")
+    })
+    await uploadAttachment({
+      scope: "run",
+      runId: "run-other",
+      ownerUpn: "u@x",
+      originalName: "b.txt",
+      mediaType: "text/plain",
+      bytes: new TextEncoder().encode("y")
+    })
 
-    const rows = await withAttachmentService(makeCtx({ runId: "run-1" }), (service) =>
-      service.list(),
-    )
+    const rows = await withAttachmentService(makeCtx({ runId: "run-1" }), (service) => service.list())
     expect(rows).toHaveLength(1)
     expect(rows[0]?.originalName).toBe("a.txt")
   })
@@ -163,18 +194,19 @@ describe("server attachment service", () => {
     const { serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
 
     await expect(serverAttachmentService.list()).rejects.toThrow(/active run context/)
   })
 
   it("promoteFromSandbox stores generated files with source=generated bound to the run", async () => {
     const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { serverAttachmentService, getAttachment } = await import("../src/adapters/persistence/attachments/index.js")
+    const { serverAttachmentService, getAttachment } =
+      await import("../src/adapters/persistence/attachments/index.js")
     const { writeFileSync, mkdirSync } = await import("node:fs")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
     const { seedRun, seedSession } = await import("./_fk-helpers.js")
     seedSession(testDb, "sid-x")
     seedRun(testDb, "run-promote", { sessionSid: "sid-x" })
@@ -185,7 +217,7 @@ describe("server attachment service", () => {
 
     const meta = await withAttachmentService(
       makeCtx({ runId: "run-promote", actorUpn: "owner@example.com", sessionId: "sid-x" }),
-      (service) => service.promoteFromSandbox("out/report.csv"),
+      (service) => service.promoteFromSandbox("out/report.csv")
     )
 
     expect(meta.normalizedName).toBe("report.csv")
@@ -206,7 +238,7 @@ describe("server attachment service", () => {
     const { serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
 
     await withAttachmentService(makeCtx(), async (service) => {
       await expect(service.promoteFromSandbox("../escape.txt")).rejects.toThrow(/escapes/)

@@ -84,7 +84,7 @@ export class CopilotChatClient implements LLMClient {
     const deviceRes = await fetch("https://github.com/login/device/code", {
       method: "POST",
       headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-      body: `client_id=${COPILOT_CLIENT_ID}&scope=copilot`,
+      body: `client_id=${COPILOT_CLIENT_ID}&scope=copilot`
     })
 
     if (!deviceRes.ok) {
@@ -114,7 +114,7 @@ export class CopilotChatClient implements LLMClient {
       const pollRes = await fetch("https://github.com/login/oauth/access_token", {
         method: "POST",
         headers: { Accept: "application/json", "Content-Type": "application/x-www-form-urlencoded" },
-        body: `client_id=${COPILOT_CLIENT_ID}&device_code=${device.device_code}&grant_type=urn:ietf:params:oauth:grant-type:device_code`,
+        body: `client_id=${COPILOT_CLIENT_ID}&device_code=${device.device_code}&grant_type=urn:ietf:params:oauth:grant-type:device_code`
       })
 
       const poll = (await pollRes.json()) as {
@@ -138,7 +138,7 @@ export class CopilotChatClient implements LLMClient {
         saveCachedToken({
           access_token: poll.access_token,
           token_type: poll.token_type ?? "bearer",
-          scope: poll.scope ?? "copilot",
+          scope: poll.scope ?? "copilot"
         })
         this.oauthToken = poll.access_token
         return poll.access_token
@@ -168,9 +168,9 @@ export class CopilotChatClient implements LLMClient {
         Accept: "application/json",
         "User-Agent": "GithubCopilot/1.255.0",
         "Editor-Version": "vscode/1.96.0",
-        "Editor-Plugin-Version": "copilot/1.255.0",
+        "Editor-Plugin-Version": "copilot/1.255.0"
       },
-      signal: AbortSignal.timeout(15_000),
+      signal: AbortSignal.timeout(15_000)
     })
 
     if (res.status === 401) {
@@ -180,7 +180,7 @@ export class CopilotChatClient implements LLMClient {
       this.session = null
       throw new Error(
         "Copilot OAuth token expired or was revoked.\n" +
-        "Restart the server to re-authorize via Device Flow.",
+          "Restart the server to re-authorize via Device Flow."
       )
     }
 
@@ -198,26 +198,34 @@ export class CopilotChatClient implements LLMClient {
     this.session = {
       token: data.token,
       endpoint: data.endpoints?.api ?? "https://api.individual.githubcopilot.com",
-      expiresAt: data.expires_at,
+      expiresAt: data.expires_at
     }
     return this.session
   }
 
   // ── LLMClient.chat ──────────────────────────────────────────
 
-  async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
+  async chat(
+    messages: Message[],
+    tools: Tool[],
+    opts?: { signal?: AbortSignal; maxTokens?: number; onToken?: (token: string) => void }
+  ): Promise<LLMResponse> {
     if (opts?.onToken) return this.chatStream(messages, tools, opts)
     return this.chatComplete(messages, tools, opts)
   }
 
-  private async chatStream(messages: Message[], tools: Tool[], opts: { signal?: AbortSignal; maxTokens?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
+  private async chatStream(
+    messages: Message[],
+    tools: Tool[],
+    opts: { signal?: AbortSignal; maxTokens?: number; onToken?: (token: string) => void }
+  ): Promise<LLMResponse> {
     const session = await this.getSession()
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map(formatMessage),
       max_completion_tokens: opts?.maxTokens ?? 16384,
       stream: true,
-      stream_options: { include_usage: true },
+      stream_options: { include_usage: true }
     }
     if (tools.length > 0) body.tools = tools.map(formatTool)
 
@@ -231,10 +239,10 @@ export class CopilotChatClient implements LLMClient {
           Authorization: `Bearer ${session.token}`,
           "Editor-Version": "vscode/1.96.0",
           "Copilot-Integration-Id": "vscode-chat",
-          "Openai-Intent": "conversation-panel",
+          "Openai-Intent": "conversation-panel"
         },
         body: JSON.stringify(body),
-        signal: opts?.signal,
+        signal: opts?.signal
       })
       if (res.status !== 429 || attempt === maxRetries) break
       const retryAfter = res.headers.get("retry-after")
@@ -249,7 +257,10 @@ export class CopilotChatClient implements LLMClient {
 
     let content = ""
     const toolCallMap = new Map<number, { id: string; name: string; arguments: string }>()
-    let promptTokens = 0, completionTokens = 0, totalTokens = 0, finishReason: string | null = null
+    let promptTokens = 0,
+      completionTokens = 0,
+      totalTokens = 0,
+      finishReason: string | null = null
     const reader = res!.body!.getReader()
     const decoder = new TextDecoder()
     let buf = ""
@@ -264,7 +275,11 @@ export class CopilotChatClient implements LLMClient {
         const raw = line.slice(6).trim()
         if (raw === "[DONE]") continue
         let chunk: Record<string, unknown>
-        try { chunk = JSON.parse(raw) as Record<string, unknown> } catch { continue }
+        try {
+          chunk = JSON.parse(raw) as Record<string, unknown>
+        } catch {
+          continue
+        }
         const choices = chunk.choices as Array<Record<string, unknown>> | undefined
         const delta = choices?.[0]?.delta as Record<string, unknown> | undefined
         const fr = choices?.[0]?.finish_reason as string | undefined
@@ -285,26 +300,38 @@ export class CopilotChatClient implements LLMClient {
           }
         }
         const usage = chunk.usage as Record<string, number> | undefined
-        if (usage?.total_tokens) { promptTokens = usage.prompt_tokens; completionTokens = usage.completion_tokens; totalTokens = usage.total_tokens }
+        if (usage?.total_tokens) {
+          promptTokens = usage.prompt_tokens
+          completionTokens = usage.completion_tokens
+          totalTokens = usage.total_tokens
+        }
       }
     }
     if (finishReason === "length") {
-      throw new Error("LLM response truncated (finish_reason=length). The model hit its completion token limit before finishing. This usually means a tool call argument (like file content) was too large.")
+      throw new Error(
+        "LLM response truncated (finish_reason=length). The model hit its completion token limit before finishing. This usually means a tool call argument (like file content) was too large."
+      )
     }
     return {
       content: content || null,
-      toolCalls: [...toolCallMap.values()].map((tc): ToolCall => ({ id: tc.id, name: tc.name, arguments: safeParseArgs(tc.arguments) })),
-      usage: totalTokens > 0 ? { promptTokens, completionTokens, totalTokens } : undefined,
+      toolCalls: [...toolCallMap.values()].map(
+        (tc): ToolCall => ({ id: tc.id, name: tc.name, arguments: safeParseArgs(tc.arguments) })
+      ),
+      usage: totalTokens > 0 ? { promptTokens, completionTokens, totalTokens } : undefined
     }
   }
 
-  private async chatComplete(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number }): Promise<LLMResponse> {
+  private async chatComplete(
+    messages: Message[],
+    tools: Tool[],
+    opts?: { signal?: AbortSignal; maxTokens?: number }
+  ): Promise<LLMResponse> {
     const session = await this.getSession()
 
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map(formatMessage),
-      max_completion_tokens: opts?.maxTokens ?? 16384,
+      max_completion_tokens: opts?.maxTokens ?? 16384
     }
 
     if (tools.length > 0) {
@@ -322,18 +349,16 @@ export class CopilotChatClient implements LLMClient {
           Authorization: `Bearer ${session.token}`,
           "Editor-Version": "vscode/1.96.0",
           "Copilot-Integration-Id": "vscode-chat",
-          "Openai-Intent": "conversation-panel",
+          "Openai-Intent": "conversation-panel"
         },
         body: JSON.stringify(body),
-        signal: opts?.signal,
+        signal: opts?.signal
       })
 
       if (res.status !== 429 || attempt === maxRetries) break
 
       const retryAfter = res.headers.get("retry-after")
-      const waitMs = retryAfter
-        ? Number(retryAfter) * 1000
-        : Math.min(2000 * 2 ** attempt, 60_000)
+      const waitMs = retryAfter ? Number(retryAfter) * 1000 : Math.min(2000 * 2 ** attempt, 60_000)
       await new Promise((r) => setTimeout(r, waitMs))
     }
 
@@ -368,8 +393,8 @@ export class CopilotChatClient implements LLMClient {
     if (finish === "length") {
       throw new Error(
         "LLM response truncated (finish_reason=length). " +
-        "The model hit its completion token limit before finishing. " +
-        "This usually means a tool call argument (like file content) was too large."
+          "The model hit its completion token limit before finishing. " +
+          "This usually means a tool call argument (like file content) was too large."
       )
     }
 
@@ -381,16 +406,16 @@ export class CopilotChatClient implements LLMClient {
         (tc): ToolCall => ({
           id: tc.id,
           name: tc.function.name,
-          arguments: safeParseArgs(tc.function.arguments),
-        }),
+          arguments: safeParseArgs(tc.function.arguments)
+        })
       ),
       usage: data.usage
         ? {
             promptTokens: data.usage.prompt_tokens,
             completionTokens: data.usage.completion_tokens,
-            totalTokens: data.usage.total_tokens,
+            totalTokens: data.usage.total_tokens
           }
-        : undefined,
+        : undefined
     }
   }
 }
@@ -444,9 +469,9 @@ function formatMessage(msg: Message): ApiMessage {
         type: "function" as const,
         function: {
           name: tc.name,
-          arguments: JSON.stringify(tc.arguments),
-        },
-      })),
+          arguments: JSON.stringify(tc.arguments)
+        }
+      }))
     }
   }
 
@@ -454,7 +479,7 @@ function formatMessage(msg: Message): ApiMessage {
     return {
       role: "tool",
       content: msg.content,
-      tool_call_id: msg.toolCallId,
+      tool_call_id: msg.toolCallId
     }
   }
 
@@ -467,7 +492,7 @@ function formatTool(tool: Tool) {
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: tool.parameters,
-    },
+      parameters: tool.parameters
+    }
   }
 }

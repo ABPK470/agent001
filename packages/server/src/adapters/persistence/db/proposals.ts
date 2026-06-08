@@ -13,16 +13,16 @@
  */
 
 import {
-    assertProposalTransition,
-    ProposalStatus,
-    ProposerRunStatus,
-    type ProposalCounts,
-    type ProposalKind,
-    type ProposerFinding,
-    type ProposerRun,
-    type ProposerRunCounts,
-    type RiskAnnotation,
-    type RiskTier,
+  assertProposalTransition,
+  ProposalStatus,
+  ProposerRunStatus,
+  type ProposalCounts,
+  type ProposalKind,
+  type ProposerFinding,
+  type ProposerRun,
+  type ProposerRunCounts,
+  type RiskAnnotation,
+  type RiskTier
 } from "@mia/sync"
 import { randomUUID } from "node:crypto"
 import { getDb } from "./connection.js"
@@ -30,45 +30,50 @@ import { getDb } from "./connection.js"
 // ── proposer_runs ────────────────────────────────────────────────
 
 export interface CreateProposerRunInput {
-  tenantId:    string
-  source:      string
-  target:      string
+  tenantId: string
+  source: string
+  target: string
   triggeredBy: string
-  trigger:     ProposerRun["trigger"]
+  trigger: ProposerRun["trigger"]
 }
 
 export function createProposerRun(input: CreateProposerRunInput): string {
   const id = randomUUID()
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO proposer_runs (id, tenant_id, source, target, started_at, status,
                                scanned, produced, errors, triggered_by, trigger)
     VALUES (?, ?, ?, ?, datetime('now'), 'pending', 0, 0, 0, ?, ?)
-  `).run(id, input.tenantId, input.source, input.target, input.triggeredBy, input.trigger)
+  `
+    )
+    .run(id, input.tenantId, input.source, input.target, input.triggeredBy, input.trigger)
   return id
 }
 
 export function markProposerRunRunning(id: string): void {
-  getDb().prepare(
-    `UPDATE proposer_runs SET status = 'running' WHERE id = ? AND status = 'pending'`,
-  ).run(id)
+  getDb().prepare(`UPDATE proposer_runs SET status = 'running' WHERE id = ? AND status = 'pending'`).run(id)
 }
 
 export interface FinishProposerRunInput {
-  id:         string
-  status:     Exclude<ProposerRunStatus, "pending" | "running">
-  counts:     ProposerRunCounts
+  id: string
+  status: Exclude<ProposerRunStatus, "pending" | "running">
+  counts: ProposerRunCounts
   durationMs: number
-  error:      string | null
+  error: string | null
 }
 
 export function finishProposerRun(i: FinishProposerRunInput): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     UPDATE proposer_runs
        SET status = ?, finished_at = datetime('now'), scanned = ?, produced = ?,
            errors = ?, duration_ms = ?, error = ?
      WHERE id = ?
-  `).run(i.status, i.counts.scanned, i.counts.produced, i.counts.errors,
-         i.durationMs, i.error, i.id)
+  `
+    )
+    .run(i.status, i.counts.scanned, i.counts.produced, i.counts.errors, i.durationMs, i.error, i.id)
 }
 
 export interface ProposerRunRow {
@@ -89,13 +94,16 @@ export interface ProposerRunRow {
 }
 
 export function getProposerRun(id: string): ProposerRunRow | null {
-  return (getDb().prepare(`SELECT * FROM proposer_runs WHERE id = ?`).get(id) as ProposerRunRow | undefined) ?? null
+  return (
+    (getDb().prepare(`SELECT * FROM proposer_runs WHERE id = ?`).get(id) as ProposerRunRow | undefined) ??
+    null
+  )
 }
 
 export function listProposerRuns(tenantId: string, limit = 50): ProposerRunRow[] {
-  return getDb().prepare(
-    `SELECT * FROM proposer_runs WHERE tenant_id = ? ORDER BY started_at DESC LIMIT ?`,
-  ).all(tenantId, limit) as ProposerRunRow[]
+  return getDb()
+    .prepare(`SELECT * FROM proposer_runs WHERE tenant_id = ? ORDER BY started_at DESC LIMIT ?`)
+    .all(tenantId, limit) as ProposerRunRow[]
 }
 
 // ── sync_proposals ───────────────────────────────────────────────
@@ -138,7 +146,7 @@ export interface ProposalRow {
 export function ingestFindings(
   tenantId: string,
   runId: string,
-  findings: readonly ProposerFinding[],
+  findings: readonly ProposerFinding[]
 ): string[] {
   const db = getDb()
   const findOpen = db.prepare(`
@@ -165,10 +173,20 @@ export function ingestFindings(
       if (dup) continue
       const id = randomUUID()
       ins.run(
-        id, tenantId, runId, f.fingerprint, f.envPair.source, f.envPair.target,
-        f.entityType, f.entityId, f.entityLabel, f.kind,
-        JSON.stringify(f.counts), JSON.stringify(f.detail),
-        f.entityDefVersion, f.observedAt,
+        id,
+        tenantId,
+        runId,
+        f.fingerprint,
+        f.envPair.source,
+        f.envPair.target,
+        f.entityType,
+        f.entityId,
+        f.entityLabel,
+        f.kind,
+        JSON.stringify(f.counts),
+        JSON.stringify(f.detail),
+        f.entityDefVersion,
+        f.observedAt
       )
       insHistory.run(id, "proposer", JSON.stringify({ runId, fingerprint: f.fingerprint }))
       inserted.push(id)
@@ -179,42 +197,63 @@ export function ingestFindings(
 }
 
 export function getProposal(id: string): ProposalRow | null {
-  return (getDb().prepare(`SELECT * FROM sync_proposals WHERE id = ?`).get(id) as ProposalRow | undefined) ?? null
+  return (
+    (getDb().prepare(`SELECT * FROM sync_proposals WHERE id = ?`).get(id) as ProposalRow | undefined) ?? null
+  )
 }
 
 export interface ListProposalsFilter {
-  tenantId:  string
-  status?:   readonly ProposalStatus[]
+  tenantId: string
+  status?: readonly ProposalStatus[]
   riskTier?: readonly RiskTier[]
-  source?:   string
-  target?:   string
+  source?: string
+  target?: string
   entityType?: string
-  limit?:    number
-  offset?:   number
+  limit?: number
+  offset?: number
 }
 
 export function listProposals(f: ListProposalsFilter): ProposalRow[] {
   const where: string[] = ["tenant_id = ?"]
   const args: unknown[] = [f.tenantId]
-  if (f.status?.length)   { where.push(`status IN (${f.status.map(() => "?").join(",")})`);     args.push(...f.status) }
-  if (f.riskTier?.length) { where.push(`risk_tier IN (${f.riskTier.map(() => "?").join(",")})`); args.push(...f.riskTier) }
-  if (f.source)           { where.push("source = ?"); args.push(f.source) }
-  if (f.target)           { where.push("target = ?"); args.push(f.target) }
-  if (f.entityType)       { where.push("entity_type = ?"); args.push(f.entityType) }
-  const limit  = f.limit  ?? 100
+  if (f.status?.length) {
+    where.push(`status IN (${f.status.map(() => "?").join(",")})`)
+    args.push(...f.status)
+  }
+  if (f.riskTier?.length) {
+    where.push(`risk_tier IN (${f.riskTier.map(() => "?").join(",")})`)
+    args.push(...f.riskTier)
+  }
+  if (f.source) {
+    where.push("source = ?")
+    args.push(f.source)
+  }
+  if (f.target) {
+    where.push("target = ?")
+    args.push(f.target)
+  }
+  if (f.entityType) {
+    where.push("entity_type = ?")
+    args.push(f.entityType)
+  }
+  const limit = f.limit ?? 100
   const offset = f.offset ?? 0
-  return getDb().prepare(`
+  return getDb()
+    .prepare(
+      `
     SELECT * FROM sync_proposals
      WHERE ${where.join(" AND ")}
      ORDER BY COALESCE(rank_score, 0) DESC, enqueued_at DESC
      LIMIT ? OFFSET ?
-  `).all(...args, limit, offset) as ProposalRow[]
+  `
+    )
+    .all(...args, limit, offset) as ProposalRow[]
 }
 
 export function countProposalsByStatus(tenantId: string): Record<ProposalStatus, number> {
-  const rows = getDb().prepare(
-    `SELECT status, COUNT(*) AS n FROM sync_proposals WHERE tenant_id = ? GROUP BY status`,
-  ).all(tenantId) as { status: ProposalStatus; n: number }[]
+  const rows = getDb()
+    .prepare(`SELECT status, COUNT(*) AS n FROM sync_proposals WHERE tenant_id = ? GROUP BY status`)
+    .all(tenantId) as { status: ProposalStatus; n: number }[]
   const out: Partial<Record<ProposalStatus, number>> = {}
   for (const r of rows) out[r.status] = r.n
   // ensure every status key present
@@ -224,17 +263,17 @@ export function countProposalsByStatus(tenantId: string): Record<ProposalStatus,
 
 // ── annotation + ranking persistence ────────────────────────────
 
-export function saveAnnotation(
-  id: string,
-  annotation: RiskAnnotation,
-  failedOpen: boolean,
-): void {
-  getDb().prepare(`
+export function saveAnnotation(id: string, annotation: RiskAnnotation, failedOpen: boolean): void {
+  getDb()
+    .prepare(
+      `
     UPDATE sync_proposals
        SET annotation_json = ?, annotation_failed_open = ?,
            risk_tier = ?, risk_score = ?
      WHERE id = ?
-  `).run(JSON.stringify(annotation), failedOpen ? 1 : 0, annotation.riskTier, annotation.riskScore, id)
+  `
+    )
+    .run(JSON.stringify(annotation), failedOpen ? 1 : 0, annotation.riskTier, annotation.riskScore, id)
 }
 
 export function saveRankScore(id: string, score: number): void {
@@ -244,12 +283,12 @@ export function saveRankScore(id: string, score: number): void {
 // ── lifecycle transitions ───────────────────────────────────────
 
 export interface UpdateProposalStatusInput {
-  id:        string
-  to:        ProposalStatus
-  actor:     string
-  reason?:   string
-  detail?:   Record<string, unknown>
-  planId?:   string | null
+  id: string
+  to: ProposalStatus
+  actor: string
+  reason?: string
+  detail?: Record<string, unknown>
+  planId?: string | null
   snoozeUntil?: string | null
   supersededBy?: string | null
 }
@@ -261,7 +300,8 @@ export function updateProposalStatus(i: UpdateProposalStatusInput): ProposalRow 
   assertProposalTransition(row.status, i.to)
 
   const tx = db.transaction(() => {
-    db.prepare(`
+    db.prepare(
+      `
       UPDATE sync_proposals
          SET status = ?,
              plan_id = COALESCE(?, plan_id),
@@ -269,12 +309,14 @@ export function updateProposalStatus(i: UpdateProposalStatusInput): ProposalRow 
              superseded_by = COALESCE(?, superseded_by),
              last_actor = ?, last_action = ?, last_action_at = datetime('now')
        WHERE id = ?
-    `).run(i.to, i.planId ?? null, i.snoozeUntil ?? null, i.supersededBy ?? null,
-           i.actor, i.to, i.id)
-    db.prepare(`
+    `
+    ).run(i.to, i.planId ?? null, i.snoozeUntil ?? null, i.supersededBy ?? null, i.actor, i.to, i.id)
+    db.prepare(
+      `
       INSERT INTO sync_proposal_history (proposal_id, from_status, to_status, actor, reason, detail_json)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(i.id, row.status, i.to, i.actor, i.reason ?? "", JSON.stringify(i.detail ?? {}))
+    `
+    ).run(i.id, row.status, i.to, i.actor, i.reason ?? "", JSON.stringify(i.detail ?? {}))
   })
   tx()
   return getProposal(i.id)!
@@ -292,9 +334,9 @@ export interface ProposalHistoryRow {
 }
 
 export function listProposalHistory(id: string): ProposalHistoryRow[] {
-  return getDb().prepare(
-    `SELECT * FROM sync_proposal_history WHERE proposal_id = ? ORDER BY at ASC, id ASC`,
-  ).all(id) as ProposalHistoryRow[]
+  return getDb()
+    .prepare(`SELECT * FROM sync_proposal_history WHERE proposal_id = ? ORDER BY at ASC, id ASC`)
+    .all(id) as ProposalHistoryRow[]
 }
 
 // ── parse helpers (DB row → domain) ─────────────────────────────

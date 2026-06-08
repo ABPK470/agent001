@@ -10,88 +10,99 @@
 import type { EntityDefinition } from "@mia/sync"
 import { describe, expect, it } from "vitest"
 import {
-    formatEntitiesYaml,
-    formatEntityYaml,
-    parseEntitiesYaml,
-    parseEntityYaml,
+  formatEntitiesYaml,
+  formatEntityYaml,
+  parseEntitiesYaml,
+  parseEntityYaml
 } from "../src/adapters/sync/entity-yaml.js"
 
 const FULL_DEF: EntityDefinition = {
-  id:             "contract",
-  tenantId:       "_default",
-  displayName:    "Contract",
-  description:    "Contract root entity",
-  rootTable:      "dbo.Contract",
-  idColumn:       "ContractId",
-  labelColumn:    "Title",
+  id: "contract",
+  tenantId: "_default",
+  displayName: "Contract",
+  description: "Contract root entity",
+  rootTable: "dbo.Contract",
+  idColumn: "ContractId",
+  labelColumn: "Title",
   selfJoinColumn: null,
   tables: [
     {
-      name:           "dbo.Contract",
+      name: "dbo.Contract",
       executionOrder: 1,
-      scope:          { kind: "rootPk", column: "ContractId" },
-      scd2Override:   null,
-      verified:       true,
-      archiveTable:   "dboArchive.Contract",
-      note:           null,
-      provenance:     { kind: "manual" },
+      scope: { kind: "rootPk", column: "ContractId" },
+      scd2Override: null,
+      verified: true,
+      archiveTable: "dboArchive.Contract",
+      note: null,
+      provenance: { kind: "manual" },
       scopeColumn: "ContractId",
       source: "fk+pipeline",
       groundedByPipeline: true,
       enabledByDefault: true,
-      userControllable: false,
+      userControllable: false
     },
     {
-      name:           "dbo.ContractLineItem",
+      name: "dbo.ContractLineItem",
       executionOrder: 2,
-      scope:          {
+      scope: {
         kind: "fkPath",
         through: [
-          { table: "dbo.ContractLineItem", fromColumn: "ContractId", toColumn: "ContractLineItemId" },
-        ],
+          {
+            table: "dbo.ContractLineItem",
+            fromColumn: "ContractId",
+            toColumn: "ContractLineItemId"
+          }
+        ]
       },
       scd2Override: null,
-      verified:     true,
+      verified: true,
       archiveTable: null,
-      note:         "downstream",
-      provenance:   { kind: "manual" },
+      note: "downstream",
+      provenance: { kind: "manual" },
       scopeColumn: null,
       source: "fk-only",
       groundedByPipeline: false,
       enabledByDefault: false,
-      userControllable: true,
-    },
+      userControllable: true
+    }
   ],
   policies: {
     approvalPolicyId: null,
-    freezeWindowIds:  ["month-end"],
-    riskMultiplier:   1.5,
+    freezeWindowIds: ["month-end"],
+    riskMultiplier: 1.5
   },
   scd2: {
-    strategyId:      "mymi-scd2",
+    strategyId: "mymi-scd2",
     strategyVersion: "latest",
-    entityOverride:  null,
+    entityOverride: null
   },
   lineageRefs: [],
-  provenance:  { kind: "legacy-migration", legacyPipelineId: 42 },
+  provenance: { kind: "legacy-migration", legacyPipelineId: 42 },
   legacyEntrySproc: "dbo.uspSyncContract",
   reverseOrder: ["dbo.ContractLineItem", "dbo.Contract"],
   discrepancies: [],
-  version:     1,
+  version: 1,
   versionLabel: null,
-  createdBy:   "test",
-  reason:      "init",
-  createdAt:   "2025-01-01T00:00:00.000Z",
-  retiredAt:   null,
+  createdBy: "test",
+  reason: "init",
+  createdAt: "2025-01-01T00:00:00.000Z",
+  retiredAt: null
 }
 
 // Fields the import path does not populate (server stamps them).
-function stripServerStamped(def: EntityDefinition): Omit<EntityDefinition, "version" | "versionLabel" | "createdAt" | "createdBy" | "reason" | "retiredAt"> {
+function stripServerStamped(
+  def: EntityDefinition
+): Omit<EntityDefinition, "version" | "versionLabel" | "createdAt" | "createdBy" | "reason" | "retiredAt"> {
   const { version, versionLabel, createdAt, createdBy, reason, retiredAt, ...rest } = def
-  void version; void versionLabel; void createdAt; void createdBy; void reason; void retiredAt
+  void version
+  void versionLabel
+  void createdAt
+  void createdBy
+  void reason
+  void retiredAt
   rest.policies = {
     freezeWindowIds: rest.policies.freezeWindowIds,
-    riskMultiplier: rest.policies.riskMultiplier,
+    riskMultiplier: rest.policies.riskMultiplier
   }
   return rest
 }
@@ -108,7 +119,7 @@ describe("entity-yaml round-trip", () => {
   it("does not round-trip approvalPolicyId because runtime ignores it", () => {
     const yaml = formatEntityYaml({
       ...FULL_DEF,
-      policies: { ...FULL_DEF.policies, approvalPolicyId: "high-risk" },
+      policies: { ...FULL_DEF.policies, approvalPolicyId: "high-risk" }
     })
     const parsed = parseEntityYaml(yaml)
     expect(parsed.ok).toBe(true)

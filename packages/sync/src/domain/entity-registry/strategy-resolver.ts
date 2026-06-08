@@ -20,12 +20,7 @@
  *     overriding even one column. UI surfaces this clearly.
  */
 
-import type {
-    EffectiveScd2,
-    EntityTable,
-    Scd2Override,
-    Scd2Strategy,
-} from "./types.js"
+import type { EffectiveScd2, EntityTable, Scd2Override, Scd2Strategy } from "./types.js"
 
 export function resolveEffectiveScd2(args: {
   strategy: Scd2Strategy
@@ -35,18 +30,13 @@ export function resolveEffectiveScd2(args: {
   const { strategy, entityOverride, table } = args
   const tableOverride = table.scd2Override
 
-  const validFromCol   = pickColumn("validFromCol", strategy, entityOverride, tableOverride)
-  const validToCol     = pickColumn("validToCol", strategy, entityOverride, tableOverride)
-  const isLockedCol    = pickColumn("isLockedCol", strategy, entityOverride, tableOverride)
-  const syncDateCol    = pickColumn("syncDateCol", strategy, entityOverride, tableOverride)
-  const deployDateCol  = pickColumn("deployDateCol", strategy, entityOverride, tableOverride)
+  const validFromCol = pickColumn("validFromCol", strategy, entityOverride, tableOverride)
+  const validToCol = pickColumn("validToCol", strategy, entityOverride, tableOverride)
+  const isLockedCol = pickColumn("isLockedCol", strategy, entityOverride, tableOverride)
+  const syncDateCol = pickColumn("syncDateCol", strategy, entityOverride, tableOverride)
+  const deployDateCol = pickColumn("deployDateCol", strategy, entityOverride, tableOverride)
 
-  const identityHandling = pickEnum(
-    "identityHandling",
-    strategy,
-    entityOverride,
-    tableOverride,
-  )
+  const identityHandling = pickEnum("identityHandling", strategy, entityOverride, tableOverride)
 
   const excludedFromDiffCols = pickArray("excludedFromDiffCols", strategy, entityOverride, tableOverride)
   const onInsert = pickDict("onInsert", strategy, entityOverride, tableOverride)
@@ -66,8 +56,8 @@ export function resolveEffectiveScd2(args: {
       strategyId: strategy.id,
       strategyVersion: strategy.version,
       entityOverrideApplied: !isEmptyOverride(entityOverride),
-      tableOverrideApplied: !isEmptyOverride(tableOverride),
-    },
+      tableOverrideApplied: !isEmptyOverride(tableOverride)
+    }
   }
 }
 
@@ -79,7 +69,7 @@ function pickColumn(
   field: ColumnField,
   strategy: Scd2Strategy,
   entityOverride: Scd2Override | null,
-  tableOverride: Scd2Override | null,
+  tableOverride: Scd2Override | null
 ): string | null {
   if (tableOverride && field in tableOverride) {
     const v = tableOverride[field]
@@ -96,7 +86,7 @@ function pickEnum(
   field: "identityHandling",
   strategy: Scd2Strategy,
   entityOverride: Scd2Override | null,
-  tableOverride: Scd2Override | null,
+  tableOverride: Scd2Override | null
 ): Scd2Strategy["identityHandling"] {
   if (tableOverride && tableOverride[field] !== undefined) return tableOverride[field]!
   if (entityOverride && entityOverride[field] !== undefined) return entityOverride[field]!
@@ -107,7 +97,7 @@ function pickArray(
   field: "excludedFromDiffCols",
   strategy: Scd2Strategy,
   entityOverride: Scd2Override | null,
-  tableOverride: Scd2Override | null,
+  tableOverride: Scd2Override | null
 ): string[] {
   if (tableOverride && tableOverride[field] !== undefined) return [...tableOverride[field]!]
   if (entityOverride && entityOverride[field] !== undefined) return [...entityOverride[field]!]
@@ -118,7 +108,7 @@ function pickDict(
   field: "onInsert" | "onUpdate",
   strategy: Scd2Strategy,
   entityOverride: Scd2Override | null,
-  tableOverride: Scd2Override | null,
+  tableOverride: Scd2Override | null
 ): Record<string, string> {
   if (tableOverride && tableOverride[field] !== undefined) return { ...tableOverride[field]! }
   if (entityOverride && entityOverride[field] !== undefined) return { ...entityOverride[field]! }

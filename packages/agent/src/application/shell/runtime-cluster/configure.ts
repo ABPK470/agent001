@@ -102,58 +102,63 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const shellMode = options.shellMode ?? (options.shellClient ? "sandbox" : "host")
   const browserCheckMode = options.browserCheckMode ?? (options.browserCheckClient ? "sandbox" : "host")
   const mssqlDatabases = options.mssqlDatabases ?? buildMssqlDatabases(options.mssqlConfigs)
-  const mssqlDefaultConnection = options.mssqlDefaultConnection ?? { value: options.mssqlDefaultConnectionName ?? null }
+  const mssqlDefaultConnection = options.mssqlDefaultConnection ?? {
+    value: options.mssqlDefaultConnectionName ?? null
+  }
   const syncOptions = options.sync
   const syncState = {
     events: { sink: syncOptions?.events?.sink ?? NOOP_SYNC_EVENT_SINK },
     runs: { sink: syncOptions?.runs?.sink ?? NOOP_SYNC_RUN_SINK },
-    governance: { freezeWindowsReader: syncOptions?.governance?.freezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER },
+    governance: {
+      freezeWindowsReader: syncOptions?.governance?.freezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER
+    },
     environments: { items: normalizeSyncEnvironmentItems(syncOptions?.environments?.items) },
     plans: {
       diskRoot: syncOptions?.plans?.diskRoot ?? null,
-      memCache: syncOptions?.plans?.memCache ?? new Map(),
+      memCache: syncOptions?.plans?.memCache ?? new Map()
     },
     project: {
       dbProjectRoot: syncOptions?.project?.dbProjectRoot ?? null,
-      publishedDefinitions: syncOptions?.project?.publishedDefinitions ?? createPublishedSyncDefinitionRegistry(),
-    },
+      publishedDefinitions:
+        syncOptions?.project?.publishedDefinitions ?? createPublishedSyncDefinitionRegistry()
+    }
   }
 
   return Object.freeze<AgentHost>({
     workspaceRoot,
     mssql: Object.freeze({
       databases: mssqlDatabases,
-      defaultConnection: mssqlDefaultConnection,
+      defaultConnection: mssqlDefaultConnection
     }),
     filesystem: Object.freeze({
-      basePath: options.filesystemBasePath ?? workspaceRoot,
+      basePath: options.filesystemBasePath ?? workspaceRoot
     }),
     searchFiles: Object.freeze({
       basePath: options.searchFilesBasePath ?? workspaceRoot,
-      excludeDirs: options.searchFilesExcludeDirs ?? new Set<string>(),
+      excludeDirs: options.searchFilesExcludeDirs ?? new Set<string>()
     }),
     shell: Object.freeze({
       mode: shellMode,
       cwd: options.shellCwd ?? workspaceRoot,
       sandboxStrict: options.shellSandboxStrict ?? false,
-      client: shellMode === "sandbox" ? (options.shellClient ?? NOOP_SHELL_CLIENT) : null,
+      client: shellMode === "sandbox" ? (options.shellClient ?? NOOP_SHELL_CLIENT) : null
     }),
     browserCheck: Object.freeze({
       mode: browserCheckMode,
       cwd: options.browserCheckCwd ?? workspaceRoot,
-      client: browserCheckMode === "sandbox" ? (options.browserCheckClient ?? null) : null,
+      client: browserCheckMode === "sandbox" ? (options.browserCheckClient ?? null) : null
     }),
     browser: Object.freeze({
       runtime: Object.freeze({
         activeSessions: new Map(),
         idCounter: { value: 0 },
-        cleanupTimer: { value: null },
+        cleanupTimer: { value: null }
       }),
       providers: Object.freeze({
         contextReader: options.browser?.providers?.contextReader ?? null,
         credentialReader: options.browser?.providers?.credentialReader ?? null,
-        handoffStore: options.browser?.providers?.handoffStore ?? null,
-      }),
+        handoffStore: options.browser?.providers?.handoffStore ?? null
+      })
     }),
     userInput: options.userInput ?? null,
     attachments: options.attachments ?? null,
@@ -161,14 +166,14 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
     tableVerdicts: options.tableVerdicts ?? null,
     catalog: Object.freeze({
       instances: options.catalogInstances ?? new Map(),
-      defaultCachePath: options.catalogDefaultCachePath ?? { value: undefined },
+      defaultCachePath: options.catalogDefaultCachePath ?? { value: undefined }
     }),
     sync: syncState,
     tenant: Object.freeze({
       id: options.tenant?.id ?? null,
       displayName: options.tenant?.displayName ?? null,
-      featureFlags: options.tenant?.featureFlags ?? new Map<string, boolean>(),
-    }),
+      featureFlags: options.tenant?.featureFlags ?? new Map<string, boolean>()
+    })
   })
 }
 
@@ -183,14 +188,18 @@ const NOOP_SYNC_EVENT_SINK: AgentHost["sync"]["events"]["sink"] = () => {
 }
 
 const NOOP_SYNC_RUN_SINK: AgentHost["sync"]["runs"]["sink"] = {
-  start() { /* noop */ },
-  finish() { /* noop */ },
+  start() {
+    /* noop */
+  },
+  finish() {
+    /* noop */
+  }
 }
 
 const EMPTY_FREEZE_WINDOWS_READER: AgentHost["sync"]["governance"]["freezeWindowsReader"] = () => []
 
 function normalizeSyncEnvironmentItems(
-  items: ReadonlyMap<string, SyncEnvironment> | ReadonlyArray<SyncEnvironment> | undefined,
+  items: ReadonlyMap<string, SyncEnvironment> | ReadonlyArray<SyncEnvironment> | undefined
 ): Map<string, SyncEnvironment> {
   if (!items) return new Map()
   if (Array.isArray(items)) return new Map(items.map((env) => [env.name, env]))
@@ -200,8 +209,13 @@ function normalizeSyncEnvironmentItems(
   return normalized
 }
 
-function buildMssqlDatabases(configs: ReadonlyArray<ConfigureMssqlConnection> | undefined): AgentHost["mssql"]["databases"] {
-  const databases = new Map<string, AgentHost["mssql"]["databases"] extends Map<string, infer Entry> ? Entry : never>()
+function buildMssqlDatabases(
+  configs: ReadonlyArray<ConfigureMssqlConnection> | undefined
+): AgentHost["mssql"]["databases"] {
+  const databases = new Map<
+    string,
+    AgentHost["mssql"]["databases"] extends Map<string, infer Entry> ? Entry : never
+  >()
   for (const config of configs ?? []) {
     const { name, writeEnabled = false, knowledge = null, ...rest } = config
     databases.set(name, {
@@ -210,20 +224,20 @@ function buildMssqlDatabases(configs: ReadonlyArray<ConfigureMssqlConnection> | 
         options: {
           encrypt: true,
           trustServerCertificate: true,
-          ...rest.options,
+          ...rest.options
         },
         pool: {
           min: 0,
           max: 20,
           idleTimeoutMillis: 30_000,
-          ...(rest.pool ?? {}),
+          ...(rest.pool ?? {})
         },
         requestTimeout: rest.requestTimeout ?? 120_000,
-        connectionTimeout: rest.connectionTimeout ?? 15_000,
+        connectionTimeout: rest.connectionTimeout ?? 15_000
       },
       pool: null,
       writeEnabled,
-      knowledge,
+      knowledge
     })
   }
   return databases

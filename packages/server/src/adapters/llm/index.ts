@@ -4,4 +4,3 @@
 
 export * from "./completion-adapter.js"
 export * from "./registry.js"
-

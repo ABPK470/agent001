@@ -15,13 +15,13 @@
  */
 
 import {
-    extractToolFacts,
-    PolicyEffect,
-    PolicyViolationError,
-    RulePolicyEvaluator,
-    type AgentRun,
-    type HostedPolicyContext,
-    type Step,
+  extractToolFacts,
+  PolicyEffect,
+  PolicyViolationError,
+  RulePolicyEvaluator,
+  type AgentRun,
+  type HostedPolicyContext,
+  type Step
 } from "@mia/agent"
 import { withPermissionDefaults } from "@mia/sync"
 import { describe, expect, it } from "vitest"
@@ -29,32 +29,32 @@ import { policyRulesFromEnvironments } from "../src/domain/policy/hosted-default
 
 function makeStep(action: string, input: Record<string, unknown> = {}): Step {
   return {
-    id:           "s1",
+    id: "s1",
     definitionId: "s1",
-    name:         action,
+    name: action,
     action,
     input,
-    condition:    null,
-    onError:      "fail",
-    status:       "pending" as Step["status"],
-    order:        0,
-    output:       {},
-    error:        null,
-    startedAt:    null,
-    completedAt:  null,
+    condition: null,
+    onError: "fail",
+    status: "pending" as Step["status"],
+    order: 0,
+    output: {},
+    error: null,
+    startedAt: null,
+    completedAt: null
   }
 }
 
 const HOSTED: HostedPolicyContext = {
-  runId:       "r1",
-  runMode:     "hosted",
-  role:        "hosted_user",
-  sandboxRoot: "/tmp/sb",
+  runId: "r1",
+  runMode: "hosted",
+  role: "hosted_user",
+  sandboxRoot: "/tmp/sb"
 }
 
 async function evaluate(
   ev: RulePolicyEvaluator,
-  step: Step,
+  step: Step
 ): Promise<{ approval: string | null; error?: PolicyViolationError }> {
   const run = { id: "r1" } as AgentRun
   try {
@@ -69,30 +69,36 @@ async function evaluate(
 // ── Fact extraction ──────────────────────────────────────────────
 
 describe("extractToolFacts — environment from connection arg", () => {
-  it("treats connection=\"prod\" as dbEnvironment=prod for query_mssql", () => {
+  it('treats connection="prod" as dbEnvironment=prod for query_mssql', () => {
     const facts = extractToolFacts(makeStep("query_mssql", { connection: "prod", query: "SELECT 1" }))
     expect(facts.dbEnvironment).toBe("prod")
     expect(facts.dbOperation).toBe("query_read")
   })
 
-  it("treats connection=\"uat\" as dbEnvironment=uat for explore_mssql_schema", () => {
+  it('treats connection="uat" as dbEnvironment=uat for explore_mssql_schema', () => {
     const facts = extractToolFacts(makeStep("explore_mssql_schema", { connection: "uat", schema: "agent" }))
     expect(facts.dbEnvironment).toBe("uat")
   })
 
   it("classifies UPDATE as dml even when arrived via connection=prod", () => {
-    const facts = extractToolFacts(makeStep("query_mssql", { connection: "prod", query: "UPDATE t SET x = 1" }))
+    const facts = extractToolFacts(
+      makeStep("query_mssql", { connection: "prod", query: "UPDATE t SET x = 1" })
+    )
     expect(facts.dbEnvironment).toBe("prod")
     expect(facts.dbOperation).toBe("dml")
   })
 
   it("ignores connection values that are not well-known env keys", () => {
-    const facts = extractToolFacts(makeStep("query_mssql", { connection: "some-other-server", query: "SELECT 1" }))
+    const facts = extractToolFacts(
+      makeStep("query_mssql", { connection: "some-other-server", query: "SELECT 1" })
+    )
     expect(facts.dbEnvironment).toBeUndefined()
   })
 
   it("explicit `environment` arg still wins over `connection`", () => {
-    const facts = extractToolFacts(makeStep("query_mssql", { environment: "uat", connection: "prod", query: "SELECT 1" }))
+    const facts = extractToolFacts(
+      makeStep("query_mssql", { environment: "uat", connection: "prod", query: "SELECT 1" })
+    )
     expect(facts.dbEnvironment).toBe("uat")
   })
 })
@@ -110,7 +116,10 @@ describe("policyRulesFromEnvironments", () => {
   it("emits deny-DML and deny-DDL rules for a UAT env with denyDml + denyDdl", () => {
     const env = withPermissionDefaults({ name: "uat" })
     const rules = policyRulesFromEnvironments([env])
-    const denies = rules.filter((r) => r.effect === PolicyEffect.Deny).map((r) => r.name).sort()
+    const denies = rules
+      .filter((r) => r.effect === PolicyEffect.Deny)
+      .map((r) => r.name)
+      .sort()
     expect(denies).toContain("env_uat_deny_dml")
     expect(denies).toContain("env_uat_deny_ddl")
     const approvals = rules.filter((r) => r.effect === PolicyEffect.RequireApproval).map((r) => r.name)
@@ -125,7 +134,10 @@ describe("policyRulesFromEnvironments", () => {
   })
 
   it("emits an explicit ALLOW rule when DEV opts in to DML via allowedOperations", () => {
-    const env = withPermissionDefaults({ name: "dev", allowedOperations: ["query_read", "schema_introspect", "sync_preview", "sync_execute", "dml"] })
+    const env = withPermissionDefaults({
+      name: "dev",
+      allowedOperations: ["query_read", "schema_introspect", "sync_preview", "sync_execute", "dml"]
+    })
     const rules = policyRulesFromEnvironments([env])
     const allows = rules.filter((r) => r.effect === PolicyEffect.Allow).map((r) => r.name)
     expect(allows).toContain("env_dev_allow_dml")
@@ -184,12 +196,15 @@ describe("derived per-env rules wired into the policy engine", () => {
     // for the query_read case to NOT default-deny in hosted mode. The
     // dml case should hit the explicit deny first regardless.
     ev.addRule({
-      name:       "baseline_allow_query_mssql",
-      effect:     PolicyEffect.Allow,
-      condition:  "selectors",
-      parameters: { selectors: { tool: "query_mssql" }, priority: 1 },
+      name: "baseline_allow_query_mssql",
+      effect: PolicyEffect.Allow,
+      condition: "selectors",
+      parameters: { selectors: { tool: "query_mssql" }, priority: 1 }
     })
-    const denied = await evaluate(ev, makeStep("query_mssql", { connection: "prod", query: "UPDATE t SET x = 1" }))
+    const denied = await evaluate(
+      ev,
+      makeStep("query_mssql", { connection: "prod", query: "UPDATE t SET x = 1" })
+    )
     expect(denied.error).toBeInstanceOf(PolicyViolationError)
     expect(denied.error?.message).toMatch(/denyDml|deny_dml/i)
 

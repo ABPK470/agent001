@@ -11,7 +11,11 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { canonicalAmbiguityDetector } from "../src/application/core/clarify-cluster/detectors/canonical-ambiguity.js"
 import type { ClarifyContext } from "../src/application/core/clarify-cluster/types.js"
-import { getTenantConfig, resetTenantConfig, setTenantConfig } from "../src/application/shell/tenant-config.js"
+import {
+  getTenantConfig,
+  resetTenantConfig,
+  setTenantConfig
+} from "../src/application/shell/tenant-config.js"
 import { MessageRole } from "../src/domain/enums/message.js"
 import { CatalogGraph } from "../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../src/tools/catalog/types.js"
@@ -22,12 +26,16 @@ function col(name: string, dataType = "decimal"): CatalogColumn {
   return { name, dataType, maxLength: null, nullable: false, isPK: false }
 }
 
-function table(schema: string, name: string, opts: {
-  type?: "TABLE" | "VIEW"
-  rowCount?: number | null
-  columns?: CatalogColumn[]
-  viewDefinition?: string
-} = {}): CatalogTable {
+function table(
+  schema: string,
+  name: string,
+  opts: {
+    type?: "TABLE" | "VIEW"
+    rowCount?: number | null
+    columns?: CatalogColumn[]
+    viewDefinition?: string
+  } = {}
+): CatalogTable {
   return {
     schema,
     name,
@@ -37,13 +45,13 @@ function table(schema: string, name: string, opts: {
     columns: opts.columns ?? [col("Revenue"), col("Date", "date")],
     fkOutgoing: [],
     fkIncoming: [],
-    viewDefinition: opts.viewDefinition,
+    viewDefinition: opts.viewDefinition
   }
 }
 
 function buildGraph(
   tables: CatalogTable[],
-  viewSourceRows: Array<{ name: string; sourceRows: number }> = [],
+  viewSourceRows: Array<{ name: string; sourceRows: number }> = []
 ): CatalogGraph {
   return CatalogGraph.fromSnapshot({
     version: 7,
@@ -52,7 +60,7 @@ function buildGraph(
     tables,
     implicitEdges: [],
     viewSourceRows,
-    sysCatalog: [],
+    sysCatalog: []
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
 }
 
@@ -68,7 +76,7 @@ function makeCtx(opts: {
     tenant: getTenantConfig(),
     messages: opts.messages ?? [],
     resolved: [],
-    round: opts.round ?? 1,
+    round: opts.round ?? 1
   }
 }
 
@@ -99,7 +107,7 @@ describe("canonicalAmbiguityDetector", () => {
     const b = table("publish", "RevenueSubset", { type: "VIEW" })
     const ctx = makeCtx({
       goal: "top products by revenue from publish.Revenue for april 2025",
-      catalog: buildGraph([a, b]),
+      catalog: buildGraph([a, b])
     })
     expect(canonicalAmbiguityDetector.detect(ctx)).toEqual([])
   })
@@ -110,7 +118,7 @@ describe("canonicalAmbiguityDetector", () => {
     const ctx = makeCtx({
       goal: "now filter that revenue table to April",
       catalog: buildGraph([a, b]),
-      messages: [{ role: MessageRole.Assistant, content: "Here are the top products." }],
+      messages: [{ role: MessageRole.Assistant, content: "Here are the top products." }]
     })
     expect(canonicalAmbiguityDetector.detect(ctx)).toEqual([])
   })
@@ -125,9 +133,9 @@ describe("canonicalAmbiguityDetector", () => {
         [wide, narrow],
         [
           { name: "publish.Revenue", sourceRows: 500_000_000 },
-          { name: "publish.RevenueOther", sourceRows: 100 },
-        ],
-      ),
+          { name: "publish.RevenueOther", sourceRows: 100 }
+        ]
+      )
     })
     const findings = canonicalAmbiguityDetector.detect(ctx)
     // wide will lead by a lot — gap should exceed 15%.
@@ -141,7 +149,7 @@ describe("canonicalAmbiguityDetector", () => {
     const b = table("publish", "OtherRevenue", { type: "VIEW", rowCount: 1_000_000 })
     const ctx = makeCtx({
       goal: "top products by revenue for april 2025",
-      catalog: buildGraph([a, b]),
+      catalog: buildGraph([a, b])
     })
     const findings = canonicalAmbiguityDetector.detect(ctx)
     expect(findings).toHaveLength(1)
@@ -158,7 +166,7 @@ describe("canonicalAmbiguityDetector", () => {
     const b = table("publish", "OtherRevenue", { type: "VIEW" })
     const ctx = makeCtx({
       goal: "top products by revenue",
-      catalog: buildGraph([a, b]),
+      catalog: buildGraph([a, b])
     })
     const id1 = canonicalAmbiguityDetector.detect(ctx)[0]?.id
     const id2 = canonicalAmbiguityDetector.detect(ctx)[0]?.id
@@ -172,7 +180,7 @@ describe("canonicalAmbiguityDetector", () => {
     const unrelated = table("dim", "Client", { type: "TABLE", columns: [col("ClientId", "int")] })
     const ctx = makeCtx({
       goal: "top products by revenue",
-      catalog: buildGraph([only, unrelated]),
+      catalog: buildGraph([only, unrelated])
     })
     expect(canonicalAmbiguityDetector.detect(ctx)).toEqual([])
   })
@@ -183,7 +191,7 @@ describe("canonicalAmbiguityDetector", () => {
     const b = table("publish", "RevenueRules", { type: "VIEW", rowCount: 1_000_000 })
     const ctx = makeCtx({
       goal: "top products by revenue for april",
-      catalog: buildGraph([a, b]),
+      catalog: buildGraph([a, b])
     })
     expect(canonicalAmbiguityDetector.detect(ctx)).toEqual([])
   })

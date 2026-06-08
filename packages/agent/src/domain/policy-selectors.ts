@@ -45,13 +45,13 @@
 
 import { isAbsolute, resolve, sep } from "node:path"
 import {
-    PolicyDbEnvironment,
-    PolicyDbOperation,
-    PolicyEffect,
-    PolicyNetwork,
-    PolicyRole,
-    PolicyRunMode,
-    PolicyScope,
+  PolicyDbEnvironment,
+  PolicyDbOperation,
+  PolicyEffect,
+  PolicyNetwork,
+  PolicyRole,
+  PolicyRunMode,
+  PolicyScope
 } from "./enums/index.js"
 import type { PolicyRule, Step } from "./models.js"
 import type { HostedPolicyContext } from "./policy-context.js"
@@ -59,33 +59,33 @@ import type { HostedPolicyContext } from "./policy-context.js"
 // ── Selector schema ──────────────────────────────────────────────
 
 export interface PolicySelectors {
-  role?:          PolicyRole
-  runMode?:       PolicyRunMode
-  tool?:          string
-  path?:          string
-  command?:       string  // RegExp source
-  network?:       PolicyNetwork
-  scope?:         PolicyScope
+  role?: PolicyRole
+  runMode?: PolicyRunMode
+  tool?: string
+  path?: string
+  command?: string // RegExp source
+  network?: PolicyNetwork
+  scope?: PolicyScope
   dbEnvironment?: PolicyDbEnvironment
-  dbOperation?:   PolicyDbOperation
+  dbOperation?: PolicyDbOperation
 }
 
 export interface SelectorRuleParameters {
-  priority?:  number
+  priority?: number
   selectors?: PolicySelectors
-  reason?:    string
+  reason?: string
 }
 
 // ── Tool fact extraction ─────────────────────────────────────────
 
 export interface ToolFacts {
-  tool:          string
-  path?:         string
-  command?:      string
-  scope?:        PolicyScope
-  network?:      PolicyNetwork
+  tool: string
+  path?: string
+  command?: string
+  scope?: PolicyScope
+  network?: PolicyNetwork
   dbEnvironment?: PolicyDbEnvironment
-  dbOperation?:   PolicyDbOperation
+  dbOperation?: PolicyDbOperation
 }
 
 const MSSQL_DML_RE = /^\s*(insert|update|delete|merge|truncate)\b/i
@@ -103,7 +103,7 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
 
   // File tools — path is the contained input.
   if (step.action === "read_file" || step.action === "write_file" || step.action === "list_directory") {
-    const raw = typeof input["path"] === "string" ? input["path"] as string : undefined
+    const raw = typeof input["path"] === "string" ? (input["path"] as string) : undefined
     if (raw) {
       facts.path = raw
       facts.scope = classifyPath(raw, ctx?.sandboxRoot ?? null)
@@ -123,21 +123,25 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
   }
 
   // MSSQL tools — environment + operation classification.
-  if (step.action.startsWith("mssql_") || step.action === "query_mssql" || step.action === "explore_mssql_schema" || step.action === "export_query_to_file") {
+  if (
+    step.action.startsWith("mssql_") ||
+    step.action === "query_mssql" ||
+    step.action === "explore_mssql_schema" ||
+    step.action === "export_query_to_file"
+  ) {
     // Accept several aliases. `connection` is the existing tool param
     // name today (e.g. `query_mssql({ connection: "prod", ... })`); we
     // treat it as a synonym for `environment` when its value happens to
     // be one of the well-known environment keys, so per-env policy
     // selectors fire without requiring the model to learn a new arg.
-    const candidates = [
-      input["environment"],
-      input["dbEnvironment"],
-      input["env"],
-      input["connection"],
-    ]
+    const candidates = [input["environment"], input["dbEnvironment"], input["env"], input["connection"]]
     let extracted: PolicyDbEnvironment | undefined
     for (const raw of candidates) {
-      if (raw === PolicyDbEnvironment.Dev || raw === PolicyDbEnvironment.Uat || raw === PolicyDbEnvironment.Prod) {
+      if (
+        raw === PolicyDbEnvironment.Dev ||
+        raw === PolicyDbEnvironment.Uat ||
+        raw === PolicyDbEnvironment.Prod
+      ) {
         extracted = raw
         break
       }
@@ -148,9 +152,12 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
       facts.dbEnvironment = ctx.defaultDbEnvironment
     }
 
-    const sql = typeof input["sql"] === "string" ? input["sql"] as string
-              : typeof input["query"] === "string" ? input["query"] as string
-              : ""
+    const sql =
+      typeof input["sql"] === "string"
+        ? (input["sql"] as string)
+        : typeof input["query"] === "string"
+          ? (input["query"] as string)
+          : ""
     facts.dbOperation = classifyDbOperation(step.action, sql)
   }
 
@@ -194,21 +201,21 @@ function classifyDbOperation(toolName: string, sql: string): PolicyDbOperation {
 export function matchesSelectorRule(
   rule: PolicyRule,
   facts: ToolFacts,
-  ctx: HostedPolicyContext | undefined,
+  ctx: HostedPolicyContext | undefined
 ): boolean {
   const params = rule.parameters as SelectorRuleParameters
   const sel = params?.selectors
   if (!sel || Object.keys(sel).length === 0) return false
 
-  if (sel.role        !== undefined && sel.role        !== ctx?.role)        return false
-  if (sel.runMode     !== undefined && sel.runMode     !== ctx?.runMode)     return false
-  if (sel.tool        !== undefined && !matchTool(sel.tool, facts.tool))     return false
-  if (sel.scope       !== undefined && sel.scope       !== facts.scope)      return false
-  if (sel.network     !== undefined && sel.network     !== facts.network)    return false
+  if (sel.role !== undefined && sel.role !== ctx?.role) return false
+  if (sel.runMode !== undefined && sel.runMode !== ctx?.runMode) return false
+  if (sel.tool !== undefined && !matchTool(sel.tool, facts.tool)) return false
+  if (sel.scope !== undefined && sel.scope !== facts.scope) return false
+  if (sel.network !== undefined && sel.network !== facts.network) return false
   if (sel.dbEnvironment !== undefined && sel.dbEnvironment !== facts.dbEnvironment) return false
-  if (sel.dbOperation   !== undefined && sel.dbOperation   !== facts.dbOperation)   return false
-  if (sel.path        !== undefined && !matchPath(sel.path, facts.path))     return false
-  if (sel.command     !== undefined && !matchCommand(sel.command, facts.command)) return false
+  if (sel.dbOperation !== undefined && sel.dbOperation !== facts.dbOperation) return false
+  if (sel.path !== undefined && !matchPath(sel.path, facts.path)) return false
+  if (sel.command !== undefined && !matchCommand(sel.command, facts.command)) return false
 
   return true
 }
@@ -225,8 +232,8 @@ function matchPath(pattern: string, value: string | undefined): boolean {
   // Sandbox/workspace virtual prefixes: "sandbox://**" matches any path
   // already classified as that scope.
   if (pattern.endsWith("://**")) return value.startsWith(pattern.slice(0, -2))
-  if (pattern.endsWith("/**"))  return value.startsWith(pattern.slice(0, -3))
-  if (pattern.endsWith("*"))    return value.startsWith(pattern.slice(0, -1))
+  if (pattern.endsWith("/**")) return value.startsWith(pattern.slice(0, -3))
+  if (pattern.endsWith("*")) return value.startsWith(pattern.slice(0, -1))
   return false
 }
 
@@ -245,13 +252,13 @@ function matchCommand(patternSource: string, value: string | undefined): boolean
 // ── Resolution ────────────────────────────────────────────────────
 
 const EFFECT_RANK: Record<PolicyEffect, number> = {
-  [PolicyEffect.Deny]:            3,
+  [PolicyEffect.Deny]: 3,
   [PolicyEffect.RequireApproval]: 2,
-  [PolicyEffect.Allow]:           1,
+  [PolicyEffect.Allow]: 1
 }
 
 export interface SelectorResolution {
-  rule:   PolicyRule
+  rule: PolicyRule
   effect: PolicyEffect
 }
 
@@ -262,7 +269,7 @@ export interface SelectorResolution {
 export function resolveSelectorRules(
   rules: readonly PolicyRule[],
   facts: ToolFacts,
-  ctx: HostedPolicyContext | undefined,
+  ctx: HostedPolicyContext | undefined
 ): SelectorResolution | null {
   let best: { rule: PolicyRule; priority: number; rank: number } | null = null
   for (const rule of rules) {
@@ -270,11 +277,7 @@ export function resolveSelectorRules(
     if (!matchesSelectorRule(rule, facts, ctx)) continue
     const priority = Number((rule.parameters as SelectorRuleParameters)?.priority ?? 0)
     const rank = EFFECT_RANK[rule.effect] ?? 0
-    if (
-      !best
-      || priority > best.priority
-      || (priority === best.priority && rank > best.rank)
-    ) {
+    if (!best || priority > best.priority || (priority === best.priority && rank > best.rank)) {
       best = { rule, priority, rank }
     }
   }

@@ -41,37 +41,37 @@ import { PlannerNeedLevel } from "../../domain/index.js"
 
 import type { LLMClient, Message } from "../../types.js"
 import {
-    CONVERSATIONAL_DATA_QUERY_RE,
-    DATA_FETCH_PIPELINE_RE,
-    DB_INVESTIGATION_RE,
-    DIALOGUE_MEMORY_RE,
-    DIALOGUE_RECALL_RE,
-    DIALOGUE_RECALL_REFERENCE_RE,
-    EDIT_ARTIFACT_RE,
-    EXACT_RESPONSE_RE,
-    EXISTING_CODE_COUPLING_RE,
-    EXPLICIT_ENV_ACTION_RE,
-    EXTERNAL_SERVICE_RE,
-    PLAN_CREATION_RE,
-    REVIEW_QUESTION_RE,
-    RUN_HISTORY_QUERY_RE,
-    SIMPLE_DIALOGUE_RE,
-    SIMPLE_FUNCTION_WRITE_RE,
-    SINGLE_ARTIFACT_BURST_RE
+  CONVERSATIONAL_DATA_QUERY_RE,
+  DATA_FETCH_PIPELINE_RE,
+  DB_INVESTIGATION_RE,
+  DIALOGUE_MEMORY_RE,
+  DIALOGUE_RECALL_RE,
+  DIALOGUE_RECALL_REFERENCE_RE,
+  EDIT_ARTIFACT_RE,
+  EXACT_RESPONSE_RE,
+  EXISTING_CODE_COUPLING_RE,
+  EXPLICIT_ENV_ACTION_RE,
+  EXTERNAL_SERVICE_RE,
+  PLAN_CREATION_RE,
+  REVIEW_QUESTION_RE,
+  RUN_HISTORY_QUERY_RE,
+  SIMPLE_DIALOGUE_RE,
+  SIMPLE_FUNCTION_WRITE_RE,
+  SINGLE_ARTIFACT_BURST_RE
 } from "../internal/decision-patterns.js"
 import type { PlannerDecision, PlannerRoute, RoutingConfidence } from "../types.js"
 import {
-    isSanityOverrideBoundedBuild,
-    shouldUseBoundedCoherentGeneration,
-    shouldUsePlannerWithCoherentBootstrap,
+  isSanityOverrideBoundedBuild,
+  shouldUseBoundedCoherentGeneration,
+  shouldUsePlannerWithCoherentBootstrap
 } from "./coherent-gates.js"
 import { callLLMRouter } from "./llm-router.js"
 import {
-    type RoutingAxes,
-    collectSignals,
-    computeRoutingConfidence,
-    evaluateRoutingAxes,
-    isHighConfidenceSingleArtifactBurst,
+  type RoutingAxes,
+  collectSignals,
+  computeRoutingConfidence,
+  evaluateRoutingAxes,
+  isHighConfidenceSingleArtifactBurst
 } from "./signals.js"
 
 // ============================================================================
@@ -84,10 +84,19 @@ function makeDecision(
   reason: string,
   axes: RoutingAxes,
   routingConfidence: RoutingConfidence,
-  llmClassified: boolean,
+  llmClassified: boolean
 ): PlannerDecision {
   const shouldPlan = route === "full_planner_decomposition" || route === "planner_with_coherent_bootstrap"
-  return { score, shouldPlan, reason, route, coherenceNeed: axes.coherenceNeed, coordinationNeed: axes.coordinationNeed, routingConfidence, llmClassified }
+  return {
+    score,
+    shouldPlan,
+    reason,
+    route,
+    coherenceNeed: axes.coherenceNeed,
+    coordinationNeed: axes.coordinationNeed,
+    routingConfidence,
+    llmClassified
+  }
 }
 
 /**
@@ -103,21 +112,45 @@ export async function assessPlannerDecision(
   messageText: string,
   history: readonly Message[],
   llm?: LLMClient,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<PlannerDecision> {
   const signals = collectSignals(messageText, history)
   const axes = evaluateRoutingAxes(signals)
   let score = 0
   const reasons: string[] = []
 
-  if (signals.hasMultiStepCue) { score += 3; reasons.push("multi_step_cues") }
-  if (signals.hasToolDiversityCue) { score += 1; reasons.push("tool_diversity") }
-  if (signals.hasDelegationCue) { score += 4; reasons.push("delegation_cue") }
-  if (signals.hasImplementationScopeCue) { score += 3; reasons.push("implementation_scope") }
-  if (signals.hasVerificationCue && signals.hasImplementationScopeCue) { score += 1; reasons.push("verification_on_impl") }
-  if (signals.longTask) { score += 1; reasons.push("long_or_structured") }
-  if (signals.priorToolMessages >= 4) { score += 2; reasons.push("prior_tool_activity") }
-  if (signals.hasPriorNoProgressSignal) { score += 2; reasons.push("prior_no_progress") }
+  if (signals.hasMultiStepCue) {
+    score += 3
+    reasons.push("multi_step_cues")
+  }
+  if (signals.hasToolDiversityCue) {
+    score += 1
+    reasons.push("tool_diversity")
+  }
+  if (signals.hasDelegationCue) {
+    score += 4
+    reasons.push("delegation_cue")
+  }
+  if (signals.hasImplementationScopeCue) {
+    score += 3
+    reasons.push("implementation_scope")
+  }
+  if (signals.hasVerificationCue && signals.hasImplementationScopeCue) {
+    score += 1
+    reasons.push("verification_on_impl")
+  }
+  if (signals.longTask) {
+    score += 1
+    reasons.push("long_or_structured")
+  }
+  if (signals.priorToolMessages >= 4) {
+    score += 2
+    reasons.push("prior_tool_activity")
+  }
+  if (signals.hasPriorNoProgressSignal) {
+    score += 2
+    reasons.push("prior_no_progress")
+  }
 
   // ── Layer 1: Hard semantic gates ─────────────────────────────
   // These are definitive: a pattern match resolves the route with no further
@@ -140,9 +173,9 @@ export async function assessPlannerDecision(
     return makeDecision("direct", score, "dialogue_memory_turn", axes, "decisive_coherent", false)
   }
   if (
-    DIALOGUE_RECALL_RE.test(signals.normalized)
-    && DIALOGUE_RECALL_REFERENCE_RE.test(signals.normalized)
-    && !EXPLICIT_ENV_ACTION_RE.test(signals.normalized)
+    DIALOGUE_RECALL_RE.test(signals.normalized) &&
+    DIALOGUE_RECALL_REFERENCE_RE.test(signals.normalized) &&
+    !EXPLICIT_ENV_ACTION_RE.test(signals.normalized)
   ) {
     return makeDecision("direct", score, "dialogue_recall_turn", axes, "decisive_coherent", false)
   }
@@ -152,13 +185,20 @@ export async function assessPlannerDecision(
   // Single function/script write — no multi-step structure, no external deps, one concern.
   // The parent agent handles this inline; planner decomposition adds 30K+ token overhead.
   if (
-    SIMPLE_FUNCTION_WRITE_RE.test(signals.normalized)
-    && !signals.hasDelegationCue
-    && !signals.hasMultiStepCue
-    && !EXTERNAL_SERVICE_RE.test(signals.normalized)
-    && !EXISTING_CODE_COUPLING_RE.test(signals.normalized)
+    SIMPLE_FUNCTION_WRITE_RE.test(signals.normalized) &&
+    !signals.hasDelegationCue &&
+    !signals.hasMultiStepCue &&
+    !EXTERNAL_SERVICE_RE.test(signals.normalized) &&
+    !EXISTING_CODE_COUPLING_RE.test(signals.normalized)
   ) {
-    return makeDecision("direct", score, "simple_function_write_direct_path", axes, "decisive_coherent", false)
+    return makeDecision(
+      "direct",
+      score,
+      "simple_function_write_direct_path",
+      axes,
+      "decisive_coherent",
+      false
+    )
   }
   if (PLAN_CREATION_RE.test(signals.normalized) && !signals.hasDelegationCue) {
     return makeDecision("direct", score, "plan_generation_direct_path", axes, "decisive_coherent", false)
@@ -168,7 +208,11 @@ export async function assessPlannerDecision(
   // produce code files. The planner would generate a nonsensical BLUEPRINT with
   // TypeScript function signatures inside .json data files. Route direct unconditionally.
   // Guard: skip if the goal is actually a software build mentioning DB concepts.
-  if (DB_INVESTIGATION_RE.test(signals.normalized) && !signals.hasDelegationCue && !signals.hasImplementationScopeCue) {
+  if (
+    DB_INVESTIGATION_RE.test(signals.normalized) &&
+    !signals.hasDelegationCue &&
+    !signals.hasImplementationScopeCue
+  ) {
     return makeDecision("direct", score, "db_investigation_direct_path", axes, "decisive_coherent", false)
   }
   // Data-fetch pipelines use direct tool loop for real query results
@@ -176,9 +220,9 @@ export async function assessPlannerDecision(
     return makeDecision("direct", score, "data_fetch_pipeline_direct_path", axes, "decisive_coherent", false)
   }
   if (
-    RUN_HISTORY_QUERY_RE.test(signals.normalized)
-    && !signals.hasDelegationCue
-    && !signals.hasImplementationScopeCue
+    RUN_HISTORY_QUERY_RE.test(signals.normalized) &&
+    !signals.hasDelegationCue &&
+    !signals.hasImplementationScopeCue
   ) {
     return makeDecision("direct", score, "run_history_query_direct_path", axes, "decisive_coherent", false)
   }
@@ -187,15 +231,29 @@ export async function assessPlannerDecision(
   // correct tool names for them and will hallucinate step definitions. Route direct
   // unconditionally when the request has no delegation or implementation-scope intent.
   if (
-    CONVERSATIONAL_DATA_QUERY_RE.test(signals.normalized)
-    && !signals.hasDelegationCue
-    && !signals.hasImplementationScopeCue
+    CONVERSATIONAL_DATA_QUERY_RE.test(signals.normalized) &&
+    !signals.hasDelegationCue &&
+    !signals.hasImplementationScopeCue
   ) {
-    return makeDecision("direct", score, "conversational_data_query_direct_path", axes, "decisive_coherent", false)
+    return makeDecision(
+      "direct",
+      score,
+      "conversational_data_query_direct_path",
+      axes,
+      "decisive_coherent",
+      false
+    )
   }
   // Single-artifact implementation burst
   if (SINGLE_ARTIFACT_BURST_RE.test(signals.normalized) && isHighConfidenceSingleArtifactBurst(signals)) {
-    return makeDecision("single_artifact_direct_burst", score, "single_artifact_direct_burst", axes, "decisive_coherent", false)
+    return makeDecision(
+      "single_artifact_direct_burst",
+      score,
+      "single_artifact_direct_burst",
+      axes,
+      "decisive_coherent",
+      false
+    )
   }
 
   // ── Layer 3: Heuristic confidence scoring ────────────────────
@@ -212,14 +270,16 @@ export async function assessPlannerDecision(
       effectiveAxes = {
         ...axes,
         coherenceNeed: llmResult.coherence_need,
-        coordinationNeed: llmResult.coordination_need,
+        coordinationNeed: llmResult.coordination_need
       }
       llmClassified = true
     }
   }
 
   const routingConfidence: RoutingConfidence = llmClassified
-    ? (effectiveAxes.coordinationNeed === PlannerNeedLevel.Low ? "lean_coherent" : "lean_planner")
+    ? effectiveAxes.coordinationNeed === PlannerNeedLevel.Low
+      ? "lean_coherent"
+      : "lean_planner"
     : heuristicConfidence
 
   // ── Layer 5: Sanity override + coherence gates ───────────────
@@ -230,13 +290,34 @@ export async function assessPlannerDecision(
   // that explicitly lists 3 output files).  Both prevent over-planning of
   // self-contained deliverables — the "sanity override" pattern.
   if (shouldUseBoundedCoherentGeneration(signals, effectiveAxes)) {
-    return makeDecision("bounded_coherent_generation", score, "bounded_coherent_generation", effectiveAxes, routingConfidence, llmClassified)
+    return makeDecision(
+      "bounded_coherent_generation",
+      score,
+      "bounded_coherent_generation",
+      effectiveAxes,
+      routingConfidence,
+      llmClassified
+    )
   }
   if (isSanityOverrideBoundedBuild(signals, effectiveAxes)) {
-    return makeDecision("bounded_coherent_generation", score, "sanity_override_bounded_build", effectiveAxes, routingConfidence, llmClassified)
+    return makeDecision(
+      "bounded_coherent_generation",
+      score,
+      "sanity_override_bounded_build",
+      effectiveAxes,
+      routingConfidence,
+      llmClassified
+    )
   }
   if (shouldUsePlannerWithCoherentBootstrap(signals, effectiveAxes)) {
-    return makeDecision("planner_with_coherent_bootstrap", score, "planner_with_coherent_bootstrap", effectiveAxes, routingConfidence, llmClassified)
+    return makeDecision(
+      "planner_with_coherent_bootstrap",
+      score,
+      "planner_with_coherent_bootstrap",
+      effectiveAxes,
+      routingConfidence,
+      llmClassified
+    )
   }
 
   const shouldPlan = score >= 4
@@ -248,6 +329,6 @@ export async function assessPlannerDecision(
     coherenceNeed: effectiveAxes.coherenceNeed,
     coordinationNeed: effectiveAxes.coordinationNeed,
     routingConfidence,
-    llmClassified,
+    llmClassified
   }
 }

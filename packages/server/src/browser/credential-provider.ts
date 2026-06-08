@@ -11,11 +11,7 @@ import { generateSync, type HashAlgorithm } from "otplib"
 
 import type { BrowserCredentialProvider } from "@mia/agent"
 
-import {
-    openCredential,
-    type PasswordPayload,
-    type TotpPayload,
-} from "./credentials.js"
+import { openCredential, type PasswordPayload, type TotpPayload } from "./credentials.js"
 
 export function createServerBrowserCredentialProvider(ownerUpn: string | null): BrowserCredentialProvider {
   return {
@@ -30,7 +26,7 @@ export function createServerBrowserCredentialProvider(ownerUpn: string | null): 
         label: opened.metadata.label,
         targetOrigin: opened.metadata.targetOrigin,
         username: opened.payload.username,
-        password: opened.payload.password,
+        password: opened.payload.password
       }
     },
 
@@ -47,16 +43,17 @@ export function createServerBrowserCredentialProvider(ownerUpn: string | null): 
         strategy: "totp",
         digits: opened.payload.digits ?? 6,
         period: opened.payload.period ?? 30,
-        algorithm: (opened.payload.algorithm ?? "sha1") as HashAlgorithm,
+        algorithm: (opened.payload.algorithm ?? "sha1") as HashAlgorithm
       })
 
       return {
         label: opened.metadata.label,
         targetOrigin: opened.metadata.targetOrigin,
-        code,
+        code
       }
     }
   }
 }
 
-export const serverBrowserCredentialProvider: BrowserCredentialProvider = createServerBrowserCredentialProvider(null)
+export const serverBrowserCredentialProvider: BrowserCredentialProvider =
+  createServerBrowserCredentialProvider(null)

@@ -4,11 +4,11 @@
 
 /** Effect kind in the deferred effect ledger. */
 export const EffectKind = {
-  Create:  "create",
-  Modify:  "modify",
-  Delete:  "delete",
+  Create: "create",
+  Modify: "modify",
+  Delete: "delete",
   Command: "command",
-  Network: "network",
+  Network: "network"
 } as const
 
 export type EffectKind = (typeof EffectKind)[keyof typeof EffectKind]
@@ -20,10 +20,10 @@ export const isEffectKind = (value: unknown): value is EffectKind =>
 
 /** Effect lifecycle status. */
 export const EffectStatus = {
-  Pending:     "pending",
-  Applied:     "applied",
+  Pending: "pending",
+  Applied: "applied",
   Compensated: "compensated",
-  Skipped:     "skipped",
+  Skipped: "skipped"
 } as const
 
 export type EffectStatus = (typeof EffectStatus)[keyof typeof EffectStatus]
@@ -40,9 +40,9 @@ export const isEffectStatus = (value: unknown): value is EffectStatus =>
  *   - Recreated — deleted artefact restored from snapshot (undo Delete)
  */
 export const RollbackActionType = {
-  Deleted:   "deleted",
-  Restored:  "restored",
-  Recreated: "recreated",
+  Deleted: "deleted",
+  Restored: "restored",
+  Recreated: "recreated"
 } as const
 
 export type RollbackActionType = (typeof RollbackActionType)[keyof typeof RollbackActionType]

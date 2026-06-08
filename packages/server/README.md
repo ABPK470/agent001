@@ -14,18 +14,18 @@ events to the UI.
 
 ## Layout
 
-| Folder / file | Purpose |
-| --- | --- |
-| `index.ts` | Entry point — wires Fastify, plugins, API routers, and application services. |
-| `api/` | Real transport edge: one module per HTTP/SSE resource. |
-| `application/shell/` | Stateful runtime orchestration, queueing, proposer scheduling, and workspace execution. |
-| `application/core/` | Stateless coordination and prompt/data-block logic. |
-| `adapters/persistence/` | SQLite-backed persistence for runs, memory, evidence, attachments, and tool cache. |
-| `adapters/effects/` | Effect log — every filesystem mutation goes through here. |
-| `adapters/sandbox/` | Per-run filesystem/process sandboxing. |
-| `adapters/sync/` | Server-local sync glue such as entity YAML/bootstrap helpers. |
-| `enums/` | Façade re-exports of `@mia/shared-enums` plus server-private enums. |
-| `tools.ts` | Server-owned tool registry and per-run tool composition. |
+| Folder / file           | Purpose                                                                                 |
+| ----------------------- | --------------------------------------------------------------------------------------- |
+| `index.ts`              | Entry point — wires Fastify, plugins, API routers, and application services.            |
+| `api/`                  | Real transport edge: one module per HTTP/SSE resource.                                  |
+| `application/shell/`    | Stateful runtime orchestration, queueing, proposer scheduling, and workspace execution. |
+| `application/core/`     | Stateless coordination and prompt/data-block logic.                                     |
+| `adapters/persistence/` | SQLite-backed persistence for runs, memory, evidence, attachments, and tool cache.      |
+| `adapters/effects/`     | Effect log — every filesystem mutation goes through here.                               |
+| `adapters/sandbox/`     | Per-run filesystem/process sandboxing.                                                  |
+| `adapters/sync/`        | Server-local sync glue such as entity YAML/bootstrap helpers.                           |
+| `enums/`                | Façade re-exports of `@mia/shared-enums` plus server-private enums.                     |
+| `tools.ts`              | Server-owned tool registry and per-run tool composition.                                |
 
 ## Conventions
 

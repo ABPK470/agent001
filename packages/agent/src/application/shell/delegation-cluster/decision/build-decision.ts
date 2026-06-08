@@ -8,9 +8,9 @@
 
 import type { HardBlockedTaskClassMatch } from "../check-decision-safety.js"
 import type {
-    DelegationDecision,
-    DelegationDecisionReason,
-    ResolvedDelegationDecisionConfig,
+  DelegationDecision,
+  DelegationDecisionReason,
+  ResolvedDelegationDecisionConfig
 } from "./types.js"
 
 export interface BuildDecisionInput {
@@ -45,7 +45,7 @@ export function buildDecision(input: BuildDecisionInput): DelegationDecision {
       enabled: input.resolvedConfig.enabled,
       maxFanoutPerTurn: input.resolvedConfig.maxFanoutPerTurn,
       maxDepth: input.resolvedConfig.maxDepth,
-      hasHardBlockedTaskClass: input.hardBlockedMatch !== null,
-    },
+      hasHardBlockedTaskClass: input.hardBlockedMatch !== null
+    }
   }
 }

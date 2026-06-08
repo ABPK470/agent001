@@ -27,11 +27,7 @@ describe("estimateTokens smoke", () => {
 
 describe("compactMessages smoke", () => {
   it("returns the input unchanged when nothing needs compacting", () => {
-    const messages: Message[] = [
-      m("system", "sys"),
-      m("user", "hi"),
-      m("assistant", "hello"),
-    ]
+    const messages: Message[] = [m("system", "sys"), m("user", "hi"), m("assistant", "hello")]
     const result = compactMessages(messages)
     expect(result).toHaveLength(3)
     expect(result.map((x) => x.role)).toEqual(["system", "user", "assistant"])
@@ -45,7 +41,7 @@ describe("compactMessages smoke", () => {
       m("assistant", fat),
       m("user", fat),
       m("assistant", fat),
-      m("user", "final question"),
+      m("user", "final question")
     ]
     const result = compactMessages(messages)
     expect(result[0]?.role).toBe("system")

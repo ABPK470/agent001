@@ -16,8 +16,8 @@ import { Signer } from "../signer.js"
 
 export interface KmsAdapter {
   readonly providerId: string
-  readonly alg:        string
-  sign(bytes: Buffer):   Promise<string>
+  readonly alg: string
+  sign(bytes: Buffer): Promise<string>
   verify(bytes: Buffer, sig: string): Promise<boolean>
 }
 
@@ -32,7 +32,7 @@ export function registerKmsAdapter(adapter: KmsAdapter): void {
 }
 
 export interface KmsSignerOptions {
-  id:  string
+  id: string
   env: NodeJS.ProcessEnv
 }
 
@@ -42,22 +42,24 @@ export function buildKmsSigner(o: KmsSignerOptions): Signer {
     // throws a structured error so the route handler can render a
     // clear "configure KMS adapter" 500.
     return {
-      id:  o.id,
+      id: o.id,
       alg: "kms/unconfigured",
       async sign() {
         throw new Error(
           "EVIDENCE_SIGNER_KIND=kms requires registerKmsAdapter(...) to be called " +
-          "during server bootstrap. No adapter is currently registered.",
+            "during server bootstrap. No adapter is currently registered."
         )
       },
-      async verify() { return false },
+      async verify() {
+        return false
+      }
     }
   }
   const adapter = registeredAdapter
   return {
-    id:  o.id,
+    id: o.id,
     alg: `KMS/${adapter.providerId}/${adapter.alg}`,
-    sign:   (bytes) => adapter.sign(bytes),
-    verify: (bytes, sig) => adapter.verify(bytes, sig),
+    sign: (bytes) => adapter.sign(bytes),
+    verify: (bytes, sig) => adapter.verify(bytes, sig)
   }
 }

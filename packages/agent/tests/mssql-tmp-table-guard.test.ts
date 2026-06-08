@@ -13,10 +13,15 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { countReferencedLargeObjects, findNonTmpMutations, validateQuery, validateTempTableBatch } from "../src/tools/mssql/validation.js"
+import {
+  countReferencedLargeObjects,
+  findNonTmpMutations,
+  validateQuery,
+  validateTempTableBatch
+} from "../src/tools/mssql/validation.js"
 import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
-const RO = false  // writeEnabled = false (read-only mode)
+const RO = false // writeEnabled = false (read-only mode)
 const catalog = canonicalFixtureCatalog()
 const accessor = () => catalog
 
@@ -53,7 +58,9 @@ describe("findNonTmpMutations", () => {
   })
 
   it("ignores SELECT INTO #temp", () => {
-    expect(findNonTmpMutations("SELECT pkClient INTO #scope FROM dim.Client WHERE pkClient < 100")).toEqual([])
+    expect(findNonTmpMutations("SELECT pkClient INTO #scope FROM dim.Client WHERE pkClient < 100")).toEqual(
+      []
+    )
   })
 
   it("flags SELECT INTO a real table", () => {
@@ -100,7 +107,7 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
       "  JOIN #scope s ON s.pkClient = r.pkClient",
       "  WHERE r.pkMonth BETWEEN 202501 AND 202512",
       "  GROUP BY r.pkClient;",
-      "DROP TABLE #scope;",
+      "DROP TABLE #scope;"
     ].join("\n")
     expect(validateQuery(batch, RO, { accessor })).toBeNull()
   })
@@ -139,7 +146,7 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
     const batch = [
       "CREATE TABLE #scope (pkClient int);",
       "INSERT INTO publish.Revenue (x) VALUES (1);",
-      "DROP TABLE #scope;",
+      "DROP TABLE #scope;"
     ].join("\n")
     const err = validateQuery(batch, RO, { accessor })
     expect(err).toMatch(/non-temp object/i)
@@ -156,7 +163,9 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
   })
 
   it("rejects garbage that is neither read nor a known mutation opener", () => {
-    expect(validateQuery("GRANT SELECT ON dim.Client TO public", RO, { accessor })).toMatch(/Write operations are disabled/i)
+    expect(validateQuery("GRANT SELECT ON dim.Client TO public", RO, { accessor })).toMatch(
+      /Write operations are disabled/i
+    )
   })
 
   it("blocks a temp-table typo that references an uncreated #temp", () => {
@@ -166,7 +175,7 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
       "SELECT pkClient INTO #balLines_6b4c9a12 FROM #topClients_6b4c9a12;",
       "SELECT COUNT(*) AS c FROM #balLines_6bc49a12;",
       "DROP TABLE #balLines_6b4c9a12;",
-      "DROP TABLE #topClients_6b4c9a12;",
+      "DROP TABLE #topClients_6b4c9a12;"
     ].join("\n")
     expect(validateTempTableBatch(batch)).toMatch(/referenced without being created/i)
     expect(validateQuery(batch, RO, { accessor })).toMatch(/#balLines_6bc49a12/i)
@@ -177,7 +186,7 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
       "CREATE TABLE #scope_a3f91c08 (pkClient int);",
       "CREATE TABLE #detail_b4c9a120 (pkClient int);",
       "DROP TABLE #detail_b4c9a120;",
-      "DROP TABLE #scope_a3f91c08;",
+      "DROP TABLE #scope_a3f91c08;"
     ].join("\n")
     const result = validateTempTableBatch(batch)
     expect(typeof result).toBe("string")
@@ -189,7 +198,7 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
       "CREATE TABLE #scope_a3f91c08 (pkClient int);",
       "CREATE TABLE #detail_b4c9a12 (pkClient int);",
       "DROP TABLE #detail_b4c9a12;",
-      "DROP TABLE #scope_a3f91c08;",
+      "DROP TABLE #scope_a3f91c08;"
     ].join("\n")
     const result = validateTempTableBatch(batch)
     expect(typeof result).toBe("string")
@@ -197,20 +206,26 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
   })
 
   it("counts repeated references to large objects", () => {
-    const counts = countReferencedLargeObjects([
-      "SELECT * FROM publish.Revenue r1",
-      "JOIN publish.Revenue r2 ON r1.pkClient = r2.pkClient",
-      "JOIN publish.Revenue r3 ON r2.pkClient = r3.pkClient",
-    ].join("\n"), accessor)
+    const counts = countReferencedLargeObjects(
+      [
+        "SELECT * FROM publish.Revenue r1",
+        "JOIN publish.Revenue r2 ON r1.pkClient = r2.pkClient",
+        "JOIN publish.Revenue r3 ON r2.pkClient = r3.pkClient"
+      ].join("\n"),
+      accessor
+    )
     expect(counts.get("publish.revenue")).toBe(3)
   })
 
   it("counts repeated references to persisted publish mirrors", () => {
-    const counts = countReferencedLargeObjects([
-      "SELECT * FROM persistedView.[publish.Revenue] r1",
-      "JOIN persistedView.[publish.Revenue] r2 ON r1.pkClient = r2.pkClient",
-      "JOIN persistedView.[publish.Revenue] r3 ON r2.pkClient = r3.pkClient",
-    ].join("\n"), accessor)
+    const counts = countReferencedLargeObjects(
+      [
+        "SELECT * FROM persistedView.[publish.Revenue] r1",
+        "JOIN persistedView.[publish.Revenue] r2 ON r1.pkClient = r2.pkClient",
+        "JOIN persistedView.[publish.Revenue] r3 ON r2.pkClient = r3.pkClient"
+      ].join("\n"),
+      accessor
+    )
     expect(counts.get("persistedview.publish.revenue")).toBe(3)
   })
 
@@ -220,7 +235,7 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
       "FROM publish.Revenue a WITH (NOLOCK)",
       "JOIN publish.Revenue b WITH (NOLOCK) ON a.pkClient = b.pkClient",
       "JOIN publish.Revenue c WITH (NOLOCK) ON b.pkClient = c.pkClient",
-      "WHERE a.pkMonth BETWEEN 202501 AND 202512",
+      "WHERE a.pkMonth BETWEEN 202501 AND 202512"
     ].join("\n")
     expect(validateQuery(batch, RO, { accessor })).toMatch(/referenced too many times/i)
     expect(validateQuery(batch, RO, { accessor })).toMatch(/publish\.Revenue/i)
@@ -240,9 +255,11 @@ describe("validateQuery — #temp micro-ETL allowance (read-only mode)", () => {
       "  (SELECT COUNT(*) FROM #revLines_a3f91c08 r WHERE r.pkClient = base.pkClient) AS ProductCount,",
       "  (SELECT SUM(r.RevenueZARMTD) FROM #revLines_a3f91c08 r WHERE r.pkClient = base.pkClient) AS RevenueZAR",
       "FROM #revLines_a3f91c08 base;",
-      "DROP TABLE #revLines_a3f91c08;",
+      "DROP TABLE #revLines_a3f91c08;"
     ].join("\n")
     expect(validateQuery(batch, RO, { accessor })).toMatch(/repeated scalar subqueries/i)
-    expect(validateQuery(batch, RO, { accessor })).toMatch(/aggregate the staged #temp once per business key/i)
+    expect(validateQuery(batch, RO, { accessor })).toMatch(
+      /aggregate the staged #temp once per business key/i
+    )
   })
 })

@@ -13,25 +13,25 @@
 
 import { canonicalSha256 } from "./canonical.js"
 import {
-    emptyCounts,
-    formatEnvPair,
-    ProposalKind,
-    type EnvPair,
-    type ProposalCounts,
-    type ProposerFinding,
-    type ProposerFindingDetail,
-    type ProposerRunCounts,
+  emptyCounts,
+  formatEnvPair,
+  ProposalKind,
+  type EnvPair,
+  type ProposalCounts,
+  type ProposerFinding,
+  type ProposerFindingDetail,
+  type ProposerRunCounts
 } from "./types.js"
 
 // ── DI seam ──────────────────────────────────────────────────────
 
 export interface EntityDescriptor {
   /** Stable machine id (registry entity id). */
-  id:           string
+  id: string
   /** Display label used in the UI when surfacing the finding. */
-  label:        string
+  label: string
   /** Snapshot of the registry version that produced this descriptor. */
-  defVersion:   number | null
+  defVersion: number | null
 }
 
 export interface CatalogDriftProbe {
@@ -40,11 +40,11 @@ export interface CatalogDriftProbe {
 }
 
 export interface DivergentEntityRow {
-  entityId:   string
+  entityId: string
   entityLabel: string
-  counts:      ProposalCounts
+  counts: ProposalCounts
   /** Per-table breakdown — empty for "new entity" findings. */
-  perTable:    ReadonlyArray<{ name: string; counts: ProposalCounts }>
+  perTable: ReadonlyArray<{ name: string; counts: ProposalCounts }>
   /** True iff the entity row is absent on target (drives ProposalKind.New). */
   newOnTarget: boolean
 }
@@ -73,16 +73,16 @@ export interface ProposerPassOptions {
 }
 
 export interface ProposerPassResult {
-  envPair:   EnvPair
-  findings:  readonly ProposerFinding[]
-  counts:    ProposerRunCounts
+  envPair: EnvPair
+  findings: readonly ProposerFinding[]
+  counts: ProposerRunCounts
   durationMs: number
 }
 
 const DEFAULT_OPTIONS = {
-  perEntityCap:    250,
+  perEntityCap: 250,
   scanConcurrency: 4,
-  maxFindings:     1000,
+  maxFindings: 1000
 } as const
 
 // ── Pass ─────────────────────────────────────────────────────────
@@ -90,24 +90,22 @@ const DEFAULT_OPTIONS = {
 export async function runProposerPass(
   envPair: EnvPair,
   opts: ProposerPassOptions,
-  deps: ProposerPassDeps,
+  deps: ProposerPassDeps
 ): Promise<ProposerPassResult> {
   const t0 = Date.now()
-  const cap          = opts.perEntityCap    ?? DEFAULT_OPTIONS.perEntityCap
+  const cap = opts.perEntityCap ?? DEFAULT_OPTIONS.perEntityCap
   // `scanConcurrency` is plumbed through for future parallel row scans; the
   // current MVP scans one entity-type at a time, so the option is accepted
   // but not yet wired into `scanDivergentRows`.
   void (opts.scanConcurrency ?? DEFAULT_OPTIONS.scanConcurrency)
-  const maxFindings  = opts.maxFindings     ?? DEFAULT_OPTIONS.maxFindings
+  const maxFindings = opts.maxFindings ?? DEFAULT_OPTIONS.maxFindings
 
   const allEntities = await deps.listEntities(envPair)
-  const scoped = opts.entityIds
-    ? allEntities.filter((e) => opts.entityIds!.includes(e.id))
-    : allEntities
+  const scoped = opts.entityIds ? allEntities.filter((e) => opts.entityIds!.includes(e.id)) : allEntities
 
   const findings: ProposerFinding[] = []
   let scanned = 0
-  let errors  = 0
+  let errors = 0
 
   // Per-entity-type scan is sequential at the entity-type level (so a slow
   // one doesn't drown a fast one), but uses `concurrency` for the rows.
@@ -120,12 +118,18 @@ export async function runProposerPass(
         // Drift dominates: produce ONE drift finding for the entity-type itself
         // (entityId = "*" sentinel) so the operator can fix schema before we
         // try to diff data. Row-level scan is skipped.
-        findings.push(makeFinding({
-          envPair, ent, entityId: "*", entityLabel: ent.label,
-          kind: ProposalKind.Drift, counts: emptyCounts(),
-          detail: { kind: "drift", drift: { issues: drift.issues } },
-          observedAt: deps.now(),
-        }))
+        findings.push(
+          makeFinding({
+            envPair,
+            ent,
+            entityId: "*",
+            entityLabel: ent.label,
+            kind: ProposalKind.Drift,
+            counts: emptyCounts(),
+            detail: { kind: "drift", drift: { issues: drift.issues } },
+            observedAt: deps.now()
+          })
+        )
         continue
       }
 
@@ -137,10 +141,18 @@ export async function runProposerPass(
         const detail: ProposerFindingDetail = r.newOnTarget
           ? { kind: "new", newEntities: { sampleIds: [r.entityId] } }
           : { kind: "out_of_sync", outOfSync: { perTable: r.perTable } }
-        findings.push(makeFinding({
-          envPair, ent, entityId: r.entityId, entityLabel: r.entityLabel,
-          kind, counts: r.counts, detail, observedAt: deps.now(),
-        }))
+        findings.push(
+          makeFinding({
+            envPair,
+            ent,
+            entityId: r.entityId,
+            entityLabel: r.entityLabel,
+            kind,
+            counts: r.counts,
+            detail,
+            observedAt: deps.now()
+          })
+        )
       }
     } catch {
       errors++
@@ -151,21 +163,21 @@ export async function runProposerPass(
     envPair,
     findings,
     counts: { scanned, produced: findings.length, errors },
-    durationMs: Date.now() - t0,
+    durationMs: Date.now() - t0
   }
 }
 
 // ── Finding construction (deterministic fingerprint) ─────────────
 
 interface MakeFindingInput {
-  envPair:     EnvPair
-  ent:         EntityDescriptor
-  entityId:    string
+  envPair: EnvPair
+  ent: EntityDescriptor
+  entityId: string
   entityLabel: string
-  kind:        ProposerFinding["kind"]
-  counts:      ProposalCounts
-  detail:      ProposerFindingDetail
-  observedAt:  string
+  kind: ProposerFinding["kind"]
+  counts: ProposalCounts
+  detail: ProposerFindingDetail
+  observedAt: string
 }
 
 function makeFinding(i: MakeFindingInput): ProposerFinding {
@@ -173,22 +185,22 @@ function makeFinding(i: MakeFindingInput): ProposerFinding {
   // finding, intentionally excluding observedAt so a re-run of the same
   // finding hashes the same and can be deduped against open proposals.
   const fingerprint = canonicalSha256({
-    envPair:     formatEnvPair(i.envPair),
-    entityType:  i.ent.id,
-    entityId:    i.entityId,
-    kind:        i.kind,
-    detail:      i.detail,
+    envPair: formatEnvPair(i.envPair),
+    entityType: i.ent.id,
+    entityId: i.entityId,
+    kind: i.kind,
+    detail: i.detail
   })
   return {
-    envPair:           i.envPair,
-    entityType:        i.ent.id,
-    entityId:          i.entityId,
-    entityLabel:       i.entityLabel,
-    kind:              i.kind,
-    counts:            i.counts,
-    detail:            i.detail,
+    envPair: i.envPair,
+    entityType: i.ent.id,
+    entityId: i.entityId,
+    entityLabel: i.entityLabel,
+    kind: i.kind,
+    counts: i.counts,
+    detail: i.detail,
     fingerprint,
-    entityDefVersion:  i.ent.defVersion,
-    observedAt:        i.observedAt,
+    entityDefVersion: i.ent.defVersion,
+    observedAt: i.observedAt
   }
 }

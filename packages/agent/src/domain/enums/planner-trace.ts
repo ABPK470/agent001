@@ -13,5 +13,5 @@ export {
   isDelegationTraceKind,
   DelegationSpanEventKind,
   DELEGATION_SPAN_EVENT_KINDS,
-  isDelegationSpanEventKind,
+  isDelegationSpanEventKind
 } from "@mia/shared-enums"

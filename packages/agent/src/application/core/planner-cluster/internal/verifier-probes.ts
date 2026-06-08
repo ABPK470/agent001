@@ -9,22 +9,17 @@ import { PipelineStatus, VerifierOutcome } from "../../domain/index.js"
  */
 
 import type { Tool } from "../../types.js"
-import type {
-    PipelineResult,
-    Plan,
-    SubagentTaskStep,
-    VerifierStepAssessment,
-} from "../types.js"
+import type { PipelineResult, Plan, SubagentTaskStep, VerifierStepAssessment } from "../types.js"
 import { assessSubagentStep } from "../verifier-probes/subagent-assessment.js"
 import { runIntegrationProbes } from "./verifier-integration.js"
 
 export async function runDeterministicProbes(
   plan: Plan,
   pipelineResult: PipelineResult,
-  tools: readonly Tool[],
+  tools: readonly Tool[]
 ): Promise<VerifierStepAssessment[]> {
   const assessments: VerifierStepAssessment[] = []
-  const toolMap = new Map(tools.map(t => [t.name, t]))
+  const toolMap = new Map(tools.map((t) => [t.name, t]))
 
   for (const step of plan.steps) {
     const stepResult = pipelineResult.stepResults.get(step.name)
@@ -34,20 +29,22 @@ export async function runDeterministicProbes(
         outcome: VerifierOutcome.Fail,
         confidence: 1.0,
         issues: [stepResult?.error ?? `Step ${step.name} did not complete`],
-        retryable: true,
+        retryable: true
       })
       continue
     }
 
     if (step.stepType === "subagent_task") {
-      assessments.push(await assessSubagentStep(step as SubagentTaskStep, stepResult, plan, pipelineResult, toolMap))
+      assessments.push(
+        await assessSubagentStep(step as SubagentTaskStep, stepResult, plan, pipelineResult, toolMap)
+      )
     } else {
       assessments.push({
         stepName: step.name,
         outcome: VerifierOutcome.Pass,
         confidence: 1.0,
         issues: [],
-        retryable: false,
+        retryable: false
       })
     }
   }

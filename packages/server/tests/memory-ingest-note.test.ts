@@ -51,16 +51,27 @@ describe("ingestAgentNote", () => {
       category: "column_semantics",
       sessionId: "s1",
       runId: "r1",
-      upn: "alice@corp",
+      upn: "alice@corp"
     })
 
     expect(res.ok).toBe(true)
     if (!res.ok) return
 
-    const row = testDb.prepare(
-      `SELECT tier, role, source, confidence, content, upn, session_id, metadata
-       FROM memory_entries WHERE id = ?`,
-    ).get(res.id) as { tier: string; role: string; source: string; confidence: number; content: string; upn: string; session_id: string; metadata: string }
+    const row = testDb
+      .prepare(
+        `SELECT tier, role, source, confidence, content, upn, session_id, metadata
+       FROM memory_entries WHERE id = ?`
+      )
+      .get(res.id) as {
+      tier: string
+      role: string
+      source: string
+      confidence: number
+      content: string
+      upn: string
+      session_id: string
+      metadata: string
+    }
 
     expect(row.tier).toBe("working")
     expect(row.role).toBe("summary")
@@ -86,12 +97,15 @@ describe("ingestAgentNote", () => {
       claim: "row count 1.2M as of 2026-01",
       evidence: "profile_data result: distinct values per client = 12 per year",
       sessionId: "s1",
-      upn: "alice@corp",
+      upn: "alice@corp"
     })
 
     expect(res.ok).toBe(true)
     if (!res.ok) return
-    const row = testDb.prepare(`SELECT confidence, content FROM memory_entries WHERE id = ?`).get(res.id) as { confidence: number; content: string }
+    const row = testDb.prepare(`SELECT confidence, content FROM memory_entries WHERE id = ?`).get(res.id) as {
+      confidence: number
+      content: string
+    }
     expect(row.confidence).toBe(0.85)
     expect(row.content).toContain("ev: profile_data result")
   })
@@ -103,7 +117,7 @@ describe("ingestAgentNote", () => {
       subject: "join:A↔B",
       claim: "FK on pkClient",
       sessionId: "s1",
-      upn: "alice@corp",
+      upn: "alice@corp"
     })
     expect(res.ok).toBe(true)
   })
@@ -114,22 +128,22 @@ describe("ingestAgentNote", () => {
       subject: "publish.Balance.BalanceZAR",
       claim: "snapshot balance column; sum across clients meaningful, sum across time is not",
       sessionId: "s1",
-      upn: "alice@corp",
+      upn: "alice@corp"
     })
     expect(a.ok).toBe(true)
     const b = mem.ingestAgentNote({
       subject: "publish.Balance.BalanceZAR",
       claim: "snapshot balance column; sum across clients meaningful, sum across time is not",
       sessionId: "s1",
-      upn: "alice@corp",
+      upn: "alice@corp"
     })
     expect(b.ok).toBe(false)
     if (b.ok) return
     expect(b.reason).toBe("duplicate")
 
-    const count = testDb.prepare(
-      `SELECT COUNT(*) AS n FROM memory_entries WHERE upn = 'alice@corp' AND session_id = 's1'`,
-    ).get() as { n: number }
+    const count = testDb
+      .prepare(`SELECT COUNT(*) AS n FROM memory_entries WHERE upn = 'alice@corp' AND session_id = 's1'`)
+      .get() as { n: number }
     expect(count.n).toBe(1)
   })
 
@@ -139,7 +153,7 @@ describe("ingestAgentNote", () => {
       subject: "publish.Revenue",
       claim: "alice-only-fact-keyword-XYZABC123",
       sessionId: "s1",
-      upn: "alice@corp",
+      upn: "alice@corp"
     })
     expect(a.ok).toBe(true)
 
@@ -149,13 +163,15 @@ describe("ingestAgentNote", () => {
       subject: "publish.Revenue",
       claim: "alice-only-fact-keyword-XYZABC123",
       sessionId: "s1",
-      upn: "bob@corp",
+      upn: "bob@corp"
     })
     expect(b.ok).toBe(true)
 
-    const rows = testDb.prepare(
-      `SELECT upn FROM memory_entries WHERE content LIKE '%alice-only-fact-keyword-XYZABC123%' ORDER BY upn`,
-    ).all() as Array<{ upn: string }>
+    const rows = testDb
+      .prepare(
+        `SELECT upn FROM memory_entries WHERE content LIKE '%alice-only-fact-keyword-XYZABC123%' ORDER BY upn`
+      )
+      .all() as Array<{ upn: string }>
     expect(rows.map((r) => r.upn)).toEqual(["alice@corp", "bob@corp"])
   })
 
@@ -178,11 +194,14 @@ describe("ingestAgentNote", () => {
       subject: "publish.Foo",
       claim: "miscellaneous note about a table that does not fit a category",
       sessionId: "s1",
-      upn: "alice@corp",
+      upn: "alice@corp"
     })
     expect(res.ok).toBe(true)
     if (!res.ok) return
-    const row = testDb.prepare(`SELECT content, metadata FROM memory_entries WHERE id = ?`).get(res.id) as { content: string; metadata: string }
+    const row = testDb.prepare(`SELECT content, metadata FROM memory_entries WHERE id = ?`).get(res.id) as {
+      content: string
+      metadata: string
+    }
     expect(row.content).toContain("[note:observation]")
     expect(JSON.parse(row.metadata)["category"]).toBe("observation")
   })

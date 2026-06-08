@@ -51,7 +51,7 @@ function fromRaw(r: RawRow): AgentMessageRow {
     topic: r.topic,
     content: r.content,
     replyTo: r.reply_to,
-    createdAt: Number(new Date(r.created_at)),
+    createdAt: Number(new Date(r.created_at))
   }
 }
 
@@ -70,10 +70,12 @@ export function insertAgentMessage(input: InsertMessageInput): AgentMessageRow {
   const id = randomUUID()
   const createdAt = new Date().toISOString()
   const db = getDb()
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO agent_messages (id, root_run_id, from_run_id, from_agent, protocol, topic, content, reply_to, created_at)
     VALUES (@id, @root, @from_run, @from_agent, @protocol, @topic, @content, @reply_to, @created_at)
-  `).run({
+  `
+  ).run({
     id,
     root: input.rootRunId,
     from_run: input.fromRunId,
@@ -82,7 +84,7 @@ export function insertAgentMessage(input: InsertMessageInput): AgentMessageRow {
     topic: input.topic,
     content: input.content,
     reply_to: input.replyTo ?? null,
-    created_at: createdAt,
+    created_at: createdAt
   })
   return {
     id,
@@ -93,30 +95,38 @@ export function insertAgentMessage(input: InsertMessageInput): AgentMessageRow {
     topic: input.topic,
     content: input.content,
     replyTo: input.replyTo ?? null,
-    createdAt: Number(new Date(createdAt)),
+    createdAt: Number(new Date(createdAt))
   }
 }
 
 /** Load every message for a root run, oldest first. */
 export function listAgentMessages(rootRunId: string): AgentMessageRow[] {
-  const rows = getDb().prepare(`
+  const rows = getDb()
+    .prepare(
+      `
     SELECT id, root_run_id, from_run_id, from_agent, protocol, topic, content, reply_to, created_at
       FROM agent_messages
      WHERE root_run_id = ?
      ORDER BY created_at ASC, id ASC
-  `).all(rootRunId) as RawRow[]
+  `
+    )
+    .all(rootRunId) as RawRow[]
   return rows.map(fromRaw)
 }
 
 /** Find a single Answer that replies to the given message id. NULL if none yet. */
 export function findReplyTo(messageId: string): AgentMessageRow | null {
-  const row = getDb().prepare(`
+  const row = getDb()
+    .prepare(
+      `
     SELECT id, root_run_id, from_run_id, from_agent, protocol, topic, content, reply_to, created_at
       FROM agent_messages
      WHERE reply_to = ?
        AND protocol = 'answer'
      ORDER BY created_at ASC, id ASC
      LIMIT 1
-  `).get(messageId) as RawRow | undefined
+  `
+    )
+    .get(messageId) as RawRow | undefined
   return row ? fromRaw(row) : null
 }

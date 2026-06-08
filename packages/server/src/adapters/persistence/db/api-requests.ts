@@ -32,10 +32,14 @@ export interface DbApiRequest {
 }
 
 export function saveApiRequest(entry: Omit<DbApiRequest, "id">): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO api_requests (method, url, status_code, duration_ms, request_body, response_summary, created_at)
     VALUES (@method, @url, @status_code, @duration_ms, @request_body, @response_summary, @created_at)
-  `).run(entry)
+  `
+    )
+    .run(entry)
 }
 
 export function listApiRequests(limit = 200): DbApiRequest[] {

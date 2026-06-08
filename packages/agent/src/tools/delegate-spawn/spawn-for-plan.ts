@@ -6,7 +6,11 @@ import { Agent } from "../../application/shell/agent.js"
 import { LLMCallPhase } from "../../domain/enums/llm.js"
 import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"
 import type { Tool } from "../../domain/agent-types.js"
-import { canonicalizeEnvelope, computePlannerChildBudgetMetrics, wrapPlannerChildToolsForWriteScope } from "../delegate-paths.js"
+import {
+  canonicalizeEnvelope,
+  computePlannerChildBudgetMetrics,
+  wrapPlannerChildToolsForWriteScope
+} from "../delegate-paths.js"
 import { CHILD_SYSTEM_PROMPT, type DelegateContext } from "../delegate/index.js"
 import { buildPlanChildGoal } from "./build-goal.js"
 import { buildChildExecutionResult } from "./helpers.js"
@@ -22,33 +26,34 @@ import { buildChildExecutionResult } from "./helpers.js"
 export async function spawnChildForPlan(
   ctx: DelegateContext,
   step: SubagentTaskStep,
-  envelope: ExecutionEnvelope,
+  envelope: ExecutionEnvelope
 ): Promise<DelegateResult> {
   const normalizedEnvelope = canonicalizeEnvelope(envelope)
   const goal = buildPlanChildGoal(step, normalizedEnvelope)
 
-
   // Filter tools based on the envelope's allowedTools / requiredToolCapabilities
   let childTools: Tool[]
-  const allowedToolNames = new Set([
-    ...normalizedEnvelope.allowedTools,
-    ...step.requiredToolCapabilities,
-  ])
+  const allowedToolNames = new Set([...normalizedEnvelope.allowedTools, ...step.requiredToolCapabilities])
 
   if (allowedToolNames.size > 0 && normalizedEnvelope.effectClass !== "readonly") {
-    for (const essential of ["read_file", "append_file", "replace_in_file", "list_directory", "browser_check", "run_command"]) {
+    for (const essential of [
+      "read_file",
+      "append_file",
+      "replace_in_file",
+      "list_directory",
+      "browser_check",
+      "run_command"
+    ]) {
       allowedToolNames.add(essential)
     }
   }
 
   if (allowedToolNames.size > 0) {
-    childTools = ctx.availableTools.filter(t =>
-      allowedToolNames.has(t.name) && t.name !== "delegate" && t.name !== "delegate_parallel",
+    childTools = ctx.availableTools.filter(
+      (t) => allowedToolNames.has(t.name) && t.name !== "delegate" && t.name !== "delegate_parallel"
     )
   } else {
-    childTools = ctx.availableTools.filter(t =>
-      t.name !== "delegate" && t.name !== "delegate_parallel",
-    )
+    childTools = ctx.availableTools.filter((t) => t.name !== "delegate" && t.name !== "delegate_parallel")
   }
 
   // Per-child run id — used to attribute bus messages and queue slots
@@ -60,19 +65,16 @@ export async function spawnChildForPlan(
   // Inject extra tools — per-child factory takes priority over a flat
   // `extraChildTools` list (Phase B.3).
   const builtPerChild = ctx.buildChildTools ? ctx.buildChildTools(childRunId, childAgentName) : []
-  const builtPerChildNames = new Set(builtPerChild.map(t => t.name))
+  const builtPerChildNames = new Set(builtPerChild.map((t) => t.name))
   if (ctx.extraChildTools) {
-    const extraNames = new Set(ctx.extraChildTools.map(t => t.name))
+    const extraNames = new Set(ctx.extraChildTools.map((t) => t.name))
     childTools = [
-      ...childTools.filter(t => !extraNames.has(t.name) && !builtPerChildNames.has(t.name)),
-      ...ctx.extraChildTools.filter(t => !builtPerChildNames.has(t.name)),
-      ...builtPerChild,
+      ...childTools.filter((t) => !extraNames.has(t.name) && !builtPerChildNames.has(t.name)),
+      ...ctx.extraChildTools.filter((t) => !builtPerChildNames.has(t.name)),
+      ...builtPerChild
     ]
   } else if (builtPerChild.length > 0) {
-    childTools = [
-      ...childTools.filter(t => !builtPerChildNames.has(t.name)),
-      ...builtPerChild,
-    ]
+    childTools = [...childTools.filter((t) => !builtPerChildNames.has(t.name)), ...builtPerChild]
   }
 
   childTools = wrapPlannerChildToolsForWriteScope(childTools, normalizedEnvelope)
@@ -85,7 +87,7 @@ export async function spawnChildForPlan(
     goal: step.objective,
     stepName: step.name,
     depth: ctx.depth + 1,
-    tools: childTools.map(t => t.name),
+    tools: childTools.map((t) => t.name),
     budget: budgetMetrics,
     envelope: {
       workspaceRoot: normalizedEnvelope.workspaceRoot,
@@ -94,8 +96,8 @@ export async function spawnChildForPlan(
       targetArtifacts: normalizedEnvelope.targetArtifacts,
       upstreamAcceptedArtifacts: normalizedEnvelope.upstreamAcceptedArtifacts,
       unresolvedDependencyBlockers: normalizedEnvelope.unresolvedDependencyBlockers,
-      repairContext: normalizedEnvelope.repairContext,
-    },
+      repairContext: normalizedEnvelope.repairContext
+    }
   })
 
   let releaseSlot: (() => void) | undefined
@@ -109,38 +111,44 @@ export async function spawnChildForPlan(
   // Build completion validator for code quality gate
   const targetArtifacts = normalizedEnvelope.targetArtifacts
   const wsRoot = normalizedEnvelope.workspaceRoot
-  const completionValidator = targetArtifacts.length > 0 ? async (): Promise<string | null> => {
-    const codeArtifacts = targetArtifacts.filter(
-      a => /\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs)$/i.test(a),
-    )
-    if (codeArtifacts.length === 0) return null
+  const completionValidator =
+    targetArtifacts.length > 0
+      ? async (): Promise<string | null> => {
+          const codeArtifacts = targetArtifacts.filter((a) =>
+            /\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs)$/i.test(a)
+          )
+          if (codeArtifacts.length === 0) return null
 
-    const allIssues: string[] = []
-    for (const artifact of codeArtifacts) {
-      const fullPath = pathResolve(wsRoot, artifact)
-      try {
-        const content = await fsReadFile(fullPath, "utf-8")
-        const findings = detectPlaceholderPatterns(content)
-        for (const f of findings) {
-          allIssues.push(`${artifact}: ${f}`)
+          const allIssues: string[] = []
+          for (const artifact of codeArtifacts) {
+            const fullPath = pathResolve(wsRoot, artifact)
+            try {
+              const content = await fsReadFile(fullPath, "utf-8")
+              const findings = detectPlaceholderPatterns(content)
+              for (const f of findings) {
+                allIssues.push(`${artifact}: ${f}`)
+              }
+            } catch {
+              /* file not created yet or unreadable */
+            }
+          }
+
+          if (allIssues.length > 0) {
+            return (
+              `COMPLETION CHECK FAILED — your code still contains stub/placeholder functions:\n` +
+              allIssues.map((i) => `  - ${i}`).join("\n") +
+              "\n\n" +
+              `You MUST fix these before finishing. For EACH stub function:\n` +
+              `1. The function name tells you what it should do — implement the REAL algorithm\n` +
+              `2. Replace the stub body (return true/false/[]/{}/ or comment-only) with working logic\n` +
+              `3. A function called "validateInput" must enforce all required validation rules\n` +
+              `4. A function called "computeResult" must execute the full required business logic\n` +
+              `Do NOT provide a final answer until ALL stubs are replaced with real code.`
+            )
+          }
+          return null
         }
-      } catch { /* file not created yet or unreadable */ }
-    }
-
-    if (allIssues.length > 0) {
-      return (
-        `COMPLETION CHECK FAILED — your code still contains stub/placeholder functions:\n` +
-        allIssues.map(i => `  - ${i}`).join("\n") + "\n\n" +
-        `You MUST fix these before finishing. For EACH stub function:\n` +
-        `1. The function name tells you what it should do — implement the REAL algorithm\n` +
-        `2. Replace the stub body (return true/false/[]/{}/ or comment-only) with working logic\n` +
-        `3. A function called "validateInput" must enforce all required validation rules\n` +
-        `4. A function called "computeResult" must execute the full required business logic\n` +
-        `Do NOT provide a final answer until ALL stubs are replaced with real code.`
-      )
-    }
-    return null
-  } : undefined
+      : undefined
 
   const child = new Agent(ctx.llm, childTools, {
     maxIterations: maxIter,
@@ -160,7 +168,7 @@ export async function spawnChildForPlan(
         stepName: step.name,
         depth: ctx.depth + 1,
         iteration: iteration + 1,
-        maxIterations: maxIter,
+        maxIterations: maxIter
       })
       for (const ev of pendingPlannerLlmEvents) ctx.onChildTrace?.(ev)
       pendingPlannerLlmEvents = []
@@ -173,7 +181,7 @@ export async function spawnChildForPlan(
         iteration: iteration + 1,
         maxIterations: maxIter,
         content: _content ? _content.slice(0, 200) : null,
-        toolNames: _toolCalls.map((c) => c.name),
+        toolNames: _toolCalls.map((c) => c.name)
       })
     },
     onStep: () => {
@@ -184,7 +192,7 @@ export async function spawnChildForPlan(
         kind: DelegationSpanEventKind.Nudge,
         tag: `[${step.name}] ${data.tag}`,
         message: data.message,
-        iteration: data.iteration,
+        iteration: data.iteration
       })
     },
     onLlmCall: (data) => {
@@ -194,12 +202,13 @@ export async function spawnChildForPlan(
           iteration: data.iteration,
           messageCount: data.messages.length,
           toolCount: data.tools.length,
-          messages: data.messages.map(m => ({
+          messages: data.messages.map((m) => ({
             role: m.role,
             content: m.content,
-            toolCalls: m.toolCalls?.map(tc => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
-            toolCallId: m.toolCallId ?? null,
-          })),
+            toolCalls:
+              m.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
+            toolCallId: m.toolCallId ?? null
+          }))
         })
       } else {
         pendingPlannerLlmEvents.push({
@@ -207,11 +216,16 @@ export async function spawnChildForPlan(
           iteration: data.iteration,
           durationMs: data.durationMs,
           content: data.response.content,
-          toolCalls: data.response.toolCalls?.map(tc => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
-          usage: data.response.usage ?? null,
+          toolCalls:
+            data.response.toolCalls?.map((tc) => ({
+              id: tc.id,
+              name: tc.name,
+              arguments: tc.arguments
+            })) ?? [],
+          usage: data.response.usage ?? null
         })
       }
-    },
+    }
   })
 
   try {
@@ -224,7 +238,7 @@ export async function spawnChildForPlan(
       stepName: step.name,
       depth: ctx.depth + 1,
       status: hitLimit ? "error" : "done",
-      answer: answer.slice(0, 500),
+      answer: answer.slice(0, 500)
     })
 
     if (hitLimit) {
@@ -232,14 +246,14 @@ export async function spawnChildForPlan(
       return {
         output: `⚠ DELEGATION INCOMPLETE — child agent for step "${step.name}" used all ${maxIter} iterations without finishing.\nChild's last output: ${answer}`,
         toolCalls: child.allToolCalls,
-        execution,
+        execution
       }
     }
 
     return {
       output: answer,
       toolCalls: child.allToolCalls,
-      execution: buildChildExecutionResult(answer, child.allToolCalls),
+      execution: buildChildExecutionResult(answer, child.allToolCalls)
     }
   } catch (err) {
     const errMsg = err instanceof Error ? err.message : String(err)
@@ -248,13 +262,13 @@ export async function spawnChildForPlan(
       stepName: step.name,
       depth: ctx.depth + 1,
       status: "error",
-      error: errMsg,
+      error: errMsg
     })
     const output = `Delegation failed: ${errMsg}`
     return {
       output,
       toolCalls: child.allToolCalls,
-      execution: buildChildExecutionResult(output, child.allToolCalls),
+      execution: buildChildExecutionResult(output, child.allToolCalls)
     }
   } finally {
     releaseSlot?.()

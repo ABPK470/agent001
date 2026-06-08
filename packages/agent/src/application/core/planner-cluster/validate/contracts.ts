@@ -21,7 +21,7 @@ export function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnosti
           severity: DiagnosticSeverity.Warning,
           code: "vague_objective",
           message: `Subagent step "${step.name}" has a vague or missing objective. Provide a specific, measurable objective (min 10 chars).`,
-          stepName: step.name,
+          stepName: step.name
         })
       }
 
@@ -31,7 +31,7 @@ export function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnosti
           severity: DiagnosticSeverity.Warning,
           code: "missing_acceptance_criteria",
           message: `Subagent step "${step.name}" has no acceptance criteria. Add at least one measurable success condition.`,
-          stepName: step.name,
+          stepName: step.name
         })
       }
 
@@ -42,7 +42,7 @@ export function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnosti
             severity: DiagnosticSeverity.Warning,
             code: "vague_criteria",
             message: `Subagent step "${step.name}" has vague acceptance criterion: "${crit}". Be specific and measurable.`,
-            stepName: step.name,
+            stepName: step.name
           })
         }
       }
@@ -53,7 +53,7 @@ export function validateStepContracts(steps: readonly PlanStep[]): PlanDiagnosti
           severity: DiagnosticSeverity.Warning,
           code: "no_tool_capabilities",
           message: `Subagent step "${step.name}" declares no required tool capabilities. Specify which tools the child needs.`,
-          stepName: step.name,
+          stepName: step.name
         })
       }
     }
@@ -72,7 +72,7 @@ export function validateArtifactOwnership(steps: readonly PlanStep[]): PlanDiagn
     const sa = step as SubagentTaskStep
     const relations = [
       ...(sa.executionContext?.artifactRelations ?? []),
-      ...(sa.workflowStep?.artifactRelations ?? []),
+      ...(sa.workflowStep?.artifactRelations ?? [])
     ]
     for (const rel of relations) {
       if (rel.relationType === "write_owner") {
@@ -91,7 +91,7 @@ export function validateArtifactOwnership(steps: readonly PlanStep[]): PlanDiagn
         category: DiagnosticCategory.Ownership,
         severity: DiagnosticSeverity.Error,
         code: "multiple_write_owners",
-        message: `Artifact "${artifact}" has ${owners.length} write owners: [${owners.join(", ")}]. Only ONE step may be write_owner for a given artifact.`,
+        message: `Artifact "${artifact}" has ${owners.length} write owners: [${owners.join(", ")}]. Only ONE step may be write_owner for a given artifact.`
       })
     }
   }
@@ -102,13 +102,11 @@ export function validateArtifactOwnership(steps: readonly PlanStep[]): PlanDiagn
 export function validateVerificationCoverage(steps: readonly PlanStep[]): PlanDiagnostic[] {
   const diagnostics: PlanDiagnostic[] = []
 
-  const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
+  const subagentSteps = steps.filter((s) => s.stepType === "subagent_task") as SubagentTaskStep[]
 
-  const hasWriters = subagentSteps.some(
-    s => s.executionContext?.effectClass !== EffectClass.Readonly,
-  )
+  const hasWriters = subagentSteps.some((s) => s.executionContext?.effectClass !== EffectClass.Readonly)
   const hasVerification = subagentSteps.some(
-    s => s.executionContext?.verificationMode !== VerificationMode.None,
+    (s) => s.executionContext?.verificationMode !== VerificationMode.None
   )
 
   if (hasWriters && !hasVerification && subagentSteps.length > 1) {
@@ -116,7 +114,8 @@ export function validateVerificationCoverage(steps: readonly PlanStep[]): PlanDi
       category: DiagnosticCategory.Verification,
       severity: DiagnosticSeverity.Warning,
       code: "no_verification_steps",
-      message: "Plan has write steps but no per-step verification mode. This is allowed; final verifier checks run after implementation. Consider setting verificationMode only on steps that fully own runnable artifacts.",
+      message:
+        "Plan has write steps but no per-step verification mode. This is allowed; final verifier checks run after implementation. Consider setting verificationMode only on steps that fully own runnable artifacts."
     })
   }
 

@@ -88,7 +88,9 @@ export function migrateMemory(): void {
         content_rowid='rowid'
       );
     `)
-  } catch { /* already exists */ }
+  } catch {
+    /* already exists */
+  }
 
   // Detect and auto-repair a corrupted FTS index (SQLITE_CORRUPT_VTAB).
   // `integrity-check` returns one row per error; an empty result means healthy.
@@ -130,7 +132,9 @@ export function migrateMemory(): void {
         content_rowid='rowid'
       );
     `)
-  } catch { /* already exists */ }
+  } catch {
+    /* already exists */
+  }
 
   // Sync triggers
   db.exec(`
@@ -204,7 +208,10 @@ export function rowToEntry(row: Record<string, unknown>): MemoryEntry {
     tier: row.tier as MemoryTier,
     role: (row.role as MemoryRole) ?? "assistant",
     content: row.content as string,
-    metadata: typeof row.metadata === "string" ? JSON.parse(row.metadata) : (row.metadata as Record<string, unknown>) ?? {},
+    metadata:
+      typeof row.metadata === "string"
+        ? JSON.parse(row.metadata)
+        : ((row.metadata as Record<string, unknown>) ?? {}),
     source: (row.source as MemorySource) ?? "agent",
     confidence: (row.confidence as number) ?? 0.5,
     salience: (row.salience as number) ?? 0.5,
@@ -215,6 +222,6 @@ export function rowToEntry(row: Record<string, unknown>): MemoryEntry {
     upn: (row.upn as string) ?? null,
     shared: (row.shared as number) === 1,
     createdAt: row.created_at as string,
-    updatedAt: row.updated_at as string,
+    updatedAt: row.updated_at as string
   }
 }

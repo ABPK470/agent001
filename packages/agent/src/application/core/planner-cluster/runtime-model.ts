@@ -1,11 +1,11 @@
 import type {
-    ArtifactOwnershipNode,
-    ExecutionGraphNode,
-    Plan,
-    PlannerRuntimeModel,
-    PlanStep,
-    RuntimeEntityDescriptor,
-    SubagentTaskStep,
+  ArtifactOwnershipNode,
+  ExecutionGraphNode,
+  Plan,
+  PlannerRuntimeModel,
+  PlanStep,
+  RuntimeEntityDescriptor,
+  SubagentTaskStep
 } from "./types.js"
 
 function normalizeArtifactPath(value: string): string {
@@ -38,10 +38,12 @@ function collectArtifactWrites(step: SubagentTaskStep): string[] {
 export function compilePlannerRuntime(plan: Plan): PlannerRuntimeModel {
   const executionGraph = new Map<string, ExecutionGraphNode>()
   const ownershipGraph = new Map<string, ArtifactOwnershipNode>()
-  const runtimeEntities: RuntimeEntityDescriptor[] = [{
-    id: "planner-run",
-    entityType: "planner_run",
-  }]
+  const runtimeEntities: RuntimeEntityDescriptor[] = [
+    {
+      id: "planner-run",
+      entityType: "planner_run"
+    }
+  ]
   const stepAcceptedDependencies = new Map<string, readonly string[]>()
 
   for (const step of plan.steps) {
@@ -51,19 +53,19 @@ export function compilePlannerRuntime(plan: Plan): PlannerRuntimeModel {
       stepName: step.name,
       stepType: step.stepType,
       dependsOn,
-      downstream,
+      downstream
     })
     runtimeEntities.push({
       id: `step:${step.name}`,
       entityType: "pipeline_step",
       parentId: "planner-run",
-      stepName: step.name,
+      stepName: step.name
     })
     runtimeEntities.push({
       id: `worker:${step.name}`,
       entityType: "delegated_worker",
       parentId: `step:${step.name}`,
-      stepName: step.name,
+      stepName: step.name
     })
   }
 
@@ -84,7 +86,7 @@ export function compilePlannerRuntime(plan: Plan): PlannerRuntimeModel {
 
     const readArtifacts = new Set<string>([
       ...collectArtifactReads(subagentStep),
-      ...subagentStep.executionContext.requiredSourceArtifacts.map(normalizeArtifactPath),
+      ...subagentStep.executionContext.requiredSourceArtifacts.map(normalizeArtifactPath)
     ])
     const acceptedDeps = new Set<string>()
     for (const artifact of readArtifacts) {
@@ -103,27 +105,28 @@ export function compilePlannerRuntime(plan: Plan): PlannerRuntimeModel {
     stepAcceptedDependencies.set(step.name, [...acceptedDeps])
   }
 
-  const allArtifacts = new Set<string>([
-    ...artifactOwners.keys(),
-    ...artifactConsumers.keys(),
-  ])
+  const allArtifacts = new Set<string>([...artifactOwners.keys(), ...artifactConsumers.keys()])
 
   for (const artifact of allArtifacts) {
     ownershipGraph.set(artifact, {
       artifactPath: artifact,
       ownerStepName: artifactOwners.get(artifact) ?? null,
       consumerStepNames: [...(artifactConsumers.get(artifact) ?? new Set<string>())],
-      relationTypes: [...(artifactRelationTypes.get(artifact) ?? new Set())],
+      relationTypes: [...(artifactRelationTypes.get(artifact) ?? new Set())]
     })
   }
 
-  runtimeEntities.push({ id: "verification:current", entityType: "verification_pass", parentId: "planner-run" })
+  runtimeEntities.push({
+    id: "verification:current",
+    entityType: "verification_pass",
+    parentId: "planner-run"
+  })
   runtimeEntities.push({ id: "repair:current", entityType: "repair_cycle", parentId: "planner-run" })
 
   return {
     executionGraph,
     ownershipGraph,
     stepAcceptedDependencies,
-    runtimeEntities,
+    runtimeEntities
   }
 }

@@ -16,16 +16,16 @@ import { DiagnosticCategory, DiagnosticSeverity, VerificationMode } from "../../
 
 import type { Tool } from "../../types.js"
 import {
-    validateArtifactDependencyWiring,
-    validatePathConsistency,
-    validateSharedDataContract,
-    validateVisualCompleteness,
+  validateArtifactDependencyWiring,
+  validatePathConsistency,
+  validateSharedDataContract,
+  validateVisualCompleteness
 } from "../internal/validate-checks.js"
 import type { Plan, PlanDiagnostic, PlanStep, SubagentTaskStep } from "../types.js"
 import {
-    validateArtifactOwnership,
-    validateStepContracts,
-    validateVerificationCoverage,
+  validateArtifactOwnership,
+  validateStepContracts,
+  validateVerificationCoverage
 } from "./contracts.js"
 import { validateGraph, validateToolReferences } from "./graph.js"
 
@@ -46,10 +46,7 @@ export interface ValidationResult {
  * @param plan - The parsed plan to validate
  * @param availableTools - Available tools (for checking tool references)
  */
-export function validatePlan(
-  plan: Plan,
-  availableTools: readonly Tool[],
-): ValidationResult {
+export function validatePlan(plan: Plan, availableTools: readonly Tool[]): ValidationResult {
   const diagnostics: PlanDiagnostic[] = []
 
   diagnostics.push(...validateGraph(plan.steps, plan.edges))
@@ -64,8 +61,8 @@ export function validatePlan(
   diagnostics.push(...validateSharedDataContract(plan.steps))
 
   return {
-    valid: diagnostics.filter(d => d.severity === DiagnosticSeverity.Error).length === 0,
-    diagnostics,
+    valid: diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error).length === 0,
+    diagnostics
   }
 }
 
@@ -90,18 +87,21 @@ function isSameOrNestedDir(candidate: string, base: string): boolean {
  */
 function validatePrematureBrowserVerification(steps: readonly PlanStep[]): PlanDiagnostic[] {
   const diagnostics: PlanDiagnostic[] = []
-  const subagentSteps = steps.filter(s => s.stepType === "subagent_task") as SubagentTaskStep[]
+  const subagentSteps = steps.filter((s) => s.stepType === "subagent_task") as SubagentTaskStep[]
 
   const runtimeByStep = new Map<string, string[]>()
   for (const step of subagentSteps) {
-    const runtimeArtifacts = (step.executionContext?.targetArtifacts ?? [])
-      .filter(a => RUNTIME_CODE_ARTIFACT_RE.test(a))
+    const runtimeArtifacts = (step.executionContext?.targetArtifacts ?? []).filter((a) =>
+      RUNTIME_CODE_ARTIFACT_RE.test(a)
+    )
     runtimeByStep.set(step.name, runtimeArtifacts)
   }
 
   for (const step of subagentSteps) {
     if (step.executionContext?.verificationMode !== VerificationMode.BrowserCheck) continue
-    const entryTargets = (step.executionContext?.targetArtifacts ?? []).filter(a => /\.(?:html?|xhtml)$/i.test(a))
+    const entryTargets = (step.executionContext?.targetArtifacts ?? []).filter((a) =>
+      /\.(?:html?|xhtml)$/i.test(a)
+    )
     if (entryTargets.length === 0) continue
 
     const ownRuntime = new Set(runtimeByStep.get(step.name) ?? [])
@@ -109,15 +109,17 @@ function validatePrematureBrowserVerification(steps: readonly PlanStep[]): PlanD
 
     const ownRuntimeDirs = new Set([...ownRuntime].map(artifactDir))
     const relatedForeignRuntime = subagentSteps
-      .filter(s => s.name !== step.name)
-      .flatMap(s => runtimeByStep.get(s.name) ?? [])
+      .filter((s) => s.name !== step.name)
+      .flatMap((s) => runtimeByStep.get(s.name) ?? [])
       .filter((artifactPath) => {
         if (ownRuntime.has(artifactPath)) return false
         const runtimeDir = artifactDir(artifactPath)
         if (ownRuntimeDirs.size > 0) {
           return ownRuntimeDirs.has(runtimeDir)
         }
-        return entryDirs.some((dir) => isSameOrNestedDir(runtimeDir, dir) || isSameOrNestedDir(dir, runtimeDir))
+        return entryDirs.some(
+          (dir) => isSameOrNestedDir(runtimeDir, dir) || isSameOrNestedDir(dir, runtimeDir)
+        )
       })
 
     if (relatedForeignRuntime.length > 0) {
@@ -126,9 +128,10 @@ function validatePrematureBrowserVerification(steps: readonly PlanStep[]): PlanD
         category: DiagnosticCategory.Verification,
         severity: DiagnosticSeverity.Error,
         code: "premature_browser_verification",
-        message: `Step "${step.name}" runs browser_check on web entry artifacts before related runtime artifacts are owned by this step: ${sample}. ` +
+        message:
+          `Step "${step.name}" runs browser_check on web entry artifacts before related runtime artifacts are owned by this step: ${sample}. ` +
           `Move required runtime artifacts into this step, or defer browser_check to a later integration owner step that includes all referenced assets.`,
-        stepName: step.name,
+        stepName: step.name
       })
     }
   }
@@ -141,12 +144,8 @@ function validatePrematureBrowserVerification(steps: readonly PlanStep[]): PlanD
 // ============================================================================
 
 export {
-    validateArtifactOwnership,
-    validateStepContracts,
-    validateVerificationCoverage
+  validateArtifactOwnership,
+  validateStepContracts,
+  validateVerificationCoverage
 } from "./contracts.js"
-export {
-    validateGraph,
-    validateToolReferences
-} from "./graph.js"
-
+export { validateGraph, validateToolReferences } from "./graph.js"

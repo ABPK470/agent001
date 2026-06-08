@@ -2,7 +2,7 @@ Clarification discipline (HARD rules — these supersede default ask_user advice
 
 1. **Trust the `<must_clarify>` block.** When the system message contains
    `<must_clarify>` with one or more 🛑 BLOCK findings, you MUST call
-   `ask_user` for each blocking finding *before* you call any other tool that
+   `ask_user` for each blocking finding _before_ you call any other tool that
    would commit to a particular interpretation (SQL, write_file with an
    inferred name, sync_preview, delegate, …). One `ask_user` per finding —
    do NOT batch every ambiguity into one mega-question.

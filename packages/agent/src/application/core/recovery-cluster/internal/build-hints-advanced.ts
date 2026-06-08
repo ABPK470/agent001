@@ -11,26 +11,22 @@
 import { SHELL_BUILTIN_COMMANDS } from "../../../../domain/agent-constants.js"
 import type { ToolCallRecord } from "../../../../tools/index.js"
 import { extractToolFailureText, parseToolResultObject } from "../../../../tools/index.js"
+import { tryNpmHint, tryTestRunnerHint, type AdvancedHintContext } from "./build-advanced.js"
 import {
-    tryNpmHint,
-    tryTestRunnerHint,
-    type AdvancedHintContext,
-} from "./build-advanced.js"
-import {
-    commandBasename,
-    extractCompilerDiagnosticLocation,
-    extractCompilerSuggestedName,
-    extractDuplicateExportName,
-    extractSpawnEnoentCommand,
-    extractUnknownTypeNameFromCompilerFailure,
-    hasBrokenHeredocConjunctionShape,
-    isCompilerDiagnosticFailure,
-    isCompilerInterfaceDriftFailure,
-    isDuplicateExportFailure,
-    isHeaderTypeOrderingCompilerFailure,
-    isJsonEscapedSourceLiteralFailure,
-    isLikelyGrepOperandShapeFailure,
-    isLikelyLiteralGlobFailure,
+  commandBasename,
+  extractCompilerDiagnosticLocation,
+  extractCompilerSuggestedName,
+  extractDuplicateExportName,
+  extractSpawnEnoentCommand,
+  extractUnknownTypeNameFromCompilerFailure,
+  hasBrokenHeredocConjunctionShape,
+  isCompilerDiagnosticFailure,
+  isCompilerInterfaceDriftFailure,
+  isDuplicateExportFailure,
+  isHeaderTypeOrderingCompilerFailure,
+  isJsonEscapedSourceLiteralFailure,
+  isLikelyGrepOperandShapeFailure,
+  isLikelyLiteralGlobFailure
 } from "./recovery-detectors.js"
 
 export interface RecoveryHint {
@@ -54,15 +50,15 @@ export function inferAdvancedRecoveryHint(call: ToolCallRecord): RecoveryHint | 
   const ctx: AdvancedHintContext = { call, parsedResult, failureText, failureTextLower }
 
   return (
-    tryTestRunnerHint(ctx)
-    ?? tryNpmHint(ctx)
-    ?? tryDuplicateExportHint(failureText)
-    ?? tryJsonEscapedLiteralHint(failureText)
-    ?? tryCompilerDiagnosticHint(call, failureText)
-    ?? tryShellSyntaxHint(call, failureTextLower)
-    ?? tryShellBuiltinHint(failureText)
-    ?? tryBrowserCheckHint(call, result)
-    ?? tryDelegationHint(call, resultLower)
+    tryTestRunnerHint(ctx) ??
+    tryNpmHint(ctx) ??
+    tryDuplicateExportHint(failureText) ??
+    tryJsonEscapedLiteralHint(failureText) ??
+    tryCompilerDiagnosticHint(call, failureText) ??
+    tryShellSyntaxHint(call, failureTextLower) ??
+    tryShellBuiltinHint(failureText) ??
+    tryBrowserCheckHint(call, result) ??
+    tryDelegationHint(call, resultLower)
   )
 }
 
@@ -74,7 +70,7 @@ function tryDuplicateExportHint(failureText: string): RecoveryHint | undefined {
     message:
       `Module exports \`${exportName}\` more than once. ` +
       "If the declaration already has an export modifier, remove the extra re-export. " +
-      "After editing, rerun the build/test command.",
+      "After editing, rerun the build/test command."
   }
 }
 
@@ -83,16 +79,13 @@ function tryJsonEscapedLiteralHint(failureText: string): RecoveryHint | undefine
   return {
     key: "json-escaped-source-literal",
     message:
-      "JSON escape sequences like `\\\\\"` or `\\\\n` were written into source code. " +
+      'JSON escape sequences like `\\\\"` or `\\\\n` were written into source code. ' +
       "Re-read the failing source file, replace the escaped text with raw source code, " +
-      "and pass file contents directly instead of JSON-encoded representations.",
+      "and pass file contents directly instead of JSON-encoded representations."
   }
 }
 
-function tryCompilerDiagnosticHint(
-  call: ToolCallRecord,
-  failureText: string,
-): RecoveryHint | undefined {
+function tryCompilerDiagnosticHint(call: ToolCallRecord, failureText: string): RecoveryHint | undefined {
   if (!isCompilerDiagnosticFailure(call, failureText)) return undefined
   const location = extractCompilerDiagnosticLocation(failureText)
   const unknownTypeName = extractUnknownTypeNameFromCompilerFailure(failureText)
@@ -106,7 +99,7 @@ function tryCompilerDiagnosticHint(
         (location ? ` at \`${location}\`` : "") +
         (suggestedName ? ` — did you mean \`${suggestedName}\`?` : "") +
         ". Read the cited header plus every source file that uses it, align the type/member names, " +
-        "and only rerun the build after the full interface is consistent.",
+        "and only rerun the build after the full interface is consistent."
     }
   }
   if (isHeaderTypeOrderingCompilerFailure(failureText)) {
@@ -116,7 +109,7 @@ function tryCompilerDiagnosticHint(
         "The compiler is reporting a header/type-ordering error" +
         (location ? ` at \`${location}\`` : "") +
         (unknownTypeName ? ` involving \`${unknownTypeName}\`` : "") +
-        ". Move the type definition or forward declaration before the first use, then rebuild.",
+        ". Move the type definition or forward declaration before the first use, then rebuild."
     }
   }
   return {
@@ -125,21 +118,18 @@ function tryCompilerDiagnosticHint(
       "The compiler identified a concrete source location" +
       (location ? ` (\`${location}\`)` : "") +
       ". Stop rerunning the same build command. Read and edit the cited file, fix the error, " +
-      "and only rerun the build after the source change is in place.",
+      "and only rerun the build after the source change is in place."
   }
 }
 
-function tryShellSyntaxHint(
-  call: ToolCallRecord,
-  failureTextLower: string,
-): RecoveryHint | undefined {
+function tryShellSyntaxHint(call: ToolCallRecord, failureTextLower: string): RecoveryHint | undefined {
   if (hasBrokenHeredocConjunctionShape(call.args, failureTextLower)) {
     return {
       key: "heredoc-conjunction-shape",
       message:
         "This shell script put `&&`, `||`, or `;` on a new line after a heredoc terminator, " +
         "which is invalid shell syntax. Split the follow-up command into a separate tool call, " +
-        "or use write_file for file contents instead of shell heredocs.",
+        "or use write_file for file contents instead of shell heredocs."
     }
   }
 
@@ -149,7 +139,7 @@ function tryShellSyntaxHint(
       message:
         "For code search, prefer `grep -r pattern path` or `rg pattern path`. " +
         "When using alternation like `foo|bar`, add `-E` flag. " +
-        "Without file paths, grep reads stdin — pair `--include` with `-r` and a directory.",
+        "Without file paths, grep reads stdin — pair `--include` with `-r` and a directory."
     }
   }
 
@@ -158,7 +148,7 @@ function tryShellSyntaxHint(
       key: "literal-glob-operand",
       message:
         "Shell globs like `*.ts` may not expand in direct mode. " +
-        "Enumerate matches with `find` or `rg --files` first, or pass the full command as a shell string.",
+        "Enumerate matches with `find` or `rg --files` first, or pass the full command as a shell string."
     }
   }
   return undefined
@@ -173,7 +163,7 @@ function tryShellBuiltinHint(failureText: string): RecoveryHint | undefined {
       key: "shell-builtin",
       message:
         `Shell builtins like \`${missingCommand}\` are not standalone executables. ` +
-        "Run the full shell command as a single string.",
+        "Run the full shell command as a single string."
     }
   }
   return {
@@ -181,7 +171,7 @@ function tryShellBuiltinHint(failureText: string): RecoveryHint | undefined {
     message:
       `Executable \`${missingCommand}\` was not found on PATH. ` +
       "If it's a project-local tool, try `npx ${missingCommand}` or `npm exec -- ${missingCommand}`. " +
-      "Otherwise install it first.",
+      "Otherwise install it first."
   }
 }
 
@@ -197,7 +187,7 @@ function tryBrowserCheckHint(call: ToolCallRecord, result: string): RecoveryHint
       "Steps to fix: (1) Use list_directory to check what files actually exist in the HTML file's directory. " +
       "(2) Either move the missing files to the expected paths, or update the HTML references to match. " +
       "(3) If you used subdirectories like css/ or js/, make sure those directories and files exist. " +
-      "Do NOT just re-run browser_check — fix the file structure or HTML first.",
+      "Do NOT just re-run browser_check — fix the file structure or HTML first."
   }
 }
 
@@ -209,7 +199,7 @@ function tryDelegationHint(call: ToolCallRecord, resultLower: string): RecoveryH
       message:
         "A delegated child task failed. Read the failure reason carefully. " +
         "Check if the goal was clear enough and had all necessary context. " +
-        "Retry with a more specific goal, or do the task directly if it's simple enough.",
+        "Retry with a more specific goal, or do the task directly if it's simple enough."
     }
   }
   if (resultLower.includes("agent stopped after") && resultLower.includes("iteration")) {
@@ -218,7 +208,7 @@ function tryDelegationHint(call: ToolCallRecord, resultLower: string): RecoveryH
       message:
         "The child agent exhausted its iteration budget. The task was too large. " +
         "Increase the child budget when the work is a single cohesive owned implementation, or split only along real ownership boundaries when the task mixes unrelated concerns. " +
-        "Do NOT micro-split solely to chase a tiny iteration count.",
+        "Do NOT micro-split solely to chase a tiny iteration count."
     }
   }
   return undefined

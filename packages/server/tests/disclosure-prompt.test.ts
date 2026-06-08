@@ -39,7 +39,7 @@ async function mkSandbox(): Promise<RunWorkspaceContext> {
     executionRoot: dir,
     taskType: "analysis_or_chat",
     isolated: true,
-    profile: "hosted",
+    profile: "hosted"
   }
 }
 
@@ -53,7 +53,7 @@ describe("Phase E.3 — <information_disclosure> prompt section", () => {
       runWorkspace,
       perTier: emptyTier(),
       runId: "r",
-      isAdmin: false,
+      isAdmin: false
     })
     const joined = messages.map((m) => m.content).join("\n---\n")
     expect(joined).toContain("<information_disclosure>")
@@ -74,7 +74,7 @@ describe("Phase E.3 — <information_disclosure> prompt section", () => {
       runWorkspace,
       perTier: emptyTier(),
       runId: "r",
-      isAdmin: true,
+      isAdmin: true
     })
     const joined = messages.map((m) => m.content).join("\n---\n")
     expect(joined).not.toContain("<information_disclosure>")
@@ -89,7 +89,7 @@ describe("Phase E.3 — <information_disclosure> prompt section", () => {
       runWorkspace,
       perTier: emptyTier(),
       runId: "r",
-      isAdmin: false,
+      isAdmin: false
     })
     const disclosureMsg = messages.find((m) => m.content.includes("<information_disclosure>"))
     expect(disclosureMsg).toBeDefined()
@@ -107,7 +107,7 @@ describe("Phase E.3 — <information_disclosure> prompt section", () => {
       allTools: [] as Tool[],
       runWorkspace,
       perTier: emptyTier(),
-      runId: "r",
+      runId: "r"
     })
     const joined = messages.map((m) => m.content).join("\n---\n")
     expect(joined).toContain("<information_disclosure>")

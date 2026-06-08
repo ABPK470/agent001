@@ -6,10 +6,10 @@
  */
 import { describe, expect, it } from "vitest"
 import {
-    DOCTRINE_FIX_HINTS,
-    enforceDoctrines,
-    getDoctrineFixHint,
-    MSSQL_DOCTRINES,
+  DOCTRINE_FIX_HINTS,
+  enforceDoctrines,
+  getDoctrineFixHint,
+  MSSQL_DOCTRINES
 } from "../src/application/core/doctrine.js"
 import { validateQuery } from "../src/tools/mssql/validation.js"
 
@@ -19,21 +19,21 @@ describe("doctrine fixHints", () => {
       aggregate_semantic_mismatch: "SELECT SUM(x) AS Avg_y FROM t",
       temp_table_integrity: [
         "CREATE TABLE #created_a3f91c08 (x int);",
-        "SELECT * FROM #missing_a3f91c08;",
+        "SELECT * FROM #missing_a3f91c08;"
       ].join("\n"),
       temp_scalar_subquery_overused: [
         "SELECT t.k,",
         "  (SELECT COUNT(*) FROM #s_a3f91c08 s WHERE s.k = t.k) AS c1,",
         "  (SELECT SUM(v)   FROM #s_a3f91c08 s WHERE s.k = t.k) AS c2",
-        "FROM #t_a3f91c08 t",
+        "FROM #t_a3f91c08 t"
       ].join("\n"),
       publish_view_topn_without_branch_aggregation: [
         "SELECT TOP 5 r.pkClient, SUM(r.RevenueZARMTD) AS TotalRevenueZAR",
         "FROM publish.Revenue r WITH (NOLOCK)",
         "WHERE r.pkMonth BETWEEN 202501 AND 202501",
         "GROUP BY r.pkClient",
-        "ORDER BY SUM(r.RevenueZARMTD) DESC, r.pkClient;",
-      ].join("\n"),
+        "ORDER BY SUM(r.RevenueZARMTD) DESC, r.pkClient;"
+      ].join("\n")
     }
     const emittedCodes = new Set<string>()
     for (const [code, q] of Object.entries(queries)) {
@@ -48,12 +48,13 @@ describe("doctrine fixHints", () => {
   })
 
   it("registry getDoctrineFixHint returns the same hint as the diagnostic carries", () => {
-    expect(getDoctrineFixHint("aggregate_semantic_mismatch"))
-      .toBe(DOCTRINE_FIX_HINTS.aggregate_semantic_mismatch)
-    expect(getDoctrineFixHint("temp_table_integrity"))
-      .toBe(DOCTRINE_FIX_HINTS.temp_table_integrity)
-    expect(getDoctrineFixHint("temp_scalar_subquery_overused"))
-      .toBe(DOCTRINE_FIX_HINTS.temp_scalar_subquery_overused)
+    expect(getDoctrineFixHint("aggregate_semantic_mismatch")).toBe(
+      DOCTRINE_FIX_HINTS.aggregate_semantic_mismatch
+    )
+    expect(getDoctrineFixHint("temp_table_integrity")).toBe(DOCTRINE_FIX_HINTS.temp_table_integrity)
+    expect(getDoctrineFixHint("temp_scalar_subquery_overused")).toBe(
+      DOCTRINE_FIX_HINTS.temp_scalar_subquery_overused
+    )
     expect(getDoctrineFixHint("nonexistent_code")).toBe(null)
   })
 
@@ -63,20 +64,25 @@ describe("doctrine fixHints", () => {
     expect(aggErr).toContain("Fix:")
     expect(aggErr).toContain("match the alias")
 
-    const tempErr = validateQuery([
-      "CREATE TABLE #created_a3f91c08 (x int);",
-      "SELECT * FROM #missing_a3f91c08;",
-    ].join("\n"), false) ?? ""
+    const tempErr =
+      validateQuery(
+        ["CREATE TABLE #created_a3f91c08 (x int);", "SELECT * FROM #missing_a3f91c08;"].join("\n"),
+        false
+      ) ?? ""
     expect(tempErr).toMatch(/referenced without being created/i)
     expect(tempErr).toContain("Fix:")
     expect(tempErr).toMatch(/8-hex suffix|ONE query_mssql call/i)
 
-    const scalarErr = validateQuery([
-      "SELECT t.k,",
-      "  (SELECT COUNT(*) FROM #s_a3f91c08 s WHERE s.k = t.k) AS c1,",
-      "  (SELECT SUM(v)   FROM #s_a3f91c08 s WHERE s.k = t.k) AS c2",
-      "FROM #t_a3f91c08 t",
-    ].join("\n"), false) ?? ""
+    const scalarErr =
+      validateQuery(
+        [
+          "SELECT t.k,",
+          "  (SELECT COUNT(*) FROM #s_a3f91c08 s WHERE s.k = t.k) AS c1,",
+          "  (SELECT SUM(v)   FROM #s_a3f91c08 s WHERE s.k = t.k) AS c2",
+          "FROM #t_a3f91c08 t"
+        ].join("\n"),
+        false
+      ) ?? ""
     expect(scalarErr).toMatch(/repeated scalar subqueries/i)
     expect(scalarErr).toContain("Fix:")
     expect(scalarErr).toMatch(/GROUP BY pkClient|JOIN that small aggregate/i)
@@ -94,8 +100,8 @@ describe("doctrine fixHints", () => {
         "SELECT t.k,",
         "  (SELECT COUNT(*) FROM #s_a3f91c08 s WHERE s.k = t.k) AS c1,",
         "  (SELECT SUM(v)   FROM #s_a3f91c08 s WHERE s.k = t.k) AS c2",
-        "FROM #t_a3f91c08 t",
-      ].join("\n"),
+        "FROM #t_a3f91c08 t"
+      ].join("\n")
     ]
     for (const q of probes) {
       for (const d of enforceDoctrines(q)) seenCodes.add(d.code)

@@ -10,7 +10,7 @@ vi.mock("../src/adapters/persistence/sqlite.js", () => ({
   listEvents,
   getRun,
   getSyncRun,
-  getSyncRunPlanJson,
+  getSyncRunPlanJson
 }))
 
 describe("listOperations sync bucketing", () => {
@@ -23,38 +23,46 @@ describe("listOperations sync bucketing", () => {
       {
         type: EventType.SyncAgentExecuteCompleted,
         created_at: "2026-05-27T14:56:38.000Z",
-        data: JSON.stringify({ runId: "run-1", planId: "plan-1", success: true }),
+        data: JSON.stringify({ runId: "run-1", planId: "plan-1", success: true })
       },
       {
         type: EventType.SyncExecuteCompleted,
         created_at: "2026-05-27T14:56:37.000Z",
-        data: JSON.stringify({ runId: "run-1", planId: "plan-1", applied: { insert: 0, update: 2, delete: 0 } }),
+        data: JSON.stringify({
+          runId: "run-1",
+          planId: "plan-1",
+          applied: { insert: 0, update: 2, delete: 0 }
+        })
       },
       {
         type: EventType.SyncExecuteStep,
         created_at: "2026-05-27T14:56:34.000Z",
-        data: JSON.stringify({ runId: "run-1", planId: "plan-1", step: "deploy-etl" }),
+        data: JSON.stringify({ runId: "run-1", planId: "plan-1", step: "deploy-etl" })
       },
       {
         type: EventType.SyncExecuteStarted,
         created_at: "2026-05-27T14:56:33.000Z",
-        data: JSON.stringify({ runId: "run-1", planId: "plan-1", source: "dev", target: "uat" }),
+        data: JSON.stringify({ runId: "run-1", planId: "plan-1", source: "dev", target: "uat" })
       },
       {
         type: EventType.SyncAgentExecuteStarted,
         created_at: "2026-05-27T14:56:32.000Z",
-        data: JSON.stringify({ runId: "run-1", planId: "plan-1" }),
+        data: JSON.stringify({ runId: "run-1", planId: "plan-1" })
       },
       {
         type: EventType.SyncPreviewCompleted,
         created_at: "2026-05-27T14:55:06.000Z",
-        data: JSON.stringify({ runId: "run-1", planId: "plan-1", totals: { insert: 0, update: 2, delete: 0 } }),
+        data: JSON.stringify({
+          runId: "run-1",
+          planId: "plan-1",
+          totals: { insert: 0, update: 2, delete: 0 }
+        })
       },
       {
         type: EventType.RunStarted,
         created_at: "2026-05-27T14:54:59.000Z",
-        data: JSON.stringify({ runId: "run-1", goal: "run sync" }),
-      },
+        data: JSON.stringify({ runId: "run-1", goal: "run sync" })
+      }
     ])
 
     getRun.mockReturnValue({
@@ -63,7 +71,7 @@ describe("listOperations sync bucketing", () => {
       goal: "run sync",
       step_count: 1,
       agent_id: "copilot",
-      error: null,
+      error: null
     })
 
     getSyncRun.mockReturnValue({
@@ -75,7 +83,7 @@ describe("listOperations sync bucketing", () => {
       entity_id: "4539",
       source: "dev",
       target: "uat",
-      error: null,
+      error: null
     })
 
     const { listOperations } = await import("../src/api/operations-query.ts")
@@ -85,7 +93,7 @@ describe("listOperations sync bucketing", () => {
     expect(result.operations.map((op) => op.kind)).toEqual([
       OperationKind.SyncExecute,
       OperationKind.SyncPreview,
-      OperationKind.AgentRun,
+      OperationKind.AgentRun
     ])
 
     const execute = result.operations.find((op) => op.kind === OperationKind.SyncExecute)
@@ -105,18 +113,18 @@ describe("listOperations sync bucketing", () => {
       {
         type: EventType.SyncExecuteCompleted,
         created_at: "2026-05-27T14:52:27.000Z",
-        data: JSON.stringify({ planId: "plan-2", applied: { insert: 0, update: 0, delete: 0 } }),
+        data: JSON.stringify({ planId: "plan-2", applied: { insert: 0, update: 0, delete: 0 } })
       },
       {
         type: EventType.SyncExecuteStep,
         created_at: "2026-05-27T14:52:26.000Z",
-        data: JSON.stringify({ planId: "plan-2", step: "sync-date" }),
+        data: JSON.stringify({ planId: "plan-2", step: "sync-date" })
       },
       {
         type: EventType.SyncExecuteStarted,
         created_at: "2026-05-27T14:52:21.000Z",
-        data: JSON.stringify({ planId: "plan-2", source: "dev", target: "uat" }),
-      },
+        data: JSON.stringify({ planId: "plan-2", source: "dev", target: "uat" })
+      }
     ])
 
     getRun.mockReturnValue(undefined)
@@ -129,7 +137,7 @@ describe("listOperations sync bucketing", () => {
       entity_id: "6374",
       source: "dev",
       target: "uat",
-      error: null,
+      error: null
     })
 
     const { listOperations } = await import("../src/api/operations-query.ts")
@@ -142,9 +150,7 @@ describe("listOperations sync bucketing", () => {
     expect(execute.activities[0]?.status).toBe(OperationStatus.Success)
     expect(execute.activities[0]?.summary).toBe("dev → uat")
     expect(execute.activities[1]?.name).toBe("sync-date")
-    expect(execute.activities[1]?.events.map((event) => event.type)).toEqual([
-      EventType.SyncExecuteStep,
-    ])
+    expect(execute.activities[1]?.events.map((event) => event.type)).toEqual([EventType.SyncExecuteStep])
     expect(execute.activities[2]?.name).toBe("completed")
     expect(execute.activities[2]?.summary).toBe("0 ins · 0 upd · 0 del")
   })
@@ -154,18 +160,18 @@ describe("listOperations sync bucketing", () => {
       {
         type: EventType.SyncExecuteCompleted,
         created_at: "2026-05-28T10:00:04.000Z",
-        data: JSON.stringify({ planId: "plan-3", applied: { insert: 1, update: 0, delete: 0 } }),
+        data: JSON.stringify({ planId: "plan-3", applied: { insert: 1, update: 0, delete: 0 } })
       },
       {
         type: EventType.SyncExecuteStep,
         created_at: "2026-05-28T10:00:03.000Z",
-        data: JSON.stringify({ planId: "plan-3", step: "metadata-sync" }),
+        data: JSON.stringify({ planId: "plan-3", step: "metadata-sync" })
       },
       {
         type: EventType.SyncExecuteStarted,
         created_at: "2026-05-28T10:00:00.000Z",
-        data: JSON.stringify({ planId: "plan-3", source: "dev", target: "uat" }),
-      },
+        data: JSON.stringify({ planId: "plan-3", source: "dev", target: "uat" })
+      }
     ])
 
     getRun.mockReturnValue(undefined)
@@ -178,30 +184,32 @@ describe("listOperations sync bucketing", () => {
       entity_id: "4539",
       source: "dev",
       target: "uat",
-      error: null,
+      error: null
     })
-    getSyncRunPlanJson.mockReturnValue(JSON.stringify({
-      planId: "plan-3",
-      source: "dev",
-      target: "uat",
-      entity: { type: "contract", id: "4539", displayName: "AccountClientMapping" },
-      executionContract: {
-        definitionId: "contract",
-        definitionPublishedVersion: "2026-05-28T09:59:59.000Z",
-      },
-      decisionLog: [
-        {
-          id: "definition-contract",
-          recordedAt: "2026-05-28T09:59:58.000Z",
-          stage: "preview",
-          category: "definition",
-          severity: "info",
-          title: "Published definition selected",
-          summary: "Using published definition contract@2026-05-28T09:59:59.000Z.",
+    getSyncRunPlanJson.mockReturnValue(
+      JSON.stringify({
+        planId: "plan-3",
+        source: "dev",
+        target: "uat",
+        entity: { type: "contract", id: "4539", displayName: "AccountClientMapping" },
+        executionContract: {
+          definitionId: "contract",
+          definitionPublishedVersion: "2026-05-28T09:59:59.000Z"
         },
-      ],
-      warnings: [],
-    }))
+        decisionLog: [
+          {
+            id: "definition-contract",
+            recordedAt: "2026-05-28T09:59:58.000Z",
+            stage: "preview",
+            category: "definition",
+            severity: "info",
+            title: "Published definition selected",
+            summary: "Using published definition contract@2026-05-28T09:59:59.000Z."
+          }
+        ],
+        warnings: []
+      })
+    )
 
     const { listOperations } = await import("../src/api/operations-query.ts")
     const result = listOperations({ limit: 50 })
@@ -210,7 +218,9 @@ describe("listOperations sync bucketing", () => {
     expect(execute.title).toBe("Execute Contract — AccountClientMapping")
     expect(execute.subtitle).toContain("def 2026-05-28T09:59:59.000Z")
     expect(execute.activities[0]?.name).toBe("Published definition selected")
-    expect(execute.activities[0]?.summary).toBe("Using published definition contract@2026-05-28T09:59:59.000Z.")
+    expect(execute.activities[0]?.summary).toBe(
+      "Using published definition contract@2026-05-28T09:59:59.000Z."
+    )
     expect(execute.activities.some((activity) => activity.name === "metadata-sync")).toBe(true)
   })
 })

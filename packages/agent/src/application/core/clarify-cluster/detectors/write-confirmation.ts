@@ -19,7 +19,8 @@ const VERSION = "1.0.0"
  * normal case. The pattern is intentionally conservative — false
  * negatives are preferable to false positives that block reads.
  */
-const MUTATING = /\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM|DROP\s+(?:TABLE|VIEW|INDEX|PROCEDURE|FUNCTION)|ALTER\s+(?:TABLE|VIEW)|TRUNCATE\s+TABLE|MERGE\s+INTO|CREATE\s+(?:TABLE|VIEW|PROCEDURE|FUNCTION))\s+([^\s(;]+)/gi
+const MUTATING =
+  /\b(INSERT\s+INTO|UPDATE|DELETE\s+FROM|DROP\s+(?:TABLE|VIEW|INDEX|PROCEDURE|FUNCTION)|ALTER\s+(?:TABLE|VIEW)|TRUNCATE\s+TABLE|MERGE\s+INTO|CREATE\s+(?:TABLE|VIEW|PROCEDURE|FUNCTION))\s+([^\s(;]+)/gi
 
 /**
  * Target qualifies as a "temp" target — session (#x) or global (##x)
@@ -58,9 +59,9 @@ export const writeConfirmationDetector: Detector = {
         subject,
         reasoning: `Planned/recent SQL contains "${verb} ${target}" — a write against a real (non-temp) object.`,
         suggestedQuestion: `Confirm: should I execute "${verb} ${target}"? (Reply yes to proceed, or describe a safer alternative.)`,
-        source: "detector" as const,
+        source: "detector" as const
       })
     }
     return out
-  },
+  }
 }

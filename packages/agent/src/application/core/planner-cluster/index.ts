@@ -7,13 +7,21 @@
  */
 
 export {
-    createBudgetState, createCircuitBreaker, isBlocked, maybeExtendBudget, recordFailure,
-    recordSuccess
+  createBudgetState,
+  createCircuitBreaker,
+  isBlocked,
+  maybeExtendBudget,
+  recordFailure,
+  recordSuccess
 } from "./circuit-breaker.js"
 export type { BudgetState } from "./circuit-breaker.js"
 export { assessPlannerDecision } from "./decision/index.js"
 export { generateCoherentBootstrap, generatePlan } from "./generate/index.js"
-export type { CoherentBootstrapGenerationResult, PlanGenerationContext, PlanGenerationResult } from "./generate/index.js"
+export type {
+  CoherentBootstrapGenerationResult,
+  PlanGenerationContext,
+  PlanGenerationResult
+} from "./generate/index.js"
 export { inferForcedOutputDirectoryFromGoal } from "./normalize/index.js"
 export { executePlannerPath } from "./orchestrator/index.js"
 export type { PlannerContext, PlannerResult } from "./orchestrator/index.js"
@@ -30,7 +38,12 @@ export * from "./coherent/index.js"
 export { isValidArtifactPath } from "./generate-parse/helpers.js"
 export { isGibberishIssue } from "./pipeline-validation/index.js"
 export { compilePlannerRuntime } from "./runtime-model.js"
-export { buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, enrichVerifierAssessments } from "./verification-model/index.js"
+export {
+  buildLegacyRetryPlan,
+  buildRepairPlan,
+  compareRepairPlanCompatibility,
+  enrichVerifierAssessments
+} from "./verification-model/index.js"
 export { isLLMGibberish } from "./verifier-helpers/index.js"
 
 // Platform-error helpers and failure polishing (used by server + lib.ts barrel).
@@ -39,7 +52,48 @@ export * from "./polish-failure.js"
 
 // Re-export all types
 export type {
-    ArchitecturePreservationStatus, ArtifactRelation, ChildExecutionResult, CircuitBreakerState, CoherentArchitectureArtifact, CoherentSharedContract, CoherentSolutionArtifact, CoherentSolutionBundle, CoherentSystemInvariant, DeterministicToolStep, DiagnosticCategory, DiagnosticSeverity, EffectClass, ExecutionEnvelope, LegacyRetryPlan, PipelineResult, PipelineStatus, PipelineStepExecutionState, PipelineStepResult, PipelineStepStatus, Plan, PlanDiagnostic, PlanEdge, PlannerCoherentBootstrap, PlannerDecision, PlannerNeedLevel, PlannerRepairCompatibilityMode, PlanStep, RepairPlan, RepairPlanCompatibilityReport, RepairTask, RoutingConfidence, StepAcceptanceState, StepRole, SubagentFailureClass, SubagentTaskStep, VerificationAttempt, VerificationEvidence, VerificationMode, VerifierDecision, VerifierIssue, VerifierOutcome,
-    VerifierStepAssessment, WorkflowStepContract
+  ArchitecturePreservationStatus,
+  ArtifactRelation,
+  ChildExecutionResult,
+  CircuitBreakerState,
+  CoherentArchitectureArtifact,
+  CoherentSharedContract,
+  CoherentSolutionArtifact,
+  CoherentSolutionBundle,
+  CoherentSystemInvariant,
+  DeterministicToolStep,
+  DiagnosticCategory,
+  DiagnosticSeverity,
+  EffectClass,
+  ExecutionEnvelope,
+  LegacyRetryPlan,
+  PipelineResult,
+  PipelineStatus,
+  PipelineStepExecutionState,
+  PipelineStepResult,
+  PipelineStepStatus,
+  Plan,
+  PlanDiagnostic,
+  PlanEdge,
+  PlannerCoherentBootstrap,
+  PlannerDecision,
+  PlannerNeedLevel,
+  PlannerRepairCompatibilityMode,
+  PlanStep,
+  RepairPlan,
+  RepairPlanCompatibilityReport,
+  RepairTask,
+  RoutingConfidence,
+  StepAcceptanceState,
+  StepRole,
+  SubagentFailureClass,
+  SubagentTaskStep,
+  VerificationAttempt,
+  VerificationEvidence,
+  VerificationMode,
+  VerifierDecision,
+  VerifierIssue,
+  VerifierOutcome,
+  VerifierStepAssessment,
+  WorkflowStepContract
 } from "./types.js"
-

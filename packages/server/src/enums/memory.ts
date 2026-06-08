@@ -4,9 +4,9 @@
 
 /** Memory tier — controls retention and retrieval behaviour. */
 export const MemoryTier = {
-  Working:  "working",
+  Working: "working",
   Episodic: "episodic",
-  Semantic: "semantic",
+  Semantic: "semantic"
 } as const
 
 export type MemoryTier = (typeof MemoryTier)[keyof typeof MemoryTier]
@@ -18,11 +18,11 @@ export const isMemoryTier = (value: unknown): value is MemoryTier =>
 
 /** Origin actor that produced a memory entry. */
 export const MemorySource = {
-  System:   "system",
-  Tool:     "tool",
-  User:     "user",
-  Agent:    "agent",
-  External: "external",
+  System: "system",
+  Tool: "tool",
+  User: "user",
+  Agent: "agent",
+  External: "external"
 } as const
 
 export type MemorySource = (typeof MemorySource)[keyof typeof MemorySource]
@@ -34,11 +34,11 @@ export const isMemorySource = (value: unknown): value is MemorySource =>
 
 /** Conversational role attached to a memory entry. */
 export const MemoryRole = {
-  User:      "user",
+  User: "user",
   Assistant: "assistant",
-  Tool:      "tool",
-  System:    "system",
-  Summary:   "summary",
+  Tool: "tool",
+  System: "system",
+  Summary: "summary"
 } as const
 
 export type MemoryRole = (typeof MemoryRole)[keyof typeof MemoryRole]
@@ -55,12 +55,14 @@ export const isMemoryRole = (value: unknown): value is MemoryRole =>
  */
 export const MemoryIngestionExclusionReason = {
   LowSalience: "low-salience",
-  Duplicate:   "duplicate",
+  Duplicate: "duplicate"
 } as const
 
-export type MemoryIngestionExclusionReason = (typeof MemoryIngestionExclusionReason)[keyof typeof MemoryIngestionExclusionReason]
+export type MemoryIngestionExclusionReason =
+  (typeof MemoryIngestionExclusionReason)[keyof typeof MemoryIngestionExclusionReason]
 
-export const MEMORY_INGESTION_EXCLUSION_REASONS: ReadonlyArray<MemoryIngestionExclusionReason> = Object.values(MemoryIngestionExclusionReason)
+export const MEMORY_INGESTION_EXCLUSION_REASONS: ReadonlyArray<MemoryIngestionExclusionReason> =
+  Object.values(MemoryIngestionExclusionReason)
 
 export const isMemoryIngestionExclusionReason = (value: unknown): value is MemoryIngestionExclusionReason =>
   typeof value === "string" && (MEMORY_INGESTION_EXCLUSION_REASONS as readonly string[]).includes(value)
@@ -72,14 +74,15 @@ export const isMemoryIngestionExclusionReason = (value: unknown): value is Memor
  *   - Flagged       \u2014 the matching memory entry was flagged for review
  */
 export const MemoryValidationAction = {
-  None:          "none",
+  None: "none",
   NoMemoryEntry: "no_memory_entry",
-  Flagged:       "flagged",
+  Flagged: "flagged"
 } as const
 
 export type MemoryValidationAction = (typeof MemoryValidationAction)[keyof typeof MemoryValidationAction]
 
-export const MEMORY_VALIDATION_ACTIONS: ReadonlyArray<MemoryValidationAction> = Object.values(MemoryValidationAction)
+export const MEMORY_VALIDATION_ACTIONS: ReadonlyArray<MemoryValidationAction> =
+  Object.values(MemoryValidationAction)
 
 export const isMemoryValidationAction = (value: unknown): value is MemoryValidationAction =>
   typeof value === "string" && (MEMORY_VALIDATION_ACTIONS as readonly string[]).includes(value)

@@ -13,7 +13,11 @@
  */
 import { describe, expect, it } from "vitest"
 import { AggregateSeverity } from "../src/domain/enums/sql-guard.js"
-import { findAggregateSemanticIssues, getQueryWarnings, validateQuery } from "../src/tools/mssql/validation.js"
+import {
+  findAggregateSemanticIssues,
+  getQueryWarnings,
+  validateQuery
+} from "../src/tools/mssql/validation.js"
 
 describe("aggregate-semantic guard — BLOCK (alias-function mismatch)", () => {
   it("blocks SUM(...) AS Avg…", () => {

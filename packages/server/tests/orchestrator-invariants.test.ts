@@ -18,19 +18,23 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { buildFixture, salientAnswer, type TurnInputs } from "./helpers/orchestrator-fixture.js"
 
 let fixture: Awaited<ReturnType<typeof buildFixture>>
-beforeEach(async () => { fixture = await buildFixture() })
-afterEach(() => { fixture.cleanup() })
+beforeEach(async () => {
+  fixture = await buildFixture()
+})
+afterEach(() => {
+  fixture.cleanup()
+})
 
 const ALICE_SID = "anon:c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1c1"
-const BOB_SID   = "anon:c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2"
+const BOB_SID = "anon:c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2c2"
 
 function turn(over: Partial<TurnInputs> & Pick<TurnInputs, "goal" | "sessionId">): TurnInputs {
   return {
-    goal:      over.goal,
-    answer:    over.answer    ?? salientAnswer(over.goal),
+    goal: over.goal,
+    answer: over.answer ?? salientAnswer(over.goal),
     sessionId: over.sessionId,
-    upn:       over.upn       ?? null,
-    agentId:   over.agentId   ?? null,
+    upn: over.upn ?? null,
+    agentId: over.agentId ?? null
   }
 }
 
@@ -45,7 +49,7 @@ describe("Layer C — C1: empty-result safety", () => {
       goal: "any goal",
       sessionId: ALICE_SID,
       upn: null,
-      runId: "run-c1",
+      runId: "run-c1"
     })
     expect(typeof result.perTier.working).toBe("string")
     expect(typeof result.perTier.episodic).toBe("string")
@@ -61,7 +65,7 @@ describe("Layer C — C1: empty-result safety", () => {
       goal: "yes",
       sessionId: ALICE_SID,
       upn: null,
-      runId: "run-c1b",
+      runId: "run-c1b"
     })
     expect(result.perTier.working).toBe("")
   })
@@ -80,31 +84,43 @@ describe("Layer C — C2: working memory respects WORKING_SESSION_WINDOW_H cutof
     // without freezing the clock.
     const oldId = "stale-entry-c2"
     const oldStamp = new Date(Date.now() - fourHoursMs - 60_000).toISOString()
-    fixture.db.prepare(`
+    fixture.db
+      .prepare(
+        `
       INSERT INTO memory_entries
         (id, tier, role, content, metadata, source, confidence, salience, access_count, session_id, run_id, parent_id, upn, shared, created_at, updated_at)
       VALUES (?, 'working', 'system', ?, '{}', 'agent', 0.9, 0.5, 0, ?, 'run-old-c2', NULL, NULL, 0, ?, ?)
-    `).run(oldId, "stale-window-marker-OSCAR-9999 should be excluded by the 4h cutoff", sid, oldStamp, oldStamp)
+    `
+      )
+      .run(
+        oldId,
+        "stale-window-marker-OSCAR-9999 should be excluded by the 4h cutoff",
+        sid,
+        oldStamp,
+        oldStamp
+      )
 
     // Plant a fresh row with the same shape so we know retrieval is wired.
-    await fixture.simulateTurn(turn({
-      goal: "fresh thing",
-      answer: "Configured fresh state: fresh-window-marker-PAPA-1111 has been recorded in the live window.",
-      sessionId: sid,
-      upn: null,
-    }))
+    await fixture.simulateTurn(
+      turn({
+        goal: "fresh thing",
+        answer: "Configured fresh state: fresh-window-marker-PAPA-1111 has been recorded in the live window.",
+        sessionId: sid,
+        upn: null
+      })
+    )
 
     const view = await fixture.retrieve({
       goal: "yes",
       sessionId: sid,
       upn: null,
-      runId: "run-c2-retrieve",
+      runId: "run-c2-retrieve"
     })
 
     expect(view.perTier.working, "fresh entry must surface").toContain("fresh-window-marker-PAPA-1111")
     expect(
       view.perTier.working,
-      "stale entry past WORKING_SESSION_WINDOW_H MUST NOT appear regardless of sid/upn match",
+      "stale entry past WORKING_SESSION_WINDOW_H MUST NOT appear regardless of sid/upn match"
     ).not.toContain("OSCAR-9999")
   })
 })
@@ -122,20 +138,20 @@ describe("Layer C — C3: shared=1 admin-curated rows are visible across tenants
       confidence: 0.95,
       runId: "run-shared-c3",
       upn: null,
-      shared: true,
+      shared: true
     })
 
     const aliceView = await fixture.retrieve({
       goal: "shared-canary-marker-TANGO",
       sessionId: ALICE_SID,
       upn: "alice@corp",
-      runId: "run-alice-c3",
+      runId: "run-alice-c3"
     })
     const bobView = await fixture.retrieve({
       goal: "shared-canary-marker-TANGO",
       sessionId: BOB_SID,
       upn: "bob@corp",
-      runId: "run-bob-c3",
+      runId: "run-bob-c3"
     })
 
     expect(aliceView.perTier.semantic).toContain("TANGO-5050")
@@ -152,20 +168,20 @@ describe("Layer C — C3: shared=1 admin-curated rows are visible across tenants
       confidence: 0.95,
       runId: "run-private-c3",
       upn: "alice@corp",
-      shared: false,
+      shared: false
     })
 
     const aliceView = await fixture.retrieve({
       goal: "private-canary-marker-UNIFORM",
       sessionId: ALICE_SID,
       upn: "alice@corp",
-      runId: "run-alice-private-c3",
+      runId: "run-alice-private-c3"
     })
     const bobView = await fixture.retrieve({
       goal: "private-canary-marker-UNIFORM",
       sessionId: BOB_SID,
       upn: "bob@corp",
-      runId: "run-bob-private-c3",
+      runId: "run-bob-private-c3"
     })
 
     expect(aliceView.perTier.semantic).toContain("UNIFORM-7070")
@@ -195,12 +211,15 @@ describe("Layer C — C4: anon→named UPN promotion preserves working continuit
 
     // Pre-modal: anonymous turn (this is what the user actually typed
     // before clicking the welcome modal).
-    await fixture.simulateTurn(turn({
-      goal: "tell me the canary",
-      answer: "Configured the canary: the pre-modal-anon-marker-VICTOR-3030 has been recorded and verified.",
-      sessionId: sid,
-      upn: null,
-    }))
+    await fixture.simulateTurn(
+      turn({
+        goal: "tell me the canary",
+        answer:
+          "Configured the canary: the pre-modal-anon-marker-VICTOR-3030 has been recorded and verified.",
+        sessionId: sid,
+        upn: null
+      })
+    )
 
     // Welcome modal submitted — SAME sid (per identity.ts:223), upn now set.
     // Post-modal retrieve from the named user's perspective:
@@ -208,36 +227,39 @@ describe("Layer C — C4: anon→named UPN promotion preserves working continuit
       goal: "yes",
       sessionId: sid,
       upn: "alice@corp",
-      runId: "run-post-modal-c4",
+      runId: "run-post-modal-c4"
     })
 
     expect(
       postModalView.perTier.working,
       "Welcome-modal upn promotion MUST NOT amnesia-bomb the same sid's prior anon turns " +
-        "— per identity.ts the sid is the conversation boundary; upn is a label upgrade.",
+        "— per identity.ts the sid is the conversation boundary; upn is a label upgrade."
     ).toContain("VICTOR-3030")
   })
 
   it("sid-scope bridge does NOT leak anon rows to a DIFFERENT sid (cross-conversation isolation holds)", async () => {
     // Anon turn on Alice's browser sid.
-    await fixture.simulateTurn(turn({
-      goal: "tell me the canary",
-      answer: "Configured the canary: the pre-modal-anon-marker-WHISKEY-7777 has been recorded and verified.",
-      sessionId: ALICE_SID,
-      upn: null,
-    }))
+    await fixture.simulateTurn(
+      turn({
+        goal: "tell me the canary",
+        answer:
+          "Configured the canary: the pre-modal-anon-marker-WHISKEY-7777 has been recorded and verified.",
+        sessionId: ALICE_SID,
+        upn: null
+      })
+    )
 
     // Bob's separate browser session, named user. Different sid entirely.
     const bobView = await fixture.retrieve({
       goal: "yes",
       sessionId: BOB_SID,
       upn: "bob@corp",
-      runId: "run-bob-c4-iso",
+      runId: "run-bob-c4-iso"
     })
 
     expect(
       bobView.perTier.working + bobView.perTier.episodic + bobView.perTier.semantic,
-      "Bridge clause must scope by session_id — anon rows on a foreign sid stay invisible.",
+      "Bridge clause must scope by session_id — anon rows on a foreign sid stay invisible."
     ).not.toContain("WHISKEY-7777")
   })
 })
@@ -249,34 +271,40 @@ describe("Layer C — C5: distinct (sid, upn) tuples produce disjoint context", 
     // Two named users, each with one substantive turn. Their full perTier
     // outputs should not overlap on the canary tokens, regardless of which
     // tier any given content lands in.
-    await fixture.simulateTurn(turn({
-      goal: "Alice query",
-      answer: "Configured Alice's project with marker-WHISKEY-AAAA: completed setup, wrote artefacts, validated state.",
-      sessionId: ALICE_SID,
-      upn: "alice@corp",
-    }))
-    await fixture.simulateTurn(turn({
-      goal: "Bob query",
-      answer: "Configured Bob's project with marker-XRAY-BBBB: completed setup, wrote artefacts, validated state.",
-      sessionId: BOB_SID,
-      upn: "bob@corp",
-    }))
+    await fixture.simulateTurn(
+      turn({
+        goal: "Alice query",
+        answer:
+          "Configured Alice's project with marker-WHISKEY-AAAA: completed setup, wrote artefacts, validated state.",
+        sessionId: ALICE_SID,
+        upn: "alice@corp"
+      })
+    )
+    await fixture.simulateTurn(
+      turn({
+        goal: "Bob query",
+        answer:
+          "Configured Bob's project with marker-XRAY-BBBB: completed setup, wrote artefacts, validated state.",
+        sessionId: BOB_SID,
+        upn: "bob@corp"
+      })
+    )
 
     const aliceFull = await fixture.retrieve({
       goal: "yes",
       sessionId: ALICE_SID,
       upn: "alice@corp",
-      runId: "run-alice-c5",
+      runId: "run-alice-c5"
     })
     const bobFull = await fixture.retrieve({
       goal: "yes",
       sessionId: BOB_SID,
       upn: "bob@corp",
-      runId: "run-bob-c5",
+      runId: "run-bob-c5"
     })
 
     const aliceText = `${aliceFull.perTier.working}\n${aliceFull.perTier.episodic}\n${aliceFull.perTier.semantic}`
-    const bobText   = `${bobFull.perTier.working}\n${bobFull.perTier.episodic}\n${bobFull.perTier.semantic}`
+    const bobText = `${bobFull.perTier.working}\n${bobFull.perTier.episodic}\n${bobFull.perTier.semantic}`
 
     expect(aliceText).toContain("WHISKEY-AAAA")
     expect(aliceText).not.toContain("XRAY-BBBB")

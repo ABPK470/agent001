@@ -28,9 +28,14 @@ export interface Step {
 
 const STEP_TRANSITIONS: Record<string, Set<string>> = {
   [StepStatus.Pending]: new Set([StepStatus.Running, StepStatus.Skipped, StepStatus.Blocked]),
-  [StepStatus.Running]: new Set([StepStatus.Completed, StepStatus.Failed, StepStatus.Blocked, StepStatus.Skipped]),
+  [StepStatus.Running]: new Set([
+    StepStatus.Completed,
+    StepStatus.Failed,
+    StepStatus.Blocked,
+    StepStatus.Skipped
+  ]),
   [StepStatus.Blocked]: new Set([StepStatus.Running, StepStatus.Skipped]),
-  [StepStatus.Failed]: new Set([StepStatus.Running]),
+  [StepStatus.Failed]: new Set([StepStatus.Running])
 }
 
 function transitionStep(step: Step, target: StepStatus): void {
@@ -97,8 +102,14 @@ export interface AgentRun {
 const RUN_TRANSITIONS: Record<string, Set<string>> = {
   [RunStatus.Pending]: new Set([RunStatus.Planning, RunStatus.Running, RunStatus.Failed, RunStatus.Crashed]),
   [RunStatus.Planning]: new Set([RunStatus.Running, RunStatus.Failed, RunStatus.Crashed]),
-  [RunStatus.Running]: new Set([RunStatus.WaitingForApproval, RunStatus.Completed, RunStatus.Failed, RunStatus.Cancelled, RunStatus.Crashed]),
-  [RunStatus.WaitingForApproval]: new Set([RunStatus.Running, RunStatus.Cancelled, RunStatus.Crashed]),
+  [RunStatus.Running]: new Set([
+    RunStatus.WaitingForApproval,
+    RunStatus.Completed,
+    RunStatus.Failed,
+    RunStatus.Cancelled,
+    RunStatus.Crashed
+  ]),
+  [RunStatus.WaitingForApproval]: new Set([RunStatus.Running, RunStatus.Cancelled, RunStatus.Crashed])
 }
 
 function transitionRun(run: AgentRun, target: RunStatus): void {
@@ -109,7 +120,11 @@ function transitionRun(run: AgentRun, target: RunStatus): void {
   run.status = target
 }
 
-export function createRun(workflowId: string, input: Record<string, unknown> = {}, customId?: string): AgentRun {
+export function createRun(
+  workflowId: string,
+  input: Record<string, unknown> = {},
+  customId?: string
+): AgentRun {
   return {
     id: customId ?? randomUUID(),
     workflowId,
@@ -117,7 +132,7 @@ export function createRun(workflowId: string, input: Record<string, unknown> = {
     status: RunStatus.Pending,
     steps: [],
     createdAt: new Date(),
-    completedAt: null,
+    completedAt: null
   }
 }
 
@@ -224,7 +239,7 @@ export function createAuditEntry(params: {
     resourceType: params.resourceType,
     resourceId: params.resourceId,
     detail: params.detail ?? {},
-    timestamp: new Date(),
+    timestamp: new Date()
   }
 }
 

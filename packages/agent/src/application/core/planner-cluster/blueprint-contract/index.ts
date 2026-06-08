@@ -46,14 +46,16 @@ export function normalizeBasename(value: string): string {
 }
 
 export function uniqueStrings(values: readonly string[]): string[] {
-  return Array.from(new Set(values.map(value => value.trim()).filter(Boolean)))
+  return Array.from(new Set(values.map((value) => value.trim()).filter(Boolean)))
 }
 
 // normalizers + parseBlueprintContractBlock moved to ./blueprint-contract/parse.ts
 
 function isBlueprintLikeStep(step: SubagentTaskStep): boolean {
-  return /blueprint/i.test(step.name)
-    || step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  return (
+    /blueprint/i.test(step.name) ||
+    step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  )
 }
 
 function collectPlannedBlueprintArtifacts(plan: Plan): string[] {
@@ -63,7 +65,7 @@ function collectPlannedBlueprintArtifacts(plan: Plan): string[] {
       .filter((step) => !isBlueprintLikeStep(step))
       .flatMap((step) => step.executionContext.targetArtifacts)
       .map(normalizeSpecPath)
-      .filter((artifact) => !/(?:^|\/)BLUEPRINT\.md$/i.test(artifact)),
+      .filter((artifact) => !/(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
   )
 }
 
@@ -73,30 +75,34 @@ export function getPlannedBlueprintArtifacts(plan: Plan): string[] {
 
 export function buildBlueprintSeedTemplate(
   blueprintPath: string,
-  plannedArtifacts: readonly string[],
+  plannedArtifacts: readonly string[]
 ): string {
   const contract = {
     version: 1,
     files: plannedArtifacts.map((path) => ({
       path,
       purpose: `TODO: purpose for ${path}`,
-      functions: [],
+      functions: []
     })),
-    sharedTypes: [],
+    sharedTypes: []
   }
 
-  const fileSections = plannedArtifacts.map((path) => [
-    `### ${path}`,
-    "- Purpose: TODO",
-    "- Exports/entrypoints:",
-    "  - TODO",
-    "- Depends on:",
-    "  - TODO",
-    "- Used by:",
-    "  - TODO",
-    "- Algorithmic contracts:",
-    "  - TODO",
-  ].join("\n")).join("\n\n")
+  const fileSections = plannedArtifacts
+    .map((path) =>
+      [
+        `### ${path}`,
+        "- Purpose: TODO",
+        "- Exports/entrypoints:",
+        "  - TODO",
+        "- Depends on:",
+        "  - TODO",
+        "- Used by:",
+        "  - TODO",
+        "- Algorithmic contracts:",
+        "  - TODO"
+      ].join("\n")
+    )
+    .join("\n\n")
 
   return [
     `# Blueprint for ${blueprintPath}`,
@@ -114,7 +120,7 @@ export function buildBlueprintSeedTemplate(
     "",
     "## Shared Data Types",
     "- If none, write `None` and keep `sharedTypes: []` in the machine contract.",
-    "- In the machine contract, each sharedTypes entry should use `{ \"name\": \"TypeName\", \"definition\": \"exact shape\", \"usedBy\": [\"path/to/file\"] }`.",
+    '- In the machine contract, each sharedTypes entry should use `{ "name": "TypeName", "definition": "exact shape", "usedBy": ["path/to/file"] }`.',
     "- TODO",
     "",
     "## File Contracts",
@@ -124,7 +130,7 @@ export function buildBlueprintSeedTemplate(
     "- TODO",
     "",
     "## Cross-File Dependency Notes",
-    "- TODO",
+    "- TODO"
   ].join("\n")
 }
 
@@ -132,14 +138,14 @@ export function validateBlueprintArtifactContract(
   step: SubagentTaskStep,
   plan: Plan,
   blueprintPath: string,
-  content: string,
+  content: string
 ): string[] {
   if (!isBlueprintLikeStep(step)) return []
 
   const contract = parseBlueprintContractBlock(content)
   if (!contract.present) {
     return [
-      `BLUEPRINT CONTRACT MISSING: ${blueprintPath} must include a machine-readable \`blueprint-contract\` JSON block with the exact planned artifact paths before implementation steps can run`,
+      `BLUEPRINT CONTRACT MISSING: ${blueprintPath} must include a machine-readable \`blueprint-contract\` JSON block with the exact planned artifact paths before implementation steps can run`
     ]
   }
   if (contract.errors.length > 0) return [...contract.errors]
@@ -148,7 +154,7 @@ export function validateBlueprintArtifactContract(
   const declaredArtifacts = uniqueStrings(
     contract.files
       .map((file) => normalizeSpecPath(file.declaredPath))
-      .filter((artifact) => !/(?:^|\/)BLUEPRINT\.md$/i.test(artifact)),
+      .filter((artifact) => !/(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
   )
 
   const missingPlanned = plannedArtifacts.filter((artifact) => !declaredArtifacts.includes(artifact))
@@ -157,12 +163,12 @@ export function validateBlueprintArtifactContract(
   const issues: string[] = []
   if (missingPlanned.length > 0) {
     issues.push(
-      `BLUEPRINT ARTIFACT COVERAGE FAILED: ${blueprintPath} is missing planned artifact declarations ${missingPlanned.join(", ")}`,
+      `BLUEPRINT ARTIFACT COVERAGE FAILED: ${blueprintPath} is missing planned artifact declarations ${missingPlanned.join(", ")}`
     )
   }
   if (undeclaredExtras.length > 0) {
     issues.push(
-      `BLUEPRINT ARTIFACT DRIFT: ${blueprintPath} declares files not present in the plan targetArtifacts (${undeclaredExtras.join(", ")})`,
+      `BLUEPRINT ARTIFACT DRIFT: ${blueprintPath} declares files not present in the plan targetArtifacts (${undeclaredExtras.join(", ")})`
     )
   }
 

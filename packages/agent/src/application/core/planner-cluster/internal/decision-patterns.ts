@@ -12,8 +12,7 @@
 // ============================================================================
 
 /** Multi-step work: "build X then Y", "first...then...", numbered lists */
-export const MULTI_STEP_RE =
-  /\b(?:first|then|next|after that|step \d|phase \d|\d+\.\s|\bfinally\b)/i
+export const MULTI_STEP_RE = /\b(?:first|then|next|after that|step \d|phase \d|\d+\.\s|\bfinally\b)/i
 
 /**
  * Tool diversity: mentions construction/execution verbs that imply multiple tool categories.
@@ -23,8 +22,7 @@ export const MULTI_STEP_RE =
  * "health check") and cause false-positive planner routing when they appear in
  * conversational DB queries. Use VERIFICATION_RE for test/check intent detection.
  */
-export const TOOL_DIVERSITY_RE =
-  /\b(?:create|write|build|implement|verify|run|deploy|configure|install)\b/i
+export const TOOL_DIVERSITY_RE = /\b(?:create|write|build|implement|verify|run|deploy|configure|install)\b/i
 
 /**
  * Delegation cue: multiple independent components or parallel work.

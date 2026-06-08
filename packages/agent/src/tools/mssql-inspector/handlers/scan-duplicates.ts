@@ -29,7 +29,10 @@ export async function runScanDuplicates(p: sql.ConnectionPool, args: ScanArgs): 
   if (Array.isArray(args.names)) {
     nameList = args.names.map((n) => String(n).trim()).filter(Boolean)
   } else if (typeof args.names === "string" && args.names.trim()) {
-    nameList = args.names.split(",").map((n) => n.trim()).filter(Boolean)
+    nameList = args.names
+      .split(",")
+      .map((n) => n.trim())
+      .filter(Boolean)
   }
 
   // names_query — let the tool source the names list itself.
@@ -59,17 +62,21 @@ export async function runScanDuplicates(p: sql.ConnectionPool, args: ScanArgs): 
   nameList = [...new Set(nameList)]
 
   if (nameList.length > 5000) {
-    return `Error: scan_duplicates accepts at most 5000 names, got ${nameList.length}. ` +
+    return (
+      `Error: scan_duplicates accepts at most 5000 names, got ${nameList.length}. ` +
       `Narrow the names_query (e.g. add a WHERE clause) or split into batches.`
+    )
   }
   const namesCsv = nameList.length > 0 ? nameList.join(",") : null
 
   if (!schemaFilter && !namesCsv) {
-    return "Error: scan_duplicates needs scope. Provide ONE of: " +
+    return (
+      "Error: scan_duplicates needs scope. Provide ONE of: " +
       "names_query='SELECT name FROM core.Dataset' (recommended for list-bearing tables), " +
       "names='schema.A,schema.B,...', " +
       "or schema='core' (only scans objects defined in that schema). " +
       "Scanning every object in the database is not allowed."
+    )
   }
 
   const req = p.request()
@@ -96,7 +103,7 @@ export async function runScanDuplicates(p: sql.ConnectionPool, args: ScanArgs): 
       withDupes.push({
         qname: `${r.schema_name}.${r.object_name}`,
         type: r.object_type,
-        dupes,
+        dupes
       })
     }
   }
@@ -124,7 +131,7 @@ export async function runScanDuplicates(p: sql.ConnectionPool, args: ScanArgs): 
     `Objects with duplicate FROM/JOIN references: ${withDupes.length} of ${scanned} (${
       scanned === 0 ? "0" : ((withDupes.length / scanned) * 100).toFixed(1)
     }%).`,
-    "",
+    ""
   ]
 
   if (withDupes.length === 0) {
@@ -138,7 +145,9 @@ export async function runScanDuplicates(p: sql.ConnectionPool, args: ScanArgs): 
         .map(([n, c]) => `${n}×${c}`)
         .join(", ")
       const more = d.dupes.length > 3 ? `, +${d.dupes.length - 3} more` : ""
-      lines.push(`  ${d.qname} (${d.type}) — ${d.dupes.length} duplicate ref${d.dupes.length === 1 ? "" : "s"}: ${summary}${more}`)
+      lines.push(
+        `  ${d.qname} (${d.type}) — ${d.dupes.length} duplicate ref${d.dupes.length === 1 ? "" : "s"}: ${summary}${more}`
+      )
     }
     if (withDupes.length > top.length) {
       lines.push(`  ... and ${withDupes.length - top.length} more.`)

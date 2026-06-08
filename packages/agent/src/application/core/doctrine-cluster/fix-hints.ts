@@ -16,7 +16,7 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
     "Common cases: `SUM(...) AS Avg…` → use `AVG(...)`. `SUM(...Snapshot)` / `SUM(...EOM)` / `SUM(...Spot)` — these are point-in-time values: use `AVG(...)` or pick the `MAX(<dateKey>)` row.",
     "NOTE: columns suffixed `…MTD / …YTD / …QTD / …WTD` ARE summable in this warehouse — they are row-grain period slices, not cumulative snapshots. SUM them within their period key (`pkMonth` / `pkYear` / …) normally.",
     "If you are unsure whether a column is summable, call `profile_data table=<schema.Table> columns=[<column>]` first — it reports distribution and distinct-cardinality clues that distinguish snapshot columns from period-additive ones.",
-    "Once confirmed, save the finding with `note subject=<schema.Table.Column> claim=\"<summable | snapshot> — <one-line rule>\" category=column_semantics` so the next turn does not re-derive it.",
+    'Once confirmed, save the finding with `note subject=<schema.Table.Column> claim="<summable | snapshot> — <one-line rule>" category=column_semantics` so the next turn does not re-derive it.'
   ].join(" "),
 
   temp_table_integrity: [
@@ -24,20 +24,20 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
     "Create every #temp in the same single batch that reads it: in a pooled connection a #temp from a prior call may not exist.",
     "If a previous call already failed, do not assume staged temps survived — restart the batch from CREATE.",
     "Send the whole micro-ETL as ONE query_mssql call (one batch). Never split CREATE / INSERT / SELECT across multiple tool calls.",
-    "If the staged set is too large to keep alive across a single batch, materialize it instead with `export_query_to_file` and read it back with a follow-up SELECT — that is the supported cross-batch handoff, not a #temp.",
+    "If the staged set is too large to keep alive across a single batch, materialize it instead with `export_query_to_file` and read it back with a follow-up SELECT — that is the supported cross-batch handoff, not a #temp."
   ].join(" "),
 
   temp_scalar_subquery_overused: [
     "Aggregate the staged #temp ONCE per business key (usually pkClient), produce all needed metrics in that single grouped result, then JOIN that small aggregate once.",
     "Bad shape:  SELECT ..., (SELECT COUNT(*) FROM #revLines_x WHERE ...), (SELECT SUM(...) FROM #revLines_x WHERE ...)",
     "Good shape: WITH revAgg AS (SELECT pkClient, COUNT(*) AS Lines, SUM(...) AS Revenue FROM #revLines_x GROUP BY pkClient) SELECT ... FROM base LEFT JOIN revAgg ON revAgg.pkClient = base.pkClient",
-    "If you don't yet know which key joins the #temp to the outer table, call `discover_relationships between=[#yourTemp, <sourceTable>]` (or the equivalent for the underlying base tables) — it returns FK candidates and key cardinality so you can pick the right GROUP BY.",
+    "If you don't yet know which key joins the #temp to the outer table, call `discover_relationships between=[#yourTemp, <sourceTable>]` (or the equivalent for the underlying base tables) — it returns FK candidates and key cardinality so you can pick the right GROUP BY."
   ].join(" "),
 
   large_object_overused: [
     "Refactor to the two-stage pattern: Stage 1 narrows keys into a #temp (one touch of the big view), Stage 2 fetches detail rows for those keys (second and last touch).",
     "Derive every remaining metric from the #temp — never re-query the big view a third time.",
-    "When the second stage still needs to fan out across many tables, prefer `export_query_to_file` for the stage-1 keys and join from the exported file rather than re-touching the big view.",
+    "When the second stage still needs to fan out across many tables, prefer `export_query_to_file` for the stage-1 keys and join from the exported file rather than re-touching the big view."
   ].join(" "),
 
   publish_view_topn_without_branch_aggregation: [
@@ -45,20 +45,20 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
     "Skeleton:  SELECT TOP N x.<keyCol>, SUM(x.<metric>) AS <metric> INTO #top_<suffix> FROM ( SELECT <keyCol>, SUM(<sourceMetric>) AS <metric> FROM <schema>.<BranchA> WITH (NOLOCK) WHERE <dateKey> BETWEEN @from AND @to GROUP BY <keyCol> UNION ALL SELECT <keyCol>, SUM(<sourceMetric>) AS <metric> FROM <schema>.<BranchB> WITH (NOLOCK) WHERE <dateKey> BETWEEN @from AND @to GROUP BY <keyCol> /* repeat per required branch */ ) x GROUP BY x.<keyCol> ORDER BY SUM(x.<metric>) DESC, x.<keyCol>;",
     "Branch names come from curated lineage: call `search_catalog lineage=<wide-union-view>` to get the exact branch list — do NOT guess branch names.",
     "Only after #top_<suffix> exists, do Stage 2: `SELECT … INTO #detail FROM <wide-union-view> WHERE <keyCol> IN (SELECT <keyCol> FROM #top_<suffix>)`. That second touch is fine — it has a tiny IN-list.",
-    "Escape valve: if you already have a small #temp narrowing the <keyCol> set, joining to it (`JOIN #scope s ON s.<keyCol> = r.<keyCol>`) lets the optimizer push the small set into each UNION branch — that pattern is allowed.",
+    "Escape valve: if you already have a small #temp narrowing the <keyCol> set, joining to it (`JOIN #scope s ON s.<keyCol> = r.<keyCol>`) lets the optimizer push the small set into each UNION branch — that pattern is allowed."
   ].join(" "),
 
   avg_of_coalesce_zero: [
     "Drop the COALESCE/ISNULL inside AVG: T-SQL `AVG(col)` already skips NULLs, so `AVG(col)` returns the true mean of observed values.",
     "If you genuinely want to treat missing months as observed zeros, make the assumption explicit: compute `SUM(COALESCE(col, 0)) / NULLIF(<MonthsExpected>, 0)` with a stated denominator.",
-    "Default behaviour for balance / revenue averages over a date range: AVG of non-null observations. Document the period and the row count alongside the figure.",
+    "Default behaviour for balance / revenue averages over a date range: AVG of non-null observations. Document the period and the row count alongside the figure."
   ].join(" "),
 
   invented_column: [
     "Stop. The column does not exist on the table you aliased — confirm column names via `search_catalog mode=column column=<name>` (or `mode=table table=<schema.table>`) BEFORE writing the next SQL.",
     "Common failure mode: the model imagines display-name columns (`<X>Name`, `fullName`, …) on transactional / fact / wide-union views. Those views carry foreign keys to dimension tables; the display name lives on the corresponding dimension — join to the dim.* table to fetch it.",
-    "If the catalog is stale (the column was just added), call `refresh_catalog` and retry. Never invent a column to make a query 'feel right' — the validator will block it and the row would have been NULL anyway.",
-  ].join(" "),
+    "If the catalog is stale (the column was just added), call `refresh_catalog` and retry. Never invent a column to make a query 'feel right' — the validator will block it and the row would have been NULL anyway."
+  ].join(" ")
 }
 
 export function getDoctrineFixHint(code: string): string | null {
@@ -127,7 +127,7 @@ export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTe
         "for *Snapshot / *EOM / *Spot / *Latest columns the answer is almost always AVG (or single-row), not SUM. " +
         "`*MTD / *YTD / *QTD / *WTD` columns ARE summable within their period key in this warehouse.",
       evidence: `Blocked shape: ${snippet}`,
-      category: "column_semantics",
+      category: "column_semantics"
     }
   },
 
@@ -144,7 +144,7 @@ export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTe
         "Send the whole #temp micro-ETL as ONE query_mssql call. " +
         "Reuse one 8-hex suffix across every CREATE/INSERT/SELECT/DROP. " +
         "If state must survive across batches, use `export_query_to_file` and read the file back — not a #temp.",
-      category: "observation",
+      category: "observation"
     }
   },
 
@@ -156,7 +156,7 @@ export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTe
         "Aggregate the staged #temp ONCE per business key (usually pkClient) and join the small grouped result. " +
         "Use `discover_relationships` to confirm the join key before grouping.",
       evidence: ctx.detail ? `Blocked locator: ${ctx.detail}` : undefined,
-      category: "performance",
+      category: "performance"
     }
   },
 
@@ -169,7 +169,7 @@ export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTe
         "Always aggregate per source-mapping branch first, UNION ALL the branch-local aggregates, then rank. " +
         "Get the branch list from `search_catalog lineage=<view>`.",
       evidence: ctx.detail ? `Blocked locator: ${ctx.detail}` : undefined,
-      category: "performance",
+      category: "performance"
     }
   },
 
@@ -182,7 +182,7 @@ export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTe
         "Never wrap NULL in COALESCE(..., 0) inside AVG — it understates the true average by counting missing observations as observed zeros. " +
         "Use AVG(col) directly (AVG already skips NULLs), or compute an explicit weighted average with a stated denominator.",
       evidence: `Blocked shape: ${snippet}`,
-      category: "column_semantics",
+      category: "column_semantics"
     }
   },
 
@@ -194,12 +194,11 @@ export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTe
         "Catalog-verify every qualified column reference before writing SQL — the validator blocks references whose column does not exist on the aliased table. " +
         "Display names (ClientName, BankerName) live on dim.* tables; fact/publish views carry FKs only. Use `search_catalog` to confirm the column lives where you think it does.",
       evidence: ctx.detail ? `Blocked reference: ${ctx.detail}` : undefined,
-      category: "schema_fact",
+      category: "schema_fact"
     }
-  },
+  }
 }
 
 export function getDoctrineLessonTemplate(code: string): DoctrineLessonTemplate | null {
   return DOCTRINE_LESSON_TEMPLATES[code] ?? null
 }
-

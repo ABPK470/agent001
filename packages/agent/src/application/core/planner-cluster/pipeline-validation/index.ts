@@ -1,4 +1,9 @@
-import { DelegationOutputValidationCode, StepRole, ToolOutcomeSeverity, VerificationMode } from "../../domain/index.js"
+import {
+  DelegationOutputValidationCode,
+  StepRole,
+  ToolOutcomeSeverity,
+  VerificationMode
+} from "../../domain/index.js"
 /**
  * Pipeline validation — subagent completion checks, artifact quality gates,
  * syntax validation, and gibberish detection.
@@ -10,18 +15,18 @@ import { DelegationOutputValidationCode, StepRole, ToolOutcomeSeverity, Verifica
 
 import type { ToolCallRecord } from "../../../../tools/index.js"
 import {
-    buildContractSpec,
-    getCorrectionGuidance,
-    specRequiresFileMutationEvidence,
-    specRequiresSuccessfulToolEvidence,
-    validateDelegatedOutputContract,
+  buildContractSpec,
+  getCorrectionGuidance,
+  specRequiresFileMutationEvidence,
+  specRequiresSuccessfulToolEvidence,
+  validateDelegatedOutputContract
 } from "../../../shell/delegation.js"
 import { detectInconsistentBranches, detectPlaceholderPatterns } from "../../governance.js"
 import type { Tool } from "../../types.js"
 import {
-    type SubagentStepValidationContext,
-    type SubagentValidationFailure,
-    validateBlueprintStepCompletion
+  type SubagentStepValidationContext,
+  type SubagentValidationFailure,
+  validateBlueprintStepCompletion
 } from "../internal/pipeline-repair.js"
 import type { SubagentTaskStep } from "../types.js"
 
@@ -49,9 +54,11 @@ function isVerificationRunCommand(call: ToolCallRecord): boolean {
   const command = typeof call.args.command === "string" ? call.args.command.trim().toLowerCase() : ""
   if (!command) return false
 
-  return /(?:^|\s)(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|build|check|lint|typecheck|verify)\b/.test(command)
-    || /(?:^|\s)(?:npx\s+)?(?:vitest|jest|tsc|pytest|ruff)\b/.test(command)
-    || /(?:^|\s)node\s+--check\b/.test(command)
+  return (
+    /(?:^|\s)(?:npm|pnpm|yarn|bun)\s+(?:run\s+)?(?:test|build|check|lint|typecheck|verify)\b/.test(command) ||
+    /(?:^|\s)(?:npx\s+)?(?:vitest|jest|tsc|pytest|ruff)\b/.test(command) ||
+    /(?:^|\s)node\s+--check\b/.test(command)
+  )
 }
 
 function findFailedVerificationToolCall(calls: readonly ToolCallRecord[]): ToolCallRecord | null {
@@ -60,7 +67,11 @@ function findFailedVerificationToolCall(calls: readonly ToolCallRecord[]): ToolC
     if (!isVerificationCall) continue
 
     if (call.isError) return call
-    if (/Uncaught Exceptions|Console Errors|Network Failures|SyntaxError|Total:\s*[1-9]\d*\s+error|Error:/i.test(call.result)) {
+    if (
+      /Uncaught Exceptions|Console Errors|Network Failures|SyntaxError|Total:\s*[1-9]\d*\s+error|Error:/i.test(
+        call.result
+      )
+    ) {
       return call
     }
   }
@@ -75,7 +86,7 @@ export async function validateSubagentCompletion(
   step: SubagentTaskStep,
   output: string,
   toolCalls: readonly ToolCallRecord[] | undefined,
-  validationCtx?: SubagentStepValidationContext,
+  validationCtx?: SubagentStepValidationContext
 ): Promise<SubagentValidationFailure | null> {
   const calls = toolCalls ?? []
 
@@ -85,17 +96,18 @@ export async function validateSubagentCompletion(
     const path = typeof c.args.path === "string" ? c.args.path : ""
     if (path) lastWriteByPath.set(path, c)
   }
-  const finalWriteWarning = [...lastWriteByPath.values()].find(c =>
-    c.outcome?.severity === ToolOutcomeSeverity.Fatal
-    || c.outcome?.errorCode === "artifact_incomplete_mutation"
-    || /WRITE REJECTED|WRITTEN WITH ERRORS|WRITTEN WITH ISSUES|STUB\/PLACEHOLDER|CORRUPTED/i.test(c.result),
+  const finalWriteWarning = [...lastWriteByPath.values()].find(
+    (c) =>
+      c.outcome?.severity === ToolOutcomeSeverity.Fatal ||
+      c.outcome?.errorCode === "artifact_incomplete_mutation" ||
+      /WRITE REJECTED|WRITTEN WITH ERRORS|WRITTEN WITH ISSUES|STUB\/PLACEHOLDER|CORRUPTED/i.test(c.result)
   )
   if (finalWriteWarning) {
     const path = typeof finalWriteWarning.args.path === "string" ? finalWriteWarning.args.path : "(unknown)"
     return {
       message:
         `Step "${step.name}" final write to "${path}" has integrity violations via ${finalWriteWarning.name}. ` +
-        `The step is rejected until file writes are clean and free of placeholder/corruption warnings.`,
+        `The step is rejected until file writes are clean and free of placeholder/corruption warnings.`
     }
   }
 
@@ -106,7 +118,7 @@ export async function validateSubagentCompletion(
       message:
         `Step "${step.name}" ran ${failedVerificationCall.name} but verification failed. ` +
         `The step cannot complete until the reported runtime/check errors are fixed. ` +
-        `Last verification output: ${failedVerificationCall.result}`,
+        `Last verification output: ${failedVerificationCall.result}`
     }
   }
 
@@ -114,14 +126,14 @@ export async function validateSubagentCompletion(
     step,
     step.executionContext,
     undefined,
-    validationCtx?.knownProjectArtifacts,
+    validationCtx?.knownProjectArtifacts
   )
   if (specRequiresSuccessfulToolEvidence(enrichedSpec) && calls.length === 0) {
     return {
       code: DelegationOutputValidationCode.MissingSuccessfulToolEvidence,
       message:
         `Step "${step.name}" produced zero tool-call evidence. ` +
-        `Completion is rejected until at least one successful tool execution is recorded.`,
+        `Completion is rejected until at least one successful tool execution is recorded.`
     }
   }
   if (specRequiresFileMutationEvidence(enrichedSpec) && calls.length === 0) {
@@ -129,23 +141,25 @@ export async function validateSubagentCompletion(
       code: DelegationOutputValidationCode.MissingFileMutationEvidence,
       message:
         `Step "${step.name}" requires file mutation evidence but recorded no tool calls. ` +
-        `Completion is rejected until file creation/modification is proven.`,
+        `Completion is rejected until file creation/modification is proven.`
     }
   }
 
   const contract = validateDelegatedOutputContract({
     spec: enrichedSpec,
     output,
-    toolCalls: calls,
+    toolCalls: calls
   })
   if (!contract.ok) {
-    const guidance = contract.code ? getCorrectionGuidance(contract.code) : "Child output violated delegation contract."
+    const guidance = contract.code
+      ? getCorrectionGuidance(contract.code)
+      : "Child output violated delegation contract."
     return {
       code: contract.code,
       message:
         `Step "${step.name}" violated delegation contract` +
         `${contract.code ? ` [${contract.code}]` : ""}: ${contract.message ?? "unknown contract failure"}. ` +
-        `Required correction: ${guidance}`,
+        `Required correction: ${guidance}`
     }
   }
 
@@ -157,9 +171,9 @@ export async function validateSubagentCompletion(
 
   const codeTargets = step.executionContext.targetArtifacts.filter((a) => /\.(js|jsx|ts|tsx|py)$/i.test(a))
   const strictQualityScope =
-    step.executionContext.verificationMode !== VerificationMode.None
-    || step.executionContext.role === StepRole.Validator
-    || step.executionContext.role === StepRole.Reviewer
+    step.executionContext.verificationMode !== VerificationMode.None ||
+    step.executionContext.role === StepRole.Validator ||
+    step.executionContext.role === StepRole.Reviewer
 
   const mutatedPaths = getMutatedArtifactPaths(calls)
   const qualityTargets = strictQualityScope
@@ -176,7 +190,7 @@ export async function validateSubagentCompletion(
       if (strictQualityScope) {
         return {
           code: DelegationOutputValidationCode.MissingTargetArtifactCoverage,
-          message: `Step "${step.name}" did not produce readable target artifact: ${artifact}`,
+          message: `Step "${step.name}" did not produce readable target artifact: ${artifact}`
         }
       }
       continue
@@ -190,7 +204,7 @@ export async function validateSubagentCompletion(
         code: DelegationOutputValidationCode.AcceptanceEvidenceMissing,
         message:
           `Step "${step.name}" produced non-executable or incomplete code in ${artifact}: ` +
-          `${findings.slice(0, 5).join("; ")}`,
+          `${findings.slice(0, 5).join("; ")}`
       }
     }
   }
@@ -209,18 +223,26 @@ export function resolveArtifactPath(artifact: string, wsRoot?: string): string {
 }
 
 /** Try to read an artifact, attempting workspace-rooted path then bare path. */
-export async function tryReadArtifact(readFileTool: Tool, artifact: string, wsRoot?: string): Promise<string | null> {
+export async function tryReadArtifact(
+  readFileTool: Tool,
+  artifact: string,
+  wsRoot?: string
+): Promise<string | null> {
   if (wsRoot) {
     const wsPath = resolveArtifactPath(artifact, wsRoot)
     try {
       const content = await readFileTool.execute({ path: wsPath })
       if (typeof content === "string" && !content.startsWith("Error:")) return content
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
   try {
     const content = await readFileTool.execute({ path: artifact })
     if (typeof content === "string" && !content.startsWith("Error:")) return content
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
   return null
 }
 
@@ -235,7 +257,7 @@ export { runPostStepSyntaxValidation } from "./syntax-check.js"
 // ============================================================================
 
 export function isGibberishIssue(issue: string): boolean {
-  const words = issue.split(/\s+/).filter(w => w.length > 0)
+  const words = issue.split(/\s+/).filter((w) => w.length > 0)
   if (words.length < 8) return false
 
   const tripleCompound = (issue.match(/[a-z]+-[a-z]+-[a-z]+/gi) ?? []).length
@@ -243,11 +265,18 @@ export function isGibberishIssue(issue: string): boolean {
 
   const doubleCompound = (issue.match(/[a-z]{3,}-[a-z]{3,}/gi) ?? []).length
 
-  const functionWords = (issue.match(/\b(the|is|a|an|and|to|of|in|for|with|that|was|it|this|are|not|but|be|has|have|can|does|should|must)\b/gi) ?? []).length
+  const functionWords = (
+    issue.match(
+      /\b(the|is|a|an|and|to|of|in|for|with|that|was|it|this|are|not|but|be|has|have|can|does|should|must)\b/gi
+    ) ?? []
+  ).length
   const ratio = functionWords / words.length
   if (ratio < 0.04 && words.length >= 15) return true
 
-  const hasCodeRefs = /[/\\]|\.(?:js|ts|html|css|py)\b|`[^`]+`|\bfunction\b|\bclass\b|\bconst\b|\bread_file\b|\bwrite_file\b|\breplace_in_file\b/i.test(issue)
+  const hasCodeRefs =
+    /[/\\]|\.(?:js|ts|html|css|py)\b|`[^`]+`|\bfunction\b|\bclass\b|\bconst\b|\bread_file\b|\bwrite_file\b|\breplace_in_file\b/i.test(
+      issue
+    )
   if (!hasCodeRefs && doubleCompound >= 4 && ratio < 0.08) return true
 
   return false

@@ -14,7 +14,7 @@ export async function executeDeterministicStep(
   step: DeterministicToolStep,
   toolExecFn: ToolExecFn,
   t0: number,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<PipelineStepResult> {
   const maxRetries = step.maxRetries ?? 2
   let lastError: string | undefined
@@ -27,7 +27,7 @@ export async function executeDeterministicStep(
         executionState: "failed",
         acceptanceState: "rejected",
         error: "Aborted",
-        durationMs: Date.now() - t0,
+        durationMs: Date.now() - t0
       }
     }
 
@@ -69,7 +69,7 @@ export async function executeDeterministicStep(
           acceptanceState: "rejected",
           error: output,
           failureClass: "platform_unconfigured",
-          durationMs: Date.now() - t0,
+          durationMs: Date.now() - t0
         }
       }
 
@@ -84,7 +84,7 @@ export async function executeDeterministicStep(
         executionState: "executed",
         acceptanceState: "accepted",
         output,
-        durationMs: Date.now() - t0,
+        durationMs: Date.now() - t0
       }
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
@@ -99,7 +99,7 @@ export async function executeDeterministicStep(
           acceptanceState: "rejected",
           error: msg,
           failureClass: "platform_unconfigured",
-          durationMs: Date.now() - t0,
+          durationMs: Date.now() - t0
         }
       }
       lastError = msg
@@ -112,6 +112,6 @@ export async function executeDeterministicStep(
     executionState: "failed",
     acceptanceState: "rejected",
     error: lastError ?? "Unknown error",
-    durationMs: Date.now() - t0,
+    durationMs: Date.now() - t0
   }
 }

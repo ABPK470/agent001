@@ -24,24 +24,28 @@ export const bingAdapter: SearchAdapter = {
       throw new CaptchaBlockedError(bingAdapter.id)
     }
 
-    const raw = await page.$$eval("#b_results > li.b_algo", (nodes: unknown[], max: number) => {
-      type El = { querySelector(sel: string): { textContent: string | null; href?: string } | null }
-      const out: { title: string; url: string; snippet: string }[] = []
-      for (const node of nodes) {
-        const n = node as El
-        if (out.length >= max) break
-        const a = n.querySelector("h2 a")
-        const snippetEl = n.querySelector(".b_caption p") ?? n.querySelector("p")
-        if (!a) continue
-        out.push({
-          title: (a.textContent ?? "").trim(),
-          url: a.href ?? "",
-          snippet: (snippetEl?.textContent ?? "").trim(),
-        })
-      }
-      return out
-    }, limit)
+    const raw = await page.$$eval(
+      "#b_results > li.b_algo",
+      (nodes: unknown[], max: number) => {
+        type El = { querySelector(sel: string): { textContent: string | null; href?: string } | null }
+        const out: { title: string; url: string; snippet: string }[] = []
+        for (const node of nodes) {
+          const n = node as El
+          if (out.length >= max) break
+          const a = n.querySelector("h2 a")
+          const snippetEl = n.querySelector(".b_caption p") ?? n.querySelector("p")
+          if (!a) continue
+          out.push({
+            title: (a.textContent ?? "").trim(),
+            url: a.href ?? "",
+            snippet: (snippetEl?.textContent ?? "").trim()
+          })
+        }
+        return out
+      },
+      limit
+    )
 
     return raw.map((r, i): SearchResult => ({ rank: i + 1, ...r }))
-  },
+  }
 }

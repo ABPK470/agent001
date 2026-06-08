@@ -28,11 +28,13 @@ describe("system_law section tier", () => {
       msg("user", fat, "history"),
       msg("user", fat, "history"),
       msg("user", fat, "history"),
-      msg("user", "Real user request", "user"),
+      msg("user", "Real user request", "user")
     ]
     const result = applyPromptBudget(messages, { hardMaxPromptChars: 24_000 })
 
-    const lawSurvivors = result.messages.filter((m) => typeof m.content === "string" && m.content.startsWith("law-"))
+    const lawSurvivors = result.messages.filter(
+      (m) => typeof m.content === "string" && m.content.startsWith("law-")
+    )
     expect(lawSurvivors).toHaveLength(2)
     // and the last user message is also preserved
     expect(result.messages.some((m) => m.content === "Real user request")).toBe(true)

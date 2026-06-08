@@ -29,7 +29,7 @@ export async function buildSysCatalog(pool: import("mssql").ConnectionPool): Pro
     return [...colsByObject.entries()].map(([name, columns]) => ({
       name,
       qualifiedName: `sys.${name}`,
-      columns,
+      columns
     }))
   } catch {
     return []

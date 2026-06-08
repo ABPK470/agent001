@@ -21,7 +21,12 @@
 
 import type { AgentHost } from "../../application/shell/runtime.js"
 import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
-import { closeAllBrowserSessions, deleteSession, launchSession, persistSessionState } from "../browse-web/session.js"
+import {
+  closeAllBrowserSessions,
+  deleteSession,
+  launchSession,
+  persistSessionState
+} from "../browse-web/session.js"
 import { bingAdapter } from "./bing.js"
 import { fetchDuckDuckGoLite } from "./ddg-fetch.js"
 import { ddgAdapter } from "./duckduckgo.js"
@@ -31,7 +36,7 @@ import { CaptchaBlockedError, type SearchAdapter, type SearchResult } from "./ty
 const ADAPTERS: Record<string, SearchAdapter> = {
   ddg: ddgAdapter,
   bing: bingAdapter,
-  google: googleAdapter,
+  google: googleAdapter
 }
 
 /** Order tried by `engine: "auto"` — DDG first because it rarely CAPTCHAs. */
@@ -43,7 +48,10 @@ export interface WebSearchOptions {
   limit?: number
 }
 
-export async function runWebSearch(opts: WebSearchOptions, host: AgentHost): Promise<{
+export async function runWebSearch(
+  opts: WebSearchOptions,
+  host: AgentHost
+): Promise<{
   engine: string
   results: SearchResult[]
   captcha: boolean
@@ -71,7 +79,7 @@ export async function runWebSearch(opts: WebSearchOptions, host: AgentHost): Pro
   }
 
   const tryAdapter = async (
-    adapter: SearchAdapter,
+    adapter: SearchAdapter
   ): Promise<{ results: SearchResult[]; captcha: boolean }> => {
     attempted.push(adapter.id)
     const launched = await launchSession(host, false, {})
@@ -93,7 +101,9 @@ export async function runWebSearch(opts: WebSearchOptions, host: AgentHost): Pro
       }
       throw err
     } finally {
-      await session.browser.close().catch(() => { /* best-effort */ })
+      await session.browser.close().catch(() => {
+        /* best-effort */
+      })
       deleteSession(host, id)
     }
   }
@@ -116,29 +126,29 @@ export async function runWebSearch(opts: WebSearchOptions, host: AgentHost): Pro
 }
 
 const WEB_SEARCH_DESCRIPTION =
-    "Search the web via a real browser against DuckDuckGo, Bing, or Google's public HTML " +
-    "interface. Returns ranked {title, url, snippet} results. Use 'auto' (default) to try " +
-    "engines in order until one succeeds; on CAPTCHA the auto chain falls over to the next " +
-    "engine. To follow a result, pass its url to fetch_url or browse_web."
+  "Search the web via a real browser against DuckDuckGo, Bing, or Google's public HTML " +
+  "interface. Returns ranked {title, url, snippet} results. Use 'auto' (default) to try " +
+  "engines in order until one succeeds; on CAPTCHA the auto chain falls over to the next " +
+  "engine. To follow a result, pass its url to fetch_url or browse_web."
 
 const WEB_SEARCH_PARAMETERS = {
-    type: "object",
-    properties: {
-      query: { type: "string", description: "Search query string." },
-      engine: {
-        type: "string",
-        enum: ["auto", "ddg", "bing", "google"],
-        description: "Which engine to use. Default 'auto'.",
-      },
-      limit: { type: "number", description: "Max results (1-25). Default 10." },
+  type: "object",
+  properties: {
+    query: { type: "string", description: "Search query string." },
+    engine: {
+      type: "string",
+      enum: ["auto", "ddg", "bing", "google"],
+      description: "Which engine to use. Default 'auto'."
     },
-    required: ["query"],
-  } as const
+    limit: { type: "number", description: "Max results (1-25). Default 10." }
+  },
+  required: ["query"]
+} as const
 
 export const webSearchToolMetadata: ToolMetadata = {
   name: "web_search",
   description: WEB_SEARCH_DESCRIPTION,
-  parameters: WEB_SEARCH_PARAMETERS,
+  parameters: WEB_SEARCH_PARAMETERS
 }
 
 export const webSearchTool = webSearchToolMetadata
@@ -161,16 +171,18 @@ export function createWebSearchTool(host: AgentHost): ExecutableTool {
             : "No results returned (engine returned an empty page)."
           return `web_search ${query} → 0 results (engines tried: ${out.attempted.join(", ")}). ${reason}`
         }
-        const lines = out.results.map(
-          (r) => `${r.rank}. ${r.title}\n   ${r.url}\n   ${r.snippet}`,
-        )
+        const lines = out.results.map((r) => `${r.rank}. ${r.title}\n   ${r.url}\n   ${r.snippet}`)
         return `web_search via ${out.engine} for "${query}":\n${lines.join("\n")}`
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         // Belt-and-braces — make sure we don't leak browser processes.
-        try { closeAllBrowserSessions(host) } catch { /* ignore */ }
+        try {
+          closeAllBrowserSessions(host)
+        } catch {
+          /* ignore */
+        }
         return `web_search failed: ${msg}`
       }
-    },
+    }
   }
 }

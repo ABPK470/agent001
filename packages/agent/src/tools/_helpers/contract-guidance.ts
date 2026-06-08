@@ -32,9 +32,9 @@ export type ToolContractEnforcement =
   | "suggestion"
 
 export type ToolContractLifetime =
-  | "one_shot"   // Active for 1 LLM call, then removed
-  | "sticky"     // Active until explicitly cleared (or max iterations)
-  | "countdown"  // Active for remainingFires calls
+  | "one_shot" // Active for 1 LLM call, then removed
+  | "sticky" // Active until explicitly cleared (or max iterations)
+  | "countdown" // Active for remainingFires calls
 
 export interface ToolContractGuidance {
   /** Higher number = higher priority. Resolvers are sorted descending. */
@@ -118,7 +118,7 @@ const delegationVerificationResolver: ResolverEntry = {
     if (ctx.lastDelegationWasReadOnly) return null
     if (ctx.lastRoundHadDelegation) {
       const verifyTools = ctx.availableToolNames.filter(
-        t => t === "read_file" || t === "run_command" || t === "browser_check" || t === "list_directory",
+        (t) => t === "read_file" || t === "run_command" || t === "browser_check" || t === "list_directory"
       )
       if (verifyTools.length === 0) return null
       return {
@@ -130,11 +130,11 @@ const delegationVerificationResolver: ResolverEntry = {
           "The subagent just completed work on your behalf. " +
           "Before taking any further action, verify the output: read the target files, " +
           "run build/test commands, or check the browser. Do NOT start new tasks yet.",
-        lifetime: "one_shot",
+        lifetime: "one_shot"
       }
     }
     return null
-  },
+  }
 }
 
 /**
@@ -160,9 +160,9 @@ const readBeforeMutationResolver: ResolverEntry = {
         `REQUIRED: Read the current content of ${paths} before attempting any mutation. ` +
         "The previous write/replace failed because the content has changed. " +
         "Read first, then plan a repair based on the actual current state.",
-      lifetime: "one_shot",
+      lifetime: "one_shot"
     }
-  },
+  }
 }
 
 /**
@@ -189,9 +189,9 @@ const verifyWrittenFilesResolver: ResolverEntry = {
       runtimeInstruction:
         `Consider verifying the recently written file(s): ${paths}. ` +
         "A quick read_file or run of tests confirms the write landed correctly.",
-      lifetime: "one_shot",
+      lifetime: "one_shot"
     }
-  },
+  }
 }
 
 /**
@@ -214,9 +214,9 @@ const noPrematureTextResponseResolver: ResolverEntry = {
       runtimeInstruction:
         "Start by using tools to gather information or take action — " +
         "do not respond with text only on the first turn.",
-      lifetime: "one_shot",
+      lifetime: "one_shot"
     }
-  },
+  }
 }
 
 // ============================================================================
@@ -227,7 +227,7 @@ const RESOLVERS: readonly ResolverEntry[] = [
   delegationVerificationResolver,
   readBeforeMutationResolver,
   verifyWrittenFilesResolver,
-  noPrematureTextResponseResolver,
+  noPrematureTextResponseResolver
 ].sort((a, b) => b.priority - a.priority)
 
 /**
@@ -260,14 +260,14 @@ export interface AppliedToolContractGuidance {
  */
 export function applyToolContractGuidance(
   guidance: ToolContractGuidance,
-  availableToolNames: readonly string[],
+  availableToolNames: readonly string[]
 ): AppliedToolContractGuidance {
   let filteredToolNames: readonly string[]
 
   if (guidance.enforcement === "block_other_tools") {
     // Intersection: only tools in both routedToolNames AND available
     const routed = new Set(guidance.routedToolNames)
-    filteredToolNames = availableToolNames.filter(n => routed.has(n))
+    filteredToolNames = availableToolNames.filter((n) => routed.has(n))
     // Safety: if nothing matches, fall back to full list to avoid empty tool set
     if (filteredToolNames.length === 0) filteredToolNames = availableToolNames
   } else {
@@ -277,6 +277,6 @@ export function applyToolContractGuidance(
   return {
     filteredToolNames,
     injectedInstruction: guidance.runtimeInstruction ?? null,
-    guidance,
+    guidance
   }
 }

@@ -13,7 +13,7 @@ describe("formatResults — pipe escaping", () => {
   it("escapes a literal `|` inside a string cell so column count is preserved", () => {
     const rs = makeRs([
       { client: "ACME", coverage: "COVERAGE UNMANAGED | SOUTH AFRICA" },
-      { client: "BETA", coverage: "RBB Banker" },
+      { client: "BETA", coverage: "RBB Banker" }
     ])
     const out = formatResults([rs], [2])
 
@@ -31,9 +31,7 @@ describe("formatResults — pipe escaping", () => {
   })
 
   it("does not touch NULL, Date, or object branches", () => {
-    const rs = makeRs([
-      { a: null, b: new Date("2025-01-15T00:00:00.000Z"), c: { x: 1 } },
-    ])
+    const rs = makeRs([{ a: null, b: new Date("2025-01-15T00:00:00.000Z"), c: { x: 1 } }])
     const out = formatResults([rs], [1])
     expect(out).toContain("NULL")
     expect(out).toContain("2025-01-15T00:00:00.000Z")
@@ -45,9 +43,7 @@ describe("formatResults — pipe escaping", () => {
     const out = formatResults([rs], [1])
     const dataLine = out.split("\n").find((l) => l.includes("A\\|B\\|C"))!
     // Split on unescaped `|` and unescape — same logic as the UI renderers use.
-    const cells = dataLine
-      .split(/(?<!\\)\|/)
-      .map((c) => c.trim().replace(/\\\|/g, "|"))
+    const cells = dataLine.split(/(?<!\\)\|/).map((c) => c.trim().replace(/\\\|/g, "|"))
     expect(cells).toEqual(["A|B|C", "x"])
   })
 })

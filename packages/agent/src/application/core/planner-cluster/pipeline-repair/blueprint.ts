@@ -12,9 +12,9 @@ import { DelegationOutputValidationCode } from "../../domain/enums/delegation.js
 import { normalizeToolExecutionOutput } from "../../tools/index.js"
 import type { Tool } from "../../types.js"
 import {
-    buildBlueprintSeedTemplate,
-    getPlannedBlueprintArtifacts,
-    validateBlueprintArtifactContract,
+  buildBlueprintSeedTemplate,
+  getPlannedBlueprintArtifacts,
+  validateBlueprintArtifactContract
 } from "../blueprint-contract/index.js"
 import type { Plan, SubagentTaskStep } from "../types.js"
 import type { SubagentStepValidationContext } from "./artifacts.js"
@@ -26,8 +26,10 @@ export interface SubagentValidationFailure {
 }
 
 export function isBlueprintLikeStep(step: SubagentTaskStep): boolean {
-  return /blueprint/i.test(step.name)
-    || step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  return (
+    /blueprint/i.test(step.name) ||
+    step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  )
 }
 
 export async function executeToolForText(tool: Tool, args: Record<string, unknown>): Promise<string> {
@@ -37,10 +39,12 @@ export async function executeToolForText(tool: Tool, args: Record<string, unknow
 export function buildBlueprintRetryGuidance(
   step: SubagentTaskStep,
   plan: Plan,
-  feedback: readonly string[],
+  feedback: readonly string[]
 ): string {
   if (!isBlueprintLikeStep(step)) return ""
-  const blueprintPath = step.executionContext.targetArtifacts.find((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  const blueprintPath = step.executionContext.targetArtifacts.find((artifact) =>
+    /(?:^|\/)BLUEPRINT\.md$/i.test(artifact)
+  )
   if (!blueprintPath) return ""
   const plannedArtifacts = getPlannedBlueprintArtifacts(plan)
   const template = buildBlueprintSeedTemplate(blueprintPath, plannedArtifacts)
@@ -58,18 +62,16 @@ export function buildBlueprintRetryGuidance(
     "- Remove any invented file paths or substitute module names from the prior attempt.",
     "- After writing the file, immediately call read_file on the same BLUEPRINT.md and compare the read-back content against the exact path list above.",
     "- If the read-back file is missing the `blueprint-contract` fence, any path differs, or any required field is omitted, rewrite it and read it again before finishing.",
-    ...(feedback.length > 0
-      ? ["- Previous failure details:", ...feedback.map((item) => `  - ${item}`)]
-      : []),
+    ...(feedback.length > 0 ? ["- Previous failure details:", ...feedback.map((item) => `  - ${item}`)] : []),
     "",
     "MANDATORY TEMPLATE TO FILL:",
-    template,
+    template
   ].join("\n")
 }
 
 export function hasSuccessfulReadBackAfterWrite(
   calls: readonly ToolCallRecord[],
-  targetPath: string,
+  targetPath: string
 ): boolean {
   const normalizedTarget = normalizeToolCallPath(targetPath)
   const basename = normalizedTarget.split("/").pop() ?? normalizedTarget
@@ -102,35 +104,43 @@ export function hasSuccessfulReadBackAfterWrite(
 export async function validateBlueprintStepCompletion(
   step: SubagentTaskStep,
   calls: readonly ToolCallRecord[],
-  validationCtx?: SubagentStepValidationContext,
+  validationCtx?: SubagentStepValidationContext
 ): Promise<SubagentValidationFailure | null> {
   if (!isBlueprintLikeStep(step)) return null
-  const blueprintPath = step.executionContext.targetArtifacts.find((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  const blueprintPath = step.executionContext.targetArtifacts.find((artifact) =>
+    /(?:^|\/)BLUEPRINT\.md$/i.test(artifact)
+  )
   const readFileTool = validationCtx?.readFileTool
   if (!blueprintPath || !readFileTool) return null
 
   if (!hasSuccessfulReadBackAfterWrite(calls, blueprintPath)) {
     return {
       code: DelegationOutputValidationCode.AcceptanceEvidenceMissing,
-      message:
-        `BLUEPRINT SELF-CHECK MISSING: Step \"${step.name}\" must read back ${blueprintPath} after writing it and repair the same file until the \`blueprint-contract\` fence and exact planned targetArtifacts are present.`,
+      message: `BLUEPRINT SELF-CHECK MISSING: Step \"${step.name}\" must read back ${blueprintPath} after writing it and repair the same file until the \`blueprint-contract\` fence and exact planned targetArtifacts are present.`
     }
   }
 
   const blueprintContent = await executeToolForText(readFileTool, { path: blueprintPath })
-  if (/^Error:\s*(?:ENOENT|ENOTDIR|EISDIR|EACCES|EPERM|Path|Symlink|A parent directory)/i.test(blueprintContent)) {
+  if (
+    /^Error:\s*(?:ENOENT|ENOTDIR|EISDIR|EACCES|EPERM|Path|Symlink|A parent directory)/i.test(blueprintContent)
+  ) {
     return {
       code: DelegationOutputValidationCode.AcceptanceEvidenceMissing,
-      message: `BLUEPRINT CONTRACT UNREADABLE: could not read ${blueprintPath} after generation (${blueprintContent})`,
+      message: `BLUEPRINT CONTRACT UNREADABLE: could not read ${blueprintPath} after generation (${blueprintContent})`
     }
   }
 
   if (validationCtx) {
-    const blueprintIssues = validateBlueprintArtifactContract(step, validationCtx.plan, blueprintPath, blueprintContent)
+    const blueprintIssues = validateBlueprintArtifactContract(
+      step,
+      validationCtx.plan,
+      blueprintPath,
+      blueprintContent
+    )
     if (blueprintIssues.length > 0) {
       return {
         code: DelegationOutputValidationCode.AcceptanceEvidenceMissing,
-        message: blueprintIssues.join("; "),
+        message: blueprintIssues.join("; ")
       }
     }
   }

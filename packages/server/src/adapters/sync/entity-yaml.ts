@@ -18,13 +18,7 @@
 
 import { parseAllDocuments, parseDocument, stringify } from "yaml"
 
-import type {
-  EntityDefinition,
-  EntityFkHop,
-  EntityTable,
-  EntityTableScope,
-  Scd2Override,
-} from "@mia/sync"
+import type { EntityDefinition, EntityFkHop, EntityTable, EntityTableScope, Scd2Override } from "@mia/sync"
 
 // ── Export ──────────────────────────────────────────────────────────
 
@@ -48,27 +42,27 @@ export function formatEntitiesYaml(defs: EntityDefinition[]): string {
 function orderEntity(def: EntityDefinition): Record<string, unknown> {
   // Explicit key ordering for stable diffs.
   const out: Record<string, unknown> = {
-    id:             def.id,
-    tenantId:       def.tenantId,
-    displayName:    def.displayName,
-    description:    def.description ?? "",
-    rootTable:      def.rootTable,
-    idColumn:       def.idColumn,
+    id: def.id,
+    tenantId: def.tenantId,
+    displayName: def.displayName,
+    description: def.description ?? "",
+    rootTable: def.rootTable,
+    idColumn: def.idColumn
   }
   if (def.labelColumn) out["labelColumn"] = def.labelColumn
   if (def.selfJoinColumn) out["selfJoinColumn"] = def.selfJoinColumn
 
   out["scd2"] = {
-    strategyId:      def.scd2.strategyId,
+    strategyId: def.scd2.strategyId,
     strategyVersion: def.scd2.strategyVersion,
-    ...(def.scd2.entityOverride ? { entityOverride: cleanOverride(def.scd2.entityOverride) } : {}),
+    ...(def.scd2.entityOverride ? { entityOverride: cleanOverride(def.scd2.entityOverride) } : {})
   }
 
   out["tables"] = def.tables.map((t) => orderTable(t))
 
   out["policies"] = {
-    freezeWindowIds:  def.policies.freezeWindowIds,
-    riskMultiplier:   def.policies.riskMultiplier,
+    freezeWindowIds: def.policies.freezeWindowIds,
+    riskMultiplier: def.policies.riskMultiplier
   }
 
   if (def.lineageRefs.length > 0) out["lineageRefs"] = def.lineageRefs
@@ -80,22 +74,22 @@ function orderEntity(def: EntityDefinition): Record<string, unknown> {
 
   // Informational (NOT consumed by the importer):
   out["__meta"] = {
-    version:      def.version,
+    version: def.version,
     versionLabel: def.versionLabel,
-    createdBy:    def.createdBy,
-    createdAt:    def.createdAt,
-    reason:       def.reason,
-    retiredAt:    def.retiredAt,
+    createdBy: def.createdBy,
+    createdAt: def.createdAt,
+    reason: def.reason,
+    retiredAt: def.retiredAt
   }
   return out
 }
 
 function orderTable(t: EntityTable): Record<string, unknown> {
   const out: Record<string, unknown> = {
-    name:           t.name,
-    scope:          orderScope(t.scope),
+    name: t.name,
+    scope: orderScope(t.scope),
     executionOrder: t.executionOrder,
-    verified:       t.verified,
+    verified: t.verified
   }
   if (t.scopeColumn) out["scopeColumn"] = t.scopeColumn
   if (t.source) out["source"] = t.source
@@ -111,19 +105,29 @@ function orderTable(t: EntityTable): Record<string, unknown> {
 
 function orderScope(s: EntityTableScope): Record<string, unknown> {
   switch (s.kind) {
-    case "rootPk": return { kind: "rootPk", column: s.column }
-    case "fkPath": return { kind: "fkPath", through: s.through.map((h) => ({ table: h.table, fromColumn: h.fromColumn, toColumn: h.toColumn })) }
-    case "sql":    return { kind: "sql", predicate: s.predicate }
+    case "rootPk":
+      return { kind: "rootPk", column: s.column }
+    case "fkPath":
+      return {
+        kind: "fkPath",
+        through: s.through.map((h) => ({
+          table: h.table,
+          fromColumn: h.fromColumn,
+          toColumn: h.toColumn
+        }))
+      }
+    case "sql":
+      return { kind: "sql", predicate: s.predicate }
   }
 }
 
 function cleanOverride(o: Scd2Override): Scd2Override {
   const out: Scd2Override = {}
   if (o.validFromCol !== undefined) out.validFromCol = o.validFromCol
-  if (o.validToCol   !== undefined) out.validToCol = o.validToCol
-  if (o.isLockedCol  !== undefined) out.isLockedCol = o.isLockedCol
-  if (o.syncDateCol  !== undefined) out.syncDateCol = o.syncDateCol
-  if (o.deployDateCol!== undefined) out.deployDateCol = o.deployDateCol
+  if (o.validToCol !== undefined) out.validToCol = o.validToCol
+  if (o.isLockedCol !== undefined) out.isLockedCol = o.isLockedCol
+  if (o.syncDateCol !== undefined) out.syncDateCol = o.syncDateCol
+  if (o.deployDateCol !== undefined) out.deployDateCol = o.deployDateCol
   if (o.identityHandling !== undefined) out.identityHandling = o.identityHandling
   if (o.excludedFromDiffCols) out.excludedFromDiffCols = o.excludedFromDiffCols
   if (o.onInsert) out.onInsert = o.onInsert
@@ -192,7 +196,17 @@ function shapeAsEntity(raw: unknown): ParseEntityResult {
   }
   const r = raw as Record<string, unknown>
 
-  const required = ["id", "tenantId", "displayName", "rootTable", "idColumn", "scd2", "tables", "policies", "provenance"]
+  const required = [
+    "id",
+    "tenantId",
+    "displayName",
+    "rootTable",
+    "idColumn",
+    "scd2",
+    "tables",
+    "policies",
+    "provenance"
+  ]
   for (const key of required) {
     if (!(key in r)) return { ok: false, def: null, error: `missing required field "${key}"` }
   }
@@ -208,46 +222,43 @@ function shapeAsEntity(raw: unknown): ParseEntityResult {
   const policiesRaw = r["policies"] as Record<string, unknown>
 
   const def: EntityDefinition = {
-    id:             String(r["id"]),
-    tenantId:       String(r["tenantId"]),
-    displayName:    String(r["displayName"]),
-    description:    typeof r["description"] === "string" ? r["description"] : "",
-    rootTable:      String(r["rootTable"]),
-    idColumn:       String(r["idColumn"]),
-    labelColumn:    typeof r["labelColumn"] === "string" ? r["labelColumn"] : null,
+    id: String(r["id"]),
+    tenantId: String(r["tenantId"]),
+    displayName: String(r["displayName"]),
+    description: typeof r["description"] === "string" ? r["description"] : "",
+    rootTable: String(r["rootTable"]),
+    idColumn: String(r["idColumn"]),
+    labelColumn: typeof r["labelColumn"] === "string" ? r["labelColumn"] : null,
     selfJoinColumn: typeof r["selfJoinColumn"] === "string" ? r["selfJoinColumn"] : null,
     tables,
     policies: {
-      freezeWindowIds:  Array.isArray(policiesRaw["freezeWindowIds"])
+      freezeWindowIds: Array.isArray(policiesRaw["freezeWindowIds"])
         ? (policiesRaw["freezeWindowIds"] as unknown[]).map(String)
         : [],
-      riskMultiplier:   typeof policiesRaw["riskMultiplier"] === "number"
-        ? policiesRaw["riskMultiplier"] as number
-        : 1.0,
+      riskMultiplier:
+        typeof policiesRaw["riskMultiplier"] === "number" ? (policiesRaw["riskMultiplier"] as number) : 1.0
     },
     scd2: {
-      strategyId:      String(scd2Raw["strategyId"]),
+      strategyId: String(scd2Raw["strategyId"]),
       strategyVersion: (scd2Raw["strategyVersion"] === "latest"
         ? "latest"
         : Number(scd2Raw["strategyVersion"])) as number | "latest",
       entityOverride: scd2Raw["entityOverride"]
         ? cleanOverride(scd2Raw["entityOverride"] as Scd2Override)
-        : null,
+        : null
     },
-    lineageRefs: Array.isArray(r["lineageRefs"])
-      ? (r["lineageRefs"] as EntityDefinition["lineageRefs"])
-      : [],
+    lineageRefs: Array.isArray(r["lineageRefs"]) ? (r["lineageRefs"] as EntityDefinition["lineageRefs"]) : [],
     provenance: r["provenance"] as EntityDefinition["provenance"],
     legacyEntrySproc: typeof r["legacyEntrySproc"] === "string" ? r["legacyEntrySproc"] : null,
     reverseOrder: Array.isArray(r["reverseOrder"]) ? (r["reverseOrder"] as unknown[]).map(String) : [],
     discrepancies: Array.isArray(r["discrepancies"]) ? (r["discrepancies"] as unknown[]).map(String) : [],
     // Server-stamped (placeholders — overwritten on save):
-    version:      0,
+    version: 0,
     versionLabel: null,
-    createdBy:    "",
-    reason:       "",
-    createdAt:    "",
-    retiredAt:    null,
+    createdBy: "",
+    reason: "",
+    createdAt: "",
+    retiredAt: null
   }
   return { ok: true, def, error: null }
 }
@@ -260,19 +271,19 @@ function shapeTable(raw: unknown, idx: number): EntityTable {
   if (typeof t["name"] !== "string") throw new Error(`tables[${idx}].name is required`)
   if (!t["scope"]) throw new Error(`tables[${idx}].scope is required`)
   return {
-    name:           t["name"] as string,
-    scope:          shapeScope(t["scope"], idx),
-    executionOrder: typeof t["executionOrder"] === "number" ? t["executionOrder"] as number : idx,
-    scd2Override:   t["scd2Override"] ? cleanOverride(t["scd2Override"] as Scd2Override) : null,
-    verified:       Boolean(t["verified"]),
-    archiveTable:   typeof t["archiveTable"] === "string" ? t["archiveTable"] : null,
-    note:           typeof t["note"] === "string" ? t["note"] : null,
-    provenance:     (t["provenance"] as EntityTable["provenance"]) ?? { kind: "manual" },
-    scopeColumn:        typeof t["scopeColumn"] === "string" ? t["scopeColumn"] : null,
-    source:             isTableSource(t["source"]) ? t["source"] : null,
+    name: t["name"] as string,
+    scope: shapeScope(t["scope"], idx),
+    executionOrder: typeof t["executionOrder"] === "number" ? (t["executionOrder"] as number) : idx,
+    scd2Override: t["scd2Override"] ? cleanOverride(t["scd2Override"] as Scd2Override) : null,
+    verified: Boolean(t["verified"]),
+    archiveTable: typeof t["archiveTable"] === "string" ? t["archiveTable"] : null,
+    note: typeof t["note"] === "string" ? t["note"] : null,
+    provenance: (t["provenance"] as EntityTable["provenance"]) ?? { kind: "manual" },
+    scopeColumn: typeof t["scopeColumn"] === "string" ? t["scopeColumn"] : null,
+    source: isTableSource(t["source"]) ? t["source"] : null,
     groundedByPipeline: typeof t["groundedByPipeline"] === "boolean" ? t["groundedByPipeline"] : null,
-    enabledByDefault:   typeof t["enabledByDefault"] === "boolean" ? t["enabledByDefault"] : null,
-    userControllable:   typeof t["userControllable"] === "boolean" ? t["userControllable"] : null,
+    enabledByDefault: typeof t["enabledByDefault"] === "boolean" ? t["enabledByDefault"] : null,
+    userControllable: typeof t["userControllable"] === "boolean" ? t["userControllable"] : null
   }
 }
 
@@ -289,9 +300,13 @@ function shapeScope(raw: unknown, idx: number): EntityTableScope {
       return { kind: "rootPk", column: s["column"] as string }
     case "fkPath":
       if (!Array.isArray(s["through"])) throw new Error(`tables[${idx}].scope.through required for fkPath`)
-      return { kind: "fkPath", through: (s["through"] as unknown[]).map((h, j) => shapeFkHop(h, idx, j)) }
+      return {
+        kind: "fkPath",
+        through: (s["through"] as unknown[]).map((h, j) => shapeFkHop(h, idx, j))
+      }
     case "sql":
-      if (typeof s["predicate"] !== "string") throw new Error(`tables[${idx}].scope.predicate required for sql`)
+      if (typeof s["predicate"] !== "string")
+        throw new Error(`tables[${idx}].scope.predicate required for sql`)
       return { kind: "sql", predicate: s["predicate"] as string }
     default:
       throw new Error(`tables[${idx}].scope.kind must be rootPk|fkPath|sql`)
@@ -299,10 +314,19 @@ function shapeScope(raw: unknown, idx: number): EntityTableScope {
 }
 
 function shapeFkHop(raw: unknown, idx: number, hopIdx: number): EntityFkHop {
-  if (raw === null || typeof raw !== "object") throw new Error(`tables[${idx}].scope.through[${hopIdx}] not a mapping`)
+  if (raw === null || typeof raw !== "object")
+    throw new Error(`tables[${idx}].scope.through[${hopIdx}] not a mapping`)
   const h = raw as Record<string, unknown>
-  if (typeof h["table"] !== "string" || typeof h["fromColumn"] !== "string" || typeof h["toColumn"] !== "string") {
+  if (
+    typeof h["table"] !== "string" ||
+    typeof h["fromColumn"] !== "string" ||
+    typeof h["toColumn"] !== "string"
+  ) {
     throw new Error(`tables[${idx}].scope.through[${hopIdx}] requires table+fromColumn+toColumn`)
   }
-  return { table: h["table"] as string, fromColumn: h["fromColumn"] as string, toColumn: h["toColumn"] as string }
+  return {
+    table: h["table"] as string,
+    fromColumn: h["fromColumn"] as string,
+    toColumn: h["toColumn"] as string
+  }
 }

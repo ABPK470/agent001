@@ -31,16 +31,16 @@ import type { TenantConfig } from "../../shell/tenant-config.js"
  * one, extend the existing detector instead of adding a new kind.
  */
 export type AmbiguityKind =
-  | "schema-match"        // noun in goal matches multiple catalog identifiers
+  | "schema-match" // noun in goal matches multiple catalog identifiers
   | "canonical-ambiguity" // top-1 vs top-2 catalog scores within a hair on a metric goal
   | "anaphora-ungrounded" // goal refers anaphorically to prior data but no recallable tool payload exists
-  | "term-undefined"      // capitalised business word with no catalog/tenant match
-  | "metric-undefined"    // ranking language ("top", "biggest") without a metric
-  | "grain-undefined"     // period word ("monthly") matches multiple grain cols
-  | "time-range"          // vague time word ("recent") with no anchor date
-  | "output-format"       // "summarise/overview" with no format hint
-  | "write-confirmation"  // non-#temp DML/DDL planned or just executed
-  | "empty-result"        // last tool call returned no rows on a data goal
+  | "term-undefined" // capitalised business word with no catalog/tenant match
+  | "metric-undefined" // ranking language ("top", "biggest") without a metric
+  | "grain-undefined" // period word ("monthly") matches multiple grain cols
+  | "time-range" // vague time word ("recent") with no anchor date
+  | "output-format" // "summarise/overview" with no format hint
+  | "write-confirmation" // non-#temp DML/DDL planned or just executed
+  | "empty-result" // last tool call returned no rows on a data goal
 
 /**
  * Severity gate. Prompted-only enforcement (per architectural decision):

@@ -22,7 +22,7 @@ import { emitSyncSqlEvent } from "../events.js"
  */
 export const PREVIEW_TABLE_CONCURRENCY = Math.max(
   1,
-  parseInt(process.env["SYNC_PREVIEW_CONCURRENCY"] ?? "4", 10) || 4,
+  parseInt(process.env["SYNC_PREVIEW_CONCURRENCY"] ?? "4", 10) || 4
 )
 
 /** Maximum tolerated drift between preview and current source row counts. */
@@ -35,13 +35,17 @@ export function configureSyncOrchestrator(host: SyncProjectRootHost, projectRoot
 
 export function projectRoot(host: SyncProjectRootHost): string {
   const root = host.sync.project.dbProjectRoot
-  if (!root) throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(host, projectRoot)")
+  if (!root)
+    throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(host, projectRoot)")
   return root
 }
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */
 export function qtable(name: string): string {
-  return name.split(".").map((p) => `[${p}]`).join(".")
+  return name
+    .split(".")
+    .map((p) => `[${p}]`)
+    .join(".")
 }
 
 /** Convert a JS value to a SQL literal for use in a VALUES clause. */
@@ -60,7 +64,7 @@ export function sqlLiteral(v: unknown): string {
 export async function mapWithConcurrency<T, R>(
   items: T[],
   limit: number,
-  fn: (item: T, index: number) => Promise<R>,
+  fn: (item: T, index: number) => Promise<R>
 ): Promise<R[]> {
   const results = new Array<R>(items.length)
   let next = 0
@@ -87,29 +91,38 @@ export async function trackedQuery<T = unknown>(
   sqlText: string,
   label: string,
   connection: string,
-  telemetryContext?: SyncTelemetryContext,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<sql.IResult<T>> {
   const t0 = Date.now()
   try {
     const result = await req.query(sqlText)
-    emitSyncSqlEvent(host, {
-      label,
-      connection,
-      sql: sqlText,
-      durationMs: Date.now() - t0,
-      rowCount: result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
-      attempts: 1,
-    }, telemetryContext)
+    emitSyncSqlEvent(
+      host,
+      {
+        label,
+        connection,
+        sql: sqlText,
+        durationMs: Date.now() - t0,
+        rowCount:
+          result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
+        attempts: 1
+      },
+      telemetryContext
+    )
     return result
   } catch (e) {
-    emitSyncSqlEvent(host, {
-      label,
-      connection,
-      sql: sqlText,
-      durationMs: Date.now() - t0,
-      attempts: 1,
-      error: e instanceof Error ? e.message : String(e),
-    }, telemetryContext)
+    emitSyncSqlEvent(
+      host,
+      {
+        label,
+        connection,
+        sql: sqlText,
+        durationMs: Date.now() - t0,
+        attempts: 1,
+        error: e instanceof Error ? e.message : String(e)
+      },
+      telemetryContext
+    )
     throw e
   }
 }
@@ -121,29 +134,37 @@ export async function trackedExecute(
   sprocName: string,
   label: string,
   connection: string,
-  telemetryContext?: SyncTelemetryContext,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<sql.IProcedureResult<unknown>> {
   const t0 = Date.now()
   try {
     const result = await req.execute(sprocName)
-    emitSyncSqlEvent(host, {
-      label,
-      connection,
-      sql: `EXEC ${sprocName}`,
-      durationMs: Date.now() - t0,
-      rowCount: result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
-      attempts: 1,
-    }, telemetryContext)
+    emitSyncSqlEvent(
+      host,
+      {
+        label,
+        connection,
+        sql: `EXEC ${sprocName}`,
+        durationMs: Date.now() - t0,
+        rowCount: result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
+        attempts: 1
+      },
+      telemetryContext
+    )
     return result
   } catch (e) {
-    emitSyncSqlEvent(host, {
-      label,
-      connection,
-      sql: `EXEC ${sprocName}`,
-      durationMs: Date.now() - t0,
-      attempts: 1,
-      error: e instanceof Error ? e.message : String(e),
-    }, telemetryContext)
+    emitSyncSqlEvent(
+      host,
+      {
+        label,
+        connection,
+        sql: `EXEC ${sprocName}`,
+        durationMs: Date.now() - t0,
+        attempts: 1,
+        error: e instanceof Error ? e.message : String(e)
+      },
+      telemetryContext
+    )
     throw e
   }
 }

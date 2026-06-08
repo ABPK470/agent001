@@ -16,7 +16,12 @@
  */
 
 import type Database from "better-sqlite3"
-import { listTableVerdicts, summarizeCachedPayload, type CachedTool, type TableVerdictRole } from "../../../adapters/persistence/memory.js"
+import {
+  listTableVerdicts,
+  summarizeCachedPayload,
+  type CachedTool,
+  type TableVerdictRole
+} from "../../../adapters/persistence/memory.js"
 import { getDb } from "../../../adapters/persistence/sqlite.js"
 import type { PriorTurn } from "./prior-turns.js"
 
@@ -91,24 +96,35 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
   }
 
   const db = opts.db ?? getDb()
-  type Row = { qname: string; tool: string; mode: string; bytes: number; created_at: number; payload_text: string }
+  type Row = {
+    qname: string
+    tool: string
+    mode: string
+    bytes: number
+    created_at: number
+    payload_text: string
+  }
 
   let rows: Row[] = []
   if (candidates.size > 0) {
     const placeholders = [...candidates].map(() => "?").join(",")
-    rows = db.prepare(`
+    rows = db
+      .prepare(
+        `
       SELECT qname, tool, mode, bytes, created_at, payload_text
       FROM tool_knowledge
       WHERE qname IN (${placeholders})
       ORDER BY created_at DESC
       LIMIT ?
-    `).all(...candidates, limit) as Row[]
+    `
+      )
+      .all(...candidates, limit) as Row[]
   }
 
   // Track which rows came from the goal-mention path vs the fallback
   // top-up: only goal rows get the heavy summarizer treatment so the
   // block budget stays bounded.
-  const goalQnames = new Set(rows.map(r => r.qname))
+  const goalQnames = new Set(rows.map((r) => r.qname))
 
   // Gap 3 fallback / top-up: append the globally-freshest rows so the
   // block is non-empty when the goal text doesn't name objects, and so
@@ -118,13 +134,17 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
   // payload summaries — they're directory-only.
   const FALLBACK_TOPUP = Math.max(1, Math.min(5, limit - rows.length))
   if (FALLBACK_TOPUP > 0) {
-    const seenQnames = new Set(rows.map(r => r.qname))
-    const extra = db.prepare(`
+    const seenQnames = new Set(rows.map((r) => r.qname))
+    const extra = db
+      .prepare(
+        `
       SELECT qname, tool, mode, bytes, created_at, payload_text
       FROM tool_knowledge
       ORDER BY created_at DESC
       LIMIT ?
-    `).all(FALLBACK_TOPUP * 2) as Row[]
+    `
+      )
+      .all(FALLBACK_TOPUP * 2) as Row[]
     for (const r of extra) {
       if (seenQnames.has(r.qname)) continue
       rows.push(r)
@@ -143,9 +163,7 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
     if (seen.has(r.qname)) continue
     seen.add(r.qname)
     const isGoal = goalQnames.has(r.qname)
-    const summary = isGoal
-      ? summarizeCachedPayload(r.tool as CachedTool, r.mode, r.payload_text)
-      : ""
+    const summary = isGoal ? summarizeCachedPayload(r.tool as CachedTool, r.mode, r.payload_text) : ""
     out.push({
       qname: r.qname,
       tool: r.tool,
@@ -153,7 +171,7 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
       ageHours: Math.round((now - r.created_at) / 3_600_000),
       bytes: r.bytes,
       priority: isGoal ? "goal" : "fallback",
-      summary,
+      summary
     })
   }
   return out
@@ -191,11 +209,11 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
  */
 export function renderKnownObjectsBlock(
   rows: readonly KnownObjectRow[],
-  verdicts: readonly CandidateVerdictRow[] = [],
+  verdicts: readonly CandidateVerdictRow[] = []
 ): string {
   if (rows.length === 0 && verdicts.length === 0) return ""
 
-  const goalRows     = rows.filter((r) => r.priority === "goal")
+  const goalRows = rows.filter((r) => r.priority === "goal")
   const fallbackRows = rows.filter((r) => r.priority !== "goal")
 
   const CLOSE = "</known_objects>"
@@ -211,7 +229,7 @@ export function renderKnownObjectsBlock(
       "on that qname unless the user explicitly needs fresher or deeper data.",
       "Directory-only entries (qname | tool | mode | age | bytes) mean the",
       "cache exists but wasn't summarized here \u2014 calling the tool will return",
-      "the cached payload automatically with a `[cached from \u2026]` header.",
+      "the cached payload automatically with a `[cached from \u2026]` header."
     )
   }
 
@@ -258,7 +276,7 @@ export function renderKnownObjectsBlock(
       "Prefer 'canonical' objects; treat 'subset' / 'rules' as scoped derivatives;",
       "avoid 'staging' / 'archive' unless explicitly requested.",
       "",
-      "qname | role | evidence",
+      "qname | role | evidence"
     ]
     for (const h of header) {
       if (!tryPush(h)) break
@@ -342,19 +360,19 @@ export function loadCandidateVerdicts(opts: LoadCandidateVerdictsOptions): Candi
     return []
   }
   if (hits.length === 0) return []
-  const qnames = hits.map(h => h.table.qualifiedName)
+  const qnames = hits.map((h) => h.table.qualifiedName)
   let verdicts: ReturnType<typeof listTableVerdicts> = []
   try {
     verdicts = listTableVerdicts({
       qnames,
       connection: opts.connection,
-      upn: opts.upn ?? null,
+      upn: opts.upn ?? null
     })
   } catch {
     return []
   }
   // Preserve catalog rank order.
-  const byQname = new Map<string, typeof verdicts[number]>()
+  const byQname = new Map<string, (typeof verdicts)[number]>()
   for (const v of verdicts) byQname.set(v.qname.toLowerCase(), v)
   const out: CandidateVerdictRow[] = []
   for (const q of qnames) {
@@ -364,4 +382,3 @@ export function loadCandidateVerdicts(opts: LoadCandidateVerdictsOptions): Candi
   }
   return out
 }
-

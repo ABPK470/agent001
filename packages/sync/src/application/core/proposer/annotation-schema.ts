@@ -12,38 +12,38 @@
 import { RISK_SCORE_BANDS, RiskTier } from "./types.js"
 
 export const WarningKind = {
-  KnownFailureMode:        "known-failure-mode",
-  LineageImpact:           "lineage-impact",
-  FreezeWindowViolation:   "freeze-window-violation",
-  LargeDeleteBatch:        "large-delete-batch",
-  SchemaDrift:             "schema-drift",
-  DependencyOrdering:      "dependency-ordering",
-  RegulatoryDownstream:    "regulatory-downstream",
-  IdentityHandlingChange:  "identity-handling-change",
-  HighRiskTimingWindow:    "high-risk-timing-window",
-  UnverifiedTable:         "unverified-table",
+  KnownFailureMode: "known-failure-mode",
+  LineageImpact: "lineage-impact",
+  FreezeWindowViolation: "freeze-window-violation",
+  LargeDeleteBatch: "large-delete-batch",
+  SchemaDrift: "schema-drift",
+  DependencyOrdering: "dependency-ordering",
+  RegulatoryDownstream: "regulatory-downstream",
+  IdentityHandlingChange: "identity-handling-change",
+  HighRiskTimingWindow: "high-risk-timing-window",
+  UnverifiedTable: "unverified-table"
 } as const
 
 export type WarningKind = (typeof WarningKind)[keyof typeof WarningKind]
 
 export interface RiskAnnotationWarning {
-  kind:        WarningKind
-  message:     string
+  kind: WarningKind
+  message: string
   /** Optional reference to a specific table or downstream object. */
-  reference?:  string
+  reference?: string
 }
 
 export interface RiskAnnotation {
-  riskTier:           RiskTier
+  riskTier: RiskTier
   /** 0..100; band must agree with `RISK_SCORE_BANDS[riskTier]`. */
-  riskScore:          number
+  riskScore: number
   /** 3..6 sentences of plain-English rationale. */
-  rationale:          string
+  rationale: string
   /** ISO datetime range "start/end" OR the literal string "any". */
-  recommendedWindow:  string
+  recommendedWindow: string
   /** Entity ids that should sync first. Each must resolve via the registry. */
-  dependsOn:          readonly string[]
-  warnings:           readonly RiskAnnotationWarning[]
+  dependsOn: readonly string[]
+  warnings: readonly RiskAnnotationWarning[]
 }
 
 /**
@@ -51,7 +51,7 @@ export interface RiskAnnotation {
  * object on success or a list of issues on failure. Pure — no IO.
  */
 export function validateRiskAnnotation(
-  raw: unknown,
+  raw: unknown
 ): { ok: true; value: RiskAnnotation } | { ok: false; issues: string[] } {
   const issues: string[] = []
   if (raw === null || typeof raw !== "object") {
@@ -90,7 +90,7 @@ export function validateRiskAnnotation(
   // recommendedWindow
   const win = r["recommendedWindow"]
   if (typeof win !== "string" || (!isIsoWindow(win) && win !== "any")) {
-    issues.push("recommendedWindow must be \"any\" or \"<isoStart>/<isoEnd>\"")
+    issues.push('recommendedWindow must be "any" or "<isoStart>/<isoEnd>"')
   }
 
   // dependsOn
@@ -107,10 +107,11 @@ export function validateRiskAnnotation(
     for (let i = 0; i < warns.length; i++) {
       const w = warns[i] as Record<string, unknown> | null
       if (w === null || typeof w !== "object") {
-        issues.push(`warnings[${i}] is not an object`); continue
+        issues.push(`warnings[${i}] is not an object`)
+        continue
       }
       const kind = w["kind"]
-      const msg  = w["message"]
+      const msg = w["message"]
       if (typeof kind !== "string" || !Object.values(WarningKind).includes(kind as WarningKind)) {
         issues.push(`warnings[${i}].kind is not a known WarningKind`)
       }
@@ -140,28 +141,28 @@ function isIsoWindow(s: string): boolean {
 
 export const RISK_ANNOTATION_JSON_SCHEMA = {
   $schema: "https://json-schema.org/draft/2020-12/schema",
-  title:   "RiskAnnotation",
-  type:    "object",
+  title: "RiskAnnotation",
+  type: "object",
   required: ["riskTier", "riskScore", "rationale", "recommendedWindow", "dependsOn", "warnings"],
   additionalProperties: false,
   properties: {
-    riskTier:          { enum: Object.keys(RISK_SCORE_BANDS) },
-    riskScore:         { type: "number", minimum: 0, maximum: 100 },
-    rationale:         { type: "string", minLength: 24 },
-    recommendedWindow: { type: "string", description: "\"any\" or \"<isoStart>/<isoEnd>\"" },
-    dependsOn:         { type: "array", items: { type: "string", minLength: 1 } },
+    riskTier: { enum: Object.keys(RISK_SCORE_BANDS) },
+    riskScore: { type: "number", minimum: 0, maximum: 100 },
+    rationale: { type: "string", minLength: 24 },
+    recommendedWindow: { type: "string", description: '"any" or "<isoStart>/<isoEnd>"' },
+    dependsOn: { type: "array", items: { type: "string", minLength: 1 } },
     warnings: {
-      type:  "array",
+      type: "array",
       items: {
         type: "object",
         required: ["kind", "message"],
         additionalProperties: false,
         properties: {
-          kind:      { enum: Object.values(WarningKind) },
-          message:   { type: "string", minLength: 1 },
-          reference: { type: "string" },
-        },
-      },
-    },
-  },
+          kind: { enum: Object.values(WarningKind) },
+          message: { type: "string", minLength: 1 },
+          reference: { type: "string" }
+        }
+      }
+    }
+  }
 } as const

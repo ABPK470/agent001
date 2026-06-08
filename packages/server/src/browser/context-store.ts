@@ -63,7 +63,7 @@ export function getOrCreateContext(ownerUpn: string): BrowserContextRecord {
       id: existing.id,
       ownerUpn: existing.owner_upn,
       storagePath: join(CONTEXTS_DIR, existing.storage_path),
-      fingerprintSeed: existing.fingerprint_seed,
+      fingerprintSeed: existing.fingerprint_seed
     }
   }
 
@@ -72,14 +72,14 @@ export function getOrCreateContext(ownerUpn: string): BrowserContextRecord {
   const seed = ownerUpn // deterministic per-tenant by default
   db.prepare(
     `INSERT INTO browser_contexts (id, owner_upn, storage_path, fingerprint_seed)
-     VALUES (?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?)`
   ).run(id, ownerUpn, fileName, seed)
 
   return {
     id,
     ownerUpn,
     storagePath: join(CONTEXTS_DIR, fileName),
-    fingerprintSeed: seed,
+    fingerprintSeed: seed
   }
 }
 
@@ -107,9 +107,7 @@ export async function saveStorageState(record: BrowserContextRecord, state: unkn
   // Use rename via fs/promises
   const { rename } = await import("node:fs/promises")
   await rename(tmp, record.storagePath)
-  getDb()
-    .prepare("UPDATE browser_contexts SET last_used_at = datetime('now') WHERE id = ?")
-    .run(record.id)
+  getDb().prepare("UPDATE browser_contexts SET last_used_at = datetime('now') WHERE id = ?").run(record.id)
 }
 
 /**
@@ -127,6 +125,6 @@ export function listContexts(ownerUpn?: string): BrowserContextRecord[] {
     id: r.id,
     ownerUpn: r.owner_upn,
     storagePath: join(CONTEXTS_DIR, r.storage_path),
-    fingerprintSeed: r.fingerprint_seed,
+    fingerprintSeed: r.fingerprint_seed
   }))
 }

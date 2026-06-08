@@ -57,10 +57,17 @@ describe("approval workflow (F1.7)", () => {
 
   it("upsertApprovalPolicy + listApprovalPolicies round-trip", async () => {
     const m = await setup()
-    m.upsertApprovalPolicy({
-      tenantId: "_default", targetEnv: "prod", riskTier: RiskTier.Medium,
-      policy: "dual", approvers: ["alice", "bob"], bypassRole: "admin",
-    }, "actor")
+    m.upsertApprovalPolicy(
+      {
+        tenantId: "_default",
+        targetEnv: "prod",
+        riskTier: RiskTier.Medium,
+        policy: "dual",
+        approvers: ["alice", "bob"],
+        bypassRole: "admin"
+      },
+      "actor"
+    )
     const list = m.listApprovalPolicies("_default")
     expect(list).toHaveLength(1)
     expect(list[0]?.policy).toBe("dual")
@@ -69,8 +76,15 @@ describe("approval workflow (F1.7)", () => {
 
   it("single-policy grant transitions to granted", async () => {
     const m = await setup()
-    const a = m.createApproval({ proposalId: "p1", tenantId: "_default", requestedBy: "alice",
-      policy: "single", ttlMs: 3600_000, planId: "plan1", planHash: "h1" })
+    const a = m.createApproval({
+      proposalId: "p1",
+      tenantId: "_default",
+      requestedBy: "alice",
+      policy: "single",
+      ttlMs: 3600_000,
+      planId: "plan1",
+      planHash: "h1"
+    })
     const out = m.grantApproval({ approvalId: a.id, approver: "bob", planHashAtGrant: "h1" })
     expect(out.state).toBe("granted")
     expect(out.granted_by_1).toBe("bob")
@@ -78,8 +92,15 @@ describe("approval workflow (F1.7)", () => {
 
   it("dual-policy: first grant is partial, second completes", async () => {
     const m = await setup()
-    const a = m.createApproval({ proposalId: "p1", tenantId: "_default", requestedBy: "alice",
-      policy: "dual", ttlMs: 3600_000, planId: null, planHash: null })
+    const a = m.createApproval({
+      proposalId: "p1",
+      tenantId: "_default",
+      requestedBy: "alice",
+      policy: "dual",
+      ttlMs: 3600_000,
+      planId: null,
+      planHash: null
+    })
     const r1 = m.grantApproval({ approvalId: a.id, approver: "bob", planHashAtGrant: null })
     expect(r1.state).toBe("partially_granted")
     const r2 = m.grantApproval({ approvalId: a.id, approver: "carol", planHashAtGrant: null })
@@ -89,40 +110,78 @@ describe("approval workflow (F1.7)", () => {
 
   it("rejects self-grant", async () => {
     const m = await setup()
-    const a = m.createApproval({ proposalId: "p1", tenantId: "_default", requestedBy: "alice",
-      policy: "single", ttlMs: 3600_000, planId: null, planHash: null })
-    expect(() => m.grantApproval({ approvalId: a.id, approver: "alice", planHashAtGrant: null }))
-      .toThrowError(/self_grant|requester/i)
+    const a = m.createApproval({
+      proposalId: "p1",
+      tenantId: "_default",
+      requestedBy: "alice",
+      policy: "single",
+      ttlMs: 3600_000,
+      planId: null,
+      planHash: null
+    })
+    expect(() =>
+      m.grantApproval({ approvalId: a.id, approver: "alice", planHashAtGrant: null })
+    ).toThrowError(/self_grant|requester/i)
   })
 
   it("rejects duplicate grant by same approver", async () => {
     const m = await setup()
-    const a = m.createApproval({ proposalId: "p1", tenantId: "_default", requestedBy: "alice",
-      policy: "dual", ttlMs: 3600_000, planId: null, planHash: null })
+    const a = m.createApproval({
+      proposalId: "p1",
+      tenantId: "_default",
+      requestedBy: "alice",
+      policy: "dual",
+      ttlMs: 3600_000,
+      planId: null,
+      planHash: null
+    })
     m.grantApproval({ approvalId: a.id, approver: "bob", planHashAtGrant: null })
-    expect(() => m.grantApproval({ approvalId: a.id, approver: "bob", planHashAtGrant: null }))
-      .toThrowError(/duplicate_grant|already granted/i)
+    expect(() => m.grantApproval({ approvalId: a.id, approver: "bob", planHashAtGrant: null })).toThrowError(
+      /duplicate_grant|already granted/i
+    )
   })
 
   it("flips state to expired when TTL has passed", async () => {
     const m = await setup()
-    const a = m.createApproval({ proposalId: "p1", tenantId: "_default", requestedBy: "alice",
-      policy: "single", ttlMs: -1, planId: null, planHash: null })
-    expect(() => m.grantApproval({ approvalId: a.id, approver: "bob", planHashAtGrant: null }))
-      .toThrowError(/expired|closed/i)
+    const a = m.createApproval({
+      proposalId: "p1",
+      tenantId: "_default",
+      requestedBy: "alice",
+      policy: "single",
+      ttlMs: -1,
+      planId: null,
+      planHash: null
+    })
+    expect(() => m.grantApproval({ approvalId: a.id, approver: "bob", planHashAtGrant: null })).toThrowError(
+      /expired|closed/i
+    )
     expect(m.getApproval(a.id)?.state).toBe("expired")
   })
 
   it("reject + bypass record actor and reason", async () => {
     const m = await setup()
-    const a = m.createApproval({ proposalId: "p1", tenantId: "_default", requestedBy: "alice",
-      policy: "single", ttlMs: 3600_000, planId: null, planHash: null })
+    const a = m.createApproval({
+      proposalId: "p1",
+      tenantId: "_default",
+      requestedBy: "alice",
+      policy: "single",
+      ttlMs: 3600_000,
+      planId: null,
+      planHash: null
+    })
     const rej = m.rejectApproval(a.id, "bob", "nope")
     expect(rej.state).toBe("rejected")
     expect(rej.reject_reason).toBe("nope")
 
-    const a2 = m.createApproval({ proposalId: "p2", tenantId: "_default", requestedBy: "alice",
-      policy: "dual", ttlMs: 3600_000, planId: null, planHash: null })
+    const a2 = m.createApproval({
+      proposalId: "p2",
+      tenantId: "_default",
+      requestedBy: "alice",
+      policy: "dual",
+      ttlMs: 3600_000,
+      planId: null,
+      planHash: null
+    })
     const byp = m.bypassApproval(a2.id, "admin", "incident")
     expect(byp.state).toBe("bypassed")
     expect(byp.bypass_reason).toBe("incident")
@@ -130,8 +189,15 @@ describe("approval workflow (F1.7)", () => {
 
   it("expireDueApprovals flips all overdue rows", async () => {
     const m = await setup()
-    const a = m.createApproval({ proposalId: "p1", tenantId: "_default", requestedBy: "alice",
-      policy: "single", ttlMs: -1000, planId: null, planHash: null })
+    const a = m.createApproval({
+      proposalId: "p1",
+      tenantId: "_default",
+      requestedBy: "alice",
+      policy: "single",
+      ttlMs: -1000,
+      planId: null,
+      planHash: null
+    })
     const n = m.expireDueApprovals()
     expect(n).toBe(1)
     expect(m.getApproval(a.id)?.state).toBe("expired")
@@ -139,21 +205,50 @@ describe("approval workflow (F1.7)", () => {
 
   it("HMAC token: issue + consume + replay rejection", async () => {
     const m = await setup()
-    const a = m.createApproval({ proposalId: "p1", tenantId: "_default", requestedBy: "alice",
-      policy: "single", ttlMs: 3600_000, planId: null, planHash: null })
-    const tok = m.issueApprovalToken({ approvalId: a.id, action: "grant", issuedTo: "bob", ttlMs: 60_000, secret: SECRET })
+    const a = m.createApproval({
+      proposalId: "p1",
+      tenantId: "_default",
+      requestedBy: "alice",
+      policy: "single",
+      ttlMs: 3600_000,
+      planId: null,
+      planHash: null
+    })
+    const tok = m.issueApprovalToken({
+      approvalId: a.id,
+      action: "grant",
+      issuedTo: "bob",
+      ttlMs: 60_000,
+      secret: SECRET
+    })
     const consumed = m.consumeApprovalToken({ raw: tok.raw, secret: SECRET, by: "bob" })
     expect(consumed.approvalId).toBe(a.id)
     expect(consumed.action).toBe("grant")
-    expect(() => m.consumeApprovalToken({ raw: tok.raw, secret: SECRET, by: "bob" })).toThrowError(/token_used|used/i)
+    expect(() => m.consumeApprovalToken({ raw: tok.raw, secret: SECRET, by: "bob" })).toThrowError(
+      /token_used|used/i
+    )
   })
 
   it("HMAC token: tampered raw rejected", async () => {
     const m = await setup()
-    const a = m.createApproval({ proposalId: "p1", tenantId: "_default", requestedBy: "alice",
-      policy: "single", ttlMs: 3600_000, planId: null, planHash: null })
-    const tok = m.issueApprovalToken({ approvalId: a.id, action: "grant", issuedTo: "bob", ttlMs: 60_000, secret: SECRET })
-    expect(() => m.consumeApprovalToken({ raw: tok.raw + "x", secret: SECRET, by: "bob" }))
-      .toThrowError(/token_invalid|Unknown/i)
+    const a = m.createApproval({
+      proposalId: "p1",
+      tenantId: "_default",
+      requestedBy: "alice",
+      policy: "single",
+      ttlMs: 3600_000,
+      planId: null,
+      planHash: null
+    })
+    const tok = m.issueApprovalToken({
+      approvalId: a.id,
+      action: "grant",
+      issuedTo: "bob",
+      ttlMs: 60_000,
+      secret: SECRET
+    })
+    expect(() => m.consumeApprovalToken({ raw: tok.raw + "x", secret: SECRET, by: "bob" })).toThrowError(
+      /token_invalid|Unknown/i
+    )
   })
 })

@@ -46,11 +46,13 @@ interface CacheEntry {
 }
 const extractState = {
   lastCache: null as CacheEntry | null,
-  walkCount: 0,
+  walkCount: 0
 }
 
 /** Test-only: how many times the inner extractor walked the history. */
-export function __getExtractWalkCount(): number { return extractState.walkCount }
+export function __getExtractWalkCount(): number {
+  return extractState.walkCount
+}
 /** Test-only: reset the memo + counter. */
 export function __resetExtractCache(): void {
   extractState.lastCache = null
@@ -60,17 +62,17 @@ export function __resetExtractCache(): void {
 export function extractCompactionState(
   messages: readonly Message[],
   goal: string,
-  currentIteration: number,
+  currentIteration: number
 ): ArtifactCompactionState {
   const length = messages.length
   const lastRef = length > 0 ? messages[length - 1] : undefined
   if (
-    extractState.lastCache
-    && extractState.lastCache.length === length
-    && extractState.lastCache.lastRef === lastRef
-    && extractState.lastCache.messages === messages
-    && extractState.lastCache.goal === goal
-    && extractState.lastCache.currentIteration === currentIteration
+    extractState.lastCache &&
+    extractState.lastCache.length === length &&
+    extractState.lastCache.lastRef === lastRef &&
+    extractState.lastCache.messages === messages &&
+    extractState.lastCache.goal === goal &&
+    extractState.lastCache.currentIteration === currentIteration
   ) {
     return extractState.lastCache.result
   }
@@ -82,7 +84,7 @@ export function extractCompactionState(
 function extractCompactionStateInner(
   messages: readonly Message[],
   goal: string,
-  currentIteration: number,
+  currentIteration: number
 ): ArtifactCompactionState {
   extractState.walkCount++
   const toolCallCounts: Record<string, number> = {}
@@ -120,13 +122,11 @@ function extractCompactionStateInner(
             if (path) {
               const existing = writeMap.get(path)
               const content = typeof args.content === "string" ? (args.content as string) : ""
-              const lineCount = content
-                ? content.split("\n").length
-                : (existing?.linesAtLastWrite ?? 0)
+              const lineCount = content ? content.split("\n").length : (existing?.linesAtLastWrite ?? 0)
               writeMap.set(path, {
                 writeCount: (existing?.writeCount ?? 0) + 1,
                 linesAtLastWrite: lineCount,
-                lastWriteMsgIdx: i,
+                lastWriteMsgIdx: i
               })
             }
           } else if (tc.name === "read_file") {
@@ -154,8 +154,8 @@ function extractCompactionStateInner(
       const content = m.content
 
       if (
-        /^Error:|\b(?:failed|exception|traceback|enoent|eacces|permission denied)\b/i.test(content)
-        && !/\bno errors\b/i.test(content)
+        /^Error:|\b(?:failed|exception|traceback|enoent|eacces|permission denied)\b/i.test(content) &&
+        !/\bno errors\b/i.test(content)
       ) {
         const short = content.slice(0, 150).replace(/\s+/g, " ")
         lastErrorSummary = `${meta.name}${meta.path ? ` ${meta.path}` : ""}: ${short}`
@@ -163,11 +163,11 @@ function extractCompactionStateInner(
 
       if (meta.name === "run_command" && meta.command) {
         const isSuccess =
-          /\b(?:passed|success|0 failed|build succeeded|compiled|done)\b/i.test(content)
-          && !/\b(?:error|failed|exception)\b/i.test(content)
+          /\b(?:passed|success|0 failed|build succeeded|compiled|done)\b/i.test(content) &&
+          !/\b(?:error|failed|exception)\b/i.test(content)
         const isFailure =
-          /\b(?:error|failed|exception|syntax error)\b/i.test(content)
-          && !/\bno errors\b|\bno.*failed\b/i.test(content)
+          /\b(?:error|failed|exception|syntax error)\b/i.test(content) &&
+          !/\bno errors\b|\bno.*failed\b/i.test(content)
         if (isSuccess) {
           successfulCommands.push(meta.command.slice(0, 80))
         } else if (isFailure) {
@@ -189,7 +189,7 @@ function extractCompactionStateInner(
       path,
       writeCount: info.writeCount,
       linesAtLastWrite: info.linesAtLastWrite,
-      lastVerified: readAfterWrite.has(path),
+      lastVerified: readAfterWrite.has(path)
     })
   }
   writtenFiles.sort((a, b) => a.path.localeCompare(b.path))
@@ -200,11 +200,11 @@ function extractCompactionStateInner(
     completedToolRounds: toolRoundCount,
     toolCallCounts,
     writtenFiles,
-    verifiedFiles: writtenFiles.filter(f => f.lastVerified).map(f => f.path),
+    verifiedFiles: writtenFiles.filter((f) => f.lastVerified).map((f) => f.path),
     successfulCommands: [...new Set(successfulCommands)].slice(0, 10),
     failedCommands: [...new Set(failedCommands)].slice(0, 5),
     pendingNextAction: lastAssistantText,
     repairEpisodes,
-    lastErrorSummary,
+    lastErrorSummary
   }
 }

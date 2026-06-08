@@ -18,22 +18,22 @@ export interface DbLayout {
 }
 
 export function saveLayout(layout: DbLayout): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO layouts (id, name, config, updated_at)
     VALUES (@id, @name, @config, @updated_at)
-  `).run(layout)
+  `
+    )
+    .run(layout)
 }
 
 export function getLayouts(): DbLayout[] {
-  return getDb()
-    .prepare("SELECT * FROM layouts ORDER BY updated_at DESC")
-    .all() as DbLayout[]
+  return getDb().prepare("SELECT * FROM layouts ORDER BY updated_at DESC").all() as DbLayout[]
 }
 
 export function getLayout(id: string): DbLayout | undefined {
-  return getDb()
-    .prepare("SELECT * FROM layouts WHERE id = ?")
-    .get(id) as DbLayout | undefined
+  return getDb().prepare("SELECT * FROM layouts WHERE id = ?").get(id) as DbLayout | undefined
 }
 
 export function deleteLayout(id: string): void {
@@ -65,21 +65,23 @@ export interface DbPolicyRule {
 }
 
 export function listPolicyRules(): DbPolicyRule[] {
-  return getDb()
-    .prepare("SELECT * FROM policy_rules ORDER BY created_at")
-    .all() as DbPolicyRule[]
+  return getDb().prepare("SELECT * FROM policy_rules ORDER BY created_at").all() as DbPolicyRule[]
 }
 
 export function savePolicyRule(rule: DbPolicyRule): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO policy_rules (name, effect, condition, parameters, created_at, source, updated_at, updated_by)
     VALUES (@name, @effect, @condition, @parameters, @created_at, @source, @updated_at, @updated_by)
-  `).run({
-    source:     rule.source ?? PolicySource.Db,
-    updated_at: rule.updated_at ?? null,
-    updated_by: rule.updated_by ?? null,
-    ...rule,
-  })
+  `
+    )
+    .run({
+      source: rule.source ?? PolicySource.Db,
+      updated_at: rule.updated_at ?? null,
+      updated_by: rule.updated_by ?? null,
+      ...rule
+    })
 }
 
 /**
@@ -87,13 +89,17 @@ export function savePolicyRule(rule: DbPolicyRule): void {
  * the seeder so re-running boot doesn't trample operator edits.
  */
 export function seedPolicyRuleIfMissing(rule: DbPolicyRule): boolean {
-  const result = getDb().prepare(`
+  const result = getDb()
+    .prepare(
+      `
     INSERT OR IGNORE INTO policy_rules (name, effect, condition, parameters, created_at, source, updated_at, updated_by)
     VALUES (@name, @effect, @condition, @parameters, @created_at, @source, NULL, NULL)
-  `).run({
-    source: rule.source ?? PolicySource.HostedDefault,
-    ...rule,
-  })
+  `
+    )
+    .run({
+      source: rule.source ?? PolicySource.HostedDefault,
+      ...rule
+    })
   return result.changes > 0
 }
 
@@ -104,10 +110,10 @@ export function deletePolicyRule(name: string): void {
 // ── Sync-environment override queries ────────────────────────────
 
 export interface DbSyncEnvOverride {
-  name:           string
+  name: string
   overrides_json: string
-  updated_at:     string
-  updated_by:     string | null
+  updated_at: string
+  updated_by: string | null
 }
 
 export interface DbSyncEnvironment {
@@ -140,16 +146,20 @@ export function listSyncEnvOverrides(): DbSyncEnvOverride[] {
 }
 
 export function getSyncEnvOverride(name: string): DbSyncEnvOverride | undefined {
-  return getDb()
-    .prepare("SELECT * FROM sync_environment_overrides WHERE name = ?")
-    .get(name) as DbSyncEnvOverride | undefined
+  return getDb().prepare("SELECT * FROM sync_environment_overrides WHERE name = ?").get(name) as
+    | DbSyncEnvOverride
+    | undefined
 }
 
 export function saveSyncEnvOverride(row: DbSyncEnvOverride): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO sync_environment_overrides (name, overrides_json, updated_at, updated_by)
     VALUES (@name, @overrides_json, @updated_at, @updated_by)
-  `).run(row)
+  `
+    )
+    .run(row)
 }
 
 export function deleteSyncEnvOverride(name: string): void {
@@ -162,22 +172,24 @@ export function countSyncEnvironments(): number {
 }
 
 export function listSyncEnvironments(): DbSyncEnvironment[] {
-  return getDb()
-    .prepare("SELECT * FROM sync_environments ORDER BY name")
-    .all() as DbSyncEnvironment[]
+  return getDb().prepare("SELECT * FROM sync_environments ORDER BY name").all() as DbSyncEnvironment[]
 }
 
 export function getSyncEnvironment(name: string): DbSyncEnvironment | undefined {
-  return getDb()
-    .prepare("SELECT * FROM sync_environments WHERE name = ?")
-    .get(name) as DbSyncEnvironment | undefined
+  return getDb().prepare("SELECT * FROM sync_environments WHERE name = ?").get(name) as
+    | DbSyncEnvironment
+    | undefined
 }
 
 export function saveSyncEnvironment(row: DbSyncEnvironment): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO sync_environments (name, body_json, created_at, updated_at, updated_by)
     VALUES (@name, @body_json, COALESCE((SELECT created_at FROM sync_environments WHERE name = @name), @created_at), @updated_at, @updated_by)
-  `).run(row)
+  `
+    )
+    .run(row)
 }
 
 export function deleteSyncEnvironment(name: string): void {
@@ -197,14 +209,19 @@ export function listSyncDefinitionConfigs(tenantId: string): DbSyncDefinitionCon
     .all(tenantId) as DbSyncDefinitionConfig[]
 }
 
-export function getSyncDefinitionConfig(tenantId: string, entityId: string): DbSyncDefinitionConfig | undefined {
+export function getSyncDefinitionConfig(
+  tenantId: string,
+  entityId: string
+): DbSyncDefinitionConfig | undefined {
   return getDb()
     .prepare("SELECT * FROM sync_definition_configs WHERE tenant_id = ? AND entity_id = ?")
     .get(tenantId, entityId) as DbSyncDefinitionConfig | undefined
 }
 
 export function saveSyncDefinitionConfig(row: DbSyncDefinitionConfig): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO sync_definition_configs (
       tenant_id,
       entity_id,
@@ -232,7 +249,9 @@ export function saveSyncDefinitionConfig(row: DbSyncDefinitionConfig): void {
       @updated_at,
       @updated_by
     )
-  `).run(row)
+  `
+    )
+    .run(row)
 }
 
 export function deleteSyncDefinitionConfig(tenantId: string, entityId: string): void {

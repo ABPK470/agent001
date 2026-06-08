@@ -17,9 +17,7 @@ export type ParseToolCallArgsResult =
  * Parse and validate tool call JSON arguments.
  * Returns structured success/error so caller can feed error back to LLM.
  */
-export function parseToolCallArguments(
-  rawArguments: unknown,
-): ParseToolCallArgsResult {
+export function parseToolCallArguments(rawArguments: unknown): ParseToolCallArgsResult {
   if (typeof rawArguments === "object" && rawArguments !== null && !Array.isArray(rawArguments)) {
     return { ok: true, args: rawArguments as Record<string, unknown> }
   }
@@ -33,8 +31,9 @@ export function parseToolCallArguments(
     } catch (parseErr) {
       return {
         ok: false,
-        error: `Invalid tool arguments: ${(parseErr as Error).message}. ` +
-          "Break your work into smaller pieces if output was truncated.",
+        error:
+          `Invalid tool arguments: ${(parseErr as Error).message}. ` +
+          "Break your work into smaller pieces if output was truncated."
       }
     }
   }
@@ -50,6 +49,6 @@ export function sanitizeToolCallArgumentsForReplay(raw: string): string {
   return JSON.stringify({
     __truncatedToolCallArgs: true,
     originalChars: raw.length,
-    preview,
+    preview
   })
 }

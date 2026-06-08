@@ -42,8 +42,11 @@ export {
   PlannerRepairCompatibilityMode,
   PlannerRoute,
   PlannerStepPhase,
-  VERIFICATION_MODES, VerificationMode, VERIFIER_MODES,
-  VERIFIER_OUTCOMES, VerifierMode,
+  VERIFICATION_MODES,
+  VerificationMode,
+  VERIFIER_MODES,
+  VERIFIER_OUTCOMES,
+  VerifierMode,
   VerifierOutcome
 } from "@mia/shared-enums"
 
@@ -52,12 +55,12 @@ export {
 // ── Diagnostic classification (validation pipeline) ──────────────
 
 export const DiagnosticCategory = {
-  Parse:        "parse",
-  Graph:        "graph",
-  Contract:     "contract",
-  Ownership:    "ownership",
+  Parse: "parse",
+  Graph: "graph",
+  Contract: "contract",
+  Ownership: "ownership",
   Verification: "verification",
-  Policy:       "policy",
+  Policy: "policy"
 } as const
 
 export type DiagnosticCategory = (typeof DiagnosticCategory)[keyof typeof DiagnosticCategory]
@@ -68,8 +71,8 @@ export const isDiagnosticCategory = (value: unknown): value is DiagnosticCategor
   typeof value === "string" && (DIAGNOSTIC_CATEGORIES as readonly string[]).includes(value)
 
 export const DiagnosticSeverity = {
-  Error:   "error",
-  Warning: "warning",
+  Error: "error",
+  Warning: "warning"
 } as const
 
 export type DiagnosticSeverity = (typeof DiagnosticSeverity)[keyof typeof DiagnosticSeverity]
@@ -79,13 +82,12 @@ export const DIAGNOSTIC_SEVERITIES: ReadonlyArray<DiagnosticSeverity> = Object.v
 export const isDiagnosticSeverity = (value: unknown): value is DiagnosticSeverity =>
   typeof value === "string" && (DIAGNOSTIC_SEVERITIES as readonly string[]).includes(value)
 
-
 // ── Pipeline execution state ─────────────────────────────────────
 
 export const PipelineStatus = {
-  Running:   "running",
+  Running: "running",
   Completed: "completed",
-  Failed:    "failed",
+  Failed: "failed"
 } as const
 
 export type PipelineStatus = (typeof PipelineStatus)[keyof typeof PipelineStatus]
@@ -98,10 +100,10 @@ export const isPipelineStatus = (value: unknown): value is PipelineStatus =>
 // ── Step execution roles ─────────────────────────────────────────
 
 export const StepRole = {
-  Writer:    "writer",
-  Reviewer:  "reviewer",
+  Writer: "writer",
+  Reviewer: "reviewer",
   Validator: "validator",
-  Grounding: "grounding",
+  Grounding: "grounding"
 } as const
 
 export type StepRole = (typeof StepRole)[keyof typeof StepRole]
@@ -115,13 +117,14 @@ export const isStepRole = (value: unknown): value is StepRole =>
 
 export const VerifierIssueSeverity = {
   Warning: "warning",
-  Error:   "error",
-  Fatal:   "fatal",
+  Error: "error",
+  Fatal: "fatal"
 } as const
 
 export type VerifierIssueSeverity = (typeof VerifierIssueSeverity)[keyof typeof VerifierIssueSeverity]
 
-export const VERIFIER_ISSUE_SEVERITIES: ReadonlyArray<VerifierIssueSeverity> = Object.values(VerifierIssueSeverity)
+export const VERIFIER_ISSUE_SEVERITIES: ReadonlyArray<VerifierIssueSeverity> =
+  Object.values(VerifierIssueSeverity)
 
 export const isVerifierIssueSeverity = (value: unknown): value is VerifierIssueSeverity =>
   typeof value === "string" && (VERIFIER_ISSUE_SEVERITIES as readonly string[]).includes(value)
@@ -129,14 +132,15 @@ export const isVerifierIssueSeverity = (value: unknown): value is VerifierIssueS
 // ── Verifier evidence source ─────────────────────────────────────
 
 export const VerifierEvidenceSource = {
-  Contract:      "contract",
+  Contract: "contract",
   Deterministic: "deterministic",
-  Llm:           "llm",
+  Llm: "llm"
 } as const
 
 export type VerifierEvidenceSource = (typeof VerifierEvidenceSource)[keyof typeof VerifierEvidenceSource]
 
-export const VERIFIER_EVIDENCE_SOURCES: ReadonlyArray<VerifierEvidenceSource> = Object.values(VerifierEvidenceSource)
+export const VERIFIER_EVIDENCE_SOURCES: ReadonlyArray<VerifierEvidenceSource> =
+  Object.values(VerifierEvidenceSource)
 
 export const isVerifierEvidenceSource = (value: unknown): value is VerifierEvidenceSource =>
   typeof value === "string" && (VERIFIER_EVIDENCE_SOURCES as readonly string[]).includes(value)
@@ -147,10 +151,10 @@ export const isVerifierEvidenceSource = (value: unknown): value is VerifierEvide
 // summarise *why* a step's output failed contract compliance.
 export const PipelineBlockCode = {
   ForbiddenArtifactWrite: "forbidden_artifact_write",
-  MissingRequiredOutput:  "missing_required_output",
-  HallucinatedArtifact:   "hallucinated_artifact",
-  UnresolvedBlocker:      "unresolved_blocker",
-  RequiredCheckSkipped:   "required_check_skipped",
+  MissingRequiredOutput: "missing_required_output",
+  HallucinatedArtifact: "hallucinated_artifact",
+  UnresolvedBlocker: "unresolved_blocker",
+  RequiredCheckSkipped: "required_check_skipped"
 } as const
 
 export type PipelineBlockCode = (typeof PipelineBlockCode)[keyof typeof PipelineBlockCode]

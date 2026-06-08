@@ -9,10 +9,10 @@
 import { asNonEmptyString as _asNonEmptyString, isRecord as _isRecord } from "../../internal/index.js"
 import { isValidArtifactPath } from "../generate/index.js"
 import type {
-    CoherentSharedContract,
-    CoherentSolutionArtifact,
-    CoherentSystemInvariant,
-    PlanEdge,
+  CoherentSharedContract,
+  CoherentSolutionArtifact,
+  CoherentSystemInvariant,
+  PlanEdge
 } from "../types.js"
 
 // Re-exports preserve the existing public surface of this module.
@@ -57,7 +57,9 @@ export function parseJsonObject(raw: string): Record<string, unknown> | null {
   try {
     const parsed = JSON.parse(trimmed) as unknown
     if (isRecord(parsed)) return parsed
-  } catch { /* fall through */ }
+  } catch {
+    /* fall through */
+  }
 
   // Strategy 2: extract from a code block, if present.
   // Use a GREEDY match so that file contents that contain their own
@@ -70,7 +72,9 @@ export function parseJsonObject(raw: string): Record<string, unknown> | null {
     try {
       const parsed = JSON.parse(candidate) as unknown
       if (isRecord(parsed)) return parsed
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   // Strategy 3: balanced-brace extraction — handles responses with
@@ -85,9 +89,18 @@ export function parseJsonObject(raw: string): Record<string, unknown> | null {
   let escape = false
   for (let i = start; i < candidate.length; i++) {
     const ch = candidate[i]
-    if (escape) { escape = false; continue }
-    if (ch === "\\") { escape = true; continue }
-    if (ch === '"') { inString = !inString; continue }
+    if (escape) {
+      escape = false
+      continue
+    }
+    if (ch === "\\") {
+      escape = true
+      continue
+    }
+    if (ch === '"') {
+      inString = !inString
+      continue
+    }
     if (inString) continue
     if (ch === "{") depth++
     else if (ch === "}") {
@@ -96,7 +109,9 @@ export function parseJsonObject(raw: string): Record<string, unknown> | null {
         try {
           const parsed = JSON.parse(candidate.slice(start, i + 1)) as unknown
           if (isRecord(parsed)) return parsed
-        } catch { /* truncated or structurally invalid — no recovery */ }
+        } catch {
+          /* truncated or structurally invalid — no recovery */
+        }
         break
       }
     }
@@ -140,15 +155,15 @@ export function parseArtifacts(value: unknown, diagnostics: string[]): CoherentS
     // must be fully implemented. Stub code causes an unrecoverable repair loop:
     // the write guard blocks the next write for missing functions, while the
     // repair instructions forbid restructuring, trapping the agent in a read spin.
-    const isCodeArtifact = /\.(js|ts|jsx|tsx|mjs|cjs|py|java|go|rs|rb|php|cs|cpp|c|h|sh|bash|zsh)$/i.test(path)
+    const isCodeArtifact = /\.(js|ts|jsx|tsx|mjs|cjs|py|java|go|rs|rb|php|cs|cpp|c|h|sh|bash|zsh)$/i.test(
+      path
+    )
     if (isCodeArtifact) {
-      const todoLine = content.split("\n").find(l =>
-        /\/\/\s*TODO[:\s]|\/\*\s*TODO\b|#\s*TODO[:\s]/.test(l),
-      )
+      const todoLine = content.split("\n").find((l) => /\/\/\s*TODO[:\s]|\/\*\s*TODO\b|#\s*TODO[:\s]/.test(l))
       if (todoLine) {
         diagnostics.push(
           `Artifact "${path}" contains TODO placeholders — all coherent bundle artifacts must be fully implemented, not stubs. ` +
-          `Found: ${todoLine.trim().slice(0, 120)}`,
+            `Found: ${todoLine.trim().slice(0, 120)}`
         )
         continue
       }

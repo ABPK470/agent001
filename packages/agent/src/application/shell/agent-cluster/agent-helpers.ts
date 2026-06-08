@@ -11,9 +11,9 @@ import type { ToolCallRecord } from "../../../tools/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../domain/agent-types.js"
 import type { VerifierDecision } from "../../core/planner.js"
 import {
-    buildCoherentVerificationPipelineResult,
-    summarizeCoherentVerifierDecision,
-    verify,
+  buildCoherentVerificationPipelineResult,
+  summarizeCoherentVerifierDecision,
+  verify
 } from "../../core/planner.js"
 import type { AgentLoopState } from "../loop.js"
 
@@ -28,7 +28,7 @@ export interface CoherentVerificationDeps {
 
 export async function runCoherentVerification(
   deps: CoherentVerificationDeps,
-  force = false,
+  force = false
 ): Promise<VerifierDecision | null> {
   const ce = deps.state.coherentExecution
   if (!ce) return null
@@ -36,10 +36,11 @@ export async function runCoherentVerification(
     return ce.lastVerifierDecision
   }
   const decision = await verify(
-    deps.llm, ce.verificationPlan,
+    deps.llm,
+    ce.verificationPlan,
     buildCoherentVerificationPipelineResult(ce.bundle, deps.allToolCalls),
     deps.toolList,
-    { signal: deps.signal, onTrace: deps.onPlannerTrace, skipContractValidation: true },
+    { signal: deps.signal, onTrace: deps.onPlannerTrace, skipContractValidation: true }
   )
   ce.lastVerifierDecision = decision
   ce.lastVerifiedToolCallCount = deps.allToolCalls.length
@@ -50,7 +51,7 @@ export async function runCoherentVerification(
     confidence: summary.confidence,
     issueCount: summary.issueCount,
     systemCheckCount: summary.systemCheckCount,
-    affectedArtifacts: [...summary.affectedArtifacts],
+    affectedArtifacts: [...summary.affectedArtifacts]
   })
   return decision
 }
@@ -62,10 +63,7 @@ export interface SynthesizeDeps {
   incrementLlmCalls: () => void
 }
 
-export async function synthesizeFinalAnswer(
-  deps: SynthesizeDeps,
-  messages: Message[],
-): Promise<string> {
+export async function synthesizeFinalAnswer(deps: SynthesizeDeps, messages: Message[]): Promise<string> {
   try {
     const truncationResult = truncateMessages(messages)
     const response = await deps.llm.chat(truncationResult.messages, [], { signal: deps.signal })
@@ -83,7 +81,7 @@ export async function synthesizeFinalAnswer(
 
 export function buildInitialMessages(
   goal: string,
-  config: { systemMessages: Message[] | null; systemPrompt: string },
+  config: { systemMessages: Message[] | null; systemPrompt: string }
 ): Message[] {
   if (config.systemMessages && config.systemMessages.length > 0) {
     // Mark the last system message as a cache breakpoint (Gap 6).
@@ -98,11 +96,16 @@ export function buildInitialMessages(
     return [
       ...prefix,
       last ? { ...last, cacheHint: last.cacheHint ?? "ephemeral" } : last!,
-      { role: MessageRole.User, content: goal, section: "user" },
+      { role: MessageRole.User, content: goal, section: "user" }
     ]
   }
   return [
-    { role: MessageRole.System, content: config.systemPrompt, section: "system_anchor", cacheHint: "ephemeral" },
-    { role: MessageRole.User, content: goal, section: "user" },
+    {
+      role: MessageRole.System,
+      content: config.systemPrompt,
+      section: "system_anchor",
+      cacheHint: "ephemeral"
+    },
+    { role: MessageRole.User, content: goal, section: "user" }
   ]
 }

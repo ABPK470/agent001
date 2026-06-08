@@ -35,9 +35,14 @@ export function wireEventBroadcasting(
   // replaced immutably during execution.
   state: RunStateLike,
   saveTrace: (runId: string, entry: Record<string, unknown>) => void,
-  createNotification: (opts: NotificationOpts) => void,
+  createNotification: (opts: NotificationOpts) => void
 ): Unsubscribe {
-  const events: EventType[] = [EventType.RunStarted, EventType.StepStarted, EventType.StepCompleted, EventType.StepFailed]
+  const events: EventType[] = [
+    EventType.RunStarted,
+    EventType.StepStarted,
+    EventType.StepCompleted,
+    EventType.StepFailed
+  ]
   const subscriptions: Unsubscribe[] = []
   for (const eventType of events) {
     const unsubscribe = services.eventBus.subscribe(eventType, async (event: DomainEvent) => {
@@ -66,23 +71,37 @@ export function wireEventBroadcasting(
         const keys = Object.keys(input)
         // Keep the full single-arg value; the UI clips with CSS ellipsis
         // so users see "…" when the available width runs out.
-        const argsSummary = keys.length > 0
-          ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}` : `${keys.length} args`
-          : ""
+        const argsSummary =
+          keys.length > 0
+            ? keys.length === 1
+              ? `${keys[0]}=${JSON.stringify(input[keys[0]])}`
+              : `${keys.length} args`
+            : ""
         // invocationId MUST be present so the UI can pair tool-call with
         // its later tool-result/tool-error entry. Without it, historical
         // trace replay (TermChat / AgentChat / IOE chat) drops the result
         // text and only shows the input — leaving every tool row in the
         // expanded view without an output panel.
-        saveTrace(runId, { kind: TrajectoryEventKind.ToolCall, invocationId: stepId, tool: toolName, argsSummary, argsFormatted })
+        saveTrace(runId, {
+          kind: TrajectoryEventKind.ToolCall,
+          invocationId: stepId,
+          tool: toolName,
+          argsSummary,
+          argsFormatted
+        })
       } else if (eventType === EventType.StepCompleted) {
         const stepId = data["stepId"] as string
         const output = (data["output"] as Record<string, unknown>) ?? {}
-        const result = (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done")
+        const result =
+          (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done")
         saveTrace(runId, { kind: TrajectoryEventKind.ToolResult, invocationId: stepId, text: result })
       } else if (eventType === EventType.StepFailed) {
         const stepId = data["stepId"] as string
-        saveTrace(runId, { kind: TrajectoryEventKind.ToolError, invocationId: stepId, text: (data["error"] as string) ?? "unknown error" })
+        saveTrace(runId, {
+          kind: TrajectoryEventKind.ToolError,
+          invocationId: stepId,
+          text: (data["error"] as string) ?? "unknown error"
+        })
       }
 
       // Save a human-readable log (not raw JSON) with the type group
@@ -110,14 +129,17 @@ export function wireEventBroadcasting(
         run_id: runId,
         level: isError ? `${typeGroup}:error` : typeGroup,
         message: logMsg,
-        timestamp: new Date().toISOString(),
+        timestamp: new Date().toISOString()
       })
     })
     subscriptions.push(unsubscribe)
   }
 
   const unsubscribeAudit = services.auditService.subscribe(async (entry) => {
-    broadcast({ type: EventType.Audit, data: { actor: entry.actor, action: entry.action, detail: entry.detail ?? {} } })
+    broadcast({
+      type: EventType.Audit,
+      data: { actor: entry.actor, action: entry.action, detail: entry.detail ?? {} }
+    })
   })
   subscriptions.push(unsubscribeAudit)
 
@@ -135,8 +157,8 @@ export function wireEventBroadcasting(
       stepId,
       actions: [
         { label: "Review", action: NotificationActionType.ViewRun, data: { runId } },
-        { label: "Edit Policies", action: NotificationActionType.OpenPolicies, data: { runId } },
-      ],
+        { label: "Edit Policies", action: NotificationActionType.OpenPolicies, data: { runId } }
+      ]
     })
     broadcast({ type: EventType.ApprovalRequired, data: { runId, stepId, toolName, reason } })
   })

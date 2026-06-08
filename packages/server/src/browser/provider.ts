@@ -33,7 +33,7 @@ export function createServerBrowserContextProvider(ownerUpn: string | null): Bro
         guard,
         async save(state: unknown): Promise<void> {
           await saveStorageState(record, state)
-        },
+        }
       }
     }
   }

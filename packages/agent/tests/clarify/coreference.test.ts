@@ -28,13 +28,14 @@ function col(name: string, dataType = "int"): CatalogColumn {
 }
 function table(schema: string, name: string, columns: CatalogColumn[]): CatalogTable {
   return {
-    schema, name,
+    schema,
+    name,
     qualifiedName: `${schema}.${name}`,
     type: "TABLE",
     rowCount: 1000,
     columns,
     fkOutgoing: [],
-    fkIncoming: [],
+    fkIncoming: []
   }
 }
 function catalogFrom(tables: CatalogTable[]): CatalogGraph {
@@ -46,7 +47,7 @@ function catalogFrom(tables: CatalogTable[]): CatalogGraph {
     implicitEdges: [],
     lineage: [],
     viewSourceRows: [],
-    sysCatalog: [],
+    sysCatalog: []
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
 }
 function ctx(over: Partial<ClarifyContext> & Pick<ClarifyContext, "goal">): ClarifyContext {
@@ -56,25 +57,25 @@ function ctx(over: Partial<ClarifyContext> & Pick<ClarifyContext, "goal">): Clar
     messages: [],
     resolved: [],
     round: 1,
-    ...over,
+    ...over
   }
 }
 
 // Catalog where "revenue" is intentionally ambiguous so any goal mentioning
 // it would normally fire schema-match. The coreference guard must override.
 const ambiguousCatalog = catalogFrom([
-  table("publish", "Revenue",    [col("amount", "decimal")]),
-  table("core",    "RevenueRaw", [col("amount", "decimal")]),
-  table("staging", "RevenueIn",  [col("amount", "decimal")]),
+  table("publish", "Revenue", [col("amount", "decimal")]),
+  table("core", "RevenueRaw", [col("amount", "decimal")]),
+  table("staging", "RevenueIn", [col("amount", "decimal")])
 ])
 
 const PRIOR_USER: Message = {
   role: MessageRole.User,
-  content: "select top 5 clients from publish.Revenue for January 2025",
+  content: "select top 5 clients from publish.Revenue for January 2025"
 }
 const PRIOR_ASSISTANT: Message = {
   role: MessageRole.Assistant,
-  content: "Here are the top 5 clients from publish.Revenue for January 2025: A=10, B=9, C=8, D=7, E=6.",
+  content: "Here are the top 5 clients from publish.Revenue for January 2025: A=10, B=9, C=8, D=7, E=6."
 }
 
 // ── schema-match coreference guard ──────────────────────────────
@@ -85,20 +86,24 @@ describe("schemaMatchDetector — coreference guard", () => {
     // explicitly via the prior context but NOT in the new goal text. Without
     // the guard the detector would still latch onto any goal token that
     // happens to multi-match — this scenario covers the pure pronoun path.
-    const findings = schemaMatchDetector.detect(ctx({
-      goal: "ok can you create a nice visualization for this data",
-      catalog: ambiguousCatalog,
-      messages: [PRIOR_USER, PRIOR_ASSISTANT],
-    }))
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "ok can you create a nice visualization for this data",
+        catalog: ambiguousCatalog,
+        messages: [PRIOR_USER, PRIOR_ASSISTANT]
+      })
+    )
     expect(findings).toEqual([])
   })
 
   it("returns [] when goal says 'plot it' after a prior assistant turn", () => {
-    const findings = schemaMatchDetector.detect(ctx({
-      goal: "plot it as a bar chart",
-      catalog: ambiguousCatalog,
-      messages: [PRIOR_USER, PRIOR_ASSISTANT],
-    }))
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "plot it as a bar chart",
+        catalog: ambiguousCatalog,
+        messages: [PRIOR_USER, PRIOR_ASSISTANT]
+      })
+    )
     expect(findings).toEqual([])
   })
 
@@ -106,11 +111,13 @@ describe("schemaMatchDetector — coreference guard", () => {
     // Same ambiguous catalog; first-turn goal with the multi-match noun.
     // The detector MUST still fire here — the guard only suppresses
     // pronoun follow-ups, not genuine first-turn ambiguities.
-    const findings = schemaMatchDetector.detect(ctx({
-      goal: "show top revenue",
-      catalog: ambiguousCatalog,
-      messages: [],
-    }))
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "show top revenue",
+        catalog: ambiguousCatalog,
+        messages: []
+      })
+    )
     expect(findings).toHaveLength(1)
     expect(findings[0]!.subject).toBe("revenue")
   })
@@ -118,11 +125,13 @@ describe("schemaMatchDetector — coreference guard", () => {
   it("still fires when goal has an ambiguous noun even if a prior assistant turn exists (no coreference shape)", () => {
     // Goal mentions "revenue" explicitly — there is no pronoun/anaphora,
     // so the guard does NOT apply and the detector should still warn.
-    const findings = schemaMatchDetector.detect(ctx({
-      goal: "show top revenue grouped by month",
-      catalog: ambiguousCatalog,
-      messages: [PRIOR_USER, PRIOR_ASSISTANT],
-    }))
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "show top revenue grouped by month",
+        catalog: ambiguousCatalog,
+        messages: [PRIOR_USER, PRIOR_ASSISTANT]
+      })
+    )
     expect(findings).toHaveLength(1)
     expect(findings[0]!.subject).toBe("revenue")
   })
@@ -130,11 +139,13 @@ describe("schemaMatchDetector — coreference guard", () => {
   it("ignores prior turns that are user-only (no assistant content)", () => {
     // Two consecutive user messages but no assistant turn — there is
     // nothing for the pronoun to refer to, so the detector must fire.
-    const findings = schemaMatchDetector.detect(ctx({
-      goal: "plot it as a bar chart for revenue",
-      catalog: ambiguousCatalog,
-      messages: [PRIOR_USER, { role: MessageRole.User, content: "and Africa only" }],
-    }))
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "plot it as a bar chart for revenue",
+        catalog: ambiguousCatalog,
+        messages: [PRIOR_USER, { role: MessageRole.User, content: "and Africa only" }]
+      })
+    )
     expect(findings.length).toBeGreaterThan(0)
   })
 })
@@ -143,25 +154,29 @@ describe("schemaMatchDetector — coreference guard", () => {
 
 describe("shouldInvokePlanner — coreference guard", () => {
   it("returns false for a pronoun-shaped goal with a prior assistant turn", () => {
-    expect(shouldInvokePlanner(
-      ctx({
-        goal: "plot it as a chart for this data",
-        catalog: ambiguousCatalog,
-        messages: [PRIOR_USER, PRIOR_ASSISTANT],
-      }),
-      [],
-    )).toBe(false)
+    expect(
+      shouldInvokePlanner(
+        ctx({
+          goal: "plot it as a chart for this data",
+          catalog: ambiguousCatalog,
+          messages: [PRIOR_USER, PRIOR_ASSISTANT]
+        }),
+        []
+      )
+    ).toBe(false)
   })
 
   it("returns true for a substantive first-turn goal", () => {
-    expect(shouldInvokePlanner(
-      ctx({
-        goal: "show top revenue grouped by month",
-        catalog: ambiguousCatalog,
-        messages: [],
-      }),
-      [],
-    )).toBe(true)
+    expect(
+      shouldInvokePlanner(
+        ctx({
+          goal: "show top revenue grouped by month",
+          catalog: ambiguousCatalog,
+          messages: []
+        }),
+        []
+      )
+    ).toBe(true)
   })
 })
 
@@ -173,8 +188,12 @@ describe("runLlmPlanner — conversation preamble", () => {
     const fake: LLMClient = {
       chat: async (messages) => {
         captured = messages as Message[]
-        return { content: '{"findings": []}', toolCalls: [], usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } }
-      },
+        return {
+          content: '{"findings": []}',
+          toolCalls: [],
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }
+      }
     } as unknown as LLMClient
 
     await runLlmPlanner(
@@ -183,9 +202,9 @@ describe("runLlmPlanner — conversation preamble", () => {
         // but we bypass the gate here by calling the planner directly.
         goal: "show top revenue grouped by month",
         catalog: ambiguousCatalog,
-        messages: [PRIOR_USER, PRIOR_ASSISTANT],
+        messages: [PRIOR_USER, PRIOR_ASSISTANT]
       }),
-      fake,
+      fake
     )
 
     // User prompt is the second message (after the system prompt).
@@ -201,17 +220,21 @@ describe("runLlmPlanner — conversation preamble", () => {
     const fake: LLMClient = {
       chat: async (messages) => {
         captured = messages as Message[]
-        return { content: '{"findings": []}', toolCalls: [], usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 } }
-      },
+        return {
+          content: '{"findings": []}',
+          toolCalls: [],
+          usage: { promptTokens: 0, completionTokens: 0, totalTokens: 0 }
+        }
+      }
     } as unknown as LLMClient
 
     await runLlmPlanner(
       ctx({
         goal: "show top revenue",
         catalog: ambiguousCatalog,
-        messages: [],
+        messages: []
       }),
-      fake,
+      fake
     )
 
     const userPrompt = String(captured[1]?.content ?? "")

@@ -11,17 +11,14 @@ import { DelegationSpanEventKind, VerifierOutcome } from "../../domain/index.js"
 import { MessageRole } from "../../domain/enums/message.js"
 import type { LLMClient, Message, Tool } from "../../types.js"
 import type {
-    PipelineResult,
-    Plan,
-    SubagentTaskStep,
-    VerifierDecision,
-    VerifierStepAssessment,
+  PipelineResult,
+  Plan,
+  SubagentTaskStep,
+  VerifierDecision,
+  VerifierStepAssessment
 } from "../types.js"
 import { buildFallbackDecision, parseLLMVerification } from "../verifier-helpers/index.js"
-import {
-    analyzeCodeStructure,
-    wrapArtifactWithStructureAnalysis,
-} from "../verifier-llm/code-structure.js"
+import { analyzeCodeStructure, wrapArtifactWithStructureAnalysis } from "../verifier-llm/code-structure.js"
 import type { StepSpecEvidence } from "./verifier-blueprint.js"
 export type { CodeStructureAnalysis } from "../verifier-llm/code-structure.js"
 export { analyzeCodeStructure, wrapArtifactWithStructureAnalysis }
@@ -37,25 +34,34 @@ export { analyzeCodeStructure, wrapArtifactWithStructureAnalysis }
 export function detectVerificationModalityGaps(
   step: SubagentTaskStep,
   executedModalities: ReadonlySet<string>,
-  toolMap: Map<string, Tool>,
+  toolMap: Map<string, Tool>
 ): string[] {
   const issues: string[] = []
   const artifacts = step.executionContext.targetArtifacts
-  const docsOnlyArtifacts = artifacts.length > 0 && artifacts.every(a => /\.(?:md|markdown|txt|rst|adoc)$/i.test(a))
-  const hasHtml = artifacts.some(a => /\.html?$/i.test(a))
-  const hasCode = artifacts.some(a => /\.(?:js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php)$/i.test(a))
+  const docsOnlyArtifacts =
+    artifacts.length > 0 && artifacts.every((a) => /\.(?:md|markdown|txt|rst|adoc)$/i.test(a))
+  const hasHtml = artifacts.some((a) => /\.html?$/i.test(a))
+  const hasCode = artifacts.some((a) =>
+    /\.(?:js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php)$/i.test(a)
+  )
 
   const criteriaText = [step.objective, ...step.acceptanceCriteria].join(" ").toLowerCase()
-  const INTERACTION_RUNTIME_RE = /\b(?:click|submit|drag|drop|keyboard|mouse|navigate|interactive|render|display|preview|execute|run|workflow|integration|e2e|end[- ]to[- ]end)\b/i
-  const IO_RUNTIME_RE = /\b(?:api|request|response|endpoint|fetch|http|rpc|query|database|sql|persist|sync|connect|auth|login|permission)\b/i
+  const INTERACTION_RUNTIME_RE =
+    /\b(?:click|submit|drag|drop|keyboard|mouse|navigate|interactive|render|display|preview|execute|run|workflow|integration|e2e|end[- ]to[- ]end)\b/i
+  const IO_RUNTIME_RE =
+    /\b(?:api|request|response|endpoint|fetch|http|rpc|query|database|sql|persist|sync|connect|auth|login|permission)\b/i
 
   const requiresArtifactReview = artifacts.length > 0
   const requiresSyntax = hasCode
-  const requiresRuntime = !docsOnlyArtifacts && (hasHtml || INTERACTION_RUNTIME_RE.test(criteriaText) || IO_RUNTIME_RE.test(criteriaText))
+  const requiresRuntime =
+    !docsOnlyArtifacts &&
+    (hasHtml || INTERACTION_RUNTIME_RE.test(criteriaText) || IO_RUNTIME_RE.test(criteriaText))
 
   if (requiresArtifactReview && !executedModalities.has("artifact-review")) {
     if (toolMap.has("read_file")) {
-      issues.push("VERIFICATION MODALITY GAP: target artifacts were produced but no deterministic artifact read/review probe ran")
+      issues.push(
+        "VERIFICATION MODALITY GAP: target artifacts were produced but no deterministic artifact read/review probe ran"
+      )
     }
   }
 
@@ -63,15 +69,21 @@ export function detectVerificationModalityGaps(
     if (toolMap.has("run_command")) {
       issues.push("VERIFICATION MODALITY GAP: code artifacts exist but no syntax/compile probe ran")
     } else {
-      issues.push("VERIFICATION MODALITY GAP: code artifacts exist but syntax probe could not run (run_command unavailable)")
+      issues.push(
+        "VERIFICATION MODALITY GAP: code artifacts exist but syntax probe could not run (run_command unavailable)"
+      )
     }
   }
 
   if (requiresRuntime && !executedModalities.has("runtime")) {
     if (hasHtml && !toolMap.has("browser_check")) {
-      issues.push("VERIFICATION MODALITY GAP: runtime behavior required for HTML output but browser_check tool is unavailable")
+      issues.push(
+        "VERIFICATION MODALITY GAP: runtime behavior required for HTML output but browser_check tool is unavailable"
+      )
     } else {
-      issues.push("VERIFICATION MODALITY GAP: acceptance criteria imply runtime behavior, but no runtime probe (browser_check/tests/command) ran")
+      issues.push(
+        "VERIFICATION MODALITY GAP: acceptance criteria imply runtime behavior, but no runtime probe (browser_check/tests/command) ran"
+      )
     }
   }
 
@@ -131,52 +143,58 @@ export async function runLLMVerification(
     onTrace?: (entry: Record<string, unknown>) => void
     artifactContents?: ReadonlyMap<string, string>
     stepSpecEvidence?: ReadonlyMap<string, StepSpecEvidence>
-  },
+  }
 ): Promise<VerifierDecision> {
-  const stepSummaries = plan.steps.map(step => {
+  const stepSummaries = plan.steps.map((step) => {
     const result = pipelineResult.stepResults.get(step.name)
-    const detAssessment = deterministicAssessments.find(a => a.stepName === step.name)
+    const detAssessment = deterministicAssessments.find((a) => a.stepName === step.name)
     const specEvidence = opts?.stepSpecEvidence?.get(step.name)
 
     return {
       name: step.name,
       type: step.stepType,
-      ...(step.stepType === "subagent_task" ? {
-        objective: (step as SubagentTaskStep).objective,
-        acceptanceCriteria: (step as SubagentTaskStep).acceptanceCriteria,
-      } : {}),
+      ...(step.stepType === "subagent_task"
+        ? {
+            objective: (step as SubagentTaskStep).objective,
+            acceptanceCriteria: (step as SubagentTaskStep).acceptanceCriteria
+          }
+        : {}),
       status: result?.status ?? "unknown",
       output: result?.output?.slice(0, 1000) ?? result?.error ?? "no output",
-      deterministicResult: detAssessment ? {
-        outcome: detAssessment.outcome,
-        issues: detAssessment.issues,
-        // Definitive positive signals from deterministic probes.
-        // When present, do NOT raise truncation/completeness blocking issues.
-        positiveSignals: detAssessment.positiveSignals ?? [],
-      } : undefined,
-      specEvidence: specEvidence ? {
-        blueprintPath: specEvidence.blueprintPath,
-        sourceReads: specEvidence.sourceReads,
-        contractSharedTypes: specEvidence.contractSharedTypes.map((type) => ({
-          name: type.name,
-          definition: type.definition,
-          usedBy: type.usedBy,
-        })),
-        sharedTypes: specEvidence.sharedTypes,
-        algorithmicContracts: specEvidence.algorithmicContracts,
-        mappings: specEvidence.mappings.map(mapping => ({
-          targetArtifact: mapping.targetArtifact,
-          actualArtifactPath: mapping.actualArtifactPath,
-          matchedSpecPath: mapping.matchedSpecPath,
-          pathMatch: mapping.pathMatch,
-          foundFunctions: mapping.foundFunctions,
-          missingFunctions: mapping.missingFunctions,
-          foundStructuralMarkers: mapping.foundStructuralMarkers,
-          missingStructuralMarkers: mapping.missingStructuralMarkers,
-        })),
-        structuralIssues: specEvidence.structuralIssues,
-        processAuditIssues: specEvidence.processAuditIssues,
-      } : undefined,
+      deterministicResult: detAssessment
+        ? {
+            outcome: detAssessment.outcome,
+            issues: detAssessment.issues,
+            // Definitive positive signals from deterministic probes.
+            // When present, do NOT raise truncation/completeness blocking issues.
+            positiveSignals: detAssessment.positiveSignals ?? []
+          }
+        : undefined,
+      specEvidence: specEvidence
+        ? {
+            blueprintPath: specEvidence.blueprintPath,
+            sourceReads: specEvidence.sourceReads,
+            contractSharedTypes: specEvidence.contractSharedTypes.map((type) => ({
+              name: type.name,
+              definition: type.definition,
+              usedBy: type.usedBy
+            })),
+            sharedTypes: specEvidence.sharedTypes,
+            algorithmicContracts: specEvidence.algorithmicContracts,
+            mappings: specEvidence.mappings.map((mapping) => ({
+              targetArtifact: mapping.targetArtifact,
+              actualArtifactPath: mapping.actualArtifactPath,
+              matchedSpecPath: mapping.matchedSpecPath,
+              pathMatch: mapping.pathMatch,
+              foundFunctions: mapping.foundFunctions,
+              missingFunctions: mapping.missingFunctions,
+              foundStructuralMarkers: mapping.foundStructuralMarkers,
+              missingStructuralMarkers: mapping.missingStructuralMarkers
+            })),
+            structuralIssues: specEvidence.structuralIssues,
+            processAuditIssues: specEvidence.processAuditIssues
+          }
+        : undefined
     }
   })
 
@@ -212,8 +230,8 @@ export async function runLLMVerification(
     { role: MessageRole.System, content: VERIFIER_SYSTEM_PROMPT },
     {
       role: MessageRole.User,
-      content: `Verify the following plan execution results:\n\nPlan reason: ${plan.reason}\n\nStep results:\n${JSON.stringify(stepSummaries, null, 2)}${artifactSection}`,
-    },
+      content: `Verify the following plan execution results:\n\nPlan reason: ${plan.reason}\n\nStep results:\n${JSON.stringify(stepSummaries, null, 2)}${artifactSection}`
+    }
   ]
 
   opts?.onTrace?.({
@@ -221,12 +239,12 @@ export async function runLLMVerification(
     iteration: -1,
     messageCount: messages.length,
     toolCount: 0,
-    messages: messages.map(m => ({
+    messages: messages.map((m) => ({
       role: m.role,
       content: m.content,
       toolCalls: [],
-      toolCallId: null,
-    })),
+      toolCallId: null
+    }))
   })
 
   try {
@@ -240,7 +258,7 @@ export async function runLLMVerification(
       durationMs,
       content: response.content,
       toolCalls: [],
-      usage: response.usage ?? null,
+      usage: response.usage ?? null
     })
 
     if (!response.content) {
@@ -252,31 +270,32 @@ export async function runLLMVerification(
     // Post-process: when deterministic probes gave positive signals (e.g. browser_check ✓),
     // downgrade any LLM issues that are purely uncertainty-based due to truncation.
     // These are false positives — the file works, the LLM just couldn't see its tail.
-    const TRUNCATION_UNCERTAINTY_RE = /truncat|cannot verify.*complet|excerpt.*missing|complet.*unverif|acceptance.*criterion.*cannot.*verif|grounded.*evidence.*shows.*truncat|critical tail.*missing/i
-    const downgraded = rawDecision.steps.map(step => {
-      const detAssessment = deterministicAssessments.find(a => a.stepName === step.stepName)
+    const TRUNCATION_UNCERTAINTY_RE =
+      /truncat|cannot verify.*complet|excerpt.*missing|complet.*unverif|acceptance.*criterion.*cannot.*verif|grounded.*evidence.*shows.*truncat|critical tail.*missing/i
+    const downgraded = rawDecision.steps.map((step) => {
+      const detAssessment = deterministicAssessments.find((a) => a.stepName === step.stepName)
       if (!detAssessment?.positiveSignals?.length) return step
-      const hasStrongSignal = detAssessment.positiveSignals.some(s => /browser_check.*✓|syntax.*✓/i.test(s))
+      const hasStrongSignal = detAssessment.positiveSignals.some((s) => /browser_check.*✓|syntax.*✓/i.test(s))
       if (!hasStrongSignal) return step
-      const processedIssues = step.issues.map(issue =>
+      const processedIssues = step.issues.map((issue) =>
         !issue.startsWith("[non-blocking]") && TRUNCATION_UNCERTAINTY_RE.test(issue)
           ? `[non-blocking] ${issue}`
           : issue
       )
-      const remainingBlocking = processedIssues.filter(i => !i.startsWith("[non-blocking]"))
+      const remainingBlocking = processedIssues.filter((i) => !i.startsWith("[non-blocking]"))
       return {
         ...step,
         issues: processedIssues,
-        outcome: remainingBlocking.length === 0 ? VerifierOutcome.Pass : step.outcome,
+        outcome: remainingBlocking.length === 0 ? VerifierOutcome.Pass : step.outcome
       }
     })
 
-    const anyRetry = downgraded.some(s => s.outcome === VerifierOutcome.Retry)
-    const anyFail = downgraded.some(s => s.outcome === VerifierOutcome.Fail)
+    const anyRetry = downgraded.some((s) => s.outcome === VerifierOutcome.Retry)
+    const anyFail = downgraded.some((s) => s.outcome === VerifierOutcome.Fail)
     return {
       ...rawDecision,
       overall: anyFail ? VerifierOutcome.Fail : anyRetry ? VerifierOutcome.Retry : VerifierOutcome.Pass,
-      steps: downgraded,
+      steps: downgraded
     }
   } catch {
     return buildFallbackDecision(deterministicAssessments)

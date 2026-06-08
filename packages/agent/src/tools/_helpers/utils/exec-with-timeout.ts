@@ -8,11 +8,7 @@
 
 import { HIGH_RISK_TOOLS, SAFE_RETRY_TOOLS } from "../../../domain/agent-constants.js"
 import type { ToolResultEnvelope } from "../../../domain/agent-types.js"
-import {
-    didToolCallFail,
-    extractToolFailureText,
-    normalizeToolExecutionOutput,
-} from "../result.js"
+import { didToolCallFail, extractToolFailureText, normalizeToolExecutionOutput } from "../result.js"
 
 export interface ToolExecutionConfig {
   /** Timeout for a single tool call in ms. 0 = no timeout. */
@@ -46,7 +42,7 @@ export async function executeToolWithTimeout(
   toolName: string,
   args: Record<string, unknown>,
   execute: (a: Record<string, unknown>) => Promise<string | ToolResultEnvelope>,
-  config: ToolExecutionConfig,
+  config: ToolExecutionConfig
 ): Promise<ToolExecutionResult> {
   const toolStart = Date.now()
   let result = JSON.stringify({ error: "Tool execution failed" })
@@ -63,7 +59,11 @@ export async function executeToolWithTimeout(
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined
 
     const toolCallPromise = (async (): Promise<{
-      result: string; isError: boolean; timedOut: boolean; threw: boolean; outcome?: ToolResultEnvelope
+      result: string
+      isError: boolean
+      timedOut: boolean
+      threw: boolean
+      outcome?: ToolResultEnvelope
     }> => {
       try {
         const value = await execute(args)
@@ -73,7 +73,7 @@ export async function executeToolWithTimeout(
           isError: false,
           timedOut: false,
           threw: false,
-          outcome: normalized.outcome,
+          outcome: normalized.outcome
         }
       } catch (toolErr) {
         return {
@@ -81,27 +81,34 @@ export async function executeToolWithTimeout(
           isError: true,
           timedOut: false,
           threw: true,
-          outcome: undefined,
+          outcome: undefined
         }
       }
     })()
 
     const timeoutMs = config.toolCallTimeoutMs
-    const timeoutPromise = timeoutMs > 0
-      ? new Promise<{
-          result: string; isError: boolean; timedOut: boolean; threw: boolean; outcome?: ToolResultEnvelope
-        }>((resolve) => {
-          timeoutHandle = setTimeout(() => {
-            resolve({
-              result: JSON.stringify({ error: `Tool "${toolName}" timed out after ${timeoutMs}ms` }),
-              isError: true,
-              timedOut: true,
-              threw: false,
-              outcome: undefined,
-            })
-          }, timeoutMs)
-        })
-      : undefined
+    const timeoutPromise =
+      timeoutMs > 0
+        ? new Promise<{
+            result: string
+            isError: boolean
+            timedOut: boolean
+            threw: boolean
+            outcome?: ToolResultEnvelope
+          }>((resolve) => {
+            timeoutHandle = setTimeout(() => {
+              resolve({
+                result: JSON.stringify({
+                  error: `Tool "${toolName}" timed out after ${timeoutMs}ms`
+                }),
+                isError: true,
+                timedOut: true,
+                threw: false,
+                outcome: undefined
+              })
+            }, timeoutMs)
+          })
+        : undefined
 
     const attemptOutcome = timeoutPromise
       ? await Promise.race([toolCallPromise, timeoutPromise])

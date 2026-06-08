@@ -4,11 +4,11 @@
 
 import { describe, expect, it, vi } from "vitest"
 import {
-    computeDelay,
-    isRetryableError,
-    TOOL_RETRY_POLICY,
-    withToolRetry,
-    type ToolRetryPolicy,
+  computeDelay,
+  isRetryableError,
+  TOOL_RETRY_POLICY,
+  withToolRetry,
+  type ToolRetryPolicy
 } from "../src/application/core/recovery.js"
 
 // ── computeDelay ─────────────────────────────────────────────────
@@ -19,7 +19,7 @@ describe("computeDelay", () => {
     baseDelayMs: 100,
     maxDelayMs: 2000,
     backoffMultiplier: 2,
-    jitterFactor: 0, // no jitter for deterministic tests
+    jitterFactor: 0 // no jitter for deterministic tests
   }
 
   it("increases exponentially", () => {
@@ -83,7 +83,7 @@ describe("withToolRetry", () => {
   const fastPolicy: ToolRetryPolicy = {
     ...TOOL_RETRY_POLICY,
     baseDelayMs: 1,
-    maxDelayMs: 1,
+    maxDelayMs: 1
   }
 
   it("returns immediately on success", async () => {
@@ -94,10 +94,7 @@ describe("withToolRetry", () => {
   })
 
   it("retries on retryable errors", async () => {
-    const fn = vi
-      .fn()
-      .mockRejectedValueOnce(new Error("timeout"))
-      .mockResolvedValue("recovered")
+    const fn = vi.fn().mockRejectedValueOnce(new Error("timeout")).mockResolvedValue("recovered")
 
     const result = await withToolRetry(fn, fastPolicy)
     expect(result.success).toBe(true)

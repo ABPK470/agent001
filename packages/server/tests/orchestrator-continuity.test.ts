@@ -23,23 +23,27 @@ import { buildFixture, salientAnswer, type TurnInputs } from "./helpers/orchestr
 
 let fixture: Awaited<ReturnType<typeof buildFixture>>
 
-beforeEach(async () => { fixture = await buildFixture() })
-afterEach(() => { fixture.cleanup() })
+beforeEach(async () => {
+  fixture = await buildFixture()
+})
+afterEach(() => {
+  fixture.cleanup()
+})
 
 // Realistic per-browser sids matching auth/identity.ts:resolveSession()'s
 // `anon:<16-byte-hex>` shape. Using realistic shapes (not "session-1") makes
 // it obvious if a test accidentally collides on a magic string.
 const ALICE_ANON_SID = "anon:a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1a1"
-const BOB_ANON_SID   = "anon:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
-const ALICE_NEW_TAB  = "anon:a1a1a1a1a1a1a1a1FFFFFFFFFFFFFFFF"
+const BOB_ANON_SID = "anon:b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2b2"
+const ALICE_NEW_TAB = "anon:a1a1a1a1a1a1a1a1FFFFFFFFFFFFFFFF"
 
 function turn(over: Partial<TurnInputs> & Pick<TurnInputs, "goal" | "sessionId">): TurnInputs {
   return {
-    goal:      over.goal,
-    answer:    over.answer    ?? salientAnswer(over.goal),
+    goal: over.goal,
+    answer: over.answer ?? salientAnswer(over.goal),
     sessionId: over.sessionId,
-    upn:       over.upn       ?? null,
-    agentId:   over.agentId   ?? null,
+    upn: over.upn ?? null,
+    agentId: over.agentId ?? null
   }
 }
 
@@ -49,12 +53,15 @@ describe("Layer A — A1: short follow-up sees prior turn via recency fallback",
   it("a short query like 'yes' surfaces the previous turn's answer in the same session", async () => {
     // Turn 1: agent makes a substantive statement and stores it.
     const sid = ALICE_ANON_SID
-    await fixture.simulateTurn(turn({
-      goal: "Tell me what the canary value is",
-      answer: "Configured the canary: the previous-turn-marker-canary value is FOXTROT-7747. I executed the lookup and verified the result.",
-      sessionId: sid,
-      upn: null,
-    }))
+    await fixture.simulateTurn(
+      turn({
+        goal: "Tell me what the canary value is",
+        answer:
+          "Configured the canary: the previous-turn-marker-canary value is FOXTROT-7747. I executed the lookup and verified the result.",
+        sessionId: sid,
+        upn: null
+      })
+    )
 
     // Turn 2: the user replies "yes" — sanitizeFtsQuery() returns empty,
     // retrieveContext MUST fall back to recency-ordered working memory for
@@ -63,13 +70,13 @@ describe("Layer A — A1: short follow-up sees prior turn via recency fallback",
       goal: "yes",
       sessionId: sid,
       upn: null,
-      runId: "run-followup-A1",
+      runId: "run-followup-A1"
     })
 
     expect(
       followUp.perTier.working,
       "I1+I6: short follow-up MUST recover prior turn's answer from working memory via the recency fallback. " +
-      "If this is empty, retrieveContext is reading a different sessionId than ingestRunTurns wrote.",
+        "If this is empty, retrieveContext is reading a different sessionId than ingestRunTurns wrote."
     ).toContain("FOXTROT-7747")
   })
 })
@@ -79,18 +86,21 @@ describe("Layer A — A1: short follow-up sees prior turn via recency fallback",
 describe("Layer A — A2: same upn, different sessionIds do not bleed", () => {
   it("Alice's tab-1 working memory does not appear in Alice's tab-2 short query", async () => {
     const upn = "alice@corp"
-    await fixture.simulateTurn(turn({
-      goal: "Note the tab-1 secret value",
-      answer: "Configured tab-1 marker TAB1-SECRET-DELTA-3399 by writing it to local state and verifying the recorded value.",
-      sessionId: ALICE_ANON_SID,
-      upn,
-    }))
+    await fixture.simulateTurn(
+      turn({
+        goal: "Note the tab-1 secret value",
+        answer:
+          "Configured tab-1 marker TAB1-SECRET-DELTA-3399 by writing it to local state and verifying the recorded value.",
+        sessionId: ALICE_ANON_SID,
+        upn
+      })
+    )
 
     const tab2View = await fixture.retrieve({
       goal: "ok",
       sessionId: ALICE_NEW_TAB,
       upn,
-      runId: "run-tab2-A2",
+      runId: "run-tab2-A2"
     })
 
     expect(tab2View.perTier.working).not.toContain("TAB1-SECRET-DELTA-3399")
@@ -106,18 +116,21 @@ describe("Layer A — A3: same sessionId would still be UPN-isolated", () => {
     // tenancy boundary; this test pins that even with the same sid string,
     // a different upn never leaks the other's working memory.
     const sharedSid = "shared-cookie-sid-by-coincidence"
-    await fixture.simulateTurn(turn({
-      goal: "Alice notes her project codename",
-      answer: "Configured Alice's project: codename ALPHA-TEAM-HOTEL-9911. I executed the assignment and verified persistence.",
-      sessionId: sharedSid,
-      upn: "alice@corp",
-    }))
+    await fixture.simulateTurn(
+      turn({
+        goal: "Alice notes her project codename",
+        answer:
+          "Configured Alice's project: codename ALPHA-TEAM-HOTEL-9911. I executed the assignment and verified persistence.",
+        sessionId: sharedSid,
+        upn: "alice@corp"
+      })
+    )
 
     const bobView = await fixture.retrieve({
       goal: "yes",
       sessionId: sharedSid,
       upn: "bob@corp",
-      runId: "run-bob-A3",
+      runId: "run-bob-A3"
     })
 
     expect(bobView.perTier.working).not.toContain("ALPHA-TEAM-HOTEL-9911")
@@ -133,30 +146,36 @@ describe("Layer A — A4: anonymous (upn=null) different sids stay isolated", ()
     // auth/identity.ts:resolveSession), and the OLD code's
     // `agentId ?? "default"` fallback put them all in one shared "default"
     // bucket on the read side while the write side correctly used the sid.
-    await fixture.simulateTurn(turn({
-      goal: "Alice asks about the dev marker",
-      answer: "Configured the dev test: alice-only-marker-ECHO-5511 was written to the dev workspace and validated.",
-      sessionId: ALICE_ANON_SID,
-      upn: null,
-    }))
-    await fixture.simulateTurn(turn({
-      goal: "Bob asks about a different marker",
-      answer: "Configured Bob's setup: bob-only-marker-INDIA-2299 has been recorded and verified in the workspace.",
-      sessionId: BOB_ANON_SID,
-      upn: null,
-    }))
+    await fixture.simulateTurn(
+      turn({
+        goal: "Alice asks about the dev marker",
+        answer:
+          "Configured the dev test: alice-only-marker-ECHO-5511 was written to the dev workspace and validated.",
+        sessionId: ALICE_ANON_SID,
+        upn: null
+      })
+    )
+    await fixture.simulateTurn(
+      turn({
+        goal: "Bob asks about a different marker",
+        answer:
+          "Configured Bob's setup: bob-only-marker-INDIA-2299 has been recorded and verified in the workspace.",
+        sessionId: BOB_ANON_SID,
+        upn: null
+      })
+    )
 
     const alicesView = await fixture.retrieve({
       goal: "yes",
       sessionId: ALICE_ANON_SID,
       upn: null,
-      runId: "run-alice-A4",
+      runId: "run-alice-A4"
     })
     const bobsView = await fixture.retrieve({
       goal: "yes",
       sessionId: BOB_ANON_SID,
       upn: null,
-      runId: "run-bob-A4",
+      runId: "run-bob-A4"
     })
 
     // Each anon dev browser sees its own marker, NOT the other's.
@@ -177,18 +196,21 @@ describe("Layer A — A5: prior runs visible across runId boundary in same sessi
     // completed runs in the same session MUST still be visible — that's the
     // whole point of working memory.
     const sid = ALICE_ANON_SID
-    await fixture.simulateTurn(turn({
-      goal: "Save the persistent canary",
-      answer: "Configured persistent state: turn-one-survivor-marker-NOVEMBER-8822 has been written and verified.",
-      sessionId: sid,
-      upn: null,
-    }))
+    await fixture.simulateTurn(
+      turn({
+        goal: "Save the persistent canary",
+        answer:
+          "Configured persistent state: turn-one-survivor-marker-NOVEMBER-8822 has been written and verified.",
+        sessionId: sid,
+        upn: null
+      })
+    )
 
     const t2View = await fixture.retrieve({
       goal: "ok",
       sessionId: sid,
       upn: null,
-      runId: "run-fresh-different-from-t1",  // intentionally NOT the previous run's id
+      runId: "run-fresh-different-from-t1" // intentionally NOT the previous run's id
     })
 
     expect(t2View.perTier.working).toContain("turn-one-survivor-marker-NOVEMBER-8822")
@@ -220,7 +242,7 @@ describe("Layer A — A5: prior runs visible across runId boundary in same sessi
       confidence: 0.9,
       sessionId: sid,
       runId: inFlightRunId,
-      upn: null,
+      upn: null
     })
 
     // Path 1: FTS query (non-empty, sanitises to a real MATCH expression).
@@ -229,11 +251,11 @@ describe("Layer A — A5: prior runs visible across runId boundary in same sessi
       goal: "distinctive-keyword-ZULU",
       sessionId: sid,
       upn: null,
-      runId: inFlightRunId,
+      runId: inFlightRunId
     })
     expect(
       ftsView.perTier.working,
-      "FTS path: in-flight self-row must not appear when excludeRunId is supplied",
+      "FTS path: in-flight self-row must not appear when excludeRunId is supplied"
     ).not.toContain("ZULU-1188")
 
     // Path 2: empty FTS query → recency fallback (the literal "yes" path).
@@ -243,11 +265,11 @@ describe("Layer A — A5: prior runs visible across runId boundary in same sessi
       goal: "yes",
       sessionId: sid,
       upn: null,
-      runId: inFlightRunId,
+      runId: inFlightRunId
     })
     expect(
       recencyView.perTier.working,
-      "Recency-fallback path: in-flight self-row must not appear when excludeRunId is supplied",
+      "Recency-fallback path: in-flight self-row must not appear when excludeRunId is supplied"
     ).not.toContain("ZULU-1188")
 
     // Sanity: a DIFFERENT runId still sees the row (the exclusion is targeted,
@@ -256,11 +278,11 @@ describe("Layer A — A5: prior runs visible across runId boundary in same sessi
       goal: "yes",
       sessionId: sid,
       upn: null,
-      runId: "run-some-other-id",
+      runId: "run-some-other-id"
     })
     expect(
       otherRunView.perTier.working,
-      "exclusion must be targeted: a different runId still observes the row",
+      "exclusion must be targeted: a different runId still observes the row"
     ).toContain("ZULU-1188")
   })
 })
@@ -271,27 +293,36 @@ describe("Layer A — A6: recency fallback returns most recent turn first", () =
   it("when multiple turns precede a short follow-up, the latest turn dominates context", async () => {
     const sid = ALICE_ANON_SID
     // Three turns; latest carries the marker we expect to surface.
-    await fixture.simulateTurn(turn({
-      goal: "first thing",
-      answer: "Configured first step: marker-OLDEST-PAPA-1111 recorded and validated.",
-      sessionId: sid, upn: null,
-    }))
-    await fixture.simulateTurn(turn({
-      goal: "second thing",
-      answer: "Configured second step: marker-MIDDLE-QUEBEC-2222 recorded and validated.",
-      sessionId: sid, upn: null,
-    }))
-    await fixture.simulateTurn(turn({
-      goal: "third thing",
-      answer: "Configured third step: marker-NEWEST-ROMEO-3333 recorded and validated.",
-      sessionId: sid, upn: null,
-    }))
+    await fixture.simulateTurn(
+      turn({
+        goal: "first thing",
+        answer: "Configured first step: marker-OLDEST-PAPA-1111 recorded and validated.",
+        sessionId: sid,
+        upn: null
+      })
+    )
+    await fixture.simulateTurn(
+      turn({
+        goal: "second thing",
+        answer: "Configured second step: marker-MIDDLE-QUEBEC-2222 recorded and validated.",
+        sessionId: sid,
+        upn: null
+      })
+    )
+    await fixture.simulateTurn(
+      turn({
+        goal: "third thing",
+        answer: "Configured third step: marker-NEWEST-ROMEO-3333 recorded and validated.",
+        sessionId: sid,
+        upn: null
+      })
+    )
 
     const view = await fixture.retrieve({
       goal: "yes",
       sessionId: sid,
       upn: null,
-      runId: "run-final-A6",
+      runId: "run-final-A6"
     })
 
     // All three may be present; the newest MUST appear (recency fallback

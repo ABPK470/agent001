@@ -30,17 +30,17 @@ async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
   const { registerAttachmentRoutes } = await import("../src/api/attachments.js")
   _setDb(testDb)
   _migrate(testDb)
-  seedTestUsers(testDb);
+  seedTestUsers(testDb)
 
   const app = Fastify({ logger: false })
   app.addHook("onRequest", async (req) => {
     if (opts.session) {
-      (req as unknown as { session: CurrentSession }).session = opts.session
+      ;(req as unknown as { session: CurrentSession }).session = opts.session
       // FK on attachments.session_id + owner_upn require parent rows.
       const { seedUser, seedSession } = await import("./_fk-helpers.js")
       seedUser(testDb, opts.session.upn, {
         displayName: opts.session.displayName,
-        isAdmin: opts.session.isAdmin,
+        isAdmin: opts.session.isAdmin
       })
       seedSession(testDb, opts.session.sid, opts.session.upn)
     }
@@ -52,12 +52,12 @@ async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
 
 function fakeSession(over: Partial<CurrentSession> = {}): CurrentSession {
   return {
-    sid:         over.sid ?? "sid-test",
+    sid: over.sid ?? "sid-test",
     displayName: over.displayName ?? "Test User",
-    upn:         over.upn ?? "test.user@example.com",
-    isAdmin:     over.isAdmin ?? false,
-    ip:          over.ip ?? "127.0.0.1",
-    userAgent:   over.userAgent ?? "vitest",
+    upn: over.upn ?? "test.user@example.com",
+    isAdmin: over.isAdmin ?? false,
+    ip: over.ip ?? "127.0.0.1",
+    userAgent: over.userAgent ?? "vitest"
   }
 }
 
@@ -86,7 +86,7 @@ describe("attachments REST API", () => {
     const res = await app.inject({
       method: "POST",
       url: "/api/attachments",
-      payload: { name: "x.txt", contentBase64: b64("hi") },
+      payload: { name: "x.txt", contentBase64: b64("hi") }
     })
     expect(res.statusCode).toBe(401)
     await app.close()
@@ -99,7 +99,7 @@ describe("attachments REST API", () => {
     const upload = await app.inject({
       method: "POST",
       url: "/api/attachments",
-      payload: { name: "notes.txt", mediaType: "text/plain", contentBase64: b64("hello world") },
+      payload: { name: "notes.txt", mediaType: "text/plain", contentBase64: b64("hello world") }
     })
     expect(upload.statusCode).toBe(201)
     const created = upload.json() as { id: string; sizeBytes: number; ingestionMode: string }
@@ -134,18 +134,22 @@ describe("attachments REST API", () => {
 
   it("non-owner cannot view another user's attachment, admin can", async () => {
     // Owner uploads
-    const ownerApp = await buildApp({ session: fakeSession({ sid: "sid-owner", upn: "owner@example.com" }) })
+    const ownerApp = await buildApp({
+      session: fakeSession({ sid: "sid-owner", upn: "owner@example.com" })
+    })
     const upload = await ownerApp.inject({
       method: "POST",
       url: "/api/attachments",
-      payload: { name: "secret.txt", contentBase64: b64("private") },
+      payload: { name: "secret.txt", contentBase64: b64("private") }
     })
     expect(upload.statusCode).toBe(201)
     const created = upload.json() as { id: string }
     await ownerApp.close()
 
     // Stranger forbidden
-    const strangerApp = await buildApp({ session: fakeSession({ sid: "sid-other", upn: "other@example.com" }) })
+    const strangerApp = await buildApp({
+      session: fakeSession({ sid: "sid-other", upn: "other@example.com" })
+    })
     const forbidden = await strangerApp.inject({ method: "GET", url: `/api/attachments/${created.id}` })
     expect(forbidden.statusCode).toBe(403)
 
@@ -155,7 +159,9 @@ describe("attachments REST API", () => {
     await strangerApp.close()
 
     // Admin sees it
-    const adminApp = await buildApp({ session: fakeSession({ sid: "sid-admin", upn: "admin@example.com", isAdmin: true }) })
+    const adminApp = await buildApp({
+      session: fakeSession({ sid: "sid-admin", upn: "admin@example.com", isAdmin: true })
+    })
     const adminGet = await adminApp.inject({ method: "GET", url: `/api/attachments/${created.id}` })
     expect(adminGet.statusCode).toBe(200)
     await adminApp.close()
@@ -164,16 +170,24 @@ describe("attachments REST API", () => {
   it("validates body shape and limits", async () => {
     const app = await buildApp({ session: fakeSession() })
 
-    const noName = await app.inject({ method: "POST", url: "/api/attachments", payload: { contentBase64: b64("x") } })
+    const noName = await app.inject({
+      method: "POST",
+      url: "/api/attachments",
+      payload: { contentBase64: b64("x") }
+    })
     expect(noName.statusCode).toBe(400)
 
-    const empty = await app.inject({ method: "POST", url: "/api/attachments", payload: { name: "x.txt", contentBase64: "" } })
+    const empty = await app.inject({
+      method: "POST",
+      url: "/api/attachments",
+      payload: { name: "x.txt", contentBase64: "" }
+    })
     expect(empty.statusCode).toBe(400)
 
     const runScopeMissingId = await app.inject({
       method: "POST",
       url: "/api/attachments",
-      payload: { name: "x.txt", contentBase64: b64("x"), scope: "run" },
+      payload: { name: "x.txt", contentBase64: b64("x"), scope: "run" }
     })
     expect(runScopeMissingId.statusCode).toBe(400)
 

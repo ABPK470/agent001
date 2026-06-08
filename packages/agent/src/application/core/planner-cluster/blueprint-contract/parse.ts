@@ -6,16 +6,12 @@
  */
 
 import type {
-    BlueprintFileSpec,
-    BlueprintFunctionSpec,
-    BlueprintSharedTypeSpec,
-    ParsedBlueprintContractBlock,
+  BlueprintFileSpec,
+  BlueprintFunctionSpec,
+  BlueprintSharedTypeSpec,
+  ParsedBlueprintContractBlock
 } from "../blueprint-contract/index.js"
-import {
-    normalizeBasename,
-    normalizeSpecPath,
-    uniqueStrings,
-} from "../blueprint-contract/index.js"
+import { normalizeBasename, normalizeSpecPath, uniqueStrings } from "../blueprint-contract/index.js"
 
 const BLUEPRINT_CONTRACT_BLOCK_RE = /```blueprint-contract\s*([\s\S]*?)```/iu
 
@@ -28,11 +24,12 @@ function normalizeFunctionSpec(input: unknown): BlueprintFunctionSpec | null {
     if (!parameter || typeof parameter !== "object") return null
     const rawParameter = parameter as Record<string, unknown>
     const name = typeof rawParameter.name === "string" ? rawParameter.name.trim() : ""
-    const type = typeof rawParameter.type === "string"
-      ? rawParameter.type.trim()
-      : typeof rawParameter.schema === "string"
-        ? rawParameter.schema.trim()
-        : ""
+    const type =
+      typeof rawParameter.type === "string"
+        ? rawParameter.type.trim()
+        : typeof rawParameter.schema === "string"
+          ? rawParameter.schema.trim()
+          : ""
     if (!name && !type) return null
     if (!name) return type || null
     return type ? `${name}: ${type}` : name
@@ -52,11 +49,12 @@ function normalizeFunctionSpec(input: unknown): BlueprintFunctionSpec | null {
     const parameters = rawParameters
       .map(normalizeParameter)
       .filter((value): value is string => Boolean(value))
-    const returnType = typeof raw.returnType === "string"
-      ? raw.returnType.trim()
-      : typeof raw.returns === "string"
-        ? raw.returns.trim()
-        : ""
+    const returnType =
+      typeof raw.returnType === "string"
+        ? raw.returnType.trim()
+        : typeof raw.returns === "string"
+          ? raw.returns.trim()
+          : ""
     const parameterBlock = parameters.join(", ")
     return returnType ? `${name}(${parameterBlock}): ${returnType}` : `${name}(${parameterBlock})`
   }
@@ -66,7 +64,7 @@ function normalizeFunctionSpec(input: unknown): BlueprintFunctionSpec | null {
     if (!name) return null
     return {
       name,
-      signature: `${name}()`,
+      signature: `${name}()`
     }
   }
   if (!input || typeof input !== "object") return null
@@ -75,7 +73,7 @@ function normalizeFunctionSpec(input: unknown): BlueprintFunctionSpec | null {
   if (!name) return null
   return {
     name,
-    signature: buildSignature(name, raw),
+    signature: buildSignature(name, raw)
   }
 }
 
@@ -110,7 +108,7 @@ function normalizeSharedTypeSpec(input: unknown): BlueprintSharedTypeSpec | null
     return {
       name,
       definition: "",
-      usedBy: [],
+      usedBy: []
     }
   }
   if (!input || typeof input !== "object") return null
@@ -121,7 +119,7 @@ function normalizeSharedTypeSpec(input: unknown): BlueprintSharedTypeSpec | null
   return {
     name,
     definition,
-    usedBy: normalizeMarkerList(raw.usedBy ?? raw.used_by ?? raw.consumers ?? raw.paths),
+    usedBy: normalizeMarkerList(raw.usedBy ?? raw.used_by ?? raw.consumers ?? raw.paths)
   }
 }
 
@@ -133,11 +131,12 @@ function normalizeMarkerList(input: unknown): string[] {
 function normalizeFileSpec(input: unknown): BlueprintFileSpec | null {
   if (!input || typeof input !== "object") return null
   const raw = input as Record<string, unknown>
-  const declaredPath = typeof raw.path === "string"
-    ? normalizeSpecPath(raw.path)
-    : typeof raw.declaredPath === "string"
-      ? normalizeSpecPath(raw.declaredPath)
-      : ""
+  const declaredPath =
+    typeof raw.path === "string"
+      ? normalizeSpecPath(raw.path)
+      : typeof raw.declaredPath === "string"
+        ? normalizeSpecPath(raw.declaredPath)
+        : ""
   if (!declaredPath) return null
   const rawFunctions = Array.isArray(raw.functions)
     ? raw.functions
@@ -155,7 +154,7 @@ function normalizeFileSpec(input: unknown): BlueprintFileSpec | null {
     declaredPath,
     basename: normalizeBasename(declaredPath),
     functions,
-    structuralMarkers: normalizeMarkerList(raw.structuralMarkers),
+    structuralMarkers: normalizeMarkerList(raw.structuralMarkers)
   }
 }
 
@@ -174,8 +173,8 @@ export function parseBlueprintContractBlock(content: string): ParsedBlueprintCon
       files: [],
       sharedTypes: [],
       errors: [
-        `BLUEPRINT CONTRACT INVALID: machine-readable blueprint-contract block is not valid JSON (${error instanceof Error ? error.message : String(error)})`,
-      ],
+        `BLUEPRINT CONTRACT INVALID: machine-readable blueprint-contract block is not valid JSON (${error instanceof Error ? error.message : String(error)})`
+      ]
     }
   }
 
@@ -184,7 +183,7 @@ export function parseBlueprintContractBlock(content: string): ParsedBlueprintCon
       present: true,
       files: [],
       sharedTypes: [],
-      errors: ["BLUEPRINT CONTRACT INVALID: blueprint-contract block must be a JSON object"],
+      errors: ["BLUEPRINT CONTRACT INVALID: blueprint-contract block must be a JSON object"]
     }
   }
 
@@ -195,7 +194,7 @@ export function parseBlueprintContractBlock(content: string): ParsedBlueprintCon
       present: true,
       files: [],
       sharedTypes: [],
-      errors: ["BLUEPRINT CONTRACT INVALID: blueprint-contract block must declare \"version\": 1"],
+      errors: ['BLUEPRINT CONTRACT INVALID: blueprint-contract block must declare "version": 1']
     }
   }
 
@@ -204,7 +203,7 @@ export function parseBlueprintContractBlock(content: string): ParsedBlueprintCon
       present: true,
       files: [],
       sharedTypes: [],
-      errors: ["BLUEPRINT CONTRACT INVALID: blueprint-contract block must declare a \"files\" array"],
+      errors: ['BLUEPRINT CONTRACT INVALID: blueprint-contract block must declare a "files" array']
     }
   }
 
@@ -213,7 +212,9 @@ export function parseBlueprintContractBlock(content: string): ParsedBlueprintCon
       present: true,
       files: [],
       sharedTypes: [],
-      errors: ["BLUEPRINT CONTRACT INVALID: blueprint-contract block must declare a \"sharedTypes\" array (use [] when none are shared)"],
+      errors: [
+        'BLUEPRINT CONTRACT INVALID: blueprint-contract block must declare a "sharedTypes" array (use [] when none are shared)'
+      ]
     }
   }
 
@@ -223,7 +224,9 @@ export function parseBlueprintContractBlock(content: string): ParsedBlueprintCon
       present: true,
       files: [],
       sharedTypes: [],
-      errors: ["BLUEPRINT CONTRACT INVALID: every blueprint-contract file entry must declare a non-empty exact path and a \"functions\" array (use [] when the file exports no functions)"],
+      errors: [
+        'BLUEPRINT CONTRACT INVALID: every blueprint-contract file entry must declare a non-empty exact path and a "functions" array (use [] when the file exports no functions)'
+      ]
     }
   }
 
@@ -235,17 +238,17 @@ export function parseBlueprintContractBlock(content: string): ParsedBlueprintCon
       present: true,
       files: [],
       sharedTypes: [],
-      errors: ["BLUEPRINT CONTRACT INVALID: every sharedTypes entry must declare a non-empty name"],
+      errors: ["BLUEPRINT CONTRACT INVALID: every sharedTypes entry must declare a non-empty name"]
     }
   }
 
-  const normalizedPaths = files.map(file => file.declaredPath)
+  const normalizedPaths = files.map((file) => file.declaredPath)
   if (new Set(normalizedPaths).size !== normalizedPaths.length) {
     return {
       present: true,
       files: [],
       sharedTypes: [],
-      errors: ["BLUEPRINT CONTRACT INVALID: blueprint-contract file paths must be unique"],
+      errors: ["BLUEPRINT CONTRACT INVALID: blueprint-contract file paths must be unique"]
     }
   }
 
@@ -255,7 +258,7 @@ export function parseBlueprintContractBlock(content: string): ParsedBlueprintCon
       present: true,
       files: [],
       sharedTypes: [],
-      errors: ["BLUEPRINT CONTRACT INVALID: sharedTypes names must be unique"],
+      errors: ["BLUEPRINT CONTRACT INVALID: sharedTypes names must be unique"]
     }
   }
 

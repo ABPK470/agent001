@@ -12,7 +12,7 @@ export function handleSearch(
   catalog: CatalogGraph,
   query: string,
   schemaFilter?: string,
-  tableVerdicts?: TableVerdictsReader | null,
+  tableVerdicts?: TableVerdictsReader | null
 ): string {
   let hits = catalog.search(query, 15, tableVerdicts)
   const sysHits = catalog.searchSys(query)
@@ -28,16 +28,19 @@ export function handleSearch(
   }
 
   const scopeNote = schemaFilter ? ` (schema: ${schemaFilter})` : ""
-  const lines = [
-    `Schema Catalog Search: '${query}'${scopeNote} — ${hits.length} matches`,
-    "",
-  ]
+  const lines = [`Schema Catalog Search: '${query}'${scopeNote} — ${hits.length} matches`, ""]
 
   const publishHits = hits.filter((h) => h.table.schema === "publish" || h.table.schema === "persistedView")
-  const dataHits = hits.filter((h) => h.table.schema === "fact" || h.table.schema === "dim" || h.table.schema === "ext")
-  const otherHits = hits.filter((h) =>
-    h.table.schema !== "publish" && h.table.schema !== "persistedView" &&
-    h.table.schema !== "fact" && h.table.schema !== "dim" && h.table.schema !== "ext",
+  const dataHits = hits.filter(
+    (h) => h.table.schema === "fact" || h.table.schema === "dim" || h.table.schema === "ext"
+  )
+  const otherHits = hits.filter(
+    (h) =>
+      h.table.schema !== "publish" &&
+      h.table.schema !== "persistedView" &&
+      h.table.schema !== "fact" &&
+      h.table.schema !== "dim" &&
+      h.table.schema !== "ext"
   )
 
   if (publishHits.length > 0) {
@@ -58,7 +61,7 @@ export function handleSearch(
       "",
       "Results ranked by: name match + schema tier (publish ★) + row volume + column richness + FK centrality + join connectivity.",
       "Pick the highest-ranked table in the best schema tier. If unsure, compare column lists above.",
-      "Next step: explore_mssql_schema(table='schema.Table') to see all columns, then SELECT TOP 5.",
+      "Next step: explore_mssql_schema(table='schema.Table') to see all columns, then SELECT TOP 5."
     )
   }
 
@@ -68,7 +71,7 @@ export function handleSearch(
       `SQL SERVER SYSTEM CATALOG (sys.*) — ${sysHits.length} match${sysHits.length > 1 ? "es" : ""}:`,
       "  These are SQL Server engine internals. Query them with query_mssql — NOT search_catalog.",
       "  Do NOT call search_catalog or explore_mssql_schema for sys.* objects.",
-      "",
+      ""
     )
     for (const entry of sysHits) {
       lines.push(fmtSysEntry(entry))
@@ -84,10 +87,7 @@ export function handleSearch(
 export function handleSys(catalog: CatalogGraph, query: string): string {
   const directEntry = catalog.getSysEntry(query)
   if (directEntry) {
-    const lines = [
-      `SQL Server sys object: ${directEntry.qualifiedName}`,
-      "",
-    ]
+    const lines = [`SQL Server sys object: ${directEntry.qualifiedName}`, ""]
     if (directEntry.columns.length > 0) {
       lines.push(`Columns (${directEntry.columns.length}):`)
       for (const col of directEntry.columns) {
@@ -97,7 +97,7 @@ export function handleSys(catalog: CatalogGraph, query: string): string {
     lines.push(
       "",
       `IMPORTANT: Query this with query_mssql — NOT search_catalog or explore_mssql_schema.`,
-      `sys.* objects are SQL Server engine internals, not in the user table catalog.`,
+      `sys.* objects are SQL Server engine internals, not in the user table catalog.`
     )
     return lines.join("\n")
   }
@@ -117,7 +117,7 @@ export function handleSys(catalog: CatalogGraph, query: string): string {
   const lines = [
     `SQL Server System Catalog Search: '${query}' — ${hits.length} sys match${hits.length > 1 ? "es" : ""}`,
     "Query all of these with query_mssql — NOT search_catalog or explore_mssql_schema.",
-    "",
+    ""
   ]
   for (const entry of hits) {
     lines.push(fmtSysEntry(entry))

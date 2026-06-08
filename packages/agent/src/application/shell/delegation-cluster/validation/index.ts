@@ -18,62 +18,54 @@ import { StepRole } from "../../../../domain/index.js"
 
 import type { ToolCallRecord } from "../../../../tools/index.js"
 import {
-    gateAcceptanceCriteria,
-    gateContradictoryCompletion,
-    gateExecutableVerification,
+  gateAcceptanceCriteria,
+  gateContradictoryCompletion,
+  gateExecutableVerification
 } from "./gates-completion.js"
+import { gateBrowserEvidence, gateFileArtifactEvidence, gateTargetCoverage } from "./gates-coverage.js"
+import { gateBlockedPhase, gatePresence, gateUnresolvedHandoff } from "./gates-presence.js"
 import {
-    gateBrowserEvidence,
-    gateFileArtifactEvidence,
-    gateTargetCoverage,
-} from "./gates-coverage.js"
-import {
-    gateBlockedPhase,
-    gatePresence,
-    gateUnresolvedHandoff,
-} from "./gates-presence.js"
-import {
-    gateFileMutation,
-    gateRequiredSourceEvidence,
-    gateSuccessfulTool,
-    gateWorkspaceInspection,
+  gateFileMutation,
+  gateRequiredSourceEvidence,
+  gateSuccessfulTool,
+  gateWorkspaceInspection
 } from "./gates-tools.js"
 import type {
-    DelegationContractSpec,
-    DelegationOutputValidationCode,
-    DelegationOutputValidationResult,
-    GateParams,
+  DelegationContractSpec,
+  DelegationOutputValidationCode,
+  DelegationOutputValidationResult,
+  GateParams
 } from "./types.js"
 
 // ── Public re-exports (preserve original public API) ─────────────
 
 export {
-    DELEGATION_OUTPUT_VALIDATION_CODES,
-    DelegationOutputValidationCode,
-    type DelegationContractSpec,
-    type DelegationOutputValidationResult
+  DELEGATION_OUTPUT_VALIDATION_CODES,
+  DelegationOutputValidationCode,
+  type DelegationContractSpec,
+  type DelegationOutputValidationResult
 } from "./types.js"
 
 export { getCorrectionGuidance } from "../correct-validation.js"
 export {
-    classifyTaskIntent,
-    extractAcceptanceTokens,
-    isFileMutationToolCall,
-    isLowSignalBrowserToolCall,
-    isWorkspaceInspectionToolCall,
-    specRequiresBrowserEvidence,
-    specRequiresFileMutationEvidence,
-    specRequiresSuccessfulToolEvidence,
-    specRequiresWorkspaceInspection,
-    type TaskIntent
+  classifyTaskIntent,
+  extractAcceptanceTokens,
+  isFileMutationToolCall,
+  isLowSignalBrowserToolCall,
+  isWorkspaceInspectionToolCall,
+  specRequiresBrowserEvidence,
+  specRequiresFileMutationEvidence,
+  specRequiresSuccessfulToolEvidence,
+  specRequiresWorkspaceInspection,
+  type TaskIntent
 } from "../validation-patterns/index.js"
 
 export {
-    buildSemanticToolCallKey,
-    didToolCallFail,
-    extractToolFailureText,
-    parseToolResultObject,
-    type ToolCallRecord
+  buildSemanticToolCallKey,
+  didToolCallFail,
+  extractToolFailureText,
+  parseToolResultObject,
+  type ToolCallRecord
 } from "../../../../tools/index.js"
 
 // ── Master validation orchestrator ───────────────────────────────
@@ -96,24 +88,24 @@ export function validateDelegatedOutputContract(params: {
     output,
     trimmed,
     outputLower: trimmed.toLowerCase(),
-    toolCalls,
+    toolCalls
   }
 
   // Order matches the original numbering. Gate 10 was retired earlier.
   const gates = [
-    gatePresence,             // 1-2: empty output / empty payload
-    gateBlockedPhase,         // 3:   blocked phase output
-    gateUnresolvedHandoff,    // 3b:  unresolved handoff language
-    gateSuccessfulTool,       // 4:   all-tools-failed / no tool calls
-    gateFileMutation,         // 5:   file mutation evidence
-    gateWorkspaceInspection,  // 6:   workspace inspection evidence
+    gatePresence, // 1-2: empty output / empty payload
+    gateBlockedPhase, // 3:   blocked phase output
+    gateUnresolvedHandoff, // 3b:  unresolved handoff language
+    gateSuccessfulTool, // 4:   all-tools-failed / no tool calls
+    gateFileMutation, // 5:   file mutation evidence
+    gateWorkspaceInspection, // 6:   workspace inspection evidence
     gateRequiredSourceEvidence, // 7: required-source-artifact reads
     gateFileArtifactEvidence, // 8:   file artifact mentioned
-    gateTargetCoverage,       // 8b:  target coverage + reference integrity
-    gateBrowserEvidence,      // 9:   browser evidence quality
+    gateTargetCoverage, // 8b:  target coverage + reference integrity
+    gateBrowserEvidence, // 9:   browser evidence quality
     gateContradictoryCompletion, // 11: claim vs unresolved work
-    gateExecutableVerification,  // 12: executable verification evidence
-    gateAcceptanceCriteria,      // 13: acceptance-criteria token coverage
+    gateExecutableVerification, // 12: executable verification evidence
+    gateAcceptanceCriteria // 13: acceptance-criteria token coverage
   ] as const
 
   for (const gate of gates) {
@@ -126,24 +118,32 @@ export function validateDelegatedOutputContract(params: {
 // ── Convenience: build spec from SubagentTaskStep + ExecutionEnvelope ──
 
 export function buildContractSpec(
-  step: { objective: string; acceptanceCriteria: readonly string[]; requiredToolCapabilities: readonly string[] },
-  envelope: { targetArtifacts: readonly string[]; requiredSourceArtifacts: readonly string[]; allowedTools: readonly string[]; effectClass: string; verificationMode: string; role?: string },
+  step: {
+    objective: string
+    acceptanceCriteria: readonly string[]
+    requiredToolCapabilities: readonly string[]
+  },
+  envelope: {
+    targetArtifacts: readonly string[]
+    requiredSourceArtifacts: readonly string[]
+    allowedTools: readonly string[]
+    effectClass: string
+    verificationMode: string
+    role?: string
+  },
   lastValidationCode?: DelegationOutputValidationCode,
-  knownProjectArtifacts?: readonly string[],
+  knownProjectArtifacts?: readonly string[]
 ): DelegationContractSpec {
   return {
     task: step.objective,
     acceptanceCriteria: step.acceptanceCriteria,
     targetArtifacts: envelope.targetArtifacts,
     requiredSourceArtifacts: envelope.requiredSourceArtifacts,
-    tools: [
-      ...envelope.allowedTools,
-      ...step.requiredToolCapabilities,
-    ],
+    tools: [...envelope.allowedTools, ...step.requiredToolCapabilities],
     effectClass: envelope.effectClass as DelegationContractSpec["effectClass"],
     verificationMode: envelope.verificationMode as DelegationContractSpec["verificationMode"],
     role: (envelope.role ?? StepRole.Writer) as DelegationContractSpec["role"],
     lastValidationCode,
-    knownProjectArtifacts,
+    knownProjectArtifacts
   }
 }

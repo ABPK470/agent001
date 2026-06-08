@@ -4,9 +4,9 @@
 
 /** Stored credential kind under tenant browser_credentials. */
 export const CredentialKind = {
-  Password:  "password",
-  Totp:      "totp",
-  CookieJar: "cookie_jar",
+  Password: "password",
+  Totp: "totp",
+  CookieJar: "cookie_jar"
 } as const
 
 export type CredentialKind = (typeof CredentialKind)[keyof typeof CredentialKind]

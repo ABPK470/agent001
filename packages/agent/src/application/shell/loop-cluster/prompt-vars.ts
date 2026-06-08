@@ -21,53 +21,55 @@
  */
 import { getTenantConfig } from "../tenant-config.js"
 import {
-    type CatalogAccessor,
-    calendarDimensionTable,
-    dateGrainColumn,
-    defaultCatalogAccessor,
-    listExpensiveUnionViews,
-    primaryKeyColumns,
-    topNTables,
-    topNUnionViews,
+  type CatalogAccessor,
+  calendarDimensionTable,
+  dateGrainColumn,
+  defaultCatalogAccessor,
+  listExpensiveUnionViews,
+  primaryKeyColumns,
+  topNTables,
+  topNUnionViews
 } from "../../../tools/index.js"
 
 export interface PromptVars {
-  mirrorSchema:          string
-  wideUnionView:         string
-  wideUnionView2:        string
+  mirrorSchema: string
+  wideUnionView: string
+  wideUnionView2: string
   wideUnionViewBranches: string
-  biggestFact:           string
-  centralDim:            string
-  centralDim2:           string
-  dateKeyExample:        string
-  keyColumnExample:      string
-  calendarDim:           string
-  branchExample:         string
-  branchExample2:        string
+  biggestFact: string
+  centralDim: string
+  centralDim2: string
+  dateKeyExample: string
+  keyColumnExample: string
+  calendarDim: string
+  branchExample: string
+  branchExample2: string
 }
 
 /** Static fallbacks — match the pre-refactor literal values verbatim. */
 const FALLBACK: PromptVars = Object.freeze({
-  mirrorSchema:          "<mirrorSchema>",
-  wideUnionView:         "<wide-union-view>",
-  wideUnionView2:        "<other-wide-union-view>",
+  mirrorSchema: "<mirrorSchema>",
+  wideUnionView: "<wide-union-view>",
+  wideUnionView2: "<other-wide-union-view>",
   wideUnionViewBranches: "many",
-  biggestFact:           "<biggest-fact-table>",
-  centralDim:            "<central-dimension-table>",
-  centralDim2:           "<other-dimension-table>",
-  dateKeyExample:        "<dateKeyColumn>",
-  keyColumnExample:      "<keyColumn>",
-  calendarDim:           "<calendar-dimension-table>",
-  branchExample:         "<branch-view-A>",
-  branchExample2:        "<branch-view-B>",
+  biggestFact: "<biggest-fact-table>",
+  centralDim: "<central-dimension-table>",
+  centralDim2: "<other-dimension-table>",
+  dateKeyExample: "<dateKeyColumn>",
+  keyColumnExample: "<keyColumn>",
+  calendarDim: "<calendar-dimension-table>",
+  branchExample: "<branch-view-A>",
+  branchExample2: "<branch-view-B>"
 })
 
 const promptVarsState = {
-  cache: null as { fingerprint: string; vars: PromptVars } | null,
+  cache: null as { fingerprint: string; vars: PromptVars } | null
 }
 
 /** Test-only hook to clear the prompt-vars cache between tests. */
-export function _resetPromptVarsCache(): void { promptVarsState.cache = null }
+export function _resetPromptVarsCache(): void {
+  promptVarsState.cache = null
+}
 
 export interface BuildPromptVarsOptions {
   connection?: string
@@ -81,27 +83,18 @@ export interface BuildPromptVarsOptions {
  * repeated renders in the same session pay the cost once.
  */
 export function buildPromptVars(options: string | BuildPromptVarsOptions = "default"): PromptVars {
-  const resolved = typeof options === "string"
-    ? { connection: options }
-    : options
-  const tenant  = getTenantConfig()
+  const resolved = typeof options === "string" ? { connection: options } : options
+  const tenant = getTenantConfig()
   const catalog = (resolved.accessor ?? (() => defaultCatalogAccessor(resolved.connection ?? "default")))()
   const acc = () => catalog
 
   if (!catalog) return { ...FALLBACK, mirrorSchema: tenant.mirrorSchema ?? FALLBACK.mirrorSchema }
 
-  const wideViews = [...listExpensiveUnionViews({ accessor: acc })]
-    .sort((a, b) => b[1] - a[1])
+  const wideViews = [...listExpensiveUnionViews({ accessor: acc })].sort((a, b) => b[1] - a[1])
   const topUnion = topNUnionViews(2, { accessor: acc })
-  const wideQn  = wideViews[0]?.[0]
-    ?? topUnion[0]?.table.qualifiedName
-    ?? FALLBACK.wideUnionView
-  const wideQn2 = wideViews[1]?.[0]
-    ?? topUnion[1]?.table.qualifiedName
-    ?? FALLBACK.wideUnionView2
-  const wideBranches = wideViews[0]?.[1]
-    ?? topUnion[0]?.branchCount
-    ?? FALLBACK.wideUnionViewBranches
+  const wideQn = wideViews[0]?.[0] ?? topUnion[0]?.table.qualifiedName ?? FALLBACK.wideUnionView
+  const wideQn2 = wideViews[1]?.[0] ?? topUnion[1]?.table.qualifiedName ?? FALLBACK.wideUnionView2
+  const wideBranches = wideViews[0]?.[1] ?? topUnion[0]?.branchCount ?? FALLBACK.wideUnionViewBranches
 
   // Largest fact-style table by row count.
   const tables = topNTables(20, { accessor: acc })
@@ -109,39 +102,37 @@ export function buildPromptVars(options: string | BuildPromptVarsOptions = "defa
 
   // Two central dimensions: pick from /^(dim|lookup|ref|master)/i schemas.
   const dims = tables.filter((t) => /^(dim|lookup|ref|master)/i.test(t.schema))
-  const centralDim  = dims[0]?.qualifiedName ?? FALLBACK.centralDim
+  const centralDim = dims[0]?.qualifiedName ?? FALLBACK.centralDim
   const centralDim2 = dims[1]?.qualifiedName ?? FALLBACK.centralDim2
 
   // Date / key example columns drawn from the wide view and the
   // central dimension respectively.
-  const dateKey = (wideQn !== FALLBACK.wideUnionView
-    ? dateGrainColumn(wideQn, { accessor: acc })
-    : null) ?? FALLBACK.dateKeyExample
-  const keyCol  = (centralDim !== FALLBACK.centralDim
-    ? primaryKeyColumns(centralDim, { accessor: acc })[0]
-    : null) ?? FALLBACK.keyColumnExample
+  const dateKey =
+    (wideQn !== FALLBACK.wideUnionView ? dateGrainColumn(wideQn, { accessor: acc }) : null) ??
+    FALLBACK.dateKeyExample
+  const keyCol =
+    (centralDim !== FALLBACK.centralDim ? primaryKeyColumns(centralDim, { accessor: acc })[0] : null) ??
+    FALLBACK.keyColumnExample
   const calendar = calendarDimensionTable({ accessor: acc }) ?? FALLBACK.calendarDim
 
   // Two example branches from wide view UNION definition.
-  const branches = wideQn !== FALLBACK.wideUnionView
-    ? catalog.getUnionBranches(wideQn)
-    : []
-  const branchExample  = branches[0] ?? FALLBACK.branchExample
+  const branches = wideQn !== FALLBACK.wideUnionView ? catalog.getUnionBranches(wideQn) : []
+  const branchExample = branches[0] ?? FALLBACK.branchExample
   const branchExample2 = branches[1] ?? FALLBACK.branchExample2
 
   const vars: PromptVars = {
-    mirrorSchema:          tenant.mirrorSchema ?? FALLBACK.mirrorSchema,
-    wideUnionView:         wideQn,
-    wideUnionView2:        wideQn2,
+    mirrorSchema: tenant.mirrorSchema ?? FALLBACK.mirrorSchema,
+    wideUnionView: wideQn,
+    wideUnionView2: wideQn2,
     wideUnionViewBranches: String(wideBranches),
     biggestFact,
     centralDim,
     centralDim2,
-    dateKeyExample:        dateKey,
-    keyColumnExample:      keyCol,
-    calendarDim:           calendar,
+    dateKeyExample: dateKey,
+    keyColumnExample: keyCol,
+    calendarDim: calendar,
     branchExample,
-    branchExample2,
+    branchExample2
   }
 
   const fingerprint = JSON.stringify(vars)
@@ -157,10 +148,7 @@ export function buildPromptVars(options: string | BuildPromptVarsOptions = "defa
  * substituting an empty string). Whitespace inside the braces is
  * tolerated.
  */
-export function renderPromptVars(
-  template: string,
-  vars: Partial<PromptVars> = buildPromptVars(),
-): string {
+export function renderPromptVars(template: string, vars: Partial<PromptVars> = buildPromptVars()): string {
   return template.replace(/\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}/g, (m, key: string) => {
     const v = (vars as Record<string, unknown>)[key]
     return typeof v === "string" ? v : m

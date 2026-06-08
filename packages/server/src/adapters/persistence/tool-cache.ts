@@ -61,7 +61,9 @@ function canonicalize(input: unknown): string {
 }
 
 function hashKey(tool: string, input: unknown): string {
-  return createHash("sha256").update(`${tool}\u0000${canonicalize(input)}`).digest("hex")
+  return createHash("sha256")
+    .update(`${tool}\u0000${canonicalize(input)}`)
+    .digest("hex")
 }
 
 function safeSessionDir(sessionId: string): string {
@@ -74,7 +76,7 @@ function safeSessionDir(sessionId: string): string {
   // wiring-contracts.test.ts B-AUDIT).
   if (!/^[a-zA-Z0-9._-]{1,128}$/.test(sessionId)) {
     throw new Error(
-      `tool-cache: invalid sessionId ${JSON.stringify(sessionId)} — callers must supply a non-empty per-session identifier (e.g. req.session.sid)`,
+      `tool-cache: invalid sessionId ${JSON.stringify(sessionId)} — callers must supply a non-empty per-session identifier (e.g. req.session.sid)`
     )
   }
   return sessionId
@@ -102,7 +104,11 @@ export async function readCache<T>(opts: {
     return null
   }
   let env: CacheEnvelope<T>
-  try { env = JSON.parse(raw) as CacheEnvelope<T> } catch { return null }
+  try {
+    env = JSON.parse(raw) as CacheEnvelope<T>
+  } catch {
+    return null
+  }
   if (env.key !== key) return null
   if (Date.parse(env.expiresAt) <= Date.now()) return null
   return env.value
@@ -127,7 +133,7 @@ export async function writeCache<T>(opts: {
     tool: opts.tool,
     createdAt: new Date().toISOString(),
     expiresAt: new Date(Date.now() + (opts.ttlMs ?? DEFAULT_TTL_MS)).toISOString(),
-    value: opts.value,
+    value: opts.value
   }
   const tmp = `${path}.tmp.${process.pid}.${Date.now()}`
   await writeFile(tmp, JSON.stringify(env), { mode: 0o600 })
@@ -150,7 +156,11 @@ export async function getOrCompute<T>(opts: {
   if (cached !== null) return { value: cached, cached: true }
   const value = await opts.compute()
   // Best-effort write \u2014 a cache write failure must not break the tool call.
-  try { await writeCache({ ...opts, value }) } catch { /* swallow */ }
+  try {
+    await writeCache({ ...opts, value })
+  } catch {
+    /* swallow */
+  }
   return { value, cached: false }
 }
 
@@ -172,7 +182,11 @@ export async function cleanupExpiredCache(): Promise<{ removed: number }> {
   for (const session of sessions) {
     const sessionDir = resolve(root, session)
     let entries: string[]
-    try { entries = await readdir(sessionDir) } catch { continue }
+    try {
+      entries = await readdir(sessionDir)
+    } catch {
+      continue
+    }
     for (const entry of entries) {
       if (!entry.endsWith(".json")) continue
       const path = resolve(sessionDir, entry)
@@ -185,7 +199,12 @@ export async function cleanupExpiredCache(): Promise<{ removed: number }> {
         }
       } catch {
         // Unreadable / corrupt \u2014 best-effort delete to keep the dir tidy.
-        try { await rm(path, { force: true }) ; removed++ } catch { /* ignore */ }
+        try {
+          await rm(path, { force: true })
+          removed++
+        } catch {
+          /* ignore */
+        }
       }
     }
     // Drop empty session directories so a churning user does not leave
@@ -193,7 +212,9 @@ export async function cleanupExpiredCache(): Promise<{ removed: number }> {
     try {
       const left = await readdir(sessionDir)
       if (left.length === 0) await rm(sessionDir, { recursive: true, force: true })
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   return { removed }
 }
@@ -205,14 +226,25 @@ export async function cleanupExpiredCache(): Promise<{ removed: number }> {
 export async function clearSessionCache(sessionId: string): Promise<{ removed: number }> {
   const dir = resolve(getToolCacheRoot(), safeSessionDir(sessionId))
   let entries: string[]
-  try { entries = await readdir(dir) } catch { return { removed: 0 } }
+  try {
+    entries = await readdir(dir)
+  } catch {
+    return { removed: 0 }
+  }
   let removed = 0
   for (const entry of entries) {
-    try { await rm(resolve(dir, entry), { force: true }) ; removed++ } catch { /* ignore */ }
+    try {
+      await rm(resolve(dir, entry), { force: true })
+      removed++
+    } catch {
+      /* ignore */
+    }
   }
   try {
     if ((await readdir(dir)).length === 0) await rm(dir, { recursive: true, force: true })
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   return { removed }
 }
 
@@ -226,20 +258,30 @@ export async function getCacheStats(): Promise<{
 }> {
   const root = getToolCacheRoot()
   let sessions: string[]
-  try { sessions = await readdir(root) } catch { return { sessions: 0, files: 0, bytes: 0 } }
+  try {
+    sessions = await readdir(root)
+  } catch {
+    return { sessions: 0, files: 0, bytes: 0 }
+  }
   let files = 0
   let bytes = 0
   for (const session of sessions) {
     const sessionDir = resolve(root, session)
     let entries: string[]
-    try { entries = await readdir(sessionDir) } catch { continue }
+    try {
+      entries = await readdir(sessionDir)
+    } catch {
+      continue
+    }
     for (const entry of entries) {
       if (!entry.endsWith(".json")) continue
       try {
         const s = await stat(resolve(sessionDir, entry))
         files++
         bytes += s.size
-      } catch { /* ignore */ }
+      } catch {
+        /* ignore */
+      }
     }
   }
   return { sessions: sessions.length, files, bytes }

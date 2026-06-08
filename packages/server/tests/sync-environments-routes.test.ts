@@ -21,7 +21,7 @@ function adminSession(): CurrentSession {
     upn: "admin@example.com",
     isAdmin: true,
     ip: "127.0.0.1",
-    userAgent: "vitest",
+    userAgent: "vitest"
   }
 }
 
@@ -30,9 +30,9 @@ function createHost(root: string): AgentHost {
     mssql: {
       databases: new Map([
         ["DEV", { config: { server: "dev-sql", database: "mymi" }, writeEnabled: true, knowledge: null }],
-        ["UAT", { config: { server: "uat-sql", database: "mymi" }, writeEnabled: true, knowledge: null }],
+        ["UAT", { config: { server: "uat-sql", database: "mymi" }, writeEnabled: true, knowledge: null }]
       ]),
-      defaultConnection: { value: "DEV" },
+      defaultConnection: { value: "DEV" }
     },
     sync: {
       events: { sink: () => {} },
@@ -42,9 +42,9 @@ function createHost(root: string): AgentHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: root,
-        publishedDefinitions: createPublishedSyncDefinitionRegistry(),
-      },
-    },
+        publishedDefinitions: createPublishedSyncDefinitionRegistry()
+      }
+    }
   } as unknown as AgentHost
   return host
 }
@@ -53,7 +53,7 @@ async function seedLiveEnvironments(root: string, host: AgentHost): Promise<void
   const { loadPersistedSyncEnvironments } = await import("../src/domain/sync/live-environments.js")
   const loaded = loadPersistedSyncEnvironments(root, [
     { name: "DEV", server: "dev-sql", database: "mymi", writeEnabled: true, knowledge: null },
-    { name: "UAT", server: "uat-sql", database: "mymi", writeEnabled: true, knowledge: null },
+    { name: "UAT", server: "uat-sql", database: "mymi", writeEnabled: true, knowledge: null }
   ])
   host.sync.environments.items = new Map(loaded.environments.map((env) => [env.name, env]))
 }
@@ -73,7 +73,7 @@ async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance
     ;(req as unknown as { session: CurrentSession }).session = session
     seedUser(testDb, session.upn, {
       displayName: session.displayName,
-      isAdmin: session.isAdmin,
+      isAdmin: session.isAdmin
     })
     seedSession(testDb, session.sid, session.upn)
   })
@@ -86,29 +86,36 @@ beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "mia-sync-env-data-"))
   projectRoot = mkdtempSync(join(tmpdir(), "mia-sync-env-root-"))
   mkdirSync(join(projectRoot, "deploy", "sync"), { recursive: true })
-  writeFileSync(join(projectRoot, "deploy", "sync", "sync-environments.json"), JSON.stringify({
-    version: 1,
-    environments: [
+  writeFileSync(
+    join(projectRoot, "deploy", "sync", "sync-environments.json"),
+    JSON.stringify(
       {
-        name: "DEV",
-        displayName: "DEV",
-        color: "blue",
-        role: "both",
-        ringOrder: 0,
-        syncAllowlist: [],
-        allowedSyncTargets: [],
+        version: 1,
+        environments: [
+          {
+            name: "DEV",
+            displayName: "DEV",
+            color: "blue",
+            role: "both",
+            ringOrder: 0,
+            syncAllowlist: [],
+            allowedSyncTargets: []
+          },
+          {
+            name: "UAT",
+            displayName: "UAT",
+            color: "teal",
+            role: "both",
+            ringOrder: 1,
+            syncAllowlist: [],
+            allowedSyncTargets: ["DEV"]
+          }
+        ]
       },
-      {
-        name: "UAT",
-        displayName: "UAT",
-        color: "teal",
-        role: "both",
-        ringOrder: 1,
-        syncAllowlist: [],
-        allowedSyncTargets: ["DEV"],
-      },
-    ],
-  }, null, 2))
+      null,
+      2
+    )
+  )
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
@@ -130,7 +137,7 @@ describe("sync-environment routes", () => {
     const update = await app.inject({
       method: "PUT",
       url: "/api/sync-environments/UAT",
-      payload: { role: "source", allowedSyncTargets: ["DEV", "PROD"] },
+      payload: { role: "source", allowedSyncTargets: ["DEV", "PROD"] }
     })
     expect(update.statusCode).toBe(200)
     expect(host.sync.environments.items.get("UAT")?.allowedSyncTargets).toEqual(["DEV", "PROD"])
@@ -138,13 +145,13 @@ describe("sync-environment routes", () => {
 
     const remove = await app.inject({
       method: "DELETE",
-      url: "/api/sync-environments/UAT",
+      url: "/api/sync-environments/UAT"
     })
     expect(remove.statusCode).toBe(200)
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/sync-environments",
+      url: "/api/sync-environments"
     })
     expect(response.statusCode).toBe(200)
     const body = response.json() as Array<{ name: string }>
@@ -158,33 +165,40 @@ describe("sync-environment routes", () => {
   it("does not drift when the legacy JSON file changes after DB seeding", async () => {
     const { app, host } = await buildApp(adminSession())
 
-    writeFileSync(join(projectRoot, "deploy", "sync", "sync-environments.json"), JSON.stringify({
-      version: 1,
-      environments: [
+    writeFileSync(
+      join(projectRoot, "deploy", "sync", "sync-environments.json"),
+      JSON.stringify(
         {
-          name: "DEV",
-          displayName: "DEV",
-          color: "blue",
-          role: "both",
-          ringOrder: 0,
-          syncAllowlist: [],
-          allowedSyncTargets: ["UAT"],
+          version: 1,
+          environments: [
+            {
+              name: "DEV",
+              displayName: "DEV",
+              color: "blue",
+              role: "both",
+              ringOrder: 0,
+              syncAllowlist: [],
+              allowedSyncTargets: ["UAT"]
+            },
+            {
+              name: "UAT",
+              displayName: "UAT",
+              color: "teal",
+              role: "source",
+              ringOrder: 1,
+              syncAllowlist: [],
+              allowedSyncTargets: ["DEV", "PROD"]
+            }
+          ]
         },
-        {
-          name: "UAT",
-          displayName: "UAT",
-          color: "teal",
-          role: "source",
-          ringOrder: 1,
-          syncAllowlist: [],
-          allowedSyncTargets: ["DEV", "PROD"],
-        },
-      ],
-    }, null, 2))
+        null,
+        2
+      )
+    )
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/sync-environments",
+      url: "/api/sync-environments"
     })
 
     expect(response.statusCode).toBe(200)
@@ -197,7 +211,7 @@ describe("sync-environment routes", () => {
     expect(uat).toMatchObject({
       name: "UAT",
       role: "both",
-      allowedSyncTargets: ["DEV"],
+      allowedSyncTargets: ["DEV"]
     })
     expect(host.sync.environments.items.get("UAT")?.role).toBe("both")
     expect(host.sync.environments.items.get("UAT")?.allowedSyncTargets).toEqual(["DEV"])

@@ -4,8 +4,34 @@
  */
 import { describe, expect, it, vi } from "vitest"
 import * as plannerVerifier from "../src/application/core/planner-cluster/verifier/index.js"
-import type { PipelineResult, Plan, SubagentTaskStep, VerifierDecision, VerifierIssue, VerifierStepAssessment } from "../src/application/core/planner.js"
-import { assessPlannerDecision, buildLegacyRetryPlan, buildRepairPlan, compareRepairPlanCompatibility, compilePlannerRuntime, enrichVerifierAssessments, executePipeline, executePlannerPath, generatePlan, inferForcedOutputDirectoryFromGoal, isGibberishIssue, isLLMGibberish, isValidArtifactPath, parseBlueprintContractBlock, parseCoherentSolutionBundle, runDeterministicProbes, synthesizeAnswer, validatePlan } from "../src/application/core/planner.js"
+import type {
+  PipelineResult,
+  Plan,
+  SubagentTaskStep,
+  VerifierDecision,
+  VerifierIssue,
+  VerifierStepAssessment
+} from "../src/application/core/planner.js"
+import {
+  assessPlannerDecision,
+  buildLegacyRetryPlan,
+  buildRepairPlan,
+  compareRepairPlanCompatibility,
+  compilePlannerRuntime,
+  enrichVerifierAssessments,
+  executePipeline,
+  executePlannerPath,
+  generatePlan,
+  inferForcedOutputDirectoryFromGoal,
+  isGibberishIssue,
+  isLLMGibberish,
+  isValidArtifactPath,
+  parseBlueprintContractBlock,
+  parseCoherentSolutionBundle,
+  runDeterministicProbes,
+  synthesizeAnswer,
+  validatePlan
+} from "../src/application/core/planner.js"
 import { ToolFailureCircuitBreaker } from "../src/application/core/recovery.js"
 import * as delegationDecision from "../src/application/shell/delegation-cluster/decision/index.js"
 import { CHILD_SYSTEM_PROMPT } from "../src/tools/index.js"
@@ -19,11 +45,11 @@ function echoTool(name = "echo"): Tool {
     description: `Echo: ${name}`,
     parameters: {
       type: "object",
-      properties: { text: { type: "string" } },
+      properties: { text: { type: "string" } }
     },
     async execute(args) {
       return `echoed: ${String(args.text)}`
-    },
+    }
   }
 }
 
@@ -34,7 +60,7 @@ function makePlan(overrides: Partial<Plan> = {}): Plan {
     requiresSynthesis: false,
     steps: [],
     edges: [],
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -58,26 +84,34 @@ function makeSubagentStep(name: string, overrides: Partial<SubagentTaskStep> = {
       targetArtifacts: ["game.js"],
       effectClass: "filesystem_write",
       verificationMode: "browser_check",
-      artifactRelations: [],
+      artifactRelations: []
     },
-    ...overrides,
+    ...overrides
   }
 }
 
 function makeBlueprintContract(paths: readonly string[]): string {
   return [
     "```blueprint-contract",
-    JSON.stringify({
-      version: 1,
-      files: paths.map(path => ({ path, purpose: `Purpose for ${path}`, functions: [] })),
-      sharedTypes: [],
-    }, null, 2),
-    "```",
+    JSON.stringify(
+      {
+        version: 1,
+        files: paths.map((path) => ({ path, purpose: `Purpose for ${path}`, functions: [] })),
+        sharedTypes: []
+      },
+      null,
+      2
+    ),
+    "```"
   ].join("\n")
 }
 
 function makeIssue(summary: string, overrides: Partial<VerifierIssue> = {}): VerifierIssue {
-  const derivedCode = summary.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "") || "issue"
+  const derivedCode =
+    summary
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "") || "issue"
   return {
     code: overrides.code ?? derivedCode,
     severity: overrides.severity ?? "error",
@@ -92,7 +126,7 @@ function makeIssue(summary: string, overrides: Partial<VerifierIssue> = {}): Ver
     evidenceIds: overrides.evidenceIds ?? [],
     repairClass: overrides.repairClass ?? "owner_implementation",
     summary,
-    details: overrides.details,
+    details: overrides.details
   }
 }
 
@@ -139,7 +173,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("routes 'create a website with multiple pages' to planner", async () => {
     const decision = await assessPlannerDecision(
       "Create a website with a landing page, about page, and contact form. Build all pages and implement form validation.",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(true)
     expect(decision.route).toBe("full_planner_decomposition")
@@ -147,7 +181,10 @@ describe("Planner decision: assessPlannerDecision", () => {
   })
 
   it("routes 'build a todo app' to planner", async () => {
-    const decision = await assessPlannerDecision("Build a complete todo application with add, delete, and filter functionality", [])
+    const decision = await assessPlannerDecision(
+      "Build a complete todo application with add, delete, and filter functionality",
+      []
+    )
     expect(decision.shouldPlan).toBe(false)
     expect(decision.route).toBe("bounded_coherent_generation")
   })
@@ -155,7 +192,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("routes 'first do X, then Y, then Z' to planner (multi-step)", async () => {
     const decision = await assessPlannerDecision(
       "First create the database schema, then implement the API endpoints, then write the frontend",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(true)
     expect(decision.reason).toContain("multi_step")
@@ -164,7 +201,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("routes 'implement multiple components' to planner", async () => {
     const decision = await assessPlannerDecision(
       "Create multiple components for the dashboard: a chart widget, a data table, and a settings panel",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(true)
     expect(decision.score).toBeGreaterThanOrEqual(3)
@@ -217,9 +254,12 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("routes with higher score when prior tool activity is high", async () => {
     const history = Array.from({ length: 5 }, () => ({
       role: "tool" as const,
-      content: "result",
+      content: "result"
     }))
-    const decision = await assessPlannerDecision("Now build a game application with these components", history)
+    const decision = await assessPlannerDecision(
+      "Now build a game application with these components",
+      history
+    )
     expect(decision.score).toBeGreaterThanOrEqual(5)
     expect(decision.reason).toContain("prior_tool_activity")
   })
@@ -227,7 +267,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("keeps explicit single-file full implementation in direct burst path", async () => {
     const decision = await assessPlannerDecision(
       "Implement the full auth flow in single file src/auth.ts with complete logic from scratch",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(false)
     expect(decision.route).toBe("single_artifact_direct_burst")
@@ -237,7 +277,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("routes bounded greenfield builds to coherence-first direct execution", async () => {
     const decision = await assessPlannerDecision(
       "Create a complete Kanban app from scratch with drag and drop and persistent state",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(false)
     expect(decision.route).toBe("bounded_coherent_generation")
@@ -247,7 +287,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("keeps planner routing for multi-page builds that already imply coordination-heavy ownership", async () => {
     const decision = await assessPlannerDecision(
       "Create a website with a landing page, docs page, and admin page, then wire shared navigation and forms",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(true)
     expect(decision.route).toBe("full_planner_decomposition")
@@ -256,7 +296,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("does not use bounded coherent generation for existing-code integration work", async () => {
     const decision = await assessPlannerDecision(
       "Build a new dashboard and integrate it into the existing auth and API flow",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(true)
     expect(decision.route).toBe("full_planner_decomposition")
@@ -265,7 +305,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("routes larger greenfield systems to planner bootstrap before decomposition", async () => {
     const decision = await assessPlannerDecision(
       "Build a complete SaaS starter from scratch with authentication, billing, admin tooling, and shared contracts across frontend, API, and worker modules.",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(true)
     expect(decision.route).toBe("planner_with_coherent_bootstrap")
@@ -276,7 +316,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("does NOT use direct burst when no concrete target file is provided", async () => {
     const decision = await assessPlannerDecision(
       "Implement a full auth flow in a single file with complete logic from scratch",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(true)
   })
@@ -284,7 +324,7 @@ describe("Planner decision: assessPlannerDecision", () => {
   it("does NOT use direct burst for ambiguous multi-target requests", async () => {
     const decision = await assessPlannerDecision(
       "Implement a full auth flow in single file src/auth.ts and add backend service wiring",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(true)
   })
@@ -295,7 +335,7 @@ describe("Planner decision: assessPlannerDecision", () => {
     // coordination that the planner handles better than a single coherent pass.
     const decision = await assessPlannerDecision(
       "Build a complete playable chess game and create tmp/game/index.html, tmp/game/styles.css, and tmp/game/game.js with verification.",
-      [],
+      []
     )
     expect(decision.shouldPlan).toBe(true)
     expect(decision.reason).toContain("implementation_scope")
@@ -304,7 +344,8 @@ describe("Planner decision: assessPlannerDecision", () => {
 
 describe("Planner output-root inference", () => {
   it("forces tmp root when goal declares temporary working directory named tmp", () => {
-    const goal = "Create a temporary working directory named tmp where all project files will be stored and organized."
+    const goal =
+      "Create a temporary working directory named tmp where all project files will be stored and organized."
     expect(inferForcedOutputDirectoryFromGoal(goal)).toBe("tmp")
   })
 
@@ -321,74 +362,88 @@ describe("Planner output-root inference", () => {
 
 describe("Blueprint contract parsing", () => {
   it("accepts shorthand string arrays for functions and shared types", () => {
-    const parsed = parseBlueprintContractBlock([
-      "```blueprint-contract",
-      JSON.stringify({
-        version: 1,
-        files: [
+    const parsed = parseBlueprintContractBlock(
+      [
+        "```blueprint-contract",
+        JSON.stringify(
           {
-            path: "tmp/game_logic.js",
-            purpose: "Game rules",
-            functions: ["initializeGame", "validateMove"],
+            version: 1,
+            files: [
+              {
+                path: "tmp/game_logic.js",
+                purpose: "Game rules",
+                functions: ["initializeGame", "validateMove"]
+              },
+              {
+                path: "tmp/index.html",
+                purpose: "UI shell",
+                functions: []
+              }
+            ],
+            sharedTypes: ["Piece", "GameState"]
           },
-          {
-            path: "tmp/index.html",
-            purpose: "UI shell",
-            functions: [],
-          },
-        ],
-        sharedTypes: ["Piece", "GameState"],
-      }, null, 2),
-      "```",
-    ].join("\n"))
+          null,
+          2
+        ),
+        "```"
+      ].join("\n")
+    )
 
     expect(parsed.present).toBe(true)
     expect(parsed.errors).toEqual([])
-    expect(parsed.files[0]?.functions.map(fn => fn.name)).toEqual(["initializeGame", "validateMove"])
-    expect(parsed.sharedTypes.map(type => type.name)).toEqual(["Piece", "GameState"])
+    expect(parsed.files[0]?.functions.map((fn) => fn.name)).toEqual(["initializeGame", "validateMove"])
+    expect(parsed.sharedTypes.map((type) => type.name)).toEqual(["Piece", "GameState"])
   })
 
   it("accepts richer function and shared-type schemas used by blueprint-writing children", () => {
-    const parsed = parseBlueprintContractBlock([
-      "```blueprint-contract",
-      JSON.stringify({
-        version: 1,
-        files: [
+    const parsed = parseBlueprintContractBlock(
+      [
+        "```blueprint-contract",
+        JSON.stringify(
           {
-            path: "tmp/chess_logic.js",
-            purpose: "Chess rules",
-            functions: [
+            version: 1,
+            files: [
               {
-                name: "validateMove",
-                parameters: [
-                  { name: "boardState", type: "BoardState" },
-                  { name: "from", type: "Coordinate" },
-                  { name: "to", type: "Coordinate" },
+                path: "tmp/chess_logic.js",
+                purpose: "Chess rules",
+                functions: [
+                  {
+                    name: "validateMove",
+                    parameters: [
+                      { name: "boardState", type: "BoardState" },
+                      { name: "from", type: "Coordinate" },
+                      { name: "to", type: "Coordinate" }
+                    ],
+                    returnType: "boolean",
+                    purpose: "Validate move legality",
+                    algorithmicContract: "Rejects illegal piece movement and king-exposing moves."
+                  }
+                ]
+              }
+            ],
+            sharedTypes: [
+              {
+                name: "GameState",
+                type: "object",
+                properties: [
+                  { name: "board", type: "BoardState" },
+                  { name: "turn", type: "PlayerColor" }
                 ],
-                returnType: "boolean",
-                purpose: "Validate move legality",
-                algorithmicContract: "Rejects illegal piece movement and king-exposing moves.",
-              },
-            ],
+                usedBy: ["tmp/chess_logic.js"]
+              }
+            ]
           },
-        ],
-        sharedTypes: [
-          {
-            name: "GameState",
-            type: "object",
-            properties: [
-              { name: "board", type: "BoardState" },
-              { name: "turn", type: "PlayerColor" },
-            ],
-            usedBy: ["tmp/chess_logic.js"],
-          },
-        ],
-      }, null, 2),
-      "```",
-    ].join("\n"))
+          null,
+          2
+        ),
+        "```"
+      ].join("\n")
+    )
 
     expect(parsed.errors).toEqual([])
-    expect(parsed.files[0]?.functions[0]?.signature).toBe("validateMove(boardState: BoardState, from: Coordinate, to: Coordinate): boolean")
+    expect(parsed.files[0]?.functions[0]?.signature).toBe(
+      "validateMove(boardState: BoardState, from: Coordinate, to: Coordinate): boolean"
+    )
     expect(parsed.sharedTypes[0]?.definition).toBe("{ board: BoardState; turn: PlayerColor }")
     expect(parsed.sharedTypes[0]?.usedBy).toEqual(["tmp/chess_logic.js"])
   })
@@ -420,15 +475,15 @@ describe("Planner path execution", () => {
               targetArtifacts: ["tmp/process.py"],
               effectClass: "filesystem_write",
               verificationMode: "none",
-              artifactRelations: [],
+              artifactRelations: []
             },
             maxBudgetHint: "20 iterations",
-            canRunParallel: false,
-          },
+            canRunParallel: false
+          }
         ],
-        edges: [],
+        edges: []
       }),
-      toolCalls: [],
+      toolCalls: []
     })
 
     const llm: LLMClient = { chat }
@@ -437,18 +492,26 @@ describe("Planner path execution", () => {
       goal: "Process a CSV and emit a summary report; use Python if that is the best fit.",
       workspaceRoot: ".",
       availableTools: [echoTool("write_file"), echoTool("read_file")],
-      history: [],
+      history: []
     })
 
     const messages = chat.mock.calls[0]?.[0] as Array<{ role: string; content: string }>
-    const systemPrompt = messages?.find(message => message.role === "system" && message.content.includes("## Rules"))?.content ?? ""
+    const systemPrompt =
+      messages?.find((message) => message.role === "system" && message.content.includes("## Rules"))
+        ?.content ?? ""
 
     expect(systemPrompt).toContain("CHOOSE THE BEST EXECUTION STRATEGY FOR THE GOAL")
     expect(systemPrompt).toContain("Do NOT default to JavaScript code files for every task")
-    expect(systemPrompt).toContain("This rule applies ONLY when the plan includes browser-loaded JS/TS runtime code referenced by HTML")
-    expect(systemPrompt).toContain("This rule does NOT mean Python, shell, awk/sed, PowerShell, or other non-browser implementation options are disallowed")
+    expect(systemPrompt).toContain(
+      "This rule applies ONLY when the plan includes browser-loaded JS/TS runtime code referenced by HTML"
+    )
+    expect(systemPrompt).toContain(
+      "This rule does NOT mean Python, shell, awk/sed, PowerShell, or other non-browser implementation options are disallowed"
+    )
     expect(systemPrompt).toContain("HELPER/CALL DEPENDENCY CLOSURE MUST BE EXPLICIT")
-    expect(systemPrompt).toContain("Do NOT leave dangling references like calling helper functions that are never defined anywhere")
+    expect(systemPrompt).toContain(
+      "Do NOT leave dangling references like calling helper functions that are never defined anywhere"
+    )
     expect(systemPrompt).toContain("VISUAL STATE/STYLING CONTRACT MUST BE EXPLICIT")
     expect(systemPrompt).toContain("row/column parity or equivalent coordinate-aware logic")
   })
@@ -489,8 +552,8 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/index.html"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
-              },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }]
+              }
             },
             {
               name: "integrate_ui_interactions",
@@ -511,14 +574,14 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/index.html"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
-              },
-            },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }]
+              }
+            }
           ],
-          edges: [{ from: "implement_board_rendering", to: "integrate_ui_interactions" }],
+          edges: [{ from: "implement_board_rendering", to: "integrate_ui_interactions" }]
         }),
-        toolCalls: [],
-      }),
+        toolCalls: []
+      })
     }
 
     const traces: Array<Record<string, unknown>> = []
@@ -529,9 +592,9 @@ describe("Planner path execution", () => {
         tools: [echoTool("write_file"), echoTool("read_file")],
         workspaceRoot: ".",
         history: [],
-        onTrace: (entry) => traces.push(entry),
+        onTrace: (entry) => traces.push(entry)
       },
-      async () => ({ output: "unused" }),
+      async () => ({ output: "unused" })
     )
 
     expect(result.handled).toBe(true)
@@ -573,8 +636,8 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/index.html"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
-              },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }]
+              }
             },
             {
               name: "rewrite_index_for_overlay",
@@ -595,14 +658,14 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/index.html"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
-              },
-            },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }]
+              }
+            }
           ],
-          edges: [],
+          edges: []
         }),
-        toolCalls: [],
-      }),
+        toolCalls: []
+      })
     }
 
     const traces: Array<Record<string, unknown>> = []
@@ -613,9 +676,9 @@ describe("Planner path execution", () => {
         tools: [echoTool("write_file"), echoTool("read_file")],
         workspaceRoot: ".",
         history: [],
-        onTrace: (entry) => traces.push(entry),
+        onTrace: (entry) => traces.push(entry)
       },
-      async () => ({ output: "unused" }),
+      async () => ({ output: "unused" })
     )
 
     expect(result.handled).toBe(true)
@@ -653,8 +716,8 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["BLUEPRINT.md"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "BLUEPRINT.md" }],
-              },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "BLUEPRINT.md" }]
+              }
             },
             {
               name: "fetch_top_clients_query",
@@ -675,8 +738,8 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["src/query.js"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "src/query.js" }],
-              },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "src/query.js" }]
+              }
             },
             {
               name: "create_html_report",
@@ -697,17 +760,17 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["public/index.html"],
                 effectClass: "filesystem_write",
                 verificationMode: "browser_check",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "public/index.html" }],
-              },
-            },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "public/index.html" }]
+              }
+            }
           ],
           edges: [
             { from: "create_blueprint", to: "fetch_top_clients_query" },
-            { from: "fetch_top_clients_query", to: "create_html_report" },
-          ],
+            { from: "fetch_top_clients_query", to: "create_html_report" }
+          ]
         }),
-        toolCalls: [],
-      }),
+        toolCalls: []
+      })
     }
 
     const traces: Array<Record<string, unknown>> = []
@@ -718,21 +781,22 @@ describe("Planner path execution", () => {
         tools: [echoTool("write_file"), echoTool("read_file"), echoTool("browser_check")],
         workspaceRoot: ".",
         history: [],
-        onTrace: (entry) => traces.push(entry),
+        onTrace: (entry) => traces.push(entry)
       },
-      async () => ({ output: "unused" }),
+      async () => ({ output: "unused" })
     )
 
     expect(result.handled).toBe(true)
     expect(result.answer).not.toContain('"stage": "validation"')
     expect(traces.some((entry) => entry.kind === "planner-validation-remediated")).toBe(true)
 
-    const subagentSteps = result.plan?.steps.filter((step): step is SubagentTaskStep => step.stepType === "subagent_task") ?? []
+    const subagentSteps =
+      result.plan?.steps.filter((step): step is SubagentTaskStep => step.stepType === "subagent_task") ?? []
     expect(subagentSteps.length).toBeGreaterThan(0)
     const roots = new Set(
       subagentSteps.flatMap((step) =>
-        step.executionContext.targetArtifacts.map((artifact) => artifact.split("/")[0] ?? artifact),
-      ),
+        step.executionContext.targetArtifacts.map((artifact) => artifact.split("/")[0] ?? artifact)
+      )
     )
     expect(roots.size).toBe(1)
   })
@@ -743,14 +807,17 @@ describe("Planner path execution", () => {
     // full_planner_decomposition, explicitDelegationRequested must be set to true so
     // the decompositionBenefit term is counted and utility clears the 0.20 threshold.
     const capturedDelegationInputs: unknown[] = []
-    const realAssess = (await import("../src/application/shell/delegation-cluster/decision/index.js")).assessDelegationDecision
-    const delegationSpy = vi.spyOn(
-      await import("../src/application/shell/delegation-cluster/decision/index.js"),
-      "assessDelegationDecision",
-    ).mockImplementation((input) => {
-      capturedDelegationInputs.push(input)
-      return realAssess(input)
-    })
+    const realAssess = (await import("../src/application/shell/delegation-cluster/decision/index.js"))
+      .assessDelegationDecision
+    const delegationSpy = vi
+      .spyOn(
+        await import("../src/application/shell/delegation-cluster/decision/index.js"),
+        "assessDelegationDecision"
+      )
+      .mockImplementation((input) => {
+        capturedDelegationInputs.push(input)
+        return realAssess(input)
+      })
 
     const llm: LLMClient = {
       chat: vi.fn().mockResolvedValue({
@@ -778,8 +845,8 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/BLUEPRINT.md"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/BLUEPRINT.md" }],
-              },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/BLUEPRINT.md" }]
+              }
             },
             {
               name: "query_database",
@@ -800,8 +867,8 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/data.js"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/data.js" }],
-              },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/data.js" }]
+              }
             },
             {
               name: "render_html",
@@ -822,17 +889,17 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/index.html"],
                 effectClass: "filesystem_write",
                 verificationMode: "browser_check",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
-              },
-            },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }]
+              }
+            }
           ],
           edges: [
             { from: "generate_blueprint", to: "query_database" },
-            { from: "query_database", to: "render_html" },
-          ],
+            { from: "query_database", to: "render_html" }
+          ]
         }),
-        toolCalls: [],
-      }),
+        toolCalls: []
+      })
     }
 
     const traces: Array<Record<string, unknown>> = []
@@ -844,13 +911,13 @@ describe("Planner path execution", () => {
           echoTool("write_file"),
           echoTool("read_file"),
           echoTool("browser_check"),
-          echoTool("query_mssql"),
+          echoTool("query_mssql")
         ],
         workspaceRoot: ".",
         history: [],
-        onTrace: (entry) => traces.push(entry),
+        onTrace: (entry) => traces.push(entry)
       },
-      async () => ({ output: "done" }),
+      async () => ({ output: "done" })
     )
 
     delegationSpy.mockRestore()
@@ -878,7 +945,7 @@ describe("Planner path execution", () => {
       hardBlockedTaskClass: null,
       hardBlockedTaskClassSource: null,
       hardBlockedTaskClassSignal: null,
-      diagnostics: {},
+      diagnostics: {}
     })
     const llm: LLMClient = {
       chat: vi.fn().mockResolvedValue({
@@ -906,8 +973,8 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/BLUEPRINT.md"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/BLUEPRINT.md" }],
-              },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/BLUEPRINT.md" }]
+              }
             },
             {
               name: "implement_logic",
@@ -928,14 +995,14 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/game_logic.js"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/game_logic.js" }],
-              },
-            },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/game_logic.js" }]
+              }
+            }
           ],
-          edges: [{ from: "generate_blueprint", to: "implement_logic" }],
+          edges: [{ from: "generate_blueprint", to: "implement_logic" }]
         }),
-        toolCalls: [],
-      }),
+        toolCalls: []
+      })
     }
 
     const delegatedSteps: string[] = []
@@ -957,32 +1024,47 @@ describe("Planner path execution", () => {
                   return [
                     "# Broken Blueprint",
                     "",
-                    makeBlueprintContract(["game/index.html", "game/rules.js"]),
+                    makeBlueprintContract(["game/index.html", "game/rules.js"])
                   ].join("\n")
                 }
                 return "Error: not found"
-              },
-            },
+              }
+            }
           ],
           workspaceRoot: ".",
-          history: [],
+          history: []
         },
         async (step) => {
           delegatedSteps.push(step.name)
           return {
             output: `done ${step.name}`,
             toolCalls: [
-              { name: "write_file", args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/BLUEPRINT.md", content: "ok" }, result: "ok", isError: false },
-              { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-            ],
+              {
+                name: "write_file",
+                args: {
+                  path: step.executionContext.targetArtifacts[0] ?? "tmp/BLUEPRINT.md",
+                  content: "ok"
+                },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              }
+            ]
           }
-        },
+        }
       )
 
       expect(delegatedSteps.length).toBeGreaterThan(0)
       expect(delegatedSteps.every((name) => name === "generate_blueprint")).toBe(true)
       expect(result.handled).toBe(true)
-      expect(result.pipelineResult?.stepResults.get("generate_blueprint")?.failureClass).toBe("blueprint_contract")
+      expect(result.pipelineResult?.stepResults.get("generate_blueprint")?.failureClass).toBe(
+        "blueprint_contract"
+      )
       expect(result.pipelineResult?.stepResults.get("implement_logic")?.status).toBe("skipped")
     } finally {
       delegationSpy.mockRestore()
@@ -1003,7 +1085,7 @@ describe("Planner path execution", () => {
       hardBlockedTaskClass: null,
       hardBlockedTaskClassSource: null,
       hardBlockedTaskClassSignal: null,
-      diagnostics: {},
+      diagnostics: {}
     })
     const llm: LLMClient = {
       chat: vi.fn().mockResolvedValue({
@@ -1031,8 +1113,8 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/index.html"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [],
-              },
+                artifactRelations: []
+              }
             },
             {
               name: "build_logic",
@@ -1053,14 +1135,14 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/game_logic.js"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [],
-              },
-            },
+                artifactRelations: []
+              }
+            }
           ],
-          edges: [{ from: "build_markup", to: "build_logic" }],
+          edges: [{ from: "build_markup", to: "build_logic" }]
         }),
-        toolCalls: [],
-      }),
+        toolCalls: []
+      })
     }
 
     let capturedBlueprintObjective = ""
@@ -1071,7 +1153,7 @@ describe("Planner path execution", () => {
           llm,
           tools: [echoTool("write_file"), echoTool("read_file"), echoTool("think")],
           workspaceRoot: ".",
-          history: [],
+          history: []
         },
         async (step) => {
           if (step.name === "generate_blueprint") {
@@ -1080,11 +1162,26 @@ describe("Planner path execution", () => {
           return {
             output: `done ${step.name}`,
             toolCalls: [
-              { name: "write_file", args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/BLUEPRINT.md", content: "ok" }, result: "ok", isError: false },
-              { name: "read_file", args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/BLUEPRINT.md" }, result: makeBlueprintContract(["tmp/index.html", "tmp/game_logic.js"]), isError: false },
-            ],
+              {
+                name: "write_file",
+                args: {
+                  path: step.executionContext.targetArtifacts[0] ?? "tmp/BLUEPRINT.md",
+                  content: "ok"
+                },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: {
+                  path: step.executionContext.targetArtifacts[0] ?? "tmp/BLUEPRINT.md"
+                },
+                result: makeBlueprintContract(["tmp/index.html", "tmp/game_logic.js"]),
+                isError: false
+              }
+            ]
           }
-        },
+        }
       )
     } finally {
       delegationSpy.mockRestore()
@@ -1094,7 +1191,7 @@ describe("Planner path execution", () => {
     expect(capturedBlueprintObjective).toContain("```blueprint-contract")
     expect(capturedBlueprintObjective).toContain("tmp/index.html")
     expect(capturedBlueprintObjective).toContain("tmp/game_logic.js")
-    expect(capturedBlueprintObjective).toContain("Immediately read \"tmp/BLUEPRINT.md\" back with read_file")
+    expect(capturedBlueprintObjective).toContain('Immediately read "tmp/BLUEPRINT.md" back with read_file')
   })
 
   it("injects browser runtime wiring and module-boundary contracts into HTML and JS steps", async () => {
@@ -1112,7 +1209,7 @@ describe("Planner path execution", () => {
       hardBlockedTaskClass: null,
       hardBlockedTaskClassSource: null,
       hardBlockedTaskClassSignal: null,
-      diagnostics: {},
+      diagnostics: {}
     })
     const llm: LLMClient = {
       chat: vi.fn().mockResolvedValue({
@@ -1140,14 +1237,14 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/index.html", "tmp/game_logic.js"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [],
-              },
-            },
+                artifactRelations: []
+              }
+            }
           ],
-          edges: [],
+          edges: []
         }),
-        toolCalls: [],
-      }),
+        toolCalls: []
+      })
     }
 
     let capturedMarkupObjective = ""
@@ -1162,7 +1259,7 @@ describe("Planner path execution", () => {
           llm,
           tools: [echoTool("write_file"), echoTool("read_file"), echoTool("think")],
           workspaceRoot: ".",
-          history: [],
+          history: []
         },
         async (step) => {
           if (step.executionContext.targetArtifacts.includes("tmp/index.html")) {
@@ -1177,11 +1274,21 @@ describe("Planner path execution", () => {
           return {
             output: `done ${step.name}`,
             toolCalls: [
-              { name: "write_file", args: { path: primaryArtifact, content: "ok" }, result: "ok", isError: false },
-              { name: "read_file", args: { path: primaryArtifact }, result: `content for ${primaryArtifact}`, isError: false },
-            ],
+              {
+                name: "write_file",
+                args: { path: primaryArtifact, content: "ok" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: primaryArtifact },
+                result: `content for ${primaryArtifact}`,
+                isError: false
+              }
+            ]
           }
-        },
+        }
       )
     } finally {
       delegationSpy.mockRestore()
@@ -1190,7 +1297,9 @@ describe("Planner path execution", () => {
     expect(capturedMarkupObjective).toContain("Entrypoint wiring contract")
     expect(capturedMarkupCriteria.some((criterion) => criterion.includes("game_logic.js"))).toBe(true)
     expect(capturedLogicObjective).toContain("runtime JS must use ES modules consistently")
-    expect(capturedLogicCriteria).toContain("Uses ES modules consistently in browser runtime files; cross-file dependencies use import/export and no CommonJS or window globals.")
+    expect(capturedLogicCriteria).toContain(
+      "Uses ES modules consistently in browser runtime files; cross-file dependencies use import/export and no CommonJS or window globals."
+    )
   })
 
   it("reruns only repair-plan steps across planner retries and updates acceptance state after verification", async () => {
@@ -1207,7 +1316,7 @@ describe("Planner path execution", () => {
       hardBlockedTaskClass: null,
       hardBlockedTaskClassSource: null,
       hardBlockedTaskClassSignal: null,
-      diagnostics: {},
+      diagnostics: {}
     })
     const verifySpy = vi.spyOn(plannerVerifier, "verify")
     const llm: LLMClient = {
@@ -1236,14 +1345,14 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/summary.txt"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [],
-              },
-            },
+                artifactRelations: []
+              }
+            }
           ],
-          edges: [],
+          edges: []
         }),
-        toolCalls: [],
-      }),
+        toolCalls: []
+      })
     }
 
     verifySpy
@@ -1257,32 +1366,36 @@ describe("Planner path execution", () => {
             outcome: "retry",
             confidence: 0.68,
             issues: ["Missing integration marker in tmp/summary.txt"],
-            issueDetails: [{
-              code: "integration_wiring",
-              severity: "error",
-              retryable: true,
-              ownerStepName: "write_summary",
-              confidence: 0.8,
-              ownershipMode: "deterministic_owner",
-              suspectedOwners: ["write_summary"],
-              primaryOwner: "write_summary",
-              affectedArtifacts: ["tmp/summary.txt"],
-              sourceArtifacts: ["tmp/summary.txt"],
-              evidenceIds: ["write_summary:llm:1:integration_wiring"],
-              repairClass: "integration_wiring",
-              summary: "Missing integration marker in tmp/summary.txt",
-            }],
-            evidence: [{
-              id: "write_summary:llm:1:integration_wiring",
-              stepName: "write_summary",
-              source: "llm",
-              kind: "integration_wiring",
-              message: "Missing integration marker in tmp/summary.txt",
-              artifactPaths: ["tmp/summary.txt"],
-            }],
-            retryable: true,
-          },
-        ],
+            issueDetails: [
+              {
+                code: "integration_wiring",
+                severity: "error",
+                retryable: true,
+                ownerStepName: "write_summary",
+                confidence: 0.8,
+                ownershipMode: "deterministic_owner",
+                suspectedOwners: ["write_summary"],
+                primaryOwner: "write_summary",
+                affectedArtifacts: ["tmp/summary.txt"],
+                sourceArtifacts: ["tmp/summary.txt"],
+                evidenceIds: ["write_summary:llm:1:integration_wiring"],
+                repairClass: "integration_wiring",
+                summary: "Missing integration marker in tmp/summary.txt"
+              }
+            ],
+            evidence: [
+              {
+                id: "write_summary:llm:1:integration_wiring",
+                stepName: "write_summary",
+                source: "llm",
+                kind: "integration_wiring",
+                message: "Missing integration marker in tmp/summary.txt",
+                artifactPaths: ["tmp/summary.txt"]
+              }
+            ],
+            retryable: true
+          }
+        ]
       })
       .mockResolvedValueOnce({
         overall: "pass",
@@ -1296,13 +1409,13 @@ describe("Planner path execution", () => {
             issues: [],
             issueDetails: [],
             evidence: [],
-            retryable: false,
-          },
-        ],
+            retryable: false
+          }
+        ]
       })
 
     const traces: Array<Record<string, unknown>> = []
-  const callOrder: string[] = []
+    const callOrder: string[] = []
     const objectives: string[] = []
 
     try {
@@ -1313,23 +1426,31 @@ describe("Planner path execution", () => {
           tools: [echoTool("write_file"), echoTool("read_file")],
           workspaceRoot: ".",
           history: [],
-          onTrace: (entry) => traces.push(entry),
+          onTrace: (entry) => traces.push(entry)
         },
         async (step) => {
           callOrder.push(step.name)
           objectives.push(step.objective)
           const attempt = callOrder.length
-          const content = attempt >= 2
-            ? "summary complete\nintegration marker present"
-            : "summary draft"
+          const content = attempt >= 2 ? "summary complete\nintegration marker present" : "summary draft"
           return {
             output: `done ${step.name}`,
             toolCalls: [
-              { name: "write_file", args: { path: "tmp/summary.txt", content }, result: "ok", isError: false },
-              { name: "read_file", args: { path: "tmp/summary.txt" }, result: content, isError: false },
-            ],
+              {
+                name: "write_file",
+                args: { path: "tmp/summary.txt", content },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: "tmp/summary.txt" },
+                result: content,
+                isError: false
+              }
+            ]
           }
-        },
+        }
       )
 
       expect(result.handled).toBe(true)
@@ -1338,30 +1459,42 @@ describe("Planner path execution", () => {
       expect(objectives[1]).toContain("Missing integration marker in tmp/summary.txt")
       expect(result.pipelineResult?.stepResults.get("write_summary")?.acceptanceState).toBe("accepted")
 
-      const repairTrace = traces.find((entry) => entry.kind === "planner-repair-plan") as { rerunOrder?: string[]; tasks?: Array<{ stepName: string; mode: string }> } | undefined
+      const repairTrace = traces.find((entry) => entry.kind === "planner-repair-plan") as
+        | { rerunOrder?: string[]; tasks?: Array<{ stepName: string; mode: string }> }
+        | undefined
       expect(repairTrace?.rerunOrder).toEqual(["write_summary"])
-      expect(repairTrace?.tasks?.map((task) => `${task.stepName}:${task.mode}`)).toEqual(["write_summary:repair"])
+      expect(repairTrace?.tasks?.map((task) => `${task.stepName}:${task.mode}`)).toEqual([
+        "write_summary:repair"
+      ])
 
-      const compatibilityTrace = traces.find((entry) => entry.kind === "planner-repair-compatibility") as {
-        activePath?: string
-        diverged?: boolean
-        legacy?: { rerunOrder?: string[] }
-        repair?: { rerunOrder?: string[] }
-      } | undefined
+      const compatibilityTrace = traces.find((entry) => entry.kind === "planner-repair-compatibility") as
+        | {
+            activePath?: string
+            diverged?: boolean
+            legacy?: { rerunOrder?: string[] }
+            repair?: { rerunOrder?: string[] }
+          }
+        | undefined
       expect(compatibilityTrace?.activePath).toBe("repair")
       expect(compatibilityTrace?.diverged).toBe(false)
       expect(compatibilityTrace?.legacy?.rerunOrder).toEqual(["write_summary"])
       expect(compatibilityTrace?.repair?.rerunOrder).toEqual(["write_summary"])
 
-      const retryTrace = traces.find((entry) => entry.kind === "planner-retry") as { rerunOrder?: string[] } | undefined
+      const retryTrace = traces.find((entry) => entry.kind === "planner-retry") as
+        | { rerunOrder?: string[] }
+        | undefined
       expect(retryTrace?.rerunOrder).toEqual(["write_summary"])
 
       const verificationTraces = traces.filter((entry) => entry.kind === "planner-verification") as Array<{
         steps: Array<{ stepName: string; acceptanceState?: string }>
       }>
       expect(verificationTraces).toHaveLength(2)
-      expect(verificationTraces[0]?.steps.find((step) => step.stepName === "write_summary")?.acceptanceState).toBe("repair_required")
-      expect(verificationTraces[1]?.steps.find((step) => step.stepName === "write_summary")?.acceptanceState).toBe("accepted")
+      expect(
+        verificationTraces[0]?.steps.find((step) => step.stepName === "write_summary")?.acceptanceState
+      ).toBe("repair_required")
+      expect(
+        verificationTraces[1]?.steps.find((step) => step.stepName === "write_summary")?.acceptanceState
+      ).toBe("accepted")
     } finally {
       delegationSpy.mockRestore()
       verifySpy.mockRestore()
@@ -1387,7 +1520,7 @@ describe("Planner path execution", () => {
       hardBlockedTaskClass: null,
       hardBlockedTaskClassSource: null,
       hardBlockedTaskClassSignal: null,
-      diagnostics: {},
+      diagnostics: {}
     })
     const verifySpy = vi.spyOn(plannerVerifier, "verify")
     const llm: LLMClient = {
@@ -1416,8 +1549,8 @@ describe("Planner path execution", () => {
                 targetArtifacts: ["tmp/api.ts"],
                 effectClass: "filesystem_write",
                 verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/api.ts" }],
-              },
+                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/api.ts" }]
+              }
             },
             {
               name: "wire_ui",
@@ -1440,15 +1573,15 @@ describe("Planner path execution", () => {
                 verificationMode: "none",
                 artifactRelations: [
                   { relationType: "read_dependency", artifactPath: "tmp/api.ts" },
-                  { relationType: "write_owner", artifactPath: "tmp/ui.ts" },
-                ],
-              },
-            },
+                  { relationType: "write_owner", artifactPath: "tmp/ui.ts" }
+                ]
+              }
+            }
           ],
-          edges: [{ from: "write_api", to: "wire_ui" }],
+          edges: [{ from: "write_api", to: "wire_ui" }]
         }),
-        toolCalls: [],
-      }),
+        toolCalls: []
+      })
     }
 
     verifySpy
@@ -1464,35 +1597,39 @@ describe("Planner path execution", () => {
             issues: [],
             issueDetails: [],
             evidence: [],
-            retryable: false,
+            retryable: false
           },
           {
             stepName: "wire_ui",
             outcome: "retry",
             confidence: 0.61,
             issues: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
-            issueDetails: [makeIssue("Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts", {
-              code: "cross_file_signature_mismatch",
-              ownerStepName: "write_api",
-              ownershipMode: "shared_owners",
-              suspectedOwners: ["write_api", "wire_ui"],
-              primaryOwner: "write_api",
-              affectedArtifacts: ["tmp/api.ts", "tmp/ui.ts"],
-              sourceArtifacts: ["tmp/api.ts"],
-              repairClass: "integration_wiring",
-              confidence: 0.58,
-            })],
-            evidence: [{
-              id: "wire_ui:llm:1:cross_file_signature_mismatch",
-              stepName: "wire_ui",
-              source: "llm",
-              kind: "cross_file_signature_mismatch",
-              message: "Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts",
-              artifactPaths: ["tmp/api.ts", "tmp/ui.ts"],
-            }],
-            retryable: true,
-          },
-        ],
+            issueDetails: [
+              makeIssue("Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts", {
+                code: "cross_file_signature_mismatch",
+                ownerStepName: "write_api",
+                ownershipMode: "shared_owners",
+                suspectedOwners: ["write_api", "wire_ui"],
+                primaryOwner: "write_api",
+                affectedArtifacts: ["tmp/api.ts", "tmp/ui.ts"],
+                sourceArtifacts: ["tmp/api.ts"],
+                repairClass: "integration_wiring",
+                confidence: 0.58
+              })
+            ],
+            evidence: [
+              {
+                id: "wire_ui:llm:1:cross_file_signature_mismatch",
+                stepName: "wire_ui",
+                source: "llm",
+                kind: "cross_file_signature_mismatch",
+                message: "Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts",
+                artifactPaths: ["tmp/api.ts", "tmp/ui.ts"]
+              }
+            ],
+            retryable: true
+          }
+        ]
       })
       .mockResolvedValueOnce({
         overall: "pass",
@@ -1506,7 +1643,7 @@ describe("Planner path execution", () => {
             issues: [],
             issueDetails: [],
             evidence: [],
-            retryable: false,
+            retryable: false
           },
           {
             stepName: "wire_ui",
@@ -1515,9 +1652,9 @@ describe("Planner path execution", () => {
             issues: [],
             issueDetails: [],
             evidence: [],
-            retryable: false,
-          },
-        ],
+            retryable: false
+          }
+        ]
       })
 
     const traces: Array<Record<string, unknown>> = []
@@ -1531,15 +1668,25 @@ describe("Planner path execution", () => {
           tools: [echoTool("write_file"), echoTool("read_file")],
           workspaceRoot: ".",
           history: [],
-          onTrace: (entry) => traces.push(entry),
+          onTrace: (entry) => traces.push(entry)
         },
         async (step) => {
           const target = step.executionContext.targetArtifacts[0] ?? "tmp/file.txt"
           return {
             output: `done ${step.name}`,
             toolCalls: [
-              { name: "write_file", args: { path: target, content: `updated ${step.name}` }, result: "ok", isError: false },
-              { name: "read_file", args: { path: target }, result: `updated ${step.name}`, isError: false },
+              {
+                name: "write_file",
+                args: { path: target, content: `updated ${step.name}` },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: target },
+                result: `updated ${step.name}`,
+                isError: false
+              }
             ],
             execution: {
               status: "success",
@@ -1547,21 +1694,23 @@ describe("Planner path execution", () => {
               producedArtifacts: step.executionContext.targetArtifacts,
               modifiedArtifacts: step.executionContext.targetArtifacts,
               verificationAttempts: [],
-              unresolvedBlockers: [],
-            },
+              unresolvedBlockers: []
+            }
           }
-        },
+        }
       )
 
       expect(result.handled).toBe(true)
 
-      const compatibilityTrace = traces.find((entry) => entry.kind === "planner-repair-compatibility") as {
-        activePath?: string
-        diverged?: boolean
-        divergenceScore?: number
-        divergenceThreshold?: number
-        pinnedToLegacy?: boolean
-      } | undefined
+      const compatibilityTrace = traces.find((entry) => entry.kind === "planner-repair-compatibility") as
+        | {
+            activePath?: string
+            diverged?: boolean
+            divergenceScore?: number
+            divergenceThreshold?: number
+            pinnedToLegacy?: boolean
+          }
+        | undefined
       expect(compatibilityTrace?.activePath).toBe("legacy")
       expect(compatibilityTrace?.diverged).toBe(true)
       expect(compatibilityTrace?.divergenceScore).toBeGreaterThanOrEqual(1)
@@ -1590,8 +1739,8 @@ describe("Planner runtime model", () => {
         targetArtifacts: ["tmp/game.js"],
         effectClass: "filesystem_write",
         verificationMode: "none",
-        artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/game.js" }],
-      },
+        artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/game.js" }]
+      }
     })
     const consumer = makeSubagentStep("wire_ui", {
       dependsOn: ["write_logic"],
@@ -1606,15 +1755,17 @@ describe("Planner runtime model", () => {
         verificationMode: "browser_check",
         artifactRelations: [
           { relationType: "read_dependency", artifactPath: "tmp/game.js" },
-          { relationType: "write_owner", artifactPath: "tmp/index.html" },
-        ],
-      },
+          { relationType: "write_owner", artifactPath: "tmp/index.html" }
+        ]
+      }
     })
 
-    const runtime = compilePlannerRuntime(makePlan({
-      steps: [owner, consumer],
-      edges: [{ from: "write_logic", to: "wire_ui" }],
-    }))
+    const runtime = compilePlannerRuntime(
+      makePlan({
+        steps: [owner, consumer],
+        edges: [{ from: "write_logic", to: "wire_ui" }]
+      })
+    )
 
     expect(runtime.executionGraph.get("wire_ui")?.dependsOn).toEqual(["write_logic"])
     expect(runtime.ownershipGraph.get("tmp/game.js")?.ownerStepName).toBe("write_logic")
@@ -1635,8 +1786,8 @@ describe("Planner runtime model", () => {
         targetArtifacts: ["tmp/api.ts"],
         effectClass: "filesystem_write",
         verificationMode: "none",
-        artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/api.ts" }],
-      },
+        artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/api.ts" }]
+      }
     })
     const consumer = makeSubagentStep("wire_ui", {
       executionContext: {
@@ -1650,45 +1801,71 @@ describe("Planner runtime model", () => {
         verificationMode: "none",
         artifactRelations: [
           { relationType: "read_dependency", artifactPath: "tmp/api.ts" },
-          { relationType: "write_owner", artifactPath: "tmp/ui.ts" },
-        ],
-      },
+          { relationType: "write_owner", artifactPath: "tmp/ui.ts" }
+        ]
+      }
     })
     const plan = makePlan({
       steps: [producer, consumer],
-      edges: [{ from: "write_api", to: "wire_ui" }],
+      edges: [{ from: "write_api", to: "wire_ui" }]
     })
     const pipelineResult: PipelineResult = {
       status: "completed",
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["write_api", { name: "write_api", status: "completed", executionState: "executed", acceptanceState: "pending_verification", durationMs: 1, producedArtifacts: ["tmp/api.ts"], modifiedArtifacts: ["tmp/api.ts"] }],
-        ["wire_ui", { name: "wire_ui", status: "completed", executionState: "executed", acceptanceState: "pending_verification", durationMs: 1, producedArtifacts: ["tmp/ui.ts"], modifiedArtifacts: ["tmp/ui.ts"] }],
-      ]),
+        [
+          "write_api",
+          {
+            name: "write_api",
+            status: "completed",
+            executionState: "executed",
+            acceptanceState: "pending_verification",
+            durationMs: 1,
+            producedArtifacts: ["tmp/api.ts"],
+            modifiedArtifacts: ["tmp/api.ts"]
+          }
+        ],
+        [
+          "wire_ui",
+          {
+            name: "wire_ui",
+            status: "completed",
+            executionState: "executed",
+            acceptanceState: "pending_verification",
+            durationMs: 1,
+            producedArtifacts: ["tmp/ui.ts"],
+            modifiedArtifacts: ["tmp/ui.ts"]
+          }
+        ]
+      ])
     }
     const decision: VerifierDecision = {
       overall: "retry",
       confidence: 0.61,
       unresolvedItems: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
-      steps: [{
-        stepName: "wire_ui",
-        outcome: "retry",
-        confidence: 0.61,
-        issues: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
-        issueDetails: [makeIssue("Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts", {
-          code: "cross_file_signature_mismatch",
-          ownerStepName: "write_api",
-          ownershipMode: "shared_owners",
-          suspectedOwners: ["write_api", "wire_ui"],
-          primaryOwner: "write_api",
-          affectedArtifacts: ["tmp/api.ts", "tmp/ui.ts"],
-          sourceArtifacts: ["tmp/api.ts"],
-          repairClass: "integration_wiring",
-          confidence: 0.58,
-        })],
-        retryable: true,
-      }],
+      steps: [
+        {
+          stepName: "wire_ui",
+          outcome: "retry",
+          confidence: 0.61,
+          issues: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
+          issueDetails: [
+            makeIssue("Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts", {
+              code: "cross_file_signature_mismatch",
+              ownerStepName: "write_api",
+              ownershipMode: "shared_owners",
+              suspectedOwners: ["write_api", "wire_ui"],
+              primaryOwner: "write_api",
+              affectedArtifacts: ["tmp/api.ts", "tmp/ui.ts"],
+              sourceArtifacts: ["tmp/api.ts"],
+              repairClass: "integration_wiring",
+              confidence: 0.58
+            })
+          ],
+          retryable: true
+        }
+      ]
     }
 
     const repairPlan = buildRepairPlan(plan, pipelineResult, decision)
@@ -1722,18 +1899,21 @@ describe("Pipeline acceptance-gated scheduling", () => {
         verificationMode: "none",
         artifactRelations: [
           { relationType: "read_dependency", artifactPath: "tmp/game.js" },
-          { relationType: "write_owner", artifactPath: "tmp/index.html" },
-        ],
-      },
+          { relationType: "write_owner", artifactPath: "tmp/index.html" }
+        ]
+      }
     })
     const plan = makePlan({
-      steps: [{
-        name: "repair_logic",
-        stepType: "deterministic_tool",
-        tool: "write_file",
-        args: { path: "tmp/game.js", content: "ok" },
-      }, consumer],
-      edges: [{ from: "repair_logic", to: "repair_ui" }],
+      steps: [
+        {
+          name: "repair_logic",
+          stepType: "deterministic_tool",
+          tool: "write_file",
+          args: { path: "tmp/game.js", content: "ok" }
+        },
+        consumer
+      ],
+      edges: [{ from: "repair_logic", to: "repair_ui" }]
     })
     const runtimeModel = compilePlannerRuntime(plan)
 
@@ -1749,14 +1929,17 @@ describe("Pipeline acceptance-gated scheduling", () => {
               name: "read_file",
               args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/file.txt" },
               result: "ok",
-              isError: false,
+              isError: false
             },
             {
               name: "write_file",
-              args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/file.txt", content: "ok" },
+              args: {
+                path: step.executionContext.targetArtifacts[0] ?? "tmp/file.txt",
+                content: "ok"
+              },
               result: "ok",
-              isError: false,
-            },
+              isError: false
+            }
           ],
           execution: {
             status: "success",
@@ -1764,8 +1947,8 @@ describe("Pipeline acceptance-gated scheduling", () => {
             producedArtifacts: step.executionContext.targetArtifacts,
             modifiedArtifacts: step.executionContext.targetArtifacts,
             verificationAttempts: [],
-            unresolvedBlockers: [],
-          },
+            unresolvedBlockers: []
+          }
         }
       },
       {
@@ -1777,20 +1960,20 @@ describe("Pipeline acceptance-gated scheduling", () => {
               mode: "repair",
               ownedIssues: [],
               dependencyContext: [],
-              requiredAcceptedArtifacts: [],
+              requiredAcceptedArtifacts: []
             },
             {
               stepName: "repair_ui",
               mode: "repair",
               ownedIssues: [],
               dependencyContext: [],
-              requiredAcceptedArtifacts: ["tmp/game.js"],
-            },
+              requiredAcceptedArtifacts: ["tmp/game.js"]
+            }
           ],
           rerunOrder: ["repair_logic", "repair_ui"],
-          skippedVerifiedSteps: [],
-        },
-      },
+          skippedVerifiedSteps: []
+        }
+      }
     )
 
     expect(calls).toEqual([])
@@ -1814,18 +1997,21 @@ describe("Pipeline acceptance-gated scheduling", () => {
         verificationMode: "none",
         artifactRelations: [
           { relationType: "read_dependency", artifactPath: "tmp/game.js" },
-          { relationType: "write_owner", artifactPath: "tmp/index.html" },
-        ],
-      },
+          { relationType: "write_owner", artifactPath: "tmp/index.html" }
+        ]
+      }
     })
     const plan = makePlan({
-      steps: [{
-        name: "repair_logic",
-        stepType: "deterministic_tool",
-        tool: "write_file",
-        args: { path: "tmp/game.js", content: "ok" },
-      }, consumer],
-      edges: [{ from: "repair_logic", to: "repair_ui" }],
+      steps: [
+        {
+          name: "repair_logic",
+          stepType: "deterministic_tool",
+          tool: "write_file",
+          args: { path: "tmp/game.js", content: "ok" }
+        },
+        consumer
+      ],
+      edges: [{ from: "repair_logic", to: "repair_ui" }]
     })
     const runtimeModel = compilePlannerRuntime(plan)
 
@@ -1839,16 +2025,24 @@ describe("Pipeline acceptance-gated scheduling", () => {
           toolCalls: [
             {
               name: "read_file",
-              args: { path: step.executionContext.requiredSourceArtifacts[0] ?? step.executionContext.targetArtifacts[0] ?? "tmp/file.txt" },
+              args: {
+                path:
+                  step.executionContext.requiredSourceArtifacts[0] ??
+                  step.executionContext.targetArtifacts[0] ??
+                  "tmp/file.txt"
+              },
               result: "ok",
-              isError: false,
+              isError: false
             },
             {
               name: "write_file",
-              args: { path: step.executionContext.targetArtifacts[0] ?? "tmp/file.txt", content: "ok" },
+              args: {
+                path: step.executionContext.targetArtifacts[0] ?? "tmp/file.txt",
+                content: "ok"
+              },
               result: "ok",
-              isError: false,
-            },
+              isError: false
+            }
           ],
           execution: {
             status: "success",
@@ -1856,22 +2050,25 @@ describe("Pipeline acceptance-gated scheduling", () => {
             producedArtifacts: step.executionContext.targetArtifacts,
             modifiedArtifacts: step.executionContext.targetArtifacts,
             verificationAttempts: [],
-            unresolvedBlockers: [],
-          },
+            unresolvedBlockers: []
+          }
         }
       },
       {
         runtimeModel,
         priorResults: new Map([
-          ["repair_logic", {
-            name: "repair_logic",
-            status: "completed",
-            executionState: "executed",
-            acceptanceState: "accepted",
-            durationMs: 1,
-            producedArtifacts: ["tmp/game.js"],
-            modifiedArtifacts: ["tmp/game.js"],
-          }],
+          [
+            "repair_logic",
+            {
+              name: "repair_logic",
+              status: "completed",
+              executionState: "executed",
+              acceptanceState: "accepted",
+              durationMs: 1,
+              producedArtifacts: ["tmp/game.js"],
+              modifiedArtifacts: ["tmp/game.js"]
+            }
+          ]
         ]),
         repairPlan: {
           tasks: [
@@ -1880,13 +2077,13 @@ describe("Pipeline acceptance-gated scheduling", () => {
               mode: "repair",
               ownedIssues: [],
               dependencyContext: [],
-              requiredAcceptedArtifacts: ["tmp/game.js"],
-            },
+              requiredAcceptedArtifacts: ["tmp/game.js"]
+            }
           ],
           rerunOrder: ["repair_ui"],
-          skippedVerifiedSteps: ["repair_logic"],
-        },
-      },
+          skippedVerifiedSteps: ["repair_logic"]
+        }
+      }
     )
 
     expect(calls).toEqual(["repair_ui"])
@@ -1896,21 +2093,23 @@ describe("Pipeline acceptance-gated scheduling", () => {
 
   it("fails completed child steps that mutate forbidden artifacts during reconciliation", async () => {
     const plan = makePlan({
-      steps: [makeSubagentStep("repair_ui", {
-        executionContext: {
-          workspaceRoot: ".",
-          allowedReadRoots: ["."],
-          allowedWriteRoots: ["tmp"],
-          allowedTools: ["write_file", "read_file"],
-          requiredSourceArtifacts: [],
-          targetArtifacts: ["tmp/index.html"],
-          effectClass: "filesystem_write",
-          verificationMode: "none",
-          artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
-          forbiddenArtifacts: ["tmp/game.js"],
-        },
-      })],
-      edges: [],
+      steps: [
+        makeSubagentStep("repair_ui", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["tmp"],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }],
+            forbiddenArtifacts: ["tmp/game.js"]
+          }
+        })
+      ],
+      edges: []
     })
 
     const result = await executePipeline(
@@ -1919,8 +2118,18 @@ describe("Pipeline acceptance-gated scheduling", () => {
       async () => ({
         output: "done",
         toolCalls: [
-          { name: "write_file", args: { path: "tmp/index.html", content: "ok" }, result: "ok", isError: false },
-          { name: "write_file", args: { path: "tmp/game.js", content: "bad" }, result: "ok", isError: false },
+          {
+            name: "write_file",
+            args: { path: "tmp/index.html", content: "ok" },
+            result: "ok",
+            isError: false
+          },
+          {
+            name: "write_file",
+            args: { path: "tmp/game.js", content: "bad" },
+            result: "ok",
+            isError: false
+          }
         ],
         execution: {
           status: "success",
@@ -1928,10 +2137,10 @@ describe("Pipeline acceptance-gated scheduling", () => {
           producedArtifacts: ["tmp/index.html", "tmp/game.js"],
           modifiedArtifacts: ["tmp/index.html", "tmp/game.js"],
           verificationAttempts: [],
-          unresolvedBlockers: [],
-        },
+          unresolvedBlockers: []
+        }
       }),
-      { runtimeModel: compilePlannerRuntime(plan) },
+      { runtimeModel: compilePlannerRuntime(plan) }
     )
 
     const step = result.stepResults.get("repair_ui")
@@ -1953,35 +2162,44 @@ describe("Verifier ownership attribution", () => {
         targetArtifacts: ["tmp/api.ts"],
         effectClass: "filesystem_write",
         verificationMode: "none",
-        artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/api.ts" }],
-      },
+        artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/api.ts" }]
+      }
     })
     const plan = makePlan({
-      steps: [producer, makeSubagentStep("wire_ui", {
-        executionContext: {
-          workspaceRoot: ".",
-          allowedReadRoots: ["."],
-          allowedWriteRoots: ["tmp"],
-          allowedTools: ["write_file", "read_file"],
-          requiredSourceArtifacts: ["tmp/api.ts"],
-          targetArtifacts: ["tmp/ui.ts"],
-          effectClass: "filesystem_write",
-          verificationMode: "none",
-          artifactRelations: [
-            { relationType: "read_dependency", artifactPath: "tmp/api.ts" },
-            { relationType: "write_owner", artifactPath: "tmp/ui.ts" },
-          ],
-        },
-      })],
-      edges: [{ from: "write_api", to: "wire_ui" }],
+      steps: [
+        producer,
+        makeSubagentStep("wire_ui", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["tmp"],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: ["tmp/api.ts"],
+            targetArtifacts: ["tmp/ui.ts"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: [
+              { relationType: "read_dependency", artifactPath: "tmp/api.ts" },
+              { relationType: "write_owner", artifactPath: "tmp/ui.ts" }
+            ]
+          }
+        })
+      ],
+      edges: [{ from: "write_api", to: "wire_ui" }]
     })
-    const enriched = enrichVerifierAssessments(plan, [{
-      stepName: "wire_ui",
-      outcome: "retry",
-      confidence: 0.55,
-      issues: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
-      retryable: true,
-    }], "llm")
+    const enriched = enrichVerifierAssessments(
+      plan,
+      [
+        {
+          stepName: "wire_ui",
+          outcome: "retry",
+          confidence: 0.55,
+          issues: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
+          retryable: true
+        }
+      ],
+      "llm"
+    )
 
     const issue = enriched[0]?.issueDetails?.[0]
     expect(issue?.ownershipMode).toBe("integration_layer")
@@ -2004,10 +2222,10 @@ describe("Plan validation: validatePlan", () => {
           stepType: "deterministic_tool",
           dependsOn: ["implement"],
           tool: "echo",
-          args: { text: "check" },
-        },
+          args: { text: "check" }
+        }
       ],
-      edges: [{ from: "implement", to: "verify" }],
+      edges: [{ from: "implement", to: "verify" }]
     })
 
     const result = validatePlan(plan, [echoTool()])
@@ -2019,55 +2237,61 @@ describe("Plan validation: validatePlan", () => {
     const plan = makePlan({
       steps: [
         makeSubagentStep("step-a", { dependsOn: ["step-b"] }),
-        makeSubagentStep("step-b", { dependsOn: ["step-a"] }),
+        makeSubagentStep("step-b", { dependsOn: ["step-a"] })
       ],
       edges: [
         { from: "step-a", to: "step-b" },
-        { from: "step-b", to: "step-a" },
-      ],
+        { from: "step-b", to: "step-a" }
+      ]
     })
 
     const result = validatePlan(plan, [echoTool()])
     expect(result.valid).toBe(false)
-    expect(result.diagnostics.some(d => d.code === "cycle_detected")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "cycle_detected")).toBe(true)
   })
 
   it("detects unknown tool references in deterministic steps", () => {
     const plan = makePlan({
-      steps: [{
-        name: "run-nonexistent",
-        stepType: "deterministic_tool",
-        tool: "nonexistent_tool",
-        args: {},
-      }],
-      edges: [],
+      steps: [
+        {
+          name: "run-nonexistent",
+          stepType: "deterministic_tool",
+          tool: "nonexistent_tool",
+          args: {}
+        }
+      ],
+      edges: []
     })
 
     const result = validatePlan(plan, [echoTool()])
     expect(result.valid).toBe(false)
-    expect(result.diagnostics.some(d => d.code === "unknown_tool")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "unknown_tool")).toBe(true)
   })
 
   it("detects vague objective in subagent steps", () => {
     const plan = makePlan({
       steps: [makeSubagentStep("bad-step", { objective: "do it" })],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
     expect(result.valid).toBe(true) // warnings don't block
-    expect(result.diagnostics.some(d => d.code === "vague_objective" && d.severity === "warning")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "vague_objective" && d.severity === "warning")).toBe(
+      true
+    )
   })
 
   it("detects missing acceptance criteria", () => {
     const plan = makePlan({
       steps: [makeSubagentStep("no-criteria", { acceptanceCriteria: [] })],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
     expect(result.valid).toBe(true) // warnings don't block
-    expect(result.diagnostics.some(d => d.code === "missing_acceptance_criteria" && d.severity === "warning")).toBe(true)
+    expect(
+      result.diagnostics.some((d) => d.code === "missing_acceptance_criteria" && d.severity === "warning")
+    ).toBe(true)
   })
 
   it("detects multiple write owners for same artifact", () => {
@@ -2083,8 +2307,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [{ relationType: "write_owner", artifactPath: "game.js" }],
-          },
+            artifactRelations: [{ relationType: "write_owner", artifactPath: "game.js" }]
+          }
         }),
         makeSubagentStep("writer-2", {
           executionContext: {
@@ -2096,16 +2320,18 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [{ relationType: "write_owner", artifactPath: "game.js" }],
-          },
-        }),
+            artifactRelations: [{ relationType: "write_owner", artifactPath: "game.js" }]
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
     expect(result.valid).toBe(false)
-    expect(result.diagnostics.some(d => d.code === "multiple_write_owners" && d.severity === "error")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "multiple_write_owners" && d.severity === "error")).toBe(
+      true
+    )
   })
 
   it("detects too many steps (>15)", () => {
@@ -2113,7 +2339,7 @@ describe("Plan validation: validatePlan", () => {
     const plan = makePlan({ steps, edges: [] })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "too_many_steps")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "too_many_steps")).toBe(true)
   })
 
   it("detects inconsistent output directories for same filename", () => {
@@ -2129,8 +2355,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["game/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("step-b", {
           executionContext: {
@@ -2142,17 +2368,19 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/game/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "inconsistent_output_directory")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "inconsistent_output_directory")).toBe(true)
     expect(result.valid).toBe(false)
-    expect(result.diagnostics.some(d => d.code === "inconsistent_output_directory" && d.severity === "error")).toBe(true)
+    expect(
+      result.diagnostics.some((d) => d.code === "inconsistent_output_directory" && d.severity === "error")
+    ).toBe(true)
   })
 
   it("allows sibling subdirectories under a single root output tree", () => {
@@ -2168,8 +2396,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/css/styles.css"],
             effectClass: "filesystem_write",
             verificationMode: "browser_check",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("step-js", {
           executionContext: {
@@ -2181,15 +2409,15 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/js/game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "inconsistent_output_directory")).toBe(false)
+    expect(result.diagnostics.some((d) => d.code === "inconsistent_output_directory")).toBe(false)
   })
 
   it("treats missing per-step verification coverage as non-blocking guidance", () => {
@@ -2205,8 +2433,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/a.txt"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("writer-b", {
           executionContext: {
@@ -2218,16 +2446,18 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/b.txt"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
     expect(result.valid).toBe(true)
-    expect(result.diagnostics.some(d => d.code === "no_verification_steps" && d.severity === "warning")).toBe(true)
+    expect(
+      result.diagnostics.some((d) => d.code === "no_verification_steps" && d.severity === "warning")
+    ).toBe(true)
   })
 
   it("does not warn for HTML scaffold steps that do not own JS artifacts", () => {
@@ -2245,8 +2475,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/chess/index.html", "tmp/chess/styles.css"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-logic", {
           objective: "Implement game logic for the chess board",
@@ -2260,15 +2490,15 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/chess/game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "missing_dependency_wiring_criteria")).toBe(false)
+    expect(result.diagnostics.some((d) => d.code === "missing_dependency_wiring_criteria")).toBe(false)
   })
 
   it("warns when a consumer step owns dependency artifacts but doesn't mention wiring", () => {
@@ -2286,15 +2516,15 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/app/index.html", "tmp/app/game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "missing_dependency_wiring_criteria")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "missing_dependency_wiring_criteria")).toBe(true)
   })
 
   it("passes when a consumer step owns dependency artifacts and mentions wiring", () => {
@@ -2312,15 +2542,15 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/app/index.html", "tmp/app/game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "missing_dependency_wiring_criteria")).toBe(false)
+    expect(result.diagnostics.some((d) => d.code === "missing_dependency_wiring_criteria")).toBe(false)
   })
 
   it("blocks browser_check when related JS files are owned by other steps", () => {
@@ -2338,8 +2568,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
             effectClass: "filesystem_write",
             verificationMode: "browser_check",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-logic", {
           objective: "Create board/game/ui scripts",
@@ -2352,16 +2582,18 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/board.js", "tmp/game.js", "tmp/ui.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
     expect(result.valid).toBe(false)
-    expect(result.diagnostics.some(d => d.code === "premature_browser_verification" && d.severity === "error")).toBe(true)
+    expect(
+      result.diagnostics.some((d) => d.code === "premature_browser_verification" && d.severity === "error")
+    ).toBe(true)
   })
 
   it("allows browser_check when HTML step owns related JS files", () => {
@@ -2378,8 +2610,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/index.html", "tmp/styles.css", "tmp/board.js", "tmp/game.js", "tmp/ui.js"],
             effectClass: "filesystem_write",
             verificationMode: "browser_check",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("other-page-script", {
           objective: "Create admin page script",
@@ -2392,15 +2624,15 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/admin/monitor.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "premature_browser_verification")).toBe(false)
+    expect(result.diagnostics.some((d) => d.code === "premature_browser_verification")).toBe(false)
   })
 
   it("warns when visual task has no visual rendering criteria", () => {
@@ -2418,8 +2650,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("game-logic", {
           objective: "Implement domain rules and action validation",
@@ -2433,15 +2665,15 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/app/logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "missing_visual_rendering_criteria")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "missing_visual_rendering_criteria")).toBe(true)
   })
 
   it("passes when visual task has rendering criteria", () => {
@@ -2451,7 +2683,7 @@ describe("Plan validation: validatePlan", () => {
           objective: "Create a dashboard layout and render widgets",
           acceptanceCriteria: [
             "Layout has distinct visual regions with clear styling",
-            "Widgets render visible labels and status indicators",
+            "Widgets render visible labels and status indicators"
           ],
           executionContext: {
             workspaceRoot: ".",
@@ -2462,15 +2694,15 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "missing_visual_rendering_criteria")).toBe(false)
+    expect(result.diagnostics.some((d) => d.code === "missing_visual_rendering_criteria")).toBe(false)
   })
 
   it("warns when multi-file JS plan has no shared data contract", () => {
@@ -2487,8 +2719,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/app/state-view.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-logic", {
           objective: "Implement domain logic with validation and state updates",
@@ -2501,22 +2733,23 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/app/logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "missing_shared_data_contract")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "missing_shared_data_contract")).toBe(true)
   })
 
   it("passes when JS steps define shared data format", () => {
     const plan = makePlan({
       steps: [
         makeSubagentStep("create-state-view", {
-          objective: "Create the shared model. Records use format { id: string, status: string }. State is a keyed map by id.",
+          objective:
+            "Create the shared model. Records use format { id: string, status: string }. State is a keyed map by id.",
           executionContext: {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
@@ -2526,8 +2759,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/app/state-view.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-logic", {
           objective: "Implement domain logic with validation and state updates",
@@ -2540,15 +2773,15 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/app/logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "missing_shared_data_contract")).toBe(false)
+    expect(result.diagnostics.some((d) => d.code === "missing_shared_data_contract")).toBe(false)
   })
 
   it("detects inconsistent top-level directories", () => {
@@ -2564,8 +2797,8 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/game/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("step-b", {
           executionContext: {
@@ -2577,54 +2810,56 @@ describe("Plan validation: validatePlan", () => {
             targetArtifacts: ["tmp/chess_game/js/board.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const result = validatePlan(plan, [])
-    expect(result.diagnostics.some(d => d.code === "inconsistent_output_directory")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "inconsistent_output_directory")).toBe(true)
   })
 
   it("errors block pipeline but warnings don't", () => {
     // Plan with only warnings (vague objective) → valid: true
     const warningPlan = makePlan({
       steps: [makeSubagentStep("bad-step", { objective: "do it" })],
-      edges: [],
+      edges: []
     })
     const warningResult = validatePlan(warningPlan, [])
     expect(warningResult.valid).toBe(true)
-    expect(warningResult.diagnostics.every(d => d.severity === "warning")).toBe(true)
+    expect(warningResult.diagnostics.every((d) => d.severity === "warning")).toBe(true)
     expect(warningResult.diagnostics.length).toBeGreaterThan(0)
 
     // Plan with error (unknown tool) → valid: false
     const errorPlan = makePlan({
-      steps: [{
-        name: "bad-tool",
-        stepType: "deterministic_tool",
-        tool: "nonexistent",
-        args: {},
-      }],
-      edges: [],
+      steps: [
+        {
+          name: "bad-tool",
+          stepType: "deterministic_tool",
+          tool: "nonexistent",
+          args: {}
+        }
+      ],
+      edges: []
     })
     const errorResult = validatePlan(errorPlan, [echoTool()])
     expect(errorResult.valid).toBe(false)
-    expect(errorResult.diagnostics.some(d => d.severity === "error")).toBe(true)
+    expect(errorResult.diagnostics.some((d) => d.severity === "error")).toBe(true)
   })
 
   it("cycle_detected is severity error", () => {
     const plan = makePlan({
-      steps: [
-        makeSubagentStep("a", { dependsOn: ["b"] }),
-        makeSubagentStep("b", { dependsOn: ["a"] }),
-      ],
-      edges: [{ from: "a", to: "b" }, { from: "b", to: "a" }],
+      steps: [makeSubagentStep("a", { dependsOn: ["b"] }), makeSubagentStep("b", { dependsOn: ["a"] })],
+      edges: [
+        { from: "a", to: "b" },
+        { from: "b", to: "a" }
+      ]
     })
     const result = validatePlan(plan, [])
     expect(result.valid).toBe(false)
-    expect(result.diagnostics.some(d => d.code === "cycle_detected" && d.severity === "error")).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "cycle_detected" && d.severity === "error")).toBe(true)
   })
 })
 
@@ -2650,11 +2885,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/index.html", "tmp/app.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -2662,8 +2897,16 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["ui-step", { name: "ui-step", status: "completed", output: "wrote tmp/index.html and tmp/app.js", durationMs: 1 }],
-      ]),
+        [
+          "ui-step",
+          {
+            name: "ui-step",
+            status: "completed",
+            output: "wrote tmp/index.html and tmp/app.js",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -2674,9 +2917,10 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         async execute(args) {
           const path = String(args.path)
           if (path.endsWith("index.html")) return "<html><body><script src='app.js'></script></body></html>"
-          if (path.endsWith("app.js")) return "const state = { count: 0 }; function click() { state.count++; }"
+          if (path.endsWith("app.js"))
+            return "const state = { count: 0 }; function click() { state.count++; }"
           return ""
-        },
+        }
       },
       {
         name: "run_command",
@@ -2684,7 +2928,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
+        }
       },
       {
         name: "browser_check",
@@ -2693,15 +2937,15 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         async execute() {
           browserChecks++
           return "No errors"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "ui-step")
+    const step = assessments.find((a) => a.stepName === "ui-step")
     expect(step).toBeDefined()
     expect(browserChecks).toBeGreaterThan(0)
-    expect(step?.issues.some(i => i.includes("VERIFICATION MODALITY GAP"))).toBe(false)
+    expect(step?.issues.some((i) => i.includes("VERIFICATION MODALITY GAP"))).toBe(false)
   })
 
   it("reports runtime modality gap when runtime verification tools are unavailable", async () => {
@@ -2719,11 +2963,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/index.html", "tmp/app.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -2731,8 +2975,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["ui-step", { name: "ui-step", status: "completed", output: "wrote files", durationMs: 1 }],
-      ]),
+        ["ui-step", { name: "ui-step", status: "completed", output: "wrote files", durationMs: 1 }]
+      ])
     }
 
     const tools: Tool[] = [
@@ -2745,15 +2989,15 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           if (path.endsWith("index.html")) return "<html><body><script src='app.js'></script></body></html>"
           if (path.endsWith("app.js")) return "function render(){ return true }"
           return ""
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "ui-step")
+    const step = assessments.find((a) => a.stepName === "ui-step")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("VERIFICATION MODALITY GAP"))).toBe(true)
-    expect(step?.issues.some(i => i.includes("CRITERIA PROOF MISSING"))).toBe(true)
+    expect(step?.issues.some((i) => i.includes("VERIFICATION MODALITY GAP"))).toBe(true)
+    expect(step?.issues.some((i) => i.includes("CRITERIA PROOF MISSING"))).toBe(true)
     expect(step?.outcome).toBe("fail")
     expect(step?.retryable).toBe(true)
   })
@@ -2779,12 +3023,12 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
               ownerStepName: "state-step",
               ownerArtifactPath: "tmp/state.js",
               schema: "single shared state object",
-              mutationPolicy: "owner-only",
-            },
-          },
-        }),
+              mutationPolicy: "owner-only"
+            }
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -2792,8 +3036,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["rules-step", { name: "rules-step", status: "completed", output: "updated tmp/rules.js", durationMs: 1 }],
-      ]),
+        [
+          "rules-step",
+          { name: "rules-step", status: "completed", output: "updated tmp/rules.js", durationMs: 1 }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -2806,7 +3053,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             return "function validateMove(state, move) { return !!state && !!move }"
           }
           return ""
-        },
+        }
       },
       {
         name: "run_command",
@@ -2814,14 +3061,14 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "rules-step")
+    const step = assessments.find((a) => a.stepName === "rules-step")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("shared-state contract"))).toBe(true)
+    expect(step?.issues.some((i) => i.includes("shared-state contract"))).toBe(true)
     expect(step?.outcome).toBe("fail")
     expect(step?.retryable).toBe(false)
   })
@@ -2840,8 +3087,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-js", {
           objective: "Create JS logic",
@@ -2854,11 +3101,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/game-logic.js", "tmp/app/ui-logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "create-html", to: "create-js" }],
+      edges: [{ from: "create-html", to: "create-js" }]
     })
 
     const pipelineResult: PipelineResult = {
@@ -2866,9 +3113,17 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 1,
       totalSteps: 2,
       stepResults: new Map([
-        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
-        ["create-js", { name: "create-js", status: "skipped", error: "upstream aborted", durationMs: 0 }],
-      ]),
+        [
+          "create-html",
+          {
+            name: "create-html",
+            status: "completed",
+            output: "wrote tmp/app/index.html",
+            durationMs: 1
+          }
+        ],
+        ["create-js", { name: "create-js", status: "skipped", error: "upstream aborted", durationMs: 0 }]
+      ])
     }
 
     const tools: Tool[] = [
@@ -2882,7 +3137,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           if (path.endsWith("game-logic.js")) return "export const game = {}"
           if (path.endsWith("ui-logic.js")) return "export const ui = {}"
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -2890,7 +3145,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
+        }
       },
       {
         name: "browser_check",
@@ -2898,14 +3153,14 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute() {
           return "No errors"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    const htmlStep = assessments.find((a) => a.stepName === "create-html")
     expect(htmlStep).toBeDefined()
-    expect(htmlStep?.issues.some(i => i.includes("Integration gap"))).toBe(false)
+    expect(htmlStep?.issues.some((i) => i.includes("Integration gap"))).toBe(false)
   })
 
   it("flags an integration gap when index.html does not load the runtime JS at all", async () => {
@@ -2922,8 +3177,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-js", {
           objective: "Create JS logic",
@@ -2936,11 +3191,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/game-logic.js", "tmp/app/ui-logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "create-html", to: "create-js" }],
+      edges: [{ from: "create-html", to: "create-js" }]
     })
 
     const pipelineResult: PipelineResult = {
@@ -2948,9 +3203,25 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
-        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/game-logic.js and tmp/app/ui-logic.js", durationMs: 1 }],
-      ]),
+        [
+          "create-html",
+          {
+            name: "create-html",
+            status: "completed",
+            output: "wrote tmp/app/index.html",
+            durationMs: 1
+          }
+        ],
+        [
+          "create-js",
+          {
+            name: "create-js",
+            status: "completed",
+            output: "wrote tmp/app/game-logic.js and tmp/app/ui-logic.js",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -2960,11 +3231,13 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute(args) {
           const path = String(args.path)
-          if (path.endsWith("index.html")) return "<html><body><div id='chessboard'></div><p id='status'></p></body></html>"
+          if (path.endsWith("index.html"))
+            return "<html><body><div id='chessboard'></div><p id='status'></p></body></html>"
           if (path.endsWith("game-logic.js")) return "export function initializeBoard() { return [] }"
-          if (path.endsWith("ui-logic.js")) return "import { initializeBoard } from './game-logic.js'\nexport function renderBoard() { return initializeBoard() }"
+          if (path.endsWith("ui-logic.js"))
+            return "import { initializeBoard } from './game-logic.js'\nexport function renderBoard() { return initializeBoard() }"
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -2972,7 +3245,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
+        }
       },
       {
         name: "browser_check",
@@ -2980,14 +3253,18 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute() {
           return "No errors"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    const htmlStep = assessments.find((a) => a.stepName === "create-html")
     expect(htmlStep).toBeDefined()
-    expect(htmlStep?.issues.some(i => i.includes("Integration gap") && i.includes("Runtime code will never load"))).toBe(true)
+    expect(
+      htmlStep?.issues.some(
+        (i) => i.includes("Integration gap") && i.includes("Runtime code will never load")
+      )
+    ).toBe(true)
     expect(htmlStep?.outcome).not.toBe("pass")
   })
 
@@ -3007,8 +3284,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-js", {
           objective: "Create JS logic",
@@ -3021,11 +3298,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/chess_logic.js", "tmp/app/interactive.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "create-html", to: "create-js" }],
+      edges: [{ from: "create-html", to: "create-js" }]
     })
 
     const pipelineResult: PipelineResult = {
@@ -3033,9 +3310,25 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
-        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/chess_logic.js", durationMs: 1 }],
-      ]),
+        [
+          "create-html",
+          {
+            name: "create-html",
+            status: "completed",
+            output: "wrote tmp/app/index.html",
+            durationMs: 1
+          }
+        ],
+        [
+          "create-js",
+          {
+            name: "create-js",
+            status: "completed",
+            output: "wrote tmp/app/chess_logic.js",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3052,14 +3345,14 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
               "<div id='board'></div>",
               "<script type='module' src='chess_logic.js'></script>",
               "<script type='module' src='interactive.js'></script>",
-              "</body></html>",
+              "</body></html>"
             ].join("\n")
           }
           // chess_logic.js exists on disk
           if (path.includes("chess_logic.js")) return "export function initializeBoard() { return [] }"
           // interactive.js does NOT exist — returns error so probeArtifact marks it missing
           return "Error: ENOENT: no such file or directory"
-        },
+        }
       },
       {
         name: "run_command",
@@ -3067,14 +3360,16 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "__MISSING__"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    const htmlStep = assessments.find((a) => a.stepName === "create-html")
     expect(htmlStep).toBeDefined()
-    const missingScriptIssue = htmlStep?.issues.find(i => i.includes("MISSING_SCRIPT_FILE") && i.includes("interactive.js"))
+    const missingScriptIssue = htmlStep?.issues.find(
+      (i) => i.includes("MISSING_SCRIPT_FILE") && i.includes("interactive.js")
+    )
     expect(missingScriptIssue).toBeDefined()
     expect(htmlStep?.outcome).toBe("retry")
   })
@@ -3093,8 +3388,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-js", {
           objective: "Create JS logic",
@@ -3107,11 +3402,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/game-logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "create-html", to: "create-js" }],
+      edges: [{ from: "create-html", to: "create-js" }]
     })
 
     const pipelineResult: PipelineResult = {
@@ -3119,9 +3414,25 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
-        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/game-logic.js", durationMs: 1 }],
-      ]),
+        [
+          "create-html",
+          {
+            name: "create-html",
+            status: "completed",
+            output: "wrote tmp/app/index.html",
+            durationMs: 1
+          }
+        ],
+        [
+          "create-js",
+          {
+            name: "create-js",
+            status: "completed",
+            output: "wrote tmp/app/game-logic.js",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3131,10 +3442,12 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute(args) {
           const path = String(args.path)
-          if (path.endsWith("index.html")) return "<html><body><script type='module' src='game-logic.js'></script></body></html>"
-          if (path.endsWith("game-logic.js")) return "function initializeBoard() { return [] }\nmodule.exports = { initializeBoard }"
+          if (path.endsWith("index.html"))
+            return "<html><body><script type='module' src='game-logic.js'></script></body></html>"
+          if (path.endsWith("game-logic.js"))
+            return "function initializeBoard() { return [] }\nmodule.exports = { initializeBoard }"
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -3142,14 +3455,16 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    const htmlStep = assessments.find((a) => a.stepName === "create-html")
     expect(htmlStep).toBeDefined()
-    expect(htmlStep?.issues.some(i => i.includes("Browser module mismatch") && i.includes("CommonJS"))).toBe(true)
+    expect(
+      htmlStep?.issues.some((i) => i.includes("Browser module mismatch") && i.includes("CommonJS"))
+    ).toBe(true)
     expect(htmlStep?.outcome).not.toBe("pass")
   })
 
@@ -3167,8 +3482,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-ui", {
           objective: "Create UI runtime",
@@ -3181,8 +3496,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/game_ui.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-logic", {
           objective: "Create logic runtime",
@@ -3195,14 +3510,14 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/game_logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
       edges: [
         { from: "create-html", to: "create-ui" },
-        { from: "create-ui", to: "create-logic" },
-      ],
+        { from: "create-ui", to: "create-logic" }
+      ]
     })
 
     const pipelineResult: PipelineResult = {
@@ -3210,10 +3525,34 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 3,
       totalSteps: 3,
       stepResults: new Map([
-        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
-        ["create-ui", { name: "create-ui", status: "completed", output: "wrote tmp/app/game_ui.js", durationMs: 1 }],
-        ["create-logic", { name: "create-logic", status: "completed", output: "wrote tmp/app/game_logic.js", durationMs: 1 }],
-      ]),
+        [
+          "create-html",
+          {
+            name: "create-html",
+            status: "completed",
+            output: "wrote tmp/app/index.html",
+            durationMs: 1
+          }
+        ],
+        [
+          "create-ui",
+          {
+            name: "create-ui",
+            status: "completed",
+            output: "wrote tmp/app/game_ui.js",
+            durationMs: 1
+          }
+        ],
+        [
+          "create-logic",
+          {
+            name: "create-logic",
+            status: "completed",
+            output: "wrote tmp/app/game_logic.js",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3232,14 +3571,14 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
               "  const board = initializeBoard()",
               "  const legal = validateMove(board, { from: 'e2', to: 'e4' })",
               "  return updateGameState(board, legal)",
-              "}",
+              "}"
             ].join("\n")
           }
           if (path.endsWith("game_logic.js")) {
             return "function initializeBoard() { return [] }\nfunction validateMove() { return true }\nfunction updateGameState(board) { return board }\nmodule.exports = { initializeBoard, validateMove, updateGameState }"
           }
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -3247,17 +3586,27 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const htmlStep = assessments.find(a => a.stepName === "create-html")
-    const uiStep = assessments.find(a => a.stepName === "create-ui")
+    const htmlStep = assessments.find((a) => a.stepName === "create-html")
+    const uiStep = assessments.find((a) => a.stepName === "create-ui")
     expect(htmlStep).toBeDefined()
     expect(uiStep).toBeDefined()
-    expect(htmlStep?.issues.some(i => i.includes("Browser module mismatch") && i.includes("CommonJS"))).toBe(true)
-    expect(uiStep?.issues.some(i => i.includes("Missing helper dependency/dependencies") && i.includes("initializeBoard()") && i.includes("validateMove()") && i.includes("updateGameState()"))).toBe(true)
+    expect(
+      htmlStep?.issues.some((i) => i.includes("Browser module mismatch") && i.includes("CommonJS"))
+    ).toBe(true)
+    expect(
+      uiStep?.issues.some(
+        (i) =>
+          i.includes("Missing helper dependency/dependencies") &&
+          i.includes("initializeBoard()") &&
+          i.includes("validateMove()") &&
+          i.includes("updateGameState()")
+      )
+    ).toBe(true)
     expect(htmlStep?.outcome).not.toBe("pass")
     expect(uiStep?.outcome).not.toBe("pass")
   })
@@ -3276,8 +3625,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-js", {
           objective: "Create JS logic",
@@ -3290,11 +3639,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/main.js", "tmp/app/game-logic.js", "tmp/app/ui-logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "create-html", to: "create-js" }],
+      edges: [{ from: "create-html", to: "create-js" }]
     })
 
     const pipelineResult: PipelineResult = {
@@ -3302,9 +3651,20 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
-        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }],
-      ]),
+        [
+          "create-html",
+          {
+            name: "create-html",
+            status: "completed",
+            output: "wrote tmp/app/index.html",
+            durationMs: 1
+          }
+        ],
+        [
+          "create-js",
+          { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3314,12 +3674,14 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute(args) {
           const path = String(args.path)
-          if (path.endsWith("index.html")) return "<html><body><script type='module' src='./main.js'></script></body></html>"
-          if (path.endsWith("main.js")) return "import { initializeBoard } from './game-logic.js'\nimport { mountUi } from './ui-logic.js'\nmountUi(initializeBoard())"
+          if (path.endsWith("index.html"))
+            return "<html><body><script type='module' src='./main.js'></script></body></html>"
+          if (path.endsWith("main.js"))
+            return "import { initializeBoard } from './game-logic.js'\nimport { mountUi } from './ui-logic.js'\nmountUi(initializeBoard())"
           if (path.endsWith("game-logic.js")) return "export function initializeBoard() { return [] }"
           if (path.endsWith("ui-logic.js")) return "export function mountUi(board) { return board }"
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -3327,15 +3689,15 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    const htmlStep = assessments.find((a) => a.stepName === "create-html")
     expect(htmlStep).toBeDefined()
-    expect(htmlStep?.issues.some(i => i.includes("Integration gap"))).toBe(false)
-    expect(htmlStep?.issues.some(i => i.includes("Browser module mismatch"))).toBe(false)
+    expect(htmlStep?.issues.some((i) => i.includes("Integration gap"))).toBe(false)
+    expect(htmlStep?.issues.some((i) => i.includes("Browser module mismatch"))).toBe(false)
   })
 
   it("flags browser module mismatch when runtime JS is loaded without type=module", async () => {
@@ -3352,8 +3714,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-js", {
           objective: "Create JS logic",
@@ -3366,11 +3728,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/main.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "create-html", to: "create-js" }],
+      edges: [{ from: "create-html", to: "create-js" }]
     })
 
     const pipelineResult: PipelineResult = {
@@ -3378,9 +3740,20 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/app/index.html", durationMs: 1 }],
-        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }],
-      ]),
+        [
+          "create-html",
+          {
+            name: "create-html",
+            status: "completed",
+            output: "wrote tmp/app/index.html",
+            durationMs: 1
+          }
+        ],
+        [
+          "create-js",
+          { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3393,7 +3766,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           if (path.endsWith("index.html")) return "<html><body><script src='main.js'></script></body></html>"
           if (path.endsWith("main.js")) return "export function boot() { return true }"
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -3401,14 +3774,14 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    const htmlStep = assessments.find((a) => a.stepName === "create-html")
     expect(htmlStep).toBeDefined()
-    expect(htmlStep?.issues.some(i => i.includes("without type=\"module\""))).toBe(true)
+    expect(htmlStep?.issues.some((i) => i.includes('without type="module"'))).toBe(true)
   })
 
   it("does NOT flag browser module mismatch when JS is a plain script with no import/export", async () => {
@@ -3428,8 +3801,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["chess-game/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-js", {
           objective: "Create game logic",
@@ -3442,11 +3815,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["chess-game/game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "create-html", to: "create-js" }],
+      edges: [{ from: "create-html", to: "create-js" }]
     })
 
     const pipelineResult: PipelineResult = {
@@ -3454,9 +3827,25 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["create-html", { name: "create-html", status: "completed", output: "wrote chess-game/index.html", durationMs: 1 }],
-        ["create-js", { name: "create-js", status: "completed", output: "wrote chess-game/game.js", durationMs: 1 }],
-      ]),
+        [
+          "create-html",
+          {
+            name: "create-html",
+            status: "completed",
+            output: "wrote chess-game/index.html",
+            durationMs: 1
+          }
+        ],
+        [
+          "create-js",
+          {
+            name: "create-js",
+            status: "completed",
+            output: "wrote chess-game/game.js",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3469,35 +3858,40 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           // Plain <script src> — NO type="module" — correct for a plain script
           if (path.endsWith("index.html")) return "<html><body><script src='game.js'></script></body></html>"
           // Plain script — no import or export statements at all
-          if (path.endsWith("game.js")) return [
-            "const board = [];",
-            "function initBoard() { for (let i=0;i<8;i++) board.push(new Array(8).fill(null)); }",
-            "function isPathClear(from, to) {",
-            "  let r = from.row, c = from.col;",
-            "  while (r !== to.row || c !== to.col) {",
-            "    if (board[r][c]) return false;",
-            "    r += Math.sign(to.row - from.row);",
-            "    c += Math.sign(to.col - from.col);",
-            "  }",
-            "  return true;",
-            "}",
-            "initBoard();",
-          ].join("\n")
+          if (path.endsWith("game.js"))
+            return [
+              "const board = [];",
+              "function initBoard() { for (let i=0;i<8;i++) board.push(new Array(8).fill(null)); }",
+              "function isPathClear(from, to) {",
+              "  let r = from.row, c = from.col;",
+              "  while (r !== to.row || c !== to.col) {",
+              "    if (board[r][c]) return false;",
+              "    r += Math.sign(to.row - from.row);",
+              "    c += Math.sign(to.col - from.col);",
+              "  }",
+              "  return true;",
+              "}",
+              "initBoard();"
+            ].join("\n")
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
         description: "run",
         parameters: { type: "object", properties: { command: { type: "string" } } },
-        async execute() { return "ok" },
-      },
+        async execute() {
+          return "ok"
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const htmlStep = assessments.find(a => a.stepName === "create-html")
+    const htmlStep = assessments.find((a) => a.stepName === "create-html")
     // No browser module mismatch should be reported for a plain script
-    expect(htmlStep?.issues.some(i => i.includes("module mismatch") || i.includes("type=\"module\""))).toBe(false)
+    expect(htmlStep?.issues.some((i) => i.includes("module mismatch") || i.includes('type="module"'))).toBe(
+      false
+    )
   })
 
   it("does NOT flag scope violation when a blueprint step only mentions other files in text (not writes them)", async () => {
@@ -3517,8 +3911,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/BLUEPRINT.md"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("implement_ui", {
           objective: "Create the UI file",
@@ -3531,11 +3925,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/chess_ui.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "create_blueprint", to: "implement_ui" }],
+      edges: [{ from: "create_blueprint", to: "implement_ui" }]
     })
 
     const pipelineResult: PipelineResult = {
@@ -3544,14 +3938,26 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       totalSteps: 2,
       stepResults: new Map([
         // Blueprint output: mentions tmp/chess_ui.html in text but only WROTE BLUEPRINT.md
-        ["create_blueprint", {
-          name: "create_blueprint",
-          status: "completed",
-          output: "I've written the blueprint. The planned files are: `tmp/chess_ui.html`, `tmp/chess_logic.js`. Successfully wrote to tmp/BLUEPRINT.md",
-          durationMs: 1,
-        }],
-        ["implement_ui", { name: "implement_ui", status: "completed", output: "wrote tmp/chess_ui.html", durationMs: 1 }],
-      ]),
+        [
+          "create_blueprint",
+          {
+            name: "create_blueprint",
+            status: "completed",
+            output:
+              "I've written the blueprint. The planned files are: `tmp/chess_ui.html`, `tmp/chess_logic.js`. Successfully wrote to tmp/BLUEPRINT.md",
+            durationMs: 1
+          }
+        ],
+        [
+          "implement_ui",
+          {
+            name: "implement_ui",
+            status: "completed",
+            output: "wrote tmp/chess_ui.html",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3561,24 +3967,27 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute(args) {
           const path = String(args.path)
-          if (path.endsWith("BLUEPRINT.md")) return "# Blueprint\n\n## Planned Artifacts\n- tmp/chess_ui.html\n"
+          if (path.endsWith("BLUEPRINT.md"))
+            return "# Blueprint\n\n## Planned Artifacts\n- tmp/chess_ui.html\n"
           if (path.endsWith("chess_ui.html")) return "<html><body></body></html>"
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
         description: "run",
         parameters: { type: "object", properties: { command: { type: "string" } } },
-        async execute() { return "ok" },
-      },
+        async execute() {
+          return "ok"
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const blueprintStep = assessments.find(a => a.stepName === "create_blueprint")
+    const blueprintStep = assessments.find((a) => a.stepName === "create_blueprint")
     // Blueprint step only wrote BLUEPRINT.md — backtick mentions of other files
     // must NOT be treated as scope violations
-    expect(blueprintStep?.issues.some(i => i.includes("SCOPE VIOLATION"))).toBe(false)
+    expect(blueprintStep?.issues.some((i) => i.includes("SCOPE VIOLATION"))).toBe(false)
   })
 
   it("flags broken local import/export bindings so helper dependencies cannot hide behind bad ESM wiring", async () => {
@@ -3595,11 +4004,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/main.js", "tmp/app/game-logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -3607,8 +4016,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["create-js", { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }],
-      ]),
+        [
+          "create-js",
+          { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3618,10 +4030,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute(args) {
           const path = String(args.path)
-          if (path.endsWith("main.js")) return "import { hasObstacles } from './game-logic.js'\nexport function validateMove(board, move) { return hasObstacles(board, move) }"
+          if (path.endsWith("main.js"))
+            return "import { hasObstacles } from './game-logic.js'\nexport function validateMove(board, move) { return hasObstacles(board, move) }"
           if (path.endsWith("game-logic.js")) return "export function initializeBoard() { return [] }"
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -3629,14 +4042,16 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "create-js")
+    const step = assessments.find((a) => a.stepName === "create-js")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("Import/export mismatch") && i.includes("hasObstacles"))).toBe(true)
+    expect(step?.issues.some((i) => i.includes("Import/export mismatch") && i.includes("hasObstacles"))).toBe(
+      true
+    )
   })
 
   it("flags unresolved helper dependencies inside a JS artifact", async () => {
@@ -3653,11 +4068,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/game_logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -3665,8 +4080,16 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["implement-rules", { name: "implement-rules", status: "completed", output: "wrote tmp/game_logic.js", durationMs: 1 }],
-      ]),
+        [
+          "implement-rules",
+          {
+            name: "implement-rules",
+            status: "completed",
+            output: "wrote tmp/game_logic.js",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3681,11 +4104,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
               "function validateMove(board, move) {",
               "  if (hasObstacles(board, move)) return false",
               "  return isKingUnderThreat(board, move) === false",
-              "}",
+              "}"
             ].join("\n")
           }
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -3693,14 +4116,21 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "implement-rules")
+    const step = assessments.find((a) => a.stepName === "implement-rules")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("Missing helper dependency/dependencies") && i.includes("hasObstacles()") && i.includes("isKingUnderThreat()"))).toBe(true)
+    expect(
+      step?.issues.some(
+        (i) =>
+          i.includes("Missing helper dependency/dependencies") &&
+          i.includes("hasObstacles()") &&
+          i.includes("isKingUnderThreat()")
+      )
+    ).toBe(true)
   })
 
   it("flags temporal-dead-zone style use-before-declaration in a JS artifact", async () => {
@@ -3717,11 +4147,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/game_logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -3729,8 +4159,16 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["implement-rules", { name: "implement-rules", status: "completed", output: "wrote tmp/game_logic.js", durationMs: 1 }],
-      ]),
+        [
+          "implement-rules",
+          {
+            name: "implement-rules",
+            status: "completed",
+            output: "wrote tmp/game_logic.js",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3749,11 +4187,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
               "'use strict'",
               "const initialSpeed = BASE_SPEED * 2",
               "const BASE_SPEED = 100",
-              "export { initialSpeed, BASE_SPEED }",
+              "export { initialSpeed, BASE_SPEED }"
             ].join("\n")
           }
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -3761,14 +4199,18 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "implement-rules")
+    const step = assessments.find((a) => a.stepName === "implement-rules")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("temporal-dead-zone/use-before-declaration") && i.includes("BASE_SPEED"))).toBe(true)
+    expect(
+      step?.issues.some(
+        (i) => i.includes("temporal-dead-zone/use-before-declaration") && i.includes("BASE_SPEED")
+      )
+    ).toBe(true)
   })
 
   it("does NOT flag use-before-declaration when the variable name appears only inside a string literal (e.g. getElementById('board'))", async () => {
@@ -3788,47 +4230,57 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/chess/game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
       status: "completed",
       completedSteps: 1,
       totalSteps: 1,
-      stepResults: new Map([["create-game", { name: "create-game", status: "completed", output: "wrote tmp/chess/game.js", durationMs: 1 }]]),
+      stepResults: new Map([
+        [
+          "create-game",
+          {
+            name: "create-game",
+            status: "completed",
+            output: "wrote tmp/chess/game.js",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
-    const tools: Tool[] = [{
-      name: "read_file",
-      description: "read",
-      parameters: { type: "object", properties: { path: { type: "string" } } },
-      async execute(args) {
-        if (String(args.path).endsWith("game.js")) {
-          // `board` appears inside a DOM string on line 1, declared as let on line 4.
-          // This MUST NOT be flagged as use-before-declaration.
-          return [
-            "const boardEl = document.getElementById('board');",
-            "const statusEl = document.getElementById('status');",
-            "const SIZE = 8;",
-            "let board = [];",
-            "let currentTurn = 'white';",
-            "function setup() { board = Array(64).fill(null); }",
-          ].join("\n")
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          if (String(args.path).endsWith("game.js")) {
+            // `board` appears inside a DOM string on line 1, declared as let on line 4.
+            // This MUST NOT be flagged as use-before-declaration.
+            return [
+              "const boardEl = document.getElementById('board');",
+              "const statusEl = document.getElementById('status');",
+              "const SIZE = 8;",
+              "let board = [];",
+              "let currentTurn = 'white';",
+              "function setup() { board = Array(64).fill(null); }"
+            ].join("\n")
+          }
+          return "Error: not found"
         }
-        return "Error: not found"
-      },
-    }]
+      }
+    ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "create-game")
+    const step = assessments.find((a) => a.stepName === "create-game")
     // 'board' in getElementById('board') is a DOM id string, not a variable ref
-    expect(step?.issues.some(i =>
-      i.includes("use-before-declaration") && i.includes("board")
-    )).toBe(false)
+    expect(step?.issues.some((i) => i.includes("use-before-declaration") && i.includes("board"))).toBe(false)
   })
 
   it("flags missing stylesheet rules for CSS classes referenced by browser code", async () => {
@@ -3845,11 +4297,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/game_ui.js", "tmp/app/styles.css"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -3857,8 +4309,16 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["create-ui", { name: "create-ui", status: "completed", output: "wrote tmp/app/game_ui.js and tmp/app/styles.css", durationMs: 1 }],
-      ]),
+        [
+          "create-ui",
+          {
+            name: "create-ui",
+            status: "completed",
+            output: "wrote tmp/app/game_ui.js and tmp/app/styles.css",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3868,10 +4328,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute(args) {
           const path = String(args.path)
-          if (path.endsWith("game_ui.js")) return "cell.classList.add('highlight-move')\ncell.classList.remove('selected')"
+          if (path.endsWith("game_ui.js"))
+            return "cell.classList.add('highlight-move')\ncell.classList.remove('selected')"
           if (path.endsWith("styles.css")) return ".selected { outline: 1px solid red; }"
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -3879,14 +4340,16 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "create-ui")
+    const step = assessments.find((a) => a.stepName === "create-ui")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("Style integration gap") && i.includes(".highlight-move"))).toBe(true)
+    expect(
+      step?.issues.some((i) => i.includes("Style integration gap") && i.includes(".highlight-move"))
+    ).toBe(true)
   })
 
   it("flags flat nth-child striping as suspicious for multi-column grid boards", async () => {
@@ -3903,11 +4366,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/app/styles.css"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -3915,8 +4378,16 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["create-styles", { name: "create-styles", status: "completed", output: "wrote tmp/app/styles.css", durationMs: 1 }],
-      ]),
+        [
+          "create-styles",
+          {
+            name: "create-styles",
+            status: "completed",
+            output: "wrote tmp/app/styles.css",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -3930,11 +4401,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             return [
               ".board { display: grid; grid-template-columns: repeat(8, 1fr); }",
               ".square:nth-child(odd) { background: #fff; }",
-              ".square:nth-child(even) { background: #000; }",
+              ".square:nth-child(even) { background: #000; }"
             ].join("\n")
           }
           return "Error: not found"
-        },
+        }
       },
       {
         name: "run_command",
@@ -3942,14 +4413,16 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
           return "ok"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "create-styles")
+    const step = assessments.find((a) => a.stepName === "create-styles")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("Potential 2D grid styling bug") && i.includes("nth-child"))).toBe(true)
+    expect(
+      step?.issues.some((i) => i.includes("Potential 2D grid styling bug") && i.includes("nth-child"))
+    ).toBe(true)
   })
 
   it("does not flag scope violation when writing declared required source artifact", async () => {
@@ -3965,8 +4438,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("implement-js", {
           executionContext: {
@@ -3978,11 +4451,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             targetArtifacts: ["tmp/chess.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "create-html", to: "implement-js" }],
+      edges: [{ from: "create-html", to: "implement-js" }]
     })
 
     const pipelineResult: PipelineResult = {
@@ -3990,19 +4463,48 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["create-html", { name: "create-html", status: "completed", output: "wrote tmp/index.html", durationMs: 1 }],
-        ["implement-js", {
-          name: "implement-js",
-          status: "completed",
-          output: "Updated `tmp/index.html` and wrote `tmp/chess.js`",
-          durationMs: 1,
-          toolCalls: [
-            { name: "read_file", args: { path: "tmp/index.html" }, result: "<html></html>", isError: false },
-            { name: "write_file", args: { path: "tmp/index.html", content: "<html><script src=\"chess.js\"></script></html>" }, result: "ok", isError: false },
-            { name: "write_file", args: { path: "tmp/chess.js", content: "console.log('ok')" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "create-html",
+          {
+            name: "create-html",
+            status: "completed",
+            output: "wrote tmp/index.html",
+            durationMs: 1
+          }
+        ],
+        [
+          "implement-js",
+          {
+            name: "implement-js",
+            status: "completed",
+            output: "Updated `tmp/index.html` and wrote `tmp/chess.js`",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "read_file",
+                args: { path: "tmp/index.html" },
+                result: "<html></html>",
+                isError: false
+              },
+              {
+                name: "write_file",
+                args: {
+                  path: "tmp/index.html",
+                  content: '<html><script src="chess.js"></script></html>'
+                },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "write_file",
+                args: { path: "tmp/chess.js", content: "console.log('ok')" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -4012,17 +4514,17 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute(args) {
           const path = String(args.path)
-          if (path.endsWith("tmp/index.html")) return "<html><script src=\"chess.js\"></script></html>"
+          if (path.endsWith("tmp/index.html")) return '<html><script src="chess.js"></script></html>'
           if (path.endsWith("tmp/chess.js")) return "console.log('ok')"
           return "Error: not found"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const jsStep = assessments.find(a => a.stepName === "implement-js")
+    const jsStep = assessments.find((a) => a.stepName === "implement-js")
     expect(jsStep).toBeDefined()
-    expect(jsStep?.issues.some(i => i.includes("SCOPE VIOLATION"))).toBe(false)
+    expect(jsStep?.issues.some((i) => i.includes("SCOPE VIOLATION"))).toBe(false)
   })
 })
 
@@ -4041,15 +4543,21 @@ describe("Pipeline: executePipeline", () => {
         const text = String(args.text)
         calls.push(text)
         return `done: ${text}`
-      },
+      }
     }
 
     const plan = makePlan({
       steps: [
         { name: "step-1", stepType: "deterministic_tool", tool: "echo", args: { text: "first" } },
-        { name: "step-2", stepType: "deterministic_tool", tool: "echo", args: { text: "second" }, dependsOn: ["step-1"] },
+        {
+          name: "step-2",
+          stepType: "deterministic_tool",
+          tool: "echo",
+          args: { text: "second" },
+          dependsOn: ["step-1"]
+        }
       ],
-      edges: [{ from: "step-1", to: "step-2" }],
+      edges: [{ from: "step-1", to: "step-2" }]
     })
 
     const result = await executePipeline(plan, [tool], async () => ({ output: "delegated" }))
@@ -4063,10 +4571,13 @@ describe("Pipeline: executePipeline", () => {
     const writeFileTool: Tool = {
       name: "write_file",
       description: "write",
-      parameters: { type: "object", properties: { path: { type: "string" }, content: { type: "string" } } },
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" }, content: { type: "string" } }
+      },
       async execute() {
         return "Error: EISDIR: illegal operation on a directory, open 'tmp/game'"
-      },
+      }
     }
     const runCommandTool: Tool = {
       name: "run_command",
@@ -4075,7 +4586,7 @@ describe("Pipeline: executePipeline", () => {
       async execute(args) {
         commands.push(String(args.command ?? ""))
         return "ok"
-      },
+      }
     }
 
     const plan = makePlan({
@@ -4084,13 +4595,15 @@ describe("Pipeline: executePipeline", () => {
           name: "scaffold-dir",
           stepType: "deterministic_tool",
           tool: "write_file",
-          args: { path: "tmp/game", content: "" },
-        },
+          args: { path: "tmp/game", content: "" }
+        }
       ],
-      edges: [],
+      edges: []
     })
 
-    const result = await executePipeline(plan, [writeFileTool, runCommandTool], async () => ({ output: "" }))
+    const result = await executePipeline(plan, [writeFileTool, runCommandTool], async () => ({
+      output: ""
+    }))
 
     expect(result.status).toBe("completed")
     expect(commands).toContain('mkdir -p "tmp/game"')
@@ -4104,15 +4617,27 @@ describe("Pipeline: executePipeline", () => {
       parameters: { type: "object", properties: {} },
       async execute() {
         throw new Error("boom")
-      },
+      }
     }
 
     const plan = makePlan({
       steps: [
-        { name: "step-fail", stepType: "deterministic_tool", tool: "fail", args: {}, onError: "abort" },
-        { name: "step-after", stepType: "deterministic_tool", tool: "fail", args: {}, dependsOn: ["step-fail"] },
+        {
+          name: "step-fail",
+          stepType: "deterministic_tool",
+          tool: "fail",
+          args: {},
+          onError: "abort"
+        },
+        {
+          name: "step-after",
+          stepType: "deterministic_tool",
+          tool: "fail",
+          args: {},
+          dependsOn: ["step-fail"]
+        }
       ],
-      edges: [{ from: "step-fail", to: "step-after" }],
+      edges: [{ from: "step-fail", to: "step-after" }]
     })
 
     const result = await executePipeline(plan, [failTool], async () => ({ output: "" }))
@@ -4127,39 +4652,35 @@ describe("Pipeline: executePipeline", () => {
 
     const plan = makePlan({
       steps: [makeSubagentStep("build-game", { acceptanceCriteria: [] })],
-      edges: [],
+      edges: []
     })
 
-    const result = await executePipeline(
-      plan,
-      [],
-      async (step) => {
-        delegatedTasks.push(step.name)
-        return {
-          output: "Build completed successfully. Created game.js with full logic.",
-          toolCalls: [
-            {
-              name: "read_file",
-              args: { path: "game.js" },
-              result: "// previous state",
-              isError: false,
-            },
-            {
-              name: "write_file",
-              args: { path: "game.js", content: "export const ready = true" },
-              result: "Successfully wrote to game.js",
-              isError: false,
-            },
-            {
-              name: "read_file",
-              args: { path: "game.js" },
-              result: "export const ready = true",
-              isError: false,
-            },
-          ],
-        }
-      },
-    )
+    const result = await executePipeline(plan, [], async (step) => {
+      delegatedTasks.push(step.name)
+      return {
+        output: "Build completed successfully. Created game.js with full logic.",
+        toolCalls: [
+          {
+            name: "read_file",
+            args: { path: "game.js" },
+            result: "// previous state",
+            isError: false
+          },
+          {
+            name: "write_file",
+            args: { path: "game.js", content: "export const ready = true" },
+            result: "Successfully wrote to game.js",
+            isError: false
+          },
+          {
+            name: "read_file",
+            args: { path: "game.js" },
+            result: "export const ready = true",
+            isError: false
+          }
+        ]
+      }
+    })
 
     expect(result.status).toBe("completed")
     expect(delegatedTasks).toContain("build-game")
@@ -4180,8 +4701,8 @@ describe("Pipeline: executePipeline", () => {
             targetArtifacts: ["tmp/chess/index.html", "tmp/chess/logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("create-pieces", {
           objective: "Create piece rendering logic",
@@ -4195,20 +4716,28 @@ describe("Pipeline: executePipeline", () => {
             targetArtifacts: ["tmp/chess/pieces.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "create-html", to: "create-pieces" }],
+      edges: [{ from: "create-html", to: "create-pieces" }]
     })
 
-    const priorResults = new Map<string, {
-      name: string
-      status: "completed"
-      output: string
-      durationMs: number
-      toolCalls: Array<{ name: string; args: Record<string, unknown>; result: string; isError: boolean }>
-    }>([
+    const priorResults = new Map<
+      string,
+      {
+        name: string
+        status: "completed"
+        output: string
+        durationMs: number
+        toolCalls: Array<{
+          name: string
+          args: Record<string, unknown>
+          result: string
+          isError: boolean
+        }>
+      }
+    >([
       [
         "create-html",
         {
@@ -4221,46 +4750,51 @@ describe("Pipeline: executePipeline", () => {
               name: "write_file",
               args: { path: "tmp/chess/index.html", content: "<html></html>" },
               result: "Successfully wrote to tmp/chess/index.html",
-              isError: false,
+              isError: false
             },
             {
               name: "read_file",
               args: { path: "tmp/chess/index.html" },
               result: "<html></html>",
-              isError: false,
-            },
-          ],
-        },
-      ],
+              isError: false
+            }
+          ]
+        }
+      ]
     ])
 
-    const result = await executePipeline(plan, [], async (step) => {
-      receivedObjectives.set(step.name, step.objective)
+    const result = await executePipeline(
+      plan,
+      [],
+      async (step) => {
+        receivedObjectives.set(step.name, step.objective)
 
-      return {
-        output: "Created tmp/chess/pieces.js",
-        toolCalls: [
-          {
-            name: "read_file",
-            args: { path: "tmp/chess/index.html" },
-            result: "<html></html>",
-            isError: false,
-          },
-          {
-            name: "write_file",
-            args: { path: "tmp/chess/pieces.js", content: "export const pieces = []" },
-            result: "Successfully wrote to tmp/chess/pieces.js",
-            isError: false,
-          },
-          {
-            name: "read_file",
-            args: { path: "tmp/chess/pieces.js" },
-            result: "export const pieces = []",
-            isError: false,
-          },
-        ],
-      }
-    }, { priorResults })
+        return {
+          output: "Created tmp/chess/pieces.js",
+          toolCalls: [
+            {
+              name: "read_file",
+              args: { path: "tmp/chess/index.html" },
+              result: "<html></html>",
+              isError: false
+            },
+            {
+              name: "write_file",
+              args: { path: "tmp/chess/pieces.js", content: "export const pieces = []" },
+              result: "Successfully wrote to tmp/chess/pieces.js",
+              isError: false
+            },
+            {
+              name: "read_file",
+              args: { path: "tmp/chess/pieces.js" },
+              result: "export const pieces = []",
+              isError: false
+            }
+          ]
+        }
+      },
+      { priorResults }
+    )
 
     expect(result.status).toBe("completed")
     const step2Objective = receivedObjectives.get("create-pieces") ?? ""
@@ -4271,24 +4805,20 @@ describe("Pipeline: executePipeline", () => {
   it("fails subagent step when write integrity warnings are present", async () => {
     const plan = makePlan({
       steps: [makeSubagentStep("build-game")],
-      edges: [],
+      edges: []
     })
 
-    const result = await executePipeline(
-      plan,
-      [],
-      async () => ({
-        output: "Completed",
-        toolCalls: [
-          {
-            name: "write_file",
-            args: { path: "game.js", content: "..." },
-            result: "⚠ WRITTEN WITH ISSUES to game.js — stub/placeholder code detected",
-            isError: false,
-          },
-        ],
-      }),
-    )
+    const result = await executePipeline(plan, [], async () => ({
+      output: "Completed",
+      toolCalls: [
+        {
+          name: "write_file",
+          args: { path: "game.js", content: "..." },
+          result: "⚠ WRITTEN WITH ISSUES to game.js — stub/placeholder code detected",
+          isError: false
+        }
+      ]
+    }))
 
     expect(result.status).toBe("failed")
     const step = result.stepResults.get("build-game")
@@ -4298,49 +4828,48 @@ describe("Pipeline: executePipeline", () => {
 
   it("fails subagent step when a child browser_check reports runtime errors", async () => {
     const plan = makePlan({
-      steps: [makeSubagentStep("build-ui", {
-        executionContext: {
-          workspaceRoot: ".",
-          allowedReadRoots: ["."],
-          allowedWriteRoots: ["."],
-          allowedTools: ["write_file", "read_file", "browser_check"],
-          requiredSourceArtifacts: [],
-          targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
-          effectClass: "filesystem_write",
-          verificationMode: "none",
-          artifactRelations: [],
-        },
-      })],
-      edges: [],
+      steps: [
+        makeSubagentStep("build-ui", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file", "browser_check"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        })
+      ],
+      edges: []
     })
 
-    const result = await executePipeline(
-      plan,
-      [],
-      async () => ({
-        output: "Completed UI step.",
-        toolCalls: [
-          {
-            name: "write_file",
-            args: { path: "tmp/index.html", content: "<html></html>" },
-            result: "Successfully wrote to tmp/index.html",
-            isError: false,
-          },
-          {
-            name: "browser_check",
-            args: { path: "tmp/index.html" },
-            result: "## Uncaught Exceptions (1)\n  - SyntaxError: Unexpected token ':'\n\nTotal: 1 error(s), 0 warning(s)",
-            isError: true,
-          },
-          {
-            name: "read_file",
-            args: { path: "tmp/index.html" },
-            result: "<html></html>",
-            isError: false,
-          },
-        ],
-      }),
-    )
+    const result = await executePipeline(plan, [], async () => ({
+      output: "Completed UI step.",
+      toolCalls: [
+        {
+          name: "write_file",
+          args: { path: "tmp/index.html", content: "<html></html>" },
+          result: "Successfully wrote to tmp/index.html",
+          isError: false
+        },
+        {
+          name: "browser_check",
+          args: { path: "tmp/index.html" },
+          result:
+            "## Uncaught Exceptions (1)\n  - SyntaxError: Unexpected token ':'\n\nTotal: 1 error(s), 0 warning(s)",
+          isError: true
+        },
+        {
+          name: "read_file",
+          args: { path: "tmp/index.html" },
+          result: "<html></html>",
+          isError: false
+        }
+      ]
+    }))
 
     expect(result.status).toBe("failed")
     const step = result.stepResults.get("build-ui")
@@ -4352,17 +4881,13 @@ describe("Pipeline: executePipeline", () => {
   it("fails subagent step when delegation contract evidence is missing", async () => {
     const plan = makePlan({
       steps: [makeSubagentStep("build-game")],
-      edges: [],
+      edges: []
     })
 
-    const result = await executePipeline(
-      plan,
-      [],
-      async () => ({
-        output: "Done.",
-        toolCalls: [],
-      }),
-    )
+    const result = await executePipeline(plan, [], async () => ({
+      output: "Done.",
+      toolCalls: []
+    }))
 
     expect(result.status).toBe("failed")
     const step = result.stepResults.get("build-game")
@@ -4374,40 +4899,36 @@ describe("Pipeline: executePipeline", () => {
   it("records execution and acceptance state for successful subagent steps", async () => {
     const plan = makePlan({
       steps: [makeSubagentStep("build-ui")],
-      edges: [],
+      edges: []
     })
 
-    const result = await executePipeline(
-      plan,
-      [],
-      async () => ({
-        output: "Built UI",
-        toolCalls: [
-          {
-            name: "write_file",
-            args: { path: "game.js", content: "export const ok = true" },
-            result: "Successfully wrote to game.js",
-            isError: false,
-          },
-          {
-            name: "browser_check",
-            args: { path: "index.html" },
-            result: "No errors",
-            isError: false,
-          },
-        ],
-        execution: {
-          status: "success",
-          summary: "Built UI",
-          producedArtifacts: ["game.js"],
-          modifiedArtifacts: ["game.js"],
-          verificationAttempts: [
-            { toolName: "browser_check", target: "index.html", success: true, summary: "No errors" },
-          ],
-          unresolvedBlockers: [],
+    const result = await executePipeline(plan, [], async () => ({
+      output: "Built UI",
+      toolCalls: [
+        {
+          name: "write_file",
+          args: { path: "game.js", content: "export const ok = true" },
+          result: "Successfully wrote to game.js",
+          isError: false
         },
-      }),
-    )
+        {
+          name: "browser_check",
+          args: { path: "index.html" },
+          result: "No errors",
+          isError: false
+        }
+      ],
+      execution: {
+        status: "success",
+        summary: "Built UI",
+        producedArtifacts: ["game.js"],
+        modifiedArtifacts: ["game.js"],
+        verificationAttempts: [
+          { toolName: "browser_check", target: "index.html", success: true, summary: "No errors" }
+        ],
+        unresolvedBlockers: []
+      }
+    }))
 
     expect(result.status).toBe("completed")
     const step = result.stepResults.get("build-ui")
@@ -4419,56 +4940,54 @@ describe("Pipeline: executePipeline", () => {
 
   it("retries once with write-first guidance on missing_file_mutation_evidence", async () => {
     const plan = makePlan({
-      steps: [makeSubagentStep("build-game", {
-        executionContext: {
-          workspaceRoot: ".",
-          allowedReadRoots: ["."],
-          allowedWriteRoots: ["."],
-          allowedTools: ["write_file", "read_file"],
-          requiredSourceArtifacts: [],
-          targetArtifacts: ["game.js"],
-          effectClass: "filesystem_write",
-          verificationMode: "none",
-          artifactRelations: [],
-        },
-      })],
-      edges: [],
+      steps: [
+        makeSubagentStep("build-game", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["game.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        })
+      ],
+      edges: []
     })
 
     let calls = 0
     let secondObjective = ""
-    const result = await executePipeline(
-      plan,
-      [],
-      async (step) => {
-        calls += 1
-        if (calls === 1) {
-          return {
-            output: "Done.",
-            toolCalls: [
-              {
-                name: "read_file",
-                args: { path: "game.js" },
-                result: "// existing",
-                isError: false,
-              },
-            ],
-          }
-        }
-        secondObjective = step.objective
+    const result = await executePipeline(plan, [], async (step) => {
+      calls += 1
+      if (calls === 1) {
         return {
-          output: "Wrote game.js",
+          output: "Done.",
           toolCalls: [
             {
-              name: "write_file",
-              args: { path: "game.js", content: "export const ready = true" },
-              result: "Successfully wrote to game.js",
-              isError: false,
-            },
-          ],
+              name: "read_file",
+              args: { path: "game.js" },
+              result: "// existing",
+              isError: false
+            }
+          ]
         }
-      },
-    )
+      }
+      secondObjective = step.objective
+      return {
+        output: "Wrote game.js",
+        toolCalls: [
+          {
+            name: "write_file",
+            args: { path: "game.js", content: "export const ready = true" },
+            result: "Successfully wrote to game.js",
+            isError: false
+          }
+        ]
+      }
+    })
 
     expect(calls).toBe(2)
     expect(secondObjective).toContain("MANDATORY RETRY")
@@ -4481,14 +5000,12 @@ describe("Pipeline: executePipeline", () => {
     controller.abort()
 
     const plan = makePlan({
-      steps: [
-        { name: "step-1", stepType: "deterministic_tool", tool: "echo", args: { text: "a" } },
-      ],
-      edges: [],
+      steps: [{ name: "step-1", stepType: "deterministic_tool", tool: "echo", args: { text: "a" } }],
+      edges: []
     })
 
     const result = await executePipeline(plan, [echoTool()], async () => ({ output: "" }), {
-      signal: controller.signal,
+      signal: controller.signal
     })
 
     expect(result.status).toBe("failed")
@@ -4503,19 +5020,25 @@ describe("Pipeline: executePipeline", () => {
       async execute(args) {
         calls.push(String(args.text))
         return `done: ${String(args.text)}`
-      },
+      }
     }
 
     const plan = makePlan({
       steps: [
         { name: "step-1", stepType: "deterministic_tool", tool: "echo", args: { text: "first" } },
-        { name: "step-2", stepType: "deterministic_tool", tool: "echo", args: { text: "second" }, dependsOn: ["step-1"] },
+        {
+          name: "step-2",
+          stepType: "deterministic_tool",
+          tool: "echo",
+          args: { text: "second" },
+          dependsOn: ["step-1"]
+        }
       ],
-      edges: [{ from: "step-1", to: "step-2" }],
+      edges: [{ from: "step-1", to: "step-2" }]
     })
 
     const priorResults = new Map([
-      ["step-1", { name: "step-1", status: "completed" as const, output: "done: first", durationMs: 10 }],
+      ["step-1", { name: "step-1", status: "completed" as const, output: "done: first", durationMs: 10 }]
     ])
 
     const result = await executePipeline(plan, [tool], async () => ({ output: "" }), { priorResults })
@@ -4529,7 +5052,7 @@ describe("Pipeline: executePipeline", () => {
     let seenObjective = ""
     const plan = makePlan({
       steps: [makeSubagentStep("fix-ui")],
-      edges: [],
+      edges: []
     })
 
     const priorResults = new Map([
@@ -4544,18 +5067,18 @@ describe("Pipeline: executePipeline", () => {
             {
               name: "replace_in_file",
               args: { path: "ui.js", old_string: "a", new_string: "b" },
-              result: "Error: old_string not found in \"ui.js\"",
-              isError: false,
+              result: 'Error: old_string not found in "ui.js"',
+              isError: false
             },
             {
               name: "replace_in_file",
               args: { path: "ui.js", old_string: "c", new_string: "d" },
-              result: "Error: old_string not found in \"ui.js\"",
-              isError: false,
-            },
-          ],
-        },
-      ],
+              result: 'Error: old_string not found in "ui.js"',
+              isError: false
+            }
+          ]
+        }
+      ]
     ])
 
     const result = await executePipeline(
@@ -4567,8 +5090,8 @@ describe("Pipeline: executePipeline", () => {
           parameters: { type: "object", properties: {} },
           async execute() {
             return "ok"
-          },
-        },
+          }
+        }
       ],
       async (step) => {
         seenObjective = step.objective
@@ -4579,25 +5102,31 @@ describe("Pipeline: executePipeline", () => {
               name: "write_file",
               args: { path: "game.js", content: "export const ok = true" },
               result: "Successfully wrote to game.js",
-              isError: false,
-            },
-          ],
+              isError: false
+            }
+          ]
         }
       },
       {
         priorResults,
         repairPlan: {
-          tasks: [{
-            stepName: "fix-ui",
-            mode: "repair",
-            ownedIssues: [makeIssue("Preserve working code while fixing UI click behavior", { ownerStepName: "fix-ui" })],
-            dependencyContext: [],
-            requiredAcceptedArtifacts: [],
-          }],
+          tasks: [
+            {
+              stepName: "fix-ui",
+              mode: "repair",
+              ownedIssues: [
+                makeIssue("Preserve working code while fixing UI click behavior", {
+                  ownerStepName: "fix-ui"
+                })
+              ],
+              dependencyContext: [],
+              requiredAcceptedArtifacts: []
+            }
+          ],
           rerunOrder: ["fix-ui"],
-          skippedVerifiedSteps: [],
-        },
-      },
+          skippedVerifiedSteps: []
+        }
+      }
     )
 
     expect(result.status).toBe("failed")
@@ -4608,20 +5137,22 @@ describe("Pipeline: executePipeline", () => {
   it("compiles verifier findings into an autonomous repair plan for code/spec mismatches", async () => {
     let seenObjective = ""
     const plan = makePlan({
-      steps: [makeSubagentStep("repair-engine", {
-        executionContext: {
-          workspaceRoot: ".",
-          allowedReadRoots: ["."],
-          allowedWriteRoots: ["."],
-          allowedTools: ["read_file", "write_file"],
-          requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
-          targetArtifacts: ["tmp/engine.py"],
-          effectClass: "filesystem_write",
-          verificationMode: "none",
-          artifactRelations: [],
-        },
-      })],
-      edges: [],
+      steps: [
+        makeSubagentStep("repair-engine", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/engine.py"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        })
+      ],
+      edges: []
     })
 
     const result = await executePipeline(
@@ -4633,29 +5164,37 @@ describe("Pipeline: executePipeline", () => {
       },
       {
         repairPlan: {
-          tasks: [{
-            stepName: "repair-engine",
-            mode: "repair",
-            ownedIssues: [
-              makeIssue("SPEC FUNCTION MISMATCH: tmp/engine.py is missing blueprint functions validate_move, apply_move from tmp/BLUEPRINT.md", {
-                ownerStepName: "repair-engine",
-                affectedArtifacts: ["tmp/engine.py"],
-                sourceArtifacts: ["tmp/BLUEPRINT.md"],
-                repairClass: "contract_drift",
-              }),
-              makeIssue("PROCESS AUDIT FAILED: step repair-engine read tmp/BLUEPRINT.md only after starting file mutations", {
-                ownerStepName: "repair-engine",
-                sourceArtifacts: ["tmp/BLUEPRINT.md"],
-                repairClass: "owner_implementation",
-              }),
-            ],
-            dependencyContext: [],
-            requiredAcceptedArtifacts: [],
-          }],
+          tasks: [
+            {
+              stepName: "repair-engine",
+              mode: "repair",
+              ownedIssues: [
+                makeIssue(
+                  "SPEC FUNCTION MISMATCH: tmp/engine.py is missing blueprint functions validate_move, apply_move from tmp/BLUEPRINT.md",
+                  {
+                    ownerStepName: "repair-engine",
+                    affectedArtifacts: ["tmp/engine.py"],
+                    sourceArtifacts: ["tmp/BLUEPRINT.md"],
+                    repairClass: "contract_drift"
+                  }
+                ),
+                makeIssue(
+                  "PROCESS AUDIT FAILED: step repair-engine read tmp/BLUEPRINT.md only after starting file mutations",
+                  {
+                    ownerStepName: "repair-engine",
+                    sourceArtifacts: ["tmp/BLUEPRINT.md"],
+                    repairClass: "owner_implementation"
+                  }
+                )
+              ],
+              dependencyContext: [],
+              requiredAcceptedArtifacts: []
+            }
+          ],
           rerunOrder: ["repair-engine"],
-          skippedVerifiedSteps: [],
-        },
-      },
+          skippedVerifiedSteps: []
+        }
+      }
     )
 
     expect(result.status).toBe("failed")
@@ -4668,20 +5207,22 @@ describe("Pipeline: executePipeline", () => {
   it("keeps foreign-artifact findings as reference context instead of primary retry work", async () => {
     let seenObjective = ""
     const plan = makePlan({
-      steps: [makeSubagentStep("repair-ui", {
-        executionContext: {
-          workspaceRoot: ".",
-          allowedReadRoots: ["."],
-          allowedWriteRoots: ["."],
-          allowedTools: ["read_file", "write_file", "browser_check"],
-          requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
-          targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
-          effectClass: "filesystem_write",
-          verificationMode: "none",
-          artifactRelations: [],
-        },
-      })],
-      edges: [],
+      steps: [
+        makeSubagentStep("repair-ui", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file", "browser_check"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        })
+      ],
+      edges: []
     })
 
     const result = await executePipeline(
@@ -4693,29 +5234,34 @@ describe("Pipeline: executePipeline", () => {
       },
       {
         repairPlan: {
-          tasks: [{
-            stepName: "repair-ui",
-            mode: "repair",
-            ownedIssues: [
-              makeIssue("Browser check for \"tmp/index.html\" reported errors: SyntaxError: Unexpected token ':'", {
-                ownerStepName: "repair-ui",
-                affectedArtifacts: ["tmp/index.html"],
-                repairClass: "runtime_failure",
-              }),
-            ],
-            dependencyContext: [
-              makeIssue('Syntax error in "tmp/chess_logic.js": Unexpected identifier', {
-                ownerStepName: "repair-logic",
-                affectedArtifacts: ["tmp/chess_logic.js"],
-                repairClass: "syntax_failure",
-              }),
-            ],
-            requiredAcceptedArtifacts: [],
-          }],
+          tasks: [
+            {
+              stepName: "repair-ui",
+              mode: "repair",
+              ownedIssues: [
+                makeIssue(
+                  "Browser check for \"tmp/index.html\" reported errors: SyntaxError: Unexpected token ':'",
+                  {
+                    ownerStepName: "repair-ui",
+                    affectedArtifacts: ["tmp/index.html"],
+                    repairClass: "runtime_failure"
+                  }
+                )
+              ],
+              dependencyContext: [
+                makeIssue('Syntax error in "tmp/chess_logic.js": Unexpected identifier', {
+                  ownerStepName: "repair-logic",
+                  affectedArtifacts: ["tmp/chess_logic.js"],
+                  repairClass: "syntax_failure"
+                })
+              ],
+              requiredAcceptedArtifacts: []
+            }
+          ],
           rerunOrder: ["repair-ui"],
-          skippedVerifiedSteps: [],
-        },
-      },
+          skippedVerifiedSteps: []
+        }
+      }
     )
 
     expect(result.status).toBe("failed")
@@ -4728,20 +5274,22 @@ describe("Pipeline: executePipeline", () => {
   it("does not tell markup steps to implement runtime functions for spec mismatches", async () => {
     let seenObjective = ""
     const plan = makePlan({
-      steps: [makeSubagentStep("repair-ui", {
-        executionContext: {
-          workspaceRoot: ".",
-          allowedReadRoots: ["."],
-          allowedWriteRoots: ["."],
-          allowedTools: ["read_file", "write_file"],
-          requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
-          targetArtifacts: ["tmp/index.html"],
-          effectClass: "filesystem_write",
-          verificationMode: "none",
-          artifactRelations: [],
-        },
-      })],
-      edges: [],
+      steps: [
+        makeSubagentStep("repair-ui", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/index.html"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        })
+      ],
+      edges: []
     })
 
     const result = await executePipeline(
@@ -4753,22 +5301,29 @@ describe("Pipeline: executePipeline", () => {
       },
       {
         repairPlan: {
-          tasks: [{
-            stepName: "repair-ui",
-            mode: "repair",
-            ownedIssues: [makeIssue("SPEC FUNCTION MISMATCH: tmp/index.html is missing blueprint functions initializeBoard, handlePieceMove from tmp/BLUEPRINT.md", {
-              ownerStepName: "repair-ui",
-              affectedArtifacts: ["tmp/index.html"],
-              sourceArtifacts: ["tmp/BLUEPRINT.md"],
-              repairClass: "contract_drift",
-            })],
-            dependencyContext: [],
-            requiredAcceptedArtifacts: [],
-          }],
+          tasks: [
+            {
+              stepName: "repair-ui",
+              mode: "repair",
+              ownedIssues: [
+                makeIssue(
+                  "SPEC FUNCTION MISMATCH: tmp/index.html is missing blueprint functions initializeBoard, handlePieceMove from tmp/BLUEPRINT.md",
+                  {
+                    ownerStepName: "repair-ui",
+                    affectedArtifacts: ["tmp/index.html"],
+                    sourceArtifacts: ["tmp/BLUEPRINT.md"],
+                    repairClass: "contract_drift"
+                  }
+                )
+              ],
+              dependencyContext: [],
+              requiredAcceptedArtifacts: []
+            }
+          ],
           rerunOrder: ["repair-ui"],
-          skippedVerifiedSteps: [],
-        },
-      },
+          skippedVerifiedSteps: []
+        }
+      }
     )
 
     expect(result.status).toBe("failed")
@@ -4779,20 +5334,22 @@ describe("Pipeline: executePipeline", () => {
   it("adds shell-specific autonomous retry guidance for PowerShell and Windows CMD artifacts", async () => {
     let seenObjective = ""
     const plan = makePlan({
-      steps: [makeSubagentStep("repair-shell", {
-        executionContext: {
-          workspaceRoot: ".",
-          allowedReadRoots: ["."],
-          allowedWriteRoots: ["."],
-          allowedTools: ["read_file", "write_file"],
-          requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
-          targetArtifacts: ["tmp/install.ps1", "tmp/bootstrap.cmd"],
-          effectClass: "filesystem_write",
-          verificationMode: "none",
-          artifactRelations: [],
-        },
-      })],
-      edges: [],
+      steps: [
+        makeSubagentStep("repair-shell", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/install.ps1", "tmp/bootstrap.cmd"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        })
+      ],
+      edges: []
     })
 
     const result = await executePipeline(
@@ -4804,29 +5361,34 @@ describe("Pipeline: executePipeline", () => {
       },
       {
         repairPlan: {
-          tasks: [{
-            stepName: "repair-shell",
-            mode: "repair",
-            ownedIssues: [
-              makeIssue("SPEC MAPPING MISSING: target artifact tmp/install.ps1 does not map to any file declared in tmp/BLUEPRINT.md", {
-                ownerStepName: "repair-shell",
-                affectedArtifacts: ["tmp/install.ps1"],
-                sourceArtifacts: ["tmp/BLUEPRINT.md"],
-                repairClass: "contract_drift",
-              }),
-              makeIssue("Syntax error in \"tmp/bootstrap.cmd\": unexpected token", {
-                ownerStepName: "repair-shell",
-                affectedArtifacts: ["tmp/bootstrap.cmd"],
-                repairClass: "syntax_failure",
-              }),
-            ],
-            dependencyContext: [],
-            requiredAcceptedArtifacts: [],
-          }],
+          tasks: [
+            {
+              stepName: "repair-shell",
+              mode: "repair",
+              ownedIssues: [
+                makeIssue(
+                  "SPEC MAPPING MISSING: target artifact tmp/install.ps1 does not map to any file declared in tmp/BLUEPRINT.md",
+                  {
+                    ownerStepName: "repair-shell",
+                    affectedArtifacts: ["tmp/install.ps1"],
+                    sourceArtifacts: ["tmp/BLUEPRINT.md"],
+                    repairClass: "contract_drift"
+                  }
+                ),
+                makeIssue('Syntax error in "tmp/bootstrap.cmd": unexpected token', {
+                  ownerStepName: "repair-shell",
+                  affectedArtifacts: ["tmp/bootstrap.cmd"],
+                  repairClass: "syntax_failure"
+                })
+              ],
+              dependencyContext: [],
+              requiredAcceptedArtifacts: []
+            }
+          ],
           rerunOrder: ["repair-shell"],
-          skippedVerifiedSteps: [],
-        },
-      },
+          skippedVerifiedSteps: []
+        }
+      }
     )
 
     expect(result.status).toBe("failed")
@@ -4838,20 +5400,22 @@ describe("Pipeline: executePipeline", () => {
 
   it("enriches verifier assessments with typed issue metadata and evidence", () => {
     const plan = makePlan({
-      steps: [makeSubagentStep("repair-engine", {
-        executionContext: {
-          workspaceRoot: ".",
-          allowedReadRoots: ["."],
-          allowedWriteRoots: ["."],
-          allowedTools: ["read_file", "write_file"],
-          requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
-          targetArtifacts: ["tmp/engine.py"],
-          effectClass: "filesystem_write",
-          verificationMode: "none",
-          artifactRelations: [],
-        },
-      })],
-      edges: [],
+      steps: [
+        makeSubagentStep("repair-engine", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["read_file", "write_file"],
+            requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
+            targetArtifacts: ["tmp/engine.py"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        })
+      ],
+      edges: []
     })
 
     const assessments: VerifierStepAssessment[] = [
@@ -4859,9 +5423,11 @@ describe("Pipeline: executePipeline", () => {
         stepName: "repair-engine",
         outcome: "retry",
         confidence: 0.9,
-        issues: ["SPEC FUNCTION MISMATCH: tmp/engine.py is missing blueprint functions validate_move from tmp/BLUEPRINT.md"],
-        retryable: true,
-      },
+        issues: [
+          "SPEC FUNCTION MISMATCH: tmp/engine.py is missing blueprint functions validate_move from tmp/BLUEPRINT.md"
+        ],
+        retryable: true
+      }
     ]
 
     const enriched = enrichVerifierAssessments(plan, assessments, "deterministic")
@@ -4873,10 +5439,20 @@ describe("Pipeline: executePipeline", () => {
   it("builds a repair plan from typed verifier issues", () => {
     const plan = makePlan({
       steps: [
-        makeSubagentStep("step-a", { executionContext: { ...makeSubagentStep("step-a").executionContext, targetArtifacts: ["tmp/a.js"] } }),
-        makeSubagentStep("step-b", { executionContext: { ...makeSubagentStep("step-b").executionContext, targetArtifacts: ["tmp/b.js"] } }),
+        makeSubagentStep("step-a", {
+          executionContext: {
+            ...makeSubagentStep("step-a").executionContext,
+            targetArtifacts: ["tmp/a.js"]
+          }
+        }),
+        makeSubagentStep("step-b", {
+          executionContext: {
+            ...makeSubagentStep("step-b").executionContext,
+            targetArtifacts: ["tmp/b.js"]
+          }
+        })
       ],
-      edges: [{ from: "step-a", to: "step-b" }],
+      edges: [{ from: "step-a", to: "step-b" }]
     })
 
     const pipelineResult: PipelineResult = {
@@ -4884,9 +5460,29 @@ describe("Pipeline: executePipeline", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["step-a", { name: "step-a", status: "completed", executionState: "executed", acceptanceState: "pending_verification", output: "done", durationMs: 1 }],
-        ["step-b", { name: "step-b", status: "completed", executionState: "executed", acceptanceState: "pending_verification", output: "done", durationMs: 1 }],
-      ]),
+        [
+          "step-a",
+          {
+            name: "step-a",
+            status: "completed",
+            executionState: "executed",
+            acceptanceState: "pending_verification",
+            output: "done",
+            durationMs: 1
+          }
+        ],
+        [
+          "step-b",
+          {
+            name: "step-b",
+            status: "completed",
+            executionState: "executed",
+            acceptanceState: "pending_verification",
+            output: "done",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const decision: VerifierDecision = {
@@ -4898,32 +5494,34 @@ describe("Pipeline: executePipeline", () => {
           stepName: "step-a",
           outcome: "retry",
           confidence: 0.7,
-          issues: ["Syntax error in \"tmp/a.js\": Unexpected token"],
-          issueDetails: [{
-            code: "syntax_failure",
-            severity: "error",
-            retryable: true,
-            ownerStepName: "step-a",
-            confidence: 0.84,
-            ownershipMode: "deterministic_owner",
-            suspectedOwners: ["step-a"],
-            primaryOwner: "step-a",
-            affectedArtifacts: ["tmp/a.js"],
-            sourceArtifacts: ["tmp/a.js"],
-            evidenceIds: ["step-a:deterministic:1:syntax_failure"],
-            repairClass: "syntax_failure",
-            summary: "Syntax error in \"tmp/a.js\": Unexpected token",
-          }],
-          retryable: true,
+          issues: ['Syntax error in "tmp/a.js": Unexpected token'],
+          issueDetails: [
+            {
+              code: "syntax_failure",
+              severity: "error",
+              retryable: true,
+              ownerStepName: "step-a",
+              confidence: 0.84,
+              ownershipMode: "deterministic_owner",
+              suspectedOwners: ["step-a"],
+              primaryOwner: "step-a",
+              affectedArtifacts: ["tmp/a.js"],
+              sourceArtifacts: ["tmp/a.js"],
+              evidenceIds: ["step-a:deterministic:1:syntax_failure"],
+              repairClass: "syntax_failure",
+              summary: 'Syntax error in "tmp/a.js": Unexpected token'
+            }
+          ],
+          retryable: true
         },
         {
           stepName: "step-b",
           outcome: "pass",
           confidence: 0.9,
           issues: [],
-          retryable: false,
-        },
-      ],
+          retryable: false
+        }
+      ]
     }
 
     const repairPlan = buildRepairPlan(plan, pipelineResult, decision)
@@ -4939,27 +5537,35 @@ describe("Pipeline: executePipeline", () => {
         makeSubagentStep("create_project_blueprint", {
           executionContext: {
             ...makeSubagentStep("create_project_blueprint").executionContext,
-            targetArtifacts: ["tmp/BLUEPRINT.md"],
-          },
+            targetArtifacts: ["tmp/BLUEPRINT.md"]
+          }
         }),
         makeSubagentStep("integrate_game_logic_with_ui", {
           executionContext: {
             ...makeSubagentStep("integrate_game_logic_with_ui").executionContext,
             requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
-            targetArtifacts: ["tmp/game_integration.js"],
-          },
-        }),
+            targetArtifacts: ["tmp/game_integration.js"]
+          }
+        })
       ],
-      edges: [{ from: "create_project_blueprint", to: "integrate_game_logic_with_ui" }],
+      edges: [{ from: "create_project_blueprint", to: "integrate_game_logic_with_ui" }]
     })
 
-    const enriched = enrichVerifierAssessments(plan, [{
-      stepName: "create_project_blueprint",
-      outcome: "fail",
-      confidence: 0.28,
-      issues: ["BLUEPRINT FUNCTION CONTRACT WEAK: tmp/game_integration.js contains underspecified machine contract signatures (handleUserMove())"],
-      retryable: true,
-    }], "deterministic")
+    const enriched = enrichVerifierAssessments(
+      plan,
+      [
+        {
+          stepName: "create_project_blueprint",
+          outcome: "fail",
+          confidence: 0.28,
+          issues: [
+            "BLUEPRINT FUNCTION CONTRACT WEAK: tmp/game_integration.js contains underspecified machine contract signatures (handleUserMove())"
+          ],
+          retryable: true
+        }
+      ],
+      "deterministic"
+    )
 
     expect(enriched[0]?.issueDetails?.[0]?.ownerStepName).toBe("create_project_blueprint")
     expect(enriched[0]?.issueDetails?.[0]?.ownershipMode).toBe("planner_fault")
@@ -4969,16 +5575,36 @@ describe("Pipeline: executePipeline", () => {
       completedSteps: 1,
       totalSteps: 2,
       stepResults: new Map([
-        ["create_project_blueprint", { name: "create_project_blueprint", status: "completed", executionState: "executed", acceptanceState: "repair_required", output: "done", durationMs: 1 }],
-        ["integrate_game_logic_with_ui", { name: "integrate_game_logic_with_ui", status: "pending", executionState: "pending", acceptanceState: "blocked", output: "", durationMs: 0 }],
-      ]),
+        [
+          "create_project_blueprint",
+          {
+            name: "create_project_blueprint",
+            status: "completed",
+            executionState: "executed",
+            acceptanceState: "repair_required",
+            output: "done",
+            durationMs: 1
+          }
+        ],
+        [
+          "integrate_game_logic_with_ui",
+          {
+            name: "integrate_game_logic_with_ui",
+            status: "pending",
+            executionState: "pending",
+            acceptanceState: "blocked",
+            output: "",
+            durationMs: 0
+          }
+        ]
+      ])
     }
 
     const repairPlan = buildRepairPlan(plan, pipelineResult, {
       overall: "retry",
       confidence: 0.28,
       unresolvedItems: ["blueprint contract weak"],
-      steps: enriched,
+      steps: enriched
     })
 
     expect(repairPlan.rerunOrder).toEqual(["create_project_blueprint"])
@@ -4992,18 +5618,18 @@ describe("Pipeline: executePipeline", () => {
         makeSubagentStep("create_blueprint", {
           executionContext: {
             ...makeSubagentStep("create_blueprint").executionContext,
-            targetArtifacts: ["tmp/BLUEPRINT.md"],
-          },
+            targetArtifacts: ["tmp/BLUEPRINT.md"]
+          }
         }),
         makeSubagentStep("build_ui", {
           executionContext: {
             ...makeSubagentStep("build_ui").executionContext,
             requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
-            targetArtifacts: ["tmp/index.html"],
-          },
-        }),
+            targetArtifacts: ["tmp/index.html"]
+          }
+        })
       ],
-      edges: [{ from: "create_blueprint", to: "build_ui" }],
+      edges: [{ from: "create_blueprint", to: "build_ui" }]
     })
 
     const decision: VerifierDecision = {
@@ -5015,30 +5641,33 @@ describe("Pipeline: executePipeline", () => {
           stepName: "create_blueprint",
           outcome: "retry",
           confidence: 0.7,
-          issues: ["BLUEPRINT FUNCTION CONTRACT WEAK: tmp/index.html contains underspecified machine contract signatures (renderBoard())"],
-          issueDetails: [makeIssue(
-            "BLUEPRINT FUNCTION CONTRACT WEAK: tmp/index.html contains underspecified machine contract signatures (renderBoard())",
-            {
-              code: "blueprint_function_contract_weak",
-              ownerStepName: "create_blueprint",
-              primaryOwner: "create_blueprint",
-              suspectedOwners: ["create_blueprint"],
-              ownershipMode: "planner_fault",
-              affectedArtifacts: ["tmp/BLUEPRINT.md"],
-              sourceArtifacts: ["tmp/BLUEPRINT.md"],
-              repairClass: "contract_drift",
-            },
-          )],
-          retryable: true,
+          issues: [
+            "BLUEPRINT FUNCTION CONTRACT WEAK: tmp/index.html contains underspecified machine contract signatures (renderBoard())"
+          ],
+          issueDetails: [
+            makeIssue(
+              "BLUEPRINT FUNCTION CONTRACT WEAK: tmp/index.html contains underspecified machine contract signatures (renderBoard())",
+              {
+                code: "blueprint_function_contract_weak",
+                ownerStepName: "create_blueprint",
+                primaryOwner: "create_blueprint",
+                suspectedOwners: ["create_blueprint"],
+                ownershipMode: "planner_fault",
+                affectedArtifacts: ["tmp/BLUEPRINT.md"],
+                sourceArtifacts: ["tmp/BLUEPRINT.md"],
+                repairClass: "contract_drift"
+              }
+            )
+          ],
+          retryable: true
         },
         {
           stepName: "build_ui",
           outcome: "retry",
           confidence: 0.85,
           issues: ["Waiting on accepted upstream artifacts: tmp/BLUEPRINT.md"],
-          issueDetails: [makeIssue(
-            "Waiting on accepted upstream artifacts: tmp/BLUEPRINT.md",
-            {
+          issueDetails: [
+            makeIssue("Waiting on accepted upstream artifacts: tmp/BLUEPRINT.md", {
               code: "waiting_on_accepted_upstream_artifacts_tmp_blueprint_md",
               ownerStepName: "create_blueprint",
               primaryOwner: "create_blueprint",
@@ -5046,12 +5675,12 @@ describe("Pipeline: executePipeline", () => {
               ownershipMode: "deterministic_owner",
               affectedArtifacts: ["tmp/index.html"],
               sourceArtifacts: ["tmp/BLUEPRINT.md"],
-              repairClass: "verification_gap",
-            },
-          )],
-          retryable: true,
-        },
-      ],
+              repairClass: "verification_gap"
+            })
+          ],
+          retryable: true
+        }
+      ]
     }
 
     const pipelineResult: PipelineResult = {
@@ -5059,9 +5688,29 @@ describe("Pipeline: executePipeline", () => {
       completedSteps: 1,
       totalSteps: 2,
       stepResults: new Map([
-        ["create_blueprint", { name: "create_blueprint", status: "completed", executionState: "executed", acceptanceState: "repair_required", output: "", durationMs: 1 }],
-        ["build_ui", { name: "build_ui", status: "failed", executionState: "failed", acceptanceState: "blocked", output: "", durationMs: 1 }],
-      ]),
+        [
+          "create_blueprint",
+          {
+            name: "create_blueprint",
+            status: "completed",
+            executionState: "executed",
+            acceptanceState: "repair_required",
+            output: "",
+            durationMs: 1
+          }
+        ],
+        [
+          "build_ui",
+          {
+            name: "build_ui",
+            status: "failed",
+            executionState: "failed",
+            acceptanceState: "blocked",
+            output: "",
+            durationMs: 1
+          }
+        ]
+      ])
     }
 
     const repairPlan = buildRepairPlan(plan, pipelineResult, decision)
@@ -5104,12 +5753,16 @@ describe("ToolFailureCircuitBreaker", () => {
 
   it("opens global circuit when many distinct keys fail", () => {
     // globalCircuitThreshold = 2 for easy testing
-    const cb = new ToolFailureCircuitBreaker({ threshold: 2, windowMs: 60_000, globalCircuitThreshold: 2 })
+    const cb = new ToolFailureCircuitBreaker({
+      threshold: 2,
+      windowMs: 60_000,
+      globalCircuitThreshold: 2
+    })
 
     // Trip key1
     cb.recordFailure("key1", "tool1")
     cb.recordFailure("key1", "tool1")
-    expect(cb.getActiveCircuit()).toBeNull()  // Only 1 key blocked
+    expect(cb.getActiveCircuit()).toBeNull() // Only 1 key blocked
 
     // Trip key2 — now 2 distinct keys blocked → global circuit opens
     cb.recordFailure("key2", "tool2")
@@ -5127,8 +5780,8 @@ describe("ToolFailureCircuitBreaker", () => {
     cb.recordFailure("key2", "tool2")
 
     expect(cb.getActiveCircuit()).toBeNull()
-    expect(cb.isKeyBlocked("key1")).toBeNull()  // below threshold
-    expect(cb.isKeyBlocked("key2")).toBeNull()  // below threshold
+    expect(cb.isKeyBlocked("key1")).toBeNull() // below threshold
+    expect(cb.isKeyBlocked("key2")).toBeNull() // below threshold
   })
 
   it("clears pattern and per-key block on success", () => {
@@ -5140,7 +5793,7 @@ describe("ToolFailureCircuitBreaker", () => {
     expect(cb.isKeyBlocked("key1")).not.toBeNull()
 
     cb.clearPattern("key1")
-    expect(cb.isKeyBlocked("key1")).toBeNull()  // cleared
+    expect(cb.isKeyBlocked("key1")).toBeNull() // cleared
 
     cb.recordFailure("key1", "tool1")
     // Only 1 failure after clear — not blocked
@@ -5181,8 +5834,8 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
-            role: "writer",
-          },
+            role: "writer"
+          }
         }),
         makeSubagentStep("implement_game_logic", {
           executionContext: {
@@ -5195,11 +5848,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
-            role: "writer",
-          },
-        }),
+            role: "writer"
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -5207,26 +5860,47 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["generate_blueprint", {
-          name: "generate_blueprint",
-          status: "completed",
-          output: "wrote tmp/BLUEPRINT.md",
-          durationMs: 1,
-          toolCalls: [
-            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-          ],
-        }],
-        ["implement_game_logic", {
-          name: "implement_game_logic",
-          status: "completed",
-          output: "wrote tmp/game_logic.js and tmp/index.html",
-          durationMs: 1,
-          toolCalls: [
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "generate_blueprint",
+          {
+            name: "generate_blueprint",
+            status: "completed",
+            output: "wrote tmp/BLUEPRINT.md",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "write_file",
+                args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ],
+        [
+          "implement_game_logic",
+          {
+            name: "implement_game_logic",
+            status: "completed",
+            output: "wrote tmp/game_logic.js and tmp/index.html",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -5245,21 +5919,27 @@ describe("Verifier: spec-driven structural and process evidence", () => {
               "`game/index.html`",
               "- browser shell",
               "`game/rules.js`",
-              "- chess rules engine",
+              "- chess rules engine"
             ].join("\n")
           }
           if (path.endsWith("game_logic.js")) return "export function validateMove() { return true }"
           if (path.endsWith("index.html")) return "<main>Chess</main>"
           return "Error: not found"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "generate_blueprint")
+    const step = assessments.find((a) => a.stepName === "generate_blueprint")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("BLUEPRINT ARTIFACT COVERAGE FAILED") && i.includes("tmp/game_logic.js"))).toBe(true)
-    expect(step?.issues.some(i => i.includes("BLUEPRINT ARTIFACT DRIFT") && i.includes("game/rules.js"))).toBe(true)
+    expect(
+      step?.issues.some(
+        (i) => i.includes("BLUEPRINT ARTIFACT COVERAGE FAILED") && i.includes("tmp/game_logic.js")
+      )
+    ).toBe(true)
+    expect(
+      step?.issues.some((i) => i.includes("BLUEPRINT ARTIFACT DRIFT") && i.includes("game/rules.js"))
+    ).toBe(true)
   })
 
   it("detects missing blueprint functions for non-web languages like Python", async () => {
@@ -5277,11 +5957,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/engine.py"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -5289,17 +5969,33 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["engine-step", {
-          name: "engine-step",
-          status: "completed",
-          output: "wrote tmp/engine.py",
-          durationMs: 1,
-          toolCalls: [
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-            { name: "write_file", args: { path: "tmp/engine.py", content: "def render_board(board):\n    return board\n" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "engine-step",
+          {
+            name: "engine-step",
+            status: "completed",
+            output: "wrote tmp/engine.py",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "write_file",
+                args: {
+                  path: "tmp/engine.py",
+                  content: "def render_board(board):\n    return board\n"
+                },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -5315,19 +6011,21 @@ describe("Verifier: spec-driven structural and process evidence", () => {
               "",
               "`tmp/engine.py`",
               "- function `validate_move(board, move)` validates legal moves",
-              "- function `render_board(board)` renders the board state",
+              "- function `render_board(board)` renders the board state"
             ].join("\n")
           }
           if (path.endsWith("engine.py")) return "def render_board(board):\n    return board\n"
           return "Error: not found"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "engine-step")
+    const step = assessments.find((a) => a.stepName === "engine-step")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("SPEC FUNCTION MISMATCH") && i.includes("validate_move"))).toBe(true)
+    expect(
+      step?.issues.some((i) => i.includes("SPEC FUNCTION MISMATCH") && i.includes("validate_move"))
+    ).toBe(true)
   })
 
   it("flags weak machine function contracts and prose drift inside BLUEPRINT.md", async () => {
@@ -5346,8 +6044,8 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
-            role: "writer",
-          },
+            role: "writer"
+          }
         }),
         makeSubagentStep("implement_engine", {
           executionContext: {
@@ -5359,11 +6057,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/engine.ts"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -5371,27 +6069,56 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["generate_blueprint", {
-          name: "generate_blueprint",
-          status: "completed",
-          output: "wrote tmp/BLUEPRINT.md",
-          durationMs: 1,
-          toolCalls: [
-            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-          ],
-        }],
-        ["implement_engine", {
-          name: "implement_engine",
-          status: "completed",
-          output: "wrote tmp/engine.ts",
-          durationMs: 1,
-          toolCalls: [
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-            { name: "write_file", args: { path: "tmp/engine.ts", content: "export function validateMove(state, move) { return true }" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "generate_blueprint",
+          {
+            name: "generate_blueprint",
+            status: "completed",
+            output: "wrote tmp/BLUEPRINT.md",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "write_file",
+                args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ],
+        [
+          "implement_engine",
+          {
+            name: "implement_engine",
+            status: "completed",
+            output: "wrote tmp/engine.ts",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "write_file",
+                args: {
+                  path: "tmp/engine.ts",
+                  content: "export function validateMove(state, move) { return true }"
+                },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -5406,35 +6133,43 @@ describe("Verifier: spec-driven structural and process evidence", () => {
               "# Engine Blueprint",
               "",
               "```blueprint-contract",
-              JSON.stringify({
-                version: 1,
-                files: [
-                  {
-                    path: "tmp/engine.ts",
-                    purpose: "Move validation engine",
-                    functions: [{ name: "validateMove", signature: "validateMove()" }],
-                  },
-                ],
-                sharedTypes: [],
-              }, null, 2),
+              JSON.stringify(
+                {
+                  version: 1,
+                  files: [
+                    {
+                      path: "tmp/engine.ts",
+                      purpose: "Move validation engine",
+                      functions: [{ name: "validateMove", signature: "validateMove()" }]
+                    }
+                  ],
+                  sharedTypes: []
+                },
+                null,
+                2
+              ),
               "```",
               "",
               "`tmp/engine.ts`",
               "- function `validateMove(state: GameState, move: Move): boolean` validates whether a move is legal",
-              "- function `applyMove(state: GameState, move: Move): GameState` returns the next state",
+              "- function `applyMove(state: GameState, move: Move): GameState` returns the next state"
             ].join("\n")
           }
           if (path.endsWith("engine.ts")) return "export function validateMove(state, move) { return true }"
           return "Error: not found"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "generate_blueprint")
+    const step = assessments.find((a) => a.stepName === "generate_blueprint")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("BLUEPRINT FUNCTION CONTRACT WEAK") && i.includes("validateMove()"))).toBe(true)
-    expect(step?.issues.some(i => i.includes("BLUEPRINT FUNCTION CONTRACT DRIFT") && i.includes("applyMove"))).toBe(true)
+    expect(
+      step?.issues.some((i) => i.includes("BLUEPRINT FUNCTION CONTRACT WEAK") && i.includes("validateMove()"))
+    ).toBe(true)
+    expect(
+      step?.issues.some((i) => i.includes("BLUEPRINT FUNCTION CONTRACT DRIFT") && i.includes("applyMove"))
+    ).toBe(true)
   })
 
   it("surfaces shared-type contract drift and weak shared-type metadata deterministically", async () => {
@@ -5453,8 +6188,8 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
-            role: "writer",
-          },
+            role: "writer"
+          }
         }),
         makeSubagentStep("implement_engine", {
           executionContext: {
@@ -5466,11 +6201,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/engine.ts", "tmp/ui.ts"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -5478,26 +6213,47 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["generate_blueprint", {
-          name: "generate_blueprint",
-          status: "completed",
-          output: "wrote tmp/BLUEPRINT.md",
-          durationMs: 1,
-          toolCalls: [
-            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-          ],
-        }],
-        ["implement_engine", {
-          name: "implement_engine",
-          status: "completed",
-          output: "wrote tmp/engine.ts and tmp/ui.ts",
-          durationMs: 1,
-          toolCalls: [
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "generate_blueprint",
+          {
+            name: "generate_blueprint",
+            status: "completed",
+            output: "wrote tmp/BLUEPRINT.md",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "write_file",
+                args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ],
+        [
+          "implement_engine",
+          {
+            name: "implement_engine",
+            status: "completed",
+            output: "wrote tmp/engine.ts and tmp/ui.ts",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -5512,35 +6268,41 @@ describe("Verifier: spec-driven structural and process evidence", () => {
               "# Shared Data Blueprint",
               "",
               "```blueprint-contract",
-              JSON.stringify({
-                version: 1,
-                files: [
-                  { path: "tmp/engine.ts", purpose: "Rules engine", functions: [] },
-                  { path: "tmp/ui.ts", purpose: "UI renderer", functions: [] },
-                ],
-                sharedTypes: [
-                  { name: "GameState", definition: "", usedBy: ["tmp/ui.ts"] },
-                ],
-              }, null, 2),
+              JSON.stringify(
+                {
+                  version: 1,
+                  files: [
+                    { path: "tmp/engine.ts", purpose: "Rules engine", functions: [] },
+                    { path: "tmp/ui.ts", purpose: "UI renderer", functions: [] }
+                  ],
+                  sharedTypes: [{ name: "GameState", definition: "", usedBy: ["tmp/ui.ts"] }]
+                },
+                null,
+                2
+              ),
               "```",
               "",
               "## Shared Data Types",
               "- `GameState` stores the canonical board and turn metadata",
-              "- `Move` carries from/to coordinates and promotion intent",
+              "- `Move` carries from/to coordinates and promotion intent"
             ].join("\n")
           }
           if (path.endsWith("engine.ts")) return "export const engine = {}"
           if (path.endsWith("ui.ts")) return "export const ui = {}"
           return "Error: not found"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "generate_blueprint")
+    const step = assessments.find((a) => a.stepName === "generate_blueprint")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("BLUEPRINT SHARED TYPE CONTRACT WEAK") && i.includes("GameState"))).toBe(true)
-    expect(step?.issues.some(i => i.includes("BLUEPRINT SHARED TYPE DRIFT") && i.includes("Move"))).toBe(true)
+    expect(
+      step?.issues.some((i) => i.includes("BLUEPRINT SHARED TYPE CONTRACT WEAK") && i.includes("GameState"))
+    ).toBe(true)
+    expect(step?.issues.some((i) => i.includes("BLUEPRINT SHARED TYPE DRIFT") && i.includes("Move"))).toBe(
+      true
+    )
   })
 
   it("does not fail process audit when a blueprint step writes the document and then reads it back", async () => {
@@ -5559,8 +6321,8 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
-            role: "writer",
-          },
+            role: "writer"
+          }
         }),
         makeSubagentStep("implement_engine", {
           executionContext: {
@@ -5572,11 +6334,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/engine.ts"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -5584,44 +6346,63 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       completedSteps: 1,
       totalSteps: 2,
       stepResults: new Map([
-        ["create_blueprint", {
-          name: "create_blueprint",
-          status: "completed",
-          output: "wrote tmp/BLUEPRINT.md",
-          durationMs: 1,
-          toolCalls: [
-            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "create_blueprint",
+          {
+            name: "create_blueprint",
+            status: "completed",
+            output: "wrote tmp/BLUEPRINT.md",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "write_file",
+                args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
-    const tools: Tool[] = [{
-      name: "read_file",
-      description: "read",
-      parameters: { type: "object", properties: { path: { type: "string" } } },
-      async execute(args) {
-        const path = String(args.path)
-        if (!path.endsWith("BLUEPRINT.md")) return "Error: not found"
-        return [
-          "# Engine Blueprint",
-          "",
-          "```blueprint-contract",
-          JSON.stringify({
-            version: 1,
-            files: [{ path: "tmp/engine.ts", purpose: "Rules engine", functions: [] }],
-            sharedTypes: [],
-          }, null, 2),
-          "```",
-        ].join("\n")
-      },
-    }]
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (!path.endsWith("BLUEPRINT.md")) return "Error: not found"
+          return [
+            "# Engine Blueprint",
+            "",
+            "```blueprint-contract",
+            JSON.stringify(
+              {
+                version: 1,
+                files: [{ path: "tmp/engine.ts", purpose: "Rules engine", functions: [] }],
+                sharedTypes: []
+              },
+              null,
+              2
+            ),
+            "```"
+          ].join("\n")
+        }
+      }
+    ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "create_blueprint")
+    const step = assessments.find((a) => a.stepName === "create_blueprint")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("PROCESS AUDIT FAILED"))).toBe(false)
+    expect(step?.issues.some((i) => i.includes("PROCESS AUDIT FAILED"))).toBe(false)
   })
 
   it("does not emit spec-mapping-missing for the blueprint file itself", async () => {
@@ -5640,8 +6421,8 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
-            role: "writer",
-          },
+            role: "writer"
+          }
         }),
         makeSubagentStep("implement_engine", {
           executionContext: {
@@ -5653,11 +6434,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/engine.ts"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -5665,50 +6446,78 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       completedSteps: 1,
       totalSteps: 2,
       stepResults: new Map([
-        ["generate_blueprint", {
-          name: "generate_blueprint",
-          status: "completed",
-          output: "wrote tmp/BLUEPRINT.md",
-          durationMs: 1,
-          toolCalls: [
-            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "generate_blueprint",
+          {
+            name: "generate_blueprint",
+            status: "completed",
+            output: "wrote tmp/BLUEPRINT.md",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "write_file",
+                args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
-    const tools: Tool[] = [{
-      name: "read_file",
-      description: "read",
-      parameters: { type: "object", properties: { path: { type: "string" } } },
-      async execute(args) {
-        const path = String(args.path)
-        if (!path.endsWith("BLUEPRINT.md")) return "Error: not found"
-        return [
-          "# Engine Blueprint",
-          "",
-          "```blueprint-contract",
-          JSON.stringify({
-            version: 1,
-            files: [
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (!path.endsWith("BLUEPRINT.md")) return "Error: not found"
+          return [
+            "# Engine Blueprint",
+            "",
+            "```blueprint-contract",
+            JSON.stringify(
               {
-                path: "tmp/engine.ts",
-                purpose: "Move validation engine",
-                functions: [{ name: "validateMove", signature: "validateMove(state: GameState, move: Move): boolean" }],
+                version: 1,
+                files: [
+                  {
+                    path: "tmp/engine.ts",
+                    purpose: "Move validation engine",
+                    functions: [
+                      {
+                        name: "validateMove",
+                        signature: "validateMove(state: GameState, move: Move): boolean"
+                      }
+                    ]
+                  }
+                ],
+                sharedTypes: []
               },
-            ],
-            sharedTypes: [],
-          }, null, 2),
-          "```",
-        ].join("\n")
-      },
-    }]
+              null,
+              2
+            ),
+            "```"
+          ].join("\n")
+        }
+      }
+    ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
     const step = assessments.find((assessment) => assessment.stepName === "generate_blueprint")
     expect(step).toBeDefined()
-    expect(step?.issues.some((issue) => issue.includes("SPEC MAPPING MISSING") && issue.includes("tmp/BLUEPRINT.md"))).toBe(false)
+    expect(
+      step?.issues.some(
+        (issue) => issue.includes("SPEC MAPPING MISSING") && issue.includes("tmp/BLUEPRINT.md")
+      )
+    ).toBe(false)
   })
 
   it("does not treat algorithm prose parentheticals as extra function declarations", async () => {
@@ -5727,8 +6536,8 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: [],
-            role: "writer",
-          },
+            role: "writer"
+          }
         }),
         makeSubagentStep("implement_game", {
           executionContext: {
@@ -5740,11 +6549,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/game/main.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -5752,66 +6561,99 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       completedSteps: 1,
       totalSteps: 2,
       stepResults: new Map([
-        ["create_blueprint", {
-          name: "create_blueprint",
-          status: "completed",
-          output: "wrote tmp/BLUEPRINT.md",
-          durationMs: 1,
-          toolCalls: [
-            { name: "write_file", args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" }, result: "ok", isError: false },
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "create_blueprint",
+          {
+            name: "create_blueprint",
+            status: "completed",
+            output: "wrote tmp/BLUEPRINT.md",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "write_file",
+                args: { path: "tmp/BLUEPRINT.md", content: "# Blueprint" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
-    const tools: Tool[] = [{
-      name: "read_file",
-      description: "read",
-      parameters: { type: "object", properties: { path: { type: "string" } } },
-      async execute(args) {
-        const path = String(args.path)
-        if (!path.endsWith("BLUEPRINT.md")) return "Error: not found"
-        return [
-          "# Blueprint for tmp/BLUEPRINT.md",
-          "",
-          "## Planned Artifacts",
-          "- tmp/game/main.js",
-          "",
-          "## Machine Contract",
-          "```blueprint-contract",
-          JSON.stringify({
-            version: 1,
-            files: [{
-              path: "tmp/game/main.js",
-              purpose: "Coordinates interactions between UI and chess logic.",
-              functions: [
-                { name: "initializeGame", signature: "initializeGame(): void" },
-                { name: "handleMove", signature: "handleMove(from: string, to: string): void" },
-                { name: "updateUI", signature: "updateUI(gameState: GameState): void" },
-              ],
-            }],
-            sharedTypes: [{ name: "GameState", definition: "{ board: Board }", usedBy: ["tmp/game/main.js"] }],
-          }, null, 2),
-          "```",
-          "",
-          "## File Contracts",
-          "### tmp/game/main.js",
-          "- Purpose: Coordinates interactions between the UI and chess logic.",
-          "- Exports/entrypoints:",
-          "  - `initializeGame`",
-          "  - `handleMove`",
-          "  - `updateUI`",
-          "- Depends on:",
-          "  - Shared types `Board`, `Move`, `GameState`.",
-          "- Used by:",
-          "  - `tmp/game/index.html`",
-          "- Algorithmic contracts:",
-          "  - `handleMove`: Must process valid moves and reject invalid ones.",
-          "  - `updateUI`: Reflect changes in the board and game state visually, including checks (e.g., check/checkmate banners), conditions (a move that ends the game), and variables (e.g., current turn).",
-        ].join("\n")
-      },
-    }]
+    const tools: Tool[] = [
+      {
+        name: "read_file",
+        description: "read",
+        parameters: { type: "object", properties: { path: { type: "string" } } },
+        async execute(args) {
+          const path = String(args.path)
+          if (!path.endsWith("BLUEPRINT.md")) return "Error: not found"
+          return [
+            "# Blueprint for tmp/BLUEPRINT.md",
+            "",
+            "## Planned Artifacts",
+            "- tmp/game/main.js",
+            "",
+            "## Machine Contract",
+            "```blueprint-contract",
+            JSON.stringify(
+              {
+                version: 1,
+                files: [
+                  {
+                    path: "tmp/game/main.js",
+                    purpose: "Coordinates interactions between UI and chess logic.",
+                    functions: [
+                      { name: "initializeGame", signature: "initializeGame(): void" },
+                      {
+                        name: "handleMove",
+                        signature: "handleMove(from: string, to: string): void"
+                      },
+                      {
+                        name: "updateUI",
+                        signature: "updateUI(gameState: GameState): void"
+                      }
+                    ]
+                  }
+                ],
+                sharedTypes: [
+                  {
+                    name: "GameState",
+                    definition: "{ board: Board }",
+                    usedBy: ["tmp/game/main.js"]
+                  }
+                ]
+              },
+              null,
+              2
+            ),
+            "```",
+            "",
+            "## File Contracts",
+            "### tmp/game/main.js",
+            "- Purpose: Coordinates interactions between the UI and chess logic.",
+            "- Exports/entrypoints:",
+            "  - `initializeGame`",
+            "  - `handleMove`",
+            "  - `updateUI`",
+            "- Depends on:",
+            "  - Shared types `Board`, `Move`, `GameState`.",
+            "- Used by:",
+            "  - `tmp/game/index.html`",
+            "- Algorithmic contracts:",
+            "  - `handleMove`: Must process valid moves and reject invalid ones.",
+            "  - `updateUI`: Reflect changes in the board and game state visually, including checks (e.g., check/checkmate banners), conditions (a move that ends the game), and variables (e.g., current turn)."
+          ].join("\n")
+        }
+      }
+    ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
     const step = assessments.find((assessment) => assessment.stepName === "create_blueprint")
@@ -5834,11 +6676,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -5846,17 +6688,33 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["ui-step", {
-          name: "ui-step",
-          status: "completed",
-          output: "wrote tmp/index.html",
-          durationMs: 1,
-          toolCalls: [
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-            { name: "write_file", args: { path: "tmp/index.html", content: "<main><div id='board'></div></main>" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "ui-step",
+          {
+            name: "ui-step",
+            status: "completed",
+            output: "wrote tmp/index.html",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "write_file",
+                args: {
+                  path: "tmp/index.html",
+                  content: "<main><div id='board'></div></main>"
+                },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -5873,20 +6731,20 @@ describe("Verifier: spec-driven structural and process evidence", () => {
               "`tmp/index.html`",
               "- Root layout uses `<main>`",
               "- Board container is `#board`",
-              "- Reset control is `.reset-button`",
+              "- Reset control is `.reset-button`"
             ].join("\n")
           }
           if (path.endsWith("index.html")) return "<main><div id='board'></div></main>"
           return "Error: not found"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "ui-step")
+    const step = assessments.find((a) => a.stepName === "ui-step")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("SPEC STRUCTURE MISMATCH"))).toBe(true)
-    expect(step?.issues.some(i => i.includes("acceptance criteria with no code evidence"))).toBe(false)
+    expect(step?.issues.some((i) => i.includes("SPEC STRUCTURE MISMATCH"))).toBe(true)
+    expect(step?.issues.some((i) => i.includes("acceptance criteria with no code evidence"))).toBe(false)
   })
 
   it("fails process audit when BLUEPRINT.md is read only after file mutation begins", async () => {
@@ -5904,11 +6762,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -5916,17 +6774,30 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["ui-step", {
-          name: "ui-step",
-          status: "completed",
-          output: "wrote tmp/index.html",
-          durationMs: 1,
-          toolCalls: [
-            { name: "write_file", args: { path: "tmp/index.html", content: "<main></main>" }, result: "ok", isError: false },
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "ui-step",
+          {
+            name: "ui-step",
+            status: "completed",
+            output: "wrote tmp/index.html",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "write_file",
+                args: { path: "tmp/index.html", content: "<main></main>" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: "tmp/BLUEPRINT.md" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -5939,14 +6810,14 @@ describe("Verifier: spec-driven structural and process evidence", () => {
           if (path.endsWith("BLUEPRINT.md")) return "`tmp/index.html`\n- Root layout uses `<main>`"
           if (path.endsWith("index.html")) return "<main></main>"
           return "Error: not found"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "ui-step")
+    const step = assessments.find((a) => a.stepName === "ui-step")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("PROCESS AUDIT FAILED"))).toBe(true)
+    expect(step?.issues.some((i) => i.includes("PROCESS AUDIT FAILED"))).toBe(true)
   })
 
   it("rejects blanket claims for complex rule coverage from runtime-only evidence", async () => {
@@ -5956,7 +6827,7 @@ describe("Verifier: spec-driven structural and process evidence", () => {
           objective: "Verify the game logic in the browser",
           acceptanceCriteria: [
             "All rules are fully implemented and the game enforces every constraint correctly",
-            "The game renders and accepts interaction",
+            "The game renders and accepts interaction"
           ],
           executionContext: {
             workspaceRoot: ".",
@@ -5968,11 +6839,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             effectClass: "readonly",
             verificationMode: "browser_check",
             artifactRelations: [],
-            role: "validator",
-          },
-        }),
+            role: "validator"
+          }
+        })
       ],
-      edges: [],
+      edges: []
     })
 
     const pipelineResult: PipelineResult = {
@@ -5980,17 +6851,30 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["runtime_verification", {
-          name: "runtime_verification",
-          status: "completed",
-          output: "The game renders successfully in the browser and all rules are implemented properly.",
-          durationMs: 1,
-          toolCalls: [
-            { name: "read_file", args: { path: "tmp/game_logic.js" }, result: "ok", isError: false },
-            { name: "read_file", args: { path: "tmp/index.html" }, result: "ok", isError: false },
-          ],
-        }],
-      ]),
+        [
+          "runtime_verification",
+          {
+            name: "runtime_verification",
+            status: "completed",
+            output: "The game renders successfully in the browser and all rules are implemented properly.",
+            durationMs: 1,
+            toolCalls: [
+              {
+                name: "read_file",
+                args: { path: "tmp/game_logic.js" },
+                result: "ok",
+                isError: false
+              },
+              {
+                name: "read_file",
+                args: { path: "tmp/index.html" },
+                result: "ok",
+                isError: false
+              }
+            ]
+          }
+        ]
+      ])
     }
 
     const tools: Tool[] = [
@@ -6003,7 +6887,7 @@ describe("Verifier: spec-driven structural and process evidence", () => {
           if (path.endsWith("index.html")) return "<main><button>Play</button></main>"
           if (path.endsWith("game_logic.js")) return "export function validateMove() { return true }"
           return "Error: not found"
-        },
+        }
       },
       {
         name: "browser_check",
@@ -6011,14 +6895,18 @@ describe("Verifier: spec-driven structural and process evidence", () => {
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute() {
           return "No errors"
-        },
-      },
+        }
+      }
     ]
 
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
-    const step = assessments.find(a => a.stepName === "runtime_verification")
+    const step = assessments.find((a) => a.stepName === "runtime_verification")
     expect(step).toBeDefined()
-    expect(step?.issues.some(i => i.includes("CRITERIA PROOF MISSING") && i.includes("exhaustive rule/logic coverage"))).toBe(true)
+    expect(
+      step?.issues.some(
+        (i) => i.includes("CRITERIA PROOF MISSING") && i.includes("exhaustive rule/logic coverage")
+      )
+    ).toBe(true)
   })
 
   it("fails closed before downstream work when the generated blueprint contract paths do not match the plan", async () => {
@@ -6036,8 +6924,8 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/BLUEPRINT.md"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("implement_game_logic", {
           executionContext: {
@@ -6049,11 +6937,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/game_logic.js", "tmp/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "generate_blueprint", to: "implement_game_logic" }],
+      edges: [{ from: "generate_blueprint", to: "implement_game_logic" }]
     })
 
     let delegateCalls = 0
@@ -6064,14 +6952,12 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       async execute(args) {
         const path = String(args.path)
         if (path.endsWith("BLUEPRINT.md")) {
-          return [
-            "# Broken Blueprint",
-            "",
-            makeBlueprintContract(["game/rules.js", "game/index.html"]),
-          ].join("\n")
+          return ["# Broken Blueprint", "", makeBlueprintContract(["game/rules.js", "game/index.html"])].join(
+            "\n"
+          )
         }
         return "Error: not found"
-      },
+      }
     }
 
     const result = await executePipeline(
@@ -6082,18 +6968,30 @@ describe("Verifier: spec-driven structural and process evidence", () => {
         return {
           output: `done ${step.name}`,
           toolCalls: [
-            { name: "write_file", args: { path: step.executionContext.targetArtifacts[0], content: "ok" }, result: "ok", isError: false },
-            { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-          ],
+            {
+              name: "write_file",
+              args: { path: step.executionContext.targetArtifacts[0], content: "ok" },
+              result: "ok",
+              isError: false
+            },
+            {
+              name: "read_file",
+              args: { path: "tmp/BLUEPRINT.md" },
+              result: "ok",
+              isError: false
+            }
+          ]
         }
       },
-      { workspaceRoot: "." },
+      { workspaceRoot: "." }
     )
 
     expect(delegateCalls).toBe(2)
     expect(result.status).toBe("failed")
     expect(result.stepResults.get("generate_blueprint")?.failureClass).toBe("blueprint_contract")
-    expect(result.stepResults.get("generate_blueprint")?.error).toContain("BLUEPRINT ARTIFACT COVERAGE FAILED")
+    expect(result.stepResults.get("generate_blueprint")?.error).toContain(
+      "BLUEPRINT ARTIFACT COVERAGE FAILED"
+    )
     expect(result.stepResults.get("implement_game_logic")?.status).toBe("skipped")
   })
 
@@ -6112,8 +7010,8 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/BLUEPRINT.md"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
+            artifactRelations: []
+          }
         }),
         makeSubagentStep("implement_game_logic", {
           executionContext: {
@@ -6125,11 +7023,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             targetArtifacts: ["tmp/game_logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
-            artifactRelations: [],
-          },
-        }),
+            artifactRelations: []
+          }
+        })
       ],
-      edges: [{ from: "generate_blueprint", to: "implement_game_logic" }],
+      edges: [{ from: "generate_blueprint", to: "implement_game_logic" }]
     })
 
     const readFileTool: Tool = {
@@ -6143,15 +7041,19 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             "# Incomplete Blueprint Contract",
             "",
             "```blueprint-contract",
-            JSON.stringify({
-              version: 1,
-              files: [{ path: "tmp/game_logic.js", purpose: "Rules engine", functions: [] }],
-            }, null, 2),
-            "```",
+            JSON.stringify(
+              {
+                version: 1,
+                files: [{ path: "tmp/game_logic.js", purpose: "Rules engine", functions: [] }]
+              },
+              null,
+              2
+            ),
+            "```"
           ].join("\n")
         }
         return "Error: not found"
-      },
+      }
     }
 
     const result = await executePipeline(
@@ -6160,11 +7062,16 @@ describe("Verifier: spec-driven structural and process evidence", () => {
       async (step) => ({
         output: `done ${step.name}`,
         toolCalls: [
-          { name: "write_file", args: { path: step.executionContext.targetArtifacts[0], content: "ok" }, result: "ok", isError: false },
-          { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false },
-        ],
+          {
+            name: "write_file",
+            args: { path: step.executionContext.targetArtifacts[0], content: "ok" },
+            result: "ok",
+            isError: false
+          },
+          { name: "read_file", args: { path: "tmp/BLUEPRINT.md" }, result: "ok", isError: false }
+        ]
       }),
-      { workspaceRoot: "." },
+      { workspaceRoot: "." }
     )
 
     expect(result.status).toBe("failed")
@@ -6181,7 +7088,7 @@ describe("Verifier: spec-driven structural and process evidence", () => {
 describe("synthesizeAnswer — verification status rendering", () => {
   const plan = makePlan({
     reason: "build chess game",
-    steps: [makeSubagentStep("build_chess")],
+    steps: [makeSubagentStep("build_chess")]
   })
 
   function makePipelineResult(status: "completed" | "failed" = "completed"): PipelineResult {
@@ -6190,13 +7097,16 @@ describe("synthesizeAnswer — verification status rendering", () => {
       completedSteps: 1,
       totalSteps: 1,
       stepResults: new Map([
-        ["build_chess", {
-          name: "build_chess",
-          status,
-          output: "All files written successfully",
-          durationMs: 5000,
-        }],
-      ]),
+        [
+          "build_chess",
+          {
+            name: "build_chess",
+            status,
+            output: "All files written successfully",
+            durationMs: 5000
+          }
+        ]
+      ])
     }
   }
 
@@ -6205,7 +7115,7 @@ describe("synthesizeAnswer — verification status rendering", () => {
       overall: "pass",
       confidence: 0.95,
       steps: [{ stepName: "build_chess", outcome: "pass", confidence: 0.95, issues: [], retryable: false }],
-      unresolvedItems: [],
+      unresolvedItems: []
     }
     const answer = synthesizeAnswer(plan, makePipelineResult(), decision)
     expect(answer).toBe("All files written successfully")
@@ -6217,14 +7127,16 @@ describe("synthesizeAnswer — verification status rendering", () => {
     const decision: VerifierDecision = {
       overall: "retry",
       confidence: 0.4,
-      steps: [{
-        stepName: "build_chess",
-        outcome: "retry",
-        confidence: 0.4,
-        issues: ["Castling logic is a placeholder", "Missing checkmate detection"],
-        retryable: true,
-      }],
-      unresolvedItems: ["Implement castling", "Implement checkmate"],
+      steps: [
+        {
+          stepName: "build_chess",
+          outcome: "retry",
+          confidence: 0.4,
+          issues: ["Castling logic is a placeholder", "Missing checkmate detection"],
+          retryable: true
+        }
+      ],
+      unresolvedItems: ["Implement castling", "Implement checkmate"]
     }
     const answer = synthesizeAnswer(plan, makePipelineResult(), decision)
     expect(answer).toContain("Task verification FAILED")
@@ -6239,14 +7151,16 @@ describe("synthesizeAnswer — verification status rendering", () => {
     const decision: VerifierDecision = {
       overall: "fail",
       confidence: 0.2,
-      steps: [{
-        stepName: "build_chess",
-        outcome: "fail",
-        confidence: 0.2,
-        issues: ["Child agent reported explicit failure"],
-        retryable: false,
-      }],
-      unresolvedItems: [],
+      steps: [
+        {
+          stepName: "build_chess",
+          outcome: "fail",
+          confidence: 0.2,
+          issues: ["Child agent reported explicit failure"],
+          retryable: false
+        }
+      ],
+      unresolvedItems: []
     }
     const answer = synthesizeAnswer(plan, makePipelineResult(), decision)
     expect(answer).toContain("Task FAILED")
@@ -6258,14 +7172,16 @@ describe("synthesizeAnswer — verification status rendering", () => {
     const decision: VerifierDecision = {
       overall: "retry",
       confidence: 0.5,
-      steps: [{
-        stepName: "build_chess",
-        outcome: "retry",
-        confidence: 0.5,
-        issues: ["Missing en passant"],
-        retryable: true,
-      }],
-      unresolvedItems: ["Implement en passant rule"],
+      steps: [
+        {
+          stepName: "build_chess",
+          outcome: "retry",
+          confidence: 0.5,
+          issues: ["Missing en passant"],
+          retryable: true
+        }
+      ],
+      unresolvedItems: ["Implement en passant rule"]
     }
     const answer = synthesizeAnswer(plan, makePipelineResult(), decision)
     expect(answer).toContain("Unresolved:")
@@ -6275,10 +7191,7 @@ describe("synthesizeAnswer — verification status rendering", () => {
   it("keeps ✓ for passing steps even when overall is retry (multi-step)", () => {
     const multiPlan = makePlan({
       reason: "build chess game",
-      steps: [
-        makeSubagentStep("setup_board"),
-        makeSubagentStep("add_rules", { objective: "Add game rules" }),
-      ],
+      steps: [makeSubagentStep("setup_board"), makeSubagentStep("add_rules", { objective: "Add game rules" })]
     })
     const pipelineResult: PipelineResult = {
       status: "completed",
@@ -6286,17 +7199,23 @@ describe("synthesizeAnswer — verification status rendering", () => {
       totalSteps: 2,
       stepResults: new Map([
         ["setup_board", { name: "setup_board", status: "completed", output: "Board done", durationMs: 3000 }],
-        ["add_rules", { name: "add_rules", status: "completed", output: "Rules done", durationMs: 4000 }],
-      ]),
+        ["add_rules", { name: "add_rules", status: "completed", output: "Rules done", durationMs: 4000 }]
+      ])
     }
     const decision: VerifierDecision = {
       overall: "retry",
       confidence: 0.6,
       steps: [
         { stepName: "setup_board", outcome: "pass", confidence: 0.9, issues: [], retryable: false },
-        { stepName: "add_rules", outcome: "retry", confidence: 0.4, issues: ["Missing castling"], retryable: true },
+        {
+          stepName: "add_rules",
+          outcome: "retry",
+          confidence: 0.4,
+          issues: ["Missing castling"],
+          retryable: true
+        }
       ],
-      unresolvedItems: [],
+      unresolvedItems: []
     }
     const answer = synthesizeAnswer(multiPlan, pipelineResult, decision)
     expect(answer).toContain("✓ setup_board")
@@ -6307,28 +7226,41 @@ describe("synthesizeAnswer — verification status rendering", () => {
   it("uses ordered unique step outputs for successful multi-step runs", () => {
     const multiPlan = makePlan({
       reason: "build chess game",
-      steps: [
-        makeSubagentStep("setup_board"),
-        makeSubagentStep("add_rules", { objective: "Add game rules" }),
-      ],
+      steps: [makeSubagentStep("setup_board"), makeSubagentStep("add_rules", { objective: "Add game rules" })]
     })
     const pipelineResult: PipelineResult = {
       status: "completed",
       completedSteps: 2,
       totalSteps: 2,
       stepResults: new Map([
-        ["setup_board", { name: "setup_board", status: "completed", output: "Done: created tmp/chess/index.html", durationMs: 3000 }],
-        ["add_rules", { name: "add_rules", status: "completed", output: "Verified in browser successfully.", durationMs: 4000 }],
-      ]),
+        [
+          "setup_board",
+          {
+            name: "setup_board",
+            status: "completed",
+            output: "Done: created tmp/chess/index.html",
+            durationMs: 3000
+          }
+        ],
+        [
+          "add_rules",
+          {
+            name: "add_rules",
+            status: "completed",
+            output: "Verified in browser successfully.",
+            durationMs: 4000
+          }
+        ]
+      ])
     }
     const decision: VerifierDecision = {
       overall: "pass",
       confidence: 0.92,
       steps: [
         { stepName: "setup_board", outcome: "pass", confidence: 0.95, issues: [], retryable: false },
-        { stepName: "add_rules", outcome: "pass", confidence: 0.9, issues: [], retryable: false },
+        { stepName: "add_rules", outcome: "pass", confidence: 0.9, issues: [], retryable: false }
       ],
-      unresolvedItems: [],
+      unresolvedItems: []
     }
 
     const answer = synthesizeAnswer(multiPlan, pipelineResult, decision)
@@ -6343,21 +7275,27 @@ describe("synthesizeAnswer — verification status rendering", () => {
 describe("Gibberish issue detection", () => {
   describe("isGibberishIssue (pipeline)", () => {
     it("detects compound-hyphenated word-salad", () => {
-      expect(isGibberishIssue(
-        "Edge-action resets fail appropriate bound-scoping interpolated mouse-rerun initialization layers creating block-scenario loop-redundancies",
-      )).toBe(true)
+      expect(
+        isGibberishIssue(
+          "Edge-action resets fail appropriate bound-scoping interpolated mouse-rerun initialization layers creating block-scenario loop-redundancies"
+        )
+      ).toBe(true)
     })
 
     it("detects gibberish with very few function words", () => {
-      expect(isGibberishIssue(
-        "clearHighlights fail appropriate bound-scoping interpolated mouse-rerun initialization layers creating block scenario loop redundancies unresolved coordination assured surround unpredictable",
-      )).toBe(true)
+      expect(
+        isGibberishIssue(
+          "clearHighlights fail appropriate bound-scoping interpolated mouse-rerun initialization layers creating block scenario loop redundancies unresolved coordination assured surround unpredictable"
+        )
+      ).toBe(true)
     })
 
     it("passes through legitimate issues with file paths", () => {
-      expect(isGibberishIssue(
-        "game_logic.js: getLegalMoves returns empty array for all piece types — stub detected",
-      )).toBe(false)
+      expect(
+        isGibberishIssue(
+          "game_logic.js: getLegalMoves returns empty array for all piece types — stub detected"
+        )
+      ).toBe(false)
     })
 
     it("passes through short issues", () => {
@@ -6365,29 +7303,37 @@ describe("Gibberish issue detection", () => {
     })
 
     it("passes through issues mentioning code patterns", () => {
-      expect(isGibberishIssue(
-        "The function isValidMove in game_logic.js contains a placeholder `return true` instead of real validation logic for each piece type",
-      )).toBe(false)
+      expect(
+        isGibberishIssue(
+          "The function isValidMove in game_logic.js contains a placeholder `return true` instead of real validation logic for each piece type"
+        )
+      ).toBe(false)
     })
   })
 
   describe("isLLMGibberish (verifier)", () => {
     it("detects pure word-salad from degenerated LLM", () => {
-      expect(isLLMGibberish(
-        "frame-hydro-exclusive memory-chaining cleanup fails interactive clearance fails qualifiers mis-nullify-control-actionations errors overall preservation misses automated-recursive",
-      )).toBe(true)
+      expect(
+        isLLMGibberish(
+          "frame-hydro-exclusive memory-chaining cleanup fails interactive clearance fails qualifiers mis-nullify-control-actionations errors overall preservation misses automated-recursive"
+        )
+      ).toBe(true)
     })
 
     it("keeps valid technical issues", () => {
-      expect(isLLMGibberish(
-        "The render_chessboard step creates board.js but does not implement the drawPieces function — it returns immediately without rendering any pieces on the board",
-      )).toBe(false)
+      expect(
+        isLLMGibberish(
+          "The render_chessboard step creates board.js but does not implement the drawPieces function — it returns immediately without rendering any pieces on the board"
+        )
+      ).toBe(false)
     })
 
     it("keeps issues with stub/placeholder keywords", () => {
-      expect(isLLMGibberish(
-        "stub: isInCheck returns false always without checking if the king is attacked by any opponent piece",
-      )).toBe(false)
+      expect(
+        isLLMGibberish(
+          "stub: isInCheck returns false always without checking if the king is attacked by any opponent piece"
+        )
+      ).toBe(false)
     })
   })
 })
@@ -6431,8 +7377,8 @@ describe("parseCoherentSolutionBundle — TODO rejection", () => {
       architecture: "index.html + chess.js",
       artifacts: [
         { path: "index.html", purpose: "HTML entry", content: "<html></html>" },
-        { path: "chess.js", purpose: "Game logic", content: appContent },
-      ],
+        { path: "chess.js", purpose: "Game logic", content: appContent }
+      ]
     })
   }
 
@@ -6443,15 +7389,19 @@ describe("parseCoherentSolutionBundle — TODO rejection", () => {
   })
 
   it("rejects a bundle whose JS artifact has a // TODO: stub", () => {
-    const result = parseCoherentSolutionBundle(makeBundle("function movePiece() {\n  // TODO: Add logic for other pieces\n  return false;\n}\n"))
+    const result = parseCoherentSolutionBundle(
+      makeBundle("function movePiece() {\n  // TODO: Add logic for other pieces\n  return false;\n}\n")
+    )
     expect(result.bundle).toBeNull()
-    expect(result.diagnostics.some(d => /TODO/i.test(d))).toBe(true)
+    expect(result.diagnostics.some((d) => /TODO/i.test(d))).toBe(true)
   })
 
   it("rejects a bundle with /* TODO block comment in JS", () => {
-    const result = parseCoherentSolutionBundle(makeBundle("/* TODO add castling */\nfunction castling() {}\n"))
+    const result = parseCoherentSolutionBundle(
+      makeBundle("/* TODO add castling */\nfunction castling() {}\n")
+    )
     expect(result.bundle).toBeNull()
-    expect(result.diagnostics.some(d => /TODO/i.test(d))).toBe(true)
+    expect(result.diagnostics.some((d) => /TODO/i.test(d))).toBe(true)
   })
 
   it("does not reject TODO in a non-code artifact (e.g. markdown)", () => {
@@ -6460,8 +7410,12 @@ describe("parseCoherentSolutionBundle — TODO rejection", () => {
       architecture: "index.html + chess.js",
       artifacts: [
         { path: "README.md", purpose: "Docs", content: "# Chess\n\n<!-- TODO: improve docs -->\n" },
-        { path: "chess.js", purpose: "Game logic", content: "function movePiece() { return true; }\n" },
-      ],
+        {
+          path: "chess.js",
+          purpose: "Game logic",
+          content: "function movePiece() { return true; }\n"
+        }
+      ]
     })
     const result = parseCoherentSolutionBundle(bundle)
     expect(result.bundle).not.toBeNull()

@@ -6,12 +6,12 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
-    DEFAULT_TENANT_CONFIG,
-    getTenantConfig,
-    isDefaultTenantConfig,
-    loadTenantConfigFromEnv,
-    resetTenantConfig,
-    setTenantConfig,
+  DEFAULT_TENANT_CONFIG,
+  getTenantConfig,
+  isDefaultTenantConfig,
+  loadTenantConfigFromEnv,
+  resetTenantConfig,
+  setTenantConfig
 } from "../src/application/shell/tenant-config.js"
 
 // Global setup (tests/setup.ts) overrides the tenant config to match the
@@ -57,8 +57,8 @@ describe("setTenantConfig", () => {
         largeObjects: ["publish.revenue"],
         canonicalQualifiedNames: { "publish.revenue": "publish.Revenue" },
         unionBranchCounts: { "publish.revenue": 12 },
-        highCardinalityKeys: { "publish.revenue": ["pkClient"] },
-      },
+        highCardinalityKeys: { "publish.revenue": ["pkClient"] }
+      }
     })
     const c = getTenantConfig()
     expect(c.catalogBootstrap.largeObjects).toEqual(["publish.revenue"])

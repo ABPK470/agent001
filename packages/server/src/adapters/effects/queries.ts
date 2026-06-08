@@ -15,7 +15,7 @@ function rowToEffect(row: Record<string, unknown>): Effect {
     postHash: (row.post_hash as string) ?? null,
     status: row.status as EffectStatus,
     metadata: JSON.parse((row.metadata as string) ?? "{}"),
-    createdAt: row.created_at as string,
+    createdAt: row.created_at as string
   }
 }
 
@@ -27,16 +27,16 @@ function rowToSnapshot(row: Record<string, unknown>): FileSnapshot {
     filePath: row.file_path as string,
     content: (row.content as string) ?? null,
     hash: (row.hash as string) ?? null,
-    createdAt: row.created_at as string,
+    createdAt: row.created_at as string
   }
 }
 
 // ── Queries ──────────────────────────────────────────────────────
 
 export function getRunEffects(runId: string): Effect[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM effects WHERE run_id = ? ORDER BY seq")
-    .all(runId) as Array<Record<string, unknown>>
+  const rows = getDb().prepare("SELECT * FROM effects WHERE run_id = ? ORDER BY seq").all(runId) as Array<
+    Record<string, unknown>
+  >
   return rows.map(rowToEffect)
 }
 
@@ -80,6 +80,6 @@ export function getEffectStats(runId: string): {
     commands: effects.filter((e) => e.kind === "command").length,
     network: effects.filter((e) => e.kind === "network").length,
     compensated: effects.filter((e) => e.status === "compensated").length,
-    idempotent: effects.filter((e) => e.metadata.idempotent).length,
+    idempotent: effects.filter((e) => e.metadata.idempotent).length
   }
 }

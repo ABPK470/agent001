@@ -13,21 +13,21 @@ import { assertSupportedSyncDirection, getEnvironment } from "../../../domain/en
 import { evaluateFreezeWindows } from "../../../domain/governance/freeze-windows.js"
 import { definitionToSyncRecipe, getPublishedSyncDefinition } from "../../../domain/published-definitions.js"
 import {
-    instantiatePredicate,
-    instantiatePredicateWithTree,
-    selectRecipeTables,
-    type EntityType,
-    type SyncRecipe,
-    type SyncRecipeTable,
+  instantiatePredicate,
+  instantiatePredicateWithTree,
+  selectRecipeTables,
+  type EntityType,
+  type SyncRecipe,
+  type SyncRecipeTable
 } from "../../../domain/recipes.js"
 import { EventType, SyncOperationType, type SyncRuntimeHost } from "../../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
 import {
-    allocPlanId,
-    savePlan,
-    type SyncPlan,
-    type SyncPlanTable,
-    type SyncPlanTotals,
+  allocPlanId,
+  savePlan,
+  type SyncPlan,
+  type SyncPlanTable,
+  type SyncPlanTotals
 } from "../plan-store.js"
 import { fetchPkColumns } from "./apply.js"
 import { mapWithConcurrency, PREVIEW_TABLE_CONCURRENCY, projectRoot } from "./db-helpers.js"
@@ -56,19 +56,24 @@ export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
     entityId: input.entityId,
     source: input.source,
     target: input.target,
-    force: Boolean(input.force),
+    force: Boolean(input.force)
   })
 
   const telemetryContext: SyncTelemetryContext = {
     kind: SyncOperationType.Preview,
     opId: previewId,
     source: input.source,
-    target: input.target,
+    target: input.target
   }
   return previewSyncInner(input, previewId, t0, telemetryContext)
 }
 
-async function previewSyncInner(input: PreviewInput, previewId: string, t0: number, telemetryContext: SyncTelemetryContext): Promise<SyncPlan> {
+async function previewSyncInner(
+  input: PreviewInput,
+  previewId: string,
+  t0: number,
+  telemetryContext: SyncTelemetryContext
+): Promise<SyncPlan> {
   try {
     const createdAt = new Date().toISOString()
     const createdAtMs = Date.now()
@@ -81,14 +86,18 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
       tables: selection.tables,
       executionOrder: selection.executionOrder,
       reverseOrder: selection.reverseOrder,
-      archiveTables: fullRecipe.archiveTables.filter((_, index) => selectedTableNames.has(fullRecipe.tables[index]?.name ?? "")),
+      archiveTables: fullRecipe.archiveTables.filter((_, index) =>
+        selectedTableNames.has(fullRecipe.tables[index]?.name ?? "")
+      )
     }
 
     // Validate environments
     const sourceEnv = getEnvironment(input.host, input.source)
     const targetEnv = getEnvironment(input.host, input.target)
-    if (sourceEnv.role === "target") throw new Error(`Environment "${sourceEnv.name}" is target-only — cannot use as source.`)
-    if (targetEnv.role === "source") throw new Error(`Environment "${targetEnv.name}" is source-only — cannot use as target.`)
+    if (sourceEnv.role === "target")
+      throw new Error(`Environment "${sourceEnv.name}" is target-only — cannot use as source.`)
+    if (targetEnv.role === "source")
+      throw new Error(`Environment "${targetEnv.name}" is source-only — cannot use as target.`)
     assertSupportedSyncDirection(sourceEnv, targetEnv)
     // Hard block: PROD is read-only until explicitly unlocked by ops (SYNC_ALLOW_PROD=1).
     if (targetEnv.name.toLowerCase() === "prod" && !process.env["SYNC_ALLOW_PROD"]) {
@@ -97,26 +106,30 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
 
     const freezeEvaluation = evaluateFreezeWindows(definition.governance.freezeWindowIds)
     const actorAllowed = input.userUpn
-      ? (targetEnv.syncAllowlist.length === 0 || targetEnv.syncAllowlist.includes(input.userUpn))
+      ? targetEnv.syncAllowlist.length === 0 || targetEnv.syncAllowlist.includes(input.userUpn)
       : null
     const governanceWarnings: string[] = []
     if (freezeEvaluation.active) {
       governanceWarnings.push(
-        `Active freeze window(s) at preview time: ${freezeEvaluation.activeWindows.map((window) => `${window.id} (${window.displayName})`).join(", ")}. Execute will be blocked unless overridden.`,
+        `Active freeze window(s) at preview time: ${freezeEvaluation.activeWindows.map((window) => `${window.id} (${window.displayName})`).join(", ")}. Execute will be blocked unless overridden.`
       )
     }
     if (freezeEvaluation.unknownIds.length > 0) {
-      governanceWarnings.push(`Unknown freeze window id(s) referenced by definition: ${freezeEvaluation.unknownIds.join(", ")}.`)
+      governanceWarnings.push(
+        `Unknown freeze window id(s) referenced by definition: ${freezeEvaluation.unknownIds.join(", ")}.`
+      )
     }
     if (actorAllowed === false && input.userUpn) {
-      governanceWarnings.push(`User ${input.userUpn} is not in the target sync allowlist for ${targetEnv.name}; execute will be blocked.`)
+      governanceWarnings.push(
+        `User ${input.userUpn} is not in the target sync allowlist for ${targetEnv.name}; execute will be blocked.`
+      )
     }
 
     const governanceDecision = {
       evaluatedAt: createdAt,
       governance: {
         freezeWindowIds: [...definition.governance.freezeWindowIds],
-        riskMultiplier: definition.governance.riskMultiplier,
+        riskMultiplier: definition.governance.riskMultiplier
       },
       freezeWindows: {
         active: freezeEvaluation.active,
@@ -124,9 +137,9 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
           id: window.id,
           displayName: window.displayName,
           startsAt: window.startsAt,
-          endsAt: window.endsAt,
+          endsAt: window.endsAt
         })),
-        unknownIds: [...freezeEvaluation.unknownIds],
+        unknownIds: [...freezeEvaluation.unknownIds]
       },
       targetEnvironment: {
         name: targetEnv.name,
@@ -134,9 +147,9 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         prodSyncUnlocked: targetEnv.name.toLowerCase() !== "prod" || Boolean(process.env["SYNC_ALLOW_PROD"]),
         syncAllowlistEnabled: targetEnv.syncAllowlist.length > 0,
         actorUpn: input.userUpn ?? null,
-        actorAllowed,
+        actorAllowed
       },
-      warnings: governanceWarnings,
+      warnings: governanceWarnings
     }
 
     // Resolve entity display name
@@ -154,10 +167,16 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     // schema-qualified, so we union the prefixes and feed them to the
     // drift check. This removes the historical hardcoded Mymi-only
     // allowlist and lets registry-defined entities span any schemas.
-    const allowedSchemas = Array.from(new Set(recipe.tables.map((t) => {
-      const ix = t.name.indexOf(".")
-      return ix > 0 ? t.name.slice(0, ix) : ""
-    }).filter((s) => s.length > 0)))
+    const allowedSchemas = Array.from(
+      new Set(
+        recipe.tables
+          .map((t) => {
+            const ix = t.name.indexOf(".")
+            return ix > 0 ? t.name.slice(0, ix) : ""
+          })
+          .filter((s) => s.length > 0)
+      )
+    )
     let preflight: { catalogCompatible: boolean; issues: string[] }
     try {
       preflight = await detectCatalogDrift(
@@ -165,12 +184,12 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         input.source,
         input.target,
         recipe.tables.map((t) => t.name),
-        allowedSchemas,
+        allowedSchemas
       )
     } catch (e) {
       preflight = {
         catalogCompatible: false,
-        issues: [`Catalog drift check failed: ${e instanceof Error ? e.message : String(e)}`],
+        issues: [`Catalog drift check failed: ${e instanceof Error ? e.message : String(e)}`]
       }
     }
 
@@ -178,7 +197,11 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     // pool and produces "Connection is closed" cascades that flap classification
     // between runs (a failed table reports counts:0/0/0/0 instead of its real
     // unchanged count, so totals jitter from one preview to the next).
-    const pkColumnsByTable = await fetchPkColumns(input.host, input.source, recipe.tables.map((t) => t.name))
+    const pkColumnsByTable = await fetchPkColumns(
+      input.host,
+      input.source,
+      recipe.tables.map((t) => t.name)
+    )
     const tableResults: SyncPlanTable[] = await mapWithConcurrency(
       recipe.tables,
       PREVIEW_TABLE_CONCURRENCY,
@@ -197,10 +220,13 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
             input.source,
             input.target,
             pkColumnsByTable.get(t.name) ?? [],
-            { rowCap: input.force ? Number.MAX_SAFE_INTEGER : undefined, expandedIds, telemetryContext },
+            { rowCap: input.force ? Number.MAX_SAFE_INTEGER : undefined, expandedIds, telemetryContext }
           )
           emit(input.host, EventType.SyncPreviewTableDone, {
-            previewId, table: t.name, counts: r.counts, durationMs: r.diffDurationMs,
+            previewId,
+            table: t.name,
+            counts: r.counts,
+            durationMs: r.diffDurationMs
           })
           return r
         } catch (e: unknown) {
@@ -216,10 +242,10 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
             samples: { insert: [], update: [], delete: [] },
             conflicts: [],
             warnings: [`Diff failed: ${errMsg}`],
-            diffDurationMs: Date.now() - tableT0,
+            diffDurationMs: Date.now() - tableT0
           } as SyncPlanTable
         }
-      },
+      }
     )
 
     const totals: SyncPlanTotals = tableResults.reduce(
@@ -230,9 +256,11 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         unchanged: acc.unchanged + t.counts.unchanged,
         lowConfidence: acc.lowConfidence + t.counts.lowConfidence,
         conflicts: acc.conflicts + t.counts.conflicts,
-        tablesCount: acc.tablesCount + (t.counts.insert + t.counts.update + t.counts.delete + t.counts.conflicts > 0 ? 1 : 0),
+        tablesCount:
+          acc.tablesCount +
+          (t.counts.insert + t.counts.update + t.counts.delete + t.counts.conflicts > 0 ? 1 : 0)
       }),
-      { insert: 0, update: 0, delete: 0, unchanged: 0, lowConfidence: 0, conflicts: 0, tablesCount: 0 },
+      { insert: 0, update: 0, delete: 0, unchanged: 0, lowConfidence: 0, conflicts: 0, tablesCount: 0 }
     )
 
     const warnings: string[] = [...governanceWarnings.map((warning) => `[governance] ${warning}`)]
@@ -246,7 +274,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
       .map((table) => table.name)
     if (disabledOptionalTables.length > 0) {
       warnings.unshift(
-        `FK-only tables excluded by default: ${disabledOptionalTables.join(", ")}. Enable them explicitly to include closure-only rows in the preview.`,
+        `FK-only tables excluded by default: ${disabledOptionalTables.join(", ")}. Enable them explicitly to include closure-only rows in the preview.`
       )
     }
 
@@ -257,7 +285,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
     if (failedTables.length > 0) {
       warnings.unshift(
         `Preview incomplete: ${failedTables.length}/${tableResults.length} table(s) failed to diff (${failedTables.map((t) => t.table).join(", ")}). ` +
-        `Totals shown EXCLUDE these tables and will jitter between runs. Re-run the preview.`,
+          `Totals shown EXCLUDE these tables and will jitter between runs. Re-run the preview.`
       )
     }
 
@@ -276,8 +304,8 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
           publishedVersion: definition.publishedVersion,
           publishedAt: definition.publishedAt,
           provenance: definition.provenance,
-          bindings: definition.bindings,
-        },
+          bindings: definition.bindings
+        }
       },
       {
         id: "compiled-flow",
@@ -294,32 +322,33 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
             phase: step.phase,
             kind: step.kind,
             title: step.title,
-            description: step.description,
-          })),
-        },
+            description: step.description
+          }))
+        }
       },
       {
         id: "optional-table-selection",
         recordedAt: createdAt,
         stage: "preview" as const,
         category: "scope" as const,
-        severity: disabledOptionalTables.length > 0 ? "warning" as const : "info" as const,
+        severity: disabledOptionalTables.length > 0 ? ("warning" as const) : ("info" as const),
         title: "Table scope selected",
-        summary: disabledOptionalTables.length > 0
-          ? `${recipe.tables.length} table(s) included; optional FK-only tables excluded: ${disabledOptionalTables.join(", ")}.`
-          : `${recipe.tables.length} table(s) included with no optional-table exclusions.`,
+        summary:
+          disabledOptionalTables.length > 0
+            ? `${recipe.tables.length} table(s) included; optional FK-only tables excluded: ${disabledOptionalTables.join(", ")}.`
+            : `${recipe.tables.length} table(s) included with no optional-table exclusions.`,
         details: {
           selectedTables: recipe.tables.map((table) => table.name),
           enabledOptionalTables,
-          disabledOptionalTables,
-        },
+          disabledOptionalTables
+        }
       },
       {
         id: "catalog-preflight",
         recordedAt: createdAt,
         stage: "preview" as const,
         category: "preflight" as const,
-        severity: preflight.catalogCompatible ? "info" as const : "warning" as const,
+        severity: preflight.catalogCompatible ? ("info" as const) : ("warning" as const),
         title: "Catalog preflight evaluated",
         summary: preflight.catalogCompatible
           ? `Catalog compatible across ${allowedSchemas.length} allowed schema(s).`
@@ -327,21 +356,22 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         details: {
           catalogCompatible: preflight.catalogCompatible,
           allowedSchemas,
-          issues: preflight.issues,
-        },
+          issues: preflight.issues
+        }
       },
       {
         id: "governance-evaluation",
         recordedAt: createdAt,
         stage: "preview" as const,
         category: "governance" as const,
-        severity: governanceWarnings.length > 0 ? "warning" as const : "info" as const,
+        severity: governanceWarnings.length > 0 ? ("warning" as const) : ("info" as const),
         title: "Governance evaluated",
-        summary: governanceWarnings.length > 0
-          ? governanceWarnings.join(" ")
-          : `No governance blockers detected at preview time for ${targetEnv.name}.`,
-        details: governanceDecision,
-      },
+        summary:
+          governanceWarnings.length > 0
+            ? governanceWarnings.join(" ")
+            : `No governance blockers detected at preview time for ${targetEnv.name}.`,
+        details: governanceDecision
+      }
     ]
 
     const plan: SyncPlan = {
@@ -362,10 +392,16 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         rootTable: recipe.rootTable,
         rootKeyColumn: recipe.rootKeyColumn,
         legacyPipelineId: recipe.legacyPipelineId ?? undefined,
-        tables: recipe.tables.map((t: SyncRecipeTable) => ({ name: t.name, scopeColumn: t.scopeColumn, predicate: t.predicate })),
+        tables: recipe.tables.map((t: SyncRecipeTable) => ({
+          name: t.name,
+          scopeColumn: t.scopeColumn,
+          predicate: t.predicate
+        })),
         executionOrder: recipe.executionOrder,
         reverseOrder: recipe.reverseOrder,
-        enabledOptionalTables: recipe.tables.filter((table) => table.userControllable).map((table) => table.name),
+        enabledOptionalTables: recipe.tables
+          .filter((table) => table.userControllable)
+          .map((table) => table.name)
       },
       executionContract: {
         definitionId: definition.id,
@@ -373,19 +409,23 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
         definitionPublishedAt: definition.publishedAt,
         governance: {
           freezeWindowIds: [...definition.governance.freezeWindowIds],
-          riskMultiplier: definition.governance.riskMultiplier,
+          riskMultiplier: definition.governance.riskMultiplier
         },
         bindings: {
           serviceProfileRef: definition.bindings.serviceProfileRef,
-          environmentPolicyRef: definition.bindings.environmentPolicyRef,
+          environmentPolicyRef: definition.bindings.environmentPolicyRef
         },
         allowedSchemas,
         metadata: {
           rootTable: recipe.rootTable,
           rootKeyColumn: recipe.rootKeyColumn,
-          tables: recipe.tables.map((t: SyncRecipeTable) => ({ name: t.name, scopeColumn: t.scopeColumn, predicate: t.predicate })),
+          tables: recipe.tables.map((t: SyncRecipeTable) => ({
+            name: t.name,
+            scopeColumn: t.scopeColumn,
+            predicate: t.predicate
+          })),
           executionOrder: recipe.executionOrder,
-          reverseOrder: recipe.reverseOrder,
+          reverseOrder: recipe.reverseOrder
         },
         flow: {
           steps: definition.executionFlow.steps.map((step) => ({
@@ -397,22 +437,22 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
             subjectRef: step.subjectRef ?? null,
             objectName: step.objectName ?? null,
             auditObjectType: step.auditObjectType ?? null,
-            pipelineName: step.pipelineName ?? null,
-          })),
+            pipelineName: step.pipelineName ?? null
+          }))
         },
         provenance: {
           kind: definition.provenance.kind,
           sourceArtifact: definition.provenance.sourceArtifact ?? null,
-          sourceVersion: definition.provenance.sourceVersion ?? null,
-        },
+          sourceVersion: definition.provenance.sourceVersion ?? null
+        }
       },
       decisionLog,
       governanceDecision,
       entityPolicies: {
         freezeWindowIds: [...definition.governance.freezeWindowIds],
         riskMultiplier: definition.governance.riskMultiplier,
-        sourceEntityVersion: null,
-      },
+        sourceEntityVersion: null
+      }
     }
     savePlan(input.host, plan)
 
@@ -428,7 +468,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
       target: input.target,
       totals,
       failedTables: failedTables.map((t) => t.table),
-      durationMs: Date.now() - t0,
+      durationMs: Date.now() - t0
     })
 
     return plan
@@ -441,7 +481,7 @@ async function previewSyncInner(input: PreviewInput, previewId: string, t0: numb
       source: input.source,
       target: input.target,
       error: errMsg,
-      durationMs: Date.now() - t0,
+      durationMs: Date.now() - t0
     })
     throw e
   }

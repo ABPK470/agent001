@@ -10,7 +10,7 @@ import { hmacSha256Hex } from "@mia/sync"
 import { Signer } from "../signer.js"
 
 export interface HmacSignerOptions {
-  id:     string
+  id: string
   secret: string
 }
 
@@ -19,7 +19,7 @@ export function buildHmacSigner(o: HmacSignerOptions): Signer {
     throw new Error("HMAC signer secret must be ≥ 32 chars (EVIDENCE_HMAC_SECRET)")
   }
   return {
-    id:  o.id,
+    id: o.id,
     alg: "HMAC-SHA256",
     async sign(bytes) {
       return Buffer.from(hmacSha256Hex(o.secret, bytes), "hex").toString("base64url")
@@ -28,8 +28,10 @@ export function buildHmacSigner(o: HmacSignerOptions): Signer {
       try {
         const expected = Buffer.from(hmacSha256Hex(o.secret, bytes), "hex").toString("base64url")
         return constantTimeEqualString(expected, sig)
-      } catch { return false }
-    },
+      } catch {
+        return false
+      }
+    }
   }
 }
 

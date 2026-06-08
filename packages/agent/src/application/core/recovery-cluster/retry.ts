@@ -33,7 +33,7 @@ export const TOOL_RETRY_POLICY: ToolRetryPolicy = {
   baseDelayMs: 500,
   maxDelayMs: 5_000,
   backoffMultiplier: 2,
-  jitterFactor: 0.3,
+  jitterFactor: 0.3
 }
 
 // ── Retry helpers ────────────────────────────────────────────────
@@ -85,7 +85,7 @@ export interface ToolRetryResult {
 export async function withToolRetry(
   fn: () => Promise<string>,
   policy: ToolRetryPolicy = TOOL_RETRY_POLICY,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<ToolRetryResult> {
   let lastError: Error | undefined
 

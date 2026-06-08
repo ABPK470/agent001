@@ -11,10 +11,7 @@
 
 import sqlMod from "mssql"
 import { definitionToSyncRecipe, getPublishedSyncDefinition } from "../../../domain/published-definitions.js"
-import {
-    type EntityType,
-    type SyncRecipe,
-} from "../../../domain/recipes.js"
+import { type EntityType, type SyncRecipe } from "../../../domain/recipes.js"
 import { getPool, type SyncRuntimeHost } from "../../../ports/index.js"
 import { projectRoot, qtable } from "./db-helpers.js"
 
@@ -24,37 +21,38 @@ export interface EntitySearchResult {
 }
 
 function invalidRootNameColumnError(recipe: SyncRecipe, columns: string[]): Error {
-  const detail = columns.length > 0
-    ? ` Available columns on ${recipe.rootTable}: ${columns.join(", ")}.`
-    : ` No readable columns were returned for ${recipe.rootTable}.`
+  const detail =
+    columns.length > 0
+      ? ` Available columns on ${recipe.rootTable}: ${columns.join(", ")}.`
+      : ` No readable columns were returned for ${recipe.rootTable}.`
   return new Error(
     `Sync recipe configuration error for ${recipe.entityType}: ` +
-    `rootNameColumn "${recipe.rootNameColumn ?? "<null>"}" does not exist on ${recipe.rootTable}.` +
-    detail,
+      `rootNameColumn "${recipe.rootNameColumn ?? "<null>"}" does not exist on ${recipe.rootTable}.` +
+      detail
   )
 }
 
 async function resolveDisplayColumn(
   host: SyncRuntimeHost,
   source: string,
-  recipe: SyncRecipe,
+  recipe: SyncRecipe
 ): Promise<string> {
   if (!recipe.rootNameColumn) {
     throw new Error(
-      `Sync recipe configuration error for ${recipe.entityType}: rootNameColumn is required for ${recipe.rootTable}.`,
+      `Sync recipe configuration error for ${recipe.entityType}: rootNameColumn is required for ${recipe.rootTable}.`
     )
   }
   const [schema, table] = recipe.rootTable.split(".")
   if (!schema || !table) {
     throw new Error(
-      `Sync recipe configuration error for ${recipe.entityType}: rootTable "${recipe.rootTable}" must be schema-qualified.`,
+      `Sync recipe configuration error for ${recipe.entityType}: rootTable "${recipe.rootTable}" must be schema-qualified.`
     )
   }
   const { pool } = await getPool(host, source)
-  const result = await pool.request()
+  const result = await pool
+    .request()
     .input("schema", sqlMod.NVarChar(128), schema)
-    .input("table", sqlMod.NVarChar(128), table)
-    .query(`
+    .input("table", sqlMod.NVarChar(128), table).query(`
       SELECT c.name
       FROM sys.columns c
       INNER JOIN sys.objects o ON o.object_id = c.object_id
@@ -83,16 +81,16 @@ export async function searchEntities(
   entityType: EntityType,
   source: string,
   query: string,
-  limit = 200,
+  limit = 200
 ): Promise<EntitySearchResult[]> {
   const recipe = definitionToSyncRecipe(getPublishedSyncDefinition(host, projectRoot(host), entityType))
   const displayColumn = await resolveDisplayColumn(host, source, recipe)
   const { pool } = await getPool(host, source)
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")
-  const r = await pool.request()
+  const r = await pool
+    .request()
     .input("q", sqlMod.NVarChar(400), `%${safeLike}%`)
-    .input("limit", sqlMod.Int, Math.min(limit, 500))
-    .query(`
+    .input("limit", sqlMod.Int, Math.min(limit, 500)).query(`
       SELECT TOP (@limit)
         [${recipe.rootKeyColumn}] AS id,
         [${displayColumn}] AS name
@@ -102,7 +100,7 @@ export async function searchEntities(
     `)
   return r.recordset.map((row: Record<string, unknown>) => ({
     id: row.id as string | number,
-    name: (row.name as string | null) ?? null,
+    name: (row.name as string | null) ?? null
   }))
 }
 
@@ -110,7 +108,7 @@ export async function fetchEntityDisplayName(
   host: SyncRuntimeHost,
   recipe: SyncRecipe,
   entityId: string | number,
-  source: string,
+  source: string
 ): Promise<string | null> {
   const displayColumn = await resolveDisplayColumn(host, source, recipe)
   const { pool } = await getPool(host, source)
@@ -137,7 +135,7 @@ export async function expandTreeIds(
   host: SyncRuntimeHost,
   recipe: SyncRecipe,
   entityId: string | number,
-  source: string,
+  source: string
 ): Promise<Array<string | number>> {
   if (!recipe.selfJoinColumn) return [entityId]
   const { pool } = await getPool(host, source)
@@ -145,9 +143,7 @@ export async function expandTreeIds(
   const fk = recipe.selfJoinColumn
   const table = qtable(recipe.rootTable)
   const idParam = typeof entityId === "number" ? sqlMod.Int : sqlMod.NVarChar(400)
-  const r = await pool.request()
-    .input("rootId", idParam, entityId)
-    .query(`
+  const r = await pool.request().input("rootId", idParam, entityId).query(`
       ;WITH tree AS (
         SELECT [${pk}] FROM ${table} WHERE [${pk}] = @rootId
         UNION ALL

@@ -50,25 +50,36 @@ const MAX_OUTPUT_BYTES = 10 * 1024 * 1024
  * in depth, not the boundary.
  */
 const NETWORK_ENV_VARS_TO_STRIP = [
-  "HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "NO_PROXY",
-  "http_proxy", "https_proxy", "all_proxy", "no_proxy",
-  "AWS_PROFILE", "AWS_ACCESS_KEY_ID", "AWS_SECRET_ACCESS_KEY", "AWS_SESSION_TOKEN",
-  "GIT_PROXY_COMMAND", "NPM_CONFIG_PROXY", "NPM_CONFIG_HTTPS_PROXY",
+  "HTTP_PROXY",
+  "HTTPS_PROXY",
+  "ALL_PROXY",
+  "NO_PROXY",
+  "http_proxy",
+  "https_proxy",
+  "all_proxy",
+  "no_proxy",
+  "AWS_PROFILE",
+  "AWS_ACCESS_KEY_ID",
+  "AWS_SECRET_ACCESS_KEY",
+  "AWS_SESSION_TOKEN",
+  "GIT_PROXY_COMMAND",
+  "NPM_CONFIG_PROXY",
+  "NPM_CONFIG_HTTPS_PROXY"
 ] as const
 
 export { SandboxBackendKind }
 
 export interface SandboxExecOptions {
   /** Hard cap in milliseconds. */
-  timeout?:    number
+  timeout?: number
   /** Sub-path relative to the sandbox root. Must stay inside sandboxRoot. */
-  cwd?:        string
+  cwd?: string
   /** Allowlist of environment variables to forward. Backend may filter. */
-  env?:        Record<string, string>
+  env?: Record<string, string>
   /** Whether outbound network is allowed for this command. Default: false. */
-  network?:    boolean
+  network?: boolean
   /** Cancellation signal. */
-  signal?:     AbortSignal
+  signal?: AbortSignal
 }
 
 export interface SandboxBackend {
@@ -178,17 +189,17 @@ class HostSandboxBackend implements SandboxBackend {
           env,
           windowsHide: true,
           // POSIX only — Windows ignores this and we kill via taskkill.
-          detached:    !isWindows,
-          stdio:       ["ignore", "pipe", "pipe"],
+          detached: !isWindows,
+          stdio: ["ignore", "pipe", "pipe"]
         })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         resolvePromise({
-          stdout:    "",
-          stderr:    `failed to spawn shell: ${msg}`,
-          exitCode:  1,
-          timedOut:  false,
-          sandboxed: false,
+          stdout: "",
+          stderr: `failed to spawn shell: ${msg}`,
+          exitCode: 1,
+          timedOut: false,
+          sandboxed: false
         })
         return
       }
@@ -206,11 +217,17 @@ class HostSandboxBackend implements SandboxBackend {
       const collect = (which: "stdout" | "stderr") => (chunk: Buffer | string) => {
         const text = typeof chunk === "string" ? chunk : chunk.toString("utf8")
         if (which === "stdout") {
-          if (stdoutBytes >= MAX_OUTPUT_BYTES) { truncated = true; return }
+          if (stdoutBytes >= MAX_OUTPUT_BYTES) {
+            truncated = true
+            return
+          }
           stdoutBytes += Buffer.byteLength(text, "utf8")
           stdout += text
         } else {
-          if (stderrBytes >= MAX_OUTPUT_BYTES) { truncated = true; return }
+          if (stderrBytes >= MAX_OUTPUT_BYTES) {
+            truncated = true
+            return
+          }
           stderrBytes += Buffer.byteLength(text, "utf8")
           stderr += text
         }
@@ -223,8 +240,11 @@ class HostSandboxBackend implements SandboxBackend {
         if (isWindows) {
           // Best-effort tree kill on Windows. Synchronous so the timeout
           // path doesn't race the close handler.
-          try { spawnSync("taskkill", ["/pid", String(child.pid), "/f", "/t"], { windowsHide: true }) }
-          catch { /* fall through to child.kill below */ }
+          try {
+            spawnSync("taskkill", ["/pid", String(child.pid), "/f", "/t"], { windowsHide: true })
+          } catch {
+            /* fall through to child.kill below */
+          }
         } else {
           for (const descendantPid of collectPosixDescendantPids(child.pid)) {
             knownDescendantPids.add(descendantPid)
@@ -233,12 +253,24 @@ class HostSandboxBackend implements SandboxBackend {
             knownDescendantPids.add(groupPid)
           }
           // POSIX: negative pid → process group kill.
-          try { process.kill(-child.pid, signal) } catch { /* ignore ESRCH */ }
+          try {
+            process.kill(-child.pid, signal)
+          } catch {
+            /* ignore ESRCH */
+          }
           for (const descendantPid of knownDescendantPids) {
-            try { process.kill(descendantPid, signal) } catch { /* ignore ESRCH */ }
+            try {
+              process.kill(descendantPid, signal)
+            } catch {
+              /* ignore ESRCH */
+            }
           }
         }
-        try { child.kill(signal) } catch { /* ignore */ }
+        try {
+          child.kill(signal)
+        } catch {
+          /* ignore */
+        }
       }
 
       const timer = setTimeout(() => {
@@ -275,11 +307,11 @@ class HostSandboxBackend implements SandboxBackend {
         options.signal?.removeEventListener("abort", onAbort)
         const trailer = truncated ? `\n[output truncated at ${MAX_OUTPUT_BYTES} bytes]` : ""
         resolvePromise({
-          stdout:    stdout + (truncated ? trailer : ""),
+          stdout: stdout + (truncated ? trailer : ""),
           stderr,
           exitCode,
           timedOut,
-          sandboxed: false,
+          sandboxed: false
         })
       }
 
@@ -291,11 +323,8 @@ class HostSandboxBackend implements SandboxBackend {
         if (timedOut) {
           killTree("SIGKILL")
         }
-        const exitCode = typeof code === "number"
-          ? code
-          : signal
-            ? 128 + (typeof signal === "string" ? 15 : 0)
-            : 1
+        const exitCode =
+          typeof code === "number" ? code : signal ? 128 + (typeof signal === "string" ? 15 : 0) : 1
         finish(exitCode)
       })
     })
@@ -307,13 +336,8 @@ class HostSandboxBackend implements SandboxBackend {
  * proactively strip well-known proxy / credential hints so tools can't
  * stealthily route around a deny via env-driven proxies.
  */
-function buildChildEnv(
-  override: Record<string, string> | undefined,
-  network: boolean,
-): NodeJS.ProcessEnv {
-  const base: NodeJS.ProcessEnv = override
-    ? { ...sanitizeEnv(override) }
-    : { ...process.env }
+function buildChildEnv(override: Record<string, string> | undefined, network: boolean): NodeJS.ProcessEnv {
+  const base: NodeJS.ProcessEnv = override ? { ...sanitizeEnv(override) } : { ...process.env }
   if (!network) {
     for (const key of NETWORK_ENV_VARS_TO_STRIP) delete base[key]
   }

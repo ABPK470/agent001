@@ -25,12 +25,16 @@ export function getLlmConfig(): DbLlmConfig {
 }
 
 export function saveLlmConfig(cfg: Omit<DbLlmConfig, "updated_at">): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     UPDATE llm_config
     SET provider = @provider, model = @model, api_key = @api_key,
         base_url = @base_url, updated_at = datetime('now')
     WHERE id = 1
-  `).run(cfg)
+  `
+    )
+    .run(cfg)
 }
 
 // ── Agent definition queries ─────────────────────────────────────
@@ -45,22 +49,24 @@ export interface DbAgentDefinition {
 }
 
 export function listAgentDefinitions(): DbAgentDefinition[] {
-  return getDb()
-    .prepare("SELECT * FROM agent_definitions ORDER BY created_at")
-    .all() as DbAgentDefinition[]
+  return getDb().prepare("SELECT * FROM agent_definitions ORDER BY created_at").all() as DbAgentDefinition[]
 }
 
 export function getAgentDefinition(id: string): DbAgentDefinition | undefined {
-  return getDb()
-    .prepare("SELECT * FROM agent_definitions WHERE id = ?")
-    .get(id) as DbAgentDefinition | undefined
+  return getDb().prepare("SELECT * FROM agent_definitions WHERE id = ?").get(id) as
+    | DbAgentDefinition
+    | undefined
 }
 
 export function saveAgentDefinition(agent: DbAgentDefinition): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO agent_definitions (id, name, description, system_prompt, created_at, updated_at)
     VALUES (@id, @name, @description, @system_prompt, @created_at, datetime('now'))
-  `).run(agent)
+  `
+    )
+    .run(agent)
 }
 
 export function deleteAgentDefinition(id: string): void {

@@ -23,19 +23,34 @@
 
 const CLASSIFIERS: Array<{ tag: string; re: RegExp }> = [
   // Ranking: "top 50", "bottom 10", "highest", "lowest", "biggest", "smallest"
-  { tag: "rankbymetric",  re: /\b(top|bottom)\s+\d+\b|\b(highest|lowest|biggest|smallest|largest|leading)\b/i },
+  {
+    tag: "rankbymetric",
+    re: /\b(top|bottom)\s+\d+\b|\b(highest|lowest|biggest|smallest|largest|leading)\b/i
+  },
   // Aggregation: "sum", "total", "average", "avg", "count", "how many", "how much"
-  { tag: "aggregateby",   re: /\b(sum|total|average|avg|mean|median|count|how\s+(?:many|much))\b/i },
+  { tag: "aggregateby", re: /\b(sum|total|average|avg|mean|median|count|how\s+(?:many|much))\b/i },
   // Comparison / change-over-time: "vs", "compared", "difference between", "change between"
-  { tag: "comparison",    re: /\b(vs\.?|compared|comparison|difference\s+between|change\s+(?:between|in|over)|growth|trend|trends|year\s*over\s*year|yoy|mom|month\s*over\s*month)\b/i },
+  {
+    tag: "comparison",
+    re: /\b(vs\.?|compared|comparison|difference\s+between|change\s+(?:between|in|over)|growth|trend|trends|year\s*over\s*year|yoy|mom|month\s*over\s*month)\b/i
+  },
   // Time-filtered: explicit year, quarter, month, MTD/YTD/QTD, "for April 2025", "in 2024"
-  { tag: "timefiltered",  re: /\b(20\d{2}|q[1-4]\b|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|ytd|mtd|qtd|wtd|fiscal\s+year|last\s+(?:month|year|quarter|week))\b/i },
+  {
+    tag: "timefiltered",
+    re: /\b(20\d{2}|q[1-4]\b|jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:tember)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?|ytd|mtd|qtd|wtd|fiscal\s+year|last\s+(?:month|year|quarter|week))\b/i
+  },
   // Pivot / group-by dimension: "by client", "per product", "by month", "per region"
-  { tag: "pivotbydim",    re: /\b(?:by|per)\s+(client|customer|product|month|year|quarter|day|week|region|branch|account|sector|industry|country|currency)s?\b/i },
+  {
+    tag: "pivotbydim",
+    re: /\b(?:by|per)\s+(client|customer|product|month|year|quarter|day|week|region|branch|account|sector|industry|country|currency)s?\b/i
+  },
   // Existence / lookup / explanation: "what is", "what tables", "show me", "list", "find", "look up"
-  { tag: "lookup",        re: /\b(what\s+(?:is|are|tables?)|show\s+me|list|find|look\s*up|describe|explain)\b/i },
+  { tag: "lookup", re: /\b(what\s+(?:is|are|tables?)|show\s+me|list|find|look\s*up|describe|explain)\b/i },
   // Export / file: "export", "save to", "write to file", "download"
-  { tag: "exportfile",    re: /\b(export|download|save\s+to|write\s+to\s+file|to\s+(?:csv|xlsx|parquet|json))\b/i },
+  {
+    tag: "exportfile",
+    re: /\b(export|download|save\s+to|write\s+to\s+file|to\s+(?:csv|xlsx|parquet|json))\b/i
+  }
 ]
 
 /**

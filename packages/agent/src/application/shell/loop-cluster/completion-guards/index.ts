@@ -8,7 +8,6 @@ import { VerifierOutcome } from "../../../../domain/index.js"
  * priority order; the first non-null result wins.
  */
 
-
 import type { PlannerContext, VerifierDecision } from "../../../core/planner.js"
 import { MessageRole } from "../../../../domain/enums/message.js"
 import type { AgentConfig, Message, Tool } from "../../../../domain/agent-types.js"
@@ -54,7 +53,7 @@ export interface CompletionGuardContext {
  * that fires, or null if the agent is allowed to complete.
  */
 export async function runCompletionGuards(
-  ctx: CompletionGuardContext,
+  ctx: CompletionGuardContext
 ): Promise<CompletionGuardResult | null> {
   // Phase 4: answer-stability override. If the model has converged on a
   // structurally-identical final answer twice in a row, accept it without
@@ -64,15 +63,15 @@ export async function runCompletionGuards(
   if (checkAnswerStability(ctx)) return null
 
   return (
-    (await checkCoherentVerification(ctx))
-    ?? checkEarlyExit(ctx)
-    ?? checkPostDelegationVerification(ctx)
-    ?? checkWriteWithoutVerify(ctx)
-    ?? checkCodeReviewRequired(ctx)
-    ?? checkVerificationFailed(ctx)
-    ?? (await checkCompletionValidator(ctx))
-    ?? checkPrematureHandoff(ctx)
-    ?? checkAnswerGroundedness(ctx)
+    (await checkCoherentVerification(ctx)) ??
+    checkEarlyExit(ctx) ??
+    checkPostDelegationVerification(ctx) ??
+    checkWriteWithoutVerify(ctx) ??
+    checkCodeReviewRequired(ctx) ??
+    checkVerificationFailed(ctx) ??
+    (await checkCompletionValidator(ctx)) ??
+    checkPrematureHandoff(ctx) ??
+    checkAnswerGroundedness(ctx)
   )
 }
 
@@ -83,10 +82,10 @@ export async function runCompletionGuards(
 function checkEarlyExit(ctx: CompletionGuardContext): CompletionGuardResult | null {
   const { state, iteration } = ctx
   if (
-    iteration === 0
-    && ctx.toolList.length > 0
-    && !state.earlyExitNudged
-    && !(state.coherentExecution?.lastVerifierDecision?.overall === VerifierOutcome.Pass)
+    iteration === 0 &&
+    ctx.toolList.length > 0 &&
+    !state.earlyExitNudged &&
+    !(state.coherentExecution?.lastVerifierDecision?.overall === VerifierOutcome.Pass)
   ) {
     state.earlyExitNudged = true
     return {
@@ -94,7 +93,7 @@ function checkEarlyExit(ctx: CompletionGuardContext): CompletionGuardResult | nu
       message:
         "You returned a text response without using any tools. " +
         "You MUST use your tools to accomplish the goal — do not just describe a plan. " +
-        "Start working now by calling the appropriate tools.",
+        "Start working now by calling the appropriate tools."
     }
   }
   return null
@@ -123,7 +122,7 @@ function checkPostDelegationVerification(ctx: CompletionGuardContext): Completio
       "- For code → run_command to compile/test AND read_file to review implementation quality\n" +
       "- For files → list_directory AND read_file to confirm content and completeness\n" +
       "A page loading without errors does NOT mean it works correctly. You must review the actual code.\n" +
-      "Do NOT provide a final answer until you have independently verified the output.",
+      "Do NOT provide a final answer until you have independently verified the output."
   }
 }
 
@@ -140,7 +139,7 @@ function checkWriteWithoutVerify(ctx: CompletionGuardContext): CompletionGuardRe
       "reviewing them. You MUST use read_file to review every file you wrote — look for " +
       "corrupted code, gibberish, incomplete functions, or syntax errors. Then use " +
       "browser_check or run_command to verify the output actually works. " +
-      "Do NOT finish until you have confirmed your code is correct.",
+      "Do NOT finish until you have confirmed your code is correct."
   }
 }
 
@@ -160,7 +159,7 @@ function checkCodeReviewRequired(ctx: CompletionGuardContext): CompletionGuardRe
       "1. Every helper function does what its name implies (trace through an example)\n" +
       "2. ALL acceptance criteria have corresponding real logic (not just function names)\n" +
       "3. No comparison or logic errors (e.g. case-insensitive compare where case matters)\n" +
-      "Do NOT finish until you have read and verified every code file.",
+      "Do NOT finish until you have read and verified every code file."
   }
 }
 
@@ -176,13 +175,11 @@ function checkVerificationFailed(ctx: CompletionGuardContext): CompletionGuardRe
       "to finish without fixing them. You MUST either:\n" +
       "1. Fix the issues directly (edit files, run commands)\n" +
       "2. Re-delegate the task with specific error details\n" +
-      "Do NOT suggest manual workarounds (like 'start an HTTP server'). Fix the actual problem.",
+      "Do NOT suggest manual workarounds (like 'start an HTTP server'). Fix the actual problem."
   }
 }
 
-async function checkCompletionValidator(
-  ctx: CompletionGuardContext,
-): Promise<CompletionGuardResult | null> {
+async function checkCompletionValidator(ctx: CompletionGuardContext): Promise<CompletionGuardResult | null> {
   const { state, config } = ctx
   if (!config.completionValidator || state.completionValidated) return null
 
@@ -202,21 +199,25 @@ function checkPrematureHandoff(ctx: CompletionGuardContext): CompletionGuardResu
   const { state, response, iteration, config, toolList } = ctx
   const answer = response.content ?? "(no response)"
 
-  const asksToContinue = /\b(?:would you like me to|do you want me to|should i (?:continue|proceed|implement|fix))\b/i.test(answer)
-  const unresolvedGaps = /\b(?:unimplemented|not implemented|missing|placeholder|issues and deficiencies|plan for fixes|further refinements?|full compliance may require|may require additional|not fully (?:implemented|complete)|deep validation|additional delegation)\b/i.test(answer)
+  const asksToContinue =
+    /\b(?:would you like me to|do you want me to|should i (?:continue|proceed|implement|fix))\b/i.test(answer)
+  const unresolvedGaps =
+    /\b(?:unimplemented|not implemented|missing|placeholder|issues and deficiencies|plan for fixes|further refinements?|full compliance may require|may require additional|not fully (?:implemented|complete)|deep validation|additional delegation)\b/i.test(
+      answer
+    )
 
   if (
-    toolList.length > 0
-    && (asksToContinue || unresolvedGaps)
-    && state.prematureHandoffNudges < 3
-    && iteration < config.maxIterations - 1
+    toolList.length > 0 &&
+    (asksToContinue || unresolvedGaps) &&
+    state.prematureHandoffNudges < 3 &&
+    iteration < config.maxIterations - 1
   ) {
     state.prematureHandoffNudges += 1
     return {
       tag: "premature-handoff",
       message:
         "PREMATURE HANDOFF DETECTED: Do not ask the user whether to continue and do not stop at partial completion language. " +
-        "Use tools now to implement and verify any missing parts, then return a completed result with concrete evidence.",
+        "Use tools now to implement and verify any missing parts, then return a completed result with concrete evidence."
     }
   }
   return null
@@ -281,7 +282,6 @@ function checkAnswerGroundedness(ctx: CompletionGuardContext): CompletionGuardRe
       "UNGROUNDED ANSWER: your reply is short and does not contain the value(s) returned by the most recent tool call. " +
       `Expected the answer to reference: ${preview}. ` +
       "Re-read the last tool result and answer the user's question with the exact value(s) from it. " +
-      "Do NOT re-run the query — the result is already in your context.",
+      "Do NOT re-run the query — the result is already in your context."
   }
 }
-

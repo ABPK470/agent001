@@ -20,7 +20,7 @@ export const tempNamingDoctrine: DoctrineModule = {
       "- Exactly one suffix is reused across the whole batch.",
       "- Every referenced #temp must be created in the same batch; DROP each at the end.",
       "- Global ##temp is forbidden. Tool blocks on suffix drift, missing creates, or mixed suffixes.",
-      "- See also: `export_query_to_file` for cross-batch handoffs that a single-batch #temp cannot serve.",
+      "- See also: `export_query_to_file` for cross-batch handoffs that a single-batch #temp cannot serve."
     ].join("\n")
   },
   enforce(query: string) {
@@ -31,11 +31,13 @@ export const tempNamingDoctrine: DoctrineModule = {
     // referenced without being created, inconsistent #temp suffixes).
     // The fixHint is the canonical refactor — one paragraph, always the
     // same shape, regardless of which sub-variant tripped.
-    return [{
-      code: "temp_table_integrity",
-      severity: "block" as const,
-      message: err,
-      fixHint: DOCTRINE_FIX_HINTS.temp_table_integrity,
-    }]
-  },
+    return [
+      {
+        code: "temp_table_integrity",
+        severity: "block" as const,
+        message: err,
+        fixHint: DOCTRINE_FIX_HINTS.temp_table_integrity
+      }
+    ]
+  }
 }

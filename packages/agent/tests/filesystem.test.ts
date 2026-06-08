@@ -21,8 +21,8 @@ let replaceInFileTool!: Tool
 beforeAll(async () => {
   tempDir = await mkdtemp(join(tmpdir(), "agent-fs-test-"))
   const host = configureAgent({ filesystemBasePath: tempDir })
-  writeFileTool     = createWriteFileTool(host)
-  readFileTool      = createReadFileTool(host)
+  writeFileTool = createWriteFileTool(host)
+  readFileTool = createReadFileTool(host)
   replaceInFileTool = createReplaceInFileTool(host)
 })
 
@@ -32,9 +32,9 @@ afterAll(async () => {
 
 async function executeToolText(
   tool: { execute(args: Record<string, unknown>): Promise<unknown> },
-  args: Record<string, unknown>,
+  args: Record<string, unknown>
 ): Promise<string> {
-  return normalizeToolExecutionOutput(await tool.execute(args) as string).result
+  return normalizeToolExecutionOutput((await tool.execute(args)) as string).result
 }
 
 // ============================================================================
@@ -55,8 +55,8 @@ describe("write_file: inline stub detection", () => {
         "    const canvas = document.getElementById('board');",
         "    canvas.width = 640;",
         "    canvas.height = 640;",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     expect(result).toContain("STUB/PLACEHOLDER CODE DETECTED")
@@ -75,8 +75,8 @@ describe("write_file: inline stub detection", () => {
         "function isStalemate(board, color) {",
         "    // Check for stalemate condition",
         "    return false;",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     expect(result).toContain("STUB/PLACEHOLDER CODE DETECTED")
@@ -99,8 +99,8 @@ describe("write_file: inline stub detection", () => {
         "        case 'king': return Math.abs(dr) <= 1 && Math.abs(dc) <= 1;",
         "        default: return false;",
         "    }",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     expect(result).toBe("Successfully wrote to good-code.js")
@@ -118,8 +118,8 @@ describe("write_file: inline stub detection", () => {
         '<div id="board"></div>',
         "<script src='game.js'></script>",
         "</body>",
-        "</html>",
-      ].join("\n"),
+        "</html>"
+      ].join("\n")
     })
 
     // HTML is not checked for stub patterns (only for HTML corruption)
@@ -129,7 +129,7 @@ describe("write_file: inline stub detection", () => {
   it("does NOT warn for tiny files under 50 chars", async () => {
     const result = await executeToolText(writeFileTool, {
       path: "tiny.js",
-      content: "// TODO: implement",
+      content: "// TODO: implement"
     })
 
     // File too small to trigger stub detection (threshold is 50 chars)
@@ -147,8 +147,8 @@ describe("write_file: inline stub detection", () => {
         "  // Other code as per existing logic",
         "",
         "  return moves;",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     expect(result).toContain("degeneration")
@@ -169,8 +169,8 @@ describe("write_file: inline stub detection", () => {
         "    const canvas = document.getElementById('board');",
         "    canvas.width = 640;",
         "    canvas.height = 640;",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     expect(result).toContain("WRITE REJECTED")
@@ -193,8 +193,8 @@ describe("write_file: function loss detection", () => {
       content: [
         "function initBoard() { return Array(8).fill(null).map(() => Array(8).fill(null)); }",
         "function isMoveLegal(from, to) { return from[0] !== to[0] || from[1] !== to[1]; }",
-        "function renderBoard(board) { board.forEach(row => console.log(row.join(' '))); }",
-      ].join("\n"),
+        "function renderBoard(board) { board.forEach(row => console.log(row.join(' '))); }"
+      ].join("\n")
     })
 
     // Second write: drops isMoveLegal and renderBoard
@@ -202,8 +202,8 @@ describe("write_file: function loss detection", () => {
       path: "chess-loss.js",
       content: [
         "function initBoard() { return Array(8).fill(null).map(() => Array(8).fill(null)); }",
-        "function newHelper() { return 42; }",
-      ].join("\n"),
+        "function newHelper() { return 42; }"
+      ].join("\n")
     })
 
     expect(result).toContain("FUNCTION LOSS")
@@ -215,10 +215,9 @@ describe("write_file: function loss detection", () => {
     // First write
     await executeToolText(writeFileTool, {
       path: "chess-ok.js",
-      content: [
-        "function initBoard() { return []; }",
-        "function renderBoard(b) { console.log(b); }",
-      ].join("\n"),
+      content: ["function initBoard() { return []; }", "function renderBoard(b) { console.log(b); }"].join(
+        "\n"
+      )
     })
 
     // Second write: keeps both, adds more
@@ -227,8 +226,8 @@ describe("write_file: function loss detection", () => {
       content: [
         "function initBoard() { return Array(8).fill(null).map(() => Array(8).fill(null)); }",
         "function renderBoard(board) { board.forEach(r => console.log(r.join(' '))); }",
-        "function isMoveLegal(from, to) { return from[0] !== to[0]; }",
-      ].join("\n"),
+        "function isMoveLegal(from, to) { return from[0] !== to[0]; }"
+      ].join("\n")
     })
 
     expect(result).toBe("Successfully wrote to chess-ok.js")
@@ -239,19 +238,17 @@ describe("write_file: function loss detection", () => {
       path: "chess-atomic.js",
       content: [
         "function initBoard() { return Array(8).fill(null).map(() => Array(8).fill(null)); }",
-        "function renderBoard(board) { board.forEach(row => console.log(row.join(' '))); }",
-      ].join("\n"),
+        "function renderBoard(board) { board.forEach(row => console.log(row.join(' '))); }"
+      ].join("\n")
     })
 
     expect(initial).toBe("Successfully wrote to chess-atomic.js")
 
     const rejected = await executeToolText(writeFileTool, {
       path: "chess-atomic.js",
-      content: [
-        "function initBoard() {",
-        "  const x = 1;",
-        "}garbled output impossible token stream",
-      ].join("\n"),
+      content: ["function initBoard() {", "  const x = 1;", "}garbled output impossible token stream"].join(
+        "\n"
+      )
     })
 
     expect(rejected).toContain("WRITE REJECTED")
@@ -279,8 +276,8 @@ describe("write_file: corruption detection", () => {
         "}valuator move saftey can ahead validated letinline acknowledge",
         "function render() {",
         "  console.log('hi');",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     expect(result).toContain("WRITE REJECTED")
@@ -296,8 +293,8 @@ describe("write_file: corruption detection", () => {
         "    if (true) {",
         "      for (let i = 0; i < 10; i++) {",
         "        console.log(i);",
-        "// file ends here, 3 unclosed braces",
-      ].join("\n"),
+        "// file ends here, 3 unclosed braces"
+      ].join("\n")
     })
 
     expect(result).toContain("WRITE REJECTED")
@@ -314,8 +311,8 @@ describe("write_file: corruption detection", () => {
         "      console.log('nested');",
         "    }",
         "  }",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     expect(result).toBe("Successfully wrote to clean.js")
@@ -324,7 +321,8 @@ describe("write_file: corruption detection", () => {
   it("rejects pure gibberish with no code keywords", async () => {
     const result = await executeToolText(writeFileTool, {
       path: "gibberish.js",
-      content: "[compacted \\u0001 full COMPL'd PROMO].THISs''. UPDATE! OFFCHAIN FINAL SCRIPT! INSERT_GAME_PATCH. wrapper + glbal dom visualization strict bind",
+      content:
+        "[compacted \\u0001 full COMPL'd PROMO].THISs''. UPDATE! OFFCHAIN FINAL SCRIPT! INSERT_GAME_PATCH. wrapper + glbal dom visualization strict bind"
     })
 
     expect(result).toContain("GIBBERISH REJECTED")
@@ -333,7 +331,8 @@ describe("write_file: corruption detection", () => {
   it("rejects degenerated compaction output as gibberish", async () => {
     const result = await executeToolText(writeFileTool, {
       path: "compacted.js",
-      content: "RESET PlaceholderINTRO.Handler-container validateManyCritical success BOILER<TAG> reinstated LEGAL WORKFLOW-safe cleaned Matrix operational",
+      content:
+        "RESET PlaceholderINTRO.Handler-container validateManyCritical success BOILER<TAG> reinstated LEGAL WORKFLOW-safe cleaned Matrix operational"
     })
 
     expect(result).toContain("GIBBERISH REJECTED")
@@ -348,8 +347,8 @@ describe("write_file: corruption detection", () => {
         "  for (let i = 0; i < 8; i++) {",
         "    board.push(new Array(8).fill(null));",
         "  }",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     expect(result).not.toContain("GIBBERISH")
@@ -363,8 +362,8 @@ describe("write_file: corruption detection", () => {
         "  const piece = null;",
         "  if (!piece) throw new Error(`No piece at ${from}`);",
         "  return piece;",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     expect(result).toBe("Successfully wrote to valid-throw.js")
@@ -382,14 +381,14 @@ describe("replace_in_file", () => {
       content: [
         "function alpha() { return 1; }",
         "function beta() { return 2; }",
-        "function gamma() { return 3; }",
-      ].join("\n"),
+        "function gamma() { return 3; }"
+      ].join("\n")
     })
 
     const result = await executeToolText(replaceInFileTool, {
       path: "replace-test.js",
       old_string: "function beta() { return 2; }",
-      new_string: "function beta() { return 42; }",
+      new_string: "function beta() { return 42; }"
     })
 
     expect(result).toBe("Successfully replaced in replace-test.js")
@@ -401,14 +400,14 @@ describe("replace_in_file", () => {
       content: [
         "function a() { return 1; }",
         "function b() { return 2; }",
-        "function c() { return 3; }",
-      ].join("\n"),
+        "function c() { return 3; }"
+      ].join("\n")
     })
 
     await executeToolText(replaceInFileTool, {
       path: "replace-preserve.js",
       old_string: "function b() { return 2; }",
-      new_string: "function b() { return 99; }",
+      new_string: "function b() { return 99; }"
     })
 
     // Read back and verify all functions exist
@@ -423,7 +422,7 @@ describe("replace_in_file", () => {
     const result = await executeToolText(replaceInFileTool, {
       path: "nonexistent-replace.js",
       old_string: "hello",
-      new_string: "world",
+      new_string: "world"
     })
 
     expect(result).toContain("does not exist")
@@ -432,13 +431,13 @@ describe("replace_in_file", () => {
   it("returns error when old_string is not found", async () => {
     await executeToolText(writeFileTool, {
       path: "replace-nomatch.js",
-      content: "function foo() { return 1; }",
+      content: "function foo() { return 1; }"
     })
 
     const result = await executeToolText(replaceInFileTool, {
       path: "replace-nomatch.js",
       old_string: "function bar() { return 2; }",
-      new_string: "function bar() { return 42; }",
+      new_string: "function bar() { return 42; }"
     })
 
     expect(result).toContain("not found")
@@ -452,8 +451,8 @@ describe("replace_in_file", () => {
         "  if (input.length < 3) return false;",
         "  if (input.length > 100) return false;",
         "  return /^[a-zA-Z]+$/.test(input);",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     const result = await executeToolText(replaceInFileTool, {
@@ -463,14 +462,14 @@ describe("replace_in_file", () => {
         "  if (input.length < 3) return false;",
         "  if (input.length > 100) return false;",
         "  return /^[a-zA-Z]+$/.test(input);",
-        "}",
+        "}"
       ].join("\n"),
       new_string: [
         "function validate(input) {",
         "  // TODO: implement validation",
         "  return true;",
-        "}",
-      ].join("\n"),
+        "}"
+      ].join("\n")
     })
 
     expect(result).toContain("REPLACE REJECTED")
@@ -495,12 +494,12 @@ describe("write_file: control character / unicode corruption detection", () => {
       "  white: { king: '\x010', queen: '\x011' },",
       "  black: { king: '\t6', queen: '\t7' }",
       "};",
-      "function setup() { board = []; }",
+      "function setup() { board = []; }"
     ].join("\n")
 
     const result = await executeToolText(writeFileTool, {
       path: "corrupted-chess.js",
-      content: corruptedContent,
+      content: corruptedContent
     })
 
     expect(result).toContain("CORRUPTED_UNICODE")
@@ -513,12 +512,12 @@ describe("write_file: control character / unicode corruption detection", () => {
       "  white: { king: '\u2654', queen: '\u2655', rook: '\u2656' },",
       "  black: { king: '\u265a', queen: '\u265b', rook: '\u265c' }",
       "};",
-      "function setup() { return PIECES; }",
+      "function setup() { return PIECES; }"
     ].join("\n")
 
     const result = await executeToolText(writeFileTool, {
       path: "clean-chess.js",
-      content: cleanContent,
+      content: cleanContent
     })
 
     expect(result).not.toContain("CORRUPTED_UNICODE")

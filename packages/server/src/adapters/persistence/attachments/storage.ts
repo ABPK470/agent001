@@ -46,7 +46,9 @@ export function resolveStorageUri(uri: string): string {
  * Persist bytes content-addressed. Idempotent: returns the existing blob
  * path when the same content already exists.
  */
-export async function writeAttachmentBlob(bytes: Uint8Array): Promise<{ hash: string; storageUri: string; sizeBytes: number }> {
+export async function writeAttachmentBlob(
+  bytes: Uint8Array
+): Promise<{ hash: string; storageUri: string; sizeBytes: number }> {
   const hash = hashBytes(bytes)
   const storageUri = storageUriFromHash(hash)
   const abs = resolveStorageUri(storageUri)

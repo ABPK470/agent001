@@ -19,7 +19,14 @@ import { AgentBus } from "../../agent-bus.js"
 import { TrajectoryEventKind } from "../../enums/trajectory.js"
 import { broadcast } from "../../event-broadcaster.js"
 import type { MessageRouterPort } from "../../ports/channels.js"
-import type { ActiveRun, AgentRunConfig, BootHostDeps, NotificationOpts, OrchestratorConfig, OrchestratorRunCtx } from "../../ports/orchestration.js"
+import type {
+  ActiveRun,
+  AgentRunConfig,
+  BootHostDeps,
+  NotificationOpts,
+  OrchestratorConfig,
+  OrchestratorRunCtx
+} from "../../ports/orchestration.js"
 import { filterToolsForVisitor, getAllTools } from "../../tools.js"
 import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
 import { createNotification, saveTrace } from "./execution/persistence.js"
@@ -32,7 +39,7 @@ import { RunPriority, RunQueue } from "./queue/run-queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace/run-workspace.js"
 import { cleanupStaleRunWorkspaces } from "./workspace/run-workspace.js"
 
-  export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestration.js"
+export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestration.js"
 
 // ── AgentOrchestrator ─────────────────────────────────────────────
 
@@ -40,7 +47,10 @@ export class AgentOrchestrator {
   private llm: LLMClient
   private readonly activeRuns = new Map<string, ActiveRun>()
   private readonly pendingInputs = new Map<string, { resolve: (answer: string) => void }>()
-  private readonly pendingKills = new Map<string, { resolve: (message: string) => void; perToolCtrl: AbortController }>()
+  private readonly pendingKills = new Map<
+    string,
+    { resolve: (message: string) => void; perToolCtrl: AbortController }
+  >()
   private readonly clarifications = new ClarificationsRegistry()
   private readonly queue: RunQueue
   private messageRouter: MessageRouterPort | null = null
@@ -69,9 +79,15 @@ export class AgentOrchestrator {
 
   // ── Configuration ─────────────────────────────────────────────
 
-  setWorkspace(path: string): void { this.workspace = path }
-  setLlm(client: LLMClient): void { this.llm = client }
-  setMessageRouter(router: MessageRouterPort): void { this.messageRouter = router }
+  setWorkspace(path: string): void {
+    this.workspace = path
+  }
+  setLlm(client: LLMClient): void {
+    this.llm = client
+  }
+  setMessageRouter(router: MessageRouterPort): void {
+    this.messageRouter = router
+  }
 
   // ── Run lifecycle ─────────────────────────────────────────────
 
@@ -89,7 +105,11 @@ export class AgentOrchestrator {
     // headless browser). Captured here at run-start time when AsyncLocalStorage
     // still holds the originating request's session. Admin sessions get the
     // full toolset unchanged.
-    const role: PolicyRole = !session ? PolicyRole.Admin : session.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
+    const role: PolicyRole = !session
+      ? PolicyRole.Admin
+      : session.isAdmin
+        ? PolicyRole.Admin
+        : PolicyRole.HostedUser
     if (session && !session.isAdmin) {
       tools = filterToolsForVisitor(tools)
     }
@@ -97,13 +117,31 @@ export class AgentOrchestrator {
 
     const dbRules = db.listPolicyRules()
     for (const r of dbRules) {
-      services.policyEvaluator.addRule({ name: r.name, effect: r.effect as PolicyEffect, condition: r.condition, parameters: JSON.parse(r.parameters) })
+      services.policyEvaluator.addRule({
+        name: r.name,
+        effect: r.effect as PolicyEffect,
+        condition: r.condition,
+        parameters: JSON.parse(r.parameters)
+      })
     }
     // Hosted-default and per-env-derived rules live in the DB now (seeded
     // at server boot via policy-seeder.ts). Operators edit/delete them
     // through the admin UI; this loop already loaded them above.
 
-    this.activeRuns.set(runId, { id: runId, goal, agentId, controller, services, traceSeq: 0, bus, workspace: null, role, attachmentIds: config?.attachmentIds ?? [], ownerUpn: session?.upn ?? null, sessionId: session?.sid ?? null })
+    this.activeRuns.set(runId, {
+      id: runId,
+      goal,
+      agentId,
+      controller,
+      services,
+      traceSeq: 0,
+      bus,
+      workspace: null,
+      role,
+      attachmentIds: config?.attachmentIds ?? [],
+      ownerUpn: session?.upn ?? null,
+      sessionId: session?.sid ?? null
+    })
 
     // Persist the run row BEFORE broadcasting or writing trace entries.
     // trace_entries.run_id has a hard FK to runs(id), so saveTrace below
@@ -112,22 +150,25 @@ export class AgentOrchestrator {
     // the row immediately, and SSE consumers never see a `run.queued`
     // event for a run that does not exist server-side.
     db.saveRun({
-      id:            runId,
+      id: runId,
       goal,
-      status:        RunStatus.Pending,
-      answer:        null,
-      step_count:    0,
-      error:         null,
+      status: RunStatus.Pending,
+      answer: null,
+      step_count: 0,
+      error: null,
       parent_run_id: null,
-      agent_id:      agentId,
-      created_at:    new Date().toISOString(),
-      completed_at:  null,
-      session_id:    session?.sid ?? null,
-      upn:           session?.upn ?? null,
-      display_name:  session?.displayName ?? null,
+      agent_id: agentId,
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      session_id: session?.sid ?? null,
+      upn: session?.upn ?? null,
+      display_name: session?.displayName ?? null
     })
 
-    broadcast({ type: EventType.RunQueued, data: { runId, goal, agentId, queueStats: this.queue.stats() } })
+    broadcast({
+      type: EventType.RunQueued,
+      data: { runId, goal, agentId, queueStats: this.queue.stats() }
+    })
     saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.Goal, text: goal })
 
     const input: ExecuteRunInput = {
@@ -140,7 +181,7 @@ export class AgentOrchestrator {
       services,
       controller,
       bus,
-      priority: RunPriority.Normal,
+      priority: RunPriority.Normal
     }
 
     this.executeRun(input).catch((err) => {
@@ -155,19 +196,19 @@ export class AgentOrchestrator {
       try {
         const existing = db.getRun(runId)
         db.saveRun({
-          id:            runId,
+          id: runId,
           goal,
-          status:        RunStatus.Failed,
-          answer:        existing?.answer ?? null,
-          step_count:    existing?.step_count ?? 0,
-          error:         message,
+          status: RunStatus.Failed,
+          answer: existing?.answer ?? null,
+          step_count: existing?.step_count ?? 0,
+          error: message,
           parent_run_id: existing?.parent_run_id ?? null,
-          agent_id:      agentId,
-          created_at:    existing?.created_at ?? new Date().toISOString(),
-          completed_at:  new Date().toISOString(),
-          session_id:    existing?.session_id ?? session?.sid ?? null,
-          upn:           existing?.upn ?? session?.upn ?? null,
-          display_name:  existing?.display_name ?? session?.displayName ?? null,
+          agent_id: agentId,
+          created_at: existing?.created_at ?? new Date().toISOString(),
+          completed_at: new Date().toISOString(),
+          session_id: existing?.session_id ?? session?.sid ?? null,
+          upn: existing?.upn ?? session?.upn ?? null,
+          display_name: existing?.display_name ?? session?.displayName ?? null
         })
       } catch (persistErr) {
         console.error(`Failed to persist failure for run ${runId}:`, persistErr)
@@ -208,7 +249,11 @@ export class AgentOrchestrator {
     if (originalRun.status === RunStatus.Completed) return null
 
     const existingRuns = db.listRuns(200)
-    const alreadyResumed = existingRuns.find((r) => r.parent_run_id === runId && (r.status === RunStatus.Running || r.status === RunStatus.Pending || r.status === RunStatus.Planning))
+    const alreadyResumed = existingRuns.find(
+      (r) =>
+        r.parent_run_id === runId &&
+        (r.status === RunStatus.Running || r.status === RunStatus.Pending || r.status === RunStatus.Planning)
+    )
     if (alreadyResumed) return alreadyResumed.id
 
     const newRunId = randomUUID()
@@ -222,36 +267,61 @@ export class AgentOrchestrator {
     // empty for the rest of the run.
     const dbRules = db.listPolicyRules()
     for (const r of dbRules) {
-      services.policyEvaluator.addRule({ name: r.name, effect: r.effect as PolicyEffect, condition: r.condition, parameters: JSON.parse(r.parameters) })
+      services.policyEvaluator.addRule({
+        name: r.name,
+        effect: r.effect as PolicyEffect,
+        condition: r.condition,
+        parameters: JSON.parse(r.parameters)
+      })
     }
     // (See startRun: hosted defaults + env-derived rules now seeded into
     // policy_rules at server boot via policy-seeder.ts, so loading dbRules
     // above already covers them.)
 
-    const resumeRole: PolicyRole = !resumeSession ? PolicyRole.Admin : resumeSession.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
-    this.activeRuns.set(newRunId, { id: newRunId, goal: originalRun.goal, agentId: originalRun.agent_id ?? null, controller, services, traceSeq: 0, bus, workspace: null, role: resumeRole, attachmentIds: [], ownerUpn: resumeSession?.upn ?? null, sessionId: resumeSession?.sid ?? null })
+    const resumeRole: PolicyRole = !resumeSession
+      ? PolicyRole.Admin
+      : resumeSession.isAdmin
+        ? PolicyRole.Admin
+        : PolicyRole.HostedUser
+    this.activeRuns.set(newRunId, {
+      id: newRunId,
+      goal: originalRun.goal,
+      agentId: originalRun.agent_id ?? null,
+      controller,
+      services,
+      traceSeq: 0,
+      bus,
+      workspace: null,
+      role: resumeRole,
+      attachmentIds: [],
+      ownerUpn: resumeSession?.upn ?? null,
+      sessionId: resumeSession?.sid ?? null
+    })
 
     // Persist the resumed-run row BEFORE broadcasting or writing trace
     // entries. trace_entries.run_id has a hard FK to runs(id), so the
     // saveTrace below would fail with SQLITE_CONSTRAINT_FOREIGNKEY
     // otherwise (mirrors the same ordering invariant in startRun).
     db.saveRun({
-      id:            newRunId,
-      goal:          originalRun.goal,
-      status:        RunStatus.Pending,
-      answer:        null,
-      step_count:    0,
-      error:         null,
+      id: newRunId,
+      goal: originalRun.goal,
+      status: RunStatus.Pending,
+      answer: null,
+      step_count: 0,
+      error: null,
       parent_run_id: runId,
-      agent_id:      originalRun.agent_id ?? null,
-      created_at:    new Date().toISOString(),
-      completed_at:  null,
-      session_id:    resumeSession?.sid ?? null,
-      upn:           resumeSession?.upn ?? null,
-      display_name:  resumeSession?.displayName ?? null,
+      agent_id: originalRun.agent_id ?? null,
+      created_at: new Date().toISOString(),
+      completed_at: null,
+      session_id: resumeSession?.sid ?? null,
+      upn: resumeSession?.upn ?? null,
+      display_name: resumeSession?.displayName ?? null
     })
 
-    broadcast({ type: EventType.RunQueued, data: { runId: newRunId, goal: originalRun.goal, resumedFrom: runId } })
+    broadcast({
+      type: EventType.RunQueued,
+      data: { runId: newRunId, goal: originalRun.goal, resumedFrom: runId }
+    })
     saveTrace(this.activeRuns, newRunId, { kind: TrajectoryEventKind.Goal, text: originalRun.goal })
 
     const messages = JSON.parse(checkpoint.messages) as Message[]
@@ -279,7 +349,7 @@ export class AgentOrchestrator {
       controller,
       bus,
       resume: { messages, iteration, parentRunId: runId },
-      priority: RunPriority.Normal,
+      priority: RunPriority.Normal
     }
 
     this.executeRun(input).catch((err) => {
@@ -291,8 +361,12 @@ export class AgentOrchestrator {
 
   // ── Queries ───────────────────────────────────────────────────
 
-  getActiveRunIds(): string[] { return [...this.activeRuns.keys()] }
-  getQueueStats() { return this.queue.stats() }
+  getActiveRunIds(): string[] {
+    return [...this.activeRuns.keys()]
+  }
+  getQueueStats() {
+    return this.queue.stats()
+  }
 
   respondToRun(runId: string, response: string): boolean {
     const pending = this.pendingInputs.get(runId)
@@ -309,7 +383,7 @@ export class AgentOrchestrator {
       saveTrace(this.activeRuns, runId, {
         kind: TrajectoryEventKind.ClarificationResolved,
         findingId: resolvedClarification.findingId,
-        subject: resolvedClarification.subject,
+        subject: resolvedClarification.subject
       } as unknown as Record<string, unknown>)
     }
     saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.UserInputResponse, text: response })
@@ -352,9 +426,17 @@ export class AgentOrchestrator {
     return this.completedRunWorkspaces.get(runId)?.executionRoot ?? null
   }
 
-  async applyRunWorkspaceDiff(runId: string): Promise<{ added: number; modified: number; deleted: number } | null> {
+  async applyRunWorkspaceDiff(
+    runId: string
+  ): Promise<{ added: number; modified: number; deleted: number } | null> {
     const boundSave = (rId: string, entry: Record<string, unknown>) => saveTrace(this.activeRuns, rId, entry)
-    return applyRunWorkspaceDiff(runId, this.completedRunWorkspaces, this.completedRunDiffs, boundSave, createNotification)
+    return applyRunWorkspaceDiff(
+      runId,
+      this.completedRunWorkspaces,
+      this.completedRunDiffs,
+      boundSave,
+      createNotification
+    )
   }
 
   // ── Private: delegate to run-executor ────────────────────────
@@ -376,7 +458,7 @@ export class AgentOrchestrator {
       searchFilesBasePath: root,
       searchFilesExcludeDirs: new Set(computeAutoDetectedExcludeDirs(root)),
       shellCwd: root,
-      browserCheckCwd: root,
+      browserCheckCwd: root
     })
     return getAllTools(host)
   }
@@ -393,7 +475,7 @@ export class AgentOrchestrator {
       completedRunDiffs: this.completedRunDiffs,
       messageRouter: this.messageRouter,
       clarifications: this.clarifications,
-      bootHostDeps: this.bootHostDeps,
+      bootHostDeps: this.bootHostDeps
     }
   }
 

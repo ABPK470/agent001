@@ -7,8 +7,17 @@
 
 import { MessageRole } from "../../../domain/enums/message.js"
 import * as log from "../../../internal/index.js"
-import { applyFullCompaction, compactMessages, shouldApplyFullCompaction, truncateMessages } from "../../../memory/index.js"
-import { applyToolContractGuidance, resolveToolContractGuidance, type ToolContractContext } from "../../../tools/index.js"
+import {
+  applyFullCompaction,
+  compactMessages,
+  shouldApplyFullCompaction,
+  truncateMessages
+} from "../../../memory/index.js"
+import {
+  applyToolContractGuidance,
+  resolveToolContractGuidance,
+  type ToolContractContext
+} from "../../../tools/index.js"
 import type { AgentConfig, Message, Tool } from "../../../domain/agent-types.js"
 import type { AgentLoopState } from "../loop.js"
 
@@ -77,7 +86,7 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
     config.onNudge?.({
       tag: "context-compaction",
       message: `Session checkpoint at iteration ${i}: ${compactionState.writtenFiles.length} file records captured`,
-      iteration: i,
+      iteration: i
     })
   }
 
@@ -91,12 +100,13 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
   const compacted = compactMessages(messages)
   const compactedCount = compacted.filter((m, idx) => m.content !== messages[idx]?.content).length
   if (compactedCount > 0) {
-    const savedChars = messages.reduce((s, m) => s + (m.content?.length ?? 0), 0)
-      - compacted.reduce((s, m) => s + (m.content?.length ?? 0), 0)
+    const savedChars =
+      messages.reduce((s, m) => s + (m.content?.length ?? 0), 0) -
+      compacted.reduce((s, m) => s + (m.content?.length ?? 0), 0)
     config.onNudge?.({
       tag: "context-compaction",
       message: `Compacted ${compactedCount} stale tool results, saved ~${Math.round(savedChars / 4)} tokens`,
-      iteration: i,
+      iteration: i
     })
   }
   const truncationResult = truncateMessages(compacted, modelHint)
@@ -106,10 +116,11 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
     const diag = truncationResult.budgetDiagnostics
     config.onNudge?.({
       tag: "prompt-budget",
-      message: `Prompt budget applied: ${diag.totalBeforeChars} → ${diag.totalAfterChars} chars` +
+      message:
+        `Prompt budget applied: ${diag.totalBeforeChars} → ${diag.totalAfterChars} chars` +
         (diag.droppedSections.length > 0 ? `, dropped: ${diag.droppedSections.join(", ")}` : "") +
         (diag.constrained ? " [constrained]" : ""),
-      iteration: i,
+      iteration: i
     })
     // Phase 6: emit a structured planner-prompt-budget trace once per
     // iteration when the budget materially affected the prompt. This is
@@ -135,7 +146,7 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
         droppedSections: [...diag.droppedSections],
         sectionAfterChars,
         sectionAfterMessages,
-        sectionTruncatedMessages,
+        sectionTruncatedMessages
       })
     }
   }
@@ -143,7 +154,7 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
   // ── Tool contract guidance ──
   const contractCtx: ToolContractContext = {
     iteration: i,
-    availableToolNames: toolList.map(t => t.name),
+    availableToolNames: toolList.map((t) => t.name),
     lastRoundHadDelegation: state.lastRoundHadDelegation,
     lastDelegationWasReadOnly: state.lastDelegationWasReadOnly,
     inPostDelegationVerification: state.inPostDelegationVerification,
@@ -151,20 +162,29 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
     wroteUnverifiedFiles: state.wroteUnverifiedFiles,
     writtenButNotReread: state.writtenButNotReread,
     lastRoundToolCalls: state.lastRoundToolCallsSnapshot,
-    isKeyBlocked: (key) => state.circuitBreaker.isKeyBlocked(key) !== null,
+    isKeyBlocked: (key) => state.circuitBreaker.isKeyBlocked(key) !== null
   }
   const contractGuidance = resolveToolContractGuidance(contractCtx)
   let chatToolsForLLM = toolList
   const contractMessages = [...chatMessages]
   if (contractGuidance) {
-    const applied = applyToolContractGuidance(contractGuidance, toolList.map(t => t.name))
+    const applied = applyToolContractGuidance(
+      contractGuidance,
+      toolList.map((t) => t.name)
+    )
     const nameSet = new Set(applied.filteredToolNames)
-    chatToolsForLLM = toolList.filter(t => nameSet.has(t.name))
+    chatToolsForLLM = toolList.filter((t) => nameSet.has(t.name))
     if (applied.injectedInstruction && contractMessages.length > 0) {
-      contractMessages.push({ role: MessageRole.System, content: applied.injectedInstruction, section: "history" })
+      contractMessages.push({
+        role: MessageRole.System,
+        content: applied.injectedInstruction,
+        section: "history"
+      })
     }
     if (config.verbose) {
-      log.logError(`[contract:${contractGuidance.resolverName}] enforcement=${contractGuidance.enforcement}, tools=${applied.filteredToolNames.join(",")}`)
+      log.logError(
+        `[contract:${contractGuidance.resolverName}] enforcement=${contractGuidance.enforcement}, tools=${applied.filteredToolNames.join(",")}`
+      )
     }
   }
 

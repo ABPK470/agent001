@@ -16,15 +16,15 @@ const READ_FILE_DESCRIPTION =
 const READ_FILE_PARAMETERS = {
   type: "object",
   properties: {
-    path: { type: "string", description: "Path to the file to read" },
+    path: { type: "string", description: "Path to the file to read" }
   },
-  required: ["path"],
+  required: ["path"]
 } as const
 
 export const readFileToolMetadata: ToolMetadata = {
   name: "read_file",
   description: READ_FILE_DESCRIPTION,
-  parameters: READ_FILE_PARAMETERS,
+  parameters: READ_FILE_PARAMETERS
 }
 
 /** Factory: build a `read_file` tool bound to `host.filesystem.basePath`. */
@@ -43,7 +43,7 @@ export function createReadFileTool(host: AgentHost): ExecutableTool {
         }
         return `Error: ${err instanceof Error ? err.message : String(err)}`
       }
-    },
+    }
   }
 }
 
@@ -58,21 +58,18 @@ const APPEND_FILE_PARAMETERS = {
   type: "object",
   properties: {
     path: { type: "string", description: "Path to append to" },
-    content: { type: "string", description: "Content to append" },
+    content: { type: "string", description: "Content to append" }
   },
-  required: ["path", "content"],
+  required: ["path", "content"]
 } as const
 
 export const appendFileToolMetadata: ToolMetadata = {
   name: "append_file",
   description: APPEND_FILE_DESCRIPTION,
-  parameters: APPEND_FILE_PARAMETERS,
+  parameters: APPEND_FILE_PARAMETERS
 }
 
-async function executeAppendFile(
-  args: Record<string, unknown>,
-  resolveSafe: (p: string) => Promise<string>,
-) {
+async function executeAppendFile(args: Record<string, unknown>, resolveSafe: (p: string) => Promise<string>) {
   try {
     const target = await resolveSafe(String(args.path))
     const filePath = String(args.path)
@@ -99,9 +96,12 @@ async function executeAppendFile(
           severity: ToolOutcomeSeverity.Fatal,
           directive: ToolControlDirective.AbortRound,
           errorCode: "artifact_integrity_violation",
-          details: [...integrityWarnings, "Use read_file to inspect the current file before any new append or rewrite."],
-          artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }],
-        },
+          details: [
+            ...integrityWarnings,
+            "Use read_file to inspect the current file before any new append or rewrite."
+          ],
+          artifacts: [{ path: filePath, preservedExisting: true, requiresReadBeforeMutation: true }]
+        }
       )
     }
 
@@ -116,8 +116,8 @@ async function executeAppendFile(
           directive: ToolControlDirective.AbortRound,
           errorCode: "artifact_incomplete_mutation",
           details: integrityWarnings,
-          artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: true }],
-        },
+          artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: true }]
+        }
       )
     }
 
@@ -125,7 +125,7 @@ async function executeAppendFile(
       ok: true,
       severity: ToolOutcomeSeverity.Info,
       directive: ToolControlDirective.Continue,
-      artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: false }],
+      artifacts: [{ path: filePath, preservedExisting: false, requiresReadBeforeMutation: false }]
     })
   } catch (err) {
     return `Error: ${err instanceof Error ? err.message : String(err)}`
@@ -144,15 +144,15 @@ const WRITE_FILE_PARAMETERS = {
   type: "object",
   properties: {
     path: { type: "string", description: "Path to write to" },
-    content: { type: "string", description: "Content to write" },
+    content: { type: "string", description: "Content to write" }
   },
-  required: ["path", "content"],
+  required: ["path", "content"]
 } as const
 
 export const writeFileToolMetadata: ToolMetadata = {
   name: "write_file",
   description: WRITE_FILE_DESCRIPTION,
-  parameters: WRITE_FILE_PARAMETERS,
+  parameters: WRITE_FILE_PARAMETERS
 }
 
 /** Factory: build a `write_file` tool bound to `host.filesystem.basePath`. */
@@ -161,7 +161,7 @@ export function createWriteFileTool(host: AgentHost): ExecutableTool {
     ...writeFileToolMetadata,
     async execute(args) {
       return executeWriteFileWith(host, args)
-    },
+    }
   }
 }
 
@@ -171,6 +171,6 @@ export function createAppendFileTool(host: AgentHost): ExecutableTool {
     ...appendFileToolMetadata,
     async execute(args) {
       return executeAppendFile(args, (p) => safePathResolvedWith(host, p))
-    },
+    }
   }
 }

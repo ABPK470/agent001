@@ -24,14 +24,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 let testDb: Database.Database
 let dataDir: string
 const ORIGINAL_DATA_DIR = process.env["MIA_DATA_DIR"]
-const ORIGINAL_REG     = process.env["MIA_ALLOW_LOCAL_REGISTRATION"]
-const ORIGINAL_SECRET  = process.env["MIA_SESSION_SECRET"]
+const ORIGINAL_REG = process.env["MIA_ALLOW_LOCAL_REGISTRATION"]
+const ORIGINAL_SECRET = process.env["MIA_SESSION_SECRET"]
 
 async function buildApp(): Promise<FastifyInstance> {
   const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-  const { registerIdentity }   = await import("../src/auth/identity.js")
+  const { registerIdentity } = await import("../src/auth/identity.js")
   const { registerAuthRoutes } = await import("../src/api/auth.js")
-  const { registerLocalUser }  = await import("../src/auth/users.js")
+  const { registerLocalUser } = await import("../src/auth/users.js")
   _setDb(testDb)
   _migrate(testDb)
   // Seed a sentinel admin so the first-user-becomes-admin auto-promotion
@@ -57,14 +57,14 @@ function cookieFromSetCookie(header: string | string[] | undefined): string {
   const arr = Array.isArray(header) ? header : [header]
   const first = arr.find((s) => s.startsWith("mia_sid="))
   if (!first) return ""
-  return first.split(";")[0]    // "mia_sid=..."
+  return first.split(";")[0] // "mia_sid=..."
 }
 
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "mia-auth-"))
-  process.env["MIA_DATA_DIR"]                = dataDir
+  process.env["MIA_DATA_DIR"] = dataDir
   process.env["MIA_ALLOW_LOCAL_REGISTRATION"] = "1"
-  process.env["MIA_SESSION_SECRET"]           = "test-secret-test-secret-test-secret-12"
+  process.env["MIA_SESSION_SECRET"] = "test-secret-test-secret-test-secret-12"
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
   testDb.pragma("foreign_keys = ON")
@@ -87,8 +87,8 @@ describe("auth routes — local registration", () => {
     try {
       const reg = await app.inject({
         method: "POST",
-        url:    "/api/auth/register",
-        payload: { username: "alice", password: "hunter2pw", displayName: "Alice" },
+        url: "/api/auth/register",
+        payload: { username: "alice", password: "hunter2pw", displayName: "Alice" }
       })
       expect(reg.statusCode).toBe(201)
       const body = reg.json() as { upn: string; displayName: string; isAdmin: boolean }
@@ -100,12 +100,15 @@ describe("auth routes — local registration", () => {
       expect(cookie).toMatch(/^mia_sid=/)
 
       const who = await app.inject({
-        method: "GET", url: "/api/auth/whoami",
-        headers: { cookie },
+        method: "GET",
+        url: "/api/auth/whoami",
+        headers: { cookie }
       })
       expect(who.statusCode).toBe(200)
       expect(who.json()).toMatchObject({ upn: "alice", displayName: "Alice", isAdmin: false })
-    } finally { await app.close() }
+    } finally {
+      await app.close()
+    }
   })
 
   it("accepts uppercase username input but canonicalizes the local-account key to lowercase", async () => {
@@ -113,50 +116,57 @@ describe("auth routes — local registration", () => {
     try {
       const reg = await app.inject({
         method: "POST",
-        url:    "/api/auth/register",
-        payload: { username: "PKA", password: "hunter2pw", displayName: "PKA" },
+        url: "/api/auth/register",
+        payload: { username: "PKA", password: "hunter2pw", displayName: "PKA" }
       })
       expect(reg.statusCode).toBe(201)
       expect(reg.json()).toMatchObject({ upn: "pka", displayName: "PKA", isAdmin: false })
 
       const login = await app.inject({
         method: "POST",
-        url:    "/api/auth/login",
-        payload: { username: "PKA", password: "hunter2pw" },
+        url: "/api/auth/login",
+        payload: { username: "PKA", password: "hunter2pw" }
       })
       expect(login.statusCode).toBe(200)
 
       const cookie = cookieFromSetCookie(login.headers["set-cookie"])
       const who = await app.inject({
         method: "GET",
-        url:    "/api/auth/whoami",
-        headers: { cookie },
+        url: "/api/auth/whoami",
+        headers: { cookie }
       })
       expect(who.statusCode).toBe(200)
       expect(who.json()).toMatchObject({ upn: "pka", displayName: "PKA", isAdmin: false })
-    } finally { await app.close() }
+    } finally {
+      await app.close()
+    }
   })
 
   it("rejects duplicate username with 409", async () => {
     const app = await buildApp()
     try {
       const payload = { username: "bob", password: "hunter2pw", displayName: "Bob" }
-      const first  = await app.inject({ method: "POST", url: "/api/auth/register", payload })
+      const first = await app.inject({ method: "POST", url: "/api/auth/register", payload })
       expect(first.statusCode).toBe(201)
       const second = await app.inject({ method: "POST", url: "/api/auth/register", payload })
       expect(second.statusCode).toBe(409)
-    } finally { await app.close() }
+    } finally {
+      await app.close()
+    }
   })
 
   it("rejects short passwords with 400", async () => {
     const app = await buildApp()
     try {
       const res = await app.inject({
-        method: "POST", url: "/api/auth/register",
-        payload: { username: "carol", password: "ab", displayName: "Carol" },
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { username: "carol", password: "ab", displayName: "Carol" }
       })
       expect(res.statusCode).toBe(400)
-    } finally { await app.close() }
+    } finally {
+      await app.close()
+    }
   })
 
   it("returns 403 when MIA_ALLOW_LOCAL_REGISTRATION=0", async () => {
@@ -164,11 +174,14 @@ describe("auth routes — local registration", () => {
     const app = await buildApp()
     try {
       const res = await app.inject({
-        method: "POST", url: "/api/auth/register",
-        payload: { username: "dan", password: "hunter2pw", displayName: "Dan" },
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { username: "dan", password: "hunter2pw", displayName: "Dan" }
       })
       expect(res.statusCode).toBe(403)
-    } finally { await app.close() }
+    } finally {
+      await app.close()
+    }
   })
 })
 
@@ -177,44 +190,53 @@ describe("auth routes — local login", () => {
     const app = await buildApp()
     try {
       await app.inject({
-        method: "POST", url: "/api/auth/register",
-        payload: { username: "eve", password: "hunter2pw", displayName: "Eve" },
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { username: "eve", password: "hunter2pw", displayName: "Eve" }
       })
       const login = await app.inject({
-        method: "POST", url: "/api/auth/login",
-        payload: { username: "eve", password: "hunter2pw" },
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { username: "eve", password: "hunter2pw" }
       })
       expect(login.statusCode).toBe(200)
       const cookie = cookieFromSetCookie(login.headers["set-cookie"])
       const who = await app.inject({
-        method: "GET", url: "/api/auth/whoami",
-        headers: { cookie },
+        method: "GET",
+        url: "/api/auth/whoami",
+        headers: { cookie }
       })
       expect(who.json()).toMatchObject({ upn: "eve", displayName: "Eve" })
-    } finally { await app.close() }
+    } finally {
+      await app.close()
+    }
   })
 
   it("returns 401 with generic message on wrong password (no user enumeration)", async () => {
     const app = await buildApp()
     try {
       await app.inject({
-        method: "POST", url: "/api/auth/register",
-        payload: { username: "frank", password: "hunter2pw", displayName: "Frank" },
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { username: "frank", password: "hunter2pw", displayName: "Frank" }
       })
       const wrongPw = await app.inject({
-        method: "POST", url: "/api/auth/login",
-        payload: { username: "frank", password: "WRONGpw99" },
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { username: "frank", password: "WRONGpw99" }
       })
       const noSuchUser = await app.inject({
-        method: "POST", url: "/api/auth/login",
-        payload: { username: "ghost", password: "anything9" },
+        method: "POST",
+        url: "/api/auth/login",
+        payload: { username: "ghost", password: "anything9" }
       })
       expect(wrongPw.statusCode).toBe(401)
       expect(noSuchUser.statusCode).toBe(401)
       // Same generic message — no enum.
-      expect((wrongPw.json() as { error: string }).error)
-        .toBe((noSuchUser.json() as { error: string }).error)
-    } finally { await app.close() }
+      expect((wrongPw.json() as { error: string }).error).toBe((noSuchUser.json() as { error: string }).error)
+    } finally {
+      await app.close()
+    }
   })
 })
 
@@ -224,19 +246,24 @@ describe("auth — gate", () => {
     try {
       const res = await app.inject({ method: "GET", url: "/api/protected" })
       expect(res.statusCode).toBe(401)
-    } finally { await app.close() }
+    } finally {
+      await app.close()
+    }
   })
 
   it("revoking the session row (deleteSession) immediately invalidates the cookie", async () => {
     const app = await buildApp()
     try {
       const reg = await app.inject({
-        method: "POST", url: "/api/auth/register",
-        payload: { username: "harry", password: "hunter2pw", displayName: "Harry" },
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { username: "harry", password: "hunter2pw", displayName: "Harry" }
       })
       const cookie = cookieFromSetCookie(reg.headers["set-cookie"])
       const before = await app.inject({
-        method: "GET", url: "/api/protected", headers: { cookie },
+        method: "GET",
+        url: "/api/protected",
+        headers: { cookie }
       })
       expect(before.statusCode).toBe(200)
       expect(before.json()).toEqual({ upn: "harry" })
@@ -246,33 +273,44 @@ describe("auth — gate", () => {
       deleteSessionsForUser("harry")
 
       const after = await app.inject({
-        method: "GET", url: "/api/protected", headers: { cookie },
+        method: "GET",
+        url: "/api/protected",
+        headers: { cookie }
       })
       expect(
         after.statusCode,
-        "identity is JOIN-resolved every request — deleting the row instantly invalidates the cookie",
+        "identity is JOIN-resolved every request — deleting the row instantly invalidates the cookie"
       ).toBe(401)
-    } finally { await app.close() }
+    } finally {
+      await app.close()
+    }
   })
 
   it("logout deletes the session row + clears the cookie", async () => {
     const app = await buildApp()
     try {
       const reg = await app.inject({
-        method: "POST", url: "/api/auth/register",
-        payload: { username: "ivy", password: "hunter2pw", displayName: "Ivy" },
+        method: "POST",
+        url: "/api/auth/register",
+        payload: { username: "ivy", password: "hunter2pw", displayName: "Ivy" }
       })
       const cookie = cookieFromSetCookie(reg.headers["set-cookie"])
       const out = await app.inject({
-        method: "POST", url: "/api/auth/logout", headers: { cookie },
+        method: "POST",
+        url: "/api/auth/logout",
+        headers: { cookie }
       })
       expect(out.statusCode).toBe(200)
 
       const after = await app.inject({
-        method: "GET", url: "/api/auth/whoami", headers: { cookie },
+        method: "GET",
+        url: "/api/auth/whoami",
+        headers: { cookie }
       })
       expect(after.statusCode).toBe(401)
-    } finally { await app.close() }
+    } finally {
+      await app.close()
+    }
   })
 })
 
@@ -281,12 +319,13 @@ describe("auth — SSO header path", () => {
     const app = await buildApp()
     try {
       const res = await app.inject({
-        method: "GET", url: "/api/auth/whoami",
+        method: "GET",
+        url: "/api/auth/whoami",
         headers: {
           "from-user-name": "sso.user@corp",
           "from-first-name": "SSO",
-          "from-last-name":  "User",
-        },
+          "from-last-name": "User"
+        }
       })
       expect(res.statusCode).toBe(200)
       expect(res.json()).toMatchObject({ upn: "sso.user@corp", displayName: "SSO User" })
@@ -298,6 +337,8 @@ describe("auth — SSO header path", () => {
 
       // The mint also set the cookie.
       expect(res.headers["set-cookie"]).toBeTruthy()
-    } finally { await app.close() }
+    } finally {
+      await app.close()
+    }
   })
 })

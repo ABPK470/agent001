@@ -17,7 +17,8 @@
 import type { SearchResult } from "./types.js"
 
 const ENDPOINT = "https://lite.duckduckgo.com/lite/"
-const UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36"
+const UA =
+  "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0 Safari/537.36"
 
 export async function fetchDuckDuckGoLite(query: string, limit: number): Promise<SearchResult[]> {
   const ctl = new AbortController()
@@ -26,14 +27,14 @@ export async function fetchDuckDuckGoLite(query: string, limit: number): Promise
   let html: string
   try {
     const res = await fetch(ENDPOINT, {
-      method:  "POST",
+      method: "POST",
       headers: {
         "Content-Type": "application/x-www-form-urlencoded",
-        "User-Agent":   UA,
-        "Accept":       "text/html",
+        "User-Agent": UA,
+        Accept: "text/html"
       },
-      body:   new URLSearchParams({ q: query, kl: "us-en" }).toString(),
-      signal: ctl.signal,
+      body: new URLSearchParams({ q: query, kl: "us-en" }).toString(),
+      signal: ctl.signal
     })
     if (!res.ok) return []
     html = await res.text()
@@ -65,11 +66,11 @@ function parseLiteHtml(html: string, limit: number): SearchResult[] {
   let m: RegExpExecArray | null
   while ((m = linkRe.exec(html))) {
     links.push({
-      url:    decodeDdgRedirect(m[1] ?? ""),
-      title:  stripTags(m[2] ?? "").trim(),
-      offset: m.index,
+      url: decodeDdgRedirect(m[1] ?? ""),
+      title: stripTags(m[2] ?? "").trim(),
+      offset: m.index
     })
-    if (links.length >= limit * 2) break  // generous cap; we trim later
+    if (links.length >= limit * 2) break // generous cap; we trim later
   }
 
   // Pre-collect snippet positions so we can pair each link with the *next* snippet.
@@ -84,10 +85,10 @@ function parseLiteHtml(html: string, limit: number): SearchResult[] {
     const next = snippets.find((s) => s.offset > link.offset)
     if (!link.url || !link.title) continue
     out.push({
-      rank:    out.length + 1,
-      title:   link.title,
-      url:     link.url,
-      snippet: next?.text ?? "",
+      rank: out.length + 1,
+      title: link.title,
+      url: link.url,
+      snippet: next?.text ?? ""
     })
   }
 
@@ -99,7 +100,7 @@ function stripTags(s: string): string {
     .replace(/<[^>]+>/g, "")
     .replace(/&nbsp;/g, " ")
     .replace(/&amp;/g, "&")
-    .replace(/&quot;/g, "\"")
+    .replace(/&quot;/g, '"')
     .replace(/&#39;/g, "'")
     .replace(/&lt;/g, "<")
     .replace(/&gt;/g, ">")

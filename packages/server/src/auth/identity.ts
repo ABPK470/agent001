@@ -47,17 +47,17 @@ declare module "fastify" {
  * SPA itself must load before the user can log in.
  */
 const AUTH_BYPASS_PATHS = [
-  "/api/auth/",        // register / login / logout / whoami
-  "/api/health",
+  "/api/auth/", // register / login / logout / whoami
+  "/api/health"
 ] as const
 
 const STATIC_BYPASS_PREFIXES = [
   "/assets/",
   "/favicon",
   "/index.html",
-  "/login",            // SPA route
+  "/login", // SPA route
   "/manifest",
-  "/robots.txt",
+  "/robots.txt"
 ] as const
 
 function pathIsAuthExempt(url: string): boolean {
@@ -97,9 +97,9 @@ function setSessionCookie(reply: FastifyReply, sid: string): void {
   reply.setCookie(SESSION_COOKIE, signSid(sid), {
     httpOnly: true,
     sameSite: "lax",
-    secure:   process.env["NODE_ENV"] === "production",
-    path:     "/",
-    maxAge:   SESSION_TTL_SECONDS,
+    secure: process.env["NODE_ENV"] === "production",
+    path: "/",
+    maxAge: SESSION_TTL_SECONDS
   })
 }
 
@@ -129,18 +129,22 @@ function tryResolveSession(req: FastifyRequest, reply: FastifyReply): CurrentSes
       // `last_seen_at` ages out within the 60 s window naturally. No
       // polling endpoint, no extra request noise in the logs.
       return {
-        sid:         row.sid,
-        upn:         row.upn,
+        sid: row.sid,
+        upn: row.upn,
         displayName: row.display_name,
-        isAdmin:     row.is_admin === 1,
+        isAdmin: row.is_admin === 1,
         ip,
-        userAgent,
+        userAgent
       }
     }
     // Cookie was signed by us but no DB row matches — likely revoked
     // (DELETE FROM sessions) or the DB was reset. Clear so the SPA stops
     // re-presenting the dead cookie on every request.
-    try { clearSessionCookie(reply) } catch { /* SSE may have flushed headers */ }
+    try {
+      clearSessionCookie(reply)
+    } catch {
+      /* SSE may have flushed headers */
+    }
   }
 
   // 2. SSO header path — trusted if the deployment configured a proxy
@@ -150,18 +154,22 @@ function tryResolveSession(req: FastifyRequest, reply: FastifyReply): CurrentSes
   const headerUpn = readHeaderUpn(req)
   if (headerUpn) {
     const user = upsertSsoUser({
-      upn:         headerUpn,
-      displayName: readHeaderDisplayName(req) ?? headerUpn,
+      upn: headerUpn,
+      displayName: readHeaderDisplayName(req) ?? headerUpn
     })
     const newSid = createSession({ upn: user.upn, ip, userAgent })
-    try { setSessionCookie(reply, newSid) } catch { /* SSE-first request — cookie set on next request */ }
+    try {
+      setSessionCookie(reply, newSid)
+    } catch {
+      /* SSE-first request — cookie set on next request */
+    }
     return {
-      sid:         newSid,
-      upn:         user.upn,
+      sid: newSid,
+      upn: user.upn,
       displayName: user.display_name,
-      isAdmin:     user.is_admin === 1,
+      isAdmin: user.is_admin === 1,
       ip,
-      userAgent,
+      userAgent
     }
   }
 
@@ -178,10 +186,7 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
     // HEAD requests and explicit health probes never carry cookies and
     // never need identity. We don't touch the DB for them.
-    const isProbe =
-      req.method === "HEAD" ||
-      req.url === "/api/health" ||
-      req.url.startsWith("/api/health?")
+    const isProbe = req.method === "HEAD" || req.url === "/api/health" || req.url.startsWith("/api/health?")
     if (isProbe) return
 
     const session = tryResolveSession(req, reply)
@@ -207,16 +212,18 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
       return { error: "not logged in" }
     }
     return {
-      upn:         req.session.upn,
+      upn: req.session.upn,
       displayName: req.session.displayName,
-      isAdmin:     req.session.isAdmin,
+      isAdmin: req.session.isAdmin
     }
   })
 
   // POST /api/auth/logout — delete the server-side row + clear cookie.
   app.post("/api/auth/logout", async (req, reply) => {
     if (req.session?.sid) {
-      try { deleteSession(req.session.sid) } catch (err) {
+      try {
+        deleteSession(req.session.sid)
+      } catch (err) {
         req.log.warn({ err, sid: req.session.sid }, "deleteSession failed")
       }
     }

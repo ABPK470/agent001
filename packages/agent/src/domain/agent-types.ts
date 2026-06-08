@@ -22,20 +22,20 @@ import { MessageRole } from "./enums/message.js"
  * or oldest-first (history) when the context window fills up.
  */
 export type PromptBudgetSection =
-  | "system_law"       // Catalog-resolved facts + doctrine SSoT — NEVER dropped, NEVER demoted
-  | "system_anchor"     // Base prompt + env — NEVER dropped (first only; subsequent demoted)
-  | "system_runtime"    // Capabilities, workspace context — droppable
-  | "memory_working"    // Recent turns — droppable
-  | "memory_episodic"   // Session summaries — droppable
-  | "memory_semantic"   // Long-lived knowledge — droppable
-  | "history"           // Conversation history — droppable, oldest-first
-  | "user"              // Current user message — NEVER dropped
+  | "system_law" // Catalog-resolved facts + doctrine SSoT — NEVER dropped, NEVER demoted
+  | "system_anchor" // Base prompt + env — NEVER dropped (first only; subsequent demoted)
+  | "system_runtime" // Capabilities, workspace context — droppable
+  | "memory_working" // Recent turns — droppable
+  | "memory_episodic" // Session summaries — droppable
+  | "memory_semantic" // Long-lived knowledge — droppable
+  | "history" // Conversation history — droppable, oldest-first
+  | "user" // Current user message — NEVER dropped
 
 /** Sections that must never be dropped during truncation. */
 export const NEVER_DROP_SECTIONS: ReadonlySet<PromptBudgetSection> = new Set([
   "system_law",
   "system_anchor",
-  "user",
+  "user"
 ])
 
 /**
@@ -43,11 +43,11 @@ export const NEVER_DROP_SECTIONS: ReadonlySet<PromptBudgetSection> = new Set([
  * When over budget, we try dropping sections in this order.
  */
 export const DROP_PRIORITY: readonly PromptBudgetSection[] = [
-  "memory_semantic",    // Oldest knowledge, least time-sensitive
-  "memory_episodic",    // Session summaries
-  "system_runtime",     // Capabilities / workspace
-  "memory_working",     // Recent turns (valuable but replaceable)
-  "history",            // Conversation — drop oldest first
+  "memory_semantic", // Oldest knowledge, least time-sensitive
+  "memory_episodic", // Session summaries
+  "system_runtime", // Capabilities / workspace
+  "memory_working", // Recent turns (valuable but replaceable)
+  "history" // Conversation — drop oldest first
 ]
 
 /**
@@ -56,13 +56,13 @@ export const DROP_PRIORITY: readonly PromptBudgetSection[] = [
  */
 export const SECTION_WEIGHTS: Readonly<Record<PromptBudgetSection, number>> = {
   system_law: 0.02,
-  system_anchor: 0.20,
-  system_runtime: 0.10,
-  memory_working: 0.10,
+  system_anchor: 0.2,
+  system_runtime: 0.1,
+  memory_working: 0.1,
   memory_episodic: 0.06,
   memory_semantic: 0.12,
-  history: 0.30,
-  user: 0.10,
+  history: 0.3,
+  user: 0.1
 }
 
 // ── Messages ─────────────────────────────────────────────────────
@@ -187,7 +187,16 @@ export interface LLMResponse {
  * The agent doesn't care which model is behind this interface.
  */
 export interface LLMClient {
-  chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse>
+  chat(
+    messages: Message[],
+    tools: Tool[],
+    opts?: {
+      signal?: AbortSignal
+      maxTokens?: number
+      temperature?: number
+      onToken?: (token: string) => void
+    }
+  ): Promise<LLMResponse>
   /**
    * Optional model identifier for downstream consumers (token estimators,
    * provider-specific cache hints). Implementations should expose the
@@ -287,7 +296,16 @@ export interface AgentConfig {
   /** Called after each tool execution round with current messages for checkpointing. */
   onStep?: (messages: Message[], iteration: number) => void
   /** Called before each LLM API call with the messages + tools being sent, and after with the raw response. */
-  onLlmCall?: (data: { phase: typeof LLMCallPhase.Request; messages: Message[]; tools: Tool[]; iteration: number } | { phase: typeof LLMCallPhase.Response; response: LLMResponse; iteration: number; durationMs: number }) => void
+  onLlmCall?: (
+    data:
+      | { phase: typeof LLMCallPhase.Request; messages: Message[]; tools: Tool[]; iteration: number }
+      | {
+          phase: typeof LLMCallPhase.Response
+          response: LLMResponse
+          iteration: number
+          durationMs: number
+        }
+  ) => void
   /** Called when the agent loop injects a system nudge/guard message. */
   onNudge?: (data: { tag: string; message: string; iteration: number }) => void
   /**
@@ -327,7 +345,10 @@ export interface AgentConfig {
   /** Called with planner/pipeline trace events for UI. */
   onPlannerTrace?: (entry: Record<string, unknown>) => void
   /** Delegation function for planner-spawned children (injected by server). */
-  plannerDelegateFn?: (step: import("../application/core/planner.js").SubagentTaskStep, envelope: import("../application/core/planner.js").ExecutionEnvelope) => Promise<import("../application/core/planner.js").DelegateResult>
+  plannerDelegateFn?: (
+    step: import("../application/core/planner.js").SubagentTaskStep,
+    envelope: import("../application/core/planner.js").ExecutionEnvelope
+  ) => Promise<import("../application/core/planner.js").DelegateResult>
   /**
    * Completion validator — called when the agent tries to exit (0 tool calls).
    * If it returns a non-null string, that string is injected as a system message
@@ -345,5 +366,4 @@ export interface AgentConfig {
    * Set to false to disable.
    */
   enableAnswerStabilityGuard?: boolean
-
 }

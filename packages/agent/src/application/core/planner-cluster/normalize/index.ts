@@ -7,11 +7,7 @@
  * @module
  */
 
-import type {
-    Plan,
-    PlanDiagnostic,
-    SubagentTaskStep
-} from "../types.js"
+import type { Plan, PlanDiagnostic, SubagentTaskStep } from "../types.js"
 
 // ============================================================================
 // Warning injection
@@ -34,18 +30,15 @@ export function injectWarningsIntoSteps(plan: Plan, warnings: readonly PlanDiagn
   for (const step of plan.steps) {
     if (step.stepType !== "subagent_task") continue
     const sa = step as SubagentTaskStep
-    const msgs = [
-      ...(stepWarnings.get(sa.name) ?? []),
-      ...globalWarnings,
-    ]
+    const msgs = [...(stepWarnings.get(sa.name) ?? []), ...globalWarnings]
     if (msgs.length === 0) continue
-    const suffix = `\n\n⚠️ VALIDATION WARNINGS (address these in your implementation):\n${msgs.map(m => `- ${m}`).join("\n")}`
+    const suffix = `\n\n⚠️ VALIDATION WARNINGS (address these in your implementation):\n${msgs.map((m) => `- ${m}`).join("\n")}`
     ;(sa as { objective: string }).objective = sa.objective + suffix
   }
 }
 
 export function applyWarningAutoFixes(plan: Plan, warnings: readonly PlanDiagnostic[]): void {
-  const codes = new Set(warnings.map(w => w.code))
+  const codes = new Set(warnings.map((w) => w.code))
 
   if (codes.has("inconsistent_output_directory") || codes.has("mixed_root_and_subdir")) {
     normalizePlanOutputDirectory(plan)
@@ -85,7 +78,7 @@ export function inferForcedOutputDirectoryFromGoal(goal: string): string | null 
   }
 
   const constrainedPathMatch = goal.match(
-    /\ball\s+project\s+files\b[\s\S]{0,120}?\b(?:in|under|inside)\s+([a-zA-Z0-9._\/-]+)/i,
+    /\ball\s+project\s+files\b[\s\S]{0,120}?\b(?:in|under|inside)\s+([a-zA-Z0-9._\/-]+)/i
   )
   if (constrainedPathMatch?.[1]) {
     const dir = normalizeOutputDirToken(constrainedPathMatch[1])
@@ -100,9 +93,7 @@ export function inferForcedOutputDirectoryFromGoal(goal: string): string | null 
 }
 
 export function normalizePlanOutputDirectory(plan: Plan, preferredDirOverride?: string): void {
-  const subagentSteps = plan.steps.filter(
-    (s): s is SubagentTaskStep => s.stepType === "subagent_task",
-  )
+  const subagentSteps = plan.steps.filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
   const dirs: string[] = []
 
   for (const step of subagentSteps) {
@@ -114,7 +105,7 @@ export function normalizePlanOutputDirectory(plan: Plan, preferredDirOverride?: 
   }
 
   const preferredDir = normalizeOutputDirToken(preferredDirOverride ?? "") || (mostFrequent(dirs) ?? "tmp")
-  const knownTopDirs = new Set(dirs.map(d => d.split("/")[0]).filter(Boolean))
+  const knownTopDirs = new Set(dirs.map((d) => d.split("/")[0]).filter(Boolean))
   const targetByBasename = new Map<string, string>()
 
   for (const step of subagentSteps) {
@@ -129,10 +120,13 @@ export function normalizePlanOutputDirectory(plan: Plan, preferredDirOverride?: 
     ;(step.executionContext as unknown as { targetArtifacts: readonly string[] }).targetArtifacts = normalized
 
     const wsRoot = step.executionContext.workspaceRoot.replace(/\/+$/, "")
-    const scopedWriteRoot = wsRoot && (wsRoot.startsWith("/") || /^[A-Za-z]:[\\/]/.test(wsRoot))
-      ? `${wsRoot}/${preferredDir}`
-      : preferredDir
-    ;(step.executionContext as unknown as { allowedWriteRoots: readonly string[] }).allowedWriteRoots = [scopedWriteRoot]
+    const scopedWriteRoot =
+      wsRoot && (wsRoot.startsWith("/") || /^[A-Za-z]:[\\/]/.test(wsRoot))
+        ? `${wsRoot}/${preferredDir}`
+        : preferredDir
+    ;(step.executionContext as unknown as { allowedWriteRoots: readonly string[] }).allowedWriteRoots = [
+      scopedWriteRoot
+    ]
 
     for (const target of normalized) {
       const base = target.split("/").pop()
@@ -160,7 +154,9 @@ export function normalizePlanOutputDirectory(plan: Plan, preferredDirOverride?: 
       const base = source.split("/").pop() ?? source
       return targetByBasename.get(base) ?? source
     })
-    ;(step.executionContext as unknown as { requiredSourceArtifacts: readonly string[] }).requiredSourceArtifacts = [...new Set(normalizedSources)]
+    ;(
+      step.executionContext as unknown as { requiredSourceArtifacts: readonly string[] }
+    ).requiredSourceArtifacts = [...new Set(normalizedSources)]
   }
 }
 
@@ -169,20 +165,20 @@ export function normalizePlanOutputDirectory(plan: Plan, preferredDirOverride?: 
 // ============================================================================
 
 import {
-    injectBrowserRuntimeContracts,
-    injectDependencyWiringCriteria,
-    injectHelperDependencyContracts,
-    injectSharedDataContract,
-    injectVisualStyleContracts,
+  injectBrowserRuntimeContracts,
+  injectDependencyWiringCriteria,
+  injectHelperDependencyContracts,
+  injectSharedDataContract,
+  injectVisualStyleContracts
 } from "./contract-injection.js"
 
 export {
-    injectBrowserRuntimeContracts,
-    injectDependencyWiringCriteria,
-    injectHelperDependencyContracts,
-    injectSharedDataContract,
-    injectSharedStateOwnershipContract,
-    injectVisualStyleContracts
+  injectBrowserRuntimeContracts,
+  injectDependencyWiringCriteria,
+  injectHelperDependencyContracts,
+  injectSharedDataContract,
+  injectSharedStateOwnershipContract,
+  injectVisualStyleContracts
 } from "./contract-injection.js"
 
 export function uniqueList(values: readonly string[]): string[] {

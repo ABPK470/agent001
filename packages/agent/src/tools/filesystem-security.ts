@@ -20,15 +20,17 @@ import type { ToolResultEnvelope } from "../domain/agent-types.js"
 
 export function buildToolOutcome(
   summary: string,
-  overrides: Omit<ToolResultEnvelope, "summary"> = { ok: true },
+  overrides: Omit<ToolResultEnvelope, "summary"> = { ok: true }
 ): ToolResultEnvelope {
   return {
     ...overrides,
     ok: overrides.ok ?? true,
-    severity: overrides.severity ?? (overrides.ok === false ? ToolOutcomeSeverity.Recoverable : ToolOutcomeSeverity.Info),
+    severity:
+      overrides.severity ??
+      (overrides.ok === false ? ToolOutcomeSeverity.Recoverable : ToolOutcomeSeverity.Info),
     directive: overrides.directive ?? ToolControlDirective.Continue,
     retryable: overrides.retryable ?? true,
-    summary,
+    summary
   }
 }
 
@@ -112,7 +114,9 @@ export async function safePathResolvedWith(host: AgentHost, p: string): Promise<
         const real = await realpath(current)
         // Layer 4 re-check on the real path
         if (!real.startsWith(basePath + "/") && real !== basePath) {
-          throw new Error(`Symlink at "${current.slice(basePath.length + 1)}" points outside the allowed directory`)
+          throw new Error(
+            `Symlink at "${current.slice(basePath.length + 1)}" points outside the allowed directory`
+          )
         }
         // Continue walking from the resolved real path
         current = real
@@ -123,8 +127,10 @@ export async function safePathResolvedWith(host: AgentHost, p: string): Promise<
       //   (write_file will handle replacing it with a directory)
       // In both cases, stop symlink checking but append ALL remaining
       // segments so we return the complete target path.
-      if ((err as NodeJS.ErrnoException).code === "ENOENT" ||
-          (err as NodeJS.ErrnoException).code === "ENOTDIR") {
+      if (
+        (err as NodeJS.ErrnoException).code === "ENOENT" ||
+        (err as NodeJS.ErrnoException).code === "ENOTDIR"
+      ) {
         // current already includes this segment; append the rest
         const remaining = segments.slice(segments.indexOf(segment) + 1)
         for (const rest of remaining) {

@@ -20,6 +20,4 @@ export * from "./escalation.js"
 // delegation-validation-patterns.ts re-exports ALL constants and helpers EXCEPT
 // `normalizeArtifactPath` (collides with loop/tool-execution).
 export * from "./validation-patterns/constants.js"
-export {
-    getToolCallPathArg
-} from "./validation-patterns/index.js"
+export { getToolCallPathArg } from "./validation-patterns/index.js"

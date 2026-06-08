@@ -8,40 +8,40 @@
  */
 
 import {
-    PolicyViolationError,
-    RulePolicyEvaluator,
-    type AgentRun,
-    type HostedPolicyContext,
-    type Step
+  PolicyViolationError,
+  RulePolicyEvaluator,
+  type AgentRun,
+  type HostedPolicyContext,
+  type Step
 } from "@mia/agent"
 import { describe, expect, it } from "vitest"
 import { hostedDefaultPolicyRules } from "../src/domain/policy/hosted-defaults.js"
 
 function makeStep(action: string, input: Record<string, unknown> = {}): Step {
   return {
-    id:           "s1",
+    id: "s1",
     definitionId: "s1",
-    name:         action,
+    name: action,
     action,
     input,
-    condition:    null,
-    onError:      "fail",
-    status:       "pending" as Step["status"],
-    order:        0,
-    output:       {},
-    error:        null,
-    startedAt:    null,
-    completedAt:  null,
+    condition: null,
+    onError: "fail",
+    status: "pending" as Step["status"],
+    order: 0,
+    output: {},
+    error: null,
+    startedAt: null,
+    completedAt: null
   }
 }
 
 function hostedCtx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext {
   return {
-    runId:       "r1",
-    runMode:     "hosted",
-    role:        "hosted_user",
+    runId: "r1",
+    runMode: "hosted",
+    role: "hosted_user",
     sandboxRoot: "/tmp/sb",
-    ...over,
+    ...over
   }
 }
 
@@ -54,7 +54,7 @@ function buildHostedEvaluator(): RulePolicyEvaluator {
 async function evaluate(
   evaluator: RulePolicyEvaluator,
   step: Step,
-  ctx: HostedPolicyContext,
+  ctx: HostedPolicyContext
 ): Promise<{ approval: string | null; error?: PolicyViolationError }> {
   const run = { id: "r1" } as AgentRun
   try {
@@ -71,7 +71,11 @@ describe("hosted default policy rules", () => {
     const ev = buildHostedEvaluator()
     const read = await evaluate(ev, makeStep("read_file", { path: "/tmp/sb/notes.txt" }), hostedCtx())
     expect(read.error).toBeUndefined()
-    const write = await evaluate(ev, makeStep("write_file", { path: "/tmp/sb/out.csv", content: "x" }), hostedCtx())
+    const write = await evaluate(
+      ev,
+      makeStep("write_file", { path: "/tmp/sb/out.csv", content: "x" }),
+      hostedCtx()
+    )
     expect(write.error).toBeUndefined()
   })
 
@@ -79,7 +83,11 @@ describe("hosted default policy rules", () => {
     const ev = buildHostedEvaluator()
     const read = await evaluate(ev, makeStep("read_file", { path: "workspace://src/secret.ts" }), hostedCtx())
     expect(read.error?.message).toMatch(/workspace/)
-    const write = await evaluate(ev, makeStep("write_file", { path: "/etc/passwd", content: "x" }), hostedCtx())
+    const write = await evaluate(
+      ev,
+      makeStep("write_file", { path: "/etc/passwd", content: "x" }),
+      hostedCtx()
+    )
     expect(write.error).toBeInstanceOf(PolicyViolationError)
   })
 
@@ -93,13 +101,29 @@ describe("hosted default policy rules", () => {
 
   it("allows MSSQL reads on UAT and PROD but blocks UAT/PROD DML", async () => {
     const ev = buildHostedEvaluator()
-    const uatRead  = await evaluate(ev, makeStep("mssql_query", { environment: "uat",  sql: "SELECT 1" }), hostedCtx())
-    const prodRead = await evaluate(ev, makeStep("mssql_query", { environment: "prod", sql: "SELECT 1" }), hostedCtx())
+    const uatRead = await evaluate(
+      ev,
+      makeStep("mssql_query", { environment: "uat", sql: "SELECT 1" }),
+      hostedCtx()
+    )
+    const prodRead = await evaluate(
+      ev,
+      makeStep("mssql_query", { environment: "prod", sql: "SELECT 1" }),
+      hostedCtx()
+    )
     expect(uatRead.error).toBeUndefined()
     expect(prodRead.error).toBeUndefined()
 
-    const uatDml  = await evaluate(ev, makeStep("mssql_query", { environment: "uat",  sql: "UPDATE t SET x=1" }), hostedCtx())
-    const prodDml = await evaluate(ev, makeStep("mssql_query", { environment: "prod", sql: "INSERT INTO t VALUES (1)" }), hostedCtx())
+    const uatDml = await evaluate(
+      ev,
+      makeStep("mssql_query", { environment: "uat", sql: "UPDATE t SET x=1" }),
+      hostedCtx()
+    )
+    const prodDml = await evaluate(
+      ev,
+      makeStep("mssql_query", { environment: "prod", sql: "INSERT INTO t VALUES (1)" }),
+      hostedCtx()
+    )
     expect(uatDml.error?.message).toMatch(/UAT/)
     expect(prodDml.error?.message).toMatch(/PROD/)
   })
@@ -109,7 +133,11 @@ describe("hosted default policy rules", () => {
     // default-deny will still block it unless the operator explicitly opts
     // in via a DB-stored rule. This test documents that contract.
     const ev = buildHostedEvaluator()
-    const devDml = await evaluate(ev, makeStep("mssql_query", { environment: "dev", sql: "UPDATE t SET x=1" }), hostedCtx())
+    const devDml = await evaluate(
+      ev,
+      makeStep("mssql_query", { environment: "dev", sql: "UPDATE t SET x=1" }),
+      hostedCtx()
+    )
     expect(devDml.error?.message).toMatch(/hosted_default_deny/)
   })
 

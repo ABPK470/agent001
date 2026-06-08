@@ -65,7 +65,10 @@ function extractObjectArgCalls(src: string, fnName: string): CallSite[] {
         const quote = c
         i++
         while (i < src.length) {
-          if (src[i] === "\\") { i += 2; continue }
+          if (src[i] === "\\") {
+            i += 2
+            continue
+          }
           if (src[i] === quote) break
           i++
         }
@@ -120,7 +123,10 @@ function parseFields(body: string): Map<string, string> {
       const q = c
       i++
       while (i < body.length) {
-        if (body[i] === "\\") { i += 2; continue }
+        if (body[i] === "\\") {
+          i += 2
+          continue
+        }
         if (body[i] === q) break
         i++
       }
@@ -160,19 +166,31 @@ describe("Wiring contracts: memory write↔read pair on sessionId", () => {
     const retrieveCalls = extractObjectArgCalls(src, "retrieveContext")
     const ingestCalls = extractObjectArgCalls(src, "ingestRunTurns")
 
-    expect(retrieveCalls.length, "expected at least one retrieveContext call in run-executor.ts").toBeGreaterThan(0)
-    expect(ingestCalls.length, "expected at least one ingestRunTurns call in run-executor.ts").toBeGreaterThan(0)
+    expect(
+      retrieveCalls.length,
+      "expected at least one retrieveContext call in run-executor.ts"
+    ).toBeGreaterThan(0)
+    expect(
+      ingestCalls.length,
+      "expected at least one ingestRunTurns call in run-executor.ts"
+    ).toBeGreaterThan(0)
 
     const ANCHOR = "activeRun?.sessionId"
     for (const c of retrieveCalls) {
       const expr = c.fields.get("sessionId")
       expect(expr, `retrieveContext at line ${c.line} must specify sessionId`).toBeDefined()
-      expect(expr, `retrieveContext at line ${c.line}: sessionId expression must reference ${ANCHOR}`).toContain(ANCHOR)
+      expect(
+        expr,
+        `retrieveContext at line ${c.line}: sessionId expression must reference ${ANCHOR}`
+      ).toContain(ANCHOR)
     }
     for (const c of ingestCalls) {
       const expr = c.fields.get("sessionId")
       expect(expr, `ingestRunTurns at line ${c.line} must specify sessionId`).toBeDefined()
-      expect(expr, `ingestRunTurns at line ${c.line}: sessionId expression must reference ${ANCHOR}`).toContain(ANCHOR)
+      expect(
+        expr,
+        `ingestRunTurns at line ${c.line}: sessionId expression must reference ${ANCHOR}`
+      ).toContain(ANCHOR)
     }
   })
 })
@@ -189,12 +207,16 @@ describe("Wiring contracts: memory write↔read pair on upn", () => {
     for (const c of retrieveCalls) {
       const expr = c.fields.get("upn")
       expect(expr, `retrieveContext at line ${c.line} must specify upn`).toBeDefined()
-      expect(expr, `retrieveContext at line ${c.line}: upn expression must reference ${ANCHOR}`).toContain(ANCHOR)
+      expect(expr, `retrieveContext at line ${c.line}: upn expression must reference ${ANCHOR}`).toContain(
+        ANCHOR
+      )
     }
     for (const c of ingestCalls) {
       const expr = c.fields.get("upn")
       expect(expr, `ingestRunTurns at line ${c.line} must specify upn`).toBeDefined()
-      expect(expr, `ingestRunTurns at line ${c.line}: upn expression must reference ${ANCHOR}`).toContain(ANCHOR)
+      expect(expr, `ingestRunTurns at line ${c.line}: upn expression must reference ${ANCHOR}`).toContain(
+        ANCHOR
+      )
     }
   })
 })
@@ -234,7 +256,9 @@ describe("Wiring contracts: procedural memory pair on sessionId/upn", () => {
       const upn = c.fields.get("upn")
       expect(sid, `extractProcedural at line ${c.line} must specify sessionId`).toBeDefined()
       expect(upn, `extractProcedural at line ${c.line} must specify upn`).toBeDefined()
-      expect(sid, `extractProcedural sessionId must reference activeRun?.sessionId`).toContain("activeRun?.sessionId")
+      expect(sid, `extractProcedural sessionId must reference activeRun?.sessionId`).toContain(
+        "activeRun?.sessionId"
+      )
       expect(upn, `extractProcedural upn must reference activeRun?.ownerUpn`).toContain("activeRun?.ownerUpn")
     }
   })
@@ -253,10 +277,12 @@ describe("Wiring contracts: HostedPolicyContext fields match memory call anchors
     const sid = fields.get("sessionId")
     expect(actorUpn, "HostedPolicyContext.actorUpn must be present").toBeDefined()
     expect(sid, "HostedPolicyContext.sessionId must be present").toBeDefined()
-    expect(actorUpn, "policy actorUpn must reference activeRun?.ownerUpn (same anchor as memory)")
-      .toContain("activeRun?.ownerUpn")
-    expect(sid, "policy sessionId must reference activeRun?.sessionId (same anchor as memory)")
-      .toContain("activeRun?.sessionId")
+    expect(actorUpn, "policy actorUpn must reference activeRun?.ownerUpn (same anchor as memory)").toContain(
+      "activeRun?.ownerUpn"
+    )
+    expect(sid, "policy sessionId must reference activeRun?.sessionId (same anchor as memory)").toContain(
+      "activeRun?.sessionId"
+    )
   })
 })
 
@@ -295,8 +321,9 @@ const AUDIT_ALLOWLIST: AllowlistEntry[] = [
   // the C9 invariant — see plan-test-coverage-deepening.md D3.
   {
     file: "memory/ingestion.ts",
-    match: "run.sessionId ?? run.agentId ?? \"default\"",
-    reason: "Memory write fallback chain — the contract that retrieval mirrors. Tail 'default' bucket is the C9/D3 open question.",
+    match: 'run.sessionId ?? run.agentId ?? "default"',
+    reason:
+      "Memory write fallback chain — the contract that retrieval mirrors. Tail 'default' bucket is the C9/D3 open question."
   },
 
   // ── Audit log display strings (display-only, NOT isolation keys) ─
@@ -307,28 +334,31 @@ const AUDIT_ALLOWLIST: AllowlistEntry[] = [
   // (Verified: db/audit_log table uses these only as display text.)
   {
     file: "db/sync-runs.ts",
-    match: "i.actorUpn ?? \"anonymous\"",
-    reason: "actor_upn column on sync_runs is display-only for the history UI; isolation is enforced by separate fk/owner columns.",
+    match: 'i.actorUpn ?? "anonymous"',
+    reason:
+      "actor_upn column on sync_runs is display-only for the history UI; isolation is enforced by separate fk/owner columns."
   },
   {
     file: "api/policies.ts",
-    match: "req.session?.upn ?? \"unknown\"",
-    reason: "Audit log actor field — display-only, not used as a tenancy/key column.",
+    match: 'req.session?.upn ?? "unknown"',
+    reason: "Audit log actor field — display-only, not used as a tenancy/key column."
   },
   {
     file: "api/sync-environments.ts",
-    match: "req.session?.upn ?? \"unknown\"",
-    reason: "Audit log actor field — display-only, not used as a tenancy/key column.",
+    match: 'req.session?.upn ?? "unknown"',
+    reason: "Audit log actor field — display-only, not used as a tenancy/key column."
   },
   {
     file: "api/freeze-windows.ts",
-    match: "req.session?.upn ?? \"unknown\"",
-    reason: "Audit log actor field — display-only, not used as a tenancy/key column. Sibling of routes/policies.ts and routes/sync-environments.ts.",
+    match: 'req.session?.upn ?? "unknown"',
+    reason:
+      "Audit log actor field — display-only, not used as a tenancy/key column. Sibling of routes/policies.ts and routes/sync-environments.ts."
   },
   {
     file: "api/sync.ts",
-    match: "req.session?.upn ?? req.session?.displayName ?? \"anonymous\"",
-    reason: "Audit log actor display string only. Real isolation uses actorUpn (which stays null) on the same call sites.",
+    match: 'req.session?.upn ?? req.session?.displayName ?? "anonymous"',
+    reason:
+      "Audit log actor display string only. Real isolation uses actorUpn (which stays null) on the same call sites."
   },
 
   // ── False positive: bounded by upn predicate ─────────────────────
@@ -339,9 +369,10 @@ const AUDIT_ALLOWLIST: AllowlistEntry[] = [
   // per-tenant. Documented at memory/ingestion.ts:46-52.
   {
     file: "memory/ingestion.ts",
-    match: "opts.sessionId ?? \"\"",
-    reason: "SQL bind parameter for dedup recency query; bounded by upn predicate so cross-anon collisions don't leak data.",
-  },
+    match: 'opts.sessionId ?? ""',
+    reason:
+      "SQL bind parameter for dedup recency query; bounded by upn predicate so cross-anon collisions don't leak data."
+  }
 
   // ── B-AUDIT history (resolved 2026-05-15) ────────────────────────
   //
@@ -417,23 +448,23 @@ describe("Wiring contracts: B-AUDIT — codebase-wide identifier-fallback scan",
     // Filter out allowlisted entries.
     const unjustified = violations.filter((v) => {
       const rel = v.file.slice(SRC_ROOT.length + 1).replace(/\\/g, "/")
-      return !AUDIT_ALLOWLIST.some(
-        (a) => rel.endsWith(a.file) && v.text.includes(a.match),
-      )
+      return !AUDIT_ALLOWLIST.some((a) => rel.endsWith(a.file) && v.text.includes(a.match))
     })
 
     if (unjustified.length > 0) {
-      const summary = unjustified.map((v) => {
-        const rel = v.file.slice(SRC_ROOT.length + 1).replace(/\\/g, "/")
-        return `  ${rel}:${v.line}\n    ${v.text}`
-      }).join("\n")
+      const summary = unjustified
+        .map((v) => {
+          const rel = v.file.slice(SRC_ROOT.length + 1).replace(/\\/g, "/")
+          return `  ${rel}:${v.line}\n    ${v.text}`
+        })
+        .join("\n")
       throw new Error(
         `B-AUDIT found ${unjustified.length} unjustified identifier→magic-string fallback(s):\n${summary}\n\n` +
           `Each match coerces an identifier (sessionId/upn/agentId/etc.) into a SHARED magic string\n` +
           `bucket when missing. This is the bug class that caused 'yes had no context': all\n` +
           `anonymous/unmapped callers collapse into the SAME bucket and silently share state.\n` +
           `Either fix the code to propagate the identifier (preferred) or add an entry to\n` +
-          `AUDIT_ALLOWLIST in tests/wiring-contracts.test.ts with a 1-line reason.`,
+          `AUDIT_ALLOWLIST in tests/wiring-contracts.test.ts with a 1-line reason.`
       )
     }
   })

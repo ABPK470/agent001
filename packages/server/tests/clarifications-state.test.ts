@@ -18,7 +18,7 @@ function mkFinding(over: Partial<AmbiguityFinding> = {}): AmbiguityFinding {
     suggestedQuestion: "Which Revenue table do you mean: publish.Revenue or mart.RevenueRecognition?",
     source: "detector",
     candidates: ["publish.Revenue", "mart.RevenueRecognition"],
-    ...over,
+    ...over
   }
 }
 
@@ -31,7 +31,10 @@ describe("ClarificationsRegistry", () => {
   it("recordEmitted stores findings then matchQuestion finds a hit", () => {
     const reg = new ClarificationsRegistry()
     reg.recordEmitted("r1", 0, [mkFinding()])
-    const match = reg.matchQuestion("r1", "Which Revenue table do you mean — publish.Revenue or mart.RevenueRecognition?")
+    const match = reg.matchQuestion(
+      "r1",
+      "Which Revenue table do you mean — publish.Revenue or mart.RevenueRecognition?"
+    )
     expect(match).not.toBeNull()
     expect(match?.findingId).toBe("schema-match:revenue")
     expect(match?.subject).toBe("Revenue")
@@ -39,13 +42,15 @@ describe("ClarificationsRegistry", () => {
 
   it("matchQuestion preserves uiOptions for closed-choice findings", () => {
     const reg = new ClarificationsRegistry()
-    reg.recordEmitted("r1", 0, [mkFinding({
-      kind: "output-format",
-      severity: "warn",
-      subject: "overview",
-      suggestedQuestion: "How would you like the overview delivered?",
-      uiOptions: ["short narrative", "data table", "chart"],
-    })])
+    reg.recordEmitted("r1", 0, [
+      mkFinding({
+        kind: "output-format",
+        severity: "warn",
+        subject: "overview",
+        suggestedQuestion: "How would you like the overview delivered?",
+        uiOptions: ["short narrative", "data table", "chart"]
+      })
+    ])
     const match = reg.matchQuestion("r1", "How would you like the overview delivered?")
     expect(match?.uiOptions).toEqual(["short narrative", "data table", "chart"])
   })
@@ -60,7 +65,12 @@ describe("ClarificationsRegistry", () => {
     const reg = new ClarificationsRegistry()
     reg.recordEmitted("r1", 0, [
       mkFinding(),
-      mkFinding({ id: "term-undefined:churn", kind: "term-undefined", subject: "churn", suggestedQuestion: "How do you define churn in this context?" }),
+      mkFinding({
+        id: "term-undefined:churn",
+        kind: "term-undefined",
+        subject: "churn",
+        suggestedQuestion: "How do you define churn in this context?"
+      })
     ])
     const match = reg.matchQuestion("r1", "How do you define churn — voluntary, involuntary, or both?")
     expect(match?.findingId).toBe("term-undefined:churn")
@@ -88,11 +98,36 @@ describe("ClarificationsRegistry", () => {
   it("getResolved accumulates across multiple resolutions", () => {
     const reg = new ClarificationsRegistry()
     const f1 = mkFinding()
-    const f2 = mkFinding({ id: "term-undefined:churn", kind: "term-undefined", subject: "churn", suggestedQuestion: "How do you define churn?" })
+    const f2 = mkFinding({
+      id: "term-undefined:churn",
+      kind: "term-undefined",
+      subject: "churn",
+      suggestedQuestion: "How do you define churn?"
+    })
     reg.recordEmitted("r1", 0, [f1, f2])
-    reg.setPending("r1", { findingId: f1.id, kind: f1.kind, subject: f1.subject, suggestedQuestion: f1.suggestedQuestion, round: 0 }, "Which revenue?")
+    reg.setPending(
+      "r1",
+      {
+        findingId: f1.id,
+        kind: f1.kind,
+        subject: f1.subject,
+        suggestedQuestion: f1.suggestedQuestion,
+        round: 0
+      },
+      "Which revenue?"
+    )
     reg.resolvePending("r1", "publish.Revenue", 1)
-    reg.setPending("r1", { findingId: f2.id, kind: f2.kind, subject: f2.subject, suggestedQuestion: f2.suggestedQuestion, round: 0 }, "Define churn?")
+    reg.setPending(
+      "r1",
+      {
+        findingId: f2.id,
+        kind: f2.kind,
+        subject: f2.subject,
+        suggestedQuestion: f2.suggestedQuestion,
+        round: 0
+      },
+      "Define churn?"
+    )
     reg.resolvePending("r1", "voluntary", 2)
     const resolved = reg.getResolved("r1")
     expect(resolved).toHaveLength(2)
@@ -109,7 +144,11 @@ describe("ClarificationsRegistry", () => {
   it("clear removes all per-run state", () => {
     const reg = new ClarificationsRegistry()
     reg.recordEmitted("r1", 0, [mkFinding()])
-    reg.setPending("r1", { findingId: "x", kind: "schema-match", subject: "Revenue", suggestedQuestion: "q", round: 0 }, "q")
+    reg.setPending(
+      "r1",
+      { findingId: "x", kind: "schema-match", subject: "Revenue", suggestedQuestion: "q", round: 0 },
+      "q"
+    )
     reg.resolvePending("r1", "answer", 0)
     reg.clear("r1")
     expect(reg.getResolved("r1")).toEqual([])
@@ -119,10 +158,35 @@ describe("ClarificationsRegistry", () => {
   it("setPending replaces a previous pending entry", () => {
     const reg = new ClarificationsRegistry()
     const f1 = mkFinding()
-    const f2 = mkFinding({ id: "term-undefined:churn", kind: "term-undefined", subject: "churn", suggestedQuestion: "How do you define churn?" })
+    const f2 = mkFinding({
+      id: "term-undefined:churn",
+      kind: "term-undefined",
+      subject: "churn",
+      suggestedQuestion: "How do you define churn?"
+    })
     reg.recordEmitted("r1", 0, [f1, f2])
-    reg.setPending("r1", { findingId: f1.id, kind: f1.kind, subject: f1.subject, suggestedQuestion: f1.suggestedQuestion, round: 0 }, "Q1")
-    reg.setPending("r1", { findingId: f2.id, kind: f2.kind, subject: f2.subject, suggestedQuestion: f2.suggestedQuestion, round: 0 }, "Q2")
+    reg.setPending(
+      "r1",
+      {
+        findingId: f1.id,
+        kind: f1.kind,
+        subject: f1.subject,
+        suggestedQuestion: f1.suggestedQuestion,
+        round: 0
+      },
+      "Q1"
+    )
+    reg.setPending(
+      "r1",
+      {
+        findingId: f2.id,
+        kind: f2.kind,
+        subject: f2.subject,
+        suggestedQuestion: f2.suggestedQuestion,
+        round: 0
+      },
+      "Q2"
+    )
     const resolved = reg.resolvePending("r1", "voluntary", 1)
     expect(resolved?.findingId).toBe(f2.id)
   })

@@ -18,7 +18,7 @@ export const DEFAULT_RETRY_POLICY: RetryPolicy = {
   baseDelayMs: 1000,
   maxDelayMs: 60_000,
   backoffMultiplier: 2,
-  jitterFactor: 0.5,
+  jitterFactor: 0.5
 }
 
 /** Compute the delay for a given attempt (0-indexed). */
@@ -40,7 +40,7 @@ export class ChannelApiError extends Error {
   constructor(
     message: string,
     readonly statusCode: number,
-    readonly responseBody?: unknown,
+    readonly responseBody?: unknown
   ) {
     super(message)
     this.name = "ChannelApiError"
@@ -66,7 +66,7 @@ export interface RetryResult<T> {
  */
 export async function withRetry<T>(
   fn: () => Promise<T>,
-  policy: RetryPolicy = DEFAULT_RETRY_POLICY,
+  policy: RetryPolicy = DEFAULT_RETRY_POLICY
 ): Promise<RetryResult<T>> {
   let lastError: Error | undefined
 

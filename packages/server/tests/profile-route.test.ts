@@ -9,7 +9,9 @@ import { registerProfileRoutes } from "../src/api/profile.js"
 const ENV_KEY = "AGENT_HOSTED_MODE"
 let original: string | undefined
 
-beforeEach(() => { original = process.env[ENV_KEY] })
+beforeEach(() => {
+  original = process.env[ENV_KEY]
+})
 afterEach(() => {
   if (original === undefined) delete process.env[ENV_KEY]
   else process.env[ENV_KEY] = original

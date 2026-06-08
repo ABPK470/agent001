@@ -22,12 +22,12 @@
  */
 
 export const BusProtocol = {
-  Status:    "status",
-  Result:    "result",
-  Help:      "help",
-  Question:  "question",
-  Answer:    "answer",
-  Broadcast: "broadcast",
+  Status: "status",
+  Result: "result",
+  Help: "help",
+  Question: "question",
+  Answer: "answer",
+  Broadcast: "broadcast"
 } as const
 
 export type BusProtocol = (typeof BusProtocol)[keyof typeof BusProtocol]

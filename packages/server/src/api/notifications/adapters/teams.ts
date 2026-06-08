@@ -11,23 +11,23 @@ import type { RenderedBody } from "../templates.js"
 
 export interface TeamsDeliveryInput {
   target: string
-  body:   RenderedBody
+  body: RenderedBody
 }
 
 export async function deliverTeams(i: TeamsDeliveryInput): Promise<void> {
   if (!/^https?:\/\//u.test(i.target)) throw new Error("Teams target must be a webhook URL")
   const payload = {
-    "@type":    "MessageCard",
+    "@type": "MessageCard",
     "@context": "https://schema.org/extensions",
-    summary:    i.body.subject,
+    summary: i.body.subject,
     themeColor: "0078D4",
-    title:      i.body.subject,
-    text:       i.body.text.replace(/\n/g, "<br/>"),
+    title: i.body.subject,
+    text: i.body.text.replace(/\n/g, "<br/>")
   }
   const r = await fetch(i.target, {
-    method:  "POST",
+    method: "POST",
     headers: { "content-type": "application/json" },
-    body:    JSON.stringify(payload),
+    body: JSON.stringify(payload)
   })
   if (!r.ok) {
     const txt = await safeText(r)
@@ -36,5 +36,9 @@ export async function deliverTeams(i: TeamsDeliveryInput): Promise<void> {
 }
 
 async function safeText(r: Response): Promise<string> {
-  try { return (await r.text()).slice(0, 500) } catch { return "<no body>" }
+  try {
+    return (await r.text()).slice(0, 500)
+  } catch {
+    return "<no body>"
+  }
 }

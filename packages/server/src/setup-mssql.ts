@@ -58,20 +58,20 @@ export function setupMssql(projectRoot: string): {
     }
 
     const configs: ConfigureMssqlConnection[] = dbConfigs.map((db) => ({
-        name: db.name,
-        server: db.host,
-        port: db.port ?? 1433,
-        ...(db.domain ? { domain: db.domain } : {}),
-        user: db.user ?? "sa",
-        password: db.password ?? "",
-        database: db.database ?? "master",
-        options: {
-          encrypt: db.encrypt !== false,
-          trustServerCertificate: db.trustServerCertificate !== false,
-        },
-        writeEnabled: db.writeEnabled ?? false,
-        knowledge: db.knowledgePath ? readKnowledgeFile(projectRoot, db.knowledgePath) : null,
-      }))
+      name: db.name,
+      server: db.host,
+      port: db.port ?? 1433,
+      ...(db.domain ? { domain: db.domain } : {}),
+      user: db.user ?? "sa",
+      password: db.password ?? "",
+      database: db.database ?? "master",
+      options: {
+        encrypt: db.encrypt !== false,
+        trustServerCertificate: db.trustServerCertificate !== false
+      },
+      writeEnabled: db.writeEnabled ?? false,
+      knowledge: db.knowledgePath ? readKnowledgeFile(projectRoot, db.knowledgePath) : null
+    }))
 
     // Optional: pin which named connection is the agent's "home" default.
     // Without this the agent falls back to the first entry in the array.
@@ -90,8 +90,9 @@ export function setupMssql(projectRoot: string): {
   if (mssqlServer) {
     const domain = process.env["MSSQL_DOMAIN"]
     const knowledgePath = process.env["MSSQL_KNOWLEDGE_FILE"]
-    const configs: ConfigureMssqlConnection[] = [{
-      name: "default",
+    const configs: ConfigureMssqlConnection[] = [
+      {
+        name: "default",
         server: mssqlServer,
         port: Number(process.env["MSSQL_PORT"] ?? 1433),
         ...(domain ? { domain } : {}),
@@ -100,11 +101,12 @@ export function setupMssql(projectRoot: string): {
         database: process.env["MSSQL_DATABASE"] ?? "master",
         options: {
           encrypt: process.env["MSSQL_ENCRYPT"] !== "false",
-          trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false",
+          trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false"
         },
         writeEnabled: process.env["MSSQL_WRITE_ENABLED"] === "true",
-        knowledge: knowledgePath ? readKnowledgeFile(projectRoot, knowledgePath) : null,
-      }]
+        knowledge: knowledgePath ? readKnowledgeFile(projectRoot, knowledgePath) : null
+      }
+    ]
     if (process.env["MSSQL_WRITE_ENABLED"] === "true") {
       const summary = `${mssqlServer} (WRITE mode enabled)`
       console.log(`MSSQL: ${summary}`)

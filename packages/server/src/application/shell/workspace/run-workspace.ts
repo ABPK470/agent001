@@ -35,7 +35,8 @@ export interface WorkspaceDiff {
   readonly deleted: readonly string[]
 }
 
-const CODEGEN_RE = /\b(?:build|create|implement|develop|write|code|scaffold|refactor|fix|patch|edit|modify|add|remove|rename|generate)\b/i
+const CODEGEN_RE =
+  /\b(?:build|create|implement|develop|write|code|scaffold|refactor|fix|patch|edit|modify|add|remove|rename|generate)\b/i
 
 const COPY_IGNORE_DIRS = new Set([
   ".git",
@@ -45,12 +46,10 @@ const COPY_IGNORE_DIRS = new Set([
   "build",
   "coverage",
   ".turbo",
-  ".cache",
+  ".cache"
 ])
 
-const COPY_IGNORE_FILES = new Set([
-  ".DS_Store",
-])
+const COPY_IGNORE_FILES = new Set([".DS_Store"])
 
 const RUN_WORKSPACE_ROOT_NAME = "mia-runs"
 
@@ -114,12 +113,12 @@ export async function prepareRunWorkspace(params: {
     const sandboxRoot = resolve(getRunWorkspaceRoot(), `${params.runId}-${randomUUID().slice(0, 8)}`)
     await mkdir(sandboxRoot, { recursive: true })
     return {
-      runId:         params.runId,
+      runId: params.runId,
       sourceRoot,
       executionRoot: sandboxRoot,
       taskType,
-      isolated:      true,
-      profile:       RunProfile.Hosted,
+      isolated: true,
+      profile: RunProfile.Hosted
     }
   }
 
@@ -129,12 +128,12 @@ export async function prepareRunWorkspace(params: {
 
   if (!shouldUseIsolatedWorkspace(params.goal, params.resume)) {
     return {
-      runId:         params.runId,
+      runId: params.runId,
       sourceRoot,
       executionRoot: sourceRoot,
       taskType,
-      isolated:      false,
-      profile,
+      isolated: false,
+      profile
     }
   }
 
@@ -143,21 +142,21 @@ export async function prepareRunWorkspace(params: {
 
   await cp(sourceRoot, sandboxRoot, {
     recursive: true,
-    force:     true,
-    filter:    (src) => {
+    force: true,
+    filter: (src) => {
       const rel = relative(sourceRoot, src)
       if (!rel) return true
       return !shouldIgnorePath(rel.replace(/\\/g, "/"))
-    },
+    }
   })
 
   return {
-    runId:         params.runId,
+    runId: params.runId,
     sourceRoot,
     executionRoot: sandboxRoot,
     taskType,
-    isolated:      true,
-    profile,
+    isolated: true,
+    profile
   }
 }
 
@@ -188,7 +187,10 @@ async function collectFileHashes(root: string): Promise<Map<string, string>> {
   return result
 }
 
-export async function computeWorkspaceDiff(sourceRoot: string, executionRoot: string): Promise<WorkspaceDiff> {
+export async function computeWorkspaceDiff(
+  sourceRoot: string,
+  executionRoot: string
+): Promise<WorkspaceDiff> {
   const sourceMap = await collectFileHashes(sourceRoot)
   const execMap = await collectFileHashes(executionRoot)
 
@@ -212,7 +214,7 @@ export async function computeWorkspaceDiff(sourceRoot: string, executionRoot: st
   return {
     added: added.sort(),
     modified: modified.sort(),
-    deleted: deleted.sort(),
+    deleted: deleted.sort()
   }
 }
 
@@ -246,7 +248,7 @@ export async function applyWorkspaceDiff(params: {
   return {
     added: diff.added.length,
     modified: diff.modified.length,
-    deleted: diff.deleted.length,
+    deleted: diff.deleted.length
   }
 }
 
@@ -284,9 +286,9 @@ export function summarizeWorkspaceDiff(diff: WorkspaceDiff): string {
       added: diff.added,
       modified: diff.modified,
       deleted: diff.deleted,
-      total: diff.added.length + diff.modified.length + diff.deleted.length,
+      total: diff.added.length + diff.modified.length + diff.deleted.length
     },
     null,
-    2,
+    2
   )
 }

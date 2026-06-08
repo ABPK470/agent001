@@ -17,11 +17,7 @@ import type { ExecutableTool, ToolMetadata } from "../domain/agent-types.js"
  * Called with the question + options, returns the user's response.
  * The Promise blocks until the user actually responds.
  */
-export type AskUserResolver = (
-  question: string,
-  options?: string[],
-  sensitive?: boolean,
-) => Promise<string>
+export type AskUserResolver = (question: string, options?: string[], sensitive?: boolean) => Promise<string>
 
 // ── Shared body (hoisted above first use to avoid TDZ) ───────────
 
@@ -37,32 +33,32 @@ export const ASK_USER_PARAMETERS = {
   properties: {
     question: {
       type: "string",
-      description: "The question or instruction to show the user.",
+      description: "The question or instruction to show the user."
     },
     options: {
       type: "array",
       items: { type: "string" },
-      description: "Optional list of choices for the user to pick from.",
+      description: "Optional list of choices for the user to pick from."
     },
     sensitive: {
       type: "boolean",
       description:
         "Set to true if the expected response contains sensitive data (passwords, tokens). " +
-        "The response will be masked in logs and traces.",
-    },
+        "The response will be masked in logs and traces."
+    }
   },
-  required: ["question"],
+  required: ["question"]
 } as const
 
 export const askUserToolMetadata: ToolMetadata = {
   name: "ask_user",
   description: ASK_USER_DESCRIPTION,
-  parameters: ASK_USER_PARAMETERS,
+  parameters: ASK_USER_PARAMETERS
 }
 
 async function runAskUser(
   resolver: AskUserResolver | null | undefined,
-  args: Record<string, unknown>,
+  args: Record<string, unknown>
 ): Promise<string> {
   if (!resolver) {
     return "Error: User input is not available in this execution context."
@@ -87,8 +83,6 @@ export function createAskUserTool(host: AgentHost): ExecutableTool {
     ...askUserToolMetadata,
     async execute(args) {
       return runAskUser(host.userInput, args)
-    },
+    }
   }
 }
-
-

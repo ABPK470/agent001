@@ -29,7 +29,7 @@ export const NOTE_CATEGORIES = [
   "column_semantics",
   "data_quality",
   "performance",
-  "observation",
+  "observation"
 ] as const
 
 export type NoteCategory = (typeof NOTE_CATEGORIES)[number]
@@ -43,7 +43,9 @@ export interface NotePayload {
 }
 
 /** Handler signature injected by the server-side factory. */
-export type NoteHandler = (payload: NotePayload) => Promise<{ ok: true; noteId: string } | { ok: false; reason: string }>
+export type NoteHandler = (
+  payload: NotePayload
+) => Promise<{ ok: true; noteId: string } | { ok: false; reason: string }>
 
 export const noteToolMetadata: ToolMetadata = {
   name: "note",
@@ -67,20 +69,20 @@ export const noteToolMetadata: ToolMetadata = {
         description:
           "Stable identifier for what the note is about. Prefer qualified " +
           "names (schema.table or schema.table.column) or join descriptors. " +
-          "Used as the FTS lookup key so consistent naming improves recall.",
+          "Used as the FTS lookup key so consistent naming improves recall."
       },
       claim: {
         type: "string",
         description:
           "The discovered fact in one sentence. Be concrete and falsifiable: " +
-          "'cumulative MTD column; non-summable across periods' not 'something to watch out for'.",
+          "'cumulative MTD column; non-summable across periods' not 'something to watch out for'."
       },
       evidence: {
         type: "string",
         description:
           "Optional supporting detail. Examples: 'confirmed via profile_data: " +
           "min=0, max=1.2M, distinct=12 per client per year', " +
-          "'discover_relationships between=[A,B] returned FK on pkClient'.",
+          "'discover_relationships between=[A,B] returned FK on pkClient'."
       },
       category: {
         type: "string",
@@ -89,11 +91,11 @@ export const noteToolMetadata: ToolMetadata = {
           "Optional tag. Defaults to 'observation'. Use 'column_semantics' for " +
           "aggregation rules on a column, 'join_path' for table relationships, " +
           "'schema_fact' for general structural facts, 'data_quality' for NULL " +
-          "rates / range issues, 'performance' for cost or plan observations.",
-      },
+          "rates / range issues, 'performance' for cost or plan observations."
+      }
     },
-    required: ["subject", "claim"],
-  },
+    required: ["subject", "claim"]
+  }
 }
 
 export const noteTool = noteToolMetadata
@@ -111,7 +113,8 @@ export const noteToolDefinition: ToolDefinition<NoteHandler> = {
         if (!claim) return "Error: 'claim' is required (non-empty string)."
 
         const evidenceRaw = args["evidence"]
-        const evidence = typeof evidenceRaw === "string" && evidenceRaw.trim() ? evidenceRaw.trim() : undefined
+        const evidence =
+          typeof evidenceRaw === "string" && evidenceRaw.trim() ? evidenceRaw.trim() : undefined
 
         const categoryRaw = args["category"]
         let category: NoteCategory | undefined
@@ -125,9 +128,9 @@ export const noteToolDefinition: ToolDefinition<NoteHandler> = {
         const result = await handler({ subject, claim, evidence, category })
         if (!result.ok) return `note: not stored — ${result.reason}`
         return `note: stored (id=${result.noteId}) — ${category ?? "observation"}: ${subject}`
-      },
+      }
     }
-  },
+  }
 }
 
 /**
@@ -147,5 +150,7 @@ export function bindNoteTool(handler: NoteHandler): ExecutableTool {
 import type { AgentHost } from "../application/shell/runtime.js"
 
 export function createNoteTool(_host: AgentHost): never {
-  throw new Error("note requires per-run binding via bindNoteTool(handler); metadata is available via noteToolMetadata")
+  throw new Error(
+    "note requires per-run binding via bindNoteTool(handler); metadata is available via noteToolMetadata"
+  )
 }

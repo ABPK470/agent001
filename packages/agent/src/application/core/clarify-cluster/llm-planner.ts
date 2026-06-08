@@ -17,12 +17,7 @@
 
 import { MessageRole } from "../../../domain/enums/message.js"
 import type { LLMClient, Message } from "../../../domain/agent-types.js"
-import type {
-    AmbiguityFinding,
-    AmbiguityKind,
-    AmbiguitySeverity,
-    ClarifyContext,
-} from "./types.js"
+import type { AmbiguityFinding, AmbiguityKind, AmbiguitySeverity, ClarifyContext } from "./types.js"
 import { makeFindingId } from "./types.js"
 
 // ── Public surface ───────────────────────────────────────────────
@@ -32,7 +27,9 @@ import { makeFindingId } from "./types.js"
  *  decide whether the goal is a pronoun-shaped follow-up that should
  *  NOT trigger a fresh clarification at all. */
 function looksCoreferential(goal: string): boolean {
-  return /\b(it|this|that|these|those|the\s+(data|result|results|report|chart|output|table|rows|answer|response))\b/i.test(goal)
+  return /\b(it|this|that|these|those|the\s+(data|result|results|report|chart|output|table|rows|answer|response))\b/i.test(
+    goal
+  )
 }
 
 function hasRecentAssistantTurn(messages: readonly Message[]): boolean {
@@ -63,7 +60,7 @@ export interface LlmPlannerOptions {
 export function shouldInvokePlanner(
   ctx: ClarifyContext,
   detectorFindings: readonly AmbiguityFinding[],
-  opts: LlmPlannerOptions = {},
+  opts: LlmPlannerOptions = {}
 ): boolean {
   if (detectorFindings.length > 0) return false
   if (!ctx.catalog) return false
@@ -91,20 +88,20 @@ export function shouldInvokePlanner(
 export async function runLlmPlanner(
   ctx: ClarifyContext,
   client: LLMClient,
-  opts: LlmPlannerOptions = {},
+  opts: LlmPlannerOptions = {}
 ): Promise<AmbiguityFinding[]> {
   const sampleSize = opts.catalogSampleSize ?? 40
   const maxFindings = opts.maxFindings ?? 4
   const messages: Message[] = [
     { role: MessageRole.System, content: buildSystemPrompt() },
-    { role: MessageRole.User, content: buildUserPrompt(ctx, sampleSize) },
+    { role: MessageRole.User, content: buildUserPrompt(ctx, sampleSize) }
   ]
   let raw: string | null
   try {
     const resp = await client.chat(messages, [], {
       signal: opts.signal,
       maxTokens: 600,
-      temperature: 0,
+      temperature: 0
     })
     raw = resp.content
   } catch (err) {
@@ -134,35 +131,35 @@ function buildSystemPrompt(): string {
     "",
     "Respond with a JSON object only, no prose, in this exact shape:",
     "  {",
-    "    \"findings\": [",
+    '    "findings": [',
     "      {",
-    "        \"kind\": \"<one of: schema-match | term-undefined | metric-undefined | grain-undefined | time-range | output-format>\",",
-    "        \"severity\": \"<block | warn>\",",
-    "        \"subject\": \"<the ambiguous word/phrase from the goal>\",",
-    "        \"reasoning\": \"<one short sentence>\",",
-    "        \"suggestedQuestion\": \"<one direct question to the user>\"",
+    '        "kind": "<one of: schema-match | term-undefined | metric-undefined | grain-undefined | time-range | output-format>",',
+    '        "severity": "<block | warn>",',
+    '        "subject": "<the ambiguous word/phrase from the goal>",',
+    '        "reasoning": "<one short sentence>",',
+    '        "suggestedQuestion": "<one direct question to the user>"',
     "      }",
     "    ]",
     "  }",
     "",
     "Rules:",
-    "  • If the goal is unambiguous, return {\"findings\": []}.",
+    '  • If the goal is unambiguous, return {"findings": []}.',
     "  • If the user goal uses pronouns / anaphora ('it', 'this', 'that',",
     "    'those results', 'the data', 'the report') AND a recent assistant",
     "    turn appears in the conversation, the referent IS that turn — do",
     "    NOT emit any clarification.",
     "  • Never invent table or column names not present in the catalog sample.",
     "  • At most 3 findings; prioritise the most user-blocking ambiguity.",
-    "  • Use kind=\"term-undefined\" with severity=\"block\" when a business word",
+    '  • Use kind="term-undefined" with severity="block" when a business word',
     "    has no plausible catalog match.",
-    "  • Use kind=\"schema-match\" with severity=\"block\" when a word plausibly",
+    '  • Use kind="schema-match" with severity="block" when a word plausibly',
     "    matches two or more catalog identifiers.",
     "  • Do NOT ask the user to confirm schema-qualified objects that already",
     "    appear in the goal and are present in the catalog sample.",
     "  • Do NOT emit metric-undefined when the goal already names an exact",
     "    numeric column or an aggregate over that exact column.",
     "  • Do NOT emit output-format when the goal already asks for a table,",
-    "    chart, list, csv, json, markdown, or other explicit delivery format.",
+    "    chart, list, csv, json, markdown, or other explicit delivery format."
   ].join("\n")
 }
 
@@ -170,18 +167,19 @@ function buildUserPrompt(ctx: ClarifyContext, sampleSize: number): string {
   const sample = ctx.catalog
     ? [...ctx.catalog.tables.values()]
         .slice(0, sampleSize)
-        .map((t) => `  • ${t.qualifiedName} (${t.type}, columns: ${t.columns.slice(0, 6).map((c) => c.name).join(", ")}${t.columns.length > 6 ? ", …" : ""})`)
+        .map(
+          (t) =>
+            `  • ${t.qualifiedName} (${t.type}, columns: ${t.columns
+              .slice(0, 6)
+              .map((c) => c.name)
+              .join(", ")}${t.columns.length > 6 ? ", …" : ""})`
+        )
         .join("\n")
     : "  (no catalog available)"
   const conversation = renderConversationPreamble(ctx.messages)
   const parts: string[] = []
   if (conversation) parts.push(conversation, "")
-  parts.push(
-    `User goal: ${ctx.goal}`,
-    "",
-    `Catalog sample (first ${sampleSize} objects):`,
-    sample,
-  )
+  parts.push(`User goal: ${ctx.goal}`, "", `Catalog sample (first ${sampleSize} objects):`, sample)
   return parts.join("\n")
 }
 
@@ -200,9 +198,13 @@ function renderConversationPreamble(messages: readonly Message[]): string {
     const text = typeof m.content === "string" ? m.content : ""
     if (text.trim().length === 0) continue
     const role =
-      m.role === MessageRole.User      ? "user"      :
-      m.role === MessageRole.Assistant ? "assistant" :
-      m.role === MessageRole.System    ? "system"    : "tool"
+      m.role === MessageRole.User
+        ? "user"
+        : m.role === MessageRole.Assistant
+          ? "assistant"
+          : m.role === MessageRole.System
+            ? "system"
+            : "tool"
     const trimmed = text.length > PER_MSG_CHARS ? text.slice(0, PER_MSG_CHARS - 1) + "…" : text
     const line = `  [${role}] ${trimmed.replace(/\n+/g, " ⏎ ")}`
     if (used + line.length > MAX_TOTAL_CHARS) break
@@ -213,25 +215,30 @@ function renderConversationPreamble(messages: readonly Message[]): string {
 }
 
 const QUALIFIED_NAME_RE = /\b([a-zA-Z][a-zA-Z0-9_]*)\.([a-zA-Z][a-zA-Z0-9_]*)\b/g
-const EXPLICIT_FORMAT_HINT_RE = /\b(table|chart|graph|bar|line|pie|scatter|histogram|csv|json|list|paragraph|narrative|markdown|spreadsheet|excel|dashboard|export)\b/i
+const EXPLICIT_FORMAT_HINT_RE =
+  /\b(table|chart|graph|bar|line|pie|scatter|histogram|csv|json|list|paragraph|narrative|markdown|spreadsheet|excel|dashboard|export)\b/i
 const TEMPORAL_OBJECT_RE = /\b(date|calendar|time|month|quarter|week|year|day)\b/i
 const NUMERIC_TYPE_HINTS = [
-  "decimal", "numeric", "money", "smallmoney",
-  "float", "real",
-  "int", "bigint", "smallint", "tinyint",
+  "decimal",
+  "numeric",
+  "money",
+  "smallmoney",
+  "float",
+  "real",
+  "int",
+  "bigint",
+  "smallint",
+  "tinyint"
 ] as const
 
 function filterPlannerFindings(
   ctx: ClarifyContext,
-  findings: readonly AmbiguityFinding[],
+  findings: readonly AmbiguityFinding[]
 ): AmbiguityFinding[] {
   return findings.filter((finding) => !isResolvedByGroundedGoal(ctx, finding))
 }
 
-function isResolvedByGroundedGoal(
-  ctx: ClarifyContext,
-  finding: AmbiguityFinding,
-): boolean {
+function isResolvedByGroundedGoal(ctx: ClarifyContext, finding: AmbiguityFinding): boolean {
   switch (finding.kind) {
     case "schema-match":
     case "term-undefined":
@@ -247,10 +254,7 @@ function isResolvedByGroundedGoal(
   }
 }
 
-function isResolvedObjectConfirmation(
-  ctx: ClarifyContext,
-  finding: AmbiguityFinding,
-): boolean {
+function isResolvedObjectConfirmation(ctx: ClarifyContext, finding: AmbiguityFinding): boolean {
   if (!ctx.catalog) return false
   const relevantText = `${finding.subject}\n${finding.suggestedQuestion}`
   const qualified = extractQualifiedNames(relevantText)
@@ -260,10 +264,7 @@ function isResolvedObjectConfirmation(
   return resolved.length === fallbackQualified.length
 }
 
-function isResolvedMetricConfirmation(
-  ctx: ClarifyContext,
-  finding: AmbiguityFinding,
-): boolean {
+function isResolvedMetricConfirmation(ctx: ClarifyContext, finding: AmbiguityFinding): boolean {
   if (!ctx.catalog) return false
   const subject = finding.subject.trim().toLowerCase()
   if (!subject) return false
@@ -305,8 +306,12 @@ function extractQualifiedNames(text: string): string[] {
 // ── Response parsing ─────────────────────────────────────────────
 
 const VALID_KINDS: ReadonlySet<AmbiguityKind> = new Set([
-  "schema-match", "term-undefined", "metric-undefined",
-  "grain-undefined", "time-range", "output-format",
+  "schema-match",
+  "term-undefined",
+  "metric-undefined",
+  "grain-undefined",
+  "time-range",
+  "output-format"
 ])
 const VALID_SEVERITIES: ReadonlySet<AmbiguitySeverity> = new Set(["block", "warn"])
 
@@ -326,7 +331,11 @@ export function parsePlannerResponse(raw: string): AmbiguityFinding[] | null {
     .replace(/\s*```\s*$/i, "")
     .trim()
   let obj: unknown
-  try { obj = JSON.parse(cleaned) } catch { return null }
+  try {
+    obj = JSON.parse(cleaned)
+  } catch {
+    return null
+  }
   if (!obj || typeof obj !== "object") return null
   const findings = (obj as { findings?: unknown }).findings
   if (!Array.isArray(findings)) return null
@@ -351,7 +360,7 @@ export function parsePlannerResponse(raw: string): AmbiguityFinding[] | null {
       subject,
       reasoning,
       suggestedQuestion,
-      source: "llm-planner",
+      source: "llm-planner"
     })
   }
   return out

@@ -46,7 +46,15 @@ export function extractModuleImports(code: string): ModuleImportRef[] {
 
   while ((match = sideEffectImportRe.exec(code)) !== null) {
     const specifier = match[1]
-    if (!imports.some(entry => entry.specifier === specifier && entry.importedNames.length === 0 && !entry.defaultImport && !entry.namespaceImport)) {
+    if (
+      !imports.some(
+        (entry) =>
+          entry.specifier === specifier &&
+          entry.importedNames.length === 0 &&
+          !entry.defaultImport &&
+          !entry.namespaceImport
+      )
+    ) {
       imports.push({ specifier, importedNames: [] })
     }
   }
@@ -70,9 +78,9 @@ function parseNamedImports(clause: string): string[] {
   const body = clause.replace(/^\{/, "").replace(/\}$/, "")
   return body
     .split(",")
-    .map(entry => entry.trim())
+    .map((entry) => entry.trim())
     .filter(Boolean)
-    .map(entry => entry.split(/\s+as\s+/i)[0]?.trim() ?? "")
+    .map((entry) => entry.split(/\s+as\s+/i)[0]?.trim() ?? "")
     .filter(Boolean)
 }
 

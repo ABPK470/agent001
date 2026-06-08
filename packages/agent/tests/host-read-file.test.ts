@@ -74,7 +74,7 @@ describe("createReadFileTool — Phase 3 pilot", () => {
 
       const [a, b] = await Promise.all([
         toolA.execute({ path: "hello.txt" }),
-        toolB.execute({ path: "hello.txt" }),
+        toolB.execute({ path: "hello.txt" })
       ])
 
       expect(a).toBe("hello from host\n")

@@ -14,50 +14,54 @@
  * See docs/doctrine.md and docs/runtime-inventory.md §7.
  */
 import { describe, expect, it } from "vitest"
-import type { AttachmentMetadata, AttachmentStore, UserInputReader } from "../src/application/shell/runtime.js"
+import type {
+  AttachmentMetadata,
+  AttachmentStore,
+  UserInputReader
+} from "../src/application/shell/runtime.js"
 import { configureAgent } from "../src/application/shell/runtime.js"
 import { createAskUserTool } from "../src/tools/ask-user.js"
 import {
-    createImportAttachmentTool,
-    createListAttachmentsTool,
-    createPromoteAttachmentTool,
-    createReadAttachmentTool,
+  createImportAttachmentTool,
+  createListAttachmentsTool,
+  createPromoteAttachmentTool,
+  createReadAttachmentTool
 } from "../src/tools/attachments.js"
 
 // ── Fixtures ─────────────────────────────────────────────────────
 
 function stubMetadata(over: Partial<AttachmentMetadata> = {}): AttachmentMetadata {
   return {
-    id:             "att-1",
-    scope:          "run",
-    originalName:   "Sales Report.csv",
+    id: "att-1",
+    scope: "run",
+    originalName: "Sales Report.csv",
     normalizedName: "sales-report.csv",
-    mediaType:      "text/csv",
-    sizeBytes:      42,
-    sha256:         "deadbeef",
-    ingestionMode:  "user",
-    purposeTags:    [],
-    blobKey:        "blob/att-1",
-    createdAt:      0,
-    ...over,
+    mediaType: "text/csv",
+    sizeBytes: 42,
+    sha256: "deadbeef",
+    ingestionMode: "user",
+    purposeTags: [],
+    blobKey: "blob/att-1",
+    createdAt: 0,
+    ...over
   }
 }
 
 function fakeStore(over: Partial<AttachmentStore> = {}): AttachmentStore {
   return {
-    list:  async () => [stubMetadata()],
-    get:   async () => stubMetadata(),
-    read:  async () => ({
-      kind:       "text",
-      text:       "col1,col2\n1,2\n",
-      truncated:  false,
-      sizeBytes:  14,
-      offset:     0,
-      nextOffset: null,
+    list: async () => [stubMetadata()],
+    get: async () => stubMetadata(),
+    read: async () => ({
+      kind: "text",
+      text: "col1,col2\n1,2\n",
+      truncated: false,
+      sizeBytes: 14,
+      offset: 0,
+      nextOffset: null
     }),
-    importToSandbox:    async (_id, sandboxRelPath) => ({ sandboxPath: sandboxRelPath, sizeBytes: 14 }),
+    importToSandbox: async (_id, sandboxRelPath) => ({ sandboxPath: sandboxRelPath, sizeBytes: 14 }),
     promoteFromSandbox: async () => stubMetadata({ id: "att-2", ingestionMode: "agent" }),
-    ...over,
+    ...over
   }
 }
 
@@ -75,9 +79,9 @@ describe("createAskUserTool — Phase 4 item 1", () => {
     const tool = createAskUserTool(host)
 
     const result = await tool.execute({
-      question:  "What is your favourite colour?",
-      options:   ["red", "blue"],
-      sensitive: false,
+      question: "What is your favourite colour?",
+      options: ["red", "blue"],
+      sensitive: false
     })
 
     expect(result).toBe("user-answer")
@@ -99,10 +103,7 @@ describe("createAskUserTool — Phase 4 item 1", () => {
     const toolA = createAskUserTool(hostA)
     const toolB = createAskUserTool(hostB)
 
-    const [a, b] = await Promise.all([
-      toolA.execute({ question: "?" }),
-      toolB.execute({ question: "?" }),
-    ])
+    const [a, b] = await Promise.all([toolA.execute({ question: "?" }), toolB.execute({ question: "?" })])
 
     expect(a).toBe("A")
     expect(b).toBe("B")
@@ -140,7 +141,7 @@ describe("create*AttachmentTool — Phase 4 item 2", () => {
       importToSandbox: async (id, dest) => {
         seen.push([id, dest])
         return { sandboxPath: dest, sizeBytes: 14 }
-      },
+      }
     })
     const host = configureAgent({ attachments: store })
     const tool = createImportAttachmentTool(host)
@@ -164,23 +165,31 @@ describe("create*AttachmentTool — Phase 4 item 2", () => {
   it("each tool throws a friendly error when host.attachments is null", async () => {
     const host = configureAgent({})
 
-    await expect(createListAttachmentsTool(host).execute({}))
-      .rejects.toThrow(/Attachment service is not configured on this AgentHost/)
-    await expect(createReadAttachmentTool(host).execute({ id: "x" }))
-      .rejects.toThrow(/Attachment service is not configured on this AgentHost/)
-    await expect(createImportAttachmentTool(host).execute({ id: "x", destination: "y" }))
-      .rejects.toThrow(/Attachment service is not configured on this AgentHost/)
-    await expect(createPromoteAttachmentTool(host).execute({ sandboxPath: "y" }))
-      .rejects.toThrow(/Attachment service is not configured on this AgentHost/)
+    await expect(createListAttachmentsTool(host).execute({})).rejects.toThrow(
+      /Attachment service is not configured on this AgentHost/
+    )
+    await expect(createReadAttachmentTool(host).execute({ id: "x" })).rejects.toThrow(
+      /Attachment service is not configured on this AgentHost/
+    )
+    await expect(createImportAttachmentTool(host).execute({ id: "x", destination: "y" })).rejects.toThrow(
+      /Attachment service is not configured on this AgentHost/
+    )
+    await expect(createPromoteAttachmentTool(host).execute({ sandboxPath: "y" })).rejects.toThrow(
+      /Attachment service is not configured on this AgentHost/
+    )
   })
 
   it("two hosts with different stores do not share state", async () => {
-    const hostA = configureAgent({ attachments: fakeStore({ list: async () => [stubMetadata({ id: "A" })] }) })
-    const hostB = configureAgent({ attachments: fakeStore({ list: async () => [stubMetadata({ id: "B" })] }) })
+    const hostA = configureAgent({
+      attachments: fakeStore({ list: async () => [stubMetadata({ id: "A" })] })
+    })
+    const hostB = configureAgent({
+      attachments: fakeStore({ list: async () => [stubMetadata({ id: "B" })] })
+    })
 
     const [a, b] = await Promise.all([
       createListAttachmentsTool(hostA).execute({}),
-      createListAttachmentsTool(hostB).execute({}),
+      createListAttachmentsTool(hostB).execute({})
     ])
 
     expect(a).toContain("id=A")

@@ -60,7 +60,7 @@ function rowToMessage(row: db.AgentMessageRow): AgentMessage {
     protocol: row.protocol,
     content: row.content,
     replyTo: row.replyTo,
-    timestamp: row.createdAt,
+    timestamp: row.createdAt
   }
 }
 
@@ -95,7 +95,7 @@ export class AgentBus {
       protocol,
       topic: input.topic,
       content: input.content,
-      replyTo: input.replyTo ?? null,
+      replyTo: input.replyTo ?? null
     })
     const msg = rowToMessage(row)
 
@@ -121,7 +121,7 @@ export class AgentBus {
       fromAgent: msg.fromAgent,
       content: msg.content,
       replyTo: msg.replyTo,
-      timestamp: msg.timestamp,
+      timestamp: msg.timestamp
     }
     broadcast({ type: EventType.AgentBusMessage, data: payload })
     if (msg.protocol === BusProtocol.Help) {
@@ -137,7 +137,9 @@ export class AgentBus {
       this.subscribers.set(topic, handlers)
     }
     handlers.add(handler)
-    return () => { handlers!.delete(handler) }
+    return () => {
+      handlers!.delete(handler)
+    }
   }
 
   /** Read message history from the persistent store (oldest first). */
@@ -168,13 +170,20 @@ const PROTOCOL_PARAM_DESCRIPTION =
 function parseProtocol(value: unknown, fallback: BusProtocol = BusProtocol.Broadcast): BusProtocol {
   if (typeof value !== "string") return fallback
   switch (value) {
-    case BusProtocol.Status:    return BusProtocol.Status
-    case BusProtocol.Result:    return BusProtocol.Result
-    case BusProtocol.Help:      return BusProtocol.Help
-    case BusProtocol.Question:  return BusProtocol.Question
-    case BusProtocol.Answer:    return BusProtocol.Answer
-    case BusProtocol.Broadcast: return BusProtocol.Broadcast
-    default:                    return fallback
+    case BusProtocol.Status:
+      return BusProtocol.Status
+    case BusProtocol.Result:
+      return BusProtocol.Result
+    case BusProtocol.Help:
+      return BusProtocol.Help
+    case BusProtocol.Question:
+      return BusProtocol.Question
+    case BusProtocol.Answer:
+      return BusProtocol.Answer
+    case BusProtocol.Broadcast:
+      return BusProtocol.Broadcast
+    default:
+      return fallback
   }
 }
 
@@ -182,17 +191,11 @@ function parseProtocol(value: unknown, fallback: BusProtocol = BusProtocol.Broad
  * Create tools that let an agent send/receive messages on the bus.
  * Each agent gets its own set bound to its identity.
  */
-export function createBusTools(
-  bus: AgentBus,
-  runId: string,
-  agentName: string,
-): Tool[] {
+export function createBusTools(bus: AgentBus, runId: string, agentName: string): Tool[] {
   // Live inbox — accumulates messages observed since this agent's last
   // check_messages call. Initialized from persisted history so a child
   // spawned mid-run-tree sees what siblings published before it existed.
-  const inbox: AgentMessage[] = bus
-    .history()
-    .filter((m) => m.fromRunId !== runId)
+  const inbox: AgentMessage[] = bus.history().filter((m) => m.fromRunId !== runId)
 
   bus.subscribe("*", (msg) => {
     if (msg.fromRunId === runId) return // don't echo own messages
@@ -213,23 +216,24 @@ export function createBusTools(
         properties: {
           topic: {
             type: "string",
-            description: `Topic/channel for the message. Use "broadcast" for all agents, or a specific topic like "research-results".`,
+            description: `Topic/channel for the message. Use "broadcast" for all agents, or a specific topic like "research-results".`
           },
           content: {
             type: "string",
-            description: "The message content. Be concise and specific.",
+            description: "The message content. Be concise and specific."
           },
           protocol: {
             type: "string",
             enum: [...Object.values(BusProtocol)],
-            description: PROTOCOL_PARAM_DESCRIPTION,
+            description: PROTOCOL_PARAM_DESCRIPTION
           },
           reply_to: {
             type: "string",
-            description: "Required when protocol='answer': the message id this is answering. Returned by check_messages / wait_for_response.",
-          },
+            description:
+              "Required when protocol='answer': the message id this is answering. Returned by check_messages / wait_for_response."
+          }
         },
-        required: ["topic", "content"],
+        required: ["topic", "content"]
       },
       execute: async (args) => {
         const topic = String(args["topic"])
@@ -239,9 +243,16 @@ export function createBusTools(
         if (protocol === BusProtocol.Answer && !replyTo) {
           return `Error: protocol="answer" requires reply_to (the message id being answered).`
         }
-        const msg = bus.publish({ topic, fromRunId: runId, fromAgent: agentName, content, protocol, replyTo })
+        const msg = bus.publish({
+          topic,
+          fromRunId: runId,
+          fromAgent: agentName,
+          content,
+          protocol,
+          replyTo
+        })
         return `Message ${msg.id} sent to topic "${topic}" with protocol "${protocol}".`
-      },
+      }
     },
     {
       name: "check_messages",
@@ -255,24 +266,22 @@ export function createBusTools(
         properties: {
           topic: {
             type: "string",
-            description: "Optional: filter messages by topic. Omit to see all new messages.",
+            description: "Optional: filter messages by topic. Omit to see all new messages."
           },
           protocol: {
             type: "string",
             enum: [...Object.values(BusProtocol)],
-            description: "Optional: filter messages by protocol (e.g. only see questions).",
-          },
+            description: "Optional: filter messages by protocol (e.g. only see questions)."
+          }
         },
-        required: [],
+        required: []
       },
       execute: async (args) => {
         const topic = args["topic"] ? String(args["topic"]) : undefined
-        const protocolFilter = typeof args["protocol"] === "string"
-          ? parseProtocol(args["protocol"], BusProtocol.Broadcast)
-          : null
-        const matching = inbox.filter((m) =>
-          (!topic || m.topic === topic) &&
-          (!protocolFilter || m.protocol === protocolFilter),
+        const protocolFilter =
+          typeof args["protocol"] === "string" ? parseProtocol(args["protocol"], BusProtocol.Broadcast) : null
+        const matching = inbox.filter(
+          (m) => (!topic || m.topic === topic) && (!protocolFilter || m.protocol === protocolFilter)
         )
         // Drain only the messages we actually returned
         for (const m of matching) {
@@ -285,7 +294,7 @@ export function createBusTools(
         return matching
           .map((m) => `[${m.fromAgent}] (${m.topic}, ${m.protocol}, id=${m.id}): ${m.content}`)
           .join("\n")
-      },
+      }
     },
     {
       name: "wait_for_response",
@@ -299,14 +308,15 @@ export function createBusTools(
         properties: {
           message_id: {
             type: "string",
-            description: "The id of your Question message (returned by send_message).",
+            description: "The id of your Question message (returned by send_message)."
           },
           timeout_ms: {
             type: "number",
-            description: "How long to wait, in milliseconds. Defaults to 60000 (60s). Capped at 600000 (10 min).",
-          },
+            description:
+              "How long to wait, in milliseconds. Defaults to 60000 (60s). Capped at 600000 (10 min)."
+          }
         },
-        required: ["message_id"],
+        required: ["message_id"]
       },
       execute: async (args) => {
         const messageId = String(args["message_id"] ?? "")
@@ -338,10 +348,10 @@ export function createBusTools(
           })
           const timer = setTimeout(
             () => finish(`Timeout: no answer to ${messageId} within ${timeoutMs}ms.`),
-            timeoutMs,
+            timeoutMs
           )
         })
-      },
-    },
+      }
+    }
   ]
 }

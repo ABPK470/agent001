@@ -24,8 +24,10 @@ export async function dismissCookieConsent(page: import("playwright").Page): Pro
         if (text && patterns.some(p => p.test(text))) { btn.click(); return; }
       }
     })()`)
-    await new Promise(r => setTimeout(r, 1000))
-  } catch { /* ignore */ }
+    await new Promise((r) => setTimeout(r, 1000))
+  } catch {
+    /* ignore */
+  }
 }
 
 /** Extract readable text from current page. */

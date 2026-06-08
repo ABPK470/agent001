@@ -6,19 +6,9 @@ export { PipelineBlockCode, PipelineStatus }
 import type { ToolCallRecord } from "../../../../tools/index.js"
 import type { DelegationOutputValidationCode } from "../../../shell/delegation.js"
 
-export type PipelineStepStatus =
-  | "pending"
-  | "running"
-  | "completed"
-  | "failed"
-  | "skipped"
+export type PipelineStepStatus = "pending" | "running" | "completed" | "failed" | "skipped"
 
-export type PipelineStepExecutionState =
-  | "pending"
-  | "running"
-  | "executed"
-  | "failed"
-  | "skipped"
+export type PipelineStepExecutionState = "pending" | "running" | "executed" | "failed" | "skipped"
 
 export type StepAcceptanceState =
   | "pending"
@@ -114,8 +104,19 @@ export interface PipelineResult {
 // ============================================================================
 
 export type {
-    CircuitBreakerState, LegacyRetryPlan,
-    PlannerRepairCompatibilityMode, RepairPlan, RepairPlanCompatibilityReport, RepairTask, VerificationEvidence, VerifierDecision, VerifierIssue, VerifierIssueSeverity, VerifierOutcome, VerifierOwnershipMode,
-    VerifierRepairClass, VerifierStepAssessment, VerifierSystemCheck
+  CircuitBreakerState,
+  LegacyRetryPlan,
+  PlannerRepairCompatibilityMode,
+  RepairPlan,
+  RepairPlanCompatibilityReport,
+  RepairTask,
+  VerificationEvidence,
+  VerifierDecision,
+  VerifierIssue,
+  VerifierIssueSeverity,
+  VerifierOutcome,
+  VerifierOwnershipMode,
+  VerifierRepairClass,
+  VerifierStepAssessment,
+  VerifierSystemCheck
 } from "./types-verifier.js"
-

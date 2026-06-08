@@ -35,19 +35,23 @@ afterEach(() => {
 describe("attachment audit events", () => {
   it("emits attachment.uploaded on upload and attachment.pruned on retention prune", async () => {
     const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { uploadAttachment, pruneExpiredAttachments } = await import("../src/adapters/persistence/attachments/index.js")
+    const { uploadAttachment, pruneExpiredAttachments } =
+      await import("../src/adapters/persistence/attachments/index.js")
     const { subscribeToEvents } = await import("../src/event-broadcaster.js")
     _setDb(testDb)
     _migrate(testDb)
-    seedTestUsers(testDb);
+    seedTestUsers(testDb)
 
     const events: { type: string; data: unknown }[] = []
     const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data }))
 
     try {
       const a = await uploadAttachment({
-        scope: "session", ownerUpn: "u@x", originalName: "x.txt",
-        mediaType: "text/plain", bytes: new TextEncoder().encode("hi"),
+        scope: "session",
+        ownerUpn: "u@x",
+        originalName: "x.txt",
+        mediaType: "text/plain",
+        bytes: new TextEncoder().encode("hi")
       })
 
       const uploaded = events.find((e) => e.type === "attachment.uploaded")

@@ -63,11 +63,7 @@ export function generateScorecard(trajectory: Trajectory): Scorecard {
   const eventsPerIteration = events.length / iterCount
 
   const thinkToActRatio =
-    toolCalls.length > 0
-      ? thinkingEvents.length / toolCalls.length
-      : thinkingEvents.length > 0
-        ? Infinity
-        : 0
+    toolCalls.length > 0 ? thinkingEvents.length / toolCalls.length : thinkingEvents.length > 0 ? Infinity : 0
 
   // Pattern detection
   const patterns: string[] = []
@@ -117,7 +113,7 @@ export function generateScorecard(trajectory: Trajectory): Scorecard {
     toolFrequency,
     eventsPerIteration,
     thinkToActRatio,
-    patterns,
+    patterns
   }
 }
 

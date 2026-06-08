@@ -25,46 +25,46 @@ import { resolveLocator } from "./browse-web/selectors.js"
 import { getKillSignal, getSession, persistSessionState } from "./browse-web/session.js"
 
 const BROWSER_AUTO_LOGIN_DESCRIPTION =
-    "Auto-fill and submit a login form on the active browse_web session using a stored credential. " +
-    "Resolves the credential via the per-tenant vault (cross-tenant access is refused). " +
-    "Use mode='password' for { username, password } credentials and mode='totp' to type a fresh TOTP code. " +
-    "Selector strings accept the same prefixes as browse_web ('css:', 'xpath:', 'text:', 'role:')."
+  "Auto-fill and submit a login form on the active browse_web session using a stored credential. " +
+  "Resolves the credential via the per-tenant vault (cross-tenant access is refused). " +
+  "Use mode='password' for { username, password } credentials and mode='totp' to type a fresh TOTP code. " +
+  "Selector strings accept the same prefixes as browse_web ('css:', 'xpath:', 'text:', 'role:')."
 
 const BROWSER_AUTO_LOGIN_PARAMETERS = {
-    type: "object",
-    properties: {
-      session_id: { type: "string", description: "Active browse_web session id." },
-      credential_id: { type: "string", description: "Credential id (must belong to the current user)." },
-      mode: {
-        type: "string",
-        enum: ["password", "totp"],
-        description:
-          "'password' fills username + password fields; 'totp' types the current 6-digit code into one field.",
-      },
-      username_selector: {
-        type: "string",
-        description: "Selector for the username/email field (mode='password' only).",
-      },
-      password_selector: {
-        type: "string",
-        description: "Selector for the password field (mode='password' only).",
-      },
-      code_selector: {
-        type: "string",
-        description: "Selector for the TOTP code field (mode='totp' only).",
-      },
-      submit_selector: {
-        type: "string",
-        description: "Optional selector to click after filling. If omitted, presses Enter.",
-      },
+  type: "object",
+  properties: {
+    session_id: { type: "string", description: "Active browse_web session id." },
+    credential_id: { type: "string", description: "Credential id (must belong to the current user)." },
+    mode: {
+      type: "string",
+      enum: ["password", "totp"],
+      description:
+        "'password' fills username + password fields; 'totp' types the current 6-digit code into one field."
     },
-    required: ["session_id", "credential_id", "mode"],
-  } as const
+    username_selector: {
+      type: "string",
+      description: "Selector for the username/email field (mode='password' only)."
+    },
+    password_selector: {
+      type: "string",
+      description: "Selector for the password field (mode='password' only)."
+    },
+    code_selector: {
+      type: "string",
+      description: "Selector for the TOTP code field (mode='totp' only)."
+    },
+    submit_selector: {
+      type: "string",
+      description: "Optional selector to click after filling. If omitted, presses Enter."
+    }
+  },
+  required: ["session_id", "credential_id", "mode"]
+} as const
 
 export const browserAutoLoginToolMetadata: ToolMetadata = {
   name: "browser_auto_login",
   description: BROWSER_AUTO_LOGIN_DESCRIPTION,
-  parameters: BROWSER_AUTO_LOGIN_PARAMETERS,
+  parameters: BROWSER_AUTO_LOGIN_PARAMETERS
 }
 
 export const browserAutoLoginTool = browserAutoLoginToolMetadata
@@ -146,6 +146,6 @@ export function createBrowserAutoLoginTool(host: AgentHost): ExecutableTool {
       } catch (err) {
         return `Error during auto-login: ${err instanceof Error ? err.message : String(err)}`
       }
-    },
+    }
   }
 }

@@ -8,11 +8,11 @@ import type sql from "mssql"
 import type { SyncEventHost } from "../../ports/index.js"
 import { hashExpr, qtable, runQueryWithRetry } from "./sql-helpers.js"
 import {
-    DETERMINISTIC_SESSION_PREFIX,
-    META_EXCLUDED_COLUMNS,
-    type HashColumn,
-    type PkHashRow,
-    type TableColumnInfo,
+  DETERMINISTIC_SESSION_PREFIX,
+  META_EXCLUDED_COLUMNS,
+  type HashColumn,
+  type PkHashRow,
+  type TableColumnInfo
 } from "./types.js"
 
 /**
@@ -25,10 +25,13 @@ export async function fetchTableColumns(
   host: SyncEventHost,
   pool: sql.ConnectionPool,
   qualifiedTable: string,
-  telemetryContext?: import("../../ports/events.js").SyncTelemetryContext,
+  telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<TableColumnInfo> {
   const [schema, name] = qualifiedTable.split(".")
-  const result = await runQueryWithRetry(host, pool, `
+  const result = await runQueryWithRetry(
+    host,
+    pool,
+    `
     SELECT
       c.name             AS columnName,
       c.is_computed      AS isComputed,
@@ -41,11 +44,23 @@ export async function fetchTableColumns(
       AND o.name = '${name!.replace(/'/g, "''")}'
       AND OBJECT_SCHEMA_NAME(c.object_id) = '${schema!.replace(/'/g, "''")}'
     ORDER BY c.column_id
-  `, `fetchTableColumns(${qualifiedTable})`, 2, telemetryContext)
+  `,
+    `fetchTableColumns(${qualifiedTable})`,
+    2,
+    telemetryContext
+  )
   const hashColumns: HashColumn[] = []
   let identityColumn: string | null = null
-  for (const row of result.recordset as Array<{ columnName: string; isComputed: boolean; isIdentity: boolean; systemType: string }>) {
-    if (row.isIdentity) { identityColumn = row.columnName; continue }
+  for (const row of result.recordset as Array<{
+    columnName: string
+    isComputed: boolean
+    isIdentity: boolean
+    systemType: string
+  }>) {
+    if (row.isIdentity) {
+      identityColumn = row.columnName
+      continue
+    }
     if (row.isComputed) continue
     if (META_EXCLUDED_COLUMNS.has(row.columnName)) continue
     hashColumns.push({ name: row.columnName, systemType: row.systemType })
@@ -70,7 +85,7 @@ export async function fetchPkHash(
   predicate: string,
   pkColumns: string[],
   colInfo: TableColumnInfo,
-  telemetryContext?: import("../../ports/events.js").SyncTelemetryContext,
+  telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<PkHashRow[]> {
   const pkSelect = pkColumns.map((c) => `[${c}]`).join(", ")
   const hashArgs = colInfo.hashColumns.map(hashExpr).join(", ")
@@ -82,7 +97,14 @@ export async function fetchPkHash(
     `SELECT ${pkSelect}, ` +
     `HASHBYTES('SHA2_256', ISNULL(CONCAT_WS('|', ${hashArgs}), '')) AS rowHash ` +
     `FROM ${qtable(qualifiedTable)} WHERE ${predicate}`
-  const result = await runQueryWithRetry(host, pool, query, `fetchPkHash(${qualifiedTable})`, 2, telemetryContext)
+  const result = await runQueryWithRetry(
+    host,
+    pool,
+    query,
+    `fetchPkHash(${qualifiedTable})`,
+    2,
+    telemetryContext
+  )
   return (result.recordset as Record<string, unknown>[]).map((row) => {
     const pkValues: Record<string, unknown> = {}
     for (const c of pkColumns) pkValues[c] = row[c]

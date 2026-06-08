@@ -23,17 +23,25 @@ function teamsConfig(): ChannelConfig {
     accessToken: "",
     verifyToken: "",
     appSecret: "test-app-password",
-    platformId: "test-app-id-1234",
+    platformId: "test-app-id-1234"
   }
 }
 
 /** In-memory queue store for testing (no SQLite). */
 function memoryQueueStore(): QueueStore {
   const messages = new Map<string, OutboundMessage>()
-  const attempts: { messageId: string; attempt: number; status: string; error: string | null; durationMs: number }[] = []
+  const attempts: {
+    messageId: string
+    attempt: number
+    status: string
+    error: string | null
+    durationMs: number
+  }[] = []
 
   return {
-    save(msg) { messages.set(msg.id, { ...msg }) },
+    save(msg) {
+      messages.set(msg.id, { ...msg })
+    },
     updateStatus(id, status, error, nextRetryAt, deliveredAt) {
       const msg = messages.get(id)
       if (msg) {
@@ -45,12 +53,12 @@ function memoryQueueStore(): QueueStore {
     },
     loadPending() {
       return [...messages.values()].filter(
-        (m) => m.status === "queued" || m.status === "sending" || m.status === "retrying",
+        (m) => m.status === "queued" || m.status === "sending" || m.status === "retrying"
       )
     },
     saveAttempt(messageId, attempt, status, error, durationMs) {
       attempts.push({ messageId, attempt, status, error, durationMs })
-    },
+    }
   }
 }
 
@@ -65,19 +73,25 @@ function memoryConversationStore(): ConversationStore {
       }
       return undefined
     },
-    save(conv) { conversations.set(conv.id, { ...conv }) },
+    save(conv) {
+      conversations.set(conv.id, { ...conv })
+    },
     updateActiveRun(id, runId) {
       const conv = conversations.get(id)
       if (conv) conv.activeRunId = runId
     },
-    get(id) { return conversations.get(id) },
+    get(id) {
+      return conversations.get(id)
+    },
     getByRunId(runId) {
       for (const c of conversations.values()) {
         if (c.activeRunId === runId) return c
       }
       return undefined
     },
-    list() { return [...conversations.values()] },
+    list() {
+      return [...conversations.values()]
+    }
   }
 }
 
@@ -91,8 +105,12 @@ function mockTeamsChannel(): Channel & { sent: { to: string; text: string }[] } 
       sent.push({ to: recipientId, text })
       return `msg-${sent.length}`
     },
-    validateSignature() { return Promise.resolve(true) },
-    parseWebhook() { return [] },
+    validateSignature() {
+      return Promise.resolve(true)
+    },
+    parseWebhook() {
+      return []
+    }
   }
 }
 
@@ -135,7 +153,8 @@ describe("retry", () => {
     })
 
     it("retries on retryable errors", async () => {
-      const fn = vi.fn()
+      const fn = vi
+        .fn()
         .mockRejectedValueOnce(new ChannelApiError("rate limited", 429))
         .mockResolvedValue("ok")
 
@@ -143,7 +162,7 @@ describe("retry", () => {
         ...DEFAULT_RETRY_POLICY,
         maxRetries: 3,
         baseDelayMs: 1,
-        maxDelayMs: 2,
+        maxDelayMs: 2
       })
 
       expect(result.success).toBe(true)
@@ -166,7 +185,7 @@ describe("retry", () => {
         baseDelayMs: 1,
         maxDelayMs: 2,
         backoffMultiplier: 2,
-        jitterFactor: 0,
+        jitterFactor: 0
       })
       expect(result.success).toBe(false)
       expect(result.attempts).toBe(3) // initial + 2 retries
@@ -216,7 +235,7 @@ describe("TeamsChannel", () => {
       conversation: { id: "conv-456" },
       recipient: { id: "test-app-id-1234" },
       text: "  Hello agent!  ",
-      channelId: "msteams",
+      channelId: "msteams"
     }
 
     const messages = channel.parseWebhook(body)
@@ -268,7 +287,7 @@ describe("MessageQueue", () => {
   beforeEach(() => {
     // Mock broadcast to prevent errors in isolated test env.
     vi.mock("../src/event-broadcaster.js", () => ({
-      broadcast: vi.fn(),
+      broadcast: vi.fn()
     }))
 
     store = memoryQueueStore()
@@ -311,7 +330,7 @@ describe("MessageRouter", () => {
 
   beforeEach(() => {
     vi.mock("../src/event-broadcaster.js", () => ({
-      broadcast: vi.fn(),
+      broadcast: vi.fn()
     }))
 
     store = memoryQueueStore()
@@ -327,7 +346,7 @@ describe("MessageRouter", () => {
     const conversationRef = JSON.stringify({
       serviceUrl: "https://smba.trafficmanager.net/emea/",
       conversationId: "conv-abc",
-      userId: "user-123",
+      userId: "user-123"
     })
     const result = router.handleInbound({
       platformMessageId: "activity-abc",
@@ -336,7 +355,7 @@ describe("MessageRouter", () => {
       senderName: "Alice",
       text: "What's the weather?",
       raw: {},
-      receivedAt: new Date(),
+      receivedAt: new Date()
     })
 
     expect(result.runId).toBe("run-001")
@@ -348,7 +367,7 @@ describe("MessageRouter", () => {
       displayName: "Alice",
       isAdmin: false,
       ip: "teams:inbound",
-      userAgent: "teams:channel",
+      userAgent: "teams:channel"
     })
     expect(session?.sid).toMatch(/^channel:teams:[0-9a-f]{24}$/)
     expect(session?.upn).toBe(session?.sid)
@@ -362,14 +381,18 @@ describe("MessageRouter", () => {
   })
 
   it("reuses existing conversation for same sender", () => {
-    const senderId = JSON.stringify({ serviceUrl: "https://smba.example.com/", conversationId: "c1", userId: "u1" })
+    const senderId = JSON.stringify({
+      serviceUrl: "https://smba.example.com/",
+      conversationId: "c1",
+      userId: "u1"
+    })
     const msg = {
       platformMessageId: "activity-abc",
       channelType: "teams" as const,
       senderId,
       text: "first",
       raw: {},
-      receivedAt: new Date(),
+      receivedAt: new Date()
     }
 
     const result1 = router.handleInbound(msg)
@@ -381,7 +404,11 @@ describe("MessageRouter", () => {
   })
 
   it("stamps the same synthetic continuity identity for repeated inbound messages from one sender", () => {
-    const senderId = JSON.stringify({ serviceUrl: "https://smba.example.com/", conversationId: "c1", userId: "u1" })
+    const senderId = JSON.stringify({
+      serviceUrl: "https://smba.example.com/",
+      conversationId: "c1",
+      userId: "u1"
+    })
     router.handleInbound({
       platformMessageId: "activity-1",
       channelType: "teams",
@@ -389,7 +416,7 @@ describe("MessageRouter", () => {
       senderName: "Alice",
       text: "first",
       raw: {},
-      receivedAt: new Date(),
+      receivedAt: new Date()
     })
     router.handleInbound({
       platformMessageId: "activity-2",
@@ -398,7 +425,7 @@ describe("MessageRouter", () => {
       senderName: "Alice",
       text: "second",
       raw: {},
-      receivedAt: new Date(),
+      receivedAt: new Date()
     })
 
     const firstSession = vi.mocked(trigger.startRun).mock.calls[0]?.[1]
@@ -416,7 +443,7 @@ describe("MessageRouter", () => {
     const conversationRef = JSON.stringify({
       serviceUrl: "https://smba.example.com/",
       conversationId: "conv-abc",
-      userId: "user-123",
+      userId: "user-123"
     })
 
     // Simulate inbound
@@ -426,7 +453,7 @@ describe("MessageRouter", () => {
       senderId: conversationRef,
       text: "Hello",
       raw: {},
-      receivedAt: new Date(),
+      receivedAt: new Date()
     })
 
     // Simulate run completion

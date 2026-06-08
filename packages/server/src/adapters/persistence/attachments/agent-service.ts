@@ -11,12 +11,12 @@ import { type AttachmentMetadata, type AttachmentService, type HostedPolicyConte
 import { mkdir, readFile, writeFile } from "node:fs/promises"
 import { basename, dirname, extname, isAbsolute, normalize, resolve, sep } from "node:path"
 import {
-    getAttachment,
-    listAttachments,
-    readAttachmentBlob,
-    recordAttachmentImport,
-    uploadAttachment,
-    type AttachmentRow,
+  getAttachment,
+  listAttachments,
+  readAttachmentBlob,
+  recordAttachmentImport,
+  uploadAttachment,
+  type AttachmentRow
 } from "./index.js"
 import { AttachmentImportMode, AttachmentScope, AttachmentSource } from "../../../enums/attachments.js"
 import { auditAttachmentImported, auditAttachmentPromoted } from "./audit.js"
@@ -26,7 +26,7 @@ const TEXT_MEDIA_TYPES = new Set([
   "application/json",
   "application/csv",
   "application/xml",
-  "application/x-yaml",
+  "application/x-yaml"
 ])
 
 function isTextMedia(mediaType: string): boolean {
@@ -41,7 +41,7 @@ function isTextMedia(mediaType: string): boolean {
  */
 const EXT_MIME: Readonly<Record<string, string>> = {
   ".txt": "text/plain",
-  ".md":  "text/markdown",
+  ".md": "text/markdown",
   ".csv": "text/csv",
   ".tsv": "text/tab-separated-values",
   ".json": "application/json",
@@ -57,7 +57,7 @@ const EXT_MIME: Readonly<Record<string, string>> = {
   ".jpeg": "image/jpeg",
   ".gif": "image/gif",
   ".svg": "image/svg+xml",
-  ".zip": "application/zip",
+  ".zip": "application/zip"
 }
 
 function guessMediaType(ext: string): string {
@@ -66,22 +66,24 @@ function guessMediaType(ext: string): string {
 
 function toMetadata(row: AttachmentRow): AttachmentMetadata {
   return {
-    id:             row.id,
-    scope:          row.scope,
-    originalName:   row.original_name,
+    id: row.id,
+    scope: row.scope,
+    originalName: row.original_name,
     normalizedName: row.normalized_name,
-    mediaType:      row.media_type,
-    sizeBytes:      row.size_bytes,
-    contentHash:    row.content_hash,
-    ingestionMode:  row.ingestion_mode,
-    uploadedAt:     row.uploaded_at,
-    purposeTag:     row.purpose_tag,
+    mediaType: row.media_type,
+    sizeBytes: row.size_bytes,
+    contentHash: row.content_hash,
+    ingestionMode: row.ingestion_mode,
+    uploadedAt: row.uploaded_at,
+    purposeTag: row.purpose_tag
   }
 }
 
 type AttachmentServiceContext = Pick<HostedPolicyContext, "runId" | "sandboxRoot" | "actorUpn" | "sessionId">
 
-function resolveContext(getContext: () => AttachmentServiceContext | null | undefined): AttachmentServiceContext {
+function resolveContext(
+  getContext: () => AttachmentServiceContext | null | undefined
+): AttachmentServiceContext {
   const ctx = getContext()
   if (!ctx) {
     throw new Error("Attachment service called outside an active run context.")
@@ -115,110 +117,122 @@ function resolveSandboxPath(sandboxRoot: string, relPath: string): string {
 }
 
 export function createServerAttachmentService(
-  getContext: () => AttachmentServiceContext | null | undefined,
+  getContext: () => AttachmentServiceContext | null | undefined
 ): AttachmentService {
   return {
-  async list(filter) {
-    const ctx = resolveContext(getContext)
-    const { runId } = ctx
-    // Visibility model: the agent should see anything the user could
-    // reasonably have attached to this run — items explicitly bound to
-    // the active runId, items in the active session, and items owned by
-    // the actor. Union the three; the optional q/scope filters apply to
-    // every branch so results stay consistent regardless of how a row
-    // was originally bound.
-    const baseFilter: { scope?: AttachmentRow["scope"]; q?: string } = {
-      ...(filter?.scope ? { scope: filter.scope } : {}),
-      ...(filter?.q     ? { q: filter.q }         : {}),
-    }
-    const explicitRunId = filter?.runId ?? runId
-    const branches: Parameters<typeof listAttachments>[0][] = [
-      { ...baseFilter, runId: explicitRunId },
-    ]
-    if (ctx?.sessionId) branches.push({ ...baseFilter, sessionId: ctx.sessionId })
-    if (ctx?.actorUpn)  branches.push({ ...baseFilter, ownerUpn:  ctx.actorUpn })
-    const seen = new Set<string>()
-    const merged: AttachmentRow[] = []
-    for (const b of branches) {
-      for (const r of listAttachments(b)) {
-        if (seen.has(r.id)) continue
-        seen.add(r.id)
-        merged.push(r)
+    async list(filter) {
+      const ctx = resolveContext(getContext)
+      const { runId } = ctx
+      // Visibility model: the agent should see anything the user could
+      // reasonably have attached to this run — items explicitly bound to
+      // the active runId, items in the active session, and items owned by
+      // the actor. Union the three; the optional q/scope filters apply to
+      // every branch so results stay consistent regardless of how a row
+      // was originally bound.
+      const baseFilter: { scope?: AttachmentRow["scope"]; q?: string } = {
+        ...(filter?.scope ? { scope: filter.scope } : {}),
+        ...(filter?.q ? { q: filter.q } : {})
       }
-    }
-    return merged.map(toMetadata)
-  },
+      const explicitRunId = filter?.runId ?? runId
+      const branches: Parameters<typeof listAttachments>[0][] = [{ ...baseFilter, runId: explicitRunId }]
+      if (ctx?.sessionId) branches.push({ ...baseFilter, sessionId: ctx.sessionId })
+      if (ctx?.actorUpn) branches.push({ ...baseFilter, ownerUpn: ctx.actorUpn })
+      const seen = new Set<string>()
+      const merged: AttachmentRow[] = []
+      for (const b of branches) {
+        for (const r of listAttachments(b)) {
+          if (seen.has(r.id)) continue
+          seen.add(r.id)
+          merged.push(r)
+        }
+      }
+      return merged.map(toMetadata)
+    },
 
-  async get(id) {
-    const row = getAttachment(id)
-    return row ? toMetadata(row) : null
-  },
+    async get(id) {
+      const row = getAttachment(id)
+      return row ? toMetadata(row) : null
+    },
 
-  async read(id, opts) {
-    const row = getAttachment(id)
-    if (!row) throw new Error(`attachment not found: ${id}`)
-    const bytes = await readAttachmentBlob(row.storage_uri)
-    const offset = Math.max(0, Math.min(opts?.offset ?? 0, bytes.byteLength))
-    const remaining = bytes.byteLength - offset
-    const limit = opts?.maxBytes && opts.maxBytes > 0 ? opts.maxBytes : remaining
-    const sliceLen = Math.min(remaining, limit)
-    const slice = bytes.subarray(offset, offset + sliceLen)
-    const nextOffset = offset + sliceLen < bytes.byteLength ? offset + sliceLen : null
-    const truncated = nextOffset !== null
-    if (isTextMedia(row.media_type)) {
-      return { kind: "text", text: slice.toString("utf8"), truncated, sizeBytes: row.size_bytes, offset, nextOffset }
-    }
-    return { kind: "binary", bytes: new Uint8Array(slice), truncated, sizeBytes: row.size_bytes, offset, nextOffset }
-  },
+    async read(id, opts) {
+      const row = getAttachment(id)
+      if (!row) throw new Error(`attachment not found: ${id}`)
+      const bytes = await readAttachmentBlob(row.storage_uri)
+      const offset = Math.max(0, Math.min(opts?.offset ?? 0, bytes.byteLength))
+      const remaining = bytes.byteLength - offset
+      const limit = opts?.maxBytes && opts.maxBytes > 0 ? opts.maxBytes : remaining
+      const sliceLen = Math.min(remaining, limit)
+      const slice = bytes.subarray(offset, offset + sliceLen)
+      const nextOffset = offset + sliceLen < bytes.byteLength ? offset + sliceLen : null
+      const truncated = nextOffset !== null
+      if (isTextMedia(row.media_type)) {
+        return {
+          kind: "text",
+          text: slice.toString("utf8"),
+          truncated,
+          sizeBytes: row.size_bytes,
+          offset,
+          nextOffset
+        }
+      }
+      return {
+        kind: "binary",
+        bytes: new Uint8Array(slice),
+        truncated,
+        sizeBytes: row.size_bytes,
+        offset,
+        nextOffset
+      }
+    },
 
-  async importToSandbox(id, sandboxRelPath) {
-    const { runId, sandboxRoot } = resolveContext(getContext)
-    if (!sandboxRoot) {
-      throw new Error("import_attachment requires an active sandbox; this run has none.")
-    }
-    const row = getAttachment(id)
-    if (!row) throw new Error(`attachment not found: ${id}`)
-    const dest = resolveSandboxPath(sandboxRoot, sandboxRelPath)
-    const bytes = await readAttachmentBlob(row.storage_uri)
-    await mkdir(dirname(dest), { recursive: true })
-    await writeFile(dest, bytes)
-    recordAttachmentImport({
-      attachmentId: id,
-      runId,
-      sandboxPath:  dest,
-      importMode:   AttachmentImportMode.Copy,
-    })
-    auditAttachmentImported(row, dest)
-    return { sandboxPath: dest, sizeBytes: bytes.byteLength }
-  },
+    async importToSandbox(id, sandboxRelPath) {
+      const { runId, sandboxRoot } = resolveContext(getContext)
+      if (!sandboxRoot) {
+        throw new Error("import_attachment requires an active sandbox; this run has none.")
+      }
+      const row = getAttachment(id)
+      if (!row) throw new Error(`attachment not found: ${id}`)
+      const dest = resolveSandboxPath(sandboxRoot, sandboxRelPath)
+      const bytes = await readAttachmentBlob(row.storage_uri)
+      await mkdir(dirname(dest), { recursive: true })
+      await writeFile(dest, bytes)
+      recordAttachmentImport({
+        attachmentId: id,
+        runId,
+        sandboxPath: dest,
+        importMode: AttachmentImportMode.Copy
+      })
+      auditAttachmentImported(row, dest)
+      return { sandboxPath: dest, sizeBytes: bytes.byteLength }
+    },
 
-  async promoteFromSandbox(sandboxRelPath, opts) {
-    const { runId, sandboxRoot, actorUpn, sessionId } = resolveContext(getContext)
-    if (!sandboxRoot) {
-      throw new Error("promote_attachment requires an active sandbox; this run has none.")
+    async promoteFromSandbox(sandboxRelPath, opts) {
+      const { runId, sandboxRoot, actorUpn, sessionId } = resolveContext(getContext)
+      if (!sandboxRoot) {
+        throw new Error("promote_attachment requires an active sandbox; this run has none.")
+      }
+      // Same containment rules as importToSandbox: agents must not exfiltrate
+      // arbitrary host files by promoting paths outside the sandbox.
+      const absPath = resolveSandboxPath(sandboxRoot, sandboxRelPath)
+      const bytes = await readFile(absPath)
+      const row = await uploadAttachment({
+        bytes,
+        originalName: basename(absPath),
+        mediaType: opts?.mediaType ?? guessMediaType(extname(absPath)),
+        // Bind to the run that produced it, but keep the bytes around as a
+        // workspace asset so the user can still access them after the run
+        // finishes.
+        scope: AttachmentScope.WorkspaceAsset,
+        runId,
+        sessionId,
+        ownerUpn: actorUpn ?? null,
+        source: AttachmentSource.Generated,
+        ...(opts?.purposeTag !== undefined ? { purposeTag: opts.purposeTag } : {})
+      })
+      auditAttachmentPromoted(row)
+      return toMetadata(row)
     }
-    // Same containment rules as importToSandbox: agents must not exfiltrate
-    // arbitrary host files by promoting paths outside the sandbox.
-    const absPath = resolveSandboxPath(sandboxRoot, sandboxRelPath)
-    const bytes = await readFile(absPath)
-    const row = await uploadAttachment({
-      bytes,
-      originalName: basename(absPath),
-      mediaType:    opts?.mediaType ?? guessMediaType(extname(absPath)),
-      // Bind to the run that produced it, but keep the bytes around as a
-      // workspace asset so the user can still access them after the run
-      // finishes.
-      scope:        AttachmentScope.WorkspaceAsset,
-      runId,
-      sessionId,
-      ownerUpn: actorUpn ?? null,
-      source:       AttachmentSource.Generated,
-      ...(opts?.purposeTag !== undefined ? { purposeTag: opts.purposeTag } : {}),
-    })
-    auditAttachmentPromoted(row)
-    return toMetadata(row)
-  },
-}
+  }
 }
 
 export const serverAttachmentService: AttachmentService = createServerAttachmentService(() => null)

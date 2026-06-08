@@ -34,9 +34,7 @@ export function resolveLocator(target: LocatorTarget, selector: string): import(
     if (m) {
       const role = m[1]! as Parameters<LocatorTarget["getByRole"]>[0]
       const name = m[2]
-      return name === undefined
-        ? target.getByRole(role)
-        : target.getByRole(role, { name })
+      return name === undefined ? target.getByRole(role) : target.getByRole(role, { name })
     }
     // Fall through to CSS if the role expression is malformed.
   }

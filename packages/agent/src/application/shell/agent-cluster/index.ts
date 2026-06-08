@@ -89,7 +89,7 @@ export class Agent {
       toolKillManager: config.toolKillManager,
       completionValidator: config.completionValidator,
       enableAnswerStabilityGuard: config.enableAnswerStabilityGuard ?? true,
-      deferRecoveryHintsUntilCompletionAttempt: config.deferRecoveryHintsUntilCompletionAttempt,
+      deferRecoveryHintsUntilCompletionAttempt: config.deferRecoveryHintsUntilCompletionAttempt
     }
   }
 
@@ -105,16 +105,13 @@ export class Agent {
   }
 
   /** Run the agent with a goal. Returns the final answer. */
-  run(
-    goal: string,
-    resume?: { messages: Message[], iteration: number },
-  ): Promise<string> {
+  run(goal: string, resume?: { messages: Message[]; iteration: number }): Promise<string> {
     return this.runInternal(goal, resume)
   }
 
   private async runInternal(
     goal: string,
-    resume?: { messages: Message[], iteration: number },
+    resume?: { messages: Message[]; iteration: number }
   ): Promise<string> {
     if (this.config.verbose) log.logGoal(goal)
 
@@ -125,30 +122,41 @@ export class Agent {
       workspaceRoot: this.config.workspaceRoot,
       history: messages,
       signal: this.config.signal,
-      onTrace: this.config.onPlannerTrace,
+      onTrace: this.config.onPlannerTrace
     })
 
     const state = createAgentLoopState(this.config.maxIterations)
 
     const verifyCoherent = (force = false): Promise<VerifierDecision | null> =>
-      runCoherentVerification({
-        llm: this.llm, toolList: this.toolList, state,
-        allToolCalls: this.allToolCalls,
-        signal: this.config.signal,
-        onPlannerTrace: this.config.onPlannerTrace,
-      }, force)
+      runCoherentVerification(
+        {
+          llm: this.llm,
+          toolList: this.toolList,
+          state,
+          allToolCalls: this.allToolCalls,
+          signal: this.config.signal,
+          onPlannerTrace: this.config.onPlannerTrace
+        },
+        force
+      )
 
     // ── Planner-first routing ──
     if (!resume) {
       const plannerResult = await attemptPlannerRouting({
-        goal, messages, state,
-        llm: this.llm, toolList: this.toolList, tools: this.tools,
+        goal,
+        messages,
+        state,
+        llm: this.llm,
+        toolList: this.toolList,
+        tools: this.tools,
         config: this.config,
         usage: this.usage,
         allToolCalls: this.allToolCalls,
-        incrementLlmCalls: () => { this.llmCalls++ },
+        incrementLlmCalls: () => {
+          this.llmCalls++
+        },
         createPlannerContext,
-        runCoherentVerification: verifyCoherent,
+        runCoherentVerification: verifyCoherent
       })
       if (plannerResult.finalAnswer) {
         if (this.config.verbose) log.logFinalAnswer(plannerResult.finalAnswer)
@@ -169,20 +177,28 @@ export class Agent {
           `Prioritize COMPLETING your current work over perfecting it. ` +
           `Finish writing any pending files, run a quick verification, and wrap up. ` +
           `Do NOT start new refactors or rewrites — finalize what you have.`
-        messages.push({ role: MessageRole.System, content: budgetMsg, section: "history", hint: true })
+        messages.push({
+          role: MessageRole.System,
+          content: budgetMsg,
+          section: "history",
+          hint: true
+        })
         this.config.onNudge?.({ tag: "budget-warning", message: budgetMsg, iteration: i })
       }
 
       if (this.config.verbose) log.logIteration(i, this.config.maxIterations)
 
       const { contractMessages, chatToolsForLLM } = prepareIterationContext({
-        messages, iteration: i, state, toolList: this.toolList,
+        messages,
+        iteration: i,
+        state,
+        toolList: this.toolList,
         modelHint: this.llm.modelHint,
         config: {
           verbose: this.config.verbose,
           onNudge: this.config.onNudge,
-          onPlannerTrace: this.config.onPlannerTrace,
-        },
+          onPlannerTrace: this.config.onPlannerTrace
+        }
       })
 
       // ── LLM call ──
@@ -192,11 +208,19 @@ export class Agent {
       // This gives genuine real-time streaming without fake setTimeout replays.
       const iterOnToken: ((t: string) => void) | undefined = this.config.onToken
 
-      this.config.onLlmCall?.({ phase: LLMCallPhase.Request, messages: contractMessages, tools: chatToolsForLLM, iteration: i })
+      this.config.onLlmCall?.({
+        phase: LLMCallPhase.Request,
+        messages: contractMessages,
+        tools: chatToolsForLLM,
+        iteration: i
+      })
       const t0 = Date.now()
       let response
       try {
-        response = await this.llm.chat(contractMessages, chatToolsForLLM, { signal: this.config.signal, onToken: iterOnToken })
+        response = await this.llm.chat(contractMessages, chatToolsForLLM, {
+          signal: this.config.signal,
+          onToken: iterOnToken
+        })
       } catch (err) {
         // If streaming was in progress when the error occurred, discard the partial buffer
         this.config.onStreamDiscard?.()
@@ -205,7 +229,12 @@ export class Agent {
             "⚠ OUTPUT TRUNCATED: Your last response was cut off because it exceeded the completion token limit. " +
             "You MUST break your work into smaller pieces. When writing files, split them into multiple smaller write_file calls. " +
             "Do NOT put an entire large file in a single write_file call."
-          messages.push({ role: MessageRole.System, content: truncMsg, section: "history", hint: true })
+          messages.push({
+            role: MessageRole.System,
+            content: truncMsg,
+            section: "history",
+            hint: true
+          })
           this.config.onNudge?.({ tag: "output-truncated", message: truncMsg, iteration: i })
           continue
         }
@@ -229,12 +258,15 @@ export class Agent {
         state.completionAttempted = true
 
         const guardResult = await runCompletionGuards({
-          response, messages, iteration: i, state,
+          response,
+          messages,
+          iteration: i,
+          state,
           toolList: this.toolList,
           config: this.config,
           runCoherentVerification: verifyCoherent,
           createPlannerContext,
-          onPlannerTrace: this.config.onPlannerTrace,
+          onPlannerTrace: this.config.onPlannerTrace
         })
 
         if (guardResult) {
@@ -246,9 +278,22 @@ export class Agent {
           // buffered tokens so a partial/incorrect answer never shows in chat.
           this.config.onStreamDiscard?.()
           // Guard fired — inject messages and continue
-          messages.push({ role: MessageRole.Assistant, content: response.content, section: "history" })
-          messages.push({ role: MessageRole.System, content: guardResult.message, section: "history", hint: true })
-          this.config.onNudge?.({ tag: guardResult.tag, message: guardResult.message, iteration: i })
+          messages.push({
+            role: MessageRole.Assistant,
+            content: response.content,
+            section: "history"
+          })
+          messages.push({
+            role: MessageRole.System,
+            content: guardResult.message,
+            section: "history",
+            hint: true
+          })
+          this.config.onNudge?.({
+            tag: guardResult.tag,
+            message: guardResult.message,
+            iteration: i
+          })
           continue
         }
 
@@ -261,10 +306,14 @@ export class Agent {
 
       // ── Execute tool calls ──
       const branchResult = await executeToolCallsBranch({
-        response, messages, iteration: i, state,
-        tools: this.tools, toolList: this.toolList,
+        response,
+        messages,
+        iteration: i,
+        state,
+        tools: this.tools,
+        toolList: this.toolList,
         config: this.config,
-        allToolCalls: this.allToolCalls,
+        allToolCalls: this.allToolCalls
       })
       if (branchResult.finalAnswer !== undefined) {
         return branchResult.finalAnswer
@@ -282,17 +331,29 @@ export class Agent {
       `You have used all ${this.config.maxIterations} iterations. STOP calling tools. ` +
       `Write your final answer now using only the information already gathered. ` +
       `If the task is incomplete, clearly state what you found and what remains unknown.`
-    messages.push({ role: MessageRole.System, content: maxIterSynthesisInstruction, section: "history", hint: true })
+    messages.push({
+      role: MessageRole.System,
+      content: maxIterSynthesisInstruction,
+      section: "history",
+      hint: true
+    })
     const maxIterAnswer = await this.synthesizeFinalAnswer(messages)
     if (this.config.verbose) log.logFinalAnswer(maxIterAnswer)
     return maxIterAnswer
   }
 
   private synthesizeFinalAnswer(messages: Message[]): Promise<string> {
-    return synthesizeFinalAnswer({
-      llm: this.llm, signal: this.config.signal, usage: this.usage,
-      incrementLlmCalls: () => { this.llmCalls++ },
-    }, messages)
+    return synthesizeFinalAnswer(
+      {
+        llm: this.llm,
+        signal: this.config.signal,
+        usage: this.usage,
+        incrementLlmCalls: () => {
+          this.llmCalls++
+        }
+      },
+      messages
+    )
   }
 
   private buildInitialMessages(goal: string): Message[] {

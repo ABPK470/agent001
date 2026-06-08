@@ -40,13 +40,12 @@ export function orderEntityTablesDetailed(def: Pick<EntityDefinition, "rootTable
     indegree.set(child, (indegree.get(child) ?? 0) + 1)
   }
 
-  const compare = (leftKey: string, rightKey: string) => compareNodes(
-    nodeByKey.get(leftKey)!,
-    nodeByKey.get(rightKey)!,
-    def.rootTable,
-  )
+  const compare = (leftKey: string, rightKey: string) =>
+    compareNodes(nodeByKey.get(leftKey)!, nodeByKey.get(rightKey)!, def.rootTable)
 
-  const ready = [...nodes.filter((node) => (indegree.get(node.key) ?? 0) === 0).map((node) => node.key)].sort(compare)
+  const ready = [...nodes.filter((node) => (indegree.get(node.key) ?? 0) === 0).map((node) => node.key)].sort(
+    compare
+  )
   const orderedKeys: string[] = []
 
   while (ready.length > 0) {
@@ -75,22 +74,28 @@ export function orderEntityTablesDetailed(def: Pick<EntityDefinition, "rootTable
   return {
     tables: orderedKeys.map((key) => nodeByKey.get(key)!.table),
     cycleDetected,
-    edges,
+    edges
   }
 }
 
-export function listEntityTableOrderEdges(def: Pick<EntityDefinition, "rootTable" | "tables">): EntityTableOrderEdge[] {
+export function listEntityTableOrderEdges(
+  def: Pick<EntityDefinition, "rootTable" | "tables">
+): EntityTableOrderEdge[] {
   const lowerNames = new Set(def.tables.map((table) => table.name.toLowerCase()))
   const edges: EntityTableOrderEdge[] = []
 
   for (const table of def.tables) {
     if (table.scope.kind === "fkPath") {
       const parent = table.scope.through[0]?.table
-      if (typeof parent === "string" && lowerNames.has(parent.toLowerCase()) && parent.toLowerCase() !== table.name.toLowerCase()) {
+      if (
+        typeof parent === "string" &&
+        lowerNames.has(parent.toLowerCase()) &&
+        parent.toLowerCase() !== table.name.toLowerCase()
+      ) {
         edges.push({
           parent,
           child: table.name,
-          reason: `fkPath scope starts from ${parent}`,
+          reason: `fkPath scope starts from ${parent}`
         })
       }
     }
@@ -99,10 +104,16 @@ export function listEntityTableOrderEdges(def: Pick<EntityDefinition, "rootTable
   return dedupeEdges(edges)
 }
 
-export function findEntityTableOrderViolations(def: Pick<EntityDefinition, "rootTable" | "tables">): EntityTableOrderViolation[] {
+export function findEntityTableOrderViolations(
+  def: Pick<EntityDefinition, "rootTable" | "tables">
+): EntityTableOrderViolation[] {
   const ordered = def.tables
     .map((table, idx) => ({ table, idx }))
-    .sort((left, right) => Number(left.table.executionOrder ?? 0) - Number(right.table.executionOrder ?? 0) || left.idx - right.idx)
+    .sort(
+      (left, right) =>
+        Number(left.table.executionOrder ?? 0) - Number(right.table.executionOrder ?? 0) ||
+        left.idx - right.idx
+    )
   const positions = new Map(ordered.map((entry, index) => [entry.table.name.toLowerCase(), index]))
   const violations: EntityTableOrderViolation[] = []
 
@@ -133,8 +144,9 @@ function dedupeEdges(edges: EntityTableOrderEdge[]): EntityTableOrderEdge[] {
 function compareNodes(
   left: { table: EntityTable; idx: number },
   right: { table: EntityTable; idx: number },
-  _rootTable: string,
+  _rootTable: string
 ): number {
-  return Number(left.table.executionOrder ?? 0) - Number(right.table.executionOrder ?? 0)
-    || left.idx - right.idx
+  return (
+    Number(left.table.executionOrder ?? 0) - Number(right.table.executionOrder ?? 0) || left.idx - right.idx
+  )
 }

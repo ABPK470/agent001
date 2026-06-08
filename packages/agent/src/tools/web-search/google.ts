@@ -28,28 +28,30 @@ export const googleAdapter: SearchAdapter = {
 
     // The classic no-JS Google result block. Each hit is a div.g containing
     // an h3 inside an anchor.
-    const raw = await page.$$eval("div.g, div.tF2Cxc", (nodes: unknown[], max: number) => {
-      type El = { querySelector(sel: string): { textContent: string | null; href?: string } | null }
-      const out: { title: string; url: string; snippet: string }[] = []
-      for (const node of nodes) {
-        const n = node as El
-        if (out.length >= max) break
-        const a = n.querySelector("a")
-        const h3 = n.querySelector("h3")
-        const snippetEl =
-          n.querySelector(".VwiC3b") ??
-          n.querySelector("[data-sncf]") ??
-          n.querySelector("span")
-        if (!a || !h3) continue
-        out.push({
-          title: (h3.textContent ?? "").trim(),
-          url: a.href ?? "",
-          snippet: (snippetEl?.textContent ?? "").trim(),
-        })
-      }
-      return out
-    }, limit)
+    const raw = await page.$$eval(
+      "div.g, div.tF2Cxc",
+      (nodes: unknown[], max: number) => {
+        type El = { querySelector(sel: string): { textContent: string | null; href?: string } | null }
+        const out: { title: string; url: string; snippet: string }[] = []
+        for (const node of nodes) {
+          const n = node as El
+          if (out.length >= max) break
+          const a = n.querySelector("a")
+          const h3 = n.querySelector("h3")
+          const snippetEl =
+            n.querySelector(".VwiC3b") ?? n.querySelector("[data-sncf]") ?? n.querySelector("span")
+          if (!a || !h3) continue
+          out.push({
+            title: (h3.textContent ?? "").trim(),
+            url: a.href ?? "",
+            snippet: (snippetEl?.textContent ?? "").trim()
+          })
+        }
+        return out
+      },
+      limit
+    )
 
     return raw.map((r, i): SearchResult => ({ rank: i + 1, ...r }))
-  },
+  }
 }

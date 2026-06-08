@@ -20,9 +20,7 @@ async function safeFileHash(filePath: string): Promise<string | null> {
 }
 
 function markCompensated(effectId: string): void {
-  getDb()
-    .prepare("UPDATE effects SET status = 'compensated' WHERE id = ?")
-    .run(effectId)
+  getDb().prepare("UPDATE effects SET status = 'compensated' WHERE id = ?").run(effectId)
 }
 
 // ── Rollback / Compensation ──────────────────────────────────────
@@ -32,7 +30,11 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
   if (preview.wouldFail.length > 0) {
     broadcast({
       type: EventType.RollbackBlocked,
-      data: { runId, failCount: preview.wouldFail.length, targets: preview.wouldFail.map(f => f.target) },
+      data: {
+        runId,
+        failCount: preview.wouldFail.length,
+        targets: preview.wouldFail.map((f) => f.target)
+      }
     })
     return {
       total: preview.wouldCompensate.length + preview.wouldSkip.length + preview.wouldFail.length,
@@ -41,8 +43,8 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
       failed: preview.wouldFail.map((f) => ({
         effectId: f.effectId,
         target: f.target,
-        reason: f.reason,
-      })),
+        reason: f.reason
+      }))
     }
   }
 
@@ -53,7 +55,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
     total: effects.length,
     compensated: 0,
     skipped: 0,
-    failed: [],
+    failed: []
   }
 
   const compensatedTargets: string[] = []
@@ -80,12 +82,21 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
           markCompensated(effect.id)
           result.compensated++
           compensatedTargets.push(effect.target)
-          broadcast({ type: EventType.RollbackEffect, data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: RollbackActionType.Deleted } })
+          broadcast({
+            type: EventType.RollbackEffect,
+            data: {
+              runId,
+              effectId: effect.id,
+              kind: effect.kind,
+              target: effect.target,
+              action: RollbackActionType.Deleted
+            }
+          })
         } else if (currentHash === null) {
           result.skipped++
         }
       } else if (effect.kind === "modify") {
-        const snapshotContent = snapshot?.content as string | null ?? null
+        const snapshotContent = (snapshot?.content as string | null) ?? null
         if (snapshotContent !== null) {
           await writeFile(effect.target, snapshotContent, "utf-8")
           const fileMode = snapshot?.file_mode as number | null
@@ -93,12 +104,25 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
             await chmod(effect.target, fileMode & 0o7777)
           }
         } else {
-          try { await unlink(effect.target) } catch { /* already gone */ }
+          try {
+            await unlink(effect.target)
+          } catch {
+            /* already gone */
+          }
         }
         markCompensated(effect.id)
         result.compensated++
         compensatedTargets.push(effect.target)
-        broadcast({ type: EventType.RollbackEffect, data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: RollbackActionType.Restored } })
+        broadcast({
+          type: EventType.RollbackEffect,
+          data: {
+            runId,
+            effectId: effect.id,
+            kind: effect.kind,
+            target: effect.target,
+            action: RollbackActionType.Restored
+          }
+        })
       } else if (effect.kind === "delete") {
         if (snapshot) {
           const snapshotContent = snapshot.content as string | null
@@ -112,7 +136,16 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
             markCompensated(effect.id)
             result.compensated++
             compensatedTargets.push(effect.target)
-            broadcast({ type: EventType.RollbackEffect, data: { runId, effectId: effect.id, kind: effect.kind, target: effect.target, action: RollbackActionType.Recreated } })
+            broadcast({
+              type: EventType.RollbackEffect,
+              data: {
+                runId,
+                effectId: effect.id,
+                kind: effect.kind,
+                target: effect.target,
+                action: RollbackActionType.Recreated
+              }
+            })
           } else {
             result.skipped++
           }
@@ -124,7 +157,7 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
       result.failed.push({
         effectId: effect.id,
         target: effect.target,
-        reason: err instanceof Error ? err.message : String(err),
+        reason: err instanceof Error ? err.message : String(err)
       })
     }
   }
@@ -139,15 +172,15 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
       compensated: result.compensated,
       skipped: result.skipped,
       failedCount: result.failed.length,
-      targets: compensatedTargets,
-    },
+      targets: compensatedTargets
+    }
   })
 
   try {
     getDb()
       .prepare(
         `INSERT INTO audit_log (run_id, actor, action, detail, timestamp)
-         VALUES (?, 'operator', 'rollback.executed', ?, ?)`,
+         VALUES (?, 'operator', 'rollback.executed', ?, ?)`
       )
       .run(
         runId,
@@ -156,9 +189,9 @@ export async function rollbackRun(runId: string): Promise<RollbackResult> {
           compensated: result.compensated,
           skipped: result.skipped,
           failed: result.failed.length,
-          targets: compensatedTargets,
+          targets: compensatedTargets
         }),
-        new Date().toISOString(),
+        new Date().toISOString()
       )
   } catch {
     // Audit insert is best-effort — don't fail the rollback
@@ -172,7 +205,7 @@ export async function previewRollback(runId: string): Promise<RollbackPreview> {
   const preview: RollbackPreview = {
     wouldCompensate: [],
     wouldSkip: [],
-    wouldFail: [],
+    wouldFail: []
   }
 
   const fileEffects = effects
@@ -181,7 +214,11 @@ export async function previewRollback(runId: string): Promise<RollbackPreview> {
 
   for (const effect of fileEffects) {
     if (effect.status === "compensated") {
-      preview.wouldSkip.push({ effectId: effect.id, target: effect.target, reason: "Already compensated" })
+      preview.wouldSkip.push({
+        effectId: effect.id,
+        target: effect.target,
+        reason: "Already compensated"
+      })
       continue
     }
 
@@ -192,39 +229,82 @@ export async function previewRollback(runId: string): Promise<RollbackPreview> {
     if (effect.kind === "create") {
       const currentHash = await safeFileHash(effect.target)
       if (currentHash === effect.postHash) {
-        preview.wouldCompensate.push({ effectId: effect.id, target: effect.target, kind: effect.kind, hasSnapshot: false })
+        preview.wouldCompensate.push({
+          effectId: effect.id,
+          target: effect.target,
+          kind: effect.kind,
+          hasSnapshot: false
+        })
       } else if (currentHash === null) {
-        preview.wouldSkip.push({ effectId: effect.id, target: effect.target, reason: "File already deleted" })
+        preview.wouldSkip.push({
+          effectId: effect.id,
+          target: effect.target,
+          reason: "File already deleted"
+        })
       } else {
-        preview.wouldFail.push({ effectId: effect.id, target: effect.target, reason: "File was modified after creation by another source" })
+        preview.wouldFail.push({
+          effectId: effect.id,
+          target: effect.target,
+          reason: "File was modified after creation by another source"
+        })
       }
     } else if (effect.kind === "modify") {
       if (!snapshot) {
-        preview.wouldFail.push({ effectId: effect.id, target: effect.target, reason: "No snapshot available" })
+        preview.wouldFail.push({
+          effectId: effect.id,
+          target: effect.target,
+          reason: "No snapshot available"
+        })
         continue
       }
       const currentHash = await safeFileHash(effect.target)
       if (currentHash !== effect.postHash && currentHash !== null) {
-        preview.wouldFail.push({ effectId: effect.id, target: effect.target, reason: "File was modified by another source since this effect" })
+        preview.wouldFail.push({
+          effectId: effect.id,
+          target: effect.target,
+          reason: "File was modified by another source since this effect"
+        })
       } else {
-        preview.wouldCompensate.push({ effectId: effect.id, target: effect.target, kind: effect.kind, hasSnapshot: true })
+        preview.wouldCompensate.push({
+          effectId: effect.id,
+          target: effect.target,
+          kind: effect.kind,
+          hasSnapshot: true
+        })
       }
     } else if (effect.kind === "delete") {
       if (!snapshot || (snapshot.content as string | null) === null) {
-        preview.wouldSkip.push({ effectId: effect.id, target: effect.target, reason: "No pre-delete snapshot" })
+        preview.wouldSkip.push({
+          effectId: effect.id,
+          target: effect.target,
+          reason: "No pre-delete snapshot"
+        })
       } else {
         const currentHash = await safeFileHash(effect.target)
         if (currentHash !== null) {
-          preview.wouldFail.push({ effectId: effect.id, target: effect.target, reason: "File was recreated after deletion" })
+          preview.wouldFail.push({
+            effectId: effect.id,
+            target: effect.target,
+            reason: "File was recreated after deletion"
+          })
         } else {
-          preview.wouldCompensate.push({ effectId: effect.id, target: effect.target, kind: effect.kind, hasSnapshot: true })
+          preview.wouldCompensate.push({
+            effectId: effect.id,
+            target: effect.target,
+            kind: effect.kind,
+            hasSnapshot: true
+          })
         }
       }
     }
   }
 
   for (const e of effects.filter((e) => e.kind === "command" || e.kind === "network")) {
-    preview.wouldSkip.push({ effectId: e.id, target: e.target, reason: `${e.kind} effects cannot be rolled back` })
+    preview.wouldSkip.push({
+      effectId: e.id,
+      target: e.target,
+      reason: `${e.kind} effects cannot be rolled back`
+    })
   }
 
   return preview

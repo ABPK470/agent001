@@ -13,7 +13,10 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { loadKnownObjects, renderKnownObjectsBlock } from "../src/application/core/data-blocks/known-objects.js"
+import {
+  loadKnownObjects,
+  renderKnownObjectsBlock
+} from "../src/application/core/data-blocks/known-objects.js"
 import type { PriorTurn } from "../src/application/core/data-blocks/prior-turns.js"
 
 let testDb: Database.Database
@@ -40,7 +43,9 @@ afterEach(() => {
   else process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
 })
 
-function seed(rows: Array<{ qname: string; tool: string; mode: string; bytes: number; ageMs: number; payload?: string }>): void {
+function seed(
+  rows: Array<{ qname: string; tool: string; mode: string; bytes: number; ageMs: number; payload?: string }>
+): void {
   const stmt = testDb.prepare(`
     INSERT INTO tool_knowledge (tool, qname, mode, connection, payload_text, fingerprint, bytes, created_at, hit_count)
     VALUES (?, ?, ?, 'default', ?, '5|T|deadbeef', ?, ?, 0)
@@ -59,7 +64,11 @@ describe("loadKnownObjects — qname extraction", () => {
     // "top 50 clients"), Gap 3 surfaces the freshest cached entries so
     // the LLM still sees previously-touched objects.
     seed([{ qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 100, ageMs: 1000 }])
-    const out = loadKnownObjects({ db: testDb, goal: "what's the weather today?", priorTurns: emptyTurns })
+    const out = loadKnownObjects({
+      db: testDb,
+      goal: "what's the weather today?",
+      priorTurns: emptyTurns
+    })
     expect(out).toHaveLength(1)
     expect(out[0]!.qname).toBe("publish.balances")
   })
@@ -68,7 +77,7 @@ describe("loadKnownObjects — qname extraction", () => {
     const out = loadKnownObjects({
       db: testDb,
       goal: "profile publish.Balances please",
-      priorTurns: emptyTurns,
+      priorTurns: emptyTurns
     })
     expect(out).toEqual([])
   })
@@ -78,7 +87,7 @@ describe("loadKnownObjects — qname extraction", () => {
     const out = loadKnownObjects({
       db: testDb,
       goal: "Plot publish.Balances by month",
-      priorTurns: emptyTurns,
+      priorTurns: emptyTurns
     })
     expect(out).toHaveLength(1)
     expect(out[0]!.qname).toBe("publish.balances")
@@ -89,10 +98,22 @@ describe("loadKnownObjects — qname extraction", () => {
   it("extracts qnames from prior-turn goal AND answer text", () => {
     seed([
       { qname: "dim.date", tool: "profile_data", mode: "fast", bytes: 100, ageMs: 1000 },
-      { qname: "publish.balances", tool: "inspect_definition", mode: "definition", bytes: 200, ageMs: 1000 },
+      {
+        qname: "publish.balances",
+        tool: "inspect_definition",
+        mode: "definition",
+        bytes: 200,
+        ageMs: 1000
+      }
     ])
     const priorTurns: PriorTurn[] = [
-      { id: "r1", goal: "show me dim.Date counts", answer: "I queried publish.Balances and got 12 rows", status: "completed", ranAt: "2025-01-01" },
+      {
+        id: "r1",
+        goal: "show me dim.Date counts",
+        answer: "I queried publish.Balances and got 12 rows",
+        status: "completed",
+        ranAt: "2025-01-01"
+      }
     ]
     const out = loadKnownObjects({ db: testDb, goal: "follow up", priorTurns })
     const qnames = out.map((r) => r.qname).sort()
@@ -101,13 +122,25 @@ describe("loadKnownObjects — qname extraction", () => {
 
   it("dedupes by qname keeping the newest entry", () => {
     seed([
-      { qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 100, ageMs: 24 * 3_600_000 },
-      { qname: "publish.balances", tool: "profile_data", mode: "deep", bytes: 200, ageMs: 1 * 3_600_000 },
+      {
+        qname: "publish.balances",
+        tool: "profile_data",
+        mode: "fast",
+        bytes: 100,
+        ageMs: 24 * 3_600_000
+      },
+      {
+        qname: "publish.balances",
+        tool: "profile_data",
+        mode: "deep",
+        bytes: 200,
+        ageMs: 1 * 3_600_000
+      }
     ])
     const out = loadKnownObjects({
       db: testDb,
       goal: "Re-profile publish.Balances",
-      priorTurns: emptyTurns,
+      priorTurns: emptyTurns
     })
     expect(out).toHaveLength(1)
     expect(out[0]!.mode).toBe("deep")
@@ -123,9 +156,18 @@ describe("loadKnownObjects — qname extraction", () => {
       "Columns (3):",
       "  Id (int, NOT NULL)",
       "  Amount (decimal, nullable)",
-      "  Date (datetime, NOT NULL)",
+      "  Date (datetime, NOT NULL)"
     ].join("\n")
-    seed([{ qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 500, ageMs: 3_600_000, payload: profilePayload }])
+    seed([
+      {
+        qname: "publish.balances",
+        tool: "profile_data",
+        mode: "fast",
+        bytes: 500,
+        ageMs: 3_600_000,
+        payload: profilePayload
+      }
+    ])
     const out = loadKnownObjects({ db: testDb, goal: "show me publish.Balances", priorTurns: emptyTurns })
     expect(out).toHaveLength(1)
     expect(out[0]!.priority).toBe("goal")
@@ -135,7 +177,16 @@ describe("loadKnownObjects — qname extraction", () => {
 
   it("leaves summary='' and priority='fallback' for rows surfaced only via Gap-3 top-up", () => {
     // Goal mentions nothing schema.table-shaped — fallback path kicks in.
-    seed([{ qname: "publish.balances", tool: "profile_data", mode: "fast", bytes: 500, ageMs: 1000, payload: "Profile (FAST mode) for publish.balances:\n  Type: TABLE" }])
+    seed([
+      {
+        qname: "publish.balances",
+        tool: "profile_data",
+        mode: "fast",
+        bytes: 500,
+        ageMs: 1000,
+        payload: "Profile (FAST mode) for publish.balances:\n  Type: TABLE"
+      }
+    ])
     const out = loadKnownObjects({ db: testDb, goal: "what is happening today", priorTurns: emptyTurns })
     expect(out).toHaveLength(1)
     expect(out[0]!.priority).toBe("fallback")
@@ -150,8 +201,24 @@ describe("renderKnownObjectsBlock", () => {
 
   it("renders fallback rows as a compact qname | tool | mode | age | bytes table", () => {
     const block = renderKnownObjectsBlock([
-      { qname: "publish.balances", tool: "profile_data", mode: "fast", ageHours: 2, bytes: 1500, priority: "fallback", summary: "" },
-      { qname: "dim.date", tool: "inspect_definition", mode: "definition", ageHours: 24, bytes: 800, priority: "fallback", summary: "" },
+      {
+        qname: "publish.balances",
+        tool: "profile_data",
+        mode: "fast",
+        ageHours: 2,
+        bytes: 1500,
+        priority: "fallback",
+        summary: ""
+      },
+      {
+        qname: "dim.date",
+        tool: "inspect_definition",
+        mode: "definition",
+        ageHours: 24,
+        bytes: 800,
+        priority: "fallback",
+        summary: ""
+      }
     ])
     expect(block).toContain("<known_objects>")
     expect(block).toContain("</known_objects>")
@@ -169,8 +236,9 @@ describe("renderKnownObjectsBlock", () => {
         ageHours: 3,
         bytes: 1500,
         priority: "goal",
-        summary: "fast: rows=1,000, type=table, indexes=2; cols(4): Id(int), Date(datetime), Amount(decimal), Status(varchar)",
-      },
+        summary:
+          "fast: rows=1,000, type=table, indexes=2; cols(4): Id(int), Date(datetime), Amount(decimal), Status(varchar)"
+      }
     ])
     expect(block).toContain("publish.balances [profile_data/fast, 3h ago, 1500B]")
     expect(block).toContain("fast: rows=1,000")
@@ -188,7 +256,7 @@ describe("renderKnownObjectsBlock", () => {
       ageHours: i,
       bytes: 1000,
       priority: "fallback" as const,
-      summary: "",
+      summary: ""
     }))
     const block = renderKnownObjectsBlock(rows)
     expect(block.length).toBeLessThan(4100)
@@ -206,7 +274,8 @@ describe("renderKnownObjectsBlock", () => {
       ageHours: 1,
       bytes: 1200,
       priority: "goal" as const,
-      summary: "fast: rows=1,234,567, type=table, indexes=3; cols(14): Id(int), CustomerId(int), Amount(decimal), Date(datetime)",
+      summary:
+        "fast: rows=1,234,567, type=table, indexes=3; cols(14): Id(int), CustomerId(int), Amount(decimal), Date(datetime)"
     }
     const fallbacks = Array.from({ length: 200 }, (_, i) => ({
       qname: `noise.T${i}`,
@@ -215,12 +284,12 @@ describe("renderKnownObjectsBlock", () => {
       ageHours: i,
       bytes: 100,
       priority: "fallback" as const,
-      summary: "",
+      summary: ""
     }))
     const verdicts = Array.from({ length: 100 }, (_, i) => ({
       qname: `noise.V${i}`,
       role: "canonical" as const,
-      evidence: ["seeded"],
+      evidence: ["seeded"]
     }))
     const block = renderKnownObjectsBlock([goalRow, ...fallbacks], verdicts)
     expect(block).toContain("publish.revenue [profile_data/fast, 1h ago, 1200B]")

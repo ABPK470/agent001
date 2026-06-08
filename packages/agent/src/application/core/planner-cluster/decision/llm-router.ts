@@ -37,30 +37,33 @@ Key distinctions:
 export async function callLLMRouter(
   normalized: string,
   llm: LLMClient,
-  signal?: AbortSignal,
+  signal?: AbortSignal
 ): Promise<LLMRouterResult | null> {
   try {
     const response = await llm.chat(
       [
         { role: MessageRole.System, content: LLM_ROUTER_SYSTEM },
-        { role: MessageRole.User, content: `Task:\n${normalized.slice(0, 1200)}` },
+        { role: MessageRole.User, content: `Task:\n${normalized.slice(0, 1200)}` }
       ],
       [],
-      { signal },
+      { signal }
     )
     const raw = (response.content ?? "").trim()
-    const jsonText = raw.replace(/^```(?:json)?\s*/i, "").replace(/\s*```$/, "").trim()
+    const jsonText = raw
+      .replace(/^```(?:json)?\s*/i, "")
+      .replace(/\s*```$/, "")
+      .trim()
     const parsed = JSON.parse(jsonText) as Record<string, unknown>
     if (
-      typeof parsed.coherence_need === "string"
-      && typeof parsed.coordination_need === "string"
-      && ["low", "medium", "high"].includes(parsed.coherence_need)
-      && ["low", "medium", "high"].includes(parsed.coordination_need)
+      typeof parsed.coherence_need === "string" &&
+      typeof parsed.coordination_need === "string" &&
+      ["low", "medium", "high"].includes(parsed.coherence_need) &&
+      ["low", "medium", "high"].includes(parsed.coordination_need)
     ) {
       return {
         coherence_need: parsed.coherence_need as PlannerNeedLevel,
         coordination_need: parsed.coordination_need as PlannerNeedLevel,
-        reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : "",
+        reasoning: typeof parsed.reasoning === "string" ? parsed.reasoning : ""
       }
     }
     return null

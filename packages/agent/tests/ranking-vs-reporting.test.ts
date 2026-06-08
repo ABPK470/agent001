@@ -7,10 +7,7 @@
  */
 import { describe, expect, it } from "vitest"
 
-import {
-    detectRankingVsReportingMismatch,
-    getQueryWarnings,
-} from "../src/tools/mssql/validation.js"
+import { detectRankingVsReportingMismatch, getQueryWarnings } from "../src/tools/mssql/validation.js"
 
 describe("detectRankingVsReportingMismatch", () => {
   it("fires when a #temp + publish.Revenue are aggregated together", () => {
@@ -18,7 +15,7 @@ describe("detectRankingVsReportingMismatch", () => {
       "SELECT t.pkClient, SUM(r.Revenue) AS TotalRevenue",
       "FROM #topClients t",
       "JOIN publish.Revenue r ON r.pkClient = t.pkClient",
-      "GROUP BY t.pkClient",
+      "GROUP BY t.pkClient"
     ].join("\n")
     const result = detectRankingVsReportingMismatch(query)
     expect(result).not.toBeNull()
@@ -30,7 +27,7 @@ describe("detectRankingVsReportingMismatch", () => {
       "SELECT t.pkBranch, COUNT(*) AS n",
       "FROM #brkBranches t",
       "JOIN publish.Balances b ON b.pkBranch = t.pkBranch",
-      "GROUP BY t.pkBranch",
+      "GROUP BY t.pkBranch"
     ].join("\n")
     expect(detectRankingVsReportingMismatch(query)).not.toBeNull()
   })
@@ -41,7 +38,7 @@ describe("detectRankingVsReportingMismatch", () => {
       "SELECT t.pkClient, SUM(r.Revenue) AS TotalRevenue",
       "FROM #topClients t",
       "JOIN publish.Revenue r ON r.pkClient = t.pkClient",
-      "GROUP BY t.pkClient",
+      "GROUP BY t.pkClient"
     ].join("\n")
     expect(detectRankingVsReportingMismatch(query)).toBeNull()
   })
@@ -56,7 +53,7 @@ describe("detectRankingVsReportingMismatch", () => {
       "SELECT t.pkClient, SUM(t.Revenue)",
       "FROM #topClients t",
       "JOIN dim.Client c ON c.pkClient = t.pkClient",
-      "GROUP BY t.pkClient",
+      "GROUP BY t.pkClient"
     ].join("\n")
     expect(detectRankingVsReportingMismatch(query)).toBeNull()
   })
@@ -65,7 +62,7 @@ describe("detectRankingVsReportingMismatch", () => {
     const query = [
       "SELECT t.pkClient, r.Revenue",
       "FROM #topClients t",
-      "JOIN publish.Revenue r ON r.pkClient = t.pkClient",
+      "JOIN publish.Revenue r ON r.pkClient = t.pkClient"
     ].join("\n")
     expect(detectRankingVsReportingMismatch(query)).toBeNull()
   })
@@ -75,11 +72,11 @@ describe("detectRankingVsReportingMismatch", () => {
       "SELECT t.pkClient, SUM(r.Revenue) AS TotalRevenue",
       "FROM #topClients t",
       "JOIN publish.Revenue r ON r.pkClient = t.pkClient",
-      "GROUP BY t.pkClient",
+      "GROUP BY t.pkClient"
     ].join("\n")
     const banner = getQueryWarnings(query, {
       lineageAccessor: () => null,
-      profiledTables: new Set(["publish.revenue"]),
+      profiledTables: new Set(["publish.revenue"])
     })
     expect(banner).not.toBeNull()
     expect(banner).toMatch(/universe mismatch/)

@@ -42,7 +42,7 @@ describe("applyPromptBudget smoke", () => {
     const messages: Message[] = [
       msg("system", "You are an assistant."),
       msg("user", "Hello", "user"),
-      msg("assistant", "Hi there!"),
+      msg("assistant", "Hi there!")
     ]
     const result = applyPromptBudget(messages)
     expect(result.messages).toHaveLength(3)
@@ -59,7 +59,7 @@ describe("applyPromptBudget smoke", () => {
       msg("user", fat, "history"),
       msg("user", fat, "history"),
       msg("user", fat, "history"),
-      msg("user", "Real user request", "user"),
+      msg("user", "Real user request", "user")
     ]
     const result = applyPromptBudget(messages, { hardMaxPromptChars: 32_000 })
     // The "user" anchor and system survive; some history was dropped or truncated.

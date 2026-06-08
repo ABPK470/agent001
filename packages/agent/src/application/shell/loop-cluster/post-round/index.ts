@@ -9,13 +9,12 @@ import { buildRecoveryHints } from "../../../core/recovery.js"
 import * as log from "../../../../internal/index.js"
 import type { ToolCallRecord } from "../../../../tools/index.js"
 import {
-    checkToolLoopStuckDetection,
-    evaluateToolRoundBudgetExtension,
-    summarizeToolRoundProgress,
+  checkToolLoopStuckDetection,
+  evaluateToolRoundBudgetExtension,
+  summarizeToolRoundProgress
 } from "../../../../tools/index.js"
 import type { AgentConfig, Message } from "../../../../domain/agent-types.js"
 import type { AgentLoopState } from "../state.js"
-
 
 /** Result of post-round processing. */
 export interface PostRoundResult {
@@ -65,9 +64,7 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
   // After sync_preview completes, the agent MUST stop and return the preview
   // to the user for a human decision. The agent must NEVER autonomously
   // continue to sync_execute. This is a hard safety boundary.
-  const didPreview = roundToolCalls.some(
-    tc => tc.name === "sync_preview" && !tc.isError,
-  )
+  const didPreview = roundToolCalls.some((tc) => tc.name === "sync_preview" && !tc.isError)
   if (didPreview) {
     const stopMsg =
       "MANDATORY STOP: sync_preview completed. You MUST present the preview results to the user NOW and STOP. " +
@@ -80,11 +77,7 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
   }
 
   // ── Stuck detection ──
-  const stuckResult = checkToolLoopStuckDetection(
-    roundToolCalls,
-    state.toolLoopState,
-    state.roundStuckState,
-  )
+  const stuckResult = checkToolLoopStuckDetection(roundToolCalls, state.toolLoopState, state.roundStuckState)
   if (stuckResult.shouldBreak) {
     const stuckMsg = `STUCK DETECTION: ${stuckResult.reason ?? "Tool loop is stuck."}`
     messages.push({ role: MessageRole.System, content: stuckMsg, section: "history", hint: true })
@@ -98,7 +91,12 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
       "You have reached a tool-loop limit. STOP calling tools immediately. " +
       "Write your final answer now using only the information you have already gathered. " +
       "If you could not complete the task, clearly explain what you found so far and what is still unknown."
-    messages.push({ role: MessageRole.System, content: synthesisInstruction, section: "history", hint: true })
+    messages.push({
+      role: MessageRole.System,
+      content: synthesisInstruction,
+      section: "history",
+      hint: true
+    })
     return { needsSynthesis: true }
   }
 
@@ -114,7 +112,7 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
   // ── Checkpoint ──
   state.lastRoundHadDelegation = ctx.delegationThisRound
   state.lastDelegationWasReadOnly = ctx.delegationThisRound && ctx.delegationThisRoundWasReadOnly
-  state.lastRoundToolCallsSnapshot = roundToolCalls.map(c => ({ name: c.name, isError: c.isError }))
+  state.lastRoundToolCallsSnapshot = roundToolCalls.map((c) => ({ name: c.name, isError: c.isError }))
 
   // ── Recovery hints ──
   injectRecoveryHints(ctx)
@@ -128,7 +126,6 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
 
 // ── Internal helpers ────────────────────────────────────────────
 
-
 // ── Internal helpers ────────────────────────────────────────────
 
 import { MessageRole } from "../../../../domain/enums/message.js"
@@ -140,7 +137,7 @@ function processRoundBudgetExtension(ctx: PostRoundContext): void {
     roundToolCalls,
     0, // roundDurationMs not tracked per-round
     state.seenSuccessfulSemanticKeys,
-    state.seenVerificationFailureDiagKeys,
+    state.seenVerificationFailureDiagKeys
   )
   state.recentRoundSummaries.push(roundProgress)
   if (state.recentRoundSummaries.length > 5) state.recentRoundSummaries.shift()
@@ -150,11 +147,13 @@ function processRoundBudgetExtension(ctx: PostRoundContext): void {
       currentLimit: config.maxIterations,
       maxAbsoluteLimit: state.absoluteIterationCap,
       recentRounds: state.recentRoundSummaries,
-      remainingToolBudget: config.maxIterations - ctx.iteration,
+      remainingToolBudget: config.maxIterations - ctx.iteration
     })
     if (budgetExt.decision === "extended" && budgetExt.newLimit > config.maxIterations) {
       if (config.verbose) {
-        log.logError(`Budget extension: ${config.maxIterations} → ${budgetExt.newLimit} (${budgetExt.extensionReason})`)
+        log.logError(
+          `Budget extension: ${config.maxIterations} → ${budgetExt.newLimit} (${budgetExt.extensionReason})`
+        )
       }
       config.maxIterations = budgetExt.newLimit
     }
@@ -186,15 +185,14 @@ function processPostDelegationVerification(ctx: PostRoundContext): void {
     .filter((m) => m.role === MessageRole.Tool)
     .map((m) => m.content ?? "")
 
-  const hasErrors = roundToolResults.some((r) =>
-    /error|fail|exception|not found/i.test(r) && !/no errors/i.test(r),
+  const hasErrors = roundToolResults.some(
+    (r) => /error|fail|exception|not found/i.test(r) && !/no errors/i.test(r)
   )
 
   const toolNamesUsed = response.toolCalls.map((c) => c.name)
   const didCodeReview = toolNamesUsed.includes("read_file")
-  const didOnlySurfaceCheck = !didCodeReview && (
-    toolNamesUsed.includes("browser_check") || toolNamesUsed.includes("list_directory")
-  )
+  const didOnlySurfaceCheck =
+    !didCodeReview && (toolNamesUsed.includes("browser_check") || toolNamesUsed.includes("list_directory"))
 
   if (hasErrors || failuresThisRound > 0) {
     state.verificationFoundIssues = true

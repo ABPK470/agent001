@@ -8,16 +8,16 @@
  */
 
 export const BrowseWebAction = {
-  Navigate:  "navigate",
-  Click:     "click",
-  Type:      "type",
-  Scroll:    "scroll",
-  Read:      "read",
-  Close:     "close",
-  Upload:    "upload",
-  Tabs:      "tabs",
-  Frame:     "frame",
-  Intercept: "intercept",
+  Navigate: "navigate",
+  Click: "click",
+  Type: "type",
+  Scroll: "scroll",
+  Read: "read",
+  Close: "close",
+  Upload: "upload",
+  Tabs: "tabs",
+  Frame: "frame",
+  Intercept: "intercept"
 } as const
 
 export type BrowseWebAction = (typeof BrowseWebAction)[keyof typeof BrowseWebAction]

@@ -10,9 +10,9 @@ import type { Tool } from "../../types.js"
 import { normalizeSpecPath } from "../blueprint-contract/index.js"
 import type { Plan, SubagentTaskStep, VerifierStepAssessment } from "../types.js"
 import {
-    extractDefinedCssClasses,
-    extractReferencedCssClassesFromHtml,
-    extractReferencedCssClassesFromScript,
+  extractDefinedCssClasses,
+  extractReferencedCssClassesFromHtml,
+  extractReferencedCssClassesFromScript
 } from "../verifier-helpers/index.js"
 import { extractModuleImports } from "./module-imports.js"
 
@@ -36,7 +36,14 @@ export type { ModuleImportRef } from "./module-imports.js"
 
 export type IntegrationProbe = (ctx: IntegrationProbeContext) => Promise<void>
 export type ReadArtifactContent = (readFile: Tool, path: string, runCommand?: Tool) => Promise<string | null>
-export type ProbeArtifact = (readFile: Tool, path: string, actualPaths: string[], wsRoot?: string, runCommand?: Tool, allowedWriteRoots?: readonly string[]) => Promise<{ found: boolean; resolvedPath: string }>
+export type ProbeArtifact = (
+  readFile: Tool,
+  path: string,
+  actualPaths: string[],
+  wsRoot?: string,
+  runCommand?: Tool,
+  allowedWriteRoots?: readonly string[]
+) => Promise<{ found: boolean; resolvedPath: string }>
 
 // ============================================================================
 // Shared utilities (also used by verifier.ts for artifact reading)
@@ -55,7 +62,7 @@ export function collectIntegrationArtifacts(plan: Plan): IntegrationArtifact[] {
 }
 
 export function findWsRootForStep(plan: Plan, stepName: string): string | undefined {
-  const step = plan.steps.find(s => s.name === stepName)
+  const step = plan.steps.find((s) => s.name === stepName)
   if (step?.stepType === "subagent_task") {
     return (step as SubagentTaskStep).executionContext.workspaceRoot || undefined
   }
@@ -70,7 +77,7 @@ export async function readIntegrationArtifactContents(
   artifacts: readonly IntegrationArtifact[],
   readFile: Tool,
   readArtifactContent: ReadArtifactContent,
-  runCommand?: Tool,
+  runCommand?: Tool
 ): Promise<Map<string, string>> {
   const contents = new Map<string, string>()
   for (const artifact of artifacts) {
@@ -79,7 +86,9 @@ export async function readIntegrationArtifactContents(
       if (typeof raw === "string" && raw.length > 0) {
         contents.set(normalizeSpecPath(artifact.path), raw)
       }
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
   }
   return contents
 }
@@ -91,7 +100,7 @@ export async function executeToolForText(tool: Tool, args: Record<string, unknow
 export async function readArtifactContentViaTool(
   readFile: Tool,
   path: string,
-  runCommand?: Tool,
+  runCommand?: Tool
 ): Promise<string | null> {
   try {
     const content = await executeToolForText(readFile, { path })
@@ -103,7 +112,7 @@ export async function readArtifactContentViaTool(
     if (!runCommand) return null
     try {
       const raw = await executeToolForText(runCommand, {
-        command: `if [ -f ${JSON.stringify(path)} ]; then cat ${JSON.stringify(path)}; else echo __MISSING__; fi`,
+        command: `if [ -f ${JSON.stringify(path)} ]; then cat ${JSON.stringify(path)}; else echo __MISSING__; fi`
       })
       if (raw.trim() === "__MISSING__") return null
       return raw
@@ -118,7 +127,7 @@ export async function probeArtifactViaTool(
   path: string,
   _actualPaths: string[],
   wsRoot?: string,
-  _runCommand?: Tool,
+  _runCommand?: Tool
 ): Promise<{ found: boolean; resolvedPath: string }> {
   const candidates: string[] = []
   if (wsRoot && !path.startsWith(wsRoot)) {
@@ -133,7 +142,9 @@ export async function probeArtifactViaTool(
       if (!content.startsWith("Error:") && !content.includes("not found") && !content.includes("ENOENT")) {
         return { found: true, resolvedPath: candidate }
       }
-    } catch { /* fall through */ }
+    } catch {
+      /* fall through */
+    }
   }
 
   return { found: false, resolvedPath: path }
@@ -154,7 +165,7 @@ export function extractHtmlScriptRefs(htmlContent: string): Array<{ src: string;
     const attrs = `${match[1] ?? ""} ${match[3] ?? ""}`
     refs.push({
       src: match[2],
-      isModule: /\btype\s*=\s*["']module["']/i.test(attrs),
+      isModule: /\btype\s*=\s*["']module["']/i.test(attrs)
     })
   }
   return refs
@@ -167,7 +178,7 @@ export function extractHtmlScriptRefs(htmlContent: string): Array<{ src: string;
 export function resolveArtifactReference(
   fromArtifactPath: string,
   reference: string,
-  artifacts: readonly IntegrationArtifact[],
+  artifacts: readonly IntegrationArtifact[]
 ): { path: string; basename: string } | null {
   const normalizedRef = reference.trim().replace(/^\.\//, "")
   if (!normalizedRef) return null
@@ -176,14 +187,19 @@ export function resolveArtifactReference(
   const candidates = [normalizedRef, byRelativePath]
 
   for (const candidate of candidates) {
-    const match = artifacts.find(artifact => normalizeSpecPath(artifact.path) === candidate)
+    const match = artifacts.find((artifact) => normalizeSpecPath(artifact.path) === candidate)
     if (match) {
-      return { path: normalizeSpecPath(match.path), basename: match.path.split("/").pop() ?? match.path }
+      return {
+        path: normalizeSpecPath(match.path),
+        basename: match.path.split("/").pop() ?? match.path
+      }
     }
   }
 
   const basename = normalizedRef.split("/").pop() ?? normalizedRef
-  const basenameMatches = artifacts.filter(artifact => (artifact.path.split("/").pop() ?? artifact.path) === basename)
+  const basenameMatches = artifacts.filter(
+    (artifact) => (artifact.path.split("/").pop() ?? artifact.path) === basename
+  )
   if (basenameMatches.length === 1) {
     const match = basenameMatches[0]
     return { path: normalizeSpecPath(match.path), basename }
@@ -194,7 +210,7 @@ export function resolveArtifactReference(
 export function resolveArtifactImport(
   fromArtifactPath: string,
   specifier: string,
-  artifacts: readonly IntegrationArtifact[],
+  artifacts: readonly IntegrationArtifact[]
 ): { path: string; basename: string } | null {
   if (!specifier.startsWith(".")) return null
   return resolveArtifactReference(fromArtifactPath, specifier, artifacts)
@@ -208,7 +224,7 @@ export function collectReachableRuntimeArtifacts(
   htmlPath: string,
   scriptRefs: readonly { src: string; isModule: boolean }[],
   relatedJs: readonly IntegrationArtifact[],
-  contents: ReadonlyMap<string, string>,
+  contents: ReadonlyMap<string, string>
 ): Set<string> {
   const reachable = new Set<string>()
   const queue: string[] = []
@@ -238,4 +254,8 @@ export function collectReachableRuntimeArtifacts(
 }
 
 // Re-exports for CSS helpers needed by probes
-export { extractDefinedCssClasses, extractReferencedCssClassesFromHtml, extractReferencedCssClassesFromScript }
+export {
+  extractDefinedCssClasses,
+  extractReferencedCssClassesFromHtml,
+  extractReferencedCssClassesFromScript
+}

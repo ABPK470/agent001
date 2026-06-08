@@ -26,7 +26,7 @@ describe("planner-prompt-budget trace", () => {
       msg("user", fat, "history"),
       msg("user", fat, "history"),
       msg("user", fat, "history"),
-      msg("user", "Real request", "user"),
+      msg("user", "Real request", "user")
     ]
     // Force a tiny model so budget genuinely bites.
     prepareIterationContext({
@@ -38,8 +38,8 @@ describe("planner-prompt-budget trace", () => {
       config: {
         verbose: false,
         onNudge: () => {},
-        onPlannerTrace: (entry) => trace.push(entry as Record<string, unknown>),
-      },
+        onPlannerTrace: (entry) => trace.push(entry as Record<string, unknown>)
+      }
     })
 
     const budgetTraces = trace.filter((t) => t["kind"] === "planner-prompt-budget")
@@ -49,7 +49,7 @@ describe("planner-prompt-budget trace", () => {
       kind: "planner-prompt-budget",
       iteration: 7,
       model: "tiny-test-model",
-      constrained: true,
+      constrained: true
     })
     expect(typeof t["totalBeforeChars"]).toBe("number")
     expect(typeof t["totalAfterChars"]).toBe("number")
@@ -60,10 +60,7 @@ describe("planner-prompt-budget trace", () => {
 
   it("does NOT emit when the prompt fits comfortably", () => {
     const trace: Array<Record<string, unknown>> = []
-    const messages: Message[] = [
-      msg("system", "anchor", "system_anchor"),
-      msg("user", "hi", "user"),
-    ]
+    const messages: Message[] = [msg("system", "anchor", "system_anchor"), msg("user", "hi", "user")]
     prepareIterationContext({
       messages,
       iteration: 1,
@@ -72,8 +69,8 @@ describe("planner-prompt-budget trace", () => {
       config: {
         verbose: false,
         onNudge: () => {},
-        onPlannerTrace: (entry) => trace.push(entry as Record<string, unknown>),
-      },
+        onPlannerTrace: (entry) => trace.push(entry as Record<string, unknown>)
+      }
     })
     const budgetTraces = trace.filter((t) => t["kind"] === "planner-prompt-budget")
     expect(budgetTraces).toEqual([])

@@ -34,7 +34,7 @@ export async function detectScopeMisattribution(
   pkColumns: string[],
   insertCandidates: PkHashRow[],
   sampleSize: number,
-  telemetryContext?: import("../../ports/events.js").SyncTelemetryContext,
+  telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<SyncPlanConflict[]> {
   if (insertCandidates.length === 0) return []
   if (pkColumns.length !== 1) return []
@@ -47,9 +47,7 @@ export async function detectScopeMisattribution(
   const scopeCol = table.scopeColumn
   // Take a hard cap to bound the IN list size.
   const candidates = insertCandidates.slice(0, 5_000)
-  const pkLiterals = candidates
-    .map((r) => quoteValue(r.pkValues[pkCol]))
-    .join(", ")
+  const pkLiterals = candidates.map((r) => quoteValue(r.pkValues[pkCol])).join(", ")
 
   let result: sql.IResult<unknown>
   try {
@@ -58,10 +56,10 @@ export async function detectScopeMisattribution(
       tgtPool,
       // No NOLOCK (consistent with the rest of diff). Plain READ COMMITTED.
       `SELECT [${pkCol}] AS pk, [${scopeCol}] AS scope ` +
-      `FROM ${qtable(table.name)} WHERE [${pkCol}] IN (${pkLiterals})`,
+        `FROM ${qtable(table.name)} WHERE [${pkCol}] IN (${pkLiterals})`,
       `detectScopeMisattribution(${table.name})`,
       2,
-      telemetryContext,
+      telemetryContext
     )
   } catch (e) {
     // Defence-in-depth: if the conflict probe itself fails (transient or
@@ -79,7 +77,9 @@ export async function detectScopeMisattribution(
   // = entityId). For nested recipes the expected scope is whatever value
   // satisfies the source predicate; we surface the entityId + the recipe's
   // scopeColumn as the "expected" context so the user has actionable info.
-  const expectedScope: Record<string, unknown> = { [scopeCol]: `(per source predicate using entityId=${entityId})` }
+  const expectedScope: Record<string, unknown> = {
+    [scopeCol]: `(per source predicate using entityId=${entityId})`
+  }
 
   const conflicts: SyncPlanConflict[] = []
   for (const row of result.recordset as Array<{ pk: unknown; scope: unknown }>) {
@@ -93,7 +93,7 @@ export async function detectScopeMisattribution(
         `${pkCol}=${formatScalar(pkValue)} exists on target with ` +
         `${scopeCol}=${formatScalar(actualScopeValue)}, but source claims it under the current sync scope ` +
         `(predicate: ${table.predicate.replace("{id}", String(entityId))}). ` +
-        `Inserting would violate the PK; execute will refuse until target metadata is corrected.`,
+        `Inserting would violate the PK; execute will refuse until target metadata is corrected.`
     })
   }
   void sampleSize // counts must be accurate; UI slices for display

@@ -25,8 +25,9 @@ function synthesizeSuccessfulAnswer(plan: Plan, pipelineResult: PipelineResult):
     return uniqueOutputs.join("\n\n")
   }
 
-  const producedArtifacts = plan.steps
-    .flatMap((step) => pipelineResult.stepResults.get(step.name)?.producedArtifacts ?? [])
+  const producedArtifacts = plan.steps.flatMap(
+    (step) => pipelineResult.stepResults.get(step.name)?.producedArtifacts ?? []
+  )
   const uniqueArtifacts = [...new Set(producedArtifacts)]
   if (uniqueArtifacts.length === 1) {
     return `Created ${uniqueArtifacts[0]}.`
@@ -43,7 +44,7 @@ function synthesizeSuccessfulAnswer(plan: Plan, pipelineResult: PipelineResult):
 export function synthesizeAnswer(
   plan: Plan,
   pipelineResult: PipelineResult,
-  verifierDecision: VerifierDecision,
+  verifierDecision: VerifierDecision
 ): string {
   // Platform-unconfigured short-circuit — if any step failed because a required
   // platform integration is missing, the verbose "Task verification FAILED" wall
@@ -51,8 +52,9 @@ export function synthesizeAnswer(
   // opaque, user-safe message instead. The technical detail (env var to set,
   // missing service name) is logged server-side by run-executor; the user
   // gets a run reference they can forward to the platform admin.
-  const hasPlatformUnconfigured = [...pipelineResult.stepResults.values()]
-    .some((r) => r.failureClass === "platform_unconfigured")
+  const hasPlatformUnconfigured = [...pipelineResult.stepResults.values()].some(
+    (r) => r.failureClass === "platform_unconfigured"
+  )
   if (hasPlatformUnconfigured) {
     return synthesizePlatformUnconfiguredAnswer()
   }
@@ -76,28 +78,32 @@ export function synthesizeAnswer(
 
   for (const step of plan.steps) {
     const result = pipelineResult.stepResults.get(step.name)
-    const stepVerification = verifierDecision.steps.find(s => s.stepName === step.name)
+    const stepVerification = verifierDecision.steps.find((s) => s.stepName === step.name)
     const acceptanceState = result?.acceptanceState
-    const effectiveAcceptance = acceptanceState
-      ?? (stepVerification?.outcome === VerifierOutcome.Pass
+    const effectiveAcceptance =
+      acceptanceState ??
+      (stepVerification?.outcome === VerifierOutcome.Pass
         ? "accepted"
-        : stepVerification?.outcome === VerifierOutcome.Retry || stepVerification?.outcome === VerifierOutcome.Fail
+        : stepVerification?.outcome === VerifierOutcome.Retry ||
+            stepVerification?.outcome === VerifierOutcome.Fail
           ? "repair_required"
           : undefined)
-    const status = effectiveAcceptance === "accepted"
-      ? "verified"
-      : effectiveAcceptance === "repair_required"
-        ? "incomplete"
-        : effectiveAcceptance === "rejected"
-          ? "rejected"
-          : (result?.status ?? "unknown")
-    const icon = effectiveAcceptance === "accepted"
-      ? "✓"
-      : effectiveAcceptance === "repair_required"
-        ? "⚠"
-        : status === "failed" || effectiveAcceptance === "rejected"
-          ? "✗"
-          : "⊘"
+    const status =
+      effectiveAcceptance === "accepted"
+        ? "verified"
+        : effectiveAcceptance === "repair_required"
+          ? "incomplete"
+          : effectiveAcceptance === "rejected"
+            ? "rejected"
+            : (result?.status ?? "unknown")
+    const icon =
+      effectiveAcceptance === "accepted"
+        ? "✓"
+        : effectiveAcceptance === "repair_required"
+          ? "⚠"
+          : status === "failed" || effectiveAcceptance === "rejected"
+            ? "✗"
+            : "⊘"
     parts.push(`${icon} ${step.name} (${step.stepType}): ${status}`)
 
     // Include output summary for completed subagent tasks

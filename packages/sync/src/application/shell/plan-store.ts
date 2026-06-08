@@ -11,7 +11,15 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs"
+import {
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  unlinkSync,
+  writeFileSync
+} from "node:fs"
 import { resolve } from "node:path"
 import type { EntityType } from "../../domain/recipes.js"
 import { SyncPlanChangeType, type SyncPlanStoreHost } from "../../ports/index.js"
@@ -195,7 +203,16 @@ export interface SyncPlan {
   warnings: string[]
   estimatedDurationSec: number
   /** Recipe snapshot used — included so execute reproduces preview exactly. */
-  recipeSnapshot: { entityType: EntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; enabledOptionalTables?: string[] }
+  recipeSnapshot: {
+    entityType: EntityType
+    rootTable?: string
+    rootKeyColumn?: string
+    legacyPipelineId?: number
+    tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>
+    executionOrder: string[]
+    reverseOrder: string[]
+    enabledOptionalTables?: string[]
+  }
   /** Explicit compiled execution contract from the published definition. */
   executionContract?: SyncExecutionContract | null
   /** First-class explainability record used by history/API/UI surfaces. */
@@ -248,7 +265,11 @@ export function savePlan(host: SyncPlanStoreHost, plan: SyncPlan): void {
   // Durable persistence (e.g. server's SQLite-backed sink). Survives restarts
   // and the disk-JSON 24h TTL — required so the History modal can re-hydrate
   // older plans on demand.
-  try { host.sync.runs.sink.savePlan?.(plan) } catch { /* sink failure must not break preview */ }
+  try {
+    host.sync.runs.sink.savePlan?.(plan)
+  } catch {
+    /* sink failure must not break preview */
+  }
 }
 
 /** Load a plan. Returns null if missing. Tries memory → disk → durable sink. */
@@ -266,8 +287,14 @@ export function loadPlan(host: SyncPlanStoreHost, planId: string): SyncPlan | nu
           plans.memCache.set(planId, plan)
           return plan
         }
-        try { unlinkSync(path) } catch { /* ignore */ }
-      } catch { /* fall through to durable sink */ }
+        try {
+          unlinkSync(path)
+        } catch {
+          /* ignore */
+        }
+      } catch {
+        /* fall through to durable sink */
+      }
     }
   }
   // Durable sink (e.g. SQLite). No TTL — required for History re-hydration
@@ -278,7 +305,9 @@ export function loadPlan(host: SyncPlanStoreHost, planId: string): SyncPlan | nu
       plans.memCache.set(planId, fromSink)
       return fromSink
     }
-  } catch { /* sink failure → treat as miss */ }
+  } catch {
+    /* sink failure → treat as miss */
+  }
   return null
 }
 
@@ -293,7 +322,12 @@ export function deletePlan(host: SyncPlanStoreHost, planId: string): void {
   plans.memCache.delete(planId)
   if (plans.diskRoot) {
     const path = resolve(plans.diskRoot, `${planId}.json`)
-    if (existsSync(path)) try { unlinkSync(path) } catch { /* ignore */ }
+    if (existsSync(path))
+      try {
+        unlinkSync(path)
+      } catch {
+        /* ignore */
+      }
   }
 }
 

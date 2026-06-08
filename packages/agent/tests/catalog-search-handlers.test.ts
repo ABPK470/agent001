@@ -25,11 +25,15 @@ function col(name: string, dataType = "int", isPK = false): CatalogColumn {
   return { name, dataType, maxLength: null, nullable: false, isPK }
 }
 
-function table(schema: string, name: string, opts: {
-  type?: "TABLE" | "VIEW"
-  columns?: CatalogColumn[]
-  rowCount?: number | null
-} = {}): CatalogTable {
+function table(
+  schema: string,
+  name: string,
+  opts: {
+    type?: "TABLE" | "VIEW"
+    columns?: CatalogColumn[]
+    rowCount?: number | null
+  } = {}
+): CatalogTable {
   return {
     schema,
     name,
@@ -39,7 +43,7 @@ function table(schema: string, name: string, opts: {
     columns: opts.columns ?? [col("Id", "int", true)],
     fkOutgoing: [],
     fkIncoming: [],
-    viewDefinition: undefined,
+    viewDefinition: undefined
   }
 }
 
@@ -51,12 +55,12 @@ function buildGraph(tables: CatalogTable[]): CatalogGraph {
     tables,
     implicitEdges: [],
     viewSourceRows: [],
-    sysCatalog: [],
+    sysCatalog: []
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
 }
 
 beforeEach(() => resetTenantConfig())
-afterEach (() => resetTenantConfig())
+afterEach(() => resetTenantConfig())
 
 describe("CatalogGraph.getTable — case-insensitive", () => {
   it("finds a table when the request matches the canonical casing", () => {
@@ -96,8 +100,8 @@ describe("handleTable — mirror-aware fallback", () => {
       table("persistedView", "publish.Revenue", {
         type: "VIEW",
         rowCount: 12_345_678,
-        columns: [col("pkClient", "int", true), col("Amount", "decimal")],
-      }),
+        columns: [col("pkClient", "int", true), col("Amount", "decimal")]
+      })
     ])
     const out = handleTable(g, "publish.revenue")
     expect(out).toContain("persistedView.publish.Revenue")
@@ -110,7 +114,7 @@ describe("handleTable — mirror-aware fallback", () => {
     setTenantConfig({ mirrorSchema: "persistedView" })
     const g = buildGraph([
       table("publish", "Revenue", { type: "VIEW", rowCount: 99 }),
-      table("persistedView", "publish.Revenue", { type: "VIEW", rowCount: 12_345_678 }),
+      table("persistedView", "publish.Revenue", { type: "VIEW", rowCount: 12_345_678 })
     ])
     const out = handleTable(g, "publish.revenue")
     // Direct hit returns first — no "resolved via mirror" annotation.
@@ -120,9 +124,7 @@ describe("handleTable — mirror-aware fallback", () => {
 
   it("does NOT recurse when the user already asks for the mirror form", () => {
     setTenantConfig({ mirrorSchema: "persistedView" })
-    const g = buildGraph([
-      table("persistedView", "publish.Revenue", { type: "VIEW", rowCount: 999 }),
-    ])
+    const g = buildGraph([table("persistedView", "publish.Revenue", { type: "VIEW", rowCount: 999 })])
     const out = handleTable(g, "persistedView.publish.Revenue")
     expect(out).toContain("persistedView.publish.Revenue")
     expect(out).not.toContain("resolved via mirror")
@@ -130,9 +132,7 @@ describe("handleTable — mirror-aware fallback", () => {
 
   it("falls back to fuzzy suggestions when neither direct nor mirror hits", () => {
     setTenantConfig({ mirrorSchema: "persistedView" })
-    const g = buildGraph([
-      table("publish", "PNLRevenue", { type: "VIEW" }),
-    ])
+    const g = buildGraph([table("publish", "PNLRevenue", { type: "VIEW" })])
     const out = handleTable(g, "publish.totallyMadeUp")
     expect(out).toMatch(/not found\. Did you mean:/)
   })
@@ -141,9 +141,7 @@ describe("handleTable — mirror-aware fallback", () => {
 describe("handleJoins — mirror-aware fallback", () => {
   it("resolves the mirror form and reports it in the header", () => {
     setTenantConfig({ mirrorSchema: "persistedView" })
-    const g = buildGraph([
-      table("persistedView", "publish.Revenue", { type: "VIEW", rowCount: 100 }),
-    ])
+    const g = buildGraph([table("persistedView", "publish.Revenue", { type: "VIEW", rowCount: 100 })])
     const out = handleJoins(g, "publish.revenue")
     expect(out).toContain("Join edges for persistedView.publish.Revenue")
     expect(out).toContain("resolved via mirror from 'publish.revenue'")

@@ -34,7 +34,7 @@ export const DEFAULT_CATALOG_BOOTSTRAP: CatalogBootstrapMetadata = Object.freeze
   largeObjects: [],
   canonicalQualifiedNames: Object.freeze({}),
   unionBranchCounts: Object.freeze({}),
-  highCardinalityKeys: Object.freeze({}),
+  highCardinalityKeys: Object.freeze({})
 })
 
 // ── Schema ──────────────────────────────────────────────────────
@@ -140,8 +140,18 @@ export const DEFAULT_TENANT_CONFIG: TenantConfig = Object.freeze({
     // SUM across rows for a single pkMonth/pkYear is the correct
     // period total). A tenant whose `…MTD` columns are instead a
     // cumulative running total should override this list at startup.
-    "Average", "Avg", "Mean", "Median",
-    "Spot", "EOM", "Eod", "Latest", "Snapshot", "EndOf", "AsOf", "StartOf",
+    "Average",
+    "Avg",
+    "Mean",
+    "Median",
+    "Spot",
+    "EOM",
+    "Eod",
+    "Latest",
+    "Snapshot",
+    "EndOf",
+    "AsOf",
+    "StartOf"
   ],
   aliasFamilies: [
     { prefix: "Sum", aggregate: "SUM" },
@@ -150,15 +160,15 @@ export const DEFAULT_TENANT_CONFIG: TenantConfig = Object.freeze({
     { prefix: "Mean", aggregate: "AVG" },
     { prefix: "Min", aggregate: "MIN" },
     { prefix: "Max", aggregate: "MAX" },
-    { prefix: "Count", aggregate: "COUNT" },
+    { prefix: "Count", aggregate: "COUNT" }
   ],
-  reservedAliases: [],
+  reservedAliases: []
 }) as TenantConfig
 
 // ── Singleton + loader ──────────────────────────────────────────
 
 const tenantConfigState = {
-  active: DEFAULT_TENANT_CONFIG as TenantConfig,
+  active: DEFAULT_TENANT_CONFIG as TenantConfig
 }
 
 /** Returns the live tenant config. Cheap — just returns the singleton. */
@@ -208,7 +218,7 @@ function mergeWithDefaults(o: Partial<TenantConfig>): TenantConfig {
     routingKeywords: o.routingKeywords ?? DEFAULT_TENANT_CONFIG.routingKeywords,
     preAggregationTokens: o.preAggregationTokens ?? DEFAULT_TENANT_CONFIG.preAggregationTokens,
     aliasFamilies: o.aliasFamilies ?? DEFAULT_TENANT_CONFIG.aliasFamilies,
-    reservedAliases: o.reservedAliases ?? DEFAULT_TENANT_CONFIG.reservedAliases,
+    reservedAliases: o.reservedAliases ?? DEFAULT_TENANT_CONFIG.reservedAliases
   }
 }
 

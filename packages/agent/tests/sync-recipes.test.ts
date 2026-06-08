@@ -22,7 +22,7 @@ describe("selectRecipeTables", () => {
           verified: true,
           groundedByPipeline: true,
           enabledByDefault: true,
-          userControllable: false,
+          userControllable: false
         },
         {
           name: "gate.UserGroupPermission",
@@ -32,21 +32,20 @@ describe("selectRecipeTables", () => {
           verified: false,
           groundedByPipeline: false,
           enabledByDefault: false,
-          userControllable: true,
-        },
+          userControllable: true
+        }
       ],
       executionOrder: ["gate.Content", "gate.UserGroupPermission"],
       reverseOrder: ["gate.UserGroupPermission", "gate.Content"],
       archiveTables: ["gateArchive.Content", "gateArchive.UserGroupPermission"],
       discrepancies: [],
-      generatedAt: new Date(0).toISOString(),
+      generatedAt: new Date(0).toISOString()
     } satisfies SyncRecipe
 
     expect(selectRecipeTables(recipe, []).tables.map((table) => table.name)).toEqual(["gate.Content"])
-    expect(selectRecipeTables(recipe, ["gate.UserGroupPermission"]).tables.map((table) => table.name)).toEqual([
-      "gate.Content",
-      "gate.UserGroupPermission",
-    ])
+    expect(
+      selectRecipeTables(recipe, ["gate.UserGroupPermission"]).tables.map((table) => table.name)
+    ).toEqual(["gate.Content", "gate.UserGroupPermission"])
   })
 })
 
@@ -58,7 +57,7 @@ describe("deployed sync recipes", () => {
     expect(optionalTables.map((table) => table.name)).toEqual([
       "gate.Content",
       "gate.ContentLink",
-      "gate.UserGroupPermission",
+      "gate.UserGroupPermission"
     ])
     expect(optionalTables.every((table) => table.enabledByDefault === false)).toBe(true)
   })

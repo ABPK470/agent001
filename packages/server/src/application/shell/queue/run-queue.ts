@@ -27,9 +27,9 @@ export { RunPriority }
 
 const PRIORITY_ORDER: Record<RunPriority, number> = {
   critical: 0, // system recovery
-  high: 1,     // delegated children (keep in-flight work moving)
-  normal: 2,   // user-initiated runs
-  low: 3,      // background/batch
+  high: 1, // delegated children (keep in-flight work moving)
+  normal: 2, // user-initiated runs
+  low: 3 // background/batch
 }
 
 export interface QueueEntry {
@@ -71,7 +71,11 @@ export class RunQueue {
    * If the AbortSignal fires while waiting, the promise rejects and the entry
    * is removed from the queue.
    */
-  acquire(runId: string, priority: RunPriority = RunPriority.Normal, signal?: AbortSignal): Promise<() => void> {
+  acquire(
+    runId: string,
+    priority: RunPriority = RunPriority.Normal,
+    signal?: AbortSignal
+  ): Promise<() => void> {
     // Fast path: slot available immediately
     if (this.active < this.maxConcurrent) {
       this.active++
@@ -87,13 +91,11 @@ export class RunQueue {
         enqueuedAt: Date.now(),
         resolve,
         reject,
-        signal,
+        signal
       }
 
       // Insert in priority order (stable: same priority → FIFO)
-      const insertIdx = this.waiting.findIndex(
-        (w) => PRIORITY_ORDER[w.priority] > PRIORITY_ORDER[priority],
-      )
+      const insertIdx = this.waiting.findIndex((w) => PRIORITY_ORDER[w.priority] > PRIORITY_ORDER[priority])
       if (insertIdx === -1) {
         this.waiting.push(entry)
       } else {
@@ -106,8 +108,8 @@ export class RunQueue {
         data: {
           runId,
           position: this.waiting.indexOf(entry) + 1,
-          queueLength: this.waiting.length,
-        },
+          queueLength: this.waiting.length
+        }
       })
 
       // If the run is cancelled while waiting, remove from queue
@@ -164,8 +166,8 @@ export class RunQueue {
       entries: this.waiting.map((w) => ({
         runId: w.runId,
         priority: w.priority,
-        waitingMs: Date.now() - w.enqueuedAt,
-      })),
+        waitingMs: Date.now() - w.enqueuedAt
+      }))
     }
   }
 }

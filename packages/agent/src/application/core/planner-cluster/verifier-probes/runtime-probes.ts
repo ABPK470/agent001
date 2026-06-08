@@ -21,17 +21,19 @@ export async function runBrowserCheckProbe(
   probeCache: ReadonlyMap<string, { found: boolean; resolvedPath: string }>,
   wsRoot: string | undefined,
   issues: string[],
-  executedModalities: Set<string>,
+  executedModalities: Set<string>
 ): Promise<BrowserCheckOutcome> {
   const htmlArtifacts = step.executionContext.targetArtifacts.filter(
-    a => a.endsWith(".html") || a.endsWith(".htm"),
+    (a) => a.endsWith(".html") || a.endsWith(".htm")
   )
   if (htmlArtifacts.length === 0) {
     return { passed: false, htmlArtifacts }
   }
   const browserCheck = toolMap.get("browser_check")
   if (!browserCheck) {
-    issues.push("VERIFICATION MODALITY GAP: HTML artifacts exist but browser_check tool is unavailable, so runtime verification could not run")
+    issues.push(
+      "VERIFICATION MODALITY GAP: HTML artifacts exist but browser_check tool is unavailable, so runtime verification could not run"
+    )
     return { passed: false, htmlArtifacts }
   }
 
@@ -51,8 +53,8 @@ export async function runBrowserCheckProbe(
           (/(404|Not Found)/i.test(ln) && /(localhost|127\.0\.0\.1)[:/]/i.test(ln))
         const allErrorsAreBackendNotRunning = result
           .split("\n")
-          .filter(ln => /error|fail|exception/i.test(ln))
-          .every(ln => isBackendNotRunningLine(ln))
+          .filter((ln) => /error|fail|exception/i.test(ln))
+          .every((ln) => isBackendNotRunningLine(ln))
         if (!allErrorsAreBackendNotRunning) {
           issues.push(`Browser check for "${browserPath}" reported errors: ${result.slice(0, 300)}`)
           anyBrowserFailure = true
@@ -70,7 +72,7 @@ export async function runTestsProbe(
   step: SubagentTaskStep,
   toolMap: Map<string, Tool>,
   issues: string[],
-  executedModalities: Set<string>,
+  executedModalities: Set<string>
 ): Promise<void> {
   if (step.executionContext.verificationMode !== VerificationMode.RunTests) return
   const runCmd = toolMap.get("run_command")

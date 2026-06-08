@@ -12,4 +12,3 @@ export * from "./canonical.js"
 export * from "./pass.js"
 export * from "./rank.js"
 export * from "./types.js"
-

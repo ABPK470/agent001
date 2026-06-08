@@ -10,7 +10,11 @@ import { BanditArmId, DelegationTraceKind } from "../../domain/index.js"
  * @module
  */
 
-import { assessDelegationDecision, type DelegationDecisionInput, type DelegationSubagentStepProfile } from "../../../shell/delegation-cluster/decision/index.js"
+import {
+  assessDelegationDecision,
+  type DelegationDecisionInput,
+  type DelegationSubagentStepProfile
+} from "../../../shell/delegation-cluster/decision/index.js"
 import type { DelegationBanditTuner, DelegationTrajectoryRecord } from "../../../shell/delegation.js"
 import type { Plan, PlanStep } from "../types.js"
 import { buildPlannerFailurePayload } from "./helpers.js"
@@ -21,7 +25,7 @@ const EFFECT_CLASS_MAP: Record<string, "read_only" | "write" | "mixed"> = {
   filesystem_write: "write",
   filesystem_scaffold: "write",
   shell: "mixed",
-  mixed: "mixed",
+  mixed: "mixed"
 }
 
 export type DelegationGateOutcome =
@@ -33,10 +37,10 @@ export function runDelegationGate(
   goal: string,
   decision: { route: string; score: number; reason: string },
   ctx: PlannerContext,
-  banditTuner: DelegationBanditTuner | undefined,
+  banditTuner: DelegationBanditTuner | undefined
 ): DelegationGateOutcome {
   const subagentSteps = plan.steps.filter(
-    (s): s is PlanStep & { stepType: "subagent_task" } => s.stepType === "subagent_task",
+    (s): s is PlanStep & { stepType: "subagent_task" } => s.stepType === "subagent_task"
   )
   const subagentProfiles: DelegationSubagentStepProfile[] = subagentSteps.map((s) => ({
     name: s.name,
@@ -45,7 +49,7 @@ export function runDelegationGate(
     acceptanceCriteria: [...s.acceptanceCriteria],
     requiredToolCapabilities: [...s.requiredToolCapabilities],
     canRunParallel: s.canRunParallel,
-    effectClass: EFFECT_CLASS_MAP[s.executionContext.effectClass] ?? "mixed",
+    effectClass: EFFECT_CLASS_MAP[s.executionContext.effectClass] ?? "mixed"
   }))
 
   if (subagentProfiles.length === 0) {
@@ -67,7 +71,7 @@ export function runDelegationGate(
     synthesisSteps: plan.steps.filter((s) => s.stepType === "deterministic_tool").length,
     subagentSteps: subagentProfiles,
     explicitDelegationRequested: decision.route === "full_planner_decomposition",
-    config: banditThresholdAdjustment !== 0 ? { scoreThreshold: 0.2 + banditThresholdAdjustment } : undefined,
+    config: banditThresholdAdjustment !== 0 ? { scoreThreshold: 0.2 + banditThresholdAdjustment } : undefined
   }
 
   const delegationDecision = assessDelegationDecision(delegationInput)
@@ -81,9 +85,10 @@ export function runDelegationGate(
       fanoutCount: subagentProfiles.length,
       stepCount: plan.steps.length,
       nestingDepth: 1,
-      parallelFraction: subagentProfiles.filter(s => s.canRunParallel).length / Math.max(1, subagentProfiles.length),
+      parallelFraction:
+        subagentProfiles.filter((s) => s.canRunParallel).length / Math.max(1, subagentProfiles.length),
       shouldDelegate: delegationDecision.shouldDelegate,
-      utilityScore: delegationDecision.utilityScore,
+      utilityScore: delegationDecision.utilityScore
     })
   }
 
@@ -96,7 +101,7 @@ export function runDelegationGate(
     confidence: delegationDecision.confidence,
     hardBlockedTaskClass: delegationDecision.hardBlockedTaskClass,
     banditArmId,
-    banditThresholdAdjustment,
+    banditThresholdAdjustment
   })
 
   if (!delegationDecision.shouldDelegate) {
@@ -108,17 +113,19 @@ export function runDelegationGate(
         answer: buildPlannerFailurePayload({
           stage: "delegation",
           reason,
-          diagnostics: [{
-            utilityScore: delegationDecision.utilityScore,
-            safetyRisk: delegationDecision.safetyRisk,
-            reason: delegationDecision.reason,
-          }],
+          diagnostics: [
+            {
+              utilityScore: delegationDecision.utilityScore,
+              safetyRisk: delegationDecision.safetyRisk,
+              reason: delegationDecision.reason
+            }
+          ],
           score: decision.score,
-          plannerReason: decision.reason,
+          plannerReason: decision.reason
         }),
         plan,
-        skipReason: reason,
-      },
+        skipReason: reason
+      }
     }
   }
 

@@ -1,4 +1,10 @@
-import { isPlannerRepairCompatibilityMode, PipelineStatus, PlannerRepairCompatibilityMode, PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
+import {
+  isPlannerRepairCompatibilityMode,
+  PipelineStatus,
+  PlannerRepairCompatibilityMode,
+  PlannerTraceKind,
+  VerifierOutcome
+} from "../../domain/index.js"
 /**
  * Private helpers for the planner orchestrator.
  * @module
@@ -19,10 +25,11 @@ import type { PlannerContext, PlannerResult } from "./types.js"
 export function tryPlatformUnconfiguredShortCircuit(
   ctx: PlannerContext,
   plan: Plan,
-  pipelineResult: PipelineResult,
+  pipelineResult: PipelineResult
 ): PlannerResult | undefined {
-  const platformUnconfiguredStep = [...pipelineResult.stepResults.values()]
-    .find((r) => r.failureClass === "platform_unconfigured")
+  const platformUnconfiguredStep = [...pipelineResult.stepResults.values()].find(
+    (r) => r.failureClass === "platform_unconfigured"
+  )
   if (!platformUnconfiguredStep) return undefined
   const hit = platformUnconfiguredStep.error
     ? detectPlatformUnconfigured(platformUnconfiguredStep.error)
@@ -32,11 +39,11 @@ export function tryPlatformUnconfiguredShortCircuit(
     stepName: platformUnconfiguredStep.name,
     subject: hit?.subject ?? "unknown integration",
     remediation: hit?.remediation ?? "Check server configuration.",
-    rawError: platformUnconfiguredStep.error ?? "",
+    rawError: platformUnconfiguredStep.error ?? ""
   })
   ctx.onTrace?.({
     kind: PlannerTraceKind.RetryAbort,
-    reason: `Platform integration not configured (${platformUnconfiguredStep.name}) — no retry can repair operator-owned config`,
+    reason: `Platform integration not configured (${platformUnconfiguredStep.name}) — no retry can repair operator-owned config`
   })
   return {
     handled: true,
@@ -45,9 +52,9 @@ export function tryPlatformUnconfiguredShortCircuit(
       confidence: 1,
       steps: [],
       systemChecks: [],
-      unresolvedItems: [],
+      unresolvedItems: []
     }),
-    plan,
+    plan
   }
 }
 
@@ -62,21 +69,25 @@ export function finalizePlannerRun(
   verifierDecision: VerifierDecision,
   banditTuner: PlannerContext["delegationBanditTuner"] | undefined,
   banditTrajectory: DelegationTrajectoryRecord | undefined,
-  pipelineStartMs: number,
+  pipelineStartMs: number
 ): PlannerResult {
   const answer = synthesizeAnswer(plan, pipelineResult, verifierDecision)
   if (banditTuner && banditTrajectory) {
-    const failedSteps = [...pipelineResult.stepResults.values()].filter(r => r.status === PipelineStatus.Failed).length
+    const failedSteps = [...pipelineResult.stepResults.values()].filter(
+      (r) => r.status === PipelineStatus.Failed
+    ).length
     const verifierPassed = verifierDecision.overall === VerifierOutcome.Pass
     const qualityProxy = verifierPassed
       ? verifierDecision.confidence
-      : (verifierDecision.overall === VerifierOutcome.Retry ? 0.4 : 0.1)
+      : verifierDecision.overall === VerifierOutcome.Retry
+        ? 0.4
+        : 0.1
     banditTuner.recordOutcome(banditTrajectory, {
       durationMs: Date.now() - pipelineStartMs,
       tokenCount: 0,
       errorCount: failedSteps,
       qualityProxy,
-      verifierPassed,
+      verifierPassed
     })
   }
   if (verifierDecision.overall !== VerifierOutcome.Pass) {
@@ -86,14 +97,16 @@ export function finalizePlannerRun(
       plan,
       pipelineResult,
       verifierDecision,
-      skipReason: "Verification failed after retries — structured execution halted",
+      skipReason: "Verification failed after retries — structured execution halted"
     }
   }
   return { handled: true, answer, plan, pipelineResult, verifierDecision }
 }
 
 export function resolvePlannerCompatibilityMode(): PlannerRepairCompatibilityMode {
-  const raw = (process.env["AGENT_PLANNER_COMPAT_MODE"] ?? PlannerRepairCompatibilityMode.Shadow).trim().toLowerCase()
+  const raw = (process.env["AGENT_PLANNER_COMPAT_MODE"] ?? PlannerRepairCompatibilityMode.Shadow)
+    .trim()
+    .toLowerCase()
   if (isPlannerRepairCompatibilityMode(raw)) return raw
   return PlannerRepairCompatibilityMode.Shadow
 }
@@ -106,24 +119,26 @@ export function resolvePlannerCompatibilityThreshold(): number {
 
 export function applyVerificationAcceptanceStates(
   pipelineResult: PipelineResult,
-  verifierDecision: VerifierDecision,
+  verifierDecision: VerifierDecision
 ): PipelineResult {
   const nextResults = new Map(pipelineResult.stepResults)
 
   for (const assessment of verifierDecision.steps) {
     const result = nextResults.get(assessment.stepName)
     if (!result) continue
-    const hasBlueprintContractIssue = (assessment.issueDetails ?? []).some((issue) => issue.repairClass === "contract_drift" && /blueprint|spec/i.test(issue.summary))
+    const hasBlueprintContractIssue = (assessment.issueDetails ?? []).some(
+      (issue) => issue.repairClass === "contract_drift" && /blueprint|spec/i.test(issue.summary)
+    )
     nextResults.set(assessment.stepName, {
       ...result,
       acceptanceState: deriveAcceptanceState(assessment, result.acceptanceState),
-      failureClass: hasBlueprintContractIssue ? "blueprint_contract" : result.failureClass,
+      failureClass: hasBlueprintContractIssue ? "blueprint_contract" : result.failureClass
     })
   }
 
   return {
     ...pipelineResult,
-    stepResults: nextResults,
+    stepResults: nextResults
   }
 }
 
@@ -134,14 +149,18 @@ export function buildPlannerFailurePayload(params: {
   score?: number
   plannerReason?: string
 }): string {
-  return JSON.stringify({
-    kind: PlannerTraceKind.Failure,
-    stage: params.stage,
-    reason: params.reason,
-    diagnostics: params.diagnostics ?? [],
-    score: params.score ?? null,
-    plannerReason: params.plannerReason ?? null,
-    requiresDirectLoopFallback: false,
-    action: "stop_and_request_plan_remediation",
-  }, null, 2)
+  return JSON.stringify(
+    {
+      kind: PlannerTraceKind.Failure,
+      stage: params.stage,
+      reason: params.reason,
+      diagnostics: params.diagnostics ?? [],
+      score: params.score ?? null,
+      plannerReason: params.plannerReason ?? null,
+      requiresDirectLoopFallback: false,
+      action: "stop_and_request_plan_remediation"
+    },
+    null,
+    2
+  )
 }

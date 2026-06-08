@@ -6,18 +6,14 @@ import { DiagnosticSeverity, EffectClass, PipelineBlockCode } from "../../domain
  */
 
 import type {
-    ContractReconciliationFinding,
-    PipelineStepResult,
-    PlannerRuntimeModel,
-    RepairPlan,
-    RepairTask,
-    SubagentTaskStep,
+  ContractReconciliationFinding,
+  PipelineStepResult,
+  PlannerRuntimeModel,
+  RepairPlan,
+  RepairTask,
+  SubagentTaskStep
 } from "../types.js"
-import {
-    buildIssueRepairActions,
-    buildLanguageRepairGuidance,
-    detectArtifactFamilies,
-} from "./artifacts.js"
+import { buildIssueRepairActions, buildLanguageRepairGuidance, detectArtifactFamilies } from "./artifacts.js"
 
 // ============================================================================
 // Repair plan helpers
@@ -25,7 +21,7 @@ import {
 
 export function collectAcceptedArtifacts(
   priorResults: ReadonlyMap<string, PipelineStepResult> | undefined,
-  stepResults: ReadonlyMap<string, PipelineStepResult>,
+  stepResults: ReadonlyMap<string, PipelineStepResult>
 ): Set<string> {
   const accepted = new Set<string>()
   const append = (result: PipelineStepResult | undefined) => {
@@ -40,7 +36,10 @@ export function collectAcceptedArtifacts(
   return accepted
 }
 
-export function getRepairTaskForStep(repairPlan: RepairPlan | undefined, stepName: string): RepairTask | undefined {
+export function getRepairTaskForStep(
+  repairPlan: RepairPlan | undefined,
+  stepName: string
+): RepairTask | undefined {
   return repairPlan?.tasks.find((task) => task.stepName === stepName)
 }
 
@@ -48,7 +47,7 @@ export function getUnresolvedAcceptanceBlockers(
   stepName: string,
   runtimeModel: PlannerRuntimeModel,
   repairTask: RepairTask | undefined,
-  acceptedArtifacts: ReadonlySet<string>,
+  acceptedArtifacts: ReadonlySet<string>
 ): string[] {
   const requiredAcceptedArtifacts = new Set<string>(repairTask?.requiredAcceptedArtifacts ?? [])
   const acceptedDependencySteps = runtimeModel.stepAcceptedDependencies.get(stepName) ?? []
@@ -70,12 +69,11 @@ export function getUnresolvedAcceptanceBlockers(
   })
 }
 
-export function buildAutonomousRepairBlock(
-  step: SubagentTaskStep,
-  feedback: readonly string[],
-): string {
+export function buildAutonomousRepairBlock(step: SubagentTaskStep, feedback: readonly string[]): string {
   const actions = buildIssueRepairActions(step, feedback)
-  const languageGuidance = buildLanguageRepairGuidance(detectArtifactFamilies(step.executionContext.targetArtifacts))
+  const languageGuidance = buildLanguageRepairGuidance(
+    detectArtifactFamilies(step.executionContext.targetArtifacts)
+  )
   if (actions.length === 0 && languageGuidance.length === 0) return ""
 
   const lines = [
@@ -83,8 +81,12 @@ export function buildAutonomousRepairBlock(
     "AUTONOMOUS REPAIR PLAN — treat verifier findings as ground truth and fix them without asking for human clarification:",
     ...actions.map((action, index) => `${index + 1}. ${action}`),
     ...(languageGuidance.length > 0
-      ? ["", "LANGUAGE-SPECIFIC EXECUTION RULES:", ...languageGuidance.map((rule, index) => `${index + 1}. ${rule}`)]
-      : []),
+      ? [
+          "",
+          "LANGUAGE-SPECIFIC EXECUTION RULES:",
+          ...languageGuidance.map((rule, index) => `${index + 1}. ${rule}`)
+        ]
+      : [])
   ]
 
   return `\n\n${lines.join("\n")}`
@@ -93,7 +95,7 @@ export function buildAutonomousRepairBlock(
 export function summarizeRepairTask(task: RepairTask): { primary: string[]; reference: string[] } {
   return {
     primary: task.ownedIssues.map((issue) => issue.summary),
-    reference: task.dependencyContext.map((issue) => issue.summary),
+    reference: task.dependencyContext.map((issue) => issue.summary)
   }
 }
 
@@ -125,7 +127,7 @@ export function collectReportedArtifacts(stepResult: PipelineStepResult): Set<st
 
 export function applyPostExecutionReconciliation(
   step: SubagentTaskStep,
-  stepResult: PipelineStepResult,
+  stepResult: PipelineStepResult
 ): PipelineStepResult {
   if (stepResult.toolCalls == null && stepResult.childResult == null) return stepResult
 
@@ -133,7 +135,9 @@ export function applyPostExecutionReconciliation(
   const reportedArtifacts = collectReportedArtifacts(stepResult)
   const targetArtifacts = new Set(step.executionContext.targetArtifacts.map(normalizeToolCallPath))
   const sourceArtifacts = new Set(step.executionContext.requiredSourceArtifacts.map(normalizeToolCallPath))
-  const forbiddenArtifacts = new Set((step.executionContext.forbiddenArtifacts ?? []).map(normalizeToolCallPath))
+  const forbiddenArtifacts = new Set(
+    (step.executionContext.forbiddenArtifacts ?? []).map(normalizeToolCallPath)
+  )
 
   const forbiddenTouched = [...reportedArtifacts].filter((artifact) => forbiddenArtifacts.has(artifact))
   if (forbiddenTouched.length > 0) {
@@ -141,33 +145,37 @@ export function applyPostExecutionReconciliation(
       code: PipelineBlockCode.ForbiddenArtifactWrite,
       severity: DiagnosticSeverity.Error,
       message: `Step modified forbidden artifacts: ${forbiddenTouched.join(", ")}`,
-      artifactPaths: forbiddenTouched,
+      artifactPaths: forbiddenTouched
     })
   }
 
   // Skip missing-output check when the child explicitly reported success with no blockers:
   // the target artifacts were already produced in a prior attempt and remain on disk.
-  const childAlreadySatisfied = stepResult.childResult?.status === "success" &&
+  const childAlreadySatisfied =
+    stepResult.childResult?.status === "success" &&
     (stepResult.childResult.unresolvedBlockers.length ?? 0) === 0
-  const missingOutputs = step.executionContext.effectClass !== EffectClass.Readonly && !childAlreadySatisfied
-    ? [...targetArtifacts].filter((artifact) => !reportedArtifacts.has(artifact))
-    : []
+  const missingOutputs =
+    step.executionContext.effectClass !== EffectClass.Readonly && !childAlreadySatisfied
+      ? [...targetArtifacts].filter((artifact) => !reportedArtifacts.has(artifact))
+      : []
   if (missingOutputs.length > 0) {
     findings.push({
       code: PipelineBlockCode.MissingRequiredOutput,
       severity: DiagnosticSeverity.Error,
       message: `Step did not produce or modify all required target artifacts: ${missingOutputs.join(", ")}`,
-      artifactPaths: missingOutputs,
+      artifactPaths: missingOutputs
     })
   }
 
-  const hallucinatedArtifacts = [...reportedArtifacts].filter((artifact) => !targetArtifacts.has(artifact) && !sourceArtifacts.has(artifact))
+  const hallucinatedArtifacts = [...reportedArtifacts].filter(
+    (artifact) => !targetArtifacts.has(artifact) && !sourceArtifacts.has(artifact)
+  )
   if (hallucinatedArtifacts.length > 0) {
     findings.push({
       code: PipelineBlockCode.HallucinatedArtifact,
       severity: DiagnosticSeverity.Error,
       message: `Step reported mutations to artifacts outside its contract: ${hallucinatedArtifacts.join(", ")}`,
-      artifactPaths: hallucinatedArtifacts,
+      artifactPaths: hallucinatedArtifacts
     })
   }
 
@@ -176,16 +184,19 @@ export function applyPostExecutionReconciliation(
       code: PipelineBlockCode.UnresolvedBlocker,
       severity: DiagnosticSeverity.Error,
       message: `Step reported unresolved blockers: ${stepResult.childResult!.unresolvedBlockers.join("; ")}`,
-      artifactPaths: [],
+      artifactPaths: []
     })
   }
 
-  if ((step.executionContext.requiredChecks?.length ?? 0) > 0 && (stepResult.verificationAttempts?.length ?? 0) === 0) {
+  if (
+    (step.executionContext.requiredChecks?.length ?? 0) > 0 &&
+    (stepResult.verificationAttempts?.length ?? 0) === 0
+  ) {
     findings.push({
       code: PipelineBlockCode.RequiredCheckSkipped,
       severity: DiagnosticSeverity.Warning,
       message: "Step completed without recording any verification attempts for its required checks.",
-      artifactPaths: [],
+      artifactPaths: []
     })
   }
 
@@ -194,8 +205,8 @@ export function applyPostExecutionReconciliation(
       ...stepResult,
       reconciliation: {
         compliant: true,
-        findings: [],
-      },
+        findings: []
+      }
     }
   }
 
@@ -205,8 +216,8 @@ export function applyPostExecutionReconciliation(
       ...stepResult,
       reconciliation: {
         compliant: true,
-        findings,
-      },
+        findings
+      }
     }
   }
 
@@ -215,11 +226,18 @@ export function applyPostExecutionReconciliation(
     status: "failed",
     executionState: "failed",
     acceptanceState: "repair_required",
-    error: [stepResult.error, ...findings.filter((finding: ContractReconciliationFinding) => finding.severity === "error").map((finding: ContractReconciliationFinding) => finding.message)].filter(Boolean).join("\n"),
+    error: [
+      stepResult.error,
+      ...findings
+        .filter((finding: ContractReconciliationFinding) => finding.severity === "error")
+        .map((finding: ContractReconciliationFinding) => finding.message)
+    ]
+      .filter(Boolean)
+      .join("\n"),
     reconciliation: {
       compliant: false,
-      findings,
-    },
+      findings
+    }
   }
 }
 
@@ -228,7 +246,10 @@ export function applyPostExecutionReconciliation(
 // ============================================================================
 
 export {
-    buildBlueprintRetryGuidance, executeToolForText, hasSuccessfulReadBackAfterWrite, isBlueprintLikeStep, validateBlueprintStepCompletion
+  buildBlueprintRetryGuidance,
+  executeToolForText,
+  hasSuccessfulReadBackAfterWrite,
+  isBlueprintLikeStep,
+  validateBlueprintStepCompletion
 } from "./blueprint.js"
 export type { SubagentValidationFailure } from "./blueprint.js"
-

@@ -20,11 +20,15 @@ function col(name: string, dataType = "int"): CatalogColumn {
   return { name, dataType, maxLength: null, nullable: false, isPK: false }
 }
 
-function table(schema: string, name: string, opts: {
-  type?: "TABLE" | "VIEW"
-  rowCount?: number | null
-  columns?: CatalogColumn[]
-} = {}): CatalogTable {
+function table(
+  schema: string,
+  name: string,
+  opts: {
+    type?: "TABLE" | "VIEW"
+    rowCount?: number | null
+    columns?: CatalogColumn[]
+  } = {}
+): CatalogTable {
   return {
     schema,
     name,
@@ -33,7 +37,7 @@ function table(schema: string, name: string, opts: {
     rowCount: opts.rowCount ?? null,
     columns: opts.columns ?? [col("Revenue", "decimal"), col("Date", "date")],
     fkOutgoing: [],
-    fkIncoming: [],
+    fkIncoming: []
   }
 }
 
@@ -45,16 +49,16 @@ function buildGraph(tables: CatalogTable[]): CatalogGraph {
     tables,
     implicitEdges: [],
     viewSourceRows: [],
-    sysCatalog: [],
+    sysCatalog: []
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
 }
 
 function stubVerdicts(records: TableVerdictRecord[]): TableVerdictsReader {
   return {
     list: ({ qnames }) => {
-    const wanted = new Set(qnames.map((q) => q.toLowerCase()))
-    return records.filter((r) => wanted.has(r.qname.toLowerCase()))
-    },
+      const wanted = new Set(qnames.map((q) => q.toLowerCase()))
+      return records.filter((r) => wanted.has(r.qname.toLowerCase()))
+    }
   }
 }
 
@@ -64,7 +68,7 @@ function rec(qname: string, role: TableVerdictRecord["role"]): TableVerdictRecor
     role,
     evidence: [`stub: ${role}`],
     confidence: 0.9,
-    createdAt: new Date().toISOString(),
+    createdAt: new Date().toISOString()
   }
 }
 
@@ -111,10 +115,7 @@ describe("searchCatalog — memory verdict bonus", () => {
     const a = table("publish", "RevenueA")
     const b = table("publish", "RevenueB")
     const g = buildGraph([a, b])
-    const verdicts = stubVerdicts([
-      rec("publish.RevenueA", "subset"),
-      rec("publish.RevenueB", "canonical"),
-    ])
+    const verdicts = stubVerdicts([rec("publish.RevenueA", "subset"), rec("publish.RevenueB", "canonical")])
     const hits = g.search("revenue", 10, verdicts)
     expect(hits[0]?.table.qualifiedName).toBe("publish.RevenueB")
     expect(hits[1]?.table.qualifiedName).toBe("publish.RevenueA")
@@ -127,9 +128,7 @@ describe("searchCatalog — memory verdict bonus", () => {
     const verdicts = stubVerdicts([rec("publish.RevenueA", "unknown")])
     const hits = g.search("revenue", 10, verdicts)
     // Order is whatever structural ranking decides — verdict didn't move it.
-    expect(hits.map((h) => h.table.qualifiedName).sort()).toEqual([
-      "publish.RevenueA", "publish.RevenueB",
-    ])
+    expect(hits.map((h) => h.table.qualifiedName).sort()).toEqual(["publish.RevenueA", "publish.RevenueB"])
   })
 
   it("matches qname case-insensitively", () => {
@@ -145,7 +144,11 @@ describe("searchCatalog — memory verdict bonus", () => {
     const a = table("publish", "Revenue")
     const b = table("publish", "RevenueB")
     const g = buildGraph([a, b])
-    const hits = g.search("revenue", 10, { list: () => { throw new Error("boom") } })
+    const hits = g.search("revenue", 10, {
+      list: () => {
+        throw new Error("boom")
+      }
+    })
     expect(hits).toHaveLength(2)
   })
 
@@ -158,7 +161,7 @@ describe("searchCatalog — memory verdict bonus", () => {
     const verdicts = stubVerdicts([
       rec("publish.RevenueStage", "staging"),
       rec("publish.RevenueArchive", "archive"),
-      rec("publish.RevenueRules", "rules"),
+      rec("publish.RevenueRules", "rules")
     ])
     const hits = g.search("revenue", 10, verdicts)
     // canon should be first; rules penalty (−120) is harshest among siblings.

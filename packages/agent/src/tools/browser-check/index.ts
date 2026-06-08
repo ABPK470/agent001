@@ -37,7 +37,7 @@ export type BrowserCheckExecutor = (
   htmlPath: string,
   clicks: string[],
   waitMs: number,
-  cwd: string,
+  cwd: string
 ) => Promise<BrowserCheckResult>
 
 // ── Constants (hoisted so const-tool initializers don't trip TDZ) ─
@@ -58,28 +58,27 @@ const BROWSER_CHECK_PARAMETERS = {
   properties: {
     path: {
       type: "string",
-      description:
-        "Path to the HTML file to check, relative to workspace root (e.g., 'tmp/game/index.html').",
+      description: "Path to the HTML file to check, relative to workspace root (e.g., 'tmp/game/index.html')."
     },
     click: {
       type: "array",
       items: { type: "string" },
       description:
         "Optional CSS selectors to click, in order (e.g., ['#startBtn', '.play-button']). " +
-        "Each click waits 500ms for any resulting errors.",
+        "Each click waits 500ms for any resulting errors."
     },
     wait: {
       type: "number",
-      description: "Milliseconds to wait after page load before collecting errors (default: 1000).",
-    },
+      description: "Milliseconds to wait after page load before collecting errors (default: 1000)."
+    }
   },
-  required: ["path"],
+  required: ["path"]
 } as const
 
 export const browserCheckToolMetadata: ToolMetadata = {
   name: "browser_check",
   description: BROWSER_CHECK_DESCRIPTION,
-  parameters: BROWSER_CHECK_PARAMETERS,
+  parameters: BROWSER_CHECK_PARAMETERS
 }
 
 export const browserCheckTool = browserCheckToolMetadata
@@ -92,9 +91,9 @@ export function createBrowserCheckTool(host: AgentHost): ExecutableTool {
       return runBrowserCheck(args, {
         mode: host.browserCheck.mode,
         cwd: host.browserCheck.cwd,
-        executor: host.browserCheck.client,
+        executor: host.browserCheck.client
       })
-    },
+    }
   }
 }
 
@@ -106,10 +105,7 @@ interface BrowserCheckCtx {
   executor: BrowserCheckExecutor | null
 }
 
-async function runBrowserCheck(
-  args: Record<string, unknown>,
-  ctx: BrowserCheckCtx,
-): Promise<string> {
+async function runBrowserCheck(args: Record<string, unknown>, ctx: BrowserCheckCtx): Promise<string> {
   const relPath = String(args.path)
   const clicks = Array.isArray(args.click) ? args.click.map(String) : []
   const waitMs = Math.min(Number(args.wait ?? 1000), 10000)
@@ -159,7 +155,7 @@ async function runBrowserCheck(
   try {
     browser = await launchBrowser({
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"]
     })
     const page = await browser.newPage()
 
@@ -207,7 +203,9 @@ async function runBrowserCheck(
         await page.click(selector)
         await new Promise((resolve) => setTimeout(resolve, 500))
       } catch (err) {
-        consoleErrors.push(`Click failed on "${selector}": ${err instanceof Error ? err.message : String(err)}`)
+        consoleErrors.push(
+          `Click failed on "${selector}": ${err instanceof Error ? err.message : String(err)}`
+        )
       }
     }
 
@@ -234,14 +232,20 @@ async function runBrowserCheck(
         for (const warning of consoleWarnings) lines.push(`  - ${warning}`)
       }
 
-      const has404 = consoleErrors.some((err) => err.includes("404")) || networkErrors.some((err) => err.includes("ERR_ABORTED") || err.includes("404"))
+      const has404 =
+        consoleErrors.some((err) => err.includes("404")) ||
+        networkErrors.some((err) => err.includes("ERR_ABORTED") || err.includes("404"))
       if (has404) {
         lines.push("")
         lines.push("## Path Resolution")
         lines.push(`  Static server root: ${dir}/`)
-        lines.push("  All <script src>, <link href>, and other references in the HTML are resolved relative to this directory.")
+        lines.push(
+          "  All <script src>, <link href>, and other references in the HTML are resolved relative to this directory."
+        )
         lines.push(`  To fix 404s: ensure the referenced files exist under ${dir}/ with matching paths.`)
-        lines.push("  Use list_directory to verify the file structure, then either move the files or fix the HTML references.")
+        lines.push(
+          "  Use list_directory to verify the file structure, then either move the files or fix the HTML references."
+        )
       }
 
       lines.push("")

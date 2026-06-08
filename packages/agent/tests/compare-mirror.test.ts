@@ -29,7 +29,7 @@ describe("decideMirrorRecommendation — happy path", () => {
     const r = decideMirrorRecommendation(
       stats("publish.Revenue", 100_000_000, new Date("2026-05-22T07:00:00Z")),
       stats("persistedView.publish.Revenue", 100_010_000, fresh),
-      NOW,
+      NOW
     )
     expect(r.recommendation).toBe("USE_MIRROR")
     expect(r.deltaPct).toBe(0.01)
@@ -42,7 +42,7 @@ describe("decideMirrorRecommendation — guards", () => {
     const r = decideMirrorRecommendation(
       stats("publish.Revenue", 100_000_000, NOW),
       stats("persistedView.publish.Revenue", null, null, false),
-      NOW,
+      NOW
     )
     expect(r.recommendation).toBe("USE_CANONICAL")
     expect(r.reason).toMatch(/does not exist/i)
@@ -52,7 +52,7 @@ describe("decideMirrorRecommendation — guards", () => {
     const r = decideMirrorRecommendation(
       stats("publish.Revenue", null, null, false),
       stats("persistedView.publish.Revenue", 1_000, NOW),
-      NOW,
+      NOW
     )
     expect(r.recommendation).toBe("INSUFFICIENT_DATA")
     expect(r.reason).toMatch(/canonical/i)
@@ -62,7 +62,7 @@ describe("decideMirrorRecommendation — guards", () => {
     const r = decideMirrorRecommendation(
       stats("publish.Revenue", 0, NOW),
       stats("persistedView.publish.Revenue", 0, NOW),
-      NOW,
+      NOW
     )
     expect(r.recommendation).toBe("INSUFFICIENT_DATA")
     expect(r.reason).toMatch(/zero rows/i)
@@ -73,7 +73,7 @@ describe("decideMirrorRecommendation — guards", () => {
     const r = decideMirrorRecommendation(
       stats("publish.Revenue", 100_000_000, NOW),
       stats("persistedView.publish.Revenue", 110_000_000, NOW), // +10%
-      NOW,
+      NOW
     )
     expect(r.recommendation).toBe("INSUFFICIENT_DATA")
     expect(r.reason).toMatch(/more rows/i)
@@ -83,7 +83,7 @@ describe("decideMirrorRecommendation — guards", () => {
     const r = decideMirrorRecommendation(
       stats("publish.Revenue", 100_000_000, NOW),
       stats("persistedView.publish.Revenue", 90_000_000, NOW), // −10%
-      NOW,
+      NOW
     )
     expect(r.recommendation).toBe("INSUFFICIENT_DATA")
     expect(r.reason).toMatch(/delta/i)
@@ -94,7 +94,7 @@ describe("decideMirrorRecommendation — guards", () => {
     const r = decideMirrorRecommendation(
       stats("publish.Revenue", 100, NOW),
       stats("persistedView.publish.Revenue", 100, null),
-      NOW,
+      NOW
     )
     expect(r.recommendation).toBe("INSUFFICIENT_DATA")
     expect(r.reason).toMatch(/STATS_DATE/i)
@@ -105,7 +105,7 @@ describe("decideMirrorRecommendation — guards", () => {
     const r = decideMirrorRecommendation(
       stats("publish.Revenue", 100, NOW),
       stats("persistedView.publish.Revenue", 100, stale),
-      NOW,
+      NOW
     )
     expect(r.recommendation).toBe("INSUFFICIENT_DATA")
     expect(r.reason).toMatch(/24h/)
@@ -119,8 +119,8 @@ describe("decideMirrorRecommendation — guards", () => {
       stats("publish.Revenue", 100_000, NOW),
       stats("persistedView.publish.Revenue", 100_500, oldButOk), // 0.5%
       NOW,
-      1,    // maxDeltaPct
-      48,   // maxFreshHours
+      1, // maxDeltaPct
+      48 // maxFreshHours
     )
     expect(r.recommendation).toBe("USE_MIRROR")
   })
@@ -133,7 +133,7 @@ describe("decideMirrorRecommendation — return shape", () => {
     const r = decideMirrorRecommendation(
       stats("publish.Revenue", 100, d1),
       stats("persistedView.publish.Revenue", 100, d2),
-      NOW,
+      NOW
     )
     expect(r.canonical.statsDate).toBe(d1.toISOString())
     expect(r.mirror.statsDate).toBe(d2.toISOString())
@@ -145,7 +145,7 @@ describe("decideMirrorRecommendation — return shape", () => {
     const r = decideMirrorRecommendation(
       stats("publish.Revenue", 100, null),
       stats("persistedView.publish.Revenue", null, null, false),
-      NOW,
+      NOW
     )
     expect(r.canonical.statsDate).toBeNull()
     expect(r.mirror.statsDate).toBeNull()

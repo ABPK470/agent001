@@ -20,7 +20,7 @@ export function createPublishedSyncDefinitionRegistry(): PublishedSyncDefinition
     bundle: null,
     loadedFromPath: null,
     loadedFromMtimeMs: null,
-    loadedFromSize: null,
+    loadedFromSize: null
   }
 
   return {
@@ -29,7 +29,7 @@ export function createPublishedSyncDefinitionRegistry(): PublishedSyncDefinition
       if (!existsSync(fullPath)) {
         throw new Error(
           `Published sync definition bundle not found at ${relPath}. ` +
-          `Run npm run sync:definitions:compile -- --write before previewing syncs.`,
+            `Run npm run sync:definitions:compile -- --write before previewing syncs.`
         )
       }
 
@@ -59,6 +59,6 @@ export function createPublishedSyncDefinitionRegistry(): PublishedSyncDefinition
       cache.loadedFromPath = null
       cache.loadedFromMtimeMs = null
       cache.loadedFromSize = null
-    },
+    }
   }
 }

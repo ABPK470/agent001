@@ -46,7 +46,9 @@ const QUALIFIED_NAME_RE = /\b([a-zA-Z][a-zA-Z0-9_]*)\.([a-zA-Z][a-zA-Z0-9_]*)\b/
 
 /** Same co-reference heuristic as schema-match — keeps behaviours aligned. */
 function looksCoreferential(goal: string): boolean {
-  return /\b(it|this|that|these|those|the\s+(data|result|results|report|chart|output|table|rows|answer|response))\b/i.test(goal)
+  return /\b(it|this|that|these|those|the\s+(data|result|results|report|chart|output|table|rows|answer|response))\b/i.test(
+    goal
+  )
 }
 
 function hasRecentAssistantTurn(messages: readonly ClarifyContext["messages"][number][]): boolean {
@@ -109,28 +111,31 @@ export const canonicalAmbiguityDetector: Detector = {
     const candidates = hits.slice(0, 3).map((h) => {
       const rows = h.table.rowCount ?? 0
       const kind = h.table.type === "VIEW" ? "VIEW" : "TABLE"
-      const rowFmt = rows >= 1_000_000
-        ? `${(rows / 1_000_000).toFixed(1)}M rows`
-        : rows >= 1_000
-          ? `${(rows / 1_000).toFixed(0)}k rows`
-          : `${rows} rows`
+      const rowFmt =
+        rows >= 1_000_000
+          ? `${(rows / 1_000_000).toFixed(1)}M rows`
+          : rows >= 1_000
+            ? `${(rows / 1_000).toFixed(0)}k rows`
+            : `${rows} rows`
       return `${h.table.qualifiedName} (${kind}, score ${Math.round(h.score)}, ${rowFmt})`
     })
 
-    return [{
-      id: makeFindingId("canonical-ambiguity", matchedKeyword),
-      kind: "canonical-ambiguity" as const,
-      severity: "warn" as const,
-      subject: matchedKeyword,
-      reasoning:
-        `Top two catalog matches for "${matchedKeyword}" are within ` +
-        `${Math.round(gap * 100)}% on rank score — picking the wrong one ` +
-        `can silently swap a canonical metric for a narrower subset.`,
-      candidates,
-      suggestedQuestion:
-        `For "${matchedKeyword}", which of these tables should I use?\n` +
-        candidates.map((c) => `  • ${c}`).join("\n"),
-      source: "detector" as const,
-    }]
-  },
+    return [
+      {
+        id: makeFindingId("canonical-ambiguity", matchedKeyword),
+        kind: "canonical-ambiguity" as const,
+        severity: "warn" as const,
+        subject: matchedKeyword,
+        reasoning:
+          `Top two catalog matches for "${matchedKeyword}" are within ` +
+          `${Math.round(gap * 100)}% on rank score — picking the wrong one ` +
+          `can silently swap a canonical metric for a narrower subset.`,
+        candidates,
+        suggestedQuestion:
+          `For "${matchedKeyword}", which of these tables should I use?\n` +
+          candidates.map((c) => `  • ${c}`).join("\n"),
+        source: "detector" as const
+      }
+    ]
+  }
 }

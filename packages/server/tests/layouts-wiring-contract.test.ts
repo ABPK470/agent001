@@ -32,14 +32,10 @@ describe("layouts wiring (v19) — single-input dashboard key", () => {
     const body = fnMatch![0]
 
     expect(body, "must read req.session.upn").toMatch(/req\.session\.upn|session\.upn/)
-    expect(
-      body,
-      "must NOT read session.sid (anon fallback was the bug)",
-    ).not.toMatch(/session\.sid/)
-    expect(
-      body,
-      "must NOT branch on session.isAdmin (admin special-case was the bug)",
-    ).not.toMatch(/session\.isAdmin/)
+    expect(body, "must NOT read session.sid (anon fallback was the bug)").not.toMatch(/session\.sid/)
+    expect(body, "must NOT branch on session.isAdmin (admin special-case was the bug)").not.toMatch(
+      /session\.isAdmin/
+    )
   })
 
   it("App.tsx restoreDashboardState useEffect deps are exactly [me?.upn]", () => {
@@ -63,7 +59,10 @@ describe("layouts wiring (v19) — single-input dashboard key", () => {
       else if (c === '"' || c === "'" || c === "`") {
         const q = c
         i++
-        while (i < src.length && src[i] !== q) { if (src[i] === "\\") i++; i++ }
+        while (i < src.length && src[i] !== q) {
+          if (src[i] === "\\") i++
+          i++
+        }
       }
       i++
     }
@@ -74,13 +73,11 @@ describe("layouts wiring (v19) — single-input dashboard key", () => {
     const deps = depsMatch![1].trim()
 
     expect(deps, "deps must include me?.upn").toMatch(/me\?\.upn/)
-    expect(
-      deps,
-      "deps must NOT include me?.sessionId (sessionId no longer exists on Me)",
-    ).not.toMatch(/me\?\.sessionId/)
-    expect(
-      deps,
-      "deps must NOT include me?.isAdmin (single-input collapse — see header)",
-    ).not.toMatch(/me\?\.isAdmin/)
+    expect(deps, "deps must NOT include me?.sessionId (sessionId no longer exists on Me)").not.toMatch(
+      /me\?\.sessionId/
+    )
+    expect(deps, "deps must NOT include me?.isAdmin (single-input collapse — see header)").not.toMatch(
+      /me\?\.isAdmin/
+    )
   })
 })

@@ -8,19 +8,19 @@ import { PlannerNeedLevel } from "../../domain/index.js"
 import { MessageRole } from "../../domain/enums/message.js"
 import type { Message } from "../../types.js"
 import {
-    BOUNDED_COHERENT_SCOPE_RE,
-    COHERENCE_FIRST_RE,
-    COHESIVE_IMPLEMENTATION_RE,
-    COORDINATION_HEAVY_RE,
-    DELEGATION_RE,
-    EXISTING_CODE_COUPLING_RE,
-    IMPLEMENTATION_SCOPE_RE,
-    MULTI_STEP_RE,
-    MULTI_TARGET_CUE_RE,
-    RECOVERY_HINT_RE,
-    TARGET_FILE_RE,
-    TOOL_DIVERSITY_RE,
-    VERIFICATION_RE,
+  BOUNDED_COHERENT_SCOPE_RE,
+  COHERENCE_FIRST_RE,
+  COHESIVE_IMPLEMENTATION_RE,
+  COORDINATION_HEAVY_RE,
+  DELEGATION_RE,
+  EXISTING_CODE_COUPLING_RE,
+  IMPLEMENTATION_SCOPE_RE,
+  MULTI_STEP_RE,
+  MULTI_TARGET_CUE_RE,
+  RECOVERY_HINT_RE,
+  TARGET_FILE_RE,
+  TOOL_DIVERSITY_RE,
+  VERIFICATION_RE
 } from "../internal/decision-patterns.js"
 import type { RoutingConfidence } from "../types.js"
 
@@ -52,20 +52,22 @@ export interface RoutingAxes {
 
 export function collectSignals(messageText: string, history: readonly Message[]): RequestSignals {
   const normalized = messageText.trim()
-  const bulletCount = (normalized.match(/^[\s]*[-*•]\s/gm) ?? []).length
-    + (normalized.match(/^\s*\d+[.)]\s/gm) ?? []).length
+  const bulletCount =
+    (normalized.match(/^[\s]*[-*•]\s/gm) ?? []).length + (normalized.match(/^\s*\d+[.)]\s/gm) ?? []).length
 
-  const priorToolMessages = history.filter(m => m.role === MessageRole.Tool).length
-  const targetFilePaths = [...new Set((normalized.match(TARGET_FILE_RE) ?? []).map(p => p.replace(/^\.\//, "")))]
+  const priorToolMessages = history.filter((m) => m.role === MessageRole.Tool).length
+  const targetFilePaths = [
+    ...new Set((normalized.match(TARGET_FILE_RE) ?? []).map((p) => p.replace(/^\.\//, "")))
+  ]
   // Exclude system messages: the episodic memory in the system prompt often contains
   // "stuck" from a prior run in the session, which would poison routing for all
   // subsequent unrelated queries. Only assistant / user / tool messages can legitimately
   // indicate that the CURRENT goal is a retry of a failed direct-loop attempt.
   // Limit to the last 4 non-system messages (≈ 2 exchanges) so a stuck event
   // from several turns ago does not affect today's semantically different queries.
-  const historyTail = history.filter(m => m.role !== "system").slice(-4)
+  const historyTail = history.filter((m) => m.role !== "system").slice(-4)
   const hasPriorNoProgressSignal = historyTail.some(
-    m => typeof m.content === "string" && RECOVERY_HINT_RE.test(m.content),
+    (m) => typeof m.content === "string" && RECOVERY_HINT_RE.test(m.content)
   )
 
   return {
@@ -79,12 +81,14 @@ export function collectSignals(messageText: string, history: readonly Message[])
     structuredBulletCount: bulletCount,
     priorToolMessages,
     targetFilePaths,
-    hasPriorNoProgressSignal,
+    hasPriorNoProgressSignal
   }
 }
 
 export function isHighConfidenceSingleArtifactBurst(signals: RequestSignals): boolean {
-  const explicitSingleArtifact = /\b(?:single|one|only)\s+(?:file|module|component|page|script)\b/i.test(signals.normalized)
+  const explicitSingleArtifact = /\b(?:single|one|only)\s+(?:file|module|component|page|script)\b/i.test(
+    signals.normalized
+  )
   if (!explicitSingleArtifact) return false
   if (signals.targetFilePaths.length !== 1) return false
   if (signals.hasDelegationCue || signals.hasMultiStepCue) return false
@@ -100,11 +104,13 @@ export function toNeedLevel(score: number): PlannerNeedLevel {
 }
 
 export function hasRealOwnershipSeparation(signals: RequestSignals): boolean {
-  return signals.hasMultiStepCue
-    || signals.hasDelegationCue
-    || signals.structuredBulletCount > 0
-    || MULTI_TARGET_CUE_RE.test(signals.normalized)
-    || COORDINATION_HEAVY_RE.test(signals.normalized)
+  return (
+    signals.hasMultiStepCue ||
+    signals.hasDelegationCue ||
+    signals.structuredBulletCount > 0 ||
+    MULTI_TARGET_CUE_RE.test(signals.normalized) ||
+    COORDINATION_HEAVY_RE.test(signals.normalized)
+  )
 }
 
 export function evaluateRoutingAxes(signals: RequestSignals): RoutingAxes {
@@ -135,7 +141,7 @@ export function evaluateRoutingAxes(signals: RequestSignals): RoutingAxes {
     coherenceScore,
     coordinationScore,
     coherenceNeed: toNeedLevel(coherenceScore),
-    coordinationNeed: toNeedLevel(coordinationScore),
+    coordinationNeed: toNeedLevel(coordinationScore)
   }
 }
 
@@ -163,7 +169,8 @@ export function evaluateRoutingAxes(signals: RequestSignals): RoutingAxes {
  */
 export function computeRoutingConfidence(signals: RequestSignals, axes: RoutingAxes): RoutingConfidence {
   if (axes.coordinationNeed === PlannerNeedLevel.High) return "decisive_planner"
-  if (signals.hasMultiStepCue && (signals.hasDelegationCue || signals.structuredBulletCount > 0)) return "decisive_planner"
+  if (signals.hasMultiStepCue && (signals.hasDelegationCue || signals.structuredBulletCount > 0))
+    return "decisive_planner"
 
   if (axes.coordinationNeed === PlannerNeedLevel.Medium) {
     // At least one hard non-delegation coordination signal → lean planner

@@ -18,22 +18,24 @@ export const UNRESOLVED_WORK_RE =
 /** Context-sensitive markers — only flag these when they appear in "unresolved work" context, not in normal English descriptions. */
 export const CONTEXT_SENSITIVE_MARKERS: ReadonlyArray<{ re: RegExp; label: string }> = [
   { re: /\b(?:do|implement|fix|add|handle|address|revisit|come back(?:to)?)\s+later\b/i, label: "later" },
-  { re: /\b(?:incomplete\s+(?:implementation|code|logic|work|feature)|(?:implementation|code|logic|work|feature)\s+(?:is|are|remains?)\s+incomplete)\b/i, label: "incomplete" },
+  {
+    re: /\b(?:incomplete\s+(?:implementation|code|logic|work|feature)|(?:implementation|code|logic|work|feature)\s+(?:is|are|remains?)\s+incomplete)\b/i,
+    label: "incomplete"
+  },
   { re: /\bwill be\s+(?:implemented|added|done|completed|fixed|handled|addressed)\b/i, label: "will be" },
-  { re: /\b(?:blocked on|blocked by)\s+(?:a |the |an )?(?:missing|lack|absence|dependency|requirement|issue|bug|error)/i, label: "blocked on" },
+  {
+    re: /\b(?:blocked on|blocked by)\s+(?:a |the |an )?(?:missing|lack|absence|dependency|requirement|issue|bug|error)/i,
+    label: "blocked on"
+  },
   { re: /\b(?:can'?t|cannot)\s+(?:implement|complete|finish|fix|resolve|access|proceed)/i, label: "can't" },
-  { re: /\b(?:placeholder|stub)\s+(?:logic|code|function|implementation)\b/i, label: "placeholder/stub" },
+  { re: /\b(?:placeholder|stub)\s+(?:logic|code|function|implementation)\b/i, label: "placeholder/stub" }
 ]
 
 /** File mutation tool names — tools that create/modify/delete files. */
-export const FILE_MUTATION_TOOLS = new Set([
-  "write_file", "append_file", "replace_in_file",
-])
+export const FILE_MUTATION_TOOLS = new Set(["write_file", "append_file", "replace_in_file"])
 
 /** File reading tool names. */
-export const FILE_READ_TOOLS = new Set([
-  "read_file", "list_directory", "search_files",
-])
+export const FILE_READ_TOOLS = new Set(["read_file", "list_directory", "search_files"])
 
 /** Commands that provide executable verification evidence. */
 export const EXECUTABLE_VERIFICATION_CMD_RE =
@@ -79,16 +81,13 @@ export const UNRESOLVED_HANDOFF_RE =
   /\b(?:would you like to (?:proceed|continue)|should i (?:proceed|continue)|let me know if you (?:want|would like) me to (?:continue|proceed|implement)|partial(?:ly)? logic|partial(?:ly)? implementation|foundational partial implementation|this (?:project|implementation) is (?:a )?foundation|further refinements can be made|missing game mechanics|full compliance may require|may require additional (?:delegation|work|implementation)|not fully (?:implemented|complete)|deep validation(?:.*)?appears)\b/i
 
 /** Narrative file claims without tool evidence. */
-export const NARRATIVE_FILE_CLAIM_RE =
-  /\b(?:created|wrote|saved|updated|implemented|scaffolded|generated)\b/i
+export const NARRATIVE_FILE_CLAIM_RE = /\b(?:created|wrote|saved|updated|implemented|scaffolded|generated)\b/i
 
 /** Low-signal browser targets that don't count as meaningful evidence. */
 export const LOW_SIGNAL_BROWSER_TARGETS = new Set(["about:blank"])
 
 /** Browser tools that are meaningful (navigate, snapshot, run_code). */
-export const MEANINGFUL_BROWSER_TOOLS = new Set([
-  "browser_check",
-])
+export const MEANINGFUL_BROWSER_TOOLS = new Set(["browser_check"])
 
 /** Browser tools that are low-signal (tab list, console only). */
 export const LOW_SIGNAL_BROWSER_TOOLS = new Set<string>([
@@ -103,8 +102,7 @@ export const RESEARCH_TASK_RE =
 export const IMPLEMENTATION_TASK_RE =
   /\b(?:implement|build|create|scaffold|write|code|develop|add|make|construct|generate|produce|render|design)\b/i
 
-export const VALIDATION_TASK_RE =
-  /\b(?:test|validate|verify|check|confirm|ensure|assert|playtest|qa|e2e)\b/i
+export const VALIDATION_TASK_RE = /\b(?:test|validate|verify|check|confirm|ensure|assert|playtest|qa|e2e)\b/i
 
 export const DOCUMENTATION_TASK_RE =
   /\b(?:document|readme|docs?|guide|instructions?|how[\s-]?to|architecture|design)\b/i

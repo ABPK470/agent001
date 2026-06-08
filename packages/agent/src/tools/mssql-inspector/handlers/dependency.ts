@@ -18,12 +18,12 @@ export async function runDependsOn(p: sql.ConnectionPool, qualName: string): Pro
     return `No dependencies found for ${qualName}. It may have no static references, or use dynamic SQL.`
   }
 
-  const tables = result.recordset.filter((r: Record<string, string>) =>
-    r.ref_type === "USER_TABLE" || r.ref_type === "SYSTEM_TABLE",
+  const tables = result.recordset.filter(
+    (r: Record<string, string>) => r.ref_type === "USER_TABLE" || r.ref_type === "SYSTEM_TABLE"
   )
   const views = result.recordset.filter((r: Record<string, string>) => r.ref_type === "VIEW")
-  const procs = result.recordset.filter((r: Record<string, string>) =>
-    r.ref_type?.includes("PROCEDURE") || r.ref_type?.includes("FUNCTION"),
+  const procs = result.recordset.filter(
+    (r: Record<string, string>) => r.ref_type?.includes("PROCEDURE") || r.ref_type?.includes("FUNCTION")
   )
 
   const lines = [`Dependencies of ${qualName} (${result.recordset.length} direct references):\n`]
@@ -42,7 +42,7 @@ export async function runDependsOn(p: sql.ConnectionPool, qualName: string): Pro
   lines.push(
     "",
     `Tip: Call inspect_definition(object='${qualName}') to read the full T-SQL and spot duplicate joins.`,
-    `Tip: Call inspect_definition(depends_on='schema.ViewName') on any listed view for deeper traversal.`,
+    `Tip: Call inspect_definition(depends_on='schema.ViewName') on any listed view for deeper traversal.`
   )
   return lines.join("\n")
 }
@@ -61,7 +61,9 @@ export async function runSearch(p: sql.ConnectionPool, pattern: string): Promise
   for (const r of result.recordset) {
     const type = String(r.object_type)
     if (!byType.has(type)) byType.set(type, [])
-    byType.get(type)!.push({ schema: r.schema_name, name: r.object_name, modified: String(r.modify_date ?? "") })
+    byType
+      .get(type)!
+      .push({ schema: r.schema_name, name: r.object_name, modified: String(r.modify_date ?? "") })
   }
   for (const [type, items] of byType) {
     lines.push(`  ${type} (${items.length}):`)

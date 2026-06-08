@@ -4,14 +4,14 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 import {
-    applyWorkspaceDiff,
-    classifyRunTaskType,
-    cleanupStaleRunWorkspaces,
-    computeWorkspaceDiff,
-    getRunProfile,
-    getRunWorkspaceRoot,
-    prepareRunWorkspace,
-    shouldUseIsolatedWorkspace,
+  applyWorkspaceDiff,
+  classifyRunTaskType,
+  cleanupStaleRunWorkspaces,
+  computeWorkspaceDiff,
+  getRunProfile,
+  getRunWorkspaceRoot,
+  prepareRunWorkspace,
+  shouldUseIsolatedWorkspace
 } from "../src/application/shell/workspace/run-workspace.js"
 
 const createdDirs: string[] = []
@@ -123,11 +123,11 @@ describe("run-workspace", () => {
       // regardless of deployment env. The deprecated `profile` param
       // only feeds the legacy admin-codegen copy path.
       const ctx = await prepareRunWorkspace({
-        runId:      "run-hosted-1",
+        runId: "run-hosted-1",
         sourceRoot,
-        goal:       "Read MSSQL stats",  // analysis-style goal; would normally not isolate
-        resume:     false,
-        role:       PolicyRole.HostedUser,
+        goal: "Read MSSQL stats", // analysis-style goal; would normally not isolate
+        resume: false,
+        role: PolicyRole.HostedUser
       })
       createdDirs.push(ctx.executionRoot)
 
@@ -140,25 +140,29 @@ describe("run-workspace", () => {
       try {
         await stat(join(ctx.executionRoot, "src", "secret.ts"))
         leaked = true
-      } catch { /* expected */ }
+      } catch {
+        /* expected */
+      }
       expect(leaked).toBe(false)
 
       let readmeLeaked = false
       try {
         await stat(join(ctx.executionRoot, "README.md"))
         readmeLeaked = true
-      } catch { /* expected */ }
+      } catch {
+        /* expected */
+      }
       expect(readmeLeaked).toBe(false)
     })
 
     it("isolates hosted runs even on resume", async () => {
       const sourceRoot = await createTempDir("hosted-resume-")
       const ctx = await prepareRunWorkspace({
-        runId:   "run-hosted-resume",
+        runId: "run-hosted-resume",
         sourceRoot,
-        goal:    "follow up question",
-        resume:  true,
-        role:    PolicyRole.HostedUser,
+        goal: "follow up question",
+        resume: true,
+        role: PolicyRole.HostedUser
       })
       createdDirs.push(ctx.executionRoot)
       expect(ctx.isolated).toBe(true)

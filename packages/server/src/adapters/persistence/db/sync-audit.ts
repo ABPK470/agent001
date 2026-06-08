@@ -27,10 +27,14 @@ export interface RecordSyncAuditInput {
 }
 
 export function recordSyncAudit(i: RecordSyncAuditInput): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO sync_audit (plan_id, actor, actor_upn, action, detail, timestamp)
     VALUES (?, ?, ?, ?, ?, datetime('now'))
-  `).run(i.planId, i.actor, i.actorUpn, i.action, JSON.stringify(i.detail))
+  `
+    )
+    .run(i.planId, i.actor, i.actorUpn, i.action, JSON.stringify(i.detail))
 }
 
 export function listSyncAuditForPlan(planId: string): SyncAuditRow[] {

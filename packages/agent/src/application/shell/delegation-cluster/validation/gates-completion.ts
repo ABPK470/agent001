@@ -7,14 +7,14 @@
 
 import { DelegationOutputValidationCode } from "../../../../domain/enums/delegation.js"
 import {
-    classifyTaskIntent,
-    COMPLETION_CLAIM_RE,
-    CONTEXT_SENSITIVE_MARKERS,
-    extractAcceptanceTokens,
-    hasPostMutationArtifactInspection,
-    isExecutableVerificationToolCall,
-    specRequiresFileMutationEvidence,
-    UNRESOLVED_WORK_RE,
+  classifyTaskIntent,
+  COMPLETION_CLAIM_RE,
+  CONTEXT_SENSITIVE_MARKERS,
+  extractAcceptanceTokens,
+  hasPostMutationArtifactInspection,
+  isExecutableVerificationToolCall,
+  specRequiresFileMutationEvidence,
+  UNRESOLVED_WORK_RE
 } from "../validation-patterns/index.js"
 import type { DelegationOutputValidationResult, GateParams } from "./types.js"
 
@@ -27,7 +27,7 @@ export function gateContradictoryCompletion(p: GateParams): DelegationOutputVali
     return {
       ok: false,
       code: DelegationOutputValidationCode.ContradictoryCompletionClaim,
-      message: `Child claims completion but output contains unresolved work: "${unresolvedMatch?.[0]}"`,
+      message: `Child claims completion but output contains unresolved work: "${unresolvedMatch?.[0]}"`
     }
   }
   for (const { re, label } of CONTEXT_SENSITIVE_MARKERS) {
@@ -35,7 +35,7 @@ export function gateContradictoryCompletion(p: GateParams): DelegationOutputVali
       return {
         ok: false,
         code: DelegationOutputValidationCode.ContradictoryCompletionClaim,
-        message: `Child claims completion but output contains unresolved work: "${label}"`,
+        message: `Child claims completion but output contains unresolved work: "${label}"`
       }
     }
   }
@@ -48,14 +48,15 @@ export function gateExecutableVerification(p: GateParams): DelegationOutputValid
   const isImplementationLike = intent === "implementation" || intent === "mixed"
   if (!isImplementationLike || !specRequiresFileMutationEvidence(spec) || toolCalls.length === 0) return null
 
-  const hasVerificationCall = toolCalls.some(tc => !tc.isError && isExecutableVerificationToolCall(tc))
+  const hasVerificationCall = toolCalls.some((tc) => !tc.isError && isExecutableVerificationToolCall(tc))
   const hasPostWriteInspection = hasPostMutationArtifactInspection(toolCalls, spec.targetArtifacts)
   if (hasVerificationCall || hasPostWriteInspection) return null
 
   return {
     ok: false,
     code: DelegationOutputValidationCode.MissingExecutableVerificationEvidence,
-    message: "Implementation output lacks executable verification evidence (runtime/test check or post-write artifact inspection)",
+    message:
+      "Implementation output lacks executable verification evidence (runtime/test check or post-write artifact inspection)"
   }
 }
 
@@ -70,13 +71,13 @@ export function gateAcceptanceCriteria(p: GateParams): DelegationOutputValidatio
   const tokens = extractAcceptanceTokens(spec.acceptanceCriteria)
   if (tokens.length === 0) return null
 
-  const matchedTokens = tokens.filter(t => outputLower.includes(t))
+  const matchedTokens = tokens.filter((t) => outputLower.includes(t))
   const coverageRatio = matchedTokens.length / tokens.length
   if (coverageRatio < 0.1 && tokens.length >= 3) {
     return {
       ok: false,
       code: DelegationOutputValidationCode.AcceptanceEvidenceMissing,
-      message: `Only ${matchedTokens.length}/${tokens.length} acceptance criteria tokens found in output (coverage: ${(coverageRatio * 100).toFixed(0)}%)`,
+      message: `Only ${matchedTokens.length}/${tokens.length} acceptance criteria tokens found in output (coverage: ${(coverageRatio * 100).toFixed(0)}%)`
     }
   }
   return null

@@ -25,15 +25,15 @@
 
 import { findEntityTableOrderViolations, orderEntityTablesDetailed } from "./order.js"
 import {
-    type EntityDefinition,
-    type EntityTable,
-    type EntityTableScope,
-    type Scd2Strategy,
-    type ValidationError,
-    type ValidationResult,
-    type ValidationWarning,
-    isValidId,
-    RESERVED_ENTITY_IDS,
+  type EntityDefinition,
+  type EntityTable,
+  type EntityTableScope,
+  type Scd2Strategy,
+  type ValidationError,
+  type ValidationResult,
+  type ValidationWarning,
+  isValidId,
+  RESERVED_ENTITY_IDS
 } from "./types.js"
 
 // ── Public entrypoints ───────────────────────────────────────────
@@ -64,7 +64,11 @@ export function validateScd2Strategy(strategy: Scd2Strategy): ValidationResult {
     errors.push({ code: "id_invalid", message: "displayName is required", path: "/displayName" })
   }
   if (!Number.isInteger(strategy.version) || strategy.version < 1) {
-    errors.push({ code: "version_not_positive", message: "version must be a positive integer", path: "/version" })
+    errors.push({
+      code: "version_not_positive",
+      message: "version must be a positive integer",
+      path: "/version"
+    })
   }
   // Identity handling: enforce enum even if the type system already does
   // (defence in depth for JSON imports).
@@ -73,7 +77,7 @@ export function validateScd2Strategy(strategy: Scd2Strategy): ValidationResult {
     errors.push({
       code: "id_invalid",
       message: `identityHandling must be one of: ${validIdentity.join(", ")}`,
-      path: "/identityHandling",
+      path: "/identityHandling"
     })
   }
   // Sanity-warn if validTo is set without validFrom (or vice versa).
@@ -81,14 +85,14 @@ export function validateScd2Strategy(strategy: Scd2Strategy): ValidationResult {
     warnings.push({
       code: "scd2_validity_half",
       message: "validFromCol is set but validToCol is null — SCD2 close-on-update will not happen",
-      path: "/validToCol",
+      path: "/validToCol"
     })
   }
   if (strategy.validToCol && !strategy.validFromCol) {
     warnings.push({
       code: "scd2_validity_half",
       message: "validToCol is set but validFromCol is null — new rows will have unbounded validity",
-      path: "/validFromCol",
+      path: "/validFromCol"
     })
   }
   // onInsert / onUpdate values are raw SQL — flag obvious unsafe patterns.
@@ -97,7 +101,7 @@ export function validateScd2Strategy(strategy: Scd2Strategy): ValidationResult {
       errors.push({
         code: "scope_sql_unsafe",
         message: `onInsert[${col}] expression contains suspicious tokens (semicolon, comment, multi-statement)`,
-        path: `/onInsert/${col}`,
+        path: `/onInsert/${col}`
       })
     }
   }
@@ -106,7 +110,7 @@ export function validateScd2Strategy(strategy: Scd2Strategy): ValidationResult {
       errors.push({
         code: "scope_sql_unsafe",
         message: `onUpdate[${col}] expression contains suspicious tokens (semicolon, comment, multi-statement)`,
-        path: `/onUpdate/${col}`,
+        path: `/onUpdate/${col}`
       })
     }
   }
@@ -121,7 +125,7 @@ function validateIdentity(def: EntityDefinition, errors: ValidationError[]): voi
     errors.push({
       code: "id_invalid",
       message: `Invalid entity id "${def.id}". Must match /^[a-z][a-z0-9_-]{0,63}$/.`,
-      path: "/id",
+      path: "/id"
     })
     return
   }
@@ -129,7 +133,7 @@ function validateIdentity(def: EntityDefinition, errors: ValidationError[]): voi
     errors.push({
       code: "id_reserved",
       message: `Entity id "${def.id}" is reserved at the platform level.`,
-      path: "/id",
+      path: "/id"
     })
   }
   if (!def.displayName || def.displayName.trim().length === 0) {
@@ -148,28 +152,28 @@ function validateRoot(def: EntityDefinition, errors: ValidationError[]): void {
     errors.push({
       code: "root_table_invalid",
       message: `rootTable must be schema-qualified (e.g. "core.Contract"); got "${def.rootTable}"`,
-      path: "/rootTable",
+      path: "/rootTable"
     })
   }
   if (!isIdentifier(def.idColumn)) {
     errors.push({
       code: "id_column_missing",
       message: `idColumn must be a valid SQL identifier; got "${def.idColumn}"`,
-      path: "/idColumn",
+      path: "/idColumn"
     })
   }
   if (def.labelColumn !== null && !isIdentifier(def.labelColumn)) {
     errors.push({
       code: "id_column_missing",
       message: `labelColumn must be a valid SQL identifier or null; got "${def.labelColumn}"`,
-      path: "/labelColumn",
+      path: "/labelColumn"
     })
   }
   if (def.selfJoinColumn !== null && !isIdentifier(def.selfJoinColumn)) {
     errors.push({
       code: "id_column_missing",
       message: `selfJoinColumn must be a valid SQL identifier or null; got "${def.selfJoinColumn}"`,
-      path: "/selfJoinColumn",
+      path: "/selfJoinColumn"
     })
   }
 }
@@ -177,7 +181,7 @@ function validateRoot(def: EntityDefinition, errors: ValidationError[]): void {
 function validateTables(
   def: EntityDefinition,
   errors: ValidationError[],
-  warnings: ValidationWarning[],
+  warnings: ValidationWarning[]
 ): void {
   const seenNames = new Set<string>()
   const seenOrders = new Set<number>()
@@ -188,7 +192,7 @@ function validateTables(
       errors.push({
         code: "table_name_invalid",
         message: `Table name must be schema-qualified; got "${t.name}"`,
-        path: `${path}/name`,
+        path: `${path}/name`
       })
     }
     const lc = t.name.toLowerCase()
@@ -200,14 +204,14 @@ function validateTables(
       errors.push({
         code: "execution_order_duplicate",
         message: `executionOrder must be a non-negative integer; got ${t.executionOrder}`,
-        path: `${path}/executionOrder`,
+        path: `${path}/executionOrder`
       })
     } else {
       if (seenOrders.has(t.executionOrder)) {
         warnings.push({
           code: "execution_order_duplicate",
           message: `executionOrder ${t.executionOrder} appears more than once — tie-break by table position is implementation-defined`,
-          path: `${path}/executionOrder`,
+          path: `${path}/executionOrder`
         })
       }
       seenOrders.add(t.executionOrder)
@@ -219,7 +223,7 @@ function validateTables(
     warnings.push({
       code: "tables_empty",
       message: "Entity has no tables. Preview/execute will be a no-op until at least one table is added.",
-      path: "/tables",
+      path: "/tables"
     })
   } else {
     const violations = findEntityTableOrderViolations(def)
@@ -229,7 +233,7 @@ function validateTables(
       errors.push({
         code: "execution_order_cycle",
         message: `executionOrder violates dependency order: "${violation.parent}" must precede "${violation.child}" (${violation.reason}).`,
-        path: childIndex == null ? "/tables" : `/tables/${childIndex}/executionOrder`,
+        path: childIndex == null ? "/tables" : `/tables/${childIndex}/executionOrder`
       })
     }
     const ordered = orderEntityTablesDetailed(def)
@@ -237,7 +241,7 @@ function validateTables(
       errors.push({
         code: "execution_order_cycle",
         message: "executionOrder dependencies contain a cycle or unresolved ordering ambiguity.",
-        path: "/tables",
+        path: "/tables"
       })
     }
   }
@@ -250,7 +254,7 @@ function validateScope(scope: EntityTableScope, errors: ValidationError[], path:
         errors.push({
           code: "scope_invalid",
           message: `rootPk.column must be a valid SQL identifier; got "${scope.column}"`,
-          path: `${path}/column`,
+          path: `${path}/column`
         })
       }
       break
@@ -259,7 +263,7 @@ function validateScope(scope: EntityTableScope, errors: ValidationError[], path:
         errors.push({
           code: "scope_invalid",
           message: "fkPath.through must be a non-empty array",
-          path: `${path}/through`,
+          path: `${path}/through`
         })
         break
       }
@@ -270,21 +274,21 @@ function validateScope(scope: EntityTableScope, errors: ValidationError[], path:
           errors.push({
             code: "scope_invalid",
             message: `fkPath hop ${i}: table must be schema-qualified; got "${hop.table}"`,
-            path: `${hopPath}/table`,
+            path: `${hopPath}/table`
           })
         }
         if (!isIdentifier(hop.fromColumn)) {
           errors.push({
             code: "scope_invalid",
             message: `fkPath hop ${i}: fromColumn must be a valid SQL identifier`,
-            path: `${hopPath}/fromColumn`,
+            path: `${hopPath}/fromColumn`
           })
         }
         if (!isIdentifier(hop.toColumn)) {
           errors.push({
             code: "scope_invalid",
             message: `fkPath hop ${i}: toColumn must be a valid SQL identifier`,
-            path: `${hopPath}/toColumn`,
+            path: `${hopPath}/toColumn`
           })
         }
       }
@@ -294,7 +298,7 @@ function validateScope(scope: EntityTableScope, errors: ValidationError[], path:
         errors.push({
           code: "scope_invalid",
           message: "sql.predicate must be a non-empty string",
-          path: `${path}/predicate`,
+          path: `${path}/predicate`
         })
         break
       }
@@ -303,14 +307,15 @@ function validateScope(scope: EntityTableScope, errors: ValidationError[], path:
         errors.push({
           code: "scope_invalid",
           message: "sql.predicate must reference {id} or {ids}",
-          path: `${path}/predicate`,
+          path: `${path}/predicate`
         })
       }
       if (looksUnsafeSqlFragment(scope.predicate)) {
         errors.push({
           code: "scope_sql_unsafe",
-          message: "sql.predicate contains suspicious tokens (semicolon, comment, multi-statement). Predicates must be a single boolean expression.",
-          path: `${path}/predicate`,
+          message:
+            "sql.predicate contains suspicious tokens (semicolon, comment, multi-statement). Predicates must be a single boolean expression.",
+          path: `${path}/predicate`
         })
       }
       break
@@ -318,16 +323,12 @@ function validateScope(scope: EntityTableScope, errors: ValidationError[], path:
       errors.push({
         code: "scope_invalid",
         message: `Unknown scope kind`,
-        path,
+        path
       })
   }
 }
 
-function validateTableScd2Override(
-  t: EntityTable,
-  errors: ValidationError[],
-  path: string,
-): void {
+function validateTableScd2Override(t: EntityTable, errors: ValidationError[], path: string): void {
   const o = t.scd2Override
   if (o === null) return
   // Identifiers must be valid SQL names when set (null is allowed = unset).
@@ -336,7 +337,7 @@ function validateTableScd2Override(
     ["validToCol", "validToCol"],
     ["isLockedCol", "isLockedCol"],
     ["syncDateCol", "syncDateCol"],
-    ["deployDateCol", "deployDateCol"],
+    ["deployDateCol", "deployDateCol"]
   ]
   for (const [key, label] of idCols) {
     const v = o[key]
@@ -344,7 +345,7 @@ function validateTableScd2Override(
       errors.push({
         code: "scope_invalid",
         message: `${label} override must be a valid SQL identifier or null`,
-        path: `${path}/${label}`,
+        path: `${path}/${label}`
       })
     }
   }
@@ -354,7 +355,7 @@ function validateTableScd2Override(
         errors.push({
           code: "scope_invalid",
           message: `excludedFromDiffCols[${i}] must be a valid SQL identifier`,
-          path: `${path}/excludedFromDiffCols/${i}`,
+          path: `${path}/excludedFromDiffCols/${i}`
         })
       }
     }
@@ -365,7 +366,7 @@ function validateTableScd2Override(
         errors.push({
           code: "scope_sql_unsafe",
           message: `onInsert[${col}] override expression contains suspicious tokens`,
-          path: `${path}/onInsert/${col}`,
+          path: `${path}/onInsert/${col}`
         })
       }
     }
@@ -376,7 +377,7 @@ function validateTableScd2Override(
         errors.push({
           code: "scope_sql_unsafe",
           message: `onUpdate[${col}] override expression contains suspicious tokens`,
-          path: `${path}/onUpdate/${col}`,
+          path: `${path}/onUpdate/${col}`
         })
       }
     }
@@ -388,7 +389,7 @@ function validateScd2Reference(def: EntityDefinition, errors: ValidationError[])
     errors.push({
       code: "scd2_strategy_unknown",
       message: `scd2.strategyId "${def.scd2.strategyId}" is not a valid id`,
-      path: "/scd2/strategyId",
+      path: "/scd2/strategyId"
     })
   }
   const v = def.scd2.strategyVersion
@@ -396,7 +397,7 @@ function validateScd2Reference(def: EntityDefinition, errors: ValidationError[])
     errors.push({
       code: "scd2_strategy_version_unknown",
       message: `scd2.strategyVersion must be a positive integer or "latest"; got ${String(v)}`,
-      path: "/scd2/strategyVersion",
+      path: "/scd2/strategyVersion"
     })
   }
 }
@@ -404,7 +405,7 @@ function validateScd2Reference(def: EntityDefinition, errors: ValidationError[])
 function validateLineage(
   def: EntityDefinition,
   errors: ValidationError[],
-  _warnings: ValidationWarning[],
+  _warnings: ValidationWarning[]
 ): void {
   for (let i = 0; i < def.lineageRefs.length; i++) {
     const ref = def.lineageRefs[i]!
@@ -412,7 +413,7 @@ function validateLineage(
       errors.push({
         code: "lineage_object_invalid",
         message: `lineageRefs[${i}].object must be schema-qualified; got "${ref.object}"`,
-        path: `/lineageRefs/${i}/object`,
+        path: `/lineageRefs/${i}/object`
       })
     }
   }
@@ -423,7 +424,7 @@ function validateVersion(def: EntityDefinition, errors: ValidationError[]): void
     errors.push({
       code: "version_not_positive",
       message: `version must be a positive integer; got ${def.version}`,
-      path: "/version",
+      path: "/version"
     })
   }
 }

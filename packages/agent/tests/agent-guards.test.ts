@@ -25,11 +25,11 @@ function echoTool(): Tool {
     parameters: {
       type: "object",
       properties: { text: { type: "string" } },
-      required: ["text"],
+      required: ["text"]
     },
     async execute(args) {
       return `echoed: ${String(args.text)}`
-    },
+    }
   }
 }
 
@@ -41,7 +41,7 @@ function scriptedLLM(responses: LLMResponse[]): LLMClient {
         return { content: "out of script", toolCalls: [] }
       }
       return responses[callIndex++]!
-    },
+    }
   }
 }
 
@@ -55,12 +55,12 @@ describe("Agent loop guards", () => {
       { content: "I can see the answer is 42", toolCalls: [] },
       // Iter 1: forced to use tools, does so, then exits
       { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "hello" } }] },
-      { content: "Done after using tools", toolCalls: [] },
+      { content: "Done after using tools", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [echoTool()], {
       verbose: false,
-      onNudge: (data) => nudges.push(data.tag),
+      onNudge: (data) => nudges.push(data.tag)
     })
     const answer = await agent.run("do something")
 
@@ -79,13 +79,13 @@ describe("Agent loop guards", () => {
         type: "object",
         properties: {
           path: { type: "string" },
-          content: { type: "string" },
+          content: { type: "string" }
         },
-        required: ["path", "content"],
+        required: ["path", "content"]
       },
       async execute(args) {
         return `Successfully wrote to ${String(args.path)}`
-      },
+      }
     }
 
     const readFileTool: Tool = {
@@ -94,27 +94,36 @@ describe("Agent loop guards", () => {
       parameters: {
         type: "object",
         properties: { path: { type: "string" } },
-        required: ["path"],
+        required: ["path"]
       },
       async execute() {
         return "file contents here"
-      },
+      }
     }
 
     const llm = scriptedLLM([
       // Iter 0: writes a JS file
-      { content: "Writing the file", toolCalls: [{ id: "tc1", name: "write_file", arguments: { path: "app.js", content: "console.log('hi')" } }] },
+      {
+        content: "Writing the file",
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: { path: "app.js", content: "console.log('hi')" }
+          }
+        ]
+      },
       // Iter 1: tries to exit without verifying
       { content: "Done!", toolCalls: [] },
       // Iter 2: forced to verify, reads the file
       { content: null, toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "app.js" } }] },
       // Iter 3: now exits
-      { content: "Verified and done", toolCalls: [] },
+      { content: "Verified and done", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [writeFileTool, readFileTool], {
       verbose: false,
-      onNudge: (data) => nudges.push(data.tag),
+      onNudge: (data) => nudges.push(data.tag)
     })
     const answer = await agent.run("write a file")
 
@@ -134,7 +143,7 @@ describe("Agent loop guards", () => {
       // Iter 2: forced to continue, uses another tool
       { content: null, toolCalls: [{ id: "tc2", name: "echo", arguments: { text: "fixing" } }] },
       // Iter 3: exits — validator already fired (one-shot)
-      { content: "Now truly done", toolCalls: [] },
+      { content: "Now truly done", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [echoTool()], {
@@ -146,7 +155,7 @@ describe("Agent loop guards", () => {
         }
         return null
       },
-      onNudge: (data) => nudges.push(data.tag),
+      onNudge: (data) => nudges.push(data.tag)
     })
     const answer = await agent.run("build something")
 
@@ -160,14 +169,17 @@ describe("Agent loop guards", () => {
 
     const llm = scriptedLLM([
       { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "work" } }] },
-      { content: "Core logic is implemented, but full compliance may require additional work.", toolCalls: [] },
+      {
+        content: "Core logic is implemented, but full compliance may require additional work.",
+        toolCalls: []
+      },
       { content: null, toolCalls: [{ id: "tc2", name: "echo", arguments: { text: "finish" } }] },
-      { content: "Completed with verified evidence.", toolCalls: [] },
+      { content: "Completed with verified evidence.", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [echoTool()], {
       verbose: false,
-      onNudge: (data) => nudges.push(data.tag),
+      onNudge: (data) => nudges.push(data.tag)
     })
     const answer = await agent.run("build implementation")
 
@@ -186,7 +198,7 @@ describe("Agent loop guards", () => {
       // Iter 2: more work
       { content: null, toolCalls: [{ id: "tc2", name: "echo", arguments: { text: "b" } }] },
       // Iter 3: second exit attempt → validator does NOT fire again
-      { content: "exit 2", toolCalls: [] },
+      { content: "exit 2", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [echoTool()], {
@@ -194,7 +206,7 @@ describe("Agent loop guards", () => {
       completionValidator: async () => {
         validatorCallCount++
         return "STUBS FOUND"
-      },
+      }
     })
     const answer = await agent.run("build it")
 
@@ -208,13 +220,13 @@ describe("Agent loop guards", () => {
 
     const llm = scriptedLLM([
       { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "work" } }] },
-      { content: "All clean", toolCalls: [] },
+      { content: "All clean", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [echoTool()], {
       verbose: false,
       completionValidator: async () => null, // no issues
-      onNudge: (data) => nudges.push(data.tag),
+      onNudge: (data) => nudges.push(data.tag)
     })
     const answer = await agent.run("build it")
 
@@ -225,14 +237,14 @@ describe("Agent loop guards", () => {
   it("completion-validator error does not block agent exit", async () => {
     const llm = scriptedLLM([
       { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "a" } }] },
-      { content: "done", toolCalls: [] },
+      { content: "done", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [echoTool()], {
       verbose: false,
       completionValidator: async () => {
         throw new Error("validator crashed!")
-      },
+      }
     })
     const answer = await agent.run("build it")
 
@@ -251,13 +263,13 @@ describe("Agent loop guards", () => {
       // Iter 1: budget warning fires here (remaining=2)
       { content: null, toolCalls: [{ id: "tc2", name: "echo", arguments: { text: "2" } }] },
       // Iter 2: done
-      { content: "finished", toolCalls: [] },
+      { content: "finished", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [echoTool()], {
       maxIterations: 3,
       verbose: false,
-      onNudge: (data) => nudges.push(data.tag),
+      onNudge: (data) => nudges.push(data.tag)
     })
     await agent.run("quick task")
 
@@ -269,12 +281,12 @@ describe("Agent loop guards", () => {
 
     const llm = scriptedLLM([
       { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "work" } }] },
-      { content: "All done", toolCalls: [] },
+      { content: "All done", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [echoTool()], {
       verbose: false,
-      onNudge: (data) => nudges.push(data.tag),
+      onNudge: (data) => nudges.push(data.tag)
     })
     const answer = await agent.run("simple task")
 
@@ -290,9 +302,9 @@ describe("Agent loop guards", () => {
         type: "object",
         properties: {
           path: { type: "string" },
-          content: { type: "string" },
+          content: { type: "string" }
         },
-        required: ["path", "content"],
+        required: ["path", "content"]
       },
       async execute(args) {
         const path = String(args.path)
@@ -302,23 +314,48 @@ describe("Agent loop guards", () => {
           severity: ToolOutcomeSeverity.Recoverable,
           directive: ToolControlDirective.AbortRound,
           errorCode: "artifact_incomplete_mutation",
-          details: [
-            "STUB/PLACEHOLDER CODE DETECTED — these functions need REAL implementation.",
-          ],
-          artifacts: [{ path, preservedExisting: false, requiresReadBeforeMutation: true }],
+          details: ["STUB/PLACEHOLDER CODE DETECTED — these functions need REAL implementation."],
+          artifacts: [{ path, preservedExisting: false, requiresReadBeforeMutation: true }]
         }
-      },
+      }
     }
 
     const llm = scriptedLLM([
-      { content: null, toolCalls: [{ id: "tc1", name: "write_file", arguments: { path: "tmp/game/chessLogic.js", content: "first" } }] },
-      { content: null, toolCalls: [{ id: "tc2", name: "write_file", arguments: { path: "tmp/game/chessLogic.js", content: "second" } }] },
-      { content: null, toolCalls: [{ id: "tc3", name: "write_file", arguments: { path: "tmp/game/chessLogic.js", content: "third" } }] },
+      {
+        content: null,
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: { path: "tmp/game/chessLogic.js", content: "first" }
+          }
+        ]
+      },
+      {
+        content: null,
+        toolCalls: [
+          {
+            id: "tc2",
+            name: "write_file",
+            arguments: { path: "tmp/game/chessLogic.js", content: "second" }
+          }
+        ]
+      },
+      {
+        content: null,
+        toolCalls: [
+          {
+            id: "tc3",
+            name: "write_file",
+            arguments: { path: "tmp/game/chessLogic.js", content: "third" }
+          }
+        ]
+      }
     ])
 
     const agent = new Agent(llm, [writeFileTool], {
       maxIterations: 6,
-      verbose: false,
+      verbose: false
     })
 
     const answer = await agent.run("fix the file")
@@ -333,9 +370,9 @@ describe("Agent loop guards", () => {
         type: "object",
         properties: {
           path: { type: "string" },
-          content: { type: "string" },
+          content: { type: "string" }
         },
-        required: ["path", "content"],
+        required: ["path", "content"]
       },
       async execute(args) {
         const path = String(args.path)
@@ -346,9 +383,9 @@ describe("Agent loop guards", () => {
           directive: ToolControlDirective.AbortRound,
           errorCode: "artifact_incomplete_mutation",
           details: ["STUB/PLACEHOLDER CODE DETECTED — these functions need REAL implementation."],
-          artifacts: [{ path, preservedExisting: false, requiresReadBeforeMutation: true }],
+          artifacts: [{ path, preservedExisting: false, requiresReadBeforeMutation: true }]
         }
-      },
+      }
     }
 
     const readFileTool: Tool = {
@@ -357,24 +394,39 @@ describe("Agent loop guards", () => {
       parameters: {
         type: "object",
         properties: { path: { type: "string" } },
-        required: ["path"],
+        required: ["path"]
       },
       async execute(args) {
         return `current contents of ${String(args.path)}`
-      },
+      }
     }
 
     const llm = scriptedLLM([
-      { content: null, toolCalls: [{ id: "tc1", name: "write_file", arguments: { path: "tmp/game.js", content: "first" } }] },
-      { content: null, toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "tmp/game.js" } }] },
-      { content: null, toolCalls: [{ id: "tc3", name: "write_file", arguments: { path: "tmp/game.js", content: "second" } }] },
-      { content: null, toolCalls: [{ id: "tc4", name: "read_file", arguments: { path: "tmp/game.js" } }] },
-      { content: null, toolCalls: [{ id: "tc5", name: "write_file", arguments: { path: "tmp/game.js", content: "third" } }] },
+      {
+        content: null,
+        toolCalls: [{ id: "tc1", name: "write_file", arguments: { path: "tmp/game.js", content: "first" } }]
+      },
+      {
+        content: null,
+        toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "tmp/game.js" } }]
+      },
+      {
+        content: null,
+        toolCalls: [{ id: "tc3", name: "write_file", arguments: { path: "tmp/game.js", content: "second" } }]
+      },
+      {
+        content: null,
+        toolCalls: [{ id: "tc4", name: "read_file", arguments: { path: "tmp/game.js" } }]
+      },
+      {
+        content: null,
+        toolCalls: [{ id: "tc5", name: "write_file", arguments: { path: "tmp/game.js", content: "third" } }]
+      }
     ])
 
     const agent = new Agent(llm, [writeFileTool, readFileTool], {
       maxIterations: 8,
-      verbose: false,
+      verbose: false
     })
 
     const answer = await agent.run("fix tmp/game.js")
@@ -390,13 +442,13 @@ describe("Agent loop guards", () => {
         properties: {
           path: { type: "string" },
           old_string: { type: "string" },
-          new_string: { type: "string" },
+          new_string: { type: "string" }
         },
-        required: ["path", "old_string", "new_string"],
+        required: ["path", "old_string", "new_string"]
       },
       async execute(args) {
         return `Error: old_string not found in "${String(args.path)}". The text you provided does not exist in the file. Use read_file to see the current content first.`
-      },
+      }
     }
 
     const readFileTool: Tool = {
@@ -405,24 +457,57 @@ describe("Agent loop guards", () => {
       parameters: {
         type: "object",
         properties: { path: { type: "string" } },
-        required: ["path"],
+        required: ["path"]
       },
       async execute(args) {
         return `current contents of ${String(args.path)}`
-      },
+      }
     }
 
     const llm = scriptedLLM([
-      { content: null, toolCalls: [{ id: "tc1", name: "replace_in_file", arguments: { path: "tmp/game.js", old_string: "A", new_string: "B" } }] },
-      { content: null, toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "tmp/game.js" } }] },
-      { content: null, toolCalls: [{ id: "tc3", name: "replace_in_file", arguments: { path: "tmp/game.js", old_string: "C", new_string: "D" } }] },
-      { content: null, toolCalls: [{ id: "tc4", name: "read_file", arguments: { path: "tmp/game.js" } }] },
-      { content: null, toolCalls: [{ id: "tc5", name: "replace_in_file", arguments: { path: "tmp/game.js", old_string: "E", new_string: "F" } }] },
+      {
+        content: null,
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "replace_in_file",
+            arguments: { path: "tmp/game.js", old_string: "A", new_string: "B" }
+          }
+        ]
+      },
+      {
+        content: null,
+        toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "tmp/game.js" } }]
+      },
+      {
+        content: null,
+        toolCalls: [
+          {
+            id: "tc3",
+            name: "replace_in_file",
+            arguments: { path: "tmp/game.js", old_string: "C", new_string: "D" }
+          }
+        ]
+      },
+      {
+        content: null,
+        toolCalls: [{ id: "tc4", name: "read_file", arguments: { path: "tmp/game.js" } }]
+      },
+      {
+        content: null,
+        toolCalls: [
+          {
+            id: "tc5",
+            name: "replace_in_file",
+            arguments: { path: "tmp/game.js", old_string: "E", new_string: "F" }
+          }
+        ]
+      }
     ])
 
     const agent = new Agent(llm, [replaceInFileTool, readFileTool], {
       maxIterations: 8,
-      verbose: false,
+      verbose: false
     })
 
     const answer = await agent.run("repair tmp/game.js")
@@ -433,13 +518,11 @@ describe("Agent loop guards", () => {
     const controller = new AbortController()
     controller.abort()
 
-    const llm = scriptedLLM([
-      { content: "should not reach", toolCalls: [] },
-    ])
+    const llm = scriptedLLM([{ content: "should not reach", toolCalls: [] }])
 
     const agent = new Agent(llm, [], {
       verbose: false,
-      signal: controller.signal,
+      signal: controller.signal
     })
     const answer = await agent.run("anything")
 
@@ -450,13 +533,13 @@ describe("Agent loop guards", () => {
     // LLM always uses a tool, never exits
     const responses: LLMResponse[] = Array.from({ length: 10 }, (_, i) => ({
       content: null,
-      toolCalls: [{ id: `tc${i}`, name: "echo", arguments: { text: `iter${i}` } }],
+      toolCalls: [{ id: `tc${i}`, name: "echo", arguments: { text: `iter${i}` } }]
     }))
 
     const llm = scriptedLLM(responses)
     const agent = new Agent(llm, [echoTool()], {
       maxIterations: 5,
-      verbose: false,
+      verbose: false
     })
     const answer = await agent.run("loop forever")
 
@@ -467,32 +550,27 @@ describe("Agent loop guards", () => {
 
   it("routes simple tasks directly without entering planner execution", async () => {
     const plannerTrace: Array<Record<string, unknown>> = []
-    const llm = scriptedLLM([
-      { content: "done", toolCalls: [] },
-    ])
+    const llm = scriptedLLM([{ content: "done", toolCalls: [] }])
 
     const agent = new Agent(llm, [], {
       verbose: false,
       enablePlanner: true,
       plannerDelegateFn: async () => "unused",
-      onPlannerTrace: (entry) => plannerTrace.push(entry),
+      onPlannerTrace: (entry) => plannerTrace.push(entry)
     })
 
     const answer = await agent.run("simple task")
 
     expect(answer).toBe("done")
-    expect(plannerTrace.map((entry) => entry.kind)).toEqual([
-      "planner-decision",
-      "direct_loop_fallback",
-    ])
+    expect(plannerTrace.map((entry) => entry.kind)).toEqual(["planner-decision", "direct_loop_fallback"])
     expect(plannerTrace[0]).toMatchObject({
       kind: "planner-decision",
       shouldPlan: false,
-      route: "direct",
+      route: "direct"
     })
     expect(plannerTrace[1]).toMatchObject({
       kind: "direct_loop_fallback",
-      source: "planner_declined",
+      source: "planner_declined"
     })
   })
 
@@ -508,14 +586,14 @@ describe("Agent loop guards", () => {
         type: "object",
         properties: {
           path: { type: "string" },
-          content: { type: "string" },
+          content: { type: "string" }
         },
-        required: ["path", "content"],
+        required: ["path", "content"]
       },
       async execute(args) {
         writes.push(String(args.path))
         return `Successfully wrote to ${String(args.path)}`
-      },
+      }
     }
 
     const readFileTool: Tool = {
@@ -524,12 +602,12 @@ describe("Agent loop guards", () => {
       parameters: {
         type: "object",
         properties: { path: { type: "string" } },
-        required: ["path"],
+        required: ["path"]
       },
       async execute(args) {
         reads.push(String(args.path))
         return `content for ${String(args.path)}`
-      },
+      }
     }
 
     const browserCheckTool: Tool = {
@@ -538,11 +616,11 @@ describe("Agent loop guards", () => {
       parameters: {
         type: "object",
         properties: { path: { type: "string" } },
-        required: ["path"],
+        required: ["path"]
       },
       async execute() {
         return "browser_check passed"
-      },
+      }
     }
 
     const runCommandTool: Tool = {
@@ -551,11 +629,11 @@ describe("Agent loop guards", () => {
       parameters: {
         type: "object",
         properties: { command: { type: "string" } },
-        required: ["command"],
+        required: ["command"]
       },
       async execute() {
         return "command passed"
-      },
+      }
     }
 
     const llm = scriptedLLM([
@@ -567,27 +645,28 @@ describe("Agent loop guards", () => {
             {
               path: "index.html",
               purpose: "Entrypoint HTML shell",
-              content: "<!doctype html><html><body><script type=\"module\" src=\"./app.js\"></script></body></html>",
+              content:
+                '<!doctype html><html><body><script type="module" src="./app.js"></script></body></html>'
             },
             {
               path: "app.js",
               purpose: "UI/controller wiring",
-              content: "import { createGame } from './game.js'\ncreateGame()\n",
+              content: "import { createGame } from './game.js'\ncreateGame()\n"
             },
             {
               path: "game.js",
               purpose: "Game state and rules",
-              content: "export function createGame() { return { status: 'ready' } }\n",
-            },
+              content: "export function createGame() { return { status: 'ready' } }\n"
+            }
           ],
           dependencyEdges: [
             { from: "index.html", to: "app.js" },
-            { from: "app.js", to: "game.js" },
+            { from: "app.js", to: "game.js" }
           ],
           sharedContracts: [{ name: "game_state", description: "createGame returns an object with status." }],
-          invariants: [{ id: "boots_without_errors", description: "The app boots without missing imports." }],
+          invariants: [{ id: "boots_without_errors", description: "The app boots without missing imports." }]
         }),
-        toolCalls: [],
+        toolCalls: []
       },
       {
         content: JSON.stringify({
@@ -599,20 +678,20 @@ describe("Agent loop guards", () => {
               outcome: "pass",
               confidence: 0.9,
               issues: [],
-              retryable: false,
-            },
+              retryable: false
+            }
           ],
-          unresolvedItems: [],
+          unresolvedItems: []
         }),
-        toolCalls: [],
+        toolCalls: []
       },
       {
         content: null,
-        toolCalls: [{ id: "tc-verify", name: "read_file", arguments: { path: "app.js" } }],
+        toolCalls: [{ id: "tc-verify", name: "read_file", arguments: { path: "app.js" } }]
       },
       {
         content: "Verified coherent bundle",
-        toolCalls: [],
+        toolCalls: []
       },
       {
         content: JSON.stringify({
@@ -624,29 +703,25 @@ describe("Agent loop guards", () => {
               outcome: "pass",
               confidence: 0.92,
               issues: [],
-              retryable: false,
-            },
+              retryable: false
+            }
           ],
-          unresolvedItems: [],
+          unresolvedItems: []
         }),
-        toolCalls: [],
-      },
+        toolCalls: []
+      }
     ])
 
     const agent = new Agent(llm, [writeFileTool, readFileTool, browserCheckTool, runCommandTool], {
       verbose: false,
       enablePlanner: true,
       plannerDelegateFn: async () => "unused",
-      onPlannerTrace: (entry) => plannerTrace.push(entry),
+      onPlannerTrace: (entry) => plannerTrace.push(entry)
     })
 
     await agent.run("Build a complete playable chess game with drag and drop")
 
-    expect(writes).toEqual([
-      "index.html",
-      "app.js",
-      "game.js",
-    ])
+    expect(writes).toEqual(["index.html", "app.js", "game.js"])
     expect(reads).toContain("app.js")
     const traceKinds = plannerTrace.map((entry) => entry.kind)
     expect(traceKinds.slice(0, 5)).toEqual([
@@ -654,7 +729,7 @@ describe("Agent loop guards", () => {
       "coherent-generation-start",
       "planner-architecture-state",
       "coherent-generation-bundle",
-      "coherent-generation-materialized",
+      "coherent-generation-materialized"
     ])
     expect(traceKinds).toContain("coherent-generation-verified")
     expect(traceKinds).toContain("coherent-generation-handoff")
@@ -672,9 +747,9 @@ describe("Agent loop guards", () => {
         type: "object",
         properties: {
           path: { type: "string" },
-          content: { type: "string" },
+          content: { type: "string" }
         },
-        required: ["path", "content"],
+        required: ["path", "content"]
       },
       async execute(args) {
         const path = String(args.path)
@@ -682,7 +757,7 @@ describe("Agent loop guards", () => {
         writes.push(path)
         fileContents.set(path, content)
         return `Successfully wrote to ${path}`
-      },
+      }
     }
 
     const readFileTool: Tool = {
@@ -691,12 +766,12 @@ describe("Agent loop guards", () => {
       parameters: {
         type: "object",
         properties: { path: { type: "string" } },
-        required: ["path"],
+        required: ["path"]
       },
       async execute(args) {
         const path = String(args.path)
         return fileContents.get(path) ?? `content for ${path}`
-      },
+      }
     }
 
     const browserCheckTool: Tool = {
@@ -705,11 +780,11 @@ describe("Agent loop guards", () => {
       parameters: {
         type: "object",
         properties: { path: { type: "string" } },
-        required: ["path"],
+        required: ["path"]
       },
       async execute() {
         return "browser_check passed"
-      },
+      }
     }
 
     const runCommandTool: Tool = {
@@ -718,11 +793,11 @@ describe("Agent loop guards", () => {
       parameters: {
         type: "object",
         properties: { command: { type: "string" } },
-        required: ["command"],
+        required: ["command"]
       },
       async execute() {
         return "command passed"
-      },
+      }
     }
 
     const llm = scriptedLLM([
@@ -734,23 +809,24 @@ describe("Agent loop guards", () => {
             {
               path: "index.html",
               purpose: "Entrypoint HTML shell",
-              content: "<!doctype html><html><body><script type=\"module\" src=\"./app.js\"></script></body></html>",
+              content:
+                '<!doctype html><html><body><script type="module" src="./app.js"></script></body></html>'
             },
             {
               path: "app.js",
               purpose: "UI/controller wiring",
-              content: "import { createGame } from './game.js'\ncreateGame()\n",
+              content: "import { createGame } from './game.js'\ncreateGame()\n"
             },
             {
               path: "game.js",
               purpose: "Game state and rules",
-              content: "export function createGame() { return { status: 'ready' } }\n",
-            },
+              content: "export function createGame() { return { status: 'ready' } }\n"
+            }
           ],
           sharedContracts: [{ name: "game_state", description: "createGame returns an object with status." }],
-          invariants: [{ id: "boots_without_errors", description: "The app boots without missing imports." }],
+          invariants: [{ id: "boots_without_errors", description: "The app boots without missing imports." }]
         }),
-        toolCalls: [],
+        toolCalls: []
       },
       {
         content: JSON.stringify({
@@ -762,27 +838,30 @@ describe("Agent loop guards", () => {
               outcome: "retry",
               confidence: 0.86,
               issues: ["Drag and drop is still placeholder logic in app.js"],
-              retryable: true,
-            },
+              retryable: true
+            }
           ],
-          unresolvedItems: ["Implement real drag and drop behavior in app.js"],
+          unresolvedItems: ["Implement real drag and drop behavior in app.js"]
         }),
-        toolCalls: [],
+        toolCalls: []
       },
       {
         content: null,
-        toolCalls: [{
-          id: "tc-fix",
-          name: "write_file",
-          arguments: {
-            path: "app.js",
-            content: "import { createGame } from './game.js'\nexport function bootChessUi() { return createGame() }\nbootChessUi()\n",
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc-fix",
+            name: "write_file",
+            arguments: {
+              path: "app.js",
+              content:
+                "import { createGame } from './game.js'\nexport function bootChessUi() { return createGame() }\nbootChessUi()\n"
+            }
+          }
+        ]
       },
       {
         content: "Coherent repair complete",
-        toolCalls: [],
+        toolCalls: []
       },
       {
         content: JSON.stringify({
@@ -794,20 +873,20 @@ describe("Agent loop guards", () => {
               outcome: "pass",
               confidence: 0.91,
               issues: [],
-              retryable: false,
-            },
+              retryable: false
+            }
           ],
-          unresolvedItems: [],
+          unresolvedItems: []
         }),
-        toolCalls: [],
-      },
+        toolCalls: []
+      }
     ])
 
     const agent = new Agent(llm, [writeFileTool, readFileTool, browserCheckTool, runCommandTool], {
       verbose: false,
       enablePlanner: true,
       plannerDelegateFn: async () => "unused",
-      onPlannerTrace: (entry) => plannerTrace.push(entry),
+      onPlannerTrace: (entry) => plannerTrace.push(entry)
     })
 
     await agent.run("Build a complete playable chess game with drag and drop")

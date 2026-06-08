@@ -7,7 +7,7 @@ import type { ClarificationMatch } from "../../../ports/clarifications.js"
  */
 export function enforceClarificationUiOptions(
   options: string[] | undefined,
-  match: ClarificationMatch | null,
+  match: ClarificationMatch | null
 ): string[] | undefined {
   if (!match) return options
   if (!match.uiOptions || match.uiOptions.length === 0) return undefined

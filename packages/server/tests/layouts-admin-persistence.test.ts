@@ -32,7 +32,7 @@ async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
 
   const app = Fastify({ logger: false })
   app.addHook("onRequest", async (req) => {
-    (req as unknown as { session: CurrentSession }).session = session
+    ;(req as unknown as { session: CurrentSession }).session = session
   })
   registerLayoutRoutes(app)
   await app.ready()
@@ -41,18 +41,16 @@ async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
 
 function session(over: Partial<CurrentSession> & { upn: string }): CurrentSession {
   return {
-    sid:         over.sid ?? "sid-test",
+    sid: over.sid ?? "sid-test",
     displayName: over.displayName ?? over.upn,
-    upn:         over.upn,
-    isAdmin:     over.isAdmin ?? false,
-    ip:          over.ip ?? "127.0.0.1",
-    userAgent:   over.userAgent ?? "vitest",
+    upn: over.upn,
+    isAdmin: over.isAdmin ?? false,
+    ip: over.ip ?? "127.0.0.1",
+    userAgent: over.userAgent ?? "vitest"
   }
 }
 
-const SAMPLE_VIEWS = [
-  { id: "main", name: "Main", widgets: [{ id: "w1", type: "live-logs" }], layouts: {} },
-]
+const SAMPLE_VIEWS = [{ id: "main", name: "Main", widgets: [{ id: "w1", type: "live-logs" }], layouts: {} }]
 
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "mia-layouts-admin-"))
@@ -77,7 +75,7 @@ describe("layouts (v19) — per-upn persistence across logout/login", () => {
     const put = await app1.inject({
       method: "PUT",
       url: "/api/dashboard-state",
-      payload: { views: SAMPLE_VIEWS, activeViewId: "main" },
+      payload: { views: SAMPLE_VIEWS, activeViewId: "main" }
     })
     expect(put.statusCode).toBe(200)
 
@@ -96,7 +94,7 @@ describe("layouts (v19) — per-upn persistence across logout/login", () => {
     await app.inject({
       method: "PUT",
       url: "/api/dashboard-state",
-      payload: { views: SAMPLE_VIEWS, activeViewId: "main" },
+      payload: { views: SAMPLE_VIEWS, activeViewId: "main" }
     })
 
     const { getLayout } = await import("../src/adapters/persistence/db/config.js")
@@ -116,7 +114,7 @@ describe("layouts (v19) — per-upn persistence across logout/login", () => {
     await adminApp.inject({
       method: "PUT",
       url: "/api/dashboard-state",
-      payload: { views: SAMPLE_VIEWS, activeViewId: "main" },
+      payload: { views: SAMPLE_VIEWS, activeViewId: "main" }
     })
 
     const otherApp = await buildApp(session({ upn: "bob@corp", isAdmin: false }))

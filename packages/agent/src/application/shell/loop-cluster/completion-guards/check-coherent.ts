@@ -6,15 +6,15 @@ import { CoherentGenerationTraceKind, PlannerTraceKind, VerifierOutcome } from "
  */
 
 import {
-    buildCoherentPlannerEscalationGoal,
-    buildCoherentRepairInstructions,
-    executePlannerPath,
-    summarizeCoherentVerifierDecision,
+  buildCoherentPlannerEscalationGoal,
+  buildCoherentRepairInstructions,
+  executePlannerPath,
+  summarizeCoherentVerifierDecision
 } from "../../../core/planner.js"
 import type { CompletionGuardContext, CompletionGuardResult } from "../completion-guards/index.js"
 
 export async function checkCoherentVerification(
-  ctx: CompletionGuardContext,
+  ctx: CompletionGuardContext
 ): Promise<CompletionGuardResult | null> {
   const { state, response } = ctx
   const ce = state.coherentExecution
@@ -28,7 +28,7 @@ export async function checkCoherentVerification(
     return {
       tag: "coherent-pass",
       message: "",
-      finalAnswer: response.content ?? "(no response)",
+      finalAnswer: response.content ?? "(no response)"
     }
   }
 
@@ -41,14 +41,14 @@ export async function checkCoherentVerification(
     repairAttempt: nextRepairAttempt,
     issueCount: summary.issueCount,
     issues: [...summary.issues],
-    affectedArtifacts: [...summary.affectedArtifacts],
+    affectedArtifacts: [...summary.affectedArtifacts]
   })
   ctx.onPlannerTrace?.({
     kind: PlannerTraceKind.ArchitectureState,
     lane: "bounded_coherent_generation",
     status: "repairing_in_place",
     reason: "coherent_completion_blocked_by_verifier",
-    architecture: ce.bundle.architecture,
+    architecture: ce.bundle.architecture
   })
 
   // First repair attempt
@@ -65,27 +65,27 @@ export async function checkCoherentVerification(
       kind: CoherentGenerationTraceKind.Escalated,
       target: "planner_repair_path",
       issueCount: summary.issueCount,
-      reason: "coherent_repair_still_failing",
+      reason: "coherent_repair_still_failing"
     })
     ctx.onPlannerTrace?.({
       kind: PlannerTraceKind.ArchitectureState,
       lane: "bounded_coherent_generation",
       status: "abandoned",
       reason: "coherent_repair_still_failing",
-      architecture: ce.bundle.architecture,
+      architecture: ce.bundle.architecture
     })
 
     const remediationResult = await executePlannerPath(
       buildCoherentPlannerEscalationGoal(ctx.messages[1]?.content ?? "", ce.bundle, decision),
       ctx.createPlannerContext(),
-      ctx.config.plannerDelegateFn,
+      ctx.config.plannerDelegateFn
     )
 
     if (remediationResult.handled) {
       return {
         tag: "coherent-escalation",
         message: "",
-        finalAnswer: remediationResult.answer ?? "(planner remediation produced no answer)",
+        finalAnswer: remediationResult.answer ?? "(planner remediation produced no answer)"
       }
     }
   }
@@ -99,10 +99,9 @@ export async function checkCoherentVerification(
     return {
       tag: "coherent-repair-exhausted",
       message: fallbackMsg,
-      finalAnswer: response.content ?? "(coherent generation completed — verifier disagreement unresolved)",
+      finalAnswer: response.content ?? "(coherent generation completed — verifier disagreement unresolved)"
     }
   }
 
   return { tag: "coherent-repair-required", message: fallbackMsg }
 }
-

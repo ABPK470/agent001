@@ -100,9 +100,18 @@ export class DelegationBanditTuner {
   constructor(explorationFactor = 1.5) {
     this.explorationFactor = explorationFactor
     this.arms = new Map([
-      [BanditArmId.Conservative, { id: BanditArmId.Conservative, thresholdDelta: 0.10, meanReward: 0, sampleCount: 0 }],
-      [BanditArmId.Balanced,     { id: BanditArmId.Balanced,     thresholdDelta: 0.00, meanReward: 0, sampleCount: 0 }],
-      [BanditArmId.Aggressive,   { id: BanditArmId.Aggressive,   thresholdDelta: -0.08, meanReward: 0, sampleCount: 0 }],
+      [
+        BanditArmId.Conservative,
+        { id: BanditArmId.Conservative, thresholdDelta: 0.1, meanReward: 0, sampleCount: 0 }
+      ],
+      [
+        BanditArmId.Balanced,
+        { id: BanditArmId.Balanced, thresholdDelta: 0.0, meanReward: 0, sampleCount: 0 }
+      ],
+      [
+        BanditArmId.Aggressive,
+        { id: BanditArmId.Aggressive, thresholdDelta: -0.08, meanReward: 0, sampleCount: 0 }
+      ]
     ])
   }
 
@@ -163,7 +172,7 @@ export class DelegationBanditTuner {
       nestingDepth: params.nestingDepth,
       parallelFraction: params.parallelFraction,
       shouldDelegate: params.shouldDelegate,
-      utilityScore: params.utilityScore,
+      utilityScore: params.utilityScore
     }
   }
 
@@ -175,7 +184,7 @@ export class DelegationBanditTuner {
    */
   recordOutcome(
     record: DelegationTrajectoryRecord,
-    rawOutcome: Omit<NonNullable<DelegationTrajectoryRecord["outcome"]>, "reward">,
+    rawOutcome: Omit<NonNullable<DelegationTrajectoryRecord["outcome"]>, "reward">
   ): void {
     const tokenCostPenalty = Math.min(0.25, (rawOutcome.tokenCount / 100_000) * 0.1)
     const errorPenalty = Math.min(0.25, rawOutcome.errorCount * 0.08)
@@ -183,7 +192,7 @@ export class DelegationBanditTuner {
     const verifierBonus = rawOutcome.verifierPassed ? 0.05 : -0.05
     const reward = Math.min(
       1,
-      Math.max(0, rawOutcome.qualityProxy - tokenCostPenalty - errorPenalty - latencyPenalty + verifierBonus),
+      Math.max(0, rawOutcome.qualityProxy - tokenCostPenalty - errorPenalty - latencyPenalty + verifierBonus)
     )
 
     const completed: DelegationTrajectoryRecord = { ...record, outcome: { ...rawOutcome, reward } }
@@ -199,15 +208,18 @@ export class DelegationBanditTuner {
   }
 
   /** Read-only snapshot of arm statistics (for trace/diagnostic). */
-  getSummary(): { totalPulls: number; arms: Array<{ id: BanditArmId; meanReward: number; sampleCount: number; thresholdDelta: number }> } {
+  getSummary(): {
+    totalPulls: number
+    arms: Array<{ id: BanditArmId; meanReward: number; sampleCount: number; thresholdDelta: number }>
+  } {
     return {
       totalPulls: this.totalPulls,
-      arms: [...this.arms.values()].map(a => ({
+      arms: [...this.arms.values()].map((a) => ({
         id: a.id,
         meanReward: Number(a.meanReward.toFixed(4)),
         sampleCount: a.sampleCount,
-        thresholdDelta: a.thresholdDelta,
-      })),
+        thresholdDelta: a.thresholdDelta
+      }))
     }
   }
 

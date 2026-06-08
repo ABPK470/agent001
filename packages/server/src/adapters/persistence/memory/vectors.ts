@@ -23,10 +23,10 @@ async function getEmbedding(text: string): Promise<Float32Array | null> {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ model: "nomic-embed-text", prompt: text.slice(0, 2000) }),
-      signal: AbortSignal.timeout(10000),
+      signal: AbortSignal.timeout(10000)
     })
     if (!res.ok) return null
-    const data = await res.json() as { embedding?: number[] }
+    const data = (await res.json()) as { embedding?: number[] }
     if (!data.embedding) return null
     return new Float32Array(data.embedding)
   } catch {
@@ -41,20 +41,20 @@ export async function embedEntry(entry: MemoryEntry): Promise<void> {
   // Mirror upn + shared from the entry so vectorSearch can apply the tenant
   // filter inside SQL (defence-in-depth + correct recall when one tenant's
   // rows would otherwise dominate the cosine top-K).
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO memory_vectors (entry_id, embedding, dimension, upn, shared)
     VALUES (?, ?, ?, ?, ?)
-  `).run(
-    entry.id,
-    Buffer.from(embedding.buffer),
-    embedding.length,
-    entry.upn ?? null,
-    entry.shared ? 1 : 0,
-  )
+  `
+    )
+    .run(entry.id, Buffer.from(embedding.buffer), embedding.length, entry.upn ?? null, entry.shared ? 1 : 0)
 }
 
 function cosineSimilarity(a: Float32Array, b: Float32Array): number {
-  let dot = 0, magA = 0, magB = 0
+  let dot = 0,
+    magA = 0,
+    magB = 0
   for (let i = 0; i < a.length; i++) {
     dot += a[i] * b[i]
     magA += a[i] * a[i]
@@ -74,7 +74,7 @@ export async function vectorSearch(
    * Pushed into SQL so a chatty tenant cannot starve other tenants of recall.
    */
   upn?: string | null,
-  sessionId?: string | null,
+  sessionId?: string | null
 ): Promise<Array<{ entryId: string; similarity: number }>> {
   const queryVec = await getEmbedding(query)
   if (!queryVec) return []
@@ -123,8 +123,13 @@ export async function vectorSearch(
   }
   if (where.length > 0) sql += " WHERE " + where.join(" AND ")
 
-  const rows = getDb().prepare(sql).all(...params) as Array<{
-    entry_id: string; embedding: Buffer; dimension: number; tier: string
+  const rows = getDb()
+    .prepare(sql)
+    .all(...params) as Array<{
+    entry_id: string
+    embedding: Buffer
+    dimension: number
+    tier: string
   }>
 
   const scored = rows.map((row) => {

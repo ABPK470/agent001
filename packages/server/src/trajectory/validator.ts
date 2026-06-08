@@ -20,15 +20,37 @@ import type { Mutation, Trajectory } from "./types.js"
  *   error → (terminal)
  */
 const VALID_TRANSITIONS: Record<string, Set<string>> = {
-  "goal":                 new Set(["thinking", "tool-call", "answer", "error", "iteration"]),
-  "thinking":             new Set(["tool-call", "answer", "error", "delegation-start", "iteration", "thinking"]),
-  "tool-call":            new Set(["tool-result", "tool-error", "delegation-start"]),
-  "tool-result":          new Set(["thinking", "tool-call", "answer", "iteration", "error", "delegation-start"]),
-  "tool-error":           new Set(["thinking", "tool-call", "answer", "error", "iteration"]),
-  "iteration":            new Set(["thinking", "tool-call", "answer", "error"]),
-  "delegation-start":     new Set(["delegation-end", "delegation-start", "tool-call", "thinking", "delegation-iteration", "iteration"]),
-  "delegation-iteration": new Set(["delegation-start", "delegation-end", "tool-call", "thinking", "delegation-iteration", "iteration"]),
-  "delegation-end":       new Set(["thinking", "tool-call", "answer", "iteration", "delegation-start", "delegation-end", "tool-result"]),
+  goal: new Set(["thinking", "tool-call", "answer", "error", "iteration"]),
+  thinking: new Set(["tool-call", "answer", "error", "delegation-start", "iteration", "thinking"]),
+  "tool-call": new Set(["tool-result", "tool-error", "delegation-start"]),
+  "tool-result": new Set(["thinking", "tool-call", "answer", "iteration", "error", "delegation-start"]),
+  "tool-error": new Set(["thinking", "tool-call", "answer", "error", "iteration"]),
+  iteration: new Set(["thinking", "tool-call", "answer", "error"]),
+  "delegation-start": new Set([
+    "delegation-end",
+    "delegation-start",
+    "tool-call",
+    "thinking",
+    "delegation-iteration",
+    "iteration"
+  ]),
+  "delegation-iteration": new Set([
+    "delegation-start",
+    "delegation-end",
+    "tool-call",
+    "thinking",
+    "delegation-iteration",
+    "iteration"
+  ]),
+  "delegation-end": new Set([
+    "thinking",
+    "tool-call",
+    "answer",
+    "iteration",
+    "delegation-start",
+    "delegation-end",
+    "tool-result"
+  ])
 }
 
 // ── Transition validation ────────────────────────────────────────
@@ -49,9 +71,17 @@ export function validateTransitions(trajectory: Trajectory): TransitionViolation
   // observability/meta events, not agent states. They can appear between any
   // pair of real states and should be transparent to the state machine validator.
   const META_KINDS = new Set([
-    "usage", "delegation-iteration", "delegation-parallel-start", "delegation-parallel-end",
-    "system-prompt", "tools-resolved", "llm-request", "llm-response",
-    "user-input-request", "user-input-response", "planner-validation-remediated",
+    "usage",
+    "delegation-iteration",
+    "delegation-parallel-start",
+    "delegation-parallel-end",
+    "system-prompt",
+    "tools-resolved",
+    "llm-request",
+    "llm-response",
+    "user-input-request",
+    "user-input-response",
+    "planner-validation-remediated"
   ])
 
   const stateEvents: Array<{ seq: number; kind: string }> = []
@@ -72,13 +102,23 @@ export function validateTransitions(trajectory: Trajectory): TransitionViolation
     if (delegationDepth > 0) continue
 
     if (prev === "answer" || prev === "error") {
-      violations.push({ seq: stateEvents[i].seq, from: prev, to: curr, message: `Event after terminal state "${prev}"` })
+      violations.push({
+        seq: stateEvents[i].seq,
+        from: prev,
+        to: curr,
+        message: `Event after terminal state "${prev}"`
+      })
       continue
     }
 
     const valid = VALID_TRANSITIONS[prev]
     if (valid && !valid.has(curr)) {
-      violations.push({ seq: stateEvents[i].seq, from: prev, to: curr, message: `Invalid transition: "${prev}" → "${curr}"` })
+      violations.push({
+        seq: stateEvents[i].seq,
+        from: prev,
+        to: curr,
+        message: `Invalid transition: "${prev}" → "${curr}"`
+      })
     }
   }
 

@@ -38,15 +38,14 @@ export async function runObjectInspection(p: sql.ConnectionPool, objName: string
   const dupeAnalysis = formatDuplicates(refs)
 
   const refLines = allRefs.map(([refName, count]) =>
-    count > 1
-      ? `  ⚠ ${refName} (${count}x — DUPLICATE)`
-      : `    ${refName}`,
+    count > 1 ? `  ⚠ ${refName} (${count}x — DUPLICATE)` : `    ${refName}`
   )
 
   const defTrimmed = definition.slice(0, 8000)
-  const defNote = definition.length > 8000
-    ? `\n(Definition truncated — ${definition.length - 8000} chars omitted. Full source is in the database.)`
-    : ""
+  const defNote =
+    definition.length > 8000
+      ? `\n(Definition truncated — ${definition.length - 8000} chars omitted. Full source is in the database.)`
+      : ""
 
   return [
     `Definition: ${schema}.${name} (${row.object_type})`,
@@ -59,6 +58,6 @@ export async function runObjectInspection(p: sql.ConnectionPool, objName: string
     "",
     "T-SQL SOURCE:",
     "─".repeat(60),
-    defTrimmed + defNote,
+    defTrimmed + defNote
   ].join("\n")
 }

@@ -5,21 +5,21 @@ import { EffectClass, PipelineStatus, StepRole, VerificationMode } from "../../d
 import { canonicalizeRelative } from "../../internal/index.js"
 import type { Message } from "../../types.js"
 import {
-    asNonEmptyString,
-    COHERENT_GENERATION_PROMPT,
-    parseArtifacts,
-    parseEdges,
-    parseInvariants,
-    parseJsonObject,
-    parseSharedContracts,
+  asNonEmptyString,
+  COHERENT_GENERATION_PROMPT,
+  parseArtifacts,
+  parseEdges,
+  parseInvariants,
+  parseJsonObject,
+  parseSharedContracts
 } from "../internal/coherent-parse.js"
 import type {
-    ArtifactRelation,
-    CoherentSolutionArtifact,
-    CoherentSolutionBundle,
-    PipelineResult,
-    PipelineStepResult,
-    Plan
+  ArtifactRelation,
+  CoherentSolutionArtifact,
+  CoherentSolutionBundle,
+  PipelineResult,
+  PipelineStepResult,
+  Plan
 } from "../types.js"
 
 export interface CoherentBundleParseResult {
@@ -55,14 +55,14 @@ function isArtifactScopedToolCall(record: ToolCallRecord, artifactPaths: Readonl
 function buildArtifactRelations(artifacts: readonly CoherentSolutionArtifact[]): ArtifactRelation[] {
   return artifacts.map((artifact) => ({
     relationType: "write_owner",
-    artifactPath: artifact.path,
+    artifactPath: artifact.path
   }))
 }
 
 export function buildCoherentGenerationMessages(
   goal: string,
   workspaceRoot: string,
-  history: readonly Message[],
+  history: readonly Message[]
 ): Message[] {
   // Keep anchor/persona system messages only.
   //
@@ -76,28 +76,26 @@ export function buildCoherentGenerationMessages(
   //
   // Retained: system_anchor (base prompt + ABI sync stub if injected) — gives the LLM its
   // persona, output format rules, and file-editing conventions which are always relevant.
-  const baseSystemMessages = history.filter(
-    (message) => {
-      if (message.role !== "system") return false
-      const content = message.content ?? ""
-      // Strip workspace directory listing
-      if (content.trimStart().startsWith("Workspace:")) return false
-      // Strip memory tiers (all noisy for code gen)
-      if (content.trimStart().startsWith("<working_memory>")) return false
-      if (content.trimStart().startsWith("<episodic_memory>")) return false
-      if (content.trimStart().startsWith("<semantic_memory>")) return false
-      // Strip large runtime sections (DB schema, tool context, env context)
-      // identified by their section tag or by being suspiciously large (>8K chars)
-      // and containing database-specific keywords.
-      const section = (message as { section?: string }).section
-      if (section === "system_runtime") {
-        // Keep small runtime messages (e.g. the ABI sync stub line is ~200 chars)
-        // but drop large ones (DB schema context, tool orchestration docs, etc.)
-        if (content.length > 4000) return false
-      }
-      return true
-    },
-  )
+  const baseSystemMessages = history.filter((message) => {
+    if (message.role !== "system") return false
+    const content = message.content ?? ""
+    // Strip workspace directory listing
+    if (content.trimStart().startsWith("Workspace:")) return false
+    // Strip memory tiers (all noisy for code gen)
+    if (content.trimStart().startsWith("<working_memory>")) return false
+    if (content.trimStart().startsWith("<episodic_memory>")) return false
+    if (content.trimStart().startsWith("<semantic_memory>")) return false
+    // Strip large runtime sections (DB schema, tool context, env context)
+    // identified by their section tag or by being suspiciously large (>8K chars)
+    // and containing database-specific keywords.
+    const section = (message as { section?: string }).section
+    if (section === "system_runtime") {
+      // Keep small runtime messages (e.g. the ABI sync stub line is ~200 chars)
+      // but drop large ones (DB schema context, tool orchestration docs, etc.)
+      if (content.length > 4000) return false
+    }
+    return true
+  })
   return [
     ...baseSystemMessages,
     { role: MessageRole.System, content: COHERENT_GENERATION_PROMPT, section: "system_runtime" },
@@ -107,8 +105,8 @@ export function buildCoherentGenerationMessages(
         `Workspace root: ${workspaceRoot}\n` +
         `Goal: ${goal}\n\n` +
         "Produce a coherent multi-file solution bundle that can be materialized directly.",
-      section: "user",
-    },
+      section: "user"
+    }
   ]
 }
 
@@ -131,7 +129,7 @@ export function applyCoherentPromptBudget(messages: Message[], modelHint?: strin
   const result = applyPromptBudget(messages, {
     contextWindowTokens: MAX_COHERENT_TOKENS + 4096,
     maxOutputTokens: 4096,
-    model: modelHint,
+    model: modelHint
   })
   return result.messages.length > 0 ? result.messages : messages
 }
@@ -142,7 +140,7 @@ export function parseCoherentSolutionBundle(raw: string): CoherentBundleParseRes
   if (!parsed) {
     return {
       bundle: null,
-      diagnostics: ["Coherent generation response is not valid JSON."],
+      diagnostics: ["Coherent generation response is not valid JSON."]
     }
   }
 
@@ -163,21 +161,22 @@ export function parseCoherentSolutionBundle(raw: string): CoherentBundleParseRes
       artifacts,
       dependencyEdges: parseEdges(parsed.dependencyEdges),
       sharedContracts: parseSharedContracts(parsed.sharedContracts),
-      invariants: parseInvariants(parsed.invariants),
+      invariants: parseInvariants(parsed.invariants)
     },
-    diagnostics,
+    diagnostics
   }
 }
 
-export function buildCoherentVerificationPlan(
-  bundle: CoherentSolutionBundle,
-  workspaceRoot: string,
-): Plan {
+export function buildCoherentVerificationPlan(bundle: CoherentSolutionBundle, workspaceRoot: string): Plan {
   const artifactRelations = buildArtifactRelations(bundle.artifacts)
   const acceptanceCriteria = uniqueStrings([
     "Every declared artifact exists at the exact planned path with non-placeholder content.",
-    ...bundle.sharedContracts?.map((contract) => `Preserve shared contract ${contract.name}: ${contract.description}`) ?? [],
-    ...bundle.invariants?.map((invariant) => `Preserve invariant ${invariant.id}: ${invariant.description}`) ?? [],
+    ...(bundle.sharedContracts?.map(
+      (contract) => `Preserve shared contract ${contract.name}: ${contract.description}`
+    ) ?? []),
+    ...(bundle.invariants?.map(
+      (invariant) => `Preserve invariant ${invariant.id}: ${invariant.description}`
+    ) ?? [])
   ])
 
   return {
@@ -192,10 +191,16 @@ export function buildCoherentVerificationPlan(
         objective: `Materialize and preserve the coherent bundle architecture: ${bundle.architecture}`,
         inputContract: bundle.summary,
         acceptanceCriteria,
-        requiredToolCapabilities: ["read_file", "browser_check", "run_command", "write_file", "replace_in_file"],
+        requiredToolCapabilities: [
+          "read_file",
+          "browser_check",
+          "run_command",
+          "write_file",
+          "replace_in_file"
+        ],
         contextRequirements: [
           `Architecture: ${bundle.architecture}`,
-          `Artifacts: ${bundle.artifacts.map((artifact) => artifact.path).join(", ")}`,
+          `Artifacts: ${bundle.artifacts.map((artifact) => artifact.path).join(", ")}`
         ],
         executionContext: {
           workspaceRoot,
@@ -209,27 +214,30 @@ export function buildCoherentVerificationPlan(
           artifactRelations,
           role: StepRole.Writer,
           forbiddenArtifacts: [],
-          requiredChecks: ["read_file"],
+          requiredChecks: ["read_file"]
         },
         maxBudgetHint: "coherent_bundle_repair",
         canRunParallel: false,
         workflowStep: {
           role: StepRole.Writer,
-          artifactRelations,
-        },
-      },
-    ],
+          artifactRelations
+        }
+      }
+    ]
   }
 }
 
 export function buildCoherentVerificationPipelineResult(
   bundle: CoherentSolutionBundle,
-  toolCalls: readonly ToolCallRecord[],
+  toolCalls: readonly ToolCallRecord[]
 ): PipelineResult {
   const artifactPathSet = new Set(bundle.artifacts.map((artifact) => normalizeArtifactPath(artifact.path)))
   const relevantToolCalls = toolCalls.filter((record) => isArtifactScopedToolCall(record, artifactPathSet))
   const writeSummaries = relevantToolCalls
-    .filter((record) => record.name === "write_file" || record.name === "replace_in_file" || record.name === "append_file")
+    .filter(
+      (record) =>
+        record.name === "write_file" || record.name === "replace_in_file" || record.name === "append_file"
+    )
     .map((record) => {
       const path = typeof record.args.path === "string" ? String(record.args.path) : "unknown"
       return `Successfully wrote to \`${path}\``
@@ -241,12 +249,15 @@ export function buildCoherentVerificationPipelineResult(
       return `Reviewed artifact \`${path}\``
     })
   const verificationAttempts = relevantToolCalls
-    .filter((record) => record.name === "read_file" || record.name === "browser_check" || record.name === "run_command")
+    .filter(
+      (record) =>
+        record.name === "read_file" || record.name === "browser_check" || record.name === "run_command"
+    )
     .map((record) => ({
       toolName: record.name,
       target: typeof record.args.path === "string" ? String(record.args.path) : undefined,
       success: !record.isError,
-      summary: record.result,
+      summary: record.result
     }))
 
   const stepResult: PipelineStepResult = {
@@ -259,7 +270,7 @@ export function buildCoherentVerificationPipelineResult(
       ...writeSummaries,
       ...readSummaries,
       `Architecture: ${bundle.architecture}`,
-      `Artifacts: ${bundle.artifacts.map((artifact) => `\`${artifact.path}\``).join(", ")}`,
+      `Artifacts: ${bundle.artifacts.map((artifact) => `\`${artifact.path}\``).join(", ")}`
     ].join("\n"),
     durationMs: 0,
     toolCalls: relevantToolCalls,
@@ -272,22 +283,22 @@ export function buildCoherentVerificationPipelineResult(
       producedArtifacts: bundle.artifacts.map((artifact) => artifact.path),
       modifiedArtifacts: bundle.artifacts.map((artifact) => artifact.path),
       verificationAttempts,
-      unresolvedBlockers: [],
-    },
+      unresolvedBlockers: []
+    }
   }
 
   return {
     status: PipelineStatus.Completed,
     stepResults: new Map([[COHERENT_STEP_NAME, stepResult]]),
     completedSteps: 1,
-    totalSteps: 1,
+    totalSteps: 1
   }
 }
 
 export {
-    buildCoherentPlannerEscalationGoal,
-    buildCoherentRepairInstructions,
-    summarizeCoherentVerifierDecision
+  buildCoherentPlannerEscalationGoal,
+  buildCoherentRepairInstructions,
+  summarizeCoherentVerifierDecision
 } from "./repair-instructions.js"
 
 // materializeCoherentSolutionBundle moved to ./coherent/materialize.ts

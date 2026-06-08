@@ -41,7 +41,7 @@ const SCHEMA_DRIFT_MULTIPLIER = 0.4
 /** Metadata keys for provenance stamps. Stable wire format. */
 export const PROVENANCE_KEYS = {
   policyVersion: "policyVersion",
-  schemaFingerprint: "schemaFingerprint",
+  schemaFingerprint: "schemaFingerprint"
 } as const
 
 /** Returns the current MSSQL doctrine policy version. Pure, cheap. */
@@ -58,7 +58,7 @@ export function currentPolicyVersion(): string {
  */
 export function stampProvenance(
   metadata: Record<string, unknown> | undefined,
-  opts?: { schemaFingerprint?: string },
+  opts?: { schemaFingerprint?: string }
 ): Record<string, unknown> {
   const out: Record<string, unknown> = { ...(metadata ?? {}) }
   if (out[PROVENANCE_KEYS.policyVersion] == null) {
@@ -90,7 +90,7 @@ export function provenanceMultiplier(
   createdAtIso: string,
   currentVersion: string,
   currentSchemaFingerprint: string | null,
-  now: Date = new Date(),
+  now: Date = new Date()
 ): { multiplier: number; reasons: string[] } {
   let m = 1
   const reasons: string[] = []

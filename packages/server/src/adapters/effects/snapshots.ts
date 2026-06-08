@@ -16,7 +16,7 @@ export function hashContent(content: string): string {
 export async function captureSnapshot(
   runId: string,
   effectId: string,
-  filePath: string,
+  filePath: string
 ): Promise<FileSnapshot | null> {
   let content: string | null = null
   let hash: string | null = null
@@ -41,20 +41,24 @@ export async function captureSnapshot(
     filePath,
     content,
     hash,
-    createdAt: now,
+    createdAt: now
   }
 
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO file_snapshots (id, effect_id, run_id, file_path, content, hash, file_mode, created_at)
     VALUES (@id, @effect_id, @run_id, @file_path, @content, @hash, @file_mode, @created_at)
-  `).run({
-    ...snapshot,
-    effect_id: snapshot.effectId,
-    run_id: snapshot.runId,
-    file_path: snapshot.filePath,
-    file_mode: fileMode,
-    created_at: snapshot.createdAt,
-  })
+  `
+    )
+    .run({
+      ...snapshot,
+      effect_id: snapshot.effectId,
+      run_id: snapshot.runId,
+      file_path: snapshot.filePath,
+      file_mode: fileMode,
+      created_at: snapshot.createdAt
+    })
 
   broadcast({
     type: EventType.SnapshotCaptured,
@@ -63,8 +67,8 @@ export async function captureSnapshot(
       effectId: snapshot.effectId,
       runId: snapshot.runId,
       filePath: snapshot.filePath,
-      hash: snapshot.hash,
-    },
+      hash: snapshot.hash
+    }
   })
 
   return snapshot

@@ -81,13 +81,13 @@ export async function fetchWithBrowser(url: string, maxLength: number): Promise<
         "--disable-setuid-sandbox",
         "--disable-dev-shm-usage",
         "--disable-gpu",
-        "--disable-extensions",
-      ],
+        "--disable-extensions"
+      ]
     })
 
     const context = await browser.newContext({
       userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     })
     const page = await context.newPage()
 

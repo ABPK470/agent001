@@ -5,7 +5,11 @@
  * or apply schema-ranking heuristics.
  */
 import { afterAll, beforeAll } from "vitest"
-import { getTenantConfig, resetTenantConfig, setTenantConfig } from "../src/application/shell/tenant-config.js"
+import {
+  getTenantConfig,
+  resetTenantConfig,
+  setTenantConfig
+} from "../src/application/shell/tenant-config.js"
 import { _resetCatalogQueriesCache } from "../src/tools/catalog/queries.js"
 
 beforeAll(() => {
@@ -21,29 +25,29 @@ beforeAll(() => {
         "publish.balances",
         "fact.unotranspose",
         "persistedview.publish.revenue",
-        "persistedview.publish.balances",
+        "persistedview.publish.balances"
       ],
       canonicalQualifiedNames: {
         "publish.revenue": "publish.Revenue",
         "publish.balances": "publish.Balances",
         "fact.unotranspose": "fact.UnoTranspose",
         "persistedview.publish.revenue": "persistedView.publish.Revenue",
-        "persistedview.publish.balances": "persistedView.publish.Balances",
+        "persistedview.publish.balances": "persistedView.publish.Balances"
       },
       unionBranchCounts: {
         "publish.revenue": 59,
         "publish.balances": 24,
         "persistedview.publish.revenue": 59,
-        "persistedview.publish.balances": 24,
+        "persistedview.publish.balances": 24
       },
       highCardinalityKeys: {
         "publish.revenue": ["pkClient", "pkBranch", "pkAccount"],
         "publish.balances": ["pkClient", "pkBranch", "pkAccount"],
         "persistedview.publish.revenue": ["pkClient", "pkBranch", "pkAccount"],
-        "persistedview.publish.balances": ["pkClient", "pkBranch", "pkAccount"],
-      },
+        "persistedview.publish.balances": ["pkClient", "pkBranch", "pkAccount"]
+      }
     },
-    schemaRanking: { publish: 50, persistedview: 45, fact: 20, dim: 20, list: 5, archive: -20, etl: -20 },
+    schemaRanking: { publish: 50, persistedview: 45, fact: 20, dim: 20, list: 5, archive: -20, etl: -20 }
   })
 })
 

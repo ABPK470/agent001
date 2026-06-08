@@ -90,7 +90,7 @@ const FULL_COMPACTION_PRESERVE_RECENT = 4
 export function shouldApplyFullCompaction(
   messages: readonly Message[],
   currentIteration: number,
-  lastCompactionIteration: number,
+  lastCompactionIteration: number
 ): boolean {
   if (currentIteration < FULL_COMPACTION_MIN_ITERATION) return false
   if (messages.length < FULL_COMPACTION_MIN_MESSAGES) return false
@@ -111,7 +111,7 @@ export function shouldApplyFullCompaction(
  */
 export function applyFullCompaction(
   messages: readonly Message[],
-  currentIteration: number,
+  currentIteration: number
 ): { readonly compacted: Message[]; readonly state: ArtifactCompactionState } {
   const systemMessages: Message[] = []
   let goalMessage: Message | undefined
@@ -121,12 +121,12 @@ export function applyFullCompaction(
   for (const m of messages) {
     if (!pastGoal) {
       if (
-        m.role === MessageRole.System
-        || m.section === "system_anchor"
-        || m.section === "system_runtime"
-        || m.section === "memory_working"
-        || m.section === "memory_episodic"
-        || m.section === "memory_semantic"
+        m.role === MessageRole.System ||
+        m.section === "system_anchor" ||
+        m.section === "system_runtime" ||
+        m.section === "memory_working" ||
+        m.section === "memory_episodic" ||
+        m.section === "memory_semantic"
       ) {
         systemMessages.push(m)
         continue
@@ -167,7 +167,7 @@ export function applyFullCompaction(
     ...systemMessages,
     ...(goalMessage ? [goalMessage] : []),
     anchorMessage,
-    ...recentZone,
+    ...recentZone
   ]
 
   return { compacted, state }

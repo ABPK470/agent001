@@ -6,16 +6,16 @@
  */
 import { describe, expect, it } from "vitest"
 import {
-    assembleDoctrineBlock,
-    DOCTRINE_BLOCK_BUDGET_BYTES,
-    MSSQL_DOCTRINES,
+  assembleDoctrineBlock,
+  DOCTRINE_BLOCK_BUDGET_BYTES,
+  MSSQL_DOCTRINES
 } from "../src/application/core/doctrine.js"
 import {
-    ABI_SYNC_SECTION,
-    BIG_TABLE_ETL_SECTION,
-    CHART_CATALOGUE_SECTION,
-    DEFAULT_SYSTEM_PROMPT,
-    MIA_DATA_PERSONA_SECTION,
+  ABI_SYNC_SECTION,
+  BIG_TABLE_ETL_SECTION,
+  CHART_CATALOGUE_SECTION,
+  DEFAULT_SYSTEM_PROMPT,
+  MIA_DATA_PERSONA_SECTION
 } from "../src/application/shell/loop-cluster/system-prompt.js"
 
 const ALL_PROMPTS: Array<readonly [string, string]> = [
@@ -23,7 +23,7 @@ const ALL_PROMPTS: Array<readonly [string, string]> = [
   ["MIA_DATA_PERSONA_SECTION", MIA_DATA_PERSONA_SECTION],
   ["ABI_SYNC_SECTION", ABI_SYNC_SECTION],
   ["BIG_TABLE_ETL_SECTION", BIG_TABLE_ETL_SECTION],
-  ["CHART_CATALOGUE_SECTION", CHART_CATALOGUE_SECTION],
+  ["CHART_CATALOGUE_SECTION", CHART_CATALOGUE_SECTION]
 ]
 
 describe("doctrine SSoT — single source of truth for MSSQL structural rules", () => {
@@ -54,7 +54,7 @@ describe("doctrine SSoT — single source of truth for MSSQL structural rules", 
     // doctrine carries them.
     const forbiddenInPromptPhrases = [
       /find-all on every `#temp` token/i,
-      /more than \*\*2×\*\* in the SQL text, rewrite into Stage 1 \+ Stage 2 \+ Stage 3/i,
+      /more than \*\*2×\*\* in the SQL text, rewrite into Stage 1 \+ Stage 2 \+ Stage 3/i
     ]
     for (const [name, body] of ALL_PROMPTS) {
       for (const re of forbiddenInPromptPhrases) {

@@ -6,8 +6,8 @@
 
 // ── LLMCallPhase (request/response discriminator on `onLlmCall`) ─────────────
 export const LLMCallPhase = {
-  Request:  "request",
-  Response: "response",
+  Request: "request",
+  Response: "response"
 } as const
 
 export type LLMCallPhase = (typeof LLMCallPhase)[keyof typeof LLMCallPhase]

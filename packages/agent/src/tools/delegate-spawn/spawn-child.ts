@@ -30,7 +30,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   let toolBundleNote: string | undefined
 
   if (resolvedAgent) {
-    childTools = resolvedAgent.tools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
+    childTools = resolvedAgent.tools.filter((t) => t.name !== "delegate" && t.name !== "delegate_parallel")
     childPrompt = resolvedAgent.systemPrompt
   } else if (spec.tools && spec.tools.length > 0) {
     const requested = new Set(spec.tools)
@@ -59,13 +59,13 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
           `Use them only if needed — start with your scoped tools first.`
       }
     }
-    childTools = ctx.availableTools.filter(t => effectiveRequested.has(t.name))
+    childTools = ctx.availableTools.filter((t) => effectiveRequested.has(t.name))
   } else {
-    childTools = ctx.availableTools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
+    childTools = ctx.availableTools.filter((t) => t.name !== "delegate" && t.name !== "delegate_parallel")
   }
 
   // Children are workers — no delegation tools. Just their execution tools.
-  childTools = childTools.filter(t => t.name !== "delegate" && t.name !== "delegate_parallel")
+  childTools = childTools.filter((t) => t.name !== "delegate" && t.name !== "delegate_parallel")
 
   // Each spawned child gets its OWN run id so bus messages, telemetry, and
   // queue slots can be attributed to the actual publisher rather than the
@@ -84,27 +84,24 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   //     across all children. Tools from path (1) override same-named ones
   //     from path (2).
   const builtPerChild = ctx.buildChildTools ? ctx.buildChildTools(childRunId, childAgentName) : []
-  const builtPerChildNames = new Set(builtPerChild.map(t => t.name))
+  const builtPerChildNames = new Set(builtPerChild.map((t) => t.name))
   if (ctx.extraChildTools) {
-    const extraNames = new Set(ctx.extraChildTools.map(t => t.name))
+    const extraNames = new Set(ctx.extraChildTools.map((t) => t.name))
     childTools = [
-      ...childTools.filter(t => !extraNames.has(t.name) && !builtPerChildNames.has(t.name)),
-      ...ctx.extraChildTools.filter(t => !builtPerChildNames.has(t.name)),
-      ...builtPerChild,
+      ...childTools.filter((t) => !extraNames.has(t.name) && !builtPerChildNames.has(t.name)),
+      ...ctx.extraChildTools.filter((t) => !builtPerChildNames.has(t.name)),
+      ...builtPerChild
     ]
   } else if (builtPerChild.length > 0) {
-    childTools = [
-      ...childTools.filter(t => !builtPerChildNames.has(t.name)),
-      ...builtPerChild,
-    ]
+    childTools = [...childTools.filter((t) => !builtPerChildNames.has(t.name)), ...builtPerChild]
   }
 
   ctx.onChildTrace?.({
     kind: DelegationTraceKind.Start,
     goal: spec.goal,
     depth: ctx.depth + 1,
-    tools: childTools.map(t => t.name),
-    ...(resolvedAgent ? { agentId: resolvedAgent.id, agentName: resolvedAgent.name } : {}),
+    tools: childTools.map((t) => t.name),
+    ...(resolvedAgent ? { agentId: resolvedAgent.id, agentName: resolvedAgent.name } : {})
   })
 
   // Optionally acquire a queue slot using the same child run id we just
@@ -123,9 +120,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
   const withAgentPrompt = childPrompt
     ? `${basePrompt}\n\n--- Agent-specific instructions ---\n${childPrompt}`
     : basePrompt
-  const effectivePrompt = toolBundleNote
-    ? `${withAgentPrompt}${toolBundleNote}`
-    : withAgentPrompt
+  const effectivePrompt = toolBundleNote ? `${withAgentPrompt}${toolBundleNote}` : withAgentPrompt
 
   const effectiveGoal = spec.instructions
     ? `${spec.goal}\n\nAdditional instructions:\n${spec.instructions}`
@@ -144,14 +139,14 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
         kind: DelegationTraceKind.Iteration,
         depth: ctx.depth + 1,
         iteration: iteration + 1,
-        maxIterations: maxIter,
+        maxIterations: maxIter
       })
       for (const ev of pendingLlmEvents) ctx.onChildTrace?.(ev)
       pendingLlmEvents = []
       if (content) {
         ctx.onChildTrace?.({
           kind: DelegationSpanEventKind.Thinking,
-          text: `[D${ctx.depth + 1}] ${content.slice(0, 500)}`,
+          text: `[D${ctx.depth + 1}] ${content.slice(0, 500)}`
         })
       }
       ctx.onChildUsage?.(child.usage, child.llmCalls)
@@ -165,7 +160,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
         iteration: iteration + 1,
         maxIterations: maxIter,
         content: content ? content.slice(0, 200) : null,
-        toolNames: _toolCalls.map((c) => c.name),
+        toolNames: _toolCalls.map((c) => c.name)
       })
     },
     onStep: (_messages, _iteration) => {
@@ -176,7 +171,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
         kind: DelegationSpanEventKind.Nudge,
         tag: `[D${ctx.depth + 1}] ${data.tag}`,
         message: data.message,
-        iteration: data.iteration,
+        iteration: data.iteration
       })
     },
     onLlmCall: (data) => {
@@ -186,12 +181,13 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
           iteration: data.iteration,
           messageCount: data.messages.length,
           toolCount: data.tools.length,
-          messages: data.messages.map(m => ({
+          messages: data.messages.map((m) => ({
             role: m.role,
             content: m.content,
-            toolCalls: m.toolCalls?.map(tc => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
-            toolCallId: m.toolCallId ?? null,
-          })),
+            toolCalls:
+              m.toolCalls?.map((tc) => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
+            toolCallId: m.toolCallId ?? null
+          }))
         })
       } else {
         pendingLlmEvents.push({
@@ -199,11 +195,16 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
           iteration: data.iteration,
           durationMs: data.durationMs,
           content: data.response.content,
-          toolCalls: data.response.toolCalls?.map(tc => ({ id: tc.id, name: tc.name, arguments: tc.arguments })) ?? [],
-          usage: data.response.usage ?? null,
+          toolCalls:
+            data.response.toolCalls?.map((tc) => ({
+              id: tc.id,
+              name: tc.name,
+              arguments: tc.arguments
+            })) ?? [],
+          usage: data.response.usage ?? null
         })
       }
-    },
+    }
   })
 
   try {
@@ -216,13 +217,15 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
       depth: ctx.depth + 1,
       status: hitLimit ? "error" : "done",
       answer: answer.slice(0, 500),
-      ...(hitLimit ? { error: "Child agent exhausted iteration budget" } : {}),
+      ...(hitLimit ? { error: "Child agent exhausted iteration budget" } : {})
     })
 
     if (hitLimit) {
-      return `⚠ DELEGATION INCOMPLETE — child agent used all ${maxIter} iterations without finishing.\n` +
+      return (
+        `⚠ DELEGATION INCOMPLETE — child agent used all ${maxIter} iterations without finishing.\n` +
         `Child's last output: ${answer}\n` +
         `You MUST either re-delegate with a simpler/clearer goal, or handle this task directly.`
+      )
     }
 
     return answer
@@ -233,7 +236,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
       kind: DelegationTraceKind.End,
       depth: ctx.depth + 1,
       status: "error",
-      error: errMsg,
+      error: errMsg
     })
 
     return `Delegation failed: ${errMsg}`

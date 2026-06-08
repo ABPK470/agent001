@@ -42,21 +42,21 @@ export function consolidate(opts?: {
   //   2. They are already deduplicated by the episodic upsert (one per goal) \u2014 there
   //      is no value in further consolidation.
   // Only working-tier tool-call/result turns (raw patterns) should be clustered.
-  const tenantClause = opts?.upn === undefined
-    ? ""
-    : opts.upn === null
-      ? " AND upn IS NULL"
-      : " AND upn = ?"
+  const tenantClause = opts?.upn === undefined ? "" : opts.upn === null ? " AND upn IS NULL" : " AND upn = ?"
   const tenantParams: unknown[] = opts?.upn === undefined || opts.upn === null ? [] : [opts.upn]
 
-  const candidates = getDb().prepare(`
+  const candidates = getDb()
+    .prepare(
+      `
     SELECT * FROM memory_entries
     WHERE (tier = 'episodic' OR (tier = 'working' AND created_at < ?))
       AND role != 'summary'
       AND created_at < ?${tenantClause}
     ORDER BY created_at ASC
     LIMIT ?
-  `).all(cutoff, cutoff, ...tenantParams, maxBatchSize) as Array<Record<string, unknown>>
+  `
+    )
+    .all(cutoff, cutoff, ...tenantParams, maxBatchSize) as Array<Record<string, unknown>>
 
   if (candidates.length < 3) return { promoted: 0, pruned: 0 }
 
@@ -79,15 +79,15 @@ export function consolidate(opts?: {
   }
 
   // Prune very low confidence entries (cross-tenant; threshold-only)
-  const deleted = getDb().prepare(
-    "DELETE FROM memory_entries WHERE confidence < 0.05 AND tier != 'semantic'"
-  ).run()
+  const deleted = getDb()
+    .prepare("DELETE FROM memory_entries WHERE confidence < 0.05 AND tier != 'semantic'")
+    .run()
   totalPruned += deleted.changes ?? 0
 
   if (totalPromoted > 0 || totalPruned > 0) {
     broadcast({
       type: EventType.MemoryConsolidated,
-      data: { promoted: totalPromoted, pruned: totalPruned },
+      data: { promoted: totalPromoted, pruned: totalPruned }
     })
   }
 
@@ -96,28 +96,29 @@ export function consolidate(opts?: {
 
 function consolidateTenant(
   tenantUpn: string | null,
-  candidates: Array<Record<string, unknown>>,
+  candidates: Array<Record<string, unknown>>
 ): { promoted: number; pruned: number } {
   if (candidates.length < 2) return { promoted: 0, pruned: 0 }
 
   // Load existing semantic entries for THIS tenant only \u2014 cross-tier dedup
   // must not consult another user's semantic memory.
-  const semanticSql = tenantUpn === null
-    ? "SELECT content FROM memory_entries WHERE tier = 'semantic' AND upn IS NULL ORDER BY created_at DESC LIMIT 100"
-    : "SELECT content FROM memory_entries WHERE tier = 'semantic' AND upn = ? ORDER BY created_at DESC LIMIT 100"
-  const existingSemantic = (tenantUpn === null
-    ? getDb().prepare(semanticSql).all()
-    : getDb().prepare(semanticSql).all(tenantUpn)) as Array<{ content: string }>
+  const semanticSql =
+    tenantUpn === null
+      ? "SELECT content FROM memory_entries WHERE tier = 'semantic' AND upn IS NULL ORDER BY created_at DESC LIMIT 100"
+      : "SELECT content FROM memory_entries WHERE tier = 'semantic' AND upn = ? ORDER BY created_at DESC LIMIT 100"
+  const existingSemantic = (
+    tenantUpn === null ? getDb().prepare(semanticSql).all() : getDb().prepare(semanticSql).all(tenantUpn)
+  ) as Array<{ content: string }>
   const semanticTokenSets = existingSemantic.map((s) => tokenize(s.content))
 
   // Agglomerative clustering by Jaccard \u2265 0.4
   const entries = candidates.map((r) => ({
     row: r,
     tokens: tokenize(r.content as string),
-    clustered: false,
+    clustered: false
   }))
 
-  const clusters: Array<Array<typeof entries[number]>> = []
+  const clusters: Array<Array<(typeof entries)[number]>> = []
 
   for (const entry of entries) {
     if (entry.clustered) continue
@@ -146,14 +147,16 @@ function consolidateTenant(
 
     // Cross-tier dedup: skip if this cluster duplicates an existing semantic entry
     const isDupOfSemantic = semanticTokenSets.some(
-      (st) => jaccardSimilarity(mergedTokens, st) >= DEDUP_JACCARD_THRESHOLD,
+      (st) => jaccardSimilarity(mergedTokens, st) >= DEDUP_JACCARD_THRESHOLD
     )
     if (isDupOfSemantic) {
       const ids = cluster.map((c) => c.row.id as string)
       const placeholders = ids.map(() => "?").join(", ")
-      getDb().prepare(
-        `UPDATE memory_entries SET confidence = confidence * 0.3, updated_at = ? WHERE id IN (${placeholders})`
-      ).run(new Date().toISOString(), ...ids)
+      getDb()
+        .prepare(
+          `UPDATE memory_entries SET confidence = confidence * 0.3, updated_at = ? WHERE id IN (${placeholders})`
+        )
+        .run(new Date().toISOString(), ...ids)
       pruned += ids.length
       continue
     }
@@ -168,11 +171,11 @@ function consolidateTenant(
       metadata: {
         sourceCount: cluster.length,
         provenance: "consolidation:episodic_promotion",
-        consolidatedFrom: cluster.map((c) => c.row.id),
+        consolidatedFrom: cluster.map((c) => c.row.id)
       },
       source: MemorySource.System,
       confidence,
-      upn: tenantUpn,
+      upn: tenantUpn
     })
     promoted++
 
@@ -180,9 +183,11 @@ function consolidateTenant(
 
     const ids = cluster.map((c) => c.row.id as string)
     const placeholders = ids.map(() => "?").join(", ")
-    getDb().prepare(
-      `UPDATE memory_entries SET confidence = confidence * 0.3, updated_at = ? WHERE id IN (${placeholders})`
-    ).run(new Date().toISOString(), ...ids)
+    getDb()
+      .prepare(
+        `UPDATE memory_entries SET confidence = confidence * 0.3, updated_at = ? WHERE id IN (${placeholders})`
+      )
+      .run(new Date().toISOString(), ...ids)
     pruned += ids.length
   }
 

@@ -16,7 +16,10 @@ import type { HashColumn, PkHashRow } from "./types.js"
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */
 export function qtable(name: string): string {
-  return name.split(".").map((p) => `[${p}]`).join(".")
+  return name
+    .split(".")
+    .map((p) => `[${p}]`)
+    .join(".")
 }
 
 /**
@@ -29,7 +32,8 @@ export function isTransientMssqlError(e: unknown): boolean {
   if (!(e instanceof Error)) return false
   const msg = e.message.toLowerCase()
   const code = (e as { code?: string }).code ?? ""
-  if (code === "ETIMEOUT" || code === "ECONNRESET" || code === "ECONNCLOSED" || code === "ESOCKET") return true
+  if (code === "ETIMEOUT" || code === "ECONNRESET" || code === "ECONNCLOSED" || code === "ESOCKET")
+    return true
   return (
     msg.includes("connection is closed") ||
     msg.includes("connection lost") ||
@@ -50,7 +54,7 @@ export async function runQueryWithRetry<T = unknown>(
   query: string,
   label: string,
   maxRetries = 2,
-  telemetryContext?: SyncTelemetryContext,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<sql.IResult<T>> {
   const t0 = Date.now()
   const connection = (pool as unknown as { config?: { database?: string } }).config?.database ?? "<unknown>"
@@ -60,26 +64,41 @@ export async function runQueryWithRetry<T = unknown>(
     attempts = attempt + 1
     try {
       const result = await pool.request().query<T>(query)
-      emitSyncSqlEvent(host, {
-        label, connection, sql: query,
-        durationMs: Date.now() - t0,
-        rowCount: result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
-        attempts,
-      }, telemetryContext)
+      emitSyncSqlEvent(
+        host,
+        {
+          label,
+          connection,
+          sql: query,
+          durationMs: Date.now() - t0,
+          rowCount:
+            result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
+          attempts
+        },
+        telemetryContext
+      )
       return result
     } catch (e) {
       lastErr = e
       if (attempt === maxRetries || !isTransientMssqlError(e)) {
-        emitSyncSqlEvent(host, {
-          label, connection, sql: query,
-          durationMs: Date.now() - t0,
-          attempts,
-          error: e instanceof Error ? e.message : String(e),
-        }, telemetryContext)
+        emitSyncSqlEvent(
+          host,
+          {
+            label,
+            connection,
+            sql: query,
+            durationMs: Date.now() - t0,
+            attempts,
+            error: e instanceof Error ? e.message : String(e)
+          },
+          telemetryContext
+        )
         throw e
       }
       const delay = 100 * Math.pow(4, attempt) + Math.floor(Math.random() * 50)
-      console.warn(`[sync.diff] transient error on ${label} (attempt ${attempt + 1}/${maxRetries + 1}): ${e instanceof Error ? e.message : String(e)} — retrying in ${delay}ms`)
+      console.warn(
+        `[sync.diff] transient error on ${label} (attempt ${attempt + 1}/${maxRetries + 1}): ${e instanceof Error ? e.message : String(e)} — retrying in ${delay}ms`
+      )
       await new Promise((r) => setTimeout(r, delay))
     }
   }
@@ -160,8 +179,8 @@ export function buildBatchWhere(rows: PkHashRow[], pkColumns: string[]): string 
     return `[${col}] IN (${values})`
   }
   // Composite PK — OR of AND-ed equality predicates.
-  const clauses = rows.map((r) =>
-    "(" + pkColumns.map((c) => `[${c}] = ${quoteValue(r.pkValues[c])}`).join(" AND ") + ")"
+  const clauses = rows.map(
+    (r) => "(" + pkColumns.map((c) => `[${c}] = ${quoteValue(r.pkValues[c])}`).join(" AND ") + ")"
   )
   return clauses.join(" OR ")
 }

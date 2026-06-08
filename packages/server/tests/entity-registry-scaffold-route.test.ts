@@ -19,7 +19,7 @@ function adminSession(): CurrentSession {
     upn: "admin@example.com",
     isAdmin: true,
     ip: "127.0.0.1",
-    userAgent: "vitest",
+    userAgent: "vitest"
   }
 }
 
@@ -59,8 +59,8 @@ async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
           source: "manual",
           groundedByPipeline: false,
           enabledByDefault: true,
-          userControllable: false,
-        },
+          userControllable: false
+        }
       ],
       policies: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
       scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
@@ -74,8 +74,8 @@ async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
       createdBy: session.upn,
       reason: "seed",
       createdAt: new Date().toISOString(),
-      retiredAt: null,
-    },
+      retiredAt: null
+    }
   })
 
   const app = Fastify({ logger: false })
@@ -83,7 +83,7 @@ async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
     ;(req as unknown as { session: CurrentSession }).session = session
     seedUser(testDb, session.upn, {
       displayName: session.displayName,
-      isAdmin: session.isAdmin,
+      isAdmin: session.isAdmin
     })
     seedSession(testDb, session.sid, session.upn)
   })
@@ -113,7 +113,7 @@ describe("entity registry scaffold route", () => {
 
     const response = await app.inject({
       method: "GET",
-      url: "/api/entity-registry/entities/contract/scaffold-sync-definition",
+      url: "/api/entity-registry/entities/contract/scaffold-sync-definition"
     })
 
     expect(response.statusCode).toBe(200)
@@ -130,7 +130,7 @@ describe("entity registry scaffold route", () => {
     expect(body.definition.id).toBe("contract")
     expect(body.definition.bindings).toEqual({
       serviceProfileRef: "default",
-      environmentPolicyRef: "default",
+      environmentPolicyRef: "default"
     })
     expect(body.definition.executionFlow.steps.map((step) => step.kind)).toEqual([
       "auditCheck",
@@ -153,7 +153,7 @@ describe("entity registry scaffold route", () => {
       "contractPostScript",
       "targetUnlock",
       "syncDate",
-      "deployDate",
+      "deployDate"
     ])
     expect(body.stderr).toEqual([])
 

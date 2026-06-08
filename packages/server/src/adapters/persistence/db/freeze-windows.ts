@@ -15,15 +15,15 @@ import { getDb } from "./connection.js"
 // ── Public type (matches shared-types `FreezeWindow`) ───────────
 
 export interface FreezeWindowRecord {
-  tenantId:    string
-  id:          string
+  tenantId: string
+  id: string
   displayName: string
   description: string
-  startsAt:    string
-  endsAt:      string
-  createdBy:   string
-  createdAt:   string
-  updatedAt:   string
+  startsAt: string
+  endsAt: string
+  createdBy: string
+  createdAt: string
+  updatedAt: string
 }
 
 // ── Validation ──────────────────────────────────────────────────
@@ -37,71 +37,75 @@ export class FreezeWindowValidationError extends Error {
   }
 }
 
-function validate(input: Pick<FreezeWindowRecord, "id" | "displayName" | "description" | "startsAt" | "endsAt">): void {
-  if (!ID_RE.test(input.id))           throw new FreezeWindowValidationError(`id: must match ${ID_RE}`)
-  if (!input.displayName.trim())       throw new FreezeWindowValidationError("displayName is required")
-  if (typeof input.description !== "string") throw new FreezeWindowValidationError("description must be a string")
+function validate(
+  input: Pick<FreezeWindowRecord, "id" | "displayName" | "description" | "startsAt" | "endsAt">
+): void {
+  if (!ID_RE.test(input.id)) throw new FreezeWindowValidationError(`id: must match ${ID_RE}`)
+  if (!input.displayName.trim()) throw new FreezeWindowValidationError("displayName is required")
+  if (typeof input.description !== "string")
+    throw new FreezeWindowValidationError("description must be a string")
   const startMs = Date.parse(input.startsAt)
-  const endMs   = Date.parse(input.endsAt)
-  if (Number.isNaN(startMs))           throw new FreezeWindowValidationError("startsAt: not a valid ISO-8601 timestamp")
-  if (Number.isNaN(endMs))             throw new FreezeWindowValidationError("endsAt: not a valid ISO-8601 timestamp")
-  if (endMs <= startMs)                throw new FreezeWindowValidationError("endsAt must be strictly after startsAt")
+  const endMs = Date.parse(input.endsAt)
+  if (Number.isNaN(startMs)) throw new FreezeWindowValidationError("startsAt: not a valid ISO-8601 timestamp")
+  if (Number.isNaN(endMs)) throw new FreezeWindowValidationError("endsAt: not a valid ISO-8601 timestamp")
+  if (endMs <= startMs) throw new FreezeWindowValidationError("endsAt must be strictly after startsAt")
 }
 
 // ── CRUD ────────────────────────────────────────────────────────
 
 interface Row {
-  tenant_id:    string
-  id:           string
+  tenant_id: string
+  id: string
   display_name: string
-  description:  string
-  starts_at:    string
-  ends_at:      string
-  created_by:   string
-  created_at:   string
-  updated_at:   string
+  description: string
+  starts_at: string
+  ends_at: string
+  created_by: string
+  created_at: string
+  updated_at: string
 }
 
 const rowToRecord = (r: Row): FreezeWindowRecord => ({
-  tenantId:    r.tenant_id,
-  id:          r.id,
+  tenantId: r.tenant_id,
+  id: r.id,
   displayName: r.display_name,
   description: r.description,
-  startsAt:    r.starts_at,
-  endsAt:      r.ends_at,
-  createdBy:   r.created_by,
-  createdAt:   r.created_at,
-  updatedAt:   r.updated_at,
+  startsAt: r.starts_at,
+  endsAt: r.ends_at,
+  createdBy: r.created_by,
+  createdAt: r.created_at,
+  updatedAt: r.updated_at
 })
 
 export function listFreezeWindowsForTenant(tenantId: string): FreezeWindowRecord[] {
-  const rows = getDb().prepare(
-    `SELECT * FROM freeze_windows WHERE tenant_id = ? ORDER BY starts_at ASC, id ASC`,
-  ).all(tenantId) as Row[]
+  const rows = getDb()
+    .prepare(`SELECT * FROM freeze_windows WHERE tenant_id = ? ORDER BY starts_at ASC, id ASC`)
+    .all(tenantId) as Row[]
   return rows.map(rowToRecord)
 }
 
 export function getFreezeWindow(tenantId: string, id: string): FreezeWindowRecord | null {
-  const r = getDb().prepare(
-    `SELECT * FROM freeze_windows WHERE tenant_id = ? AND id = ?`,
-  ).get(tenantId, id) as Row | undefined
+  const r = getDb()
+    .prepare(`SELECT * FROM freeze_windows WHERE tenant_id = ? AND id = ?`)
+    .get(tenantId, id) as Row | undefined
   return r ? rowToRecord(r) : null
 }
 
 export interface UpsertFreezeWindowArgs {
-  tenantId:    string
-  id:          string
+  tenantId: string
+  id: string
   displayName: string
   description: string
-  startsAt:    string
-  endsAt:      string
-  actor:       string
+  startsAt: string
+  endsAt: string
+  actor: string
 }
 
 export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRecord {
   validate(args)
   const db = getDb()
-  db.prepare(`
+  db.prepare(
+    `
     INSERT INTO freeze_windows
       (tenant_id, id, display_name, description, starts_at, ends_at, created_by, created_at, updated_at)
     VALUES
@@ -113,14 +117,15 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
       starts_at    = excluded.starts_at,
       ends_at      = excluded.ends_at,
       updated_at   = datetime('now')
-  `).run({
-    tenantId:    args.tenantId,
-    id:          args.id,
+  `
+  ).run({
+    tenantId: args.tenantId,
+    id: args.id,
     displayName: args.displayName,
     description: args.description,
-    startsAt:    args.startsAt,
-    endsAt:      args.endsAt,
-    actor:       args.actor,
+    startsAt: args.startsAt,
+    endsAt: args.endsAt,
+    actor: args.actor
   })
   const fresh = getFreezeWindow(args.tenantId, args.id)
   if (!fresh) throw new Error(`freeze_window not persisted: ${args.id}`)
@@ -129,9 +134,7 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
 }
 
 export function deleteFreezeWindow(tenantId: string, id: string): boolean {
-  const info = getDb().prepare(
-    `DELETE FROM freeze_windows WHERE tenant_id = ? AND id = ?`,
-  ).run(tenantId, id)
+  const info = getDb().prepare(`DELETE FROM freeze_windows WHERE tenant_id = ? AND id = ?`).run(tenantId, id)
   if (info.changes > 0 && tenantId === DEFAULT_TENANT_ID) refreshFreezeWindowRegistry()
   return info.changes > 0
 }
@@ -151,11 +154,11 @@ export function deleteFreezeWindow(tenantId: string, id: string): boolean {
 export function listFreezeWindowDefinitionsForTenant(tenantId = DEFAULT_TENANT_ID): FreezeWindowDefinition[] {
   const recs = listFreezeWindowsForTenant(tenantId)
   return recs.map((r) => ({
-    id:          r.id,
+    id: r.id,
     displayName: r.displayName,
     description: r.description,
-    startsAt:    r.startsAt,
-    endsAt:      r.endsAt,
+    startsAt: r.startsAt,
+    endsAt: r.endsAt
   }))
 }
 

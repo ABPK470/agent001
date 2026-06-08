@@ -8,11 +8,7 @@
  */
 
 import type { AgentLoopState } from "../state.js"
-import {
-    ANTIPASTE_MIN_CONTENT_LEN,
-    ANTIPASTE_NEEDLE_LEN,
-    MAX_TRUNCATED_FINGERPRINTS,
-} from "./types.js"
+import { ANTIPASTE_MIN_CONTENT_LEN, ANTIPASTE_NEEDLE_LEN, MAX_TRUNCATED_FINGERPRINTS } from "./types.js"
 
 /**
  * Extract a distinctive substring ("needle") from a truncated query_mssql
@@ -41,7 +37,7 @@ export function extractWritePayload(name: string, args: Record<string, unknown>)
 export function recordTruncatedQuery(
   state: AgentLoopState,
   enrichedResult: string,
-  args: Record<string, unknown>,
+  args: Record<string, unknown>
 ): void {
   const wasTruncated = /TRUNCATION WARNING|ROW LIMIT WARNING|\(output truncated\)/.test(enrichedResult)
   if (!wasTruncated) return

@@ -31,16 +31,18 @@ export async function probeTriggers(
   planId: string,
   target: string,
   upsertTables: string[],
-  telemetryContext?: SyncTelemetryContext,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<Map<string, boolean>> {
   const triggerCache = new Map<string, boolean>()
   if (upsertTables.length === 0) return triggerCache
   const probeT0 = Date.now()
   try {
-    const pairs = upsertTables.map((tn) => {
-      const [s, n] = tn.split(".")
-      return `('${(s ?? "").replace(/'/g, "''")}','${(n ?? "").replace(/'/g, "''")}')`
-    }).join(",")
+    const pairs = upsertTables
+      .map((tn) => {
+        const [s, n] = tn.split(".")
+        return `('${(s ?? "").replace(/'/g, "''")}','${(n ?? "").replace(/'/g, "''")}')`
+      })
+      .join(",")
     const sqlText =
       `WITH wanted(s,n) AS (SELECT * FROM (VALUES ${pairs}) v(s,n)) ` +
       `SELECT s.name AS schemaName, o.name AS tableName, ` +
@@ -50,12 +52,21 @@ export async function probeTriggers(
       `JOIN sys.objects o ON o.schema_id = s.schema_id AND o.name = w.n ` +
       `LEFT JOIN sys.triggers t ON t.parent_id = o.object_id AND t.is_disabled = 0 ` +
       `GROUP BY s.name, o.name`
-    const r = await trackedQuery(host, tgtPool.request(), sqlText, "trigger-probe.batch", target, telemetryContext)
+    const r = await trackedQuery(
+      host,
+      tgtPool.request(),
+      sqlText,
+      "trigger-probe.batch",
+      target,
+      telemetryContext
+    )
     for (const row of r.recordset as Array<{ schemaName: string; tableName: string; triggerCount: number }>) {
       triggerCache.set(`${row.schemaName}.${row.tableName}`, row.triggerCount > 0)
     }
     emit(host, EventType.SyncExecuteArchiveProbeBatch, {
-      planId, tables: upsertTables.length, durationMs: Date.now() - probeT0,
+      planId,
+      tables: upsertTables.length,
+      durationMs: Date.now() - probeT0
     })
   } catch (e) {
     // Best-effort: if the batch probe fails, the per-table fallback in
@@ -78,7 +89,7 @@ export async function maybeArchive(
   host: SyncRuntimeHost,
   plan: SyncPlan,
   tableName: string,
-  triggerCache?: Map<string, boolean>,
+  triggerCache?: Map<string, boolean>
 ): Promise<void> {
   // Resolve archive sibling for this table.
   const tIdx = plan.recipeSnapshot.tables.findIndex((rt) => rt.name === tableName)
@@ -107,14 +118,14 @@ export async function maybeArchive(
       table: tableName,
       hasTriggers,
       cached,
-      durationMs: Date.now() - probeT0,
+      durationMs: Date.now() - probeT0
     })
     if (!hasTriggers) {
       emit(host, EventType.SyncExecuteArchiveSkipped, {
         planId: plan.planId,
         table: tableName,
         reason:
-          "target has no active triggers and engine-side archive not yet implemented — SCD2 history will NOT be captured for this run",
+          "target has no active triggers and engine-side archive not yet implemented — SCD2 history will NOT be captured for this run"
       })
     }
   } catch (e) {

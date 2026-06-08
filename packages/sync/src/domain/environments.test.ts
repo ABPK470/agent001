@@ -15,7 +15,7 @@ describe("assertSupportedSyncDirection", () => {
     const target = withPermissionDefaults({ name: "UAT", role: "both" })
 
     expect(() => assertSupportedSyncDirection(source, target)).toThrow(
-      'Unsupported sync direction "DEV -> UAT". Allowed targets for DEV: none.',
+      'Unsupported sync direction "DEV -> UAT". Allowed targets for DEV: none.'
     )
   })
 

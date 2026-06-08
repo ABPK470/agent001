@@ -20,17 +20,15 @@ import { qtable } from "./db-helpers.js"
  * Cheap: one COUNT(*) per affected table; bounded by recipe size.
  */
 export async function revalidatePlanDrift(host: SyncRuntimeHost, plan: SyncPlan): Promise<number | null> {
-  const affected = plan.tables.filter(
-    (t) => t.counts.insert + t.counts.update + t.counts.delete > 0,
-  )
+  const affected = plan.tables.filter((t) => t.counts.insert + t.counts.update + t.counts.delete > 0)
   if (affected.length === 0) return null
   const { pool } = await getPool(host, plan.source)
   let maxDrift = 0
   for (const t of affected) {
     try {
-      const r = await pool.request().query(
-        `SELECT COUNT(*) AS cnt FROM ${qtable(t.table)} WITH (NOLOCK) WHERE ${t.scopePredicate}`,
-      )
+      const r = await pool
+        .request()
+        .query(`SELECT COUNT(*) AS cnt FROM ${qtable(t.table)} WITH (NOLOCK) WHERE ${t.scopePredicate}`)
       const currentCount = (r.recordset[0]?.cnt as number | undefined) ?? 0
       // Reference: source rows expected = unchanged + insert + update (everything in source scope).
       const expected = t.counts.unchanged + t.counts.insert + t.counts.update

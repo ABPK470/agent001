@@ -32,8 +32,8 @@ let listDirectoryTool!: Tool
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), "agent-e2e-"))
   const host = configureAgent({ filesystemBasePath: tempDir })
-  readFileTool      = createReadFileTool(host)
-  writeFileTool     = createWriteFileTool(host)
+  readFileTool = createReadFileTool(host)
+  writeFileTool = createWriteFileTool(host)
   listDirectoryTool = createListDirectoryTool(host)
   fsTools = [readFileTool, writeFileTool, listDirectoryTool]
 })
@@ -50,7 +50,7 @@ function scriptedLLM(responses: LLMResponse[]): LLMClient {
         return { content: "out of script", toolCalls: [] }
       }
       return responses[callIndex++]!
-    },
+    }
   }
 }
 
@@ -69,29 +69,34 @@ describe("E2E: simple file creation", () => {
     const llm = scriptedLLM([
       {
         content: "Creating index.html",
-        toolCalls: [{
-          id: "tc1",
-          name: "write_file",
-          arguments: {
-            path: "index.html",
-            content: "<!DOCTYPE html>\n<html>\n<head><title>Test</title></head>\n<body><h1>Hello World</h1></body>\n</html>",
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: {
+              path: "index.html",
+              content:
+                "<!DOCTYPE html>\n<html>\n<head><title>Test</title></head>\n<body><h1>Hello World</h1></body>\n</html>"
+            }
+          }
+        ]
       },
       {
         content: "Verifying the file",
-        toolCalls: [{
-          id: "tc2",
-          name: "read_file",
-          arguments: { path: "index.html" },
-        }],
+        toolCalls: [
+          {
+            id: "tc2",
+            name: "read_file",
+            arguments: { path: "index.html" }
+          }
+        ]
       },
-      { content: "Created index.html with Hello World heading", toolCalls: [] },
+      { content: "Created index.html with Hello World heading", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, fsTools, {
       verbose: false,
-      onNudge: (d) => nudges.push(d.tag),
+      onNudge: (d) => nudges.push(d.tag)
     })
     const answer = await agent.run("Create a simple HTML page")
 
@@ -135,7 +140,7 @@ describe("E2E: chess game with stub detection", () => {
       "      el.appendChild(sq);",
       "    }",
       "  }",
-      "}",
+      "}"
     ].join("\n")
 
     const fixedChessCode = [
@@ -171,36 +176,45 @@ describe("E2E: chess game with stub detection", () => {
       "      el.appendChild(sq);",
       "    }",
       "  }",
-      "}",
+      "}"
     ].join("\n")
 
     const llm = scriptedLLM([
       // Iter 0: write stub code (should be rejected before commit)
       {
         content: "Writing chess game",
-        toolCalls: [{
-          id: "tc1", name: "write_file",
-          arguments: { path: "game.js", content: stubChessCode },
-        }],
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: { path: "game.js", content: stubChessCode }
+          }
+        ]
       },
       // Iter 1: fix by writing real code
       {
         content: "Fixing the stub functions",
-        toolCalls: [{
-          id: "tc2", name: "write_file",
-          arguments: { path: "game.js", content: fixedChessCode },
-        }],
+        toolCalls: [
+          {
+            id: "tc2",
+            name: "write_file",
+            arguments: { path: "game.js", content: fixedChessCode }
+          }
+        ]
       },
       // Iter 2: reads to verify again
       {
         content: null,
-        toolCalls: [{
-          id: "tc3", name: "read_file",
-          arguments: { path: "game.js" },
-        }],
+        toolCalls: [
+          {
+            id: "tc3",
+            name: "read_file",
+            arguments: { path: "game.js" }
+          }
+        ]
       },
       // Iter 3: exit after clean repair
-      { content: "Chess game with complete move validation", toolCalls: [] },
+      { content: "Chess game with complete move validation", toolCalls: [] }
     ])
 
     // Set up the completion validator (simulating what delegate.ts does)
@@ -212,11 +226,13 @@ describe("E2E: chess game with stub detection", () => {
           const code = await readFile(join(tempDir, "game.js"), "utf-8")
           const findings = detectPlaceholderPatterns(code)
           if (findings.length > 0) {
-            return `COMPLETION CHECK FAILED — stubs found:\n${findings.map(f => `  - ${f}`).join("\n")}`
+            return `COMPLETION CHECK FAILED — stubs found:\n${findings.map((f) => `  - ${f}`).join("\n")}`
           }
-        } catch { /* file not created yet */ }
+        } catch {
+          /* file not created yet */
+        }
         return null
-      },
+      }
     })
 
     const answer = await agent.run("Build a chess game")
@@ -245,25 +261,32 @@ describe("E2E: write-without-verify guard", () => {
       // Iter 0: write a file
       {
         content: "Writing app.js",
-        toolCalls: [{
-          id: "tc1", name: "write_file",
-          arguments: { path: "app.js", content: "function main() {\n  const message = 'Hello';\n  console.log(message.toUpperCase());\n}\nmain();" },
-        }],
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: {
+              path: "app.js",
+              content:
+                "function main() {\n  const message = 'Hello';\n  console.log(message.toUpperCase());\n}\nmain();"
+            }
+          }
+        ]
       },
       // Iter 1: tries to exit without reading
       { content: "All done!", toolCalls: [] },
       // Iter 2: forced to verify — reads the file
       {
         content: "Let me verify",
-        toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "app.js" } }],
+        toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "app.js" } }]
       },
       // Iter 3: exits
-      { content: "Verified — app.js works correctly", toolCalls: [] },
+      { content: "Verified — app.js works correctly", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, fsTools, {
       verbose: false,
-      onNudge: (d) => nudges.push(d.tag),
+      onNudge: (d) => nudges.push(d.tag)
     })
     await agent.run("Create a simple app")
 
@@ -284,45 +307,57 @@ describe("E2E: multi-file project creation", () => {
       // Iter 0: write HTML
       {
         content: "Creating HTML",
-        toolCalls: [{
-          id: "tc1", name: "write_file",
-          arguments: {
-            path: "index.html",
-            content: '<!DOCTYPE html>\n<html>\n<head>\n<link rel="stylesheet" href="styles.css">\n</head>\n<body>\n<div id="app"></div>\n<script src="app.js"></script>\n</body>\n</html>',
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: {
+              path: "index.html",
+              content:
+                '<!DOCTYPE html>\n<html>\n<head>\n<link rel="stylesheet" href="styles.css">\n</head>\n<body>\n<div id="app"></div>\n<script src="app.js"></script>\n</body>\n</html>'
+            }
+          }
+        ]
       },
       // Iter 1: write CSS
       {
         content: "Creating CSS",
-        toolCalls: [{
-          id: "tc2", name: "write_file",
-          arguments: {
-            path: "styles.css",
-            content: "body { font-family: sans-serif; margin: 0; }\n#app { max-width: 800px; margin: 0 auto; padding: 20px; }",
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc2",
+            name: "write_file",
+            arguments: {
+              path: "styles.css",
+              content:
+                "body { font-family: sans-serif; margin: 0; }\n#app { max-width: 800px; margin: 0 auto; padding: 20px; }"
+            }
+          }
+        ]
       },
       // Iter 2: write JS
       {
         content: "Creating JS",
-        toolCalls: [{
-          id: "tc3", name: "write_file",
-          arguments: {
-            path: "app.js",
-            content: "document.getElementById('app').innerHTML = '<h1>Todo App</h1><ul id=\"list\"></ul>';\nfunction addItem(text) {\n  const li = document.createElement('li');\n  li.textContent = text;\n  document.getElementById('list').appendChild(li);\n}",
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc3",
+            name: "write_file",
+            arguments: {
+              path: "app.js",
+              content:
+                "document.getElementById('app').innerHTML = '<h1>Todo App</h1><ul id=\"list\"></ul>';\nfunction addItem(text) {\n  const li = document.createElement('li');\n  li.textContent = text;\n  document.getElementById('list').appendChild(li);\n}"
+            }
+          }
+        ]
       },
       // Iter 3: verify by reading
       {
         content: "Verifying",
         toolCalls: [
           { id: "tc4", name: "read_file", arguments: { path: "index.html" } },
-          { id: "tc5", name: "read_file", arguments: { path: "app.js" } },
-        ],
+          { id: "tc5", name: "read_file", arguments: { path: "app.js" } }
+        ]
       },
-      { content: "Created a complete todo app with HTML, CSS, and JS", toolCalls: [] },
+      { content: "Created a complete todo app with HTML, CSS, and JS", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, fsTools, { verbose: false })
@@ -352,52 +387,58 @@ describe("E2E: inline stub detection during write", () => {
       // Iter 0: writes code with a stub — should get warning in tool result
       {
         content: "Writing game logic",
-        toolCalls: [{
-          id: "tc1", name: "write_file",
-          arguments: {
-            path: "logic.js",
-            content: [
-              "function calculate(a, b) { return a + b; }",
-              "function isCheckmate(board, color) {",
-              "    // TODO: implement checkmate detection",
-              "    return false;",
-              "}",
-              "function render() { document.body.innerHTML = 'game'; }",
-            ].join("\n"),
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: {
+              path: "logic.js",
+              content: [
+                "function calculate(a, b) { return a + b; }",
+                "function isCheckmate(board, color) {",
+                "    // TODO: implement checkmate detection",
+                "    return false;",
+                "}",
+                "function render() { document.body.innerHTML = 'game'; }"
+              ].join("\n")
+            }
+          }
+        ]
       },
       // Iter 1: the new artifact guard requires a read before another mutation
       {
         content: "Inspecting the current file before repair",
-        toolCalls: [{ id: "tc-read-logic", name: "read_file", arguments: { path: "logic.js" } }],
+        toolCalls: [{ id: "tc-read-logic", name: "read_file", arguments: { path: "logic.js" } }]
       },
       // Iter 2: repair after inspection
       {
         content: "Fixing the stubs",
-        toolCalls: [{
-          id: "tc2", name: "write_file",
-          arguments: {
-            path: "logic.js",
-            content: [
-              "function calculate(a, b) { return a + b; }",
-              "function isCheckmate(board, color) {",
-              "    const king = findKing(board, color);",
-              "    if (!king) return false;",
-              "    const moves = getAllLegalMoves(board, color);",
-              "    return moves.length === 0 && isInCheck(board, color);",
-              "}",
-              "function render() { document.body.innerHTML = 'game'; }",
-            ].join("\n"),
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc2",
+            name: "write_file",
+            arguments: {
+              path: "logic.js",
+              content: [
+                "function calculate(a, b) { return a + b; }",
+                "function isCheckmate(board, color) {",
+                "    const king = findKing(board, color);",
+                "    if (!king) return false;",
+                "    const moves = getAllLegalMoves(board, color);",
+                "    return moves.length === 0 && isInCheck(board, color);",
+                "}",
+                "function render() { document.body.innerHTML = 'game'; }"
+              ].join("\n")
+            }
+          }
+        ]
       },
       // Iter 3: reads to verify
       {
         content: null,
-        toolCalls: [{ id: "tc3", name: "read_file", arguments: { path: "logic.js" } }],
+        toolCalls: [{ id: "tc3", name: "read_file", arguments: { path: "logic.js" } }]
       },
-      { content: "Done — all functions have real implementations", toolCalls: [] },
+      { content: "Done — all functions have real implementations", toolCalls: [] }
     ])
 
     // Intercept tool results to check what write_file returned
@@ -407,7 +448,7 @@ describe("E2E: inline stub detection during write", () => {
         const result = await writeFileTool.execute(args)
         toolResults.push(toToolText(result as string | object))
         return result
-      },
+      }
     }
 
     const agent = new Agent(llm, [wrappedWriteFile, readFileTool], { verbose: false })
@@ -430,36 +471,44 @@ describe("E2E: function loss prevention", () => {
       // Iter 0: writes 3 functions
       {
         content: "Writing initial code",
-        toolCalls: [{
-          id: "tc1", name: "write_file",
-          arguments: {
-            path: "game.js",
-            content: "function initBoard() { return Array(64).fill(null); }\nfunction movePiece(board, from, to) { const next = [...board]; next[to] = next[from]; next[from] = null; return next; }\nfunction renderBoard(board) { const el = document.getElementById('board'); el.textContent = board.map(cell => cell ?? '.').join(''); }",
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: {
+              path: "game.js",
+              content:
+                "function initBoard() { return Array(64).fill(null); }\nfunction movePiece(board, from, to) { const next = [...board]; next[to] = next[from]; next[from] = null; return next; }\nfunction renderBoard(board) { const el = document.getElementById('board'); el.textContent = board.map(cell => cell ?? '.').join(''); }"
+            }
+          }
+        ]
       },
       // Iter 1: rewrites but drops movePiece
       {
         content: "Improving the code",
-        toolCalls: [{
-          id: "tc2", name: "write_file",
-          arguments: {
-            path: "game.js",
-            content: "function initBoard() { return Array(64).fill(null); }\nfunction renderBoard() { const el = document.getElementById('board'); el.innerHTML = board.map(p => p || '.').join(''); }",
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc2",
+            name: "write_file",
+            arguments: {
+              path: "game.js",
+              content:
+                "function initBoard() { return Array(64).fill(null); }\nfunction renderBoard() { const el = document.getElementById('board'); el.innerHTML = board.map(p => p || '.').join(''); }"
+            }
+          }
+        ]
       },
       // Iter 2: read current file before retrying mutation on the same artifact
       {
         content: "Inspecting the current file after the failed rewrite",
-        toolCalls: [{ id: "tc2b", name: "read_file", arguments: { path: "game.js" } }],
+        toolCalls: [{ id: "tc2b", name: "read_file", arguments: { path: "game.js" } }]
       },
       // Iter 3: reads to check
       {
         content: null,
-        toolCalls: [{ id: "tc3", name: "read_file", arguments: { path: "game.js" } }],
+        toolCalls: [{ id: "tc3", name: "read_file", arguments: { path: "game.js" } }]
       },
-      { content: "Done", toolCalls: [] },
+      { content: "Done", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [writeFileTool, readFileTool], { verbose: false })
@@ -482,25 +531,28 @@ describe("E2E: corruption detection", () => {
     const llm = scriptedLLM([
       {
         content: "Writing code",
-        toolCalls: [{
-          id: "tc1", name: "write_file",
-          arguments: {
-            path: "corrupted.js",
-            content: [
-              "function init() {",
-              "  const board = [];",
-              "  for (let i = 0; i < 8; i++) {",
-              "    board.push(Array(8).fill(null));",
-              "  }",
-              "}validator move safety checking ahead validated letinline acknowledge",
-              "function render() {",
-              "  console.log('done');",
-              "}",
-            ].join("\n"),
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: {
+              path: "corrupted.js",
+              content: [
+                "function init() {",
+                "  const board = [];",
+                "  for (let i = 0; i < 8; i++) {",
+                "    board.push(Array(8).fill(null));",
+                "  }",
+                "}validator move safety checking ahead validated letinline acknowledge",
+                "function render() {",
+                "  console.log('done');",
+                "}"
+              ].join("\n")
+            }
+          }
+        ]
       },
-      { content: "Done", toolCalls: [] },
+      { content: "Done", toolCalls: [] }
     ])
 
     const wrappedWriteFile: Tool = {
@@ -509,7 +561,7 @@ describe("E2E: corruption detection", () => {
         const result = await writeFileTool.execute(args)
         toolResults.push(toToolText(result as string | object))
         return result
-      },
+      }
     }
 
     const agent = new Agent(llm, [wrappedWriteFile], { verbose: false })
@@ -534,22 +586,25 @@ describe("E2E: early exit prevention", () => {
       // Iter 1: forced to use tools
       {
         content: "Let me actually do the work",
-        toolCalls: [{
-          id: "tc1", name: "write_file",
-          arguments: { path: "result.txt", content: "42" },
-        }],
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: { path: "result.txt", content: "42" }
+          }
+        ]
       },
       // Iter 2: reads to verify
       {
         content: null,
-        toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "result.txt" } }],
+        toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "result.txt" } }]
       },
-      { content: "Created result.txt with the answer", toolCalls: [] },
+      { content: "Created result.txt with the answer", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, fsTools, {
       verbose: false,
-      onNudge: (d) => nudges.push(d.tag),
+      onNudge: (d) => nudges.push(d.tag)
     })
     const answer = await agent.run("Create a file with the number 42")
 
@@ -605,22 +660,25 @@ describe("E2E: calculator app — no false positives", () => {
       "  operator = null;",
       "  operandA = null;",
       "  updateDisplay();",
-      "}",
+      "}"
     ].join("\n")
 
     const llm = scriptedLLM([
       {
         content: "Writing calculator",
-        toolCalls: [{
-          id: "tc1", name: "write_file",
-          arguments: { path: "calc.js", content: calculatorCode },
-        }],
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: { path: "calc.js", content: calculatorCode }
+          }
+        ]
       },
       {
         content: "Verifying",
-        toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "calc.js" } }],
+        toolCalls: [{ id: "tc2", name: "read_file", arguments: { path: "calc.js" } }]
       },
-      { content: "Calculator app created successfully", toolCalls: [] },
+      { content: "Calculator app created successfully", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, fsTools, {
@@ -633,9 +691,11 @@ describe("E2E: calculator app — no false positives", () => {
           if (findings.length > 0) {
             return `STUBS:\n${findings.join("\n")}`
           }
-        } catch { /* */ }
+        } catch {
+          /* */
+        }
         return null
-      },
+      }
     })
     const answer = await agent.run("Build a calculator")
 
@@ -708,35 +768,42 @@ describe("E2E: snake game — complex clean project", () => {
       "  }",
       "});",
       "",
-      "setInterval(() => { update(); draw(); }, 100);",
+      "setInterval(() => { update(); draw(); }, 100);"
     ].join("\n")
 
     const llm = scriptedLLM([
       {
         content: "Creating HTML",
-        toolCalls: [{
-          id: "tc1", name: "write_file",
-          arguments: {
-            path: "index.html",
-            content: '<!DOCTYPE html>\n<html>\n<head><title>Snake</title>\n<style>body{margin:0;display:flex;justify-content:center;align-items:center;height:100vh;background:#111}</style>\n</head>\n<body>\n<canvas id="canvas"></canvas>\n<script src="snake.js"></script>\n</body>\n</html>',
-          },
-        }],
+        toolCalls: [
+          {
+            id: "tc1",
+            name: "write_file",
+            arguments: {
+              path: "index.html",
+              content:
+                '<!DOCTYPE html>\n<html>\n<head><title>Snake</title>\n<style>body{margin:0;display:flex;justify-content:center;align-items:center;height:100vh;background:#111}</style>\n</head>\n<body>\n<canvas id="canvas"></canvas>\n<script src="snake.js"></script>\n</body>\n</html>'
+            }
+          }
+        ]
       },
       {
         content: "Creating snake game logic",
-        toolCalls: [{
-          id: "tc2", name: "write_file",
-          arguments: { path: "snake.js", content: snakeCode },
-        }],
+        toolCalls: [
+          {
+            id: "tc2",
+            name: "write_file",
+            arguments: { path: "snake.js", content: snakeCode }
+          }
+        ]
       },
       {
         content: "Verifying files",
         toolCalls: [
           { id: "tc3", name: "read_file", arguments: { path: "index.html" } },
-          { id: "tc4", name: "read_file", arguments: { path: "snake.js" } },
-        ],
+          { id: "tc4", name: "read_file", arguments: { path: "snake.js" } }
+        ]
       },
-      { content: "Complete snake game with collision detection, scoring, and rendering", toolCalls: [] },
+      { content: "Complete snake game with collision detection, scoring, and rendering", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, fsTools, {
@@ -747,9 +814,11 @@ describe("E2E: snake game — complex clean project", () => {
           const code = await readFile(join(tempDir, "snake.js"), "utf-8")
           const findings = detectPlaceholderPatterns(code)
           if (findings.length > 0) return `STUBS:\n${findings.join("\n")}`
-        } catch { /* */ }
+        } catch {
+          /* */
+        }
         return null
-      },
+      }
     })
     const answer = await agent.run("Build a snake game")
 
@@ -793,13 +862,13 @@ describe("E2E: tic-tac-toe with catch-all detection", () => {
       "    if (board[a] && board[a] === board[b] && board[b] === board[c]) return board[a];",
       "  }",
       "  return null;",
-      "}",
+      "}"
     ].join("\n")
 
     // isValidMove should check board[index] === null, but it catches-all with return true
     const findings = detectPlaceholderPatterns(stubTicTacToe)
     expect(findings.length).toBeGreaterThan(0)
-    expect(findings.some(f => f.includes("isValidMove"))).toBe(true)
+    expect(findings.some((f) => f.includes("isValidMove"))).toBe(true)
   })
 })
 
@@ -839,13 +908,13 @@ describe("E2E: app with mixed real and stub functions", () => {
       "    el.innerHTML = '<span>' + formatDate(day.dt) + '</span><span>' + formatTemperature(day.temp.max) + '</span>';",
       "    container.appendChild(el);",
       "  }",
-      "}",
+      "}"
     ].join("\n")
 
     const findings = detectPlaceholderPatterns(mixedCode)
     // The TODO comment triggers "placeholder comment" detection
     expect(findings.length).toBeGreaterThan(0)
-    expect(findings.some(f => /placeholder comment/i.test(f))).toBe(true)
+    expect(findings.some((f) => /placeholder comment/i.test(f))).toBe(true)
     // Should NOT flag the real functions
     const joinedFindings = findings.join(" ")
     expect(joinedFindings).not.toContain("formatTemperature")
@@ -869,7 +938,9 @@ describe("E2E: budget warning at low iteration count", () => {
       name: "echo",
       description: "Echo tool",
       parameters: { type: "object", properties: { text: { type: "string" } } },
-      async execute(args) { return `echoed: ${String(args.text)}` },
+      async execute(args) {
+        return `echoed: ${String(args.text)}`
+      }
     }
 
     const llm = scriptedLLM([
@@ -878,13 +949,13 @@ describe("E2E: budget warning at low iteration count", () => {
       // Iter 1: budget warning fires (remaining=2, threshold=max(ceil(3*0.2),2)=2)
       { content: null, toolCalls: [{ id: "tc2", name: "echo", arguments: { text: "2" } }] },
       // Iter 2: done
-      { content: "Done", toolCalls: [] },
+      { content: "Done", toolCalls: [] }
     ])
 
     const agent = new Agent(llm, [tool], {
       maxIterations: 3,
       verbose: false,
-      onNudge: (d) => nudges.push(d.tag),
+      onNudge: (d) => nudges.push(d.tag)
     })
     await agent.run("Create files")
 

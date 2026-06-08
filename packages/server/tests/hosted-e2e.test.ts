@@ -13,7 +13,14 @@
  *      and that the audit event log captured every step in order
  */
 
-import { configureAgent, createImportAttachmentTool, createListAttachmentsTool, createPromoteAttachmentTool, createReadAttachmentTool, type HostedPolicyContext } from "@mia/agent"
+import {
+  configureAgent,
+  createImportAttachmentTool,
+  createListAttachmentsTool,
+  createPromoteAttachmentTool,
+  createReadAttachmentTool,
+  type HostedPolicyContext
+} from "@mia/agent"
 import Database from "better-sqlite3"
 import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -24,7 +31,7 @@ let testDb: Database.Database
 let dataDir: string
 let sandboxRoot: string
 const ORIGINAL_DATA_DIR = process.env["MIA_DATA_DIR"]
-const ORIGINAL_HOSTED   = process.env["AGENT_HOSTED_MODE"]
+const ORIGINAL_HOSTED = process.env["AGENT_HOSTED_MODE"]
 
 beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "mia-e2e-data-"))
@@ -48,29 +55,29 @@ afterEach(() => {
 
 function ctx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext {
   return {
-    runId:       over.runId       ?? "run-e2e",
-    runMode:     "hosted",
-    role:        "hosted_user",
+    runId: over.runId ?? "run-e2e",
+    runMode: "hosted",
+    role: "hosted_user",
     sandboxRoot: over.sandboxRoot ?? sandboxRoot,
-    actorUpn:    over.actorUpn    ?? "alice@example.com",
-    sessionId:   over.sessionId   ?? "sid-alice",
+    actorUpn: over.actorUpn ?? "alice@example.com",
+    sessionId: over.sessionId ?? "sid-alice"
   }
 }
 
 describe("hosted-mode end-to-end happy path", () => {
   it("upload → list → read → import → produce → promote, with audit", async () => {
     const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { createServerAttachmentService, uploadAttachment, getAttachment, listAttachments }
-      = await import("../src/adapters/persistence/attachments/index.js")
+    const { createServerAttachmentService, uploadAttachment, getAttachment, listAttachments } =
+      await import("../src/adapters/persistence/attachments/index.js")
     const { subscribeToEvents } = await import("../src/event-broadcaster.js")
     _setDb(testDb)
     _migrate(testDb)
 
     const attachmentService = createServerAttachmentService(() => ctx())
     const host = configureAgent({ attachments: attachmentService })
-    const listAttachmentsTool   = createListAttachmentsTool(host)
-    const readAttachmentTool    = createReadAttachmentTool(host)
-    const importAttachmentTool  = createImportAttachmentTool(host)
+    const listAttachmentsTool = createListAttachmentsTool(host)
+    const readAttachmentTool = createReadAttachmentTool(host)
+    const importAttachmentTool = createImportAttachmentTool(host)
     const promoteAttachmentTool = createPromoteAttachmentTool(host)
     // Seed FK parents required by the attachments table.
     const { seedSession, seedRun } = await import("./_fk-helpers.js")
@@ -79,17 +86,19 @@ describe("hosted-mode end-to-end happy path", () => {
 
     // 1. user upload (mimics POST /api/attachments)
     const uploaded = await uploadAttachment({
-      scope:        "session",
-      ownerUpn:     "alice@example.com",
-      sessionId:    "sid-alice",
+      scope: "session",
+      ownerUpn: "alice@example.com",
+      sessionId: "sid-alice",
       originalName: "input.csv",
-      mediaType:    "text/csv",
-      bytes:        new TextEncoder().encode("a,b\n1,2\n3,4\n"),
+      mediaType: "text/csv",
+      bytes: new TextEncoder().encode("a,b\n1,2\n3,4\n")
     })
     expect(uploaded.source).toBe("user_upload")
 
     const events: { type: string; data: Record<string, unknown> }[] = []
-    const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data as Record<string, unknown> }))
+    const unsub = subscribeToEvents((e) =>
+      events.push({ type: e.type, data: e.data as Record<string, unknown> })
+    )
 
     try {
       // 2-5. agent runs inside its hosted policy context.
@@ -102,7 +111,8 @@ describe("hosted-mode end-to-end happy path", () => {
       expect(String(read)).toContain("a,b")
 
       const importRes = await importAttachmentTool.execute({
-        id: uploaded.id, destination: "inputs/data.csv",
+        id: uploaded.id,
+        destination: "inputs/data.csv"
       })
       expect(String(importRes)).toContain("Imported")
       expect(readFileSync(join(sandboxRoot, "inputs/data.csv"), "utf8")).toContain("a,b")
@@ -112,7 +122,7 @@ describe("hosted-mode end-to-end happy path", () => {
 
       const promoteRes = await promoteAttachmentTool.execute({
         sandboxPath: "report.md",
-        purposeTag:  "final-report",
+        purposeTag: "final-report"
       })
       expect(String(promoteRes)).toContain("Promoted")
     } finally {
@@ -133,7 +143,7 @@ describe("hosted-mode end-to-end happy path", () => {
     const types = events.map((e) => e.type)
     expect(types).toContain("attachment.imported")
     expect(types).toContain("attachment.promoted")
-    expect(types).toContain("attachment.uploaded")  // promotion is itself an upload
+    expect(types).toContain("attachment.uploaded") // promotion is itself an upload
     expect(types.indexOf("attachment.imported")).toBeLessThan(types.indexOf("attachment.promoted"))
   })
 })

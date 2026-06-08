@@ -7,16 +7,11 @@ import { PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
  */
 
 import {
-    buildContractSpec,
-    getCorrectionGuidance,
-    validateDelegatedOutputContract,
+  buildContractSpec,
+  getCorrectionGuidance,
+  validateDelegatedOutputContract
 } from "../../../shell/delegation.js"
-import type {
-    PipelineResult,
-    Plan,
-    SubagentTaskStep,
-    VerifierStepAssessment,
-} from "../types.js"
+import type { PipelineResult, Plan, SubagentTaskStep, VerifierStepAssessment } from "../types.js"
 
 export interface ContractCheckOptions {
   knownProjectArtifacts: readonly string[]
@@ -26,7 +21,7 @@ export interface ContractCheckOptions {
 export function runContractValidation(
   plan: Plan,
   pipelineResult: PipelineResult,
-  opts: ContractCheckOptions,
+  opts: ContractCheckOptions
 ): VerifierStepAssessment[] {
   const contractFailures: VerifierStepAssessment[] = []
 
@@ -36,16 +31,11 @@ export function runContractValidation(
     const stepResult = pipelineResult.stepResults.get(step.name)
     if (!stepResult || stepResult.status === "skipped") continue
 
-    const contractSpec = buildContractSpec(
-      sa,
-      sa.executionContext,
-      undefined,
-      opts.knownProjectArtifacts,
-    )
+    const contractSpec = buildContractSpec(sa, sa.executionContext, undefined, opts.knownProjectArtifacts)
     const contractResult = validateDelegatedOutputContract({
       spec: contractSpec,
       output: stepResult.output ?? stepResult.error ?? "",
-      toolCalls: stepResult.toolCalls,
+      toolCalls: stepResult.toolCalls
     })
 
     if (stepResult.reconciliation && !stepResult.reconciliation.compliant) {
@@ -53,13 +43,19 @@ export function runContractValidation(
         stepName: step.name,
         outcome: VerifierOutcome.Retry,
         confidence: 0.97,
-        issues: stepResult.reconciliation.findings.map((finding) => `[reconciliation:${finding.code}] ${finding.message}`),
-        retryable: true,
+        issues: stepResult.reconciliation.findings.map(
+          (finding) => `[reconciliation:${finding.code}] ${finding.message}`
+        ),
+        retryable: true
       })
       opts.onTrace?.({
         kind: PlannerTraceKind.VerifierReconciliation,
         stepName: step.name,
-        findings: stepResult.reconciliation.findings.map((finding) => ({ code: finding.code, severity: finding.severity, message: finding.message })),
+        findings: stepResult.reconciliation.findings.map((finding) => ({
+          code: finding.code,
+          severity: finding.severity,
+          message: finding.message
+        }))
       })
       continue
     }
@@ -70,17 +66,14 @@ export function runContractValidation(
         stepName: step.name,
         outcome: VerifierOutcome.Retry,
         confidence: 0.95,
-        issues: [
-          `[contract:${contractResult.code}] ${contractResult.message}`,
-          `[correction] ${guidance}`,
-        ],
-        retryable: true,
+        issues: [`[contract:${contractResult.code}] ${contractResult.message}`, `[correction] ${guidance}`],
+        retryable: true
       })
       opts.onTrace?.({
         kind: PlannerTraceKind.VerifierContractCheck,
         stepName: step.name,
         code: contractResult.code,
-        message: contractResult.message,
+        message: contractResult.message
       })
     }
   }

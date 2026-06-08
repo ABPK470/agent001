@@ -5,9 +5,9 @@
 /** Run scheduling priority class for the in-process queue. */
 export const RunPriority = {
   Critical: "critical",
-  High:     "high",
-  Normal:   "normal",
-  Low:      "low",
+  High: "high",
+  Normal: "normal",
+  Low: "low"
 } as const
 
 export type RunPriority = (typeof RunPriority)[keyof typeof RunPriority]

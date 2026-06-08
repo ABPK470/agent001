@@ -6,16 +6,16 @@
 
 import type { BlueprintSharedTypeSpec } from "../blueprint-contract/index.js"
 import {
-    normalizeBasename,
-    normalizeSpecPath,
-    parseBlueprintContractBlock,
-    uniqueStrings,
+  normalizeBasename,
+  normalizeSpecPath,
+  parseBlueprintContractBlock,
+  uniqueStrings
 } from "../blueprint-contract/index.js"
 import type { PipelineStepResult, SubagentTaskStep } from "../types.js"
 import {
-    BLUEPRINT_FILE_PATH_RE,
-    BLUEPRINT_TREE_FILE_RE,
-    extractStructureMarkersFromText,
+  BLUEPRINT_FILE_PATH_RE,
+  BLUEPRINT_TREE_FILE_RE,
+  extractStructureMarkersFromText
 } from "./structural-markers.js"
 
 export { detectStructuralMarkersInArtifact } from "./structural-markers.js"
@@ -87,7 +87,7 @@ const DIRECT_MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "append_
 export function collectSpecAuditIssues(
   step: SubagentTaskStep,
   stepResult: PipelineStepResult,
-  blueprintPath: string,
+  blueprintPath: string
 ): string[] {
   const calls = stepResult.toolCalls ?? []
   const normalizedBlueprint = normalizeSpecPath(blueprintPath)
@@ -96,7 +96,7 @@ export function collectSpecAuditIssues(
     .map(normalizeSpecPath)
     .includes(normalizedBlueprint)
 
-  const firstBlueprintReadIndex = calls.findIndex(call => {
+  const firstBlueprintReadIndex = calls.findIndex((call) => {
     if (call.name !== "read_file") return false
     const path = typeof call.args.path === "string" ? normalizeSpecPath(call.args.path) : ""
     return path === normalizedBlueprint || /(?:^|\/)BLUEPRINT\.md$/i.test(path)
@@ -109,42 +109,46 @@ export function collectSpecAuditIssues(
     return issues
   }
 
-  const firstMutationIndex = calls.findIndex(call => {
+  const firstMutationIndex = calls.findIndex((call) => {
     if (DIRECT_MUTATION_TOOLS.has(call.name)) return true
     if (call.name !== "run_command") return false
     const command = typeof call.args.command === "string" ? call.args.command : ""
     return SHELL_MUTATION_RE.test(command)
   })
 
-  if (firstMutationIndex !== -1 && firstBlueprintReadIndex > firstMutationIndex && !blueprintIsTargetArtifact) {
+  if (
+    firstMutationIndex !== -1 &&
+    firstBlueprintReadIndex > firstMutationIndex &&
+    !blueprintIsTargetArtifact
+  ) {
     issues.push(
-      `PROCESS AUDIT FAILED: step ${step.name} read ${blueprintPath} only after starting file mutations`,
+      `PROCESS AUDIT FAILED: step ${step.name} read ${blueprintPath} only after starting file mutations`
     )
   }
 
   const targetReads = new Set(
-    calls.flatMap(call => {
+    calls.flatMap((call) => {
       if (call.name !== "read_file") return []
       const path = typeof call.args.path === "string" ? normalizeSpecPath(call.args.path) : ""
       return path ? [path] : []
-    }),
+    })
   )
   const replaceInFileTargets = new Set(
-    calls.flatMap(call => {
+    calls.flatMap((call) => {
       if (call.name !== "replace_in_file") return []
       const path = typeof call.args.path === "string" ? normalizeSpecPath(call.args.path) : ""
       return path ? [path] : []
-    }),
+    })
   )
   const readRequiredTargets = new Set(step.executionContext.requiredSourceArtifacts.map(normalizeSpecPath))
   const missingTargetReads = step.executionContext.targetArtifacts
     .map(normalizeSpecPath)
-    .filter(path => readRequiredTargets.has(path) || replaceInFileTargets.has(path))
-    .filter(path => !targetReads.has(path))
+    .filter((path) => readRequiredTargets.has(path) || replaceInFileTargets.has(path))
+    .filter((path) => !targetReads.has(path))
 
   if (missingTargetReads.length > 0) {
     issues.push(
-      `PROCESS AUDIT WEAK: step ${step.name} mutated or produced artifacts without reading target files first (${missingTargetReads.slice(0, 4).join(", ")})`,
+      `PROCESS AUDIT WEAK: step ${step.name} mutated or produced artifacts without reading target files first (${missingTargetReads.slice(0, 4).join(", ")})`
     )
   }
 
@@ -172,7 +176,7 @@ export function parseBlueprintSpec(blueprintPath: string, content: string): Blue
       declaredPath: normalizedPath,
       basename: normalizeBasename(normalizedPath),
       functions: [],
-      structuralMarkers: [],
+      structuralMarkers: []
     }
     fileMap.set(normalizedPath, created)
     return created
@@ -181,10 +185,10 @@ export function parseBlueprintSpec(blueprintPath: string, content: string): Blue
   const appendFunction = (declaredPath: string, spec: BlueprintFunctionSpec) => {
     const normalizedPath = normalizeSpecPath(declaredPath)
     const existing = ensureFile(normalizedPath)
-    if (existing.functions.some(fn => fn.name === spec.name)) return
+    if (existing.functions.some((fn) => fn.name === spec.name)) return
     fileMap.set(normalizedPath, {
       ...existing,
-      functions: [...existing.functions, spec],
+      functions: [...existing.functions, spec]
     })
   }
 
@@ -193,7 +197,7 @@ export function parseBlueprintSpec(blueprintPath: string, content: string): Blue
     const existing = ensureFile(normalizedPath)
     fileMap.set(normalizedPath, {
       ...existing,
-      structuralMarkers: uniqueStrings([...existing.structuralMarkers, ...markers]),
+      structuralMarkers: uniqueStrings([...existing.structuralMarkers, ...markers])
     })
   }
 
@@ -212,9 +216,13 @@ export function parseBlueprintSpec(blueprintPath: string, content: string): Blue
     if (!line) continue
 
     if (/^#{1,6}\s+/u.test(line)) {
-      const heading = line.replace(/^#{1,6}\s+/u, "").trim().toLowerCase()
+      const heading = line
+        .replace(/^#{1,6}\s+/u, "")
+        .trim()
+        .toLowerCase()
       inSharedTypes = heading.includes("shared data") || heading.includes("data structures")
-      inAlgorithmSection = heading.includes("algorithm") || heading.includes("logic") || heading.includes("flow")
+      inAlgorithmSection =
+        heading.includes("algorithm") || heading.includes("logic") || heading.includes("flow")
       currentFile = null
     }
 
@@ -235,11 +243,13 @@ export function parseBlueprintSpec(blueprintPath: string, content: string): Blue
       if (markers.length > 0) appendStructuralMarkers(currentFile, markers)
     }
 
-    const functionMatch = line.match(/^(?:[-*]\s*|\d+\.\s*)(?:(?:function|method|proc(?:edure)?|subroutine|handler|command|cmdlet|def|fn|lambda|label|target)\s+)?`?([A-Za-z_.$@?-][\w.$@?-]*)\s*\(([^)]*)\)`?(?::|\s|$)/iu)
+    const functionMatch = line.match(
+      /^(?:[-*]\s*|\d+\.\s*)(?:(?:function|method|proc(?:edure)?|subroutine|handler|command|cmdlet|def|fn|lambda|label|target)\s+)?`?([A-Za-z_.$@?-][\w.$@?-]*)\s*\(([^)]*)\)`?(?::|\s|$)/iu
+    )
     if (functionMatch && currentFile) {
       appendFunction(currentFile, {
         name: functionMatch[1],
-        signature: `${functionMatch[1]}(${functionMatch[2].trim()})`,
+        signature: `${functionMatch[1]}(${functionMatch[2].trim()})`
       })
     }
 
@@ -261,6 +271,6 @@ export function parseBlueprintSpec(blueprintPath: string, content: string): Blue
     contractBlockPresent: contractBlock.present,
     contractBlockErrors: Array.from(contractBlock.errors),
     sharedTypes: Array.from(sharedTypes),
-    algorithmicContracts: Array.from(algorithmicContracts),
+    algorithmicContracts: Array.from(algorithmicContracts)
   }
 }

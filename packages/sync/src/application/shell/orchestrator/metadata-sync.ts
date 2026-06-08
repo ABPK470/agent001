@@ -33,7 +33,7 @@ export interface RunMetadataSyncInput {
 }
 
 export async function runMetadataSync(
-  input: RunMetadataSyncInput,
+  input: RunMetadataSyncInput
 ): Promise<{ applied: { insert: number; update: number; delete: number } }> {
   const { plan, planId, pkByTable, triggerCache, onProgress, target, tgtPool, telemetryContext } = input
   const host = input.host
@@ -57,14 +57,14 @@ export async function runMetadataSync(
     const failure = toSyncExecuteError(error, {
       step: "metadata-sync",
       table: context.table,
-      op: context.op,
+      op: context.op
     })
     onProgress({
       type: SyncProgressKind.Step,
       step: failure.step,
       table: failure.table,
       message: failure.message,
-      error: failure.causeDetail,
+      error: failure.causeDetail
     })
     emit(host, EventType.SyncExecuteStepFailed, {
       planId,
@@ -72,7 +72,7 @@ export async function runMetadataSync(
       table: failure.table ?? null,
       op: failure.op ?? null,
       error: failure.message,
-      cause: failure.causeDetail ?? null,
+      cause: failure.causeDetail ?? null
     })
     return failure
   }
@@ -84,7 +84,14 @@ export async function runMetadataSync(
     for (const t of allTables) {
       if (!affectedTables.has(t)) continue
       try {
-        await trackedQuery(host, tx.request(), `ALTER TABLE ${qtable(t)} NOCHECK CONSTRAINT ALL`, `nocheck-constraint(${t})`, target, telemetryContext)
+        await trackedQuery(
+          host,
+          tx.request(),
+          `ALTER TABLE ${qtable(t)} NOCHECK CONSTRAINT ALL`,
+          `nocheck-constraint(${t})`,
+          target,
+          telemetryContext
+        )
       } catch (error) {
         throw fail(error, { table: t, op: "nocheck-constraint" })
       }
@@ -100,10 +107,22 @@ export async function runMetadataSync(
       emit(host, EventType.SyncExecuteTableStart, { planId, table: tableName, op: "upsert", rowsTotal })
       try {
         await maybeArchive(host, plan, tableName, triggerCache)
-        const applied = await applyInsertsUpdates(host, tx, plan, tableName, pkByTable.get(tableName) ?? [], telemetryContext)
+        const applied = await applyInsertsUpdates(
+          host,
+          tx,
+          plan,
+          tableName,
+          pkByTable.get(tableName) ?? [],
+          telemetryContext
+        )
         appliedTotals.update += applied
         onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
-        emit(host, EventType.SyncExecuteTableDone, { planId, table: tableName, op: "upsert", rowsApplied: applied })
+        emit(host, EventType.SyncExecuteTableDone, {
+          planId,
+          table: tableName,
+          op: "upsert",
+          rowsApplied: applied
+        })
       } catch (error) {
         throw fail(error, { table: tableName, op: "upsert" })
       }
@@ -113,13 +132,34 @@ export async function runMetadataSync(
     for (const tableName of plan.recipeSnapshot.reverseOrder) {
       const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
       if (!tableResult || tableResult.counts.delete === 0) continue
-      onProgress({ type: SyncProgressKind.TableStarted, table: tableName, rowsTotal: tableResult.counts.delete })
-      emit(host, EventType.SyncExecuteTableStart, { planId, table: tableName, op: "delete", rowsTotal: tableResult.counts.delete })
+      onProgress({
+        type: SyncProgressKind.TableStarted,
+        table: tableName,
+        rowsTotal: tableResult.counts.delete
+      })
+      emit(host, EventType.SyncExecuteTableStart, {
+        planId,
+        table: tableName,
+        op: "delete",
+        rowsTotal: tableResult.counts.delete
+      })
       try {
-        const applied = await applyDeletes(host, tx, plan, tableName, pkByTable.get(tableName) ?? [], telemetryContext)
+        const applied = await applyDeletes(
+          host,
+          tx,
+          plan,
+          tableName,
+          pkByTable.get(tableName) ?? [],
+          telemetryContext
+        )
         appliedTotals.delete += applied
         onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
-        emit(host, EventType.SyncExecuteTableDone, { planId, table: tableName, op: "delete", rowsApplied: applied })
+        emit(host, EventType.SyncExecuteTableDone, {
+          planId,
+          table: tableName,
+          op: "delete",
+          rowsApplied: applied
+        })
       } catch (error) {
         throw fail(error, { table: tableName, op: "delete" })
       }
@@ -129,7 +169,14 @@ export async function runMetadataSync(
     for (const t of allTables) {
       if (!affectedTables.has(t)) continue
       try {
-        await trackedQuery(host, tx.request(), `ALTER TABLE ${qtable(t)} WITH CHECK CHECK CONSTRAINT ALL`, `check-constraint(${t})`, target, telemetryContext)
+        await trackedQuery(
+          host,
+          tx.request(),
+          `ALTER TABLE ${qtable(t)} WITH CHECK CHECK CONSTRAINT ALL`,
+          `check-constraint(${t})`,
+          target,
+          telemetryContext
+        )
       } catch (error) {
         throw fail(error, { table: t, op: "check-constraint" })
       }
@@ -144,10 +191,17 @@ export async function runMetadataSync(
   } catch (e) {
     // Re-enable FK constraints even on failure — best-effort
     for (const t of allTables) {
-      try { await tx.request().query(`ALTER TABLE ${qtable(t)} WITH CHECK CHECK CONSTRAINT ALL`) }
-      catch { /* tx may already be aborted */ }
+      try {
+        await tx.request().query(`ALTER TABLE ${qtable(t)} WITH CHECK CHECK CONSTRAINT ALL`)
+      } catch {
+        /* tx may already be aborted */
+      }
     }
-    try { await tx.rollback() } catch { /* ignore */ }
+    try {
+      await tx.rollback()
+    } catch {
+      /* ignore */
+    }
     throw e instanceof SyncExecuteError ? e : fail(e, { op: "transaction" })
   }
 }

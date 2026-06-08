@@ -21,24 +21,26 @@ import * as log from "../../../../internal/index.js"
 import { compactAtWriteTime } from "../../../../memory/index.js"
 import type { ToolCallRecord } from "../../../../tools/index.js"
 import {
-    buildSemanticToolCallKey, didToolCallFail, enrichToolResultMetadata as enrichResult,
-    trackToolCallFailureState
+  buildSemanticToolCallKey,
+  didToolCallFail,
+  enrichToolResultMetadata as enrichResult,
+  trackToolCallFailureState
 } from "../../../../tools/index.js"
 import { extractWritePayload, recordTruncatedQuery } from "./anti-paste-guard.js"
 import {
-    collectChildToolNames,
-    handleReplaceInFileMiss,
-    processArtifactOutcome,
-    recordBlockedArtifactFailure,
-    trackWriteVerification,
+  collectChildToolNames,
+  handleReplaceInFileMiss,
+  processArtifactOutcome,
+  recordBlockedArtifactFailure,
+  trackWriteVerification
 } from "./artifact-tracking.js"
 import { executeWithKillManager } from "./kill-manager.js"
 import {
-    ANTIPASTE_MIN_CONTENT_LEN,
-    FILE_MUTATION_TOOLS,
-    normalizeArtifactPath,
-    type ToolExecContext,
-    type ToolRoundResult,
+  ANTIPASTE_MIN_CONTENT_LEN,
+  FILE_MUTATION_TOOLS,
+  normalizeArtifactPath,
+  type ToolExecContext,
+  type ToolRoundResult
 } from "./types.js"
 
 // Re-export public types/helpers for backwards compatibility.
@@ -56,7 +58,7 @@ export async function executeToolRound(
     name: string
     arguments: Record<string, unknown> & { __parseError?: boolean; __raw?: string }
   }>,
-  ctx: ToolExecContext,
+  ctx: ToolExecContext
 ): Promise<ToolRoundResult> {
   const { tools, state, messages, config } = ctx
   let failuresThisRound = 0
@@ -73,12 +75,26 @@ export async function executeToolRound(
   if (circuitStatus) {
     const cbMsg = `CIRCUIT BREAKER: ${circuitStatus.reason} — change your approach.`
     messages.push({ role: MessageRole.System, content: cbMsg, section: "history" })
-    return { roundToolCalls, failuresThisRound, delegationThisRound, delegationThisRoundWasReadOnly, forcedAbortRoundMessage: cbMsg, forcedAbortLoopMessage }
+    return {
+      roundToolCalls,
+      failuresThisRound,
+      delegationThisRound,
+      delegationThisRoundWasReadOnly,
+      forcedAbortRoundMessage: cbMsg,
+      forcedAbortLoopMessage
+    }
   }
 
   for (const call of calls) {
     if (config.signal?.aborted) {
-      return { roundToolCalls, failuresThisRound, delegationThisRound, delegationThisRoundWasReadOnly, forcedAbortRoundMessage: null, forcedAbortLoopMessage: "Agent was cancelled." }
+      return {
+        roundToolCalls,
+        failuresThisRound,
+        delegationThisRound,
+        delegationThisRoundWasReadOnly,
+        forcedAbortRoundMessage: null,
+        forcedAbortLoopMessage: "Agent was cancelled."
+      }
     }
     if (config.verbose) log.logToolCall(call.name, call.arguments)
 
@@ -99,7 +115,12 @@ export async function executeToolRound(
     if (!tool) {
       const errMsg = `Unknown tool "${call.name}". Available: ${[...tools.keys()].join(", ")}`
       if (config.verbose) log.logToolError(errMsg)
-      messages.push({ role: MessageRole.Tool, toolCallId: call.id, content: errMsg, section: "history" })
+      messages.push({
+        role: MessageRole.Tool,
+        toolCallId: call.id,
+        content: errMsg,
+        section: "history"
+      })
       roundToolCalls.push({ name: call.name, args: call.arguments, result: errMsg, isError: true })
       failuresThisRound++
       continue
@@ -107,21 +128,26 @@ export async function executeToolRound(
 
     // Parse error guard
     if (call.arguments.__parseError) {
-      const errMsg = `Tool call "${call.name}" failed: the model produced malformed arguments that could not be parsed as JSON. ` +
+      const errMsg =
+        `Tool call "${call.name}" failed: the model produced malformed arguments that could not be parsed as JSON. ` +
         `This usually means your output was too large and got cut off. ` +
         `Break the work into smaller pieces — use multiple write_file calls instead of one large one. ` +
         `Raw (truncated): ${String(call.arguments.__raw).slice(0, 200)}...`
       if (config.verbose) log.logToolError(errMsg)
-      messages.push({ role: MessageRole.Tool, toolCallId: call.id, content: errMsg, section: "history" })
+      messages.push({
+        role: MessageRole.Tool,
+        toolCallId: call.id,
+        content: errMsg,
+        section: "history"
+      })
       roundToolCalls.push({ name: call.name, args: call.arguments, result: errMsg, isError: true })
       failuresThisRound++
       continue
     }
 
     // Mutation guard — require read before re-mutation
-    const requestedPath = typeof call.arguments.path === "string"
-      ? normalizeArtifactPath(String(call.arguments.path))
-      : ""
+    const requestedPath =
+      typeof call.arguments.path === "string" ? normalizeArtifactPath(String(call.arguments.path)) : ""
 
     // Anti-paste guard: detect when the model is about to dump a previously
     // truncated query_mssql result into write_file / replace_in_file.
@@ -145,17 +171,27 @@ export async function executeToolRound(
             `It streams the FULL result set directly to disk and returns a 20-row preview. ` +
             `If the SELECT contains wide JSON/blob columns, narrow it to only the columns the user actually needs first.`
           if (config.verbose) log.logToolError(blockedMsg)
-          messages.push({ role: MessageRole.Tool, toolCallId: call.id, content: blockedMsg, section: "history" })
+          messages.push({
+            role: MessageRole.Tool,
+            toolCallId: call.id,
+            content: blockedMsg,
+            section: "history"
+          })
           roundToolCalls.push({
-            name: call.name, args: call.arguments, result: blockedMsg, isError: true,
+            name: call.name,
+            args: call.arguments,
+            result: blockedMsg,
+            isError: true,
             outcome: {
               ok: false,
               summary: `Anti-paste guard: blocked ${call.name} of truncated query result`,
               severity: ToolOutcomeSeverity.Recoverable,
               directive: ToolControlDirective.AbortRound,
               errorCode: "truncated_query_paste_blocked",
-              details: [`Use export_query_to_file with query=${JSON.stringify(matched.query)} path=${JSON.stringify(targetPath)}.`],
-            },
+              details: [
+                `Use export_query_to_file with query=${JSON.stringify(matched.query)} path=${JSON.stringify(targetPath)}.`
+              ]
+            }
           })
           // One-shot: clear matched entry so a deliberate retry isn't permanently blocked.
           state.recentTruncatedQueries = state.recentTruncatedQueries.filter((e) => e !== matched)
@@ -166,15 +202,27 @@ export async function executeToolRound(
       }
     }
 
-    if (FILE_MUTATION_TOOLS.has(call.name) && requestedPath && state.artifactsRequiringReadBeforeMutation.has(requestedPath)) {
+    if (
+      FILE_MUTATION_TOOLS.has(call.name) &&
+      requestedPath &&
+      state.artifactsRequiringReadBeforeMutation.has(requestedPath)
+    ) {
       const blockedMsg =
         `MUTATION BLOCKED for ${requestedPath} — you must read the current artifact before attempting another mutation.\n` +
         "  - The previous mutation on this artifact produced a structured integrity failure.\n" +
         "  - Use read_file on the exact same path first, then plan a targeted repair from the current file state."
       if (config.verbose) log.logToolError(blockedMsg)
-      messages.push({ role: MessageRole.Tool, toolCallId: call.id, content: blockedMsg, section: "history" })
+      messages.push({
+        role: MessageRole.Tool,
+        toolCallId: call.id,
+        content: blockedMsg,
+        section: "history"
+      })
       roundToolCalls.push({
-        name: call.name, args: call.arguments, result: blockedMsg, isError: true,
+        name: call.name,
+        args: call.arguments,
+        result: blockedMsg,
+        isError: true,
         outcome: {
           ok: false,
           summary: `MUTATION BLOCKED for ${requestedPath}`,
@@ -182,19 +230,28 @@ export async function executeToolRound(
           directive: ToolControlDirective.AbortRound,
           errorCode: "artifact_inspection_required",
           details: ["Use read_file on the same artifact before any further write/replace/append attempt."],
-          artifacts: [{ path: requestedPath, preservedExisting: true, requiresReadBeforeMutation: true }],
-        },
+          artifacts: [{ path: requestedPath, preservedExisting: true, requiresReadBeforeMutation: true }]
+        }
       })
       failuresThisRound++
-      forcedAbortLoopMessage = recordBlockedArtifactFailure(state, requestedPath, 3, "Repeated mutation-blocked attempts")
+      forcedAbortLoopMessage = recordBlockedArtifactFailure(
+        state,
+        requestedPath,
+        3,
+        "Repeated mutation-blocked attempts"
+      )
       forcedAbortRoundMessage = `Artifact guard triggered for ${requestedPath}. Read the current file before retrying any mutation.`
       break
     }
 
     // Execute with kill manager racing
-    const { result: execResult, killed, killMessage } = await executeWithKillManager(call, tool, {
+    const {
+      result: execResult,
+      killed,
+      killMessage
+    } = await executeWithKillManager(call, tool, {
       ...config,
-      iteration: ctx.iteration,
+      iteration: ctx.iteration
     })
 
     if (killed) {
@@ -208,15 +265,30 @@ export async function executeToolRound(
 
     if (execResult.isError) {
       if (config.verbose) log.logToolError(execResult.result)
-      messages.push({ role: MessageRole.Tool, toolCallId: call.id, content: execResult.result, section: "history" })
-      roundToolCalls.push({ name: call.name, args: call.arguments, result: execResult.result, isError: true, outcome: execResult.outcome })
+      messages.push({
+        role: MessageRole.Tool,
+        toolCallId: call.id,
+        content: execResult.result,
+        section: "history"
+      })
+      roundToolCalls.push({
+        name: call.name,
+        args: call.arguments,
+        result: execResult.result,
+        isError: true,
+        outcome: execResult.outcome
+      })
       // No-amnesia hook: persist the result so a later turn can ground on it.
       // Wrapped in try/catch — a persistence failure must never break the
       // agent loop.
       try {
         config.onToolResult?.({
-          iteration: ctx.iteration, toolCallId: call.id, toolName: call.name,
-          args: call.arguments, result: execResult.result, isError: true,
+          iteration: ctx.iteration,
+          toolCallId: call.id,
+          toolName: call.name,
+          args: call.arguments,
+          result: execResult.result,
+          isError: true
         })
       } catch (e) {
         log.logError(`onToolResult hook threw (ignored): ${e instanceof Error ? e.message : String(e)}`)
@@ -225,27 +297,47 @@ export async function executeToolRound(
       state.circuitBreaker.recordFailure(semanticKey, call.name)
       trackToolCallFailureState(true, semanticKey, state.toolLoopState)
 
-      handleReplaceInFileMiss(call, execResult, requestedPath, state, forcedAbortLoopMessage, forcedAbortRoundMessage, (loop, round) => {
-        forcedAbortLoopMessage = loop
-        forcedAbortRoundMessage = round
-      })
+      handleReplaceInFileMiss(
+        call,
+        execResult,
+        requestedPath,
+        state,
+        forcedAbortLoopMessage,
+        forcedAbortRoundMessage,
+        (loop, round) => {
+          forcedAbortLoopMessage = loop
+          forcedAbortRoundMessage = round
+        }
+      )
     } else {
       const enriched = enrichResult(execResult.result, {})
       const compactedForHistory = compactAtWriteTime(call.name, enriched)
       const semanticFailure = execResult.outcome ? !execResult.outcome.ok : didToolCallFail(false, enriched)
       if (config.verbose) log.logToolResult(enriched)
-      messages.push({ role: MessageRole.Tool, toolCallId: call.id, content: compactedForHistory, section: "history" })
+      messages.push({
+        role: MessageRole.Tool,
+        toolCallId: call.id,
+        content: compactedForHistory,
+        section: "history"
+      })
       roundToolCalls.push({
-        name: call.name, args: call.arguments, result: enriched,
-        isError: semanticFailure, outcome: execResult.outcome,
+        name: call.name,
+        args: call.arguments,
+        result: enriched,
+        isError: semanticFailure,
+        outcome: execResult.outcome
       })
       // No-amnesia hook: persist the (enriched) result before continuing.
       // We persist BOTH success and semantic-failure outcomes — knowing a
       // prior tool failed is itself ground truth the next turn needs.
       try {
         config.onToolResult?.({
-          iteration: ctx.iteration, toolCallId: call.id, toolName: call.name,
-          args: call.arguments, result: enriched, isError: semanticFailure,
+          iteration: ctx.iteration,
+          toolCallId: call.id,
+          toolName: call.name,
+          args: call.arguments,
+          result: enriched,
+          isError: semanticFailure
         })
       } catch (e) {
         log.logError(`onToolResult hook threw (ignored): ${e instanceof Error ? e.message : String(e)}`)
@@ -256,10 +348,18 @@ export async function executeToolRound(
         state.circuitBreaker.recordFailure(semanticKey, call.name)
         trackToolCallFailureState(true, semanticKey, state.toolLoopState)
 
-        handleReplaceInFileMiss(call, { result: enriched }, requestedPath, state, forcedAbortLoopMessage, forcedAbortRoundMessage, (loop, round) => {
-          forcedAbortLoopMessage = loop
-          forcedAbortRoundMessage = round
-        })
+        handleReplaceInFileMiss(
+          call,
+          { result: enriched },
+          requestedPath,
+          state,
+          forcedAbortLoopMessage,
+          forcedAbortRoundMessage,
+          (loop, round) => {
+            forcedAbortLoopMessage = loop
+            forcedAbortRoundMessage = round
+          }
+        )
       } else {
         state.circuitBreaker.clearPattern(semanticKey)
         trackToolCallFailureState(false, semanticKey, state.toolLoopState)
@@ -291,7 +391,10 @@ export async function executeToolRound(
       // Abort directives
       if (execResult.outcome?.directive === ToolControlDirective.AbortLoop && !forcedAbortLoopMessage) {
         forcedAbortLoopMessage = execResult.outcome.summary
-      } else if (execResult.outcome?.directive === ToolControlDirective.AbortRound && !forcedAbortRoundMessage) {
+      } else if (
+        execResult.outcome?.directive === ToolControlDirective.AbortRound &&
+        !forcedAbortRoundMessage
+      ) {
         forcedAbortRoundMessage = execResult.outcome.summary
       }
 
@@ -299,5 +402,12 @@ export async function executeToolRound(
     }
   }
 
-  return { roundToolCalls, failuresThisRound, delegationThisRound, delegationThisRoundWasReadOnly, forcedAbortRoundMessage, forcedAbortLoopMessage }
+  return {
+    roundToolCalls,
+    failuresThisRound,
+    delegationThisRound,
+    delegationThisRoundWasReadOnly,
+    forcedAbortRoundMessage,
+    forcedAbortLoopMessage
+  }
 }

@@ -17,19 +17,23 @@ describe("parseCoherentSolutionBundle smoke", () => {
   })
 
   it("returns null bundle when summary is missing", () => {
-    const result = parseCoherentSolutionBundle(JSON.stringify({
-      architecture: "single page",
-      artifacts: [],
-    }))
+    const result = parseCoherentSolutionBundle(
+      JSON.stringify({
+        architecture: "single page",
+        artifacts: []
+      })
+    )
     expect(result.bundle).toBeNull()
     expect(result.diagnostics.some((d) => /summary/i.test(d))).toBe(true)
   })
 
   it("returns null bundle when architecture is missing", () => {
-    const result = parseCoherentSolutionBundle(JSON.stringify({
-      summary: "do a thing",
-      artifacts: [],
-    }))
+    const result = parseCoherentSolutionBundle(
+      JSON.stringify({
+        summary: "do a thing",
+        artifacts: []
+      })
+    )
     expect(result.bundle).toBeNull()
     expect(result.diagnostics.some((d) => /architecture/i.test(d))).toBe(true)
   })
@@ -42,9 +46,9 @@ describe("parseCoherentSolutionBundle smoke", () => {
         {
           path: "src/Counter.tsx",
           purpose: "counter UI",
-          content: "export const Counter = () => null",
-        },
-      ],
+          content: "export const Counter = () => null"
+        }
+      ]
     })
     const result = parseCoherentSolutionBundle(raw)
     expect(result.bundle).not.toBeNull()

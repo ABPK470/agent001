@@ -6,16 +6,12 @@ import { PlannerNeedLevel } from "../../domain/index.js"
  */
 
 import {
-    BOUNDED_COHERENT_SCOPE_RE,
-    EXISTING_CODE_COUPLING_RE,
-    EXTERNAL_SERVICE_RE,
-    LARGE_GREENFIELD_BOOTSTRAP_RE,
+  BOUNDED_COHERENT_SCOPE_RE,
+  EXISTING_CODE_COUPLING_RE,
+  EXTERNAL_SERVICE_RE,
+  LARGE_GREENFIELD_BOOTSTRAP_RE
 } from "../internal/decision-patterns.js"
-import {
-    type RequestSignals,
-    type RoutingAxes,
-    hasRealOwnershipSeparation,
-} from "./signals.js"
+import { type RequestSignals, type RoutingAxes, hasRealOwnershipSeparation } from "./signals.js"
 
 /**
  * Sanity override: a clearly bounded single-system build with no external
@@ -51,7 +47,12 @@ export function shouldUseBoundedCoherentGeneration(signals: RequestSignals, axes
 export function shouldUsePlannerWithCoherentBootstrap(signals: RequestSignals, axes: RoutingAxes): boolean {
   if (!signals.hasImplementationScopeCue) return false
   if (!BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) return false
-  if (!LARGE_GREENFIELD_BOOTSTRAP_RE.test(signals.normalized) && signals.structuredBulletCount < 3 && signals.targetFilePaths.length < 3) return false
+  if (
+    !LARGE_GREENFIELD_BOOTSTRAP_RE.test(signals.normalized) &&
+    signals.structuredBulletCount < 3 &&
+    signals.targetFilePaths.length < 3
+  )
+    return false
   if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) return false
   if (axes.coherenceNeed !== PlannerNeedLevel.High) return false
   if (axes.coordinationNeed === PlannerNeedLevel.Low) return false

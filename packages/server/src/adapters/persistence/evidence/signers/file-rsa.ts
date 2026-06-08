@@ -18,19 +18,19 @@ import { readFileSync } from "node:fs"
 import { Signer } from "../signer.js"
 
 export interface FileRsaSignerOptions {
-  id:              string
-  privateKeyPath:  string
-  publicKeyPath:   string
+  id: string
+  privateKeyPath: string
+  publicKeyPath: string
 }
 
 export function buildFileRsaSigner(o: FileRsaSignerOptions): Signer {
   const privatePem = readFileSync(o.privateKeyPath, "utf-8")
-  const publicPem  = readFileSync(o.publicKeyPath,  "utf-8")
+  const publicPem = readFileSync(o.publicKeyPath, "utf-8")
   const privateKey = createPrivateKey(privatePem)
-  const publicKey  = createPublicKey(publicPem)
+  const publicKey = createPublicKey(publicPem)
 
   return {
-    id:  o.id,
+    id: o.id,
     alg: "RSASSA-PKCS1-v1_5-SHA256",
     async sign(bytes) {
       const signer = createSign("RSA-SHA256")
@@ -44,7 +44,9 @@ export function buildFileRsaSigner(o: FileRsaSignerOptions): Signer {
         verifier.update(bytes)
         verifier.end()
         return verifier.verify(publicKey, Buffer.from(sig, "base64url"))
-      } catch { return false }
-    },
+      } catch {
+        return false
+      }
+    }
   }
 }

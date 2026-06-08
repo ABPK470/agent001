@@ -16,56 +16,45 @@ import type Database from "better-sqlite3"
 export function seedUser(
   db: Database.Database,
   upn: string,
-  opts: { displayName?: string; isAdmin?: boolean } = {},
+  opts: { displayName?: string; isAdmin?: boolean } = {}
 ): void {
   db.prepare(
     `INSERT OR IGNORE INTO users (upn, username, display_name, is_admin, source, created_at)
-     VALUES (?, ?, ?, ?, 'local', datetime('now'))`,
+     VALUES (?, ?, ?, ?, 'local', datetime('now'))`
   ).run(
     upn,
-    upn,                                       // username = upn for tests
+    upn, // username = upn for tests
     opts.displayName ?? upn,
-    opts.isAdmin ? 1 : 0,
+    opts.isAdmin ? 1 : 0
   )
 }
 
-export function seedSession(
-  db: Database.Database,
-  sid: string,
-  upn: string = "test-user@local",
-): void {
+export function seedSession(db: Database.Database, sid: string, upn: string = "test-user@local"): void {
   seedUser(db, upn)
   db.prepare(
     `INSERT OR IGNORE INTO sessions (sid, upn, created_at, last_seen_at)
-     VALUES (?, ?, datetime('now'), datetime('now'))`,
+     VALUES (?, ?, datetime('now'), datetime('now'))`
   ).run(sid, upn)
 }
 
 export function seedRun(
   db: Database.Database,
   runId: string,
-  opts: { sessionSid?: string; upn?: string; displayName?: string; goal?: string; status?: string } = {},
+  opts: { sessionSid?: string; upn?: string; displayName?: string; goal?: string; status?: string } = {}
 ): void {
   const upn = opts.upn ?? "test-user@local"
   const sid = opts.sessionSid ?? "sid-test"
   seedSession(db, sid, upn)
   db.prepare(
     `INSERT OR IGNORE INTO runs (id, goal, status, session_id, upn, display_name, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`,
-  ).run(
-    runId,
-    opts.goal ?? "test",
-    opts.status ?? "completed",
-    sid,
-    upn,
-    opts.displayName ?? upn,
-  )
+     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`
+  ).run(runId, opts.goal ?? "test", opts.status ?? "completed", sid, upn, opts.displayName ?? upn)
 }
 
 export function seedRuns(
   db: Database.Database,
   runIds: readonly string[],
-  opts: { sessionSid?: string; upn?: string } = {},
+  opts: { sessionSid?: string; upn?: string } = {}
 ): void {
   for (const id of runIds) seedRun(db, id, opts)
 }
@@ -88,7 +77,7 @@ export const TEST_USERS = [
   "test-user@local",
   "alice@x",
   "bob@x",
-  "u@x",
+  "u@x"
 ] as const
 
 export function seedTestUsers(db: Database.Database, extra: readonly string[] = []): void {

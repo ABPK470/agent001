@@ -2,21 +2,21 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from 
 import { resolve } from "node:path"
 
 import type {
-    AuthoredSyncDefinition,
-    AuthoredSyncFlowStep,
-    EntityRegistrySyncFlowTemplateId,
-    PublishedSyncDefinition,
-    SyncDefinitionRuntimeOptions,
+  AuthoredSyncDefinition,
+  AuthoredSyncFlowStep,
+  EntityRegistrySyncFlowTemplateId,
+  PublishedSyncDefinition,
+  SyncDefinitionRuntimeOptions
 } from "@mia/shared-types"
 import {
-    buildSyncDefinitionFlowTemplateSteps,
-    buildSyncDefinitionRuntimeFlowOptions,
-    defaultSyncDefinitionFlowTemplateId,
-    getSyncDefinitionFlowTemplateSteps,
-    loadSyncDefinitionFlowTemplateCatalog,
-    orderEntityTables,
-    type EntityDefinition,
-    type SyncDefinitionFlowTemplateCatalog,
+  buildSyncDefinitionFlowTemplateSteps,
+  buildSyncDefinitionRuntimeFlowOptions,
+  defaultSyncDefinitionFlowTemplateId,
+  getSyncDefinitionFlowTemplateSteps,
+  loadSyncDefinitionFlowTemplateCatalog,
+  orderEntityTables,
+  type EntityDefinition,
+  type SyncDefinitionFlowTemplateCatalog
 } from "@mia/sync"
 
 import * as db from "../adapters/persistence/sqlite.js"
@@ -29,16 +29,16 @@ const SERVICE_PROFILE_OPTIONS: SyncDefinitionRuntimeOptions["serviceProfiles"] =
   {
     id: "default",
     label: "Default service routing",
-    description: "Use the standard environment-resolved agent, ETL, and gate service endpoints.",
-  },
+    description: "Use the standard environment-resolved agent, ETL, and gate service endpoints."
+  }
 ]
 
 const ENVIRONMENT_POLICY_OPTIONS: SyncDefinitionRuntimeOptions["environmentPolicies"] = [
   {
     id: "default",
     label: "Default environment rules",
-    description: "Apply the standard environment access mode, allowlist, and target checks.",
-  },
+    description: "Apply the standard environment access mode, allowlist, and target checks."
+  }
 ]
 
 export interface SyncDefinitionAdminItem {
@@ -66,7 +66,7 @@ export function listSyncDefinitionRuntimeOptions(projectRoot: string): SyncDefin
     flowTemplates: buildSyncDefinitionRuntimeFlowOptions(flowTemplateCatalog),
     flowTemplateSteps: buildSyncDefinitionFlowTemplateSteps(flowTemplateCatalog),
     serviceProfiles: SERVICE_PROFILE_OPTIONS,
-    environmentPolicies: ENVIRONMENT_POLICY_OPTIONS,
+    environmentPolicies: ENVIRONMENT_POLICY_OPTIONS
   }
 }
 
@@ -81,18 +81,26 @@ function loadFlowTemplateCatalog(projectRoot: string): SyncDefinitionFlowTemplat
   return loadSyncDefinitionFlowTemplateCatalog(projectRoot)
 }
 
-function defaultFlowTemplateId(entityId: string, flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog): EntityRegistrySyncFlowTemplateId {
+function defaultFlowTemplateId(
+  entityId: string,
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog
+): EntityRegistrySyncFlowTemplateId {
   return defaultSyncDefinitionFlowTemplateId(entityId, flowTemplateCatalog)
 }
 
-function defaultConfigForEntity(entity: EntityDefinition, flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog): db.DbSyncDefinitionConfig {
+function defaultConfigForEntity(
+  entity: EntityDefinition,
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog
+): db.DbSyncDefinitionConfig {
   const now = new Date().toISOString()
   const flowTemplateId = defaultFlowTemplateId(entity.id, flowTemplateCatalog)
   return {
     tenant_id: entity.tenantId,
     entity_id: entity.id,
     flow_preset: flowTemplateId,
-    execution_steps_json: JSON.stringify(getSyncDefinitionFlowTemplateSteps(flowTemplateCatalog, flowTemplateId)),
+    execution_steps_json: JSON.stringify(
+      getSyncDefinitionFlowTemplateSteps(flowTemplateCatalog, flowTemplateId)
+    ),
     service_profile_ref: "default",
     environment_policy_ref: "default",
     ownership_team: "sync-platform",
@@ -100,20 +108,22 @@ function defaultConfigForEntity(entity: EntityDefinition, flowTemplateCatalog: S
     review_status: "legacy-review-required",
     ownership_notes_json: JSON.stringify([
       "Managed in DB via Entity Registry + Sync Admin.",
-      "Review and publish after changing runtime bindings or flow preset.",
+      "Review and publish after changing runtime bindings or flow preset."
     ]),
     updated_at: now,
-    updated_by: null,
+    updated_by: null
   }
 }
 
 function inferFlowTemplateId(
   entityId: string,
   definition: Partial<AuthoredSyncDefinition>,
-  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog
 ): EntityRegistrySyncFlowTemplateId {
   const kinds = (definition.executionFlow?.steps ?? []).map((step) => step.kind)
-  for (const [templateId, steps] of Object.entries(buildSyncDefinitionFlowTemplateSteps(flowTemplateCatalog)) as Array<[EntityRegistrySyncFlowTemplateId, AuthoredSyncDefinition["executionFlow"]["steps"]]>) {
+  for (const [templateId, steps] of Object.entries(
+    buildSyncDefinitionFlowTemplateSteps(flowTemplateCatalog)
+  ) as Array<[EntityRegistrySyncFlowTemplateId, AuthoredSyncDefinition["executionFlow"]["steps"]]>) {
     if (steps.map((step) => step.kind).join("|") === kinds.join("|")) return templateId
   }
   return defaultFlowTemplateId(entityId, flowTemplateCatalog)
@@ -122,7 +132,7 @@ function inferFlowTemplateId(
 function resolveExecutionSteps(
   config: Pick<db.DbSyncDefinitionConfig, "execution_steps_json" | "flow_preset">,
   entityId: string,
-  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog
 ): AuthoredSyncFlowStep[] {
   try {
     const parsed = JSON.parse(config.execution_steps_json) as unknown
@@ -130,13 +140,18 @@ function resolveExecutionSteps(
   } catch {
     // fall through to preset-derived default
   }
-  const flowTemplateId = (config.flow_preset in flowTemplateCatalog.flowTemplates
-    ? config.flow_preset
-    : defaultFlowTemplateId(entityId, flowTemplateCatalog)) as EntityRegistrySyncFlowTemplateId
+  const flowTemplateId = (
+    config.flow_preset in flowTemplateCatalog.flowTemplates
+      ? config.flow_preset
+      : defaultFlowTemplateId(entityId, flowTemplateCatalog)
+  ) as EntityRegistrySyncFlowTemplateId
   return getSyncDefinitionFlowTemplateSteps(flowTemplateCatalog, flowTemplateId)
 }
 
-function seedFromRepoDefinition(projectRoot: string, entity: EntityDefinition): db.DbSyncDefinitionConfig | null {
+function seedFromRepoDefinition(
+  projectRoot: string,
+  entity: EntityDefinition
+): db.DbSyncDefinitionConfig | null {
   const flowTemplateCatalog = loadFlowTemplateCatalog(projectRoot)
   const path = resolve(projectRoot, AUTHORED_DEFINITIONS_DIR, `${entity.id}.json`)
   if (!existsSync(path)) return null
@@ -146,24 +161,33 @@ function seedFromRepoDefinition(projectRoot: string, entity: EntityDefinition): 
     return {
       ...base,
       flow_preset: inferFlowTemplateId(entity.id, parsed, flowTemplateCatalog),
-      execution_steps_json: JSON.stringify(parsed.executionFlow?.steps ?? resolveExecutionSteps(base, entity.id, flowTemplateCatalog)),
+      execution_steps_json: JSON.stringify(
+        parsed.executionFlow?.steps ?? resolveExecutionSteps(base, entity.id, flowTemplateCatalog)
+      ),
       service_profile_ref: parsed.bindings?.serviceProfileRef ?? base.service_profile_ref,
       environment_policy_ref: parsed.bindings?.environmentPolicyRef ?? base.environment_policy_ref,
       ownership_team: parsed.ownership?.team ?? base.ownership_team,
       ownership_owner: parsed.ownership?.owner ?? base.ownership_owner,
       review_status: parsed.ownership?.reviewStatus ?? base.review_status,
-      ownership_notes_json: JSON.stringify(parsed.ownership?.notes ?? JSON.parse(base.ownership_notes_json) as string[]),
+      ownership_notes_json: JSON.stringify(
+        parsed.ownership?.notes ?? (JSON.parse(base.ownership_notes_json) as string[])
+      )
     }
   } catch (error) {
-    console.warn(`[sync-definitions] failed to seed config from ${path}:`, error instanceof Error ? error.message : error)
+    console.warn(
+      `[sync-definitions] failed to seed config from ${path}:`,
+      error instanceof Error ? error.message : error
+    )
     return null
   }
 }
 
 function predicateForTable(entity: EntityDefinition, table: EntityDefinition["tables"][number]): string {
   if (table.scope?.kind === "sql" && typeof table.scope.predicate === "string") return table.scope.predicate
-  if (table.scope?.kind === "rootPk") return `${table.scope.column}${entity.selfJoinColumn ? " IN ({ids})" : " = {id}"}`
-  if (typeof table.scopeColumn === "string" && table.scopeColumn.trim().length > 0) return `${table.scopeColumn} = {id}`
+  if (table.scope?.kind === "rootPk")
+    return `${table.scope.column}${entity.selfJoinColumn ? " IN ({ids})" : " = {id}"}`
+  if (typeof table.scopeColumn === "string" && table.scopeColumn.trim().length > 0)
+    return `${table.scopeColumn} = {id}`
   return `${entity.idColumn} = {id}`
 }
 
@@ -172,7 +196,7 @@ function composeDefinition(
   config: db.DbSyncDefinitionConfig,
   flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
   publishedAt: string,
-  publishedVersion: string,
+  publishedVersion: string
 ): PublishedSyncDefinition {
   const executionSteps = resolveExecutionSteps(config, entity.id, flowTemplateCatalog)
   const orderedTables = orderEntityTables(entity)
@@ -189,26 +213,26 @@ function composeDefinition(
     labelColumn: entity.labelColumn,
     selfJoinColumn: entity.selfJoinColumn,
     legacy: {
-	      pipelineId: entity.provenance.kind === "legacy-migration" ? entity.provenance.legacyPipelineId : null,
-      entrySproc: entity.legacyEntrySproc ?? null,
+      pipelineId: entity.provenance.kind === "legacy-migration" ? entity.provenance.legacyPipelineId : null,
+      entrySproc: entity.legacyEntrySproc ?? null
     },
     governance: {
       freezeWindowIds: entity.policies.freezeWindowIds,
-      riskMultiplier: entity.policies.riskMultiplier,
+      riskMultiplier: entity.policies.riskMultiplier
     },
     strategy: {
       strategyId: entity.scd2.strategyId,
-      strategyVersion: entity.scd2.strategyVersion,
+      strategyVersion: entity.scd2.strategyVersion
     },
     bindings: {
       serviceProfileRef: config.service_profile_ref,
-      environmentPolicyRef: config.environment_policy_ref,
+      environmentPolicyRef: config.environment_policy_ref
     },
     ownership: {
       team: config.ownership_team,
       owner: config.ownership_owner,
       reviewStatus: config.review_status,
-      notes: JSON.parse(config.ownership_notes_json) as string[],
+      notes: JSON.parse(config.ownership_notes_json) as string[]
     },
     metadata: {
       tables: entity.tables.map((table) => ({
@@ -220,22 +244,26 @@ function composeDefinition(
         groundedByPipeline: Boolean(table.groundedByPipeline),
         enabledByDefault: table.enabledByDefault ?? true,
         userControllable: table.userControllable ?? false,
-        ...(table.note ? { note: table.note } : {}),
+        ...(table.note ? { note: table.note } : {})
       })),
       executionOrder,
       reverseOrder,
-      discrepancies: entity.discrepancies.map((note) => ({ table: entity.rootTable, kind: "drift", note })),
+      discrepancies: entity.discrepancies.map((note) => ({
+        table: entity.rootTable,
+        kind: "drift",
+        note
+      }))
     },
     executionFlow: {
-      steps: executionSteps,
+      steps: executionSteps
     },
     provenance: {
-	      kind: entity.provenance.kind === "legacy-migration" ? "legacy-migration" : "manual",
+      kind: entity.provenance.kind === "legacy-migration" ? "legacy-migration" : "manual",
       sourceArtifact: `entity-registry:${entity.tenantId}/${entity.id}`,
-      sourceVersion: String(entity.version),
+      sourceVersion: String(entity.version)
     },
     publishedAt,
-    publishedVersion,
+    publishedVersion
   }
 }
 
@@ -256,11 +284,16 @@ export function ensureSyncDefinitionConfigs(projectRoot: string, tenantId = DEFA
   const existing = new Set(db.listSyncDefinitionConfigs(tenantId).map((row) => row.entity_id))
   for (const entity of entities) {
     if (existing.has(entity.id)) continue
-    db.saveSyncDefinitionConfig(seedFromRepoDefinition(projectRoot, entity) ?? defaultConfigForEntity(entity, flowTemplateCatalog))
+    db.saveSyncDefinitionConfig(
+      seedFromRepoDefinition(projectRoot, entity) ?? defaultConfigForEntity(entity, flowTemplateCatalog)
+    )
   }
 }
 
-export function listSyncDefinitionAdminItems(projectRoot: string, tenantId = DEFAULT_TENANT_ID): SyncDefinitionAdminItem[] {
+export function listSyncDefinitionAdminItems(
+  projectRoot: string,
+  tenantId = DEFAULT_TENANT_ID
+): SyncDefinitionAdminItem[] {
   ensureSyncDefinitionConfigs(projectRoot, tenantId)
   const flowTemplateCatalog = loadFlowTemplateCatalog(projectRoot)
   const entities = db.listEntityDefinitions(tenantId)
@@ -287,7 +320,7 @@ export function listSyncDefinitionAdminItems(projectRoot: string, tenantId = DEF
       updatedAt: config.updated_at,
       updatedBy: config.updated_by,
       publishedVersion: publishedDefinition?.publishedVersion ?? null,
-      publishedAt: publishedDefinition?.publishedAt ?? null,
+      publishedAt: publishedDefinition?.publishedAt ?? null
     }
   })
 }
@@ -297,20 +330,29 @@ export function upsertSyncDefinitionConfig(projectRoot: string, row: db.DbSyncDe
   const flowTemplateCatalog = loadFlowTemplateCatalog(projectRoot)
   db.saveSyncDefinitionConfig({
     ...row,
-    flow_preset: row.flow_preset || defaultFlowTemplateId(row.entity_id, flowTemplateCatalog),
+    flow_preset: row.flow_preset || defaultFlowTemplateId(row.entity_id, flowTemplateCatalog)
   })
 }
 
-export function resetSyncDefinitionConfig(projectRoot: string, tenantId: string, entityId: string): db.DbSyncDefinitionConfig | null {
+export function resetSyncDefinitionConfig(
+  projectRoot: string,
+  tenantId: string,
+  entityId: string
+): db.DbSyncDefinitionConfig | null {
   const entity = db.getEntityDefinition(tenantId, entityId)
   if (!entity) return null
   db.deleteSyncDefinitionConfig(tenantId, entityId)
-  const reset = seedFromRepoDefinition(projectRoot, entity) ?? defaultConfigForEntity(entity, loadFlowTemplateCatalog(projectRoot))
+  const reset =
+    seedFromRepoDefinition(projectRoot, entity) ??
+    defaultConfigForEntity(entity, loadFlowTemplateCatalog(projectRoot))
   db.saveSyncDefinitionConfig(reset)
   return reset
 }
 
-export function publishSyncDefinitionsFromDb(projectRoot: string, tenantId = DEFAULT_TENANT_ID): {
+export function publishSyncDefinitionsFromDb(
+  projectRoot: string,
+  tenantId = DEFAULT_TENANT_ID
+): {
   publishedAt: string
   publishedVersion: string
   definitionCount: number
@@ -328,14 +370,20 @@ export function publishSyncDefinitionsFromDb(projectRoot: string, tenantId = DEF
 
   for (const entity of entities) {
     const config = configs.get(entity.id) ?? defaultConfigForEntity(entity, flowTemplateCatalog)
-    definitions[entity.id] = composeDefinition(entity, config, flowTemplateCatalog, publishedAt, publishedVersion)
+    definitions[entity.id] = composeDefinition(
+      entity,
+      config,
+      flowTemplateCatalog,
+      publishedAt,
+      publishedVersion
+    )
   }
 
   const bundle: PersistedPublishedBundle = {
     version: 1,
     publishedAt,
     publishedVersion,
-    definitions,
+    definitions
   }
   const outputPath = resolve(projectRoot, PUBLISHED_BUNDLE_PATH)
   mkdirSync(resolve(projectRoot, "sync-definitions", "published"), { recursive: true })
@@ -347,7 +395,7 @@ export function publishSyncDefinitionsFromDb(projectRoot: string, tenantId = DEF
     definitionCount: Object.keys(definitions).length,
     publishedBundlePath: PUBLISHED_BUNDLE_PATH,
     stdout: [`Wrote published definition bundle to ${outputPath}`],
-    stderr: [],
+    stderr: []
   }
 }
 

@@ -8,23 +8,19 @@
  * Pure function. No catalog calls.
  */
 
-import type {
-    EntityDefinition,
-    EntityDefinitionChange,
-    EntityTable,
-} from "./types.js"
+import type { EntityDefinition, EntityDefinitionChange, EntityTable } from "./types.js"
 
 export function diffEntityDefinitions(
   prev: EntityDefinition | null,
-  next: EntityDefinition,
+  next: EntityDefinition
 ): EntityDefinitionChange[] {
   if (prev === null) {
     return [
       {
         kind: "created",
         tableName: null,
-        description: `Created entity "${next.id}" (${next.displayName}) with ${next.tables.length} table(s).`,
-      },
+        description: `Created entity "${next.id}" (${next.displayName}) with ${next.tables.length} table(s).`
+      }
     ]
   }
 
@@ -37,7 +33,7 @@ export function diffEntityDefinitions(
       tableName: null,
       description: `Entity retired at ${next.retiredAt}.`,
       before: prev.retiredAt,
-      after: next.retiredAt,
+      after: next.retiredAt
     })
   } else if (prev.retiredAt !== null && next.retiredAt === null) {
     changes.push({
@@ -45,7 +41,7 @@ export function diffEntityDefinitions(
       tableName: null,
       description: "Entity unretired.",
       before: prev.retiredAt,
-      after: null,
+      after: null
     })
   }
 
@@ -56,7 +52,7 @@ export function diffEntityDefinitions(
       tableName: null,
       description: `displayName "${prev.displayName}" → "${next.displayName}".`,
       before: prev.displayName,
-      after: next.displayName,
+      after: next.displayName
     })
   }
   if (prev.rootTable !== next.rootTable) {
@@ -65,7 +61,7 @@ export function diffEntityDefinitions(
       tableName: null,
       description: `rootTable "${prev.rootTable}" → "${next.rootTable}".`,
       before: prev.rootTable,
-      after: next.rootTable,
+      after: next.rootTable
     })
   }
   if (prev.idColumn !== next.idColumn) {
@@ -74,7 +70,7 @@ export function diffEntityDefinitions(
       tableName: null,
       description: `idColumn "${prev.idColumn}" → "${next.idColumn}".`,
       before: prev.idColumn,
-      after: next.idColumn,
+      after: next.idColumn
     })
   }
 
@@ -88,7 +84,7 @@ export function diffEntityDefinitions(
       tableName: null,
       description: `SCD2 strategy "${prev.scd2.strategyId}@${String(prev.scd2.strategyVersion)}" → "${next.scd2.strategyId}@${String(next.scd2.strategyVersion)}".`,
       before: { id: prev.scd2.strategyId, version: prev.scd2.strategyVersion },
-      after: { id: next.scd2.strategyId, version: next.scd2.strategyVersion },
+      after: { id: next.scd2.strategyId, version: next.scd2.strategyVersion }
     })
   }
   if (JSON.stringify(prev.scd2.entityOverride) !== JSON.stringify(next.scd2.entityOverride)) {
@@ -97,7 +93,7 @@ export function diffEntityDefinitions(
       tableName: null,
       description: "Entity-level SCD2 override changed.",
       before: prev.scd2.entityOverride,
-      after: next.scd2.entityOverride,
+      after: next.scd2.entityOverride
     })
   }
 
@@ -110,7 +106,7 @@ export function diffEntityDefinitions(
       changes.push({
         kind: "tableRemoved",
         tableName: prevTable.name,
-        description: `Removed table "${prevTable.name}".`,
+        description: `Removed table "${prevTable.name}".`
       })
     }
   }
@@ -120,7 +116,7 @@ export function diffEntityDefinitions(
       changes.push({
         kind: "tableAdded",
         tableName: nextTable.name,
-        description: `Added table "${nextTable.name}" (executionOrder ${nextTable.executionOrder}).`,
+        description: `Added table "${nextTable.name}" (executionOrder ${nextTable.executionOrder}).`
       })
       continue
     }
@@ -136,7 +132,7 @@ export function diffEntityDefinitions(
       tableName: null,
       description: "Table execution order changed.",
       before: prevOrder,
-      after: nextOrder,
+      after: nextOrder
     })
   }
 
@@ -147,7 +143,7 @@ export function diffEntityDefinitions(
       tableName: null,
       description: "Policies changed (approval / freeze windows / risk multiplier).",
       before: prev.policies,
-      after: next.policies,
+      after: next.policies
     })
   }
   if (JSON.stringify(prev.lineageRefs) !== JSON.stringify(next.lineageRefs)) {
@@ -156,7 +152,7 @@ export function diffEntityDefinitions(
       tableName: null,
       description: `Lineage refs changed (${prev.lineageRefs.length} → ${next.lineageRefs.length}).`,
       before: prev.lineageRefs,
-      after: next.lineageRefs,
+      after: next.lineageRefs
     })
   }
 
@@ -170,7 +166,7 @@ function diffTable(prev: EntityTable, next: EntityTable, out: EntityDefinitionCh
       tableName: next.name,
       description: `Scope changed for "${next.name}" (${prev.scope.kind} → ${next.scope.kind}).`,
       before: prev.scope,
-      after: next.scope,
+      after: next.scope
     })
   }
   if (prev.verified !== next.verified) {
@@ -179,7 +175,7 @@ function diffTable(prev: EntityTable, next: EntityTable, out: EntityDefinitionCh
       tableName: next.name,
       description: `verified ${prev.verified} → ${next.verified} for "${next.name}".`,
       before: prev.verified,
-      after: next.verified,
+      after: next.verified
     })
   }
   if (JSON.stringify(prev.scd2Override) !== JSON.stringify(next.scd2Override)) {
@@ -188,7 +184,7 @@ function diffTable(prev: EntityTable, next: EntityTable, out: EntityDefinitionCh
       tableName: next.name,
       description: `Table-level SCD2 override changed for "${next.name}".`,
       before: prev.scd2Override,
-      after: next.scd2Override,
+      after: next.scd2Override
     })
   }
 }

@@ -24,13 +24,13 @@ export const thinkTool: Tool = {
     properties: {
       thought: {
         type: "string",
-        description: "Your reasoning or analysis",
-      },
+        description: "Your reasoning or analysis"
+      }
     },
-    required: ["thought"],
+    required: ["thought"]
   },
 
   async execute(args) {
     return String(args.thought)
-  },
+  }
 }

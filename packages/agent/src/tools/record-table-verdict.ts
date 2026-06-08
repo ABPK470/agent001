@@ -19,14 +19,7 @@
 import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../domain/agent-types.js"
 import type { TableVerdictRoleType } from "../ports/index.js"
 
-export const TABLE_VERDICT_ROLES = [
-  "canonical",
-  "subset",
-  "staging",
-  "archive",
-  "rules",
-  "unknown",
-] as const
+export const TABLE_VERDICT_ROLES = ["canonical", "subset", "staging", "archive", "rules", "unknown"] as const
 
 export type TableVerdictRole = TableVerdictRoleType
 
@@ -38,7 +31,7 @@ export interface TableVerdictPayload {
 }
 
 export type RecordTableVerdictHandler = (
-  payload: TableVerdictPayload,
+  payload: TableVerdictPayload
 ) => Promise<{ ok: true; verdictId: string } | { ok: false; reason: string }>
 
 export const recordTableVerdictToolMetadata: ToolMetadata = {
@@ -63,13 +56,12 @@ export const recordTableVerdictToolMetadata: ToolMetadata = {
         type: "string",
         description:
           "Schema-qualified object name (e.g. 'publish.Revenue'). Must be " +
-          "an object you actually used or rejected this run.",
+          "an object you actually used or rejected this run."
       },
       role: {
         type: "string",
         enum: [...TABLE_VERDICT_ROLES],
-        description:
-          "Structural role of this object relative to its sibling cluster.",
+        description: "Structural role of this object relative to its sibling cluster."
       },
       evidence: {
         type: "array",
@@ -78,17 +70,16 @@ export const recordTableVerdictToolMetadata: ToolMetadata = {
           "Short bullet observations supporting the role (≤200 chars each). " +
           "Examples: 'view defines UNION of 59 source tables', " +
           "'rowCount=270M dwarfs sibling rowCount=12M', " +
-          "'viewDefinition references publish.RevenueESGRules as one branch'.",
+          "'viewDefinition references publish.RevenueESGRules as one branch'."
       },
       observedFromGoal: {
         type: "string",
         description:
-          "Optional one-line summary of the goal that produced this " +
-          "verdict, for retrieval provenance.",
-      },
+          "Optional one-line summary of the goal that produced this " + "verdict, for retrieval provenance."
+      }
     },
-    required: ["qname", "role"],
-  },
+    required: ["qname", "role"]
+  }
 }
 
 export const recordTableVerdictTool = recordTableVerdictToolMetadata
@@ -117,20 +108,19 @@ export const recordTableVerdictToolDefinition: ToolDefinition<RecordTableVerdict
           evidence = evidenceRaw
             .map((e) => String(e ?? "").trim())
             .filter(Boolean)
-            .map((e) => e.length > 200 ? e.slice(0, 200) : e)
+            .map((e) => (e.length > 200 ? e.slice(0, 200) : e))
         }
 
         const observedRaw = args["observedFromGoal"]
-        const observedFromGoal = typeof observedRaw === "string" && observedRaw.trim()
-          ? observedRaw.trim()
-          : undefined
+        const observedFromGoal =
+          typeof observedRaw === "string" && observedRaw.trim() ? observedRaw.trim() : undefined
 
         const result = await handler({ qname, role, evidence, observedFromGoal })
         if (!result.ok) return `record_table_verdict: not stored — ${result.reason}`
         return `record_table_verdict: stored (id=${result.verdictId}) — ${qname} → ${role}`
-      },
+      }
     }
-  },
+  }
 }
 
 /**
@@ -147,5 +137,7 @@ export function bindRecordTableVerdictTool(handler: RecordTableVerdictHandler): 
 import type { AgentHost } from "../application/shell/runtime.js"
 
 export function createRecordTableVerdictTool(_host: AgentHost): never {
-  throw new Error("record_table_verdict requires per-run binding via bindRecordTableVerdictTool(handler); metadata is available via recordTableVerdictToolMetadata")
+  throw new Error(
+    "record_table_verdict requires per-run binding via bindRecordTableVerdictTool(handler); metadata is available via recordTableVerdictToolMetadata"
+  )
 }

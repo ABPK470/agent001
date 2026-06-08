@@ -11,12 +11,7 @@
  */
 
 import type { ToolCallRecord } from "../../../../tools/index.js"
-import type {
-    DeterministicToolStep,
-    PipelineStepResult,
-    Plan,
-    SubagentTaskStep
-} from "../types.js"
+import type { DeterministicToolStep, PipelineStepResult, Plan, SubagentTaskStep } from "../types.js"
 
 // ============================================================================
 // Path extraction helpers
@@ -31,7 +26,9 @@ export function extractMentionedPaths(output: string): string[] {
   }
   // "created/wrote/modified [to] <path>" patterns — the optional "to" is
   // critical because tool output often says "Successfully wrote to tmp/app/main.js"
-  for (const m of output.matchAll(/(?:creat|writ|wrote|modif|generat|saved)\w*\s+(?:to\s+)?(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi)) {
+  for (const m of output.matchAll(
+    /(?:creat|writ|wrote|modif|generat|saved)\w*\s+(?:to\s+)?(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi
+  )) {
     if (m[1] && m[1].length < 200) paths.push(m[1])
   }
   return [...new Set(paths)]
@@ -45,19 +42,22 @@ export function extractMutatedPathsFromToolCalls(calls: readonly ToolCallRecord[
     if (c.isError) continue
     if (c.name !== "write_file" && c.name !== "replace_in_file" && c.name !== "append_file") continue
 
-    const fromArgs = typeof c.args.path === "string"
-      ? c.args.path
-      : typeof c.args.filePath === "string"
-        ? c.args.filePath
-        : typeof c.args.file === "string"
-          ? c.args.file
-          : ""
+    const fromArgs =
+      typeof c.args.path === "string"
+        ? c.args.path
+        : typeof c.args.filePath === "string"
+          ? c.args.filePath
+          : typeof c.args.file === "string"
+            ? c.args.file
+            : ""
     if (fromArgs.trim().length > 0) {
       paths.add(fromArgs)
       continue
     }
 
-    for (const m of c.result.matchAll(/(?:wrote|created|updated|saved)\s+(?:to\s+)?(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi)) {
+    for (const m of c.result.matchAll(
+      /(?:wrote|created|updated|saved)\s+(?:to\s+)?(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi
+    )) {
       if (m[1] && m[1].length < 200) paths.add(m[1])
     }
   }
@@ -70,7 +70,11 @@ export function extractMutatedPathsFromToolCalls(calls: readonly ToolCallRecord[
 // ============================================================================
 
 /** Summarize a dependency step's output for downstream consumption. */
-export function summarizeDependencyOutput(output: string, maxChars: number, toolCalls?: readonly ToolCallRecord[]): string {
+export function summarizeDependencyOutput(
+  output: string,
+  maxChars: number,
+  toolCalls?: readonly ToolCallRecord[]
+): string {
   const mentionedPaths = extractMutatedPathsFromToolCalls(toolCalls)
   const parts: string[] = []
 
@@ -79,7 +83,7 @@ export function summarizeDependencyOutput(output: string, maxChars: number, tool
   }
 
   // Extract the first few meaningful lines (skip blanks, markdown headers)
-  const lines = output.split("\n").filter(l => l.trim().length > 0)
+  const lines = output.split("\n").filter((l) => l.trim().length > 0)
   const meaningfulLines = lines.slice(0, 5).join("\n")
 
   if (meaningfulLines.length > 0) {
@@ -100,7 +104,7 @@ export function injectPriorContext(
   step: SubagentTaskStep,
   plan: Plan,
   stepResults: ReadonlyMap<string, PipelineStepResult>,
-  workspaceRoot?: string,
+  workspaceRoot?: string
 ): SubagentTaskStep {
   const deps = step.dependsOn ?? []
   if (deps.length === 0 && !workspaceRoot) return step
@@ -112,7 +116,7 @@ export function injectPriorContext(
     const depResult = stepResults.get(depName)
     if (!depResult) continue
 
-    const depStep = plan.steps.find(s => s.name === depName)
+    const depStep = plan.steps.find((s) => s.name === depName)
 
     // agenc-core pattern: summarize rather than raw truncate
     const summary = depResult.output
@@ -120,7 +124,7 @@ export function injectPriorContext(
       : `(step ${depResult.status})`
 
     priorSections.push(
-      `### Step "${depName}" (${depResult.status})${depStep?.stepType === "deterministic_tool" ? ` — tool: ${(depStep as DeterministicToolStep).tool}` : ""}\n${summary}`,
+      `### Step "${depName}" (${depResult.status})${depStep?.stepType === "deterministic_tool" ? ` — tool: ${(depStep as DeterministicToolStep).tool}` : ""}\n${summary}`
     )
   }
 
@@ -136,12 +140,10 @@ export function injectPriorContext(
     executionContext = {
       ...executionContext,
       workspaceRoot,
-      allowedReadRoots: executionContext.allowedReadRoots.length > 0
-        ? executionContext.allowedReadRoots
-        : [workspaceRoot],
-      allowedWriteRoots: executionContext.allowedWriteRoots.length > 0
-        ? executionContext.allowedWriteRoots
-        : [workspaceRoot],
+      allowedReadRoots:
+        executionContext.allowedReadRoots.length > 0 ? executionContext.allowedReadRoots : [workspaceRoot],
+      allowedWriteRoots:
+        executionContext.allowedWriteRoots.length > 0 ? executionContext.allowedWriteRoots : [workspaceRoot]
     }
   }
 
@@ -151,20 +153,19 @@ export function injectPriorContext(
     const priorArtifacts: string[] = []
     for (const depName of deps) {
       const depResult = stepResults.get(depName)
-      const depStep = plan.steps.find(s => s.name === depName)
+      const depStep = plan.steps.find((s) => s.name === depName)
 
-      const depTargetArtifacts = depStep?.stepType === "subagent_task"
-        ? (depStep as SubagentTaskStep).executionContext.targetArtifacts
-        : []
+      const depTargetArtifacts =
+        depStep?.stepType === "subagent_task"
+          ? (depStep as SubagentTaskStep).executionContext.targetArtifacts
+          : []
 
       if (depResult) {
         const actualPaths = extractMutatedPathsFromToolCalls(depResult.toolCalls)
         if (actualPaths.length > 0) {
-          const resolvedPaths = actualPaths.map(extracted => {
+          const resolvedPaths = actualPaths.map((extracted) => {
             if (!extracted.includes("/") && depTargetArtifacts.length > 0) {
-              const match = depTargetArtifacts.find(
-                t => t.endsWith(`/${extracted}`) || t === extracted,
-              )
+              const match = depTargetArtifacts.find((t) => t.endsWith(`/${extracted}`) || t === extracted)
               return match ?? extracted
             }
             return extracted
@@ -194,7 +195,7 @@ export function injectPriorContext(
       }
       executionContext = {
         ...executionContext,
-        requiredSourceArtifacts: [...existingSource],
+        requiredSourceArtifacts: [...existingSource]
       }
     }
   }
@@ -203,6 +204,6 @@ export function injectPriorContext(
     ...step,
     objective,
     inputContract: augmentedInput,
-    executionContext,
+    executionContext
   }
 }

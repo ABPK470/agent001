@@ -82,7 +82,9 @@ function tableSessionFkIsCascade(db: Database.Database, table: string): boolean 
   // `from` column, `on_delete` action. Return true iff the row for
   // session_id -> sessions still says CASCADE (the old, buggy default).
   const rows = db.prepare(`PRAGMA foreign_key_list("${table}")`).all() as Array<{
-    table: string; from: string; on_delete: string
+    table: string
+    from: string
+    on_delete: string
   }>
   return rows.some((r) => r.table === "sessions" && r.from === "session_id" && r.on_delete === "CASCADE")
 }
@@ -93,9 +95,9 @@ function tableSessionFkIsCascade(db: Database.Database, table: string): boolean 
  *  `'crashed'` is sufficient because the only place it could appear is
  *  inside the status CHECK clause. */
 function runsTableMissingCrashedStatus(db: Database.Database): boolean {
-  const row = db.prepare(
-    "SELECT sql FROM sqlite_master WHERE type='table' AND name='runs'",
-  ).get() as { sql?: string } | undefined
+  const row = db.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='runs'").get() as
+    | { sql?: string }
+    | undefined
   if (!row?.sql) return false
   return !row.sql.includes("'crashed'")
 }
@@ -214,7 +216,7 @@ export function migrateSessionFkSetNull(db: Database.Database): void {
         created_at    TEXT NOT NULL,
         updated_at    TEXT NOT NULL
       );
-    `,
+    `
   }
   // Indexes to recreate per table after the rebuild (table-rebuild drops
   // them along with the original table).
@@ -222,19 +224,19 @@ export function migrateSessionFkSetNull(db: Database.Database): void {
     runs: [
       `CREATE INDEX IF NOT EXISTS idx_runs_session ON runs(session_id, created_at DESC);`,
       `CREATE INDEX IF NOT EXISTS idx_runs_upn     ON runs(upn, created_at DESC);`,
-      `CREATE INDEX IF NOT EXISTS idx_runs_parent  ON runs(parent_run_id);`,
+      `CREATE INDEX IF NOT EXISTS idx_runs_parent  ON runs(parent_run_id);`
     ],
     attachments: [
       `CREATE INDEX IF NOT EXISTS idx_attachments_run     ON attachments(run_id);`,
       `CREATE INDEX IF NOT EXISTS idx_attachments_session ON attachments(session_id);`,
       `CREATE INDEX IF NOT EXISTS idx_attachments_owner   ON attachments(owner_upn);`,
-      `CREATE INDEX IF NOT EXISTS idx_attachments_hash    ON attachments(content_hash);`,
+      `CREATE INDEX IF NOT EXISTS idx_attachments_hash    ON attachments(content_hash);`
     ],
     notifications: [
       `CREATE INDEX IF NOT EXISTS idx_notifications_read     ON notifications(read, created_at DESC);`,
       `CREATE INDEX IF NOT EXISTS idx_notifications_owner    ON notifications(owner_upn, created_at DESC);`,
       `CREATE INDEX IF NOT EXISTS idx_notifications_session  ON notifications(session_id, created_at DESC);`,
-      `CREATE INDEX IF NOT EXISTS idx_notifications_run      ON notifications(run_id);`,
+      `CREATE INDEX IF NOT EXISTS idx_notifications_run      ON notifications(run_id);`
     ],
     memory_entries: [
       `CREATE INDEX IF NOT EXISTS idx_me_tier    ON memory_entries(tier);`,
@@ -242,13 +244,13 @@ export function migrateSessionFkSetNull(db: Database.Database): void {
       `CREATE INDEX IF NOT EXISTS idx_me_run     ON memory_entries(run_id);`,
       `CREATE INDEX IF NOT EXISTS idx_me_created ON memory_entries(created_at);`,
       `CREATE INDEX IF NOT EXISTS idx_me_upn     ON memory_entries(upn);`,
-      `CREATE INDEX IF NOT EXISTS idx_me_shared  ON memory_entries(shared);`,
+      `CREATE INDEX IF NOT EXISTS idx_me_shared  ON memory_entries(shared);`
     ],
     procedural_memories: [
       `CREATE INDEX IF NOT EXISTS idx_proc_upn     ON procedural_memories(upn);`,
       `CREATE INDEX IF NOT EXISTS idx_proc_session ON procedural_memories(session_id);`,
-      `CREATE INDEX IF NOT EXISTS idx_proc_shared  ON procedural_memories(shared);`,
-    ],
+      `CREATE INDEX IF NOT EXISTS idx_proc_shared  ON procedural_memories(shared);`
+    ]
   }
 
   const tableExists = (name: string): boolean =>
@@ -289,18 +291,25 @@ export function migrateSessionFkSetNull(db: Database.Database): void {
   db.pragma("foreign_keys = ON")
   // Sanity check — the new FK graph must still be internally consistent.
   // Throw loud rather than silently leaving the DB in a broken state.
-  const violations = db.pragma("foreign_key_check") as Array<{ table: string; rowid: number; parent: string }>
+  const violations = db.pragma("foreign_key_check") as Array<{
+    table: string
+    rowid: number
+    parent: string
+  }>
   if (violations.length > 0) {
     throw new Error(
-      `migrateSessionFkSetNull: foreign_key_check found ${violations.length} violations after rebuild: ${
-        JSON.stringify(violations.slice(0, 5))
-      }`,
+      `migrateSessionFkSetNull: foreign_key_check found ${violations.length} violations after rebuild: ${JSON.stringify(
+        violations.slice(0, 5)
+      )}`
     )
   }
 }
 
 function migrateAuditLogScopes(db: Database.Database): void {
-  const columns = db.prepare("PRAGMA table_info(audit_log)").all() as Array<{ name: string; notnull: number }>
+  const columns = db.prepare("PRAGMA table_info(audit_log)").all() as Array<{
+    name: string
+    notnull: number
+  }>
   if (columns.length === 0) return
   const hasScopeType = columns.some((c) => c.name === "scope_type")
   const runIdColumn = columns.find((c) => c.name === "run_id")
@@ -353,7 +362,9 @@ export function _migrate(db: Database.Database): void {
   `)
 
   const getMetaValue = (key: string): string | undefined => {
-    const row = db.prepare("SELECT value FROM schema_meta WHERE key = ?").get(key) as { value: string } | undefined
+    const row = db.prepare("SELECT value FROM schema_meta WHERE key = ?").get(key) as
+      | { value: string }
+      | undefined
     return row?.value
   }
   const setMetaValue = (key: string, value: string): void => {
@@ -373,21 +384,25 @@ export function _migrate(db: Database.Database): void {
     // may not be dropped". They're auto-managed by the parent virtual
     // table, so we drop virtual tables first and SQLite cascades the
     // shadow drops, then drop the remaining regular tables/views.
-    const virtualTables = db.prepare(
-      `SELECT name FROM sqlite_master
+    const virtualTables = db
+      .prepare(
+        `SELECT name FROM sqlite_master
        WHERE type = 'table'
          AND sql LIKE 'CREATE VIRTUAL TABLE%'
-         AND name NOT IN ('llm_config','schema_meta')`,
-    ).all() as { name: string }[]
+         AND name NOT IN ('llm_config','schema_meta')`
+      )
+      .all() as { name: string }[]
     for (const { name } of virtualTables) {
       db.exec(`DROP TABLE IF EXISTS "${name}"`)
     }
-    const remainingTables = db.prepare(
-      `SELECT name FROM sqlite_master
+    const remainingTables = db
+      .prepare(
+        `SELECT name FROM sqlite_master
        WHERE type IN ('table','view')
          AND name NOT LIKE 'sqlite_%'
-         AND name NOT IN ('llm_config','schema_meta')`,
-    ).all() as { name: string }[]
+         AND name NOT IN ('llm_config','schema_meta')`
+      )
+      .all() as { name: string }[]
     for (const { name } of remainingTables) {
       db.exec(`DROP TABLE IF EXISTS "${name}"`)
     }
@@ -1175,7 +1190,9 @@ export function _migrate(db: Database.Database): void {
     );
   `)
 
-  const syncDefinitionConfigColumns = db.prepare("PRAGMA table_info(sync_definition_configs)").all() as Array<{ name: string }>
+  const syncDefinitionConfigColumns = db
+    .prepare("PRAGMA table_info(sync_definition_configs)")
+    .all() as Array<{ name: string }>
   if (!syncDefinitionConfigColumns.some((column) => column.name === "execution_steps_json")) {
     db.exec("ALTER TABLE sync_definition_configs ADD COLUMN execution_steps_json TEXT NOT NULL DEFAULT '[]';")
   }
@@ -1204,12 +1221,12 @@ export function _migrate(db: Database.Database): void {
   // DEFAULT_TENANT_ID exported from @mia/agent.
   const seedStrategyPointer = db.prepare(
     `INSERT OR IGNORE INTO scd2_strategies (tenant_id, id, current_version, retired_at)
-     VALUES (?, ?, ?, NULL)`,
+     VALUES (?, ?, ?, NULL)`
   )
   const seedStrategyVersion = db.prepare(
     `INSERT OR IGNORE INTO scd2_strategy_versions
        (tenant_id, id, version, body_json, created_by, created_at, reason)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
   )
   for (const s of BUNDLED_SCD2_STRATEGIES) {
     seedStrategyPointer.run("_default", s.id, s.version)
@@ -1220,7 +1237,7 @@ export function _migrate(db: Database.Database): void {
       JSON.stringify(s),
       s.createdBy,
       s.createdAt,
-      "bundled",
+      "bundled"
     )
   }
 
@@ -1245,10 +1262,11 @@ export function _migrate(db: Database.Database): void {
   // Custom agents (any non-"default" id) keep DB persistence — that is the
   // entire point of letting operators fork a prompt.
   const seededDefaultSha = createHash("sha1").update(DEFAULT_SYSTEM_PROMPT).digest("hex").slice(0, 8)
-  const previousDefault = db.prepare(
-    "SELECT system_prompt FROM agent_definitions WHERE id = 'default'",
-  ).get() as { system_prompt: string } | undefined
-  db.prepare(`
+  const previousDefault = db
+    .prepare("SELECT system_prompt FROM agent_definitions WHERE id = 'default'")
+    .get() as { system_prompt: string } | undefined
+  db.prepare(
+    `
     INSERT INTO agent_definitions (id, name, description, system_prompt, created_at, updated_at)
     VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
@@ -1256,29 +1274,56 @@ export function _migrate(db: Database.Database): void {
       name          = excluded.name,
       description   = excluded.description,
       updated_at    = datetime('now')
-  `).run(
+  `
+  ).run(
     "default",
     "Universal Agent",
     "General-purpose agent with all tools. Handles any task.",
-    DEFAULT_SYSTEM_PROMPT,
+    DEFAULT_SYSTEM_PROMPT
   )
   if (previousDefault && previousDefault.system_prompt !== DEFAULT_SYSTEM_PROMPT) {
     const previousSha = createHash("sha1").update(previousDefault.system_prompt).digest("hex").slice(0, 8)
     // eslint-disable-next-line no-console
     console.log(
       `[seed] default agent system_prompt re-synced from file: ${previousSha} → ${seededDefaultSha} ` +
-      `(${DEFAULT_SYSTEM_PROMPT.length} bytes). Source: packages/agent/prompts/default-system.md`,
+        `(${DEFAULT_SYSTEM_PROMPT.length} bytes). Source: packages/agent/prompts/default-system.md`
     )
   } else {
     // eslint-disable-next-line no-console
-    console.log(`[seed] default agent system_prompt verified (sha=${seededDefaultSha}, ${DEFAULT_SYSTEM_PROMPT.length} bytes)`)
+    console.log(
+      `[seed] default agent system_prompt verified (sha=${seededDefaultSha}, ${DEFAULT_SYSTEM_PROMPT.length} bytes)`
+    )
   }
 
   // Seed default policies
   const seedPolicies: { name: string; effect: PolicyEffect; condition: string; parameters: string }[] = [
-    { name: "Tool Permission", effect: PolicyEffect.Allow, condition: "tool_call", parameters: JSON.stringify({ scope: "all_tools", description: "Controls which tools agents are permitted to invoke" }) },
-    { name: "Model", effect: PolicyEffect.Allow, condition: "model_selection", parameters: JSON.stringify({ scope: "all_models", description: "Controls model selection and usage limits" }) },
-    { name: "Security", effect: PolicyEffect.RequireApproval, condition: "sensitive_action", parameters: JSON.stringify({ scope: "destructive_ops", description: "Requires approval for destructive or sensitive operations" }) },
+    {
+      name: "Tool Permission",
+      effect: PolicyEffect.Allow,
+      condition: "tool_call",
+      parameters: JSON.stringify({
+        scope: "all_tools",
+        description: "Controls which tools agents are permitted to invoke"
+      })
+    },
+    {
+      name: "Model",
+      effect: PolicyEffect.Allow,
+      condition: "model_selection",
+      parameters: JSON.stringify({
+        scope: "all_models",
+        description: "Controls model selection and usage limits"
+      })
+    },
+    {
+      name: "Security",
+      effect: PolicyEffect.RequireApproval,
+      condition: "sensitive_action",
+      parameters: JSON.stringify({
+        scope: "destructive_ops",
+        description: "Requires approval for destructive or sensitive operations"
+      })
+    }
   ]
   const insertPolicy = db.prepare(`
     INSERT OR IGNORE INTO policy_rules (name, effect, condition, parameters, created_at)

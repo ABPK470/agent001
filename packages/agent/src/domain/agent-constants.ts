@@ -133,7 +133,7 @@ export const HIGH_RISK_TOOLS = new Set([
   "replace_in_file",
   "append_file",
   "delegate",
-  "delegate_parallel",
+  "delegate_parallel"
 ])
 
 /**
@@ -153,29 +153,31 @@ export const SAFE_RETRY_TOOLS = new Set([
   "discover_relationships",
   "profile_data",
   "inspect_definition",
-  "search_catalog",
+  "search_catalog"
 ])
 
 /** Tools that indicate verification activity. */
-export const VERIFICATION_TOOLS = new Set([
-  "read_file",
-  "list_directory",
-  "search_files",
-  "browser_check",
-])
+export const VERIFICATION_TOOLS = new Set(["read_file", "list_directory", "search_files", "browser_check"])
 
 /** Tools that indicate workspace mutation. */
-export const MUTATION_TOOLS = new Set([
-  "write_file",
-  "replace_in_file",
-  "append_file",
-  "run_command",
-])
+export const MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "append_file", "run_command"])
 
 /** Shell builtin commands (for bash/command parsing). */
 export const SHELL_BUILTIN_COMMANDS = new Set([
-  "set", "cd", "export", "source", "alias", "unalias", "unset",
-  "shopt", "ulimit", "umask", "readonly", "declare", "typeset", "builtin",
+  "set",
+  "cd",
+  "export",
+  "source",
+  "alias",
+  "unalias",
+  "unset",
+  "shopt",
+  "ulimit",
+  "umask",
+  "readonly",
+  "declare",
+  "typeset",
+  "builtin"
 ])
 
 /** Recovery hint prefix used in system messages. */
@@ -192,8 +194,18 @@ export const MAX_COMPACT_INPUT = 20_000
 
 /** Priority keys when summarizing JSON tool results (checked first). */
 export const TOOL_RESULT_PRIORITY_KEYS = [
-  "error", "stderr", "stdout", "exitcode", "status", "message",
-  "result", "output", "url", "title", "text", "data",
+  "error",
+  "stderr",
+  "stdout",
+  "exitcode",
+  "status",
+  "message",
+  "result",
+  "output",
+  "url",
+  "title",
+  "text",
+  "data"
 ] as const
 
 /**
@@ -208,8 +220,16 @@ export const TOOL_RESULT_PRIORITY_KEYS = [
  *      first tool choice is insufficient.
  */
 export const READ_ONLY_TOOL_NAMES: ReadonlySet<string> = new Set([
-  "read_file", "list_directory", "search_files",
-  "search_catalog", "query_mssql", "explore_mssql_schema",
-  "discover_relationships", "profile_data", "inspect_definition",
-  "think", "fetch_url", "check_messages",
+  "read_file",
+  "list_directory",
+  "search_files",
+  "search_catalog",
+  "query_mssql",
+  "explore_mssql_schema",
+  "discover_relationships",
+  "profile_data",
+  "inspect_definition",
+  "think",
+  "fetch_url",
+  "check_messages"
 ])

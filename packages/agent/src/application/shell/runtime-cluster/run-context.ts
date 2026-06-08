@@ -16,6 +16,6 @@ export function makeRunContext(options: MakeRunContextOptions = {}): RunContext 
     trace: options.trace ?? null,
     policy: options.policy ?? null,
     syncOp: options.syncOp ?? null,
-    mssqlProfileCalls: new Set(options.mssqlProfileCalls ?? []),
+    mssqlProfileCalls: new Set(options.mssqlProfileCalls ?? [])
   }
 }

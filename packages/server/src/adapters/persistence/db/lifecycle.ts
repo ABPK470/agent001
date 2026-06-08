@@ -15,7 +15,11 @@ export function clearTransactionalData(): void {
   // System-wide notifications (run_id IS NULL) survive a `runs` purge —
   // wipe them explicitly so the inbox is empty after reset.
   db.exec(`DELETE FROM notifications;`)
-  try { db.exec("DELETE FROM api_requests") } catch { /* table may not exist yet */ }
+  try {
+    db.exec("DELETE FROM api_requests")
+  } catch {
+    /* table may not exist yet */
+  }
 }
 
 // ── Data lifecycle / pruning ─────────────────────────────────────
@@ -42,7 +46,13 @@ export function pruneOldData(opts?: {
   keepApiRequests?: number
   keepNotifications?: number
   keepEvents?: number
-}): { prunedRuns: number; prunedApiRequests: number; prunedNotifications: number; prunedEvents: number; vacuumed: boolean } {
+}): {
+  prunedRuns: number
+  prunedApiRequests: number
+  prunedNotifications: number
+  prunedEvents: number
+  vacuumed: boolean
+} {
   const db = getDb()
   // keepRuns defaults to `undefined` → no run pruning. Operators that
   // really want a cap must opt in via the admin endpoint.
@@ -53,12 +63,16 @@ export function pruneOldData(opts?: {
 
   let prunedRuns = 0
   if (typeof keepRuns === "number" && keepRuns >= 0) {
-    const runsToPrune = db.prepare(`
+    const runsToPrune = db
+      .prepare(
+        `
       SELECT id FROM runs
       WHERE status IN ('completed', 'failed', 'cancelled')
       ORDER BY created_at DESC
       LIMIT -1 OFFSET ?
-    `).all(keepRuns) as { id: string }[]
+    `
+      )
+      .all(keepRuns) as { id: string }[]
 
     if (runsToPrune.length > 0) {
       const ids = runsToPrune.map((r) => r.id)
@@ -70,29 +84,43 @@ export function pruneOldData(opts?: {
     }
   }
 
-  const apiResult = db.prepare(`
+  const apiResult = db
+    .prepare(
+      `
     DELETE FROM api_requests WHERE id NOT IN (
       SELECT id FROM api_requests ORDER BY created_at DESC LIMIT ?
     )
-  `).run(keepApiRequests)
+  `
+    )
+    .run(keepApiRequests)
   const prunedApiRequests = apiResult.changes
 
-  const notifResult = db.prepare(`
+  const notifResult = db
+    .prepare(
+      `
     DELETE FROM notifications WHERE id NOT IN (
       SELECT id FROM notifications ORDER BY created_at DESC LIMIT ?
     )
-  `).run(keepNotifications)
+  `
+    )
+    .run(keepNotifications)
   const prunedNotifications = notifResult.changes
 
   let prunedEvents = 0
   try {
-    const evtResult = db.prepare(`
+    const evtResult = db
+      .prepare(
+        `
       DELETE FROM event_log WHERE id NOT IN (
         SELECT id FROM event_log ORDER BY created_at DESC LIMIT ?
       )
-    `).run(keepEvents)
+    `
+      )
+      .run(keepEvents)
     prunedEvents = evtResult.changes
-  } catch { /* table may not exist yet */ }
+  } catch {
+    /* table may not exist yet */
+  }
 
   let vacuumed = false
   if (prunedRuns > 50 || prunedApiRequests > 1000 || prunedEvents > 5000) {
@@ -107,8 +135,20 @@ export function pruneOldData(opts?: {
 
 export function getDbStats(): Record<string, number> {
   const db = getDb()
-  const tables = ["runs", "audit_log", "logs", "trace_entries", "token_usage", "checkpoints",
-    "effects", "file_snapshots", "notifications", "api_requests", "event_log", "webhook_drains"] as const
+  const tables = [
+    "runs",
+    "audit_log",
+    "logs",
+    "trace_entries",
+    "token_usage",
+    "checkpoints",
+    "effects",
+    "file_snapshots",
+    "notifications",
+    "api_requests",
+    "event_log",
+    "webhook_drains"
+  ] as const
   const stats: Record<string, number> = {}
   for (const t of tables) {
     try {

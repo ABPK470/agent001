@@ -4,20 +4,25 @@
 
 import { describe, expect, it } from "vitest"
 import type { EnvelopeHeader } from "../src/adapters/persistence/evidence/envelope.js"
-import { buildEnvelope, envelopeBodyBytes, envelopeBodyHash, recomputeHashChain } from "../src/adapters/persistence/evidence/index.js"
+import {
+  buildEnvelope,
+  envelopeBodyBytes,
+  envelopeBodyHash,
+  recomputeHashChain
+} from "../src/adapters/persistence/evidence/index.js"
 import { buildHmacSigner } from "../src/adapters/persistence/evidence/signers/hmac.js"
 
 function header(): EnvelopeHeader {
   return {
-    version:    1,
-    id:         "ev-1",
-    createdAt:  "2025-01-15T12:00:00.000Z",
-    tenantId:   "_default",
-    planId:     "plan-1",
+    version: 1,
+    id: "ev-1",
+    createdAt: "2025-01-15T12:00:00.000Z",
+    tenantId: "_default",
+    planId: "plan-1",
     proposalId: null,
-    envPair:    { source: "uat", target: "prod" },
-    actor:      "alice",
-    outcome:    "success",
+    envPair: { source: "uat", target: "prod" },
+    actor: "alice",
+    outcome: "success"
   }
 }
 
@@ -33,9 +38,19 @@ describe("evidence signer + envelope (F1.8)", () => {
   it("hashChain over body sections is stable + verifiable", () => {
     const env = buildEnvelope({
       header: header(),
-      proposal: { id: "p" }, annotation: null, plan: { steps: [] },
-      approval: null, execution: { startedAt: "t", finishedAt: "t2", durationMs: 1, counts: { planned: 0, executed: 0 }, error: null },
-      verification: null, audit: [],
+      proposal: { id: "p" },
+      annotation: null,
+      plan: { steps: [] },
+      approval: null,
+      execution: {
+        startedAt: "t",
+        finishedAt: "t2",
+        durationMs: 1,
+        counts: { planned: 0, executed: 0 },
+        error: null
+      },
+      verification: null,
+      audit: []
     })
     expect(env.hashChain).toHaveLength(8)
     expect(recomputeHashChain(env)).toEqual([])
@@ -44,9 +59,19 @@ describe("evidence signer + envelope (F1.8)", () => {
   it("hashChain detects body tampering", () => {
     const env = buildEnvelope({
       header: header(),
-      proposal: { id: "p" }, annotation: null, plan: { steps: [] },
-      approval: null, execution: { startedAt: "t", finishedAt: "t2", durationMs: 1, counts: { planned: 0, executed: 0 }, error: null },
-      verification: null, audit: [],
+      proposal: { id: "p" },
+      annotation: null,
+      plan: { steps: [] },
+      approval: null,
+      execution: {
+        startedAt: "t",
+        finishedAt: "t2",
+        durationMs: 1,
+        counts: { planned: 0, executed: 0 },
+        error: null
+      },
+      verification: null,
+      audit: []
     })
     const tampered = { ...env, proposal: { id: "MUTATED" } }
     expect(recomputeHashChain(tampered).length).toBeGreaterThan(0)
@@ -55,8 +80,13 @@ describe("evidence signer + envelope (F1.8)", () => {
   it("envelopeBodyHash is stable", () => {
     const env = buildEnvelope({
       header: header(),
-      proposal: null, annotation: null, plan: null, approval: null,
-      execution: null, verification: null, audit: [],
+      proposal: null,
+      annotation: null,
+      plan: null,
+      approval: null,
+      execution: null,
+      verification: null,
+      audit: []
     })
     expect(envelopeBodyHash(env)).toEqual(envelopeBodyHash(env))
     expect(envelopeBodyBytes(env).length).toBeGreaterThan(0)

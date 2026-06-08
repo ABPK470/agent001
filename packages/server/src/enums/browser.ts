@@ -4,10 +4,10 @@
 
 /** Browser navigation gate decision for audit logging. */
 export const BrowserDecision = {
-  Allow:   "allow",
-  Deny:    "deny",
+  Allow: "allow",
+  Deny: "deny",
   Captcha: "captcha",
-  Error:   "error",
+  Error: "error"
 } as const
 
 export type BrowserDecision = (typeof BrowserDecision)[keyof typeof BrowserDecision]
@@ -24,10 +24,10 @@ export const isBrowserDecision = (value: unknown): value is BrowserDecision =>
 // resolved values returned to the agent). The extra `Pending` state
 // lives only on the server side while the user is still working.
 export const HandoffStatus = {
-  Pending:   "pending",
+  Pending: "pending",
   Completed: "completed",
-  Expired:   "expired",
-  Revoked:   "revoked",
+  Expired: "expired",
+  Revoked: "revoked"
 } as const
 
 export type HandoffStatus = (typeof HandoffStatus)[keyof typeof HandoffStatus]

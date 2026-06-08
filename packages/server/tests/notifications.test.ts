@@ -5,17 +5,17 @@
 import Database from "better-sqlite3"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
-    _migrate,
-    _setDb,
-    findStaleRuns,
-    getUnreadNotificationCount,
-    listNotifications,
-    markAllNotificationsRead,
-    markNotificationRead,
-    markRunCrashed,
-    migrateNotifications,
-    saveNotification,
-    type DbNotification,
+  _migrate,
+  _setDb,
+  findStaleRuns,
+  getUnreadNotificationCount,
+  listNotifications,
+  markAllNotificationsRead,
+  markNotificationRead,
+  markRunCrashed,
+  migrateNotifications,
+  saveNotification,
+  type DbNotification
 } from "../src/adapters/persistence/db/index.js"
 import { seedSession, seedUser } from "./_fk-helpers.js"
 
@@ -41,9 +41,11 @@ afterEach(() => {
 
 function insertRun(id: string, status: string, goal = "test goal") {
   seedSession(testDb, "test-session", TEST_UPN)
-  testDb.prepare(
-    "INSERT INTO runs (id, goal, status, session_id, upn, display_name, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))"
-  ).run(id, goal, status, "test-session", TEST_UPN, TEST_UPN)
+  testDb
+    .prepare(
+      "INSERT INTO runs (id, goal, status, session_id, upn, display_name, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))"
+    )
+    .run(id, goal, status, "test-session", TEST_UPN, TEST_UPN)
 }
 
 function makeNotification(overrides: Partial<DbNotification> = {}): DbNotification {
@@ -59,7 +61,7 @@ function makeNotification(overrides: Partial<DbNotification> = {}): DbNotificati
     created_at: new Date().toISOString(),
     owner_upn: TEST_UPN,
     session_id: null,
-    ...overrides,
+    ...overrides
   }
 }
 

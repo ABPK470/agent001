@@ -9,13 +9,13 @@ import { VerifierOutcome } from "../../../domain/index.js"
 
 import { normalizeSpecPath } from "../../blueprint-contract/index.js"
 import {
-    type IntegrationProbeContext,
-    collectReachableRuntimeArtifacts,
-    extractHtmlScriptRefs,
-    findWsRootForStep,
-    probeArtifactViaTool,
-    readArtifactContentViaTool,
-    readIntegrationArtifactContents,
+  type IntegrationProbeContext,
+  collectReachableRuntimeArtifacts,
+  extractHtmlScriptRefs,
+  findWsRootForStep,
+  probeArtifactViaTool,
+  readArtifactContentViaTool,
+  readIntegrationArtifactContents
 } from "../helpers.js"
 
 export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeContext): Promise<void> {
@@ -24,8 +24,8 @@ export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeConte
   const runCommand = toolMap.get("run_command")
   if (!readFile) return
 
-  const htmlArtifacts = allArtifacts.filter(a => /\.html?$/i.test(a.path))
-  const jsArtifacts = allArtifacts.filter(a => /\.js$/i.test(a.path))
+  const htmlArtifacts = allArtifacts.filter((a) => /\.html?$/i.test(a.path))
+  const jsArtifacts = allArtifacts.filter((a) => /\.js$/i.test(a.path))
   if (htmlArtifacts.length === 0 || jsArtifacts.length === 0) return
 
   for (const htmlEntry of htmlArtifacts) {
@@ -38,10 +38,12 @@ export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeConte
       const raw = await readArtifactContentViaTool(readFile, probe.resolvedPath, runCommand)
       if (typeof raw !== "string" || raw.length === 0) continue
       htmlContent = raw
-    } catch { continue }
+    } catch {
+      continue
+    }
 
     const htmlDir = htmlEntry.path.replace(/[^/]+$/, "")
-    const relatedJs = jsArtifacts.filter(js => {
+    const relatedJs = jsArtifacts.filter((js) => {
       const jsDir = js.path.replace(/[^/]+$/, "")
       return jsDir.startsWith(htmlDir)
     })
@@ -49,8 +51,18 @@ export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeConte
     if (relatedJs.length === 0) continue
 
     const scriptRefs = extractHtmlScriptRefs(htmlContent)
-    const relatedJsContent = await readIntegrationArtifactContents(relatedJs, readFile, readArtifactContentViaTool, runCommand)
-    const reachableRuntimeArtifacts = collectReachableRuntimeArtifacts(htmlEntry.path, scriptRefs, relatedJs, relatedJsContent)
+    const relatedJsContent = await readIntegrationArtifactContents(
+      relatedJs,
+      readFile,
+      readArtifactContentViaTool,
+      runCommand
+    )
+    const reachableRuntimeArtifacts = collectReachableRuntimeArtifacts(
+      htmlEntry.path,
+      scriptRefs,
+      relatedJs,
+      relatedJsContent
+    )
 
     const missingScripts: string[] = []
     for (const jsEntry of relatedJs) {
@@ -61,7 +73,7 @@ export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeConte
     }
 
     if (missingScripts.length > 0) {
-      const idx = assessments.findIndex(a => a.stepName === htmlEntry.stepName)
+      const idx = assessments.findIndex((a) => a.stepName === htmlEntry.stepName)
       const issue = `Integration gap: entry artifact "${htmlEntry.path}" does not reach related runtime artifacts through module scripts/imports: ${missingScripts.join(", ")}. Runtime code will never load.`
       if (idx >= 0) {
         const existing = assessments[idx]
@@ -70,7 +82,7 @@ export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeConte
           outcome: existing.outcome === VerifierOutcome.Pass ? VerifierOutcome.Retry : existing.outcome,
           confidence: existing.outcome === "pass" ? 0.4 : existing.confidence,
           issues: [...existing.issues, issue],
-          retryable: true,
+          retryable: true
         }
       }
     }
@@ -86,7 +98,7 @@ export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeConte
       if (!existsProbe.found) {
         missingRefIssues.push(
           `MISSING_SCRIPT_FILE: "${htmlEntry.path}" has <script src="${src}"> but "${resolvedSrc}" does not exist on disk. ` +
-          `The browser will 404 and the page will be non-functional. Either write the missing file or remove the reference.`,
+            `The browser will 404 and the page will be non-functional. Either write the missing file or remove the reference.`
         )
       }
     }
@@ -99,12 +111,12 @@ export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeConte
       if (!existsProbe.found) {
         missingRefIssues.push(
           `MISSING_STYLESHEET_FILE: "${htmlEntry.path}" has <link href="${href}"> but "${resolvedHref}" does not exist on disk. ` +
-          `Styles will be missing. Either write the missing CSS file or remove the reference.`,
+            `Styles will be missing. Either write the missing CSS file or remove the reference.`
         )
       }
     }
     if (missingRefIssues.length > 0) {
-      const idx = assessments.findIndex(a => a.stepName === htmlEntry.stepName)
+      const idx = assessments.findIndex((a) => a.stepName === htmlEntry.stepName)
       if (idx >= 0) {
         const existing = assessments[idx]
         assessments[idx] = {
@@ -112,7 +124,7 @@ export async function probeWebEntrypointRuntimeWiring(ctx: IntegrationProbeConte
           outcome: VerifierOutcome.Retry,
           confidence: 0.0,
           issues: [...existing.issues, ...missingRefIssues],
-          retryable: true,
+          retryable: true
         }
       }
     }

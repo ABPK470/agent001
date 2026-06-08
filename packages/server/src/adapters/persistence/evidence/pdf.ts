@@ -50,19 +50,19 @@ function buildPages(env: EvidenceEnvelope): Page[] {
         `Content hash:  ${env.signature?.contentHash ?? "-"}`,
         ``,
         `--- Hash chain (one per section) ---`,
-        ...env.hashChain.map((h, i) => `${String(i+1).padStart(2," ")}. ${h}`),
-      ],
+        ...env.hashChain.map((h, i) => `${String(i + 1).padStart(2, " ")}. ${h}`)
+      ]
     },
-    section("Proposal",     env.proposal),
-    section("Annotation",   env.annotation),
-    section("Plan",         env.plan),
-    section("Approval",     env.approval),
-    section("Execution",    env.execution),
+    section("Proposal", env.proposal),
+    section("Annotation", env.annotation),
+    section("Plan", env.plan),
+    section("Approval", env.approval),
+    section("Execution", env.execution),
     section("Verification", env.verification),
     {
       title: "Audit",
-      lines: env.audit.map((row, i) => `${i+1}. ${oneLine(row)}`),
-    },
+      lines: env.audit.map((row, i) => `${i + 1}. ${oneLine(row)}`)
+    }
   ]
 }
 
@@ -101,15 +101,17 @@ function buildPdfBytes(pages: readonly Page[]): Buffer {
   // 2: Pages (filled in after we know page count + ids)
   const pageObjStart = 4
   const pageIds = pages.map((_, i) => pageObjStart + i * 2)
-  objects.push(`<< /Type /Pages /Count ${pages.length} /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] >>`)
+  objects.push(
+    `<< /Type /Pages /Count ${pages.length} /Kids [${pageIds.map((id) => `${id} 0 R`).join(" ")}] >>`
+  )
   // 3: Font
   objects.push("<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>")
 
   for (let i = 0; i < pages.length; i++) {
-    const pageId    = pageIds[i]!
+    const pageId = pageIds[i]!
     const contentId = pageId + 1
     objects.push(
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`,
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentId} 0 R >>`
     )
     objects.push(buildContentObject(pages[i]!))
   }
@@ -142,10 +144,12 @@ function buildContentObject(page: Page): string {
 }
 
 function escapePdfString(s: string): string {
-  return s
-    .replace(/\\/g, "\\\\")
-    .replace(/\(/g, "\\(")
-    .replace(/\)/g, "\\)")
-    // strip control chars except tab
-    .replace(/[\x00-\x08\x0B-\x1F\x7F]/g, "")
+  return (
+    s
+      .replace(/\\/g, "\\\\")
+      .replace(/\(/g, "\\(")
+      .replace(/\)/g, "\\)")
+      // strip control chars except tab
+      .replace(/[\x00-\x08\x0B-\x1F\x7F]/g, "")
+  )
 }

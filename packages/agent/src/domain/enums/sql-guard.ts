@@ -20,7 +20,7 @@
 /** Severity of an issue surfaced by the aggregate-semantic guard. */
 export const AggregateSeverity = {
   Block: "block",
-  Warn:  "warn",
+  Warn: "warn"
 } as const
 
 export type AggregateSeverity = (typeof AggregateSeverity)[keyof typeof AggregateSeverity]
@@ -35,11 +35,11 @@ export const isAggregateSeverity = (value: unknown): value is AggregateSeverity 
  * Two calls disagree (and are blocked) when their families differ.
  */
 export const AggregateFamily = {
-  Sum:   "sum",
-  Avg:   "avg",
-  Min:   "min",
-  Max:   "max",
-  Count: "count",
+  Sum: "sum",
+  Avg: "avg",
+  Min: "min",
+  Max: "max",
+  Count: "count"
 } as const
 
 export type AggregateFamily = (typeof AggregateFamily)[keyof typeof AggregateFamily]

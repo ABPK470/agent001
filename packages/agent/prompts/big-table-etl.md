@@ -3,6 +3,7 @@ Big-table query discipline:
 **Performance budget: 2 minutes. HARD.** 120s timeout. `profile_data` defaults to `mode='fast'` (metadata-only, sub-second, safe ANY size — including UNION big views) — use as FIRST move. `mode='deep'` scans; refused on big wide views (e.g. `{{wideUnionView}}` / `{{wideUnionView2}}` / `{{biggestFact}}`) — small tables / `#temp` only.
 
 Reality of the warehouse:
+
 - 100M–2B-row tables/views. `{{wideUnionView}}` and `{{wideUnionView2}}` are wide UNION views over many source branches ({{wideUnionViewBranches}}+ for the largest); `{{biggestFact}}` is the largest single fact; `{{centralDim}}`, `{{centralDim2}}` the most-referenced dimensions.
 - Every touch of a UNION view scans every branch. **Touch each big view ≤ 2× per task.**
 - Prefer the persisted mirror `{{mirrorSchema}}.[{{wideUnionView}}]` over `{{wideUnionView}}` for heavy reads when that exact mirror exists.
@@ -108,6 +109,7 @@ DROP TABLE #range_a3f91c08;
 ```
 
 Anti-patterns — each one is a "this won't return in 2 min" smell:
+
 - A mega-CTE joining `{{wideUnionView}}` to `{{centralDim}}` to `{{calendarDim}}` to `{{biggestFact}}` in one statement.
 - `SELECT TOP n … FROM {{wideUnionView}} ORDER BY x` with no WHERE — full sort over every UNION branch.
 - `MIN({{dateKeyExample}}) FROM {{wideUnionView}}` — full scan of every UNION branch. Use `{{calendarDim}}`.

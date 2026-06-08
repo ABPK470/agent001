@@ -11,16 +11,16 @@
 
 import bcrypt from "bcryptjs"
 import {
-    countUsers,
-    findUserByUpn,
-    findUserByUsername,
-    insertUser,
-    updateLastLoginAt,
-    type DbUser,
+  countUsers,
+  findUserByUpn,
+  findUserByUsername,
+  insertUser,
+  updateLastLoginAt,
+  type DbUser
 } from "../adapters/persistence/users.js"
 import { UserSource } from "../enums/auth.js"
 
-const BCRYPT_ROUNDS = 10  // dev-grade; raise if/when production volume warrants
+const BCRYPT_ROUNDS = 10 // dev-grade; raise if/when production volume warrants
 
 export interface RegisterInput {
   username: string
@@ -73,7 +73,7 @@ export function registerLocalUser(input: RegisterInput): DbUser {
     displayName,
     isAdmin: isFirstUser || input.isAdmin === true,
     passwordHash,
-    source: UserSource.Local,
+    source: UserSource.Local
   })
   const created = findUserByUpn(upn)
   if (!created) throw new AuthError("user creation failed", 500)
@@ -117,7 +117,7 @@ export function upsertSsoUser(input: SsoUpsertInput): DbUser {
     displayName: input.displayName.trim() || upn,
     isAdmin: input.isAdmin === true,
     passwordHash: null,
-    source: UserSource.Sso,
+    source: UserSource.Sso
   })
   const created = findUserByUpn(upn)
   if (!created) throw new AuthError("sso user creation failed", 500)
@@ -142,7 +142,7 @@ export function bootstrapAdminFromEnv(): void {
   if (!username || !password) {
     console.warn(
       "[auth] users table is empty and MIA_BOOTSTRAP_ADMIN_USERNAME / MIA_BOOTSTRAP_ADMIN_PASSWORD are not set. " +
-      "No one can log in. Set these env vars and restart the server.",
+        "No one can log in. Set these env vars and restart the server."
     )
     return
   }
@@ -155,7 +155,10 @@ export function bootstrapAdminFromEnv(): void {
 }
 
 export class AuthError extends Error {
-  constructor(message: string, public readonly statusCode: number) {
+  constructor(
+    message: string,
+    public readonly statusCode: number
+  ) {
     super(message)
     this.name = "AuthError"
   }

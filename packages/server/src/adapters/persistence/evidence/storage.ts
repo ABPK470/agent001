@@ -15,40 +15,40 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, join } from "node:path"
 import { getDb } from "../db-connection.js"
 import {
-    buildEnvelope,
-    envelopeBodyBytes,
-    envelopeBodyHash,
-    type BuildEnvelopeInput,
-    type EvidenceEnvelope,
+  buildEnvelope,
+  envelopeBodyBytes,
+  envelopeBodyHash,
+  type BuildEnvelopeInput,
+  type EvidenceEnvelope
 } from "./envelope.js"
 import { renderEvidencePdf } from "./pdf.js"
 import type { Signer } from "./signer.js"
 
 export interface SealedEvidence {
-  id:           string
+  id: string
   envelopePath: string
-  pdfPath:      string
-  contentHash:  string
-  envelope:     EvidenceEnvelope
+  pdfPath: string
+  contentHash: string
+  envelope: EvidenceEnvelope
 }
 
 export interface SealEvidenceInput extends BuildEnvelopeInput {
-  tenantId:    string
+  tenantId: string
   /** Absolute path to the evidence storage root e.g. <projectRoot>/packages/server/data/evidence. */
   storageRoot: string
-  signer:      Signer
+  signer: Signer
 }
 
 export async function sealEvidence(i: SealEvidenceInput): Promise<SealedEvidence> {
   const draft = buildEnvelope({
-    header:       i.header,
-    proposal:     i.proposal,
-    annotation:   i.annotation,
-    plan:         i.plan,
-    approval:     i.approval,
-    execution:    i.execution,
+    header: i.header,
+    proposal: i.proposal,
+    annotation: i.annotation,
+    plan: i.plan,
+    approval: i.approval,
+    execution: i.execution,
     verification: i.verification,
-    audit:        i.audit,
+    audit: i.audit
   })
   const bytes = envelopeBodyBytes(draft)
   const contentHash = envelopeBodyHash(draft)
@@ -56,70 +56,83 @@ export async function sealEvidence(i: SealEvidenceInput): Promise<SealedEvidence
   const signed: EvidenceEnvelope = {
     ...draft,
     signature: {
-      alg:         i.signer.alg,
-      signerId:    i.signer.id,
-      value:       sig,
-      contentHash,
-    },
+      alg: i.signer.alg,
+      signerId: i.signer.id,
+      value: sig,
+      contentHash
+    }
   }
 
   const ts = new Date(i.header.createdAt)
   const yyyy = String(ts.getUTCFullYear()).padStart(4, "0")
-  const mm   = String(ts.getUTCMonth() + 1).padStart(2, "0")
+  const mm = String(ts.getUTCMonth() + 1).padStart(2, "0")
   const folderRel = join(yyyy, mm)
-  const envFile   = `${i.header.planId}.envelope.json`
-  const pdfFile   = `${i.header.planId}.evidence.pdf`
-  const envAbs    = join(i.storageRoot, folderRel, envFile)
-  const pdfAbs    = join(i.storageRoot, folderRel, pdfFile)
+  const envFile = `${i.header.planId}.envelope.json`
+  const pdfFile = `${i.header.planId}.evidence.pdf`
+  const envAbs = join(i.storageRoot, folderRel, envFile)
+  const pdfAbs = join(i.storageRoot, folderRel, pdfFile)
 
   mkdirSync(dirname(envAbs), { recursive: true })
   writeFileSync(envAbs, JSON.stringify(signed, null, 2), "utf-8")
   writeFileSync(pdfAbs, renderEvidencePdf(signed))
 
   const id = randomUUID()
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO sync_evidence (id, tenant_id, plan_id, proposal_id, envelope_path, pdf_path,
                                content_hash, signature_alg, signer_id, signature)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    id, i.tenantId, i.header.planId, i.header.proposalId,
-    join(folderRel, envFile), join(folderRel, pdfFile),
-    contentHash, i.signer.alg, i.signer.id, sig,
-  )
+  `
+    )
+    .run(
+      id,
+      i.tenantId,
+      i.header.planId,
+      i.header.proposalId,
+      join(folderRel, envFile),
+      join(folderRel, pdfFile),
+      contentHash,
+      i.signer.alg,
+      i.signer.id,
+      sig
+    )
 
   return {
     id,
     envelopePath: join(folderRel, envFile),
-    pdfPath:      join(folderRel, pdfFile),
+    pdfPath: join(folderRel, pdfFile),
     contentHash,
-    envelope:     signed,
+    envelope: signed
   }
 }
 
 // ── lookup ──────────────────────────────────────────────────────
 
 export interface EvidenceIndexRow {
-  id:            string
-  tenant_id:     string
-  plan_id:       string
-  proposal_id:   string | null
+  id: string
+  tenant_id: string
+  plan_id: string
+  proposal_id: string | null
   envelope_path: string
-  pdf_path:      string | null
-  content_hash:  string
+  pdf_path: string | null
+  content_hash: string
   signature_alg: string
-  signer_id:     string
-  signature:     string
-  created_at:    string
+  signer_id: string
+  signature: string
+  created_at: string
 }
 
 export function getEvidenceByPlan(planId: string): EvidenceIndexRow | null {
-  return (getDb().prepare(
-    `SELECT * FROM sync_evidence WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1`,
-  ).get(planId) as EvidenceIndexRow | undefined) ?? null
+  return (
+    (getDb()
+      .prepare(`SELECT * FROM sync_evidence WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1`)
+      .get(planId) as EvidenceIndexRow | undefined) ?? null
+  )
 }
 
 export function listEvidence(tenantId: string, limit = 100): EvidenceIndexRow[] {
-  return getDb().prepare(
-    `SELECT * FROM sync_evidence WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?`,
-  ).all(tenantId, limit) as EvidenceIndexRow[]
+  return getDb()
+    .prepare(`SELECT * FROM sync_evidence WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?`)
+    .all(tenantId, limit) as EvidenceIndexRow[]
 }

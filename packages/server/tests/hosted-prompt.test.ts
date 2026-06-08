@@ -40,21 +40,21 @@ describe("hosted prompt redaction", () => {
     created.push(sandboxRoot)
 
     const runWorkspace: RunWorkspaceContext = {
-      runId:         "run-1",
+      runId: "run-1",
       sourceRoot,
       executionRoot: sandboxRoot,
-      taskType:      "analysis_or_chat",
-      isolated:      true,
-      profile:       "hosted",
+      taskType: "analysis_or_chat",
+      isolated: true,
+      profile: "hosted"
     }
 
     const messages = await buildSystemMessages({
-      goal:         "summarize the dataset",
+      goal: "summarize the dataset",
       systemPrompt: undefined,
-      allTools:     [] as Tool[],
+      allTools: [] as Tool[],
       runWorkspace,
-      perTier:      emptyTier(),
-      runId:        "run-1",
+      perTier: emptyTier(),
+      runId: "run-1"
     })
 
     const joined = messages.map((m) => m.content).join("\n---\n")
@@ -72,22 +72,22 @@ describe("hosted prompt redaction", () => {
     const sourceRoot = await createWorkspaceWithSecrets()
 
     const runWorkspace: RunWorkspaceContext = {
-      runId:         "run-2",
+      runId: "run-2",
       sourceRoot,
       executionRoot: sourceRoot,
-      taskType:      "analysis_or_chat",
-      isolated:      false,
-      profile:       "developer",
+      taskType: "analysis_or_chat",
+      isolated: false,
+      profile: "developer"
     }
 
     const messages = await buildSystemMessages({
-      goal:         "summarize the dataset",
+      goal: "summarize the dataset",
       systemPrompt: undefined,
-      allTools:     [] as Tool[],
+      allTools: [] as Tool[],
       runWorkspace,
-      perTier:      emptyTier(),
-      runId:        "run-2",
-      isAdmin:      true,
+      perTier: emptyTier(),
+      runId: "run-2",
+      isAdmin: true
     })
 
     const joined = messages.map((m) => m.content).join("\n---\n")
@@ -101,22 +101,22 @@ describe("hosted prompt redaction", () => {
     const sourceRoot = await createWorkspaceWithSecrets()
 
     const runWorkspace: RunWorkspaceContext = {
-      runId:         "run-3",
+      runId: "run-3",
       sourceRoot,
       executionRoot: sourceRoot,
-      taskType:      "analysis_or_chat",
-      isolated:      false,
-      profile:       "developer",
+      taskType: "analysis_or_chat",
+      isolated: false,
+      profile: "developer"
     }
 
     const messages = await buildSystemMessages({
-      goal:         "summarize the dataset",
+      goal: "summarize the dataset",
       systemPrompt: undefined,
-      allTools:     [] as Tool[],
+      allTools: [] as Tool[],
       runWorkspace,
-      perTier:      emptyTier(),
-      runId:        "run-3",
-      isAdmin:      false,
+      perTier: emptyTier(),
+      runId: "run-3",
+      isAdmin: false
     })
 
     const joined = messages.map((m) => m.content).join("\n---\n")

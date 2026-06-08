@@ -5,9 +5,9 @@
  */
 import { beforeEach, describe, expect, it } from "vitest"
 import {
-    _resetPromptVarsCache,
-    buildPromptVars,
-    renderPromptVars,
+  _resetPromptVarsCache,
+  buildPromptVars,
+  renderPromptVars
 } from "../src/application/shell/loop-cluster/prompt-vars.js"
 import { resetTenantConfig, setTenantConfig } from "../src/application/shell/tenant-config.js"
 

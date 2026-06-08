@@ -109,10 +109,10 @@ export interface SectionSpec {
 
 export const BASE_SECTION_SPECS: readonly SectionSpec[] = [
   { key: BaseSectionKey.System, weight: 0.25, minChars: 2_048, maxChars: 40_000 },
-  { key: BaseSectionKey.Memory, weight: 0.20, minChars: 1_536, maxChars: 30_000 },
+  { key: BaseSectionKey.Memory, weight: 0.2, minChars: 1_536, maxChars: 30_000 },
   { key: BaseSectionKey.History, weight: 0.35, minChars: 2_048, maxChars: 50_000 },
   { key: BaseSectionKey.User, weight: 0.12, minChars: 1_536, maxChars: 16_000 },
-  { key: BaseSectionKey.Other, weight: 0.08, minChars: 512, maxChars: 12_000 },
+  { key: BaseSectionKey.Other, weight: 0.08, minChars: 512, maxChars: 12_000 }
 ]
 
 export const SECTION_ORDER: readonly PromptBudgetSection[] = [
@@ -123,7 +123,7 @@ export const SECTION_ORDER: readonly PromptBudgetSection[] = [
   "memory_episodic",
   "memory_semantic",
   "history",
-  "user",
+  "user"
 ]
 
 export interface SectionBehavior {
@@ -139,5 +139,5 @@ export const SECTION_BEHAVIOR: Record<PromptBudgetSection, SectionBehavior> = {
   memory_episodic: { dropAllowed: true, newestFirst: true },
   memory_semantic: { dropAllowed: true, newestFirst: true },
   history: { dropAllowed: true, newestFirst: true },
-  user: { dropAllowed: false, newestFirst: false },
+  user: { dropAllowed: false, newestFirst: false }
 }

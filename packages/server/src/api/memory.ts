@@ -3,162 +3,228 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { getEffectStats, getFileHistory, getRunEffects, getRunSnapshots, previewRollback, rollbackRun } from "../adapters/effects/index.js"
-import { clearAllMemories, consolidate, getMemoryStats, listMemories, prune, retrieveContext, searchEntries, searchProcedures, type MemoryTier } from "../adapters/persistence/memory.js"
+import {
+  getEffectStats,
+  getFileHistory,
+  getRunEffects,
+  getRunSnapshots,
+  previewRollback,
+  rollbackRun
+} from "../adapters/effects/index.js"
+import {
+  clearAllMemories,
+  consolidate,
+  getMemoryStats,
+  listMemories,
+  prune,
+  retrieveContext,
+  searchEntries,
+  searchProcedures,
+  type MemoryTier
+} from "../adapters/persistence/memory.js"
 import type { AgentOrchestrator } from "../application/shell/agent-orchestrator.js"
-import { compareTrajectories, loadTrajectory, replay, summarizeTrajectory, type Mutation } from "../trajectory/index.js"
+import {
+  compareTrajectories,
+  loadTrajectory,
+  replay,
+  summarizeTrajectory,
+  type Mutation
+} from "../trajectory/index.js"
 
 export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentOrchestrator): void {
-	const tenantScope = (req: { session: { isAdmin: boolean; upn: string } }): string | undefined => req.session.isAdmin ? undefined : req.session.upn
+  const tenantScope = (req: { session: { isAdmin: boolean; upn: string } }): string | undefined =>
+    req.session.isAdmin ? undefined : req.session.upn
 
-	app.post<{ Body: { query: string; tier?: MemoryTier; maxItems?: number } }>("/api/memory/search", async (req, reply) => {
-		const { query, tier, maxItems } = req.body
-		if (!query || typeof query !== "string") {
-			reply.code(400)
-			return { error: "query is required" }
-		}
-		const limit = maxItems ?? 20
-		const results = await searchEntries(query, { tier, budget: { maxTokens: 8000, maxItems: limit }, sessionId: req.session?.sid, upn: tenantScope(req) })
-		return results.map((result) => ({
-			id: result.entry.id,
-			tier: result.entry.tier,
-			content: result.entry.content,
-			metadata: result.entry.metadata,
-			source: result.entry.source,
-			confidence: result.entry.confidence,
-			accessCount: result.entry.accessCount,
-			rank: result.relevance,
-			score: result.combined,
-			createdAt: result.entry.createdAt,
-		}))
-	})
+  app.post<{ Body: { query: string; tier?: MemoryTier; maxItems?: number } }>(
+    "/api/memory/search",
+    async (req, reply) => {
+      const { query, tier, maxItems } = req.body
+      if (!query || typeof query !== "string") {
+        reply.code(400)
+        return { error: "query is required" }
+      }
+      const limit = maxItems ?? 20
+      const results = await searchEntries(query, {
+        tier,
+        budget: { maxTokens: 8000, maxItems: limit },
+        sessionId: req.session?.sid,
+        upn: tenantScope(req)
+      })
+      return results.map((result) => ({
+        id: result.entry.id,
+        tier: result.entry.tier,
+        content: result.entry.content,
+        metadata: result.entry.metadata,
+        source: result.entry.source,
+        confidence: result.entry.confidence,
+        accessCount: result.entry.accessCount,
+        rank: result.relevance,
+        score: result.combined,
+        createdAt: result.entry.createdAt
+      }))
+    }
+  )
 
-	app.get<{ Querystring: { tier?: MemoryTier; limit?: string } }>("/api/memory", async (req) => {
-		const tier = req.query.tier
-		const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50
-		const memories = listMemories(tier, limit, { upn: tenantScope(req) })
-		return memories.map((memory) => ({
-			id: memory.id,
-			tier: memory.tier,
-			content: memory.content,
-			metadata: memory.metadata,
-			source: memory.source,
-			confidence: memory.confidence,
-			accessCount: memory.accessCount,
-			createdAt: memory.createdAt,
-		}))
-	})
+  app.get<{ Querystring: { tier?: MemoryTier; limit?: string } }>("/api/memory", async (req) => {
+    const tier = req.query.tier
+    const limit = req.query.limit ? parseInt(req.query.limit, 10) : 50
+    const memories = listMemories(tier, limit, { upn: tenantScope(req) })
+    return memories.map((memory) => ({
+      id: memory.id,
+      tier: memory.tier,
+      content: memory.content,
+      metadata: memory.metadata,
+      source: memory.source,
+      confidence: memory.confidence,
+      accessCount: memory.accessCount,
+      createdAt: memory.createdAt
+    }))
+  })
 
-	app.get("/api/memory/stats", async (req) => getMemoryStats({ upn: tenantScope(req) }))
+  app.get("/api/memory/stats", async (req) => getMemoryStats({ upn: tenantScope(req) }))
 
-	app.post<{ Body: { goal: string } }>("/api/memory/preview", async (req, reply) => {
-		const { goal } = req.body
-		if (!goal || typeof goal !== "string") {
-			reply.code(400)
-			return { error: "goal is required" }
-		}
-		const { context, results } = await retrieveContext(goal, { upn: tenantScope(req), sessionId: req.session?.sid })
-		return {
-			context,
-			resultCount: results.length,
-			results: results.map((result) => ({
-				tier: result.entry.tier,
-				role: result.entry.role,
-				content: result.entry.content.slice(0, 200),
-				confidence: result.entry.confidence,
-				relevance: result.relevance,
-				recency: result.recency,
-				combined: result.combined,
-			})),
-		}
-	})
+  app.post<{ Body: { goal: string } }>("/api/memory/preview", async (req, reply) => {
+    const { goal } = req.body
+    if (!goal || typeof goal !== "string") {
+      reply.code(400)
+      return { error: "goal is required" }
+    }
+    const { context, results } = await retrieveContext(goal, {
+      upn: tenantScope(req),
+      sessionId: req.session?.sid
+    })
+    return {
+      context,
+      resultCount: results.length,
+      results: results.map((result) => ({
+        tier: result.entry.tier,
+        role: result.entry.role,
+        content: result.entry.content.slice(0, 200),
+        confidence: result.entry.confidence,
+        relevance: result.relevance,
+        recency: result.recency,
+        combined: result.combined
+      }))
+    }
+  })
 
-	app.post<{ Body: { goal: string; limit?: number } }>("/api/memory/procedures", async (req, reply) => {
-		const { goal, limit } = req.body
-		if (!goal || typeof goal !== "string") {
-			reply.code(400)
-			return { error: "goal is required" }
-		}
-		const procedures = searchProcedures(goal, limit ?? 5, tenantScope(req), req.session?.sid)
-		return procedures.map((procedure) => ({
-			id: procedure.id,
-			trigger: procedure.trigger,
-			toolSequence: procedure.toolSequence,
-			successCount: procedure.successCount,
-			failureCount: procedure.failureCount,
-			createdAt: procedure.createdAt,
-		}))
-	})
+  app.post<{ Body: { goal: string; limit?: number } }>("/api/memory/procedures", async (req, reply) => {
+    const { goal, limit } = req.body
+    if (!goal || typeof goal !== "string") {
+      reply.code(400)
+      return { error: "goal is required" }
+    }
+    const procedures = searchProcedures(goal, limit ?? 5, tenantScope(req), req.session?.sid)
+    return procedures.map((procedure) => ({
+      id: procedure.id,
+      trigger: procedure.trigger,
+      toolSequence: procedure.toolSequence,
+      successCount: procedure.successCount,
+      failureCount: procedure.failureCount,
+      createdAt: procedure.createdAt
+    }))
+  })
 
-	app.post("/api/memory/consolidate", async (req, reply) => {
-		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin required" } }
-		return consolidate()
-	})
+  app.post("/api/memory/consolidate", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin required" }
+    }
+    return consolidate()
+  })
 
-	app.post("/api/memory/prune", async (req, reply) => {
-		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin required" } }
-		return prune()
-	})
+  app.post("/api/memory/prune", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin required" }
+    }
+    return prune()
+  })
 
-	app.delete("/api/memory", async (req, reply) => {
-		if (!req.session?.isAdmin) { reply.code(403); return { error: "admin required" } }
-		clearAllMemories()
-		return { ok: true }
-	})
+  app.delete("/api/memory", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin required" }
+    }
+    clearAllMemories()
+    return { ok: true }
+  })
 
-	app.get<{ Params: { runId: string } }>("/api/trajectory/:runId", async (req) => loadTrajectory(req.params.runId))
-	app.get<{ Params: { runId: string } }>("/api/trajectory/:runId/summary", async (req) => ({ summary: summarizeTrajectory(req.params.runId) }))
-	app.post<{ Params: { runId: string }; Body: { mutations?: Mutation[] } }>("/api/trajectory/:runId/replay", async (req) => {
-		const result = replay(req.params.runId, req.body.mutations)
-		return { valid: result.valid, violations: result.violations, scorecard: result.scorecard, eventCount: result.trajectory.events.length }
-	})
-	app.post<{ Body: { runIdA: string; runIdB: string } }>("/api/trajectory/compare", async (req, reply) => {
-		const { runIdA, runIdB } = req.body
-		if (!runIdA || !runIdB) {
-			reply.code(400)
-			return { error: "runIdA and runIdB are required" }
-		}
-		return compareTrajectories(runIdA, runIdB)
-	})
+  app.get<{ Params: { runId: string } }>("/api/trajectory/:runId", async (req) =>
+    loadTrajectory(req.params.runId)
+  )
+  app.get<{ Params: { runId: string } }>("/api/trajectory/:runId/summary", async (req) => ({
+    summary: summarizeTrajectory(req.params.runId)
+  }))
+  app.post<{ Params: { runId: string }; Body: { mutations?: Mutation[] } }>(
+    "/api/trajectory/:runId/replay",
+    async (req) => {
+      const result = replay(req.params.runId, req.body.mutations)
+      return {
+        valid: result.valid,
+        violations: result.violations,
+        scorecard: result.scorecard,
+        eventCount: result.trajectory.events.length
+      }
+    }
+  )
+  app.post<{ Body: { runIdA: string; runIdB: string } }>("/api/trajectory/compare", async (req, reply) => {
+    const { runIdA, runIdB } = req.body
+    if (!runIdA || !runIdB) {
+      reply.code(400)
+      return { error: "runIdA and runIdB are required" }
+    }
+    return compareTrajectories(runIdA, runIdB)
+  })
 
-	app.get<{ Params: { runId: string } }>("/api/effects/:runId", async (req) => getRunEffects(req.params.runId).map((effect) => ({
-		id: effect.id,
-		seq: effect.seq,
-		kind: effect.kind,
-		tool: effect.tool,
-		target: effect.target,
-		preHash: effect.preHash,
-		postHash: effect.postHash,
-		status: effect.status,
-		metadata: effect.metadata,
-		createdAt: effect.createdAt,
-	})))
-	app.get<{ Params: { runId: string } }>("/api/effects/:runId/stats", async (req) => getEffectStats(req.params.runId))
-	app.get<{ Params: { runId: string } }>("/api/effects/:runId/snapshots", async (req) => getRunSnapshots(req.params.runId).map((snapshot) => ({
-		id: snapshot.id,
-		effectId: snapshot.effectId,
-		filePath: snapshot.filePath,
-		hasContent: snapshot.content !== null,
-		hash: snapshot.hash,
-		createdAt: snapshot.createdAt,
-	})))
-	app.post<{ Body: { filePath: string } }>("/api/effects/file-history", async (req, reply) => {
-		const { filePath } = req.body
-		if (!filePath || typeof filePath !== "string") {
-			reply.code(400)
-			return { error: "filePath is required" }
-		}
-		return getFileHistory(filePath).map((effect) => ({
-			id: effect.id,
-			runId: effect.runId,
-			kind: effect.kind,
-			tool: effect.tool,
-			status: effect.status,
-			preHash: effect.preHash,
-			postHash: effect.postHash,
-			createdAt: effect.createdAt,
-		}))
-	})
-	app.get<{ Params: { runId: string } }>("/api/effects/:runId/rollback-preview", async (req) => previewRollback(req.params.runId))
-	app.post<{ Params: { runId: string } }>("/api/effects/:runId/rollback", async (req) => rollbackRun(req.params.runId))
+  app.get<{ Params: { runId: string } }>("/api/effects/:runId", async (req) =>
+    getRunEffects(req.params.runId).map((effect) => ({
+      id: effect.id,
+      seq: effect.seq,
+      kind: effect.kind,
+      tool: effect.tool,
+      target: effect.target,
+      preHash: effect.preHash,
+      postHash: effect.postHash,
+      status: effect.status,
+      metadata: effect.metadata,
+      createdAt: effect.createdAt
+    }))
+  )
+  app.get<{ Params: { runId: string } }>("/api/effects/:runId/stats", async (req) =>
+    getEffectStats(req.params.runId)
+  )
+  app.get<{ Params: { runId: string } }>("/api/effects/:runId/snapshots", async (req) =>
+    getRunSnapshots(req.params.runId).map((snapshot) => ({
+      id: snapshot.id,
+      effectId: snapshot.effectId,
+      filePath: snapshot.filePath,
+      hasContent: snapshot.content !== null,
+      hash: snapshot.hash,
+      createdAt: snapshot.createdAt
+    }))
+  )
+  app.post<{ Body: { filePath: string } }>("/api/effects/file-history", async (req, reply) => {
+    const { filePath } = req.body
+    if (!filePath || typeof filePath !== "string") {
+      reply.code(400)
+      return { error: "filePath is required" }
+    }
+    return getFileHistory(filePath).map((effect) => ({
+      id: effect.id,
+      runId: effect.runId,
+      kind: effect.kind,
+      tool: effect.tool,
+      status: effect.status,
+      preHash: effect.preHash,
+      postHash: effect.postHash,
+      createdAt: effect.createdAt
+    }))
+  })
+  app.get<{ Params: { runId: string } }>("/api/effects/:runId/rollback-preview", async (req) =>
+    previewRollback(req.params.runId)
+  )
+  app.post<{ Params: { runId: string } }>("/api/effects/:runId/rollback", async (req) =>
+    rollbackRun(req.params.runId)
+  )
 }

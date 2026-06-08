@@ -1,6 +1,9 @@
 // ── Query validation ─────────────────────────────────────────────
 
-import { DOCTRINE_FIX_HINTS, getDoctrineLessonTemplate } from "../../application/core/doctrine-cluster/fix-hints.js"
+import {
+  DOCTRINE_FIX_HINTS,
+  getDoctrineLessonTemplate
+} from "../../application/core/doctrine-cluster/fix-hints.js"
 import { getTenantConfig } from "../../application/shell/tenant-config.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
 import type { CatalogAccessor } from "../catalog/index.js"
@@ -16,7 +19,7 @@ import {
   listSchemas,
   persistedMirrorOf,
   primaryKeyColumns,
-  unionBranchCount,
+  unionBranchCount
 } from "../catalog/queries.js"
 
 /** Appends a doctrine-owned fixHint to an error string, when one is registered. */
@@ -42,7 +45,7 @@ const DANGEROUS_PATTERNS = [
   /BULK\s+INSERT/i,
   /DBCC\b/i,
   /SHUTDOWN\b/i,
-  /RECONFIGURE\b/i,
+  /RECONFIGURE\b/i
 ]
 
 // Statements that mutate a non-temp object. Used to scan multi-statement batches —
@@ -60,18 +63,30 @@ const DANGEROUS_PATTERNS = [
 const MUTATION_PATTERNS: { re: RegExp; label: string }[] = [
   // CREATE/DROP INDEX: the index name comes first, the *target* table/view name
   // follows ON — that is what the temp-only constraint must apply to.
-  { re: /\bCREATE\s+(?:UNIQUE\s+)?(?:CLUSTERED\s+|NONCLUSTERED\s+)?INDEX\s+\[?\w+\]?\s+ON\s+(\[?[#\w.]+\]?)/gi, label: "CREATE INDEX" },
-  { re: /\bDROP\s+INDEX\s+(?:IF\s+EXISTS\s+)?\[?\w+\]?\s+ON\s+(\[?[#\w.]+\]?)/gi,                                label: "DROP INDEX" },
+  {
+    re: /\bCREATE\s+(?:UNIQUE\s+)?(?:CLUSTERED\s+|NONCLUSTERED\s+)?INDEX\s+\[?\w+\]?\s+ON\s+(\[?[#\w.]+\]?)/gi,
+    label: "CREATE INDEX"
+  },
+  { re: /\bDROP\s+INDEX\s+(?:IF\s+EXISTS\s+)?\[?\w+\]?\s+ON\s+(\[?[#\w.]+\]?)/gi, label: "DROP INDEX" },
   // CREATE/DROP/ALTER on objects whose name follows the keyword directly.
-  { re: /\bCREATE\s+(?:OR\s+ALTER\s+)?(?:TABLE|VIEW|PROCEDURE|PROC|FUNCTION|TRIGGER|SCHEMA|DATABASE)\s+(\[?[#\w.]+\]?)/gi, label: "CREATE" },
-  { re: /\bDROP\s+(?:TABLE|VIEW|PROCEDURE|PROC|FUNCTION|TRIGGER|SCHEMA|DATABASE)\s+(?:IF\s+EXISTS\s+)?(\[?[#\w.]+\]?)/gi,   label: "DROP" },
-  { re: /\bTRUNCATE\s+TABLE\s+(\[?[#\w.]+\]?)/gi,                                                                              label: "TRUNCATE" },
-  { re: /\bALTER\s+(?:TABLE|VIEW|PROCEDURE|PROC|FUNCTION|TRIGGER|SCHEMA|DATABASE)\s+(\[?[#\w.]+\]?)/gi,                       label: "ALTER" },
-  { re: /\bINSERT\s+INTO\s+(\[?[#\w.]+\]?)/gi,                                                                                  label: "INSERT" },
-  { re: /\bUPDATE\s+(\[?[#\w.]+\]?)/gi,                                                                                         label: "UPDATE" },
-  { re: /\bDELETE\s+FROM\s+(\[?[#\w.]+\]?)/gi,                                                                                  label: "DELETE" },
-  { re: /\bSELECT\b[\s\S]*?\bINTO\s+(\[?[#\w.]+\]?)\s+FROM\b/gi,                                                                label: "SELECT INTO" },
-  { re: /\bMERGE\s+(?:INTO\s+)?(\[?[#\w.]+\]?)/gi,                                                                              label: "MERGE" },
+  {
+    re: /\bCREATE\s+(?:OR\s+ALTER\s+)?(?:TABLE|VIEW|PROCEDURE|PROC|FUNCTION|TRIGGER|SCHEMA|DATABASE)\s+(\[?[#\w.]+\]?)/gi,
+    label: "CREATE"
+  },
+  {
+    re: /\bDROP\s+(?:TABLE|VIEW|PROCEDURE|PROC|FUNCTION|TRIGGER|SCHEMA|DATABASE)\s+(?:IF\s+EXISTS\s+)?(\[?[#\w.]+\]?)/gi,
+    label: "DROP"
+  },
+  { re: /\bTRUNCATE\s+TABLE\s+(\[?[#\w.]+\]?)/gi, label: "TRUNCATE" },
+  {
+    re: /\bALTER\s+(?:TABLE|VIEW|PROCEDURE|PROC|FUNCTION|TRIGGER|SCHEMA|DATABASE)\s+(\[?[#\w.]+\]?)/gi,
+    label: "ALTER"
+  },
+  { re: /\bINSERT\s+INTO\s+(\[?[#\w.]+\]?)/gi, label: "INSERT" },
+  { re: /\bUPDATE\s+(\[?[#\w.]+\]?)/gi, label: "UPDATE" },
+  { re: /\bDELETE\s+FROM\s+(\[?[#\w.]+\]?)/gi, label: "DELETE" },
+  { re: /\bSELECT\b[\s\S]*?\bINTO\s+(\[?[#\w.]+\]?)\s+FROM\b/gi, label: "SELECT INTO" },
+  { re: /\bMERGE\s+(?:INTO\s+)?(\[?[#\w.]+\]?)/gi, label: "MERGE" }
 ]
 
 /** Returns {name, label} for any mutation statement whose target is NOT a local #temp table. */
@@ -118,13 +133,10 @@ export function _resetLargeObjectCache(): void {
  * Delegates to the catalog facade so the threshold and shape rules stay
  * defined in one place. Returns false when no catalog is loaded.
  */
-export function isLargeObject(
-  qualifiedName: string,
-  accessor?: () => unknown,
-): boolean {
+export function isLargeObject(qualifiedName: string, accessor?: () => unknown): boolean {
   return catalogIsLargeObject(qualifiedName, {
     threshold: getTenantConfig().largeObjectRows,
-    accessor: accessor as never,
+    accessor: accessor as never
   })
 }
 
@@ -135,9 +147,7 @@ export function isLargeObject(
  * table or growing a view past the threshold takes effect immediately.
  */
 function* iterateObjectRefs(query: string): IterableIterator<string> {
-  const stripped = query
-    .replace(/--[^\r\n]*/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
+  const stripped = query.replace(/--[^\r\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "")
   // 2-part: [schema].[name] / schema.name (`name` may itself contain a dot
   // when bracketed — e.g. mirrorSchema.[publish.Revenue]).
   const re = /\[?(\w+)\]?\.\[?([\w]+(?:\.\w+)?)\]?/g
@@ -223,15 +233,17 @@ export interface QueryValidationDiagnostics {
 function analyzeTempTableBatch(query: string): TempTableBatchAnalysis {
   const refs = extractLocalTempRefs(query)
   const created = extractCreatedLocalTemps(query)
-  const malformedSuffixes = refs.filter((name) => /_[A-Fa-f0-9]+$/.test(name) && !/_([A-Fa-f0-9]{8})$/.test(name))
-  const missingCreations = created.length > 0
-    ? refs.filter((name) => !created.includes(name))
-    : []
-  const suffixes = Array.from(new Set(
-    refs
-      .map((name) => /_([A-Fa-f0-9]{8})$/.exec(name)?.[1]?.toLowerCase() ?? null)
-      .filter((suffix): suffix is string => suffix !== null),
-  ))
+  const malformedSuffixes = refs.filter(
+    (name) => /_[A-Fa-f0-9]+$/.test(name) && !/_([A-Fa-f0-9]{8})$/.test(name)
+  )
+  const missingCreations = created.length > 0 ? refs.filter((name) => !created.includes(name)) : []
+  const suffixes = Array.from(
+    new Set(
+      refs
+        .map((name) => /_([A-Fa-f0-9]{8})$/.exec(name)?.[1]?.toLowerCase() ?? null)
+        .filter((suffix): suffix is string => suffix !== null)
+    )
+  )
   return { refs, created, suffixes, malformedSuffixes, missingCreations }
 }
 
@@ -297,7 +309,9 @@ function findTempSubqueries(query: string): TempSubqueryFinding[] {
     const before = text.slice(Math.max(0, i - 40), i)
     const lastTokenMatch = /([A-Za-z_][\w]*)\s*$/.exec(before)
     const lastToken = lastTokenMatch?.[1]?.toUpperCase() ?? ""
-    const isSetOrDerived = /^(IN|EXISTS|ANY|SOME|ALL|FROM|JOIN|AS|APPLY|UNION|INTERSECT|EXCEPT)$/.test(lastToken)
+    const isSetOrDerived = /^(IN|EXISTS|ANY|SOME|ALL|FROM|JOIN|AS|APPLY|UNION|INTERSECT|EXCEPT)$/.test(
+      lastToken
+    )
 
     // Body shape: scalar requires aggregate or TOP 1, AND a single select-list column
     const selectListMatch = /\bSELECT\s+(?:DISTINCT\s+|TOP\s+\d+\s+)?([\s\S]*?)\s+FROM\b/i.exec(body)
@@ -384,8 +398,14 @@ function outerFromTargets(stmt: string): string[] {
   let m: RegExpExecArray | null
   while ((m = re.exec(stmt)) !== null) {
     const token = m[0][0]
-    if (token === "(") { depth++; continue }
-    if (token === ")") { depth = Math.max(0, depth - 1); continue }
+    if (token === "(") {
+      depth++
+      continue
+    }
+    if (token === ")") {
+      depth = Math.max(0, depth - 1)
+      continue
+    }
     if (depth === 0 && m[1] && m[2]) out.push(`${m[1].toLowerCase()}.${m[2].toLowerCase()}`)
   }
   return out
@@ -393,7 +413,7 @@ function outerFromTargets(stmt: string): string[] {
 
 export function detectWideUnionViewTopnWithoutBranchAggregation(
   query: string,
-  options: { accessor?: CatalogAccessor } = {},
+  options: { accessor?: CatalogAccessor } = {}
 ): WideUnionViewTopnOffender | null {
   const tc = getTenantConfig()
   const stripped = stripForScan(query)
@@ -407,7 +427,13 @@ export function detectWideUnionViewTopnWithoutBranchAggregation(
     const groupBody = groupByMatch[1]
 
     for (const fromTarget of outerFromTargets(stmt)) {
-      if (!isExpensiveUnionView(fromTarget, { accessor: options.accessor, threshold: tc.unionBranchThreshold })) continue
+      if (
+        !isExpensiveUnionView(fromTarget, {
+          accessor: options.accessor,
+          threshold: tc.unionBranchThreshold
+        })
+      )
+        continue
       // Catalog says this FROM target is a wide UNION view. Check whether
       // GROUP BY mentions any of its high-cardinality keys.
       const highCardKeys = highCardinalityKeyColumns(fromTarget, { accessor: options.accessor })
@@ -415,7 +441,10 @@ export function detectWideUnionViewTopnWithoutBranchAggregation(
       let matchedKey: string | null = null
       for (const key of highCardKeys) {
         const keyRe = new RegExp(`\\b${escapeRegExp(key)}\\b`, "i")
-        if (keyRe.test(groupBody)) { matchedKey = key; break }
+        if (keyRe.test(groupBody)) {
+          matchedKey = key
+          break
+        }
       }
       if (!matchedKey) continue
 
@@ -424,14 +453,14 @@ export function detectWideUnionViewTopnWithoutBranchAggregation(
       // each branch).
       const narrowingJoin = new RegExp(
         `\\bJOIN\\s+#\\w+\\b[\\s\\S]{0,200}?\\bON\\b[\\s\\S]{0,200}?\\b${escapeRegExp(matchedKey)}\\b\\s*=`,
-        "i",
+        "i"
       ).test(stmt)
       if (narrowingJoin) continue
 
       return {
         object: canonicalQualifiedName(fromTarget, { accessor: options.accessor }),
         groupKey: matchedKey,
-        branchCount: unionBranchCount(fromTarget, { accessor: options.accessor }),
+        branchCount: unionBranchCount(fromTarget, { accessor: options.accessor })
       }
     }
   }
@@ -460,7 +489,7 @@ export type PublishViewTopnOffender = WideUnionViewTopnOffender
 // `SUM(COALESCE(col, 0)) / NULLIF(<MonthsExpected>, 0)`. The latter makes the
 // assumption visible.
 export interface AvgOfCoalesceZeroOffender {
-  readonly snippet: string  // the offending expression, trimmed for display
+  readonly snippet: string // the offending expression, trimmed for display
 }
 
 export function detectAvgOfCoalesceZero(query: string): AvgOfCoalesceZeroOffender[] {
@@ -509,16 +538,77 @@ export interface InventedColumnOffender {
 
 /** SQL keywords that must never be treated as an alias when seen left of `.col`. */
 const ALIAS_RESERVED_KEYWORDS = new Set([
-  "select", "from", "where", "join", "inner", "outer", "left", "right", "full",
-  "cross", "apply", "on", "as", "and", "or", "not", "in", "exists", "between",
-  "is", "null", "case", "when", "then", "else", "end", "by", "group", "order",
-  "having", "union", "intersect", "except", "with", "into", "values", "set",
-  "top", "distinct", "all", "any", "some", "over", "partition", "rows", "range",
-  "unbounded", "preceding", "following", "current", "row", "asc", "desc",
-  "option", "recompile", "maxdop", "nolock", "readonly", "tablock", "tablockx",
-  "holdlock", "updlock", "rowlock", "paglock", "index", "noexpand", "fastfirstrow",
+  "select",
+  "from",
+  "where",
+  "join",
+  "inner",
+  "outer",
+  "left",
+  "right",
+  "full",
+  "cross",
+  "apply",
+  "on",
+  "as",
+  "and",
+  "or",
+  "not",
+  "in",
+  "exists",
+  "between",
+  "is",
+  "null",
+  "case",
+  "when",
+  "then",
+  "else",
+  "end",
+  "by",
+  "group",
+  "order",
+  "having",
+  "union",
+  "intersect",
+  "except",
+  "with",
+  "into",
+  "values",
+  "set",
+  "top",
+  "distinct",
+  "all",
+  "any",
+  "some",
+  "over",
+  "partition",
+  "rows",
+  "range",
+  "unbounded",
+  "preceding",
+  "following",
+  "current",
+  "row",
+  "asc",
+  "desc",
+  "option",
+  "recompile",
+  "maxdop",
+  "nolock",
+  "readonly",
+  "tablock",
+  "tablockx",
+  "holdlock",
+  "updlock",
+  "rowlock",
+  "paglock",
+  "index",
+  "noexpand",
+  "fastfirstrow",
   // System schemas that are universal across MSSQL deployments.
-  "sys", "information_schema", "dbo",
+  "sys",
+  "information_schema",
+  "dbo"
 ])
 
 /**
@@ -538,13 +628,11 @@ function reservedAliasSet(): Set<string> {
 }
 
 /** Bare table/column tokens that almost certainly aren't real columns. */
-const NON_COLUMN_TOKEN = new Set([
-  "asc", "desc", "as", "and", "or", "is", "null", "on", "in", "from", "join",
-])
+const NON_COLUMN_TOKEN = new Set(["asc", "desc", "as", "and", "or", "is", "null", "on", "in", "from", "join"])
 
 interface AliasBinding {
   alias: string
-  qualifiedTable: string  // "schema.table" — guaranteed to exist in the catalog
+  qualifiedTable: string // "schema.table" — guaranteed to exist in the catalog
 }
 
 interface CatalogLike {
@@ -582,7 +670,7 @@ function nearestColumns(target: string, columns: ReadonlyArray<{ name: string }>
  */
 export function detectInventedColumns(
   query: string,
-  accessor: () => CatalogLike | null = EMPTY_CATALOG_ACCESSOR,
+  accessor: () => CatalogLike | null = EMPTY_CATALOG_ACCESSOR
 ): InventedColumnOffender[] {
   const catalog = accessor()
   if (!catalog) return []
@@ -615,11 +703,11 @@ export function detectInventedColumns(
     // CTE that re-uses the same alias letter as the outer query against a
     // different base table — accepted in exchange for catching the entire
     // hallucinated-column family at parse time instead of at SQL Server.
-    if (/\bFROM\s*\(\s*SELECT\b/i.test(stmt)) continue               // derived FROM
-    if (/\bJOIN\s*\(\s*SELECT\b/i.test(stmt)) continue               // derived JOIN
-    if (/\bUNION\b|\bINTERSECT\b|\bEXCEPT\b/i.test(stmt)) continue   // set ops
-    if (/\bsys\.|\bINFORMATION_SCHEMA\b/i.test(stmt)) continue       // system catalog
-    if (/\bOPENJSON\b|\bOPENROWSET\b|\bSTRING_SPLIT\b/i.test(stmt)) continue  // TVFs
+    if (/\bFROM\s*\(\s*SELECT\b/i.test(stmt)) continue // derived FROM
+    if (/\bJOIN\s*\(\s*SELECT\b/i.test(stmt)) continue // derived JOIN
+    if (/\bUNION\b|\bINTERSECT\b|\bEXCEPT\b/i.test(stmt)) continue // set ops
+    if (/\bsys\.|\bINFORMATION_SCHEMA\b/i.test(stmt)) continue // system catalog
+    if (/\bOPENJSON\b|\bOPENROWSET\b|\bSTRING_SPLIT\b/i.test(stmt)) continue // TVFs
 
     // Build alias map from FROM/JOIN <schema>.<table> [AS] <alias>.
     // Anchor on schema.table to avoid mis-parsing #temp / @var / single-name
@@ -633,14 +721,12 @@ export function detectInventedColumns(
       const aliasRaw = fm[3]
       const qualified = `${schema}.${table}`
       const catalogTable = catalog.getTable(qualified)
-      if (!catalogTable) continue   // Not in catalog → cannot validate; stay silent.
+      if (!catalogTable) continue // Not in catalog → cannot validate; stay silent.
 
       // Effective alias: explicit alias if given AND not a reserved keyword
       // (otherwise it's our regex eating the next clause: `FROM x.y WHERE` →
       // `aliasRaw=WHERE`). Fall back to bare table name.
-      const candidate = aliasRaw && !reservedAliases.has(aliasRaw.toLowerCase())
-        ? aliasRaw
-        : table
+      const candidate = aliasRaw && !reservedAliases.has(aliasRaw.toLowerCase()) ? aliasRaw : table
       aliasMap.set(candidate.toLowerCase(), { alias: candidate, qualifiedTable: qualified })
     }
 
@@ -667,7 +753,7 @@ export function detectInventedColumns(
         // 3-part `schema.table.col`
         const qualified = `${a}.${b}`
         const tbl = catalog.getTable(qualified)
-        if (!tbl) continue   // Unknown schema.table → can't claim "invented".
+        if (!tbl) continue // Unknown schema.table → can't claim "invented".
         table = qualified
         column = c
         referenceText = `${a}.${b}.${c}`
@@ -676,7 +762,7 @@ export function detectInventedColumns(
         const aliasLower = a.toLowerCase()
         if (reservedAliases.has(aliasLower)) continue
         const binding = aliasMap.get(aliasLower)
-        if (!binding) continue   // Unknown alias → silent.
+        if (!binding) continue // Unknown alias → silent.
         if (NON_COLUMN_TOKEN.has(b.toLowerCase())) continue
         // `alias.*` is whitespace by now; the regex won't match `*` anyway.
         table = binding.qualifiedTable
@@ -697,7 +783,7 @@ export function detectInventedColumns(
         reference: referenceText,
         table,
         column,
-        suggestions: nearestColumns(column, catalogTable.columns),
+        suggestions: nearestColumns(column, catalogTable.columns)
       })
     }
   }
@@ -748,7 +834,7 @@ const BRANCH_SAMPLE_COMMENT = /--\s*(sampled\s+\d+\s+of\s+\d+|branches?\s*:|bran
  */
 export function detectLineageBranchCoverage(
   query: string,
-  accessor: () => BranchCatalogLike | null = EMPTY_BRANCH_ACCESSOR,
+  accessor: () => BranchCatalogLike | null = EMPTY_BRANCH_ACCESSOR
 ): BranchCoverageGap[] {
   if (BRANCH_SAMPLE_COMMENT.test(query)) return []
 
@@ -789,7 +875,7 @@ export function detectLineageBranchCoverage(
     gaps.push({
       parent,
       referenced: [...refs].sort(),
-      totalBranches: total,
+      totalBranches: total
     })
   }
   return gaps.sort((a, b) => a.parent.localeCompare(b.parent))
@@ -812,7 +898,7 @@ export function detectLineageBranchCoverage(
  */
 export function detectBigViewWithoutProfile(
   _query: string,
-  _profiledTables: ReadonlySet<string> | null,
+  _profiledTables: ReadonlySet<string> | null
 ): string[] {
   return []
 }
@@ -852,22 +938,26 @@ export interface RankingReportingMismatch {
   readonly bigViews: string[]
 }
 
-export function detectRankingVsReportingMismatch(query: string, accessor?: CatalogAccessor): RankingReportingMismatch | null {
+export function detectRankingVsReportingMismatch(
+  query: string,
+  accessor?: CatalogAccessor
+): RankingReportingMismatch | null {
   if (UNIVERSES_INTENTIONAL_COMMENT.test(query)) return null
-  const stripped = query
-    .replace(/--[^\r\n]*/g, "")
-    .replace(/\/\*[\s\S]*?\*\//g, "")
+  const stripped = query.replace(/--[^\r\n]*/g, "").replace(/\/\*[\s\S]*?\*\//g, "")
   if (!TEMP_TABLE_REF.test(stripped)) return null
   if (!AGGREGATE_IN_SELECT.test(stripped)) return null
   const tc = getTenantConfig()
   const bigViews = referencedLargeObjects(query, accessor).filter((r) =>
-    isExpensiveUnionView(r, { accessor, threshold: tc.unionBranchThreshold }),
+    isExpensiveUnionView(r, { accessor, threshold: tc.unionBranchThreshold })
   )
   if (bigViews.length === 0) return null
   return { tempTouched: true, bigViews }
 }
 
-export function analyzeMssqlQueryQuality(query: string, accessor?: CatalogAccessor): MssqlQueryQualityAnalysis {
+export function analyzeMssqlQueryQuality(
+  query: string,
+  accessor?: CatalogAccessor
+): MssqlQueryQualityAnalysis {
   const largeObjectRefs = Array.from(countReferencedLargeObjects(query, accessor).entries())
     .map(([name, count]) => ({ name, count }))
     .sort((a, b) => a.name.localeCompare(b.name))
@@ -897,7 +987,10 @@ export function analyzeMssqlQueryQuality(query: string, accessor?: CatalogAccess
   }
 
   const hasWhere = hasWhereClause(query)
-  const unsafeScanReason = isUnsafeScan(query, largeObjectRefs.map((entry) => entry.name))
+  const unsafeScanReason = isUnsafeScan(
+    query,
+    largeObjectRefs.map((entry) => entry.name)
+  )
   return {
     largeObjectRefs,
     usesPersistedMirrors,
@@ -909,13 +1002,14 @@ export function analyzeMssqlQueryQuality(query: string, accessor?: CatalogAccess
     tempTableSuffixes: temp.suffixes,
     malformedTempSuffixes: temp.malformedSuffixes,
     missingTempCreations: temp.missingCreations,
-    aggregateWarningCount: aggregateIssues.filter((issue) => issue.severity === AggregateSeverity.Warn).length,
+    aggregateWarningCount: aggregateIssues.filter((issue) => issue.severity === AggregateSeverity.Warn)
+      .length,
     aggregateBlockCount: aggregateIssues.filter((issue) => issue.severity === AggregateSeverity.Block).length,
     tempScalarSubqueryCount: countTempScalarSubqueries(query),
     stagePatternLikely:
       largeObjectRefs.length > 0 &&
       largeObjectRefs.every((entry) => entry.count <= 2) &&
-      temp.created.length > 0,
+      temp.created.length > 0
   }
 }
 
@@ -937,7 +1031,7 @@ function extractCreatedLocalTemps(query: string): string[] {
   const created: string[] = []
   const patterns = [
     /\bCREATE\s+TABLE\s+(#[A-Za-z_][\w]*)/gi,
-    /\bSELECT\b[\s\S]*?\bINTO\s+(#[A-Za-z_][\w]*)\s+FROM\b/gi,
+    /\bSELECT\b[\s\S]*?\bINTO\s+(#[A-Za-z_][\w]*)\s+FROM\b/gi
   ]
   for (const re of patterns) {
     re.lastIndex = 0
@@ -959,7 +1053,7 @@ export function validateTempTableBatch(query: string): string | null {
     return [
       `Query blocked — malformed #temp suffix (expected 8 hex chars): ${malformedSuffixTemps.join(", ")}.`,
       ``,
-      `Use names like \`#range_a3f91c08\` and reuse that exact 8-hex suffix across the whole batch.`,
+      `Use names like \`#range_a3f91c08\` and reuse that exact 8-hex suffix across the whole batch.`
     ].join("\n")
   }
 
@@ -969,7 +1063,7 @@ export function validateTempTableBatch(query: string): string | null {
         `Query blocked — local #temp table referenced without being created in the same batch: ${temp.missingCreations.join(", ")}.`,
         ``,
         `This usually means a typo or suffix drift (for example one reference says \`#balLines_ab12cd34\` and another says \`#balLines_ab12dc34\`).`,
-        `In pooled connections, assuming a #temp from a prior call still exists is unsafe. Create every #temp in the same batch that reads it, then DROP it at the end.`,
+        `In pooled connections, assuming a #temp from a prior call still exists is unsafe. Create every #temp in the same batch that reads it, then DROP it at the end.`
       ].join("\n")
     }
   }
@@ -979,7 +1073,7 @@ export function validateTempTableBatch(query: string): string | null {
       `Query blocked — inconsistent #temp suffixes in one batch: ${temp.suffixes.join(", ")}.`,
       ``,
       `Use exactly one 8-hex suffix across every local #temp in the batch so references cannot drift by one character.`,
-      `Pattern: pick one suffix once (for example \`a3f91c08\`) and reuse it literally in every #temp, index name and DROP statement.`,
+      `Pattern: pick one suffix once (for example \`a3f91c08\`) and reuse it literally in every #temp, index name and DROP statement.`
     ].join("\n")
   }
 
@@ -997,7 +1091,7 @@ export function hasWhereClause(query: string): boolean {
   const stripped = query
     .replace(/--[^\r\n]*/g, "")
     .replace(/\/\*[\s\S]*?\*\//g, "")
-    .replace(/'[^']*'/g, "''")  // remove string literals that might contain WHERE
+    .replace(/'[^']*'/g, "''") // remove string literals that might contain WHERE
   return /\bWHERE\b/i.test(stripped)
 }
 
@@ -1040,7 +1134,7 @@ export function isUnsafeScan(query: string, largeObjects: string[]): string | nu
 export function validateQuery(
   query: string,
   writeEnabled: boolean,
-  options: QueryValidationOptions = {},
+  options: QueryValidationOptions = {}
 ): string | null {
   return validateQueryDetailed(query, writeEnabled, options).error
 }
@@ -1048,7 +1142,7 @@ export function validateQuery(
 export function validateQueryDetailed(
   query: string,
   writeEnabled: boolean,
-  options: QueryValidationOptions = {},
+  options: QueryValidationOptions = {}
 ): QueryValidationDiagnostics {
   const analysis = analyzeMssqlQueryQuality(query, options.accessor)
   // Always block dangerous operations regardless of write mode — must run BEFORE
@@ -1058,9 +1152,10 @@ export function validateQueryDetailed(
     if (pattern.test(query)) {
       return {
         ok: false,
-        error: "Query blocked: contains potentially dangerous operation (EXEC, xp_, OPENROWSET, BULK INSERT, DBCC, SHUTDOWN, etc.).",
+        error:
+          "Query blocked: contains potentially dangerous operation (EXEC, xp_, OPENROWSET, BULK INSERT, DBCC, SHUTDOWN, etc.).",
         code: "dangerous_operation",
-        analysis,
+        analysis
       }
     }
   }
@@ -1078,17 +1173,18 @@ export function validateQueryDetailed(
       ``,
       `    ${issue.snippet}`,
       ``,
-      issue.message,
+      issue.message
     ].join("\n")
     return {
       ok: false,
       error: withFixHint(head, "aggregate_semantic_mismatch"),
       code: "aggregate_semantic_mismatch",
       analysis,
-      lesson: getDoctrineLessonTemplate("aggregate_semantic_mismatch")?.({
-        query,
-        detail: issue.snippet,
-      }) ?? null,
+      lesson:
+        getDoctrineLessonTemplate("aggregate_semantic_mismatch")?.({
+          query,
+          detail: issue.snippet
+        }) ?? null
     }
   }
 
@@ -1099,31 +1195,35 @@ export function validateQueryDetailed(
       error: withFixHint(tempBatchError, "temp_table_integrity"),
       code: "temp_table_integrity",
       analysis,
-      lesson: getDoctrineLessonTemplate("temp_table_integrity")?.({
-        query,
-        detail: tempBatchError.split("\n")[0],
-      }) ?? null,
+      lesson:
+        getDoctrineLessonTemplate("temp_table_integrity")?.({
+          query,
+          detail: tempBatchError.split("\n")[0]
+        }) ?? null
     }
   }
 
   const tempScalarCounts = countTempScalarSubqueriesByTemp(query)
   const repeatedTempScalarProbes = Array.from(tempScalarCounts.entries()).filter(([, count]) => count > 1)
   if (repeatedTempScalarProbes.length > 0) {
-    const list = repeatedTempScalarProbes.map(([name, count]) => `${name} (${count} scalar probes)`).join(", ")
+    const list = repeatedTempScalarProbes
+      .map(([name, count]) => `${name} (${count} scalar probes)`)
+      .join(", ")
     const head = [
       `Query blocked — repeated scalar subqueries against staged #temp data: ${list}.`,
       ``,
-      `This shape repeatedly re-probes staged rows one metric at a time and is exactly the pattern that turns a good micro-ETL into a slow Stage 3 plan.`,
+      `This shape repeatedly re-probes staged rows one metric at a time and is exactly the pattern that turns a good micro-ETL into a slow Stage 3 plan.`
     ].join("\n")
     return {
       ok: false,
       error: withFixHint(head, "temp_scalar_subquery_overused"),
       code: "temp_scalar_subquery_overused",
       analysis,
-      lesson: getDoctrineLessonTemplate("temp_scalar_subquery_overused")?.({
-        query,
-        detail: list,
-      }) ?? null,
+      lesson:
+        getDoctrineLessonTemplate("temp_scalar_subquery_overused")?.({
+          query,
+          detail: list
+        }) ?? null
     }
   }
 
@@ -1131,22 +1231,25 @@ export function validateQueryDetailed(
   // the catalog classifies as expensive (≥ tenantConfig.unionBranchThreshold
   // branches). The fix is per-branch aggregation — see doctrine
   // `mssql.wide-union-view-policy`.
-  const wideUnionOffender = detectWideUnionViewTopnWithoutBranchAggregation(query, { accessor: options.accessor })
+  const wideUnionOffender = detectWideUnionViewTopnWithoutBranchAggregation(query, {
+    accessor: options.accessor
+  })
   if (wideUnionOffender) {
     const head = [
       `Query blocked — direct TOP-N + GROUP BY ${wideUnionOffender.groupKey} against ${wideUnionOffender.object}.`,
       ``,
-      `${wideUnionOffender.object} is a UNION ALL over ${wideUnionOffender.branchCount} source-mapping views (per live catalog). A single GROUP BY ${wideUnionOffender.groupKey} + TOP N forces SQL Server to expand every branch, materialise the lot, then group and sort globally. No branch-local index can help — this shape runs for minutes and is the canonical cause of cancelled runs on wide UNION views.`,
+      `${wideUnionOffender.object} is a UNION ALL over ${wideUnionOffender.branchCount} source-mapping views (per live catalog). A single GROUP BY ${wideUnionOffender.groupKey} + TOP N forces SQL Server to expand every branch, materialise the lot, then group and sort globally. No branch-local index can help — this shape runs for minutes and is the canonical cause of cancelled runs on wide UNION views.`
     ].join("\n")
     return {
       ok: false,
       error: withFixHint(head, "publish_view_topn_without_branch_aggregation"),
       code: "publish_view_topn_without_branch_aggregation",
       analysis,
-      lesson: getDoctrineLessonTemplate("publish_view_topn_without_branch_aggregation")?.({
-        query,
-        detail: `${wideUnionOffender.object} GROUP BY ${wideUnionOffender.groupKey}`,
-      }) ?? null,
+      lesson:
+        getDoctrineLessonTemplate("publish_view_topn_without_branch_aggregation")?.({
+          query,
+          detail: `${wideUnionOffender.object} GROUP BY ${wideUnionOffender.groupKey}`
+        }) ?? null
     }
   }
 
@@ -1157,17 +1260,18 @@ export function validateQueryDetailed(
     const head = [
       `Query blocked — statistical mistake: ${list}.`,
       ``,
-      `Wrapping NULL in COALESCE(..., 0) inside AVG treats a missing observation as an observed zero — it drags the reported average down and the controller has no way to detect it from the result. T-SQL AVG already skips NULLs.`,
+      `Wrapping NULL in COALESCE(..., 0) inside AVG treats a missing observation as an observed zero — it drags the reported average down and the controller has no way to detect it from the result. T-SQL AVG already skips NULLs.`
     ].join("\n")
     return {
       ok: false,
       error: withFixHint(head, "avg_of_coalesce_zero"),
       code: "avg_of_coalesce_zero",
       analysis,
-      lesson: getDoctrineLessonTemplate("avg_of_coalesce_zero")?.({
-        query,
-        detail: avgCoalesceOffenders[0].snippet,
-      }) ?? null,
+      lesson:
+        getDoctrineLessonTemplate("avg_of_coalesce_zero")?.({
+          query,
+          detail: avgCoalesceOffenders[0].snippet
+        }) ?? null
     }
   }
 
@@ -1178,7 +1282,8 @@ export function validateQueryDetailed(
   const inventedColumns = detectInventedColumns(query, options.accessor ?? EMPTY_CATALOG_ACCESSOR)
   if (inventedColumns.length > 0) {
     const lines = inventedColumns.slice(0, 5).map((o) => {
-      const hint = o.suggestions.length > 0 ? `  (closest live columns on ${o.table}: ${o.suggestions.join(", ")})` : ""
+      const hint =
+        o.suggestions.length > 0 ? `  (closest live columns on ${o.table}: ${o.suggestions.join(", ")})` : ""
       return `  - ${o.reference} → column "${o.column}" not in ${o.table}${hint}`
     })
     const more = inventedColumns.length > 5 ? `\n  …and ${inventedColumns.length - 5} more.` : ""
@@ -1186,7 +1291,7 @@ export function validateQueryDetailed(
       `Query blocked — references columns that do not exist in the live catalog:`,
       lines.join("\n") + more,
       ``,
-      `The catalog is the live sys.all_columns snapshot for this connection. If the column truly exists, the catalog is stale — call \`refresh_catalog\` and retry. Otherwise the column is hallucinated; use \`search_catalog\` to confirm names before writing SQL.`,
+      `The catalog is the live sys.all_columns snapshot for this connection. If the column truly exists, the catalog is stale — call \`refresh_catalog\` and retry. Otherwise the column is hallucinated; use \`search_catalog\` to confirm names before writing SQL.`
     ].join("\n")
     const first = inventedColumns[0]
     return {
@@ -1194,10 +1299,11 @@ export function validateQueryDetailed(
       error: withFixHint(head, "invented_column"),
       code: "invented_column",
       analysis,
-      lesson: getDoctrineLessonTemplate("invented_column")?.({
-        query,
-        detail: `${first.table}.${first.column}`,
-      }) ?? null,
+      lesson:
+        getDoctrineLessonTemplate("invented_column")?.({
+          query,
+          detail: `${first.table}.${first.column}`
+        }) ?? null
     }
   }
 
@@ -1213,9 +1319,10 @@ export function validateQueryDetailed(
     if (!isPureRead && !opensWithMutation) {
       return {
         ok: false,
-        error: "Write operations are disabled. Only SELECT/WITH queries are allowed (or DDL/DML targeting local #temp tables only).",
+        error:
+          "Write operations are disabled. Only SELECT/WITH queries are allowed (or DDL/DML targeting local #temp tables only).",
         code: "write_disabled",
-        analysis,
+        analysis
       }
     }
     if (opensWithMutation) {
@@ -1232,10 +1339,10 @@ export function validateQueryDetailed(
             `tables, views, indexes and global ##temp tables are READ-ONLY.`,
             ``,
             `Pattern: stage a narrow slice into #scope, optionally CREATE INDEX on its keys, then join `,
-            `the big warehouse view to #scope. DROP TABLE #scope at the end.`,
+            `the big warehouse view to #scope. DROP TABLE #scope at the end.`
           ].join("\n"),
           code: "non_temp_mutation",
-          analysis,
+          analysis
         }
       }
     }
@@ -1251,10 +1358,10 @@ export function validateQueryDetailed(
         `Query blocked — large object referenced too many times in one batch: ${list}.`,
         ``,
         `Large publish views and their persisted mirrors still represent very large scans. Referencing one more than twice usually means the query will rescan the warehouse slice and miss the 2-minute budget.`,
-        `Required fix: Stage keys on the first touch, fetch detail rows on the second touch, then derive every remaining metric from #temp tables only.`,
+        `Required fix: Stage keys on the first touch, fetch detail rows on the second touch, then derive every remaining metric from #temp tables only.`
       ].join("\n"),
       code: "large_object_overused",
-      analysis,
+      analysis
     }
   }
 
@@ -1268,7 +1375,7 @@ export function validateQueryDetailed(
       ok: false,
       error: scanGuardErrorMessage(objects, scanReason, largeRefs, options.accessor),
       code: "unsafe_large_object_scan",
-      analysis,
+      analysis
     }
   }
 
@@ -1285,7 +1392,7 @@ function scanGuardErrorMessage(
   objects: string,
   scanReason: string,
   largeRefs: string[],
-  accessor?: CatalogAccessor,
+  accessor?: CatalogAccessor
 ): string {
   const tc = getTenantConfig()
   const firstRef = largeRefs[0]
@@ -1293,13 +1400,14 @@ function scanGuardErrorMessage(
   const firstTable = firstRef && catalog ? catalog.getTable(firstRef) : null
   const firstQn = firstTable?.qualifiedName ?? firstRef ?? "<large-object>"
 
-  const mirror = firstTable && tc.mirrorSchema
-    ? persistedMirrorOf(firstTable.qualifiedName, { accessor, mirrorSchema: tc.mirrorSchema })
-    : null
+  const mirror =
+    firstTable && tc.mirrorSchema
+      ? persistedMirrorOf(firstTable.qualifiedName, { accessor, mirrorSchema: tc.mirrorSchema })
+      : null
   const exampleObject = mirror ?? firstQn
   const dateKey = firstTable ? dateGrainColumn(firstTable.qualifiedName, { accessor }) : null
   const calendar = calendarDimensionTable({ accessor })
-  const calendarKey = calendar ? primaryKeyColumns(calendar, { accessor })[0] ?? null : null
+  const calendarKey = calendar ? (primaryKeyColumns(calendar, { accessor })[0] ?? null) : null
 
   const lines = [
     `Query blocked — would cause a full scan of large object(s): ${objects} (${scanReason}).`,
@@ -1307,30 +1415,30 @@ function scanGuardErrorMessage(
     `Large warehouse views/tables are UNION views or partitioned facts spanning many tables. Use the persisted mirror when available.`,
     `An unfiltered query re-executes the entire scan and will run for minutes / never complete.`,
     ``,
-    `Required fix:`,
+    `Required fix:`
   ]
   if (calendar && calendarKey && dateKey) {
     lines.push(
       `1. First resolve the date/key range from the small calendar dimension:`,
       `      SELECT MIN(${calendarKey}) AS fromKey, MAX(${calendarKey}) AS toKey FROM ${calendar} WITH (NOLOCK) WHERE <date-predicate>`,
       `2. Then query the large object WITH a WHERE predicate that narrows the scan:`,
-      `      SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE ${dateKey} BETWEEN <fromKey> AND <toKey> GROUP BY ...`,
+      `      SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE ${dateKey} BETWEEN <fromKey> AND <toKey> GROUP BY ...`
     )
   } else if (dateKey) {
     lines.push(
       `1. Add a narrowing predicate on the time-grain column \`${dateKey}\` (the catalog's FK to your calendar dimension).`,
-      `2. Then query the large object: SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE ${dateKey} = <value> GROUP BY ...`,
+      `2. Then query the large object: SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE ${dateKey} = <value> GROUP BY ...`
     )
   } else {
     lines.push(
       `1. Identify a high-selectivity column on ${firstQn} (PK, FK to a small dim, or a date column) and add a WHERE predicate on it.`,
-      `2. Then query: SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE <predicate> GROUP BY ...`,
+      `2. Then query: SELECT ... FROM ${exampleObject} WITH (NOLOCK) WHERE <predicate> GROUP BY ...`
     )
   }
   lines.push(
     `3. Add WITH (NOLOCK) for read-only analytical queries.`,
     `4. Never use ORDER BY without WHERE on a large view — it forces a full sort of all rows.`,
-    `5. If checking what data exists: query sys.partitions or the calendar dim — NOT the view itself.`,
+    `5. If checking what data exists: query sys.partitions or the calendar dim — NOT the view itself.`
   )
   return lines.join("\n")
 }
@@ -1369,28 +1477,31 @@ function scanGuardErrorMessage(
 
 export type AggregateSemanticIssue = {
   severity: AggregateSeverity
-  line:     number   // 1-based
-  snippet:  string   // the offending substring (≤80 chars)
-  message:  string   // actionable, agent-facing fix hint
+  line: number // 1-based
+  snippet: string // the offending substring (≤80 chars)
+  message: string // actionable, agent-facing fix hint
 }
 
 const AGG_FUNCTION_FAMILIES: { re: RegExp; family: AggregateFamily }[] = [
-  { re: /^(SUM|TOTAL)$/i,                     family: AggregateFamily.Sum   },
-  { re: /^(AVG|AVERAGE|MEAN)$/i,              family: AggregateFamily.Avg   },
-  { re: /^(MIN|MINIMUM)$/i,                   family: AggregateFamily.Min   },
-  { re: /^(MAX|MAXIMUM)$/i,                   family: AggregateFamily.Max   },
-  { re: /^(COUNT|COUNT_BIG)$/i,               family: AggregateFamily.Count },
+  { re: /^(SUM|TOTAL)$/i, family: AggregateFamily.Sum },
+  { re: /^(AVG|AVERAGE|MEAN)$/i, family: AggregateFamily.Avg },
+  { re: /^(MIN|MINIMUM)$/i, family: AggregateFamily.Min },
+  { re: /^(MAX|MAXIMUM)$/i, family: AggregateFamily.Max },
+  { re: /^(COUNT|COUNT_BIG)$/i, family: AggregateFamily.Count }
 ]
 
 // Alias-prefix → semantic family. Order matters: more-specific first.
 // We check the alias's word-prefix only — `AvgCreditBal_2025` is Avg-family,
 // `TotalRevenueZAR` is Sum-family, etc.
 const ALIAS_PREFIX_FAMILIES: { re: RegExp; family: AggregateFamily }[] = [
-  { re: /^(avg|average|mean|median|mid|middle)/i,                                                    family: AggregateFamily.Avg   },
-  { re: /^(sum|total|aggregate|gross|net|grand)/i,                                                   family: AggregateFamily.Sum   },
-  { re: /^(min|minimum|earliest|oldest|low|lowest|first)/i,                                          family: AggregateFamily.Min   },
-  { re: /^(max|maximum|latest|newest|peak|high|highest|last|spot|eom|eod|snapshot|endof|asof)/i,     family: AggregateFamily.Max   },
-  { re: /^(count|cnt|num|number|distinct|n_|nbr)/i,                                                  family: AggregateFamily.Count },
+  { re: /^(avg|average|mean|median|mid|middle)/i, family: AggregateFamily.Avg },
+  { re: /^(sum|total|aggregate|gross|net|grand)/i, family: AggregateFamily.Sum },
+  { re: /^(min|minimum|earliest|oldest|low|lowest|first)/i, family: AggregateFamily.Min },
+  {
+    re: /^(max|maximum|latest|newest|peak|high|highest|last|spot|eom|eod|snapshot|endof|asof)/i,
+    family: AggregateFamily.Max
+  },
+  { re: /^(count|cnt|num|number|distinct|n_|nbr)/i, family: AggregateFamily.Count }
 ]
 
 // Source-column-name tokens that indicate the column IS ALREADY pre-aggregated.
@@ -1402,19 +1513,20 @@ const ALIAS_PREFIX_FAMILIES: { re: RegExp; family: AggregateFamily }[] = [
 // (`MonthlyAvg`, `dailySpot`). We DO NOT require a trailing word boundary —
 // `AverageCreditBalanceZARMTD` must trigger on `Average`.
 const validationCache = {
-  preAggregatedColReCache: null as { tokensRef: object; re: RegExp } | null,
+  preAggregatedColReCache: null as { tokensRef: object; re: RegExp } | null
 }
 
 function preAggregatedColRe(): RegExp {
   const tokens = getTenantConfig().preAggregationTokens
-  if (validationCache.preAggregatedColReCache && validationCache.preAggregatedColReCache.tokensRef === (tokens as unknown as object)) {
+  if (
+    validationCache.preAggregatedColReCache &&
+    validationCache.preAggregatedColReCache.tokensRef === (tokens as unknown as object)
+  ) {
     return validationCache.preAggregatedColReCache.re
   }
   const alternation = tokens.map((t) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")).join("|")
   // Empty tenant config → regex that never matches.
-  const re = alternation.length > 0
-    ? new RegExp(`(?:\\b|(?<=[a-z]))(${alternation})`, "i")
-    : /a^/
+  const re = alternation.length > 0 ? new RegExp(`(?:\\b|(?<=[a-z]))(${alternation})`, "i") : /a^/
   validationCache.preAggregatedColReCache = { tokensRef: tokens as unknown as object, re }
   return re
 }
@@ -1480,7 +1592,7 @@ export function findAggregateSemanticIssues(query: string): AggregateSemanticIss
     const fnFamily = functionFamily(m[1])
     if (!fnFamily) continue
 
-    const openIdx  = m.index + m[0].length - 1   // index of '('
+    const openIdx = m.index + m[0].length - 1 // index of '('
     const closeIdx = findMatchingParen(stripped, openIdx)
     if (closeIdx < 0) continue
 
@@ -1491,7 +1603,10 @@ export function findAggregateSemanticIssues(query: string): AggregateSemanticIss
     //   ) aliasName , …
     //   ) aliasName\n
     const tail = stripped.slice(closeIdx, Math.min(closeIdx + 80, stripped.length))
-    const aliasMatch = /^\s*(?:AS\s+)?\[?([A-Za-z_][A-Za-z0-9_]*)\]?\s*(?=,|\n|$|FROM\b|WHERE\b|GROUP\b|ORDER\b|HAVING\b|JOIN\b|ON\b|\)|UNION\b)/i.exec(tail)
+    const aliasMatch =
+      /^\s*(?:AS\s+)?\[?([A-Za-z_][A-Za-z0-9_]*)\]?\s*(?=,|\n|$|FROM\b|WHERE\b|GROUP\b|ORDER\b|HAVING\b|JOIN\b|ON\b|\)|UNION\b)/i.exec(
+        tail
+      )
     const alias = aliasMatch?.[1]
 
     // ── BLOCK rule: function family vs alias family disagree ──
@@ -1502,14 +1617,17 @@ export function findAggregateSemanticIssues(query: string): AggregateSemanticIss
         // ("TotalRows", "TotalCount") — don't block COUNT→sum mismatch.
         const isBenignCountTotal = fnFamily === AggregateFamily.Count && aFamily === AggregateFamily.Sum
         if (!isBenignCountTotal) {
-          const snippet = stripped.slice(m.index, Math.min(closeIdx + (aliasMatch?.[0].length ?? 0), m.index + 80))
+          const snippet = stripped.slice(
+            m.index,
+            Math.min(closeIdx + (aliasMatch?.[0].length ?? 0), m.index + 80)
+          )
           issues.push({
             severity: AggregateSeverity.Block,
-            line:     lineOf(stripped, m.index),
-            snippet:  snippet.replace(/\s+/g, " ").trim(),
-            message:  `Function \`${m[1].toUpperCase()}\` (family: ${fnFamily}) is aliased as \`${alias}\` (family: ${aFamily}). One of them is wrong — they describe different operations.`,
+            line: lineOf(stripped, m.index),
+            snippet: snippet.replace(/\s+/g, " ").trim(),
+            message: `Function \`${m[1].toUpperCase()}\` (family: ${fnFamily}) is aliased as \`${alias}\` (family: ${aFamily}). One of them is wrong — they describe different operations.`
           })
-          continue   // don't also warn on the same call
+          continue // don't also warn on the same call
         }
       }
     }
@@ -1529,9 +1647,9 @@ export function findAggregateSemanticIssues(query: string): AggregateSemanticIss
         const snippet = stripped.slice(m.index, Math.min(closeIdx, m.index + 80))
         issues.push({
           severity: AggregateSeverity.Warn,
-          line:     lineOf(stripped, m.index),
-          snippet:  snippet.replace(/\s+/g, " ").trim(),
-          message:  `\`${m[1].toUpperCase()}\` is being applied to a column whose name suggests it is already pre-aggregated (token: \`${colMatch[0]}\`). Summing N pre-averaged or point-in-time values usually returns N× the real value. Did you mean \`AVG(...)\` (for averages) or the \`MAX(pkMonth)\` row's value (for "latest spot")? If the SUM is intentional, alias the output explicitly with a sum-prefixed name (e.g. \`SumOfMonthlyAverages\`, \`TotalAvgFoo\`) and the warning will be suppressed.`,
+          line: lineOf(stripped, m.index),
+          snippet: snippet.replace(/\s+/g, " ").trim(),
+          message: `\`${m[1].toUpperCase()}\` is being applied to a column whose name suggests it is already pre-aggregated (token: \`${colMatch[0]}\`). Summing N pre-averaged or point-in-time values usually returns N× the real value. Did you mean \`AVG(...)\` (for averages) or the \`MAX(pkMonth)\` row's value (for "latest spot")? If the SUM is intentional, alias the output explicitly with a sum-prefixed name (e.g. \`SumOfMonthlyAverages\`, \`TotalAvgFoo\`) and the warning will be suppressed.`
         })
       }
     }
@@ -1559,12 +1677,10 @@ export interface QueryWarningOptions {
 
 export function getQueryWarnings(
   query: string,
-  options: QueryWarningOptions | (() => BranchCatalogLike | null) = {},
+  options: QueryWarningOptions | (() => BranchCatalogLike | null) = {}
 ): string | null {
   // Back-compat: a bare accessor function is still accepted.
-  const opts: QueryWarningOptions = typeof options === "function"
-    ? { branchAccessor: options }
-    : options
+  const opts: QueryWarningOptions = typeof options === "function" ? { branchAccessor: options } : options
   const branchAccessor = opts.branchAccessor ?? opts.lineageAccessor ?? EMPTY_BRANCH_ACCESSOR
   const profiledTables = opts.profiledTables ?? liveProfiledTables()
   const rankingAccessor = opts.accessor ?? EMPTY_CATALOG_ACCESSOR
@@ -1573,44 +1689,52 @@ export function getQueryWarnings(
   const branchGaps = detectLineageBranchCoverage(query, branchAccessor)
   const profileTriggers = detectBigViewWithoutProfile(query, profiledTables)
   const mixedUniverses = detectRankingVsReportingMismatch(query, rankingAccessor)
-  if (
-    warns.length === 0
-    && branchGaps.length === 0
-    && profileTriggers.length === 0
-    && !mixedUniverses
-  ) return null
+  if (warns.length === 0 && branchGaps.length === 0 && profileTriggers.length === 0 && !mixedUniverses)
+    return null
 
-  const lines = [
-    `⚠ SQL CORRECTNESS WARNING — review BEFORE trusting the numbers below:`,
-    ``,
-  ]
+  const lines = [`⚠ SQL CORRECTNESS WARNING — review BEFORE trusting the numbers below:`, ``]
   for (const w of warns) {
     lines.push(`  • line ${w.line}: ${w.snippet}`)
     lines.push(`    ${w.message}`)
     lines.push(``)
   }
   for (const gap of branchGaps) {
-    lines.push(`  • lineage coverage: ${gap.parent} has ${gap.totalBranches} source branches; this query references only ${gap.referenced.length} of them`)
+    lines.push(
+      `  • lineage coverage: ${gap.parent} has ${gap.totalBranches} source branches; this query references only ${gap.referenced.length} of them`
+    )
     lines.push(`    Referenced: ${gap.referenced.join(", ")}`)
-    lines.push(`    If the ranking and the final reporting both pull from ${gap.parent}, the unreferenced branches will inflate the reporting metric vs the ranking metric.`)
-    lines.push(`    Fix: either rank from the full ${gap.parent} (use the branch-aggregation pattern from the doctrine), or add an explicit \`-- sampled K of N\` comment to confirm the sub-sample is intentional.`)
+    lines.push(
+      `    If the ranking and the final reporting both pull from ${gap.parent}, the unreferenced branches will inflate the reporting metric vs the ranking metric.`
+    )
+    lines.push(
+      `    Fix: either rank from the full ${gap.parent} (use the branch-aggregation pattern from the doctrine), or add an explicit \`-- sampled K of N\` comment to confirm the sub-sample is intentional.`
+    )
     lines.push(``)
   }
   for (const view of profileTriggers) {
     lines.push(`  • profile-first: ${view} is a canonical big view and has not been profiled in this run`)
-    lines.push(`    Call \`profile_data table='${view}'\` (with a narrow \`columns\` list) BEFORE the analytical pass so you know its row count, NULL rates, and key cardinality. Skip this step and the next query may run for minutes or return a misleading row.`)
+    lines.push(
+      `    Call \`profile_data table='${view}'\` (with a narrow \`columns\` list) BEFORE the analytical pass so you know its row count, NULL rates, and key cardinality. Skip this step and the next query may run for minutes or return a misleading row.`
+    )
     lines.push(``)
   }
   if (mixedUniverses) {
-    lines.push(`  • universe mismatch: this query aggregates across a #temp table AND ${mixedUniverses.bigViews.join(", ")}`)
-    lines.push(`    The #temp was likely derived from a sub-set (specific branches, months, or clients). Joining ${mixedUniverses.bigViews.join("/")} unfiltered then SUM/COUNT will report the BIG-view universe, not the #temp universe — even though rows appear filtered.`)
-    lines.push(`    Fix: either (a) derive the aggregate from a single source, (b) filter ${mixedUniverses.bigViews[0]} by the same predicates that built the #temp, or (c) add \`-- universes intentional\` to acknowledge the cross-universe aggregate.`)
+    lines.push(
+      `  • universe mismatch: this query aggregates across a #temp table AND ${mixedUniverses.bigViews.join(", ")}`
+    )
+    lines.push(
+      `    The #temp was likely derived from a sub-set (specific branches, months, or clients). Joining ${mixedUniverses.bigViews.join("/")} unfiltered then SUM/COUNT will report the BIG-view universe, not the #temp universe — even though rows appear filtered.`
+    )
+    lines.push(
+      `    Fix: either (a) derive the aggregate from a single source, (b) filter ${mixedUniverses.bigViews[0]} by the same predicates that built the #temp, or (c) add \`-- universes intentional\` to acknowledge the cross-universe aggregate.`
+    )
     lines.push(``)
   }
   if (warns.length > 0) {
-    lines.push(`If the warning is a false positive, re-run the query with an explicit alias that names the operation (e.g. \`SumOfMonthlyAverages\`) — the result will be returned without re-flagging.`)
+    lines.push(
+      `If the warning is a false positive, re-run the query with an explicit alias that names the operation (e.g. \`SumOfMonthlyAverages\`) — the result will be returned without re-flagging.`
+    )
   }
   lines.push(`---`)
   return lines.join("\n")
 }
-

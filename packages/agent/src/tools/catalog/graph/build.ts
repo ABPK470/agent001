@@ -16,13 +16,7 @@ import type { AgentHost } from "../../../application/shell/runtime.js"
 import { getPool } from "../../mssql/index.js"
 import { buildSearchIndexes, computeImplicitEdges, tableKey } from "../helpers.js"
 import { Q_COLUMNS, Q_FKS, Q_FULL_VIEW_DEPS, Q_OBJECTS, Q_VIEW_DEFINITIONS } from "../sql.js"
-import type {
-    CatalogColumn,
-    CatalogFK,
-    CatalogTable,
-    ImplicitEdge,
-    SysEntry,
-} from "../types.js"
+import type { CatalogColumn, CatalogFK, CatalogTable, ImplicitEdge, SysEntry } from "../types.js"
 import { buildSysCatalog } from "./sys-catalog.js"
 
 export interface CatalogLoadResult {
@@ -52,7 +46,7 @@ export async function loadCatalogFromDb(host: AgentHost, connection?: string): P
       rowCount: r.row_count != null ? Number(r.row_count) : null,
       columns: [],
       fkOutgoing: [],
-      fkIncoming: [],
+      fkIncoming: []
     })
   }
 
@@ -67,7 +61,7 @@ export async function loadCatalogFromDb(host: AgentHost, connection?: string): P
         dataType: r.data_type,
         maxLength: r.max_length,
         nullable: !!r.is_nullable,
-        isPK: !!r.is_pk,
+        isPK: !!r.is_pk
       } as CatalogColumn)
     }
   }
@@ -83,7 +77,7 @@ export async function loadCatalogFromDb(host: AgentHost, connection?: string): P
       fromColumn: r.from_column,
       toSchema: r.to_schema,
       toTable: r.to_table,
-      toColumn: r.to_column,
+      toColumn: r.to_column
     }
     const fromKey = tableKey(r.from_schema, r.from_table)
     const toKey = tableKey(r.to_schema, r.to_table)
@@ -120,7 +114,9 @@ export async function loadCatalogFromDb(host: AgentHost, connection?: string): P
         viewSourceRows.set(viewName, (viewSourceRows.get(viewName) ?? 0) + refTable.rowCount)
       }
     }
-  } catch { /* non-fatal */ }
+  } catch {
+    /* non-fatal */
+  }
 
   // Step 7: Fetch view definitions from sys.sql_modules (non-fatal)
   try {
@@ -132,7 +128,9 @@ export async function loadCatalogFromDb(host: AgentHost, connection?: string): P
         t.viewDefinition = String(r.definition)
       }
     }
-  } catch { /* non-fatal */ }
+  } catch {
+    /* non-fatal */
+  }
 
   // Step 8: Await sys catalog
   const sysCatalog = await sysCatalogPromise

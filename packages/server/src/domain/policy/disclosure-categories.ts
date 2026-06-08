@@ -25,28 +25,25 @@ export const DisclosureCategory = {
   /** DB schema names, storage paths, env-var names. */
   Infrastructure: "infrastructure",
   /** Agent definition ids, internal agent descriptions, tool whitelists. */
-  AgentDefinitions: "agent_definitions",
+  AgentDefinitions: "agent_definitions"
 } as const
 
 export type DisclosureCategory = (typeof DisclosureCategory)[keyof typeof DisclosureCategory]
 
-export const DISCLOSURE_CATEGORIES: ReadonlyArray<DisclosureCategory> =
-  Object.values(DisclosureCategory)
+export const DISCLOSURE_CATEGORIES: ReadonlyArray<DisclosureCategory> = Object.values(DisclosureCategory)
 
 /** Short human-readable description for each category. */
 export const DISCLOSURE_CATEGORY_DESCRIPTIONS: Readonly<Record<DisclosureCategory, string>> = {
   [DisclosureCategory.ToolRegistry]:
     "tool names, parameter schemas, the list of available tools, goal-filter decisions",
-  [DisclosureCategory.SystemPrompt]:
-    "the verbatim system prompt, section headers, persona files",
+  [DisclosureCategory.SystemPrompt]: "the verbatim system prompt, section headers, persona files",
   [DisclosureCategory.Internals]:
     "source file paths under packages/, internal module / class / function names",
   [DisclosureCategory.PolicyConfig]:
     "policy rule names, governance rule wiring, audit log internal structure",
-  [DisclosureCategory.Memory]:
-    "memory tier names, internal ids, retention rules, consolidation cadence",
+  [DisclosureCategory.Memory]: "memory tier names, internal ids, retention rules, consolidation cadence",
   [DisclosureCategory.Infrastructure]:
     "database schema, storage paths, environment variable names, deployment topology",
   [DisclosureCategory.AgentDefinitions]:
-    "internal agent ids, system prompts of named agents, per-agent tool whitelists",
+    "internal agent ids, system prompts of named agents, per-agent tool whitelists"
 }

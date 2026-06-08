@@ -14,5 +14,5 @@ export {
   isSubStepFailureEvent,
   isTerminalRunEvent,
   isStepEvent,
-  isSyncEvent,
+  isSyncEvent
 } from "@mia/shared-enums"

@@ -55,16 +55,7 @@ const DEFAULT_TIMEOUT_MS = 120_000
 const MAX_TIMEOUT_MS = 600_000
 
 /** Safe environment variables — the ONLY keys forwarded to child processes. */
-const SAFE_ENV_KEYS = new Set([
-  "PATH",
-  "HOME",
-  "USER",
-  "LANG",
-  "LC_ALL",
-  "TERM",
-  "NO_COLOR",
-  "NODE_ENV",
-])
+const SAFE_ENV_KEYS = new Set(["PATH", "HOME", "USER", "LANG", "LC_ALL", "TERM", "NO_COLOR", "NODE_ENV"])
 
 /**
  * Command deny list — regex patterns that block dangerous commands.
@@ -82,7 +73,6 @@ const SAFE_ENV_KEYS = new Set([
 
 /** Deny rule sets — extracted to ./shell/deny-rules.ts */
 import { CONTAINER_RULES, HOST_ONLY_RULES } from "./deny-rules.js"
-
 
 /**
  * Check if a command is blocked.
@@ -127,16 +117,19 @@ const SHELL_TOOL_DESCRIPTION =
 const SHELL_TOOL_PARAMETERS = {
   type: "object",
   properties: {
-    command:    { type: "string", description: "The shell command to run" },
-    timeout_ms: { type: "number", description: `Optional per-call timeout in ms. Default ${DEFAULT_TIMEOUT_MS}, max ${MAX_TIMEOUT_MS}.` },
+    command: { type: "string", description: "The shell command to run" },
+    timeout_ms: {
+      type: "number",
+      description: `Optional per-call timeout in ms. Default ${DEFAULT_TIMEOUT_MS}, max ${MAX_TIMEOUT_MS}.`
+    }
   },
-  required: ["command"],
+  required: ["command"]
 } as const
 
 export const shellToolMetadata: ToolMetadata = {
   name: "run_command",
   description: SHELL_TOOL_DESCRIPTION,
-  parameters: SHELL_TOOL_PARAMETERS,
+  parameters: SHELL_TOOL_PARAMETERS
 }
 
 export const shellTool = shellToolMetadata
@@ -153,9 +146,9 @@ export function createShellTool(host: AgentHost, run?: RunContext): ExecutableTo
         cwd: host.shell.cwd,
         executor: host.shell.client,
         sandboxStrict: host.shell.sandboxStrict,
-        killSignal: run?.signal ?? null,
+        killSignal: run?.signal ?? null
       })
-    },
+    }
   }
 }
 
@@ -170,59 +163,62 @@ interface ShellCtx {
 }
 
 async function runShell(args: Record<string, unknown>, ctx: ShellCtx): Promise<string> {
-    const command   = String(args.command)
-    const requested = typeof args["timeout_ms"] === "number" ? Number(args["timeout_ms"]) : DEFAULT_TIMEOUT_MS
-    const timeoutMs = Math.max(1_000, Math.min(MAX_TIMEOUT_MS, Number.isFinite(requested) ? requested : DEFAULT_TIMEOUT_MS))
+  const command = String(args.command)
+  const requested = typeof args["timeout_ms"] === "number" ? Number(args["timeout_ms"]) : DEFAULT_TIMEOUT_MS
+  const timeoutMs = Math.max(
+    1_000,
+    Math.min(MAX_TIMEOUT_MS, Number.isFinite(requested) ? requested : DEFAULT_TIMEOUT_MS)
+  )
 
-    const blocked = isBlocked(command, ctx.sandboxStrict)
-    if (blocked) {
-      return `Error: Command blocked for safety (matched: "${blocked}"). This command is not allowed.`
+  const blocked = isBlocked(command, ctx.sandboxStrict)
+  if (blocked) {
+    return `Error: Command blocked for safety (matched: "${blocked}"). This command is not allowed.`
+  }
+
+  if (ctx.mode === "disabled") {
+    return "Error: Shell commands are disabled in this deployment."
+  }
+
+  if (ctx.mode === "sandbox") {
+    if (!ctx.executor) {
+      return "Error: Shell sandbox is enabled but no sandbox executor is configured."
     }
-
-    if (ctx.mode === "disabled") {
-      return "Error: Shell commands are disabled in this deployment."
+    try {
+      const result = await ctx.executor(command, ctx.cwd, ctx.killSignal ?? undefined)
+      return formatResult(result)
+    } catch (err) {
+      return `Error: ${err instanceof Error ? err.message : String(err)}`
     }
+  }
 
-    if (ctx.mode === "sandbox") {
-      if (!ctx.executor) {
-        return "Error: Shell sandbox is enabled but no sandbox executor is configured."
+  // Host mode: direct execution with safe env only.
+  return new Promise<string>((resolve) => {
+    execFile(
+      "/bin/sh",
+      ["-c", command],
+      {
+        timeout: timeoutMs,
+        maxBuffer: 1024 * 1024, // 1MB
+        cwd: ctx.cwd,
+        env: safeEnv(),
+        ...(ctx.killSignal ? { signal: ctx.killSignal } : {})
+      },
+      (error, stdout, stderr) => {
+        const parts: string[] = []
+        if (stdout) parts.push(stdout)
+        if (stderr) parts.push(`[stderr] ${stderr}`)
+        if (error && error.killed) {
+          parts.push(`[command timed out after ${Math.round(timeoutMs / 1000)}s]`)
+        } else if (error && (error as NodeJS.ErrnoException).code === "ABORT_ERR") {
+          parts.push("[command cancelled]")
+        } else if (error && !stdout && !stderr) {
+          const code = (error as { code?: number }).code
+          parts.push(`Command exited with code ${code ?? "non-zero"} and produced no output.`)
+        }
+        resolve(truncateOutput(parts.join("\n").trim()) || "(no output)")
       }
-      try {
-        const result = await ctx.executor(command, ctx.cwd, ctx.killSignal ?? undefined)
-        return formatResult(result)
-      } catch (err) {
-        return `Error: ${err instanceof Error ? err.message : String(err)}`
-      }
-    }
-
-    // Host mode: direct execution with safe env only.
-    return new Promise<string>((resolve) => {
-      execFile(
-        "/bin/sh",
-        ["-c", command],
-        {
-          timeout: timeoutMs,
-          maxBuffer: 1024 * 1024, // 1MB
-          cwd: ctx.cwd,
-          env: safeEnv(),
-          ...(ctx.killSignal ? { signal: ctx.killSignal } : {}),
-        },
-        (error, stdout, stderr) => {
-          const parts: string[] = []
-          if (stdout) parts.push(stdout)
-          if (stderr) parts.push(`[stderr] ${stderr}`)
-          if (error && error.killed) {
-            parts.push(`[command timed out after ${Math.round(timeoutMs / 1000)}s]`)
-          } else if (error && (error as NodeJS.ErrnoException).code === "ABORT_ERR") {
-            parts.push("[command cancelled]")
-          } else if (error && !stdout && !stderr) {
-            const code = (error as { code?: number }).code
-            parts.push(`Command exited with code ${code ?? "non-zero"} and produced no output.`)
-          }
-          resolve(truncateOutput(parts.join("\n").trim()) || "(no output)")
-        },
-      )
-    })
+    )
+  })
 }
 
 /** Format a ShellExecResult into a string for the agent. */

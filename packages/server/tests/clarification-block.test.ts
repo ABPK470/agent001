@@ -17,7 +17,7 @@ function mkFinding(over: Partial<AmbiguityFinding> = {}): AmbiguityFinding {
     suggestedQuestion: "Which Revenue table do you mean?",
     source: "detector",
     candidates: ["publish.Revenue", "mart.RevenueRecognition"],
-    ...over,
+    ...over
   }
 }
 
@@ -29,10 +29,18 @@ describe("buildClarificationBlock", () => {
   it("renders <must_clarify> with blocking findings first", () => {
     const block = buildClarificationBlock({
       findings: [
-        mkFinding({ id: "time-range:last-quarter", kind: "time-range", severity: "warn", subject: "last quarter", suggestedQuestion: "Which quarter?", source: "detector", candidates: undefined }),
-        mkFinding(),
+        mkFinding({
+          id: "time-range:last-quarter",
+          kind: "time-range",
+          severity: "warn",
+          subject: "last quarter",
+          suggestedQuestion: "Which quarter?",
+          source: "detector",
+          candidates: undefined
+        }),
+        mkFinding()
       ],
-      resolved: [],
+      resolved: []
     })
     expect(block).toContain("<must_clarify>")
     expect(block).toContain("</must_clarify>")
@@ -56,13 +64,15 @@ describe("buildClarificationBlock", () => {
 
   it("renders ui options only when a finding explicitly provides them", () => {
     const block = buildClarificationBlock({
-      findings: [mkFinding({
-        kind: "output-format",
-        severity: "warn",
-        subject: "overview",
-        uiOptions: ["short narrative", "data table", "chart"],
-      })],
-      resolved: [],
+      findings: [
+        mkFinding({
+          kind: "output-format",
+          severity: "warn",
+          subject: "overview",
+          uiOptions: ["short narrative", "data table", "chart"]
+        })
+      ],
+      resolved: []
     })
     expect(block).toContain("ui options: short narrative, data table, chart")
   })
@@ -70,30 +80,41 @@ describe("buildClarificationBlock", () => {
   it("omits candidates line when not provided", () => {
     const block = buildClarificationBlock({
       findings: [mkFinding({ candidates: undefined })],
-      resolved: [],
+      resolved: []
     })
     expect(block).not.toContain("candidates:")
   })
 
   it("renders <resolved_clarifications> with answers", () => {
-    const resolved: ResolvedClarification[] = [{
-      findingId: "schema-match:revenue",
-      kind: "schema-match",
-      subject: "Revenue",
-      question: "Which Revenue table?",
-      answer: "publish.Revenue",
-      resolvedAtRound: 1,
-    }]
+    const resolved: ResolvedClarification[] = [
+      {
+        findingId: "schema-match:revenue",
+        kind: "schema-match",
+        subject: "Revenue",
+        question: "Which Revenue table?",
+        answer: "publish.Revenue",
+        resolvedAtRound: 1
+      }
+    ]
     const block = buildClarificationBlock({ findings: [], resolved })
     expect(block).toContain("<resolved_clarifications>")
-    expect(block).toContain("subject=\"Revenue\"")
+    expect(block).toContain('subject="Revenue"')
     expect(block).toContain("answer: publish.Revenue")
   })
 
   it("renders both sections when both supplied", () => {
     const block = buildClarificationBlock({
       findings: [mkFinding({ id: "term-undefined:churn", kind: "term-undefined", subject: "churn" })],
-      resolved: [{ findingId: "schema-match:revenue", kind: "schema-match", subject: "Revenue", question: "q", answer: "a", resolvedAtRound: 0 }],
+      resolved: [
+        {
+          findingId: "schema-match:revenue",
+          kind: "schema-match",
+          subject: "Revenue",
+          question: "q",
+          answer: "a",
+          resolvedAtRound: 0
+        }
+      ]
     })
     expect(block).toContain("<must_clarify>")
     expect(block).toContain("<resolved_clarifications>")
@@ -102,19 +123,25 @@ describe("buildClarificationBlock", () => {
   it("tags finding source in the bullet", () => {
     const block = buildClarificationBlock({
       findings: [mkFinding({ source: "llm-planner" })],
-      resolved: [],
+      resolved: []
     })
     expect(block).toContain("source: llm-planner")
   })
 
   it("truncates by dropping warns when over budget", () => {
     const warns = Array.from({ length: 50 }, (_, i) =>
-      mkFinding({ id: `warn:${i}`, kind: "time-range", severity: "warn", subject: `t${i}`, reasoning: "x".repeat(200) })
+      mkFinding({
+        id: `warn:${i}`,
+        kind: "time-range",
+        severity: "warn",
+        subject: `t${i}`,
+        reasoning: "x".repeat(200)
+      })
     )
     const blocked = mkFinding()
     const block = buildClarificationBlock({ findings: [blocked, ...warns], resolved: [] })
     expect(block).toContain("🛑")
-    expect(block).toContain("subject=\"Revenue\"")
+    expect(block).toContain('subject="Revenue"')
     expect(block.length).toBeLessThanOrEqual(2048 + 64)
   })
 })

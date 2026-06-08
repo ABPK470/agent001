@@ -7,7 +7,10 @@ import { describe, expect, it } from "vitest"
 
 const repoRoot = resolve(import.meta.dirname, "../../../..")
 const entitiesScript = resolve(repoRoot, "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs")
-const flowTemplatesScript = resolve(repoRoot, "deploy/sync/generators/generate-flow-templates-from-legacy-pipelines.mjs")
+const flowTemplatesScript = resolve(
+  repoRoot,
+  "deploy/sync/generators/generate-flow-templates-from-legacy-pipelines.mjs"
+)
 const evidenceFixture = resolve(repoRoot, "notes/sync/legacy-pipeline-evidence.fixture.json")
 const flowTemplatesSeed = resolve(repoRoot, "deploy/sync/artifacts/flow-templates.json")
 const catalogCacheFile = "packages/server/data/catalog-cache.uat.json"
@@ -46,7 +49,11 @@ interface CatalogSnapshot {
 
 interface LegacyEntityDerivationModule {
   buildCatalogIndex(snapshot: unknown): unknown
-  deriveSyncDefinitions(pipelines: unknown, catalogIndex: unknown, generatedAt: string): DerivedSyncDefinition[]
+  deriveSyncDefinitions(
+    pipelines: unknown,
+    catalogIndex: unknown,
+    generatedAt: string
+  ): DerivedSyncDefinition[]
 }
 
 const expectedEntities = {
@@ -56,7 +63,7 @@ const expectedEntities = {
     idColumn: "contentId",
     labelColumn: "title",
     entrySproc: "core.uspSyncContentObjectsTran",
-    requiredTables: ["gate.Content", "gate.ContentLink", "gate.ContentType", "gate.ContentLinkType"],
+    requiredTables: ["gate.Content", "gate.ContentLink", "gate.ContentType", "gate.ContentLinkType"]
   },
   gateMetadata: {
     pipelineId: 780,
@@ -64,7 +71,7 @@ const expectedEntities = {
     idColumn: "tableId",
     labelColumn: "name",
     entrySproc: "core.uspSyncDataListObjectsTran",
-    requiredTables: ["gate.MetaTable", "gate.MetaView", "gate.MetaColumn", "gate.jsonSchema"],
+    requiredTables: ["gate.MetaTable", "gate.MetaView", "gate.MetaColumn", "gate.jsonSchema"]
   },
   contract: {
     pipelineId: 788,
@@ -72,7 +79,7 @@ const expectedEntities = {
     idColumn: "contractId",
     labelColumn: "name",
     entrySproc: "core.uspSyncCoreObjectsTran",
-    requiredTables: ["core.ContractColumn", "core.Contract", "core.Dataset", "core.Pipeline", "core.Activity"],
+    requiredTables: ["core.ContractColumn", "core.Contract", "core.Dataset", "core.Pipeline", "core.Activity"]
   },
   rule: {
     pipelineId: 791,
@@ -80,7 +87,7 @@ const expectedEntities = {
     idColumn: "ruleId",
     labelColumn: "name",
     entrySproc: "core.uspSyncRuleObjectsTran",
-    requiredTables: ["core.Rule", "core.RuleColumn", "core.RuleCondition", "core.RuleLink", "core.RuleType"],
+    requiredTables: ["core.Rule", "core.RuleColumn", "core.RuleCondition", "core.RuleLink", "core.RuleType"]
   },
   dataset: {
     pipelineId: 792,
@@ -88,7 +95,13 @@ const expectedEntities = {
     idColumn: "datasetId",
     labelColumn: "name",
     entrySproc: "core.uspSyncDatasetObjectsTran",
-    requiredTables: ["core.Dataset", "core.DatasetColumn", "core.DatasetMapping", "core.Pipeline", "core.Activity"],
+    requiredTables: [
+      "core.Dataset",
+      "core.DatasetColumn",
+      "core.DatasetMapping",
+      "core.Pipeline",
+      "core.Activity"
+    ]
   },
   pipelineActivity: {
     pipelineId: 798,
@@ -96,8 +109,8 @@ const expectedEntities = {
     idColumn: "pipelineId",
     labelColumn: "name",
     entrySproc: "core.uspSyncPipelineObjectsTran",
-    requiredTables: ["core.Pipeline", "core.Activity"],
-  },
+    requiredTables: ["core.Pipeline", "core.Activity"]
+  }
 }
 
 describe("legacy sync generators", () => {
@@ -105,13 +118,20 @@ describe("legacy sync generators", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "legacy-flow-templates-"))
     const outputPath = join(tempRoot, "flow-templates.json")
 
-    execFileSync("node", [
-      flowTemplatesScript,
-      "--pipeline-ids", pipelineIds,
-      "--evidence-file", evidenceFixture,
-      "--output", outputPath,
-      "--force",
-    ], { cwd: repoRoot, stdio: "pipe" })
+    execFileSync(
+      "node",
+      [
+        flowTemplatesScript,
+        "--pipeline-ids",
+        pipelineIds,
+        "--evidence-file",
+        evidenceFixture,
+        "--output",
+        outputPath,
+        "--force"
+      ],
+      { cwd: repoRoot, stdio: "pipe" }
+    )
 
     const actual = JSON.parse(readFileSync(outputPath, "utf-8"))
     const expected = JSON.parse(readFileSync(flowTemplatesSeed, "utf-8"))
@@ -119,13 +139,22 @@ describe("legacy sync generators", () => {
   })
 
   it("rebuilds deploy/sync/artifacts/entities from the reviewed legacy pipeline set", async () => {
-    const modulePath = new URL("../../../../deploy/sync/helpers/legacy-entity-derivation.mjs", import.meta.url).href
-    const { buildCatalogIndex, deriveSyncDefinitions } = await import(modulePath) as LegacyEntityDerivationModule
+    const modulePath = new URL(
+      "../../../../deploy/sync/helpers/legacy-entity-derivation.mjs",
+      import.meta.url
+    ).href
+    const { buildCatalogIndex, deriveSyncDefinitions } = (await import(
+      modulePath
+    )) as LegacyEntityDerivationModule
     const evidence = JSON.parse(readFileSync(evidenceFixture, "utf-8"))
-    const catalogSnapshot = JSON.parse(readFileSync(resolve(repoRoot, catalogCacheFile), "utf-8")) as CatalogSnapshot
+    const catalogSnapshot = JSON.parse(
+      readFileSync(resolve(repoRoot, catalogCacheFile), "utf-8")
+    ) as CatalogSnapshot
     const catalogIndex = buildCatalogIndex(catalogSnapshot)
     const definitions = deriveSyncDefinitions(evidence.pipelines, catalogIndex, generatedAt)
-    const byId = new Map<string, DerivedSyncDefinition>(definitions.map((definition) => [definition.id, definition]))
+    const byId = new Map<string, DerivedSyncDefinition>(
+      definitions.map((definition) => [definition.id, definition])
+    )
     const fkChildrenByParent = new Map<string, Set<string>>()
     for (const table of catalogSnapshot.tables) {
       const child = `${table.schema}.${table.name}`.toLowerCase()
@@ -161,7 +190,9 @@ describe("legacy sync generators", () => {
         expect(actualTables.has(tableName), `${name} missing ${tableName}`).toBe(true)
       }
 
-      const positions = new Map(actual.metadata.executionOrder.map((tableName, index) => [tableName.toLowerCase(), index]))
+      const positions = new Map(
+        actual.metadata.executionOrder.map((tableName, index) => [tableName.toLowerCase(), index])
+      )
       for (const [parent, children] of fkChildrenByParent) {
         if (!positions.has(parent)) continue
         const parentPos = positions.get(parent)

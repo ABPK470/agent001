@@ -4,9 +4,9 @@
 
 import { describe, expect, it } from "vitest"
 import {
-    buildEscalationInput,
-    resolveEscalation,
-    type EscalationInput,
+  buildEscalationInput,
+  resolveEscalation,
+  type EscalationInput
 } from "../src/application/shell/delegation.js"
 
 // ============================================================================
@@ -22,7 +22,7 @@ function makeInput(overrides: Partial<EscalationInput> = {}): EscalationInput {
     maxDisagreements: 3,
     revisionAvailable: true,
     reexecuteOnNeedsRevision: true,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -111,12 +111,14 @@ describe("resolveEscalation", () => {
     })
 
     it("escalates on repeated fail when the run is marked stuck", () => {
-      const result = resolveEscalation(makeInput({
-        verdict: "fail",
-        revisionAvailable: true,
-        attempt: 1,
-        allStepsStuck: true,
-      }))
+      const result = resolveEscalation(
+        makeInput({
+          verdict: "fail",
+          revisionAvailable: true,
+          attempt: 1,
+          allStepsStuck: true
+        })
+      )
       expect(result.action).toBe("escalate")
       expect(result.reason).toBe("all_steps_stuck")
     })
@@ -124,30 +126,36 @@ describe("resolveEscalation", () => {
 
   describe("retry verdict with revision", () => {
     it("revises when revision is available", () => {
-      const result = resolveEscalation(makeInput({
-        verdict: "retry",
-        revisionAvailable: true,
-      }))
+      const result = resolveEscalation(
+        makeInput({
+          verdict: "retry",
+          revisionAvailable: true
+        })
+      )
       expect(result.action).toBe("revise")
       expect(result.reason).toBe("needs_revision")
     })
 
     it("retries when revision unavailable but reexecute allowed", () => {
-      const result = resolveEscalation(makeInput({
-        verdict: "retry",
-        revisionAvailable: false,
-        reexecuteOnNeedsRevision: true,
-      }))
+      const result = resolveEscalation(
+        makeInput({
+          verdict: "retry",
+          revisionAvailable: false,
+          reexecuteOnNeedsRevision: true
+        })
+      )
       expect(result.action).toBe("retry")
       expect(result.reason).toBe("retry_allowed")
     })
 
     it("escalates when no revision and no reexecute", () => {
-      const result = resolveEscalation(makeInput({
-        verdict: "retry",
-        revisionAvailable: false,
-        reexecuteOnNeedsRevision: false,
-      }))
+      const result = resolveEscalation(
+        makeInput({
+          verdict: "retry",
+          revisionAvailable: false,
+          reexecuteOnNeedsRevision: false
+        })
+      )
       expect(result.action).toBe("escalate")
       expect(result.reason).toBe("revision_unavailable")
     })
@@ -165,7 +173,7 @@ describe("buildEscalationInput", () => {
       attempt: 1,
       maxAttempts: 3,
       hasRetryableSteps: true,
-      allStepsRepeatedFailure: false,
+      allStepsRepeatedFailure: false
     })
 
     expect(input.verdict).toBe("retry")
@@ -182,7 +190,7 @@ describe("buildEscalationInput", () => {
       attempt: 2,
       maxAttempts: 3,
       hasRetryableSteps: true,
-      allStepsRepeatedFailure: true,
+      allStepsRepeatedFailure: true
     })
 
     expect(input.allStepsStuck).toBe(true)
@@ -195,7 +203,7 @@ describe("buildEscalationInput", () => {
       maxAttempts: 3,
       hasRetryableSteps: true,
       allStepsRepeatedFailure: false,
-      timedOut: true,
+      timedOut: true
     })
 
     expect(input.timedOut).toBe(true)

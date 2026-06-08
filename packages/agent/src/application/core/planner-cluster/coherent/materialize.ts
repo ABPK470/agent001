@@ -6,9 +6,7 @@
  */
 
 import type { Tool, ToolResultEnvelope } from "../../types.js"
-import type {
-    CoherentSolutionBundle,
-} from "../types.js"
+import type { CoherentSolutionBundle } from "../types.js"
 
 export interface CoherentMaterializationResult {
   readonly writtenArtifacts: readonly string[]
@@ -20,12 +18,12 @@ function normalizeToolResult(result: string | ToolResultEnvelope): { ok: boolean
   if (typeof result === "string") {
     return {
       ok: !/^Error:/i.test(result),
-      summary: result,
+      summary: result
     }
   }
   return {
     ok: result.ok !== false,
-    summary: result.summary,
+    summary: result.summary
   }
 }
 
@@ -34,7 +32,7 @@ export async function materializeCoherentSolutionBundle(
   tools: {
     readonly writeFileTool?: Tool
     readonly readFileTool?: Tool
-  },
+  }
 ): Promise<CoherentMaterializationResult> {
   const diagnostics: string[] = []
   const writtenArtifacts: string[] = []
@@ -44,15 +42,17 @@ export async function materializeCoherentSolutionBundle(
     return {
       writtenArtifacts,
       readBackArtifacts,
-      diagnostics: ["write_file tool is unavailable for coherent bundle materialization."],
+      diagnostics: ["write_file tool is unavailable for coherent bundle materialization."]
     }
   }
 
   for (const artifact of bundle.artifacts) {
-    const writeResult = normalizeToolResult(await tools.writeFileTool.execute({
-      path: artifact.path,
-      content: artifact.content,
-    }))
+    const writeResult = normalizeToolResult(
+      await tools.writeFileTool.execute({
+        path: artifact.path,
+        content: artifact.content
+      })
+    )
     if (!writeResult.ok) {
       diagnostics.push(`write_file failed for ${artifact.path}: ${writeResult.summary}`)
       continue
@@ -72,6 +72,6 @@ export async function materializeCoherentSolutionBundle(
   return {
     writtenArtifacts,
     readBackArtifacts,
-    diagnostics,
+    diagnostics
   }
 }

@@ -37,7 +37,7 @@ const EAGER_COMPACT_TOOLS = new Set<string>([
   "run_command",
   "shell",
   "fetch_url",
-  "browse_web",
+  "browse_web"
 ])
 
 export function compactAtWriteTime(toolName: string, content: string): string {
@@ -50,18 +50,23 @@ export function compactAtWriteTime(toolName: string, content: string): string {
 
   // Tool-specific guidance for fetching the omitted middle.
   const recallHint =
-    toolName === "read_attachment"   ? `re-call read_attachment with offset=${HEAD_BYTES} (and offset=${HEAD_BYTES + Math.floor(omittedBytes / 2)} etc.) to page through the rest`
-    : toolName === "import_attachment" ? `re-call import_attachment with the same id and stream the file from the sandbox path returned above`
-    : toolName === "read_file"         ? `re-call read_file with startLine/endLine to fetch a specific range`
-    : toolName === "run_command" || toolName === "shell" ? `re-run with a more specific filter (head/tail/grep) to narrow the output`
-    : toolName === "fetch_url" || toolName === "browse_web" ? `re-fetch with a narrower selector or path`
-    : `re-call with narrower parameters to fetch the omitted region`
+    toolName === "read_attachment"
+      ? `re-call read_attachment with offset=${HEAD_BYTES} (and offset=${HEAD_BYTES + Math.floor(omittedBytes / 2)} etc.) to page through the rest`
+      : toolName === "import_attachment"
+        ? `re-call import_attachment with the same id and stream the file from the sandbox path returned above`
+        : toolName === "read_file"
+          ? `re-call read_file with startLine/endLine to fetch a specific range`
+          : toolName === "run_command" || toolName === "shell"
+            ? `re-run with a more specific filter (head/tail/grep) to narrow the output`
+            : toolName === "fetch_url" || toolName === "browse_web"
+              ? `re-fetch with a narrower selector or path`
+              : `re-call with narrower parameters to fetch the omitted region`
 
   return [
     head,
     "",
     `[truncated at write time — ${omittedBytes.toLocaleString()} more bytes available; ${recallHint}]`,
     "",
-    tail,
+    tail
   ].join("\n")
 }

@@ -1,4 +1,12 @@
-import { type Agent, type DelegateContext, type EngineServices, type ExecutableTool, type Message, type RunState, type Unsubscribe } from "@mia/agent"
+import {
+  type Agent,
+  type DelegateContext,
+  type EngineServices,
+  type ExecutableTool,
+  type Message,
+  type RunState,
+  type Unsubscribe
+} from "@mia/agent"
 import type { AgentBus } from "../../../../agent-bus.js"
 import type { OrchestratorRunCtx } from "../../../../ports/orchestration.js"
 import { type RunPriority } from "../../queue/run-queue.js"
@@ -26,7 +34,8 @@ export type ExecuteRunInput = {
   priority: RunPriority
 }
 
-export type ActiveRunRecord = OrchestratorRunCtx["activeRuns"] extends Map<string, infer TValue> ? TValue : never
+export type ActiveRunRecord =
+  OrchestratorRunCtx["activeRuns"] extends Map<string, infer TValue> ? TValue : never
 
 export type AgentRef = {
   current: Agent | null

@@ -2,11 +2,7 @@
  * Entity registry — diff tests.
  */
 
-import {
-    diffEntityDefinitions,
-    type EntityDefinition,
-    type EntityTable,
-} from "@mia/sync"
+import { diffEntityDefinitions, type EntityDefinition, type EntityTable } from "@mia/sync"
 import { describe, expect, it } from "vitest"
 
 function table(overrides: Partial<EntityTable> = {}): EntityTable {
@@ -24,7 +20,7 @@ function table(overrides: Partial<EntityTable> = {}): EntityTable {
     groundedByPipeline: null,
     enabledByDefault: null,
     userControllable: null,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -52,7 +48,7 @@ function def(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
     reason: "",
     createdAt: "2026-05-16T00:00:00.000Z",
     retiredAt: null,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -98,7 +94,11 @@ describe("diffEntityDefinitions", () => {
   it("detects entity-level scd2 override change", () => {
     const a = def()
     const b = def({
-      scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: { identityHandling: "none" } },
+      scd2: {
+        strategyId: "mymi-scd2",
+        strategyVersion: 1,
+        entityOverride: { identityHandling: "none" }
+      }
     })
     expect(diffEntityDefinitions(a, b).some((c) => c.kind === "scd2OverrideChanged")).toBe(true)
   })
@@ -106,18 +106,20 @@ describe("diffEntityDefinitions", () => {
   it("detects table added", () => {
     const a = def()
     const b = def({
-      tables: [table(), table({ name: "core.B", executionOrder: 2 })],
+      tables: [table(), table({ name: "core.B", executionOrder: 2 })]
     })
-    expect(diffEntityDefinitions(a, b).some((c) => c.kind === "tableAdded" && c.tableName === "core.B")).toBe(true)
+    expect(diffEntityDefinitions(a, b).some((c) => c.kind === "tableAdded" && c.tableName === "core.B")).toBe(
+      true
+    )
   })
 
   it("detects table removed", () => {
     const a = def({
-      tables: [table(), table({ name: "core.B", executionOrder: 2 })],
+      tables: [table(), table({ name: "core.B", executionOrder: 2 })]
     })
     const b = def()
     expect(
-      diffEntityDefinitions(a, b).some((c) => c.kind === "tableRemoved" && c.tableName === "core.B"),
+      diffEntityDefinitions(a, b).some((c) => c.kind === "tableRemoved" && c.tableName === "core.B")
     ).toBe(true)
   })
 
@@ -136,10 +138,10 @@ describe("diffEntityDefinitions", () => {
 
   it("detects reorder of common tables", () => {
     const a = def({
-      tables: [table({ name: "core.A" }), table({ name: "core.B", executionOrder: 2 })],
+      tables: [table({ name: "core.A" }), table({ name: "core.B", executionOrder: 2 })]
     })
     const b = def({
-      tables: [table({ name: "core.B" }), table({ name: "core.A", executionOrder: 2 })],
+      tables: [table({ name: "core.B" }), table({ name: "core.A", executionOrder: 2 })]
     })
     expect(diffEntityDefinitions(a, b).some((c) => c.kind === "tableReordered")).toBe(true)
   })
@@ -161,7 +163,9 @@ describe("diffEntityDefinitions", () => {
 
   it("detects policies change", () => {
     const a = def()
-    const b = def({ policies: { approvalPolicyId: "dual", freezeWindowIds: ["holidays"], riskMultiplier: 2 } })
+    const b = def({
+      policies: { approvalPolicyId: "dual", freezeWindowIds: ["holidays"], riskMultiplier: 2 }
+    })
     expect(diffEntityDefinitions(a, b).some((c) => c.kind === "policiesChanged")).toBe(true)
   })
 

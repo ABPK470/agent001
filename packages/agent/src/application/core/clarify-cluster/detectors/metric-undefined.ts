@@ -19,7 +19,8 @@ const VERSION = "1.0.0"
  * Ranking / aggregation language. Each entry is matched as a whole word
  * (case-insensitive) anywhere in the goal text.
  */
-const RANKING_PATTERN = /\b(top|bottom|biggest|smallest|highest|lowest|most|least|best|worst|largest|leading|trailing)\b/i
+const RANKING_PATTERN =
+  /\b(top|bottom|biggest|smallest|highest|lowest|most|least|best|worst|largest|leading|trailing)\b/i
 
 /**
  * Numeric MSSQL data types that count as a metric. Listed exhaustively
@@ -28,9 +29,16 @@ const RANKING_PATTERN = /\b(top|bottom|biggest|smallest|highest|lowest|most|leas
  * CatalogColumn.dataType.
  */
 const METRIC_TYPES: readonly string[] = [
-  "decimal", "numeric", "money", "smallmoney",
-  "float", "real",
-  "int", "bigint", "smallint", "tinyint",
+  "decimal",
+  "numeric",
+  "money",
+  "smallmoney",
+  "float",
+  "real",
+  "int",
+  "bigint",
+  "smallint",
+  "tinyint"
 ]
 
 export const metricUndefinedDetector: Detector = {
@@ -59,14 +67,16 @@ export const metricUndefinedDetector: Detector = {
         }
       }
     }
-    return [{
-      id: makeFindingId("metric-undefined", rankWord),
-      kind: "metric-undefined" as const,
-      severity: "warn" as const,
-      subject: rankWord,
-      reasoning: `"${rankWord}" implies a ranking but the goal names no measure column to rank by.`,
-      suggestedQuestion: `You asked for "${rankWord}" — what should I rank by? (Name a numeric column or measure.)`,
-      source: "detector" as const,
-    }]
-  },
+    return [
+      {
+        id: makeFindingId("metric-undefined", rankWord),
+        kind: "metric-undefined" as const,
+        severity: "warn" as const,
+        subject: rankWord,
+        reasoning: `"${rankWord}" implies a ranking but the goal names no measure column to rank by.`,
+        suggestedQuestion: `You asked for "${rankWord}" — what should I rank by? (Name a numeric column or measure.)`,
+        source: "detector" as const
+      }
+    ]
+  }
 }

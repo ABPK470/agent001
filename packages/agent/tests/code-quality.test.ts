@@ -6,10 +6,10 @@
  */
 import { describe, expect, it } from "vitest"
 import {
-    detectCatchAllReturns,
-    detectInconsistentBranches,
-    detectPlaceholderPatterns,
-    PLACEHOLDER_PATTERNS,
+  detectCatchAllReturns,
+  detectInconsistentBranches,
+  detectPlaceholderPatterns,
+  PLACEHOLDER_PATTERNS
 } from "../src/application/core/governance.js"
 
 // ============================================================================
@@ -532,9 +532,9 @@ describe("code-quality: detectPlaceholderPatterns", () => {
   describe("caps output length", () => {
     it("returns at most 8 findings", () => {
       // Create a file with many many stubs
-      const stubs = Array.from({ length: 20 }, (_, i) =>
-        `function isValid${i}(x) { return true; }`
-      ).join("\n")
+      const stubs = Array.from({ length: 20 }, (_, i) => `function isValid${i}(x) { return true; }`).join(
+        "\n"
+      )
       const findings = detectPlaceholderPatterns(stubs)
       expect(findings.length).toBeLessThanOrEqual(8)
     })
@@ -783,7 +783,7 @@ function processTransaction(source, target, txType) {
 
   it("is integrated into detectPlaceholderPatterns", () => {
     const findings = detectPlaceholderPatterns(DISPATCH_INCONSISTENT_BRANCHES)
-    const branchFinding = findings.find(f => /inconsistent branch/i.test(f))
+    const branchFinding = findings.find((f) => /inconsistent branch/i.test(f))
     expect(branchFinding).toBeDefined()
   })
 })
@@ -900,7 +900,7 @@ describe("code-quality: class method stub detection (trace regression)", () => {
       "// Basic legal move logic placeholder (to be replaced with full rules)",
       "// Handle piece selection and moves (placeholder logic for now)",
       "// This is a placeholder implementation",
-      "// Game state placeholder — will be filled in later",
+      "// Game state placeholder — will be filled in later"
     ]
     for (const comment of cases) {
       const code = `function test() {\n  ${comment}\n  return true;\n}`

@@ -28,20 +28,70 @@ const CONTEXT_LINES = 2
 
 /** Directories to always skip. */
 const SKIP_DIRS = new Set([
-  "node_modules", ".git", ".hg", ".svn", "dist", "build",
-  ".next", ".nuxt", "__pycache__", ".tox", ".venv", "venv",
-  "coverage", ".nyc_output", ".cache", ".turbo",
+  "node_modules",
+  ".git",
+  ".hg",
+  ".svn",
+  "dist",
+  "build",
+  ".next",
+  ".nuxt",
+  "__pycache__",
+  ".tox",
+  ".venv",
+  "venv",
+  "coverage",
+  ".nyc_output",
+  ".cache",
+  ".turbo"
 ])
 
 /** Binary-ish extensions to skip. */
 const BINARY_EXTS = new Set([
-  ".png", ".jpg", ".jpeg", ".gif", ".bmp", ".ico", ".webp", ".avif",
-  ".mp3", ".mp4", ".wav", ".avi", ".mov", ".mkv", ".flac",
-  ".zip", ".gz", ".tar", ".bz2", ".7z", ".rar", ".xz",
-  ".pdf", ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
-  ".woff", ".woff2", ".ttf", ".otf", ".eot",
-  ".exe", ".dll", ".so", ".dylib", ".bin", ".o", ".a",
-  ".sqlite", ".db", ".lock",
+  ".png",
+  ".jpg",
+  ".jpeg",
+  ".gif",
+  ".bmp",
+  ".ico",
+  ".webp",
+  ".avif",
+  ".mp3",
+  ".mp4",
+  ".wav",
+  ".avi",
+  ".mov",
+  ".mkv",
+  ".flac",
+  ".zip",
+  ".gz",
+  ".tar",
+  ".bz2",
+  ".7z",
+  ".rar",
+  ".xz",
+  ".pdf",
+  ".doc",
+  ".docx",
+  ".xls",
+  ".xlsx",
+  ".ppt",
+  ".pptx",
+  ".woff",
+  ".woff2",
+  ".ttf",
+  ".otf",
+  ".eot",
+  ".exe",
+  ".dll",
+  ".so",
+  ".dylib",
+  ".bin",
+  ".o",
+  ".a",
+  ".sqlite",
+  ".db",
+  ".lock"
 ])
 
 // ── Shared base path (same as filesystem.ts) ────────────────────
@@ -62,7 +112,9 @@ export function computeAutoDetectedExcludeDirs(basePath: string): string[] {
       if (stats.isDirectory()) {
         dirs.push(dir)
       }
-    } catch { /* doesn't exist, skip */ }
+    } catch {
+      /* doesn't exist, skip */
+    }
   }
   return dirs
 }
@@ -84,7 +136,7 @@ async function* walkFiles(
   dir: string,
   basePath: string,
   includeGlob: string | undefined,
-  excludeTopLevelDirs?: ReadonlySet<string>,
+  excludeTopLevelDirs?: ReadonlySet<string>
 ): AsyncGenerator<string> {
   let entries
   try {
@@ -141,28 +193,28 @@ const SEARCH_FILES_PARAMETERS = {
   properties: {
     pattern: {
       type: "string",
-      description: "Text or regex pattern to search for",
+      description: "Text or regex pattern to search for"
     },
     path: {
       type: "string",
-      description: "Directory to search in (default: workspace root). Relative to working directory.",
+      description: "Directory to search in (default: workspace root). Relative to working directory."
     },
     include: {
       type: "string",
-      description: "File filter — e.g. '*.ts' or 'package.json'. Only files matching this are searched.",
+      description: "File filter — e.g. '*.ts' or 'package.json'. Only files matching this are searched."
     },
     regex: {
       type: "boolean",
-      description: "If true, treat pattern as a regex. Default: false (exact text match).",
-    },
+      description: "If true, treat pattern as a regex. Default: false (exact text match)."
+    }
   },
-  required: ["pattern"],
+  required: ["pattern"]
 } as const
 
 export const searchFilesToolMetadata: ToolMetadata = {
   name: "search_files",
   description: SEARCH_FILES_DESCRIPTION,
-  parameters: SEARCH_FILES_PARAMETERS,
+  parameters: SEARCH_FILES_PARAMETERS
 }
 
 interface SearchFilesCtx {
@@ -170,10 +222,7 @@ interface SearchFilesCtx {
   excludeDirs: ReadonlySet<string>
 }
 
-async function executeSearchFiles(
-  args: Record<string, unknown>,
-  ctx: SearchFilesCtx,
-): Promise<string> {
+async function executeSearchFiles(args: Record<string, unknown>, ctx: SearchFilesCtx): Promise<string> {
   try {
     const pattern = String(args.pattern)
     if (!pattern) return "Error: pattern is required"
@@ -257,7 +306,9 @@ async function executeSearchFiles(
 
     // Format output
     const parts: string[] = []
-    parts.push(`Found ${matches.length} match${matches.length > 1 ? "es" : ""} in ${filesSearched} files${truncated ? " (results truncated)" : ""}:\n`)
+    parts.push(
+      `Found ${matches.length} match${matches.length > 1 ? "es" : ""} in ${filesSearched} files${truncated ? " (results truncated)" : ""}:\n`
+    )
 
     // Group by file for readability
     const byFile = new Map<string, Match[]>()
@@ -288,8 +339,8 @@ export function createSearchFilesTool(host: AgentHost): ExecutableTool {
     async execute(args) {
       return executeSearchFiles(args, {
         basePath: host.searchFiles.basePath,
-        excludeDirs: host.searchFiles.excludeDirs,
+        excludeDirs: host.searchFiles.excludeDirs
       })
-    },
+    }
   }
 }

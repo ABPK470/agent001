@@ -8,25 +8,22 @@ import { VerifierOutcome } from "../../domain/index.js"
  * @module
  */
 
-import {
-    getArchitectureRepairContext,
-    uniqueStrings,
-} from "../internal/verification-inference.js"
+import { getArchitectureRepairContext, uniqueStrings } from "../internal/verification-inference.js"
 import type {
-    LegacyRetryPlan,
-    PipelineResult,
-    Plan,
-    PlannerRepairCompatibilityMode,
-    RepairPlan,
-    RepairPlanCompatibilityReport,
-    RepairTask,
-    VerifierDecision,
+  LegacyRetryPlan,
+  PipelineResult,
+  Plan,
+  PlannerRepairCompatibilityMode,
+  RepairPlan,
+  RepairPlanCompatibilityReport,
+  RepairTask,
+  VerifierDecision
 } from "../types.js"
 
 export function buildLegacyRetryPlan(
   plan: Plan,
   pipelineResult: PipelineResult,
-  decision: VerifierDecision,
+  decision: VerifierDecision
 ): LegacyRetryPlan {
   const nonRetryableFailureClasses = new Set(["cancelled", "spawn_error"])
   const architectureContext = getArchitectureRepairContext(plan)
@@ -35,9 +32,10 @@ export function buildLegacyRetryPlan(
   for (const assessment of decision.steps) {
     if (assessment.outcome === VerifierOutcome.Pass) continue
     const stepResult = pipelineResult.stepResults.get(assessment.stepName)
-    const isBlocked = assessment.retryable === false
-      || (stepResult?.failureClass != null && nonRetryableFailureClasses.has(stepResult.failureClass))
-      || stepResult?.acceptanceState === "blocked"
+    const isBlocked =
+      assessment.retryable === false ||
+      (stepResult?.failureClass != null && nonRetryableFailureClasses.has(stepResult.failureClass)) ||
+      stepResult?.acceptanceState === "blocked"
 
     tasks.push({
       stepName: assessment.stepName,
@@ -48,7 +46,7 @@ export function buildLegacyRetryPlan(
       preserveArchitecture: architectureContext?.preserveArchitecture,
       architectureSummary: architectureContext?.architectureSummary,
       sharedContracts: architectureContext?.sharedContracts,
-      invariants: architectureContext?.invariants,
+      invariants: architectureContext?.invariants
     })
   }
 
@@ -59,7 +57,9 @@ export function buildLegacyRetryPlan(
   return {
     tasks,
     rerunOrder,
-    skippedVerifiedSteps: decision.steps.filter((step) => step.outcome === VerifierOutcome.Pass).map((step) => step.stepName),
+    skippedVerifiedSteps: decision.steps
+      .filter((step) => step.outcome === VerifierOutcome.Pass)
+      .map((step) => step.stepName)
   }
 }
 
@@ -70,7 +70,7 @@ function taskCodes(task: RepairTask): string[] {
 export function compareRepairPlanCompatibility(
   mode: PlannerRepairCompatibilityMode,
   legacyPlan: LegacyRetryPlan,
-  repairPlan: RepairPlan,
+  repairPlan: RepairPlan
 ): RepairPlanCompatibilityReport {
   const reasons: string[] = []
   const activePath = mode === "legacy" ? "legacy" : "repair"
@@ -84,13 +84,19 @@ export function compareRepairPlanCompatibility(
   const repairOnly = [...repairRerun].filter((stepName) => !legacyRerun.has(stepName))
 
   if (legacyOnly.length > 0) {
-    reasons.push(`Legacy retry would rerun ${legacyOnly.join(", ")} but repair-plan scheduling would skip them.`)
+    reasons.push(
+      `Legacy retry would rerun ${legacyOnly.join(", ")} but repair-plan scheduling would skip them.`
+    )
   }
   if (repairOnly.length > 0) {
-    reasons.push(`Repair-plan scheduling adds ${repairOnly.join(", ")} beyond the direct failing-step legacy retry set.`)
+    reasons.push(
+      `Repair-plan scheduling adds ${repairOnly.join(", ")} beyond the direct failing-step legacy retry set.`
+    )
   }
   if (legacyPlan.rerunOrder.join("|") !== repairPlan.rerunOrder.join("|")) {
-    reasons.push(`Rerun order diverged: legacy=${legacyPlan.rerunOrder.join(" -> ") || "none"}; repair=${repairPlan.rerunOrder.join(" -> ") || "none"}.`)
+    reasons.push(
+      `Rerun order diverged: legacy=${legacyPlan.rerunOrder.join(" -> ") || "none"}; repair=${repairPlan.rerunOrder.join(" -> ") || "none"}.`
+    )
   }
 
   for (const stepName of [...new Set([...legacyTasks.keys(), ...repairTasks.keys()])]) {
@@ -102,13 +108,19 @@ export function compareRepairPlanCompatibility(
       reasons.push(`Step ${stepName} mode diverged: legacy=${legacyTask.mode}, repair=${repairTask.mode}.`)
     }
     if (taskCodes(legacyTask).join("|") !== taskCodes(repairTask).join("|")) {
-      reasons.push(`Step ${stepName} issue ownership diverged between legacy retry targeting and repair-plan targeting.`)
+      reasons.push(
+        `Step ${stepName} issue ownership diverged between legacy retry targeting and repair-plan targeting.`
+      )
     }
     if (legacyTask.requiredAcceptedArtifacts.length !== repairTask.requiredAcceptedArtifacts.length) {
-      reasons.push(`Step ${stepName} gained acceptance gates in repair-plan scheduling (${repairTask.requiredAcceptedArtifacts.length}) that legacy retry did not enforce.`)
+      reasons.push(
+        `Step ${stepName} gained acceptance gates in repair-plan scheduling (${repairTask.requiredAcceptedArtifacts.length}) that legacy retry did not enforce.`
+      )
     }
     if (legacyTask.dependencyContext.length !== repairTask.dependencyContext.length) {
-      reasons.push(`Step ${stepName} gained dependency context in repair-plan scheduling (${repairTask.dependencyContext.length} issue(s)).`)
+      reasons.push(
+        `Step ${stepName} gained dependency context in repair-plan scheduling (${repairTask.dependencyContext.length} issue(s)).`
+      )
     }
   }
 
@@ -119,6 +131,6 @@ export function compareRepairPlanCompatibility(
     divergenceScore: reasons.length,
     reasons,
     legacyPlan,
-    repairPlan,
+    repairPlan
   }
 }

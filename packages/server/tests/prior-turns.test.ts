@@ -22,7 +22,10 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { loadPriorTurns, PRIOR_TURN_ANSWER_MAX_CHARS } from "../src/application/core/data-blocks/prior-turns.js"
+import {
+  loadPriorTurns,
+  PRIOR_TURN_ANSWER_MAX_CHARS
+} from "../src/application/core/data-blocks/prior-turns.js"
 import { seedSession, seedUser } from "./_fk-helpers.js"
 
 let db: Database.Database
@@ -42,7 +45,11 @@ beforeEach(async () => {
 })
 
 afterEach(() => {
-  try { db.close() } catch { /* already closed */ }
+  try {
+    db.close()
+  } catch {
+    /* already closed */
+  }
   rmSync(dataDir, { recursive: true, force: true })
   if (originalDataDir === undefined) delete process.env["MIA_DATA_DIR"]
   else process.env["MIA_DATA_DIR"] = originalDataDir
@@ -69,34 +76,34 @@ function insertRun(r: InsertRun): void {
   seedUser(db, upn)
   // sessions require FK to users — seed a session for any session id used
   seedSession(db, sid, upn)
-  const completedAt = r.completedMinutesAgo == null
-    ? null
-    : new Date(Date.now() + r.completedMinutesAgo * 60_000).toISOString()
-  const createdAt = completedAt
-    ?? new Date(Date.now() + (r.completedMinutesAgo ?? 0) * 60_000).toISOString()
-  db.prepare(`
+  const completedAt =
+    r.completedMinutesAgo == null ? null : new Date(Date.now() + r.completedMinutesAgo * 60_000).toISOString()
+  const createdAt = completedAt ?? new Date(Date.now() + (r.completedMinutesAgo ?? 0) * 60_000).toISOString()
+  db.prepare(
+    `
     INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, upn, display_name)
     VALUES (@id, @goal, @status, @answer, 1, NULL, @parent_run_id, NULL, @created_at, @completed_at, @session_id, @upn, @display_name)
-  `).run({
+  `
+  ).run({
     display_name: upn ?? "anon",
-    id:            r.id,
-    goal:          r.goal,
-    status:        r.status ?? "completed",
-    answer:        r.answer ?? null,
+    id: r.id,
+    goal: r.goal,
+    status: r.status ?? "completed",
+    answer: r.answer ?? null,
     parent_run_id: r.parentRunId ?? null,
-    created_at:    createdAt,
-    completed_at:  completedAt,
-    session_id:    sid,
-    upn:           upn,
+    created_at: createdAt,
+    completed_at: completedAt,
+    session_id: sid,
+    upn: upn
   })
 }
 
 describe("loadPriorTurns", () => {
   it("returns most-recent runs first, capped by limit", () => {
-    insertRun({ id: "r1", goal: "first",  answer: "A1", completedMinutesAgo: -30 })
+    insertRun({ id: "r1", goal: "first", answer: "A1", completedMinutesAgo: -30 })
     insertRun({ id: "r2", goal: "second", answer: "A2", completedMinutesAgo: -20 })
-    insertRun({ id: "r3", goal: "third",  answer: "A3", completedMinutesAgo: -10 })
-    insertRun({ id: "r4", goal: "fourth", answer: "A4", completedMinutesAgo: -5  })
+    insertRun({ id: "r3", goal: "third", answer: "A3", completedMinutesAgo: -10 })
+    insertRun({ id: "r4", goal: "fourth", answer: "A4", completedMinutesAgo: -5 })
 
     const turns = loadPriorTurns({ sessionId: SID, upn: UPN, limit: 3 })
 
@@ -107,7 +114,7 @@ describe("loadPriorTurns", () => {
 
   it("excludes the current runId via excludeRunId", () => {
     insertRun({ id: "rPrev", goal: "earlier", answer: "old", completedMinutesAgo: -10 })
-    insertRun({ id: "rCur",  goal: "current", answer: "new", completedMinutesAgo: -1 })
+    insertRun({ id: "rCur", goal: "current", answer: "new", completedMinutesAgo: -1 })
 
     const turns = loadPriorTurns({ sessionId: SID, upn: UPN, excludeRunId: "rCur" })
 
@@ -115,8 +122,14 @@ describe("loadPriorTurns", () => {
   })
 
   it("filters strictly by sessionId", () => {
-    insertRun({ id: "rA", goal: "in-session",  answer: "yes", completedMinutesAgo: -5, sessionId: SID })
-    insertRun({ id: "rB", goal: "out-session", answer: "no",  completedMinutesAgo: -3, sessionId: "anon:ffffffffffffffffffffffffffffffff" })
+    insertRun({ id: "rA", goal: "in-session", answer: "yes", completedMinutesAgo: -5, sessionId: SID })
+    insertRun({
+      id: "rB",
+      goal: "out-session",
+      answer: "no",
+      completedMinutesAgo: -3,
+      sessionId: "anon:ffffffffffffffffffffffffffffffff"
+    })
 
     const turns = loadPriorTurns({ sessionId: SID, upn: UPN })
 
@@ -124,8 +137,14 @@ describe("loadPriorTurns", () => {
   })
 
   it("filters strictly by upn (tenant isolation)", () => {
-    insertRun({ id: "rMine",  goal: "mine",  answer: "ok", completedMinutesAgo: -5, upn: UPN })
-    insertRun({ id: "rOther", goal: "other", answer: "ok", completedMinutesAgo: -3, upn: "bob@example.com" })
+    insertRun({ id: "rMine", goal: "mine", answer: "ok", completedMinutesAgo: -5, upn: UPN })
+    insertRun({
+      id: "rOther",
+      goal: "other",
+      answer: "ok",
+      completedMinutesAgo: -3,
+      upn: "bob@example.com"
+    })
 
     const turns = loadPriorTurns({ sessionId: SID, upn: UPN })
 
@@ -139,7 +158,13 @@ describe("loadPriorTurns", () => {
 
   it("skips delegated child runs (parent_run_id IS NOT NULL)", () => {
     insertRun({ id: "rParent", goal: "top-level", answer: "P", completedMinutesAgo: -10 })
-    insertRun({ id: "rChild",  goal: "delegated", answer: "C", completedMinutesAgo: -5, parentRunId: "rParent" })
+    insertRun({
+      id: "rChild",
+      goal: "delegated",
+      answer: "C",
+      completedMinutesAgo: -5,
+      parentRunId: "rParent"
+    })
 
     const turns = loadPriorTurns({ sessionId: SID, upn: UPN })
 
@@ -147,11 +172,29 @@ describe("loadPriorTurns", () => {
   })
 
   it("skips non-terminal and cancelled/crashed statuses", () => {
-    insertRun({ id: "rOk",        goal: "ok",        answer: "x", completedMinutesAgo: -50, status: "completed" })
-    insertRun({ id: "rFail",      goal: "failed",    answer: "y", completedMinutesAgo: -40, status: "failed" })
-    insertRun({ id: "rRunning",   goal: "running",   answer: null, completedMinutesAgo: -30, status: "running" })
-    insertRun({ id: "rCancelled", goal: "cancelled", answer: null, completedMinutesAgo: -20, status: "cancelled" })
-    insertRun({ id: "rCrashed",   goal: "crashed",   answer: null, completedMinutesAgo: -10, status: "crashed" })
+    insertRun({ id: "rOk", goal: "ok", answer: "x", completedMinutesAgo: -50, status: "completed" })
+    insertRun({ id: "rFail", goal: "failed", answer: "y", completedMinutesAgo: -40, status: "failed" })
+    insertRun({
+      id: "rRunning",
+      goal: "running",
+      answer: null,
+      completedMinutesAgo: -30,
+      status: "running"
+    })
+    insertRun({
+      id: "rCancelled",
+      goal: "cancelled",
+      answer: null,
+      completedMinutesAgo: -20,
+      status: "cancelled"
+    })
+    insertRun({
+      id: "rCrashed",
+      goal: "crashed",
+      answer: null,
+      completedMinutesAgo: -10,
+      status: "crashed"
+    })
 
     const turns = loadPriorTurns({ sessionId: SID, upn: UPN, limit: 10 })
 

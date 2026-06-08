@@ -5,32 +5,28 @@
  */
 
 import type { Tool } from "../../types.js"
-import {
-    normalizeBasename,
-    normalizeSpecPath,
-    uniqueStrings,
-} from "../blueprint-contract/index.js"
+import { normalizeBasename, normalizeSpecPath, uniqueStrings } from "../blueprint-contract/index.js"
 import type { PipelineStepResult, Plan, SubagentTaskStep } from "../types.js"
 import { escapeRegExp } from "../verifier-helpers/index.js"
 import {
-    buildBlueprintArtifactCoverageIssues,
-    buildBlueprintFunctionContractIssues,
-    buildBlueprintSharedTypeContractIssues,
-    isBlueprintLikeStepForVerifier,
+  buildBlueprintArtifactCoverageIssues,
+  buildBlueprintFunctionContractIssues,
+  buildBlueprintSharedTypeContractIssues,
+  isBlueprintLikeStepForVerifier
 } from "./contract-issues.js"
 import {
-    type ArtifactSpecMapping,
-    type BlueprintFunctionSpec,
-    type StepSpecEvidence,
-    collectSpecAuditIssues,
-    detectStructuralMarkersInArtifact,
-    parseBlueprintSpec,
+  type ArtifactSpecMapping,
+  type BlueprintFunctionSpec,
+  type StepSpecEvidence,
+  collectSpecAuditIssues,
+  detectStructuralMarkersInArtifact,
+  parseBlueprintSpec
 } from "./core.js"
 
 export {
-    buildBlueprintArtifactCoverageIssues,
-    collectPlannedBlueprintArtifacts,
-    isBlueprintLikeStepForVerifier
+  buildBlueprintArtifactCoverageIssues,
+  collectPlannedBlueprintArtifacts,
+  isBlueprintLikeStepForVerifier
 } from "./contract-issues.js"
 
 // ============================================================================
@@ -39,34 +35,37 @@ export {
 
 function collectSourceReadEvidence(stepResult: PipelineStepResult, blueprintPath: string): string[] {
   const reads = (stepResult.toolCalls ?? [])
-    .filter(call => call.name === "read_file" || call.name === "search_files")
-    .map(call => {
-      const pathArg = typeof call.args.path === "string"
-        ? call.args.path
-        : typeof call.args.pattern === "string"
-          ? call.args.pattern
-          : null
+    .filter((call) => call.name === "read_file" || call.name === "search_files")
+    .map((call) => {
+      const pathArg =
+        typeof call.args.path === "string"
+          ? call.args.path
+          : typeof call.args.pattern === "string"
+            ? call.args.pattern
+            : null
       return pathArg ? normalizeSpecPath(pathArg) : null
     })
     .filter((value): value is string => Boolean(value))
 
   const normalizedBlueprint = normalizeSpecPath(blueprintPath)
-  return uniqueStrings(reads.filter(read => read.includes("BLUEPRINT.md") || read === normalizedBlueprint))
+  return uniqueStrings(reads.filter((read) => read.includes("BLUEPRINT.md") || read === normalizedBlueprint))
 }
 
 export function findBlueprintForStep(step: SubagentTaskStep): string | null {
-  return step.executionContext.requiredSourceArtifacts.find(
-    (artifact: string) => /(^|\/)BLUEPRINT\.md$/iu.test(artifact),
+  return (
+    step.executionContext.requiredSourceArtifacts.find((artifact: string) =>
+      /(^|\/)BLUEPRINT\.md$/iu.test(artifact)
+    ) ??
+    step.executionContext.targetArtifacts.find((artifact: string) =>
+      /(^|\/)BLUEPRINT\.md$/iu.test(artifact)
+    ) ??
+    null
   )
-    ?? step.executionContext.targetArtifacts.find(
-      (artifact: string) => /(^|\/)BLUEPRINT\.md$/iu.test(artifact),
-    )
-    ?? null
 }
 
 function detectFunctionsInArtifact(
   content: string,
-  functions: readonly BlueprintFunctionSpec[],
+  functions: readonly BlueprintFunctionSpec[]
 ): { found: string[]; missing: string[] } {
   const found: string[] = []
   const missing: string[] = []
@@ -82,7 +81,6 @@ function detectFunctionsInArtifact(
 
 // Contract issue builders extracted to ./contract-issues.ts
 
-
 // ============================================================================
 // Build step spec evidence (main entry point)
 // ============================================================================
@@ -93,9 +91,16 @@ export async function buildStepSpecEvidence(
   plan: Plan,
   readFile: Tool,
   readArtifactContent: (readFile: Tool, path: string, runCommand?: Tool) => Promise<string | null>,
-  probeArtifact: (readFile: Tool, path: string, actualPaths: string[], wsRoot?: string, runCommand?: Tool, allowedWriteRoots?: readonly string[]) => Promise<{ found: boolean; resolvedPath: string }>,
+  probeArtifact: (
+    readFile: Tool,
+    path: string,
+    actualPaths: string[],
+    wsRoot?: string,
+    runCommand?: Tool,
+    allowedWriteRoots?: readonly string[]
+  ) => Promise<{ found: boolean; resolvedPath: string }>,
   runCommand?: Tool,
-  actualPaths: string[] = [],
+  actualPaths: string[] = []
 ): Promise<StepSpecEvidence | null> {
   const blueprintPath = findBlueprintForStep(step)
   if (!blueprintPath) return null
@@ -111,7 +116,7 @@ export async function buildStepSpecEvidence(
       sharedTypes: [],
       algorithmicContracts: [],
       structuralIssues: [`SPEC INGESTION FAILED: could not read ${blueprintPath} for step ${step.name}`],
-      processAuditIssues: collectSpecAuditIssues(step, stepResult, blueprintPath),
+      processAuditIssues: collectSpecAuditIssues(step, stepResult, blueprintPath)
     }
   }
 
@@ -123,13 +128,13 @@ export async function buildStepSpecEvidence(
 
   if (sourceReads.length === 0) {
     structuralIssues.push(
-      `SPEC EVIDENCE MISSING: step ${step.name} did not read ${blueprintPath} before producing artifacts`,
+      `SPEC EVIDENCE MISSING: step ${step.name} did not read ${blueprintPath} before producing artifacts`
     )
   }
 
   if (spec.files.length === 0) {
     structuralIssues.push(
-      `SPEC INGESTION WEAK: ${blueprintPath} did not yield any declared file structure for step ${step.name}`,
+      `SPEC INGESTION WEAK: ${blueprintPath} did not yield any declared file structure for step ${step.name}`
     )
   }
 
@@ -142,10 +147,10 @@ export async function buildStepSpecEvidence(
     if (isBlueprintLikeStepForVerifier(step) && normalizedArtifact === normalizeSpecPath(blueprintPath)) {
       continue
     }
-    const exactMatch = spec.files.find(file => normalizeSpecPath(file.declaredPath) === normalizedArtifact)
+    const exactMatch = spec.files.find((file) => normalizeSpecPath(file.declaredPath) === normalizedArtifact)
     const basenameMatch = exactMatch
       ? null
-      : spec.files.find(file => file.basename === normalizeBasename(normalizedArtifact))
+      : spec.files.find((file) => file.basename === normalizeBasename(normalizedArtifact))
     const matchedSpec = exactMatch ?? basenameMatch ?? null
     const probe = await probeArtifact(
       readFile,
@@ -153,19 +158,24 @@ export async function buildStepSpecEvidence(
       actualPaths,
       step.executionContext.workspaceRoot || undefined,
       runCommand,
-      step.executionContext.allowedWriteRoots,
+      step.executionContext.allowedWriteRoots
     )
     const resolvedArtifactPath = probe.found ? probe.resolvedPath : null
     const content = resolvedArtifactPath
       ? await readArtifactContent(readFile, resolvedArtifactPath, runCommand)
       : null
-    const functionEvidence = matchedSpec && content
-      ? detectFunctionsInArtifact(content, matchedSpec.functions)
-      : { found: [], missing: matchedSpec?.functions.map(fn => fn.name) ?? [] }
+    const functionEvidence =
+      matchedSpec && content
+        ? detectFunctionsInArtifact(content, matchedSpec.functions)
+        : { found: [], missing: matchedSpec?.functions.map((fn) => fn.name) ?? [] }
     const actualStructuralMarkers = content ? detectStructuralMarkersInArtifact(artifact, content) : []
     const requiredStructuralMarkers = matchedSpec?.structuralMarkers ?? []
-    const foundStructuralMarkers = requiredStructuralMarkers.filter(marker => actualStructuralMarkers.includes(marker))
-    const missingStructuralMarkers = requiredStructuralMarkers.filter(marker => !actualStructuralMarkers.includes(marker))
+    const foundStructuralMarkers = requiredStructuralMarkers.filter((marker) =>
+      actualStructuralMarkers.includes(marker)
+    )
+    const missingStructuralMarkers = requiredStructuralMarkers.filter(
+      (marker) => !actualStructuralMarkers.includes(marker)
+    )
 
     mappings.push({
       targetArtifact: artifact,
@@ -175,31 +185,31 @@ export async function buildStepSpecEvidence(
       foundFunctions: functionEvidence.found,
       missingFunctions: functionEvidence.missing,
       foundStructuralMarkers,
-      missingStructuralMarkers,
+      missingStructuralMarkers
     })
 
     if (!matchedSpec) {
       structuralIssues.push(
-        `SPEC MAPPING MISSING: target artifact ${artifact} does not map to any file declared in ${blueprintPath}`,
+        `SPEC MAPPING MISSING: target artifact ${artifact} does not map to any file declared in ${blueprintPath}`
       )
       continue
     }
 
     if (!exactMatch && basenameMatch) {
       structuralIssues.push(
-        `SPEC PATH MISMATCH: target artifact ${artifact} only matches blueprint file ${matchedSpec.declaredPath} by basename`,
+        `SPEC PATH MISMATCH: target artifact ${artifact} only matches blueprint file ${matchedSpec.declaredPath} by basename`
       )
     }
 
     if (content && functionEvidence.missing.length > 0) {
       structuralIssues.push(
-        `SPEC FUNCTION MISMATCH: ${artifact} is missing blueprint functions ${functionEvidence.missing.join(", ")} from ${matchedSpec.declaredPath}`,
+        `SPEC FUNCTION MISMATCH: ${artifact} is missing blueprint functions ${functionEvidence.missing.join(", ")} from ${matchedSpec.declaredPath}`
       )
     }
 
     if (content && missingStructuralMarkers.length > 0) {
       structuralIssues.push(
-        `SPEC STRUCTURE MISMATCH: ${artifact} is missing blueprint structure markers ${missingStructuralMarkers.join(", ")} from ${matchedSpec.declaredPath}`,
+        `SPEC STRUCTURE MISMATCH: ${artifact} is missing blueprint structure markers ${missingStructuralMarkers.join(", ")} from ${matchedSpec.declaredPath}`
       )
     }
   }
@@ -213,6 +223,6 @@ export async function buildStepSpecEvidence(
     sharedTypes: spec.sharedTypes,
     algorithmicContracts: spec.algorithmicContracts,
     structuralIssues,
-    processAuditIssues,
+    processAuditIssues
   }
 }

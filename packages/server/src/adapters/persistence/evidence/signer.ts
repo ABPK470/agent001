@@ -17,15 +17,15 @@ import { buildHmacSigner } from "./signers/hmac.js"
 import { buildKmsSigner } from "./signers/kms-stub.js"
 
 export const SignerKind = {
-  Hmac:    "hmac",
+  Hmac: "hmac",
   FileRsa: "file-rsa",
-  Kms:     "kms",
+  Kms: "kms"
 } as const
 export type SignerKind = (typeof SignerKind)[keyof typeof SignerKind]
 
 export interface Signer {
   /** Stable identifier embedded in `EnvelopeSignature.signerId`. */
-  readonly id:  string
+  readonly id: string
   /** Algorithm tag e.g. "HMAC-SHA256", "RSASSA-PKCS1-v1_5-SHA256". */
   readonly alg: string
   /** Sign `bytes` and return base64url signature. */
@@ -54,7 +54,7 @@ export interface SignerConfigError {
  */
 export function buildSignerFromEnv(env: NodeJS.ProcessEnv = process.env): Signer {
   const kind = (env["EVIDENCE_SIGNER_KIND"] ?? "hmac") as SignerKind
-  const id   = env["EVIDENCE_SIGNER_ID"] ?? "default"
+  const id = env["EVIDENCE_SIGNER_ID"] ?? "default"
   switch (kind) {
     case "hmac": {
       const secret = env["EVIDENCE_HMAC_SECRET"]
@@ -63,9 +63,11 @@ export function buildSignerFromEnv(env: NodeJS.ProcessEnv = process.env): Signer
     }
     case "file-rsa": {
       const priv = env["EVIDENCE_RSA_PRIVATE_PATH"]
-      const pub  = env["EVIDENCE_RSA_PUBLIC_PATH"]
+      const pub = env["EVIDENCE_RSA_PUBLIC_PATH"]
       if (!priv || !pub) {
-        throw new Error(`EVIDENCE_SIGNER_KIND=file-rsa requires EVIDENCE_RSA_PRIVATE_PATH and EVIDENCE_RSA_PUBLIC_PATH`)
+        throw new Error(
+          `EVIDENCE_SIGNER_KIND=file-rsa requires EVIDENCE_RSA_PRIVATE_PATH and EVIDENCE_RSA_PUBLIC_PATH`
+        )
       }
       return buildFileRsaSigner({ id, privateKeyPath: priv, publicKeyPath: pub })
     }
@@ -78,10 +80,11 @@ export function buildSignerFromEnv(env: NodeJS.ProcessEnv = process.env): Signer
 }
 
 export function tryBuildSignerFromEnv(
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = process.env
 ): { ok: true; signer: Signer } | { ok: false; error: SignerConfigError } {
-  try { return { ok: true, signer: buildSignerFromEnv(env) } }
-  catch (e) {
+  try {
+    return { ok: true, signer: buildSignerFromEnv(env) }
+  } catch (e) {
     const kind = (env["EVIDENCE_SIGNER_KIND"] ?? "hmac") as SignerKind
     return { ok: false, error: { kind, message: e instanceof Error ? e.message : String(e) } }
   }

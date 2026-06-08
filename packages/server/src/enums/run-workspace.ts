@@ -5,7 +5,7 @@
 /** Coarse classification of a run's primary task. */
 export const RunTaskType = {
   CodeGeneration: "code_generation",
-  AnalysisOrChat: "analysis_or_chat",
+  AnalysisOrChat: "analysis_or_chat"
 } as const
 
 export type RunTaskType = (typeof RunTaskType)[keyof typeof RunTaskType]
@@ -18,7 +18,7 @@ export const isRunTaskType = (value: unknown): value is RunTaskType =>
 /** Runtime profile a run executes under (developer vs hosted). */
 export const RunProfile = {
   Developer: "developer",
-  Hosted:    "hosted",
+  Hosted: "hosted"
 } as const
 
 export type RunProfile = (typeof RunProfile)[keyof typeof RunProfile]

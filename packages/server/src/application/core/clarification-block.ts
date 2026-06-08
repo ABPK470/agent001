@@ -23,19 +23,19 @@ export interface ClarificationBlockInput {
  */
 function renderFinding(f: AmbiguityFinding): string {
   const sev = f.severity === "block" ? "🛑" : "⚠"
-  const candidates = f.candidates && f.candidates.length > 0
-    ? `  candidates: ${f.candidates.slice(0, 6).join(", ")}\n`
-    : ""
-  const uiOptions = f.uiOptions && f.uiOptions.length > 0
-    ? `  ui options: ${f.uiOptions.slice(0, 6).join(", ")}\n`
-    : ""
+  const candidates =
+    f.candidates && f.candidates.length > 0 ? `  candidates: ${f.candidates.slice(0, 6).join(", ")}\n` : ""
+  const uiOptions =
+    f.uiOptions && f.uiOptions.length > 0 ? `  ui options: ${f.uiOptions.slice(0, 6).join(", ")}\n` : ""
   return [
     `${sev} [${f.kind}] subject="${f.subject}" (source: ${f.source})`,
     `  reasoning: ${f.reasoning}`,
     candidates,
     uiOptions,
-    `  suggested question: ${f.suggestedQuestion}`,
-  ].join("\n").replace(/\n+$/g, "")
+    `  suggested question: ${f.suggestedQuestion}`
+  ]
+    .join("\n")
+    .replace(/\n+$/g, "")
 }
 
 function renderResolved(r: ResolvedClarification): string {
@@ -69,7 +69,7 @@ export function buildClarificationBlock(input: ClarificationBlockInput): string 
       "do NOT copy them into ask_user options unless explicit `ui options` are present.",
       "",
       bullets,
-      "</must_clarify>",
+      "</must_clarify>"
     )
   }
 
@@ -80,7 +80,7 @@ export function buildClarificationBlock(input: ClarificationBlockInput): string 
       "Treat their answers as authoritative; do NOT re-ask the same subject.",
       "",
       resolved.map(renderResolved).join("\n"),
-      "</resolved_clarifications>",
+      "</resolved_clarifications>"
     )
   }
 

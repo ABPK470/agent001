@@ -8,25 +8,21 @@ import { StepRole, VerifierOutcome } from "../../domain/index.js"
 
 import type { Tool } from "../../types.js"
 import { buildStepSpecEvidence } from "../internal/verifier-blueprint.js"
-import {
-    extractActualPaths,
-    probeArtifact,
-    readArtifactContent,
-} from "../internal/verifier-io.js"
+import { extractActualPaths, probeArtifact, readArtifactContent } from "../internal/verifier-io.js"
 import { detectVerificationModalityGaps } from "../internal/verifier-llm.js"
 import { probeContentCompleteness, probeCriteriaProof } from "../internal/verifier-probes-subprobes.js"
 import type {
-    PipelineResult,
-    PipelineStepResult,
-    Plan,
-    SubagentTaskStep,
-    VerifierStepAssessment,
+  PipelineResult,
+  PipelineStepResult,
+  Plan,
+  SubagentTaskStep,
+  VerifierStepAssessment
 } from "../types.js"
 import {
-    computeGibberishScore,
-    isBlockingCriteriaProofGap,
-    outputIntersectsArtifacts,
-    safeParseJson
+  computeGibberishScore,
+  isBlockingCriteriaProofGap,
+  outputIntersectsArtifacts,
+  safeParseJson
 } from "../verifier-helpers/index.js"
 import { runBrowserCheckProbe, runTestsProbe } from "./runtime-probes.js"
 import { detectPathMismatchIssues, detectScopeViolationIssues } from "./scope-checks.js"
@@ -36,14 +32,32 @@ const EVIDENCE_DENSITY_RE = /(line|file|log|trace|stderr|stdout|stack|error|\d)/
 const HALLUCINATION_CLAIM_RE = /(according to|as seen in|from the logs|based on)/i
 
 const STRUCTURAL_KEYWORDS = [
-  "not found", "Placeholder", "stub", "Syntax error", "Corrupted",
-  "Missing method", "Browser check", "catch-all", "empty function",
-  "deferred-work", "explicit failure", "all tool calls failed",
-  "zero tool calls", "gibberish", "skeletal", "inconsistent branch",
-  "degeneration", "PATH MISMATCH", "SCOPE VIOLATION",
-  "VERIFICATION MODALITY GAP", "CRITERIA PROOF MISSING",
-  "SPEC ", "PROCESS AUDIT", "BLUEPRINT ARTIFACT",
-  "BLUEPRINT FUNCTION CONTRACT", "BLUEPRINT SHARED TYPE",
+  "not found",
+  "Placeholder",
+  "stub",
+  "Syntax error",
+  "Corrupted",
+  "Missing method",
+  "Browser check",
+  "catch-all",
+  "empty function",
+  "deferred-work",
+  "explicit failure",
+  "all tool calls failed",
+  "zero tool calls",
+  "gibberish",
+  "skeletal",
+  "inconsistent branch",
+  "degeneration",
+  "PATH MISMATCH",
+  "SCOPE VIOLATION",
+  "VERIFICATION MODALITY GAP",
+  "CRITERIA PROOF MISSING",
+  "SPEC ",
+  "PROCESS AUDIT",
+  "BLUEPRINT ARTIFACT",
+  "BLUEPRINT FUNCTION CONTRACT",
+  "BLUEPRINT SHARED TYPE"
 ]
 
 export async function assessSubagentStep(
@@ -51,7 +65,7 @@ export async function assessSubagentStep(
   stepResult: PipelineStepResult,
   plan: Plan,
   pipelineResult: PipelineResult,
-  toolMap: Map<string, Tool>,
+  toolMap: Map<string, Tool>
 ): Promise<VerifierStepAssessment> {
   void pipelineResult
   const sa = step
@@ -66,7 +80,14 @@ export async function assessSubagentStep(
   const probeCache = new Map<string, { found: boolean; resolvedPath: string }>()
   if (readFile && sa.executionContext.targetArtifacts.length > 0) {
     for (const artifact of sa.executionContext.targetArtifacts) {
-      const probe = await probeArtifact(readFile, artifact, actualPaths, wsRoot, runCommand, sa.executionContext.allowedWriteRoots)
+      const probe = await probeArtifact(
+        readFile,
+        artifact,
+        actualPaths,
+        wsRoot,
+        runCommand,
+        sa.executionContext.allowedWriteRoots
+      )
       probeCache.set(artifact, probe)
       if (!probe.found) {
         issues.push(`Target artifact "${artifact}" not found`)
@@ -77,7 +98,16 @@ export async function assessSubagentStep(
   }
 
   if (readFile) {
-    const specEvidence = await buildStepSpecEvidence(sa, stepResult, plan, readFile, readArtifactContent, probeArtifact, runCommand, actualPaths)
+    const specEvidence = await buildStepSpecEvidence(
+      sa,
+      stepResult,
+      plan,
+      readFile,
+      readArtifactContent,
+      probeArtifact,
+      runCommand,
+      actualPaths
+    )
     if (specEvidence) {
       issues.push(...specEvidence.structuralIssues)
       issues.push(...specEvidence.processAuditIssues)
@@ -89,7 +119,14 @@ export async function assessSubagentStep(
   issues.push(...detectScopeViolationIssues(sa, plan, outputText, wsRoot))
 
   // Runtime probes: browser_check + run_tests
-  const browserOutcome = await runBrowserCheckProbe(sa, toolMap, probeCache, wsRoot, issues, executedModalities)
+  const browserOutcome = await runBrowserCheckProbe(
+    sa,
+    toolMap,
+    probeCache,
+    wsRoot,
+    issues,
+    executedModalities
+  )
   const browserCheckPassed = browserOutcome.passed
   const htmlArtifacts = browserOutcome.htmlArtifacts
   await runTestsProbe(sa, toolMap, issues, executedModalities)
@@ -102,7 +139,9 @@ export async function assessSubagentStep(
   // Evidence density scoring
   const outputLower = outputText.toLowerCase()
   if (outputText.length > 0 && !EVIDENCE_DENSITY_RE.test(outputLower)) {
-    issues.push("Weak evidence density: output lacks concrete indicators (file paths, line numbers, errors, data)")
+    issues.push(
+      "Weak evidence density: output lacks concrete indicators (file paths, line numbers, errors, data)"
+    )
   }
 
   // Hallucination detection
@@ -118,11 +157,14 @@ export async function assessSubagentStep(
   if (stepResult.output) {
     const parsedOutput = safeParseJson(stepResult.output)
     if (parsedOutput) {
-      const toolCallCount = typeof parsedOutput.toolCalls === "number"
-        ? parsedOutput.toolCalls
-        : Array.isArray(parsedOutput.toolCalls) ? parsedOutput.toolCalls.length : -1
-      const failedToolCallCount = typeof parsedOutput.failedToolCalls === "number"
-        ? parsedOutput.failedToolCalls : 0
+      const toolCallCount =
+        typeof parsedOutput.toolCalls === "number"
+          ? parsedOutput.toolCalls
+          : Array.isArray(parsedOutput.toolCalls)
+            ? parsedOutput.toolCalls.length
+            : -1
+      const failedToolCallCount =
+        typeof parsedOutput.failedToolCalls === "number" ? parsedOutput.failedToolCalls : 0
 
       if (toolCallCount === 0 && sa.executionContext.targetArtifacts.length > 0) {
         issues.push("Missing tool evidence: step required tool capabilities but reported zero tool calls")
@@ -157,10 +199,13 @@ export async function assessSubagentStep(
     let mutationConfirmed = false
     for (const artifact of sa.executionContext.targetArtifacts) {
       const cached = probeCache.get(artifact)
-      if (cached?.found) { mutationConfirmed = true; break }
+      if (cached?.found) {
+        mutationConfirmed = true
+        break
+      }
     }
     if (!mutationConfirmed && sa.executionContext.targetArtifacts.length > 0) {
-      if (!issues.some(i => i.includes("not found"))) {
+      if (!issues.some((i) => i.includes("not found"))) {
         issues.push("Writer step may lack mutation evidence — target artifacts not found on disk")
       }
     }
@@ -170,21 +215,21 @@ export async function assessSubagentStep(
   const shared = sa.executionContext.sharedStateContract
   if (shared) {
     if (sa.name !== shared.ownerStepName) {
-      const required = new Set(sa.executionContext.requiredSourceArtifacts.map(a => a.replace(/^\.\//, "")))
+      const required = new Set(sa.executionContext.requiredSourceArtifacts.map((a) => a.replace(/^\.\//, "")))
       const ownerArtifact = shared.ownerArtifactPath.replace(/^\.\//, "")
       if (!required.has(ownerArtifact)) {
         issues.push(
-          `CRITERIA PROOF MISSING: shared-state contract requires consuming owner artifact "${shared.ownerArtifactPath}", but it is missing from requiredSourceArtifacts`,
+          `CRITERIA PROOF MISSING: shared-state contract requires consuming owner artifact "${shared.ownerArtifactPath}", but it is missing from requiredSourceArtifacts`
         )
       }
     }
   }
 
-  const structuralIssues = issues.filter(i =>
-    STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
+  const structuralIssues = issues.filter((i) =>
+    STRUCTURAL_KEYWORDS.some((kw) => i.toLowerCase().includes(kw.toLowerCase()))
   )
-  const nonStructuralIssues = issues.filter(i =>
-    !STRUCTURAL_KEYWORDS.some(kw => i.toLowerCase().includes(kw.toLowerCase())),
+  const nonStructuralIssues = issues.filter(
+    (i) => !STRUCTURAL_KEYWORDS.some((kw) => i.toLowerCase().includes(kw.toLowerCase()))
   )
 
   let effectiveIssueCount = issues.length
@@ -199,12 +244,14 @@ export async function assessSubagentStep(
   const outcome = hasBlockingGap
     ? VerifierOutcome.Fail
     : effectiveIssueCount > 0
-      ? (confidence < DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE ? VerifierOutcome.Fail : VerifierOutcome.Retry)
+      ? confidence < DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE
+        ? VerifierOutcome.Fail
+        : VerifierOutcome.Retry
       : VerifierOutcome.Pass
 
   const positiveSignals: string[] = []
   if (browserCheckPassed) {
-    const htmlNames = htmlArtifacts.map(a => a.split("/").pop()).join(", ")
+    const htmlNames = htmlArtifacts.map((a) => a.split("/").pop()).join(", ")
     positiveSignals.push(`browser_check: ✓ all HTML artifacts load without errors (${htmlNames})`)
   }
 
@@ -212,10 +259,11 @@ export async function assessSubagentStep(
     stepName: step.name,
     outcome,
     confidence,
-    issues: effectiveIssueCount < issues.length
-      ? [...structuralIssues, ...nonStructuralIssues.map(i => `[non-blocking] ${i}`)]
-      : issues,
+    issues:
+      effectiveIssueCount < issues.length
+        ? [...structuralIssues, ...nonStructuralIssues.map((i) => `[non-blocking] ${i}`)]
+        : issues,
     retryable: !hasBlockingGap,
-    positiveSignals: positiveSignals.length > 0 ? positiveSignals : undefined,
+    positiveSignals: positiveSignals.length > 0 ? positiveSignals : undefined
   }
 }

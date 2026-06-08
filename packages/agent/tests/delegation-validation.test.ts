@@ -4,21 +4,21 @@
 
 import { describe, expect, it } from "vitest"
 import {
-    buildContractSpec,
-    classifyTaskIntent,
-    DELEGATION_OUTPUT_VALIDATION_CODES,
-    extractAcceptanceTokens,
-    getCorrectionGuidance,
-    isFileMutationToolCall,
-    isLowSignalBrowserToolCall,
-    isWorkspaceInspectionToolCall,
-    specRequiresBrowserEvidence,
-    specRequiresFileMutationEvidence,
-    specRequiresSuccessfulToolEvidence,
-    specRequiresWorkspaceInspection,
-    validateDelegatedOutputContract,
-    type DelegationContractSpec,
-    type ToolCallRecord
+  buildContractSpec,
+  classifyTaskIntent,
+  DELEGATION_OUTPUT_VALIDATION_CODES,
+  extractAcceptanceTokens,
+  getCorrectionGuidance,
+  isFileMutationToolCall,
+  isLowSignalBrowserToolCall,
+  isWorkspaceInspectionToolCall,
+  specRequiresBrowserEvidence,
+  specRequiresFileMutationEvidence,
+  specRequiresSuccessfulToolEvidence,
+  specRequiresWorkspaceInspection,
+  validateDelegatedOutputContract,
+  type DelegationContractSpec,
+  type ToolCallRecord
 } from "../src/application/shell/delegation.js"
 
 // ============================================================================
@@ -35,7 +35,7 @@ function makeSpec(overrides: Partial<DelegationContractSpec> = {}): DelegationCo
     effectClass: "filesystem_write",
     verificationMode: "browser_check",
     role: "writer",
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -45,7 +45,7 @@ function makeToolCall(overrides: Partial<ToolCallRecord> = {}): ToolCallRecord {
     args: { path: "tmp/chess/game.js", content: "console.log('hello')" },
     result: "Successfully wrote to tmp/chess/game.js",
     isError: false,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -58,7 +58,7 @@ describe("validateDelegatedOutputContract", () => {
     it("detects empty string output", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "",
+        output: ""
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("empty_output")
@@ -67,7 +67,7 @@ describe("validateDelegatedOutputContract", () => {
     it("detects whitespace-only output", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "   \n  \t  ",
+        output: "   \n  \t  "
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("empty_output")
@@ -77,7 +77,7 @@ describe("validateDelegatedOutputContract", () => {
       for (const val of ["null", "undefined", "{}", "[]"]) {
         const result = validateDelegatedOutputContract({
           spec: makeSpec(),
-          output: val,
+          output: val
         })
         expect(result.ok).toBe(false)
         expect(result.code).toBe("empty_structured_payload")
@@ -89,7 +89,7 @@ describe("validateDelegatedOutputContract", () => {
     it("detects blocked output without completion claim", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "I am blocked on external dependencies. Cannot proceed with this task. Blocked on API access.",
+        output: "I am blocked on external dependencies. Cannot proceed with this task. Blocked on API access."
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("blocked_phase_output")
@@ -98,8 +98,9 @@ describe("validateDelegatedOutputContract", () => {
     it("allows output mentioning blocked but also completion", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "I was initially blocked but found a workaround and completed the task. Created all files successfully. tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        output:
+          "I was initially blocked but found a workaround and completed the task. Created all files successfully. tmp/chess/game.js",
+        toolCalls: [makeToolCall()]
       })
       // Should not be flagged as blocked since it also claims completion
       expect(result.code).not.toBe("blocked_phase_output")
@@ -110,8 +111,9 @@ describe("validateDelegatedOutputContract", () => {
     it("rejects outputs that ask user whether to continue implementation", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "The game currently meets foundational requirements. Further refinements can be made. Would you like to proceed with implementing missing game mechanics? tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        output:
+          "The game currently meets foundational requirements. Further refinements can be made. Would you like to proceed with implementing missing game mechanics? tmp/chess/game.js",
+        toolCalls: [makeToolCall()]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("unresolved_handoff_output")
@@ -125,12 +127,11 @@ describe("validateDelegatedOutputContract", () => {
           role: "reviewer",
           effectClass: "readonly",
           targetArtifacts: [],
-          requiredSourceArtifacts: ["src/engine.ts"],
+          requiredSourceArtifacts: ["src/engine.ts"]
         }),
-        output: "I reviewed the current architecture. Would you like me to continue with a deeper analysis? src/engine.ts",
-        toolCalls: [
-          makeToolCall({ name: "read_file", args: { path: "src/engine.ts" }, result: "code..." }),
-        ],
+        output:
+          "I reviewed the current architecture. Would you like me to continue with a deeper analysis? src/engine.ts",
+        toolCalls: [makeToolCall({ name: "read_file", args: { path: "src/engine.ts" }, result: "code..." })]
       })
       expect(result.ok).toBe(true)
     })
@@ -138,8 +139,9 @@ describe("validateDelegatedOutputContract", () => {
     it("rejects outputs that defer completion with full-compliance language", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "Implemented core files and critical logic. Full compliance may require additional delegation and deep validation appears pending.",
-        toolCalls: [makeToolCall()],
+        output:
+          "Implemented core files and critical logic. Full compliance may require additional delegation and deep validation appears pending.",
+        toolCalls: [makeToolCall()]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("unresolved_handoff_output")
@@ -153,8 +155,8 @@ describe("validateDelegatedOutputContract", () => {
         output: "I tried to create the files but encountered errors. tmp/chess/game.js",
         toolCalls: [
           makeToolCall({ isError: true, result: "Error: ENOENT" }),
-          makeToolCall({ name: "read_file", isError: true, result: "Error: not found" }),
-        ],
+          makeToolCall({ name: "read_file", isError: true, result: "Error: not found" })
+        ]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("all_tools_failed")
@@ -164,7 +166,7 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
         output: "I created the chess game with drag-and-drop support.",
-        toolCalls: [],
+        toolCalls: []
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("missing_successful_tool_evidence")
@@ -173,11 +175,16 @@ describe("validateDelegatedOutputContract", () => {
     it("passes when tool calls are successful", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "Created tmp/chess/game.js with full chess implementation including board rendering and drag-and-drop pieces.",
+        output:
+          "Created tmp/chess/game.js with full chess implementation including board rendering and drag-and-drop pieces.",
         toolCalls: [
           makeToolCall(),
-          makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "game code..." }),
-        ],
+          makeToolCall({
+            name: "read_file",
+            args: { path: "tmp/chess/game.js" },
+            result: "game code..."
+          })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -187,10 +194,11 @@ describe("validateDelegatedOutputContract", () => {
     it("detects missing file mutation when contract requires it", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "I reviewed the requirements and planned the implementation. Board renders 8x8 grid. tmp/chess/game.js",
+        output:
+          "I reviewed the requirements and planned the implementation. Board renders 8x8 grid. tmp/chess/game.js",
         toolCalls: [
-          makeToolCall({ name: "read_file", args: { path: "README.md" }, result: "readme content" }),
-        ],
+          makeToolCall({ name: "read_file", args: { path: "README.md" }, result: "readme content" })
+        ]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("missing_file_mutation_evidence")
@@ -199,15 +207,20 @@ describe("validateDelegatedOutputContract", () => {
     it("accepts shell-based file creation", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "Created files via shell commands. Board renders 8x8 grid. Pieces can be dragged. tmp/chess/game.js",
+        output:
+          "Created files via shell commands. Board renders 8x8 grid. Pieces can be dragged. tmp/chess/game.js",
         toolCalls: [
           makeToolCall({
             name: "run_command",
             args: { command: "cat > tmp/chess/game.js << 'EOF'\nconsole.log('chess')\nEOF" },
-            result: "",
+            result: ""
           }),
-          makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "console.log('chess')" }),
-        ],
+          makeToolCall({
+            name: "read_file",
+            args: { path: "tmp/chess/game.js" },
+            result: "console.log('chess')"
+          })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -221,15 +234,15 @@ describe("validateDelegatedOutputContract", () => {
             name: "read_file",
             args: { path: "tmp/chess/game.js" },
             result: "previous code",
-            isError: false,
+            isError: false
           }),
           makeToolCall({
             name: "replace_in_file",
             args: { path: "tmp/chess/game.js", old_string: "x", new_string: "y" },
             result: "Successfully replaced in tmp/chess/game.js",
-            isError: false,
-          }),
-        ],
+            isError: false
+          })
+        ]
       })
       expect(result.code).not.toBe("missing_file_mutation_evidence")
     })
@@ -238,9 +251,7 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({ effectClass: "readonly", targetArtifacts: [] }),
         output: "Reviewed the codebase. Board renders 8x8 grid. Everything looks good.",
-        toolCalls: [
-          makeToolCall({ name: "read_file", args: { path: "src/app.ts" }, result: "code..." }),
-        ],
+        toolCalls: [makeToolCall({ name: "read_file", args: { path: "src/app.ts" }, result: "code..." })]
       })
       expect(result.ok).toBe(true)
     })
@@ -253,12 +264,10 @@ describe("validateDelegatedOutputContract", () => {
           role: "reviewer",
           effectClass: "readonly",
           targetArtifacts: [],
-          requiredSourceArtifacts: ["src/game.js"],
+          requiredSourceArtifacts: ["src/game.js"]
         }),
         output: "The code looks good. Board renders 8x8. Pieces dragged. src/game.js",
-        toolCalls: [
-          makeToolCall({ name: "run_command", args: { command: "echo hello" }, result: "hello" }),
-        ],
+        toolCalls: [makeToolCall({ name: "run_command", args: { command: "echo hello" }, result: "hello" })]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("missing_workspace_inspection_evidence")
@@ -269,12 +278,12 @@ describe("validateDelegatedOutputContract", () => {
     it("detects missing source file reads", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({
-          requiredSourceArtifacts: ["src/engine.ts", "src/board.ts"],
+          requiredSourceArtifacts: ["src/engine.ts", "src/board.ts"]
         }),
         output: "Created the chess game. Board renders 8x8 grid. Pieces dragged. tmp/chess/game.js",
         toolCalls: [
-          makeToolCall(), // write_file only, no reads
-        ],
+          makeToolCall() // write_file only, no reads
+        ]
       })
       expect(result.ok).toBe(false)
       // workspace inspection fires before required source evidence (priority ordering)
@@ -284,14 +293,22 @@ describe("validateDelegatedOutputContract", () => {
     it("passes when source files are read (basename match)", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({
-          requiredSourceArtifacts: ["src/engine.ts"],
+          requiredSourceArtifacts: ["src/engine.ts"]
         }),
         output: "Read source, created chess game. Board renders 8x8 grid. Pieces dragged. tmp/chess/game.js",
         toolCalls: [
-          makeToolCall({ name: "read_file", args: { path: "/project/src/engine.ts" }, result: "code..." }),
+          makeToolCall({
+            name: "read_file",
+            args: { path: "/project/src/engine.ts" },
+            result: "code..."
+          }),
           makeToolCall(),
-          makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "verified content" }),
-        ],
+          makeToolCall({
+            name: "read_file",
+            args: { path: "tmp/chess/game.js" },
+            result: "verified content"
+          })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -305,9 +322,9 @@ describe("validateDelegatedOutputContract", () => {
         toolCalls: [
           makeToolCall({
             args: { content: "console.log('hello')" },
-            result: "Success",
-          }),
-        ],
+            result: "Success"
+          })
+        ]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("missing_file_artifact_evidence")
@@ -319,8 +336,12 @@ describe("validateDelegatedOutputContract", () => {
         output: "Board renders 8x8 grid and pieces can be dragged.",
         toolCalls: [
           makeToolCall(),
-          makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "verified implementation" }),
-        ],
+          makeToolCall({
+            name: "read_file",
+            args: { path: "tmp/chess/game.js" },
+            result: "verified implementation"
+          })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -330,16 +351,16 @@ describe("validateDelegatedOutputContract", () => {
     it("fails when mutations do not touch declared target artifacts", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({
-          targetArtifacts: ["tmp/chess/index.html", "tmp/chess/game.js"],
+          targetArtifacts: ["tmp/chess/index.html", "tmp/chess/game.js"]
         }),
         output: "Created implementation files and verified behavior. tmp/chess/index.html tmp/chess/game.js",
         toolCalls: [
           makeToolCall({
             name: "write_file",
             args: { path: "tmp/chess/notes.md", content: "implementation notes" },
-            result: "Success",
-          }),
-        ],
+            result: "Success"
+          })
+        ]
       })
 
       expect(result.ok).toBe(false)
@@ -350,7 +371,7 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({
           targetArtifacts: ["tmp/chess/index.html"],
-          verificationMode: "browser_check",
+          verificationMode: "browser_check"
         }),
         output: "Created tmp/chess/index.html with full app shell.",
         toolCalls: [
@@ -358,11 +379,11 @@ describe("validateDelegatedOutputContract", () => {
             name: "write_file",
             args: {
               path: "tmp/chess/index.html",
-              content: "<script src=\"board.js\"></script>\n<script src=\"pieces.js\"></script>",
+              content: '<script src="board.js"></script>\n<script src="pieces.js"></script>'
             },
-            result: "Success",
-          }),
-        ],
+            result: "Success"
+          })
+        ]
       })
 
       expect(result.ok).toBe(false)
@@ -374,7 +395,7 @@ describe("validateDelegatedOutputContract", () => {
         spec: makeSpec({
           targetArtifacts: ["tmp/chess/index.html"],
           verificationMode: "none",
-          knownProjectArtifacts: ["tmp/chess/styles.css", "tmp/chess/game-logic.js", "tmp/chess/ui-logic.js"],
+          knownProjectArtifacts: ["tmp/chess/styles.css", "tmp/chess/game-logic.js", "tmp/chess/ui-logic.js"]
         }),
         output: "Created tmp/chess/index.html scaffold and linked planned assets.",
         toolCalls: [
@@ -382,12 +403,13 @@ describe("validateDelegatedOutputContract", () => {
             name: "write_file",
             args: {
               path: "tmp/chess/index.html",
-              content: "<link rel=\"stylesheet\" href=\"styles.css\">\\n<script src=\"game-logic.js\"></script>\\n<script src=\"ui-logic.js\"></script>",
+              content:
+                '<link rel="stylesheet" href="styles.css">\\n<script src="game-logic.js"></script>\\n<script src="ui-logic.js"></script>'
             },
-            result: "Success",
+            result: "Success"
           }),
-          makeToolCall({ name: "read_file", args: { path: "tmp/chess/index.html" }, result: "ok" }),
-        ],
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/index.html" }, result: "ok" })
+        ]
       })
 
       expect(result.ok).toBe(true)
@@ -396,30 +418,35 @@ describe("validateDelegatedOutputContract", () => {
     it("passes when local references are covered by target artifacts", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({
-          targetArtifacts: ["tmp/chess/index.html", "tmp/chess/board.js", "tmp/chess/pieces.js"],
+          targetArtifacts: ["tmp/chess/index.html", "tmp/chess/board.js", "tmp/chess/pieces.js"]
         }),
-        output: "Created tmp/chess/index.html tmp/chess/board.js tmp/chess/pieces.js and wired them together.",
+        output:
+          "Created tmp/chess/index.html tmp/chess/board.js tmp/chess/pieces.js and wired them together.",
         toolCalls: [
           makeToolCall({
             name: "write_file",
             args: {
               path: "tmp/chess/index.html",
-              content: "<script src=\"board.js\"></script>\n<script src=\"pieces.js\"></script>",
+              content: '<script src="board.js"></script>\n<script src="pieces.js"></script>'
             },
-            result: "Success",
+            result: "Success"
           }),
           makeToolCall({
             name: "write_file",
             args: { path: "tmp/chess/board.js", content: "export const board = []" },
-            result: "Success",
+            result: "Success"
           }),
           makeToolCall({
             name: "write_file",
             args: { path: "tmp/chess/pieces.js", content: "export const pieces = {}" },
-            result: "Success",
+            result: "Success"
           }),
-          makeToolCall({ name: "run_command", args: { command: "npm test" }, result: "tests passed" }),
-        ],
+          makeToolCall({
+            name: "run_command",
+            args: { command: "npm test" },
+            result: "tests passed"
+          })
+        ]
       })
 
       expect(result.ok).toBe(true)
@@ -428,7 +455,7 @@ describe("validateDelegatedOutputContract", () => {
     it("does not treat CSS unit literals as unresolved artifact references", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({
-          targetArtifacts: ["tmp/chess/pieces.js"],
+          targetArtifacts: ["tmp/chess/pieces.js"]
         }),
         output: "Updated tmp/chess/pieces.js and verified rendering setup.",
         toolCalls: [
@@ -436,12 +463,12 @@ describe("validateDelegatedOutputContract", () => {
             name: "write_file",
             args: {
               path: "tmp/chess/pieces.js",
-              content: "pieceElement.style.fontSize = '1.8rem';\\npieceElement.style.height = '100%';",
+              content: "pieceElement.style.fontSize = '1.8rem';\\npieceElement.style.height = '100%';"
             },
-            result: "Success",
+            result: "Success"
           }),
-          makeToolCall({ name: "read_file", args: { path: "tmp/chess/pieces.js" }, result: "ok" }),
-        ],
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/pieces.js" }, result: "ok" })
+        ]
       })
 
       expect(result.ok).toBe(true)
@@ -459,9 +486,9 @@ describe("validateDelegatedOutputContract", () => {
           makeToolCall({
             name: "browser_check",
             args: { url: "about:blank" },
-            result: "[about:blank]",
-          }),
-        ],
+            result: "[about:blank]"
+          })
+        ]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("low_signal_browser_evidence")
@@ -476,9 +503,10 @@ describe("validateDelegatedOutputContract", () => {
           makeToolCall({
             name: "browser_check",
             args: { path: "tmp/chess/index.html" },
-            result: "Found 2 JavaScript error(s): Failed to load resource: the server responded with a status of 404",
-          }),
-        ],
+            result:
+              "Found 2 JavaScript error(s): Failed to load resource: the server responded with a status of 404"
+          })
+        ]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("missing_executable_verification_evidence")
@@ -487,15 +515,16 @@ describe("validateDelegatedOutputContract", () => {
     it("passes with meaningful browser evidence", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({ verificationMode: "browser_check" }),
-        output: "Created and tested chess game. Board renders 8x8 grid. Pieces can be dragged. tmp/chess/game.js",
+        output:
+          "Created and tested chess game. Board renders 8x8 grid. Pieces can be dragged. tmp/chess/game.js",
         toolCalls: [
           makeToolCall(),
           makeToolCall({
             name: "browser_check",
             args: { path: "tmp/chess/index.html" },
-            result: "Page loaded, no JS errors",
-          }),
-        ],
+            result: "Page loaded, no JS errors"
+          })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -507,8 +536,12 @@ describe("validateDelegatedOutputContract", () => {
         spec: makeSpec(),
         output: "Created tmp/chess/game.js and implemented move logic. Board renders and pieces move.",
         toolCalls: [
-          makeToolCall({ name: "write_file", args: { path: "tmp/chess/game.js", content: "const x=1" }, result: "Success" }),
-        ],
+          makeToolCall({
+            name: "write_file",
+            args: { path: "tmp/chess/game.js", content: "const x=1" },
+            result: "Success"
+          })
+        ]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("missing_executable_verification_evidence")
@@ -519,9 +552,17 @@ describe("validateDelegatedOutputContract", () => {
         spec: makeSpec(),
         output: "Implemented tmp/chess/game.js and verified with tests.",
         toolCalls: [
-          makeToolCall({ name: "write_file", args: { path: "tmp/chess/game.js", content: "const x=1" }, result: "Success" }),
-          makeToolCall({ name: "run_command", args: { command: "npm test -- --runInBand" }, result: "All tests passed" }),
-        ],
+          makeToolCall({
+            name: "write_file",
+            args: { path: "tmp/chess/game.js", content: "const x=1" },
+            result: "Success"
+          }),
+          makeToolCall({
+            name: "run_command",
+            args: { command: "npm test -- --runInBand" },
+            result: "All tests passed"
+          })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -532,7 +573,7 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
         output: "Done! Created all files. TODO: implement drag-and-drop. tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        toolCalls: [makeToolCall()]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("contradictory_completion_claim")
@@ -541,8 +582,9 @@ describe("validateDelegatedOutputContract", () => {
     it("detects FIXME markers in completed output", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "Successfully implemented the chess game. FIXME: board rendering is broken. tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        output:
+          "Successfully implemented the chess game. FIXME: board rendering is broken. tmp/chess/game.js",
+        toolCalls: [makeToolCall()]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("contradictory_completion_claim")
@@ -552,7 +594,7 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
         output: "Completed the implementation. Note: PLACEHOLDER logic in move validation. tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        toolCalls: [makeToolCall()]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("contradictory_completion_claim")
@@ -562,17 +604,21 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({
           acceptanceCriteria: [],
-          verificationMode: "none",
+          verificationMode: "none"
         }),
-        output: "Done. Added placeholders for JavaScript and CSS linking in tmp/chess/index.html as requested.",
+        output:
+          "Done. Added placeholders for JavaScript and CSS linking in tmp/chess/index.html as requested.",
         toolCalls: [
           makeToolCall({
             name: "write_file",
-            args: { path: "tmp/chess/index.html", content: "<link rel=\"stylesheet\" href=\"styles.css\">" },
-            result: "Success",
+            args: {
+              path: "tmp/chess/index.html",
+              content: '<link rel="stylesheet" href="styles.css">'
+            },
+            result: "Success"
           }),
-          makeToolCall({ name: "read_file", args: { path: "tmp/chess/index.html" }, result: "ok" }),
-        ],
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/index.html" }, result: "ok" })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -585,10 +631,11 @@ describe("validateDelegatedOutputContract", () => {
           effectClass: "readonly",
           role: "reviewer",
           targetArtifacts: [],
-          verificationMode: "test",
+          verificationMode: "test"
         }),
-        output: "Successfully implemented UI. highlightSquare appends it to the highlightedSquares array for later clearing. tmp/chess/ui.js",
-        toolCalls: [makeToolCall({ name: "read_file", args: { path: "tmp/chess/ui.js" }, result: "code" })],
+        output:
+          "Successfully implemented UI. highlightSquare appends it to the highlightedSquares array for later clearing. tmp/chess/ui.js",
+        toolCalls: [makeToolCall({ name: "read_file", args: { path: "tmp/chess/ui.js" }, result: "code" })]
       })
       expect(result.ok).toBe(true)
     })
@@ -601,10 +648,11 @@ describe("validateDelegatedOutputContract", () => {
           effectClass: "readonly",
           role: "reviewer",
           targetArtifacts: [],
-          verificationMode: "test",
+          verificationMode: "test"
         }),
-        output: "Done! Verified all code by checking for incomplete patterns — found none. All functions have real logic. tmp/chess/game.js",
-        toolCalls: [makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "code" })],
+        output:
+          "Done! Verified all code by checking for incomplete patterns — found none. All functions have real logic. tmp/chess/game.js",
+        toolCalls: [makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "code" })]
       })
       expect(result.ok).toBe(true)
     })
@@ -616,10 +664,13 @@ describe("validateDelegatedOutputContract", () => {
           effectClass: "readonly",
           role: "reviewer",
           targetArtifacts: [],
-          verificationMode: "test",
+          verificationMode: "test"
         }),
-        output: "Completed implementation. The status display will be updated whenever a move is made. tmp/chess/status.js",
-        toolCalls: [makeToolCall({ name: "read_file", args: { path: "tmp/chess/status.js" }, result: "code" })],
+        output:
+          "Completed implementation. The status display will be updated whenever a move is made. tmp/chess/status.js",
+        toolCalls: [
+          makeToolCall({ name: "read_file", args: { path: "tmp/chess/status.js" }, result: "code" })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -631,10 +682,17 @@ describe("validateDelegatedOutputContract", () => {
           effectClass: "readonly",
           role: "reviewer",
           targetArtifacts: [],
-          verificationMode: "test",
+          verificationMode: "test"
         }),
-        output: "Done! The function comes back to the caller with the validated result. tmp/chess/validate.js",
-        toolCalls: [makeToolCall({ name: "read_file", args: { path: "tmp/chess/validate.js" }, result: "code" })],
+        output:
+          "Done! The function comes back to the caller with the validated result. tmp/chess/validate.js",
+        toolCalls: [
+          makeToolCall({
+            name: "read_file",
+            args: { path: "tmp/chess/validate.js" },
+            result: "code"
+          })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -643,7 +701,7 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({ acceptanceCriteria: [] }),
         output: "Created the game files. Will implement later the castling logic. tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        toolCalls: [makeToolCall()]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("contradictory_completion_claim")
@@ -653,7 +711,7 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({ acceptanceCriteria: [] }),
         output: "Created game.js. The implementation is incomplete for pawn promotion. tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        toolCalls: [makeToolCall()]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("contradictory_completion_claim")
@@ -663,7 +721,7 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({ acceptanceCriteria: [] }),
         output: "Done with basic structure. En passant will be implemented in a follow-up. tmp/chess/game.js",
-        toolCalls: [makeToolCall()],
+        toolCalls: [makeToolCall()]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("contradictory_completion_claim")
@@ -682,13 +740,17 @@ describe("validateDelegatedOutputContract", () => {
           acceptanceCriteria: [
             "Repository summary includes module boundaries",
             "Dependency graph is captured for core packages",
-            "Operational risks are listed with mitigations",
-          ],
+            "Operational risks are listed with mitigations"
+          ]
         }),
         output: "Status report generated for baseline prototype. tmp/demo/app.txt",
         toolCalls: [
-          makeToolCall({ name: "read_file", args: { path: "tmp/demo/app.txt" }, result: "placeholder" }),
-        ],
+          makeToolCall({
+            name: "read_file",
+            args: { path: "tmp/demo/app.txt" },
+            result: "placeholder"
+          })
+        ]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("acceptance_evidence_missing")
@@ -697,11 +759,16 @@ describe("validateDelegatedOutputContract", () => {
     it("passes when acceptance tokens are present", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "Created chess game with board that renders an 8x8 grid. Pieces can be dragged between squares. tmp/chess/game.js",
+        output:
+          "Created chess game with board that renders an 8x8 grid. Pieces can be dragged between squares. tmp/chess/game.js",
         toolCalls: [
           makeToolCall(),
-          makeToolCall({ name: "read_file", args: { path: "tmp/chess/game.js" }, result: "game code" }),
-        ],
+          makeToolCall({
+            name: "read_file",
+            args: { path: "tmp/chess/game.js" },
+            result: "game code"
+          })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -711,13 +778,30 @@ describe("validateDelegatedOutputContract", () => {
     it("passes when all evidence is present", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec(),
-        output: "Created tmp/chess/game.js and tmp/chess/index.html. Board renders 8x8 grid with alternating colors. Pieces can be dragged between squares.",
+        output:
+          "Created tmp/chess/game.js and tmp/chess/index.html. Board renders 8x8 grid with alternating colors. Pieces can be dragged between squares.",
         toolCalls: [
-          makeToolCall({ name: "read_file", args: { path: "README.md" }, result: "project readme" }),
-          makeToolCall({ name: "write_file", args: { path: "tmp/chess/game.js" }, result: "Success" }),
-          makeToolCall({ name: "write_file", args: { path: "tmp/chess/index.html" }, result: "Success" }),
-          makeToolCall({ name: "browser_check", args: { path: "tmp/chess/index.html" }, result: "No JS errors" }),
-        ],
+          makeToolCall({
+            name: "read_file",
+            args: { path: "README.md" },
+            result: "project readme"
+          }),
+          makeToolCall({
+            name: "write_file",
+            args: { path: "tmp/chess/game.js" },
+            result: "Success"
+          }),
+          makeToolCall({
+            name: "write_file",
+            args: { path: "tmp/chess/index.html" },
+            result: "Success"
+          }),
+          makeToolCall({
+            name: "browser_check",
+            args: { path: "tmp/chess/index.html" },
+            result: "No JS errors"
+          })
+        ]
       })
       expect(result.ok).toBe(true)
     })
@@ -734,30 +818,42 @@ describe("classifyTaskIntent", () => {
   })
 
   it("classifies research tasks", () => {
-    expect(classifyTaskIntent(makeSpec({
-      task: "Research the best approach for chess AI",
-      role: "reviewer",
-      effectClass: "readonly",
-      targetArtifacts: [],
-    }))).toBe("research")
+    expect(
+      classifyTaskIntent(
+        makeSpec({
+          task: "Research the best approach for chess AI",
+          role: "reviewer",
+          effectClass: "readonly",
+          targetArtifacts: []
+        })
+      )
+    ).toBe("research")
   })
 
   it("classifies validation tasks", () => {
-    expect(classifyTaskIntent(makeSpec({
-      task: "Test the chess game and verify all moves",
-      role: "validator",
-      effectClass: "readonly",
-      targetArtifacts: [],
-    }))).toBe("validation")
+    expect(
+      classifyTaskIntent(
+        makeSpec({
+          task: "Test the chess game and verify all moves",
+          role: "validator",
+          effectClass: "readonly",
+          targetArtifacts: []
+        })
+      )
+    ).toBe("validation")
   })
 
   it("classifies mixed tasks", () => {
-    expect(classifyTaskIntent(makeSpec({
-      task: "Investigate and implement the fix",
-      role: "writer",
-      effectClass: "readonly",
-      targetArtifacts: [],
-    }))).toBe("mixed")
+    expect(
+      classifyTaskIntent(
+        makeSpec({
+          task: "Investigate and implement the fix",
+          role: "writer",
+          effectClass: "readonly",
+          targetArtifacts: []
+        })
+      )
+    ).toBe("mixed")
   })
 })
 
@@ -777,7 +873,7 @@ describe("extractAcceptanceTokens", () => {
 
   it("deduplicates tokens", () => {
     const tokens = extractAcceptanceTokens(["board renders", "board displays"])
-    const boardCount = tokens.filter(t => t === "board").length
+    const boardCount = tokens.filter((t) => t === "board").length
     expect(boardCount).toBe(1)
   })
 
@@ -796,17 +892,25 @@ describe("isFileMutationToolCall", () => {
   })
 
   it("identifies shell file writes", () => {
-    expect(isFileMutationToolCall(makeToolCall({
-      name: "run_command",
-      args: { command: "cat > output.js << EOF\nconsole.log('hi')\nEOF" },
-    }))).toBe(true)
+    expect(
+      isFileMutationToolCall(
+        makeToolCall({
+          name: "run_command",
+          args: { command: "cat > output.js << EOF\nconsole.log('hi')\nEOF" }
+        })
+      )
+    ).toBe(true)
   })
 
   it("identifies npm create as scaffold", () => {
-    expect(isFileMutationToolCall(makeToolCall({
-      name: "run_command",
-      args: { command: "npm create vite@latest my-app" },
-    }))).toBe(true)
+    expect(
+      isFileMutationToolCall(
+        makeToolCall({
+          name: "run_command",
+          args: { command: "npm create vite@latest my-app" }
+        })
+      )
+    ).toBe(true)
   })
 
   it("does not identify read_file as mutation", () => {
@@ -814,10 +918,14 @@ describe("isFileMutationToolCall", () => {
   })
 
   it("does not treat plain cat reads as mutation", () => {
-    expect(isFileMutationToolCall(makeToolCall({
-      name: "run_command",
-      args: { command: "cat tmp/chess/index.html" },
-    }))).toBe(false)
+    expect(
+      isFileMutationToolCall(
+        makeToolCall({
+          name: "run_command",
+          args: { command: "cat tmp/chess/index.html" }
+        })
+      )
+    ).toBe(false)
   })
 })
 
@@ -837,17 +945,25 @@ describe("isWorkspaceInspectionToolCall", () => {
 
 describe("isLowSignalBrowserToolCall", () => {
   it("identifies about:blank navigation as low signal", () => {
-    expect(isLowSignalBrowserToolCall(makeToolCall({
-      name: "browser_check",
-      args: { url: "about:blank" },
-    }))).toBe(true)
+    expect(
+      isLowSignalBrowserToolCall(
+        makeToolCall({
+          name: "browser_check",
+          args: { url: "about:blank" }
+        })
+      )
+    ).toBe(true)
   })
 
   it("does not flag real browser check", () => {
-    expect(isLowSignalBrowserToolCall(makeToolCall({
-      name: "browser_check",
-      args: { path: "tmp/index.html" },
-    }))).toBe(false)
+    expect(
+      isLowSignalBrowserToolCall(
+        makeToolCall({
+          name: "browser_check",
+          args: { path: "tmp/index.html" }
+        })
+      )
+    ).toBe(false)
   })
 })
 
@@ -881,9 +997,13 @@ describe("specRequiresWorkspaceInspection", () => {
   })
 
   it("requires inspection when source artifacts listed", () => {
-    expect(specRequiresWorkspaceInspection(makeSpec({
-      requiredSourceArtifacts: ["src/game.ts"],
-    }))).toBe(true)
+    expect(
+      specRequiresWorkspaceInspection(
+        makeSpec({
+          requiredSourceArtifacts: ["src/game.ts"]
+        })
+      )
+    ).toBe(true)
   })
 
   it("does not require inspection for plain writer", () => {
@@ -926,7 +1046,7 @@ describe("buildContractSpec", () => {
       {
         objective: "Build chess game",
         acceptanceCriteria: ["Board renders"],
-        requiredToolCapabilities: ["browser_check"],
+        requiredToolCapabilities: ["browser_check"]
       },
       {
         targetArtifacts: ["game.js"],
@@ -934,8 +1054,8 @@ describe("buildContractSpec", () => {
         allowedTools: ["write_file"],
         effectClass: "filesystem_write",
         verificationMode: "browser_check",
-        role: "writer",
-      },
+        role: "writer"
+      }
     )
 
     expect(spec.task).toBe("Build chess game")
@@ -951,8 +1071,14 @@ describe("buildContractSpec", () => {
   it("carries lastValidationCode when provided", () => {
     const spec = buildContractSpec(
       { objective: "Fix issues", acceptanceCriteria: [], requiredToolCapabilities: [] },
-      { targetArtifacts: [], requiredSourceArtifacts: [], allowedTools: [], effectClass: "readonly", verificationMode: "none" },
-      "contradictory_completion_claim",
+      {
+        targetArtifacts: [],
+        requiredSourceArtifacts: [],
+        allowedTools: [],
+        effectClass: "readonly",
+        verificationMode: "none"
+      },
+      "contradictory_completion_claim"
     )
     expect(spec.lastValidationCode).toBe("contradictory_completion_claim")
   })

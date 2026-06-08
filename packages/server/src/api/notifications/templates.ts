@@ -9,20 +9,20 @@
 
 export interface RenderedBody {
   subject: string
-  text:    string
+  text: string
 }
 
 export type TemplateRenderer = (ctx: Record<string, unknown>) => RenderedBody
 
 const TEMPLATES: Readonly<Record<string, TemplateRenderer>> = {
-  "sync.proposal.created":       proposalCreated,
-  "sync.proposal.annotated":     proposalAnnotated,
-  "sync.approval.requested":     approvalRequested,
-  "sync.approval.granted":       approvalGranted,
-  "sync.approval.rejected":      approvalRejected,
-  "sync.evidence.sealed":        evidenceSealed,
+  "sync.proposal.created": proposalCreated,
+  "sync.proposal.annotated": proposalAnnotated,
+  "sync.approval.requested": approvalRequested,
+  "sync.approval.granted": approvalGranted,
+  "sync.approval.rejected": approvalRejected,
+  "sync.evidence.sealed": evidenceSealed,
   "sync.verification.completed": verificationCompleted,
-  "sync.verification.failed":    verificationFailed,
+  "sync.verification.failed": verificationFailed
 } as const
 
 export function renderNotificationBody(eventType: string, ctx: Record<string, unknown>): RenderedBody {
@@ -32,8 +32,8 @@ export function renderNotificationBody(eventType: string, ctx: Record<string, un
 
 function proposalCreated(ctx: Record<string, unknown>): RenderedBody {
   const entityType = String(ctx["entityType"] ?? "?")
-  const envPair    = String(ctx["envPair"]    ?? "?")
-  const riskTier   = String(ctx["riskTier"]   ?? "(unannotated)")
+  const envPair = String(ctx["envPair"] ?? "?")
+  const riskTier = String(ctx["riskTier"] ?? "(unannotated)")
   return {
     subject: `[mia] proposal: ${entityType} (${riskTier})`,
     text: lines([
@@ -43,8 +43,8 @@ function proposalCreated(ctx: Record<string, unknown>): RenderedBody {
       `Env-pair: ${envPair}`,
       `Risk:     ${riskTier}`,
       `Counts:   ${formatCounts(ctx["counts"])}`,
-      `Link:     ${String(ctx["url"] ?? "(no url)")}`,
-    ]),
+      `Link:     ${String(ctx["url"] ?? "(no url)")}`
+    ])
   }
 }
 
@@ -58,8 +58,8 @@ function proposalAnnotated(ctx: Record<string, unknown>): RenderedBody {
       `Risk tier: ${String(ctx["riskTier"] ?? "?")}`,
       `Score:     ${String(ctx["riskScore"] ?? "?")}`,
       `Rationale: ${String(ctx["rationale"] ?? "")}`,
-      `Link:      ${String(ctx["url"] ?? "(no url)")}`,
-    ]),
+      `Link:      ${String(ctx["url"] ?? "(no url)")}`
+    ])
   }
 }
 
@@ -76,15 +76,15 @@ function approvalRequested(ctx: Record<string, unknown>): RenderedBody {
       `Expires:     ${String(ctx["expiresAt"] ?? "?")}`,
       ``,
       `Grant:  ${String(ctx["grantUrl"] ?? "")}`,
-      `Reject: ${String(ctx["rejectUrl"] ?? "")}`,
-    ]),
+      `Reject: ${String(ctx["rejectUrl"] ?? "")}`
+    ])
   }
 }
 
 function approvalGranted(ctx: Record<string, unknown>): RenderedBody {
   return {
     subject: `[mia] approval granted: ${String(ctx["entityType"] ?? "?")}`,
-    text:    lines([`Approval ${String(ctx["approvalId"] ?? "")} granted by ${String(ctx["by"] ?? "?")}.`]),
+    text: lines([`Approval ${String(ctx["approvalId"] ?? "")} granted by ${String(ctx["by"] ?? "?")}.`])
   }
 }
 
@@ -93,8 +93,8 @@ function approvalRejected(ctx: Record<string, unknown>): RenderedBody {
     subject: `[mia] approval rejected: ${String(ctx["entityType"] ?? "?")}`,
     text: lines([
       `Approval ${String(ctx["approvalId"] ?? "")} rejected by ${String(ctx["by"] ?? "?")}.`,
-      `Reason: ${String(ctx["reason"] ?? "")}`,
-    ]),
+      `Reason: ${String(ctx["reason"] ?? "")}`
+    ])
   }
 }
 
@@ -106,37 +106,39 @@ function evidenceSealed(ctx: Record<string, unknown>): RenderedBody {
       `Signer:      ${String(ctx["signerId"] ?? "?")} (${String(ctx["alg"] ?? "?")})`,
       `Content hash:${String(ctx["contentHash"] ?? "?")}`,
       `JSON:        ${String(ctx["envelopeUrl"] ?? "?")}`,
-      `PDF:         ${String(ctx["pdfUrl"] ?? "?")}`,
-    ]),
+      `PDF:         ${String(ctx["pdfUrl"] ?? "?")}`
+    ])
   }
 }
 
 function verificationCompleted(ctx: Record<string, unknown>): RenderedBody {
   return {
     subject: `[mia] post-execute verification OK (plan ${String(ctx["planId"] ?? "?")})`,
-    text:    lines([`Independent post-execute verification passed for plan ${String(ctx["planId"] ?? "?")}.`]),
+    text: lines([`Independent post-execute verification passed for plan ${String(ctx["planId"] ?? "?")}.`])
   }
 }
 
 function verificationFailed(ctx: Record<string, unknown>): RenderedBody {
   return {
     subject: `[mia] post-execute verification FAILED (plan ${String(ctx["planId"] ?? "?")})`,
-    text:    lines([
+    text: lines([
       `Independent post-execute verification FAILED for plan ${String(ctx["planId"] ?? "?")}.`,
       `Issues:`,
-      ...(Array.isArray(ctx["issues"]) ? (ctx["issues"] as string[]).map((i) => `  - ${i}`) : []),
-    ]),
+      ...(Array.isArray(ctx["issues"]) ? (ctx["issues"] as string[]).map((i) => `  - ${i}`) : [])
+    ])
   }
 }
 
 function genericFallback(eventType: string): TemplateRenderer {
   return (ctx) => ({
     subject: `[mia] ${eventType}`,
-    text:    `${eventType}\n\n${JSON.stringify(ctx, null, 2)}`,
+    text: `${eventType}\n\n${JSON.stringify(ctx, null, 2)}`
   })
 }
 
-function lines(xs: readonly string[]): string { return xs.join("\n") }
+function lines(xs: readonly string[]): string {
+  return xs.join("\n")
+}
 
 function formatCounts(v: unknown): string {
   if (!v || typeof v !== "object") return "(none)"

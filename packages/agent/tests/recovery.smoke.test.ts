@@ -15,15 +15,20 @@ function call(over: Partial<ToolCallRecord>): ToolCallRecord {
     args: {},
     result: "",
     isError: false,
-    ...over,
+    ...over
   }
 }
 
 describe("buildRecoveryHints smoke", () => {
   it("emits ENOENT hint when a tool result mentions missing file", () => {
     const hints = buildRecoveryHints(
-      [call({ isError: true, result: "Error: ENOENT: no such file or directory, open '/missing/path.txt'" })],
-      new Set(),
+      [
+        call({
+          isError: true,
+          result: "Error: ENOENT: no such file or directory, open '/missing/path.txt'"
+        })
+      ],
+      new Set()
     )
     expect(hints).toHaveLength(1)
     // The current ENOENT regex captures the next word after "directory," — snapshot
@@ -36,17 +41,22 @@ describe("buildRecoveryHints smoke", () => {
     const hints = buildRecoveryHints(
       [
         call({ isError: true, result: "error: connection refused" }),
-        call({ isError: true, result: "error: command not found" }),
+        call({ isError: true, result: "error: command not found" })
       ],
-      new Set(),
+      new Set()
     )
     expect(hints.some((h) => h.key === "round-all-tools-failed")).toBe(true)
   })
 
   it("emits delegation-exhausted hint when child agent ran out of budget", () => {
     const hints = buildRecoveryHints(
-      [call({ name: "delegate", result: "Agent stopped after 30 iterations without completing the task." })],
-      new Set(),
+      [
+        call({
+          name: "delegate",
+          result: "Agent stopped after 30 iterations without completing the task."
+        })
+      ],
+      new Set()
     )
     expect(hints.some((h) => h.key === "delegation-child-exhausted-budget")).toBe(true)
   })
@@ -54,8 +64,13 @@ describe("buildRecoveryHints smoke", () => {
   it("respects the emittedHints dedup set", () => {
     const emitted = new Set<string>(["enoent:open"])
     const hints = buildRecoveryHints(
-      [call({ isError: true, result: "Error: ENOENT: no such file or directory, open '/missing/path.txt'" })],
-      emitted,
+      [
+        call({
+          isError: true,
+          result: "Error: ENOENT: no such file or directory, open '/missing/path.txt'"
+        })
+      ],
+      emitted
     )
     expect(hints).toHaveLength(0)
   })

@@ -82,7 +82,7 @@ export function formatResults(recordsets: sql.IRecordSet<unknown>[], rowsAffecte
       parts.push(`... (${totalRows - previewLimit} more rows omitted — preview is capped at ${previewLimit})`)
       parts.push(
         `\n⚠️ ROW LIMIT WARNING: this is a PREVIEW of the first ${previewLimit} of ${totalRows} rows. ` +
-        EXPORT_HINT
+          EXPORT_HINT
       )
     }
   }
@@ -102,7 +102,9 @@ export function formatResults(recordsets: sql.IRecordSet<unknown>[], rowsAffecte
       const sample = rs.slice(0, FALLBACK_PREVIEW_ROWS)
       const totalRows = rs.length
       if (recordsets.length > 1) {
-        fallbackParts.push(`\n--- Result set ${i + 1} (${totalRows} rows; preview shrunk to ${sample.length}) ---`)
+        fallbackParts.push(
+          `\n--- Result set ${i + 1} (${totalRows} rows; preview shrunk to ${sample.length}) ---`
+        )
       } else {
         fallbackParts.push(`(${totalRows} rows; preview shrunk to ${sample.length} due to byte cap)`)
       }
@@ -113,8 +115,8 @@ export function formatResults(recordsets: sql.IRecordSet<unknown>[], rowsAffecte
     }
     fallbackParts.push(
       `\n⚠️ TRUNCATION WARNING: the full preview exceeded ${MAX_RESULT_LENGTH} bytes (likely wide columns or JSON/blob fields). ` +
-      EXPORT_HINT +
-      ` Also: SELECT only the columns you need — never SELECT * on tables with JSON/blob columns (e.g. core.Dataset.controlFlow is ~50KB per row).`
+        EXPORT_HINT +
+        ` Also: SELECT only the columns you need — never SELECT * on tables with JSON/blob columns (e.g. core.Dataset.controlFlow is ~50KB per row).`
     )
     result = fallbackParts.join("\n")
   }

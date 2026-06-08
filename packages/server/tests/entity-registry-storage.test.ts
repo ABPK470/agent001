@@ -14,11 +14,7 @@
  *   - validation failures throw EntityRegistryValidationError
  */
 
-import {
-    BUNDLED_SCD2_STRATEGIES,
-    type EntityDefinition,
-    type Scd2Strategy,
-} from "@mia/sync"
+import { BUNDLED_SCD2_STRATEGIES, type EntityDefinition, type Scd2Strategy } from "@mia/sync"
 import Database from "better-sqlite3"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
@@ -75,8 +71,8 @@ function validDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
         source: null,
         groundedByPipeline: null,
         enabledByDefault: null,
-        userControllable: null,
-      },
+        userControllable: null
+      }
     ],
     policies: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
@@ -91,7 +87,7 @@ function validDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
     reason: "create",
     createdAt: "2026-05-16T00:00:00.000Z",
     retiredAt: null,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -126,7 +122,7 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
     const r = m.saveEntityDefinition({
       def: validDef(),
       actor: "alice@example.com",
-      reason: "create",
+      reason: "create"
     })
     expect(r.version).toBe(1)
     const fetched = m.getEntityDefinition("_default", "contract")
@@ -142,7 +138,7 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
     const r2 = m.saveEntityDefinition({
       def: validDef({ displayName: "Contract v2" }),
       actor: "bob@example.com",
-      reason: "rename",
+      reason: "rename"
     })
     expect(r2.version).toBe(2)
     expect(r2.diff.some((c) => c.kind === "renamed")).toBe(true)
@@ -161,7 +157,7 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
     const r = m.saveEntityDefinition({
       def: validDef({ version: 999 }),
       actor: "a",
-      reason: "create",
+      reason: "create"
     })
     expect(r.version).toBe(1)
   })
@@ -172,8 +168,8 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
       m.saveEntityDefinition({
         def: validDef({ id: "1invalid" }),
         actor: "a",
-        reason: "create",
-      }),
+        reason: "create"
+      })
     ).toThrow(m.EntityRegistryValidationError)
   })
 
@@ -183,11 +179,11 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
     m.saveEntityDefinition({
       def: validDef({ displayName: "X" }),
       actor: "a",
-      reason: "rename",
+      reason: "rename"
     })
     const row = testDb
       .prepare(
-        `SELECT diff_json FROM entity_def_versions WHERE tenant_id = '_default' AND id = 'contract' AND version = 2`,
+        `SELECT diff_json FROM entity_def_versions WHERE tenant_id = '_default' AND id = 'contract' AND version = 2`
       )
       .get() as { diff_json: string }
     const diff = JSON.parse(row.diff_json)
@@ -264,34 +260,30 @@ describe("immutability triggers", () => {
     const m = await setup()
     m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
     expect(() =>
-      testDb
-        .prepare(`UPDATE entity_def_versions SET reason = 'tampered' WHERE id = 'contract'`)
-        .run(),
+      testDb.prepare(`UPDATE entity_def_versions SET reason = 'tampered' WHERE id = 'contract'`).run()
     ).toThrow(/append-only/)
   })
 
   it("refuses DELETE on entity_def_versions", async () => {
     const m = await setup()
     m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
-    expect(() =>
-      testDb.prepare(`DELETE FROM entity_def_versions WHERE id = 'contract'`).run(),
-    ).toThrow(/append-only/)
+    expect(() => testDb.prepare(`DELETE FROM entity_def_versions WHERE id = 'contract'`).run()).toThrow(
+      /append-only/
+    )
   })
 
   it("refuses UPDATE on scd2_strategy_versions", async () => {
     await setup()
     expect(() =>
-      testDb
-        .prepare(`UPDATE scd2_strategy_versions SET reason = 'tampered' WHERE id = 'mymi-scd2'`)
-        .run(),
+      testDb.prepare(`UPDATE scd2_strategy_versions SET reason = 'tampered' WHERE id = 'mymi-scd2'`).run()
     ).toThrow(/append-only/)
   })
 
   it("refuses DELETE on scd2_strategy_versions", async () => {
     await setup()
-    expect(() =>
-      testDb.prepare(`DELETE FROM scd2_strategy_versions WHERE id = 'mymi-scd2'`).run(),
-    ).toThrow(/append-only/)
+    expect(() => testDb.prepare(`DELETE FROM scd2_strategy_versions WHERE id = 'mymi-scd2'`).run()).toThrow(
+      /append-only/
+    )
   })
 })
 
@@ -331,7 +323,7 @@ describe("resolveScd2Strategy", () => {
       version: 1,
       versionLabel: null,
       createdBy: "acme-admin",
-      createdAt: "2026-05-16T00:00:00.000Z",
+      createdAt: "2026-05-16T00:00:00.000Z"
     }
     m.saveScd2Strategy({ tenantId: "acme", strategy: custom, actor: "acme-admin", reason: "fork" })
     const s = m.resolveScd2Strategy("acme", "mymi-scd2")
@@ -359,7 +351,10 @@ describe("resolveScd2Strategy", () => {
 describe("listAvailableStrategies", () => {
   it("for _default tenant returns just the bundled strategies", async () => {
     const m = await setup()
-    const ids = m.listAvailableStrategies("_default").map((s) => s.id).sort()
+    const ids = m
+      .listAvailableStrategies("_default")
+      .map((s) => s.id)
+      .sort()
     expect(ids).toEqual(BUNDLED_SCD2_STRATEGIES.map((s) => s.id).sort())
   })
 
@@ -382,10 +377,13 @@ describe("listAvailableStrategies", () => {
       version: 1,
       versionLabel: null,
       createdBy: "u",
-      createdAt: "2026-05-16T00:00:00.000Z",
+      createdAt: "2026-05-16T00:00:00.000Z"
     }
     m.saveScd2Strategy({ tenantId: "acme", strategy: custom, actor: "u", reason: "fork" })
-    const ids = m.listAvailableStrategies("acme").map((s) => s.id).sort()
+    const ids = m
+      .listAvailableStrategies("acme")
+      .map((s) => s.id)
+      .sort()
     expect(ids).toContain("acme-custom")
     expect(ids).toContain("mymi-scd2") // inherited
     expect(ids).toContain("generic-scd2") // inherited
@@ -412,7 +410,7 @@ describe("listAvailableStrategies", () => {
       version: 1,
       versionLabel: null,
       createdBy: "u",
-      createdAt: "2026-05-16T00:00:00.000Z",
+      createdAt: "2026-05-16T00:00:00.000Z"
     }
     m.saveScd2Strategy({ tenantId: "acme", strategy: custom, actor: "u", reason: "fork" })
     const matches = m.listAvailableStrategies("acme").filter((s) => s.id === "mymi-scd2")
@@ -428,13 +426,13 @@ describe("multi-tenant isolation", () => {
       def: validDef({ tenantId: "acme", displayName: "ACME contract" }),
       actor: "u",
       reason: "",
-      tenantId: "acme",
+      tenantId: "acme"
     })
     m.saveEntityDefinition({
       def: validDef({ tenantId: "globex", displayName: "Globex contract" }),
       actor: "u",
       reason: "",
-      tenantId: "globex",
+      tenantId: "globex"
     })
     expect(m.getEntityDefinition("acme", "contract")!.displayName).toBe("ACME contract")
     expect(m.getEntityDefinition("globex", "contract")!.displayName).toBe("Globex contract")

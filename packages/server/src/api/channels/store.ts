@@ -96,18 +96,22 @@ export class SqliteConversationStore implements ConversationStore {
   }
 
   save(conv: Conversation): void {
-    getDb().prepare(`
+    getDb()
+      .prepare(
+        `
       INSERT OR REPLACE INTO conversations (id, channel_type, sender_id, sender_name, active_run_id, created_at, updated_at)
       VALUES (@id, @channel_type, @sender_id, @sender_name, @active_run_id, @created_at, @updated_at)
-    `).run({
-      id: conv.id,
-      channel_type: conv.channelType,
-      sender_id: conv.senderId,
-      sender_name: conv.senderName,
-      active_run_id: conv.activeRunId,
-      created_at: conv.createdAt.toISOString(),
-      updated_at: conv.updatedAt.toISOString(),
-    })
+    `
+      )
+      .run({
+        id: conv.id,
+        channel_type: conv.channelType,
+        sender_id: conv.senderId,
+        sender_name: conv.senderName,
+        active_run_id: conv.activeRunId,
+        created_at: conv.createdAt.toISOString(),
+        updated_at: conv.updatedAt.toISOString()
+      })
   }
 
   updateActiveRun(id: string, runId: string | null): void {
@@ -117,17 +121,17 @@ export class SqliteConversationStore implements ConversationStore {
   }
 
   get(id: string): Conversation | undefined {
-    const row = getDb()
-      .prepare("SELECT * FROM conversations WHERE id = ?")
-      .get(id) as DbConversation | undefined
+    const row = getDb().prepare("SELECT * FROM conversations WHERE id = ?").get(id) as
+      | DbConversation
+      | undefined
 
     return row ? toConversation(row) : undefined
   }
 
   getByRunId(runId: string): Conversation | undefined {
-    const row = getDb()
-      .prepare("SELECT * FROM conversations WHERE active_run_id = ?")
-      .get(runId) as DbConversation | undefined
+    const row = getDb().prepare("SELECT * FROM conversations WHERE active_run_id = ?").get(runId) as
+      | DbConversation
+      | undefined
 
     return row ? toConversation(row) : undefined
   }
@@ -145,22 +149,26 @@ export class SqliteConversationStore implements ConversationStore {
 
 export class SqliteQueueStore implements QueueStore {
   save(msg: OutboundMessage): void {
-    getDb().prepare(`
+    getDb()
+      .prepare(
+        `
       INSERT INTO outbound_messages (id, conversation_id, channel_type, recipient_id, text, status, attempts, next_retry_at, last_error, created_at, delivered_at)
       VALUES (@id, @conversation_id, @channel_type, @recipient_id, @text, @status, @attempts, @next_retry_at, @last_error, @created_at, @delivered_at)
-    `).run({
-      id: msg.id,
-      conversation_id: msg.conversationId,
-      channel_type: msg.channelType,
-      recipient_id: msg.recipientId,
-      text: msg.text,
-      status: msg.status,
-      attempts: msg.attempts,
-      next_retry_at: msg.nextRetryAt?.toISOString() ?? null,
-      last_error: msg.lastError,
-      created_at: msg.createdAt.toISOString(),
-      delivered_at: msg.deliveredAt?.toISOString() ?? null,
-    })
+    `
+      )
+      .run({
+        id: msg.id,
+        conversation_id: msg.conversationId,
+        channel_type: msg.channelType,
+        recipient_id: msg.recipientId,
+        text: msg.text,
+        status: msg.status,
+        attempts: msg.attempts,
+        next_retry_at: msg.nextRetryAt?.toISOString() ?? null,
+        last_error: msg.lastError,
+        created_at: msg.createdAt.toISOString(),
+        delivered_at: msg.deliveredAt?.toISOString() ?? null
+      })
   }
 
   updateStatus(
@@ -168,18 +176,24 @@ export class SqliteQueueStore implements QueueStore {
     status: DeliveryStatus,
     error: string | null,
     nextRetryAt: Date | null,
-    deliveredAt: Date | null,
+    deliveredAt: Date | null
   ): void {
-    getDb().prepare(`
+    getDb()
+      .prepare(
+        `
       UPDATE outbound_messages
       SET status = ?, last_error = ?, next_retry_at = ?, delivered_at = ?
       WHERE id = ?
-    `).run(status, error, nextRetryAt?.toISOString() ?? null, deliveredAt?.toISOString() ?? null, id)
+    `
+      )
+      .run(status, error, nextRetryAt?.toISOString() ?? null, deliveredAt?.toISOString() ?? null, id)
   }
 
   loadPending(): OutboundMessage[] {
     const rows = getDb()
-      .prepare("SELECT * FROM outbound_messages WHERE status IN ('queued', 'sending', 'retrying') ORDER BY created_at")
+      .prepare(
+        "SELECT * FROM outbound_messages WHERE status IN ('queued', 'sending', 'retrying') ORDER BY created_at"
+      )
       .all() as DbOutboundMessage[]
 
     return rows.map(toOutboundMessage)
@@ -190,41 +204,47 @@ export class SqliteQueueStore implements QueueStore {
     attempt: number,
     status: "success" | "failed",
     error: string | null,
-    durationMs: number,
+    durationMs: number
   ): void {
-    getDb().prepare(`
+    getDb()
+      .prepare(
+        `
       INSERT INTO delivery_attempts (message_id, attempt_number, status, error, duration_ms, created_at)
       VALUES (?, ?, ?, ?, ?, ?)
-    `).run(messageId, attempt, status, error, durationMs, new Date().toISOString())
+    `
+      )
+      .run(messageId, attempt, status, error, durationMs, new Date().toISOString())
 
     // Update attempt count on the message
-    getDb()
-      .prepare("UPDATE outbound_messages SET attempts = ? WHERE id = ?")
-      .run(attempt, messageId)
+    getDb().prepare("UPDATE outbound_messages SET attempts = ? WHERE id = ?").run(attempt, messageId)
   }
 }
 
 // ── Channel Config Store ─────────────────────────────────────────
 
 export function saveChannelConfig(config: ChannelConfig): void {
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT OR REPLACE INTO channel_configs (type, access_token, verify_token, app_secret, platform_id, created_at, updated_at)
     VALUES (@type, @access_token, @verify_token, @app_secret, @platform_id, @created_at, @updated_at)
-  `).run({
-    type: config.type,
-    access_token: config.accessToken,
-    verify_token: config.verifyToken,
-    app_secret: config.appSecret,
-    platform_id: config.platformId,
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  })
+  `
+    )
+    .run({
+      type: config.type,
+      access_token: config.accessToken,
+      verify_token: config.verifyToken,
+      app_secret: config.appSecret,
+      platform_id: config.platformId,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString()
+    })
 }
 
 export function getChannelConfig(type: ChannelType): ChannelConfig | undefined {
-  const row = getDb()
-    .prepare("SELECT * FROM channel_configs WHERE type = ?")
-    .get(type) as DbChannelConfig | undefined
+  const row = getDb().prepare("SELECT * FROM channel_configs WHERE type = ?").get(type) as
+    | DbChannelConfig
+    | undefined
 
   if (!row) return undefined
   return {
@@ -232,21 +252,19 @@ export function getChannelConfig(type: ChannelType): ChannelConfig | undefined {
     accessToken: row.access_token,
     verifyToken: row.verify_token,
     appSecret: row.app_secret,
-    platformId: row.platform_id,
+    platformId: row.platform_id
   }
 }
 
 export function listChannelConfigs(): ChannelConfig[] {
-  const rows = getDb()
-    .prepare("SELECT * FROM channel_configs ORDER BY type")
-    .all() as DbChannelConfig[]
+  const rows = getDb().prepare("SELECT * FROM channel_configs ORDER BY type").all() as DbChannelConfig[]
 
   return rows.map((row) => ({
     type: row.type as ChannelType,
     accessToken: row.access_token,
     verifyToken: row.verify_token,
     appSecret: row.app_secret,
-    platformId: row.platform_id,
+    platformId: row.platform_id
   }))
 }
 
@@ -277,23 +295,31 @@ export function getDeliveryStats(): {
   pending: number
   avgAttemptsOnSuccess: number
 } {
-  const row = getDb().prepare(`
+  const row = getDb()
+    .prepare(
+      `
     SELECT
       COUNT(*) as total,
       SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) as delivered,
       SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed,
       SUM(CASE WHEN status IN ('queued', 'sending', 'retrying') THEN 1 ELSE 0 END) as pending
     FROM outbound_messages
-  `).get() as { total: number; delivered: number; failed: number; pending: number }
+  `
+    )
+    .get() as { total: number; delivered: number; failed: number; pending: number }
 
-  const avgRow = getDb().prepare(`
+  const avgRow = getDb()
+    .prepare(
+      `
     SELECT COALESCE(AVG(attempts), 0) as avg_attempts
     FROM outbound_messages WHERE status = 'delivered'
-  `).get() as { avg_attempts: number }
+  `
+    )
+    .get() as { avg_attempts: number }
 
   return {
     ...row,
-    avgAttemptsOnSuccess: Math.round(avgRow.avg_attempts * 100) / 100,
+    avgAttemptsOnSuccess: Math.round(avgRow.avg_attempts * 100) / 100
   }
 }
 
@@ -317,7 +343,7 @@ function toConversation(row: DbConversation): Conversation {
     senderName: row.sender_name,
     activeRunId: row.active_run_id,
     createdAt: new Date(row.created_at),
-    updatedAt: new Date(row.updated_at),
+    updatedAt: new Date(row.updated_at)
   }
 }
 
@@ -347,7 +373,7 @@ function toOutboundMessage(row: DbOutboundMessage): OutboundMessage {
     nextRetryAt: row.next_retry_at ? new Date(row.next_retry_at) : null,
     lastError: row.last_error,
     createdAt: new Date(row.created_at),
-    deliveredAt: row.delivered_at ? new Date(row.delivered_at) : null,
+    deliveredAt: row.delivered_at ? new Date(row.delivered_at) : null
   }
 }
 

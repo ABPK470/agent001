@@ -65,7 +65,7 @@ function toMetadata(r: Row): CredentialMetadata {
     targetOrigin: r.target_origin,
     createdAt: r.created_at,
     updatedAt: r.updated_at,
-    lastUsedAt: r.last_used_at,
+    lastUsedAt: r.last_used_at
   }
 }
 
@@ -101,7 +101,7 @@ export function createCredential(input: CreateCredentialInput): CredentialMetada
   db.prepare(
     `INSERT INTO browser_credentials
        (id, owner_upn, label, kind, target_origin, enc_payload, iv, auth_tag)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     input.ownerUpn,
@@ -110,11 +110,9 @@ export function createCredential(input: CreateCredentialInput): CredentialMetada
     input.targetOrigin,
     sealed.encPayload,
     sealed.iv,
-    sealed.authTag,
+    sealed.authTag
   )
-  return toMetadata(
-    db.prepare("SELECT * FROM browser_credentials WHERE id = ?").get(id) as Row,
-  )
+  return toMetadata(db.prepare("SELECT * FROM browser_credentials WHERE id = ?").get(id) as Row)
 }
 
 export function listCredentials(ownerUpn: string): CredentialMetadata[] {
@@ -124,10 +122,7 @@ export function listCredentials(ownerUpn: string): CredentialMetadata[] {
   return rows.map(toMetadata)
 }
 
-export function getCredentialMetadata(
-  ownerUpn: string,
-  id: string,
-): CredentialMetadata | null {
+export function getCredentialMetadata(ownerUpn: string, id: string): CredentialMetadata | null {
   const row = getDb()
     .prepare("SELECT * FROM browser_credentials WHERE owner_upn = ? AND id = ?")
     .get(ownerUpn, id) as Row | undefined
@@ -140,7 +135,7 @@ export function getCredentialMetadata(
  */
 export function openCredential<T = unknown>(
   ownerUpn: string,
-  id: string,
+  id: string
 ): { metadata: CredentialMetadata; payload: T } | null {
   const db = getDb()
   const row = db
@@ -149,10 +144,7 @@ export function openCredential<T = unknown>(
   if (!row) return null
 
   const sealed = { encPayload: row.enc_payload, iv: row.iv, authTag: row.auth_tag }
-  const payload =
-    row.kind === "cookie_jar"
-      ? (openJson(sealed) as T)
-      : (openJson(sealed) as T)
+  const payload = row.kind === "cookie_jar" ? (openJson(sealed) as T) : (openJson(sealed) as T)
   // openJson is fine for password+totp too (both are JSON shapes).
   void open // keep tree-shake happy — direct `open()` not used here.
 
@@ -171,7 +163,7 @@ export function deleteCredential(ownerUpn: string, id: string): boolean {
 export function updateCredentialPayload(
   ownerUpn: string,
   id: string,
-  payload: unknown,
+  payload: unknown
 ): CredentialMetadata | null {
   const db = getDb()
   const row = db
@@ -182,7 +174,7 @@ export function updateCredentialPayload(
   db.prepare(
     `UPDATE browser_credentials
         SET enc_payload = ?, iv = ?, auth_tag = ?, updated_at = datetime('now')
-      WHERE owner_upn = ? AND id = ?`,
+      WHERE owner_upn = ? AND id = ?`
   ).run(sealed.encPayload, sealed.iv, sealed.authTag, ownerUpn, id)
   return getCredentialMetadata(ownerUpn, id)
 }

@@ -26,7 +26,9 @@ export function buildClassificationContext(opts: {
   return parts.join("\n")
 }
 
-export function buildPersistedToolTrace(steps: Array<{ action: string; input?: Record<string, unknown> | null }>): Array<{
+export function buildPersistedToolTrace(
+  steps: Array<{ action: string; input?: Record<string, unknown> | null }>
+): Array<{
   kind: "tool-call"
   tool: string
   text: string
@@ -36,15 +38,18 @@ export function buildPersistedToolTrace(steps: Array<{ action: string; input?: R
   return steps.map((step) => {
     const input = step.input ?? {}
     const keys = Object.keys(input)
-    const argsSummary = keys.length > 0
-      ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}` : `${keys.length} args`
-      : ""
+    const argsSummary =
+      keys.length > 0
+        ? keys.length === 1
+          ? `${keys[0]}=${JSON.stringify(input[keys[0]])}`
+          : `${keys.length} args`
+        : ""
     return {
       kind: "tool-call",
       tool: step.action,
       text: `${step.action}(${argsSummary || "..."})`,
       argsSummary,
-      argsFormatted: JSON.stringify(input, null, 2),
+      argsFormatted: JSON.stringify(input, null, 2)
     }
   })
 }

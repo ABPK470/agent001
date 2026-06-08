@@ -41,23 +41,21 @@ afterEach(() => {
 
 describe("browser proxy config", () => {
   it("sets, reads, updates, and deletes a proxy", async () => {
-    const { setProxyConfig, getProxyConfig, deleteProxyConfig } = await import(
-      "../src/browser/proxy.js"
-    )
+    const { setProxyConfig, getProxyConfig, deleteProxyConfig } = await import("../src/browser/proxy.js")
 
     expect(getProxyConfig("alice@example.com")).toBeNull()
 
     const created = setProxyConfig({
       ownerUpn: "alice@example.com",
       server: "http://corp-proxy:8080",
-      bypass: "*.local,127.0.0.1",
+      bypass: "*.local,127.0.0.1"
     })
     expect(created.server).toBe("http://corp-proxy:8080")
     expect(created.bypass).toBe("*.local,127.0.0.1")
 
     const updated = setProxyConfig({
       ownerUpn: "alice@example.com",
-      server: "socks5://localhost:1080",
+      server: "socks5://localhost:1080"
     })
     expect(updated.server).toBe("socks5://localhost:1080")
     expect(updated.bypass).toBe("")
@@ -71,12 +69,8 @@ describe("browser proxy config", () => {
 
   it("rejects invalid URLs and unsupported schemes", async () => {
     const { setProxyConfig } = await import("../src/browser/proxy.js")
-    expect(() =>
-      setProxyConfig({ ownerUpn: "u@x", server: "ftp://nope" }),
-    ).toThrow(/http|socks5/)
-    expect(() =>
-      setProxyConfig({ ownerUpn: "u@x", server: "not-a-url" }),
-    ).toThrow(/http|socks5/)
+    expect(() => setProxyConfig({ ownerUpn: "u@x", server: "ftp://nope" })).toThrow(/http|socks5/)
+    expect(() => setProxyConfig({ ownerUpn: "u@x", server: "not-a-url" })).toThrow(/http|socks5/)
   })
 
   it("isolates tenants", async () => {

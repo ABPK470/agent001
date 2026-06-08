@@ -36,7 +36,7 @@ const MODEL_FAMILY_FACTOR: ReadonlyArray<readonly [RegExp, number]> = [
   [/^anthropic/i, 3.5],
   [/^gemini/i, 4],
   [/^llama/i, 3.8],
-  [/^mistral/i, 3.8],
+  [/^mistral/i, 3.8]
 ]
 
 /**
@@ -58,7 +58,10 @@ interface TiktokenLike {
 }
 const tiktokenCache = new Map<string, TiktokenLike | null>()
 const tiktokenState: {
-  module: { encoding_for_model?: (m: string) => TiktokenLike; get_encoding?: (n: string) => TiktokenLike } | null | undefined
+  module:
+    | { encoding_for_model?: (m: string) => TiktokenLike; get_encoding?: (n: string) => TiktokenLike }
+    | null
+    | undefined
 } = { module: undefined }
 
 function tiktokenFor(model: string): TiktokenLike | null {
@@ -81,7 +84,10 @@ function tiktokenFor(model: string): TiktokenLike | null {
   }
   let enc: TiktokenLike | null = null
   try {
-    enc = tiktokenState.module.encoding_for_model?.(model) ?? tiktokenState.module.get_encoding?.("cl100k_base") ?? null
+    enc =
+      tiktokenState.module.encoding_for_model?.(model) ??
+      tiktokenState.module.get_encoding?.("cl100k_base") ??
+      null
   } catch {
     enc = null
   }
@@ -128,16 +134,14 @@ export function estimateTokensFromMessages(messages: readonly Message[], model?:
  * Per-section token breakdown — used by telemetry hooks to surface
  * which slice of the prompt is dominating budget consumption.
  */
-export function tokensBySection(
-  messages: readonly Message[],
-  model?: string,
-): Record<string, number> {
+export function tokensBySection(messages: readonly Message[], model?: string): Record<string, number> {
   const cpt = charPerToken(model)
   const out: Record<string, number> = {}
   for (const m of messages) {
-    const sec = m.section ?? (m.role ?? "other")
-    const len = (m.content ?? "").length
-      + (m.toolCalls?.reduce((s, tc) => s + tc.name.length + JSON.stringify(tc.arguments).length, 0) ?? 0)
+    const sec = m.section ?? m.role ?? "other"
+    const len =
+      (m.content ?? "").length +
+      (m.toolCalls?.reduce((s, tc) => s + tc.name.length + JSON.stringify(tc.arguments).length, 0) ?? 0)
     out[sec] = (out[sec] ?? 0) + Math.ceil(len / cpt)
   }
   return out

@@ -11,17 +11,17 @@ import type { ToolCallRecord } from "../../../../tools/index.js"
 import { parseToolResultObject } from "../../../../tools/index.js"
 import type { RecoveryHint } from "../recovery.js"
 import {
-    extractMissingNpmScriptName,
-    isMissingLocalPackageDistFailure,
-    isMissingNpmScriptFailure,
-    isMissingNpmWorkspaceFailure,
-    isPackagePathNotExportedFailure,
-    isRecursiveNpmInstallLifecycleFailure,
-    isTimedOutNonWatchTestRunnerFailure,
-    isTypescriptRootDirScopeFailure,
-    isUnsupportedWorkspaceProtocolFailure,
-    isVitestUnsupportedThreadsFlagFailure,
-    isWatchModeTestRunnerFailure,
+  extractMissingNpmScriptName,
+  isMissingLocalPackageDistFailure,
+  isMissingNpmScriptFailure,
+  isMissingNpmWorkspaceFailure,
+  isPackagePathNotExportedFailure,
+  isRecursiveNpmInstallLifecycleFailure,
+  isTimedOutNonWatchTestRunnerFailure,
+  isTypescriptRootDirScopeFailure,
+  isUnsupportedWorkspaceProtocolFailure,
+  isVitestUnsupportedThreadsFlagFailure,
+  isWatchModeTestRunnerFailure
 } from "./recovery-detectors.js"
 
 export interface AdvancedHintContext {
@@ -41,7 +41,7 @@ export function tryTestRunnerHint(ctx: AdvancedHintContext): RecoveryHint | unde
         "Retry with a non-interactive single-run invocation. " +
         "For Vitest: `vitest run` or `vitest --run`. " +
         "For Jest: `CI=1 npm test` or `jest --runInBand`. " +
-        "Only append npm `--` flags when the underlying runner supports them.",
+        "Only append npm `--` flags when the underlying runner supports them."
     }
   }
 
@@ -52,7 +52,7 @@ export function tryTestRunnerHint(ctx: AdvancedHintContext): RecoveryHint | unde
         "This non-interactive test command timed out. " +
         "A test or code path likely hung (infinite loop, unresolved promise, or open handle). " +
         "Do not keep retrying the same command. Inspect the source and tests, fix the hang, " +
-        "then rerun the minimal single-run test command.",
+        "then rerun the minimal single-run test command."
     }
   }
 
@@ -62,7 +62,7 @@ export function tryTestRunnerHint(ctx: AdvancedHintContext): RecoveryHint | unde
       message:
         "Vitest rejected an unsupported thread flag. Do not invent `--threads` or `--no-threads`. " +
         "Keep the command in single-run mode (`vitest run` or `vitest --run`). " +
-        "If worker strategy matters, use `--pool=<threads|forks>` or project config instead.",
+        "If worker strategy matters, use `--pool=<threads|forks>` or project config instead."
     }
   }
   return undefined
@@ -76,7 +76,7 @@ export function tryNpmHint(ctx: AdvancedHintContext): RecoveryHint | undefined {
       key: "workspace-protocol-unsupported",
       message:
         "This package manager rejected `workspace:*`. Do not assume workspace protocol support. " +
-        "Rewrite the local dependency to a host-compatible specifier, then rerun `npm install`.",
+        "Rewrite the local dependency to a host-compatible specifier, then rerun `npm install`."
     }
   }
 
@@ -85,7 +85,7 @@ export function tryNpmHint(ctx: AdvancedHintContext): RecoveryHint | undefined {
       key: "recursive-npm-install-lifecycle",
       message:
         "This project defines an `install` lifecycle that recursively reruns `npm install`, causing a loop. " +
-        "Remove or rename the recursive `install` script in `package.json`, then rerun `npm install`.",
+        "Remove or rename the recursive `install` script in `package.json`, then rerun `npm install`."
     }
   }
 
@@ -95,7 +95,7 @@ export function tryNpmHint(ctx: AdvancedHintContext): RecoveryHint | undefined {
       key: `missing-npm-script:${scriptName.toLowerCase()}`,
       message:
         `The current package.json does not define npm script \`${scriptName}\`. ` +
-        "Inspect package.json, add the missing script, or run the correct command directly.",
+        "Inspect package.json, add the missing script, or run the correct command directly."
     }
   }
 
@@ -105,7 +105,7 @@ export function tryNpmHint(ctx: AdvancedHintContext): RecoveryHint | undefined {
       message:
         "npm could not match the `--workspace` selector. " +
         "Inspect root `package.json` workspaces and each package `name`, then rerun with exact workspace names " +
-        "or run the command from the matching workspace cwd.",
+        "or run the command from the matching workspace cwd."
     }
   }
 
@@ -114,7 +114,7 @@ export function tryNpmHint(ctx: AdvancedHintContext): RecoveryHint | undefined {
       key: "local-package-dist-missing",
       message:
         "This local package link resolved to a `dist/*` entry that doesn't exist yet. " +
-        "Build the dependency package first, then rerun the command.",
+        "Build the dependency package first, then rerun the command."
     }
   }
 
@@ -123,7 +123,7 @@ export function tryNpmHint(ctx: AdvancedHintContext): RecoveryHint | undefined {
       key: "package-exports-mismatch",
       message:
         "This package's `exports` map does not match how the command is loading it. " +
-        "Inspect `package.json` `exports`/`main`/`types`, then retry with an entry point that matches the package format.",
+        "Inspect `package.json` `exports`/`main`/`types`, then retry with an entry point that matches the package format."
     }
   }
 
@@ -133,7 +133,7 @@ export function tryNpmHint(ctx: AdvancedHintContext): RecoveryHint | undefined {
       message:
         "This TypeScript config includes files outside `rootDir`. " +
         "Either remove the restrictive `rootDir`, exclude config files from tsconfig, " +
-        "or move Node-side config files into a separate `tsconfig.node.json`.",
+        "or move Node-side config files into a separate `tsconfig.node.json`."
     }
   }
 

@@ -7,12 +7,7 @@
  */
 
 import { buildSearchIndexes, tableKey } from "../helpers.js"
-import type {
-    CatalogFK,
-    CatalogSnapshot,
-    CatalogTable,
-    SysEntry,
-} from "../types.js"
+import type { CatalogFK, CatalogSnapshot, CatalogTable, SysEntry } from "../types.js"
 
 export interface SnapshotRebuildResult {
   tables: Map<string, CatalogTable>
@@ -48,7 +43,11 @@ export function loadCatalogFromSnapshot(snap: CatalogSnapshot): SnapshotRebuildR
 
   // Restore sys catalog from snapshot as-is — no curated overlay
   const sysCatalog: SysEntry[] = snap.sysCatalog
-    ? snap.sysCatalog.map((e) => ({ name: e.name, qualifiedName: e.qualifiedName, columns: e.columns ?? [] }))
+    ? snap.sysCatalog.map((e) => ({
+        name: e.name,
+        qualifiedName: e.qualifiedName,
+        columns: e.columns ?? []
+      }))
     : []
 
   return { tables, nameIndex, columnIndex, adjacency, viewSourceRows, sysCatalog }

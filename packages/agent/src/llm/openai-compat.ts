@@ -67,18 +67,36 @@ export class OpenAICompatibleClient implements LLMClient {
     this.enablePromptCaching = opts.enablePromptCaching ?? false
   }
 
-  async chat(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
+  async chat(
+    messages: Message[],
+    tools: Tool[],
+    opts?: {
+      signal?: AbortSignal
+      maxTokens?: number
+      temperature?: number
+      onToken?: (token: string) => void
+    }
+  ): Promise<LLMResponse> {
     if (opts?.onToken) return this.chatStream(messages, tools, opts)
     return this.chatComplete(messages, tools, opts)
   }
 
-  private async chatStream(messages: Message[], tools: Tool[], opts: { signal?: AbortSignal; maxTokens?: number; temperature?: number; onToken?: (token: string) => void }): Promise<LLMResponse> {
+  private async chatStream(
+    messages: Message[],
+    tools: Tool[],
+    opts: {
+      signal?: AbortSignal
+      maxTokens?: number
+      temperature?: number
+      onToken?: (token: string) => void
+    }
+  ): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map((m) => formatOpenAICompatibleMessage(m, this.enablePromptCaching)),
       max_completion_tokens: opts?.maxTokens ?? 16384,
       stream: true,
-      stream_options: { include_usage: true },
+      stream_options: { include_usage: true }
     }
     if (opts?.temperature !== undefined) body.temperature = opts.temperature
     if (tools.length > 0) body.tools = formatOpenAICompatibleTools(tools)
@@ -90,18 +108,24 @@ export class OpenAICompatibleClient implements LLMClient {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
         body: JSON.stringify(body),
-        signal: opts?.signal,
+        signal: opts?.signal
       })
       if (res.status !== 429 || attempt === maxRetries) break
       const retryAfter = res.headers.get("retry-after")
       const waitMs = retryAfter ? Number(retryAfter) * 1000 : Math.min(2000 * 2 ** attempt, 60_000)
       await new Promise((r) => setTimeout(r, waitMs))
     }
-    if (!res!.ok) { const text = await res!.text(); throw new Error(`OpenAI API error ${res!.status}: ${text}`) }
+    if (!res!.ok) {
+      const text = await res!.text()
+      throw new Error(`OpenAI API error ${res!.status}: ${text}`)
+    }
 
     let content = ""
     const toolCallMap = new Map<number, { id: string; name: string; arguments: string }>()
-    let promptTokens = 0, completionTokens = 0, totalTokens = 0, finishReason: string | null = null
+    let promptTokens = 0,
+      completionTokens = 0,
+      totalTokens = 0,
+      finishReason: string | null = null
     const reader = res!.body!.getReader()
     const decoder = new TextDecoder()
     let buf = ""
@@ -116,7 +140,11 @@ export class OpenAICompatibleClient implements LLMClient {
         const raw = line.slice(6).trim()
         if (raw === "[DONE]") continue
         let chunk: Record<string, unknown>
-        try { chunk = JSON.parse(raw) as Record<string, unknown> } catch { continue }
+        try {
+          chunk = JSON.parse(raw) as Record<string, unknown>
+        } catch {
+          continue
+        }
         const choices = chunk.choices as Array<Record<string, unknown>> | undefined
         const delta = choices?.[0]?.delta as Record<string, unknown> | undefined
         const fr = choices?.[0]?.finish_reason as string | undefined
@@ -137,24 +165,36 @@ export class OpenAICompatibleClient implements LLMClient {
           }
         }
         const usage = chunk.usage as Record<string, number> | undefined
-        if (usage?.total_tokens) { promptTokens = usage.prompt_tokens; completionTokens = usage.completion_tokens; totalTokens = usage.total_tokens }
+        if (usage?.total_tokens) {
+          promptTokens = usage.prompt_tokens
+          completionTokens = usage.completion_tokens
+          totalTokens = usage.total_tokens
+        }
       }
     }
     if (finishReason === "length") {
-      throw new Error("LLM response truncated (finish_reason=length). The model hit its completion token limit before finishing. This usually means a tool call argument (like file content) was too large.")
+      throw new Error(
+        "LLM response truncated (finish_reason=length). The model hit its completion token limit before finishing. This usually means a tool call argument (like file content) was too large."
+      )
     }
     return {
       content: content || null,
-      toolCalls: [...toolCallMap.values()].map((tc): ToolCall => ({ id: tc.id, name: tc.name, arguments: safeParseArgs(tc.arguments) })),
-      usage: totalTokens > 0 ? { promptTokens, completionTokens, totalTokens } : undefined,
+      toolCalls: [...toolCallMap.values()].map(
+        (tc): ToolCall => ({ id: tc.id, name: tc.name, arguments: safeParseArgs(tc.arguments) })
+      ),
+      usage: totalTokens > 0 ? { promptTokens, completionTokens, totalTokens } : undefined
     }
   }
 
-  private async chatComplete(messages: Message[], tools: Tool[], opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number }): Promise<LLMResponse> {
+  private async chatComplete(
+    messages: Message[],
+    tools: Tool[],
+    opts?: { signal?: AbortSignal; maxTokens?: number; temperature?: number }
+  ): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
       model: this.model,
       messages: messages.map((m) => formatOpenAICompatibleMessage(m, this.enablePromptCaching)),
-      max_completion_tokens: opts?.maxTokens ?? 16384,
+      max_completion_tokens: opts?.maxTokens ?? 16384
     }
     if (opts?.temperature !== undefined) body.temperature = opts.temperature
 
@@ -170,19 +210,17 @@ export class OpenAICompatibleClient implements LLMClient {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          Authorization: `Bearer ${this.apiKey}`,
+          Authorization: `Bearer ${this.apiKey}`
         },
         body: JSON.stringify(body),
-        signal: opts?.signal,
+        signal: opts?.signal
       })
 
       if (res.status !== 429 || attempt === maxRetries) break
 
       // Respect Retry-After header, fall back to exponential backoff
       const retryAfter = res.headers.get("retry-after")
-      const waitMs = retryAfter
-        ? Number(retryAfter) * 1000
-        : Math.min(2000 * 2 ** attempt, 60_000)
+      const waitMs = retryAfter ? Number(retryAfter) * 1000 : Math.min(2000 * 2 ** attempt, 60_000)
       await new Promise((r) => setTimeout(r, waitMs))
     }
 
@@ -208,9 +246,9 @@ export function formatOpenAICompatibleMessage(msg: Message, enablePromptCaching 
         type: "function" as const,
         function: {
           name: tc.name,
-          arguments: JSON.stringify(tc.arguments),
-        },
-      })),
+          arguments: JSON.stringify(tc.arguments)
+        }
+      }))
     }
   }
 
@@ -218,7 +256,7 @@ export function formatOpenAICompatibleMessage(msg: Message, enablePromptCaching 
     return {
       role: MessageRole.Tool,
       content: msg.content,
-      tool_call_id: msg.toolCallId,
+      tool_call_id: msg.toolCallId
     }
   }
 
@@ -226,10 +264,15 @@ export function formatOpenAICompatibleMessage(msg: Message, enablePromptCaching 
   // Anthropic-style cache_control (Databricks Claude, Anthropic native).
   // Without this the request body is identical to a vanilla OpenAI
   // request, so safe to keep gated behind enablePromptCaching.
-  if (enablePromptCaching && msg.cacheHint === "ephemeral" && typeof msg.content === "string" && msg.content.length > 0) {
+  if (
+    enablePromptCaching &&
+    msg.cacheHint === "ephemeral" &&
+    typeof msg.content === "string" &&
+    msg.content.length > 0
+  ) {
     return {
       role: msg.role,
-      content: [{ type: "text", text: msg.content, cache_control: { type: "ephemeral" } }],
+      content: [{ type: "text", text: msg.content, cache_control: { type: "ephemeral" } }]
     }
   }
 
@@ -242,8 +285,8 @@ function formatTool(tool: Tool): OpenAITool {
     function: {
       name: tool.name,
       description: tool.description,
-      parameters: tool.parameters,
-    },
+      parameters: tool.parameters
+    }
   }
 }
 
@@ -256,8 +299,8 @@ export function parseOpenAICompatibleResponse(data: any): LLMResponse {
   if (finish === "length") {
     throw new Error(
       "LLM response truncated (finish_reason=length). " +
-      "The model hit its completion token limit before finishing. " +
-      "This usually means a tool call argument (like file content) was too large."
+        "The model hit its completion token limit before finishing. " +
+        "This usually means a tool call argument (like file content) was too large."
     )
   }
 
@@ -267,18 +310,23 @@ export function parseOpenAICompatibleResponse(data: any): LLMResponse {
   }
 
   return {
-    content: typeof choice.content === "string" || choice.content === null ? choice.content : JSON.stringify(choice.content),
+    content:
+      typeof choice.content === "string" || choice.content === null
+        ? choice.content
+        : JSON.stringify(choice.content),
     toolCalls: (choice.tool_calls ?? []).map(
       (tc: OpenAIToolCall): ToolCall => ({
         id: tc.id,
         name: tc.function.name,
-        arguments: safeParseArgs(tc.function.arguments),
-      }),
+        arguments: safeParseArgs(tc.function.arguments)
+      })
     ),
-    usage: data?.usage ? {
-      promptTokens: data.usage.prompt_tokens,
-      completionTokens: data.usage.completion_tokens,
-      totalTokens: data.usage.total_tokens,
-    } : undefined,
+    usage: data?.usage
+      ? {
+          promptTokens: data.usage.prompt_tokens,
+          completionTokens: data.usage.completion_tokens,
+          totalTokens: data.usage.total_tokens
+        }
+      : undefined
   }
 }

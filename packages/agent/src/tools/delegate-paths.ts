@@ -10,7 +10,8 @@
 import type { ExecutionEnvelope, SubagentTaskStep } from "../application/core/planner.js"
 import type { Tool } from "../domain/agent-types.js"
 
-const COMPLEX_IMPLEMENTATION_RE = /\b(?:game|rules?|engine|validator|workflow|state machine|parser|compiler|algorithm|reconciliation|move validation|checkmate|castling|en passant|promotion|scheduling|constraint|domain logic|business logic)\b/i
+const COMPLEX_IMPLEMENTATION_RE =
+  /\b(?:game|rules?|engine|validator|workflow|state machine|parser|compiler|algorithm|reconciliation|move validation|checkmate|castling|en passant|promotion|scheduling|constraint|domain logic|business logic)\b/i
 
 const DEFAULT_CHILD_ITERATIONS = 50
 const MAX_CHILD_ITERATIONS = 180
@@ -58,9 +59,7 @@ function chooseCanonicalRoot(paths: readonly string[]): string | null {
 }
 
 export function canonicalizeArtifacts(artifacts: readonly string[], workspaceRoot?: string): string[] {
-  const normalized = artifacts
-    .map(a => normalizeRelativePath(a, workspaceRoot))
-    .filter(Boolean)
+  const normalized = artifacts.map((a) => normalizeRelativePath(a, workspaceRoot)).filter(Boolean)
   if (normalized.length === 0) return []
 
   const canonicalRoot = chooseCanonicalRoot(normalized)
@@ -86,14 +85,14 @@ function buildCanonicalPathMap(targetArtifacts: readonly string[], workspaceRoot
   return {
     targets,
     targetSet,
-    byBasename,
+    byBasename
   }
 }
 
 function resolveWritePathToCanonical(
   rawPath: string,
   canonical: CanonicalPathMap,
-  workspaceRoot?: string,
+  workspaceRoot?: string
 ): { ok: true; path: string; rewritten: boolean } | { ok: false; reason: string } {
   if (canonical.targets.length === 0) {
     const normalized = normalizeRelativePath(rawPath, workspaceRoot)
@@ -117,11 +116,14 @@ function resolveWritePathToCanonical(
 
   return {
     ok: false,
-    reason: `path "${rawPath}" is outside this step's targetArtifacts`,
+    reason: `path "${rawPath}" is outside this step's targetArtifacts`
   }
 }
 
-export function wrapPlannerChildToolsForWriteScope(tools: readonly Tool[], envelope: ExecutionEnvelope): Tool[] {
+export function wrapPlannerChildToolsForWriteScope(
+  tools: readonly Tool[],
+  envelope: ExecutionEnvelope
+): Tool[] {
   const canonical = buildCanonicalPathMap(envelope.targetArtifacts, envelope.workspaceRoot)
 
   return tools.map((tool) => {
@@ -152,7 +154,7 @@ export function wrapPlannerChildToolsForWriteScope(tools: readonly Tool[], envel
           return `${result}\n[canonical-path] Rewrote write path "${rawPath}" -> "${resolved.path}"`
         }
         return result
-      },
+      }
     }
   })
 }
@@ -160,13 +162,15 @@ export function wrapPlannerChildToolsForWriteScope(tools: readonly Tool[], envel
 export function canonicalizeEnvelope(envelope: ExecutionEnvelope): ExecutionEnvelope {
   const targetArtifacts = canonicalizeArtifacts(envelope.targetArtifacts, envelope.workspaceRoot)
   const targetSet = new Set(targetArtifacts)
-  const requiredSourceArtifacts = canonicalizeArtifacts(envelope.requiredSourceArtifacts, envelope.workspaceRoot)
-    .map((src) => {
-      if (targetSet.has(src)) return src
-      const base = src.split("/").pop() ?? src
-      const matches = targetArtifacts.filter(t => t.endsWith(`/${base}`) || t === base)
-      return matches.length === 1 ? matches[0] : src
-    })
+  const requiredSourceArtifacts = canonicalizeArtifacts(
+    envelope.requiredSourceArtifacts,
+    envelope.workspaceRoot
+  ).map((src) => {
+    if (targetSet.has(src)) return src
+    const base = src.split("/").pop() ?? src
+    const matches = targetArtifacts.filter((t) => t.endsWith(`/${base}`) || t === base)
+    return matches.length === 1 ? matches[0] : src
+  })
 
   return {
     ...envelope,
@@ -178,11 +182,11 @@ export function canonicalizeEnvelope(envelope: ExecutionEnvelope): ExecutionEnve
     unresolvedDependencyBlockers: [...new Set(envelope.unresolvedDependencyBlockers ?? [])],
     repairContext: envelope.repairContext
       ? {
-        ...envelope.repairContext,
-        requiredAcceptedArtifacts: [...new Set(envelope.repairContext.requiredAcceptedArtifacts)],
-        unresolvedDependencyBlockers: [...new Set(envelope.repairContext.unresolvedDependencyBlockers)],
-      }
-      : undefined,
+          ...envelope.repairContext,
+          requiredAcceptedArtifacts: [...new Set(envelope.repairContext.requiredAcceptedArtifacts)],
+          unresolvedDependencyBlockers: [...new Set(envelope.repairContext.unresolvedDependencyBlockers)]
+        }
+      : undefined
   }
 }
 
@@ -204,38 +208,62 @@ export interface PlannerChildBudgetMetrics {
 
 export function computePlannerChildBudgetMetrics(
   step: SubagentTaskStep,
-  envelope: ExecutionEnvelope,
+  envelope: ExecutionEnvelope
 ): PlannerChildBudgetMetrics {
   const budgetMatch = step.maxBudgetHint.match(/(\d+)\s*iteration/i)
   const parsedBudget = budgetMatch ? parseInt(budgetMatch[1], 10) : DEFAULT_CHILD_ITERATIONS
   const baseBudget = Math.max(parsedBudget, DEFAULT_CHILD_ITERATIONS)
-  const codeArtifactCount = envelope.targetArtifacts.filter(a => /\.(?:js|jsx|ts|tsx|py|rb|go|rs|java|php)$/i.test(a)).length
+  const codeArtifactCount = envelope.targetArtifacts.filter((a) =>
+    /\.(?:js|jsx|ts|tsx|py|rb|go|rs|java|php)$/i.test(a)
+  ).length
   const isWriterStep = envelope.effectClass !== "readonly" && envelope.targetArtifacts.length > 0
   const combinedContractText = `${step.objective} ${step.acceptanceCriteria.join(" ")}`
   const hasComplexImplementation = COMPLEX_IMPLEMENTATION_RE.test(combinedContractText)
-  const hasBlueprintSource = envelope.requiredSourceArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  const hasBlueprintSource = envelope.requiredSourceArtifacts.some((artifact) =>
+    /(?:^|\/)BLUEPRINT\.md$/i.test(artifact)
+  )
 
-  const contractFloor = Math.min(60, Math.max(18,
-    envelope.targetArtifacts.length * 2 +
-    step.acceptanceCriteria.length * 3 +
-    envelope.requiredSourceArtifacts.length +
-    (envelope.verificationMode !== "none" ? 6 : 0) +
-    (isWriterStep ? 8 : 0),
-  ))
+  const contractFloor = Math.min(
+    60,
+    Math.max(
+      18,
+      envelope.targetArtifacts.length * 2 +
+        step.acceptanceCriteria.length * 3 +
+        envelope.requiredSourceArtifacts.length +
+        (envelope.verificationMode !== "none" ? 6 : 0) +
+        (isWriterStep ? 8 : 0)
+    )
+  )
 
   const complexityBoost = isWriterStep
-    ? Math.min(100,
-      (step.acceptanceCriteria.length >= 8 ? 34 : step.acceptanceCriteria.length >= 6 ? 24 : step.acceptanceCriteria.length >= 4 ? 12 : 0) +
-      (codeArtifactCount >= 4 ? 26 : codeArtifactCount >= 2 ? 16 : codeArtifactCount === 1 ? 8 : 0) +
-      (envelope.requiredSourceArtifacts.length >= 4 ? 16 : envelope.requiredSourceArtifacts.length >= 2 ? 8 : envelope.requiredSourceArtifacts.length === 1 ? 4 : 0) +
-      (envelope.verificationMode !== "none" ? 10 : 0) +
-      (hasComplexImplementation ? 36 : 0) +
-      (hasBlueprintSource ? 10 : 0),
-    )
+    ? Math.min(
+        100,
+        (step.acceptanceCriteria.length >= 8
+          ? 34
+          : step.acceptanceCriteria.length >= 6
+            ? 24
+            : step.acceptanceCriteria.length >= 4
+              ? 12
+              : 0) +
+          (codeArtifactCount >= 4 ? 26 : codeArtifactCount >= 2 ? 16 : codeArtifactCount === 1 ? 8 : 0) +
+          (envelope.requiredSourceArtifacts.length >= 4
+            ? 16
+            : envelope.requiredSourceArtifacts.length >= 2
+              ? 8
+              : envelope.requiredSourceArtifacts.length === 1
+                ? 4
+                : 0) +
+          (envelope.verificationMode !== "none" ? 10 : 0) +
+          (hasComplexImplementation ? 36 : 0) +
+          (hasBlueprintSource ? 10 : 0)
+      )
     : 0
 
   const adaptiveBudget = baseBudget + complexityBoost
-  const computedMaxIterations = Math.min(Math.max(baseBudget, contractFloor, adaptiveBudget), MAX_CHILD_ITERATIONS)
+  const computedMaxIterations = Math.min(
+    Math.max(baseBudget, contractFloor, adaptiveBudget),
+    MAX_CHILD_ITERATIONS
+  )
 
   return {
     hint: step.maxBudgetHint,
@@ -250,13 +278,13 @@ export function computePlannerChildBudgetMetrics(
     codeArtifactCount,
     hasComplexImplementation,
     hasBlueprintSource,
-    verificationMode: envelope.verificationMode,
+    verificationMode: envelope.verificationMode
   }
 }
 
 export function computePlannerChildMaxIterations(
   step: SubagentTaskStep,
-  envelope: ExecutionEnvelope,
+  envelope: ExecutionEnvelope
 ): number {
   return computePlannerChildBudgetMetrics(step, envelope).computedMaxIterations
 }

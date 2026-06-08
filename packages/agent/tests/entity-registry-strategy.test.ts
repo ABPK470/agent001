@@ -3,12 +3,12 @@
  */
 
 import {
-    BUNDLED_SCD2_STRATEGIES,
-    bundledStrategyById,
-    type EntityTable,
-    resolveEffectiveScd2,
-    type Scd2Override,
-    type Scd2Strategy,
+  BUNDLED_SCD2_STRATEGIES,
+  bundledStrategyById,
+  type EntityTable,
+  resolveEffectiveScd2,
+  type Scd2Override,
+  type Scd2Strategy
 } from "@mia/sync"
 import { describe, expect, it } from "vitest"
 
@@ -26,7 +26,7 @@ function table(scd2Override: Scd2Override | null = null): EntityTable {
     source: null,
     groundedByPipeline: null,
     enabledByDefault: null,
-    userControllable: null,
+    userControllable: null
   }
 }
 
@@ -67,7 +67,7 @@ describe("resolveEffectiveScd2 — no overrides", () => {
       strategyId: "mymi-scd2",
       strategyVersion: 1,
       entityOverrideApplied: false,
-      tableOverrideApplied: false,
+      tableOverrideApplied: false
     })
   })
 })
@@ -78,7 +78,7 @@ describe("resolveEffectiveScd2 — entity-level overrides", () => {
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: { isLockedCol: null },
-      table: table(),
+      table: table()
     })
     expect(eff.isLockedCol).toBeNull()
     expect(eff.validFromCol).toBe("validFrom") // unchanged
@@ -90,7 +90,7 @@ describe("resolveEffectiveScd2 — entity-level overrides", () => {
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: { excludedFromDiffCols: ["only_this"] },
-      table: table(),
+      table: table()
     })
     expect(eff.excludedFromDiffCols).toEqual(["only_this"])
   })
@@ -100,7 +100,7 @@ describe("resolveEffectiveScd2 — entity-level overrides", () => {
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: { identityHandling: "none" },
-      table: table(),
+      table: table()
     })
     expect(eff.identityHandling).toBe("none")
   })
@@ -111,7 +111,7 @@ describe("resolveEffectiveScd2 — entity-level overrides", () => {
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: { isLockedCol: null }, // unrelated override
-      table: table(),
+      table: table()
     })
     expect(eff.syncDateCol).toBe("syncDate") // came from strategy
   })
@@ -123,7 +123,7 @@ describe("resolveEffectiveScd2 — table-level overrides win over entity", () =>
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: { validFromCol: "entity_vf" },
-      table: table({ validFromCol: "table_vf" }),
+      table: table({ validFromCol: "table_vf" })
     })
     expect(eff.validFromCol).toBe("table_vf")
     expect(eff.resolution.entityOverrideApplied).toBe(true)
@@ -135,7 +135,7 @@ describe("resolveEffectiveScd2 — table-level overrides win over entity", () =>
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: { validFromCol: "entity_vf" },
-      table: table({ validFromCol: null }),
+      table: table({ validFromCol: null })
     })
     expect(eff.validFromCol).toBeNull()
   })
@@ -145,7 +145,7 @@ describe("resolveEffectiveScd2 — table-level overrides win over entity", () =>
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: null,
-      table: table({ validFromCol: "table_vf" }),
+      table: table({ validFromCol: "table_vf" })
     })
     expect(eff.resolution.entityOverrideApplied).toBe(false)
     expect(eff.resolution.tableOverrideApplied).toBe(true)
@@ -156,12 +156,12 @@ describe("resolveEffectiveScd2 — dict semantics", () => {
   it("onInsert / onUpdate are REPLACED, not merged", () => {
     const strategy: Scd2Strategy = {
       ...bundledStrategyById("mymi-scd2")!,
-      onInsert: { validFrom: "GETUTCDATE()", validTo: "NULL" },
+      onInsert: { validFrom: "GETUTCDATE()", validTo: "NULL" }
     }
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: { onInsert: { validFrom: "@@DBTS" } },
-      table: table(),
+      table: table()
     })
     // validTo dropped because entity override replaces the whole dict.
     expect(eff.onInsert).toEqual({ validFrom: "@@DBTS" })

@@ -101,5 +101,4 @@ export interface SyncStateHost {
   sync: SyncHost
 }
 
-export interface SyncRuntimeHost extends MssqlAccessHost, SyncStateHost {
-}
+export interface SyncRuntimeHost extends MssqlAccessHost, SyncStateHost {}

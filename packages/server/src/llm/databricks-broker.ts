@@ -10,15 +10,17 @@
  *      (worst case: one extra token request, no functional harm).
  */
 
-interface CachedToken { token: string; expiresAt: number }
+interface CachedToken {
+  token: string
+  expiresAt: number
+}
 let cached: CachedToken | null = null
 
 export function isDatabricksConfigured(): boolean {
   return Boolean(
-    process.env["DATABRICKS_HOST"] && (
-      process.env["DATABRICKS_TOKEN"] ||
-      (process.env["DATABRICKS_CLIENT_ID"] && process.env["DATABRICKS_CLIENT_SECRET"])
-    ),
+    process.env["DATABRICKS_HOST"] &&
+    (process.env["DATABRICKS_TOKEN"] ||
+      (process.env["DATABRICKS_CLIENT_ID"] && process.env["DATABRICKS_CLIENT_SECRET"]))
   )
 }
 
@@ -43,7 +45,7 @@ export async function getDatabricksToken(): Promise<string> {
   const res = await fetch(`${getDatabricksHost()}/oidc/v1/token`, {
     method: "POST",
     headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" },
-    body: "grant_type=client_credentials&scope=all-apis",
+    body: "grant_type=client_credentials&scope=all-apis"
   })
   if (!res.ok) throw new Error(`Databricks OAuth failed (${res.status}): ${await res.text()}`)
   const data = (await res.json()) as { access_token: string; expires_in?: number }

@@ -17,13 +17,13 @@ import { PolicyDbEnvironment, PolicyRole, PolicyRunMode } from "./enums/policy.j
 
 export interface HostedPolicyContext {
   /** Run identity (for audit cross-referencing). */
-  readonly runId:        string
+  readonly runId: string
   /** Effective execution profile of the run. Drives default-deny. */
-  readonly runMode:      PolicyRunMode
+  readonly runMode: PolicyRunMode
   /** Caller role used by selector rules. */
-  readonly role:         PolicyRole
+  readonly role: PolicyRole
   /** Canonical sandbox root path; required when runMode === "hosted". */
-  readonly sandboxRoot:  string | null
+  readonly sandboxRoot: string | null
   /** Default MSSQL environment if a tool call does not specify one. */
   readonly defaultDbEnvironment?: PolicyDbEnvironment
   /**
@@ -31,7 +31,7 @@ export interface HostedPolicyContext {
    * (notably the attachment service) to bind ownership of artifacts the
    * agent produces. Null when the run is service-internal.
    */
-  readonly actorUpn?:    string | null
+  readonly actorUpn?: string | null
   /** Originating session id, mirrored from cookie sid. */
-  readonly sessionId?:   string | null
+  readonly sessionId?: string | null
 }

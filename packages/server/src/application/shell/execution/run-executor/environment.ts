@@ -1,20 +1,20 @@
 import {
-    computeAutoDetectedExcludeDirs,
-    configureAgent,
-    createRun,
-    EventType,
-    getCatalog,
-    governTool,
-    makeRunContext,
-    PolicyRole,
-    PolicyRunMode,
-    runStarted,
-    startRunningPure,
-    type AgentHost,
-    type DelegateContext,
-    type HostedPolicyContext,
-    type RunState,
-    type Tool,
+  computeAutoDetectedExcludeDirs,
+  configureAgent,
+  createRun,
+  EventType,
+  getCatalog,
+  governTool,
+  makeRunContext,
+  PolicyRole,
+  PolicyRunMode,
+  runStarted,
+  startRunningPure,
+  type AgentHost,
+  type DelegateContext,
+  type HostedPolicyContext,
+  type RunState,
+  type Tool
 } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { SyncRunStatus } from "@mia/sync"
@@ -23,7 +23,14 @@ import { createServerBrowserHandoffProvider } from "../../../../adapters/browser
 import { createServerBrowserContextProvider } from "../../../../adapters/browser/provider.js"
 import { resetEffectSeq } from "../../../../adapters/effects/index.js"
 import { createServerAttachmentService } from "../../../../adapters/persistence/attachments.js"
-import { ingestAgentNote, listTableVerdicts, lookupToolKnowledge, renderCachedHeader, retrieveContext, saveToolKnowledge } from "../../../../adapters/persistence/memory.js"
+import {
+  ingestAgentNote,
+  listTableVerdicts,
+  lookupToolKnowledge,
+  renderCachedHeader,
+  retrieveContext,
+  saveToolKnowledge
+} from "../../../../adapters/persistence/memory.js"
 import * as db from "../../../../adapters/persistence/sqlite.js"
 import { createBusTools } from "../../../../agent-bus.js"
 import { AuditActor } from "../../../../enums/audit.js"
@@ -44,11 +51,22 @@ import { enforceClarificationUiOptions } from "../ask-user-options.js"
 import { createNotification, persistRun, saveTrace } from "../persistence.js"
 import { wrapWithEffects } from "../workspace-effects.js"
 import { buildClassificationContext } from "./support.js"
-import type { ActiveRunRecord, AgentRef, ExecuteRunInput, ExecutionEnvironment, ProgressState, RunWorkspace } from "./types.js"
+import type {
+  ActiveRunRecord,
+  AgentRef,
+  ExecuteRunInput,
+  ExecutionEnvironment,
+  ProgressState,
+  RunWorkspace
+} from "./types.js"
 
 const MSSQL_TOOL_TIMEOUT_MS = 120_000
 
-function createRunContextForExecution(activeRun: ActiveRunRecord | undefined, runId: string, controller: AbortController) {
+function createRunContextForExecution(
+  activeRun: ActiveRunRecord | undefined,
+  runId: string,
+  controller: AbortController
+) {
   return makeRunContext({
     signal: controller.signal,
     memory: {
@@ -61,17 +79,21 @@ function createRunContextForExecution(activeRun: ActiveRunRecord | undefined, ru
             category: payload.category,
             sessionId: activeRun?.sessionId ?? null,
             runId,
-            upn: activeRun?.ownerUpn ?? null,
+            upn: activeRun?.ownerUpn ?? null
           })
         } catch {
           // Side-channel persistence must not break the run.
         }
-      },
-    },
+      }
+    }
   })
 }
 
-function createPolicyContext(runId: string, activeRun: ActiveRunRecord | undefined, runWorkspace: RunWorkspace): HostedPolicyContext {
+function createPolicyContext(
+  runId: string,
+  activeRun: ActiveRunRecord | undefined,
+  runWorkspace: RunWorkspace
+): HostedPolicyContext {
   const role = activeRun?.role ?? PolicyRole.Admin
   return {
     runId,
@@ -79,11 +101,16 @@ function createPolicyContext(runId: string, activeRun: ActiveRunRecord | undefin
     role,
     sandboxRoot: runWorkspace.executionRoot,
     actorUpn: activeRun?.ownerUpn ?? null,
-    sessionId: activeRun?.sessionId ?? null,
+    sessionId: activeRun?.sessionId ?? null
   }
 }
 
-function createPerRunHost(input: ExecuteRunInput, activeRun: ActiveRunRecord | undefined, runWorkspace: RunWorkspace, policyCtx: HostedPolicyContext): AgentHost {
+function createPerRunHost(
+  input: ExecuteRunInput,
+  activeRun: ActiveRunRecord | undefined,
+  runWorkspace: RunWorkspace,
+  policyCtx: HostedPolicyContext
+): AgentHost {
   return configureAgent({
     ...bootHostDepsToConfigureAgentOptions(input.ctx.bootHostDeps),
     attachments: createServerAttachmentService(() => policyCtx),
@@ -91,8 +118,8 @@ function createPerRunHost(input: ExecuteRunInput, activeRun: ActiveRunRecord | u
       providers: {
         contextReader: createServerBrowserContextProvider(activeRun?.ownerUpn ?? null),
         credentialReader: createServerBrowserCredentialProvider(activeRun?.ownerUpn ?? null),
-        handoffStore: createServerBrowserHandoffProvider(activeRun?.ownerUpn ?? null),
-      },
+        handoffStore: createServerBrowserHandoffProvider(activeRun?.ownerUpn ?? null)
+      }
     },
     workspaceRoot: runWorkspace.executionRoot,
     filesystemBasePath: runWorkspace.executionRoot,
@@ -101,13 +128,15 @@ function createPerRunHost(input: ExecuteRunInput, activeRun: ActiveRunRecord | u
     shellCwd: runWorkspace.executionRoot,
     browserCheckCwd: runWorkspace.executionRoot,
     toolKnowledge: {
-      lookup: (args) => lookupToolKnowledge(args) as unknown as ReturnType<NonNullable<AgentHost["toolKnowledge"]>["lookup"]>,
+      lookup: (args) =>
+        lookupToolKnowledge(args) as unknown as ReturnType<NonNullable<AgentHost["toolKnowledge"]>["lookup"]>,
       save: (args) => saveToolKnowledge({ ...args, upn: activeRun?.ownerUpn ?? null }),
-      renderHeader: (hit, opts) => renderCachedHeader(hit as unknown as Parameters<typeof renderCachedHeader>[0], opts),
+      renderHeader: (hit, opts) =>
+        renderCachedHeader(hit as unknown as Parameters<typeof renderCachedHeader>[0], opts)
     },
     tableVerdicts: {
-      list: (args) => listTableVerdicts({ qnames: args.qnames, connection: args.connection }),
-    },
+      list: (args) => listTableVerdicts({ qnames: args.qnames, connection: args.connection })
+    }
   })
 }
 
@@ -118,51 +147,65 @@ async function resolveToolSelection(
   policyCtx: HostedPolicyContext,
   state: RunState,
   boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void,
-  debugSeqRef: { value: number },
+  debugSeqRef: { value: number }
 ) {
-  const governRuntimeTool = (tool: Tool) => governTool(tool, input.services, state, {
-    signal: input.controller.signal,
-    policyContext: policyCtx,
-    ...((tool.name === "query_mssql" || tool.name === "explore_mssql_schema") ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS } : {}),
-  })
+  const governRuntimeTool = (tool: Tool) =>
+    governTool(tool, input.services, state, {
+      signal: input.controller.signal,
+      policyContext: policyCtx,
+      ...(tool.name === "query_mssql" || tool.name === "explore_mssql_schema"
+        ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS }
+        : {})
+    })
 
   const shouldUseMemory = !(runWorkspace.taskType === "code_generation" && !input.resume)
-  let perTier: { working: string; episodic: string; semantic: string } = { working: "", episodic: "", semantic: "" }
+  let perTier: { working: string; episodic: string; semantic: string } = {
+    working: "",
+    episodic: "",
+    semantic: ""
+  }
   if (shouldUseMemory) {
     try {
       const result = await retrieveContext(input.goal, {
         sessionId: activeRun?.sessionId ?? undefined,
         runId: input.runId,
-        upn: activeRun?.ownerUpn ?? null,
+        upn: activeRun?.ownerUpn ?? null
       })
       perTier = result.perTier
     } catch (error) {
-      console.warn(`[run ${input.runId}] memory retrieval failed, running without context:`, (error as Error).message)
+      console.warn(
+        `[run ${input.runId}] memory retrieval failed, running without context:`,
+        (error as Error).message
+      )
     }
   }
 
   const classificationContext = buildClassificationContext({
     resumeMessages: input.resume?.messages,
     working: perTier.working,
-    episodic: perTier.episodic,
+    episodic: perTier.episodic
   })
   const toolDecision = decideSections({ goal: input.goal, memory: perTier, context: classificationContext })
   const toolFilter = filterToolsByGoal(input.tools, toolDecision)
   if (!toolFilter.passThrough) {
-    console.log(`[tools] run=${input.runId} dropped ${toolFilter.dropped.length} DB/sync tools for non-DB goal (kept ${toolFilter.tools.length}): ${toolFilter.dropped.join(", ")}`)
+    console.log(
+      `[tools] run=${input.runId} dropped ${toolFilter.dropped.length} DB/sync tools for non-DB goal (kept ${toolFilter.tools.length}): ${toolFilter.dropped.join(", ")}`
+    )
     const filteredEntry = {
       kind: TrajectoryEventKind.ToolsFiltered,
       dropped: toolFilter.dropped,
       kept: toolFilter.tools.length,
       dbScore: toolDecision.dbScore ?? 0,
       syncTrigger: !!toolDecision.triggers?.sync,
-      reason: `goal classified non-DB (dbScore=${toolDecision.dbScore ?? 0}, sync=${!!toolDecision.triggers?.sync})`,
+      reason: `goal classified non-DB (dbScore=${toolDecision.dbScore ?? 0}, sync=${!!toolDecision.triggers?.sync})`
     } as const
     boundSaveTrace(input.runId, filteredEntry)
     broadcastTrace(input.runId, debugSeqRef.value++, filteredEntry)
   }
 
-  const trackedTools = toolFilter.tools.map((tool) => wrapWithEffects(tool, input.runId, runWorkspace.executionRoot))
+  const trackedTools = toolFilter.tools.map((tool) =>
+    wrapWithEffects(tool, input.runId, runWorkspace.executionRoot)
+  )
   const governedTools = trackedTools.map(governRuntimeTool)
 
   return { governedTools, perTier, toolDecision }
@@ -178,7 +221,7 @@ function createDelegateContext(
     boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
   },
   governedTools: Tool[],
-  agentRef: AgentRef,
+  agentRef: AgentRef
 ): DelegateContext {
   const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
   const lastStatusIter = new Map<string, number>()
@@ -204,35 +247,75 @@ function createDelegateContext(
           fromRunId: info.childRunId,
           fromAgent: info.childAgentName,
           content: `iteration ${info.iteration}/${info.maxIterations}${preview ? ": " + preview : ""}`,
-          protocol: BusProtocol.Status,
+          protocol: BusProtocol.Status
         })
       } catch {
         // Bus publish must not break the run.
       }
     },
-    acquireSlot: (childRunId: string) => input.ctx.queue.acquire(childRunId, RunPriority.High, input.controller.signal),
+    acquireSlot: (childRunId: string) =>
+      input.ctx.queue.acquire(childRunId, RunPriority.High, input.controller.signal),
     resolveAgent: (agentId) => {
       const def = db.getAgentDefinition(agentId)
       if (!def) return null
-      const agentTools = getAllTools(envBase.perRunHost, envBase.runContext).map((tool) => governTool(tool, input.services, envBase.state, { signal: input.controller.signal }))
-      return { id: def.id, name: def.name, systemPrompt: db.resolveAgentSystemPrompt(def), tools: agentTools }
+      const agentTools = getAllTools(envBase.perRunHost, envBase.runContext).map((tool) =>
+        governTool(tool, input.services, envBase.state, { signal: input.controller.signal })
+      )
+      return {
+        id: def.id,
+        name: def.name,
+        systemPrompt: db.resolveAgentSystemPrompt(def),
+        tools: agentTools
+      }
     },
     onChildTrace: (entry) => {
       envBase.boundSaveTrace(input.runId, entry)
       if (entry.kind === TrajectoryEventKind.DelegationStart) {
         broadcast({ type: EventType.DelegationStarted, data: { runId: input.runId, ...entry } })
-        input.services.auditService.log({ actor: AuditActor.Agent, action: "delegation.started", resourceType: "AgentRun", resourceId: input.runId, detail: { goal: entry.goal, depth: entry.depth, tools: entry.tools, agentName: entry.agentName } }).catch(() => {})
+        input.services.auditService
+          .log({
+            actor: AuditActor.Agent,
+            action: "delegation.started",
+            resourceType: "AgentRun",
+            resourceId: input.runId,
+            detail: {
+              goal: entry.goal,
+              depth: entry.depth,
+              tools: entry.tools,
+              agentName: entry.agentName
+            }
+          })
+          .catch(() => {})
       } else if (entry.kind === TrajectoryEventKind.DelegationEnd) {
         broadcast({ type: EventType.DelegationEnded, data: { runId: input.runId, ...entry } })
-        input.services.auditService.log({ actor: AuditActor.Agent, action: entry.status === "done" ? "delegation.completed" : "delegation.failed", resourceType: "AgentRun", resourceId: input.runId, detail: { depth: entry.depth, status: entry.status, answer: entry.answer, error: entry.error } }).catch(() => {})
+        input.services.auditService
+          .log({
+            actor: AuditActor.Agent,
+            action: entry.status === "done" ? "delegation.completed" : "delegation.failed",
+            resourceType: "AgentRun",
+            resourceId: input.runId,
+            detail: {
+              depth: entry.depth,
+              status: entry.status,
+              answer: entry.answer,
+              error: entry.error
+            }
+          })
+          .catch(() => {})
       } else if (entry.kind === TrajectoryEventKind.DelegationIteration) {
         broadcast({ type: EventType.DelegationIteration, data: { runId: input.runId, ...entry } })
       } else if (entry.kind === TrajectoryEventKind.DelegationParallelStart) {
-        broadcast({ type: EventType.DelegationParallelStarted, data: { runId: input.runId, ...entry } })
+        broadcast({
+          type: EventType.DelegationParallelStarted,
+          data: { runId: input.runId, ...entry }
+        })
       } else if (entry.kind === TrajectoryEventKind.DelegationParallelEnd) {
         broadcast({ type: EventType.DelegationParallelEnded, data: { runId: input.runId, ...entry } })
       } else if (entry.kind === "thinking") {
-        broadcast({ type: EventType.AgentThinking, data: { runId: input.runId, content: entry.text } })
+        broadcast({
+          type: EventType.AgentThinking,
+          data: { runId: input.runId, content: entry.text }
+        })
       } else if (typeof entry.kind === "string" && entry.kind.startsWith("planner-delegation")) {
         broadcastTraceLoose(input.runId, Date.now(), entry as { kind: string } & Record<string, unknown>)
       } else if (entry.kind === "llm-request" || entry.kind === "llm-response" || entry.kind === "nudge") {
@@ -251,17 +334,31 @@ function createDelegateContext(
         totalCompletion += childUsage.completionTokens - prev.c
         totalTokens += childUsage.totalTokens - prev.t
         totalLlmCalls += childLlmCalls - prev.l
-        lastSeen.set(childUsage, { p: childUsage.promptTokens, c: childUsage.completionTokens, t: childUsage.totalTokens, l: childLlmCalls })
+        lastSeen.set(childUsage, {
+          p: childUsage.promptTokens,
+          c: childUsage.completionTokens,
+          t: childUsage.totalTokens,
+          l: childLlmCalls
+        })
         const agent = agentRef.current
         if (!agent) return
         agent.usage.promptTokens = totalPrompt
         agent.usage.completionTokens = totalCompletion
         agent.usage.totalTokens = totalTokens
         agent.llmCalls = totalLlmCalls
-        broadcast({ type: EventType.UsageUpdated, data: { runId: input.runId, promptTokens: totalPrompt, completionTokens: totalCompletion, totalTokens, llmCalls: totalLlmCalls } })
+        broadcast({
+          type: EventType.UsageUpdated,
+          data: {
+            runId: input.runId,
+            promptTokens: totalPrompt,
+            completionTokens: totalCompletion,
+            totalTokens,
+            llmCalls: totalLlmCalls
+          }
+        })
       }
     })(),
-    parentSystemPrompt: undefined,
+    parentSystemPrompt: undefined
   }
 }
 
@@ -274,27 +371,41 @@ function composeExecutionTools(
     runWorkspace: RunWorkspace
   },
   delegateCtx: DelegateContext,
-  governedTools: Tool[],
+  governedTools: Tool[]
 ): Tool[] {
-  const agentName = input.agentId ? (db.getAgentDefinition(input.agentId)?.name ?? "Agent") : "Universal Agent"
+  const agentName = input.agentId
+    ? (db.getAgentDefinition(input.agentId)?.name ?? "Agent")
+    : "Universal Agent"
   const allToolsBase = composePerRunTools(governedTools, {
     runId: input.runId,
     agentName,
     bus: input.bus,
     delegateCtx,
-    govern: (tool, opts) => governTool(tool, input.services, envBase.state, { signal: input.controller.signal, ...(opts ?? {}) }),
+    govern: (tool, opts) =>
+      governTool(tool, input.services, envBase.state, {
+        signal: input.controller.signal,
+        ...(opts ?? {})
+      }),
     askUserResolve: (question, options, sensitive) => {
       const match = input.ctx.clarifications.matchQuestion(input.runId, question)
       const effectiveOptions = enforceClarificationUiOptions(options, match)
-      envBase.boundSaveTrace(input.runId, { kind: TrajectoryEventKind.UserInputRequest, question, options: effectiveOptions, sensitive })
-      broadcast({ type: EventType.UserInputRequired, data: { runId: input.runId, question, options: effectiveOptions ?? [], sensitive } })
+      envBase.boundSaveTrace(input.runId, {
+        kind: TrajectoryEventKind.UserInputRequest,
+        question,
+        options: effectiveOptions,
+        sensitive
+      })
+      broadcast({
+        type: EventType.UserInputRequired,
+        data: { runId: input.runId, question, options: effectiveOptions ?? [], sensitive }
+      })
       if (match) input.ctx.clarifications.setPending(input.runId, match, question)
       return new Promise<string>((resolve) => {
         input.ctx.pendingInputs.set(input.runId, { resolve })
       })
     },
     sessionId: envBase.activeRun?.sessionId ?? null,
-    upn: envBase.activeRun?.ownerUpn ?? null,
+    upn: envBase.activeRun?.ownerUpn ?? null
   })
 
   const allTools = allToolsBase.map((tool) => {
@@ -307,9 +418,17 @@ function composeExecutionTools(
             const match = result.match(/^Plan\s+([a-f0-9-]{36})\b/)
             if (match) {
               const planId = match[1]
-              const totalsMatch = result.match(/Totals:\s*\+(\d+)\s*~(\d+)\s*-(\d+)\s*\(=(\d+)\s*unchanged\)\s*across\s*(\d+)/)
+              const totalsMatch = result.match(
+                /Totals:\s*\+(\d+)\s*~(\d+)\s*-(\d+)\s*\(=(\d+)\s*unchanged\)\s*across\s*(\d+)/
+              )
               const previewTotals = totalsMatch
-                ? { insert: Number(totalsMatch[1]), update: Number(totalsMatch[2]), delete: Number(totalsMatch[3]), unchanged: Number(totalsMatch[4]), tablesCount: Number(totalsMatch[5]) }
+                ? {
+                    insert: Number(totalsMatch[1]),
+                    update: Number(totalsMatch[2]),
+                    delete: Number(totalsMatch[3]),
+                    unchanged: Number(totalsMatch[4]),
+                    tablesCount: Number(totalsMatch[5])
+                  }
                 : {}
               try {
                 db.recordSyncRunStart({
@@ -320,10 +439,13 @@ function composeExecutionTools(
                   source: String(args["source"] ?? ""),
                   target: String(args["target"] ?? ""),
                   actorUpn: "agent",
-                  previewTotals,
+                  previewTotals
                 })
               } catch (error) {
-                console.warn("[sync-history] recordSyncRunStart failed:", error instanceof Error ? error.message : error)
+                console.warn(
+                  "[sync-history] recordSyncRunStart failed:",
+                  error instanceof Error ? error.message : error
+                )
               }
               broadcast({
                 type: EventType.SyncAgentPreview,
@@ -333,13 +455,13 @@ function composeExecutionTools(
                   entityType: String(args["entityType"] ?? ""),
                   entityId: String(args["entityId"] ?? ""),
                   source: String(args["source"] ?? ""),
-                  target: String(args["target"] ?? ""),
-                },
+                  target: String(args["target"] ?? "")
+                }
               })
             }
           }
           return result
-        },
+        }
       }
     }
 
@@ -348,7 +470,10 @@ function composeExecutionTools(
         ...tool,
         execute: async (args: Record<string, unknown>) => {
           const planId = String(args["planId"] ?? "")
-          broadcast({ type: EventType.SyncAgentExecuteStarted, data: { runId: input.runId, planId } })
+          broadcast({
+            type: EventType.SyncAgentExecuteStarted,
+            data: { runId: input.runId, planId }
+          })
           const startedAt = Date.now()
           const result = await tool.execute(args)
           const success = typeof result === "string" && result.toLowerCase().includes("successfully")
@@ -356,18 +481,26 @@ function composeExecutionTools(
             db.recordSyncRunFinish({
               planId,
               status: success ? SyncRunStatus.Success : SyncRunStatus.Failed,
-              error: success ? null : (typeof result === "string" ? result : null),
-              durationMs: Date.now() - startedAt,
+              error: success ? null : typeof result === "string" ? result : null,
+              durationMs: Date.now() - startedAt
             })
           } catch (error) {
-            console.warn("[sync-history] recordSyncRunFinish failed:", error instanceof Error ? error.message : error)
+            console.warn(
+              "[sync-history] recordSyncRunFinish failed:",
+              error instanceof Error ? error.message : error
+            )
           }
           broadcast({
             type: EventType.SyncAgentExecuteCompleted,
-            data: { runId: input.runId, planId, success, result: typeof result === "string" ? result : String(result) },
+            data: {
+              runId: input.runId,
+              planId,
+              success,
+              result: typeof result === "string" ? result : String(result)
+            }
           })
           return result
-        },
+        }
       }
     }
 
@@ -388,20 +521,24 @@ async function buildExecutionSystemMessages(
     boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
     debugSeqRef: { value: number }
   },
-  perTier: { working: string; episodic: string; semantic: string },
+  perTier: { working: string; episodic: string; semantic: string }
 ) {
-  const priorTurns = (envBase.activeRun?.sessionId && envBase.activeRun?.ownerUpn && envBase.runWorkspace.taskType !== "code_generation")
-    ? loadPriorTurns({
-        sessionId: envBase.activeRun.sessionId,
-        excludeRunId: input.runId,
-        upn: envBase.activeRun.ownerUpn,
-        limit: 3,
-      })
-    : []
+  const priorTurns =
+    envBase.activeRun?.sessionId &&
+    envBase.activeRun?.ownerUpn &&
+    envBase.runWorkspace.taskType !== "code_generation"
+      ? loadPriorTurns({
+          sessionId: envBase.activeRun.sessionId,
+          excludeRunId: input.runId,
+          upn: envBase.activeRun.ownerUpn,
+          limit: 3
+        })
+      : []
 
-  const priorResults = (envBase.activeRun?.sessionId && envBase.runWorkspace.taskType !== "code_generation")
-    ? loadPriorResults({ sessionId: envBase.activeRun.sessionId, excludeRunId: input.runId })
-    : []
+  const priorResults =
+    envBase.activeRun?.sessionId && envBase.runWorkspace.taskType !== "code_generation"
+      ? loadPriorResults({ sessionId: envBase.activeRun.sessionId, excludeRunId: input.runId })
+      : []
 
   const systemMessages = await buildSystemMessages({
     goal: input.goal,
@@ -424,7 +561,11 @@ async function buildExecutionSystemMessages(
     })(),
     knownVerdicts: (() => {
       try {
-        return loadCandidateVerdicts({ goal: input.goal, catalog: getCatalog(envBase.perRunHost), upn: envBase.activeRun?.ownerUpn ?? null })
+        return loadCandidateVerdicts({
+          goal: input.goal,
+          catalog: getCatalog(envBase.perRunHost),
+          upn: envBase.activeRun?.ownerUpn ?? null
+        })
       } catch (error) {
         console.warn(`[run ${input.runId}] knownVerdicts load failed:`, (error as Error).message)
         return []
@@ -441,12 +582,12 @@ async function buildExecutionSystemMessages(
           severity: event.finding.severity,
           subject: event.finding.subject,
           source: event.finding.source,
-          suggestedQuestion: event.finding.suggestedQuestion,
+          suggestedQuestion: event.finding.suggestedQuestion
         } as Record<string, unknown>)
       } else {
         envBase.boundSaveTrace(input.runId, {
           kind: TrajectoryEventKind.ClarificationLlmPlannerInvoked,
-          findingsCount: event.findingsCount,
+          findingsCount: event.findingsCount
         } as Record<string, unknown>)
       }
     },
@@ -462,13 +603,26 @@ async function buildExecutionSystemMessages(
         })
         .join("\n")
     })(),
-    coordinationTopic: `${input.runId}-status`,
+    coordinationTopic: `${input.runId}-status`
   })
 
   const effectivePrompt = systemMessages.map((message) => message.content).join("\n\n")
-  envBase.boundSaveTrace(input.runId, { kind: TrajectoryEventKind.SystemPrompt, text: effectivePrompt || "(no system prompt)" })
-  broadcastTrace(input.runId, envBase.debugSeqRef.value++, { kind: TrajectoryEventKind.SystemPrompt, text: effectivePrompt || "(no system prompt)" })
-  const toolsResolvedEntry = { kind: TrajectoryEventKind.ToolsResolved, tools: envBase.allTools.map((tool) => ({ name: tool.name, description: tool.description, parameters: tool.parameters })) }
+  envBase.boundSaveTrace(input.runId, {
+    kind: TrajectoryEventKind.SystemPrompt,
+    text: effectivePrompt || "(no system prompt)"
+  })
+  broadcastTrace(input.runId, envBase.debugSeqRef.value++, {
+    kind: TrajectoryEventKind.SystemPrompt,
+    text: effectivePrompt || "(no system prompt)"
+  })
+  const toolsResolvedEntry = {
+    kind: TrajectoryEventKind.ToolsResolved,
+    tools: envBase.allTools.map((tool) => ({
+      name: tool.name,
+      description: tool.description,
+      parameters: tool.parameters
+    }))
+  }
   envBase.boundSaveTrace(input.runId, toolsResolvedEntry)
   broadcastTrace(input.runId, envBase.debugSeqRef.value++, toolsResolvedEntry)
   return { effectivePrompt, systemMessages }
@@ -484,7 +638,7 @@ export async function prepareExecutionEnvironment(input: ExecuteRunInput): Promi
     sourceRoot: baseWorkspace,
     goal: input.goal,
     resume: !!input.resume,
-    role: preActiveRun?.role ?? PolicyRole.Admin,
+    role: preActiveRun?.role ?? PolicyRole.Admin
   })
   const activeRun = input.ctx.activeRuns.get(input.runId)
   if (activeRun) activeRun.workspace = runWorkspace
@@ -492,10 +646,11 @@ export async function prepareExecutionEnvironment(input: ExecuteRunInput): Promi
   const state: RunState = {
     run: createRun("agent-session", { goal: input.goal }, input.runId),
     actor,
-    stepCounter: input.resume?.iteration ?? 0,
+    stepCounter: input.resume?.iteration ?? 0
   }
 
-  const boundSaveTrace = (runId: string, entry: Record<string, unknown>) => saveTrace(input.ctx.activeRuns, runId, entry)
+  const boundSaveTrace = (runId: string, entry: Record<string, unknown>) =>
+    saveTrace(input.ctx.activeRuns, runId, entry)
   const persistCurrentRun = (answer?: string, error?: string): void => {
     persistRun(state.run, input.goal, input.agentId, input.resume?.parentRunId, answer, error)
   }
@@ -511,7 +666,13 @@ export async function prepareExecutionEnvironment(input: ExecuteRunInput): Promi
   }
 
   // register listeners / subscribe to events
-  const disposeEventWiring = wireEventBroadcasting(input.services, input.runId, state, boundSaveTrace, createNotification)
+  const disposeEventWiring = wireEventBroadcasting(
+    input.services,
+    input.runId,
+    state,
+    boundSaveTrace,
+    createNotification
+  )
   // 1. time set state.run (in-memory state)
   await saveCurrentRun()
   await input.services.auditService.log({
@@ -525,8 +686,8 @@ export async function prepareExecutionEnvironment(input: ExecuteRunInput): Promi
       agentId: input.agentId,
       profile: runWorkspace.profile,
       workspaceMode: runWorkspace.isolated ? "isolated" : "shared",
-      workspaceRoot: runWorkspace.executionRoot,
-    },
+      workspaceRoot: runWorkspace.executionRoot
+    }
   })
   // store to database (durable state)
   persistCurrentRun()
@@ -536,10 +697,32 @@ export async function prepareExecutionEnvironment(input: ExecuteRunInput): Promi
   const perRunHost = createPerRunHost(input, activeRun, runWorkspace, policyCtx)
   const debugSeqRef = { value: 0 }
   const agentRef: AgentRef = { current: null }
-  const { governedTools, perTier, toolDecision } = await resolveToolSelection(input, activeRun, runWorkspace, policyCtx, state, boundSaveTrace, debugSeqRef)
-  const delegateCtx = createDelegateContext(input, { activeRun, runContext, perRunHost, state, boundSaveTrace }, governedTools, agentRef)
-  const allTools = composeExecutionTools(input, { activeRun, state, boundSaveTrace, runWorkspace }, delegateCtx, governedTools)
-  const { effectivePrompt, systemMessages } = await buildExecutionSystemMessages(input, { activeRun, runWorkspace, perRunHost, allTools, boundSaveTrace, debugSeqRef }, perTier)
+  const { governedTools, perTier, toolDecision } = await resolveToolSelection(
+    input,
+    activeRun,
+    runWorkspace,
+    policyCtx,
+    state,
+    boundSaveTrace,
+    debugSeqRef
+  )
+  const delegateCtx = createDelegateContext(
+    input,
+    { activeRun, runContext, perRunHost, state, boundSaveTrace },
+    governedTools,
+    agentRef
+  )
+  const allTools = composeExecutionTools(
+    input,
+    { activeRun, state, boundSaveTrace, runWorkspace },
+    delegateCtx,
+    governedTools
+  )
+  const { effectivePrompt, systemMessages } = await buildExecutionSystemMessages(
+    input,
+    { activeRun, runWorkspace, perRunHost, allTools, boundSaveTrace, debugSeqRef },
+    perTier
+  )
   delegateCtx.parentSystemPrompt = effectivePrompt
 
   return {
@@ -558,6 +741,6 @@ export async function prepareExecutionEnvironment(input: ExecuteRunInput): Promi
     delegateCtx,
     allTools,
     systemMessages,
-    agentRef,
+    agentRef
   }
 }

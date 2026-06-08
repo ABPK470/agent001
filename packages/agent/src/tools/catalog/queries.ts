@@ -64,11 +64,15 @@ const catalogQueryState = {
     catalog: object
     threshold: number
     branchCounts: Map<string, number>
-  } | null,
+  } | null
 }
 
 function ciIndex(catalog: CatalogGraph): Map<string, string> {
-  if (catalogQueryState.ciIndexCache && catalogQueryState.ciIndexCache.catalog === (catalog as unknown as object)) return catalogQueryState.ciIndexCache.lower
+  if (
+    catalogQueryState.ciIndexCache &&
+    catalogQueryState.ciIndexCache.catalog === (catalog as unknown as object)
+  )
+    return catalogQueryState.ciIndexCache.lower
   const lower = new Map<string, string>()
   for (const [key] of catalog.tables) lower.set(key.toLowerCase(), key)
   catalogQueryState.ciIndexCache = { catalog: catalog as unknown as object, lower }
@@ -91,11 +95,14 @@ function getTableCI(catalog: CatalogGraph, qualifiedName: string): CatalogTable 
  */
 export function canonicalQualifiedName(
   qualifiedName: string,
-  options: { accessor?: CatalogAccessor } = {},
+  options: { accessor?: CatalogAccessor } = {}
 ): string {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
-  if (!catalog) return getTenantConfig().catalogBootstrap.canonicalQualifiedNames[qualifiedName.toLowerCase()] ?? qualifiedName
+  if (!catalog)
+    return (
+      getTenantConfig().catalogBootstrap.canonicalQualifiedNames[qualifiedName.toLowerCase()] ?? qualifiedName
+    )
   return getTableCI(catalog, qualifiedName)?.qualifiedName ?? qualifiedName
 }
 
@@ -130,10 +137,11 @@ function currentLargeIndex(accessor: CatalogAccessor, threshold: number): Set<st
   const catalog = accessor()
   if (!catalog) return null
   if (
-    catalogQueryState.largeIndexCache
-    && catalogQueryState.largeIndexCache.catalog === (catalog as unknown as object)
-    && catalogQueryState.largeIndexCache.threshold === threshold
-  ) return catalogQueryState.largeIndexCache.names
+    catalogQueryState.largeIndexCache &&
+    catalogQueryState.largeIndexCache.catalog === (catalog as unknown as object) &&
+    catalogQueryState.largeIndexCache.threshold === threshold
+  )
+    return catalogQueryState.largeIndexCache.names
   const names = buildLargeIndex(catalog, threshold)
   catalogQueryState.largeIndexCache = { catalog: catalog as unknown as object, threshold, names }
   return names
@@ -175,10 +183,11 @@ function currentUnionIndex(accessor: CatalogAccessor, threshold: number): Map<st
   const catalog = accessor()
   if (!catalog) return null
   if (
-    catalogQueryState.unionIndexCache
-    && catalogQueryState.unionIndexCache.catalog === (catalog as unknown as object)
-    && catalogQueryState.unionIndexCache.threshold === threshold
-  ) return catalogQueryState.unionIndexCache.branchCounts
+    catalogQueryState.unionIndexCache &&
+    catalogQueryState.unionIndexCache.catalog === (catalog as unknown as object) &&
+    catalogQueryState.unionIndexCache.threshold === threshold
+  )
+    return catalogQueryState.unionIndexCache.branchCounts
   const branchCounts = buildUnionIndex(catalog, threshold)
   catalogQueryState.unionIndexCache = { catalog: catalog as unknown as object, threshold, branchCounts }
   return branchCounts
@@ -198,7 +207,7 @@ function currentUnionIndex(accessor: CatalogAccessor, threshold: number): Map<st
  */
 export function isLargeObject(
   qualifiedName: string,
-  options: { accessor?: CatalogAccessor; threshold?: number } = {},
+  options: { accessor?: CatalogAccessor; threshold?: number } = {}
 ): boolean {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const threshold = options.threshold ?? LARGE_OBJECT_ROW_THRESHOLD
@@ -213,7 +222,7 @@ export function isLargeObject(
  * "top expensive objects" lists.
  */
 export function listLargeObjects(
-  options: { accessor?: CatalogAccessor; threshold?: number } = {},
+  options: { accessor?: CatalogAccessor; threshold?: number } = {}
 ): ReadonlySet<string> {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const threshold = options.threshold ?? LARGE_OBJECT_ROW_THRESHOLD
@@ -229,7 +238,7 @@ export function listLargeObjects(
  */
 export function unionBranchCount(
   qualifiedName: string,
-  options: { accessor?: CatalogAccessor } = {},
+  options: { accessor?: CatalogAccessor } = {}
 ): number {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
@@ -241,10 +250,7 @@ export function unionBranchCount(
 }
 
 /** True iff the object is a VIEW with at least one UNION branch boundary. */
-export function isUnionView(
-  qualifiedName: string,
-  options: { accessor?: CatalogAccessor } = {},
-): boolean {
+export function isUnionView(qualifiedName: string, options: { accessor?: CatalogAccessor } = {}): boolean {
   return unionBranchCount(qualifiedName, options) >= 2
 }
 
@@ -256,27 +262,33 @@ export function isUnionView(
  */
 export function isExpensiveUnionView(
   qualifiedName: string,
-  options: { accessor?: CatalogAccessor; threshold?: number } = {},
+  options: { accessor?: CatalogAccessor; threshold?: number } = {}
 ): boolean {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const threshold = options.threshold ?? UNION_BRANCH_THRESHOLD
   const idx = currentUnionIndex(accessor, threshold)
   if (!idx) {
-    return (getTenantConfig().catalogBootstrap.unionBranchCounts[qualifiedName.toLowerCase()] ?? 0) >= threshold
+    return (
+      (getTenantConfig().catalogBootstrap.unionBranchCounts[qualifiedName.toLowerCase()] ?? 0) >= threshold
+    )
   }
   return idx.has(qualifiedName.toLowerCase())
 }
 
 /** Returns the lowercased qualifiedName → branchCount map of expensive UNION views. */
 export function listExpensiveUnionViews(
-  options: { accessor?: CatalogAccessor; threshold?: number } = {},
+  options: { accessor?: CatalogAccessor; threshold?: number } = {}
 ): ReadonlyMap<string, number> {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const threshold = options.threshold ?? UNION_BRANCH_THRESHOLD
-  return currentUnionIndex(accessor, threshold)
-    ?? new Map(
-      Object.entries(getTenantConfig().catalogBootstrap.unionBranchCounts).filter(([, branches]) => branches >= threshold),
+  return (
+    currentUnionIndex(accessor, threshold) ??
+    new Map(
+      Object.entries(getTenantConfig().catalogBootstrap.unionBranchCounts).filter(
+        ([, branches]) => branches >= threshold
+      )
     )
+  )
 }
 
 // ── Key-column primitives ───────────────────────────────────────
@@ -284,7 +296,7 @@ export function listExpensiveUnionViews(
 /** Primary-key columns for the table. Empty array for views or tables without PK. */
 export function primaryKeyColumns(
   qualifiedName: string,
-  options: { accessor?: CatalogAccessor } = {},
+  options: { accessor?: CatalogAccessor } = {}
 ): string[] {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
@@ -308,11 +320,12 @@ export function primaryKeyColumns(
  */
 export function highCardinalityKeyColumns(
   qualifiedName: string,
-  options: { accessor?: CatalogAccessor; minTargetIncomingFks?: number } = {},
+  options: { accessor?: CatalogAccessor; minTargetIncomingFks?: number } = {}
 ): string[] {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
-  if (!catalog) return [...(getTenantConfig().catalogBootstrap.highCardinalityKeys[qualifiedName.toLowerCase()] ?? [])]
+  if (!catalog)
+    return [...(getTenantConfig().catalogBootstrap.highCardinalityKeys[qualifiedName.toLowerCase()] ?? [])]
   const tbl = getTableCI(catalog, qualifiedName)
   if (!tbl) return []
   const minIncoming = options.minTargetIncomingFks ?? 3
@@ -341,7 +354,7 @@ export function highCardinalityKeyColumns(
  */
 export function dateGrainColumn(
   qualifiedName: string,
-  options: { accessor?: CatalogAccessor } = {},
+  options: { accessor?: CatalogAccessor } = {}
 ): string | null {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
@@ -353,7 +366,7 @@ export function dateGrainColumn(
   for (const fk of tbl.fkOutgoing) {
     const target = getTableCI(catalog, `${fk.toSchema}.${fk.toTable}`)
     if (!target) continue
-    const isSmall = target.rowCount != null && target.rowCount < 100_000  // calendars are small
+    const isSmall = target.rowCount != null && target.rowCount < 100_000 // calendars are small
     const hasDateCol = target.columns.some((c) => isDateType(c.dataType))
     if (isSmall && hasDateCol) return fk.fromColumn
   }
@@ -364,8 +377,9 @@ export function dateGrainColumn(
 
 function isDateType(dataType: string): boolean {
   const t = dataType.toLowerCase()
-  return t === "date" || t === "datetime" || t === "datetime2"
-    || t === "smalldatetime" || t === "datetimeoffset"
+  return (
+    t === "date" || t === "datetime" || t === "datetime2" || t === "smalldatetime" || t === "datetimeoffset"
+  )
 }
 
 /**
@@ -378,9 +392,7 @@ function isDateType(dataType: string): boolean {
  * Heuristic (no name match): a TABLE with rowCount < 100k AND at least
  * one DATE/DATETIME column AND a primary key. Returns the smallest such.
  */
-export function calendarDimensionTable(
-  options: { accessor?: CatalogAccessor } = {},
-): string | null {
+export function calendarDimensionTable(options: { accessor?: CatalogAccessor } = {}): string | null {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
   if (!catalog) return null
@@ -412,16 +424,19 @@ export function calendarDimensionTable(
  */
 export function persistedMirrorOf(
   qualifiedName: string,
-  options: { accessor?: CatalogAccessor; mirrorSchema?: string | null } = {},
+  options: { accessor?: CatalogAccessor; mirrorSchema?: string | null } = {}
 ): string | null {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const mirrorSchema = options.mirrorSchema ?? null
   if (!mirrorSchema) return null
   const catalog = accessor()
   if (!catalog) {
-    const base = getTenantConfig().catalogBootstrap.canonicalQualifiedNames[qualifiedName.toLowerCase()] ?? qualifiedName
+    const base =
+      getTenantConfig().catalogBootstrap.canonicalQualifiedNames[qualifiedName.toLowerCase()] ?? qualifiedName
     const mirrorName = `${mirrorSchema}.${base}`
-    return getTenantConfig().catalogBootstrap.canonicalQualifiedNames[mirrorName.toLowerCase()] ? mirrorName : null
+    return getTenantConfig().catalogBootstrap.canonicalQualifiedNames[mirrorName.toLowerCase()]
+      ? mirrorName
+      : null
   }
   const mirrorName = `${mirrorSchema}.${qualifiedName}`
   return getTableCI(catalog, mirrorName) ? mirrorName : null
@@ -440,10 +455,7 @@ export function listSchemas(options: { accessor?: CatalogAccessor } = {}): strin
 }
 
 /** Top-N tables in the catalog sorted by rowCount (desc). Excludes nulls. */
-export function topNTables(
-  n: number,
-  options: { accessor?: CatalogAccessor } = {},
-): CatalogTable[] {
+export function topNTables(n: number, options: { accessor?: CatalogAccessor } = {}): CatalogTable[] {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
   if (!catalog) return []
@@ -460,7 +472,7 @@ export function topNTables(
 /** Top-N VIEWS by branch count (desc). Only views with branchCount ≥ 2. */
 export function topNUnionViews(
   n: number,
-  options: { accessor?: CatalogAccessor } = {},
+  options: { accessor?: CatalogAccessor } = {}
 ): Array<{ table: CatalogTable; branchCount: number; sourceRows: number }> {
   const accessor = options.accessor ?? defaultCatalogAccessor
   const catalog = accessor()
@@ -473,9 +485,6 @@ export function topNUnionViews(
     const sr = catalog.viewSourceRows.get(t.qualifiedName) ?? 0
     rows.push({ table: t, branchCount: bc, sourceRows: sr })
   }
-  rows.sort((a, b) =>
-    b.branchCount - a.branchCount
-    || b.sourceRows - a.sourceRows,
-  )
+  rows.sort((a, b) => b.branchCount - a.branchCount || b.sourceRows - a.sourceRows)
   return rows.slice(0, n)
 }

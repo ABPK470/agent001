@@ -33,25 +33,25 @@ export const tempScalarSubqueryDoctrine: DoctrineModule = {
       "- A single #temp may be probed with a scalar subquery (SELECT … FROM #t WHERE …) at most ONCE per outer query.",
       "- Multiple metrics from the same staged #temp MUST be derived in one GROUP BY pkClient pass, then joined.",
       "- The tool BLOCKS queries with ≥2 scalar subqueries against the same staged #temp.",
-      "- See also: `discover_relationships` to pick the right GROUP BY key; `profile_data` to size the staged set before fan-out.",
+      "- See also: `discover_relationships` to pick the right GROUP BY key; `profile_data` to size the staged set before fan-out."
     ].join("\n")
   },
   enforce(query: string) {
     const counts = countTempScalarSubqueriesByTemp(query)
     const offenders = Array.from(counts.entries()).filter(([, count]) => count > 1)
     if (offenders.length === 0) return []
-    const list = offenders
-      .map(([name, count]) => `${name} (${count} scalar probes)`)
-      .join(", ")
-    return [{
-      code: "temp_scalar_subquery_overused",
-      severity: "block" as const,
-      message: [
-        `Query blocked — repeated scalar subqueries against staged #temp data: ${list}.`,
-        ``,
-        `This shape repeatedly re-probes staged rows one metric at a time and is exactly the pattern that turns a good micro-ETL into a slow Stage 3 plan.`,
-      ].join("\n"),
-      fixHint: DOCTRINE_FIX_HINTS.temp_scalar_subquery_overused,
-    }]
-  },
+    const list = offenders.map(([name, count]) => `${name} (${count} scalar probes)`).join(", ")
+    return [
+      {
+        code: "temp_scalar_subquery_overused",
+        severity: "block" as const,
+        message: [
+          `Query blocked — repeated scalar subqueries against staged #temp data: ${list}.`,
+          ``,
+          `This shape repeatedly re-probes staged rows one metric at a time and is exactly the pattern that turns a good micro-ETL into a slow Stage 3 plan.`
+        ].join("\n"),
+        fixHint: DOCTRINE_FIX_HINTS.temp_scalar_subquery_overused
+      }
+    ]
+  }
 }

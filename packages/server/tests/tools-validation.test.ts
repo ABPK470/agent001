@@ -47,7 +47,10 @@ describe("getAllTools — guard contract", () => {
     const { getAllTools } = await import("../src/tools.js")
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
-      resolveTools(getAllTools(stubHost).map((t) => t.name), stubHost)
+      resolveTools(
+        getAllTools(stubHost).map((t) => t.name),
+        stubHost
+      )
       const messages = warnSpy.mock.calls.map((c) => String(c[0]))
       expect(messages.filter((m) => m.startsWith("[tools] WARNING"))).toEqual([])
     } finally {

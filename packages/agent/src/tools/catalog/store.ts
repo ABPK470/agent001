@@ -15,12 +15,15 @@ import type { CatalogBuildOptions, CatalogSnapshot } from "./types.js"
  *
  * Accepts a string (connection name, backward compat) or CatalogBuildOptions.
  */
-export async function buildCatalog(host: AgentHost, opts?: string | CatalogBuildOptions): Promise<CatalogGraph> {
+export async function buildCatalog(
+  host: AgentHost,
+  opts?: string | CatalogBuildOptions
+): Promise<CatalogGraph> {
   const o: CatalogBuildOptions = typeof opts === "string" ? { connection: opts } : (opts ?? {})
   const conn = o.connection ?? "default"
   const cachePath = o.cachePath ?? host.catalog.defaultCachePath.value
-  const maxAge = o.maxAgeMs ?? 7 * 24 * 3600_000  // 7 days default
-  if (o.cachePath) host.catalog.defaultCachePath.value = o.cachePath  // remember for refresh calls
+  const maxAge = o.maxAgeMs ?? 7 * 24 * 3600_000 // 7 days default
+  if (o.cachePath) host.catalog.defaultCachePath.value = o.cachePath // remember for refresh calls
 
   // Try loading from persistent cache (unless forceFresh)
   if (cachePath && !o.forceFresh) {
@@ -36,7 +39,9 @@ export async function buildCatalog(host: AgentHost, opts?: string | CatalogBuild
           return catalog
         }
       }
-    } catch { /* no cache or invalid — build fresh */ }
+    } catch {
+      /* no cache or invalid — build fresh */
+    }
   }
 
   // Build from live database (expensive — 5 SQL queries)
@@ -50,7 +55,9 @@ export async function buildCatalog(host: AgentHost, opts?: string | CatalogBuild
       const { dirname } = await import("node:path")
       await fs.mkdir(dirname(cachePath), { recursive: true })
       await fs.writeFile(cachePath, JSON.stringify(catalog.toSnapshot(conn)), "utf-8")
-    } catch { /* cache write failure is non-fatal */ }
+    } catch {
+      /* cache write failure is non-fatal */
+    }
   }
 
   return catalog

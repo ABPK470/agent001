@@ -19,22 +19,22 @@ vi.mock("mssql", () => ({
       rollback = txRollback
       request = txRequest
       constructor(_pool: unknown) {}
-    },
-  },
+    }
+  }
 }))
 
 vi.mock("./db-helpers.js", () => ({
   qtable: (tableName: string) => tableName,
-  trackedQuery: vi.fn(),
+  trackedQuery: vi.fn()
 }))
 
 vi.mock("./apply.js", () => ({
   applyInsertsUpdates: vi.fn(),
-  applyDeletes: vi.fn(),
+  applyDeletes: vi.fn()
 }))
 
 vi.mock("./archive.js", () => ({
-  maybeArchive: vi.fn(),
+  maybeArchive: vi.fn()
 }))
 
 describe("runMetadataSync", () => {
@@ -54,7 +54,9 @@ describe("runMetadataSync", () => {
   it("preserves the failing table and step when FK re-check fails", async () => {
     trackedQueryMock.mockImplementation(async (_host, _request, sql) => {
       if (String(sql).includes("ALTER TABLE core.Child WITH CHECK CHECK CONSTRAINT ALL")) {
-        throw new Error("The ALTER TABLE statement conflicted with the FOREIGN KEY constraint \"FK_Child_parent\".")
+        throw new Error(
+          'The ALTER TABLE statement conflicted with the FOREIGN KEY constraint "FK_Child_parent".'
+        )
       }
       return {} as never
     })
@@ -64,25 +66,27 @@ describe("runMetadataSync", () => {
     const plan = {
       recipeSnapshot: {
         executionOrder: ["core.Parent", "core.Child"],
-        reverseOrder: ["core.Child", "core.Parent"],
+        reverseOrder: ["core.Child", "core.Parent"]
       },
       tables: [
         { table: "core.Parent", counts: { insert: 1, update: 0, delete: 0 } },
-        { table: "core.Child", counts: { insert: 1, update: 0, delete: 0 } },
-      ],
+        { table: "core.Child", counts: { insert: 1, update: 0, delete: 0 } }
+      ]
     } as never
 
-    await expect(runMetadataSync({
-      host: { sync: { events: { sink: eventSink } } } as never,
-      plan,
-      planId: "plan-123",
-      pkByTable: new Map(),
-      triggerCache: new Map(),
-      onProgress: progress,
-      target: "DEV",
-      tgtPool: {} as never,
-      telemetryContext: undefined,
-    })).rejects.toThrow("metadata-sync / check-constraint / core.Child failed")
+    await expect(
+      runMetadataSync({
+        host: { sync: { events: { sink: eventSink } } } as never,
+        plan,
+        planId: "plan-123",
+        pkByTable: new Map(),
+        triggerCache: new Map(),
+        onProgress: progress,
+        target: "DEV",
+        tgtPool: {} as never,
+        telemetryContext: undefined
+      })
+    ).rejects.toThrow("metadata-sync / check-constraint / core.Child failed")
 
     expect(eventSink).toHaveBeenCalledWith({
       type: EventType.SyncExecuteStepFailed,
@@ -90,15 +94,17 @@ describe("runMetadataSync", () => {
         planId: "plan-123",
         step: "metadata-sync",
         table: "core.Child",
-        op: "check-constraint",
-      }),
+        op: "check-constraint"
+      })
     })
-    expect(progress).toHaveBeenCalledWith(expect.objectContaining({
-      type: "step",
-      step: "metadata-sync",
-      table: "core.Child",
-      error: "The ALTER TABLE statement conflicted with the FOREIGN KEY constraint \"FK_Child_parent\".",
-    }))
+    expect(progress).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: "step",
+        step: "metadata-sync",
+        table: "core.Child",
+        error: 'The ALTER TABLE statement conflicted with the FOREIGN KEY constraint "FK_Child_parent".'
+      })
+    )
     expect(txCommit).not.toHaveBeenCalled()
     expect(txRollback).toHaveBeenCalled()
   })

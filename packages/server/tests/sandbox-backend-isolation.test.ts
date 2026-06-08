@@ -75,7 +75,7 @@ describe("HostSandboxBackend — timeout-kill and env hardening", () => {
 
       expect(descendantRan).toBe(false)
     },
-    45_000,
+    45_000
   )
 
   it("strips HTTP/HTTPS proxy env vars when network is not opted-in (default)", async () => {
@@ -83,11 +83,13 @@ describe("HostSandboxBackend — timeout-kill and env hardening", () => {
     const backend = getSandboxBackend("host")
     // Caller passes a forged proxy var via options.env; backend must
     // drop it before spawning the shell.
-    const cmd = isPosix
-      ? `printf '%s|%s' "$HTTP_PROXY" "$HTTPS_PROXY"`
-      : `echo %HTTP_PROXY%^|%HTTPS_PROXY%`
+    const cmd = isPosix ? `printf '%s|%s' "$HTTP_PROXY" "$HTTPS_PROXY"` : `echo %HTTP_PROXY%^|%HTTPS_PROXY%`
     const result = await backend.exec(cmd, sandbox, {
-      env: { HTTP_PROXY: "http://evil:3128", HTTPS_PROXY: "http://evil:3128", PATH: process.env["PATH"] ?? "" },
+      env: {
+        HTTP_PROXY: "http://evil:3128",
+        HTTPS_PROXY: "http://evil:3128",
+        PATH: process.env["PATH"] ?? ""
+      }
     })
     expect(result.exitCode).toBe(0)
     // POSIX prints empty|empty; cmd.exe prints `|` literally because
@@ -101,7 +103,7 @@ describe("HostSandboxBackend — timeout-kill and env hardening", () => {
     const cmd = isPosix ? `printf '%s' "$HTTP_PROXY"` : `echo %HTTP_PROXY%`
     const result = await backend.exec(cmd, sandbox, {
       network: true,
-      env: { HTTP_PROXY: "http://allowed-proxy:3128", PATH: process.env["PATH"] ?? "" },
+      env: { HTTP_PROXY: "http://allowed-proxy:3128", PATH: process.env["PATH"] ?? "" }
     })
     expect(result.exitCode).toBe(0)
     expect(result.stdout).toContain("allowed-proxy:3128")

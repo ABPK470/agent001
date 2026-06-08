@@ -33,14 +33,49 @@ const CAPITALISED_PHRASE = /\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+){0,2}\b/g
  * Strictly framing language — never a business subject.
  */
 const SENTENCE_STARTERS: ReadonlySet<string> = new Set([
-  "Show", "Give", "Tell", "Find", "List", "Get", "Fetch", "Return", "Display",
-  "Please", "Thanks", "Thank", "Hi", "Hello", "Hey",
-  "How", "What", "Which", "Who", "Where", "When", "Why",
-  "Can", "Could", "Would", "Should", "Will", "Do", "Does", "Did",
-  "Is", "Are", "Was", "Were",
-  "I", "We", "You", "They",
-  "The", "A", "An",
-  "Let", "Make",
+  "Show",
+  "Give",
+  "Tell",
+  "Find",
+  "List",
+  "Get",
+  "Fetch",
+  "Return",
+  "Display",
+  "Please",
+  "Thanks",
+  "Thank",
+  "Hi",
+  "Hello",
+  "Hey",
+  "How",
+  "What",
+  "Which",
+  "Who",
+  "Where",
+  "When",
+  "Why",
+  "Can",
+  "Could",
+  "Would",
+  "Should",
+  "Will",
+  "Do",
+  "Does",
+  "Did",
+  "Is",
+  "Are",
+  "Was",
+  "Were",
+  "I",
+  "We",
+  "You",
+  "They",
+  "The",
+  "A",
+  "An",
+  "Let",
+  "Make"
 ])
 
 export const termUndefinedDetector: Detector = {
@@ -69,11 +104,11 @@ export const termUndefinedDetector: Detector = {
         subject: phrase,
         reasoning: `"${phrase}" is not a table, view, column, schema, or configured domain term in this database. The agent has no grounding for what it refers to.`,
         suggestedQuestion: `I don't recognise "${phrase}" in this database. Could you point me at a table or column that captures it, or describe what it means in terms I can look up?`,
-        source: "detector" as const,
+        source: "detector" as const
       })
     }
     return out
-  },
+  }
 }
 
 /**

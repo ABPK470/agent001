@@ -4,8 +4,8 @@
 
 /** Sandbox backend implementation — host process or docker container. */
 export const SandboxBackendKind = {
-  Host:   "host",
-  Docker: "docker",
+  Host: "host",
+  Docker: "docker"
 } as const
 
 export type SandboxBackendKind = (typeof SandboxBackendKind)[keyof typeof SandboxBackendKind]
@@ -24,9 +24,9 @@ export const isSandboxBackendKind = (value: unknown): value is SandboxBackendKin
  *   - Readwrite — host → /workspace:rw (default — the agent edits files)
  */
 export const WorkspaceMountMode = {
-  None:      "none",
-  Readonly:  "readonly",
-  Readwrite: "readwrite",
+  None: "none",
+  Readonly: "readonly",
+  Readwrite: "readwrite"
 } as const
 
 export type WorkspaceMountMode = (typeof WorkspaceMountMode)[keyof typeof WorkspaceMountMode]

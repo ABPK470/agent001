@@ -6,30 +6,44 @@
  */
 
 import type { DomainEvent } from "./events.js"
-import type { AuditRepository, EventBus, ExecutionRecordRepository, RunRepository, Unsubscribe } from "./interfaces.js"
+import type {
+  AuditRepository,
+  EventBus,
+  ExecutionRecordRepository,
+  RunRepository,
+  Unsubscribe
+} from "./interfaces.js"
 import type { AgentRun, AuditEntry, ExecutionRecord } from "./models.js"
 
 // ── Repositories ─────────────────────────────────────────────────
 
 export class MemoryRunRepository implements RunRepository {
   private store = new Map<string, AgentRun>()
-  async save(run: AgentRun): Promise<void> { this.store.set(run.id, run) }
-  async get(id: string): Promise<AgentRun | null> { return this.store.get(id) ?? null }
+  async save(run: AgentRun): Promise<void> {
+    this.store.set(run.id, run)
+  }
+  async get(id: string): Promise<AgentRun | null> {
+    return this.store.get(id) ?? null
+  }
 }
 
 export class MemoryAuditRepository implements AuditRepository {
   private entries: AuditEntry[] = []
-  async append(entry: AuditEntry): Promise<void> { this.entries.push(entry) }
+  async append(entry: AuditEntry): Promise<void> {
+    this.entries.push(entry)
+  }
   async listByResource(resourceType: string, resourceId: string): Promise<AuditEntry[]> {
-    return this.entries.filter(e => e.resourceType === resourceType && e.resourceId === resourceId)
+    return this.entries.filter((e) => e.resourceType === resourceType && e.resourceId === resourceId)
   }
 }
 
 export class MemoryExecutionRecordRepository implements ExecutionRecordRepository {
   private records: ExecutionRecord[] = []
-  async append(record: ExecutionRecord): Promise<void> { this.records.push(record) }
+  async append(record: ExecutionRecord): Promise<void> {
+    this.records.push(record)
+  }
   async listByAction(action: string): Promise<ExecutionRecord[]> {
-    return this.records.filter(r => r.action === action)
+    return this.records.filter((r) => r.action === action)
   }
 }
 
@@ -62,10 +76,15 @@ export class MemoryEventBus implements EventBus {
     if (!listeners) return
 
     for (const handler of [...listeners]) {
-      try { await handler(event) }
-      catch (err) { console.error(`Event handler error for ${event.type}:`, err) }
+      try {
+        await handler(event)
+      } catch (err) {
+        console.error(`Event handler error for ${event.type}:`, err)
+      }
     }
   }
 
-  get history(): readonly DomainEvent[] { return this._history }
+  get history(): readonly DomainEvent[] {
+    return this._history
+  }
 }

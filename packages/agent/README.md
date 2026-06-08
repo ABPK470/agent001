@@ -23,16 +23,16 @@ Headline exports:
 
 ## Layout
 
-| Folder | Purpose |
-| --- | --- |
-| `application/core/` | Stateless planner, doctrine, clarify, and recovery logic. |
-| `application/shell/` | Stateful loop and runtime wiring, including `Agent` and `configureAgent()`. |
-| `domain/` | Domain model: enums, policy, models, learner. Cluster barrel via `domain/index.ts`. |
-| `ports/` | Contracts for host/runtime dependencies exposed by the agent package. |
-| `tools/` | Concrete tool implementations. |
-| `memory/` | Context compaction, budgeting, and transcript state. |
-| `llm/` | Model adapters implementing the `LLMClient` contract. |
-| `internal/` | Package-private utilities. |
+| Folder               | Purpose                                                                             |
+| -------------------- | ----------------------------------------------------------------------------------- |
+| `application/core/`  | Stateless planner, doctrine, clarify, and recovery logic.                           |
+| `application/shell/` | Stateful loop and runtime wiring, including `Agent` and `configureAgent()`.         |
+| `domain/`            | Domain model: enums, policy, models, learner. Cluster barrel via `domain/index.ts`. |
+| `ports/`             | Contracts for host/runtime dependencies exposed by the agent package.               |
+| `tools/`             | Concrete tool implementations.                                                      |
+| `memory/`            | Context compaction, budgeting, and transcript state.                                |
+| `llm/`               | Model adapters implementing the `LLMClient` contract.                               |
+| `internal/`          | Package-private utilities.                                                          |
 
 ## Where things go
 

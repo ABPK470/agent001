@@ -34,7 +34,7 @@ function parseArgs(argv: string[]): {
   const options = {
     output: "deploy/sync/entity-registry.seed.yaml",
     tenantId: null,
-    includeRetired: false,
+    includeRetired: false
   } as {
     output: string
     tenantId: string | null

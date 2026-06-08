@@ -135,7 +135,7 @@ export function compactMessages(messages: Message[]): Message[] {
       toolCallMeta.set(tc.id, {
         name: tc.name,
         path: extractFilePath(tc.name, args),
-        assistantIdx: i,
+        assistantIdx: i
       })
     }
   }
@@ -192,8 +192,8 @@ export function compactMessages(messages: Message[]): Message[] {
               ...tc,
               arguments: {
                 ...args,
-                content: `[compacted — ${lineCount} lines, see tool result]`,
-              },
+                content: `[compacted — ${lineCount} lines, see tool result]`
+              }
             }
           }
           return tc
@@ -227,20 +227,24 @@ export function compactMessages(messages: Message[]): Message[] {
         const lineCount = m.content.split("\n").length
         result.push({
           ...m,
-          content: `[compacted — file was modified later] read_file ${meta.path}: ${lineCount} lines (superseded by later write)`,
+          content: `[compacted — file was modified later] read_file ${meta.path}: ${lineCount} lines (superseded by later write)`
         })
         continue
       }
     }
 
     // Strategy 2: Superseded write
-    if ((meta.name === "write_file" || meta.name === "replace_in_file") && meta.path && lastWriteOf.has(meta.path)) {
+    if (
+      (meta.name === "write_file" || meta.name === "replace_in_file") &&
+      meta.path &&
+      lastWriteOf.has(meta.path)
+    ) {
       const lastWrite = lastWriteOf.get(meta.path)!
       if (lastWrite > meta.assistantIdx) {
         const lineCount = m.content.split("\n").length
         result.push({
           ...m,
-          content: `[compacted — file was rewritten later] ${meta.name} ${meta.path}: ${lineCount} lines (superseded)`,
+          content: `[compacted — file was rewritten later] ${meta.name} ${meta.path}: ${lineCount} lines (superseded)`
         })
         continue
       }
@@ -250,7 +254,7 @@ export function compactMessages(messages: Message[]): Message[] {
     if (age > COMPACT_PRESERVE_RECENT) {
       result.push({
         ...m,
-        content: compactToolResult(meta.name, meta.path, m.content),
+        content: compactToolResult(meta.name, meta.path, m.content)
       })
       continue
     }
@@ -268,4 +272,3 @@ export { truncateMessages, type TruncationResult } from "../context-truncation.j
 // file focused on iteration tracking + compaction orchestration.
 import { MessageRole } from "../../domain/enums/message.js"
 import { compactToolResult } from "./result-summary.js"
-

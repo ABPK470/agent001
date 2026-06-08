@@ -7,12 +7,12 @@
  */
 import { describe, expect, it } from "vitest"
 import {
-    ageInDays,
-    currentPolicyVersion,
-    MEMORY_STALE_DAYS,
-    PROVENANCE_KEYS,
-    provenanceMultiplier,
-    stampProvenance,
+  ageInDays,
+  currentPolicyVersion,
+  MEMORY_STALE_DAYS,
+  PROVENANCE_KEYS,
+  provenanceMultiplier,
+  stampProvenance
 } from "../src/adapters/persistence/memory/provenance.js"
 
 const now = new Date("2026-05-21T12:00:00Z")
@@ -53,7 +53,7 @@ describe("memory provenance — demotion multiplier", () => {
       fresh,
       current,
       null,
-      now,
+      now
     )
     expect(multiplier).toBe(1)
     expect(reasons).toEqual([])
@@ -65,7 +65,7 @@ describe("memory provenance — demotion multiplier", () => {
       fresh,
       current,
       null,
-      now,
+      now
     )
     expect(multiplier).toBe(0.5)
     expect(reasons).toContain("policy_mismatch")
@@ -75,12 +75,12 @@ describe("memory provenance — demotion multiplier", () => {
     const { multiplier, reasons } = provenanceMultiplier(
       {
         [PROVENANCE_KEYS.policyVersion]: current,
-        [PROVENANCE_KEYS.schemaFingerprint]: "old",
+        [PROVENANCE_KEYS.schemaFingerprint]: "old"
       },
       fresh,
       current,
       "new",
-      now,
+      now
     )
     expect(multiplier).toBe(0.4)
     expect(reasons).toContain("schema_drift")
@@ -93,7 +93,7 @@ describe("memory provenance — demotion multiplier", () => {
       old,
       current,
       null,
-      now,
+      now
     )
     expect(multiplier).toBeLessThan(1)
     expect(multiplier).toBeGreaterThan(0)
@@ -105,12 +105,12 @@ describe("memory provenance — demotion multiplier", () => {
     const { multiplier } = provenanceMultiplier(
       {
         [PROVENANCE_KEYS.policyVersion]: "stale",
-        [PROVENANCE_KEYS.schemaFingerprint]: "old",
+        [PROVENANCE_KEYS.schemaFingerprint]: "old"
       },
       ancient,
       current,
       "new",
-      now,
+      now
     )
     expect(multiplier).toBeGreaterThan(0)
   })

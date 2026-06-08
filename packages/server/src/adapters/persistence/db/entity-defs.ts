@@ -28,13 +28,13 @@
  */
 
 import {
-    bundledStrategyById,
-    diffEntityDefinitions,
-    validateEntityDefinition,
-    validateScd2Strategy,
-    type EntityDefinition,
-    type Scd2Strategy,
-    type ValidationResult,
+  bundledStrategyById,
+  diffEntityDefinitions,
+  validateEntityDefinition,
+  validateScd2Strategy,
+  type EntityDefinition,
+  type Scd2Strategy,
+  type ValidationResult
 } from "@mia/sync"
 import { getDb } from "./connection.js"
 import { listFreezeWindowsForTenant } from "./freeze-windows.js"
@@ -60,10 +60,10 @@ function normalizeEntityDefinition(raw: EntityDefinition): EntityDefinition {
   const r = raw as Partial<EntityDefinition> & EntityDefinition
   return {
     ...r,
-    tables:           (r.tables ?? []).map(normalizeEntityTable),
+    tables: (r.tables ?? []).map(normalizeEntityTable),
     legacyEntrySproc: r.legacyEntrySproc ?? null,
-    reverseOrder:     r.reverseOrder ?? [],
-    discrepancies:    r.discrepancies ?? [],
+    reverseOrder: r.reverseOrder ?? [],
+    discrepancies: r.discrepancies ?? []
   }
 }
 
@@ -71,11 +71,11 @@ function normalizeEntityTable(t: EntityDefinition["tables"][number]): EntityDefi
   const x = t as Partial<EntityDefinition["tables"][number]> & EntityDefinition["tables"][number]
   return {
     ...x,
-    scopeColumn:        x.scopeColumn        ?? null,
-    source:             x.source             ?? null,
+    scopeColumn: x.scopeColumn ?? null,
+    source: x.source ?? null,
     groundedByPipeline: x.groundedByPipeline ?? null,
-    enabledByDefault:   x.enabledByDefault   ?? null,
-    userControllable:   x.userControllable   ?? null,
+    enabledByDefault: x.enabledByDefault ?? null,
+    userControllable: x.userControllable ?? null
   }
 }
 
@@ -92,16 +92,16 @@ function normalizeEntityTable(t: EntityDefinition["tables"][number]): EntityDefi
 // - policies.freezeWindowIds[]            → in-process registry (which
 //                                            mirrors freeze_windows DB)
 function validateEntityReferences(tenantId: string, def: EntityDefinition): ValidationResult {
-  const errors: ValidationResult["errors"]   = []
+  const errors: ValidationResult["errors"] = []
   const warnings: ValidationResult["warnings"] = []
 
   // strategy resolution
   const strategy = resolveScd2Strategy(tenantId, def.scd2.strategyId, def.scd2.strategyVersion)
   if (!strategy) {
     errors.push({
-      path:    "scd2.strategyId",
-      code:    "scd2_strategy_unknown",
-      message: `SCD2 strategy "${def.scd2.strategyId}" v${def.scd2.strategyVersion} does not resolve for tenant "${tenantId}". Pick one from GET /api/entity-registry/strategies, or create a custom strategy first.`,
+      path: "scd2.strategyId",
+      code: "scd2_strategy_unknown",
+      message: `SCD2 strategy "${def.scd2.strategyId}" v${def.scd2.strategyVersion} does not resolve for tenant "${tenantId}". Pick one from GET /api/entity-registry/strategies, or create a custom strategy first.`
     })
   }
 
@@ -112,9 +112,9 @@ function validateEntityReferences(tenantId: string, def: EntityDefinition): Vali
     for (const fwId of def.policies.freezeWindowIds) {
       if (!reg.has(fwId)) {
         errors.push({
-          path:    "policies.freezeWindowIds",
-          code:    "freeze_window_unknown",
-          message: `freeze window "${fwId}" is not defined. Create it via GET/POST /api/sync/freeze-windows first.`,
+          path: "policies.freezeWindowIds",
+          code: "freeze_window_unknown",
+          message: `freeze window "${fwId}" is not defined. Create it via GET/POST /api/sync/freeze-windows first.`
         })
       }
     }
@@ -156,7 +156,7 @@ export class EntityRegistryValidationError extends Error {
     super(
       `entity definition failed validation: ${result.errors
         .map((e) => `${e.path} ${e.code} - ${e.message}`)
-        .join("; ")}`,
+        .join("; ")}`
     )
     this.name = "EntityRegistryValidationError"
     this.result = result
@@ -200,12 +200,8 @@ export function saveEntityDefinition(args: {
 
   return db.transaction(() => {
     const pointer = db
-      .prepare(
-        `SELECT current_version, retired_at FROM entity_defs WHERE tenant_id = ? AND id = ?`,
-      )
-      .get(tenantId, args.def.id) as
-      | { current_version: number; retired_at: string | null }
-      | undefined
+      .prepare(`SELECT current_version, retired_at FROM entity_defs WHERE tenant_id = ? AND id = ?`)
+      .get(tenantId, args.def.id) as { current_version: number; retired_at: string | null } | undefined
 
     const prev: EntityDefinition | null = pointer
       ? readEntityVersionBody(tenantId, args.def.id, pointer.current_version)
@@ -222,7 +218,7 @@ export function saveEntityDefinition(args: {
       createdBy: args.actor,
       reason: args.reason,
       createdAt,
-      retiredAt: null,
+      retiredAt: null
     }
 
     const diff = diffEntityDefinitions(prev, persisted)
@@ -230,7 +226,7 @@ export function saveEntityDefinition(args: {
     db.prepare(
       `INSERT INTO entity_def_versions
          (tenant_id, id, version, body_json, version_label, created_by, created_at, reason, diff_json)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
       tenantId,
       persisted.id,
@@ -240,16 +236,16 @@ export function saveEntityDefinition(args: {
       args.actor,
       createdAt,
       reason(args.reason, prev === null),
-      JSON.stringify(diff),
+      JSON.stringify(diff)
     )
 
     if (pointer) {
       db.prepare(
-        `UPDATE entity_defs SET current_version = ?, retired_at = NULL WHERE tenant_id = ? AND id = ?`,
+        `UPDATE entity_defs SET current_version = ?, retired_at = NULL WHERE tenant_id = ? AND id = ?`
       ).run(nextVersion, tenantId, persisted.id)
     } else {
       db.prepare(
-        `INSERT INTO entity_defs (tenant_id, id, current_version, retired_at) VALUES (?, ?, ?, NULL)`,
+        `INSERT INTO entity_defs (tenant_id, id, current_version, retired_at) VALUES (?, ?, ?, NULL)`
       ).run(tenantId, persisted.id, nextVersion)
     }
 
@@ -270,13 +266,13 @@ function reason(input: string, isCreate: boolean): string {
 export function readEntityVersionBody(
   tenantId: string,
   id: string,
-  version: number,
+  version: number
 ): EntityDefinition | null {
   const db = getDb()
   const row = db
     .prepare(
       `SELECT body_json FROM entity_def_versions
-       WHERE tenant_id = ? AND id = ? AND version = ?`,
+       WHERE tenant_id = ? AND id = ? AND version = ?`
     )
     .get(tenantId, id, version) as { body_json: string } | undefined
   if (!row) return null
@@ -291,19 +287,15 @@ export function readEntityVersionBody(
 export function getEntityDefinition(
   tenantId: string,
   id: string,
-  opts: { version?: number; includeRetired?: boolean } = {},
+  opts: { version?: number; includeRetired?: boolean } = {}
 ): EntityDefinition | null {
   const db = getDb()
   if (opts.version !== undefined) {
     return readEntityVersionBody(tenantId, id, opts.version)
   }
   const pointer = db
-    .prepare(
-      `SELECT current_version, retired_at FROM entity_defs WHERE tenant_id = ? AND id = ?`,
-    )
-    .get(tenantId, id) as
-    | { current_version: number; retired_at: string | null }
-    | undefined
+    .prepare(`SELECT current_version, retired_at FROM entity_defs WHERE tenant_id = ? AND id = ?`)
+    .get(tenantId, id) as { current_version: number; retired_at: string | null } | undefined
   if (!pointer) return null
   if (pointer.retired_at && !opts.includeRetired) return null
   const def = readEntityVersionBody(tenantId, id, pointer.current_version)
@@ -317,13 +309,11 @@ export function getEntityDefinition(
  */
 export function listEntityDefinitions(
   tenantId: string,
-  opts: { includeRetired?: boolean } = {},
+  opts: { includeRetired?: boolean } = {}
 ): EntityDefinition[] {
   const db = getDb()
   const rows = db
-    .prepare(
-      `SELECT id, current_version, retired_at FROM entity_defs WHERE tenant_id = ? ORDER BY id`,
-    )
+    .prepare(`SELECT id, current_version, retired_at FROM entity_defs WHERE tenant_id = ? ORDER BY id`)
     .all(tenantId) as { id: string; current_version: number; retired_at: string | null }[]
 
   const out: EntityDefinition[] = []
@@ -346,26 +336,23 @@ export interface EntityDefinitionHistoryEntry extends EntityDefinitionVersionRow
   diff: ReturnType<typeof diffEntityDefinitions>
 }
 
-export function listEntityDefinitionHistory(
-  tenantId: string,
-  id: string,
-): EntityDefinitionHistoryEntry[] {
+export function listEntityDefinitionHistory(tenantId: string, id: string): EntityDefinitionHistoryEntry[] {
   const db = getDb()
   const rows = db
     .prepare(
       `SELECT version, version_label, created_by, created_at, reason, diff_json
        FROM entity_def_versions
        WHERE tenant_id = ? AND id = ?
-       ORDER BY version DESC`,
+       ORDER BY version DESC`
     )
     .all(tenantId, id) as {
-      version: number
-      version_label: string | null
-      created_by: string
-      created_at: string
-      reason: string
-      diff_json: string
-    }[]
+    version: number
+    version_label: string | null
+    created_by: string
+    created_at: string
+    reason: string
+    diff_json: string
+  }[]
 
   return rows.map((r) => ({
     tenantId,
@@ -375,7 +362,7 @@ export function listEntityDefinitionHistory(
     createdBy: r.created_by,
     createdAt: r.created_at,
     reason: r.reason,
-    diff: JSON.parse(r.diff_json),
+    diff: JSON.parse(r.diff_json)
   }))
 }
 
@@ -386,7 +373,7 @@ export function listEntityDefinitionHistory(
 export function retireEntityDefinition(
   tenantId: string,
   id: string,
-  actor: string,
+  actor: string
 ): { retiredAt: string } | null {
   const db = getDb()
   const pointer = db
@@ -400,7 +387,7 @@ export function retireEntityDefinition(
     db.prepare(`UPDATE entity_defs SET retired_at = ? WHERE tenant_id = ? AND id = ?`).run(
       retiredAt,
       tenantId,
-      id,
+      id
     )
     // Record the retire as a new version so the diff history has it.
     const prev = readEntityVersionBody(tenantId, id, pointer.current_version)
@@ -413,25 +400,19 @@ export function retireEntityDefinition(
         createdBy: actor,
         reason: "retire",
         createdAt: retiredAt,
-        retiredAt,
+        retiredAt
       }
       const diff = diffEntityDefinitions(prev, retiredDef)
       db.prepare(
         `INSERT INTO entity_def_versions
            (tenant_id, id, version, body_json, version_label, created_by, created_at, reason, diff_json)
-         VALUES (?, ?, ?, ?, NULL, ?, ?, 'retire', ?)`,
-      ).run(
-        tenantId,
-        id,
+         VALUES (?, ?, ?, ?, NULL, ?, ?, 'retire', ?)`
+      ).run(tenantId, id, nextVersion, JSON.stringify(retiredDef), actor, retiredAt, JSON.stringify(diff))
+      db.prepare(`UPDATE entity_defs SET current_version = ? WHERE tenant_id = ? AND id = ?`).run(
         nextVersion,
-        JSON.stringify(retiredDef),
-        actor,
-        retiredAt,
-        JSON.stringify(diff),
+        tenantId,
+        id
       )
-      db.prepare(
-        `UPDATE entity_defs SET current_version = ? WHERE tenant_id = ? AND id = ?`,
-      ).run(nextVersion, tenantId, id)
     }
     return { retiredAt }
   })()
@@ -471,13 +452,13 @@ export function saveScd2Strategy(args: {
       ...args.strategy,
       version: nextVersion,
       createdBy: args.actor,
-      createdAt,
+      createdAt
     }
 
     db.prepare(
       `INSERT INTO scd2_strategy_versions
          (tenant_id, id, version, body_json, created_by, created_at, reason)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?)`
     ).run(
       tenantId,
       persisted.id,
@@ -485,16 +466,16 @@ export function saveScd2Strategy(args: {
       JSON.stringify(persisted),
       args.actor,
       createdAt,
-      args.reason || (pointer ? "edit" : "create"),
+      args.reason || (pointer ? "edit" : "create")
     )
 
     if (pointer) {
       db.prepare(
-        `UPDATE scd2_strategies SET current_version = ?, retired_at = NULL WHERE tenant_id = ? AND id = ?`,
+        `UPDATE scd2_strategies SET current_version = ?, retired_at = NULL WHERE tenant_id = ? AND id = ?`
       ).run(nextVersion, tenantId, persisted.id)
     } else {
       db.prepare(
-        `INSERT INTO scd2_strategies (tenant_id, id, current_version, retired_at) VALUES (?, ?, ?, NULL)`,
+        `INSERT INTO scd2_strategies (tenant_id, id, current_version, retired_at) VALUES (?, ?, ?, NULL)`
       ).run(tenantId, persisted.id, nextVersion)
     }
 
@@ -514,7 +495,7 @@ export function saveScd2Strategy(args: {
 export function resolveScd2Strategy(
   tenantId: string,
   id: string,
-  version?: number | "latest",
+  version?: number | "latest"
 ): Scd2Strategy | null {
   const db = getDb()
 
@@ -522,7 +503,7 @@ export function resolveScd2Strategy(
     const row = db
       .prepare(
         `SELECT body_json FROM scd2_strategy_versions
-         WHERE tenant_id = ? AND id = ? AND version = ?`,
+         WHERE tenant_id = ? AND id = ? AND version = ?`
       )
       .get(tenantId, id, version) as { body_json: string } | undefined
     if (row) return JSON.parse(row.body_json) as Scd2Strategy
@@ -530,7 +511,7 @@ export function resolveScd2Strategy(
       const def = db
         .prepare(
           `SELECT body_json FROM scd2_strategy_versions
-           WHERE tenant_id = ? AND id = ? AND version = ?`,
+           WHERE tenant_id = ? AND id = ? AND version = ?`
         )
         .get(DEFAULT_TENANT_ID, id, version) as { body_json: string } | undefined
       if (def) return JSON.parse(def.body_json) as Scd2Strategy
@@ -548,7 +529,7 @@ export function resolveScd2Strategy(
     if (pointer) {
       const row = db
         .prepare(
-          `SELECT body_json FROM scd2_strategy_versions WHERE tenant_id = ? AND id = ? AND version = ?`,
+          `SELECT body_json FROM scd2_strategy_versions WHERE tenant_id = ? AND id = ? AND version = ?`
         )
         .get(t, id, pointer.current_version) as { body_json: string } | undefined
       if (row) return JSON.parse(row.body_json) as Scd2Strategy
@@ -579,7 +560,7 @@ function readTenantStrategies(db: ReturnType<typeof getDb>, tenantId: string): S
        JOIN scd2_strategy_versions v
          ON v.tenant_id = s.tenant_id AND v.id = s.id AND v.version = s.current_version
        WHERE s.tenant_id = ?
-       ORDER BY s.id`,
+       ORDER BY s.id`
     )
     .all(tenantId) as { id: string; current_version: number; body_json: string }[]
   return rows.map((r) => JSON.parse(r.body_json) as Scd2Strategy)

@@ -11,23 +11,23 @@ import { StepRole, VerificationMode } from "../../../../domain/index.js"
 import type { ToolCallRecord } from "../../../../tools/index.js"
 import type { DelegationContractSpec } from "../validation/index.js"
 import {
-    DOCUMENTATION_TASK_RE,
-    EXECUTABLE_VERIFICATION_CMD_RE,
-    FILE_ARTIFACT_RE,
-    FILE_MUTATION_TOOLS,
-    FILE_READ_TOOLS,
-    IMPLEMENTATION_TASK_RE,
-    LOCAL_ARTIFACT_REFERENCE_RE,
-    LOW_SIGNAL_BROWSER_TARGETS,
-    LOW_SIGNAL_BROWSER_TOOLS,
-    MEANINGFUL_BROWSER_TOOLS,
-    NON_WORKSPACE_REF_RE,
-    RESEARCH_TASK_RE,
-    SHELL_FILE_WRITE_RE,
-    SHELL_IN_PLACE_EDIT_RE,
-    SHELL_SCAFFOLD_RE,
-    VALIDATION_TASK_RE,
-    WORKSPACE_FILE_EXT_RE,
+  DOCUMENTATION_TASK_RE,
+  EXECUTABLE_VERIFICATION_CMD_RE,
+  FILE_ARTIFACT_RE,
+  FILE_MUTATION_TOOLS,
+  FILE_READ_TOOLS,
+  IMPLEMENTATION_TASK_RE,
+  LOCAL_ARTIFACT_REFERENCE_RE,
+  LOW_SIGNAL_BROWSER_TARGETS,
+  LOW_SIGNAL_BROWSER_TOOLS,
+  MEANINGFUL_BROWSER_TOOLS,
+  NON_WORKSPACE_REF_RE,
+  RESEARCH_TASK_RE,
+  SHELL_FILE_WRITE_RE,
+  SHELL_IN_PLACE_EDIT_RE,
+  SHELL_SCAFFOLD_RE,
+  VALIDATION_TASK_RE,
+  WORKSPACE_FILE_EXT_RE
 } from "./constants.js"
 
 // Re-export every constant so existing call-sites still work
@@ -114,7 +114,7 @@ export function classifyTaskIntent(spec: DelegationContractSpec): TaskIntent {
     { intent: TaskIntent.Implementation, score: implScore },
     { intent: TaskIntent.Research, score: researchScore },
     { intent: TaskIntent.Validation, score: validationScore },
-    { intent: TaskIntent.Documentation, score: docScore },
+    { intent: TaskIntent.Documentation, score: docScore }
   ]
 
   scores.sort((a, b) => b.score - a.score)
@@ -183,9 +183,9 @@ export function isExecutableVerificationToolCall(record: ToolCallRecord): boolea
 /** Check if at least one target artifact was inspected after mutation. */
 export function hasPostMutationArtifactInspection(
   toolCalls: readonly ToolCallRecord[],
-  targetArtifacts: readonly string[],
+  targetArtifacts: readonly string[]
 ): boolean {
-  const targetBasenames = new Set(targetArtifacts.map(a => a.split("/").pop() ?? a))
+  const targetBasenames = new Set(targetArtifacts.map((a) => a.split("/").pop() ?? a))
   let sawMutation = false
   for (const tc of toolCalls) {
     if (!tc.isError && isFileMutationToolCall(tc)) {
@@ -197,7 +197,10 @@ export function hasPostMutationArtifactInspection(
     const path = typeof tc.args.path === "string" ? tc.args.path : ""
     if (!path) continue
     const basename = path.split("/").pop() ?? path
-    if (targetBasenames.has(basename) || targetArtifacts.some(t => t === path || path.endsWith(`/${t.split("/").pop() ?? t}`))) {
+    if (
+      targetBasenames.has(basename) ||
+      targetArtifacts.some((t) => t === path || path.endsWith(`/${t.split("/").pop() ?? t}`))
+    ) {
       return true
     }
   }

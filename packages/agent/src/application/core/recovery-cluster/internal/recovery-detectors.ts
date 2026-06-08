@@ -17,7 +17,10 @@ export function extractShellCommand(call: ToolCallRecord): string {
     ? (call.args.args as unknown[]).filter((v): v is string => typeof v === "string")
     : []
   if (rawArgs.length === 0) return command
-  return [command, ...rawArgs].filter(v => v.length > 0).join(" ").trim()
+  return [command, ...rawArgs]
+    .filter((v) => v.length > 0)
+    .join(" ")
+    .trim()
 }
 
 export function commandBasename(command: string): string {
@@ -29,14 +32,13 @@ export function commandBasename(command: string): string {
 // ============================================================================
 
 export function isWatchModeOutput(text: string): boolean {
-  return /watch.*usage|press.*to|watching for/i.test(text)
-    && /tests?\s+\d|suite/i.test(text)
+  return /watch.*usage|press.*to|watching for/i.test(text) && /tests?\s+\d|suite/i.test(text)
 }
 
 export function isWatchModeTestRunnerFailure(
   call: ToolCallRecord,
   parsedResult: Record<string, unknown> | null,
-  failureTextLower: string,
+  failureTextLower: string
 ): boolean {
   if (call.name !== "run_command") return false
   if (!parsedResult || parsedResult.timedOut !== true) return false
@@ -52,18 +54,22 @@ export function isWatchModeTestRunnerFailure(
   if (!watchSignal) return false
 
   return (
-    command.includes("vitest") || command.includes("jest") ||
-    command.includes("npm") || command.includes("pnpm") ||
-    command.includes("yarn") || command.includes("bun") ||
+    command.includes("vitest") ||
+    command.includes("jest") ||
+    command.includes("npm") ||
+    command.includes("pnpm") ||
+    command.includes("yarn") ||
+    command.includes("bun") ||
     command.includes("test") ||
-    failureTextLower.includes("vitest") || failureTextLower.includes("jest")
+    failureTextLower.includes("vitest") ||
+    failureTextLower.includes("jest")
   )
 }
 
 export function isTimedOutNonWatchTestRunnerFailure(
   call: ToolCallRecord,
   parsedResult: Record<string, unknown> | null,
-  failureTextLower: string,
+  failureTextLower: string
 ): boolean {
   if (!parsedResult || parsedResult.timedOut !== true) return false
   if (isWatchModeTestRunnerFailure(call, parsedResult, failureTextLower)) return false
@@ -78,7 +84,10 @@ export function isTestRunnerCommand(call: ToolCallRecord, failureTextLower: stri
   return failureTextLower.includes("vitest") || failureTextLower.includes("jest")
 }
 
-export function isVitestUnsupportedThreadsFlagFailure(call: ToolCallRecord, failureTextLower: string): boolean {
+export function isVitestUnsupportedThreadsFlagFailure(
+  call: ToolCallRecord,
+  failureTextLower: string
+): boolean {
   if (call.name !== "run_command") return false
   const command = extractShellCommand(call).toLowerCase()
   if (!command.includes("vitest") && !failureTextLower.includes("vitest")) return false
@@ -88,13 +97,16 @@ export function isVitestUnsupportedThreadsFlagFailure(call: ToolCallRecord, fail
 
 export function isUnsupportedWorkspaceProtocolFailure(failureTextLower: string): boolean {
   return (
-    failureTextLower.includes("unsupported url type \"workspace:\"") ||
+    failureTextLower.includes('unsupported url type "workspace:"') ||
     failureTextLower.includes("unsupported url type 'workspace:'") ||
     failureTextLower.includes("eunsupportedprotocol")
   )
 }
 
-export function isRecursiveNpmInstallLifecycleFailure(call: ToolCallRecord, parsedResult: Record<string, unknown> | null): boolean {
+export function isRecursiveNpmInstallLifecycleFailure(
+  call: ToolCallRecord,
+  parsedResult: Record<string, unknown> | null
+): boolean {
   if (call.name !== "run_command") return false
   const command = extractShellCommand(call).toLowerCase()
   if (!command.includes("npm") || !command.includes("install")) return false
@@ -127,7 +139,9 @@ export function isMissingNpmWorkspaceFailure(call: ToolCallRecord, failureText: 
 }
 
 export function isMissingLocalPackageDistFailure(failureText: string): boolean {
-  return /cannot find (?:package|module)\s+['"][^'"]*\/node_modules\/[^'"]*\/dist\/[^'"]+['"]/i.test(failureText)
+  return /cannot find (?:package|module)\s+['"][^'"]*\/node_modules\/[^'"]*\/dist\/[^'"]+['"]/i.test(
+    failureText
+  )
 }
 
 export function isTypescriptRootDirScopeFailure(failureText: string): boolean {
@@ -138,7 +152,7 @@ export function extractDuplicateExportName(failureText: string): string | undefi
   for (const pattern of [
     /multiple exports with the same name ["'`](.+?)["'`]/i,
     /duplicate export(?:s)? ["'`](.+?)["'`]/i,
-    /already exported a member named ['"`]([^'"`]+)['"`]/i,
+    /already exported a member named ['"`]([^'"`]+)['"`]/i
   ]) {
     const match = failureText.match(pattern)
     const name = match?.[1]?.trim()
@@ -152,7 +166,9 @@ export function isDuplicateExportFailure(failureText: string): boolean {
 }
 
 export function isJsonEscapedSourceLiteralFailure(failureText: string): boolean {
-  const hasCompilerStylePath = /(?:^|\s|["'`])[^"'`\s]+\.(?:rs|c|cc|cpp|h|hpp|ts|tsx|js|jsx|py):\d+/i.test(failureText)
+  const hasCompilerStylePath = /(?:^|\s|["'`])[^"'`\s]+\.(?:rs|c|cc|cpp|h|hpp|ts|tsx|js|jsx|py):\d+/i.test(
+    failureText
+  )
   const hasEscapeTokenSignal =
     failureText.toLowerCase().includes("unknown start of token: \\") ||
     failureText.toLowerCase().includes("unknown character escape") ||
@@ -163,12 +179,14 @@ export function isJsonEscapedSourceLiteralFailure(failureText: string): boolean 
 }
 
 export function isShellExecutionAnomalyFailure(failureText: string): boolean {
-  return /(?:^|\n)(?:[^:\n]+:\s+line\s+\d+:\s+)?(?:(?:ba|z|k)?sh|cd|pushd|popd|source|\.)[^:\n]*:\s+.*(?:no such file or directory|command not found|not found|permission denied|not a directory)/i.test(failureText)
+  return /(?:^|\n)(?:[^:\n]+:\s+line\s+\d+:\s+)?(?:(?:ba|z|k)?sh|cd|pushd|popd|source|\.)[^:\n]*:\s+.*(?:no such file or directory|command not found|not found|permission denied|not a directory)/i.test(
+    failureText
+  )
 }
 
 export function extractCompilerDiagnosticLocation(failureText: string): string | undefined {
   const match = failureText.match(
-    /(^|\n)([^:\n]+\.(?:c|cc|cpp|cxx|h|hpp|hh|m|mm|rs|go|ts|tsx|js|jsx|py)):(\d+)(?::(\d+))?:\s*(?:fatal\s+)?error:/i,
+    /(^|\n)([^:\n]+\.(?:c|cc|cpp|cxx|h|hpp|hh|m|mm|rs|go|ts|tsx|js|jsx|py)):(\d+)(?::(\d+))?:\s*(?:fatal\s+)?error:/i
   )
   const file = match?.[2]?.trim()
   const line = match?.[3]?.trim()
@@ -205,7 +223,10 @@ export function isCompilerInterfaceDriftFailure(failureText: string): boolean {
 export function isCompilerDiagnosticFailure(call: ToolCallRecord, failureText: string): boolean {
   if (call.name !== "run_command") return false
   const command = extractShellCommand(call).toLowerCase()
-  const looksLikeBuild = /\b(?:cmake|ctest|make|ninja|meson|gcc|g\+\+|clang|clang\+\+|cc|c\+\+|tsc|cargo|go build|rustc)\b/.test(command)
+  const looksLikeBuild =
+    /\b(?:cmake|ctest|make|ninja|meson|gcc|g\+\+|clang|clang\+\+|cc|c\+\+|tsc|cargo|go build|rustc)\b/.test(
+      command
+    )
   const looksLikeScript = /\b(?:ba|z|k)?sh\s+[^\s]+\.(?:sh|bash|zsh)\b/i.test(command)
   return (looksLikeBuild || looksLikeScript) && extractCompilerDiagnosticLocation(failureText) !== undefined
 }
@@ -213,11 +234,14 @@ export function isCompilerDiagnosticFailure(call: ToolCallRecord, failureText: s
 export function isPackagePathNotExportedFailure(failureTextLower: string): boolean {
   return (
     failureTextLower.includes("err_package_path_not_exported") ||
-    failureTextLower.includes("no \"exports\" main defined")
+    failureTextLower.includes('no "exports" main defined')
   )
 }
 
-export function hasBrokenHeredocConjunctionShape(args: Record<string, unknown> | undefined, failureTextLower: string): boolean {
+export function hasBrokenHeredocConjunctionShape(
+  args: Record<string, unknown> | undefined,
+  failureTextLower: string
+): boolean {
   if (!failureTextLower.includes("syntax error near unexpected token")) return false
   const command = typeof args?.command === "string" ? args.command : ""
   if (!command.includes("<<")) return false
@@ -229,9 +253,9 @@ export function hasExtendedGrepPatternWithoutFlag(args: Record<string, unknown> 
     ? (args!.args as unknown[]).filter((v): v is string => typeof v === "string")
     : []
   if (rawArgs.length === 0) return false
-  const hasExtendedFlag = rawArgs.some(v => v === "-E" || v === "-P")
+  const hasExtendedFlag = rawArgs.some((v) => v === "-E" || v === "-P")
   if (hasExtendedFlag) return false
-  return rawArgs.some(v => !v.startsWith("-") && v.includes("|"))
+  return rawArgs.some((v) => !v.startsWith("-") && v.includes("|"))
 }
 
 export function isLikelyGrepOperandShapeFailure(call: ToolCallRecord, failureTextLower: string): boolean {
@@ -244,11 +268,12 @@ export function isLikelyGrepOperandShapeFailure(call: ToolCallRecord, failureTex
 
 export function isLikelyLiteralGlobFailure(call: ToolCallRecord, failureTextLower: string): boolean {
   if (call.name !== "run_command") return false
-  if (!failureTextLower.includes("no such file or directory") && !failureTextLower.includes("cannot access")) return false
+  if (!failureTextLower.includes("no such file or directory") && !failureTextLower.includes("cannot access"))
+    return false
   const rawArgs = Array.isArray(call.args?.args)
     ? (call.args.args as unknown[]).filter((v): v is string => typeof v === "string")
     : []
-  return rawArgs.some(v => !v.startsWith("-") && /[?[*\]]/.test(v) && (v.includes("/") || v.includes(".")))
+  return rawArgs.some((v) => !v.startsWith("-") && /[?[*\]]/.test(v) && (v.includes("/") || v.includes(".")))
 }
 
 export function extractSpawnEnoentCommand(failureText: string): string | undefined {

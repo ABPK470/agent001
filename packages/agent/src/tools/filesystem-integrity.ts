@@ -28,7 +28,9 @@ export function extractDefinedNames(code: string): Set<string> {
     if (m[1]) names.add(m[1])
   }
   // const/let/var with function value: const name = function | const name = (
-  for (const m of code.matchAll(/\b(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*(?:function|\(|[a-zA-Z_$][\w$]*\s*=>)/g)) {
+  for (const m of code.matchAll(
+    /\b(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*(?:function|\(|[a-zA-Z_$][\w$]*\s*=>)/g
+  )) {
     if (m[1]) names.add(m[1])
   }
   return names
@@ -47,16 +49,18 @@ export function checkWriteIntegrity(filePath: string, content: string): string[]
   const isCode = /\.(js|jsx|ts|tsx|py|rb|java|cs|go|rs|c|cpp|swift|kt|php|sh|bash|zsh)$/i.test(filePath)
   const isHtml = /\.html?$/i.test(filePath)
 
-  if (isCode) {    // ── Pure gibberish detection ──
+  if (isCode) {
+    // ── Pure gibberish detection ──
     // Catches LLM degeneration that produces entirely non-code text,
     // e.g. "[compacted \u0001 full COMPL'd PROMO].THISs''." or
     //      "UPDATE! OFFCHAIN FINAL SCRIPT! INSERT_GAME_PATCH"
     // These lack ANY valid programming keywords.
-    const CODE_KEYWORD_RE = /\b(?:function|const|let|var|class|if|else|for|while|do|switch|case|return|import|export|require|module|try|catch|throw|new|this|typeof|instanceof|null|undefined|true|false|async|await|yield|=>|console|document|window)\b/
+    const CODE_KEYWORD_RE =
+      /\b(?:function|const|let|var|class|if|else|for|while|do|switch|case|return|import|export|require|module|try|catch|throw|new|this|typeof|instanceof|null|undefined|true|false|async|await|yield|=>|console|document|window)\b/
     if (!CODE_KEYWORD_RE.test(content)) {
       warnings.push(
         `GIBBERISH REJECTED: File contains NO valid code keywords — this is degenerated LLM output, not code. ` +
-        `Do NOT write non-code text to code files. Use the think tool to plan, then write REAL code.`
+          `Do NOT write non-code text to code files. Use the think tool to plan, then write REAL code.`
       )
       return warnings // Early return — no point checking further
     }
@@ -68,8 +72,13 @@ export function checkWriteIntegrity(filePath: string, content: string): string[]
     const lines = content.split("\n")
     for (const line of lines) {
       const trimmed = line.trim()
-      if (trimmed.length > 10 && brokenCodeRe.test(trimmed) &&
-          !trimmed.startsWith("//") && !trimmed.startsWith("*") && !trimmed.startsWith("#")) {
+      if (
+        trimmed.length > 10 &&
+        brokenCodeRe.test(trimmed) &&
+        !trimmed.startsWith("//") &&
+        !trimmed.startsWith("*") &&
+        !trimmed.startsWith("#")
+      ) {
         warnings.push(`Line contains gibberish mixed with code: "${trimmed.slice(0, 80)}"`)
         break
       }
@@ -83,11 +92,17 @@ export function checkWriteIntegrity(filePath: string, content: string): string[]
     }
 
     // Detect abrupt ending with non-code text
-    const lastLine = lines.filter(l => l.trim().length > 0).pop()?.trim() ?? ""
-    if (lastLine.length > 10 &&
-        !/[});\]`'"\\]$/.test(lastLine) &&
-        !/^(?:export|module\.exports|\/\/|#|\*)/i.test(lastLine) &&
-        /[a-z]{3,}\s+[a-z]{3,}/i.test(lastLine)) {
+    const lastLine =
+      lines
+        .filter((l) => l.trim().length > 0)
+        .pop()
+        ?.trim() ?? ""
+    if (
+      lastLine.length > 10 &&
+      !/[});\]`'"\\]$/.test(lastLine) &&
+      !/^(?:export|module\.exports|\/\/|#|\*)/i.test(lastLine) &&
+      /[a-z]{3,}\s+[a-z]{3,}/i.test(lastLine)
+    ) {
       warnings.push(`File ends with non-code text: "${lastLine.slice(-60)}"`)
     }
   }
@@ -107,13 +122,13 @@ export function checkWriteIntegrity(filePath: string, content: string): string[]
       const ctx = content
         .substring(Math.max(0, pos - 15), pos + 20)
         // eslint-disable-next-line no-control-regex
-        .replace(/[\x00-\x1f]/g, c => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`)
+        .replace(/[\x00-\x1f]/g, (c) => `\\x${c.charCodeAt(0).toString(16).padStart(2, "0")}`)
       warnings.push(
         `CORRUPTED_UNICODE: File contains non-printable control character(s) near: "${ctx}". ` +
-        `This happens when a \\u JSON escape is wrong — e.g. \\u0001 instead of \\u2654 for ♔. ` +
-        `Use the correct 4-hex-digit \\uXXXX escape or embed the literal character. ` +
-        `Chess symbols: \\u2654=♔ \\u2655=♕ \\u2656=♖ \\u2657=♗ \\u2658=♘ \\u2659=♙ ` +
-        `\\u265a=♚ \\u265b=♛ \\u265c=♜ \\u265d=♝ \\u265e=♞ \\u265f=♟`
+          `This happens when a \\u JSON escape is wrong — e.g. \\u0001 instead of \\u2654 for ♔. ` +
+          `Use the correct 4-hex-digit \\uXXXX escape or embed the literal character. ` +
+          `Chess symbols: \\u2654=♔ \\u2655=♕ \\u2656=♖ \\u2657=♗ \\u2658=♘ \\u2659=♙ ` +
+          `\\u265a=♚ \\u265b=♛ \\u265c=♜ \\u265d=♝ \\u265e=♞ \\u265f=♟`
       )
     }
   }
@@ -139,7 +154,9 @@ export function checkWriteIntegrity(filePath: string, content: string): string[]
 
 /** Structural integrity issues must block writes to keep file state monotonic. */
 export function hasStructuralIntegrityIssue(warnings: readonly string[]): boolean {
-  return warnings.some(w =>
-    /unclosed brace|gibberish|truncated|non-code text|FUNCTION LOSS|Unclosed HTML attribute|code garbage|CORRUPTED_UNICODE/i.test(w),
+  return warnings.some((w) =>
+    /unclosed brace|gibberish|truncated|non-code text|FUNCTION LOSS|Unclosed HTML attribute|code garbage|CORRUPTED_UNICODE/i.test(
+      w
+    )
   )
 }

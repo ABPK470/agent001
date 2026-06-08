@@ -18,7 +18,9 @@ import { configureAgent, type AgentHost } from "../src/application/shell/runtime
 import { createMssqlSchemaTool } from "../src/tools/mssql/tools.js"
 import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
-function makeFixture(query?: (sql: string) => Promise<{ recordset: unknown[]; recordsets: unknown[][]; rowsAffected: number[] }>): {
+function makeFixture(
+  query?: (sql: string) => Promise<{ recordset: unknown[]; recordsets: unknown[][]; rowsAffected: number[] }>
+): {
   tool: ReturnType<typeof createMssqlSchemaTool>
   toolKnowledge: NonNullable<AgentHost["toolKnowledge"]>
 } {
@@ -27,12 +29,12 @@ function makeFixture(query?: (sql: string) => Promise<{ recordset: unknown[]; re
   const toolKnowledge: NonNullable<AgentHost["toolKnowledge"]> = {
     lookup: () => ({ hit: false as const, reason: "miss" as const }),
     save: () => undefined,
-    renderHeader: () => "",
+    renderHeader: () => ""
   }
   const host = configureAgent({
     mssqlDatabases: databases,
     catalogInstances,
-    toolKnowledge,
+    toolKnowledge
   })
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
@@ -40,13 +42,13 @@ function makeFixture(query?: (sql: string) => Promise<{ recordset: unknown[]; re
       request: () => ({
         input: () => undefined,
         cancel: () => undefined,
-        query: query ?? (async () => ({ recordset: [], recordsets: [[]], rowsAffected: [0] })),
+        query: query ?? (async () => ({ recordset: [], recordsets: [[]], rowsAffected: [0] }))
       }),
       connected: true,
-      close: async () => undefined,
+      close: async () => undefined
     } as never,
     writeEnabled: false,
-    knowledge: null,
+    knowledge: null
   })
   catalogInstances.set("default", canonicalFixtureCatalog())
   return { toolKnowledge, tool: createMssqlSchemaTool(host) }
@@ -58,15 +60,21 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
 
     const lookup = vi.fn((args: { tool: string; mode?: string }) => {
       if (args.tool === "explore_mssql_schema" && args.mode === "columns") {
-        return { hit: true as const, payload: "Columns for publish.Revenue:\npkClient int\n...", ageMs: 1, profiledAt: 0 }
+        return {
+          hit: true as const,
+          payload: "Columns for publish.Revenue:\npkClient int\n...",
+          ageMs: 1,
+          profiledAt: 0
+        }
       }
       return { hit: false as const, reason: "miss" as const }
     })
     toolKnowledge.lookup = lookup
     toolKnowledge.save = vi.fn()
-    toolKnowledge.renderHeader = () => "[cached from 2026-05-22, mode=columns, ageHours=1, source=tool_knowledge]"
+    toolKnowledge.renderHeader = () =>
+      "[cached from 2026-05-22, mode=columns, ageHours=1, source=tool_knowledge]"
 
-    const out = await mssqlSchemaTool.execute({ table: "publish.Revenue" }) as string
+    const out = (await mssqlSchemaTool.execute({ table: "publish.Revenue" })) as string
     expect(out).toMatch(/^\[cached from 2026-05-22.*mode=columns/)
     expect(out).toContain("Columns for publish.Revenue")
     expect(lookup).toHaveBeenCalled()
@@ -86,7 +94,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
           hit: true as const,
           payload: "Profile for publish.Revenue:\nTotal rows: 60M\nColumns:\npkClient int ...",
           ageMs: 1,
-          profiledAt: 0,
+          profiledAt: 0
         }
       }
       return { hit: false as const, reason: "miss" as const }
@@ -95,7 +103,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
     toolKnowledge.save = vi.fn()
     toolKnowledge.renderHeader = () => "[hdr]"
 
-    const out = await mssqlSchemaTool.execute({ table: "publish.Revenue" }) as string
+    const out = (await mssqlSchemaTool.execute({ table: "publish.Revenue" })) as string
     expect(out).toContain("cross-served from profile_data(fast) cache")
     expect(out).toContain("Profile for publish.Revenue")
     // Both buckets consulted, own first then profile_data
@@ -108,11 +116,35 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
   })
 
   it("falls through to live execution on full miss, then persists the result", async () => {
-    const fakeQuery = (text: string): Promise<{ recordset: Array<Record<string, unknown>>; recordsets: Array<Array<Record<string, unknown>>>; rowsAffected: number[] }> => {
+    const fakeQuery = (
+      text: string
+    ): Promise<{
+      recordset: Array<Record<string, unknown>>
+      recordsets: Array<Array<Record<string, unknown>>>
+      rowsAffected: number[]
+    }> => {
       if (text.toLowerCase().includes("information_schema.columns")) {
         const rs = [
-          { TABLE_SCHEMA: "publish", COLUMN_NAME: "pkClient", DATA_TYPE: "int", IS_NULLABLE: "NO", CHARACTER_MAXIMUM_LENGTH: null, COLUMN_DEFAULT: null, IS_PRIMARY_KEY: "NO", FK_REFERENCES: null },
-          { TABLE_SCHEMA: "publish", COLUMN_NAME: "pkMonth", DATA_TYPE: "int", IS_NULLABLE: "NO", CHARACTER_MAXIMUM_LENGTH: null, COLUMN_DEFAULT: null, IS_PRIMARY_KEY: "NO", FK_REFERENCES: null },
+          {
+            TABLE_SCHEMA: "publish",
+            COLUMN_NAME: "pkClient",
+            DATA_TYPE: "int",
+            IS_NULLABLE: "NO",
+            CHARACTER_MAXIMUM_LENGTH: null,
+            COLUMN_DEFAULT: null,
+            IS_PRIMARY_KEY: "NO",
+            FK_REFERENCES: null
+          },
+          {
+            TABLE_SCHEMA: "publish",
+            COLUMN_NAME: "pkMonth",
+            DATA_TYPE: "int",
+            IS_NULLABLE: "NO",
+            CHARACTER_MAXIMUM_LENGTH: null,
+            COLUMN_DEFAULT: null,
+            IS_PRIMARY_KEY: "NO",
+            FK_REFERENCES: null
+          }
         ]
         return Promise.resolve({ recordset: rs, recordsets: [rs], rowsAffected: [rs.length] })
       }
@@ -125,7 +157,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
     toolKnowledge.save = save
     toolKnowledge.renderHeader = () => "ignored"
 
-    const out = await mssqlSchemaTool.execute({ table: "publish.Revenue" }) as string
+    const out = (await mssqlSchemaTool.execute({ table: "publish.Revenue" })) as string
     expect(out).toMatch(/^Columns for publish\.Revenue/)
     expect(out).not.toMatch(/^\[cached/)
 
@@ -144,7 +176,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
     toolKnowledge.save = null as unknown as NonNullable<AgentHost["toolKnowledge"]>["save"]
 
     // Stub returns empty rows so the tool emits the "No columns found" string.
-    const out = await mssqlSchemaTool.execute({ table: "publish.Revenue" }) as string
+    const out = (await mssqlSchemaTool.execute({ table: "publish.Revenue" })) as string
     expect(typeof out).toBe("string")
   })
 
@@ -154,7 +186,9 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
     toolKnowledge.lookup = lookup
     try {
       await mssqlSchemaTool.execute({ table: "Revenue" })
-    } catch { /* live path may fail against the stub pool */ }
+    } catch {
+      /* live path may fail against the stub pool */
+    }
     expect(lookup).not.toHaveBeenCalled()
   })
 
@@ -164,7 +198,9 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
     toolKnowledge.lookup = lookup
     try {
       await mssqlSchemaTool.execute({ table: "mystery.Unknown" })
-    } catch { /* live path may fail against the stub pool */ }
+    } catch {
+      /* live path may fail against the stub pool */
+    }
     expect(lookup).not.toHaveBeenCalled()
   })
 })

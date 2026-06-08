@@ -10,12 +10,12 @@ import { VerifierIssueSeverity } from "../../domain/index.js"
 
 import { compilePlannerRuntime } from "../runtime-model.js"
 import type {
-    Plan,
-    SubagentTaskStep,
-    VerificationEvidence,
-    VerifierIssue,
-    VerifierOwnershipMode,
-    VerifierRepairClass,
+  Plan,
+  SubagentTaskStep,
+  VerificationEvidence,
+  VerifierIssue,
+  VerifierOwnershipMode,
+  VerifierRepairClass
 } from "../types.js"
 
 export function uniqueStrings(values: readonly string[]): string[] {
@@ -49,53 +49,92 @@ export function inferIssueCode(summary: string): string {
   if (/Placeholder|stub/i.test(summary)) return "placeholder_logic"
   if (/VERIFICATION MODALITY GAP|CRITERIA PROOF MISSING/i.test(summary)) return "verification_gap"
   if (/FUNCTION LOSS/i.test(summary)) return "function_loss"
-  return summary.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 80) || "verification_issue"
+  return (
+    summary
+      .toLowerCase()
+      .replace(/[^a-z0-9]+/g, "_")
+      .replace(/^_+|_+$/g, "")
+      .slice(0, 80) || "verification_issue"
+  )
 }
 
 export function inferSeverity(summary: string): VerifierIssueSeverity {
-  if (/FUNCTION LOSS|contradictory_completion_claim|unresolved_handoff_output|fatal/i.test(summary)) return VerifierIssueSeverity.Fatal
-  if (/fail|error|mismatch|missing|violation|corrupted|gibberish|syntax|rejected/i.test(summary)) return VerifierIssueSeverity.Error
+  if (/FUNCTION LOSS|contradictory_completion_claim|unresolved_handoff_output|fatal/i.test(summary))
+    return VerifierIssueSeverity.Fatal
+  if (/fail|error|mismatch|missing|violation|corrupted|gibberish|syntax|rejected/i.test(summary))
+    return VerifierIssueSeverity.Error
   return VerifierIssueSeverity.Warning
 }
 
 export function inferRepairClass(summary: string): VerifierRepairClass {
-  if (/Cross-file signature mismatch|Import\/export mismatch|Integration gap|Browser module mismatch|Style integration gap/i.test(summary)) return "integration_wiring"
-  if (/Browser check|runtime|Uncaught Exceptions|Console Errors|Network Failures/i.test(summary)) return "runtime_failure"
+  if (
+    /Cross-file signature mismatch|Import\/export mismatch|Integration gap|Browser module mismatch|Style integration gap/i.test(
+      summary
+    )
+  )
+    return "integration_wiring"
+  if (/Browser check|runtime|Uncaught Exceptions|Console Errors|Network Failures/i.test(summary))
+    return "runtime_failure"
   if (/Syntax error|Syntax validation failed/i.test(summary)) return "syntax_failure"
   if (/Placeholder|stub|trivial return|returns constant/i.test(summary)) return "placeholder_logic"
   if (/PATH MISMATCH|SCOPE VIOLATION/i.test(summary)) return "path_scope"
-  if (/SPEC FUNCTION MISMATCH|SPEC STRUCTURE MISMATCH|BLUEPRINT|contract/i.test(summary)) return "contract_drift"
-  if (/Integration gap|module mismatch|wiring|load|stylesheet rules/i.test(summary)) return "integration_wiring"
+  if (/SPEC FUNCTION MISMATCH|SPEC STRUCTURE MISMATCH|BLUEPRINT|contract/i.test(summary))
+    return "contract_drift"
+  if (/Integration gap|module mismatch|wiring|load|stylesheet rules/i.test(summary))
+    return "integration_wiring"
   if (/VERIFICATION MODALITY GAP|CRITERIA PROOF MISSING/i.test(summary)) return "verification_gap"
   return "owner_implementation"
 }
 
-export function inferIssueConfidence(source: VerificationEvidence["source"], summary: string, ownershipMode: VerifierOwnershipMode, suspectedOwners: readonly string[]): number {
+export function inferIssueConfidence(
+  source: VerificationEvidence["source"],
+  summary: string,
+  ownershipMode: VerifierOwnershipMode,
+  suspectedOwners: readonly string[]
+): number {
   const sourceBase = source === "contract" ? 0.95 : source === "deterministic" ? 0.85 : 0.65
-  const ambiguityPenalty = ownershipMode === "deterministic_owner" ? 0 : ownershipMode === "shared_owners" ? 0.12 : ownershipMode === "integration_layer" ? 0.18 : ownershipMode === "planner_fault" ? 0.15 : 0.22
+  const ambiguityPenalty =
+    ownershipMode === "deterministic_owner"
+      ? 0
+      : ownershipMode === "shared_owners"
+        ? 0.12
+        : ownershipMode === "integration_layer"
+          ? 0.18
+          : ownershipMode === "planner_fault"
+            ? 0.15
+            : 0.22
   const ownerPenalty = suspectedOwners.length <= 1 ? 0 : Math.min(0.2, (suspectedOwners.length - 1) * 0.07)
   const wordingPenalty = /maybe|appears|likely|suggests|possible/i.test(summary) ? 0.08 : 0
   return Math.max(0.2, Math.min(0.99, sourceBase - ambiguityPenalty - ownerPenalty - wordingPenalty))
 }
 
 export function isDependencyGateIssue(issue: VerifierIssue): boolean {
-  return issue.code.startsWith("waiting_on_accepted_upstream_artifacts")
-    || /^Waiting on accepted upstream artifacts:/i.test(issue.summary)
+  return (
+    issue.code.startsWith("waiting_on_accepted_upstream_artifacts") ||
+    /^Waiting on accepted upstream artifacts:/i.test(issue.summary)
+  )
 }
 
-export function buildEvidenceId(stepName: string, source: VerificationEvidence["source"], index: number, code: string): string {
+export function buildEvidenceId(
+  stepName: string,
+  source: VerificationEvidence["source"],
+  index: number,
+  code: string
+): string {
   return `${stepName}:${source}:${index}:${code}`
 }
 
 export function getSubagentStep(plan: Plan, stepName: string): SubagentTaskStep | undefined {
   const step = plan.steps.find((candidate) => candidate.name === stepName)
-  return step?.stepType === "subagent_task" ? step as SubagentTaskStep : undefined
+  return step?.stepType === "subagent_task" ? (step as SubagentTaskStep) : undefined
 }
 
 export function isBlueprintLikeStep(step: SubagentTaskStep | undefined): boolean {
   if (!step) return false
-  return /blueprint/i.test(step.name)
-    || step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  return (
+    /blueprint/i.test(step.name) ||
+    step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
+  )
 }
 
 export function getArchitectureRepairContext(plan: Plan): {
@@ -109,7 +148,7 @@ export function getArchitectureRepairContext(plan: Plan): {
     preserveArchitecture: true,
     architectureSummary: plan.coherentBootstrap.architecture,
     sharedContracts: plan.coherentBootstrap.sharedContracts,
-    invariants: plan.coherentBootstrap.invariants,
+    invariants: plan.coherentBootstrap.invariants
   }
 }
 
@@ -133,18 +172,30 @@ export function deriveOwnershipAttribution(
   assessmentStepName: string,
   affectedArtifacts: readonly string[],
   sourceArtifacts: readonly string[],
-  summary: string,
-): { ownerStepName: string; suspectedOwners: string[]; primaryOwner?: string; ownershipMode: VerifierOwnershipMode; confidence: number } {
+  summary: string
+): {
+  ownerStepName: string
+  suspectedOwners: string[]
+  primaryOwner?: string
+  ownershipMode: VerifierOwnershipMode
+  confidence: number
+} {
   const runtime = compilePlannerRuntime(plan)
   const assessmentStep = getSubagentStep(plan, assessmentStepName)
   const candidateArtifacts = uniqueStrings([...affectedArtifacts, ...sourceArtifacts].map(normalizePath))
-  const candidateOwners = uniqueStrings(candidateArtifacts
-    .map((artifact) => runtime.ownershipGraph.get(artifact)?.ownerStepName ?? undefined)
-    .filter((owner): owner is string => Boolean(owner)))
+  const candidateOwners = uniqueStrings(
+    candidateArtifacts
+      .map((artifact) => runtime.ownershipGraph.get(artifact)?.ownerStepName ?? undefined)
+      .filter((owner): owner is string => Boolean(owner))
+  )
 
-  const mentionsPlanner = /blueprint|plan|planner/i.test(summary) && /drift|missing|mapping|coverage|contract|weak/i.test(summary)
+  const mentionsPlanner =
+    /blueprint|plan|planner/i.test(summary) && /drift|missing|mapping|coverage|contract|weak/i.test(summary)
   const blueprintContractIssue = /^BLUEPRINT\b/i.test(summary)
-  const isIntegration = /Cross-file signature mismatch|Import\/export mismatch|Integration gap|Browser module mismatch|Style integration gap/i.test(summary)
+  const isIntegration =
+    /Cross-file signature mismatch|Import\/export mismatch|Integration gap|Browser module mismatch|Style integration gap/i.test(
+      summary
+    )
 
   let ownershipMode: VerifierOwnershipMode
   let suspectedOwners: string[]
@@ -183,6 +234,6 @@ export function deriveOwnershipAttribution(
     suspectedOwners,
     primaryOwner,
     ownershipMode,
-    confidence,
+    confidence
   }
 }

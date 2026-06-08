@@ -6,16 +6,16 @@
  */
 
 import {
-    getCatalog,
-    getCatalogPromptSummary,
-    getDefaultMssqlConnectionName,
-    getMssqlConfig,
-    getTenantConfig,
-    listExpensiveUnionViews,
-    topNTables,
-    topNUnionViews,
-    type AgentHost,
-    type Tool,
+  getCatalog,
+  getCatalogPromptSummary,
+  getDefaultMssqlConnectionName,
+  getMssqlConfig,
+  getTenantConfig,
+  listExpensiveUnionViews,
+  topNTables,
+  topNUnionViews,
+  type AgentHost,
+  type Tool
 } from "@mia/agent"
 import { arch, homedir, platform } from "node:os"
 
@@ -24,7 +24,7 @@ import { arch, homedir, platform } from "node:os"
 const OS_LABELS: Record<string, string> = {
   darwin: "macOS",
   linux: "Linux",
-  win32: "Windows",
+  win32: "Windows"
 }
 
 export function buildEnvironmentContext(opts?: { isAdmin?: boolean }): string {
@@ -37,7 +37,7 @@ export function buildEnvironmentContext(opts?: { isAdmin?: boolean }): string {
     `  Shell: ${shell}`,
     // Home directory is the real server path — only expose to admin.
     ...(isAdmin ? [`  Home: ${homedir()}`] : []),
-    `  Node: ${process.version}`,
+    `  Node: ${process.version}`
   ]
   if (platform() === "darwin") {
     lines.push("  Note: macOS uses BSD coreutils (e.g. sed -i '' not sed -i, no GNU extensions by default).")
@@ -61,9 +61,10 @@ export function buildEnvironmentContext(opts?: { isAdmin?: boolean }): string {
 function extractKnowledgeHeader(body: string): string {
   const HEADER_BYTE_CAP = 700
   const firstPara = body.split(/\n\s*\n/, 1)[0]?.trim() ?? ""
-  const truncated = firstPara.length > HEADER_BYTE_CAP
-    ? firstPara.slice(0, HEADER_BYTE_CAP).replace(/\s+\S*$/, "") + "\u2026"
-    : firstPara
+  const truncated =
+    firstPara.length > HEADER_BYTE_CAP
+      ? firstPara.slice(0, HEADER_BYTE_CAP).replace(/\s+\S*$/, "") + "\u2026"
+      : firstPara
   return `${truncated}\n[full knowledge body omitted — call search_catalog / inspect_definition / explore_mssql_schema for specifics]`
 }
 
@@ -94,11 +95,11 @@ export interface BuildToolContextOptions {
    *  - "header" — first paragraph + namespace summary + discovery-tools hint
    *               (~600B). Used for borderline DB-intent goals.
    */
-  mssqlKnowledgeMode?:    "full" | "header"
+  mssqlKnowledgeMode?: "full" | "header"
   /** Include the live schema-catalog summary (medium). */
-  includeMssqlCatalog?:   boolean
+  includeMssqlCatalog?: boolean
   /** Include the verbose "RULES / EFFICIENCY ANALYSIS" guidance (large). */
-  includeMssqlGuidance?:  boolean
+  includeMssqlGuidance?: boolean
 }
 
 /**
@@ -108,18 +109,18 @@ export interface BuildToolContextOptions {
  * language. Cheap to recompute per prompt build.
  */
 interface CatalogExamples {
-  exampleWideView:     string
-  schemaList:          string
-  dbSizeHint:          string
-  mirrorAdvice:        string
+  exampleWideView: string
+  schemaList: string
+  dbSizeHint: string
+  mirrorAdvice: string
   mirrorInspectAdvice: string
-  dimensionAdvice:     string
+  dimensionAdvice: string
 }
 
 function catalogExamples(host?: AgentHost): CatalogExamples {
   const defaultConn = host ? (getDefaultMssqlConnectionName(host) ?? "default") : "default"
   const catalog = host ? getCatalog(host, defaultConn) : null
-  const tenant  = getTenantConfig()
+  const tenant = getTenantConfig()
 
   // Best wide-union view to use as a worked lineage example.
   let exampleWideView = "<wide-union-view>"
@@ -162,7 +163,8 @@ function catalogExamples(host?: AgentHost): CatalogExamples {
 
   // Pick the two largest dimension-style tables (heuristic: rowCount-ranked
   // tables in schemas with negative routing weight or named like dim/lookup).
-  let dimensionAdvice = "  • Before any JOIN to a high-cardinality dimension: confirm cardinality with profile_data first."
+  let dimensionAdvice =
+    "  • Before any JOIN to a high-cardinality dimension: confirm cardinality with profile_data first."
   if (catalog) {
     const top = topNTables(10, { accessor: () => catalog })
     const dims = top.filter((t) => /^(dim|lookup|ref|master)/i.test(t.schema)).slice(0, 2)
@@ -178,9 +180,9 @@ function catalogExamples(host?: AgentHost): CatalogExamples {
 
 export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions): string {
   const includeMssqlKnowledge = opts?.includeMssqlKnowledge ?? true
-  const mssqlKnowledgeMode    = opts?.mssqlKnowledgeMode    ?? "full"
-  const includeMssqlCatalog   = opts?.includeMssqlCatalog   ?? true
-  const includeMssqlGuidance  = opts?.includeMssqlGuidance  ?? true
+  const mssqlKnowledgeMode = opts?.mssqlKnowledgeMode ?? "full"
+  const includeMssqlCatalog = opts?.includeMssqlCatalog ?? true
+  const includeMssqlGuidance = opts?.includeMssqlGuidance ?? true
 
   // Catalog-derived example placeholders so guidance text never names a
   // customer-specific table. All placeholders fall back to generic shape
@@ -188,37 +190,42 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
   const ex = catalogExamples(opts?.host)
   const sections: string[] = []
 
-  const hasMssql = tools.some((t) =>
-    t.name === "query_mssql" || t.name === "explore_mssql_schema" ||
-    t.name === "discover_relationships" || t.name === "profile_data" ||
-    t.name === "inspect_definition" || t.name === "search_catalog",
+  const hasMssql = tools.some(
+    (t) =>
+      t.name === "query_mssql" ||
+      t.name === "explore_mssql_schema" ||
+      t.name === "discover_relationships" ||
+      t.name === "profile_data" ||
+      t.name === "inspect_definition" ||
+      t.name === "search_catalog"
   )
   if (hasMssql) {
     const cfgs = opts?.host ? getMssqlConfig(opts.host) : []
     if (cfgs.length > 0) {
-      const dbList = cfgs.map((c) => {
-        const mode = c.writeEnabled ? "read-write" : "read-only"
-        return cfgs.length === 1
-          ? `${mode} access to ${c.server}/${c.database}`
-          : `"${c.name}" (${c.server}/${c.database}, ${mode})`
-      }).join("; ")
+      const dbList = cfgs
+        .map((c) => {
+          const mode = c.writeEnabled ? "read-write" : "read-only"
+          return cfgs.length === 1
+            ? `${mode} access to ${c.server}/${c.database}`
+            : `"${c.name}" (${c.server}/${c.database}, ${mode})`
+        })
+        .join("; ")
       sections.push(`Database: You have access to Microsoft SQL Server — ${dbList}.`)
 
       // In multi-connection mode, tell the agent which connection is "home"
       // so it never has to guess. The default is used for all DB queries unless
       // the task explicitly requires a different environment (e.g. sync operations).
       if (cfgs.length > 1) {
-        const defaultConnName = (opts?.host ? getDefaultMssqlConnectionName(opts.host) : null)
-          ?? cfgs[0].name  // mirrors getPool() fallback
+        const defaultConnName = (opts?.host ? getDefaultMssqlConnectionName(opts.host) : null) ?? cfgs[0].name // mirrors getPool() fallback
         sections.push(
           `Default connection: "${defaultConnName}" — use this for all regular database queries.`,
           `DO NOT pass environment names (${cfgs.map((c) => `"${c.name}"`).join(", ")}) as the "database" parameter — that runs USE [name] as SQL and will fail.`,
-          `To target a different server, pass connection='name' (not database='name').`,
+          `To target a different server, pass connection='name' (not database='name').`
         )
       }
     } else {
       sections.push(
-        "Database: You have access to a Microsoft SQL Server database via the query_mssql and explore_mssql_schema tools.",
+        "Database: You have access to a Microsoft SQL Server database via the query_mssql and explore_mssql_schema tools."
       )
     }
 
@@ -235,7 +242,7 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
     // oriented (it learns the schema namespaces exist) without paying
     // 5-15 KB per call for goals that only marginally touch the DB.
     if (includeMssqlKnowledge && cfgs.some((c) => c.knowledge)) {
-      const groups = new Map<string, string[]>()  // body → [env names]
+      const groups = new Map<string, string[]>() // body → [env names]
       for (const c of cfgs) {
         if (!c.knowledge) continue
         const arr = groups.get(c.knowledge) ?? []
@@ -244,18 +251,17 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
       }
       const knowledgeBlocks: string[] = []
       for (const [body, envs] of groups) {
-        const renderedBody = mssqlKnowledgeMode === "header"
-          ? extractKnowledgeHeader(body)
-          : body
+        const renderedBody = mssqlKnowledgeMode === "header" ? extractKnowledgeHeader(body) : body
         knowledgeBlocks.push(
           cfgs.length === 1 || (groups.size === 1 && envs.length === cfgs.length)
             ? renderedBody
-            : `[${envs.join(", ")}]\n${renderedBody}`,
+            : `[${envs.join(", ")}]\n${renderedBody}`
         )
       }
-      const header = mssqlKnowledgeMode === "header"
-        ? "DATABASE KNOWLEDGE (header only — goal looks marginally DB-shaped; full body omitted for prompt economy. Call search_catalog / explore_mssql_schema / inspect_definition for details):"
-        : "DATABASE KNOWLEDGE — use this to understand the database structure and write accurate queries:"
+      const header =
+        mssqlKnowledgeMode === "header"
+          ? "DATABASE KNOWLEDGE (header only — goal looks marginally DB-shaped; full body omitted for prompt economy. Call search_catalog / explore_mssql_schema / inspect_definition for details):"
+          : "DATABASE KNOWLEDGE — use this to understand the database structure and write accurate queries:"
       sections.push("", header, ...knowledgeBlocks)
     }
 
@@ -308,7 +314,7 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
         "      'Largest tables' in stats output = physical tables, not views. Ignore for this task.",
         "  • COUNTING duplicate joins across many objects (e.g. 'how many of N datasets have duplicate joins?'):",
         "      PREFERRED — let the tool source the names itself in ONE call:",
-        "        inspect_definition(scan_duplicates=true, names_query=\"SELECT name FROM <metadata.Table>\")",
+        '        inspect_definition(scan_duplicates=true, names_query="SELECT name FROM <metadata.Table>")',
         "      Alternatives: names='schema.A,schema.B,...' (when you already have a small list),",
         "      or schema='X' (ONLY when the user truly means 'objects defined in schema X').",
         "      WARNING — scope mismatch is the #1 failure mode here:",
@@ -324,11 +330,11 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
         "",
         "DATA DISPLAY: For any report/data-display task, query_mssql for rows, then write_file a STATIC HTML — no server/API layer.",
         "",
-        "EXPORTING LARGE LISTS — when the user asks for ALL rows of something (e.g. \"give me all 4000 dataset names\", \"export the table\", \"save the results\"):",
+        'EXPORTING LARGE LISTS — when the user asks for ALL rows of something (e.g. "give me all 4000 dataset names", "export the table", "save the results"):',
         "  • Use export_query_to_file(query='SELECT ...', path='datasets.csv') — it streams the FULL result set to disk and returns only a 20-row preview.",
         "  • Do NOT use query_mssql + write_file for this purpose. The model will only retype ~20 rows and the file will be truncated.",
         "  • In your reply, acknowledge the file path + total row count, and quote the 20-row preview the tool returned. The user gets the full data via the file.",
-        "  • Pick the file extension from intent: .csv for tabular, .txt for a single-column list, .jsonl for streaming JSON.",
+        "  • Pick the file extension from intent: .csv for tabular, .txt for a single-column list, .jsonl for streaming JSON."
       )
     }
   }
@@ -379,7 +385,7 @@ export function buildMemoryGuidance(): string {
     "    It does NOT mean the 'fact' schema. 'fact schema' and 'datasets' are different things.",
     "    Example: 'duplicate joins in datasets in fact schema' = look in core.vDataset filtered to fact schema rows.",
     "    Example: 'how many datasets have duplicate joins?' = ONE call:",
-    "      inspect_definition(scan_duplicates=true, names_query=\"SELECT name FROM core.Dataset\")",
+    '      inspect_definition(scan_duplicates=true, names_query="SELECT name FROM core.Dataset")',
     "      The tool runs the SELECT internally and scans every returned name.",
     "      Do NOT use schema='core' here — that scans only the 39 metadata-schema views,",
     "      not the 4262 dataset entries (which span many schemas).",
@@ -392,7 +398,7 @@ export function buildMemoryGuidance(): string {
     "    qualified name (e.g. '<schema>.<Table>.<Column>') and claim = the",
     "    fact in one sentence. These notes are saved to working memory and",
     "    retrieved into your next turn, so you don't re-discover the same fact.",
-    "    Call `note` ONCE per discovery — duplicates are dropped automatically.",
+    "    Call `note` ONCE per discovery — duplicates are dropped automatically."
   ].join("\n")
 }
 
@@ -404,12 +410,26 @@ export async function getWorkspaceContext(workspace: string): Promise<string> {
     const { execFile } = await import("node:child_process")
     const { promisify } = await import("node:util")
     const exec = promisify(execFile)
-    const { stdout } = await exec("find", [
-      ".", "-maxdepth", "3", "-type", "d",
-      "-not", "-path", "*/node_modules/*",
-      "-not", "-path", "*/.git/*",
-      "-not", "-path", "*/dist/*",
-    ], { cwd: workspace, timeout: 5000 })
+    const { stdout } = await exec(
+      "find",
+      [
+        ".",
+        "-maxdepth",
+        "3",
+        "-type",
+        "d",
+        "-not",
+        "-path",
+        "*/node_modules/*",
+        "-not",
+        "-path",
+        "*/.git/*",
+        "-not",
+        "-path",
+        "*/dist/*"
+      ],
+      { cwd: workspace, timeout: 5000 }
+    )
     const dirs = stdout.trim().split("\n").filter(Boolean).slice(0, 60)
     return `Structure:\n${dirs.join("\n")}`
   } catch {
@@ -427,7 +447,7 @@ export async function getWorkspaceContext(workspace: string): Promise<string> {
  * are correlatable, but the absolute parent path is not exposed.
  */
 export function buildHostedRuntimeContext(opts: {
-  sandboxRoot:           string
+  sandboxRoot: string
   defaultDbEnvironment?: "dev" | "uat" | "prod"
 }): string {
   const os = OS_LABELS[platform()] ?? platform()
@@ -439,14 +459,14 @@ export function buildHostedRuntimeContext(opts: {
     `  Sandbox shell: ${shell}`,
     `  Sandbox root:  sandbox://${sandboxName}/   (private; outside the app source tree)`,
     "  Filesystem:    file tools see only the sandbox; references to a real app workspace are not available.",
-    "  Network:       outbound HTTP requires explicit approval; MSSQL access is via dedicated tools.",
+    "  Network:       outbound HTTP requires explicit approval; MSSQL access is via dedicated tools."
   ]
   if (opts.defaultDbEnvironment) {
     lines.push(`  DB default:    ${opts.defaultDbEnvironment.toUpperCase()} environment.`)
   }
   lines.push(
     "  DB defaults:   UAT and PROD are read-only; DML/DDL is blocked unless explicitly configured.",
-    "  Output:        files written inside the sandbox can be promoted to the user via the dedicated promotion flow.",
+    "  Output:        files written inside the sandbox can be promoted to the user via the dedicated promotion flow."
   )
   return lines.join("\n")
 }

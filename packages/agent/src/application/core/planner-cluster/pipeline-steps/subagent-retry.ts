@@ -7,9 +7,9 @@
  */
 
 import {
-    buildBlueprintRetryGuidance,
-    isBlueprintLikeStep,
-    type SubagentStepValidationContext,
+  buildBlueprintRetryGuidance,
+  isBlueprintLikeStep,
+  type SubagentStepValidationContext
 } from "../internal/pipeline-repair.js"
 import { validateSubagentCompletion } from "../pipeline-validation/index.js"
 import type { DelegateFn } from "../pipeline/index.js"
@@ -23,13 +23,12 @@ export interface MandatoryRetryInput {
   readonly t0: number
 }
 
-export async function runSubagentMandatoryRetry(
-  input: MandatoryRetryInput,
-): Promise<PipelineStepResult> {
+export async function runSubagentMandatoryRetry(input: MandatoryRetryInput): Promise<PipelineStepResult> {
   const { step, originalFailureMessage, delegateFn, validationCtx, t0 } = input
-  const blueprintRepairBlock = validationCtx && isBlueprintLikeStep(step)
-    ? `\n\n[MANDATORY RETRY — BLUEPRINT CONTRACT REPAIR]\n${buildBlueprintRetryGuidance(step, validationCtx.plan, [originalFailureMessage])}`
-    : ""
+  const blueprintRepairBlock =
+    validationCtx && isBlueprintLikeStep(step)
+      ? `\n\n[MANDATORY RETRY — BLUEPRINT CONTRACT REPAIR]\n${buildBlueprintRetryGuidance(step, validationCtx.plan, [originalFailureMessage])}`
+      : ""
 
   const retryStep: SubagentTaskStep = {
     ...step,
@@ -39,7 +38,7 @@ export async function runSubagentMandatoryRetry(
       `You must create or modify the target artifacts in this attempt.\n` +
       `Use write_file (or replace_in_file after reading the existing file) on the exact target paths.\n` +
       `Do not stop at analysis or narrative summary. Produce real file mutations before finishing.` +
-      blueprintRepairBlock,
+      blueprintRepairBlock
   }
 
   const retryResult = await delegateFn(retryStep, retryStep.executionContext)
@@ -49,7 +48,15 @@ export async function runSubagentMandatoryRetry(
 
   if (retryOutput.startsWith("Delegation failed:")) {
     const isSpawnError = retryOutput.includes("not found") || retryOutput.includes("spawn")
-    return failed(step, retryOutput, isSpawnError ? "spawn_error" : "unknown", "rejected", t0, retryCalls, childExec)
+    return failed(
+      step,
+      retryOutput,
+      isSpawnError ? "spawn_error" : "unknown",
+      "rejected",
+      t0,
+      retryCalls,
+      childExec
+    )
   }
   if (retryOutput.includes("DELEGATION INCOMPLETE")) {
     return failed(step, retryOutput, "budget_exceeded", "repair_required", t0, retryCalls, childExec)
@@ -58,12 +65,7 @@ export async function runSubagentMandatoryRetry(
     return failed(step, retryOutput, "tool_misuse", "repair_required", t0, retryCalls, childExec)
   }
 
-  const retryStrictFailure = await validateSubagentCompletion(
-    step,
-    retryOutput,
-    retryCalls,
-    validationCtx,
-  )
+  const retryStrictFailure = await validateSubagentCompletion(step, retryOutput, retryCalls, validationCtx)
   if (!retryStrictFailure) {
     return {
       name: step.name,
@@ -76,7 +78,7 @@ export async function runSubagentMandatoryRetry(
       childResult: childExec,
       producedArtifacts: childExec?.producedArtifacts,
       modifiedArtifacts: childExec?.modifiedArtifacts,
-      verificationAttempts: childExec?.verificationAttempts,
+      verificationAttempts: childExec?.verificationAttempts
     }
   }
 
@@ -86,14 +88,17 @@ export async function runSubagentMandatoryRetry(
     executionState: "failed",
     acceptanceState: "repair_required",
     error: retryStrictFailure.message,
-    failureClass: isBlueprintLikeStep(step) && /BLUEPRINT/i.test(retryStrictFailure.message) ? "blueprint_contract" : "unknown",
+    failureClass:
+      isBlueprintLikeStep(step) && /BLUEPRINT/i.test(retryStrictFailure.message)
+        ? "blueprint_contract"
+        : "unknown",
     durationMs: Date.now() - t0,
     toolCalls: retryCalls,
     childResult: childExec,
     producedArtifacts: childExec?.producedArtifacts,
     modifiedArtifacts: childExec?.modifiedArtifacts,
     verificationAttempts: childExec?.verificationAttempts,
-    validationCode: retryStrictFailure.code,
+    validationCode: retryStrictFailure.code
   }
 }
 
@@ -104,7 +109,7 @@ function failed(
   acceptanceState: PipelineStepResult["acceptanceState"],
   t0: number,
   toolCalls: PipelineStepResult["toolCalls"],
-  childExec: PipelineStepResult["childResult"],
+  childExec: PipelineStepResult["childResult"]
 ): PipelineStepResult {
   return {
     name: step.name,
@@ -118,6 +123,6 @@ function failed(
     childResult: childExec,
     producedArtifacts: childExec?.producedArtifacts,
     modifiedArtifacts: childExec?.modifiedArtifacts,
-    verificationAttempts: childExec?.verificationAttempts,
+    verificationAttempts: childExec?.verificationAttempts
   }
 }

@@ -28,18 +28,10 @@
  */
 
 import { DiscoverySource, SyncRecipeDiscrepancyKind } from "../enums.js"
-import type {
-    SyncRecipe,
-    SyncRecipeTable,
-} from "../recipes.js"
+import type { SyncRecipe, SyncRecipeTable } from "../recipes.js"
 import { orderEntityTables } from "./order.js"
 import { resolveEffectiveScd2 } from "./strategy-resolver.js"
-import type {
-    EffectiveScd2,
-    EntityDefinition,
-    EntityTable,
-    Scd2Strategy,
-} from "./types.js"
+import type { EffectiveScd2, EntityDefinition, EntityTable, Scd2Strategy } from "./types.js"
 
 /**
  * A `SyncRecipe` extended with the per-table effective SCD2 snapshot.
@@ -89,29 +81,28 @@ export function projectRecipe(args: {
   const orderedNames = tables.map((t) => t.name)
 
   return {
-    entityType:      def.id,
-    displayName:     def.displayName,
-    rootTable:       def.rootTable,
-    rootKeyColumn:   def.idColumn,
-    rootNameColumn:  def.labelColumn,
-    legacyPipelineId:
-      def.provenance.kind === "legacy-migration" ? def.provenance.legacyPipelineId : null,
-    selfJoinColumn:  hasSelfJoin ? def.selfJoinColumn : null,
+    entityType: def.id,
+    displayName: def.displayName,
+    rootTable: def.rootTable,
+    rootKeyColumn: def.idColumn,
+    rootNameColumn: def.labelColumn,
+    legacyPipelineId: def.provenance.kind === "legacy-migration" ? def.provenance.legacyPipelineId : null,
+    selfJoinColumn: hasSelfJoin ? def.selfJoinColumn : null,
     tables,
-    executionOrder:  orderedNames,
-    reverseOrder:    [...orderedNames].reverse(),
+    executionOrder: orderedNames,
+    reverseOrder: [...orderedNames].reverse(),
     postMetadataActions: [],
     archiveTables,
-    discrepancies:   collectDiscrepancies(sortedTables),
+    discrepancies: collectDiscrepancies(sortedTables),
     generatedAt,
     effectiveScd2,
     projectedFrom: {
-      tenantId:        def.tenantId,
-      entityId:        def.id,
-      entityVersion:   def.version,
-      strategyId:      strategy.id,
-      strategyVersion: strategy.version,
-    },
+      tenantId: def.tenantId,
+      entityId: def.id,
+      entityVersion: def.version,
+      strategyId: strategy.id,
+      strategyVersion: strategy.version
+    }
   }
 }
 
@@ -124,15 +115,15 @@ function projectTable(t: EntityTable, rootIdColumn: string, hasSelfJoin: boolean
   // `verified` flag tracks human review independently.
   const source = DiscoverySource.FkAndPipeline
   return {
-    name:               t.name,
+    name: t.name,
     scopeColumn,
     predicate,
     source,
-    verified:           t.verified,
+    verified: t.verified,
     groundedByPipeline: true,
-    enabledByDefault:   true,
-    userControllable:   false,
-    note:               t.note ?? undefined,
+    enabledByDefault: true,
+    userControllable: false,
+    note: t.note ?? undefined
   }
 }
 
@@ -164,17 +155,21 @@ function projectPredicate(t: EntityTable, rootIdColumn: string, hasSelfJoin: boo
         } else {
           const prev = aliases[i - 1]!
           const prevHop = through[i - 1]!
-          joins.push(`JOIN ${hop.table} AS ${alias} ON ${alias}.${quoteIdentifier(hop.toColumn)} = ${prev}.${quoteIdentifier(prevHop.fromColumn)}`)
+          joins.push(
+            `JOIN ${hop.table} AS ${alias} ON ${alias}.${quoteIdentifier(hop.toColumn)} = ${prev}.${quoteIdentifier(prevHop.fromColumn)}`
+          )
         }
       }
       const firstHop = through[0]!
-      const lastHop  = through[through.length - 1]!
+      const lastHop = through[through.length - 1]!
       const lastAlias = aliases[aliases.length - 1]!
       const op = hasSelfJoin ? " IN ({ids})" : " = {id}"
-      return `EXISTS (SELECT 1 ${joins.join(" ")} WHERE ${aliases[0]!}.${quoteIdentifier(firstHop.toColumn)} = ${quoteRootRef(t.name, firstHop.toColumn)} AND ${lastAlias}.${quoteIdentifier(lastHop.fromColumn)}${op})`
+      return (
+        `EXISTS (SELECT 1 ${joins.join(" ")} WHERE ${aliases[0]!}.${quoteIdentifier(firstHop.toColumn)} = ${quoteRootRef(t.name, firstHop.toColumn)} AND ${lastAlias}.${quoteIdentifier(lastHop.fromColumn)}${op})` +
         // Reference rootIdColumn defensively to satisfy lint-arch "unused";
         // not part of the SQL when fkPath is in play.
-        + (rootIdColumn === "" ? "" : "")
+        (rootIdColumn === "" ? "" : "")
+      )
     }
     case "sql":
       return t.scope.predicate
@@ -213,7 +208,7 @@ function collectDiscrepancies(tables: readonly EntityTable[]): SyncRecipe["discr
       out.push({
         table: t.name,
         kind: SyncRecipeDiscrepancyKind.Implicit,
-        note: t.note ?? "unverified entity-registry row; review against ground truth",
+        note: t.note ?? "unverified entity-registry row; review against ground truth"
       })
     }
   }

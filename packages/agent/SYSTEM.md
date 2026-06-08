@@ -43,7 +43,7 @@ const host = configureAgent({
   browserHandoffStore,
   attachmentStore,
   shellClient,
-  browserClient,
+  browserClient
 })
 ```
 

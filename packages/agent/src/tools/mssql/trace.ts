@@ -18,17 +18,20 @@ function currentDoctrineVersions(): Record<string, string> {
   return out
 }
 
-export function emitMssqlQualityTrace(input: {
-  toolMode: "query" | "export"
-  phase: "blocked" | "executed" | "failed"
-  query: string
-  connection: string
-  database?: string | null
-  validation: QueryValidationDiagnostics
-  durationMs?: number
-  rowCount?: number
-  error?: string
-}, trace: ToolTraceContext | null = null): void {
+export function emitMssqlQualityTrace(
+  input: {
+    toolMode: "query" | "export"
+    phase: "blocked" | "executed" | "failed"
+    query: string
+    connection: string
+    database?: string | null
+    validation: QueryValidationDiagnostics
+    durationMs?: number
+    rowCount?: number
+    error?: string
+  },
+  trace: ToolTraceContext | null = null
+): void {
   emitToolTrace(trace, {
     kind: PlannerTraceKind.SqlQuality,
     toolMode: input.toolMode,
@@ -56,6 +59,6 @@ export function emitMssqlQualityTrace(input: {
     error: input.error ?? null,
     sqlPreview: previewSql(input.query),
     sqlLength: input.query.length,
-    doctrineVersions: currentDoctrineVersions(),
+    doctrineVersions: currentDoctrineVersions()
   })
 }

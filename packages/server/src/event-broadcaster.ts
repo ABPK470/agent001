@@ -63,23 +63,27 @@ export class EventBroadcaster {
   addSseClient(sink: SseSink, identity: WsClientIdentity): () => void {
     const key = Symbol()
     this.sseClients.set(key, { sink, identity })
-    const dispose = () => { this.sseClients.delete(key) }
+    const dispose = () => {
+      this.sseClients.delete(key)
+    }
     sink.on("close", dispose)
     sink.on("error", dispose)
     // Initial padding + hello event
     sink.write(`: connected\n\n`)
-    sink.write(`data: ${JSON.stringify({
-      type: EventType.EventsConnected,
-      data: { version: "0.1.0", clients: this.clientCount() },
-      timestamp: new Date().toISOString(),
-    })}\n\n`)
+    sink.write(
+      `data: ${JSON.stringify({
+        type: EventType.EventsConnected,
+        data: { version: "0.1.0", clients: this.clientCount() },
+        timestamp: new Date().toISOString()
+      })}\n\n`
+    )
     return dispose
   }
 
   broadcast(event: Omit<SseEvent, "timestamp">): void {
     const msg: SseEvent = {
       ...event,
-      timestamp: new Date().toISOString(),
+      timestamp: new Date().toISOString()
     }
     const json = JSON.stringify(msg)
     const sseFrame = `data: ${json}\n\n`
@@ -91,7 +95,8 @@ export class EventBroadcaster {
 
     const allowed = (identity: WsClientIdentity): boolean => {
       if (!owner) return true
-      const matchesUpn = !!identity.upn && !!owner.upn && identity.upn.toLowerCase() === owner.upn.toLowerCase()
+      const matchesUpn =
+        !!identity.upn && !!owner.upn && identity.upn.toLowerCase() === owner.upn.toLowerCase()
       // Sid match was previously gated on `!identity.upn`. That gate caused
       // the chat-stuck-on-Thinking bug: a client whose SSE socket was opened
       // pre-welcome (identity.upn=null) and later got a new cookie (new sid
@@ -105,7 +110,11 @@ export class EventBroadcaster {
 
     for (const [, { sink, identity }] of this.sseClients) {
       if (allowed(identity)) {
-        try { sink.write(sseFrame) } catch { /* dropped client; close handler cleans up */ }
+        try {
+          sink.write(sseFrame)
+        } catch {
+          /* dropped client; close handler cleans up */
+        }
       }
     }
 
@@ -118,14 +127,20 @@ export class EventBroadcaster {
     ) {
       try {
         saveEvent(msg.type, msg.data, msg.timestamp)
-      } catch { /* don't break broadcast if DB write fails */ }
+      } catch {
+        /* don't break broadcast if DB write fails */
+      }
     }
 
     // Push to webhook drains (fire-and-forget, async)
     this.pushToWebhooks(msg, json).catch(() => {})
     // Notify internal subscribers
     for (const fn of this.subscribers) {
-      try { fn(msg) } catch { /* ignore */ }
+      try {
+        fn(msg)
+      } catch {
+        /* ignore */
+      }
     }
   }
 
@@ -164,7 +179,9 @@ export class EventBroadcaster {
 
       const filters: string[] = JSON.parse(drain.event_filters || "[]")
       if (filters.length > 0) {
-        const matches = filters.some((f) => event.type === f || event.type.startsWith(f + ".") || event.type.startsWith(f))
+        const matches = filters.some(
+          (f) => event.type === f || event.type.startsWith(f + ".") || event.type.startsWith(f)
+        )
         if (!matches) continue
       }
 
@@ -180,7 +197,7 @@ export class EventBroadcaster {
         method: "POST",
         headers,
         body: json,
-        signal: AbortSignal.timeout(5000),
+        signal: AbortSignal.timeout(5000)
       }).catch(() => {})
     }
   }
@@ -230,7 +247,7 @@ export function subscribeToEvents(fn: (event: SseEvent) => void): () => void {
 export function broadcastTrace(runId: string, seq: number, entry: TraceEntry): void {
   _default.broadcast({
     type: EventType.DebugTrace,
-    data: { runId, seq, entry },
+    data: { runId, seq, entry }
   })
 }
 
@@ -249,10 +266,10 @@ export function broadcastTrace(runId: string, seq: number, entry: TraceEntry): v
 export function broadcastTraceLoose(
   runId: string,
   seq: number,
-  entry: { kind: string } & Record<string, unknown>,
+  entry: { kind: string } & Record<string, unknown>
 ): void {
   _default.broadcast({
     type: EventType.DebugTrace,
-    data: { runId, seq, entry: entry as unknown as TraceEntry },
+    data: { runId, seq, entry: entry as unknown as TraceEntry }
   })
 }

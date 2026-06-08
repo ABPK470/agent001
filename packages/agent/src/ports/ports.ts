@@ -13,11 +13,7 @@ export interface ShellExecResult {
   sandboxed: boolean
 }
 
-export type ShellClient = (
-  command: string,
-  cwd: string,
-  signal?: AbortSignal,
-) => Promise<ShellExecResult>
+export type ShellClient = (command: string, cwd: string, signal?: AbortSignal) => Promise<ShellExecResult>
 
 export interface BrowserCheckRunResult {
   report: string
@@ -28,7 +24,7 @@ export type BrowserClient = (
   htmlPath: string,
   clicks: string[],
   waitMs: number,
-  cwd: string,
+  cwd: string
 ) => Promise<BrowserCheckRunResult>
 
 // ── Browser context / credential / handoff ───────────────────────
@@ -75,25 +71,21 @@ export interface HandoffStore {
 
 // ── Ask-user (UI prompt channel) ─────────────────────────────────
 
-export type UserInputReader = (
-  question: string,
-  options?: string[],
-  sensitive?: boolean,
-) => Promise<string>
+export type UserInputReader = (question: string, options?: string[], sensitive?: boolean) => Promise<string>
 
 // ── Attachments ──────────────────────────────────────────────────
 
 export interface AttachmentMetadata {
-  id:             string
-  scope:          AttachmentScope
-  originalName:   string
+  id: string
+  scope: AttachmentScope
+  originalName: string
   normalizedName: string
-  mediaType:      string
-  sizeBytes:      number
-  contentHash:    string
-  ingestionMode:  IngestionMode
-  uploadedAt:     string
-  purposeTag:     string | null
+  mediaType: string
+  sizeBytes: number
+  contentHash: string
+  ingestionMode: IngestionMode
+  uploadedAt: string
+  purposeTag: string | null
 }
 
 export interface AttachmentStore {
@@ -103,7 +95,10 @@ export interface AttachmentStore {
     q?: string
   }): Promise<AttachmentMetadata[]>
   get(id: string): Promise<AttachmentMetadata | null>
-  read(id: string, opts?: { maxBytes?: number; offset?: number }): Promise<{
+  read(
+    id: string,
+    opts?: { maxBytes?: number; offset?: number }
+  ): Promise<{
     kind: "text" | "binary"
     text?: string
     bytes?: Uint8Array
@@ -112,14 +107,20 @@ export interface AttachmentStore {
     offset: number
     nextOffset: number | null
   }>
-  importToSandbox(id: string, sandboxRelPath: string): Promise<{
+  importToSandbox(
+    id: string,
+    sandboxRelPath: string
+  ): Promise<{
     sandboxPath: string
     sizeBytes: number
   }>
-  promoteFromSandbox(sandboxRelPath: string, opts?: {
-    mediaType?: string
-    purposeTag?: string | null
-  }): Promise<AttachmentMetadata>
+  promoteFromSandbox(
+    sandboxRelPath: string,
+    opts?: {
+      mediaType?: string
+      purposeTag?: string | null
+    }
+  ): Promise<AttachmentMetadata>
 }
 
 // ── Tool-knowledge cache (semantic memo for heavy MSSQL tools) ───
@@ -168,17 +169,19 @@ export interface ToolKnowledgeSaveArgs {
 export interface ToolKnowledgeStore {
   lookup(args: ToolKnowledgeLookupArgs): ToolKnowledgeHit | ToolKnowledgeMiss
   save(args: ToolKnowledgeSaveArgs): void
-  renderHeader(hit: ToolKnowledgeHit, opts: {
-    qname: string
-    tool: ToolKnowledgeCachedTool
-    mode?: string
-  }): string
+  renderHeader(
+    hit: ToolKnowledgeHit,
+    opts: {
+      qname: string
+      tool: ToolKnowledgeCachedTool
+      mode?: string
+    }
+  ): string
 }
 
 // ── Table verdicts (read-only durable role classifications) ──────
 
-export type TableVerdictRoleType =
-  | "canonical" | "subset" | "staging" | "archive" | "rules" | "unknown"
+export type TableVerdictRoleType = "canonical" | "subset" | "staging" | "archive" | "rules" | "unknown"
 
 export interface TableVerdictRecord {
   qname: string

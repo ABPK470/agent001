@@ -55,13 +55,15 @@ describe("persistToolResult", () => {
         "| Product | Revenue |",
         "|---|---:|",
         "| FX CURRENCY FORWARD | 11,702,943.16 |",
-        "| CASH FEES LCY | 8,601,480.91 |",
+        "| CASH FEES LCY | 8,601,480.91 |"
       ].join("\n"),
-      isError: false,
+      isError: false
     })
 
     expect(ok).toBe(true)
-    const row = testDb.prepare("SELECT run_id, session_id, tool_call_id, tool_name, row_count FROM tool_results").get() as {
+    const row = testDb
+      .prepare("SELECT run_id, session_id, tool_call_id, tool_name, row_count FROM tool_results")
+      .get() as {
       run_id: string
       session_id: string
       tool_call_id: string
@@ -73,7 +75,7 @@ describe("persistToolResult", () => {
       session_id: "sid-1",
       tool_call_id: "tc-1",
       tool_name: "query_mssql",
-      row_count: 2,
+      row_count: 2
     })
   })
 
@@ -94,15 +96,17 @@ describe("persistToolResult", () => {
         "|---|---:|",
         "| FX CURRENCY FORWARD | 11,702,943.16 |",
         "| CASH FEES LCY | 8,601,480.91 |",
-        "| FX CURRENCY SPOT | 2,548,999.07 |",
+        "| FX CURRENCY SPOT | 2,548,999.07 |"
       ].join("\n"),
-      isError: false,
+      isError: false
     })
 
-    const artifact = testDb.prepare(
-      `SELECT tier, role, source, upn, session_id, run_id, content, metadata
-       FROM memory_entries WHERE json_extract(metadata, '$.type') = 'referable_artifact'`,
-    ).get() as {
+    const artifact = testDb
+      .prepare(
+        `SELECT tier, role, source, upn, session_id, run_id, content, metadata
+       FROM memory_entries WHERE json_extract(metadata, '$.type') = 'referable_artifact'`
+      )
+      .get() as {
       tier: string
       role: string
       source: string
@@ -148,19 +152,21 @@ describe("persistToolResult", () => {
         "------------+--------------",
         "POS SERVICE FEE INCOME | 187192337716.08",
         "FX CURRENCY SPOT (ARO) | 60754228106.85",
-        "FINANCIAL SOLUTIONS GROUP | 32242818387.04",
+        "FINANCIAL SOLUTIONS GROUP | 32242818387.04"
       ].join("\n"),
-      isError: false,
+      isError: false
     })
 
-    const toolRow = testDb.prepare(
-      "SELECT row_count FROM tool_results WHERE run_id = 'run-live-shape'",
-    ).get() as { row_count: number }
+    const toolRow = testDb
+      .prepare("SELECT row_count FROM tool_results WHERE run_id = 'run-live-shape'")
+      .get() as { row_count: number }
     expect(toolRow.row_count).toBe(3)
 
-    const artifact = testDb.prepare(
-      `SELECT content FROM memory_entries WHERE run_id = 'run-live-shape' AND json_extract(metadata, '$.type') = 'referable_artifact'`,
-    ).get() as { content: string }
+    const artifact = testDb
+      .prepare(
+        `SELECT content FROM memory_entries WHERE run_id = 'run-live-shape' AND json_extract(metadata, '$.type') = 'referable_artifact'`
+      )
+      .get() as { content: string }
 
     expect(artifact.content).toContain("[artifact:data_result]")
     expect(artifact.content).toContain("columns=ProductName, RevenueZARMTD")
@@ -181,12 +187,14 @@ describe("persistToolResult", () => {
       toolName: "query_mssql",
       args: { query: "SELECT 1" },
       result: "Invalid object name 'publish.Missing'.",
-      isError: true,
+      isError: true
     })
 
-    const count = testDb.prepare(
-      `SELECT COUNT(*) AS n FROM memory_entries WHERE json_extract(metadata, '$.type') = 'referable_artifact'`,
-    ).get() as { n: number }
+    const count = testDb
+      .prepare(
+        `SELECT COUNT(*) AS n FROM memory_entries WHERE json_extract(metadata, '$.type') = 'referable_artifact'`
+      )
+      .get() as { n: number }
     expect(count.n).toBe(0)
   })
 
@@ -202,49 +210,66 @@ describe("persistToolResult", () => {
       toolCallId: "tc-4",
       toolName: "query_mssql",
       args: { query: "SELECT TOP 10 * FROM publish.Revenue" },
-      result: "DENIED: Policy 'hosted_default_deny' violated: no policy rule allows tool \"query_mssql\" in hosted mode. This action is forbidden by governance policy.",
-      isError: false,
+      result:
+        "DENIED: Policy 'hosted_default_deny' violated: no policy rule allows tool \"query_mssql\" in hosted mode. This action is forbidden by governance policy.",
+      isError: false
     })
 
     expect(ok).toBe(false)
-    const count = testDb.prepare("SELECT COUNT(*) AS n FROM tool_results WHERE run_id = 'run-4'").get() as { n: number }
+    const count = testDb.prepare("SELECT COUNT(*) AS n FROM tool_results WHERE run_id = 'run-4'").get() as {
+      n: number
+    }
     expect(count.n).toBe(0)
   })
 
   it("filters legacy governance-denied rows out of prior_results", async () => {
     await setupDb()
 
-    testDb.prepare(`
+    testDb
+      .prepare(
+        `
       INSERT INTO tool_results (run_id, session_id, tool_call_id, tool_name, args_json, result_json, row_count, bytes, truncated, goal_excerpt, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(
-      "run-denied",
-      "sid-5",
-      "tc-denied",
-      "query_mssql",
-      "{}",
-      JSON.stringify({ text: "DENIED: Policy 'hosted_default_deny' violated: no policy rule allows tool \"query_mssql\" in hosted mode.", isError: false }),
-      null,
-      120,
-      0,
-      "top products by revenue",
-    )
+    `
+      )
+      .run(
+        "run-denied",
+        "sid-5",
+        "tc-denied",
+        "query_mssql",
+        "{}",
+        JSON.stringify({
+          text: "DENIED: Policy 'hosted_default_deny' violated: no policy rule allows tool \"query_mssql\" in hosted mode.",
+          isError: false
+        }),
+        null,
+        120,
+        0,
+        "top products by revenue"
+      )
 
-    testDb.prepare(`
+    testDb
+      .prepare(
+        `
       INSERT INTO tool_results (run_id, session_id, tool_call_id, tool_name, args_json, result_json, row_count, bytes, truncated, goal_excerpt, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-    `).run(
-      "run-valid",
-      "sid-5",
-      "tc-valid",
-      "query_mssql",
-      "{}",
-      JSON.stringify({ text: "| Product | Revenue |\n|---|---:|\n| CASH FEES LCY | 8601480.91 |", isError: false }),
-      1,
-      82,
-      0,
-      "top products by revenue",
-    )
+    `
+      )
+      .run(
+        "run-valid",
+        "sid-5",
+        "tc-valid",
+        "query_mssql",
+        "{}",
+        JSON.stringify({
+          text: "| Product | Revenue |\n|---|---:|\n| CASH FEES LCY | 8601480.91 |",
+          isError: false
+        }),
+        1,
+        82,
+        0,
+        "top products by revenue"
+      )
 
     const rows = await loadPriorResultsForSession("sid-5")
     expect(rows).toHaveLength(1)

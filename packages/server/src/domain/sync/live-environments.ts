@@ -1,5 +1,10 @@
 import { getMssqlConfig, type AgentHost } from "@mia/agent"
-import { loadSyncEnvironments, replaceEnvironments, withPermissionDefaults, type SyncEnvironment } from "@mia/sync"
+import {
+  loadSyncEnvironments,
+  replaceEnvironments,
+  withPermissionDefaults,
+  type SyncEnvironment
+} from "@mia/sync"
 
 import * as db from "../../adapters/persistence/sqlite.js"
 
@@ -24,7 +29,10 @@ function mergeLegacyOverrides(environments: SyncEnvironment[]): SyncEnvironment[
     try {
       overrides.set(row.name, JSON.parse(row.overrides_json) as Partial<SyncEnvironment>)
     } catch (error) {
-      console.warn(`[sync-envs] invalid legacy override JSON for env "${row.name}":`, error instanceof Error ? error.message : error)
+      console.warn(
+        `[sync-envs] invalid legacy override JSON for env "${row.name}":`,
+        error instanceof Error ? error.message : error
+      )
     }
   }
   return environments.map((env) => {
@@ -36,7 +44,7 @@ function mergeLegacyOverrides(environments: SyncEnvironment[]): SyncEnvironment[
 function parsePersistedEnvironment(row: db.DbSyncEnvironment): SyncEnvironment {
   return withPermissionDefaults({
     ...(JSON.parse(row.body_json) as SyncEnvironment),
-    name: row.name,
+    name: row.name
   })
 }
 
@@ -46,7 +54,7 @@ function renderSummary(environments: SyncEnvironment[]): string {
 
 export function loadPersistedSyncEnvironments(
   projectRoot: string,
-  connections: ReadonlyArray<{ name: string }>,
+  connections: ReadonlyArray<{ name: string }>
 ): PersistedSyncEnvironmentLoad {
   const persistedRows = db.listSyncEnvironments()
   if (persistedRows.length > 0) {
@@ -55,7 +63,7 @@ export function loadPersistedSyncEnvironments(
       environments,
       source: "db",
       seeded: false,
-      summary: renderSummary(environments),
+      summary: renderSummary(environments)
     }
   }
 
@@ -68,14 +76,14 @@ export function loadPersistedSyncEnvironments(
       body_json: JSON.stringify(env),
       created_at: now,
       updated_at: now,
-      updated_by: null,
+      updated_by: null
     })
   }
   return {
     environments,
     source: loaded.source,
     seeded: true,
-    summary: renderSummary(environments),
+    summary: renderSummary(environments)
   }
 }
 

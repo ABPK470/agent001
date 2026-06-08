@@ -31,12 +31,21 @@ import { extractToolFacts, resolveSelectorRules } from "./policy-selectors.js"
 export class RulePolicyEvaluator implements PolicyEvaluator {
   private rules: PolicyRule[] = []
 
-  addRule(rule: PolicyRule): void { this.rules.push(rule) }
-  removeRule(name: string): void { this.rules = this.rules.filter(r => r.name !== name) }
-  listRules(): PolicyRule[] { return [...this.rules] }
+  addRule(rule: PolicyRule): void {
+    this.rules.push(rule)
+  }
+  removeRule(name: string): void {
+    this.rules = this.rules.filter((r) => r.name !== name)
+  }
+  listRules(): PolicyRule[] {
+    return [...this.rules]
+  }
 
-  async evaluatePreStep(_run: AgentRun, step: Step, ctx: HostedPolicyContext | null = null): Promise<string | null> {
-
+  async evaluatePreStep(
+    _run: AgentRun,
+    step: Step,
+    ctx: HostedPolicyContext | null = null
+  ): Promise<string | null> {
     // 1. Legacy action: rules — preserve original first-match semantics.
     for (const rule of this.rules) {
       if (rule.condition === "selectors") continue
@@ -63,14 +72,14 @@ export class RulePolicyEvaluator implements PolicyEvaluator {
       if (resolution.effect === PolicyEffect.RequireApproval) {
         return `Policy '${resolution.rule.name}': ${reason}`
       }
-      return null  // Allow
+      return null // Allow
     }
 
     // 3. Hosted default-deny — only when explicitly in hosted mode.
     if (ctx?.runMode === "hosted") {
       throw new PolicyViolationError(
         "hosted_default_deny",
-        `no policy rule allows tool "${step.action}" in hosted mode`,
+        `no policy rule allows tool "${step.action}" in hosted mode`
       )
     }
 

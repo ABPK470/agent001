@@ -7,7 +7,13 @@ import { PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
  * @module
  */
 
-import type { LegacyRetryPlan, PipelineResult, PipelineStepResult, RepairPlan, VerifierDecision } from "../types.js"
+import type {
+  LegacyRetryPlan,
+  PipelineResult,
+  PipelineStepResult,
+  RepairPlan,
+  VerifierDecision
+} from "../types.js"
 import { buildIssueIdentity } from "../verification-model/index.js"
 
 export interface RegressionInput {
@@ -49,7 +55,7 @@ const STUB_KEYWORDS = [
   "returns constant",
   "catch-all",
   "trivial return",
-  "empty function",
+  "empty function"
 ]
 
 /**
@@ -57,15 +63,25 @@ const STUB_KEYWORDS = [
  * Mutates priorStepIssues and priorStubCounts in place.
  */
 export function checkStubCountRegression(input: RegressionInput): RegressionResult {
-  const { verifierDecision, pipelineResult, currentRepairPlan, activeCompatibilityPath, legacyRetryPlan, priorStepIssues, priorStubCounts, onTrace } = input
+  const {
+    verifierDecision,
+    pipelineResult,
+    currentRepairPlan,
+    activeCompatibilityPath,
+    legacyRetryPlan,
+    priorStepIssues,
+    priorStubCounts,
+    onTrace
+  } = input
 
-  const activeRepairPlan = activeCompatibilityPath === "legacy"
-    ? {
-        tasks: legacyRetryPlan.tasks,
-        rerunOrder: legacyRetryPlan.rerunOrder,
-        skippedVerifiedSteps: legacyRetryPlan.skippedVerifiedSteps,
-      }
-    : currentRepairPlan
+  const activeRepairPlan =
+    activeCompatibilityPath === "legacy"
+      ? {
+          tasks: legacyRetryPlan.tasks,
+          rerunOrder: legacyRetryPlan.rerunOrder,
+          skippedVerifiedSteps: legacyRetryPlan.skippedVerifiedSteps
+        }
+      : currentRepairPlan
 
   // Detect repeated identical failures — if a step produces the same issues
   // as the previous attempt, further retries won't help (LLM is stuck).
@@ -82,12 +98,14 @@ export function checkStubCountRegression(input: RegressionInput): RegressionResu
     const prevIssueKey = priorStepIssues.get(stepAssessment.stepName)
 
     // Count stub-specific issues for regression tracking
-    const currentStubCount = stepAssessment.issues.filter(i =>
-      STUB_KEYWORDS.some(kw => i.toLowerCase().includes(kw)),
+    const currentStubCount = stepAssessment.issues.filter((i) =>
+      STUB_KEYWORDS.some((kw) => i.toLowerCase().includes(kw))
     ).length
     const prevStubCount = priorStubCounts.get(stepAssessment.stepName)
-    const hasFatalPattern = stepAssessment.issues.some(i =>
-      /function loss|\[contract:contradictory_completion_claim\]|\[contract:unresolved_handoff_output\]/i.test(i),
+    const hasFatalPattern = stepAssessment.issues.some((i) =>
+      /function loss|\[contract:contradictory_completion_claim\]|\[contract:unresolved_handoff_output\]/i.test(
+        i
+      )
     )
 
     if (stepAssessment.outcome === VerifierOutcome.Pass && stepResult) {
@@ -99,7 +117,8 @@ export function checkStubCountRegression(input: RegressionInput): RegressionResu
     } else if (stepAssessment.issues.length > 0) {
       // Check for repeated failure OR stub-count not improving
       const isExactRepeat = prevIssueKey === issueKey
-      const stubsNotImproving = prevStubCount !== undefined && currentStubCount >= prevStubCount && currentStubCount > 0
+      const stubsNotImproving =
+        prevStubCount !== undefined && currentStubCount >= prevStubCount && currentStubCount > 0
 
       if (isExactRepeat || stubsNotImproving) {
         onTrace?.({
@@ -107,7 +126,7 @@ export function checkStubCountRegression(input: RegressionInput): RegressionResu
           stepName: stepAssessment.stepName,
           reason: isExactRepeat
             ? "Repeated identical failure — further retries won't help"
-            : `Stub count not improving (${prevStubCount} → ${currentStubCount}) — child is stuck`,
+            : `Stub count not improving (${prevStubCount} → ${currentStubCount}) — child is stuck`
         })
         if (stepResult) {
           priorResults.set(stepAssessment.stepName, stepResult)
@@ -122,7 +141,8 @@ export function checkStubCountRegression(input: RegressionInput): RegressionResu
         onTrace?.({
           kind: PlannerTraceKind.RetryAbort,
           stepName: stepAssessment.stepName,
-          reason: "Repeated fatal pattern detected (FUNCTION LOSS / contradictory completion claim) — aborting retries and forcing replan",
+          reason:
+            "Repeated fatal pattern detected (FUNCTION LOSS / contradictory completion claim) — aborting retries and forcing replan"
         })
       }
 
@@ -141,6 +161,6 @@ export function checkStubCountRegression(input: RegressionInput): RegressionResu
     allStepsRepeatedFailure,
     shouldAbortRetriesForFatalPattern,
     forceReplanForFatalPattern,
-    retryableTaskCount,
+    retryableTaskCount
   }
 }

@@ -16,13 +16,13 @@ export function createLlmCompletionAdapter(client: LLMClient): LlmCompletionPort
     async complete(req: LlmCompletionRequest): Promise<string> {
       const messages: Message[] = [
         { role: MessageRole.System, content: req.system },
-        { role: MessageRole.User,   content: req.user },
+        { role: MessageRole.User, content: req.user }
       ]
       const response = await client.chat(messages, [], {
-        maxTokens:   req.maxTokens,
-        temperature: req.temperature,
+        maxTokens: req.maxTokens,
+        temperature: req.temperature
       })
       return response.content ?? ""
-    },
+    }
   }
 }

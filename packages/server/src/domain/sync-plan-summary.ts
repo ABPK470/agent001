@@ -37,7 +37,10 @@ export function summarizeSyncPlan(plan: unknown): SyncPlanSummary | null {
 
   return {
     planId: asString(record["planId"]),
-    entityType: asString(executionContract?.["definitionId"]) ?? asString(asRecord(record["recipeSnapshot"])?.["entityType"]) ?? asString(entity?.["type"]),
+    entityType:
+      asString(executionContract?.["definitionId"]) ??
+      asString(asRecord(record["recipeSnapshot"])?.["entityType"]) ??
+      asString(entity?.["type"]),
     entityId: asStringOrNumber(entity?.["id"]),
     entityName: asString(entity?.["displayName"]),
     source: asString(record["source"]),
@@ -46,7 +49,7 @@ export function summarizeSyncPlan(plan: unknown): SyncPlanSummary | null {
     definitionPublishedVersion: asString(executionContract?.["definitionPublishedVersion"]),
     governanceDecision,
     decisionLog,
-    warnings: asStringArray(record["warnings"]),
+    warnings: asStringArray(record["warnings"])
   }
 }
 
@@ -60,7 +63,11 @@ export function loadPersistedSyncPlanSummary(planId: string): SyncPlanSummary | 
   }
 }
 
-export function buildSyncAuditDetail(summary: SyncPlanSummary, totals: unknown, error?: string | null): Record<string, unknown> {
+export function buildSyncAuditDetail(
+  summary: SyncPlanSummary,
+  totals: unknown,
+  error?: string | null
+): Record<string, unknown> {
   return {
     entityType: summary.entityType,
     entityId: summary.entityId,
@@ -73,12 +80,12 @@ export function buildSyncAuditDetail(summary: SyncPlanSummary, totals: unknown, 
     governanceDecision: summary.governanceDecision,
     decisionLog: summary.decisionLog,
     warnings: summary.warnings,
-    error: error ?? null,
+    error: error ?? null
   }
 }
 
 function asRecord(value: unknown): LooseRecord | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? value as LooseRecord : null
+  return value && typeof value === "object" && !Array.isArray(value) ? (value as LooseRecord) : null
 }
 
 function asString(value: unknown): string | null {
@@ -101,14 +108,16 @@ function asDecisionLog(value: unknown): SyncDecisionSummary[] {
     const title = asString(record["title"])
     const summary = asString(record["summary"])
     if (!title || !summary) return []
-    return [{
-      id: asString(record["id"]) ?? title,
-      recordedAt: asString(record["recordedAt"]),
-      stage: asString(record["stage"]),
-      category: asString(record["category"]),
-      severity: asString(record["severity"]),
-      title,
-      summary,
-    }]
+    return [
+      {
+        id: asString(record["id"]) ?? title,
+        recordedAt: asString(record["recordedAt"]),
+        stage: asString(record["stage"]),
+        category: asString(record["category"]),
+        severity: asString(record["severity"]),
+        title,
+        summary
+      }
+    ]
   })
 }

@@ -9,12 +9,12 @@ export const BROWSER_DOCKERFILE = resolve(import.meta.dirname, "../../docker/Doc
 export const DEFAULT_MAX_MEMORY = "4g"
 export const DEFAULT_MAX_CPU = "2.0"
 export const DEFAULT_MAX_CONCURRENT = 4
-export const DEFAULT_IDLE_TIMEOUT = 30 * 60 * 1000  // 30 min
-export const DEFAULT_MAX_LIFETIME = 5 * 60 * 1000   // 5 min
+export const DEFAULT_IDLE_TIMEOUT = 30 * 60 * 1000 // 30 min
+export const DEFAULT_MAX_LIFETIME = 5 * 60 * 1000 // 5 min
 export const DEFAULT_WORKSPACE_ACCESS = WorkspaceMountMode.Readwrite
 export const DEFAULT_TIMEOUT = 30_000
 export const MAX_OUTPUT = 16_000
-export const WATCHDOG_INTERVAL = 60_000  // check every 60s
+export const WATCHDOG_INTERVAL = 60_000 // check every 60s
 
 /** Safe environment variables to forward into the container. */
 export const SAFE_ENV_KEYS = new Set([
@@ -25,7 +25,7 @@ export const SAFE_ENV_KEYS = new Set([
   "LC_ALL",
   "TERM",
   "NO_COLOR",
-  "NODE_ENV",
+  "NODE_ENV"
 ])
 
 // ── Concurrency semaphore ─────────────────────────────────────────
@@ -36,7 +36,9 @@ export class Semaphore {
 
   constructor(private readonly max: number) {}
 
-  get active(): number { return this.current }
+  get active(): number {
+    return this.current
+  }
 
   acquire(timeoutMs = 60_000): Promise<void> {
     if (this.current < this.max) {
@@ -45,14 +47,16 @@ export class Semaphore {
     }
     return new Promise<void>((resolve, reject) => {
       const entry = {
-        resolve: () => { /* replaced below */ },
+        resolve: () => {
+          /* replaced below */
+        },
         timer: setTimeout(() => {
           const idx = this.waiting.indexOf(entry)
           if (idx !== -1) {
             this.waiting.splice(idx, 1)
             reject(new Error(`Concurrency limit reached (${this.max} containers). Try again later.`))
           }
-        }, timeoutMs),
+        }, timeoutMs)
       }
       entry.resolve = () => {
         clearTimeout(entry.timer)

@@ -4,4 +4,3 @@ export * from "./signer.js"
 export { registerKmsAdapter } from "./signers/kms-stub.js"
 export * from "./storage.js"
 export * from "./verifier-core.js"
-

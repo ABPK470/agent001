@@ -156,10 +156,10 @@ export type EntityTableProvenance =
  * the historical introspection output.
  */
 export type EntityTableSource =
-  | "fk+pipeline"   // both FK graph and legacy pipeline agree
-  | "fk-only"       // only FK graph; predicate inferred, needs verification
+  | "fk+pipeline" // both FK graph and legacy pipeline agree
+  | "fk-only" // only FK graph; predicate inferred, needs verification
   | "pipeline-only" // only legacy pipeline body referenced it
-  | "manual"        // hand-authored
+  | "manual" // hand-authored
 
 export interface EntityTable {
   /** Schema-qualified name e.g. `core.ContractColumn`. */
@@ -365,11 +365,7 @@ export type ValidationErrorCode =
  * Entity ids that are reserved at the platform level (cannot be used as
  * tenant entity ids). Keeps namespace clean for future internal entities.
  */
-export const RESERVED_ENTITY_IDS = Object.freeze([
-  "_internal",
-  "_system",
-  "_meta",
-] as const)
+export const RESERVED_ENTITY_IDS = Object.freeze(["_internal", "_system", "_meta"] as const)
 
 /** Single-tenant sentinel tenant id used when multi-tenancy is off. */
 export const DEFAULT_TENANT_ID = "_default"

@@ -1,6 +1,11 @@
 import { EventType, getCatalogSchemaFingerprint, RunStatus } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { MemoryIngestionExclusionReason, MemoryRole, MemorySource, MemoryTier } from "../../../enums/memory.js"
+import {
+  MemoryIngestionExclusionReason,
+  MemoryRole,
+  MemorySource,
+  MemoryTier
+} from "../../../enums/memory.js"
 import { broadcast } from "../../../event-broadcaster.js"
 import { getSession } from "../db/sessions.js"
 import { getDb } from "../sqlite.js"
@@ -52,8 +57,8 @@ export function ingestTurn(opts: {
         threshold: floor,
         tier: opts.tier,
         role: opts.role,
-        contentPreview: opts.content.slice(0, 80),
-      },
+        contentPreview: opts.content.slice(0, 80)
+      }
     })
     return null
   }
@@ -61,22 +66,33 @@ export function ingestTurn(opts: {
   // Dedup: check against recent entries (same session/run AND same tenant).
   // Without the upn predicate user A's entry could mask a near-identical
   // legitimate entry from user B.
-  const recentRows = getDb().prepare(`
+  const recentRows = getDb()
+    .prepare(
+      `
     SELECT content FROM memory_entries
     WHERE (session_id = ? OR run_id = ?)
       AND ((upn IS NULL AND ? IS NULL) OR upn = ?)
     ORDER BY created_at DESC LIMIT 20
-  `).all(opts.sessionId ?? "", opts.runId ?? "", opts.upn ?? null, opts.upn ?? null) as Array<{ content: string }>
+  `
+    )
+    .all(opts.sessionId ?? "", opts.runId ?? "", opts.upn ?? null, opts.upn ?? null) as Array<{
+    content: string
+  }>
 
-  if (isDuplicate(opts.content, recentRows.map((r) => r.content))) {
+  if (
+    isDuplicate(
+      opts.content,
+      recentRows.map((r) => r.content)
+    )
+  ) {
     broadcast({
       type: EventType.MemoryFiltered,
       data: {
         reason: MemoryIngestionExclusionReason.Duplicate,
         tier: opts.tier,
         role: opts.role,
-        contentPreview: opts.content.slice(0, 80),
-      },
+        contentPreview: opts.content.slice(0, 80)
+      }
     })
     return null
   }
@@ -91,7 +107,7 @@ export function ingestTurn(opts: {
       // null when no catalog is loaded (e.g. boot-time service ingests);
       // stampProvenance ignores undefined/empty values so legacy rows
       // remain neutral at retrieval time.
-      schemaFingerprint: (opts.host ? getCatalogSchemaFingerprint(opts.host) : null) ?? undefined,
+      schemaFingerprint: (opts.host ? getCatalogSchemaFingerprint(opts.host) : null) ?? undefined
     }),
     source: opts.source ?? MemorySource.Agent,
     confidence: opts.confidence ?? 0.5,
@@ -103,30 +119,34 @@ export function ingestTurn(opts: {
     upn: opts.upn ?? null,
     shared: opts.shared ?? false,
     createdAt: now,
-    updatedAt: now,
+    updatedAt: now
   }
 
-  getDb().prepare(`
+  getDb()
+    .prepare(
+      `
     INSERT INTO memory_entries (id, tier, role, content, metadata, source, confidence, salience, access_count, session_id, run_id, parent_id, upn, shared, created_at, updated_at)
     VALUES (@id, @tier, @role, @content, @metadata, @source, @confidence, @salience, @access_count, @session_id, @run_id, @parent_id, @upn, @shared, @created_at, @updated_at)
-  `).run({
-    id: entry.id,
-    tier: entry.tier,
-    role: entry.role,
-    content: entry.content,
-    metadata: JSON.stringify(entry.metadata),
-    source: entry.source,
-    confidence: entry.confidence,
-    salience: entry.salience,
-    access_count: entry.accessCount,
-    session_id: entry.sessionId,
-    run_id: entry.runId,
-    parent_id: entry.parentId,
-    upn: entry.upn,
-    shared: entry.shared ? 1 : 0,
-    created_at: entry.createdAt,
-    updated_at: entry.updatedAt,
-  })
+  `
+    )
+    .run({
+      id: entry.id,
+      tier: entry.tier,
+      role: entry.role,
+      content: entry.content,
+      metadata: JSON.stringify(entry.metadata),
+      source: entry.source,
+      confidence: entry.confidence,
+      salience: entry.salience,
+      access_count: entry.accessCount,
+      session_id: entry.sessionId,
+      run_id: entry.runId,
+      parent_id: entry.parentId,
+      upn: entry.upn,
+      shared: entry.shared ? 1 : 0,
+      created_at: entry.createdAt,
+      updated_at: entry.updatedAt
+    })
 
   // Optionally embed (async, non-blocking)
   embedEntry(entry).catch(() => {})
@@ -139,8 +159,8 @@ export function ingestTurn(opts: {
       role: entry.role,
       source: entry.source,
       runId: entry.runId,
-      contentPreview: entry.content.slice(0, 200),
-    },
+      contentPreview: entry.content.slice(0, 200)
+    }
   })
 
   return entry
@@ -164,9 +184,7 @@ export function ingestRunTurns(run: {
   /** Owner UPN — used to scope this run's memories to the originating user. */
   upn?: string | null
 }): void {
-  const sessionId = run.sessionId
-    ? (getSession(run.sessionId)?.sid ?? null)
-    : null
+  const sessionId = run.sessionId ? (getSession(run.sessionId)?.sid ?? null) : null
   const upn = run.upn ?? null
 
   // 1. (goal text intentionally NOT stored in working memory — it is INPUT,
@@ -196,7 +214,7 @@ export function ingestRunTurns(run: {
         confidence: 0.6,
         sessionId,
         runId: run.id,
-        upn,
+        upn
       })
     } else if (t.kind === "tool-result" && t.text) {
       ingestTurn({
@@ -208,7 +226,7 @@ export function ingestRunTurns(run: {
         confidence: 0.6,
         sessionId,
         runId: run.id,
-        upn,
+        upn
       })
     }
   }
@@ -228,7 +246,7 @@ export function ingestRunTurns(run: {
       confidence: 0.8,
       sessionId,
       runId: run.id,
-      upn,
+      upn
     })
   }
 
@@ -262,7 +280,13 @@ export function ingestRunTurns(run: {
   }
 
   const episodicContent = lines.join("\n")
-  const episodicMeta = { goal: run.goal, tools: run.tools, stepCount: run.stepCount, status: run.status, hasCorrections: toolErrors.length > 0 }
+  const episodicMeta = {
+    goal: run.goal,
+    tools: run.tools,
+    stepCount: run.stepCount,
+    status: run.status,
+    hasCorrections: toolErrors.length > 0
+  }
   // Lower confidence when tool errors were detected — the approach was flawed.
   const episodicConfidence = toolErrors.length > 0 ? 0.35 : run.status === RunStatus.Completed ? 0.7 : 0.3
 
@@ -271,50 +295,67 @@ export function ingestRunTurns(run: {
   // user asking the same question must NOT collide with this row.
   // Use substr() not LIKE to avoid treating goal text as a SQL wildcard pattern.
   const goalPrefix = `Goal: ${run.goal}\n`
-  const existingEpisodic = upn === null
-    ? (sessionId
-      ? getDb().prepare(`
+  const existingEpisodic =
+    upn === null
+      ? ((sessionId
+          ? getDb()
+              .prepare(
+                `
           SELECT id FROM memory_entries
           WHERE tier = 'episodic' AND role = 'summary'
             AND substr(content, 1, ?) = ?
             AND upn IS NULL
             AND session_id = ?
           ORDER BY updated_at DESC LIMIT 1
-        `).get(goalPrefix.length, goalPrefix, sessionId)
-      : getDb().prepare(`
+        `
+              )
+              .get(goalPrefix.length, goalPrefix, sessionId)
+          : getDb()
+              .prepare(
+                `
           SELECT id FROM memory_entries
           WHERE tier = 'episodic' AND role = 'summary'
             AND substr(content, 1, ?) = ?
             AND upn IS NULL
             AND session_id IS NULL
           ORDER BY updated_at DESC LIMIT 1
-        `).get(goalPrefix.length, goalPrefix)) as { id: string } | undefined
-    : getDb().prepare(`
+        `
+              )
+              .get(goalPrefix.length, goalPrefix)) as { id: string } | undefined)
+      : (getDb()
+          .prepare(
+            `
         SELECT id FROM memory_entries
         WHERE tier = 'episodic' AND role = 'summary'
           AND substr(content, 1, ?) = ?
           AND upn = ?
         ORDER BY updated_at DESC LIMIT 1
-      `).get(goalPrefix.length, goalPrefix, upn) as { id: string } | undefined
+      `
+          )
+          .get(goalPrefix.length, goalPrefix, upn) as { id: string } | undefined)
 
   if (existingEpisodic) {
     // Update in place — keeps memory lean and avoids contradictory prior-failure entries
     const now = new Date().toISOString()
-    getDb().prepare(`
+    getDb()
+      .prepare(
+        `
       UPDATE memory_entries
       SET content = ?, metadata = ?, confidence = ?, salience = ?, run_id = ?, upn = COALESCE(upn, ?), session_id = COALESCE(session_id, ?), updated_at = ?
       WHERE id = ?
-    `).run(
-      episodicContent,
-      JSON.stringify(episodicMeta),
-      episodicConfidence,
-      computeSalience(episodicContent, MemoryRole.Summary),
-      run.id,
-      upn,
-      sessionId,
-      now,
-      existingEpisodic.id,
-    )
+    `
+      )
+      .run(
+        episodicContent,
+        JSON.stringify(episodicMeta),
+        episodicConfidence,
+        computeSalience(episodicContent, MemoryRole.Summary),
+        run.id,
+        upn,
+        sessionId,
+        now,
+        existingEpisodic.id
+      )
   } else {
     ingestTurn({
       tier: MemoryTier.Episodic,
@@ -325,7 +366,7 @@ export function ingestRunTurns(run: {
       confidence: episodicConfidence,
       sessionId,
       runId: run.id,
-      upn,
+      upn
     })
   }
 }
@@ -336,21 +377,26 @@ export function ingestRunTurns(run: {
  * so the entry is retrieved with very low weight in future runs.
  */
 export function flagRunMemory(runId: string, note?: string): boolean {
-  const row = getDb().prepare(
-    `SELECT id, content, confidence FROM memory_entries
+  const row = getDb()
+    .prepare(
+      `SELECT id, content, confidence FROM memory_entries
      WHERE run_id = ? AND tier = 'episodic' AND role = 'summary'
-     ORDER BY updated_at DESC LIMIT 1`,
-  ).get(runId) as { id: string; content: string; confidence: number } | undefined
+     ORDER BY updated_at DESC LIMIT 1`
+    )
+    .get(runId) as { id: string; content: string; confidence: number } | undefined
 
   if (!row) return false
 
-  const prefix = `FEEDBACK: User marked this answer as NOT useful${note ? ` — ${note}` : ""}. ` +
+  const prefix =
+    `FEEDBACK: User marked this answer as NOT useful${note ? ` — ${note}` : ""}. ` +
     `Do NOT reuse the approaches described below. Find a different strategy.\n`
   const updated = prefix + row.content
   const now = new Date().toISOString()
-  getDb().prepare(
-    `UPDATE memory_entries SET content = ?, confidence = 0.05, salience = 0.1, updated_at = ? WHERE id = ?`,
-  ).run(updated, now, row.id)
+  getDb()
+    .prepare(
+      `UPDATE memory_entries SET content = ?, confidence = 0.05, salience = 0.1, updated_at = ? WHERE id = ?`
+    )
+    .run(updated, now, row.id)
   return true
 }
 
@@ -404,9 +450,7 @@ export function ingestAgentNote(input: AgentNoteInput): AgentNoteResult {
   // Compose the content. Format is chosen so that FTS5 indexes the subject
   // verbatim (it appears as a discrete token) and downstream readers can
   // grep `[note:` to filter agent notes apart from regular working entries.
-  const evidenceTail = input.evidence && input.evidence.trim()
-    ? `\n  ev: ${input.evidence.trim()}`
-    : ""
+  const evidenceTail = input.evidence && input.evidence.trim() ? `\n  ev: ${input.evidence.trim()}` : ""
   const content = `[note:${category}] ${subject} — ${claim}${evidenceTail}`
 
   const entry = ingestTurn({
@@ -418,7 +462,7 @@ export function ingestAgentNote(input: AgentNoteInput): AgentNoteResult {
     metadata: {
       type: "agent_note",
       category,
-      subject,
+      subject
     },
     source: MemorySource.Agent,
     confidence: evidenceTail ? 0.85 : 0.75,
@@ -429,7 +473,7 @@ export function ingestAgentNote(input: AgentNoteInput): AgentNoteResult {
     // prose length, so a short "join_path: A↔B on pkClient" should not be
     // rejected by the generic salience heuristic. Floor at 0.05 keeps truly
     // empty/garbage entries out.
-    minSalience: 0.05,
+    minSalience: 0.05
   })
 
   if (!entry) {
@@ -442,4 +486,3 @@ export function ingestAgentNote(input: AgentNoteInput): AgentNoteResult {
   }
   return { ok: true, id: entry.id }
 }
-

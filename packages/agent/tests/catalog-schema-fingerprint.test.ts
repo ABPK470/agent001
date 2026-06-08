@@ -24,7 +24,7 @@ function table(schema: string, name: string, columns: string[], rowCount: number
     rowCount,
     columns: columns.map((c) => col(c)),
     fkOutgoing: [],
-    fkIncoming: [],
+    fkIncoming: []
   }
 }
 
@@ -38,14 +38,14 @@ function buildGraph(tables: CatalogTable[]): CatalogGraph {
     implicitEdges: [],
     lineage: [],
     viewSourceRows: [],
-    sysCatalog: [],
+    sysCatalog: []
   } as Parameters<typeof CatalogGraph.fromSnapshot>[0])
 }
 
 describe("CatalogGraph.schemaFingerprint", () => {
   const tables = [
     table("dbo", "Client", ["pkClient", "name", "createdAt"]),
-    table("publish", "Revenue", ["pkClient", "amount", "fy"]),
+    table("publish", "Revenue", ["pkClient", "amount", "fy"])
   ]
 
   it("returns a stable sha1-prefixed string", () => {
@@ -68,10 +68,7 @@ describe("CatalogGraph.schemaFingerprint", () => {
 
   it("changes when a column is added", () => {
     const a = buildGraph(tables).schemaFingerprint()
-    const extended = [
-      tables[0]!,
-      { ...tables[1]!, columns: [...tables[1]!.columns, col("newCol")] },
-    ]
+    const extended = [tables[0]!, { ...tables[1]!, columns: [...tables[1]!.columns, col("newCol")] }]
     const b = buildGraph(extended).schemaFingerprint()
     expect(b).not.toBe(a)
   })

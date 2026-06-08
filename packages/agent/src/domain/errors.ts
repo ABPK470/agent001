@@ -11,7 +11,7 @@ export class InvalidTransitionError extends DomainError {
   constructor(
     public readonly entity: string,
     public readonly current: string,
-    public readonly target: string,
+    public readonly target: string
   ) {
     super(`${entity}: cannot transition from '${current}' to '${target}'`)
     this.name = "InvalidTransitionError"
@@ -21,7 +21,7 @@ export class InvalidTransitionError extends DomainError {
 export class PolicyViolationError extends DomainError {
   constructor(
     public readonly policyName: string,
-    public readonly reason: string,
+    public readonly reason: string
   ) {
     super(`Policy '${policyName}' violated: ${reason}`)
     this.name = "PolicyViolationError"

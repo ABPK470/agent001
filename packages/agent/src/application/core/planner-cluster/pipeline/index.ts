@@ -20,24 +20,24 @@ import type { ToolCallRecord } from "../../../../tools/index.js"
 import type { Tool } from "../../types.js"
 import { injectPriorContext } from "../internal/pipeline-context.js"
 import {
-    applyPostExecutionReconciliation,
-    collectAcceptedArtifacts,
-    getRepairTaskForStep,
-    getUnresolvedAcceptanceBlockers,
+  applyPostExecutionReconciliation,
+  collectAcceptedArtifacts,
+  getRepairTaskForStep,
+  getUnresolvedAcceptanceBlockers
 } from "../internal/pipeline-repair.js"
 import { executeStep } from "../internal/pipeline-steps.js"
 import { compilePlannerRuntime } from "../runtime-model.js"
 import type {
-    ChildExecutionResult,
-    DeterministicToolStep,
-    ExecutionEnvelope,
-    PipelineResult,
-    PipelineStepResult,
-    Plan,
-    PlanStep,
-    PlannerRuntimeModel,
-    RepairPlan,
-    SubagentTaskStep,
+  ChildExecutionResult,
+  DeterministicToolStep,
+  ExecutionEnvelope,
+  PipelineResult,
+  PipelineStepResult,
+  Plan,
+  PlanStep,
+  PlannerRuntimeModel,
+  RepairPlan,
+  SubagentTaskStep
 } from "../types.js"
 import { buildGraph, buildResult, executeToolForText } from "./graph.js"
 import { buildRepairStep } from "./repair-step.js"
@@ -55,15 +55,9 @@ export interface DelegateResult {
   readonly execution?: ChildExecutionResult
 }
 
-export type DelegateFn = (
-  step: SubagentTaskStep,
-  envelope: ExecutionEnvelope,
-) => Promise<DelegateResult>
+export type DelegateFn = (step: SubagentTaskStep, envelope: ExecutionEnvelope) => Promise<DelegateResult>
 
-export type ToolExecFn = (
-  toolName: string,
-  args: Record<string, unknown>,
-) => Promise<string>
+export type ToolExecFn = (toolName: string, args: Record<string, unknown>) => Promise<string>
 
 // ============================================================================
 // Pipeline executor options
@@ -96,7 +90,7 @@ export async function executePipeline(
   plan: Plan,
   tools: readonly Tool[],
   delegateFn: DelegateFn,
-  opts?: PipelineExecutorOptions,
+  opts?: PipelineExecutorOptions
 ): Promise<PipelineResult> {
   const maxParallel = opts?.maxParallel ?? 4
   const stepResults = new Map<string, PipelineStepResult>()
@@ -105,7 +99,7 @@ export async function executePipeline(
     .filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
     .flatMap((s) => s.executionContext.targetArtifacts)
 
-  const toolMap = new Map(tools.map(t => [t.name, t]))
+  const toolMap = new Map(tools.map((t) => [t.name, t]))
 
   const toolExecFn: ToolExecFn = async (toolName, args) => {
     const tool = toolMap.get(toolName)
@@ -153,16 +147,22 @@ export async function executePipeline(
       for (const step of plan.steps) {
         if (!stepResults.has(step.name)) {
           const repairTask = getRepairTaskForStep(opts?.repairPlan, step.name)
-          const blockers = getUnresolvedAcceptanceBlockers(step.name, runtimeModel, repairTask, acceptedArtifacts)
+          const blockers = getUnresolvedAcceptanceBlockers(
+            step.name,
+            runtimeModel,
+            repairTask,
+            acceptedArtifacts
+          )
           stepResults.set(step.name, {
             name: step.name,
             status: "skipped",
             executionState: "skipped",
             acceptanceState: "blocked",
-            error: blockers.length > 0
-              ? `Waiting on accepted upstream artifacts: ${blockers.join(", ")}`
-              : "Upstream dependency failed",
-            durationMs: 0,
+            error:
+              blockers.length > 0
+                ? `Waiting on accepted upstream artifacts: ${blockers.join(", ")}`
+                : "Upstream dependency failed",
+            durationMs: 0
           })
         }
       }
@@ -190,26 +190,21 @@ export async function executePipeline(
           acceptedArtifacts,
           toolMap,
           plan,
-          opts,
+          opts
         )
       }
 
-      const result = await executeStep(
-        effectiveStep,
-        toolExecFn,
-        delegateFn,
-        opts?.signal,
-        {
-          plan,
-          readFileTool: toolMap.get("read_file"),
-          workspaceRoot: opts?.workspaceRoot,
-          knownProjectArtifacts,
-        },
-      )
+      const result = await executeStep(effectiveStep, toolExecFn, delegateFn, opts?.signal, {
+        plan,
+        readFileTool: toolMap.get("read_file"),
+        workspaceRoot: opts?.workspaceRoot,
+        knownProjectArtifacts
+      })
 
-      const finalResult = effectiveStep.stepType === "subagent_task"
-        ? applyPostExecutionReconciliation(effectiveStep as SubagentTaskStep, result)
-        : result
+      const finalResult =
+        effectiveStep.stepType === "subagent_task"
+          ? applyPostExecutionReconciliation(effectiveStep as SubagentTaskStep, result)
+          : result
 
       stepResults.set(name, finalResult)
       opts?.onStepEnd?.(step, finalResult)
@@ -220,9 +215,10 @@ export async function executePipeline(
           inDegree.set(downstream, (inDegree.get(downstream) ?? 1) - 1)
         }
       } else if (finalResult.status === PipelineStatus.Failed) {
-        const onError = step.stepType === "deterministic_tool"
-          ? (step as DeterministicToolStep).onError ?? "retry"
-          : "abort"
+        const onError =
+          step.stepType === "deterministic_tool"
+            ? ((step as DeterministicToolStep).onError ?? "retry")
+            : "abort"
 
         if (onError === "skip") {
           completed.add(name)
@@ -239,7 +235,7 @@ export async function executePipeline(
                 executionState: "skipped",
                 acceptanceState: "blocked",
                 error: `Pipeline aborted: step "${name}" failed`,
-                durationMs: 0,
+                durationMs: 0
               })
               failed.add(s.name)
             }
@@ -253,15 +249,14 @@ export async function executePipeline(
     await Promise.allSettled(batchPromises)
   }
 
-  const anyFailed = [...stepResults.values()].some(r => r.status === PipelineStatus.Failed)
+  const anyFailed = [...stepResults.values()].some((r) => r.status === PipelineStatus.Failed)
   return buildResult(
     stepResults,
     plan.steps.length,
-    anyFailed ? PipelineStatus.Failed : PipelineStatus.Completed,
+    anyFailed ? PipelineStatus.Failed : PipelineStatus.Completed
   )
 }
 
 // ============================================================================
 // Repair step builder is in pipeline/repair-step.ts
 // ============================================================================
-

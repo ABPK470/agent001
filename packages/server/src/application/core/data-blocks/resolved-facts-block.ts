@@ -23,11 +23,11 @@
 
 import type { CatalogGraph } from "@mia/agent"
 import {
-    buildResolvedFacts,
-    getTenantConfig,
-    listLargeObjects,
-    persistedMirrorOf,
-    type LargeObjectFact,
+  buildResolvedFacts,
+  getTenantConfig,
+  listLargeObjects,
+  persistedMirrorOf,
+  type LargeObjectFact
 } from "@mia/agent"
 import { listTableVerdicts } from "../../../adapters/persistence/memory.js"
 
@@ -69,9 +69,7 @@ export function buildResolvedFactsBlock(input: {
   mirrorSchema?: string | null
 }): string {
   const { goal, catalog } = input
-  const mirrorSchema = input.mirrorSchema !== undefined
-    ? input.mirrorSchema
-    : getTenantConfig().mirrorSchema
+  const mirrorSchema = input.mirrorSchema !== undefined ? input.mirrorSchema : getTenantConfig().mirrorSchema
 
   // Union: top-N largest objects (catalog-derived) ∪ goal-mentioned tokens
   // that live in catalog. Stripping unknown tokens keeps the block honest —
@@ -103,7 +101,7 @@ export function buildResolvedFactsBlock(input: {
       name,
       hasPersistedMirror,
       ...(fanInRows > 0 ? { fanInRows } : {}),
-      ...(typeof structuralRank === "number" ? { structuralRank } : {}),
+      ...(typeof structuralRank === "number" ? { structuralRank } : {})
     })
   }
 
@@ -128,7 +126,7 @@ export function buildResolvedFactsBlock(input: {
 
   return buildResolvedFacts({
     largeObjects,
-    ...(input.schemaFingerprint ? { schemaFingerprint: input.schemaFingerprint } : {}),
+    ...(input.schemaFingerprint ? { schemaFingerprint: input.schemaFingerprint } : {})
   })
 }
 
@@ -167,14 +165,12 @@ function structuralRankIn(catalog: CatalogGraph, lowerName: string): number | un
  * comes from tenant config; when unset, no object is ever flagged as
  * having a mirror. Convention is documented per-deployment.
  */
-function hasMirror(
-  catalog: CatalogGraph,
-  lowerName: string,
-  mirrorSchema: string | null,
-): boolean {
+function hasMirror(catalog: CatalogGraph, lowerName: string, mirrorSchema: string | null): boolean {
   if (!mirrorSchema) return false
-  return persistedMirrorOf(lowerName, {
-    mirrorSchema,
-    accessor: () => catalog,
-  }) !== null
+  return (
+    persistedMirrorOf(lowerName, {
+      mirrorSchema,
+      accessor: () => catalog
+    }) !== null
+  )
 }

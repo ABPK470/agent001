@@ -7,15 +7,15 @@
  */
 
 import {
-    type EntityDefinition,
-    type EntityTable,
-    type EntityTableScope,
-    type Scd2Strategy,
-    isIdentifier,
-    isSchemaQualifiedTable,
-    looksUnsafeSqlFragment,
-    validateEntityDefinition,
-    validateScd2Strategy,
+  type EntityDefinition,
+  type EntityTable,
+  type EntityTableScope,
+  type Scd2Strategy,
+  isIdentifier,
+  isSchemaQualifiedTable,
+  looksUnsafeSqlFragment,
+  validateEntityDefinition,
+  validateScd2Strategy
 } from "@mia/sync"
 import { describe, expect, it } from "vitest"
 
@@ -36,7 +36,7 @@ function validTable(overrides: Partial<EntityTable> = {}): EntityTable {
     groundedByPipeline: null,
     enabledByDefault: null,
     userControllable: null,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -64,7 +64,7 @@ function validDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
     reason: "initial",
     createdAt: "2026-05-16T00:00:00.000Z",
     retiredAt: null,
-    ...overrides,
+    ...overrides
   }
 }
 
@@ -87,23 +87,19 @@ function validStrategy(overrides: Partial<Scd2Strategy> = {}): Scd2Strategy {
     versionLabel: null,
     createdBy: "alice@example.com",
     createdAt: "2026-05-16T00:00:00.000Z",
-    ...overrides,
+    ...overrides
   }
 }
 
 // ── Identifier helpers ───────────────────────────────────────────
 
 describe("isIdentifier", () => {
-  it.each([
-    "contractId",
-    "Contract",
-    "_id",
-    "[Order]",
-    "[Has Spaces]",
-    "ContractColumn123",
-  ])("accepts %s", (s) => {
-    expect(isIdentifier(s)).toBe(true)
-  })
+  it.each(["contractId", "Contract", "_id", "[Order]", "[Has Spaces]", "ContractColumn123"])(
+    "accepts %s",
+    (s) => {
+      expect(isIdentifier(s)).toBe(true)
+    }
+  )
 
   it.each([
     "",
@@ -115,7 +111,7 @@ describe("isIdentifier", () => {
     "[unterminated",
     "unterminated]",
     "[has]bracket]",
-    "[has\nnewline]",
+    "[has\nnewline]"
   ])("rejects %s", (s) => {
     expect(isIdentifier(s)).toBe(false)
   })
@@ -128,31 +124,23 @@ describe("isIdentifier", () => {
 })
 
 describe("isSchemaQualifiedTable", () => {
-  it.each(["core.Contract", "[Has Space].[Has Space]", "etl.staging_table"])(
-    "accepts %s",
-    (s) => {
-      expect(isSchemaQualifiedTable(s)).toBe(true)
-    },
-  )
-
-  it.each([
-    "",
-    "Contract",
-    "a.b.c",
-    "core.",
-    ".Contract",
-    "core .Contract",
-    "core.Con;tract",
-  ])("rejects %s", (s) => {
-    expect(isSchemaQualifiedTable(s)).toBe(false)
+  it.each(["core.Contract", "[Has Space].[Has Space]", "etl.staging_table"])("accepts %s", (s) => {
+    expect(isSchemaQualifiedTable(s)).toBe(true)
   })
+
+  it.each(["", "Contract", "a.b.c", "core.", ".Contract", "core .Contract", "core.Con;tract"])(
+    "rejects %s",
+    (s) => {
+      expect(isSchemaQualifiedTable(s)).toBe(false)
+    }
+  )
 })
 
 describe("looksUnsafeSqlFragment", () => {
   it.each([
     "contractId = {id}",
     "datasetMappingId IN (SELECT datasetMappingId FROM core.DM WHERE contractId = {id})",
-    "EXISTS (SELECT 1 FROM core.X WHERE X.id = {id} AND X.flag = 1)",
+    "EXISTS (SELECT 1 FROM core.X WHERE X.id = {id} AND X.flag = 1)"
   ])("accepts safe predicate %#", (s) => {
     expect(looksUnsafeSqlFragment(s)).toBe(false)
   })
@@ -162,7 +150,7 @@ describe("looksUnsafeSqlFragment", () => {
     "x = 1 -- comment",
     "x = 1 /* block */",
     "x = 1\nGO\nDROP TABLE x",
-    "x = `id`",
+    "x = `id`"
   ])("rejects unsafe predicate %#", (s) => {
     expect(looksUnsafeSqlFragment(s)).toBe(true)
   })
@@ -237,17 +225,15 @@ describe("validateEntityDefinition — tables", () => {
       validDef({
         tables: [
           validTable({ name: "core.A", executionOrder: 1 }),
-          validTable({ name: "core.A", executionOrder: 2 }),
-        ],
-      }),
+          validTable({ name: "core.A", executionOrder: 2 })
+        ]
+      })
     )
     expect(r.errors.some((e) => e.code === "table_duplicate")).toBe(true)
   })
 
   it("rejects non-integer executionOrder", () => {
-    const r = validateEntityDefinition(
-      validDef({ tables: [validTable({ executionOrder: 1.5 })] }),
-    )
+    const r = validateEntityDefinition(validDef({ tables: [validTable({ executionOrder: 1.5 })] }))
     expect(r.errors.some((e) => e.code === "execution_order_duplicate")).toBe(true)
   })
 
@@ -256,9 +242,9 @@ describe("validateEntityDefinition — tables", () => {
       validDef({
         tables: [
           validTable({ name: "core.A", executionOrder: 1 }),
-          validTable({ name: "core.B", executionOrder: 1 }),
-        ],
-      }),
+          validTable({ name: "core.B", executionOrder: 1 })
+        ]
+      })
     )
     expect(r.ok).toBe(true)
     expect(r.warnings.some((w) => w.code === "execution_order_duplicate")).toBe(true)
@@ -281,8 +267,8 @@ describe("validateEntityDefinition — tables", () => {
       kind: "fkPath",
       through: [
         { table: "core.Dataset", fromColumn: "contractId", toColumn: "contractId" },
-        { table: "core.DatasetColumn", fromColumn: "datasetId", toColumn: "datasetId" },
-      ],
+        { table: "core.DatasetColumn", fromColumn: "datasetId", toColumn: "datasetId" }
+      ]
     }
     const r = validateEntityDefinition(validDef({ tables: [validTable({ scope })] }))
     expect(r.ok).toBe(true)
@@ -297,7 +283,7 @@ describe("validateEntityDefinition — tables", () => {
   it("rejects sql scope with unsafe content", () => {
     const scope: EntityTableScope = {
       kind: "sql",
-      predicate: "contractId = {id}; DROP TABLE x",
+      predicate: "contractId = {id}; DROP TABLE x"
     }
     const r = validateEntityDefinition(validDef({ tables: [validTable({ scope })] }))
     expect(r.errors.some((e) => e.code === "scope_sql_unsafe")).toBe(true)
@@ -306,10 +292,10 @@ describe("validateEntityDefinition — tables", () => {
   it("accepts sql scope referencing {ids} (self-join)", () => {
     const scope: EntityTableScope = {
       kind: "sql",
-      predicate: "ruleId IN ({ids})",
+      predicate: "ruleId IN ({ids})"
     }
     const r = validateEntityDefinition(
-      validDef({ selfJoinColumn: "parentRuleId", tables: [validTable({ scope })] }),
+      validDef({ selfJoinColumn: "parentRuleId", tables: [validTable({ scope })] })
     )
     expect(r.ok).toBe(true)
   })
@@ -319,10 +305,10 @@ describe("validateEntityDefinition — tables", () => {
       validDef({
         tables: [
           validTable({
-            scd2Override: { onInsert: { x: "1; DROP TABLE y" } },
-          }),
-        ],
-      }),
+            scd2Override: { onInsert: { x: "1; DROP TABLE y" } }
+          })
+        ]
+      })
     )
     expect(r.errors.some((e) => e.code === "scope_sql_unsafe")).toBe(true)
   })
@@ -331,21 +317,21 @@ describe("validateEntityDefinition — tables", () => {
 describe("validateEntityDefinition — SCD2 reference", () => {
   it("rejects unknown strategy id shape", () => {
     const r = validateEntityDefinition(
-      validDef({ scd2: { strategyId: "1bad", strategyVersion: 1, entityOverride: null } }),
+      validDef({ scd2: { strategyId: "1bad", strategyVersion: 1, entityOverride: null } })
     )
     expect(r.errors.some((e) => e.code === "scd2_strategy_unknown")).toBe(true)
   })
 
   it("rejects non-positive strategy version", () => {
     const r = validateEntityDefinition(
-      validDef({ scd2: { strategyId: "mymi-scd2", strategyVersion: 0, entityOverride: null } }),
+      validDef({ scd2: { strategyId: "mymi-scd2", strategyVersion: 0, entityOverride: null } })
     )
     expect(r.errors.some((e) => e.code === "scd2_strategy_version_unknown")).toBe(true)
   })
 
   it("accepts strategyVersion = 'latest'", () => {
     const r = validateEntityDefinition(
-      validDef({ scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null } }),
+      validDef({ scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null } })
     )
     expect(r.ok).toBe(true)
   })
@@ -355,8 +341,8 @@ describe("validateEntityDefinition — lineage + version", () => {
   it("rejects non-schema-qualified lineage object", () => {
     const r = validateEntityDefinition(
       validDef({
-        lineageRefs: [{ object: "Revenue", kind: "view-source", note: null }],
-      }),
+        lineageRefs: [{ object: "Revenue", kind: "view-source", note: null }]
+      })
     )
     expect(r.errors.some((e) => e.code === "lineage_object_invalid")).toBe(true)
   })
@@ -390,9 +376,7 @@ describe("validateScd2Strategy", () => {
   })
 
   it("rejects unsafe onInsert expression", () => {
-    const r = validateScd2Strategy(
-      validStrategy({ onInsert: { x: "GETUTCDATE(); DROP TABLE x" } }),
-    )
+    const r = validateScd2Strategy(validStrategy({ onInsert: { x: "GETUTCDATE(); DROP TABLE x" } }))
     expect(r.ok).toBe(false)
     expect(r.errors[0]?.code).toBe("scope_sql_unsafe")
   })

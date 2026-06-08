@@ -27,10 +27,7 @@ export function loadTrajectory(runId: string): Trajectory {
 // ── Mutations ────────────────────────────────────────────────────
 
 /** Apply mutations to a trajectory (returns a new trajectory, no side effects). */
-export function applyMutations(
-  trajectory: Trajectory,
-  mutations: Mutation[],
-): Trajectory {
+export function applyMutations(trajectory: Trajectory, mutations: Mutation[]): Trajectory {
   let events = [...trajectory.events]
 
   // Sort mutations by seq descending so inserts/drops don't shift later indices
@@ -53,7 +50,7 @@ export function applyMutations(
         const entry = {
           seq: mut.seq,
           event: mut.event,
-          timestamp: new Date().toISOString(),
+          timestamp: new Date().toISOString()
         }
         if (insertIdx >= 0) {
           events.splice(insertIdx, 0, entry)

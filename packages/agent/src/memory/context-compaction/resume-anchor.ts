@@ -13,15 +13,15 @@ export function buildResumeAnchorMessage(state: ArtifactCompactionState): Messag
   const lines: string[] = [
     `[SESSION COMPACTED — iteration ${state.compactedAtIteration}]`,
     `Goal: ${state.goal.slice(0, 200)}${state.goal.length > 200 ? "..." : ""}`,
-    `Tool rounds completed: ${state.completedToolRounds}`,
+    `Tool rounds completed: ${state.completedToolRounds}`
   ]
 
   if (state.writtenFiles.length > 0) {
     const fileList = state.writtenFiles
       .map(
-        f =>
+        (f) =>
           `  - ${f.path} (${f.writeCount === 1 ? "1 write" : `${f.writeCount} writes`}, ~${f.linesAtLastWrite} lines` +
-          `${f.lastVerified ? ", read-verified" : ""})`,
+          `${f.lastVerified ? ", read-verified" : ""})`
       )
       .join("\n")
     lines.push(`Files written:\n${fileList}`)
@@ -37,7 +37,7 @@ export function buildResumeAnchorMessage(state: ArtifactCompactionState): Messag
 
   if (state.failedCommands.length > 0) {
     lines.push(
-      `Commands that failed (do NOT retry without a fix): ${state.failedCommands.slice(0, 3).join("; ")}`,
+      `Commands that failed (do NOT retry without a fix): ${state.failedCommands.slice(0, 3).join("; ")}`
     )
   }
 
@@ -50,7 +50,7 @@ export function buildResumeAnchorMessage(state: ArtifactCompactionState): Messag
 
   if (state.repairEpisodes > 0) {
     lines.push(
-      `Repair cycles detected: ${state.repairEpisodes} (files required multiple write+verify passes)`,
+      `Repair cycles detected: ${state.repairEpisodes} (files required multiple write+verify passes)`
     )
   }
 
@@ -67,6 +67,6 @@ export function buildResumeAnchorMessage(state: ArtifactCompactionState): Messag
   return {
     role: MessageRole.System,
     content: lines.join("\n"),
-    section: "history" as PromptBudgetSection,
+    section: "history" as PromptBudgetSection
   }
 }

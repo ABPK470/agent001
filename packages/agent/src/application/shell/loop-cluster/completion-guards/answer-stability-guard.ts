@@ -33,7 +33,8 @@ export interface AnswerSignature {
 const TABLE_ROW_LINE = /^\s*\|.+\|\s*$/
 const TABLE_SEPARATOR_LINE = /^\s*\|?\s*:?-{3,}/
 const SECTION_HEADER_LINE = /^\s*#{1,6}\s+\S/
-const CONCLUSION_KEYWORDS = /\b(unlock|next step|recommendation|conclusion|summary|takeaway|in summary|key finding)\b/i
+const CONCLUSION_KEYWORDS =
+  /\b(unlock|next step|recommendation|conclusion|summary|takeaway|in summary|key finding)\b/i
 
 /**
  * Compute the structural signature of a candidate final answer.
@@ -57,11 +58,7 @@ export function computeAnswerSignature(content: string | null): AnswerSignature 
 }
 
 function signaturesEqual(a: AnswerSignature, b: AnswerSignature): boolean {
-  return (
-    a.tableRowCount === b.tableRowCount
-    && a.sectionCount === b.sectionCount
-    && a.length === b.length
-  )
+  return a.tableRowCount === b.tableRowCount && a.sectionCount === b.sectionCount && a.length === b.length
 }
 
 /**

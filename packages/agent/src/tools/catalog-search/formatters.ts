@@ -15,7 +15,7 @@ export function fmtTable(
   matchedCols?: string[],
   catalog?: {
     getImplicitJoins(key: string, limit?: number): { column: string; dataType: string; tables: string[] }[]
-  },
+  }
 ): string {
   if (!t) return "(unknown table)"
   const lines: string[] = []
@@ -46,12 +46,16 @@ export function fmtTable(
   const pks = t.columns.filter((c) => c.isPK)
   const nonPk = t.columns.filter((c) => !c.isPK)
   const shown = [...pks, ...nonPk].slice(0, COLUMN_DISPLAY_CAP)
-  const colStr = shown.map((c) => {
-    const flags: string[] = []
-    if (c.isPK) flags.push("PK")
-    return `${c.name}${flags.length ? " (" + flags.join(", ") + ")" : ""}`
-  }).join(", ")
-  lines.push(`    Columns: ${colStr}${colCount > COLUMN_DISPLAY_CAP ? ` (+${colCount - COLUMN_DISPLAY_CAP} more)` : ""}`)
+  const colStr = shown
+    .map((c) => {
+      const flags: string[] = []
+      if (c.isPK) flags.push("PK")
+      return `${c.name}${flags.length ? " (" + flags.join(", ") + ")" : ""}`
+    })
+    .join(", ")
+  lines.push(
+    `    Columns: ${colStr}${colCount > COLUMN_DISPLAY_CAP ? ` (+${colCount - COLUMN_DISPLAY_CAP} more)` : ""}`
+  )
 
   // Highlight matched columns if any
   if (matchedCols && matchedCols.length > 0) {
@@ -72,9 +76,12 @@ export function fmtTable(
 }
 
 export function fmtPath(path: CatalogFK[]): string {
-  return path.map((fk) =>
-    `  ${fk.fromSchema}.${fk.fromTable}.${fk.fromColumn} → ${fk.toSchema}.${fk.toTable}.${fk.toColumn}`,
-  ).join("\n")
+  return path
+    .map(
+      (fk) =>
+        `  ${fk.fromSchema}.${fk.fromTable}.${fk.fromColumn} → ${fk.toSchema}.${fk.toTable}.${fk.toColumn}`
+    )
+    .join("\n")
 }
 
 /**
@@ -90,7 +97,9 @@ export function fmtSysEntry(entry: SysEntry): string {
     const SYS_COLUMN_DISPLAY_CAP = 40
     const shown = entry.columns.slice(0, SYS_COLUMN_DISPLAY_CAP)
     const colStr = shown.map((c) => `${c.name} (${c.dataType})`).join(", ")
-    lines.push(`    Columns: ${colStr}${entry.columns.length > SYS_COLUMN_DISPLAY_CAP ? ` (+${entry.columns.length - SYS_COLUMN_DISPLAY_CAP} more)` : ""}`)
+    lines.push(
+      `    Columns: ${colStr}${entry.columns.length > SYS_COLUMN_DISPLAY_CAP ? ` (+${entry.columns.length - SYS_COLUMN_DISPLAY_CAP} more)` : ""}`
+    )
   }
   lines.push(`    ⇒ Query with: query_mssql({ query: "SELECT ... FROM ${entry.qualifiedName} ..." })`)
   return lines.join("\n")

@@ -87,7 +87,7 @@ describe("procedural recall — Gap 5 class-tag overlap", () => {
     { tool: "search_catalog", argsPattern: { summary: "term=revenue" } },
     { tool: "explore_mssql_schema", argsPattern: { summary: "table=publish.Revenue" } },
     { tool: "profile_data", argsPattern: { summary: "table=publish.Revenue mode=fast" } },
-    { tool: "query_mssql", argsPattern: { summary: "SELECT TOP …" } },
+    { tool: "query_mssql", argsPattern: { summary: "SELECT TOP …" } }
   ]
 
   it("recalls a recipe across surface-different but shape-similar goals", () => {
@@ -95,7 +95,7 @@ describe("procedural recall — Gap 5 class-tag overlap", () => {
       trigger: "list top 3 products based on revenue for April 2025",
       toolSequence: toolSeq,
       runId: "r1",
-      upn: "user@example.com",
+      upn: "user@example.com"
     })
 
     // Surface-different goal (no "top 3", no "products", no "April 2025"),
@@ -103,7 +103,10 @@ describe("procedural recall — Gap 5 class-tag overlap", () => {
     const hits = searchProcedures("top 50 clients by revenue", 5, "user@example.com")
     expect(hits.length).toBeGreaterThanOrEqual(1)
     expect(hits[0]!.toolSequence.map((s) => s.tool)).toEqual([
-      "search_catalog", "explore_mssql_schema", "profile_data", "query_mssql",
+      "search_catalog",
+      "explore_mssql_schema",
+      "profile_data",
+      "query_mssql"
     ])
   })
 
@@ -112,7 +115,7 @@ describe("procedural recall — Gap 5 class-tag overlap", () => {
       trigger: "list top 3 products based on revenue for April 2025",
       toolSequence: toolSeq,
       runId: "r2",
-      upn: "user@example.com",
+      upn: "user@example.com"
     })
 
     const hits = searchProcedures("list top 5 products based on revenue", 5, "user@example.com")
@@ -124,7 +127,7 @@ describe("procedural recall — Gap 5 class-tag overlap", () => {
       trigger: "list top 3 products based on revenue for April 2025",
       toolSequence: toolSeq,
       runId: "r3",
-      upn: "user@example.com",
+      upn: "user@example.com"
     })
 
     const hits = searchProcedures("hello there friend", 5, "user@example.com")
@@ -136,7 +139,7 @@ describe("procedural recall — Gap 5 class-tag overlap", () => {
       trigger: "total revenue per month",
       toolSequence: toolSeq,
       runId: "r4",
-      upn: "user@example.com",
+      upn: "user@example.com"
     })
     expect(proc.trigger).toContain("[goalclasses")
     expect(proc.trigger).toContain("aggregateby")
