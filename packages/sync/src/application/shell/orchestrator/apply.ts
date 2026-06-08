@@ -9,9 +9,9 @@
  */
 
 import { type Transaction } from "mssql"
-import { getPool, type AgentHost } from "../../../ports/index.js"
-import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
+import { getPool, type SyncRuntimeHost } from "../../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
+import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { qtable, sqlLiteral, trackedQuery } from "./db-helpers.js"
 
 /**
@@ -33,7 +33,7 @@ const SYNC_META_COLUMNS = new Set([
  * Returns a map keyed by `schema.table`. Tables without a PK get an empty
  * array — callers must guard against that before issuing MERGE / DELETE.
  */
-export async function fetchPkColumns(host: AgentHost, connection: string, tables: string[], telemetryContext?: SyncTelemetryContext): Promise<Map<string, string[]>> {
+export async function fetchPkColumns(host: SyncRuntimeHost, connection: string, tables: string[], telemetryContext?: SyncTelemetryContext): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>()
   if (tables.length === 0) return result
   const { pool } = await getPool(host, connection)
@@ -77,7 +77,7 @@ export async function fetchPkColumns(host: AgentHost, connection: string, tables
  * copied from source — instead validFrom=GETUTCDATE(), validTo=NULL on both
  * INSERT and UPDATE, matching the legacy core.uspSyncObjectTran behaviour.
  */
-export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[], telemetryContext?: SyncTelemetryContext): Promise<number> {
+export async function applyInsertsUpdates(host: SyncRuntimeHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[], telemetryContext?: SyncTelemetryContext): Promise<number> {
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
   const predicate = tableResult.scopePredicate
@@ -204,7 +204,7 @@ export async function applyInsertsUpdates(host: AgentHost, tx: Transaction, plan
  * Apply deletes: rows on target within scope that no longer exist on source.
  * Uses direct source pool — no linked server needed.
  */
-export async function applyDeletes(host: AgentHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[], telemetryContext?: SyncTelemetryContext): Promise<number> {
+export async function applyDeletes(host: SyncRuntimeHost, tx: Transaction, plan: SyncPlan, tableName: string, pkColumns: string[], telemetryContext?: SyncTelemetryContext): Promise<number> {
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
   const predicate = tableResult.scopePredicate

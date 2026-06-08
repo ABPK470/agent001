@@ -2,7 +2,7 @@ import type { ConnectionPool } from "mssql"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { PostMetadataActionKind } from "../../../domain/enums.js"
-import type { AgentHost } from "../../../ports/host.js"
+import type { SyncRuntimeHost } from "../../../ports/host.js"
 import type { SyncExecutionContractStep, SyncPlan } from "../plan-store.js"
 import {
     createDataset,
@@ -422,7 +422,7 @@ function stepId(kind: PostMetadataActionKind): string {
   }
 }
 
-function createHost(): AgentHost {
+function createHost(): SyncRuntimeHost {
   return {
     mssql: {
       databases: new Map(),

@@ -1,7 +1,7 @@
 import { existsSync, readFileSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 
-import type { AgentHost } from "../ports/index.js"
+import type { SyncProjectRootHost } from "../ports/index.js"
 import { PostMetadataActionKind, type PostMetadataActionKind as PostMetadataActionKindValue } from "./enums.js"
 import { deriveArchiveTable, type SyncRecipe, type SyncRecipeDiscrepancy, type SyncRecipeTable } from "./recipes.js"
 
@@ -82,7 +82,7 @@ export interface PublishedSyncDefinitionBundle {
 }
 
 export function loadPublishedSyncDefinitionBundle(
-  host: AgentHost,
+  host: SyncProjectRootHost,
   projectRoot: string,
   relPath = DEFAULT_PUBLISHED_DEFINITIONS_PATH,
 ): PublishedSyncDefinitionBundle {
@@ -125,7 +125,7 @@ export function loadPublishedSyncDefinitionBundle(
 }
 
 export function getPublishedSyncDefinition(
-  host: AgentHost,
+  host: SyncProjectRootHost,
   projectRoot: string,
   entityId: string,
 ): PublishedSyncDefinition {
@@ -138,7 +138,7 @@ export function getPublishedSyncDefinition(
 }
 
 export function listPublishedSyncDefinitions(
-  host: AgentHost,
+  host: SyncProjectRootHost,
   projectRoot: string,
 ): PublishedSyncDefinition[] {
   return Object.values(loadPublishedSyncDefinitionBundle(host, projectRoot).definitions)
@@ -146,17 +146,17 @@ export function listPublishedSyncDefinitions(
 }
 
 export function getPublishedSyncDefinitionForHost(
-  host: AgentHost,
+  host: SyncProjectRootHost,
   entityId: string,
 ): PublishedSyncDefinition {
   return getPublishedSyncDefinition(host, requireProjectRoot(host), entityId)
 }
 
-export function listPublishedSyncDefinitionsForHost(host: AgentHost): PublishedSyncDefinition[] {
+export function listPublishedSyncDefinitionsForHost(host: SyncProjectRootHost): PublishedSyncDefinition[] {
   return listPublishedSyncDefinitions(host, requireProjectRoot(host))
 }
 
-export function getPublishedSyncRecipe(host: AgentHost, entityId: string): SyncRecipe {
+export function getPublishedSyncRecipe(host: SyncProjectRootHost, entityId: string): SyncRecipe {
   return definitionToSyncRecipe(getPublishedSyncDefinitionForHost(host, entityId))
 }
 
@@ -204,7 +204,7 @@ function toPostMetadataAction(kind: string): Array<{ kind: PostMetadataActionKin
   }
 }
 
-function requireProjectRoot(host: AgentHost): string {
+function requireProjectRoot(host: SyncProjectRootHost): string {
   const root = host.sync.dbProjectRoot
   if (!root) {
     throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(host, projectRoot)")

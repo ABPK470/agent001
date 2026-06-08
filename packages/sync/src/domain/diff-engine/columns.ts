@@ -5,7 +5,7 @@
  */
 
 import type sql from "mssql"
-import type { AgentHost } from "../../ports/index.js"
+import type { SyncEventHost } from "../../ports/index.js"
 import { hashExpr, qtable, runQueryWithRetry } from "./sql-helpers.js"
 import {
     DETERMINISTIC_SESSION_PREFIX,
@@ -22,7 +22,7 @@ import {
  * skip the identity column (it's the PK and used for matching).
  */
 export async function fetchTableColumns(
-  host: AgentHost,
+  host: SyncEventHost,
   pool: sql.ConnectionPool,
   qualifiedTable: string,
   telemetryContext?: import("../../ports/events.js").SyncTelemetryContext,
@@ -64,7 +64,7 @@ export async function fetchTableColumns(
  * in scope are stable, and nullables compare consistently across source/target.
  */
 export async function fetchPkHash(
-  host: AgentHost,
+  host: SyncEventHost,
   pool: sql.ConnectionPool,
   qualifiedTable: string,
   predicate: string,

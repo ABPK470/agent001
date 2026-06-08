@@ -20,7 +20,7 @@
  */
 
 import sqlMod, { type ConnectionPool, type IProcedureResult, type IRecordSet } from "mssql"
-import type { AgentHost } from "../../../ports/index.js"
+import type { SyncRuntimeHost } from "../../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
 
@@ -137,7 +137,7 @@ function assertNoErrors(result: DeployStepResult, stepLabel: string): void {
  * a single cheap lookup against `core.Contract`.
  */
 export async function resolveContractName(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   contractId: number,
   connection: string,
@@ -171,7 +171,7 @@ export async function resolveContractName(
  * the no-op cases internally (not marked for deletion, no changes, etc).
  */
 export async function undeployMarkedContract(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   contractId: number,
   connection: string,
@@ -203,7 +203,7 @@ export async function undeployMarkedContract(
  * it to match current metadata if it already exists.
  */
 export async function createDataset(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   _contractId: number,
   contractName: string,
@@ -241,7 +241,7 @@ export async function createDataset(
  * as needed.
  */
 export async function createDatasetFKs(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   contractName: string,
   connection: string,
@@ -280,7 +280,7 @@ export async function createDatasetFKs(
  * entries.
  */
 export async function deployETL(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   contractName: string,
   connection: string,
@@ -313,7 +313,7 @@ export async function deployETL(
  * triggers (create/drop/enable/disable) on the target dataset table.
  */
 export async function deployRoutine(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   contractName: string,
   connection: string,
@@ -354,7 +354,7 @@ type AuditAction = "deployDate" | "syncDate" | "runOrNot" | "syncOrNot"
  *   - `deployDate` / `syncDate` — stamps the date, returns success
  */
 export async function runAuditCheckDirect(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   params: { schema?: string; objType: string; id: string | number; action: AuditAction },
   connection: string,
@@ -391,7 +391,7 @@ export async function runAuditCheckDirect(
  * `core.Contract.isLocked` and returns status/message.
  */
 export async function setContractLockDirect(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   contractId: number,
   isLocked: boolean,
@@ -425,7 +425,7 @@ export async function setContractLockDirect(
  * array from the contract metadata and executes each script.
  */
 export async function runContractDeploymentScriptsDirect(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   contractName: string,
   action: "Run preScript" | "Run postScript",

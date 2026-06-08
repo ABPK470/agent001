@@ -7,7 +7,7 @@
  * @module
  */
 
-import { SyncProgressKind, type AgentHost } from "../../../ports/index.js"
+import { SyncProgressKind, type SyncRuntimeHost } from "../../../ports/index.js"
 
 export interface ExecuteProgress {
   type: SyncProgressKind
@@ -58,7 +58,7 @@ export function formatSyncExecuteFailure(context: SyncExecuteFailureContext, det
 }
 
 export interface ExecuteOptions {
-  host: AgentHost
+  host: SyncRuntimeHost
   confirm: boolean
   /** Optional progress callback (used by SSE route). */
   onProgress?: (p: ExecuteProgress) => void

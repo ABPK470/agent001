@@ -14,7 +14,7 @@ export type {
     AttachmentStore as AttachmentService, BrowserClient, BrowserContextHandle,
     BrowserContextReader as BrowserContextProvider, CredentialReader as BrowserCredentialProvider,
     BrowserGuard,
-    HandoffStore as BrowserHandoffProvider, ConfigureAgentOptions, ConfigureMssqlConnection, MakeRunContextOptions, RunContext, ShellClient
+    HandoffStore as BrowserHandoffProvider, ConfigureAgentOptions, ConfigureMssqlConnection, MakeRunContextOptions, MssqlEntry, RunContext, ShellClient
 } from "./application/shell/runtime.js"
 
 // ── Types & constants ───────────────────────────────────────────────
@@ -82,21 +82,18 @@ export type { CatalogBootstrapMetadata, TenantConfig } from "./application/shell
 
 // ── Planner public surface (curated subset; planner has its own index) ─
 export {
-    detectInternalFailure,
+    GENERIC_FAILURE_PREFIX, PLATFORM_UNCONFIGURED_PREFIX,
+    POLISHED_FAILURE_MARKER, detectInternalFailure,
     detectPlatformUnconfigured,
-    fillRunReference,
-    GENERIC_FAILURE_PREFIX,
-    isGenericFailureAnswer,
+    fillRunReference, isGenericFailureAnswer,
     isPlatformUnconfiguredAnswer,
     isPolishedFailureAnswer,
     isUserSafeFailureAnswer,
     mapFailureKindForPolish,
-    markPolishedFailure,
-    PLATFORM_UNCONFIGURED_PREFIX,
-    POLISHED_FAILURE_MARKER,
-    polishFailureForUser,
+    markPolishedFailure, polishFailureForUser,
     synthesizeGenericFailureAnswer,
     type InternalFailureHit,
     type PlatformUnconfiguredHit,
     type PolishFailureInput
 } from "./application/core/planner.js"
+

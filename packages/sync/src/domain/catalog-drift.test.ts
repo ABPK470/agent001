@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 
-import type { AgentHost } from "../ports/host.js"
+import type { SyncRuntimeHost } from "../ports/host.js"
 
 const queryMock = vi.fn()
 
@@ -18,7 +18,7 @@ vi.mock("../ports/index.js", () => ({
 
 import { detectCatalogDrift } from "./catalog-drift.js"
 
-function createHost(): AgentHost {
+function createHost(): SyncRuntimeHost {
   return {
     mssql: {
       databases: new Map(),

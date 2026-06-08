@@ -25,16 +25,16 @@ import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
-  EventType,
-  buildCatalog, closeMssqlPool,
-  configureAgent,
-  getMssqlConfig,
-  type AgentHost,
-  type BrowserClient,
-  type ShellClient,
+    EventType,
+    buildCatalog, closeMssqlPool,
+    configureAgent,
+    getMssqlConfig,
+    type AgentHost,
+    type BrowserClient,
+    type ShellClient,
 } from "@mia/agent"
 import {
-  configurePlanStore,
+    configurePlanStore,
 } from "@mia/sync"
 import Fastify from "fastify"
 import { registerIdentity } from "./adapters/auth/identity.js"
@@ -51,41 +51,41 @@ import { touchSession } from "./adapters/persistence/sessions.js"
 import { initSandbox } from "./adapters/sandbox/index.js"
 import { registerAuthRoutes } from "./api/auth.js"
 import {
-  MessageQueue,
-  MessageRouter,
-  SqliteConversationStore,
-  SqliteQueueStore,
-  TeamsChannel,
-  listChannelConfigs,
-  migrateChannels,
+    MessageQueue,
+    MessageRouter,
+    SqliteConversationStore,
+    SqliteQueueStore,
+    TeamsChannel,
+    listChannelConfigs,
+    migrateChannels,
 } from "./api/channels/index.js"
 import {
-  registerAdminRoutes,
-  registerAgentRoutes,
-  registerApprovalRoutes,
-  registerAttachmentRoutes,
-  registerBrowserRoutes,
-  registerEntityRegistryRoutes,
-  registerEventRoutes,
-  registerEvidenceRoutes,
-  registerFreezeWindowRoutes,
-  registerLayoutRoutes,
-  registerLlmRoutes,
-  registerMemoryRoutes,
-  registerMetricsRoutes,
-  registerMymiRoutes,
-  registerNotificationRouteRoutes,
-  registerNotificationRoutes,
-  registerOperationRoutes,
-  registerPolicyRoutes,
-  registerProfileRoutes,
-  registerProposerRoutes,
-  registerRunRoutes,
-  registerSyncEnvironmentRoutes,
-  registerSyncRoutes,
-  registerToolCacheRoutes,
-  registerUsageRoutes,
-  registerWebhookRoutes,
+    registerAdminRoutes,
+    registerAgentRoutes,
+    registerApprovalRoutes,
+    registerAttachmentRoutes,
+    registerBrowserRoutes,
+    registerEntityRegistryRoutes,
+    registerEventRoutes,
+    registerEvidenceRoutes,
+    registerFreezeWindowRoutes,
+    registerLayoutRoutes,
+    registerLlmRoutes,
+    registerMemoryRoutes,
+    registerMetricsRoutes,
+    registerMymiRoutes,
+    registerNotificationRouteRoutes,
+    registerNotificationRoutes,
+    registerOperationRoutes,
+    registerPolicyRoutes,
+    registerProfileRoutes,
+    registerProposerRoutes,
+    registerRunRoutes,
+    registerSyncEnvironmentRoutes,
+    registerSyncRoutes,
+    registerToolCacheRoutes,
+    registerUsageRoutes,
+    registerWebhookRoutes,
 } from "./api/http-routes.js"
 import { dispatchNotification } from "./api/notifications/router.js"
 import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
@@ -105,7 +105,7 @@ async function main() {
   initDatabase()
 
   let currentWorkspace = resolveWorkspace()
-  const { sandbox, shellClient, shellSandboxStrict, browserCheckClient } = await configureSandbox(() => currentWorkspace)
+  const { sandbox, shellClient, shellSandboxStrict, browserCheckMode, browserCheckClient } = await configureSandbox(() => currentWorkspace)
 
   const mssqlSetup = setupMssql(_projectRoot)
   const syncEnvironments = loadPersistedSyncEnvironments(_projectRoot, mssqlSetup.configs)
@@ -256,12 +256,26 @@ async function main() {
         client: shellClient,
         sandboxStrict: shellSandboxStrict,
       },
-      browserCheckClient,
-      mssqlDatabases: bootHost.mssql.databases,
-      mssqlDefaultConnection: bootHost.mssql.defaultConnection,
-      catalogInstances: bootHost.catalog.instances,
-      catalogDefaultCachePath: bootHost.catalog.defaultCachePath,
-      syncState: bootHost.sync,
+      browserCheck: {
+        mode: browserCheckMode,
+        client: browserCheckClient,
+      },
+      mssql: {
+        databases: bootHost.mssql.databases,
+        defaultConnection: bootHost.mssql.defaultConnection,
+      },
+      catalog: {
+        instances: bootHost.catalog.instances,
+        defaultCachePath: bootHost.catalog.defaultCachePath,
+      },
+      sync: {
+        eventSink: bootHost.sync.eventSink,
+        runSink: bootHost.sync.runSink,
+        freezeWindowsReader: bootHost.sync.freezeWindowsReader,
+        environments: bootHost.sync.environments,
+        plans: bootHost.sync.plans,
+        dbProjectRoot: bootHost.sync.dbProjectRoot,
+      },
     },
   })
   const { messageQueue, messageRouter, channelConfigs } = initMessaging(orchestrator)
@@ -374,6 +388,7 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
   sandbox: ReturnType<typeof initSandbox>
   shellClient: ShellClient | null
   shellSandboxStrict: boolean
+  browserCheckMode: "host" | "sandbox"
   browserCheckClient: BrowserClient | null
 }> {
   const sandboxMode = process.env["SANDBOX_MODE"] === "host"
@@ -386,6 +401,7 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
 
   let shellClient: ShellClient | null = null
   let shellSandboxStrict = false
+  let browserCheckMode: "host" | "sandbox" = "host"
   let browserCheckClient: BrowserClient | null = null
 
   if (dockerReady && sandbox.mode !== "host") {
@@ -406,6 +422,7 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
     // (doctrine §1 — no late-bound module setter).
     const browserReady = await sandbox.ensureBrowserImage()
     if (browserReady) {
+      browserCheckMode = "sandbox"
       browserCheckClient = async (htmlPath, clicks, waitMs, cwd) => {
         const script = buildBrowserScript(htmlPath, clicks, waitMs)
         const result = await sandbox.browserExec(script, cwd || getWorkspace(), { timeout: 30_000 })
@@ -433,7 +450,7 @@ async function configureSandbox(getWorkspace: () => string): Promise<{
       : "Docker sandbox: UNAVAILABLE (commands run on host with filtered env)")
   }
 
-  return { sandbox, shellClient, shellSandboxStrict, browserCheckClient }
+  return { sandbox, shellClient, shellSandboxStrict, browserCheckMode, browserCheckClient }
 }
 
 async function buildLlmAndCatalog(host: AgentHost, mssqlSummary: string) {

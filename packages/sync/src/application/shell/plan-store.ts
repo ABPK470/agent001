@@ -14,7 +14,7 @@ import { randomUUID } from "node:crypto"
 import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, unlinkSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { EntityType } from "../../domain/recipes.js"
-import { SyncPlanChangeType, type AgentHost } from "../../ports/index.js"
+import { SyncPlanChangeType, type SyncPlanStoreHost } from "../../ports/index.js"
 
 export interface SyncExecutionContractStep {
   id: string
@@ -226,7 +226,7 @@ const EXECUTE_MAX_AGE_MS = 60 * 60 * 1000
  * Configure the disk root for plan persistence (e.g.
  * `packages/server/data/sync-plans`). Idempotent.
  */
-export function configurePlanStore(host: AgentHost, diskRoot: string): void {
+export function configurePlanStore(host: SyncPlanStoreHost, diskRoot: string): void {
   host.sync.plans.diskRoot = diskRoot
   if (!existsSync(diskRoot)) mkdirSync(diskRoot, { recursive: true })
   pruneExpired(host)
@@ -238,7 +238,7 @@ export function allocPlanId(): string {
 }
 
 /** Persist a plan (memory + disk + durable sink, if installed). */
-export function savePlan(host: AgentHost, plan: SyncPlan): void {
+export function savePlan(host: SyncPlanStoreHost, plan: SyncPlan): void {
   const plans = host.sync.plans
   plans.memCache.set(plan.planId, plan)
   if (plans.diskRoot) {
@@ -252,7 +252,7 @@ export function savePlan(host: AgentHost, plan: SyncPlan): void {
 }
 
 /** Load a plan. Returns null if missing. Tries memory → disk → durable sink. */
-export function loadPlan(host: AgentHost, planId: string): SyncPlan | null {
+export function loadPlan(host: SyncPlanStoreHost, planId: string): SyncPlan | null {
   const plans = host.sync.plans
   const cached = plans.memCache.get(planId)
   if (cached && !isExpired(cached)) return cached
@@ -288,7 +288,7 @@ export function planTooOldToExecute(plan: SyncPlan): boolean {
 }
 
 /** Drop a plan from memory + disk (after successful execute). */
-export function deletePlan(host: AgentHost, planId: string): void {
+export function deletePlan(host: SyncPlanStoreHost, planId: string): void {
   const plans = host.sync.plans
   plans.memCache.delete(planId)
   if (plans.diskRoot) {
@@ -301,7 +301,7 @@ function isExpired(plan: SyncPlan): boolean {
   return Date.now() - plan.createdAtMs > TTL_MS
 }
 
-function pruneExpired(host: AgentHost): void {
+function pruneExpired(host: SyncPlanStoreHost): void {
   const diskRoot = host.sync.plans.diskRoot
   if (!diskRoot) return
   for (const f of readdirSync(diskRoot)) {

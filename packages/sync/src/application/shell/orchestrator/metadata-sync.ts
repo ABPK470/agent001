@@ -12,7 +12,7 @@
  */
 
 import sqlMod from "mssql"
-import { EventType, SyncProgressKind, type AgentHost } from "../../../ports/index.js"
+import { EventType, SyncProgressKind, type SyncRuntimeHost } from "../../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { applyDeletes, applyInsertsUpdates } from "./apply.js"
@@ -21,7 +21,7 @@ import { qtable, trackedQuery } from "./db-helpers.js"
 import { SyncExecuteError, toSyncExecuteError, type ExecuteProgress } from "./types.js"
 
 export interface RunMetadataSyncInput {
-  host: AgentHost
+  host: SyncRuntimeHost
   plan: SyncPlan
   planId: string
   pkByTable: Map<string, string[]>

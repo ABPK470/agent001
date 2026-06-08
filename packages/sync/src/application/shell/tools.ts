@@ -9,7 +9,7 @@
 import type { ExecutableTool, Tool, ToolMetadata } from "@mia/agent"
 import { getEnvironments } from "../../domain/environments.js"
 import type { EntityType } from "../../domain/recipes.js"
-import { getPool, type AgentHost } from "../../ports/index.js"
+import { getPool, type SyncRuntimeHost } from "../../ports/index.js"
 import { executeSync, previewSync } from "./orchestrator/index.js"
 import { loadPlan } from "./plan-store.js"
 
@@ -28,7 +28,7 @@ function normalizeCatalogName(name: string): string {
 
 // ── compare_catalogs ─────────────────────────────────────────────
 
-function buildCompareCatalogsTool(host: AgentHost): Tool { return {
+function buildCompareCatalogsTool(host: SyncRuntimeHost): Tool { return {
   name: "compare_catalogs",
   description:
     "Compare the schema (tables + columns) of two MSSQL connections (source vs target). " +
@@ -80,7 +80,7 @@ function buildCompareCatalogsTool(host: AgentHost): Tool { return {
 } }
 
 export const compareCatalogsToolMetadata: ToolMetadata = (() => {
-  const stub = {} as AgentHost
+  const stub = {} as SyncRuntimeHost
   const t = buildCompareCatalogsTool(stub)
   return {
     name: t.name,
@@ -91,11 +91,11 @@ export const compareCatalogsToolMetadata: ToolMetadata = (() => {
 
 export const compareCatalogsTool = compareCatalogsToolMetadata
 
-export function createCompareCatalogsTool(host: AgentHost): ExecutableTool {
+export function createCompareCatalogsTool(host: SyncRuntimeHost): ExecutableTool {
   return buildCompareCatalogsTool(host)
 }
 
-async function fetchSchema(host: AgentHost, connection: string): Promise<{ tables: Set<string>; cols: Map<string, Map<string, string>> }> {
+async function fetchSchema(host: SyncRuntimeHost, connection: string): Promise<{ tables: Set<string>; cols: Map<string, Map<string, string>> }> {
   const { pool } = await getPool(host, connection)
   const r = await pool.request().query(`
     SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
@@ -118,7 +118,7 @@ async function fetchSchema(host: AgentHost, connection: string): Promise<{ table
 
 // ── sync_preview ─────────────────────────────────────────────────
 
-function buildSyncPreviewTool(host: AgentHost): Tool { return {
+function buildSyncPreviewTool(host: SyncRuntimeHost): Tool { return {
   name: "sync_preview",
   description:
     "Compute a SyncPlan for migrating one ABI entity (Contract / Dataset / Rule / Pipeline / Gate Metadata / Content) " +
@@ -198,7 +198,7 @@ function buildSyncPreviewTool(host: AgentHost): Tool { return {
 } }
 
 export const syncPreviewToolMetadata: ToolMetadata = (() => {
-  const stub = {} as AgentHost
+  const stub = {} as SyncRuntimeHost
   const t = buildSyncPreviewTool(stub)
   return {
     name: t.name,
@@ -209,13 +209,13 @@ export const syncPreviewToolMetadata: ToolMetadata = (() => {
 
 export const syncPreviewTool = syncPreviewToolMetadata
 
-export function createSyncPreviewTool(host: AgentHost): ExecutableTool {
+export function createSyncPreviewTool(host: SyncRuntimeHost): ExecutableTool {
   return buildSyncPreviewTool(host)
 }
 
 // ── sync_execute ──────────────────────────────────────
 
-function buildSyncExecuteTool(host: AgentHost): Tool { return {
+function buildSyncExecuteTool(host: SyncRuntimeHost): Tool { return {
   name: "sync_execute",
   description:
     "Apply a previously-computed sync plan (from sync_preview) to the target environment. " +
@@ -248,7 +248,7 @@ function buildSyncExecuteTool(host: AgentHost): Tool { return {
 } }
 
 export const syncExecuteToolMetadata: ToolMetadata = (() => {
-  const stub = {} as AgentHost
+  const stub = {} as SyncRuntimeHost
   const t = buildSyncExecuteTool(stub)
   return {
     name: t.name,
@@ -259,13 +259,13 @@ export const syncExecuteToolMetadata: ToolMetadata = (() => {
 
 export const syncExecuteTool = syncExecuteToolMetadata
 
-export function createSyncExecuteTool(host: AgentHost): ExecutableTool {
+export function createSyncExecuteTool(host: SyncRuntimeHost): ExecutableTool {
   return buildSyncExecuteTool(host)
 }
 
 // ── list_environments (helper) ───────────────────────────────────
 
-function buildListEnvironmentsTool(host: AgentHost): Tool { return {
+function buildListEnvironmentsTool(host: SyncRuntimeHost): Tool { return {
   name: "list_environments",
   description: "List all configured ABI environments (source/target candidates for sync).",
   parameters: { type: "object", properties: {}, required: [] },
@@ -281,7 +281,7 @@ function buildListEnvironmentsTool(host: AgentHost): Tool { return {
 } }
 
 export const listEnvironmentsToolMetadata: ToolMetadata = (() => {
-  const stub = {} as AgentHost
+  const stub = {} as SyncRuntimeHost
   const t = buildListEnvironmentsTool(stub)
   return {
     name: t.name,
@@ -292,6 +292,6 @@ export const listEnvironmentsToolMetadata: ToolMetadata = (() => {
 
 export const listEnvironmentsTool = listEnvironmentsToolMetadata
 
-export function createListEnvironmentsTool(host: AgentHost): ExecutableTool {
+export function createListEnvironmentsTool(host: SyncRuntimeHost): ExecutableTool {
   return buildListEnvironmentsTool(host)
 }

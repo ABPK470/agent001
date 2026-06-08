@@ -15,7 +15,7 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
-import { getMssqlConfig, type AgentHost } from "../ports/index.js"
+import { getMssqlConfig, type MssqlAccessHost, type SyncEnvironmentRegistryHost } from "../ports/index.js"
 import { EnvAccessMode, EnvRole } from "./enums.js"
 
 /**
@@ -112,18 +112,18 @@ export interface LoadSyncEnvironmentsResult {
 // Environment registry lives on the supplied host.
 
 /** Configure all environments at once. Replaces any prior config. */
-export function replaceEnvironments(host: AgentHost, envs: SyncEnvironment[]): void {
+export function replaceEnvironments(host: SyncEnvironmentRegistryHost, envs: SyncEnvironment[]): void {
   host.sync.environments.clear()
   for (const e of envs) host.sync.environments.set(e.name, e)
 }
 
 /** Read the current environment registry. */
-export function getEnvironments(host: AgentHost): SyncEnvironment[] {
+export function getEnvironments(host: SyncEnvironmentRegistryHost): SyncEnvironment[] {
   return Array.from(host.sync.environments.values())
 }
 
 /** Get one environment by name; throws if missing. */
-export function getEnvironment(host: AgentHost, name: string): SyncEnvironment {
+export function getEnvironment(host: SyncEnvironmentRegistryHost, name: string): SyncEnvironment {
   const e = host.sync.environments.get(name)
   if (!e) {
     const available = Array.from(host.sync.environments.keys()).join(", ") || "none"
@@ -257,7 +257,7 @@ export function loadSyncEnvironments(
  * Initialise environments. Reads `deploy/sync/sync-environments.json` if
  * present; otherwise synthesises one entry per configured MSSQL connection.
  */
-export async function setupEnvironments(host: AgentHost, projectRoot: string, relPath = DEFAULT_CONFIG_PATH): Promise<string> {
+export async function setupEnvironments(host: MssqlAccessHost & SyncEnvironmentRegistryHost, projectRoot: string, relPath = DEFAULT_CONFIG_PATH): Promise<string> {
   const loaded = loadSyncEnvironments(projectRoot, getMssqlConfig(host), relPath)
   replaceEnvironments(host, loaded.environments)
   if (loaded.source === "file") {

@@ -5,8 +5,8 @@
  */
 
 import type sql from "mssql"
-import type { AgentHost } from "../../ports/index.js"
 import type { SyncPlanConflict } from "../../application/shell/plan-store.js"
+import type { SyncEventHost } from "../../ports/index.js"
 import type { SyncRecipeTable } from "../recipes.js"
 import { formatScalar, qtable, quoteValue, runQueryWithRetry } from "./sql-helpers.js"
 import type { PkHashRow } from "./types.js"
@@ -27,7 +27,7 @@ import type { PkHashRow } from "./types.js"
  *  - Capped at 5_000 PKs per query to keep the IN list reasonable.
  */
 export async function detectScopeMisattribution(
-  host: AgentHost,
+  host: SyncEventHost,
   tgtPool: sql.ConnectionPool,
   table: SyncRecipeTable,
   entityId: string | number,

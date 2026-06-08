@@ -10,7 +10,7 @@
  */
 
 import type sql from "mssql"
-import type { AgentHost } from "../../../ports/index.js"
+import type { SyncEventHost, SyncProjectRootHost } from "../../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
 import { emitSyncSqlEvent } from "../events.js"
 
@@ -29,11 +29,11 @@ export const PREVIEW_TABLE_CONCURRENCY = Math.max(
 export const DRIFT_ABORT_PCT = 0.05
 
 /** Configure the project root used to load published sync definitions. */
-export function configureSyncOrchestrator(host: AgentHost, projectRoot: string): void {
+export function configureSyncOrchestrator(host: SyncProjectRootHost, projectRoot: string): void {
   host.sync.dbProjectRoot = projectRoot
 }
 
-export function projectRoot(host: AgentHost): string {
+export function projectRoot(host: SyncProjectRootHost): string {
   const root = host.sync.dbProjectRoot
   if (!root) throw new Error("Sync orchestrator not configured — call configureSyncOrchestrator(host, projectRoot)")
   return root
@@ -82,7 +82,7 @@ export async function mapWithConcurrency<T, R>(
  * already has equivalent telemetry inside diff-engine.ts via runQueryWithRetry).
  */
 export async function trackedQuery<T = unknown>(
-  host: AgentHost,
+  host: SyncEventHost,
   req: { query: (sql: string) => Promise<sql.IResult<T>> },
   sqlText: string,
   label: string,
@@ -116,7 +116,7 @@ export async function trackedQuery<T = unknown>(
 
 /** Same as trackedQuery but for `.execute(sproc)` calls. */
 export async function trackedExecute(
-  host: AgentHost,
+  host: SyncEventHost,
   req: { execute: (sproc: string) => Promise<sql.IProcedureResult<unknown>> },
   sprocName: string,
   label: string,

@@ -42,6 +42,10 @@ export interface MssqlHost {
   defaultConnection: { value: string | null }
 }
 
+export interface MssqlAccessHost {
+  mssql: MssqlHost
+}
+
 export interface SyncHost {
   eventSink: SyncEventSink
   runSink: SyncRunSink
@@ -50,7 +54,29 @@ export interface SyncHost {
   dbProjectRoot: string | null
 }
 
-export interface AgentHost {
-  mssql: MssqlHost
+export interface SyncEventHost {
+  sync: Pick<SyncHost, "eventSink">
+}
+
+export interface SyncRunHost {
+  sync: Pick<SyncHost, "runSink">
+}
+
+export interface SyncEnvironmentRegistryHost {
+  sync: Pick<SyncHost, "environments">
+}
+
+export interface SyncPlanStoreHost {
+  sync: Pick<SyncHost, "plans" | "runSink">
+}
+
+export interface SyncProjectRootHost {
+  sync: Pick<SyncHost, "dbProjectRoot">
+}
+
+export interface SyncStateHost {
   sync: SyncHost
+}
+
+export interface SyncRuntimeHost extends MssqlAccessHost, SyncStateHost {
 }

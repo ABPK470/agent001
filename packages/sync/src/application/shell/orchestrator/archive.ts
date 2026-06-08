@@ -15,9 +15,9 @@
 
 import type { ConnectionPool } from "mssql"
 import { tableHasTriggers } from "../../../domain/catalog-drift.js"
-import { EventType, type AgentHost } from "../../../ports/index.js"
-import { type SyncPlan } from "../plan-store.js"
+import { EventType, type SyncRuntimeHost } from "../../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
+import { type SyncPlan } from "../plan-store.js"
 import { trackedQuery } from "./db-helpers.js"
 
 /**
@@ -26,7 +26,7 @@ import { trackedQuery } from "./db-helpers.js"
  * where the batch query failed.
  */
 export async function probeTriggers(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   tgtPool: ConnectionPool,
   planId: string,
   target: string,
@@ -75,7 +75,7 @@ export async function probeTriggers(
  * The trigger-based path is the production-default per the original plan.
  */
 export async function maybeArchive(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   plan: SyncPlan,
   tableName: string,
   triggerCache?: Map<string, boolean>,

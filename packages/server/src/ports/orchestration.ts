@@ -1,4 +1,17 @@
-import type { AttachmentService, BrowserClient, BrowserContextProvider, BrowserCredentialProvider, BrowserHandoffProvider, EngineServices, LLMClient, PolicyRole, ShellClient } from "@mia/agent"
+import type {
+    AttachmentService,
+    BrowserClient,
+    BrowserContextProvider,
+    BrowserCredentialProvider,
+    BrowserHandoffProvider,
+    CatalogGraph,
+    EngineServices,
+    LLMClient,
+    MssqlEntry,
+    PolicyRole,
+    ShellClient,
+} from "@mia/agent"
+import type { FreezeWindowDefinition, SyncEnvironment, SyncEventSink, SyncPlan, SyncRunSink } from "@mia/sync"
 import type { AgentBus } from "../agent-bus.js"
 import type { RunQueue } from "../application/shell/queue/run-queue.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../application/shell/workspace/run-workspace.js"
@@ -67,6 +80,36 @@ export interface OrchestratorConfig {
   bootHostDeps: BootHostDeps
 }
 
+export interface BootShellDeps {
+  mode: "host" | "sandbox" | "disabled"
+  client?: ShellClient | null
+  sandboxStrict?: boolean
+}
+
+export interface BootBrowserCheckDeps {
+  mode: "host" | "sandbox" | "disabled"
+  client?: BrowserClient | null
+}
+
+export interface BootMssqlState {
+  databases: Map<string, MssqlEntry>
+  defaultConnection: { value: string | null }
+}
+
+export interface BootCatalogState {
+  instances: Map<string, CatalogGraph>
+  defaultCachePath: { value: string | undefined }
+}
+
+export interface BootSyncState {
+  eventSink: SyncEventSink
+  runSink: SyncRunSink
+  freezeWindowsReader: () => readonly FreezeWindowDefinition[]
+  environments: Map<string, SyncEnvironment>
+  plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }
+  dbProjectRoot: string | null
+}
+
 /**
  * Boot-time host dependencies — ports the server resolves once at boot and
  * passes to every per-run host. Each field is optional (the server may not
@@ -78,24 +121,11 @@ export interface BootHostDeps {
   browserContextReader?: BrowserContextProvider | null
   browserCredentialReader?: BrowserCredentialProvider | null
   browserHandoffStore?: BrowserHandoffProvider | null
-  /** Final shell policy for per-run hosts. Host mode is the normal default. */
-  shell?: {
-    mode: import("@mia/agent").AgentHost["shell"]["mode"]
-    client?: ShellClient | null
-    sandboxStrict?: boolean
-  }
-  /** Sandbox-routed Playwright client. Null = host fallback. */
-  browserCheckClient?: BrowserClient | null
-  /** Shared mssql connection registry (mutable Map, populated by setupMssql). */
-  mssqlDatabases?: import("@mia/agent").AgentHost["mssql"]["databases"]
-  /** Shared mssql default-connection ref (mutable container). */
-  mssqlDefaultConnection?: import("@mia/agent").AgentHost["mssql"]["defaultConnection"]
-  /** Shared catalog registry (mutable Map, populated by buildCatalog at boot). */
-  catalogInstances?: import("@mia/agent").AgentHost["catalog"]["instances"]
-  /** Shared catalog default-cachePath ref (mutable container). */
-  catalogDefaultCachePath?: import("@mia/agent").AgentHost["catalog"]["defaultCachePath"]
-  /** Shared sync host state (environments, plans, sinks, registry readers). */
-  syncState?: import("@mia/agent").AgentHost["sync"]
+  shell?: BootShellDeps
+  browserCheck?: BootBrowserCheckDeps
+  mssql?: BootMssqlState
+  catalog?: BootCatalogState
+  sync?: BootSyncState
 }
 
 // ── Notification types ────────────────────────────────────────────

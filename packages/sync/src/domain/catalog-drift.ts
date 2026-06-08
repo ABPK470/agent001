@@ -11,7 +11,7 @@
  * {@link DEFAULT_MYMI_SCHEMA_ALLOWLIST} for the historical Mymi set.
  */
 
-import { getPool, type AgentHost } from "../ports/index.js"
+import { getPool, type MssqlAccessHost } from "../ports/index.js"
 
 export interface CatalogDriftResult {
   catalogCompatible: boolean
@@ -56,7 +56,7 @@ function isTransientCatalogDriftError(e: unknown): boolean {
 }
 
 async function queryWithRetry<T>(
-  host: AgentHost,
+  host: MssqlAccessHost,
   connection: string,
   query: string,
   maxRetries = 2,
@@ -78,7 +78,7 @@ async function queryWithRetry<T>(
   throw lastErr
 }
 
-async function fetchSchema(host: AgentHost, connection: string, schemas: readonly string[]): Promise<SchemaSnapshot> {
+async function fetchSchema(host: MssqlAccessHost, connection: string, schemas: readonly string[]): Promise<SchemaSnapshot> {
   if (schemas.length === 0) {
     // Defensive: an empty allowlist would generate `IN ()` (a SQL syntax
     // error). Return an empty snapshot instead — the caller's restrict
@@ -124,7 +124,7 @@ async function fetchSchema(host: AgentHost, connection: string, schemas: readonl
  * augmented with the schema prefix of each restricted table.
  */
 export async function detectCatalogDrift(
-  host: AgentHost,
+  host: MssqlAccessHost,
   source: string,
   target: string,
   restrictTables?: Iterable<string>,
@@ -170,7 +170,7 @@ export async function detectCatalogDrift(
  * preflight to decide whether the engine should write archive rows itself or
  * rely on existing target-side triggers (the ABI convention is the latter).
  */
-export async function tableHasTriggers(host: AgentHost, connection: string, qualifiedName: string): Promise<boolean> {
+export async function tableHasTriggers(host: MssqlAccessHost, connection: string, qualifiedName: string): Promise<boolean> {
   const [schema, name] = qualifiedName.split(".")
   if (!schema || !name) return false
   try {

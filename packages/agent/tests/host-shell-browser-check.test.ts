@@ -18,6 +18,29 @@ import { configureAgent, type BrowserCheckResult, type ShellExecResult } from ".
 import { createBrowserCheckTool } from "../src/tools/browser-check/index.js"
 import { createShellTool } from "../src/tools/shell/index.js"
 
+const playwrightMocks = vi.hoisted(() => {
+  const page = {
+    on: vi.fn(),
+    goto: vi.fn(async () => ({ ok: () => true })),
+    click: vi.fn(async () => {}),
+  }
+  const browser = {
+    newPage: vi.fn(async () => page),
+    close: vi.fn(async () => {}),
+  }
+  return {
+    chromiumLaunch: vi.fn(async () => browser),
+    page,
+    browser,
+  }
+})
+
+vi.mock("playwright", () => ({
+  chromium: {
+    launch: playwrightMocks.chromiumLaunch,
+  },
+}))
+
 let sandboxA: string
 let sandboxB: string
 
@@ -134,6 +157,37 @@ describe("createBrowserCheckTool — Phase 4 item 6", () => {
     expect(String(result)).toMatch(/not found|missing|enoent/i)
   })
 
+  it("falls back to host execution when browserCheckMode=host", async () => {
+    const fixture = join(sandboxA, "page.html")
+    await writeFile(fixture, "<html><body>hi</body></html>", "utf-8")
+
+    const host = configureAgent({
+      browserCheckCwd: sandboxA,
+      browserCheckMode: "host",
+    })
+    const tool = createBrowserCheckTool(host)
+
+    const result = await tool.execute({ path: "page.html", wait: 0 })
+
+    expect(playwrightMocks.chromiumLaunch).toHaveBeenCalled()
+    expect(String(result)).toContain("No errors or warnings detected")
+  })
+
+  it("returns a friendly error when browserCheckMode=disabled", async () => {
+    const fixture = join(sandboxA, "page.html")
+    await writeFile(fixture, "<html><body>hi</body></html>", "utf-8")
+
+    const host = configureAgent({
+      browserCheckCwd: sandboxA,
+      browserCheckMode: "disabled",
+    })
+    const tool = createBrowserCheckTool(host)
+
+    const result = await tool.execute({ path: "page.html" })
+
+    expect(String(result)).toMatch(/disabled/i)
+  })
+
   it("routes through host.browserCheck.client when set", async () => {
     const fixture = join(sandboxA, "page.html")
     await writeFile(fixture, "<html><body>hi</body></html>", "utf-8")
@@ -146,6 +200,7 @@ describe("createBrowserCheckTool — Phase 4 item 6", () => {
     )
     const host = configureAgent({
       browserCheckCwd: sandboxA,
+      browserCheckMode: "sandbox",
       browserCheckClient: client,
     })
     const tool = createBrowserCheckTool(host)

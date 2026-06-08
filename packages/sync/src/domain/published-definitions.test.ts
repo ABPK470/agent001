@@ -4,14 +4,14 @@ import { join, resolve } from "node:path"
 
 import { afterEach, describe, expect, it } from "vitest"
 
-import type { AgentHost } from "../ports/host.js"
+import type { SyncRuntimeHost } from "../ports/host.js"
 import {
     definitionToSyncRecipe,
     getPublishedSyncRecipe,
     loadPublishedSyncDefinitionBundle,
 } from "./published-definitions.js"
 
-function createHost(projectRoot: string): AgentHost {
+function createHost(projectRoot: string): SyncRuntimeHost {
   return {
     mssql: {
       databases: new Map(),

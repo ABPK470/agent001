@@ -2,7 +2,7 @@ import sqlMod, { type ConnectionPool } from "mssql"
 
 import { PostMetadataActionKind } from "../../../domain/enums.js"
 import { getEnvironment } from "../../../domain/environments.js"
-import { EventType, SyncProgressKind, type AgentHost } from "../../../ports/index.js"
+import { EventType, SyncProgressKind, type SyncRuntimeHost } from "../../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
 import { type SyncExecutionContractStep, type SyncPlan } from "../plan-store.js"
 import {
@@ -26,7 +26,7 @@ export interface StepWarning {
 }
 
 export interface PostMetadataPipelineInput {
-  host: AgentHost
+  host: SyncRuntimeHost
   tgtPool: ConnectionPool
   srcPool: ConnectionPool
   plan: SyncPlan
@@ -287,7 +287,7 @@ function contractDatasetTypeForKind(kind: string): "stage" | "archive" | "list" 
 }
 
 async function runDatasetDeploy(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   environmentName: string,
   entityId: string | number,
   userUpn?: string | null,
@@ -318,7 +318,7 @@ async function runDatasetDeploy(
 }
 
 async function runRulesDeploy(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   environmentName: string,
   entityId: string | number,
   userUpn?: string | null,
@@ -352,7 +352,7 @@ async function runRulesDeploy(
 }
 
 async function runPipelineRegister(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   environmentName: string,
   entityId: string | number,
 ): Promise<void> {
@@ -382,7 +382,7 @@ async function runPipelineRegister(
 }
 
 async function runMetaRefresh(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   environmentName: string,
 ): Promise<void> {
   const environment = getEnvironment(host, environmentName)
@@ -404,7 +404,7 @@ async function runMetaRefresh(
 }
 
 async function runPipelineStartByName(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   environmentName: string,
   pipelineName: string,
 ): Promise<void> {
@@ -429,7 +429,7 @@ async function runPipelineStartByName(
 }
 
 async function resolveRuleInputDatasetId(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   connection: string,
   ruleId: string | number,
@@ -460,7 +460,7 @@ async function resolveRuleInputDatasetId(
 }
 
 async function resolveContractPipelineId(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   connection: string,
   contractId: string | number,
@@ -491,7 +491,7 @@ async function resolveContractPipelineId(
 }
 
 async function runHandleDependencies(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   pool: ConnectionPool,
   connection: string,
   objectName: string,
@@ -531,7 +531,7 @@ async function resolveStepSubjectId(
   step: SyncExecutionContractStep,
   input: {
     defaultEntityId: string | number
-    host: AgentHost
+    host: SyncRuntimeHost
     pool: ConnectionPool
     connection: string
     telemetryContext?: SyncTelemetryContext

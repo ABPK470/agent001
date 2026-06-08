@@ -35,13 +35,13 @@
  * live UAT mymi DB). All earlier hash-column logic was based on a false assumption.
  */
 
-import { getPool, type AgentHost } from "../../ports/index.js"
-import { SyncPlanChangeType } from "../enums.js"
 import type {
     SyncPlanGraph,
     SyncPlanTable,
     SyncPlanTableCounts,
 } from "../../application/shell/plan-store.js"
+import { getPool, type SyncRuntimeHost } from "../../ports/index.js"
+import { SyncPlanChangeType } from "../enums.js"
 import type { SyncRecipe, SyncRecipeTable } from "../recipes.js"
 import { instantiatePredicate, instantiatePredicateWithTree } from "../recipes.js"
 import { fetchPkHash, fetchTableColumns } from "./columns.js"
@@ -52,7 +52,7 @@ import { DEFAULT_OPTS, type DiffOptions, type PkHashRow } from "./types.js"
 export type { DiffOptions } from "./types.js"
 
 export async function diffTable(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   _recipe: SyncRecipe,
   table: SyncRecipeTable,
   entityId: string | number,

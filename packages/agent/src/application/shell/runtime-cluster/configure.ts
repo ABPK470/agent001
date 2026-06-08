@@ -44,6 +44,7 @@ export interface ConfigureAgentOptions {
   shellSandboxStrict?: boolean
   shellClient?: AgentHost["shell"]["client"]
   browserCheckCwd?: string
+  browserCheckMode?: AgentHost["browserCheck"]["mode"]
   browserCheckClient?: AgentHost["browserCheck"]["client"]
 
   // MSSQL connection registry (shared across all per-run hosts at boot)
@@ -91,6 +92,7 @@ export interface ConfigureAgentOptions {
 export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const workspaceRoot = options.workspaceRoot ?? process.cwd()
   const shellMode = options.shellMode ?? (options.shellClient ? "sandbox" : "host")
+  const browserCheckMode = options.browserCheckMode ?? (options.browserCheckClient ? "sandbox" : "host")
   const mssqlDatabases = options.mssqlDatabases ?? buildMssqlDatabases(options.mssqlConfigs)
   const mssqlDefaultConnection = options.mssqlDefaultConnection ?? { value: options.mssqlDefaultConnectionName ?? null }
   const syncState = options.syncState ?? {
@@ -133,8 +135,9 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       client: shellMode === "sandbox" ? (options.shellClient ?? NOOP_SHELL_CLIENT) : null,
     }),
     browserCheck: Object.freeze({
+      mode: browserCheckMode,
       cwd: options.browserCheckCwd ?? workspaceRoot,
-      client: options.browserCheckClient ?? null,
+      client: browserCheckMode === "sandbox" ? (options.browserCheckClient ?? null) : null,
     }),
     browser: Object.freeze({
       sessions: new Map(),

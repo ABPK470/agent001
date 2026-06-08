@@ -10,13 +10,13 @@
  */
 
 import type sql from "mssql"
-import type { AgentHost } from "../../ports/index.js"
 import type { SyncPlanRowSample } from "../../application/shell/plan-store.js"
+import type { SyncEventHost } from "../../ports/index.js"
 import { buildBatchWhere, qtable, runQueryWithRetry } from "./sql-helpers.js"
 import { META_EXCLUDED_COLUMNS, type PkHashRow } from "./types.js"
 
 export async function fetchSamples(
-  host: AgentHost,
+  host: SyncEventHost,
   pool: sql.ConnectionPool,
   qualifiedTable: string,
   rows: PkHashRow[],
@@ -52,7 +52,7 @@ export async function fetchSamples(
 }
 
 export async function fetchUpdateSamples(
-  host: AgentHost,
+  host: SyncEventHost,
   srcPool: sql.ConnectionPool,
   tgtPool: sql.ConnectionPool,
   qualifiedTable: string,

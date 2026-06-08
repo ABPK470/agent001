@@ -15,7 +15,7 @@ import {
     type EntityType,
     type SyncRecipe,
 } from "../../../domain/recipes.js"
-import { getPool, type AgentHost } from "../../../ports/index.js"
+import { getPool, type SyncRuntimeHost } from "../../../ports/index.js"
 import { projectRoot, qtable } from "./db-helpers.js"
 
 export interface EntitySearchResult {
@@ -35,7 +35,7 @@ function invalidRootNameColumnError(recipe: SyncRecipe, columns: string[]): Erro
 }
 
 async function resolveDisplayColumn(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   source: string,
   recipe: SyncRecipe,
 ): Promise<string> {
@@ -79,7 +79,7 @@ async function resolveDisplayColumn(
  * Returns up to `limit` matches from the source environment.
  */
 export async function searchEntities(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   entityType: EntityType,
   source: string,
   query: string,
@@ -107,7 +107,7 @@ export async function searchEntities(
 }
 
 export async function fetchEntityDisplayName(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   recipe: SyncRecipe,
   entityId: string | number,
   source: string,
@@ -134,7 +134,7 @@ export async function fetchEntityDisplayName(
  * Runs against the SOURCE environment (the tree structure we want to replicate).
  */
 export async function expandTreeIds(
-  host: AgentHost,
+  host: SyncRuntimeHost,
   recipe: SyncRecipe,
   entityId: string | number,
   source: string,

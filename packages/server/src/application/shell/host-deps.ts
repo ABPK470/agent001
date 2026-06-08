@@ -18,11 +18,24 @@ export function bootHostDepsToConfigureAgentOptions(bootHostDeps: BootHostDeps):
           shellSandboxStrict: bootHostDeps.shell.sandboxStrict ?? false,
         }
       : {}),
-    ...(bootHostDeps.browserCheckClient ? { browserCheckClient: bootHostDeps.browserCheckClient } : {}),
-    ...(bootHostDeps.mssqlDatabases ? { mssqlDatabases: bootHostDeps.mssqlDatabases } : {}),
-    ...(bootHostDeps.mssqlDefaultConnection ? { mssqlDefaultConnection: bootHostDeps.mssqlDefaultConnection } : {}),
-    ...(bootHostDeps.catalogInstances ? { catalogInstances: bootHostDeps.catalogInstances } : {}),
-    ...(bootHostDeps.catalogDefaultCachePath ? { catalogDefaultCachePath: bootHostDeps.catalogDefaultCachePath } : {}),
-    ...(bootHostDeps.syncState ? { syncState: bootHostDeps.syncState } : {}),
+    ...(bootHostDeps.browserCheck
+      ? {
+          browserCheckMode: bootHostDeps.browserCheck.mode,
+          browserCheckClient: bootHostDeps.browserCheck.client ?? null,
+        }
+      : {}),
+    ...(bootHostDeps.mssql
+      ? {
+          mssqlDatabases: bootHostDeps.mssql.databases,
+          mssqlDefaultConnection: bootHostDeps.mssql.defaultConnection,
+        }
+      : {}),
+    ...(bootHostDeps.catalog
+      ? {
+          catalogInstances: bootHostDeps.catalog.instances,
+          catalogDefaultCachePath: bootHostDeps.catalog.defaultCachePath,
+        }
+      : {}),
+    ...(bootHostDeps.sync ? { syncState: bootHostDeps.sync } : {}),
   }
 }

@@ -18,9 +18,16 @@ export type { EnvAccessMode, EnvRole } from "../domain/enums.js"
 export type { EnvOperation, LoadSyncEnvironmentsResult, SyncEnvironment } from "../domain/environments.js"
 export type { SqlEventInput, SyncEvent, SyncEventSink, SyncTelemetryContext } from "./events.js"
 export type {
-    AgentHost,
+    MssqlAccessHost,
     MssqlHost,
+    SyncEnvironmentRegistryHost,
+    SyncEventHost,
     SyncHost,
+    SyncPlanStoreHost,
+    SyncProjectRootHost,
+    SyncRunHost,
+    SyncRuntimeHost,
+    SyncStateHost,
     Tool,
     ToolResultArtifactState,
     ToolResultEnvelope

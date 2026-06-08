@@ -29,11 +29,9 @@ export interface BrowserCheckResult {
 }
 
 /**
- * Optional executor injected by the host for Docker-sandboxed browser checks.
- * When present (host.browserCheck.client), the browser runs inside a container
- * with Chromium + its own sandbox. No ambient `setBrowserCheckExecutor` setter
- * exists — wire the client via `configureAgent({ browserCheckClient })` in the
- * server boot.
+ * Optional executor injected by the host for sandboxed browser checks.
+ * When host.browserCheck.mode is "sandbox", the browser runs inside a container
+ * with Chromium + its own sandbox and this executor must be present.
  */
 export type BrowserCheckExecutor = (
   htmlPath: string,
@@ -86,12 +84,13 @@ export const browserCheckToolMetadata: ToolMetadata = {
 
 export const browserCheckTool = browserCheckToolMetadata
 
-/** Factory variant bound to `host.browserCheck.{cwd,client}`. */
+/** Factory variant bound to `host.browserCheck.{mode,cwd,client}`. */
 export function createBrowserCheckTool(host: AgentHost): ExecutableTool {
   return {
     ...browserCheckToolMetadata,
     async execute(args) {
       return runBrowserCheck(args, {
+        mode: host.browserCheck.mode,
         cwd: host.browserCheck.cwd,
         executor: host.browserCheck.client,
       })
@@ -102,6 +101,7 @@ export function createBrowserCheckTool(host: AgentHost): ExecutableTool {
 // ── Shared body ──────────────────────────────────────────────────
 
 interface BrowserCheckCtx {
+  mode: AgentHost["browserCheck"]["mode"]
   cwd: string
   executor: BrowserCheckExecutor | null
 }
@@ -110,158 +110,149 @@ async function runBrowserCheck(
   args: Record<string, unknown>,
   ctx: BrowserCheckCtx,
 ): Promise<string> {
-    const relPath = String(args.path)
-    const clicks = Array.isArray(args.click) ? args.click.map(String) : []
-    const waitMs = Math.min(Number(args.wait ?? 1000), 10000)
+  const relPath = String(args.path)
+  const clicks = Array.isArray(args.click) ? args.click.map(String) : []
+  const waitMs = Math.min(Number(args.wait ?? 1000), 10000)
 
-    // Resolve paths
-    const fullPath = join(ctx.cwd, relPath)
-    const dir = fullPath.substring(0, fullPath.lastIndexOf("/"))
-    const fileName = fullPath.substring(fullPath.lastIndexOf("/") + 1)
+  const fullPath = join(ctx.cwd, relPath)
+  const dir = fullPath.substring(0, fullPath.lastIndexOf("/"))
+  const fileName = fullPath.substring(fullPath.lastIndexOf("/") + 1)
 
-    // Verify the file exists
-    try {
-      await stat(fullPath)
-    } catch {
-      return `Error: File not found: ${relPath}`
+  try {
+    await stat(fullPath)
+  } catch {
+    return `Error: File not found: ${relPath}`
+  }
+
+  if (ctx.mode === "disabled") {
+    return "Error: browser_check is disabled in this deployment."
+  }
+
+  if (ctx.mode === "sandbox") {
+    if (!ctx.executor) {
+      return "Error: browser_check sandbox mode is enabled but no sandbox browser client is configured."
     }
-
-    // Route through Docker sandbox if executor is available
-    if (ctx.executor) {
-      try {
-        const result = await ctx.executor(relPath, clicks, waitMs, ctx.cwd)
-        return result.report
-      } catch (err) {
-        return `Error running sandboxed browser check: ${err instanceof Error ? err.message : String(err)}`
-      }
-    }
-
-    // Fallback: run Playwright on host
-
-    // Dynamically import playwright (it's a heavy dep, only load when needed)
-    let launchBrowser: (opts: Record<string, unknown>) => Promise<import("playwright").Browser>
     try {
-      const pw = await import("playwright")
-      launchBrowser = (opts) => pw.chromium.launch(opts as never)
-    } catch {
-      return "Error: Playwright is not installed. Run: npm install playwright && npx playwright install chromium"
-    }
-
-    // Start static file server
-    const { server, url } = await startStaticServer(dir)
-
-    // Collect errors
-    const consoleErrors: string[] = []
-    const consoleWarnings: string[] = []
-    const networkErrors: string[] = []
-    const uncaughtErrors: string[] = []
-
-    let browser: import("playwright").Browser | undefined
-    try {
-      browser = await launchBrowser({
-        headless: true,
-        args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
-      })
-      const page = await browser.newPage()
-
-      // Collect console messages
-      page.on("console", (msg) => {
-        const type = msg.type()
-        const text = msg.text()
-        if (type === "error") {
-          // Enrich generic "Failed to load resource" with the actual URL
-          const location = msg.location()
-          const errUrl = location?.url ?? ""
-          // Skip non-critical missing resources (favicon, apple-touch-icon, etc.)
-          if (text.includes("Failed to load resource") && /favicon|apple-touch-icon/i.test(errUrl)) {
-            // Ignore — these are browser-initiated requests, not project bugs
-          } else if (text.includes("Failed to load resource") && errUrl) {
-            consoleErrors.push(`${text} — URL: ${errUrl}`)
-          } else {
-            consoleErrors.push(text)
-          }
-        } else if (type === "warning") consoleWarnings.push(text)
-      })
-
-      // Collect uncaught exceptions
-      page.on("pageerror", (err: unknown) => {
-        uncaughtErrors.push(err instanceof Error ? err.message : String(err))
-      })
-
-      // Collect failed network requests (skip non-critical assets)
-      page.on("requestfailed", (req) => {
-        const reqUrl = req.url()
-        if (/favicon|apple-touch-icon/i.test(reqUrl)) return
-        networkErrors.push(`${req.failure()?.errorText ?? "failed"}: ${reqUrl}`)
-      })
-
-      // Navigate to the page
-      const pageUrl = `${url}/${fileName}`
-      const response = await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 15000 })
-
-      if (!response || !response.ok()) {
-        const status = response?.status() ?? "unknown"
-        return `Error: Page returned HTTP ${status} for ${pageUrl}`
-      }
-
-      // Wait for any async errors
-      await new Promise((r) => setTimeout(r, waitMs))
-
-      // Perform clicks if requested
-      for (const selector of clicks) {
-        try {
-          await page.click(selector)
-          // Wait for click-triggered errors to surface
-          await new Promise((r) => setTimeout(r, 500))
-        } catch (err) {
-          consoleErrors.push(`Click failed on "${selector}": ${err instanceof Error ? err.message : String(err)}`)
-        }
-      }
-
-      // Build report
-      const lines: string[] = []
-      const totalErrors = consoleErrors.length + uncaughtErrors.length + networkErrors.length
-
-      if (totalErrors === 0 && consoleWarnings.length === 0) {
-        lines.push("✓ No errors or warnings detected.")
-      } else {
-        if (uncaughtErrors.length > 0) {
-          lines.push(`## Uncaught Exceptions (${uncaughtErrors.length})`)
-          for (const e of uncaughtErrors) lines.push(`  - ${e}`)
-        }
-        if (consoleErrors.length > 0) {
-          lines.push(`## Console Errors (${consoleErrors.length})`)
-          for (const e of consoleErrors) lines.push(`  - ${e}`)
-        }
-        if (networkErrors.length > 0) {
-          lines.push(`## Network Failures (${networkErrors.length})`)
-          for (const e of networkErrors) lines.push(`  - ${e}`)
-        }
-        if (consoleWarnings.length > 0) {
-          lines.push(`## Warnings (${consoleWarnings.length})`)
-          for (const w of consoleWarnings) lines.push(`  - ${w}`)
-        }
-
-        // If there are 404s, add actionable context about the server root
-        const has404 = consoleErrors.some((e) => e.includes("404")) || networkErrors.some((e) => e.includes("ERR_ABORTED") || e.includes("404"))
-        if (has404) {
-          lines.push("")
-          lines.push(`## Path Resolution`)
-          lines.push(`  Static server root: ${dir}/`)
-          lines.push(`  All <script src>, <link href>, and other references in the HTML are resolved relative to this directory.`)
-          lines.push(`  To fix 404s: ensure the referenced files exist under ${dir}/ with matching paths.`)
-          lines.push(`  Use list_directory to verify the file structure, then either move the files or fix the HTML references.`)
-        }
-
-        lines.push("")
-        lines.push(`Total: ${totalErrors} error(s), ${consoleWarnings.length} warning(s)`)
-      }
-
-      return lines.join("\n")
+      const result = await ctx.executor(relPath, clicks, waitMs, ctx.cwd)
+      return result.report
     } catch (err) {
-      return `Error running browser check: ${err instanceof Error ? err.message : String(err)}`
-    } finally {
-      await browser?.close().catch(() => {})
-      server.close()
+      return `Error running sandboxed browser check: ${err instanceof Error ? err.message : String(err)}`
     }
+  }
+
+  // Host mode: run Playwright locally.
+  let launchBrowser: (opts: Record<string, unknown>) => Promise<import("playwright").Browser>
+  try {
+    const pw = await import("playwright")
+    launchBrowser = (opts) => pw.chromium.launch(opts as never)
+  } catch {
+    return "Error: Playwright is not installed. Run: npm install playwright && npx playwright install chromium"
+  }
+
+  const { server, url } = await startStaticServer(dir)
+  const consoleErrors: string[] = []
+  const consoleWarnings: string[] = []
+  const networkErrors: string[] = []
+  const uncaughtErrors: string[] = []
+
+  let browser: import("playwright").Browser | undefined
+  try {
+    browser = await launchBrowser({
+      headless: true,
+      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+    })
+    const page = await browser.newPage()
+
+    page.on("console", (msg) => {
+      const type = msg.type()
+      const text = msg.text()
+      if (type === "error") {
+        const location = msg.location()
+        const errUrl = location?.url ?? ""
+        if (text.includes("Failed to load resource") && /favicon|apple-touch-icon/i.test(errUrl)) {
+          return
+        }
+        if (text.includes("Failed to load resource") && errUrl) {
+          consoleErrors.push(`${text} — URL: ${errUrl}`)
+          return
+        }
+        consoleErrors.push(text)
+      } else if (type === "warning") {
+        consoleWarnings.push(text)
+      }
+    })
+
+    page.on("pageerror", (err: unknown) => {
+      uncaughtErrors.push(err instanceof Error ? err.message : String(err))
+    })
+
+    page.on("requestfailed", (req) => {
+      const reqUrl = req.url()
+      if (/favicon|apple-touch-icon/i.test(reqUrl)) return
+      networkErrors.push(`${req.failure()?.errorText ?? "failed"}: ${reqUrl}`)
+    })
+
+    const pageUrl = `${url}/${fileName}`
+    const response = await page.goto(pageUrl, { waitUntil: "domcontentloaded", timeout: 15000 })
+
+    if (!response || !response.ok()) {
+      const status = response?.status() ?? "unknown"
+      return `Error: Page returned HTTP ${status} for ${pageUrl}`
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, waitMs))
+
+    for (const selector of clicks) {
+      try {
+        await page.click(selector)
+        await new Promise((resolve) => setTimeout(resolve, 500))
+      } catch (err) {
+        consoleErrors.push(`Click failed on "${selector}": ${err instanceof Error ? err.message : String(err)}`)
+      }
+    }
+
+    const lines: string[] = []
+    const totalErrors = consoleErrors.length + uncaughtErrors.length + networkErrors.length
+
+    if (totalErrors === 0 && consoleWarnings.length === 0) {
+      lines.push("✓ No errors or warnings detected.")
+    } else {
+      if (uncaughtErrors.length > 0) {
+        lines.push(`## Uncaught Exceptions (${uncaughtErrors.length})`)
+        for (const err of uncaughtErrors) lines.push(`  - ${err}`)
+      }
+      if (consoleErrors.length > 0) {
+        lines.push(`## Console Errors (${consoleErrors.length})`)
+        for (const err of consoleErrors) lines.push(`  - ${err}`)
+      }
+      if (networkErrors.length > 0) {
+        lines.push(`## Network Failures (${networkErrors.length})`)
+        for (const err of networkErrors) lines.push(`  - ${err}`)
+      }
+      if (consoleWarnings.length > 0) {
+        lines.push(`## Warnings (${consoleWarnings.length})`)
+        for (const warning of consoleWarnings) lines.push(`  - ${warning}`)
+      }
+
+      const has404 = consoleErrors.some((err) => err.includes("404")) || networkErrors.some((err) => err.includes("ERR_ABORTED") || err.includes("404"))
+      if (has404) {
+        lines.push("")
+        lines.push("## Path Resolution")
+        lines.push(`  Static server root: ${dir}/`)
+        lines.push("  All <script src>, <link href>, and other references in the HTML are resolved relative to this directory.")
+        lines.push(`  To fix 404s: ensure the referenced files exist under ${dir}/ with matching paths.`)
+        lines.push("  Use list_directory to verify the file structure, then either move the files or fix the HTML references.")
+      }
+
+      lines.push("")
+      lines.push(`Total: ${totalErrors} error(s), ${consoleWarnings.length} warning(s)`)
+    }
+
+    return lines.join("\n")
+  } catch (err) {
+    return `Error running browser check: ${err instanceof Error ? err.message : String(err)}`
+  } finally {
+    await browser?.close().catch(() => {})
+    server.close()
+  }
 }

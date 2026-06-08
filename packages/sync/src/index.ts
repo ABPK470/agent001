@@ -11,9 +11,16 @@ export * from "./application/index.js"
 export * from "./domain/index.js"
 export type { SqlEventInput, SyncEvent, SyncEventSink, SyncTelemetryContext } from "./ports/events.js"
 export type {
-    AgentHost,
+    MssqlAccessHost,
     MssqlHost,
+    SyncEnvironmentRegistryHost,
+    SyncEventHost,
     SyncHost,
+    SyncPlanStoreHost,
+    SyncProjectRootHost,
+    SyncRunHost,
+    SyncRuntimeHost,
+    SyncStateHost,
     Tool,
     ToolResultArtifactState,
     ToolResultEnvelope

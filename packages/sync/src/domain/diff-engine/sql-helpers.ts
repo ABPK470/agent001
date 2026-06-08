@@ -9,9 +9,9 @@
  */
 
 import type sql from "mssql"
-import type { AgentHost } from "../../ports/index.js"
-import type { SyncTelemetryContext } from "../../ports/events.js"
 import { emitSyncSqlEvent } from "../../application/shell/events.js"
+import type { SyncTelemetryContext } from "../../ports/events.js"
+import type { SyncEventHost } from "../../ports/index.js"
 import type { HashColumn, PkHashRow } from "./types.js"
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */
@@ -45,7 +45,7 @@ export function isTransientMssqlError(e: unknown): boolean {
  * Backoff: 100ms, 400ms (jittered).
  */
 export async function runQueryWithRetry<T = unknown>(
-  host: AgentHost,
+  host: SyncEventHost,
   pool: sql.ConnectionPool,
   query: string,
   label: string,

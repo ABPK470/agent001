@@ -20,7 +20,7 @@ import {
     type SyncRecipe,
     type SyncRecipeTable,
 } from "../../../domain/recipes.js"
-import { EventType, SyncOperationType, type AgentHost } from "../../../ports/index.js"
+import { EventType, SyncOperationType, type SyncRuntimeHost } from "../../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
 import {
     allocPlanId,
@@ -34,7 +34,7 @@ import { mapWithConcurrency, PREVIEW_TABLE_CONCURRENCY, projectRoot } from "./db
 import { expandTreeIds, fetchEntityDisplayName } from "./search.js"
 
 export interface PreviewInput {
-  host: AgentHost
+  host: SyncRuntimeHost
   entityType: EntityType
   entityId: string | number
   source: string

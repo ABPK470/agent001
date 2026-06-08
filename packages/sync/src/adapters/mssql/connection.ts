@@ -1,9 +1,9 @@
-import sql from "mssql"
-import type { AgentHost, MssqlEntry } from "../../ports/host.js"
+import sql from "mssql";
+import type { MssqlAccessHost, MssqlEntry } from "../../ports/host.js";
 
-export type { MssqlEntry }
+export type { MssqlEntry };
 
-export function getMssqlConfig(host: AgentHost): Array<{ name: string; server: string; database: string; writeEnabled: boolean; knowledge: string | null }> {
+export function getMssqlConfig(host: MssqlAccessHost): Array<{ name: string; server: string; database: string; writeEnabled: boolean; knowledge: string | null }> {
   return Array.from(host.mssql.databases.entries()).map(([name, entry]) => ({
     name,
     server: entry.config.server!,
@@ -13,7 +13,7 @@ export function getMssqlConfig(host: AgentHost): Array<{ name: string; server: s
   }))
 }
 
-export async function getPool(host: AgentHost, name = "default"): Promise<{ pool: sql.ConnectionPool; entry: MssqlEntry }> {
+export async function getPool(host: MssqlAccessHost, name = "default"): Promise<{ pool: sql.ConnectionPool; entry: MssqlEntry }> {
   const mssql = host.mssql
   const resolvedName = mssql.databases.has(name)
     ? name
