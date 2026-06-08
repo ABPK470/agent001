@@ -709,7 +709,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     const { dirname, join } = await import("node:path")
     const here = dirname(fileURLToPath(import.meta.url))
     const retrieveSrc = readFileSync(
-      join(here, "..", "src", "features", "runs", "execution", "run-executor", "environment.ts"),
+      join(here, "..", "src", "features", "runs", "execution", "run-executor", "tools.ts"),
       "utf8"
     )
     const ingestSrc = readFileSync(

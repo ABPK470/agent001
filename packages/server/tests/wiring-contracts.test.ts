@@ -36,6 +36,8 @@ const RUN_EXECUTOR_ENVIRONMENT = join(
   "run-executor",
   "environment.ts"
 )
+const RUN_EXECUTOR_TOOLS = join(SRC_ROOT, "features", "runs", "execution", "run-executor", "tools.ts")
+const RUN_EXECUTOR_HOST = join(SRC_ROOT, "features", "runs", "execution", "run-executor", "host.ts")
 const RUN_EXECUTOR_FINALIZATION = join(
   SRC_ROOT,
   "features",
@@ -177,7 +179,7 @@ function readSrc(absPath: string): string {
 
 describe("Wiring contracts: memory write↔read pair on sessionId", () => {
   it("B1: every retrieveContext + ingestRunTurns sessionId expression references activeRun?.sessionId", () => {
-    const retrieveSrc = readSrc(RUN_EXECUTOR_ENVIRONMENT)
+    const retrieveSrc = readSrc(RUN_EXECUTOR_TOOLS)
     const ingestSrc = readSrc(RUN_EXECUTOR_FINALIZATION)
     const retrieveCalls = extractObjectArgCalls(retrieveSrc, "retrieveContext")
     const ingestCalls = extractObjectArgCalls(ingestSrc, "ingestRunTurns")
@@ -215,7 +217,7 @@ describe("Wiring contracts: memory write↔read pair on sessionId", () => {
 
 describe("Wiring contracts: memory write↔read pair on upn", () => {
   it("B2: every retrieveContext + ingestRunTurns upn expression references activeRun?.ownerUpn", () => {
-    const retrieveSrc = readSrc(RUN_EXECUTOR_ENVIRONMENT)
+    const retrieveSrc = readSrc(RUN_EXECUTOR_TOOLS)
     const ingestSrc = readSrc(RUN_EXECUTOR_FINALIZATION)
     const retrieveCalls = extractObjectArgCalls(retrieveSrc, "retrieveContext")
     const ingestCalls = extractObjectArgCalls(ingestSrc, "ingestRunTurns")
@@ -242,7 +244,7 @@ describe("Wiring contracts: memory write↔read pair on upn", () => {
 
 describe("Wiring contracts: memory write↔read pair on runId / excludeRunId", () => {
   it("B3: retrieveContext.runId equals the runId variable that ingestRunTurns.id uses", () => {
-    const retrieveSrc = readSrc(RUN_EXECUTOR_ENVIRONMENT)
+    const retrieveSrc = readSrc(RUN_EXECUTOR_TOOLS)
     const ingestSrc = readSrc(RUN_EXECUTOR_FINALIZATION)
     const retrieveCalls = extractObjectArgCalls(retrieveSrc, "retrieveContext")
     const ingestCalls = extractObjectArgCalls(ingestSrc, "ingestRunTurns")
@@ -286,7 +288,7 @@ describe("Wiring contracts: procedural memory pair on sessionId/upn", () => {
 
 describe("Wiring contracts: HostedPolicyContext fields match memory call anchors", () => {
   it("B5: HostedPolicyContext actorUpn/sessionId references activeRun fields, same as memory calls", () => {
-    const src = readSrc(RUN_EXECUTOR_ENVIRONMENT)
+    const src = readSrc(RUN_EXECUTOR_HOST)
     const m = src.match(/function createPolicyContext\([\s\S]*?return \{([\s\S]*?)\n\s*\}/)
     expect(m, "expected createPolicyContext() to return a HostedPolicyContext object literal").not.toBeNull()
     const fields = parseFields(m![1])
