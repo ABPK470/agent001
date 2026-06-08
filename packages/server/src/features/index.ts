@@ -1,4 +1,5 @@
 export * from "./agents/tools.js"
+export * from "./approvals/routes.js"
 export * from "./auth/index.js"
 export * from "./browser/index.js"
 export * from "./notifications/router.js"

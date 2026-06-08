@@ -41,10 +41,10 @@ afterEach(() => {
 })
 
 async function setup() {
-  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  return import("../src/adapters/persistence/db/entity-defs.js")
+  return import("../src/platform/persistence/db/entity-defs.js")
 }
 
 function validDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
@@ -105,7 +105,7 @@ describe("entity registry seed", () => {
   })
 
   it("seed is idempotent across repeated _migrate calls", async () => {
-    const { _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _migrate } = await import("../src/platform/persistence/db/index.js")
     _migrate(testDb)
     _migrate(testDb)
     _migrate(testDb)

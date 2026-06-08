@@ -25,7 +25,7 @@ import {
 } from "@mia/agent"
 import { withPermissionDefaults } from "@mia/sync"
 import { describe, expect, it } from "vitest"
-import { policyRulesFromEnvironments } from "../src/domain/policy/hosted-defaults.js"
+import { policyRulesFromEnvironments } from "../src/features/policies/hosted-defaults.js"
 
 function makeStep(action: string, input: Record<string, unknown> = {}): Step {
   return {

@@ -4,7 +4,7 @@
 
 import Fastify from "fastify"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { registerProfileRoutes } from "../src/api/profile.js"
+import { registerProfileRoutes } from "../src/features/profile/routes.js"
 
 const ENV_KEY = "AGENT_HOSTED_MODE"
 let original: string | undefined

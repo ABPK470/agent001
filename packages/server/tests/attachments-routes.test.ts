@@ -13,7 +13,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import type { CurrentSession } from "../src/auth/context.js"
+import type { CurrentSession } from "../src/features/auth/context.js"
 import { seedTestUsers } from "./_fk-helpers.js"
 
 let testDb: Database.Database
@@ -26,8 +26,8 @@ interface BuildOptions {
 
 async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
   // Dynamic import after env is set so storage uses our temp dir.
-  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-  const { registerAttachmentRoutes } = await import("../src/api/attachments.js")
+  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { registerAttachmentRoutes } = await import("../src/features/attachments/routes.js")
   _setDb(testDb)
   _migrate(testDb)
   seedTestUsers(testDb)

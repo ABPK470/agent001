@@ -22,13 +22,13 @@ import { describe, expect, it } from "vitest"
 const here = dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = join(here, "..", "..", "..")
 const APP_TSX = join(REPO_ROOT, "packages", "ui", "src", "App.tsx")
-const LAYOUTS_TS = join(REPO_ROOT, "packages", "server", "src", "api", "layouts.ts")
+const LAYOUTS_TS = join(REPO_ROOT, "packages", "server", "src", "features", "layouts", "routes.ts")
 
 describe("layouts wiring (v19) — single-input dashboard key", () => {
   it("dashboardIdFor reads ONLY req.session.upn (no sid, no isAdmin)", () => {
     const src = readFileSync(LAYOUTS_TS, "utf8")
     const fnMatch = src.match(/function dashboardIdFor\([\s\S]*?\n\}/)
-    expect(fnMatch, "dashboardIdFor should exist in api/layouts.ts").not.toBeNull()
+    expect(fnMatch, "dashboardIdFor should exist in features/layouts/routes.ts").not.toBeNull()
     const body = fnMatch![0]
 
     expect(body, "must read req.session.upn").toMatch(/req\.session\.upn|session\.upn/)

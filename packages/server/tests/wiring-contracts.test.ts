@@ -28,7 +28,22 @@ import { describe, expect, it } from "vitest"
 const here = dirname(fileURLToPath(import.meta.url))
 const SERVER_ROOT = join(here, "..")
 const SRC_ROOT = join(SERVER_ROOT, "src")
-const RUN_EXECUTOR = join(SRC_ROOT, "application", "shell", "execution", "run-executor.ts")
+const RUN_EXECUTOR_ENVIRONMENT = join(
+  SRC_ROOT,
+  "features",
+  "runs",
+  "execution",
+  "run-executor",
+  "environment.ts"
+)
+const RUN_EXECUTOR_FINALIZATION = join(
+  SRC_ROOT,
+  "features",
+  "runs",
+  "execution",
+  "run-executor",
+  "finalization.ts"
+)
 
 // ── Shared helpers ────────────────────────────────────────────────
 
@@ -162,9 +177,10 @@ function readSrc(absPath: string): string {
 
 describe("Wiring contracts: memory write↔read pair on sessionId", () => {
   it("B1: every retrieveContext + ingestRunTurns sessionId expression references activeRun?.sessionId", () => {
-    const src = readSrc(RUN_EXECUTOR)
-    const retrieveCalls = extractObjectArgCalls(src, "retrieveContext")
-    const ingestCalls = extractObjectArgCalls(src, "ingestRunTurns")
+    const retrieveSrc = readSrc(RUN_EXECUTOR_ENVIRONMENT)
+    const ingestSrc = readSrc(RUN_EXECUTOR_FINALIZATION)
+    const retrieveCalls = extractObjectArgCalls(retrieveSrc, "retrieveContext")
+    const ingestCalls = extractObjectArgCalls(ingestSrc, "ingestRunTurns")
 
     expect(
       retrieveCalls.length,
@@ -199,9 +215,10 @@ describe("Wiring contracts: memory write↔read pair on sessionId", () => {
 
 describe("Wiring contracts: memory write↔read pair on upn", () => {
   it("B2: every retrieveContext + ingestRunTurns upn expression references activeRun?.ownerUpn", () => {
-    const src = readSrc(RUN_EXECUTOR)
-    const retrieveCalls = extractObjectArgCalls(src, "retrieveContext")
-    const ingestCalls = extractObjectArgCalls(src, "ingestRunTurns")
+    const retrieveSrc = readSrc(RUN_EXECUTOR_ENVIRONMENT)
+    const ingestSrc = readSrc(RUN_EXECUTOR_FINALIZATION)
+    const retrieveCalls = extractObjectArgCalls(retrieveSrc, "retrieveContext")
+    const ingestCalls = extractObjectArgCalls(ingestSrc, "ingestRunTurns")
 
     const ANCHOR = "activeRun?.ownerUpn"
     for (const c of retrieveCalls) {
@@ -225,9 +242,10 @@ describe("Wiring contracts: memory write↔read pair on upn", () => {
 
 describe("Wiring contracts: memory write↔read pair on runId / excludeRunId", () => {
   it("B3: retrieveContext.runId equals the runId variable that ingestRunTurns.id uses", () => {
-    const src = readSrc(RUN_EXECUTOR)
-    const retrieveCalls = extractObjectArgCalls(src, "retrieveContext")
-    const ingestCalls = extractObjectArgCalls(src, "ingestRunTurns")
+    const retrieveSrc = readSrc(RUN_EXECUTOR_ENVIRONMENT)
+    const ingestSrc = readSrc(RUN_EXECUTOR_FINALIZATION)
+    const retrieveCalls = extractObjectArgCalls(retrieveSrc, "retrieveContext")
+    const ingestCalls = extractObjectArgCalls(ingestSrc, "ingestRunTurns")
 
     // retrieveContext.runId is used as excludeRunId in retrieval — must
     // refer to the SAME identifier that ingestRunTurns writes as `id`.
@@ -247,7 +265,7 @@ describe("Wiring contracts: memory write↔read pair on runId / excludeRunId", (
 
 describe("Wiring contracts: procedural memory pair on sessionId/upn", () => {
   it("B4: extractProcedural sessionId/upn expressions match the memory write/read anchors", () => {
-    const src = readSrc(RUN_EXECUTOR)
+    const src = readSrc(RUN_EXECUTOR_FINALIZATION)
     const calls = extractObjectArgCalls(src, "extractProcedural")
     expect(calls.length, "expected extractProcedural call(s) in run-executor.ts").toBeGreaterThan(0)
 
@@ -268,10 +286,9 @@ describe("Wiring contracts: procedural memory pair on sessionId/upn", () => {
 
 describe("Wiring contracts: HostedPolicyContext fields match memory call anchors", () => {
   it("B5: HostedPolicyContext actorUpn/sessionId references activeRun fields, same as memory calls", () => {
-    const src = readSrc(RUN_EXECUTOR)
-    // Locate `policyCtx: HostedPolicyContext = { ... }` (or similar).
-    const m = src.match(/HostedPolicyContext\s*=\s*\{([\s\S]*?)\n\s*\}/)
-    expect(m, "expected a HostedPolicyContext object literal in run-executor.ts").not.toBeNull()
+    const src = readSrc(RUN_EXECUTOR_ENVIRONMENT)
+    const m = src.match(/function createPolicyContext\([\s\S]*?return \{([\s\S]*?)\n\s*\}/)
+    expect(m, "expected createPolicyContext() to return a HostedPolicyContext object literal").not.toBeNull()
     const fields = parseFields(m![1])
     const actorUpn = fields.get("actorUpn")
     const sid = fields.get("sessionId")

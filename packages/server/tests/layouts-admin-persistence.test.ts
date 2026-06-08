@@ -17,7 +17,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import type { CurrentSession } from "../src/auth/context.js"
+import type { CurrentSession } from "../src/features/auth/context.js"
 import { seedUser } from "./_fk-helpers.js"
 
 let testDb: Database.Database
@@ -25,8 +25,8 @@ let dataDir: string
 const ORIGINAL_DATA_DIR = process.env["MIA_DATA_DIR"]
 
 async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
-  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-  const { registerLayoutRoutes } = await import("../src/api/layouts.js")
+  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { registerLayoutRoutes } = await import("../src/features/layouts/routes.js")
   _setDb(testDb)
   _migrate(testDb)
 
@@ -97,7 +97,7 @@ describe("layouts (v19) — per-upn persistence across logout/login", () => {
       payload: { views: SAMPLE_VIEWS, activeViewId: "main" }
     })
 
-    const { getLayout } = await import("../src/adapters/persistence/db/config.js")
+    const { getLayout } = await import("../src/platform/persistence/db/config.js")
     const expectedKey = `dashboard:${upn.toLowerCase()}`
     const row = getLayout(expectedKey)
     expect(row, `PUT must write to id='${expectedKey}'`).toBeDefined()

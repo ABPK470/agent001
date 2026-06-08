@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
 import { createPublishedSyncDefinitionRegistry } from "@mia/sync"
-import type { CurrentSession } from "../src/auth/context.js"
+import type { CurrentSession } from "../src/features/auth/context.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -50,7 +50,7 @@ function createHost(root: string): AgentHost {
 }
 
 async function seedLiveEnvironments(root: string, host: AgentHost): Promise<void> {
-  const { loadPersistedSyncEnvironments } = await import("../src/domain/sync/live-environments.js")
+  const { loadPersistedSyncEnvironments } = await import("../src/features/sync/live-environments.js")
   const loaded = loadPersistedSyncEnvironments(root, [
     { name: "DEV", server: "dev-sql", database: "mymi", writeEnabled: true, knowledge: null },
     { name: "UAT", server: "uat-sql", database: "mymi", writeEnabled: true, knowledge: null }
@@ -59,8 +59,8 @@ async function seedLiveEnvironments(root: string, host: AgentHost): Promise<void
 }
 
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
-  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-  const { registerSyncEnvironmentRoutes } = await import("../src/api/sync-environments.js")
+  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { registerSyncEnvironmentRoutes } = await import("../src/features/sync/environments.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
 
   _setDb(testDb)

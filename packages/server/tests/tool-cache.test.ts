@@ -25,7 +25,7 @@ afterEach(() => {
 describe("tool-cache", () => {
   it("memoises deterministic compute() across calls within a session", async () => {
     // Re-import after env change so getToolCacheRoot() resolves under scratch.
-    const { getOrCompute } = await import("../src/adapters/persistence/tool-cache.js")
+    const { getOrCompute } = await import("../src/platform/persistence/tool-cache.js")
     let calls = 0
     const compute = async () => {
       calls++
@@ -52,7 +52,7 @@ describe("tool-cache", () => {
   })
 
   it("partitions by sessionId so two sessions cannot poison each other", async () => {
-    const { getOrCompute } = await import("../src/adapters/persistence/tool-cache.js")
+    const { getOrCompute } = await import("../src/platform/persistence/tool-cache.js")
     let aCalls = 0,
       bCalls = 0
     const computeA = async () => {
@@ -101,7 +101,7 @@ describe("tool-cache", () => {
   })
 
   it("canonicalises input so {a:1,b:2} and {b:2,a:1} hit the same key", async () => {
-    const { getOrCompute } = await import("../src/adapters/persistence/tool-cache.js")
+    const { getOrCompute } = await import("../src/platform/persistence/tool-cache.js")
     let calls = 0
     const compute = async () => {
       calls++
@@ -120,7 +120,7 @@ describe("tool-cache", () => {
 
   it("expired entries are treated as misses and removable by cleanup", async () => {
     const { getOrCompute, readCache, cleanupExpiredCache, getCacheStats } =
-      await import("../src/adapters/persistence/tool-cache.js")
+      await import("../src/platform/persistence/tool-cache.js")
     let calls = 0
     const compute = async () => {
       calls++
@@ -156,7 +156,7 @@ describe("tool-cache", () => {
   })
 
   it("rejects unsafe sessionIds so cache cannot escape its partition", async () => {
-    const { writeCache, readCache } = await import("../src/adapters/persistence/tool-cache.js")
+    const { writeCache, readCache } = await import("../src/platform/persistence/tool-cache.js")
     // A sessionId containing path-traversal characters must be rejected
     // outright \u2014 throwing loudly is preferred over silently mapping to a
     // shared "invalid" bucket, since the latter collapsed every malformed
@@ -180,7 +180,7 @@ describe("tool-cache", () => {
 
   it("clearSessionCache removes only the targeted session", async () => {
     const { getOrCompute, clearSessionCache, getCacheStats } =
-      await import("../src/adapters/persistence/tool-cache.js")
+      await import("../src/platform/persistence/tool-cache.js")
     await getOrCompute({ tool: "t", input: 1, sessionId: "keep-me", compute: async () => 1 })
     await getOrCompute({ tool: "t", input: 1, sessionId: "drop-me", compute: async () => 2 })
 

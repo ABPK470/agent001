@@ -11,7 +11,7 @@
 
 import { afterEach, describe, expect, it, vi } from "vitest"
 import { configureAgent } from "@mia/agent"
-import { resolveTools } from "../src/tools.js"
+import { resolveTools } from "../src/features/agents/tools.js"
 
 const stubHost = configureAgent({})
 
@@ -44,7 +44,7 @@ describe("resolveTools — guard-referenced tool validation", () => {
 describe("getAllTools — guard contract", () => {
   it("includes every guard-referenced tool", async () => {
     // getAllTools() is the single source of truth — no DB involved.
-    const { getAllTools } = await import("../src/tools.js")
+    const { getAllTools } = await import("../src/features/agents/tools.js")
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
       resolveTools(

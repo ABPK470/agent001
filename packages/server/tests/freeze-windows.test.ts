@@ -38,12 +38,12 @@ afterEach(() => {
 })
 
 async function setup() {
-  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   return {
-    defs: await import("../src/adapters/persistence/db/entity-defs.js"),
-    freezes: await import("../src/adapters/persistence/db/freeze-windows.js")
+    defs: await import("../src/platform/persistence/db/entity-defs.js"),
+    freezes: await import("../src/platform/persistence/db/freeze-windows.js")
   }
 }
 

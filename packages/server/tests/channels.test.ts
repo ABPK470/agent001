@@ -7,13 +7,13 @@
  */
 
 import { beforeEach, describe, expect, it, vi } from "vitest"
-import type { QueueStore } from "../src/api/channels/queue.js"
-import { MessageQueue } from "../src/api/channels/queue.js"
-import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/api/channels/retry.js"
-import type { ConversationStore, RunTrigger } from "../src/api/channels/router.js"
-import { MessageRouter } from "../src/api/channels/router.js"
-import { TeamsChannel } from "../src/api/channels/teams.js"
-import type { Channel, ChannelConfig, Conversation, OutboundMessage } from "../src/api/channels/types.js"
+import type { QueueStore } from "../src/platform/queue/channels/queue.js"
+import { MessageQueue } from "../src/platform/queue/channels/queue.js"
+import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/platform/queue/channels/retry.js"
+import type { ConversationStore, RunTrigger } from "../src/platform/queue/channels/router.js"
+import { MessageRouter } from "../src/platform/queue/channels/router.js"
+import { TeamsChannel } from "../src/platform/queue/channels/teams.js"
+import type { Channel, ChannelConfig, Conversation, OutboundMessage } from "../src/platform/queue/channels/types.js"
 
 // ── Test helpers ─────────────────────────────────────────────────
 
@@ -286,7 +286,7 @@ describe("MessageQueue", () => {
 
   beforeEach(() => {
     // Mock broadcast to prevent errors in isolated test env.
-    vi.mock("../src/event-broadcaster.js", () => ({
+    vi.mock("../src/platform/events/broadcaster.js", () => ({
       broadcast: vi.fn()
     }))
 
@@ -329,7 +329,7 @@ describe("MessageRouter", () => {
   let runId: string
 
   beforeEach(() => {
-    vi.mock("../src/event-broadcaster.js", () => ({
+    vi.mock("../src/platform/events/broadcaster.js", () => ({
       broadcast: vi.fn()
     }))
 

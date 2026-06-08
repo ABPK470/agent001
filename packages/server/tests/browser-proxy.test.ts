@@ -22,7 +22,7 @@ beforeEach(async () => {
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
   testDb.pragma("foreign_keys = ON")
-  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   _migrate(testDb)
   _setDb(testDb)
   seedTestUsers(testDb)
@@ -41,7 +41,7 @@ afterEach(() => {
 
 describe("browser proxy config", () => {
   it("sets, reads, updates, and deletes a proxy", async () => {
-    const { setProxyConfig, getProxyConfig, deleteProxyConfig } = await import("../src/browser/proxy.js")
+    const { setProxyConfig, getProxyConfig, deleteProxyConfig } = await import("../src/features/browser/proxy.js")
 
     expect(getProxyConfig("alice@example.com")).toBeNull()
 
@@ -68,13 +68,13 @@ describe("browser proxy config", () => {
   })
 
   it("rejects invalid URLs and unsupported schemes", async () => {
-    const { setProxyConfig } = await import("../src/browser/proxy.js")
+    const { setProxyConfig } = await import("../src/features/browser/proxy.js")
     expect(() => setProxyConfig({ ownerUpn: "u@x", server: "ftp://nope" })).toThrow(/http|socks5/)
     expect(() => setProxyConfig({ ownerUpn: "u@x", server: "not-a-url" })).toThrow(/http|socks5/)
   })
 
   it("isolates tenants", async () => {
-    const { setProxyConfig, getProxyConfig } = await import("../src/browser/proxy.js")
+    const { setProxyConfig, getProxyConfig } = await import("../src/features/browser/proxy.js")
     setProxyConfig({ ownerUpn: "alice@example.com", server: "http://a:1" })
     setProxyConfig({ ownerUpn: "bob@example.com", server: "http://b:2" })
     expect(getProxyConfig("alice@example.com")?.server).toBe("http://a:1")

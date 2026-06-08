@@ -35,7 +35,7 @@ import {
   RunStatus
 } from "@mia/agent"
 import { SyncRunStatus } from "@mia/shared-enums"
-import * as db from "../../adapters/persistence/sqlite.js"
+import * as db from "../../platform/persistence/sqlite.js"
 import { OperationKind, OperationStatus } from "../../shared/enums/operations.js"
 import { loadPersistedSyncPlanSummary } from "../sync/plan-summary.js"
 

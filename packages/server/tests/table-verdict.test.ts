@@ -33,13 +33,13 @@ afterEach(() => {
 })
 
 async function setupMemory() {
-  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
-  const { migrateMemory } = await import("../src/adapters/persistence/memory/index.js")
+  const { migrateMemory } = await import("../src/platform/persistence/memory/index.js")
   migrateMemory()
-  return await import("../src/adapters/persistence/memory/index.js")
+  return await import("../src/platform/persistence/memory/index.js")
 }
 
 describe("recordTableVerdict — write path", () => {

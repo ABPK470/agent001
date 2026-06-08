@@ -35,7 +35,7 @@ afterEach(() => {
 })
 
 async function bootstrap(): Promise<void> {
-  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   _migrate(testDb)
   _setDb(testDb)
   seedTestUsers(testDb)
@@ -47,7 +47,7 @@ describe("browser credentials store", () => {
   it("creates, lists, and round-trips a password credential", async () => {
     await bootstrap()
     const { createCredential, listCredentials, openCredential } =
-      await import("../src/browser/credentials.js")
+      await import("../src/features/browser/credentials.js")
 
     const meta = createCredential({
       ownerUpn: "alice@example.com",
@@ -69,7 +69,7 @@ describe("browser credentials store", () => {
   it("refuses cross-tenant access", async () => {
     await bootstrap()
     const { createCredential, openCredential, listCredentials } =
-      await import("../src/browser/credentials.js")
+      await import("../src/features/browser/credentials.js")
 
     const m = createCredential({
       ownerUpn: "alice@example.com",
@@ -85,7 +85,7 @@ describe("browser credentials store", () => {
 
   it("validates payload shape per kind", async () => {
     await bootstrap()
-    const { createCredential } = await import("../src/browser/credentials.js")
+    const { createCredential } = await import("../src/features/browser/credentials.js")
 
     expect(() =>
       createCredential({
@@ -110,8 +110,8 @@ describe("browser credentials store", () => {
 
   it("server provider generates TOTP codes and refuses cross-tenant", async () => {
     await bootstrap()
-    const { createCredential } = await import("../src/browser/credentials.js")
-    const { createServerBrowserCredentialProvider } = await import("../src/browser/credential-provider.js")
+    const { createCredential } = await import("../src/features/browser/credentials.js")
+    const { createServerBrowserCredentialProvider } = await import("../src/features/browser/credential-provider.js")
 
     // RFC 6238 Appendix B test vector secret (base32 of "12345678901234567890")
     const meta = createCredential({
@@ -135,7 +135,7 @@ describe("browser credentials store", () => {
 
   it("server provider returns null for anonymous sessions", async () => {
     await bootstrap()
-    const { serverBrowserCredentialProvider } = await import("../src/browser/credential-provider.js")
+    const { serverBrowserCredentialProvider } = await import("../src/features/browser/credential-provider.js")
     expect(await serverBrowserCredentialProvider.resolvePassword("anything")).toBeNull()
     expect(await serverBrowserCredentialProvider.resolveTotp("anything")).toBeNull()
   })

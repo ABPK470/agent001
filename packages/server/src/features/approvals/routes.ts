@@ -5,8 +5,8 @@
 import { EventType } from "@mia/shared-enums"
 import type { RiskTier } from "@mia/sync"
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
-import * as db from "../adapters/persistence/sqlite.js"
-import { broadcast } from "../event-broadcaster.js"
+import { broadcast } from "../../platform/events/broadcaster.js"
+import * as db from "../../platform/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 const TOKEN_TTL_MS_DEFAULT = 24 * 60 * 60 * 1000
@@ -217,72 +217,37 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
               approvalId: approval.id,
               proposalId: approval.proposal_id,
               state: approval.state,
-              by: req.session.upn,
-              viaToken: true
+              by: req.session.upn
             }
           })
           return approval
         }
-        const reason = req.query.reason ?? "rejected via one-click token"
-        const approval = db.rejectApproval(token.approvalId, req.session.upn, reason)
+        const rejected = db.rejectApproval(
+          token.approvalId,
+          req.session.upn,
+          req.query.reason ?? "rejected via token"
+        )
         broadcast({
           type: EventType.SyncApprovalRejected,
           data: {
-            approvalId: approval.id,
-            proposalId: approval.proposal_id,
+            approvalId: rejected.id,
+            proposalId: rejected.proposal_id,
             by: req.session.upn,
-            viaToken: true
+            reason: req.query.reason ?? "rejected via token"
           }
         })
-        return approval
+        return rejected
       } catch (error) {
         return mapApprovalError(reply, error)
       }
     }
   )
-
-  app.get<{ Querystring: { tenant?: string } }>("/api/approvals/policies", async (req) =>
-    db.listApprovalPolicies(resolveTenant(req))
-  )
-
-  app.put<{
-    Body: {
-      targetEnv: string
-      riskTier: RiskTier
-      policy: db.ApprovalPolicyKind
-      approvers?: readonly string[]
-      bypassRole?: string | null
-    }
-  }>("/api/approvals/policies", async (req, reply) => {
-    if (!req.session?.isAdmin) {
-      reply.code(403)
-      return { error: "admin only" }
-    }
-    try {
-      db.upsertApprovalPolicy(
-        {
-          tenantId: resolveTenant(req),
-          targetEnv: req.body.targetEnv,
-          riskTier: req.body.riskTier,
-          policy: req.body.policy,
-          approvers: req.body.approvers ?? [],
-          bypassRole: req.body.bypassRole ?? "admin"
-        },
-        req.session.upn
-      )
-      return { ok: true }
-    } catch (error) {
-      reply.code(400)
-      return { error: error instanceof Error ? error.message : String(error) }
-    }
-  })
 }
 
-function mapApprovalError(reply: FastifyReply, error: unknown): { error: string; code?: string } {
-  if (error instanceof db.ApprovalError) {
-    reply.code(error.code === "not_found" ? 404 : 400)
-    return { error: error.message, code: error.code }
-  }
-  reply.code(500)
-  return { error: error instanceof Error ? error.message : String(error) }
+function mapApprovalError(reply: FastifyReply, error: unknown) {
+  const msg = error instanceof Error ? error.message : String(error)
+  if (msg.includes("not found")) reply.code(404)
+  else if (msg.includes("expired") || msg.includes("already") || msg.includes("consumed")) reply.code(409)
+  else reply.code(400)
+  return { error: msg }
 }

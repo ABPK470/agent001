@@ -3,14 +3,14 @@
  */
 
 import { describe, expect, it } from "vitest"
-import type { EnvelopeHeader } from "../src/adapters/persistence/evidence/envelope.js"
+import type { EnvelopeHeader } from "../src/platform/persistence/evidence/envelope.js"
 import {
   buildEnvelope,
   envelopeBodyBytes,
   envelopeBodyHash,
   recomputeHashChain
-} from "../src/adapters/persistence/evidence/index.js"
-import { buildHmacSigner } from "../src/adapters/persistence/evidence/signers/hmac.js"
+} from "../src/platform/persistence/evidence/index.js"
+import { buildHmacSigner } from "../src/platform/persistence/evidence/signers/hmac.js"
 
 function header(): EnvelopeHeader {
   return {

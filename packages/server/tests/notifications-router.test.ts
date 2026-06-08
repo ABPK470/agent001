@@ -33,10 +33,10 @@ afterEach(() => {
 })
 
 async function setup() {
-  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  return import("../src/api/notifications/router.js")
+  return import("../src/features/notifications/router.js")
 }
 
 describe("notifications router (F1.10)", () => {

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
 import { createPublishedSyncDefinitionRegistry, type EntityDefinition } from "@mia/sync"
-import type { CurrentSession } from "../src/auth/context.js"
+import type { CurrentSession } from "../src/features/auth/context.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -46,8 +46,8 @@ function createHost(root: string): AgentHost {
 }
 
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
-  const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-  const { registerSyncRoutes } = await import("../src/api/sync.js")
+  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { registerSyncRoutes } = await import("../src/features/sync/routes.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
 
   _setDb(testDb)
@@ -153,7 +153,7 @@ afterEach(() => {
 describe("sync routes", () => {
   it("publishes DB-authored definitions and exposes them immediately via runtime definitions", async () => {
     const { app } = await buildApp(adminSession())
-    const { saveEntityDefinition } = await import("../src/adapters/persistence/db/index.js")
+    const { saveEntityDefinition } = await import("../src/platform/persistence/db/index.js")
 
     const entityDefinition: EntityDefinition = {
       tenantId: "_default",

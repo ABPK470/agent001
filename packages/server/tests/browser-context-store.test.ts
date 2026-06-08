@@ -37,13 +37,13 @@ afterEach(() => {
 
 describe("browser context store", () => {
   it("is idempotent per upn and round-trips storage state", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
     _migrate(testDb)
     seedTestUsers(testDb)
     _setDb(testDb)
 
     const { getOrCreateContext, loadStorageState, saveStorageState, listContexts } =
-      await import("../src/browser/context-store.js")
+      await import("../src/features/browser/context-store.js")
 
     const a = getOrCreateContext("alice@example.com")
     const b = getOrCreateContext("alice@example.com")

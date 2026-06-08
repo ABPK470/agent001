@@ -5,18 +5,18 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 beforeEach(async () => {
-  const { _resetHandoffs } = await import("../src/browser/handoff.js")
+  const { _resetHandoffs } = await import("../src/features/browser/handoff.js")
   _resetHandoffs()
 })
 
 afterEach(async () => {
-  const { _resetHandoffs } = await import("../src/browser/handoff.js")
+  const { _resetHandoffs } = await import("../src/features/browser/handoff.js")
   _resetHandoffs()
 })
 
 describe("browser handoff registry", () => {
   it("mints, lists, and isolates tenants", async () => {
-    const { mintHandoff, getHandoff, listHandoffs } = await import("../src/browser/handoff.js")
+    const { mintHandoff, getHandoff, listHandoffs } = await import("../src/features/browser/handoff.js")
     const a = mintHandoff({ ownerUpn: "alice@x", browserSessionId: "s1", reason: "captcha" })
     mintHandoff({ ownerUpn: "bob@x", browserSessionId: "s2", reason: "2fa" })
 
@@ -31,7 +31,7 @@ describe("browser handoff registry", () => {
   })
 
   it("completes a handoff and resolves awaiters", async () => {
-    const { mintHandoff, completeHandoff, awaitHandoff } = await import("../src/browser/handoff.js")
+    const { mintHandoff, completeHandoff, awaitHandoff } = await import("../src/features/browser/handoff.js")
     const rec = mintHandoff({ ownerUpn: "alice@x", browserSessionId: "s1", reason: "captcha" })
     const promise = awaitHandoff(rec.id)
     completeHandoff("alice@x", rec.id)
@@ -40,7 +40,7 @@ describe("browser handoff registry", () => {
   })
 
   it("revokes a handoff", async () => {
-    const { mintHandoff, revokeHandoff, awaitHandoff } = await import("../src/browser/handoff.js")
+    const { mintHandoff, revokeHandoff, awaitHandoff } = await import("../src/features/browser/handoff.js")
     const rec = mintHandoff({ ownerUpn: "alice@x", browserSessionId: "s1", reason: "manual" })
     const promise = awaitHandoff(rec.id)
     expect(revokeHandoff("alice@x", rec.id)).toBe(true)
@@ -49,7 +49,7 @@ describe("browser handoff registry", () => {
   })
 
   it("expires after TTL", async () => {
-    const { mintHandoff, getHandoff } = await import("../src/browser/handoff.js")
+    const { mintHandoff, getHandoff } = await import("../src/features/browser/handoff.js")
     const rec = mintHandoff({
       ownerUpn: "alice@x",
       browserSessionId: "s1",
@@ -62,7 +62,7 @@ describe("browser handoff registry", () => {
   })
 
   it("refuses cross-tenant complete and revoke", async () => {
-    const { mintHandoff, completeHandoff, revokeHandoff } = await import("../src/browser/handoff.js")
+    const { mintHandoff, completeHandoff, revokeHandoff } = await import("../src/features/browser/handoff.js")
     const rec = mintHandoff({ ownerUpn: "alice@x", browserSessionId: "s1", reason: "captcha" })
     expect(completeHandoff("bob@x", rec.id)).toBe(false)
     expect(revokeHandoff("bob@x", rec.id)).toBe(false)

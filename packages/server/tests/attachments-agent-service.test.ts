@@ -53,15 +53,15 @@ async function withAttachmentService<T>(
   ctx: HostedPolicyContext,
   fn: (service: import("@mia/agent").AttachmentService) => Promise<T>
 ): Promise<T> {
-  const { createServerAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
+  const { createServerAttachmentService } = await import("../src/platform/persistence/attachments/index.js")
   return fn(createServerAttachmentService(() => ctx))
 }
 
 describe("server attachment service", () => {
   it("rejects path-traversal and absolute destinations", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
     const { uploadAttachment, serverAttachmentService } =
-      await import("../src/adapters/persistence/attachments/index.js")
+      await import("../src/platform/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
@@ -86,9 +86,9 @@ describe("server attachment service", () => {
   })
 
   it("imports a file into the sandbox and records the import", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
     const { uploadAttachment, serverAttachmentService, listAttachmentImports } =
-      await import("../src/adapters/persistence/attachments/index.js")
+      await import("../src/platform/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
@@ -117,9 +117,9 @@ describe("server attachment service", () => {
   })
 
   it("read() returns text for text-media and binary for the rest, honouring maxBytes", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
     const { uploadAttachment, serverAttachmentService } =
-      await import("../src/adapters/persistence/attachments/index.js")
+      await import("../src/platform/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
@@ -158,9 +158,9 @@ describe("server attachment service", () => {
   })
 
   it("list() defaults to the active run when no filter is supplied", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
     const { uploadAttachment, serverAttachmentService } =
-      await import("../src/adapters/persistence/attachments/index.js")
+      await import("../src/platform/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
@@ -190,8 +190,8 @@ describe("server attachment service", () => {
   })
 
   it("throws a clear error when called outside a run context", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+    const { serverAttachmentService } = await import("../src/platform/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
@@ -200,9 +200,9 @@ describe("server attachment service", () => {
   })
 
   it("promoteFromSandbox stores generated files with source=generated bound to the run", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
     const { serverAttachmentService, getAttachment } =
-      await import("../src/adapters/persistence/attachments/index.js")
+      await import("../src/platform/persistence/attachments/index.js")
     const { writeFileSync, mkdirSync } = await import("node:fs")
     _setDb(testDb)
     _migrate(testDb)
@@ -234,8 +234,8 @@ describe("server attachment service", () => {
   })
 
   it("promoteFromSandbox refuses paths that escape the sandbox", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { serverAttachmentService } = await import("../src/adapters/persistence/attachments/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+    const { serverAttachmentService } = await import("../src/platform/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)

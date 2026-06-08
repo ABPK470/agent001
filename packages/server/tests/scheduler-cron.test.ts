@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { nextCronMatch } from "../src/application/shell/proposer/scheduler.js"
+import { nextCronMatch } from "../src/features/proposer/scheduler.js"
 
 describe("nextCronMatch", () => {
   it("hourly fires at next :00", () => {

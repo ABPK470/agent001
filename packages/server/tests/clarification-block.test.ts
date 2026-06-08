@@ -5,7 +5,7 @@
 
 import type { AmbiguityFinding, ResolvedClarification } from "@mia/agent"
 import { describe, expect, it } from "vitest"
-import { buildClarificationBlock } from "../src/application/core/clarification-block.js"
+import { buildClarificationBlock } from "../src/features/runs/core/clarification-block.js"
 
 function mkFinding(over: Partial<AmbiguityFinding> = {}): AmbiguityFinding {
   return {

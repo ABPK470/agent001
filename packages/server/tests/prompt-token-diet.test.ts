@@ -20,10 +20,10 @@ import {
   decideSections,
   filterToolsByGoal,
   scoreDbLikelihood
-} from "../src/application/core/decide-sections.js"
-import { buildToolContext } from "../src/application/core/prompt/builder.js"
-import { buildSystemMessages } from "../src/application/core/system-messages.js"
-import type { RunWorkspaceContext } from "../src/application/shell/workspace/run-workspace.js"
+} from "../src/features/runs/core/decide-sections.js"
+import { buildToolContext } from "../src/features/runs/core/prompt/builder.js"
+import { buildSystemMessages } from "../src/features/runs/core/system-messages.js"
+import type { RunWorkspaceContext } from "../src/bootstrap/workspace.js"
 
 const RW: RunWorkspaceContext = {
   runId: "run-x",

@@ -37,9 +37,9 @@ afterEach(() => {
 describe("attachment lifecycle", () => {
   it("sets a retention_until on insert that respects the scope-specific TTL", async () => {
     process.env["MIA_ATTACHMENT_RETENTION_RUN_DAYS"] = "1"
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
     const { uploadAttachment, getAttachment } =
-      await import("../src/adapters/persistence/attachments/index.js")
+      await import("../src/platform/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
@@ -64,9 +64,9 @@ describe("attachment lifecycle", () => {
   })
 
   it("pruneExpiredAttachments soft-deletes rows past their retention", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
     const { uploadAttachment, getAttachment, pruneExpiredAttachments } =
-      await import("../src/adapters/persistence/attachments/index.js")
+      await import("../src/platform/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
@@ -93,9 +93,9 @@ describe("attachment lifecycle", () => {
 
   it("rejects an upload that would exceed the per-owner quota", async () => {
     process.env["MIA_ATTACHMENT_OWNER_QUOTA_BYTES"] = "100"
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
     const { uploadAttachment, QuotaExceededError, getOwnerUsage } =
-      await import("../src/adapters/persistence/attachments/index.js")
+      await import("../src/platform/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
@@ -123,8 +123,8 @@ describe("attachment lifecycle", () => {
   })
 
   it("owner-less uploads are rejected (v19: every attachment has an owner)", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
-    const { uploadAttachment } = await import("../src/adapters/persistence/attachments/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+    const { uploadAttachment } = await import("../src/platform/persistence/attachments/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)

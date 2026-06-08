@@ -11,9 +11,9 @@ import {
   synthesizeGenericFailureAnswer,
   type ToolKillManager
 } from "@mia/agent"
-import * as db from "../../../../adapters/persistence/sqlite.js"
-import { TrajectoryEventKind } from "../../../../enums/trajectory.js"
-import { broadcast, broadcastTrace } from "../../../../event-broadcaster.js"
+import { broadcast, broadcastTrace } from "../../../../platform/events/broadcaster.js"
+import * as db from "../../../../platform/persistence/sqlite.js"
+import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 import { handlePlannerTrace } from "../../core/coordination/planner-events.js"
 import { persistToolResult } from "../tool-result-persister.js"
 import type { ExecuteRunInput, ExecutionEnvironment } from "./types.js"

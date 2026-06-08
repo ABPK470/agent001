@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { summarizeCachedPayload } from "../src/adapters/persistence/memory/tool-knowledge-summarizer.js"
+import { summarizeCachedPayload } from "../src/platform/persistence/memory/tool-knowledge-summarizer.js"
 
 describe("summarizeCachedPayload — explore_mssql_schema", () => {
   it("extracts col(type) pairs and PK / FK markers from a pipe-table payload", () => {

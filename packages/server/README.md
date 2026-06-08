@@ -7,8 +7,8 @@ events to the UI.
 
 - REST API for runs, agents, layouts, memory, notifications.
 - SSE event stream (`/api/events/stream`) — the single realtime channel.
-- Application shell/core orchestration for start / stop / resume / fail-over agent runs.
-- Persistence — SQLite over better-sqlite3 (see `adapters/persistence/`).
+- Run orchestration for start / stop / resume / fail-over agent runs.
+- Persistence — SQLite over better-sqlite3 (see `platform/persistence/`).
 - Static file serving for the built UI in production.
 - Catalog cache, attachment service, sandbox file isolation.
 
@@ -16,30 +16,23 @@ events to the UI.
 
 | Folder / file           | Purpose                                                                                 |
 | ----------------------- | --------------------------------------------------------------------------------------- |
-| `index.ts`              | Entry point — wires Fastify, plugins, API routers, and application services.            |
-| `api/`                  | Real transport edge: one module per HTTP/SSE resource.                                  |
-| `auth/`                 | Authentication and session implementation.                                              |
-| `browser/`              | Browser credential, context, handoff, policy, and guard implementation.                 |
-| `application/shell/`    | Stateful runtime orchestration, queueing, proposer scheduling, and workspace execution. |
-| `application/core/`     | Stateless coordination and prompt/data-block logic.                                     |
-| `adapters/persistence/` | SQLite-backed persistence for runs, memory, evidence, attachments, and tool cache.      |
-| `adapters/effects/`     | Effect log — every filesystem mutation goes through here.                               |
-| `adapters/llm/`         | LLM adapter door plus completion adapter bindings.                                      |
-| `adapters/sync/`        | Server-local sync glue such as entity YAML/bootstrap helpers.                           |
-| `llm/`                  | LLM provider/runtime implementation.                                                    |
-| `sandbox/`              | Per-run filesystem/process sandboxing implementation.                                   |
-| `enums/`                | Façade re-exports of `@mia/shared-enums` plus server-private enums.                     |
-| `tools.ts`              | Server-owned tool registry and per-run tool composition.                                |
+| `index.ts`              | Entry point — wires Fastify, plugins, feature routes, and runtime services.             |
+| `bootstrap/`            | Composition helpers for config, workspace, LLM, and sync bootstrapping.                 |
+| `features/`             | HTTP routes plus feature-local orchestration for runs, auth, sync, layouts, and more.   |
+| `platform/`             | Infrastructure: persistence, events, queueing, LLM, sandbox, effects, and MSSQL setup. |
+| `shared/`               | Shared enums, HTTP helpers, utility code, and server-local types/errors.                |
+| `ports/`                | Cross-package interfaces and contracts exposed by the server package.                    |
+| `cli/`                  | Package-local scripts such as entity-registry export.                                   |
+| `crypto/`               | Local cryptographic helpers.                                                            |
 
 ## Conventions
 
-- **Imports inside the package**: prefer the cluster's `index.ts`
-  (`from "./api/index.js"`, `from "./adapters/persistence/index.js"`, etc.)
-  and import canonical implementation folders directly (`auth/`, `browser/`,
-  `llm/`, `sandbox/`) instead of re-introducing mirror shim trees.
-- **`adapters/persistence/index.ts` is the documented persistence barrel**.
-  Outside callers go through it; do not bypass it with deleted legacy paths.
+- **Imports inside the package**: import from the canonical top-level structure
+  (`bootstrap/`, `features/`, `platform/`, `shared/`, `ports/`) and do not
+  re-introduce compatibility mirror trees.
+- **`platform/persistence/index.ts` is the persistence barrel**.
+  Outside callers go through it; do not bypass it with ad hoc deep imports.
 - **Wire enums**: own them in `@mia/shared-enums`. Re-export through
-  `enums/index.ts`. Do not re-declare.
+  `shared/enums/index.ts`. Do not re-declare.
 - **Effects**: any code that writes to disk on behalf of a run **must**
-  route through `adapters/effects/` so the trajectory can be replayed / rolled back.
+  route through `platform/effects/` so the trajectory can be replayed / rolled back.

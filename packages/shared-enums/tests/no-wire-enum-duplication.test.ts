@@ -4,11 +4,7 @@ import { describe, expect, test } from "vitest"
 import * as shared from "../src/index.js"
 
 const ROOT = resolve(__dirname, "../../..")
-const SCAN_DIRS = [
-  "packages/agent/src",
-  "packages/server/src",
-  "packages/ui/src",
-]
+const SCAN_DIRS = ["packages/agent/src", "packages/server/src", "packages/ui/src"]
 // Files that LEGITIMATELY re-export wire enums from @mia/shared-enums
 // (façades) — exempt from drift detection.
 const FACADE_WHITELIST = new Set([
@@ -19,12 +15,12 @@ const FACADE_WHITELIST = new Set([
   "packages/agent/src/engine/enums/agent-runtime.ts",
   "packages/agent/src/engine/enums/attachment.ts",
   "packages/agent/src/engine/enums/sync.ts",
-  "packages/server/src/enums/operations.ts",
-  "packages/server/src/enums/policy-source.ts",
+  "packages/server/src/shared/enums/operations.ts",
+  "packages/server/src/shared/enums/policy-source.ts",
   "packages/ui/src/enums/index.ts",
   "packages/ui/src/api.ts",
   "packages/ui/src/components/policy/selector-schema.ts",
-  "packages/ui/src/types.ts",
+  "packages/ui/src/types.ts"
 ])
 
 const TS_EXT = /\.tsx?$/
@@ -83,19 +79,22 @@ describe("Lockdown — no wire-enum duplication outside @mia/shared-enums", () =
             if (matches) {
               offenders.push(
                 `${rel} :: const ${localName} duplicates @mia/shared-enums::${wire.name} ` +
-                  `(${[...localVals].join(", ")})`,
+                  `(${[...localVals].join(", ")})`
               )
             }
           }
         }
       }
     }
-    expect(offenders, [
-      "Found local enums whose value sets duplicate a wire enum already",
-      "owned by @mia/shared-enums. Replace the local `as const` with a",
-      "façade re-export from @mia/shared-enums to avoid BE↔FE drift.",
-      "Offenders:",
-      ...offenders.map((o) => "  " + o),
-    ].join("\n")).toEqual([])
+    expect(
+      offenders,
+      [
+        "Found local enums whose value sets duplicate a wire enum already",
+        "owned by @mia/shared-enums. Replace the local `as const` with a",
+        "façade re-export from @mia/shared-enums to avoid BE↔FE drift.",
+        "Offenders:",
+        ...offenders.map((o) => "  " + o)
+      ].join("\n")
+    ).toEqual([])
   })
 })

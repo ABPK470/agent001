@@ -21,7 +21,7 @@
 
 import { type AgentHost } from "@mia/agent"
 import { getEnvironments } from "@mia/sync"
-import * as db from "../../adapters/persistence/sqlite.js"
+import * as db from "../../platform/persistence/sqlite.js"
 import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "./hosted-defaults.js"
 
 // ── Policy rule seeding ──────────────────────────────────────────

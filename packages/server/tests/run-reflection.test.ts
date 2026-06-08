@@ -5,7 +5,7 @@ import {
   extractObservedQnames,
   runReflectionTurn,
   type ReflectionStep
-} from "../src/application/core/coordination/run-reflection.js"
+} from "../src/features/runs/core/coordination/run-reflection.js"
 
 // ── helpers ──────────────────────────────────────────────────────
 

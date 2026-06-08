@@ -6,7 +6,7 @@ const getRun = vi.fn()
 const getSyncRun = vi.fn()
 const getSyncRunPlanJson = vi.fn()
 
-vi.mock("../src/adapters/persistence/sqlite.js", () => ({
+vi.mock("../src/platform/persistence/sqlite.js", () => ({
   listEvents,
   getRun,
   getSyncRun,
@@ -86,7 +86,7 @@ describe("listOperations sync bucketing", () => {
       error: null
     })
 
-    const { listOperations } = await import("../src/api/operations-query.ts")
+    const { listOperations } = await import("../src/features/operations/query.ts")
     const result = listOperations({ limit: 50 })
 
     expect(result.operations).toHaveLength(3)
@@ -140,7 +140,7 @@ describe("listOperations sync bucketing", () => {
       error: null
     })
 
-    const { listOperations } = await import("../src/api/operations-query.ts")
+    const { listOperations } = await import("../src/features/operations/query.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
 
@@ -211,7 +211,7 @@ describe("listOperations sync bucketing", () => {
       })
     )
 
-    const { listOperations } = await import("../src/api/operations-query.ts")
+    const { listOperations } = await import("../src/features/operations/query.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
 

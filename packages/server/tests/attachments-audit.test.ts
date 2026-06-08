@@ -34,10 +34,10 @@ afterEach(() => {
 
 describe("attachment audit events", () => {
   it("emits attachment.uploaded on upload and attachment.pruned on retention prune", async () => {
-    const { _setDb, _migrate } = await import("../src/adapters/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
     const { uploadAttachment, pruneExpiredAttachments } =
-      await import("../src/adapters/persistence/attachments/index.js")
-    const { subscribeToEvents } = await import("../src/event-broadcaster.js")
+      await import("../src/platform/persistence/attachments/index.js")
+    const { subscribeToEvents } = await import("../src/platform/events/broadcaster.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
