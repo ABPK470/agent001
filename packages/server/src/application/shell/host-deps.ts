@@ -8,9 +8,7 @@ import type { BootHostDeps } from "../../ports/orchestration.js"
 export function bootHostDepsToConfigureAgentOptions(bootHostDeps: BootHostDeps): Partial<ConfigureAgentOptions> {
   return {
     ...(bootHostDeps.attachments ? { attachments: bootHostDeps.attachments } : {}),
-    ...(bootHostDeps.browserContextReader ? { browserContextReader: bootHostDeps.browserContextReader } : {}),
-    ...(bootHostDeps.browserCredentialReader ? { browserCredentialReader: bootHostDeps.browserCredentialReader } : {}),
-    ...(bootHostDeps.browserHandoffStore ? { browserHandoffStore: bootHostDeps.browserHandoffStore } : {}),
+    ...(bootHostDeps.browser ? { browser: bootHostDeps.browser } : {}),
     ...(bootHostDeps.shell
       ? {
           shellMode: bootHostDeps.shell.mode,
@@ -36,6 +34,6 @@ export function bootHostDepsToConfigureAgentOptions(bootHostDeps: BootHostDeps):
           catalogDefaultCachePath: bootHostDeps.catalog.defaultCachePath,
         }
       : {}),
-    ...(bootHostDeps.sync ? { syncState: bootHostDeps.sync } : {}),
+    ...(bootHostDeps.sync ? { sync: bootHostDeps.sync } : {}),
   }
 }

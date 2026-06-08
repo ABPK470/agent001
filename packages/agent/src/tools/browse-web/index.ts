@@ -133,8 +133,8 @@ export const browseWebTool = browseWebToolMetadata
 
 /**
  * Factory variant bound to a host — the only supported construction path.
- * Threads the host through to session.ts so `host.browser.sessions`,
- * `host.browser.idCounter`, and `host.browser.contextReader` are sourced
+ * Threads the host through to session.ts so `host.browser.runtime.activeSessions`,
+ * `host.browser.runtime.idCounter`, and `host.browser.providers.contextReader` are sourced
  * from the explicit AgentHost rather than any ambient runtime state.
  */
 export function createBrowseWebTool(host: AgentHost, run?: RunContext): ExecutableTool {

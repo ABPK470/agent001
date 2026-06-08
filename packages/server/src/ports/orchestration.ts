@@ -91,6 +91,14 @@ export interface BootBrowserCheckDeps {
   client?: BrowserClient | null
 }
 
+export interface BootBrowserState {
+  providers: {
+    contextReader: BrowserContextProvider | null
+    credentialReader: BrowserCredentialProvider | null
+    handoffStore: BrowserHandoffProvider | null
+  }
+}
+
 export interface BootMssqlState {
   databases: Map<string, MssqlEntry>
   defaultConnection: { value: string | null }
@@ -121,9 +129,7 @@ export interface BootSyncState {
  */
 export interface BootHostDeps {
   attachments?: AttachmentService | null
-  browserContextReader?: BrowserContextProvider | null
-  browserCredentialReader?: BrowserCredentialProvider | null
-  browserHandoffStore?: BrowserHandoffProvider | null
+  browser?: BootBrowserState
   shell?: BootShellDeps
   browserCheck?: BootBrowserCheckDeps
   mssql?: BootMssqlState

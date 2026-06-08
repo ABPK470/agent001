@@ -73,7 +73,7 @@ export function createBrowserAutoLoginTool(host: AgentHost): ExecutableTool {
   return {
     ...browserAutoLoginToolMetadata,
     async execute(args) {
-      const provider = host.browser.credentialReader
+      const provider = host.browser.providers.credentialReader
       if (!provider) {
         return "Error: credential vault is not configured for this runtime (anonymous session or non-server host)."
       }

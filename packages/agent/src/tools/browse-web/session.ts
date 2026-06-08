@@ -30,9 +30,9 @@ export interface BrowserSession {
 }
 
 // State container — `const` reference to a mutable record so the lint rule
-// banning module-level `let` passes. Owned by AgentHost (`host.browser.*`).
+// banning module-level `let` passes. Owned by AgentHost (`host.browser.runtime.*`).
 
-// Browser sessions live on the active AgentHost (`host.browser.sessions`).
+// Browser sessions live on the active AgentHost (`host.browser.runtime.activeSessions`).
 const SESSION_TIMEOUT = 5 * 60 * 1000
 
 export function getKillSignal(signal?: AbortSignal | null): AbortSignal | null {
@@ -46,16 +46,16 @@ export function getKillSignal(signal?: AbortSignal | null): AbortSignal | null {
  * on shutdown so the timer doesn't keep the process alive.
  */
 export function startBrowseSessionCleanup(host: AgentHost): void {
-  const browser = host.browser
+  const browser = host.browser.runtime
   if (browser.cleanupTimer.value) return
   const timer = setInterval(() => {
     const now = Date.now()
-    for (const [id, session] of browser.sessions) {
+    for (const [id, session] of browser.activeSessions) {
       if (now - session.lastUsed > SESSION_TIMEOUT) {
         // Best-effort persistence before close.
         persistSessionState(session)
           .finally(() => session.browser.close().catch(() => {}))
-        browser.sessions.delete(id)
+        browser.activeSessions.delete(id)
       }
     }
   }, 60_000)
@@ -65,7 +65,7 @@ export function startBrowseSessionCleanup(host: AgentHost): void {
 
 /** Stop the periodic cleanup timer. Safe to call when not started. */
 export function stopBrowseSessionCleanup(host: AgentHost): void {
-  const browser = host.browser
+  const browser = host.browser.runtime
   if (browser.cleanupTimer.value) {
     clearInterval(browser.cleanupTimer.value)
     browser.cleanupTimer.value = null
@@ -148,7 +148,7 @@ export async function launchSession(
   }
 
   // Acquire persistent context handle (null for anon / no provider).
-  const provider = host.browser.contextReader
+  const provider = host.browser.providers.contextReader
   let handle: BrowserContextHandle | null = null
   if (provider) {
     try { handle = await provider.acquire() } catch { handle = null }
@@ -185,7 +185,7 @@ export async function launchSession(
   const context = await browser.newContext(contextOpts)
   const page = await context.newPage()
 
-  const id = `s${++host.browser.idCounter.value}`
+  const id = `s${++host.browser.runtime.idCounter.value}`
   const session: BrowserSession = {
     browser,
     context,
@@ -198,7 +198,7 @@ export async function launchSession(
     fingerprint,
     contextHandle: handle,
   }
-  host.browser.sessions.set(id, session)
+  host.browser.runtime.activeSessions.set(id, session)
   return { session, id }
 }
 
@@ -218,21 +218,21 @@ export async function persistSessionState(session: BrowserSession): Promise<void
 }
 
 export function getSession(host: AgentHost, sessionId: string): BrowserSession | string {
-  const session = host.browser.sessions.get(sessionId)
+  const session = host.browser.runtime.activeSessions.get(sessionId)
   if (!session) return `Error: Session "${sessionId}" not found or expired`
   session.lastUsed = Date.now()
   return session
 }
 
 export function deleteSession(host: AgentHost, sessionId: string): void {
-  host.browser.sessions.delete(sessionId)
+  host.browser.runtime.activeSessions.delete(sessionId)
 }
 
 /** Force-close all open browser sessions on this host (for cleanup on server shutdown). */
 export function closeAllBrowserSessions(host: AgentHost): void {
-  for (const [id, session] of host.browser.sessions) {
+  for (const [id, session] of host.browser.runtime.activeSessions) {
     persistSessionState(session)
       .finally(() => session.browser.close().catch(() => {}))
-    host.browser.sessions.delete(id)
+    host.browser.runtime.activeSessions.delete(id)
   }
 }

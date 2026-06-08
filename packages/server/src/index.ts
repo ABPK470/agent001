@@ -25,16 +25,16 @@ import cookie from "@fastify/cookie"
 import cors from "@fastify/cors"
 import fastifyStatic from "@fastify/static"
 import {
-    EventType,
-    buildCatalog, closeMssqlPool,
-    configureAgent,
-    getMssqlConfig,
-    type AgentHost,
-    type BrowserClient,
-    type ShellClient,
+  EventType,
+  buildCatalog, closeMssqlPool,
+  configureAgent,
+  getMssqlConfig,
+  type AgentHost,
+  type BrowserClient,
+  type ShellClient,
 } from "@mia/agent"
 import {
-    configurePlanStore,
+  configurePlanStore,
 } from "@mia/sync"
 import Fastify from "fastify"
 import { registerIdentity } from "./adapters/auth/identity.js"
@@ -51,41 +51,41 @@ import { touchSession } from "./adapters/persistence/sessions.js"
 import { initSandbox } from "./adapters/sandbox/index.js"
 import { registerAuthRoutes } from "./api/auth.js"
 import {
-    MessageQueue,
-    MessageRouter,
-    SqliteConversationStore,
-    SqliteQueueStore,
-    TeamsChannel,
-    listChannelConfigs,
-    migrateChannels,
+  MessageQueue,
+  MessageRouter,
+  SqliteConversationStore,
+  SqliteQueueStore,
+  TeamsChannel,
+  listChannelConfigs,
+  migrateChannels,
 } from "./api/channels/index.js"
 import {
-    registerAdminRoutes,
-    registerAgentRoutes,
-    registerApprovalRoutes,
-    registerAttachmentRoutes,
-    registerBrowserRoutes,
-    registerEntityRegistryRoutes,
-    registerEventRoutes,
-    registerEvidenceRoutes,
-    registerFreezeWindowRoutes,
-    registerLayoutRoutes,
-    registerLlmRoutes,
-    registerMemoryRoutes,
-    registerMetricsRoutes,
-    registerMymiRoutes,
-    registerNotificationRouteRoutes,
-    registerNotificationRoutes,
-    registerOperationRoutes,
-    registerPolicyRoutes,
-    registerProfileRoutes,
-    registerProposerRoutes,
-    registerRunRoutes,
-    registerSyncEnvironmentRoutes,
-    registerSyncRoutes,
-    registerToolCacheRoutes,
-    registerUsageRoutes,
-    registerWebhookRoutes,
+  registerAdminRoutes,
+  registerAgentRoutes,
+  registerApprovalRoutes,
+  registerAttachmentRoutes,
+  registerBrowserRoutes,
+  registerEntityRegistryRoutes,
+  registerEventRoutes,
+  registerEvidenceRoutes,
+  registerFreezeWindowRoutes,
+  registerLayoutRoutes,
+  registerLlmRoutes,
+  registerMemoryRoutes,
+  registerMetricsRoutes,
+  registerMymiRoutes,
+  registerNotificationRouteRoutes,
+  registerNotificationRoutes,
+  registerOperationRoutes,
+  registerPolicyRoutes,
+  registerProfileRoutes,
+  registerProposerRoutes,
+  registerRunRoutes,
+  registerSyncEnvironmentRoutes,
+  registerSyncRoutes,
+  registerToolCacheRoutes,
+  registerUsageRoutes,
+  registerWebhookRoutes,
 } from "./api/http-routes.js"
 import { dispatchNotification } from "./api/notifications/router.js"
 import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
@@ -154,11 +154,13 @@ async function main() {
     mssqlDefaultConnectionName: mssqlSetup.defaultConnectionName,
     catalogInstances,
     catalogDefaultCachePath,
-    syncEventSink,
-    syncRunSink,
-    syncEnvironments: syncEnvironments.environments,
-    syncDbProjectRoot: _projectRoot,
-    syncFreezeWindowsReader: () => listFreezeWindowDefinitionsForTenant(),
+    sync: {
+      events: { sink: syncEventSink },
+      runs: { sink: syncRunSink },
+      environments: { items: syncEnvironments.environments },
+      project: { dbProjectRoot: _projectRoot },
+      governance: { freezeWindowsReader: () => listFreezeWindowDefinitionsForTenant() },
+    },
   })
   const mssqlSummary = mssqlSetup.summary
 
@@ -169,8 +171,8 @@ async function main() {
   // every concurrent run.
 
   // Browse-web persistent-context, credential, and human-handoff backends
-  // are wired exclusively via `configureAgent({ browserContextReader,
-  // browserCredentialReader, browserHandoffStore })` below — the legacy
+  // are wired exclusively via `configureAgent({ browser: { providers } })`
+  // below — the legacy
   // `setBrowser*Provider` ambient setters were removed in cluster 7.
 
   // ── ABI sync subsystem ──
@@ -248,9 +250,13 @@ async function main() {
     // setBrowserContextProvider / etc. above.
     bootHostDeps: {
       attachments: serverAttachmentService,
-      browserContextReader: serverBrowserContextProvider,
-      browserCredentialReader: serverBrowserCredentialProvider,
-      browserHandoffStore: serverBrowserHandoffProvider,
+      browser: {
+        providers: {
+          contextReader: serverBrowserContextProvider,
+          credentialReader: serverBrowserCredentialProvider,
+          handoffStore: serverBrowserHandoffProvider,
+        },
+      },
       shell: {
         mode: shellClient ? "sandbox" : "host",
         client: shellClient,

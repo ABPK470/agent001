@@ -14,7 +14,7 @@ export type {
     AttachmentStore as AttachmentService, BrowserClient, BrowserContextHandle,
     BrowserContextReader as BrowserContextProvider, CredentialReader as BrowserCredentialProvider,
     BrowserGuard,
-    HandoffStore as BrowserHandoffProvider, ConfigureAgentOptions, ConfigureMssqlConnection, MakeRunContextOptions, MssqlEntry, RunContext, ShellClient
+    HandoffStore as BrowserHandoffProvider, ConfigureAgentBrowserOptions, ConfigureAgentOptions, ConfigureAgentSyncOptions, ConfigureMssqlConnection, MakeRunContextOptions, MssqlEntry, RunContext, ShellClient
 } from "./application/shell/runtime.js"
 
 // ── Types & constants ───────────────────────────────────────────────

@@ -17,24 +17,24 @@
  */
 
 import type {
-    FreezeWindowDefinition,
-    PublishedSyncDefinitionRegistry,
-    SyncEnvironment,
-    SyncEventSink,
-    SyncPlan,
-    SyncRunSink,
+  FreezeWindowDefinition,
+  PublishedSyncDefinitionRegistry,
+  SyncEnvironment,
+  SyncEventSink,
+  SyncPlan,
+  SyncRunSink,
 } from "@mia/sync"
 import type {
-    AttachmentStore,
-    BrowserClient,
-    BrowserContextReader,
-    CredentialReader,
-    HandoffStore,
-    MssqlEntry,
-    ShellClient,
-    TableVerdictsReader,
-    ToolKnowledgeStore,
-    UserInputReader,
+  AttachmentStore,
+  BrowserClient,
+  BrowserContextReader,
+  CredentialReader,
+  HandoffStore,
+  MssqlEntry,
+  ShellClient,
+  TableVerdictsReader,
+  ToolKnowledgeStore,
+  UserInputReader,
 } from "../../../ports/ports.js"
 import type { BrowserSession, CatalogGraph } from "../../../tools/index.js"
 
@@ -70,16 +70,24 @@ export interface BrowserCheckHost {
   readonly client: BrowserClient | null
 }
 
-export interface BrowserHost {
+export interface BrowserRuntimeHost {
   /** Live browser sessions for this host. Tools mutate this map. */
-  readonly sessions: Map<string, BrowserSession>
+  readonly activeSessions: Map<string, BrowserSession>
   /** Monotonic session-id counter — mutable ref so tools can `++.value`. */
   readonly idCounter: { value: number }
   /** Per-host idle-session cleanup timer — mutable ref started lazily. */
   readonly cleanupTimer: { value: NodeJS.Timeout | null }
+}
+
+export interface BrowserProvidersHost {
   readonly contextReader: BrowserContextReader | null
   readonly credentialReader: CredentialReader | null
   readonly handoffStore: HandoffStore | null
+}
+
+export interface BrowserHost {
+  readonly runtime: BrowserRuntimeHost
+  readonly providers: BrowserProvidersHost
 }
 
 export interface CatalogHost {

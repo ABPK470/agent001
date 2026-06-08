@@ -74,7 +74,7 @@ export function createBrowserHumanHandoffTool(host: AgentHost): ExecutableTool {
       const session = getSession(host, sessionId)
       if (typeof session === "string") return session // error message
 
-      const provider = host.browser.handoffStore
+      const provider = host.browser.providers.handoffStore
       if (!provider) {
         return "browser_human_handoff is not available: no handoff provider installed (anonymous session, CLI, or tests). Cannot escalate to a human."
       }

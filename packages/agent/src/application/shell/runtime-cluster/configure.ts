@@ -20,6 +20,21 @@ export interface ConfigureMssqlConnection extends sql.config {
   knowledge?: string | null
 }
 
+export interface ConfigureAgentBrowserOptions {
+  providers?: Partial<AgentHost["browser"]["providers"]>
+}
+
+export interface ConfigureAgentSyncOptions {
+  events?: Partial<AgentHost["sync"]["events"]>
+  runs?: Partial<AgentHost["sync"]["runs"]>
+  governance?: Partial<AgentHost["sync"]["governance"]>
+  environments?: {
+    items?: ReadonlyMap<string, SyncEnvironment> | ReadonlyArray<SyncEnvironment>
+  }
+  plans?: Partial<AgentHost["sync"]["plans"]>
+  project?: Partial<AgentHost["sync"]["project"]>
+}
+
 /**
  * Options passed by the entrypoint. Every field is optional so the
  * minimal call `configureAgent({})` yields a working-but-empty host
@@ -58,9 +73,7 @@ export interface ConfigureAgentOptions {
   catalogDefaultCachePath?: AgentHost["catalog"]["defaultCachePath"]
 
   // Browser stack (any/all may be null in CLI / tests)
-  browserContextReader?: AgentHost["browser"]["contextReader"]
-  browserCredentialReader?: AgentHost["browser"]["credentialReader"]
-  browserHandoffStore?: AgentHost["browser"]["handoffStore"]
+  browser?: ConfigureAgentBrowserOptions
 
   // Capability ports (null means "not configured here")
   userInput?: AgentHost["userInput"]
@@ -72,12 +85,7 @@ export interface ConfigureAgentOptions {
   tenant?: Partial<AgentHost["tenant"]>
 
   // Shared sync surface and hosted sync readers
-  syncState?: AgentHost["sync"]
-  syncEventSink?: AgentHost["sync"]["events"]["sink"]
-  syncRunSink?: AgentHost["sync"]["runs"]["sink"]
-  syncEnvironments?: ReadonlyArray<SyncEnvironment>
-  syncDbProjectRoot?: string
-  syncFreezeWindowsReader?: AgentHost["sync"]["governance"]["freezeWindowsReader"]
+  sync?: ConfigureAgentSyncOptions
 }
 
 /**
@@ -95,27 +103,20 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const browserCheckMode = options.browserCheckMode ?? (options.browserCheckClient ? "sandbox" : "host")
   const mssqlDatabases = options.mssqlDatabases ?? buildMssqlDatabases(options.mssqlConfigs)
   const mssqlDefaultConnection = options.mssqlDefaultConnection ?? { value: options.mssqlDefaultConnectionName ?? null }
-  const syncState = options.syncState ?? {
-    events: { sink: options.syncEventSink ?? NOOP_SYNC_EVENT_SINK },
-    runs: { sink: options.syncRunSink ?? NOOP_SYNC_RUN_SINK },
-    governance: { freezeWindowsReader: options.syncFreezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER },
-    environments: { items: new Map((options.syncEnvironments ?? []).map((env) => [env.name, env])) },
-    plans: { diskRoot: null, memCache: new Map() },
-    project: {
-      dbProjectRoot: options.syncDbProjectRoot ?? null,
-      publishedDefinitions: createPublishedSyncDefinitionRegistry(),
+  const syncOptions = options.sync
+  const syncState = {
+    events: { sink: syncOptions?.events?.sink ?? NOOP_SYNC_EVENT_SINK },
+    runs: { sink: syncOptions?.runs?.sink ?? NOOP_SYNC_RUN_SINK },
+    governance: { freezeWindowsReader: syncOptions?.governance?.freezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER },
+    environments: { items: normalizeSyncEnvironmentItems(syncOptions?.environments?.items) },
+    plans: {
+      diskRoot: syncOptions?.plans?.diskRoot ?? null,
+      memCache: syncOptions?.plans?.memCache ?? new Map(),
     },
-  }
-
-  if (options.syncState) {
-    if (options.syncEventSink) syncState.events.sink = options.syncEventSink
-    if (options.syncRunSink) syncState.runs.sink = options.syncRunSink
-    if (options.syncEnvironments) {
-      syncState.environments.items.clear()
-      for (const env of options.syncEnvironments) syncState.environments.items.set(env.name, env)
-    }
-    if (options.syncDbProjectRoot !== undefined) syncState.project.dbProjectRoot = options.syncDbProjectRoot
-    if (options.syncFreezeWindowsReader) syncState.governance.freezeWindowsReader = options.syncFreezeWindowsReader
+    project: {
+      dbProjectRoot: syncOptions?.project?.dbProjectRoot ?? null,
+      publishedDefinitions: syncOptions?.project?.publishedDefinitions ?? createPublishedSyncDefinitionRegistry(),
+    },
   }
 
   return Object.freeze<AgentHost>({
@@ -143,12 +144,16 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       client: browserCheckMode === "sandbox" ? (options.browserCheckClient ?? null) : null,
     }),
     browser: Object.freeze({
-      sessions: new Map(),
-      idCounter: { value: 0 },
-      cleanupTimer: { value: null },
-      contextReader: options.browserContextReader ?? null,
-      credentialReader: options.browserCredentialReader ?? null,
-      handoffStore: options.browserHandoffStore ?? null,
+      runtime: Object.freeze({
+        activeSessions: new Map(),
+        idCounter: { value: 0 },
+        cleanupTimer: { value: null },
+      }),
+      providers: Object.freeze({
+        contextReader: options.browser?.providers?.contextReader ?? null,
+        credentialReader: options.browser?.providers?.credentialReader ?? null,
+        handoffStore: options.browser?.providers?.handoffStore ?? null,
+      }),
     }),
     userInput: options.userInput ?? null,
     attachments: options.attachments ?? null,
@@ -183,6 +188,17 @@ const NOOP_SYNC_RUN_SINK: AgentHost["sync"]["runs"]["sink"] = {
 }
 
 const EMPTY_FREEZE_WINDOWS_READER: AgentHost["sync"]["governance"]["freezeWindowsReader"] = () => []
+
+function normalizeSyncEnvironmentItems(
+  items: ReadonlyMap<string, SyncEnvironment> | ReadonlyArray<SyncEnvironment> | undefined,
+): Map<string, SyncEnvironment> {
+  if (!items) return new Map()
+  if (Array.isArray(items)) return new Map(items.map((env) => [env.name, env]))
+  const environmentMap = items as ReadonlyMap<string, SyncEnvironment>
+  const normalized = new Map<string, SyncEnvironment>()
+  for (const [name, env] of environmentMap.entries()) normalized.set(name, env)
+  return normalized
+}
 
 function buildMssqlDatabases(configs: ReadonlyArray<ConfigureMssqlConnection> | undefined): AgentHost["mssql"]["databases"] {
   const databases = new Map<string, AgentHost["mssql"]["databases"] extends Map<string, infer Entry> ? Entry : never>()

@@ -52,7 +52,7 @@ describe("selectRecipeTables", () => {
 
 describe("deployed sync recipes", () => {
   it("marks gateMetadata FK-only tables as optional and default-off", () => {
-    const host = configureAgent({ syncDbProjectRoot: resolve(process.cwd(), "../..") })
+    const host = configureAgent({ sync: { project: { dbProjectRoot: resolve(process.cwd(), "../..") } } })
     const recipe = getPublishedSyncRecipe(host, "gateMetadata")
     const optionalTables = recipe.tables.filter((table) => table.userControllable)
     expect(optionalTables.map((table) => table.name)).toEqual([
@@ -64,7 +64,7 @@ describe("deployed sync recipes", () => {
   })
 
   it("marks content FK-only tables as optional and default-off", () => {
-    const host = configureAgent({ syncDbProjectRoot: resolve(process.cwd(), "../..") })
+    const host = configureAgent({ sync: { project: { dbProjectRoot: resolve(process.cwd(), "../..") } } })
     const recipe = getPublishedSyncRecipe(host, "content")
     const optionalTables = recipe.tables.filter((table) => table.userControllable)
     expect(optionalTables.map((table) => table.name)).toEqual(["gate.UserGroupPermission"])

@@ -3,12 +3,14 @@
  */
 
 export { configureAgent, makeRunContext } from "./runtime-cluster/index.js"
-export type { ConfigureAgentOptions, ConfigureMssqlConnection, MakeRunContextOptions } from "./runtime-cluster/index.js"
+export type { ConfigureAgentBrowserOptions, ConfigureAgentOptions, ConfigureAgentSyncOptions, ConfigureMssqlConnection, MakeRunContextOptions } from "./runtime-cluster/index.js"
 
 export type {
     AgentHost,
     BrowserCheckHost,
     BrowserHost,
+    BrowserProvidersHost,
+    BrowserRuntimeHost,
     CatalogHost,
     FilesystemHost,
     MssqlHost,

@@ -3,7 +3,7 @@
  *
  * The agent reads freeze-window definitions through a host-wired reader.
  * This module owns the durable backing store and exposes a read helper the
- * server passes into `configureAgent({ syncFreezeWindowsReader })`.
+ * server passes into `configureAgent({ sync: { governance: { freezeWindowsReader } } })`.
  *
  * Schema is created in `connection.ts::_migrate`; this file only
  * holds the CRUD helpers and the registry-rehydrate routine.
