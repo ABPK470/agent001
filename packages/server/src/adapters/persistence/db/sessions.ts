@@ -15,7 +15,7 @@
  * sessions any more.
  */
 
-import { newSid } from "../../auth/session.js"
+import { newSid } from "../../../auth/session.js"
 import { getDb } from "./connection.js"
 
 export interface DbSession {

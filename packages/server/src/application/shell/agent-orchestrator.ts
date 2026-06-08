@@ -11,11 +11,11 @@ import {
   type Tool
 } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import type { CurrentSession } from "../../adapters/auth/context.js"
 import { migrateEffects } from "../../adapters/effects/index.js"
 import { cleanupExpiredCache, migrateMemory } from "../../adapters/persistence/index.js"
 import * as db from "../../adapters/persistence/sqlite.js"
 import { AgentBus } from "../../agent-bus.js"
+import type { CurrentSession } from "../../auth/context.js"
 import { TrajectoryEventKind } from "../../enums/trajectory.js"
 import { broadcast } from "../../event-broadcaster.js"
 import type { MessageRouterPort } from "../../ports/channels.js"

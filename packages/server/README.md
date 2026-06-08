@@ -18,22 +18,25 @@ events to the UI.
 | ----------------------- | --------------------------------------------------------------------------------------- |
 | `index.ts`              | Entry point — wires Fastify, plugins, API routers, and application services.            |
 | `api/`                  | Real transport edge: one module per HTTP/SSE resource.                                  |
+| `auth/`                 | Authentication and session implementation.                                              |
+| `browser/`              | Browser credential, context, handoff, policy, and guard implementation.                 |
 | `application/shell/`    | Stateful runtime orchestration, queueing, proposer scheduling, and workspace execution. |
 | `application/core/`     | Stateless coordination and prompt/data-block logic.                                     |
 | `adapters/persistence/` | SQLite-backed persistence for runs, memory, evidence, attachments, and tool cache.      |
 | `adapters/effects/`     | Effect log — every filesystem mutation goes through here.                               |
-| `adapters/sandbox/`     | Per-run filesystem/process sandboxing.                                                  |
+| `adapters/llm/`         | LLM adapter door plus completion adapter bindings.                                      |
 | `adapters/sync/`        | Server-local sync glue such as entity YAML/bootstrap helpers.                           |
+| `llm/`                  | LLM provider/runtime implementation.                                                    |
+| `sandbox/`              | Per-run filesystem/process sandboxing implementation.                                   |
 | `enums/`                | Façade re-exports of `@mia/shared-enums` plus server-private enums.                     |
 | `tools.ts`              | Server-owned tool registry and per-run tool composition.                                |
 
 ## Conventions
 
 - **Imports inside the package**: prefer the cluster's `index.ts`
-  (`from "./api/index.js"`, `from "./adapters/persistence/index.js"`, etc.),
-  not superseded root-level shims. Legacy wrappers (`memory.ts`, `effects.ts`,
-  `db.ts`, `routes.ts`, etc.) were removed;
-  do not re-introduce.
+  (`from "./api/index.js"`, `from "./adapters/persistence/index.js"`, etc.)
+  and import canonical implementation folders directly (`auth/`, `browser/`,
+  `llm/`, `sandbox/`) instead of re-introducing mirror shim trees.
 - **`adapters/persistence/index.ts` is the documented persistence barrel**.
   Outside callers go through it; do not bypass it with deleted legacy paths.
 - **Wire enums**: own them in `@mia/shared-enums`. Re-export through

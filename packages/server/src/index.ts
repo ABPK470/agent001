@@ -36,13 +36,7 @@ import {
 } from "@mia/agent"
 import { configurePlanStore } from "@mia/sync"
 import Fastify from "fastify"
-import { registerIdentity } from "./adapters/auth/identity.js"
-import { bootstrapAdminFromEnv } from "./adapters/auth/users.js"
-import { serverBrowserCredentialProvider } from "./adapters/browser/credential-provider.js"
-import { serverBrowserHandoffProvider } from "./adapters/browser/handoff-provider.js"
-import { serverBrowserContextProvider } from "./adapters/browser/provider.js"
 import { createLlmCompletionAdapter } from "./adapters/llm/index.js"
-import { buildLlmClient } from "./adapters/llm/registry.js"
 import { pruneExpiredAttachments, serverAttachmentService } from "./adapters/persistence/attachments.js"
 import {
   clearTransactionalData,
@@ -66,7 +60,6 @@ import {
 } from "./adapters/persistence/index.js"
 import { migrateMemory, prune as pruneMemory } from "./adapters/persistence/memory.js"
 import { touchSession } from "./adapters/persistence/sessions.js"
-import { initSandbox } from "./adapters/sandbox/index.js"
 import { registerAuthRoutes } from "./api/auth.js"
 import {
   MessageQueue,
@@ -109,11 +102,18 @@ import { dispatchNotification } from "./api/notifications/router.js"
 import { AgentOrchestrator } from "./application/shell/agent-orchestrator.js"
 import { startScheduler, stopScheduler } from "./application/shell/proposer/scheduler.js"
 import { getRunProfile } from "./application/shell/workspace/run-workspace.js"
+import { registerIdentity } from "./auth/identity.js"
+import { bootstrapAdminFromEnv } from "./auth/users.js"
 import { buildBrowserScript, formatBrowserReport } from "./browser-helpers.js"
+import { serverBrowserCredentialProvider } from "./browser/credential-provider.js"
+import { serverBrowserHandoffProvider } from "./browser/handoff-provider.js"
+import { serverBrowserContextProvider } from "./browser/provider.js"
 import { seedDefaultPoliciesIfMissing } from "./domain/policy/policy-seeder.js"
 import { ensureSyncDefinitionConfigs } from "./domain/sync-definition-admin.js"
 import { loadPersistedSyncEnvironments } from "./domain/sync/live-environments.js"
 import { addSseClient, broadcast, subscribeToEvents, toBroadcastData } from "./event-broadcaster.js"
+import { buildLlmClient } from "./llm/registry.js"
+import { initSandbox } from "./sandbox/index.js"
 import { setupMssql } from "./setup-mssql.js"
 
 const PORT = Number(process.env["PORT"] ?? 3102)

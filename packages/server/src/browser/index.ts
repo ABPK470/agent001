@@ -1,7 +1,3 @@
-/**
- * Browser adapter door for the server package.
- */
-
 export * from "./audit.js"
 export * from "./context-store.js"
 export * from "./credential-provider.js"

@@ -4,9 +4,9 @@
 
 import type { LLMClient } from "@mia/agent"
 import type { FastifyInstance } from "fastify"
-import { buildLlmClient, PROVIDER_DEFAULTS } from "../adapters/llm/registry.js"
 import { getLlmConfig, saveLlmConfig } from "../adapters/persistence/sqlite.js"
 import { LlmProvider } from "../enums/llm.js"
+import { buildLlmClient, PROVIDER_DEFAULTS } from "../llm/registry.js"
 
 const VALID_PROVIDERS: LlmProvider[] = [LlmProvider.CopilotChat, LlmProvider.Databricks]
 
