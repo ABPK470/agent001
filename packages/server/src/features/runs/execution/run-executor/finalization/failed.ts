@@ -5,7 +5,7 @@ import { ingestRunTurns } from "../../../../../platform/persistence/memory.js"
 import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../../shared/enums/trajectory.js"
-import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
+import { persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { buildPersistedToolTrace } from "../support.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
@@ -62,7 +62,11 @@ export async function finalizeFailedRun(
   await persistAuditLog(sideEffects.auditLog, request.runId)
   persistTokenUsage(request.runId, agent)
   env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Error, text: errMsg })
-  await runtime.workspaceStore.captureOutputDiff(request.runId, env.boundSaveTrace, createNotification)
+  await runtime.workspaceStore.captureOutputDiff(
+    request.runId,
+    env.boundSaveTrace,
+    sideEffects.notifications.notify
+  )
   ingestRunTurns({
     id: request.runId,
     goal: request.goal,
@@ -95,7 +99,7 @@ export async function finalizeFailedRun(
     timestamp: new Date().toISOString()
   })
   const hasCheckpoint = !!db.getCheckpoint(request.runId)
-  createNotification({
+  sideEffects.notifications.notify({
     type: EventType.RunFailed,
     title: "Run failed",
     message: `"${request.goal.slice(0, 80)}" failed: ${errMsg.slice(0, 120)}`,

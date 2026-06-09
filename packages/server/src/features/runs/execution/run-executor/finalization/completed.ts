@@ -5,7 +5,7 @@ import { consolidate, extractProcedural, ingestRunTurns } from "../../../../../p
 import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../../shared/enums/trajectory.js"
-import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
+import { persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { buildPersistedToolTrace } from "../support.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
@@ -45,7 +45,11 @@ export async function finalizeCompletedRun(
   persistTokenUsage(request.runId, agent)
 
   env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Answer, text: answer })
-  await runtime.workspaceStore.captureOutputDiff(request.runId, env.boundSaveTrace, createNotification)
+  await runtime.workspaceStore.captureOutputDiff(
+    request.runId,
+    env.boundSaveTrace,
+    sideEffects.notifications.notify
+  )
 
   const pendingDiff = runtime.workspaceStore.getCompletedDiff(request.runId)
   const pendingChangeCount = pendingDiff
@@ -96,7 +100,7 @@ export async function finalizeCompletedRun(
     message: `Completed — ${env.state.run.steps.length} steps`,
     timestamp: new Date().toISOString()
   })
-  createNotification({
+  sideEffects.notifications.notify({
     type: EventType.RunCompleted,
     title: "Run completed",
     message:

@@ -2,7 +2,7 @@ import { createRun, PolicyRole, runStarted, startRunningPure, type RunState } fr
 import { RunStatus } from "@mia/shared-enums"
 import { prepareRunWorkspace } from "../../../../bootstrap/workspace.js"
 import { wireEventBroadcasting } from "../../core/coordination/event-wiring.js"
-import { createNotification, persistRun } from "../persistence.js"
+import { persistRun } from "../persistence.js"
 import type {
   DelegateToolsBundle,
   ExecuteRunCommand,
@@ -104,7 +104,7 @@ export function createRunPersistence(
 export function wireExecutionEvents(
   command: ExecuteRunCommand,
   state: RunState,
-  boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
+  saveTrace: (runId: string, entry: Record<string, unknown>) => void
 ) {
   return wireEventBroadcasting(
     {
@@ -113,8 +113,8 @@ export function wireExecutionEvents(
     },
     command.request.runId,
     state,
-    boundSaveTrace,
-    createNotification
+    saveTrace,
+    command.sideEffects.notifications.notify
   )
 }
 

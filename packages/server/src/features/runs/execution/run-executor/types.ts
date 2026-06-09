@@ -93,12 +93,17 @@ export type EventBusPort = EngineServices["eventBus"]
 export type PolicyEvaluatorPort = EngineServices["policyEvaluator"]
 export type LearnerPort = EngineServices["learner"]
 
+export interface NotificationPort {
+  notify(opts: NotificationOpts): void
+}
+
 export type ExecuteRunSideEffectServices = {
   runRepo: RunRepoPort
   auditLog: AuditLogPort
   eventBus: EventBusPort
   policyEvaluator: PolicyEvaluatorPort
   learner: LearnerPort
+  notifications: NotificationPort
 }
 
 export type ExecuteRunCommand = {

@@ -553,7 +553,10 @@ export class AgentOrchestrator {
         auditLog: services.auditService,
         eventBus: services.eventBus,
         policyEvaluator: services.policyEvaluator,
-        learner: services.learner
+        learner: services.learner,
+        notifications: {
+          notify: (opts) => this.createNotification(opts)
+        }
       }
     }
   }

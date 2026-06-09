@@ -3,7 +3,7 @@ import { RunStatus } from "@mia/shared-enums"
 import { broadcast } from "../../../../../platform/events/broadcaster.js"
 import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
-import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
+import { persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
 export async function finalizeCancelledRun(
@@ -13,7 +13,11 @@ export async function finalizeCancelledRun(
 ): Promise<void> {
   const { request, runtime, sideEffects } = command
   env.state.run = cancelRunPure(env.state.run)
-  await runtime.workspaceStore.captureOutputDiff(request.runId, env.boundSaveTrace, createNotification)
+  await runtime.workspaceStore.captureOutputDiff(
+    request.runId,
+    env.boundSaveTrace,
+    sideEffects.notifications.notify
+  )
   await sideEffects.auditLog.log({
     actor: env.actor,
     action: "agent.cancelled",
@@ -42,7 +46,7 @@ export async function finalizeCancelledRun(
     message: "Cancelled",
     timestamp: new Date().toISOString()
   })
-  createNotification({
+  sideEffects.notifications.notify({
     type: EventType.RunCancelled,
     title: "Run cancelled",
     message: `"${request.goal.slice(0, 80)}" was cancelled after ${env.state.run.steps.length} steps.`,
