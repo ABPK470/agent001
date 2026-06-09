@@ -9,9 +9,9 @@
  * production with `export_query_to_file` not being in DEFAULT_TOOLS.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest"
 import { configureAgent } from "@mia/agent"
-import { resolveTools } from "../src/features/agents/tools.js"
+import { afterEach, describe, expect, it, vi } from "vitest"
+import { resolveTools } from "../src/features/runs/tooling/registry.js"
 
 const stubHost = configureAgent({})
 
@@ -44,7 +44,7 @@ describe("resolveTools — guard-referenced tool validation", () => {
 describe("getAllTools — guard contract", () => {
   it("includes every guard-referenced tool", async () => {
     // getAllTools() is the single source of truth — no DB involved.
-    const { getAllTools } = await import("../src/features/agents/tools.js")
+    const { getAllTools } = await import("../src/features/runs/tooling/registry.js")
     const warnSpy = vi.spyOn(console, "warn").mockImplementation(() => {})
     try {
       resolveTools(

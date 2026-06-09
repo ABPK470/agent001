@@ -6,7 +6,7 @@ import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
 import * as db from "../../platform/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
-import { listAvailableTools } from "./tools.js"
+import { listAvailableTools } from "../runs/tooling/registry.js"
 
 export function registerAgentRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
   app.get("/api/tools", async () => listAvailableTools())

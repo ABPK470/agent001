@@ -29,7 +29,6 @@ import type {
   OrchestratorConfig
 } from "../../ports/orchestration.js"
 import { TrajectoryEventKind } from "../../shared/enums/trajectory.js"
-import { filterToolsForVisitor, getAllTools } from "../agents/tools.js"
 import type { CurrentSession } from "../auth/context.js"
 import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
 import { createNotification, saveTrace } from "./execution/persistence.js"
@@ -37,6 +36,7 @@ import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
 import type { ExecuteRunCommand } from "./execution/run-executor/types.js"
 import { applyRunWorkspaceDiff, captureRunWorkspaceDiff } from "./execution/workspace-effects.js"
+import { filterToolsForVisitor, getAllTools } from "./tooling/registry.js"
 
 export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestration.js"
 

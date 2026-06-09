@@ -403,7 +403,7 @@ export function flagRunMemory(runId: string, note?: string): boolean {
 //
 // `ingestAgentNote` is the write-side of the otherwise read-only memory system
 // exposed to the agent. It is called by the per-run wrapper of the `note` tool
-// (see packages/server/src/features/agents/tools.ts PER_RUN_FACTORIES).
+// (see packages/server/src/features/runs/tooling/registry.ts PER_RUN_FACTORIES).
 //
 // Design choices:
 // - tier=working, role=summary: notes are session-hot but treated as canonical
