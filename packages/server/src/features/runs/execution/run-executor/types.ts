@@ -1,5 +1,4 @@
 import {
-  type Agent,
   type AgentHost,
   type AuditService,
   type DelegateContext,
@@ -168,7 +167,7 @@ export type DelegateRuntimeContext = {
   state: RunState
   runContext: ReturnType<typeof import("@mia/agent").makeRunContext>
   perRunHost: AgentHost
-  getParentAgent: () => Agent | null
+  reportChildUsage: NonNullable<DelegateContext["onChildUsage"]>
   llm: LLMClient
   queue: RunQueuePort
   interaction: RunInteractionPort

@@ -1,4 +1,4 @@
-import { createRunAgent, normalizeRunAnswer } from "./run-executor/agent.js"
+import { createChildUsageReporter, createRunAgent, normalizeRunAnswer } from "./run-executor/agent.js"
 import { prepareExecutionEnvironment } from "./run-executor/environment.js"
 import {
   cleanupExecution,
@@ -17,10 +17,10 @@ export async function executeRunImpl(command: ExecuteRunCommand): Promise<void> 
 
   let env: ExecutionEnvironment | undefined
   let agent: ReturnType<typeof createRunAgent> | undefined
-  const getParentAgent = (): ReturnType<typeof createRunAgent> | null => agent ?? null
+  const reportChildUsage = createChildUsageReporter(request.runId, () => agent ?? null)
 
   try {
-    env = await prepareExecutionEnvironment(command, getParentAgent)
+    env = await prepareExecutionEnvironment(command, reportChildUsage)
     agent = createRunAgent(command, env)
 
     await env.markRunStarted()

@@ -8,11 +8,11 @@ import {
 import { createPerRunHost } from "./host.js"
 import { buildExecutionSystemMessages } from "./system-messages.js"
 import { createDelegateContext, resolveExecutionTools } from "./tools.js"
-import type { ExecuteRunCommand, ExecutionEnvironment } from "./types.js"
+import type { DelegateRuntimeContext, ExecuteRunCommand, ExecutionEnvironment } from "./types.js"
 
 export async function prepareExecutionEnvironment(
   command: ExecuteRunCommand,
-  getParentAgent: () => import("@mia/agent").Agent | null
+  reportChildUsage: DelegateRuntimeContext["reportChildUsage"]
 ): Promise<ExecutionEnvironment> {
   const { request, runtime, sideEffects } = command
   const workspace = await prepareWorkspace(command)
@@ -44,7 +44,7 @@ export async function prepareExecutionEnvironment(
       state: state.state,
       runContext: host.runContext,
       perRunHost: host.perRunHost,
-      getParentAgent,
+      reportChildUsage,
       llm: runtime.interaction.llm,
       queue: runtime.queue,
       interaction: runtime.interaction,

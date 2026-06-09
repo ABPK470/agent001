@@ -16,7 +16,7 @@ import * as db from "../../../../platform/persistence/sqlite.js"
 import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 import { handlePlannerTrace } from "../../core/coordination/planner-events.js"
 import { persistToolResult } from "../tool-result-persister.js"
-import type { ExecuteRunCommand, ExecutionEnvironment } from "./types.js"
+import type { DelegateRuntimeContext, ExecuteRunCommand, ExecutionEnvironment } from "./types.js"
 
 function createKillManager(
   command: ExecuteRunCommand,
@@ -49,6 +49,49 @@ function createKillManager(
       void toolCallId
       return await fn()
     }
+  }
+}
+
+export function createChildUsageReporter(
+  runId: string,
+  resolveParentAgent: () => Agent | null
+): DelegateRuntimeContext["reportChildUsage"] {
+  const lastSeen = new WeakMap<object, { p: number; c: number; t: number; l: number }>()
+  let totalPrompt = 0
+  let totalCompletion = 0
+  let totalTokens = 0
+  let totalLlmCalls = 0
+
+  return (childUsage, childLlmCalls) => {
+    const prev = lastSeen.get(childUsage) ?? { p: 0, c: 0, t: 0, l: 0 }
+    totalPrompt += childUsage.promptTokens - prev.p
+    totalCompletion += childUsage.completionTokens - prev.c
+    totalTokens += childUsage.totalTokens - prev.t
+    totalLlmCalls += childLlmCalls - prev.l
+    lastSeen.set(childUsage, {
+      p: childUsage.promptTokens,
+      c: childUsage.completionTokens,
+      t: childUsage.totalTokens,
+      l: childLlmCalls
+    })
+
+    const agent = resolveParentAgent()
+    if (!agent) return
+
+    agent.usage.promptTokens = totalPrompt
+    agent.usage.completionTokens = totalCompletion
+    agent.usage.totalTokens = totalTokens
+    agent.llmCalls = totalLlmCalls
+    broadcast({
+      type: EventType.UsageUpdated,
+      data: {
+        runId,
+        promptTokens: totalPrompt,
+        completionTokens: totalCompletion,
+        totalTokens,
+        llmCalls: totalLlmCalls
+      }
+    })
   }
 }
 

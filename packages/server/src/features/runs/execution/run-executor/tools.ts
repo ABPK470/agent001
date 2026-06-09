@@ -106,7 +106,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
     runContext,
     perRunHost,
     state,
-    getParentAgent,
+    reportChildUsage,
     llm,
     queue,
     messaging,
@@ -209,42 +209,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
         broadcastTraceLoose(request.runId, Date.now(), entry as { kind: string } & Record<string, unknown>)
       }
     },
-    onChildUsage: (() => {
-      const lastSeen = new WeakMap<object, { p: number; c: number; t: number; l: number }>()
-      let totalPrompt = 0
-      let totalCompletion = 0
-      let totalTokens = 0
-      let totalLlmCalls = 0
-      return (childUsage, childLlmCalls) => {
-        const prev = lastSeen.get(childUsage) ?? { p: 0, c: 0, t: 0, l: 0 }
-        totalPrompt += childUsage.promptTokens - prev.p
-        totalCompletion += childUsage.completionTokens - prev.c
-        totalTokens += childUsage.totalTokens - prev.t
-        totalLlmCalls += childLlmCalls - prev.l
-        lastSeen.set(childUsage, {
-          p: childUsage.promptTokens,
-          c: childUsage.completionTokens,
-          t: childUsage.totalTokens,
-          l: childLlmCalls
-        })
-        const agent = getParentAgent()
-        if (!agent) return
-        agent.usage.promptTokens = totalPrompt
-        agent.usage.completionTokens = totalCompletion
-        agent.usage.totalTokens = totalTokens
-        agent.llmCalls = totalLlmCalls
-        broadcast({
-          type: EventType.UsageUpdated,
-          data: {
-            runId: request.runId,
-            promptTokens: totalPrompt,
-            completionTokens: totalCompletion,
-            totalTokens,
-            llmCalls: totalLlmCalls
-          }
-        })
-      }
-    })(),
+    onChildUsage: reportChildUsage,
     parentSystemPrompt: undefined
   }
 }
