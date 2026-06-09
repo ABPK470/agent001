@@ -8,41 +8,44 @@ import {
 import { createPerRunHost } from "./host.js"
 import { buildExecutionSystemMessages } from "./system-messages.js"
 import { createDelegateContext, resolveExecutionTools } from "./tools.js"
-import type { ExecuteRunInput, ExecutionEnvironment } from "./types.js"
+import type { ExecuteRunCommand, ExecutionEnvironment } from "./types.js"
 
-export async function prepareExecutionEnvironment(input: ExecuteRunInput): Promise<ExecutionEnvironment> {
-  const workspace = await prepareWorkspace(input)
-  const state = createExecutionState(input)
-  const persistence = createRunPersistence(input, state.state, state.actor, workspace.runWorkspace)
-  const eventWiring = wireExecutionEvents(input, state.state, persistence.boundSaveTrace)
+export async function prepareExecutionEnvironment(command: ExecuteRunCommand): Promise<ExecutionEnvironment> {
+  const workspace = await prepareWorkspace(command)
+  const state = createExecutionState(command)
+  const persistence = createRunPersistence(command, state.state, state.actor, workspace.runWorkspace)
+  const eventWiring = wireExecutionEvents(command, state.state, persistence.boundSaveTrace)
 
   await persistence.initialize()
 
-  const host = createPerRunHost(input, workspace.activeRun, workspace.runWorkspace)
-  const tools = await resolveExecutionTools(
-    input,
-    workspace.activeRun,
-    workspace.runWorkspace,
-    host.policyCtx,
-    state.state,
-    persistence.boundSaveTrace,
-    host.debugSeqRef
-  )
+  const host = createPerRunHost(command, workspace.activeRun, workspace.runWorkspace)
+  const tools = await resolveExecutionTools({
+    command,
+    activeRun: workspace.activeRun,
+    runWorkspace: workspace.runWorkspace,
+    state: state.state,
+    policyCtx: host.policyCtx,
+    tracing: {
+      boundSaveTrace: persistence.boundSaveTrace,
+      debugSeqRef: host.debugSeqRef
+    }
+  })
   const delegateCtx = createDelegateContext(
-    input,
     {
+      command,
       activeRun: workspace.activeRun,
+      state: state.state,
       runContext: host.runContext,
       perRunHost: host.perRunHost,
-      state: state.state,
-      boundSaveTrace: persistence.boundSaveTrace,
-      runWorkspace: workspace.runWorkspace
+      agentRef: host.agentRef,
+      tracing: {
+        boundSaveTrace: persistence.boundSaveTrace
+      }
     },
-    tools.governedTools,
-    host.agentRef
+    tools.governedTools
   )
   const systemMessages = await buildExecutionSystemMessages(
-    input,
+    command,
     {
       activeRun: workspace.activeRun,
       runWorkspace: workspace.runWorkspace,

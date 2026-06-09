@@ -5,36 +5,37 @@ import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
 import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { captureRunWorkspaceDiff } from "../../workspace-effects.js"
-import type { ExecuteRunInput, ExecutionEnvironment } from "../types.js"
+import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
 export async function finalizeCancelledRun(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   env: ExecutionEnvironment,
   agent: Agent
 ): Promise<void> {
+  const { request, runtime, sideEffects } = command
   env.state.run = cancelRunPure(env.state.run)
   await captureRunWorkspaceDiff(
-    input.runId,
-    input.ctx.activeRuns,
-    input.ctx.completedRunWorkspaces,
-    input.ctx.completedRunDiffs,
+    request.runId,
+    runtime.orchestrator.activeRuns,
+    runtime.orchestrator.completedRunWorkspaces,
+    runtime.orchestrator.completedRunDiffs,
     env.boundSaveTrace,
     createNotification
   )
-  await input.services.auditService.log({
+  await sideEffects.engine.auditService.log({
     actor: env.actor,
     action: "agent.cancelled",
     resourceType: "AgentRun",
     resourceId: env.state.run.id,
-    detail: { goal: input.goal, totalTokens: agent.usage.totalTokens, llmCalls: agent.llmCalls }
+    detail: { goal: request.goal, totalTokens: agent.usage.totalTokens, llmCalls: agent.llmCalls }
   })
   env.persistCurrentRun()
-  await persistAuditLog(input.services, input.runId)
-  persistTokenUsage(input.runId, agent)
+  await persistAuditLog(sideEffects.engine, request.runId)
+  persistTokenUsage(request.runId, agent)
   broadcast({
     type: EventType.RunCancelled,
     data: {
-      runId: input.runId,
+      runId: request.runId,
       status: RunStatus.Cancelled,
       stepCount: env.state.run.steps.length,
       totalTokens: agent.usage.totalTokens,
@@ -44,7 +45,7 @@ export async function finalizeCancelledRun(
     }
   })
   db.saveLog({
-    run_id: input.runId,
+    run_id: request.runId,
     level: "run:error",
     message: "Cancelled",
     timestamp: new Date().toISOString()
@@ -52,11 +53,11 @@ export async function finalizeCancelledRun(
   createNotification({
     type: EventType.RunCancelled,
     title: "Run cancelled",
-    message: `"${input.goal.slice(0, 80)}" was cancelled after ${env.state.run.steps.length} steps.`,
-    runId: input.runId,
+    message: `"${request.goal.slice(0, 80)}" was cancelled after ${env.state.run.steps.length} steps.`,
+    runId: request.runId,
     actions: [
-      { label: "View", action: NotificationActionType.ViewRun, data: { runId: input.runId } },
-      { label: "Rollback", action: NotificationActionType.RollbackRun, data: { runId: input.runId } }
+      { label: "View", action: NotificationActionType.ViewRun, data: { runId: request.runId } },
+      { label: "Rollback", action: NotificationActionType.RollbackRun, data: { runId: request.runId } }
     ]
   })
 }

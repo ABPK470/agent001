@@ -16,33 +16,34 @@ import * as db from "../../../../platform/persistence/sqlite.js"
 import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 import { handlePlannerTrace } from "../../core/coordination/planner-events.js"
 import { persistToolResult } from "../tool-result-persister.js"
-import type { ExecuteRunInput, ExecutionEnvironment } from "./types.js"
+import type { ExecuteRunCommand, ExecutionEnvironment } from "./types.js"
 
 function createKillManager(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   env: Pick<ExecutionEnvironment, "runContext">
 ): ToolKillManager {
+  const { request, runtime } = command
   const callSignals = new Map<string, AbortSignal>()
   return {
     register: (toolCallId: string, toolName: string) => {
       const perToolCtrl = new AbortController()
-      const composed = AbortSignal.any([input.controller.signal, perToolCtrl.signal])
+      const composed = AbortSignal.any([runtime.controller.signal, perToolCtrl.signal])
       callSignals.set(toolCallId, composed)
       env.runContext.signal = composed
       return new Promise<string>((resolve) => {
-        const key = `${input.runId}:${toolCallId}`
-        input.ctx.pendingKills.set(key, { resolve, perToolCtrl })
+        const key = `${request.runId}:${toolCallId}`
+        runtime.orchestrator.pendingKills.set(key, { resolve, perToolCtrl })
         broadcast({
           type: EventType.ToolCallExecuting,
-          data: { runId: input.runId, toolCallId, toolName }
+          data: { runId: request.runId, toolCallId, toolName }
         })
       })
     },
     unregister: (toolCallId: string) => {
       callSignals.delete(toolCallId)
-      input.ctx.pendingKills.delete(`${input.runId}:${toolCallId}`)
-      env.runContext.signal = input.controller.signal
-      broadcast({ type: EventType.ToolCallCompleted, data: { runId: input.runId, toolCallId } })
+      runtime.orchestrator.pendingKills.delete(`${request.runId}:${toolCallId}`)
+      env.runContext.signal = runtime.controller.signal
+      broadcast({ type: EventType.ToolCallCompleted, data: { runId: request.runId, toolCallId } })
     },
     wrap: async <T>(toolCallId: string, fn: () => Promise<T>): Promise<T> => {
       void toolCallId
@@ -51,19 +52,20 @@ function createKillManager(
   }
 }
 
-export function createRunAgent(input: ExecuteRunInput, env: ExecutionEnvironment): Agent {
-  const killManager = createKillManager(input, env)
-  const agent = new Agent(input.ctx.llm, env.allTools, {
+export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnvironment): Agent {
+  const { request, runtime, sideEffects } = command
+  const killManager = createKillManager(command, env)
+  const agent = new Agent(runtime.orchestrator.llm, env.allTools, {
     verbose: true,
-    signal: input.controller.signal,
+    signal: runtime.controller.signal,
     systemMessages: env.systemMessages,
     toolKillManager: killManager,
     enablePlanner: true,
     workspaceRoot: env.runWorkspace.executionRoot,
     onPlannerTrace: (entry) =>
       handlePlannerTrace(entry, {
-        runId: input.runId,
-        services: input.services,
+        runId: request.runId,
+        services: sideEffects.engine,
         debugSeqRef: env.debugSeqRef,
         saveTrace: env.boundSaveTrace
       }),
@@ -75,15 +77,15 @@ export function createRunAgent(input: ExecuteRunInput, env: ExecutionEnvironment
         message: data.message,
         iteration: data.iteration
       }
-      env.boundSaveTrace(input.runId, entry)
-      broadcastTrace(input.runId, env.debugSeqRef.value++, entry)
+      env.boundSaveTrace(request.runId, entry)
+      broadcastTrace(request.runId, env.debugSeqRef.value++, entry)
     },
     onToolResult: (data) => {
       persistToolResult({
-        runId: input.runId,
+        runId: request.runId,
         sessionId: env.activeRun?.sessionId ?? null,
         upn: env.activeRun?.ownerUpn ?? null,
-        goal: input.goal,
+        goal: request.goal,
         iteration: data.iteration,
         toolCallId: data.toolCallId,
         toolName: data.toolName,
@@ -111,8 +113,8 @@ export function createRunAgent(input: ExecuteRunInput, env: ExecutionEnvironment
             toolCallId: message.toolCallId ?? null
           }))
         }
-        env.boundSaveTrace(input.runId, entry)
-        broadcastTrace(input.runId, env.debugSeqRef.value++, entry)
+        env.boundSaveTrace(request.runId, entry)
+        broadcastTrace(request.runId, env.debugSeqRef.value++, entry)
         return
       }
 
@@ -128,16 +130,16 @@ export function createRunAgent(input: ExecuteRunInput, env: ExecutionEnvironment
         })),
         usage: data.response.usage ?? null
       }
-      env.boundSaveTrace(input.runId, entry)
-      broadcastTrace(input.runId, env.debugSeqRef.value++, entry)
+      env.boundSaveTrace(request.runId, entry)
+      broadcastTrace(request.runId, env.debugSeqRef.value++, entry)
     },
     onThinking: (content, _toolCalls, iteration) => {
       const iterEntry = { kind: TrajectoryEventKind.Iteration, current: iteration + 1, max: 30 }
-      env.boundSaveTrace(input.runId, iterEntry)
-      broadcastTrace(input.runId, env.debugSeqRef.value++, iterEntry)
+      env.boundSaveTrace(request.runId, iterEntry)
+      broadcastTrace(request.runId, env.debugSeqRef.value++, iterEntry)
       if (content) {
-        env.boundSaveTrace(input.runId, { kind: TrajectoryEventKind.Thinking, text: content })
-        broadcast({ type: EventType.AgentThinking, data: { runId: input.runId, content, iteration } })
+        env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Thinking, text: content })
+        broadcast({ type: EventType.AgentThinking, data: { runId: request.runId, content, iteration } })
       }
       const currentAgent = env.agentRef.current
       if (!currentAgent) return
@@ -151,12 +153,12 @@ export function createRunAgent(input: ExecuteRunInput, env: ExecutionEnvironment
         completionTokens: currentAgent.usage.completionTokens,
         llmCalls: currentAgent.llmCalls
       }
-      env.boundSaveTrace(input.runId, usageEntry)
-      broadcastTrace(input.runId, env.debugSeqRef.value++, usageEntry)
+      env.boundSaveTrace(request.runId, usageEntry)
+      broadcastTrace(request.runId, env.debugSeqRef.value++, usageEntry)
       broadcast({
         type: EventType.UsageUpdated,
         data: {
-          runId: input.runId,
+          runId: request.runId,
           promptTokens: currentAgent.usage.promptTokens,
           completionTokens: currentAgent.usage.completionTokens,
           totalTokens: currentAgent.usage.totalTokens,
@@ -168,7 +170,7 @@ export function createRunAgent(input: ExecuteRunInput, env: ExecutionEnvironment
       env.progress.lastMessages = messages
       env.progress.lastIteration = iteration
       db.saveCheckpoint({
-        run_id: input.runId,
+        run_id: request.runId,
         messages: JSON.stringify(messages),
         iteration,
         step_counter: env.state.stepCounter,
@@ -176,15 +178,15 @@ export function createRunAgent(input: ExecuteRunInput, env: ExecutionEnvironment
       })
       broadcast({
         type: EventType.CheckpointSaved,
-        data: { runId: input.runId, iteration, stepCounter: env.state.stepCounter }
+        data: { runId: request.runId, iteration, stepCounter: env.state.stepCounter }
       })
       env.persistCurrentRun()
     },
     onToken: (token) => {
-      broadcast({ type: EventType.AnswerChunk, data: { runId: input.runId, chunk: token } })
+      broadcast({ type: EventType.AnswerChunk, data: { runId: request.runId, chunk: token } })
     },
     onStreamDiscard: () => {
-      broadcast({ type: EventType.StreamReset, data: { runId: input.runId } })
+      broadcast({ type: EventType.StreamReset, data: { runId: request.runId } })
     }
   })
 
@@ -193,24 +195,25 @@ export function createRunAgent(input: ExecuteRunInput, env: ExecutionEnvironment
 }
 
 export async function normalizeRunAnswer(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   env: ExecutionEnvironment,
   answer: string
 ): Promise<string> {
+  const { request, runtime, sideEffects } = command
   let nextAnswer = answer
 
   if (isPlatformUnconfiguredAnswer(nextAnswer)) {
     const polished = await polishFailureForUser(
-      input.ctx.llm,
+      runtime.orchestrator.llm,
       {
-        goal: input.goal,
+        goal: request.goal,
         operatorSummary: "A required backend integration is not configured on this server.",
         failureKind: "platform_unconfigured",
-        runRef: input.runId
+        runRef: request.runId
       },
-      { signal: input.controller.signal }
+      { signal: runtime.controller.signal }
     )
-    nextAnswer = polished ? markPolishedFailure(polished) : fillRunReference(nextAnswer, input.runId)
+    nextAnswer = polished ? markPolishedFailure(polished) : fillRunReference(nextAnswer, request.runId)
   }
 
   const internalFailure = detectInternalFailure(nextAnswer)
@@ -219,7 +222,7 @@ export async function normalizeRunAnswer(
   const truncatedRaw = internalFailure.rawDetail.slice(0, 4000)
   try {
     db.saveLog({
-      run_id: input.runId,
+      run_id: request.runId,
       level: "run:error",
       message: `[user-safe-failure] ${internalFailure.kind} — ${internalFailure.summary}\n${truncatedRaw}`,
       timestamp: new Date().toISOString()
@@ -229,11 +232,11 @@ export async function normalizeRunAnswer(
   }
 
   try {
-    await input.services.auditService.log({
+    await sideEffects.engine.auditService.log({
       actor: env.actor,
       action: "agent.user_safe_failure",
       resourceType: "AgentRun",
-      resourceId: input.runId,
+      resourceId: request.runId,
       detail: { kind: internalFailure.kind, summary: internalFailure.summary, raw: truncatedRaw }
     })
   } catch {
@@ -243,26 +246,26 @@ export async function normalizeRunAnswer(
   try {
     broadcast({
       type: EventType.RunUserSafeFailure,
-      data: { runId: input.runId, kind: internalFailure.kind, summary: internalFailure.summary }
+      data: { runId: request.runId, kind: internalFailure.kind, summary: internalFailure.summary }
     })
   } catch {
     // Broadcasting is best-effort.
   }
 
   console.error(
-    `[run-executor] Internal failure for run ${input.runId} (${internalFailure.kind}): ${internalFailure.summary}`
+    `[run-executor] Internal failure for run ${request.runId} (${internalFailure.kind}): ${internalFailure.summary}`
   )
   const polished = await polishFailureForUser(
-    input.ctx.llm,
+    runtime.orchestrator.llm,
     {
-      goal: input.goal,
+      goal: request.goal,
       operatorSummary: internalFailure.summary,
       failureKind: mapFailureKindForPolish(internalFailure.kind),
-      runRef: input.runId
+      runRef: request.runId
     },
-    { signal: input.controller.signal }
+    { signal: runtime.controller.signal }
   )
   return polished
     ? markPolishedFailure(polished)
-    : fillRunReference(synthesizeGenericFailureAnswer(), input.runId)
+    : fillRunReference(synthesizeGenericFailureAnswer(), request.runId)
 }

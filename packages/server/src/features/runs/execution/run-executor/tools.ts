@@ -1,11 +1,4 @@
-import {
-  EventType,
-  governTool,
-  type AgentHost,
-  type DelegateContext,
-  type RunState,
-  type Tool
-} from "@mia/agent"
+import { EventType, governTool, type DelegateContext, type Tool } from "@mia/agent"
 import { SyncRunStatus } from "@mia/sync"
 import { resetEffectSeq } from "../../../../platform/effects/index.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../../../../platform/events/broadcaster.js"
@@ -22,35 +15,27 @@ import { enforceClarificationUiOptions } from "../ask-user-options.js"
 import { wrapWithEffects } from "../workspace-effects.js"
 import { buildClassificationContext } from "./support.js"
 import type {
-  ActiveRunRecord,
-  AgentRef,
+  DelegateRuntimeContext,
   DelegateToolsBundle,
-  ExecuteRunInput,
-  RunWorkspace,
-  ToolResolution
+  ToolResolution,
+  ToolResolutionContext
 } from "./types.js"
 
 const MSSQL_TOOL_TIMEOUT_MS = 120_000
 
-export async function resolveExecutionTools(
-  input: ExecuteRunInput,
-  activeRun: ActiveRunRecord | undefined,
-  runWorkspace: RunWorkspace,
-  policyCtx: import("@mia/agent").HostedPolicyContext,
-  state: RunState,
-  boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void,
-  debugSeqRef: { value: number }
-): Promise<ToolResolution> {
+export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise<ToolResolution> {
+  const { command, activeRun, runWorkspace, state, policyCtx, tracing } = ctx
+  const { request, runtime, sideEffects } = command
   const governRuntimeTool = (tool: Tool) =>
-    governTool(tool, input.services, state, {
-      signal: input.controller.signal,
+    governTool(tool, sideEffects.engine, state, {
+      signal: runtime.controller.signal,
       policyContext: policyCtx,
       ...(tool.name === "query_mssql" || tool.name === "explore_mssql_schema"
         ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS }
         : {})
     })
 
-  const shouldUseMemory = !(runWorkspace.taskType === "code_generation" && !input.resume)
+  const shouldUseMemory = !(runWorkspace.taskType === "code_generation" && !request.resume)
   let perTier: ToolResolution["perTier"] = {
     working: "",
     episodic: "",
@@ -59,31 +44,31 @@ export async function resolveExecutionTools(
 
   if (shouldUseMemory) {
     try {
-      const result = await retrieveContext(input.goal, {
+      const result = await retrieveContext(request.goal, {
         sessionId: activeRun?.sessionId ?? undefined,
-        runId: input.runId,
+        runId: request.runId,
         upn: activeRun?.ownerUpn ?? null
       })
       perTier = result.perTier
     } catch (error) {
       console.warn(
-        `[run ${input.runId}] memory retrieval failed, running without context:`,
+        `[run ${request.runId}] memory retrieval failed, running without context:`,
         (error as Error).message
       )
     }
   }
 
   const classificationContext = buildClassificationContext({
-    resumeMessages: input.resume?.messages,
+    resumeMessages: request.resume?.messages,
     working: perTier.working,
     episodic: perTier.episodic
   })
-  const toolDecision = decideSections({ goal: input.goal, memory: perTier, context: classificationContext })
-  const toolFilter = filterToolsByGoal(input.tools, toolDecision)
+  const toolDecision = decideSections({ goal: request.goal, memory: perTier, context: classificationContext })
+  const toolFilter = filterToolsByGoal(request.tools, toolDecision)
 
   if (!toolFilter.passThrough) {
     console.log(
-      `[tools] run=${input.runId} dropped ${toolFilter.dropped.length} DB/sync tools for non-DB goal (kept ${toolFilter.tools.length}): ${toolFilter.dropped.join(", ")}`
+      `[tools] run=${request.runId} dropped ${toolFilter.dropped.length} DB/sync tools for non-DB goal (kept ${toolFilter.tools.length}): ${toolFilter.dropped.join(", ")}`
     )
     const filteredEntry = {
       kind: TrajectoryEventKind.ToolsFiltered,
@@ -93,40 +78,31 @@ export async function resolveExecutionTools(
       syncTrigger: !!toolDecision.triggers?.sync,
       reason: `goal classified non-DB (dbScore=${toolDecision.dbScore ?? 0}, sync=${!!toolDecision.triggers?.sync})`
     } as const
-    boundSaveTrace(input.runId, filteredEntry)
-    broadcastTrace(input.runId, debugSeqRef.value++, filteredEntry)
+    tracing.boundSaveTrace(request.runId, filteredEntry)
+    broadcastTrace(request.runId, tracing.debugSeqRef.value++, filteredEntry)
   }
 
   const trackedTools = toolFilter.tools.map((tool) =>
-    wrapWithEffects(tool, input.runId, runWorkspace.executionRoot)
+    wrapWithEffects(tool, request.runId, runWorkspace.executionRoot)
   )
   const governedTools = trackedTools.map(governRuntimeTool)
 
   return { governedTools, perTier, toolDecision }
 }
 
-function buildDelegateContext(
-  input: ExecuteRunInput,
-  envBase: {
-    activeRun: ActiveRunRecord | undefined
-    runContext: ReturnType<typeof import("@mia/agent").makeRunContext>
-    perRunHost: AgentHost
-    state: RunState
-    boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
-  },
-  governedTools: Tool[],
-  agentRef: AgentRef
-): DelegateContext {
+function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]): DelegateContext {
+  const { command, runContext, perRunHost, state, agentRef, tracing } = ctx
+  const { request, runtime, sideEffects } = command
   const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
   const lastStatusIter = new Map<string, number>()
 
   return {
-    llm: input.ctx.llm,
+    llm: runtime.orchestrator.llm,
     availableTools: governedTools,
     depth: 0,
     maxDepth: maxDelegationDepth,
-    signal: input.controller.signal,
-    buildChildTools: (childRunId, childAgentName) => createBusTools(input.bus, childRunId, childAgentName),
+    signal: runtime.controller.signal,
+    buildChildTools: (childRunId, childAgentName) => createBusTools(runtime.bus, childRunId, childAgentName),
     onChildIteration: (info) => {
       const last = lastStatusIter.get(info.childRunId) ?? 0
       if (info.iteration !== 1 && info.iteration - last < 5) return
@@ -136,8 +112,8 @@ function buildDelegateContext(
       if (info.content) previewBits.push(info.content.replace(/\s+/g, " ").trim())
       const preview = previewBits.join(" ").slice(0, 240)
       try {
-        input.bus.publish({
-          topic: `${input.runId}-status`,
+        runtime.bus.publish({
+          topic: `${request.runId}-status`,
           fromRunId: info.childRunId,
           fromAgent: info.childAgentName,
           content: `iteration ${info.iteration}/${info.maxIterations}${preview ? ": " + preview : ""}`,
@@ -148,12 +124,12 @@ function buildDelegateContext(
       }
     },
     acquireSlot: (childRunId: string) =>
-      input.ctx.queue.acquire(childRunId, RunPriority.High, input.controller.signal),
+      runtime.orchestrator.queue.acquire(childRunId, RunPriority.High, runtime.controller.signal),
     resolveAgent: (agentId) => {
       const def = db.getAgentDefinition(agentId)
       if (!def) return null
-      const agentTools = getAllTools(envBase.perRunHost, envBase.runContext).map((tool) =>
-        governTool(tool, input.services, envBase.state, { signal: input.controller.signal })
+      const agentTools = getAllTools(perRunHost, runContext).map((tool) =>
+        governTool(tool, sideEffects.engine, state, { signal: runtime.controller.signal })
       )
       return {
         id: def.id,
@@ -163,15 +139,15 @@ function buildDelegateContext(
       }
     },
     onChildTrace: (entry) => {
-      envBase.boundSaveTrace(input.runId, entry)
+      tracing.boundSaveTrace(request.runId, entry)
       if (entry.kind === TrajectoryEventKind.DelegationStart) {
-        broadcast({ type: EventType.DelegationStarted, data: { runId: input.runId, ...entry } })
-        input.services.auditService
+        broadcast({ type: EventType.DelegationStarted, data: { runId: request.runId, ...entry } })
+        sideEffects.engine.auditService
           .log({
             actor: AuditActor.Agent,
             action: "delegation.started",
             resourceType: "AgentRun",
-            resourceId: input.runId,
+            resourceId: request.runId,
             detail: {
               goal: entry.goal,
               depth: entry.depth,
@@ -181,13 +157,13 @@ function buildDelegateContext(
           })
           .catch(() => {})
       } else if (entry.kind === TrajectoryEventKind.DelegationEnd) {
-        broadcast({ type: EventType.DelegationEnded, data: { runId: input.runId, ...entry } })
-        input.services.auditService
+        broadcast({ type: EventType.DelegationEnded, data: { runId: request.runId, ...entry } })
+        sideEffects.engine.auditService
           .log({
             actor: AuditActor.Agent,
             action: entry.status === "done" ? "delegation.completed" : "delegation.failed",
             resourceType: "AgentRun",
-            resourceId: input.runId,
+            resourceId: request.runId,
             detail: {
               depth: entry.depth,
               status: entry.status,
@@ -197,20 +173,20 @@ function buildDelegateContext(
           })
           .catch(() => {})
       } else if (entry.kind === TrajectoryEventKind.DelegationIteration) {
-        broadcast({ type: EventType.DelegationIteration, data: { runId: input.runId, ...entry } })
+        broadcast({ type: EventType.DelegationIteration, data: { runId: request.runId, ...entry } })
       } else if (entry.kind === TrajectoryEventKind.DelegationParallelStart) {
-        broadcast({ type: EventType.DelegationParallelStarted, data: { runId: input.runId, ...entry } })
+        broadcast({ type: EventType.DelegationParallelStarted, data: { runId: request.runId, ...entry } })
       } else if (entry.kind === TrajectoryEventKind.DelegationParallelEnd) {
-        broadcast({ type: EventType.DelegationParallelEnded, data: { runId: input.runId, ...entry } })
+        broadcast({ type: EventType.DelegationParallelEnded, data: { runId: request.runId, ...entry } })
       } else if (entry.kind === "thinking") {
         broadcast({
           type: EventType.AgentThinking,
-          data: { runId: input.runId, content: entry.text }
+          data: { runId: request.runId, content: entry.text }
         })
       } else if (typeof entry.kind === "string" && entry.kind.startsWith("planner-delegation")) {
-        broadcastTraceLoose(input.runId, Date.now(), entry as { kind: string } & Record<string, unknown>)
+        broadcastTraceLoose(request.runId, Date.now(), entry as { kind: string } & Record<string, unknown>)
       } else if (entry.kind === "llm-request" || entry.kind === "llm-response" || entry.kind === "nudge") {
-        broadcastTraceLoose(input.runId, Date.now(), entry as { kind: string } & Record<string, unknown>)
+        broadcastTraceLoose(request.runId, Date.now(), entry as { kind: string } & Record<string, unknown>)
       }
     },
     onChildUsage: (() => {
@@ -240,7 +216,7 @@ function buildDelegateContext(
         broadcast({
           type: EventType.UsageUpdated,
           data: {
-            runId: input.runId,
+            runId: request.runId,
             promptTokens: totalPrompt,
             completionTokens: totalCompletion,
             totalTokens,
@@ -254,34 +230,30 @@ function buildDelegateContext(
 }
 
 function composeExecutionTools(
-  input: ExecuteRunInput,
-  envBase: {
-    activeRun: ActiveRunRecord | undefined
-    state: RunState
-    boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
-    runWorkspace: RunWorkspace
-  },
+  ctx: DelegateRuntimeContext,
   delegateCtx: DelegateContext,
   governedTools: Tool[]
 ): import("@mia/agent").ExecutableTool[] {
-  const agentName = input.agentId
-    ? (db.getAgentDefinition(input.agentId)?.name ?? "Agent")
+  const { command, activeRun, state, tracing } = ctx
+  const { request, runtime, sideEffects } = command
+  const agentName = request.agentId
+    ? (db.getAgentDefinition(request.agentId)?.name ?? "Agent")
     : "Universal Agent"
 
   const allToolsBase = composePerRunTools(governedTools, {
-    runId: input.runId,
+    runId: request.runId,
     agentName,
-    bus: input.bus,
+    bus: runtime.bus,
     delegateCtx,
     govern: (tool, opts) =>
-      governTool(tool, input.services, envBase.state, {
-        signal: input.controller.signal,
+      governTool(tool, sideEffects.engine, state, {
+        signal: runtime.controller.signal,
         ...(opts ?? {})
       }),
     askUserResolve: (question, options, sensitive) => {
-      const match = input.ctx.clarifications.matchQuestion(input.runId, question)
+      const match = runtime.orchestrator.clarifications.matchQuestion(request.runId, question)
       const effectiveOptions = enforceClarificationUiOptions(options, match)
-      envBase.boundSaveTrace(input.runId, {
+      tracing.boundSaveTrace(request.runId, {
         kind: TrajectoryEventKind.UserInputRequest,
         question,
         options: effectiveOptions,
@@ -289,15 +261,15 @@ function composeExecutionTools(
       })
       broadcast({
         type: EventType.UserInputRequired,
-        data: { runId: input.runId, question, options: effectiveOptions ?? [], sensitive }
+        data: { runId: request.runId, question, options: effectiveOptions ?? [], sensitive }
       })
-      if (match) input.ctx.clarifications.setPending(input.runId, match, question)
+      if (match) runtime.orchestrator.clarifications.setPending(request.runId, match, question)
       return new Promise<string>((resolve) => {
-        input.ctx.pendingInputs.set(input.runId, { resolve })
+        runtime.orchestrator.pendingInputs.set(request.runId, { resolve })
       })
     },
-    sessionId: envBase.activeRun?.sessionId ?? null,
-    upn: envBase.activeRun?.ownerUpn ?? null
+    sessionId: activeRun?.sessionId ?? null,
+    upn: activeRun?.ownerUpn ?? null
   })
 
   const allTools = allToolsBase.map((tool) => {
@@ -342,7 +314,7 @@ function composeExecutionTools(
               broadcast({
                 type: EventType.SyncAgentPreview,
                 data: {
-                  runId: input.runId,
+                  runId: request.runId,
                   planId,
                   entityType: String(args["entityType"] ?? ""),
                   entityId: String(args["entityId"] ?? ""),
@@ -364,7 +336,7 @@ function composeExecutionTools(
           const planId = String(args["planId"] ?? "")
           broadcast({
             type: EventType.SyncAgentExecuteStarted,
-            data: { runId: input.runId, planId }
+            data: { runId: request.runId, planId }
           })
           const startedAt = Date.now()
           const result = await tool.execute(args)
@@ -385,7 +357,7 @@ function composeExecutionTools(
           broadcast({
             type: EventType.SyncAgentExecuteCompleted,
             data: {
-              runId: input.runId,
+              runId: request.runId,
               planId,
               success,
               result: typeof result === "string" ? result : String(result)
@@ -399,35 +371,16 @@ function composeExecutionTools(
     return tool
   })
 
-  resetEffectSeq(input.runId)
+  resetEffectSeq(request.runId)
   return allTools
 }
 
 export function createDelegateContext(
-  input: ExecuteRunInput,
-  envBase: {
-    activeRun: ActiveRunRecord | undefined
-    runContext: ReturnType<typeof import("@mia/agent").makeRunContext>
-    perRunHost: AgentHost
-    state: RunState
-    boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
-    runWorkspace: RunWorkspace
-  },
-  governedTools: Tool[],
-  agentRef: AgentRef
+  ctx: DelegateRuntimeContext,
+  governedTools: Tool[]
 ): DelegateToolsBundle {
-  const delegateCtx = buildDelegateContext(input, envBase, governedTools, agentRef)
-  const allTools = composeExecutionTools(
-    input,
-    {
-      activeRun: envBase.activeRun,
-      state: envBase.state,
-      boundSaveTrace: envBase.boundSaveTrace,
-      runWorkspace: envBase.runWorkspace
-    },
-    delegateCtx,
-    governedTools
-  )
+  const delegateCtx = buildDelegateContext(ctx, governedTools)
+  const allTools = composeExecutionTools(ctx, delegateCtx, governedTools)
 
   return { allTools, delegateCtx }
 }

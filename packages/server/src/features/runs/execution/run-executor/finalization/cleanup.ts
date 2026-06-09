@@ -1,13 +1,14 @@
-import type { ExecuteRunInput, ExecutionEnvironment } from "../types.js"
+import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
 export function cleanupExecution(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   env: ExecutionEnvironment | undefined,
   releaseSlot: () => void
 ): void {
+  const { request, runtime } = command
   env?.disposeEventWiring()
   releaseSlot()
-  input.bus.dispose()
-  input.ctx.pendingInputs.delete(input.runId)
-  input.ctx.activeRuns.delete(input.runId)
+  runtime.bus.dispose()
+  runtime.orchestrator.pendingInputs.delete(request.runId)
+  runtime.orchestrator.activeRuns.delete(request.runId)
 }

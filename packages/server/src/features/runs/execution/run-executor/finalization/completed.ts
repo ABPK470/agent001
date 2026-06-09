@@ -8,7 +8,7 @@ import { TrajectoryEventKind } from "../../../../../shared/enums/trajectory.js"
 import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { captureRunWorkspaceDiff } from "../../workspace-effects.js"
 import { buildPersistedToolTrace } from "../support.js"
-import type { ExecuteRunInput, ExecutionEnvironment } from "../types.js"
+import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
 function hasInternalTaskFailure(answer: string): boolean {
   return (
@@ -19,20 +19,21 @@ function hasInternalTaskFailure(answer: string): boolean {
 }
 
 export async function finalizeCompletedRun(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   env: ExecutionEnvironment,
   agent: Agent,
   answer: string
 ): Promise<void> {
+  const { request, runtime, sideEffects } = command
   env.state.run = completeRunPure(env.state.run)
-  await input.services.eventBus.publish(runCompleted(env.state.run.id))
-  await input.services.auditService.log({
+  await sideEffects.engine.eventBus.publish(runCompleted(env.state.run.id))
+  await sideEffects.engine.auditService.log({
     actor: env.actor,
     action: "agent.completed",
     resourceType: "AgentRun",
     resourceId: env.state.run.id,
     detail: {
-      goal: input.goal,
+      goal: request.goal,
       answer: answer.slice(0, 500),
       totalTokens: agent.usage.totalTokens,
       promptTokens: agent.usage.promptTokens,
@@ -41,20 +42,20 @@ export async function finalizeCompletedRun(
     }
   })
   env.persistCurrentRun(answer)
-  await persistAuditLog(input.services, input.runId)
-  persistTokenUsage(input.runId, agent)
+  await persistAuditLog(sideEffects.engine, request.runId)
+  persistTokenUsage(request.runId, agent)
 
-  env.boundSaveTrace(input.runId, { kind: TrajectoryEventKind.Answer, text: answer })
+  env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Answer, text: answer })
   await captureRunWorkspaceDiff(
-    input.runId,
-    input.ctx.activeRuns,
-    input.ctx.completedRunWorkspaces,
-    input.ctx.completedRunDiffs,
+    request.runId,
+    runtime.orchestrator.activeRuns,
+    runtime.orchestrator.completedRunWorkspaces,
+    runtime.orchestrator.completedRunDiffs,
     env.boundSaveTrace,
     createNotification
   )
 
-  const pendingDiff = input.ctx.completedRunDiffs.get(input.runId)
+  const pendingDiff = runtime.orchestrator.completedRunDiffs.get(request.runId)
   const pendingChangeCount = pendingDiff
     ? pendingDiff.added.length + pendingDiff.modified.length + pendingDiff.deleted.length
     : 0
@@ -62,11 +63,11 @@ export async function finalizeCompletedRun(
   const taskInternallyFailed = hasInternalTaskFailure(answer)
 
   ingestRunTurns({
-    id: input.runId,
-    goal: input.goal,
+    id: request.runId,
+    goal: request.goal,
     answer: taskInternallyFailed ? null : answer,
     status: taskInternallyFailed ? RunStatus.Failed : RunStatus.Completed,
-    agentId: input.agentId,
+    agentId: request.agentId,
     sessionId: env.activeRun?.sessionId ?? null,
     tools: [...new Set(env.state.run.steps.map((step) => step.action))],
     stepCount: env.state.run.steps.length,
@@ -75,8 +76,8 @@ export async function finalizeCompletedRun(
     upn: env.activeRun?.ownerUpn ?? null
   })
   extractProcedural({
-    id: input.runId,
-    goal: input.goal,
+    id: request.runId,
+    goal: request.goal,
     trace: persistedToolTrace,
     upn: env.activeRun?.ownerUpn ?? null,
     sessionId: env.activeRun?.sessionId ?? null
@@ -86,7 +87,7 @@ export async function finalizeCompletedRun(
   broadcast({
     type: EventType.RunCompleted,
     data: {
-      runId: input.runId,
+      runId: request.runId,
       answer,
       status: RunStatus.Completed,
       stepCount: env.state.run.steps.length,
@@ -98,7 +99,7 @@ export async function finalizeCompletedRun(
     }
   })
   db.saveLog({
-    run_id: input.runId,
+    run_id: request.runId,
     level: "run",
     message: `Completed — ${env.state.run.steps.length} steps`,
     timestamp: new Date().toISOString()
@@ -108,15 +109,15 @@ export async function finalizeCompletedRun(
     title: "Run completed",
     message:
       pendingChangeCount > 0
-        ? `"${input.goal.slice(0, 80)}" finished with ${env.state.run.steps.length} steps. ${pendingChangeCount} workspace changes pending approval.`
-        : `"${input.goal.slice(0, 80)}" finished with ${env.state.run.steps.length} steps.`,
-    runId: input.runId,
-    actions: [{ label: "View", action: NotificationActionType.ViewRun, data: { runId: input.runId } }]
+        ? `"${request.goal.slice(0, 80)}" finished with ${env.state.run.steps.length} steps. ${pendingChangeCount} workspace changes pending approval.`
+        : `"${request.goal.slice(0, 80)}" finished with ${env.state.run.steps.length} steps.`,
+    runId: request.runId,
+    actions: [{ label: "View", action: NotificationActionType.ViewRun, data: { runId: request.runId } }]
   })
 
-  if (input.ctx.messageRouter) {
-    input.ctx.messageRouter.sendReply(input.runId, answer).catch((error) => {
-      console.error(`Failed to send reply for run ${input.runId}:`, error)
+  if (runtime.orchestrator.messageRouter) {
+    runtime.orchestrator.messageRouter.sendReply(request.runId, answer).catch((error) => {
+      console.error(`Failed to send reply for run ${request.runId}:`, error)
     })
   }
 }

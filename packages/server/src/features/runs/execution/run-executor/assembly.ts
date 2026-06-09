@@ -5,7 +5,7 @@ import { wireEventBroadcasting } from "../../core/coordination/event-wiring.js"
 import { createNotification, persistRun, saveTrace } from "../persistence.js"
 import type {
   DelegateToolsBundle,
-  ExecuteRunInput,
+  ExecuteRunCommand,
   ExecutionEnvironment,
   ExecutionStateBundle,
   ExecutionSystemMessagesBundle,
@@ -17,50 +17,53 @@ import type {
   WorkspacePreparation
 } from "./types.js"
 
-export async function prepareWorkspace(input: ExecuteRunInput): Promise<WorkspacePreparation> {
-  const baseWorkspace = input.ctx.workspace ?? process.cwd()
-  const preActiveRun = input.ctx.activeRuns.get(input.runId)
+export async function prepareWorkspace(command: ExecuteRunCommand): Promise<WorkspacePreparation> {
+  const { request, runtime } = command
+  const baseWorkspace = runtime.orchestrator.workspace ?? process.cwd()
+  const preActiveRun = runtime.orchestrator.activeRuns.get(request.runId)
 
   const runWorkspace = await prepareRunWorkspace({
-    runId: input.runId,
+    runId: request.runId,
     sourceRoot: baseWorkspace,
-    goal: input.goal,
-    resume: !!input.resume,
+    goal: request.goal,
+    resume: !!request.resume,
     role: preActiveRun?.role ?? PolicyRole.Admin
   })
 
-  const activeRun = input.ctx.activeRuns.get(input.runId)
+  const activeRun = runtime.orchestrator.activeRuns.get(request.runId)
   if (activeRun) activeRun.workspace = runWorkspace
   return { activeRun, runWorkspace }
 }
 
-export function createExecutionState(input: ExecuteRunInput): ExecutionStateBundle {
+export function createExecutionState(command: ExecuteRunCommand): ExecutionStateBundle {
+  const { request } = command
   const actor = "user"
   const progress: ProgressState = { lastMessages: [], lastIteration: 0, prevTotalTokens: 0 }
   const state: RunState = {
-    run: createRun("agent-session", { goal: input.goal }, input.runId),
+    run: createRun("agent-session", { goal: request.goal }, request.runId),
     actor,
-    stepCounter: input.resume?.iteration ?? 0
+    stepCounter: request.resume?.iteration ?? 0
   }
 
   return { actor, progress, state }
 }
 
 export function createRunPersistence(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   state: RunState,
   actor: string,
   runWorkspace: RunWorkspace
 ): RunPersistenceBundle {
+  const { request, runtime, sideEffects } = command
   const boundSaveTrace = (runId: string, entry: Record<string, unknown>) =>
-    saveTrace(input.ctx.activeRuns, runId, entry)
+    saveTrace(runtime.orchestrator.activeRuns, runId, entry)
 
   const persistCurrentRun = (answer?: string, error?: string): void => {
-    persistRun(state.run, input.goal, input.agentId, input.resume?.parentRunId, answer, error)
+    persistRun(state.run, request.goal, request.agentId, request.resume?.parentRunId, answer, error)
   }
 
   const saveCurrentRun = async (): Promise<void> => {
-    await input.services.runRepo.save(state.run)
+    await sideEffects.engine.runRepo.save(state.run)
   }
 
   const markRunStarted = async (): Promise<void> => {
@@ -68,20 +71,20 @@ export function createRunPersistence(
     state.run = startRunningPure(state.run, state.run.steps)
     await saveCurrentRun()
     persistCurrentRun()
-    await input.services.eventBus.publish(runStarted(state.run.id, "agent-session"))
+    await sideEffects.engine.eventBus.publish(runStarted(state.run.id, "agent-session"))
   }
 
   const initialize = async (): Promise<void> => {
     await saveCurrentRun()
-    await input.services.auditService.log({
+    await sideEffects.engine.auditService.log({
       actor,
       action: "agent.started",
       resourceType: "AgentRun",
       resourceId: state.run.id,
       detail: {
-        goal: input.goal,
-        tools: input.tools.map((tool) => tool.name),
-        agentId: input.agentId,
+        goal: request.goal,
+        tools: request.tools.map((tool) => tool.name),
+        agentId: request.agentId,
         profile: runWorkspace.profile,
         workspaceMode: runWorkspace.isolated ? "isolated" : "shared",
         workspaceRoot: runWorkspace.executionRoot
@@ -99,11 +102,17 @@ export function createRunPersistence(
 }
 
 export function wireExecutionEvents(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   state: RunState,
   boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
 ) {
-  return wireEventBroadcasting(input.services, input.runId, state, boundSaveTrace, createNotification)
+  return wireEventBroadcasting(
+    command.sideEffects.engine,
+    command.request.runId,
+    state,
+    boundSaveTrace,
+    createNotification
+  )
 }
 
 export function assembleExecutionEnvironment(input: {

@@ -8,13 +8,14 @@ import { TrajectoryEventKind } from "../../../../../shared/enums/trajectory.js"
 import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { captureRunWorkspaceDiff } from "../../workspace-effects.js"
 import { buildPersistedToolTrace } from "../support.js"
-import type { ExecuteRunInput, ExecutionEnvironment } from "../types.js"
+import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
-function saveFailureCheckpoint(input: ExecuteRunInput, env: ExecutionEnvironment): void {
+function saveFailureCheckpoint(command: ExecuteRunCommand, env: ExecutionEnvironment): void {
+  const { request } = command
   if (env.progress.lastMessages.length === 0) return
 
   db.saveCheckpoint({
-    run_id: input.runId,
+    run_id: request.runId,
     messages: JSON.stringify(env.progress.lastMessages),
     iteration: env.progress.lastIteration,
     step_counter: env.state.stepCounter,
@@ -23,7 +24,7 @@ function saveFailureCheckpoint(input: ExecuteRunInput, env: ExecutionEnvironment
   broadcast({
     type: EventType.CheckpointSaved,
     data: {
-      runId: input.runId,
+      runId: request.runId,
       iteration: env.progress.lastIteration,
       stepCounter: env.state.stepCounter
     }
@@ -31,22 +32,23 @@ function saveFailureCheckpoint(input: ExecuteRunInput, env: ExecutionEnvironment
 }
 
 export async function finalizeFailedRun(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   env: ExecutionEnvironment,
   agent: Agent,
   error: unknown
 ): Promise<void> {
+  const { request, runtime, sideEffects } = command
   const errMsg = error instanceof Error ? error.message : String(error)
   const persistedToolTrace = buildPersistedToolTrace(env.state.run.steps)
   env.state.run = failRunPure(env.state.run)
-  await input.services.eventBus.publish(runFailed(env.state.run.id, errMsg))
-  await input.services.auditService.log({
+  await sideEffects.engine.eventBus.publish(runFailed(env.state.run.id, errMsg))
+  await sideEffects.engine.auditService.log({
     actor: env.actor,
     action: "agent.failed",
     resourceType: "AgentRun",
     resourceId: env.state.run.id,
     detail: {
-      goal: input.goal,
+      goal: request.goal,
       error: errMsg,
       totalTokens: agent.usage.totalTokens,
       promptTokens: agent.usage.promptTokens,
@@ -55,26 +57,26 @@ export async function finalizeFailedRun(
     }
   })
 
-  saveFailureCheckpoint(input, env)
+  saveFailureCheckpoint(command, env)
 
   env.persistCurrentRun(undefined, errMsg)
-  await persistAuditLog(input.services, input.runId)
-  persistTokenUsage(input.runId, agent)
-  env.boundSaveTrace(input.runId, { kind: TrajectoryEventKind.Error, text: errMsg })
+  await persistAuditLog(sideEffects.engine, request.runId)
+  persistTokenUsage(request.runId, agent)
+  env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Error, text: errMsg })
   await captureRunWorkspaceDiff(
-    input.runId,
-    input.ctx.activeRuns,
-    input.ctx.completedRunWorkspaces,
-    input.ctx.completedRunDiffs,
+    request.runId,
+    runtime.orchestrator.activeRuns,
+    runtime.orchestrator.completedRunWorkspaces,
+    runtime.orchestrator.completedRunDiffs,
     env.boundSaveTrace,
     createNotification
   )
   ingestRunTurns({
-    id: input.runId,
-    goal: input.goal,
+    id: request.runId,
+    goal: request.goal,
     answer: null,
     status: RunStatus.Failed,
-    agentId: input.agentId,
+    agentId: request.agentId,
     sessionId: env.activeRun?.sessionId ?? null,
     tools: [...new Set(env.state.run.steps.map((step) => step.action))],
     stepCount: env.state.run.steps.length,
@@ -85,7 +87,7 @@ export async function finalizeFailedRun(
   broadcast({
     type: EventType.RunFailed,
     data: {
-      runId: input.runId,
+      runId: request.runId,
       error: errMsg,
       stepCount: env.state.run.steps.length,
       totalTokens: agent.usage.totalTokens,
@@ -95,29 +97,29 @@ export async function finalizeFailedRun(
     }
   })
   db.saveLog({
-    run_id: input.runId,
+    run_id: request.runId,
     level: "run:error",
     message: `Failed — ${errMsg.slice(0, 200)}`,
     timestamp: new Date().toISOString()
   })
-  const hasCheckpoint = !!db.getCheckpoint(input.runId)
+  const hasCheckpoint = !!db.getCheckpoint(request.runId)
   createNotification({
     type: EventType.RunFailed,
     title: "Run failed",
-    message: `"${input.goal.slice(0, 80)}" failed: ${errMsg.slice(0, 120)}`,
-    runId: input.runId,
+    message: `"${request.goal.slice(0, 80)}" failed: ${errMsg.slice(0, 120)}`,
+    runId: request.runId,
     actions: [
-      { label: "Review", action: NotificationActionType.ViewRun, data: { runId: input.runId } },
+      { label: "Review", action: NotificationActionType.ViewRun, data: { runId: request.runId } },
       ...(hasCheckpoint
         ? [
             {
               label: "Resume",
               action: NotificationActionType.ResumeRun,
-              data: { runId: input.runId }
+              data: { runId: request.runId }
             }
           ]
         : []),
-      { label: "Rollback", action: NotificationActionType.RollbackRun, data: { runId: input.runId } }
+      { label: "Rollback", action: NotificationActionType.RollbackRun, data: { runId: request.runId } }
     ]
   })
 }

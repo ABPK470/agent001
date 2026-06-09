@@ -1,19 +1,20 @@
 import { detectInternalFailure, isPlatformUnconfiguredAnswer, type ExecutableTool } from "@mia/agent"
 import { runReflectionTurn } from "../../../core/coordination/run-reflection.js"
-import type { ExecuteRunInput, ExecutionEnvironment } from "../types.js"
+import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
 function findVerdictTool(tools: ExecutableTool[]): ExecutableTool | undefined {
   return tools.find((tool) => tool.name === "record_table_verdict")
 }
 
 export async function maybeRunReflection(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   env: ExecutionEnvironment,
   answer: string
 ): Promise<void> {
+  const { request, runtime } = command
   const internalFailure = detectInternalFailure(answer)
   if (!env.toolDecision.includeDataPersona || isPlatformUnconfiguredAnswer(answer) || !!internalFailure) {
-    env.boundSaveTrace(input.runId, {
+    env.boundSaveTrace(request.runId, {
       kind: "reflection",
       outcome: "gated",
       verdictsRecorded: 0,
@@ -29,7 +30,7 @@ export async function maybeRunReflection(
   try {
     const verdictTool = findVerdictTool(env.allTools)
     if (!verdictTool) {
-      env.boundSaveTrace(input.runId, {
+      env.boundSaveTrace(request.runId, {
         kind: "reflection",
         outcome: "skipped",
         verdictsRecorded: 0,
@@ -40,18 +41,18 @@ export async function maybeRunReflection(
     }
 
     const reflection = await runReflectionTurn({
-      runId: input.runId,
-      goal: input.goal,
+      runId: request.runId,
+      goal: request.goal,
       answer,
       steps: env.state.run.steps,
       recordVerdictTool: verdictTool,
-      llm: input.ctx.llm,
-      signal: input.controller.signal
+      llm: runtime.orchestrator.llm,
+      signal: runtime.controller.signal
     })
     console.log(
-      `[reflection] run=${input.runId} outcome=${reflection.outcome} recorded=${reflection.verdictsRecorded} ${reflection.detail}`
+      `[reflection] run=${request.runId} outcome=${reflection.outcome} recorded=${reflection.verdictsRecorded} ${reflection.detail}`
     )
-    env.boundSaveTrace(input.runId, {
+    env.boundSaveTrace(request.runId, {
       kind: "reflection",
       outcome: reflection.outcome,
       verdictsRecorded: reflection.verdictsRecorded,
@@ -59,8 +60,8 @@ export async function maybeRunReflection(
       detail: reflection.detail
     })
   } catch (error) {
-    console.warn(`[reflection] run=${input.runId} failed: ${(error as Error).message}`)
-    env.boundSaveTrace(input.runId, {
+    console.warn(`[reflection] run=${request.runId} failed: ${(error as Error).message}`)
+    env.boundSaveTrace(request.runId, {
       kind: "reflection",
       outcome: "error",
       verdictsRecorded: 0,

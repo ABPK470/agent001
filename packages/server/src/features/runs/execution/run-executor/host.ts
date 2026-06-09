@@ -19,7 +19,7 @@ import {
 import { createServerBrowserCredentialProvider } from "../../../browser/credential-provider.js"
 import { createServerBrowserHandoffProvider } from "../../../browser/handoff-provider.js"
 import { createServerBrowserContextProvider } from "../../../browser/provider.js"
-import type { ActiveRunRecord, AgentRef, ExecuteRunInput, PerRunHostBundle, RunWorkspace } from "./types.js"
+import type { ActiveRunRecord, AgentRef, ExecuteRunCommand, PerRunHostBundle, RunWorkspace } from "./types.js"
 
 function createRunContextForExecution(
   activeRun: ActiveRunRecord | undefined,
@@ -65,14 +65,15 @@ function createPolicyContext(
 }
 
 export function createPerRunHost(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   activeRun: ActiveRunRecord | undefined,
   runWorkspace: RunWorkspace
 ): PerRunHostBundle {
-  const runContext = createRunContextForExecution(activeRun, input.runId, input.controller)
-  const policyCtx = createPolicyContext(input.runId, activeRun, runWorkspace)
+  const { request, runtime } = command
+  const runContext = createRunContextForExecution(activeRun, request.runId, runtime.controller)
+  const policyCtx = createPolicyContext(request.runId, activeRun, runWorkspace)
   const perRunHost: AgentHost = configureAgent({
-    ...bootHostDepsToConfigureAgentOptions(input.ctx.bootHostDeps),
+    ...bootHostDepsToConfigureAgentOptions(runtime.orchestrator.bootHostDeps),
     attachments: createServerAttachmentService(() => policyCtx),
     browser: {
       providers: {

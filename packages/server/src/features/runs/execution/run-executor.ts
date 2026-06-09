@@ -8,40 +8,41 @@ import {
   maybeRunReflection
 } from "./run-executor/finalization.js"
 import { acquireRunSlot } from "./run-executor/support.js"
-import type { ExecuteRunInput, ExecutionEnvironment } from "./run-executor/types.js"
+import type { ExecuteRunCommand, ExecutionEnvironment } from "./run-executor/types.js"
 
-export async function executeRunImpl(input: ExecuteRunInput): Promise<void> {
-  const releaseSlot = await acquireRunSlot(input)
+export async function executeRunImpl(command: ExecuteRunCommand): Promise<void> {
+  const { request, runtime } = command
+  const releaseSlot = await acquireRunSlot(command)
   if (!releaseSlot) return
 
   let env: ExecutionEnvironment | undefined
   let agent: ReturnType<typeof createRunAgent> | undefined
 
   try {
-    env = await prepareExecutionEnvironment(input)
-    agent = createRunAgent(input, env)
+    env = await prepareExecutionEnvironment(command)
+    agent = createRunAgent(command, env)
 
     await env.markRunStarted()
     const rawAnswer = await agent.run(
-      input.goal,
-      input.resume ? { messages: input.resume.messages, iteration: input.resume.iteration } : undefined
+      request.goal,
+      request.resume ? { messages: request.resume.messages, iteration: request.resume.iteration } : undefined
     )
-    const answer = await normalizeRunAnswer(input, env, rawAnswer)
+    const answer = await normalizeRunAnswer(command, env, rawAnswer)
 
-    if (input.controller.signal.aborted) {
-      await finalizeCancelledRun(input, env, agent)
+    if (runtime.controller.signal.aborted) {
+      await finalizeCancelledRun(command, env, agent)
       return
     }
 
-    await maybeRunReflection(input, env, answer)
-    await finalizeCompletedRun(input, env, agent, answer)
+    await maybeRunReflection(command, env, answer)
+    await finalizeCompletedRun(command, env, agent, answer)
   } catch (error) {
     if (env && agent) {
-      await finalizeFailedRun(input, env, agent, error)
+      await finalizeFailedRun(command, env, agent, error)
       return
     }
     throw error
   } finally {
-    cleanupExecution(input, env, releaseSlot)
+    cleanupExecution(command, env, releaseSlot)
   }
 }

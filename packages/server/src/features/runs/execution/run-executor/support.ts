@@ -1,5 +1,5 @@
 import type { Message } from "@mia/agent"
-import { type ExecuteRunInput } from "./types.js"
+import { type ExecuteRunCommand } from "./types.js"
 
 const CLASSIFICATION_RECENT_MSGS = 6
 const CLASSIFICATION_PER_MSG_CAP = 600
@@ -54,11 +54,16 @@ export function buildPersistedToolTrace(
   })
 }
 
-export async function acquireRunSlot(input: ExecuteRunInput): Promise<(() => void) | null> {
+export async function acquireRunSlot(command: ExecuteRunCommand): Promise<(() => void) | null> {
+  const { request, runtime } = command
   try {
-    return await input.ctx.queue.acquire(input.runId, input.priority, input.controller.signal)
+    return await runtime.orchestrator.queue.acquire(
+      request.runId,
+      request.priority,
+      runtime.controller.signal
+    )
   } catch {
-    input.ctx.activeRuns.delete(input.runId)
+    runtime.orchestrator.activeRuns.delete(request.runId)
     return null
   }
 }

@@ -7,13 +7,13 @@ import { loadPriorTurns } from "../../core/data-blocks/prior-turns.js"
 import { buildSystemMessages } from "../../core/system-messages.js"
 import type {
   ActiveRunRecord,
-  ExecuteRunInput,
+  ExecuteRunCommand,
   ExecutionSystemMessagesBundle,
   RunWorkspace
 } from "./types.js"
 
 export async function buildExecutionSystemMessages(
-  input: ExecuteRunInput,
+  command: ExecuteRunCommand,
   envBase: {
     activeRun: ActiveRunRecord | undefined
     runWorkspace: RunWorkspace
@@ -24,13 +24,14 @@ export async function buildExecutionSystemMessages(
   },
   perTier: { working: string; episodic: string; semantic: string }
 ): Promise<ExecutionSystemMessagesBundle> {
+  const { request, runtime } = command
   const priorTurns =
     envBase.activeRun?.sessionId &&
     envBase.activeRun?.ownerUpn &&
     envBase.runWorkspace.taskType !== "code_generation"
       ? loadPriorTurns({
           sessionId: envBase.activeRun.sessionId,
-          excludeRunId: input.runId,
+          excludeRunId: request.runId,
           upn: envBase.activeRun.ownerUpn,
           limit: 3
         })
@@ -38,45 +39,45 @@ export async function buildExecutionSystemMessages(
 
   const priorResults =
     envBase.activeRun?.sessionId && envBase.runWorkspace.taskType !== "code_generation"
-      ? loadPriorResults({ sessionId: envBase.activeRun.sessionId, excludeRunId: input.runId })
+      ? loadPriorResults({ sessionId: envBase.activeRun.sessionId, excludeRunId: request.runId })
       : []
 
   const systemMessages = await buildSystemMessages({
-    goal: input.goal,
-    systemPrompt: input.systemPrompt,
+    goal: request.goal,
+    systemPrompt: request.systemPrompt,
     allTools: envBase.allTools,
     runWorkspace: envBase.runWorkspace,
     perTier,
-    runId: input.runId,
+    runId: request.runId,
     host: envBase.perRunHost,
     attachmentIds: envBase.activeRun?.attachmentIds ?? [],
     priorTurns,
     priorResults,
     knownObjects: (() => {
       try {
-        return loadKnownObjects({ goal: input.goal, priorTurns })
+        return loadKnownObjects({ goal: request.goal, priorTurns })
       } catch (error) {
-        console.warn(`[run ${input.runId}] knownObjects load failed:`, (error as Error).message)
+        console.warn(`[run ${request.runId}] knownObjects load failed:`, (error as Error).message)
         return []
       }
     })(),
     knownVerdicts: (() => {
       try {
         return loadCandidateVerdicts({
-          goal: input.goal,
+          goal: request.goal,
           catalog: getCatalog(envBase.perRunHost),
           upn: envBase.activeRun?.ownerUpn ?? null
         })
       } catch (error) {
-        console.warn(`[run ${input.runId}] knownVerdicts load failed:`, (error as Error).message)
+        console.warn(`[run ${request.runId}] knownVerdicts load failed:`, (error as Error).message)
         return []
       }
     })(),
-    clarifications: input.ctx.clarifications,
-    llmForClarification: input.ctx.llm,
+    clarifications: runtime.orchestrator.clarifications,
+    llmForClarification: runtime.orchestrator.llm,
     onClarificationTrace: (event) => {
       if (event.kind === "detected") {
-        envBase.boundSaveTrace(input.runId, {
+        envBase.boundSaveTrace(request.runId, {
           kind: TrajectoryEventKind.ClarificationDetected,
           findingId: event.finding.id,
           ambiguityKind: event.finding.kind,
@@ -86,16 +87,16 @@ export async function buildExecutionSystemMessages(
           suggestedQuestion: event.finding.suggestedQuestion
         } as Record<string, unknown>)
       } else {
-        envBase.boundSaveTrace(input.runId, {
+        envBase.boundSaveTrace(request.runId, {
           kind: TrajectoryEventKind.ClarificationLlmPlannerInvoked,
           findingsCount: event.findingsCount
         } as Record<string, unknown>)
       }
     },
     isAdmin: (envBase.activeRun?.role ?? PolicyRole.HostedUser) === PolicyRole.Admin,
-    hasSiblings: !!input.resume?.parentRunId || input.bus.history().length > 0,
+    hasSiblings: !!request.resume?.parentRunId || runtime.bus.history().length > 0,
     siblingProgressDigest: (() => {
-      const recent = input.bus.history().slice(-6)
+      const recent = runtime.bus.history().slice(-6)
       if (recent.length === 0) return ""
       return recent
         .map((message) => {
@@ -104,15 +105,15 @@ export async function buildExecutionSystemMessages(
         })
         .join("\n")
     })(),
-    coordinationTopic: `${input.runId}-status`
+    coordinationTopic: `${request.runId}-status`
   })
 
   const effectivePrompt = systemMessages.map((message) => message.content).join("\n\n")
-  envBase.boundSaveTrace(input.runId, {
+  envBase.boundSaveTrace(request.runId, {
     kind: TrajectoryEventKind.SystemPrompt,
     text: effectivePrompt || "(no system prompt)"
   })
-  broadcastTrace(input.runId, envBase.debugSeqRef.value++, {
+  broadcastTrace(request.runId, envBase.debugSeqRef.value++, {
     kind: TrajectoryEventKind.SystemPrompt,
     text: effectivePrompt || "(no system prompt)"
   })
@@ -124,7 +125,7 @@ export async function buildExecutionSystemMessages(
       parameters: tool.parameters
     }))
   }
-  envBase.boundSaveTrace(input.runId, toolsResolvedEntry)
-  broadcastTrace(input.runId, envBase.debugSeqRef.value++, toolsResolvedEntry)
+  envBase.boundSaveTrace(request.runId, toolsResolvedEntry)
+  broadcastTrace(request.runId, envBase.debugSeqRef.value++, toolsResolvedEntry)
   return { effectivePrompt, systemMessages }
 }

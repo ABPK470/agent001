@@ -23,18 +23,30 @@ export type ResumeState = {
   parentRunId: string
 }
 
-export type ExecuteRunInput = {
-  ctx: OrchestratorRunCtx
+export type ExecuteRunRequestDto = {
   runId: string
   goal: string
   tools: ExecutableTool[]
   systemPrompt: string | undefined
   agentId: string | null
-  services: EngineServices
-  controller: AbortController
-  bus: AgentBus
   resume?: ResumeState
   priority: RunPriority
+}
+
+export type ExecuteRunRuntimeDeps = {
+  orchestrator: OrchestratorRunCtx
+  controller: AbortController
+  bus: AgentBus
+}
+
+export type ExecuteRunSideEffectServices = {
+  engine: EngineServices
+}
+
+export type ExecuteRunCommand = {
+  request: ExecuteRunRequestDto
+  runtime: ExecuteRunRuntimeDeps
+  sideEffects: ExecuteRunSideEffectServices
 }
 
 export type ActiveRunRecord =
@@ -68,6 +80,11 @@ export type RunPersistenceBundle = {
   initialize: () => Promise<void>
 }
 
+export type ExecutionTraceBundle = {
+  boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
+  debugSeqRef: { value: number }
+}
+
 export type PerRunHostBundle = {
   runContext: ReturnType<typeof import("@mia/agent").makeRunContext>
   perRunHost: AgentHost
@@ -80,6 +97,25 @@ export type ToolResolution = {
   governedTools: Tool[]
   perTier: { working: string; episodic: string; semantic: string }
   toolDecision: ReturnType<typeof import("../../core/decide-sections.js").decideSections>
+}
+
+export type ToolResolutionContext = {
+  command: ExecuteRunCommand
+  activeRun: ActiveRunRecord | undefined
+  runWorkspace: RunWorkspace
+  state: RunState
+  policyCtx: HostedPolicyContext
+  tracing: ExecutionTraceBundle
+}
+
+export type DelegateRuntimeContext = {
+  command: ExecuteRunCommand
+  activeRun: ActiveRunRecord | undefined
+  state: RunState
+  runContext: ReturnType<typeof import("@mia/agent").makeRunContext>
+  perRunHost: AgentHost
+  agentRef: AgentRef
+  tracing: Pick<ExecutionTraceBundle, "boundSaveTrace">
 }
 
 export type DelegateToolsBundle = {

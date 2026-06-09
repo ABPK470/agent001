@@ -36,7 +36,7 @@ import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
 import { createNotification, saveTrace } from "./execution/persistence.js"
 import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
-import type { ExecuteRunInput } from "./execution/run-executor/types.js"
+import type { ExecuteRunCommand } from "./execution/run-executor/types.js"
 import { applyRunWorkspaceDiff } from "./execution/workspace-effects.js"
 
 export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestration.js"
@@ -171,20 +171,26 @@ export class AgentOrchestrator {
     })
     saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.Goal, text: goal })
 
-    const input: ExecuteRunInput = {
-      ctx: this.getCtx(),
-      runId,
-      goal,
-      tools,
-      systemPrompt: config?.systemPrompt,
-      agentId,
-      services,
-      controller,
-      bus,
-      priority: RunPriority.Normal
+    const command: ExecuteRunCommand = {
+      request: {
+        runId,
+        goal,
+        tools,
+        systemPrompt: config?.systemPrompt,
+        agentId,
+        priority: RunPriority.Normal
+      },
+      runtime: {
+        orchestrator: this.getCtx(),
+        controller,
+        bus
+      },
+      sideEffects: {
+        engine: services
+      }
     }
 
-    this.executeRun(input).catch((err) => {
+    this.executeRun(command).catch((err) => {
       console.error(`Run ${runId} crashed:`, err)
       // executeRun threw before its own try/catch could mark the run
       // failed (e.g. crash during prepareWorkspace). Without this the
@@ -338,21 +344,27 @@ export class AgentOrchestrator {
       tools = filterToolsForVisitor(tools)
     }
 
-    const input: ExecuteRunInput = {
-      ctx: this.getCtx(),
-      runId: newRunId,
-      goal: originalRun.goal,
-      tools,
-      systemPrompt,
-      agentId: originalRun.agent_id ?? null,
-      services,
-      controller,
-      bus,
-      resume: { messages, iteration, parentRunId: runId },
-      priority: RunPriority.Normal
+    const command: ExecuteRunCommand = {
+      request: {
+        runId: newRunId,
+        goal: originalRun.goal,
+        tools,
+        systemPrompt,
+        agentId: originalRun.agent_id ?? null,
+        resume: { messages, iteration, parentRunId: runId },
+        priority: RunPriority.Normal
+      },
+      runtime: {
+        orchestrator: this.getCtx(),
+        controller,
+        bus
+      },
+      sideEffects: {
+        engine: services
+      }
     }
 
-    this.executeRun(input).catch((err) => {
+    this.executeRun(command).catch((err) => {
       console.error(`Resumed run ${newRunId} crashed:`, err)
     })
 
@@ -479,7 +491,7 @@ export class AgentOrchestrator {
     }
   }
 
-  private async executeRun(input: ExecuteRunInput): Promise<void> {
-    return executeRunImpl(input)
+  private async executeRun(command: ExecuteRunCommand): Promise<void> {
+    return executeRunImpl(command)
   }
 }
