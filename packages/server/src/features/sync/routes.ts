@@ -16,6 +16,7 @@ import {
   type ExecuteProgress
 } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
+import { broadcast } from "../../platform/events/broadcaster.js"
 import * as db from "../../platform/persistence/sqlite.js"
 import {
   listSyncDefinitionAdminItems,
@@ -23,14 +24,13 @@ import {
   publishSyncDefinitionsFromDb,
   resetSyncDefinitionConfig,
   upsertSyncDefinitionConfig
-} from "./definitions.js"
+} from "./application/definitions.js"
 import {
   buildSyncAuditDetail,
   loadPersistedSyncPlanSummary,
   summarizeSyncPlan
-} from "./plan-summary.js"
-import { rebuildLiveSyncEnvironments } from "./live-environments.js"
-import { broadcast } from "../../platform/events/broadcaster.js"
+} from "./application/plan-summary.js"
+import { rebuildLiveSyncEnvironments } from "./runtime/live-environments.js"
 
 interface PublishSyncDefinitionsResponse {
   publishedAt: string

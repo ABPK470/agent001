@@ -4,8 +4,8 @@
 
 import type { FastifyInstance } from "fastify"
 import * as db from "../../platform/persistence/sqlite.js"
+import { canAccessRun } from "../auth/application/access.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
-import { canAccessRun } from "../auth/access.js"
 
 function canSee(
   session: { isAdmin?: boolean; upn?: string | null; sid?: string } | undefined,

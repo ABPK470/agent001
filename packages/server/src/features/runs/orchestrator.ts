@@ -29,7 +29,7 @@ import type {
   OrchestratorConfig
 } from "../../ports/orchestration.js"
 import { TrajectoryEventKind } from "../../shared/enums/trajectory.js"
-import type { CurrentSession } from "../auth/context.js"
+import type { CurrentSession } from "../auth/runtime/context.js"
 import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
 import { createNotification, saveTrace } from "./execution/persistence.js"
 import { recoverStaleRunsImpl } from "./execution/recovery.js"

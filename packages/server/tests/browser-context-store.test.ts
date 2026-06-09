@@ -43,7 +43,7 @@ describe("browser context store", () => {
     _setDb(testDb)
 
     const { getOrCreateContext, loadStorageState, saveStorageState, listContexts } =
-      await import("../src/features/browser/context-store.js")
+      await import("../src/features/browser/runtime/context-store.js")
 
     const a = getOrCreateContext("alice@example.com")
     const b = getOrCreateContext("alice@example.com")

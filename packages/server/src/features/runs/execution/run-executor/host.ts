@@ -16,9 +16,9 @@ import {
   renderCachedHeader,
   saveToolKnowledge
 } from "../../../../platform/persistence/memory.js"
-import { createServerBrowserCredentialProvider } from "../../../browser/credential-provider.js"
-import { createServerBrowserHandoffProvider } from "../../../browser/handoff-provider.js"
-import { createServerBrowserContextProvider } from "../../../browser/provider.js"
+import { createServerBrowserCredentialProvider } from "../../../browser/runtime/credential-provider.js"
+import { createServerBrowserHandoffProvider } from "../../../browser/runtime/handoff-provider.js"
+import { createServerBrowserContextProvider } from "../../../browser/runtime/provider.js"
 import type { ActiveRunRecord, ExecuteRunCommand, PerRunHostBundle, RunWorkspace } from "./types.js"
 
 function createRunContextForExecution(

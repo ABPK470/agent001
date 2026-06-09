@@ -3,14 +3,14 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { listAuditLog } from "../browser/audit.js"
-import { listContexts } from "../browser/context-store.js"
+import { HandoffStatus } from "../../shared/enums/browser.js"
+import { listAuditLog } from "./application/audit.js"
 import {
   createCredential,
   deleteCredential,
   listCredentials,
   type CredentialKind
-} from "../browser/credentials.js"
+} from "./application/credentials.js"
 import {
   awaitHandoff,
   completeHandoff,
@@ -18,10 +18,10 @@ import {
   listHandoffs,
   mintHandoff,
   revokeHandoff
-} from "../browser/handoff.js"
-import { addPolicyRule, deletePolicyRule, listPolicyRules } from "../browser/policy.js"
-import { deleteProxyConfig, getProxyConfig, setProxyConfig } from "../browser/proxy.js"
-import { HandoffStatus } from "../../shared/enums/browser.js"
+} from "./application/handoff.js"
+import { deleteProxyConfig, getProxyConfig, setProxyConfig } from "./application/proxy.js"
+import { addPolicyRule, deletePolicyRule, listPolicyRules } from "./domain/policy.js"
+import { listContexts } from "./runtime/context-store.js"
 
 function requireUpn(
   req: { session: { upn: string | null } },

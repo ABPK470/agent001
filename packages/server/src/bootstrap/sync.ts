@@ -1,6 +1,6 @@
 import type { AgentHost } from "@mia/agent"
-import { ensureSyncDefinitionConfigs } from "../features/sync/definitions.js"
-import { loadPersistedSyncEnvironments } from "../features/sync/live-environments.js"
+import { ensureSyncDefinitionConfigs } from "../features/sync/application/definitions.js"
+import { loadPersistedSyncEnvironments } from "../features/sync/runtime/live-environments.js"
 import { broadcast } from "../platform/events/broadcaster.js"
 import {
   getSyncRunPlanJson,

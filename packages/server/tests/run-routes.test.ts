@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { CurrentSession } from "../src/features/auth/context.js"
+import type { CurrentSession } from "../src/features/auth/runtime/context.js"
 
 function fakeSession(over: Partial<CurrentSession> = {}): CurrentSession {
   return {

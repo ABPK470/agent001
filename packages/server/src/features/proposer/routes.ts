@@ -6,10 +6,10 @@ import type { AgentHost } from "@mia/agent"
 import { EventType } from "@mia/shared-enums"
 import type { LlmCompletionPort, ProposalStatus, RiskTier } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import * as db from "../../platform/persistence/sqlite.js"
-import { runProposer } from "./runner.js"
-import { deleteSchedule, listSchedules, upsertSchedule } from "./scheduler.js"
 import { broadcast } from "../../platform/events/broadcaster.js"
+import * as db from "../../platform/persistence/sqlite.js"
+import { runProposer } from "./application/runner.js"
+import { deleteSchedule, listSchedules, upsertSchedule } from "./runtime/scheduler.js"
 
 const DEFAULT_TENANT_ID = "_default"
 

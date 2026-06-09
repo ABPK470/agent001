@@ -41,7 +41,8 @@ afterEach(() => {
 
 describe("browser proxy config", () => {
   it("sets, reads, updates, and deletes a proxy", async () => {
-    const { setProxyConfig, getProxyConfig, deleteProxyConfig } = await import("../src/features/browser/proxy.js")
+    const { setProxyConfig, getProxyConfig, deleteProxyConfig } =
+      await import("../src/features/browser/application/proxy.js")
 
     expect(getProxyConfig("alice@example.com")).toBeNull()
 
@@ -68,13 +69,13 @@ describe("browser proxy config", () => {
   })
 
   it("rejects invalid URLs and unsupported schemes", async () => {
-    const { setProxyConfig } = await import("../src/features/browser/proxy.js")
+    const { setProxyConfig } = await import("../src/features/browser/application/proxy.js")
     expect(() => setProxyConfig({ ownerUpn: "u@x", server: "ftp://nope" })).toThrow(/http|socks5/)
     expect(() => setProxyConfig({ ownerUpn: "u@x", server: "not-a-url" })).toThrow(/http|socks5/)
   })
 
   it("isolates tenants", async () => {
-    const { setProxyConfig, getProxyConfig } = await import("../src/features/browser/proxy.js")
+    const { setProxyConfig, getProxyConfig } = await import("../src/features/browser/application/proxy.js")
     setProxyConfig({ ownerUpn: "alice@example.com", server: "http://a:1" })
     setProxyConfig({ ownerUpn: "bob@example.com", server: "http://b:2" })
     expect(getProxyConfig("alice@example.com")?.server).toBe("http://a:1")

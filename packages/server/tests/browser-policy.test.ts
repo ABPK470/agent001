@@ -34,7 +34,7 @@ afterEach(() => {
 
 describe("browser domain policy", () => {
   it("matches exact and wildcard patterns", async () => {
-    const { matchPattern } = await import("../src/features/browser/policy.js")
+    const { matchPattern } = await import("../src/features/browser/domain/policy.js")
     expect(matchPattern("example.com", "example.com")).toBe(true)
     expect(matchPattern("example.com", "evil.com")).toBe(false)
     expect(matchPattern("*.example.com", "example.com")).toBe(true)
@@ -45,13 +45,13 @@ describe("browser domain policy", () => {
   })
 
   it("default-allow when no rules exist", async () => {
-    const { evaluatePolicy } = await import("../src/features/browser/policy.js")
+    const { evaluatePolicy } = await import("../src/features/browser/domain/policy.js")
     const d = evaluatePolicy("alice@x", "https://example.com/path")
     expect(d.allow).toBe(true)
   })
 
   it("deny rules win over allow rules", async () => {
-    const { addPolicyRule, evaluatePolicy } = await import("../src/features/browser/policy.js")
+    const { addPolicyRule, evaluatePolicy } = await import("../src/features/browser/domain/policy.js")
     addPolicyRule({ ownerUpn: "alice@x", pattern: "*.example.com", effect: "allow" })
     addPolicyRule({
       ownerUpn: "alice@x",
@@ -69,7 +69,7 @@ describe("browser domain policy", () => {
   })
 
   it("allow-list flips the tenant to default-deny", async () => {
-    const { addPolicyRule, evaluatePolicy } = await import("../src/features/browser/policy.js")
+    const { addPolicyRule, evaluatePolicy } = await import("../src/features/browser/domain/policy.js")
     addPolicyRule({ ownerUpn: "alice@x", pattern: "github.com", effect: "allow" })
 
     expect(evaluatePolicy("alice@x", "https://github.com/x").allow).toBe(true)
@@ -79,7 +79,7 @@ describe("browser domain policy", () => {
   })
 
   it("global rules apply to every tenant", async () => {
-    const { addPolicyRule, evaluatePolicy } = await import("../src/features/browser/policy.js")
+    const { addPolicyRule, evaluatePolicy } = await import("../src/features/browser/domain/policy.js")
     addPolicyRule({ ownerUpn: null, pattern: "*.malware.test", effect: "deny", reason: "global-deny" })
 
     expect(evaluatePolicy("alice@x", "https://x.malware.test").allow).toBe(false)
@@ -88,7 +88,7 @@ describe("browser domain policy", () => {
   })
 
   it("rejects malformed URLs", async () => {
-    const { evaluatePolicy } = await import("../src/features/browser/policy.js")
+    const { evaluatePolicy } = await import("../src/features/browser/domain/policy.js")
     const d = evaluatePolicy("alice@x", "not a url")
     expect(d.allow).toBe(false)
     expect(d.reason).toMatch(/invalid URL/)

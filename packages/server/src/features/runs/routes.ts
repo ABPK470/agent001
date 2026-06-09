@@ -8,9 +8,9 @@ import type { FastifyInstance } from "fastify"
 import { getAttachment, type AttachmentRow } from "../../platform/persistence/attachments.js"
 import { flagRunMemory } from "../../platform/persistence/memory.js"
 import * as db from "../../platform/persistence/sqlite.js"
-import type { AgentOrchestrator } from "../runs/orchestrator.js"
-import { canAccessRun } from "../auth/access.js"
 import { MemoryValidationAction } from "../../shared/enums/memory.js"
+import { canAccessRun } from "../auth/application/access.js"
+import type { AgentOrchestrator } from "../runs/orchestrator.js"
 
 export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
   app.get<{ Querystring: { scope?: "session" | "all" } }>("/api/runs", async (req) => {

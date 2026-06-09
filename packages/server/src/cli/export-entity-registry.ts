@@ -2,7 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs"
 import { dirname, relative, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import { formatEntitiesYaml } from "../features/sync/entity-yaml.js"
+import { formatEntitiesYaml } from "../features/sync/domain/entity-yaml.js"
 import * as db from "../platform/persistence/sqlite.js"
 
 const HERE = dirname(fileURLToPath(import.meta.url))

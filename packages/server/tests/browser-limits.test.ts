@@ -5,18 +5,19 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 beforeEach(async () => {
-  const { _resetLimits } = await import("../src/features/browser/limits.js")
+  const { _resetLimits } = await import("../src/features/browser/domain/limits.js")
   _resetLimits()
 })
 
 afterEach(async () => {
-  const { _resetLimits } = await import("../src/features/browser/limits.js")
+  const { _resetLimits } = await import("../src/features/browser/domain/limits.js")
   _resetLimits()
 })
 
 describe("browser limits — concurrency", () => {
   it("acquires up to MAX_PER_USER then queues", async () => {
-    const { acquireUserSlot, _userInFlight, limitsConfig } = await import("../src/features/browser/limits.js")
+    const { acquireUserSlot, _userInFlight, limitsConfig } =
+      await import("../src/features/browser/domain/limits.js")
 
     const acquired: Array<() => void> = []
     for (let i = 0; i < limitsConfig.maxPerUser; i++) {
@@ -47,7 +48,7 @@ describe("browser limits — concurrency", () => {
 
 describe("browser limits — token bucket", () => {
   it("starts full and consumes one token per request", async () => {
-    const { tryConsumeDomainToken, limitsConfig } = await import("../src/features/browser/limits.js")
+    const { tryConsumeDomainToken, limitsConfig } = await import("../src/features/browser/domain/limits.js")
 
     let allowed = 0
     let blocked = 0
@@ -61,7 +62,8 @@ describe("browser limits — token bucket", () => {
   })
 
   it("isolates tenants and domains", async () => {
-    const { tryConsumeDomainToken, _resetLimits, limitsConfig } = await import("../src/features/browser/limits.js")
+    const { tryConsumeDomainToken, _resetLimits, limitsConfig } =
+      await import("../src/features/browser/domain/limits.js")
     _resetLimits()
 
     // Drain alice@example.com

@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
 import { createPublishedSyncDefinitionRegistry, type EntityDefinition } from "@mia/sync"
-import type { CurrentSession } from "../src/features/auth/context.js"
+import type { CurrentSession } from "../src/features/auth/runtime/context.js"
 
 let testDb: Database.Database
 let dataDir: string

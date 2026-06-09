@@ -13,7 +13,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import type { CurrentSession } from "../src/features/auth/context.js"
+import type { CurrentSession } from "../src/features/auth/runtime/context.js"
 import { seedTestUsers } from "./_fk-helpers.js"
 
 let testDb: Database.Database
