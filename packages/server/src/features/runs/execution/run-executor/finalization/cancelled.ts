@@ -4,7 +4,6 @@ import { broadcast } from "../../../../../platform/events/broadcaster.js"
 import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
 import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
-import { captureRunWorkspaceDiff } from "../../workspace-effects.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
 export async function finalizeCancelledRun(
@@ -14,15 +13,8 @@ export async function finalizeCancelledRun(
 ): Promise<void> {
   const { request, runtime, sideEffects } = command
   env.state.run = cancelRunPure(env.state.run)
-  await captureRunWorkspaceDiff(
-    request.runId,
-    runtime.orchestrator.activeRuns,
-    runtime.orchestrator.completedRunWorkspaces,
-    runtime.orchestrator.completedRunDiffs,
-    env.boundSaveTrace,
-    createNotification
-  )
-  await sideEffects.engine.auditService.log({
+  await runtime.workspaceStore.captureOutputDiff(request.runId, env.boundSaveTrace, createNotification)
+  await sideEffects.auditLog.log({
     actor: env.actor,
     action: "agent.cancelled",
     resourceType: "AgentRun",
@@ -30,7 +22,7 @@ export async function finalizeCancelledRun(
     detail: { goal: request.goal, totalTokens: agent.usage.totalTokens, llmCalls: agent.llmCalls }
   })
   env.persistCurrentRun()
-  await persistAuditLog(sideEffects.engine, request.runId)
+  await persistAuditLog(sideEffects.auditLog, request.runId)
   persistTokenUsage(request.runId, agent)
   broadcast({
     type: EventType.RunCancelled,

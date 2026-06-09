@@ -11,6 +11,7 @@ import { createDelegateContext, resolveExecutionTools } from "./tools.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "./types.js"
 
 export async function prepareExecutionEnvironment(command: ExecuteRunCommand): Promise<ExecutionEnvironment> {
+  const { request, runtime, sideEffects } = command
   const workspace = await prepareWorkspace(command)
   const state = createExecutionState(command)
   const persistence = createRunPersistence(command, state.state, state.actor, workspace.runWorkspace)
@@ -20,11 +21,13 @@ export async function prepareExecutionEnvironment(command: ExecuteRunCommand): P
 
   const host = createPerRunHost(command, workspace.activeRun, workspace.runWorkspace)
   const tools = await resolveExecutionTools({
-    command,
+    request,
+    signal: runtime.controller.signal,
     activeRun: workspace.activeRun,
     runWorkspace: workspace.runWorkspace,
     state: state.state,
     policyCtx: host.policyCtx,
+    services: sideEffects,
     tracing: {
       boundSaveTrace: persistence.boundSaveTrace,
       debugSeqRef: host.debugSeqRef
@@ -32,12 +35,18 @@ export async function prepareExecutionEnvironment(command: ExecuteRunCommand): P
   })
   const delegateCtx = createDelegateContext(
     {
-      command,
+      request,
+      signal: runtime.controller.signal,
       activeRun: workspace.activeRun,
       state: state.state,
       runContext: host.runContext,
       perRunHost: host.perRunHost,
       agentRef: host.agentRef,
+      llm: runtime.interaction.llm,
+      queue: runtime.queue,
+      interaction: runtime.interaction,
+      messaging: runtime.messaging,
+      services: sideEffects,
       tracing: {
         boundSaveTrace: persistence.boundSaveTrace
       }
@@ -45,7 +54,11 @@ export async function prepareExecutionEnvironment(command: ExecuteRunCommand): P
     tools.governedTools
   )
   const systemMessages = await buildExecutionSystemMessages(
-    command,
+    {
+      request,
+      interaction: runtime.interaction,
+      messaging: runtime.messaging
+    },
     {
       activeRun: workspace.activeRun,
       runWorkspace: workspace.runWorkspace,

@@ -6,7 +6,6 @@ import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../../shared/enums/trajectory.js"
 import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
-import { captureRunWorkspaceDiff } from "../../workspace-effects.js"
 import { buildPersistedToolTrace } from "../support.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
@@ -41,8 +40,8 @@ export async function finalizeFailedRun(
   const errMsg = error instanceof Error ? error.message : String(error)
   const persistedToolTrace = buildPersistedToolTrace(env.state.run.steps)
   env.state.run = failRunPure(env.state.run)
-  await sideEffects.engine.eventBus.publish(runFailed(env.state.run.id, errMsg))
-  await sideEffects.engine.auditService.log({
+  await sideEffects.eventBus.publish(runFailed(env.state.run.id, errMsg))
+  await sideEffects.auditLog.log({
     actor: env.actor,
     action: "agent.failed",
     resourceType: "AgentRun",
@@ -60,17 +59,10 @@ export async function finalizeFailedRun(
   saveFailureCheckpoint(command, env)
 
   env.persistCurrentRun(undefined, errMsg)
-  await persistAuditLog(sideEffects.engine, request.runId)
+  await persistAuditLog(sideEffects.auditLog, request.runId)
   persistTokenUsage(request.runId, agent)
   env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Error, text: errMsg })
-  await captureRunWorkspaceDiff(
-    request.runId,
-    runtime.orchestrator.activeRuns,
-    runtime.orchestrator.completedRunWorkspaces,
-    runtime.orchestrator.completedRunDiffs,
-    env.boundSaveTrace,
-    createNotification
-  )
+  await runtime.workspaceStore.captureOutputDiff(request.runId, env.boundSaveTrace, createNotification)
   ingestRunTurns({
     id: request.runId,
     goal: request.goal,

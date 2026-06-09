@@ -1,10 +1,9 @@
-import { EventType, governTool, type DelegateContext, type Tool } from "@mia/agent"
+import { EventType, governTool, type DelegateContext, type EngineServices, type Tool } from "@mia/agent"
 import { SyncRunStatus } from "@mia/sync"
 import { resetEffectSeq } from "../../../../platform/effects/index.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../../../../platform/events/broadcaster.js"
 import { retrieveContext } from "../../../../platform/persistence/memory.js"
 import * as db from "../../../../platform/persistence/sqlite.js"
-import { createBusTools } from "../../../../platform/queue/agent-bus.js"
 import { RunPriority } from "../../../../platform/queue/run-queue.js"
 import { AuditActor } from "../../../../shared/enums/audit.js"
 import { BusProtocol } from "../../../../shared/enums/bus.js"
@@ -23,12 +22,22 @@ import type {
 
 const MSSQL_TOOL_TIMEOUT_MS = 120_000
 
+function createGovernanceServices(services: ToolResolutionContext["services"]): EngineServices {
+  return {
+    runRepo: services.runRepo,
+    auditService: services.auditLog,
+    policyEvaluator: services.policyEvaluator,
+    learner: services.learner,
+    eventBus: services.eventBus
+  }
+}
+
 export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise<ToolResolution> {
-  const { command, activeRun, runWorkspace, state, policyCtx, tracing } = ctx
-  const { request, runtime, sideEffects } = command
+  const { request, signal, activeRun, runWorkspace, state, policyCtx, services, tracing } = ctx
+  const governanceServices = createGovernanceServices(services)
   const governRuntimeTool = (tool: Tool) =>
-    governTool(tool, sideEffects.engine, state, {
-      signal: runtime.controller.signal,
+    governTool(tool, governanceServices, state, {
+      signal,
       policyContext: policyCtx,
       ...(tool.name === "query_mssql" || tool.name === "explore_mssql_schema"
         ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS }
@@ -91,18 +100,30 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
 }
 
 function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]): DelegateContext {
-  const { command, runContext, perRunHost, state, agentRef, tracing } = ctx
-  const { request, runtime, sideEffects } = command
+  const {
+    request,
+    signal,
+    runContext,
+    perRunHost,
+    state,
+    agentRef,
+    llm,
+    queue,
+    messaging,
+    services,
+    tracing
+  } = ctx
+  const governanceServices = createGovernanceServices(services)
   const maxDelegationDepth = Number(process.env["DELEGATION_MAX_DEPTH"]) || 3
   const lastStatusIter = new Map<string, number>()
 
   return {
-    llm: runtime.orchestrator.llm,
+    llm,
     availableTools: governedTools,
     depth: 0,
     maxDepth: maxDelegationDepth,
-    signal: runtime.controller.signal,
-    buildChildTools: (childRunId, childAgentName) => createBusTools(runtime.bus, childRunId, childAgentName),
+    signal,
+    buildChildTools: (childRunId, childAgentName) => messaging.createChildTools(childRunId, childAgentName),
     onChildIteration: (info) => {
       const last = lastStatusIter.get(info.childRunId) ?? 0
       if (info.iteration !== 1 && info.iteration - last < 5) return
@@ -112,7 +133,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
       if (info.content) previewBits.push(info.content.replace(/\s+/g, " ").trim())
       const preview = previewBits.join(" ").slice(0, 240)
       try {
-        runtime.bus.publish({
+        messaging.publish({
           topic: `${request.runId}-status`,
           fromRunId: info.childRunId,
           fromAgent: info.childAgentName,
@@ -123,13 +144,12 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
         // Bus publish must not break the run.
       }
     },
-    acquireSlot: (childRunId: string) =>
-      runtime.orchestrator.queue.acquire(childRunId, RunPriority.High, runtime.controller.signal),
+    acquireSlot: (childRunId: string) => queue.acquire(childRunId, RunPriority.High, signal),
     resolveAgent: (agentId) => {
       const def = db.getAgentDefinition(agentId)
       if (!def) return null
       const agentTools = getAllTools(perRunHost, runContext).map((tool) =>
-        governTool(tool, sideEffects.engine, state, { signal: runtime.controller.signal })
+        governTool(tool, governanceServices, state, { signal })
       )
       return {
         id: def.id,
@@ -142,7 +162,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
       tracing.boundSaveTrace(request.runId, entry)
       if (entry.kind === TrajectoryEventKind.DelegationStart) {
         broadcast({ type: EventType.DelegationStarted, data: { runId: request.runId, ...entry } })
-        sideEffects.engine.auditService
+        services.auditLog
           .log({
             actor: AuditActor.Agent,
             action: "delegation.started",
@@ -158,7 +178,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
           .catch(() => {})
       } else if (entry.kind === TrajectoryEventKind.DelegationEnd) {
         broadcast({ type: EventType.DelegationEnded, data: { runId: request.runId, ...entry } })
-        sideEffects.engine.auditService
+        services.auditLog
           .log({
             actor: AuditActor.Agent,
             action: entry.status === "done" ? "delegation.completed" : "delegation.failed",
@@ -234,8 +254,8 @@ function composeExecutionTools(
   delegateCtx: DelegateContext,
   governedTools: Tool[]
 ): import("@mia/agent").ExecutableTool[] {
-  const { command, activeRun, state, tracing } = ctx
-  const { request, runtime, sideEffects } = command
+  const { request, signal, activeRun, state, tracing, interaction, messaging, services } = ctx
+  const governanceServices = createGovernanceServices(services)
   const agentName = request.agentId
     ? (db.getAgentDefinition(request.agentId)?.name ?? "Agent")
     : "Universal Agent"
@@ -243,15 +263,15 @@ function composeExecutionTools(
   const allToolsBase = composePerRunTools(governedTools, {
     runId: request.runId,
     agentName,
-    bus: runtime.bus,
+    busTools: messaging.createChildTools(request.runId, agentName),
     delegateCtx,
     govern: (tool, opts) =>
-      governTool(tool, sideEffects.engine, state, {
-        signal: runtime.controller.signal,
+      governTool(tool, governanceServices, state, {
+        signal,
         ...(opts ?? {})
       }),
     askUserResolve: (question, options, sensitive) => {
-      const match = runtime.orchestrator.clarifications.matchQuestion(request.runId, question)
+      const match = interaction.clarifications.matchQuestion(request.runId, question)
       const effectiveOptions = enforceClarificationUiOptions(options, match)
       tracing.boundSaveTrace(request.runId, {
         kind: TrajectoryEventKind.UserInputRequest,
@@ -263,9 +283,9 @@ function composeExecutionTools(
         type: EventType.UserInputRequired,
         data: { runId: request.runId, question, options: effectiveOptions ?? [], sensitive }
       })
-      if (match) runtime.orchestrator.clarifications.setPending(request.runId, match, question)
+      if (match) interaction.clarifications.setPending(request.runId, match, question)
       return new Promise<string>((resolve) => {
-        runtime.orchestrator.pendingInputs.set(request.runId, { resolve })
+        interaction.registerPendingInput(request.runId, { resolve })
       })
     },
     sessionId: activeRun?.sessionId ?? null,

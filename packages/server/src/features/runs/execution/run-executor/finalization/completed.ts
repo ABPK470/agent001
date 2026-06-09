@@ -6,7 +6,6 @@ import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../../shared/enums/trajectory.js"
 import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
-import { captureRunWorkspaceDiff } from "../../workspace-effects.js"
 import { buildPersistedToolTrace } from "../support.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
@@ -26,8 +25,8 @@ export async function finalizeCompletedRun(
 ): Promise<void> {
   const { request, runtime, sideEffects } = command
   env.state.run = completeRunPure(env.state.run)
-  await sideEffects.engine.eventBus.publish(runCompleted(env.state.run.id))
-  await sideEffects.engine.auditService.log({
+  await sideEffects.eventBus.publish(runCompleted(env.state.run.id))
+  await sideEffects.auditLog.log({
     actor: env.actor,
     action: "agent.completed",
     resourceType: "AgentRun",
@@ -42,20 +41,13 @@ export async function finalizeCompletedRun(
     }
   })
   env.persistCurrentRun(answer)
-  await persistAuditLog(sideEffects.engine, request.runId)
+  await persistAuditLog(sideEffects.auditLog, request.runId)
   persistTokenUsage(request.runId, agent)
 
   env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Answer, text: answer })
-  await captureRunWorkspaceDiff(
-    request.runId,
-    runtime.orchestrator.activeRuns,
-    runtime.orchestrator.completedRunWorkspaces,
-    runtime.orchestrator.completedRunDiffs,
-    env.boundSaveTrace,
-    createNotification
-  )
+  await runtime.workspaceStore.captureOutputDiff(request.runId, env.boundSaveTrace, createNotification)
 
-  const pendingDiff = runtime.orchestrator.completedRunDiffs.get(request.runId)
+  const pendingDiff = runtime.workspaceStore.getCompletedDiff(request.runId)
   const pendingChangeCount = pendingDiff
     ? pendingDiff.added.length + pendingDiff.modified.length + pendingDiff.deleted.length
     : 0
@@ -115,9 +107,7 @@ export async function finalizeCompletedRun(
     actions: [{ label: "View", action: NotificationActionType.ViewRun, data: { runId: request.runId } }]
   })
 
-  if (runtime.orchestrator.messageRouter) {
-    runtime.orchestrator.messageRouter.sendReply(request.runId, answer).catch((error) => {
-      console.error(`Failed to send reply for run ${request.runId}:`, error)
-    })
-  }
+  runtime.messaging.sendReply(request.runId, answer).catch((error) => {
+    console.error(`Failed to send reply for run ${request.runId}:`, error)
+  })
 }

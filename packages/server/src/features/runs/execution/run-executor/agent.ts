@@ -32,7 +32,7 @@ function createKillManager(
       env.runContext.signal = composed
       return new Promise<string>((resolve) => {
         const key = `${request.runId}:${toolCallId}`
-        runtime.orchestrator.pendingKills.set(key, { resolve, perToolCtrl })
+        runtime.interaction.registerPendingKill(key, { resolve, perToolCtrl })
         broadcast({
           type: EventType.ToolCallExecuting,
           data: { runId: request.runId, toolCallId, toolName }
@@ -41,7 +41,7 @@ function createKillManager(
     },
     unregister: (toolCallId: string) => {
       callSignals.delete(toolCallId)
-      runtime.orchestrator.pendingKills.delete(`${request.runId}:${toolCallId}`)
+      runtime.interaction.clearPendingKill(`${request.runId}:${toolCallId}`)
       env.runContext.signal = runtime.controller.signal
       broadcast({ type: EventType.ToolCallCompleted, data: { runId: request.runId, toolCallId } })
     },
@@ -55,7 +55,7 @@ function createKillManager(
 export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnvironment): Agent {
   const { request, runtime, sideEffects } = command
   const killManager = createKillManager(command, env)
-  const agent = new Agent(runtime.orchestrator.llm, env.allTools, {
+  const agent = new Agent(runtime.interaction.llm, env.allTools, {
     verbose: true,
     signal: runtime.controller.signal,
     systemMessages: env.systemMessages,
@@ -65,7 +65,13 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
     onPlannerTrace: (entry) =>
       handlePlannerTrace(entry, {
         runId: request.runId,
-        services: sideEffects.engine,
+        services: {
+          runRepo: sideEffects.runRepo,
+          auditService: sideEffects.auditLog,
+          policyEvaluator: sideEffects.policyEvaluator,
+          learner: sideEffects.learner,
+          eventBus: sideEffects.eventBus
+        },
         debugSeqRef: env.debugSeqRef,
         saveTrace: env.boundSaveTrace
       }),
@@ -204,7 +210,7 @@ export async function normalizeRunAnswer(
 
   if (isPlatformUnconfiguredAnswer(nextAnswer)) {
     const polished = await polishFailureForUser(
-      runtime.orchestrator.llm,
+      runtime.interaction.llm,
       {
         goal: request.goal,
         operatorSummary: "A required backend integration is not configured on this server.",
@@ -232,7 +238,7 @@ export async function normalizeRunAnswer(
   }
 
   try {
-    await sideEffects.engine.auditService.log({
+    await sideEffects.auditLog.log({
       actor: env.actor,
       action: "agent.user_safe_failure",
       resourceType: "AgentRun",
@@ -256,7 +262,7 @@ export async function normalizeRunAnswer(
     `[run-executor] Internal failure for run ${request.runId} (${internalFailure.kind}): ${internalFailure.summary}`
   )
   const polished = await polishFailureForUser(
-    runtime.orchestrator.llm,
+    runtime.interaction.llm,
     {
       goal: request.goal,
       operatorSummary: internalFailure.summary,

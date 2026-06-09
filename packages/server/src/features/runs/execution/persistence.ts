@@ -1,9 +1,10 @@
-import type { Agent, EngineServices } from "@mia/agent"
+import type { Agent } from "@mia/agent"
 import { EventType, RunStatus } from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import { broadcast } from "../../../platform/events/broadcaster.js"
 import * as db from "../../../platform/persistence/sqlite.js"
 import type { ActiveRun, NotificationOpts } from "../../../ports/orchestration.js"
+import type { AuditLogPort } from "./run-executor/types.js"
 // ── Trace ─────────────────────────────────────────────────────────
 
 export function saveTrace(
@@ -45,8 +46,8 @@ export function persistRun(
   })
 }
 
-export async function persistAuditLog(services: EngineServices, runId: string): Promise<void> {
-  const entries = await services.auditService.history("AgentRun", runId)
+export async function persistAuditLog(auditLog: AuditLogPort, runId: string): Promise<void> {
+  const entries = await auditLog.history("AgentRun", runId)
   for (const entry of entries) {
     db.saveAudit({
       run_id: runId,

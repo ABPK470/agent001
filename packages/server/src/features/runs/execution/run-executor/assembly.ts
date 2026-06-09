@@ -2,7 +2,7 @@ import { createRun, PolicyRole, runStarted, startRunningPure, type RunState } fr
 import { RunStatus } from "@mia/shared-enums"
 import { prepareRunWorkspace } from "../../../../bootstrap/workspace.js"
 import { wireEventBroadcasting } from "../../core/coordination/event-wiring.js"
-import { createNotification, persistRun, saveTrace } from "../persistence.js"
+import { createNotification, persistRun } from "../persistence.js"
 import type {
   DelegateToolsBundle,
   ExecuteRunCommand,
@@ -19,8 +19,8 @@ import type {
 
 export async function prepareWorkspace(command: ExecuteRunCommand): Promise<WorkspacePreparation> {
   const { request, runtime } = command
-  const baseWorkspace = runtime.orchestrator.workspace ?? process.cwd()
-  const preActiveRun = runtime.orchestrator.activeRuns.get(request.runId)
+  const baseWorkspace = runtime.workspaceRoot ?? process.cwd()
+  const preActiveRun = runtime.registry.getActiveRun(request.runId)
 
   const runWorkspace = await prepareRunWorkspace({
     runId: request.runId,
@@ -30,8 +30,8 @@ export async function prepareWorkspace(command: ExecuteRunCommand): Promise<Work
     role: preActiveRun?.role ?? PolicyRole.Admin
   })
 
-  const activeRun = runtime.orchestrator.activeRuns.get(request.runId)
-  if (activeRun) activeRun.workspace = runWorkspace
+  runtime.registry.assignWorkspace(request.runId, runWorkspace)
+  const activeRun = runtime.registry.getActiveRun(request.runId)
   return { activeRun, runWorkspace }
 }
 
@@ -56,14 +56,14 @@ export function createRunPersistence(
 ): RunPersistenceBundle {
   const { request, runtime, sideEffects } = command
   const boundSaveTrace = (runId: string, entry: Record<string, unknown>) =>
-    saveTrace(runtime.orchestrator.activeRuns, runId, entry)
+    runtime.registry.appendTrace(runId, entry)
 
   const persistCurrentRun = (answer?: string, error?: string): void => {
     persistRun(state.run, request.goal, request.agentId, request.resume?.parentRunId, answer, error)
   }
 
   const saveCurrentRun = async (): Promise<void> => {
-    await sideEffects.engine.runRepo.save(state.run)
+    await sideEffects.runRepo.save(state.run)
   }
 
   const markRunStarted = async (): Promise<void> => {
@@ -71,12 +71,12 @@ export function createRunPersistence(
     state.run = startRunningPure(state.run, state.run.steps)
     await saveCurrentRun()
     persistCurrentRun()
-    await sideEffects.engine.eventBus.publish(runStarted(state.run.id, "agent-session"))
+    await sideEffects.eventBus.publish(runStarted(state.run.id, "agent-session"))
   }
 
   const initialize = async (): Promise<void> => {
     await saveCurrentRun()
-    await sideEffects.engine.auditService.log({
+    await sideEffects.auditLog.log({
       actor,
       action: "agent.started",
       resourceType: "AgentRun",
@@ -107,7 +107,10 @@ export function wireExecutionEvents(
   boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
 ) {
   return wireEventBroadcasting(
-    command.sideEffects.engine,
+    {
+      eventBus: command.sideEffects.eventBus,
+      auditLog: command.sideEffects.auditLog
+    },
     command.request.runId,
     state,
     boundSaveTrace,

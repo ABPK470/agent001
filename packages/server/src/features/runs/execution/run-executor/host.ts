@@ -73,7 +73,7 @@ export function createPerRunHost(
   const runContext = createRunContextForExecution(activeRun, request.runId, runtime.controller)
   const policyCtx = createPolicyContext(request.runId, activeRun, runWorkspace)
   const perRunHost: AgentHost = configureAgent({
-    ...bootHostDepsToConfigureAgentOptions(runtime.orchestrator.bootHostDeps),
+    ...bootHostDepsToConfigureAgentOptions(runtime.bootHostDeps),
     attachments: createServerAttachmentService(() => policyCtx),
     browser: {
       providers: {

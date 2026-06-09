@@ -1,10 +1,21 @@
-import type { DomainEvent, EngineServices, Unsubscribe } from "@mia/agent"
+import type { DomainEvent, Unsubscribe } from "@mia/agent"
 import { EventType } from "@mia/agent"
+import { broadcast, toBroadcastData } from "../../../../platform/events/broadcaster.js"
 import * as db from "../../../../platform/persistence/sqlite.js"
+import type { NotificationOpts } from "../../../../ports/orchestration.js"
 import { NotificationActionType } from "../../../../shared/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
-import { broadcast, toBroadcastData } from "../../../../platform/events/broadcaster.js"
-import type { NotificationOpts } from "../../../../ports/orchestration.js"
+
+type EventWiringServices = {
+  eventBus: {
+    subscribe(eventType: string, listener: (event: DomainEvent) => Promise<void>): Unsubscribe
+  }
+  auditLog: {
+    subscribe(
+      listener: (entry: { actor: string; action: string; detail?: unknown }) => Promise<void>
+    ): Unsubscribe
+  }
+}
 
 type RunLike = {
   steps: Array<{
@@ -29,7 +40,7 @@ type RunStateLike = {
  * explicitly (with full data) after the agent finishes.
  */
 export function wireEventBroadcasting(
-  services: EngineServices,
+  services: EventWiringServices,
   runId: string,
   // Keep a live reference to the mutable state holder because state.run is
   // replaced immutably during execution.
@@ -135,7 +146,7 @@ export function wireEventBroadcasting(
     subscriptions.push(unsubscribe)
   }
 
-  const unsubscribeAudit = services.auditService.subscribe(async (entry) => {
+  const unsubscribeAudit = services.auditLog.subscribe(async (entry) => {
     broadcast({
       type: EventType.Audit,
       data: { actor: entry.actor, action: entry.action, detail: entry.detail ?? {} }

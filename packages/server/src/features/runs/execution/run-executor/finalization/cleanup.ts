@@ -8,7 +8,7 @@ export function cleanupExecution(
   const { request, runtime } = command
   env?.disposeEventWiring()
   releaseSlot()
-  runtime.bus.dispose()
-  runtime.orchestrator.pendingInputs.delete(request.runId)
-  runtime.orchestrator.activeRuns.delete(request.runId)
+  runtime.messaging.dispose()
+  runtime.interaction.clearPendingInput(request.runId)
+  runtime.registry.removeActiveRun(request.runId)
 }

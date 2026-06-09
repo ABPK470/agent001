@@ -7,13 +7,19 @@ import { loadPriorTurns } from "../../core/data-blocks/prior-turns.js"
 import { buildSystemMessages } from "../../core/system-messages.js"
 import type {
   ActiveRunRecord,
-  ExecuteRunCommand,
+  ExecuteRunRequestDto,
   ExecutionSystemMessagesBundle,
+  RunInteractionPort,
+  RunMessagingPort,
   RunWorkspace
 } from "./types.js"
 
 export async function buildExecutionSystemMessages(
-  command: ExecuteRunCommand,
+  input: {
+    request: ExecuteRunRequestDto
+    interaction: RunInteractionPort
+    messaging: RunMessagingPort
+  },
   envBase: {
     activeRun: ActiveRunRecord | undefined
     runWorkspace: RunWorkspace
@@ -24,7 +30,7 @@ export async function buildExecutionSystemMessages(
   },
   perTier: { working: string; episodic: string; semantic: string }
 ): Promise<ExecutionSystemMessagesBundle> {
-  const { request, runtime } = command
+  const { request, interaction, messaging } = input
   const priorTurns =
     envBase.activeRun?.sessionId &&
     envBase.activeRun?.ownerUpn &&
@@ -73,8 +79,8 @@ export async function buildExecutionSystemMessages(
         return []
       }
     })(),
-    clarifications: runtime.orchestrator.clarifications,
-    llmForClarification: runtime.orchestrator.llm,
+    clarifications: interaction.clarifications,
+    llmForClarification: interaction.llm,
     onClarificationTrace: (event) => {
       if (event.kind === "detected") {
         envBase.boundSaveTrace(request.runId, {
@@ -94,9 +100,9 @@ export async function buildExecutionSystemMessages(
       }
     },
     isAdmin: (envBase.activeRun?.role ?? PolicyRole.HostedUser) === PolicyRole.Admin,
-    hasSiblings: !!request.resume?.parentRunId || runtime.bus.history().length > 0,
+    hasSiblings: !!request.resume?.parentRunId || messaging.history().length > 0,
     siblingProgressDigest: (() => {
-      const recent = runtime.bus.history().slice(-6)
+      const recent = messaging.history().slice(-6)
       if (recent.length === 0) return ""
       return recent
         .map((message) => {

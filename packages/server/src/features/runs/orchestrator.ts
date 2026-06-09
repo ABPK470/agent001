@@ -18,7 +18,7 @@ import { migrateEffects } from "../../platform/effects/index.js"
 import { broadcast } from "../../platform/events/broadcaster.js"
 import { cleanupExpiredCache, migrateMemory } from "../../platform/persistence/index.js"
 import * as db from "../../platform/persistence/sqlite.js"
-import { AgentBus } from "../../platform/queue/agent-bus.js"
+import { AgentBus, createBusTools } from "../../platform/queue/agent-bus.js"
 import { RunPriority, RunQueue } from "../../platform/queue/run-queue.js"
 import type { MessageRouterPort } from "../../ports/channels.js"
 import type {
@@ -26,8 +26,7 @@ import type {
   AgentRunConfig,
   BootHostDeps,
   NotificationOpts,
-  OrchestratorConfig,
-  OrchestratorRunCtx
+  OrchestratorConfig
 } from "../../ports/orchestration.js"
 import { TrajectoryEventKind } from "../../shared/enums/trajectory.js"
 import { filterToolsForVisitor, getAllTools } from "../agents/tools.js"
@@ -37,7 +36,7 @@ import { createNotification, saveTrace } from "./execution/persistence.js"
 import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
 import type { ExecuteRunCommand } from "./execution/run-executor/types.js"
-import { applyRunWorkspaceDiff } from "./execution/workspace-effects.js"
+import { applyRunWorkspaceDiff, captureRunWorkspaceDiff } from "./execution/workspace-effects.js"
 
 export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestration.js"
 
@@ -171,24 +170,17 @@ export class AgentOrchestrator {
     })
     saveTrace(this.activeRuns, runId, { kind: TrajectoryEventKind.Goal, text: goal })
 
-    const command: ExecuteRunCommand = {
-      request: {
-        runId,
-        goal,
-        tools,
-        systemPrompt: config?.systemPrompt,
-        agentId,
-        priority: RunPriority.Normal
-      },
-      runtime: {
-        orchestrator: this.getCtx(),
-        controller,
-        bus
-      },
-      sideEffects: {
-        engine: services
-      }
-    }
+    const command = this.buildRunCommand({
+      runId,
+      goal,
+      tools,
+      systemPrompt: config?.systemPrompt,
+      agentId,
+      services,
+      controller,
+      bus,
+      priority: RunPriority.Normal
+    })
 
     this.executeRun(command).catch((err) => {
       console.error(`Run ${runId} crashed:`, err)
@@ -344,25 +336,18 @@ export class AgentOrchestrator {
       tools = filterToolsForVisitor(tools)
     }
 
-    const command: ExecuteRunCommand = {
-      request: {
-        runId: newRunId,
-        goal: originalRun.goal,
-        tools,
-        systemPrompt,
-        agentId: originalRun.agent_id ?? null,
-        resume: { messages, iteration, parentRunId: runId },
-        priority: RunPriority.Normal
-      },
-      runtime: {
-        orchestrator: this.getCtx(),
-        controller,
-        bus
-      },
-      sideEffects: {
-        engine: services
-      }
-    }
+    const command = this.buildRunCommand({
+      runId: newRunId,
+      goal: originalRun.goal,
+      tools,
+      systemPrompt,
+      agentId: originalRun.agent_id ?? null,
+      services,
+      controller,
+      bus,
+      resume: { messages, iteration, parentRunId: runId },
+      priority: RunPriority.Normal
+    })
 
     this.executeRun(command).catch((err) => {
       console.error(`Resumed run ${newRunId} crashed:`, err)
@@ -475,19 +460,101 @@ export class AgentOrchestrator {
     return getAllTools(host)
   }
 
-  private getCtx(): OrchestratorRunCtx {
+  private buildRunCommand(args: {
+    runId: string
+    goal: string
+    tools: Tool[]
+    systemPrompt: string | undefined
+    agentId: string | null
+    services: ReturnType<typeof createEngineServices>
+    controller: AbortController
+    bus: AgentBus
+    priority: RunPriority
+    resume?: { messages: Message[]; iteration: number; parentRunId: string }
+  }): ExecuteRunCommand {
+    const { runId, goal, tools, systemPrompt, agentId, services, controller, bus, priority, resume } = args
+
     return {
-      llm: this.llm,
-      workspace: this.workspace,
-      queue: this.queue,
-      activeRuns: this.activeRuns,
-      pendingInputs: this.pendingInputs,
-      pendingKills: this.pendingKills,
-      completedRunWorkspaces: this.completedRunWorkspaces,
-      completedRunDiffs: this.completedRunDiffs,
-      messageRouter: this.messageRouter,
-      clarifications: this.clarifications,
-      bootHostDeps: this.bootHostDeps
+      request: {
+        runId,
+        goal,
+        tools,
+        systemPrompt,
+        agentId,
+        resume,
+        priority
+      },
+      runtime: {
+        workspaceRoot: this.workspace,
+        queue: {
+          acquire: (queuedRunId, queuedPriority, signal) =>
+            this.queue.acquire(queuedRunId, queuedPriority, signal)
+        },
+        interaction: {
+          llm: this.llm,
+          clarifications: this.clarifications,
+          registerPendingInput: (pendingRunId, pending) => {
+            this.pendingInputs.set(pendingRunId, pending)
+          },
+          clearPendingInput: (pendingRunId) => {
+            this.pendingInputs.delete(pendingRunId)
+          },
+          registerPendingKill: (key, pending) => {
+            this.pendingKills.set(key, pending)
+          },
+          clearPendingKill: (key) => {
+            this.pendingKills.delete(key)
+          }
+        },
+        registry: {
+          getActiveRun: (activeRunId) => this.activeRuns.get(activeRunId),
+          assignWorkspace: (activeRunId, workspace) => {
+            const activeRun = this.activeRuns.get(activeRunId)
+            if (activeRun) activeRun.workspace = workspace
+          },
+          appendTrace: (traceRunId, entry) => {
+            saveTrace(this.activeRuns, traceRunId, entry)
+          },
+          removeActiveRun: (activeRunId) => {
+            this.activeRuns.delete(activeRunId)
+          }
+        },
+        workspaceStore: {
+          captureOutputDiff: (diffRunId, saveTraceEntry, notify) =>
+            captureRunWorkspaceDiff(
+              diffRunId,
+              this.activeRuns,
+              this.completedRunWorkspaces,
+              this.completedRunDiffs,
+              saveTraceEntry,
+              notify
+            ),
+          getCompletedDiff: (diffRunId) => this.completedRunDiffs.get(diffRunId) ?? null
+        },
+        messaging: {
+          publish: (message) => {
+            return bus.publish(message)
+          },
+          history: () => bus.history(),
+          createChildTools: (childRunId, childAgentName) => createBusTools(bus, childRunId, childAgentName),
+          sendReply: async (replyRunId, answer) => {
+            if (!this.messageRouter) return
+            await this.messageRouter.sendReply(replyRunId, answer)
+          },
+          dispose: () => {
+            bus.dispose()
+          }
+        },
+        bootHostDeps: this.bootHostDeps,
+        controller
+      },
+      sideEffects: {
+        runRepo: services.runRepo,
+        auditLog: services.auditService,
+        eventBus: services.eventBus,
+        policyEvaluator: services.policyEvaluator,
+        learner: services.learner
+      }
     }
   }
 

@@ -46,7 +46,7 @@ export async function maybeRunReflection(
       answer,
       steps: env.state.run.steps,
       recordVerdictTool: verdictTool,
-      llm: runtime.orchestrator.llm,
+      llm: runtime.interaction.llm,
       signal: runtime.controller.signal
     })
     console.log(

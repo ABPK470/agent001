@@ -95,7 +95,6 @@ import {
   isRecallableToolResult,
   loadRecentToolResults
 } from "../../platform/persistence/tool-results.js"
-import { AgentBus, createBusTools } from "../../platform/queue/agent-bus.js"
 
 export { thinkTool }
 
@@ -412,7 +411,7 @@ export function isVisitorTool(name: string): boolean {
 export interface PerRunToolContext {
   runId: string
   agentName: string
-  bus: AgentBus
+  busTools: ExecutableTool[]
   delegateCtx: DelegateContext
   /**
    * Wraps a tool with run-scoped governance. The caller binds services,
@@ -449,7 +448,7 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
   (ctx) => createDelegateTools(ctx.delegateCtx),
   // bus tools (send_message, check_messages, etc.) — needs the run-id and
   // the agent's display name so messages are attributed correctly.
-  (ctx) => createBusTools(ctx.bus, ctx.runId, ctx.agentName),
+  (ctx) => ctx.busTools,
   // ask_user — governance applied with timeoutMs:0 because the tool blocks
   // until a human responds; the default racer would kill it.
   (ctx) => [
