@@ -1,5 +1,5 @@
 /**
- * F1.10 — notification router persistence + filter matching tests.
+ * F1.10 — notification delivery routing persistence + filter matching tests.
  *
  * Adapters (email/teams/slack) perform network IO; this file exercises
  * everything *up to* the adapter dispatch:
@@ -36,10 +36,10 @@ async function setup() {
   const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  return import("../src/features/notifications/application/router.js")
+  return import("../src/features/notifications/application/delivery-routing.js")
 }
 
-describe("notifications router (F1.10)", () => {
+describe("notification delivery routing (F1.10)", () => {
   it("upsert + list + delete CRUD", async () => {
     const m = await setup()
     const r = m.upsertNotificationRoute({

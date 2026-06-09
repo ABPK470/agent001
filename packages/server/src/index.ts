@@ -41,9 +41,7 @@ import { registerAdminRoutes } from "./features/admin/routes.js"
 import { registerAgentRoutes } from "./features/agents/routes.js"
 import { registerApprovalRoutes } from "./features/approvals/routes.js"
 import { registerAttachmentRoutes } from "./features/attachments/routes.js"
-import { bootstrapAdminFromEnv } from "./features/auth/application/users.js"
-import { registerAuthRoutes } from "./features/auth/routes.js"
-import { registerIdentity } from "./features/auth/runtime/identity.js"
+import { bootstrapAdminFromEnv, registerAuthRoutes, registerIdentity } from "./features/auth/index.js"
 import { buildBrowserScript, formatBrowserReport } from "./features/browser/application/helpers.js"
 import { registerBrowserRoutes } from "./features/browser/routes.js"
 import { serverBrowserCredentialProvider } from "./features/browser/runtime/credential-provider.js"
@@ -56,23 +54,24 @@ import { registerLlmRoutes } from "./features/llm/routes.js"
 import { registerMemoryRoutes } from "./features/memory/routes.js"
 import { registerMetricsRoutes } from "./features/metrics/routes.js"
 import { registerMymiRoutes } from "./features/mymi/routes.js"
-import { dispatchNotification } from "./features/notifications/application/router.js"
+import { dispatchNotification } from "./features/notifications/application/delivery-routing.js"
 import { registerNotificationRoutes } from "./features/notifications/routes.js"
-import { registerNotificationRouteRoutes } from "./features/notifications/transport/route-rules.js"
+import { registerNotificationManagementRoutes } from "./features/notifications/transport/management-routes.js"
 import { registerOperationRoutes } from "./features/operations/routes.js"
 import { seedDefaultPoliciesIfMissing } from "./features/policies/application/policy-seeder.js"
 import { registerPolicyRoutes } from "./features/policies/routes.js"
 import { registerProfileRoutes } from "./features/profile/routes.js"
-import { registerProposerRoutes } from "./features/proposer/routes.js"
-import { startScheduler, stopScheduler } from "./features/proposer/runtime/scheduler.js"
+import { registerProposerRoutes, startScheduler, stopScheduler } from "./features/proposer/index.js"
 import { AgentOrchestrator } from "./features/runs/orchestrator.js"
 import { registerRunRoutes } from "./features/runs/routes.js"
-import { ensureSyncDefinitionConfigs } from "./features/sync/application/definitions.js"
-import { registerSyncRoutes } from "./features/sync/routes.js"
-import { loadPersistedSyncEnvironments } from "./features/sync/runtime/live-environments.js"
-import { registerFreezeWindowRoutes } from "./features/sync/transport/admin.js"
-import { registerEntityRegistryRoutes } from "./features/sync/transport/definitions-routes.js"
-import { registerSyncEnvironmentRoutes } from "./features/sync/transport/environments.js"
+import {
+  ensureSyncDefinitionConfigs,
+  loadPersistedSyncEnvironments,
+  registerEntityRegistryRoutes,
+  registerFreezeWindowRoutes,
+  registerSyncEnvironmentRoutes,
+  registerSyncRoutes
+} from "./features/sync/index.js"
 import { registerToolCacheRoutes } from "./features/tool-cache/routes.js"
 import { registerUsageRoutes } from "./features/usage/routes.js"
 import { registerWebhookRoutes } from "./features/webhooks/routes.js"
@@ -778,7 +777,7 @@ async function buildApp(opts: AppOpts) {
   registerFreezeWindowRoutes(app)
   registerEvidenceRoutes(app, { storageRoot: evidenceStorageRoot, signer: evidenceSigner })
   registerMetricsRoutes(app)
-  registerNotificationRouteRoutes(app)
+  registerNotificationManagementRoutes(app)
   registerAdminRoutes(app, orchestrator)
 
   app.get("/api/health", async () => ({

@@ -1,5 +1,5 @@
 /**
- * Notification route management transport routes.
+ * Notification management transport routes.
  */
 
 import { EventType } from "@mia/shared-enums"
@@ -12,7 +12,7 @@ import {
   upsertNotificationRoute,
   type NotificationChannel,
   type NotificationFilter
-} from "../application/router.js"
+} from "../application/delivery-routing.js"
 
 const DEFAULT_TENANT_ID = "_default"
 
@@ -22,7 +22,7 @@ function resolveTenant(req: FastifyRequest): string {
   return DEFAULT_TENANT_ID
 }
 
-export function registerNotificationRouteRoutes(app: FastifyInstance): void {
+export function registerNotificationManagementRoutes(app: FastifyInstance): void {
   app.get<{ Querystring: { tenant?: string } }>("/api/notification-routes", async (req) =>
     listNotificationRoutes(resolveTenant(req))
   )

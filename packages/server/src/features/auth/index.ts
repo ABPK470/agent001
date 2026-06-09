@@ -1,5 +1,6 @@
 export * from "./application/access.js"
 export * from "./application/users.js"
+export * from "./routes.js"
 export * from "./runtime/context.js"
 export * from "./runtime/identity.js"
 export * from "./runtime/session.js"

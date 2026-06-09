@@ -1,5 +1,5 @@
 /**
- * F1.10 — Notification router + persistence.
+ * F1.10 — Notification delivery routing + persistence.
  *
  * Routes are stored in `notification_routes`; deliveries are logged in
  * `notification_log`. Each delivery is attempted up to `MAX_ATTEMPTS`

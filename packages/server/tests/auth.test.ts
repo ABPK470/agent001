@@ -29,9 +29,8 @@ const ORIGINAL_SECRET = process.env["MIA_SESSION_SECRET"]
 
 async function buildApp(): Promise<FastifyInstance> {
   const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
-  const { registerIdentity } = await import("../src/features/auth/runtime/identity.js")
-  const { registerAuthRoutes } = await import("../src/features/auth/routes.js")
-  const { registerLocalUser } = await import("../src/features/auth/application/users.js")
+  const { registerAuthRoutes, registerIdentity, registerLocalUser } =
+    await import("../src/features/auth/index.js")
   _setDb(testDb)
   _migrate(testDb)
   // Seed a sentinel admin so the first-user-becomes-admin auto-promotion
