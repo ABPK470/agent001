@@ -108,10 +108,6 @@ export type ExecuteRunCommand = {
   sideEffects: ExecuteRunSideEffectServices
 }
 
-export type AgentRef = {
-  current: Agent | null
-}
-
 export type ProgressState = {
   lastMessages: Message[]
   lastIteration: number
@@ -146,7 +142,6 @@ export type PerRunHostBundle = {
   perRunHost: AgentHost
   policyCtx: HostedPolicyContext
   debugSeqRef: { value: number }
-  agentRef: AgentRef
 }
 
 export type ToolResolution = {
@@ -173,7 +168,7 @@ export type DelegateRuntimeContext = {
   state: RunState
   runContext: ReturnType<typeof import("@mia/agent").makeRunContext>
   perRunHost: AgentHost
-  agentRef: AgentRef
+  getParentAgent: () => Agent | null
   llm: LLMClient
   queue: RunQueuePort
   interaction: RunInteractionPort
@@ -208,5 +203,4 @@ export type ExecutionEnvironment = {
   delegateCtx: DelegateContext
   allTools: ExecutableTool[]
   systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages.js").buildSystemMessages>>
-  agentRef: AgentRef
 }

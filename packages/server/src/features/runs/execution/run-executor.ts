@@ -17,9 +17,10 @@ export async function executeRunImpl(command: ExecuteRunCommand): Promise<void> 
 
   let env: ExecutionEnvironment | undefined
   let agent: ReturnType<typeof createRunAgent> | undefined
+  const getParentAgent = (): ReturnType<typeof createRunAgent> | null => agent ?? null
 
   try {
-    env = await prepareExecutionEnvironment(command)
+    env = await prepareExecutionEnvironment(command, getParentAgent)
     agent = createRunAgent(command, env)
 
     await env.markRunStarted()

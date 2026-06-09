@@ -106,7 +106,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
     runContext,
     perRunHost,
     state,
-    agentRef,
+    getParentAgent,
     llm,
     queue,
     messaging,
@@ -227,7 +227,7 @@ function buildDelegateContext(ctx: DelegateRuntimeContext, governedTools: Tool[]
           t: childUsage.totalTokens,
           l: childLlmCalls
         })
-        const agent = agentRef.current
+        const agent = getParentAgent()
         if (!agent) return
         agent.usage.promptTokens = totalPrompt
         agent.usage.completionTokens = totalCompletion

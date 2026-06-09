@@ -19,7 +19,7 @@ import {
 import { createServerBrowserCredentialProvider } from "../../../browser/credential-provider.js"
 import { createServerBrowserHandoffProvider } from "../../../browser/handoff-provider.js"
 import { createServerBrowserContextProvider } from "../../../browser/provider.js"
-import type { ActiveRunRecord, AgentRef, ExecuteRunCommand, PerRunHostBundle, RunWorkspace } from "./types.js"
+import type { ActiveRunRecord, ExecuteRunCommand, PerRunHostBundle, RunWorkspace } from "./types.js"
 
 function createRunContextForExecution(
   activeRun: ActiveRunRecord | undefined,
@@ -101,7 +101,6 @@ export function createPerRunHost(
   })
 
   const debugSeqRef = { value: 0 }
-  const agentRef: AgentRef = { current: null }
 
-  return { runContext, perRunHost, policyCtx, debugSeqRef, agentRef }
+  return { runContext, perRunHost, policyCtx, debugSeqRef }
 }

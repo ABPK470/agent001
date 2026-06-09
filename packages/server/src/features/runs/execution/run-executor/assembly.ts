@@ -143,7 +143,6 @@ export function assembleExecutionEnvironment(input: {
     toolDecision: input.tools.toolDecision,
     delegateCtx: input.delegateCtx.delegateCtx,
     allTools: input.delegateCtx.allTools,
-    systemMessages: input.systemMessages.systemMessages,
-    agentRef: input.host.agentRef
+    systemMessages: input.systemMessages.systemMessages
   }
 }

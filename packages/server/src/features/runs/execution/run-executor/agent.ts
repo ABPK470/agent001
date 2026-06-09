@@ -147,8 +147,7 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
         env.boundSaveTrace(request.runId, { kind: TrajectoryEventKind.Thinking, text: content })
         broadcast({ type: EventType.AgentThinking, data: { runId: request.runId, content, iteration } })
       }
-      const currentAgent = env.agentRef.current
-      if (!currentAgent) return
+      const currentAgent = agent
       const iterationTokens = currentAgent.usage.totalTokens - env.progress.prevTotalTokens
       env.progress.prevTotalTokens = currentAgent.usage.totalTokens
       const usageEntry = {
@@ -196,7 +195,6 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
     }
   })
 
-  env.agentRef.current = agent
   return agent
 }
 
