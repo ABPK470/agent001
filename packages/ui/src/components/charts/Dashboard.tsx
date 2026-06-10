@@ -6,6 +6,7 @@
 import type React from "react"
 import { InlineDiagram, isDiagramLang } from "../InlineDiagram"
 import { renderChart, type ChartKind } from "./index"
+import { normalizeDashboardData } from "./normalizeDashboard"
 
 export interface DashboardItem {
   kind: ChartKind | "relationships" | "flow" | "text"
@@ -20,14 +21,17 @@ export interface DashboardData {
 }
 
 export function Dashboard({ data }: { data: DashboardData }): React.ReactElement {
-  const items = data.items ?? []
+  const normalized = normalizeDashboardData(data)
+  const items = normalized.items ?? []
+  const title = normalized.title ?? data.title
+  const subtitle = normalized.subtitle ?? data.subtitle
 
   return (
     <div className="rounded-lg overflow-hidden border border-border">
-      {(data.title || data.subtitle) && (
+      {(title || subtitle) && (
         <div className="px-3 py-2 border-b border-border-subtle flex items-baseline gap-2 flex-wrap">
-          {data.title && <div className="text-sm font-bold text-text">{data.title}</div>}
-          {data.subtitle && <div className="text-sm text-text-muted">{data.subtitle}</div>}
+          {title && <div className="text-sm font-bold text-text">{title}</div>}
+          {subtitle && <div className="text-sm text-text-muted">{subtitle}</div>}
           <div className="ml-auto text-[10px] text-text-muted font-mono uppercase tracking-wide">dashboard</div>
         </div>
       )}

@@ -11,6 +11,7 @@ import { getEnvironments } from "../../domain/environments.js"
 import type { EntityType } from "../../domain/recipes.js"
 import { getPool, type SyncRuntimeHost } from "../../ports/index.js"
 import { executeSync, previewSync, searchEntities } from "./orchestrator/index.js"
+import { formatSyncPreviewDashboardFence } from "./preview-dashboard.js"
 import { loadPlan } from "./plan-store.js"
 
 const VALID_ENTITY_TYPES = new Set<EntityType>([
@@ -298,6 +299,10 @@ function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
         }
         lines.push(``)
         lines.push(`Open the env-sync widget for the full visual diff.`)
+        lines.push(``)
+        lines.push(`Include this dashboard block verbatim in your answer:`)
+        lines.push(formatSyncPreviewDashboardFence(plan))
+        lines.push(``)
         lines.push(`Apply command:`)
         lines.push(`sync_execute planId="${plan.planId}" confirm=true`)
         return lines.join("\n")
