@@ -392,6 +392,40 @@ textarea.input {
   100% { background-position: 100px 0; }
 }
 
+/* ── Sync widget — live search ring ───────────────────────────── */
+
+@keyframes search-live-ring-spin {
+  to { transform: rotate(360deg); }
+}
+
+.search-live-ring {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+
+.search-live-ring::before {
+  content: "";
+  position: absolute;
+  inset: -120%;
+  background: conic-gradient(
+    from 0deg,
+    transparent 0deg 50deg,
+    color-mix(in srgb, var(--accent) 18%, transparent) 80deg,
+    var(--accent) 130deg,
+    color-mix(in srgb, var(--accent) 18%, transparent) 180deg,
+    transparent 230deg 360deg
+  );
+  animation: search-live-ring-spin 1.35s linear infinite;
+  z-index: 0;
+}
+
+.search-live-ring__inner {
+  position: relative;
+  z-index: 1;
+  background: var(--canvas);
+}
+
 /* ── Logo eye animations ───────────────────────────────────────── */
 
 @keyframes eye-blink-dark {

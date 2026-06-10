@@ -307,9 +307,15 @@ export const api = {
   syncEnvironments: () => json<SyncEnvironment[]>("/api/sync/environments"),
   syncDefinitions: () => json<PublishedSyncDefinition[]>("/api/sync/definitions"),
   publishSyncDefinitions: () => json<PublishSyncDefinitionsResponse>("/api/sync/definitions/publish", { method: "POST" }),
-  syncSearch: (params: { entityType: SyncEntityType; source: string; q: string; limit?: number }) =>
+  syncSearch: (params: {
+    entityType: SyncEntityType
+    source: string
+    q: string
+    limit?: number
+    mode?: "name" | "id"
+  }) =>
     json<Array<{ id: string | number; name: string | null }>>(
-      `/api/sync/search?entityType=${encodeURIComponent(params.entityType)}&source=${encodeURIComponent(params.source)}&q=${encodeURIComponent(params.q)}${params.limit ? `&limit=${params.limit}` : ""}`,
+      `/api/sync/search?entityType=${encodeURIComponent(params.entityType)}&source=${encodeURIComponent(params.source)}&q=${encodeURIComponent(params.q)}${params.mode ? `&mode=${encodeURIComponent(params.mode)}` : ""}${params.limit ? `&limit=${params.limit}` : ""}`,
     ),
   syncPreview: (params: { entityType: SyncEntityType; entityId: string | number; source: string; target: string; force?: boolean; enabledOptionalTables?: string[] }) =>
     json<SyncPlan & { error?: string }>("/api/sync/preview", { method: "POST", body: JSON.stringify(params) }),

@@ -99,16 +99,22 @@ export function EnvSync() {
     setDisplayLabel(null)
     setSearchErr(null)
     setForm({ entityId: value })
-    if (searchMode !== "name" || !value.trim() || !source) {
+    if (!value.trim() || !source) {
       setSearchResults([])
       setSearchOpen(false)
+      setSearchLoading(false)
       return
     }
     if (searchTimerRef.current) clearTimeout(searchTimerRef.current)
+    setSearchLoading(true)
     searchTimerRef.current = setTimeout(async () => {
-      setSearchLoading(true)
       try {
-        const hits = await api.syncSearch({ entityType, source, q: value.trim() })
+        const hits = await api.syncSearch({
+          entityType,
+          source,
+          q: value.trim(),
+          mode: searchMode,
+        })
         setSearchResults(hits)
         setSearchOpen(hits.length > 0)
         if (hits.length === 0) setSearchErr("No matches")
@@ -308,37 +314,43 @@ export function EnvSync() {
             </button>
 
             <div className="relative flex-1 min-w-0" ref={searchBoxRef}>
-              <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted/40 pointer-events-none" />
-              <input
-                value={displayLabel ?? entityId}
-                onChange={(e) => onSearchInput(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && void onPreview()}
-                onFocus={() => { if (searchMode === "name" && searchResults.length) setSearchOpen(true) }}
-                placeholder={searchMode === "id" ? (definition?.idColumn ?? "id") : (definition?.labelColumn ?? "name")}
-                className={`w-full bg-base text-text text-sm pl-7 pr-2 py-1.5 rounded border border-border-subtle outline-none focus:border-accent placeholder:text-text-muted/40 ${displayLabel ? "" : "font-mono"}`}
-              />
-              {searchLoading && (
-                <Loader2 size={12} className="absolute right-2 top-1/2 -translate-y-1/2 animate-spin text-text-muted/40" />
-              )}
-              {searchOpen && searchResults.length > 0 && (
-                <div className="absolute top-full left-0 mt-1 w-full max-w-[24rem] max-h-[min(280px,50vh)] overflow-y-auto bg-elevated border border-border rounded shadow-lg z-50">
-                  {searchResults.map((hit) => (
-                    <button
-                      key={String(hit.id)}
-                      onClick={() => pickSearchHit(hit)}
-                      className="w-full text-left px-3 py-1.5 text-sm hover:bg-surface transition-colors flex items-center gap-3"
-                    >
-                      <span className="text-text-muted font-mono text-sm shrink-0">{String(hit.id)}</span>
-                      <span className="truncate">{hit.name ?? "—"}</span>
-                    </button>
-                  ))}
+              <div className={searchLoading ? "search-live-ring rounded-md p-[1.5px]" : "rounded-md"}>
+                <div className={searchLoading ? "search-live-ring__inner relative rounded-[calc(0.375rem-1.5px)]" : "relative"}>
+                  <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted/40 pointer-events-none z-10" />
+                  <input
+                    value={displayLabel ?? entityId}
+                    onChange={(e) => onSearchInput(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && void onPreview()}
+                    onFocus={() => { if (searchResults.length) setSearchOpen(true) }}
+                    placeholder={searchMode === "id" ? (definition?.idColumn ?? "id") : (definition?.labelColumn ?? "name")}
+                    aria-busy={searchLoading}
+                    className={[
+                      "w-full bg-base text-text text-sm pl-7 pr-2 py-1.5 rounded-md outline-none placeholder:text-text-muted/40",
+                      searchLoading ? "border border-transparent" : "border border-border-subtle focus:border-accent",
+                      displayLabel ? "" : "font-mono",
+                    ].join(" ")}
+                  />
+                  {searchOpen && searchResults.length > 0 && (
+                    <div className="absolute top-full left-0 mt-1 w-full max-w-[24rem] max-h-[min(280px,50vh)] overflow-y-auto bg-elevated border border-border rounded shadow-lg z-50">
+                      {searchResults.map((hit) => (
+                        <button
+                          key={String(hit.id)}
+                          onClick={() => pickSearchHit(hit)}
+                          className="w-full text-left px-3 py-1.5 text-sm hover:bg-surface transition-colors flex items-center gap-3"
+                        >
+                          <span className="text-text-muted font-mono text-sm shrink-0">{String(hit.id)}</span>
+                          <span className="truncate">{hit.name ?? "—"}</span>
+                        </button>
+                      ))}
+                    </div>
+                  )}
+                  {!searchOpen && !searchLoading && searchErr && (
+                    <div className="absolute top-full left-0 mt-1 w-64 bg-elevated border border-border rounded shadow-lg z-50 px-3 py-2 text-xs text-text-muted">
+                      {searchErr}
+                    </div>
+                  )}
                 </div>
-              )}
-              {!searchOpen && !searchLoading && searchErr && (
-                <div className="absolute top-full left-0 mt-1 w-64 bg-elevated border border-border rounded shadow-lg z-50 px-3 py-2 text-xs text-text-muted">
-                  {searchErr}
-                </div>
-              )}
+              </div>
             </div>
 
             {compact ? (

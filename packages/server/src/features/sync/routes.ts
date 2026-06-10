@@ -309,17 +309,25 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       }
     }
   )
-  app.get<{ Querystring: { entityType: string; source: string; q: string; limit?: string } }>(
+  app.get<{ Querystring: { entityType: string; source: string; q: string; limit?: string; mode?: string } }>(
     "/api/sync/search",
     async (req, reply) => {
       rebuildLiveSyncEnvironments(host)
-      const { entityType, source, q, limit } = req.query
+      const { entityType, source, q, limit, mode } = req.query
       if (!entityType || !source || !q) {
         reply.code(400)
         return { error: "entityType, source, and q are required" }
       }
+      const searchMode = mode === "id" ? "id" : "name"
       try {
-        return await searchEntities(host, entityType as EntityType, source, q, limit ? Number(limit) : 200)
+        return await searchEntities(
+          host,
+          entityType as EntityType,
+          source,
+          q,
+          limit ? Number(limit) : 200,
+          searchMode
+        )
       } catch (error) {
         reply.code(400)
         return { error: error instanceof Error ? error.message : String(error) }

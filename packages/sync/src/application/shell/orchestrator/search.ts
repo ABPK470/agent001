@@ -20,6 +20,8 @@ export interface EntitySearchResult {
   name: string | null
 }
 
+export type EntitySearchMode = "name" | "id"
+
 function invalidRootNameColumnError(recipe: SyncRecipe, columns: string[]): Error {
   const detail =
     columns.length > 0
@@ -73,7 +75,9 @@ async function resolveDisplayColumn(
 }
 
 /**
- * Search for entities by name in the root table of a recipe.
+ * Search for entities in the root table of a recipe.
+ * `name` mode — case-insensitive substring on the display column.
+ * `id` mode — prefix match on the primary key (as the user types digits).
  * Returns up to `limit` matches from the source environment.
  */
 export async function searchEntities(
@@ -81,16 +85,37 @@ export async function searchEntities(
   entityType: EntityType,
   source: string,
   query: string,
-  limit = 200
+  limit = 200,
+  mode: EntitySearchMode = "name"
 ): Promise<EntitySearchResult[]> {
   const recipe = definitionToSyncRecipe(getPublishedSyncDefinition(host, projectRoot(host), entityType))
   const displayColumn = await resolveDisplayColumn(host, source, recipe)
   const { pool } = await getPool(host, source)
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")
+  const capped = Math.min(limit, 500)
+
+  if (mode === "id") {
+    const r = await pool
+      .request()
+      .input("q", sqlMod.NVarChar(100), `${safeLike}%`)
+      .input("limit", sqlMod.Int, capped).query(`
+        SELECT TOP (@limit)
+          [${recipe.rootKeyColumn}] AS id,
+          [${displayColumn}] AS name
+        FROM ${qtable(recipe.rootTable)} WITH (NOLOCK)
+        WHERE CAST([${recipe.rootKeyColumn}] AS NVARCHAR(100)) LIKE @q
+        ORDER BY [${recipe.rootKeyColumn}]
+      `)
+    return r.recordset.map((row: Record<string, unknown>) => ({
+      id: row.id as string | number,
+      name: (row.name as string | null) ?? null
+    }))
+  }
+
   const r = await pool
     .request()
     .input("q", sqlMod.NVarChar(400), `%${safeLike}%`)
-    .input("limit", sqlMod.Int, Math.min(limit, 500)).query(`
+    .input("limit", sqlMod.Int, capped).query(`
       SELECT TOP (@limit)
         [${recipe.rootKeyColumn}] AS id,
         [${displayColumn}] AS name
