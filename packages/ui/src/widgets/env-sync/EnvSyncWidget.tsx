@@ -60,7 +60,7 @@ export function EnvSync() {
   const [searchLoading, setSearchLoading] = useState(false)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchBoxRef = useRef<HTMLDivElement>(null)
-  const [displayLabel, setDisplayLabel] = useState<string | null>(null)
+  const [searchDraft, setSearchDraft] = useState("")
 
   const srcEnv = useMemo(() => envs.find((entry) => entry.name === source) ?? null, [envs, source])
   const tgtEnv = useMemo(() => envs.find((entry) => entry.name === target) ?? null, [envs, target])
@@ -69,7 +69,9 @@ export function EnvSync() {
     () => normalizeOptionalTableSelection(definition, form.enabledOptionalTables),
     [definition, form.enabledOptionalTables],
   )
-  const formSig = `${source}|${target}|${entityType}|${entityId}|${force}|${searchMode}|${[...enabledOptionalTables].sort().join(",")}`
+  const resolvedEntityId = entityId.trim() || (plan ? String(plan.entity.id) : "")
+  const formSig = `${source}|${target}|${entityType}|${resolvedEntityId}|${force}|${searchMode}|${[...enabledOptionalTables].sort().join(",")}`
+  const previewEntityId = entityId.trim() || searchDraft.trim()
 
   useEffect(() => {
     if (!definition) return
@@ -96,9 +98,8 @@ export function EnvSync() {
   }, [])
 
   function onSearchInput(value: string) {
-    setDisplayLabel(null)
     setSearchErr(null)
-    setForm({ entityId: value })
+    setSearchDraft(value)
     if (!value.trim() || !source) {
       setSearchResults([])
       setSearchOpen(false)
@@ -130,7 +131,7 @@ export function EnvSync() {
 
   function pickSearchHit(hit: SearchHit) {
     setForm({ entityId: String(hit.id) })
-    setDisplayLabel(hit.name ? `${hit.name} (${hit.id})` : String(hit.id))
+    setSearchDraft("")
     setSearchOpen(false)
     setSearchResults([])
     setSearchErr(null)
@@ -170,17 +171,16 @@ export function EnvSync() {
       setPlan(nextPlan)
       setPreviewErr(null)
       setExpanded(new Set())
-      const entityName = nextPlan.entity.displayName ?? null
       const entityIdStr = String(nextPlan.entity.id)
       const planEntityType = getPlanEntityType(nextPlan) ?? form.entityType
       setForm({
         source: nextPlan.source,
         target: nextPlan.target,
         entityType: planEntityType,
-        entityId: entityIdStr,
+        entityId: "",
         enabledOptionalTables: nextPlan.recipeSnapshot?.enabledOptionalTables ?? null,
       })
-      if (entityName) setDisplayLabel(`${entityName} (${entityIdStr})`)
+      setSearchDraft("")
       const hydratedDefinition = definitions.find((entry) => entry.id === planEntityType) ?? null
       planSigRef.current = `${nextPlan.source}|${nextPlan.target}|${planEntityType}|${entityIdStr}|${force}|${searchMode}|${[...normalizeOptionalTableSelection(hydratedDefinition, nextPlan.recipeSnapshot?.enabledOptionalTables ?? null)].sort().join(",")}`
       if (!isFirstMountRef.current) setHasNewAgentSync(true)
@@ -214,7 +214,7 @@ export function EnvSync() {
   const blocker =
     !source || !target ? "Pick source + target"
       : source === target ? "Source ≠ target"
-        : !entityId.trim() ? `Enter ${searchMode === "name" ? (definition?.labelColumn ?? "name") : (definition?.idColumn ?? "id")}`
+        : !previewEntityId ? `Enter ${searchMode === "name" ? (definition?.labelColumn ?? "name") : (definition?.idColumn ?? "id")}`
           : !definition ? "No published definition" : null
   const canPreview = !blocker && !previewing
 
@@ -227,7 +227,7 @@ export function EnvSync() {
     setExpanded(new Set())
     planSigRef.current = null
     try {
-      const id: string | number = /^\d+$/.test(entityId.trim()) ? Number(entityId.trim()) : entityId.trim()
+      const id: string | number = /^\d+$/.test(previewEntityId) ? Number(previewEntityId) : previewEntityId
       const requestEnabledOptionalTables = Array.isArray(form.enabledOptionalTables) ? enabledOptionalTables : undefined
       const result = await api.syncPreview({ entityType, entityId: id, source, target, force, enabledOptionalTables: requestEnabledOptionalTables })
       if (result.error) {
@@ -237,7 +237,8 @@ export function EnvSync() {
         loadedPlanIdRef.current = result.planId
         planSigRef.current = formSig
         setPlan(result)
-        setForm({ planId: result.planId })
+        setForm({ planId: result.planId, entityId: String(result.entity.id) })
+        setSearchDraft("")
       }
     } catch (error) {
       setPreviewErr(error instanceof Error ? error.message : String(error))
@@ -300,12 +301,29 @@ export function EnvSync() {
 
             {!stacked && <div className="h-4 w-px bg-overlay-3 shrink-0" />}
 
-            <Listbox value={entityType} options={entOpts} onChange={(value) => setForm({ entityType: value })} size="md" variant="ghost" ariaLabel="Entity type" />
+            <Listbox
+              value={entityType}
+              options={entOpts}
+              onChange={(value) => {
+                setForm({ entityType: value, entityId: "" })
+                setSearchDraft("")
+                setSearchResults([])
+                setSearchOpen(false)
+              }}
+              size="md"
+              variant="ghost"
+              ariaLabel="Entity type"
+            />
           </div>
 
           <div className={`flex items-center gap-2 ${stacked ? "w-full" : "flex-1 min-w-0"}`}>
             <button
-              onClick={() => { setForm({ searchMode: searchMode === "id" ? "name" : "id", entityId: "" }); setDisplayLabel(null); setSearchResults([]); setSearchOpen(false) }}
+              onClick={() => {
+                setForm({ searchMode: searchMode === "id" ? "name" : "id", entityId: "" })
+                setSearchDraft("")
+                setSearchResults([])
+                setSearchOpen(false)
+              }}
               className={`flex items-center justify-center gap-1 text-sm text-text-muted/60 hover:text-text py-1 rounded hover:bg-elevated transition-colors select-none shrink-0 ${tiny ? "w-9" : "w-16"}`}
               title={searchMode === "id" ? "Switch to name search" : "Switch to ID search"}
             >
@@ -318,16 +336,15 @@ export function EnvSync() {
                 <div className={searchLoading ? "search-live-ring__inner relative rounded-[calc(0.375rem-1.5px)]" : "relative"}>
                   <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted/40 pointer-events-none z-10" />
                   <input
-                    value={displayLabel ?? entityId}
+                    value={searchDraft}
                     onChange={(e) => onSearchInput(e.target.value)}
                     onKeyDown={(e) => e.key === "Enter" && void onPreview()}
                     onFocus={() => { if (searchResults.length) setSearchOpen(true) }}
                     placeholder={searchMode === "id" ? (definition?.idColumn ?? "id") : (definition?.labelColumn ?? "name")}
                     aria-busy={searchLoading}
                     className={[
-                      "w-full bg-base text-text text-sm pl-7 pr-2 py-1.5 rounded-md outline-none placeholder:text-text-muted/40",
+                      "w-full bg-base text-text text-sm pl-7 pr-2 py-1.5 rounded-md outline-none placeholder:text-text-muted/40 font-mono",
                       searchLoading ? "border border-transparent" : "border border-border-subtle focus:border-accent",
-                      displayLabel ? "" : "font-mono",
                     ].join(" ")}
                   />
                   {searchOpen && searchResults.length > 0 && (

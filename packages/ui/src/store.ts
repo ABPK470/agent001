@@ -1388,7 +1388,7 @@ export const useStore = create<AppState>()(
               source: data["source"] as string || store.envSyncForm.source,
               target: data["target"] as string || store.envSyncForm.target,
               entityType: data["entityType"] as string || store.envSyncForm.entityType,
-              entityId: String(data["entityId"] ?? "") || store.envSyncForm.entityId,
+              entityId: "",
             })
             break
           }
@@ -1748,6 +1748,7 @@ export const useStore = create<AppState>()(
           envSyncForm: {
             ...DEFAULT_ENV_SYNC_FORM,
             ...(persisted.envSyncForm ?? {}),
+            entityId: "",
             planId: null,
           },
         }
@@ -1757,7 +1758,7 @@ export const useStore = create<AppState>()(
         activeViewId: state.activeViewId,
         selectedAgentId: state.selectedAgentId,
         ioeLayout: state.ioeLayout,
-        envSyncForm: { ...state.envSyncForm, planId: null },
+        envSyncForm: { ...state.envSyncForm, entityId: "", planId: null },
       }),
     },
   ),

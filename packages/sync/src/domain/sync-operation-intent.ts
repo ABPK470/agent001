@@ -12,6 +12,7 @@ import {
   type PublishedSyncDefinition
 } from "./published-definitions.js"
 import type { SyncEnvironmentRegistryHost, SyncProjectRootHost } from "../ports/index.js"
+import { parseEntityInstanceRef } from "./entity-instance-ref.js"
 import { splitIdentifierTokens } from "./operational-vocabulary.js"
 
 export interface SyncOperationIntent {
@@ -142,13 +143,10 @@ export function parseSyncOperationIntent(
   const entityHit = findEntityTypeAlias(text, aliasMap)
   if (!entityHit) return null
 
-  const instanceRef = extractInstanceRef(text, entityHit.alias)
-  let entityQuery: string | null = instanceRef
-  let entityId: string | null = null
-  if (instanceRef && /^\d+$/.test(instanceRef.replace(/\s+/g, ""))) {
-    entityId = instanceRef.replace(/\s+/g, "")
-    entityQuery = null
-  }
+  const instanceRaw = extractInstanceRef(text, entityHit.alias)
+  const parsedInstance = instanceRaw ? parseEntityInstanceRef(instanceRaw) : null
+  const entityQuery = parsedInstance?.entityQuery ?? null
+  const entityId = parsedInstance?.entityId ?? null
 
   const vocabulary = new Set<string>()
   for (const def of definitions) {
@@ -164,7 +162,7 @@ export function parseSyncOperationIntent(
   const reservedTokens = buildReservedTokens(
     text,
     entityHit.alias,
-    instanceRef,
+    instanceRaw,
     source,
     target,
     vocabulary
@@ -200,7 +198,10 @@ export function formatSyncOperationIntentBlock(intent: SyncOperationIntent): str
     `route: ${intent.source} → ${intent.target}`
   ]
   if (intent.entityId) {
-    lines.push(`entityId: ${intent.entityId}`)
+    lines.push(`entityId: ${intent.entityId} (primary key on the recipe root table — e.g. metaTable.id for gateMetadata)`)
+    lines.push(
+      "Call sync_preview directly with this entityId. Do NOT call search_sync_entities — the id is already known."
+    )
   } else if (intent.entityQuery) {
     lines.push(
       `entity instance name: "${intent.entityQuery}" — resolve with search_sync_entities { entityType, source, q } on the source environment.`
@@ -208,13 +209,18 @@ export function formatSyncOperationIntentBlock(intent: SyncOperationIntent): str
     lines.push(
       "This is a row label in the sync recipe root table (e.g. core.Contract.name), NOT a warehouse catalog table."
     )
+    lines.push(
+      "If q is numeric or tableId=/id= form, search_sync_entities resolves by primary key automatically."
+    )
   } else {
     lines.push("entity instance: not specified — use search_sync_entities if the user gave a name.")
   }
   lines.push(
     "Do NOT call ask_user to pick catalog tables for the entity name or entity type. Do NOT use search_catalog for sync lookup."
   )
-  lines.push("Workflow: search_sync_entities (when name given) → sync_preview → present plan and STOP.")
+  lines.push(
+    "Workflow: search_sync_entities only when the display name must be resolved → sync_preview → present plan and STOP."
+  )
   lines.push("</sync_operation_intent>")
   return lines.join("\n")
 }

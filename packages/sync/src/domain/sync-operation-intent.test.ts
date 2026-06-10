@@ -77,6 +77,16 @@ describe("parseSyncOperationIntent", () => {
     expect(intent?.entityQuery).toBe("MyPipe")
   })
 
+  it("parses numeric contract id without name search", () => {
+    const intent = parseSyncOperationIntent(
+      "sync contract 2545 from uat to dev",
+      definitions,
+      environments
+    )
+    expect(intent?.entityId).toBe("2545")
+    expect(intent?.entityQuery).toBeNull()
+  })
+
   it("returns null without sync verb or env route", () => {
     expect(parseSyncOperationIntent("show contract abcd", definitions, environments)).toBeNull()
     expect(parseSyncOperationIntent("sync contract abcd", definitions, environments)).toBeNull()

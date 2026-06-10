@@ -9,7 +9,8 @@ Workflow — always preview-first:
 2. Resolve the entity instance before preview:
    - entityType must be a published definition id from the bundle (see above).
    - source / target must be configured environment names.
-   - If the user gave a display **name** instead of a numeric primary key: search_sync_entities { entityType, source, q } on the source env, then use the returned id in sync_preview. Use search_sync_entities — not search_catalog — for instance lookup.
+   - If the user gave a **numeric primary key** (e.g. `2545`, `table 2545`, `tableId=2545`): call sync_preview directly with that entityId — do NOT search by display name.
+   - If the user gave a display **name** instead: search_sync_entities { entityType, source, q } on the source env (auto-detects id vs name), then use the returned id in sync_preview. Use search_sync_entities — not search_catalog — for instance lookup.
    - ask_user only when search_sync_entities returns multiple plausible hits (offer id + name choices).
 3. sync_preview { entityType, entityId, source, target, force? } → builds a SyncPlan (TTL 1h) using HASHBYTES SHA2_256 over CONCAT_WS of non-meta columns to classify each row as INSERT / UPDATE / DELETE / unchanged.
 4. Render the plan inline (see contract below). STOP IMMEDIATELY. End your response. DO NOT call any more tools. DO NOT call sync_execute. Return the preview to the user and wait.

@@ -10,6 +10,7 @@
  */
 
 import sqlMod from "mssql"
+import { parseEntityInstanceRef } from "../../../domain/entity-instance-ref.js"
 import { definitionToSyncRecipe, getPublishedSyncDefinition } from "../../../domain/published-definitions.js"
 import { type EntityType, type SyncRecipe } from "../../../domain/recipes.js"
 import { getPool, type SyncRuntimeHost } from "../../../ports/index.js"
@@ -21,6 +22,19 @@ export interface EntitySearchResult {
 }
 
 export type EntitySearchMode = "name" | "id"
+
+/** Normalize agent/user search text and pick id vs name lookup. */
+export function resolveSyncEntitySearch(
+  rawQuery: string,
+  explicitMode?: EntitySearchMode | "auto"
+): { q: string; mode: EntitySearchMode } {
+  const parsed = parseEntityInstanceRef(rawQuery)
+  if (parsed.entityId) return { q: parsed.entityId, mode: "id" }
+  if (explicitMode === "id") {
+    return { q: parsed.entityQuery ?? rawQuery.trim(), mode: "id" }
+  }
+  return { q: parsed.entityQuery ?? rawQuery.trim(), mode: "name" }
+}
 
 function invalidRootNameColumnError(recipe: SyncRecipe, columns: string[]): Error {
   const detail =

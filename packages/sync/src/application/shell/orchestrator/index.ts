@@ -27,5 +27,10 @@ export { configureSyncRunSink } from "../run-sink.js"
 export { configureSyncOrchestrator } from "./db-helpers.js"
 export { executeSync } from "./execute.js"
 export { previewSync, type PreviewInput } from "./preview.js"
-export { searchEntities, type EntitySearchMode, type EntitySearchResult } from "./search.js"
+export {
+  resolveSyncEntitySearch,
+  searchEntities,
+  type EntitySearchMode,
+  type EntitySearchResult
+} from "./search.js"
 export type { ExecuteOptions, ExecuteProgress } from "./types.js"
