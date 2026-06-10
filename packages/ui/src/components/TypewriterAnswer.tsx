@@ -1,20 +1,24 @@
 /**
- * TypewriterAnswer — streaming answer renderer with paced reveal.
+ * TypewriterAnswer — sequential "printer" reveal for streaming agent answers.
  *
- * Network token delivery is bursty; we pace a local cursor so prose still
- * feels live. Structured blocks (tables, charts, dashboards) render through
- * SmartAnswer as soon as they are structurally complete — never as raw
- * markdown / JSON characters. In-progress structured tails show skeletons.
+ * Reveals content block-by-block: prose types out, tables grow row-by-row,
+ * dashboards build then appear. Incomplete structured tails show skeletons
+ * (never raw markdown / JSON).
  */
 
 import { useEffect, useMemo, useRef, useState } from "react"
-import { joinStreamingParts, splitStreamingAnswer } from "./answer-stream-layout"
+import {
+  availablePrintUnits,
+  CATCHUP_MULTIPLIER,
+  CATCHUP_UNITS_THRESHOLD,
+  getStreamingSegments,
+  revealFromUnits,
+  snapProseTail,
+  totalBlockUnits,
+  UNITS_PER_SECOND,
+} from "./answer-stream-reveal"
 import { SmartAnswer } from "./SmartAnswer"
 import { StructuredPendingBlock, TablePendingBlock } from "./StreamingBlocks"
-
-const BASE_CHARS_PER_SECOND = 220
-const CATCHUP_MULTIPLIER = 5
-const CATCHUP_THRESHOLD_CHARS = 120
 
 export function TypewriterAnswer({
   text,
@@ -25,50 +29,59 @@ export function TypewriterAnswer({
   streaming?: boolean
   compact?: boolean
 }) {
-  const [revealed, setRevealed] = useState(0)
-  const cursorRef = useRef(0)
+  const [units, setUnits] = useState(0)
+  const unitsRef = useRef(0)
   const lastTickRef = useRef<number | null>(null)
   const rafRef = useRef<number | null>(null)
-  const targetRef = useRef(text)
+  const targetTextRef = useRef(text)
+  const prevLenRef = useRef(text.length)
 
-  targetRef.current = text
+  targetTextRef.current = text
+
+  const segments = useMemo(() => getStreamingSegments(text), [text])
+  const blockTotal = useMemo(() => totalBlockUnits(segments.blocks), [segments.blocks])
+  const targetUnits = useMemo(() => availablePrintUnits(segments), [segments])
 
   useEffect(() => {
-    if (text.length < cursorRef.current) {
-      cursorRef.current = text.length
-      setRevealed(text.length)
+    if (text.length < prevLenRef.current) {
+      unitsRef.current = 0
+      setUnits(0)
     }
+    prevLenRef.current = text.length
   }, [text])
 
   useEffect(() => {
     let cancelled = false
-    if (!streaming && cursorRef.current >= text.length) return
+    if (!streaming && unitsRef.current >= targetUnits) return
 
     const tick = (now: number) => {
       if (cancelled) return
-      const target = targetRef.current.length
-      if (cursorRef.current < target) {
+      const target = availablePrintUnits(getStreamingSegments(targetTextRef.current))
+      if (unitsRef.current < target) {
         const last = lastTickRef.current ?? now
         const dt = Math.min(now - last, 100)
         lastTickRef.current = now
-        const behind = target - cursorRef.current
-        const cps =
-          behind > CATCHUP_THRESHOLD_CHARS
-            ? BASE_CHARS_PER_SECOND * CATCHUP_MULTIPLIER
-            : BASE_CHARS_PER_SECOND
-        const advance = Math.max(1, Math.ceil((cps * dt) / 1000))
-        cursorRef.current = Math.min(target, cursorRef.current + advance)
-        setRevealed(cursorRef.current)
+        const behind = target - unitsRef.current
+        const ups =
+          behind > CATCHUP_UNITS_THRESHOLD
+            ? UNITS_PER_SECOND * CATCHUP_MULTIPLIER
+            : UNITS_PER_SECOND
+        const advance = Math.max(1, Math.ceil((ups * dt) / 1000))
+        unitsRef.current = Math.min(target, unitsRef.current + advance)
+        setUnits(unitsRef.current)
         rafRef.current = requestAnimationFrame(tick)
         return
       }
       lastTickRef.current = null
       if (streaming) {
         rafRef.current = requestAnimationFrame(tick)
+      } else if (unitsRef.current < targetUnits) {
+        rafRef.current = requestAnimationFrame(tick)
       } else {
         rafRef.current = null
       }
     }
+
     rafRef.current = requestAnimationFrame(tick)
     return () => {
       cancelled = true
@@ -76,36 +89,37 @@ export function TypewriterAnswer({
       rafRef.current = null
       lastTickRef.current = null
     }
-  }, [streaming, text])
+  }, [streaming, text, targetUnits])
 
-  const layout = useMemo(() => splitStreamingAnswer(text), [text])
+  const blockReveal = useMemo(() => revealFromUnits(segments.blocks, units), [segments.blocks, units])
 
-  const proseTail = useMemo(() => {
-    if (layout.remainderKind !== "prose" || !layout.remainder) return ""
-    const proseStart = layout.committed ? layout.committed.length + 2 : 0
-    const slice = layout.remainder.slice(0, Math.max(0, revealed - proseStart))
-    const atEnd = !streaming && revealed >= text.length
-    return snapToWordBoundary(slice, atEnd)
-  }, [layout, revealed, streaming, text.length])
-
-  const renderText = useMemo(
-    () => joinStreamingParts(layout.committed, proseTail),
-    [layout.committed, proseTail],
-  )
+  const proseChars = Math.max(0, units - blockTotal)
+  const proseTail =
+    segments.layout.remainderKind === "prose" && segments.layout.remainder
+      ? snapProseTail(segments.layout.remainder, proseChars, !streaming && units >= targetUnits)
+      : ""
 
   const showStructuredPending =
     streaming &&
-    (layout.remainderKind === "fenced" || layout.remainderKind === "table") &&
-    layout.remainder.length > 0
+    (segments.layout.remainderKind === "fenced" || segments.layout.remainderKind === "table") &&
+    segments.layout.remainder.length > 0 &&
+    units >= blockTotal
 
-  const showProseCursor =
+  const caughtUp = units >= availablePrintUnits(segments)
+  const waitingForMore =
     streaming &&
-    layout.remainderKind === "prose" &&
-    (renderText.length > 0 || layout.remainder.length > 0)
+    caughtUp &&
+    segments.layout.remainderKind !== "fenced" &&
+    segments.layout.remainderKind !== "table"
 
-  if (!streaming && revealed >= text.length) {
+  const finished = !streaming && units >= targetUnits
+
+  if (finished) {
     return <SmartAnswer text={text} compact={compact} />
   }
+
+  const hasBlockContent = segments.blocks.length > 0 && (blockReveal.doneCount > 0 || blockReveal.partial)
+  const hasProse = proseTail.length > 0
 
   return (
     <div
@@ -114,35 +128,40 @@ export function TypewriterAnswer({
         "space-y-2",
       ].join(" ")}
     >
-      {renderText ? <SmartAnswer text={renderText} streaming compact={compact} /> : null}
-      {showStructuredPending && layout.remainderKind === "fenced" ? (
-        <StructuredPendingBlock lang={layout.fencedLang ?? "text"} />
+      {hasBlockContent ? (
+        <SmartAnswer
+          blocks={segments.blocks}
+          reveal={blockReveal}
+          streaming
+          compact={compact}
+        />
       ) : null}
-      {showStructuredPending && layout.remainderKind === "table" ? (
-        <TablePendingBlock raw={layout.remainder} />
+      {hasProse ? (
+        <div>
+          <SmartAnswer text={proseTail} streaming compact={compact} />
+          {streaming || units < targetUnits ? (
+            <span
+              className={[
+                "inline-block w-[2px] bg-accent/80 animate-pulse align-middle ml-0.5 -mt-1",
+                compact ? "h-[13px]" : "h-[1em]",
+              ].join(" ")}
+              aria-hidden
+            />
+          ) : null}
+        </div>
       ) : null}
-      {showProseCursor ? <StreamingCursor compact={compact} /> : null}
+      {showStructuredPending && segments.layout.remainderKind === "fenced" ? (
+        <StructuredPendingBlock lang={segments.layout.fencedLang ?? "chart"} />
+      ) : null}
+      {showStructuredPending && segments.layout.remainderKind === "table" ? (
+        <TablePendingBlock raw={segments.layout.remainder} />
+      ) : null}
+      {waitingForMore && !showStructuredPending ? (
+        <div className="flex items-center gap-2 pt-0.5">
+          <span className="w-1.5 h-1.5 rounded-full bg-accent/70 animate-pulse shrink-0" />
+          <span className="text-[12px] text-text-muted font-mono">Generating…</span>
+        </div>
+      ) : null}
     </div>
   )
-}
-
-function StreamingCursor({ compact }: { compact?: boolean }) {
-  return (
-    <span
-      className={[
-        "inline-block w-[2px] bg-accent/75 animate-pulse align-middle",
-        compact ? "h-[14px] ml-0.5" : "h-[1.1em] ml-0.5",
-      ].join(" ")}
-      aria-hidden
-    />
-  )
-}
-
-function snapToWordBoundary(s: string, atEnd: boolean): string {
-  if (!s) return ""
-  if (atEnd) return s
-  if (/\s$/.test(s)) return s
-  const lastWhitespace = s.search(/\s[^\s]*$/)
-  if (lastWhitespace < 0) return s
-  return s.slice(0, lastWhitespace + 1)
 }

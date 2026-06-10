@@ -13,6 +13,10 @@
 
 import { Check, Copy } from "lucide-react"
 import React from "react"
+import type { AnswerBlock } from "./answer-parser"
+import { parseAnswerBlocks } from "./answer-parser"
+import type { StreamRevealState } from "./answer-stream-reveal"
+import { sliceBlockForReveal } from "./answer-stream-reveal"
 import { DataTable } from "./DataTable"
 import { InlineDiagram, isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 import { StructuredPendingBlock } from "./StreamingBlocks"
@@ -21,17 +25,7 @@ import { StructuredPendingBlock } from "./StreamingBlocks"
 // lighter, less-decorated style. Used by the term-chat widget.
 const CompactContext = React.createContext(false)
 
-// ── Block types ────────────────────────────────────────────────
-
-type Block =
-  | { type: "paragraph"; lines: string[] }
-  | { type: "heading"; level: number; text: string }
-  | { type: "table"; headers: string[]; rows: string[][] }
-  | { type: "code"; lang: string; text: string }
-  | { type: "bullet-list"; items: string[] }
-  | { type: "ordered-list"; items: { num: number; text: string }[] }
-  | { type: "command"; command: string; before: string; after: string }
-  | { type: "hr" }
+type Block = AnswerBlock
 
 // ── Structured ordered-list → table heuristic ─────────────────
 // Detects "**Name**: detail, detail, detail" items and builds a multi-column
@@ -147,147 +141,6 @@ function parseCommandLikeItem(text: string): { name: string; detail: string } | 
   return looksStructured ? { name: match[1], detail } : null
 }
 
-function cleanupCommandBoundaryText(text: string, side: "before" | "after"): string {
-  let cleaned = text.trim()
-  if (!cleaned) return ""
-
-  if (side === "before") {
-    cleaned = cleaned.replace(/\s*(\*\*|__|`)+\s*$/g, "")
-  } else {
-    cleaned = cleaned.replace(/^\s*(\*\*|__|`)+\s*/g, "")
-  }
-
-  return cleaned.trim()
-}
-
-// ── Parser ─────────────────────────────────────────────────────
-
-function parseBlocks(text: string): Block[] {
-  const lines = text.split("\n")
-  const blocks: Block[] = []
-  let i = 0
-
-  while (i < lines.length) {
-    const line = lines[i]
-
-    // Skip blank lines between blocks
-    if (line.trim() === "") { i++; continue }
-
-    // Horizontal rule — `---`, `***`, `___` (markdown thematic break)
-    if (/^\s*(?:-\s*-\s*-[-\s]*|\*\s*\*\s*\*[*\s]*|_\s*_\s*_[_\s]*)$/.test(line)) {
-      blocks.push({ type: "hr" })
-      i++
-      continue
-    }
-
-    // Code block
-    if (line.startsWith("```")) {
-      const lang = line.slice(3).trim()
-      const codeLines: string[] = []
-      i++
-      while (i < lines.length && !lines[i].startsWith("```")) {
-        codeLines.push(lines[i])
-        i++
-      }
-      i++ // skip closing fence
-      blocks.push({ type: "code", lang, text: codeLines.join("\n") })
-      continue
-    }
-
-    // Heading
-    const headingMatch = line.match(/^(#{1,3})\s+(.+)/)
-    if (headingMatch) {
-      blocks.push({ type: "heading", level: headingMatch[1].length, text: headingMatch[2] })
-      i++
-      continue
-    }
-
-    // Table — lines that start with |
-    if (line.trimStart().startsWith("|") && line.includes("|", 1)) {
-      const tableLines: string[] = []
-      while (i < lines.length && lines[i].trimStart().startsWith("|")) {
-        tableLines.push(lines[i])
-        i++
-      }
-      const isSeparator = (row: string) => /^\|[\s\-|:]+\|$/.test(row.trim())
-      // Split on unescaped `|` only; cells may contain `\|` (escaped by formatter).
-      const parseRow = (row: string) =>
-        row.split(/(?<!\\)\|/).slice(1, -1).map((c) => c.trim().replace(/\\\|/g, "|"))
-      const dataLines = tableLines.filter((l) => !isSeparator(l))
-      if (dataLines.length >= 2) {
-        const headers = parseRow(dataLines[0])
-        // Drop rows whose cell count doesn't match the header.
-        const rows = dataLines.slice(1).map(parseRow).filter((r) => r.length === headers.length)
-        blocks.push({ type: "table", headers, rows })
-      } else if (dataLines.length === 1) {
-        blocks.push({ type: "paragraph", lines: [dataLines[0]] })
-      }
-      continue
-    }
-
-    // Bullet list
-    if (/^[-*•]\s/.test(line)) {
-      const items: string[] = []
-      while (i < lines.length && /^[-*•]\s/.test(lines[i])) {
-        items.push(lines[i].replace(/^[-*•]\s+/, ""))
-        i++
-      }
-      blocks.push({ type: "bullet-list", items })
-      continue
-    }
-
-    // Ordered list
-    if (/^\d+[.)]\s/.test(line)) {
-      const items: { num: number; text: string }[] = []
-      while (i < lines.length && /^\d+[.)]\s/.test(lines[i])) {
-        const m = lines[i].match(/^(\d+)[.)]\s+(.*)$/)
-        items.push({ num: m ? Number(m[1]) : items.length + 1, text: m ? m[2] : lines[i] })
-        i++
-      }
-      blocks.push({ type: "ordered-list", items })
-      continue
-    }
-
-    // Paragraph — accumulate until blank line or structural element
-    const paraLines: string[] = []
-    while (
-      i < lines.length &&
-      lines[i].trim() !== "" &&
-      !lines[i].startsWith("```") &&
-      !lines[i].match(/^#{1,3}\s/) &&
-      !(lines[i].trimStart().startsWith("|") && lines[i].includes("|", 1)) &&
-      !/^[-*•]\s/.test(lines[i]) &&
-      !/^\d+[.)]\s/.test(lines[i])
-    ) {
-      paraLines.push(lines[i])
-      i++
-    }
-    if (paraLines.length > 0) {
-      // Check if any paragraph line contains a command-like inline code: `tool_name key=val ...`
-      const joined = paraLines.join("\n")
-      const cmdMatch = joined.match(/`(\w+\s+\w+=\S[^`]*)`/)
-      if (cmdMatch) {
-        const idx = cmdMatch.index!
-        const before = cleanupCommandBoundaryText(joined.slice(0, idx), "before")
-        const after = cleanupCommandBoundaryText(joined.slice(idx + cmdMatch[0].length), "after")
-        blocks.push({ type: "command", command: cmdMatch[1], before, after })
-      } else {
-        const commandLineIndex = paraLines.findIndex((line) => parseCommandLikeItem(line) !== null)
-        if (commandLineIndex >= 0) {
-          const before = cleanupCommandBoundaryText(paraLines.slice(0, commandLineIndex).join("\n"), "before")
-          const command = paraLines[commandLineIndex].trim().replace(/^`|`$/g, "")
-          const after = cleanupCommandBoundaryText(paraLines.slice(commandLineIndex + 1).join("\n"), "after")
-          blocks.push({ type: "command", command, before, after })
-        } else {
-          blocks.push({ type: "paragraph", lines: paraLines })
-        }
-      }
-    }
-  }
-
-  return blocks
-}
-
 // ── Copyable command block ──────────────────────────────────────
 
 function CommandBlock({ text }: { text: string }): React.ReactElement {
@@ -371,6 +224,18 @@ function InlineText({ text }: { text: string }): React.ReactElement {
   return <>{parts}</>
 }
 
+function StreamingCaret({ compact }: { compact?: boolean }) {
+  return (
+    <span
+      className={[
+        "inline-block w-[2px] bg-accent/80 animate-pulse align-middle ml-0.5",
+        compact ? "h-[13px]" : "h-[1em]",
+      ].join(" ")}
+      aria-hidden
+    />
+  )
+}
+
 // ── Component ──────────────────────────────────────────────────
 
 // Lightweight compact table — used in TermChat. A simple thin border
@@ -382,9 +247,11 @@ function InlineText({ text }: { text: string }): React.ReactElement {
 function CompactTable({
   headers,
   rows,
+  animateRows = false,
 }: {
   headers: string[]
   rows: string[][]
+  animateRows?: boolean
 }) {
   return (
     <div className="w-full min-w-0 overflow-x-auto rounded-md ring-1 ring-border-subtle my-1.5">
@@ -418,7 +285,11 @@ function CompactTable({
         </thead>
         <tbody className="divide-y divide-border-subtle">
           {rows.map((row, ri) => (
-            <tr key={ri}>
+            <tr
+              key={ri}
+              className={animateRows ? "stream-table-row" : undefined}
+              style={animateRows ? { animationDelay: `${Math.min(ri, 12) * 45}ms` } : undefined}
+            >
               {row.map((cell, ci) => (
                 <td
                   key={ci}
@@ -501,14 +372,18 @@ function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
 
 export function SmartAnswer({
   text,
+  blocks: blocksIn,
+  reveal,
   streaming = false,
   compact = false,
 }: {
-  text: string
+  text?: string
+  blocks?: AnswerBlock[]
+  reveal?: StreamRevealState
   streaming?: boolean
   compact?: boolean
 }) {
-  const blocks = parseBlocks(text)
+  const blocks = blocksIn ?? parseAnswerBlocks(text ?? "")
 
   return (
     <CompactContext.Provider value={compact}>
@@ -517,97 +392,129 @@ export function SmartAnswer({
       streaming ? "space-y-2" : "space-y-3",
     ].join(" ")}>
       {blocks.map((block, bi) => {
-
-        if (block.type === "heading") {
-          if (block.level === 1) {
+        if (reveal && bi > reveal.doneCount) return null
+        const printing = Boolean(reveal && bi === reveal.doneCount && reveal.partial)
+        let activeBlock: Block | "diagram-building" = block
+        if (printing && reveal?.partial) {
+          const sliced = sliceBlockForReveal(block, reveal.partial)
+          if (sliced === null) return null
+          if (sliced === "diagram-building") {
             return (
-              <div key={bi} className="flex items-center gap-3 pt-1 pb-0.5">
+              <div key={bi} className="stream-block-appear">
+                <StructuredPendingBlock lang={block.type === "code" ? block.lang : "chart"} />
+              </div>
+            )
+          }
+          activeBlock = sliced
+        } else if (reveal && bi < reveal.doneCount) {
+          activeBlock = block
+        }
+
+        const wrapClass = reveal ? "stream-block-appear" : ""
+        const b = activeBlock
+
+        if (b.type === "heading") {
+          if (b.level === 1) {
+            return (
+              <div key={bi} className={`flex items-center gap-3 pt-1 pb-0.5 ${wrapClass}`}>
                 <span className="h-px flex-1 bg-gradient-to-r from-overlay-3 to-transparent" />
                 <p className="text-[13px] font-semibold tracking-[0.12em] uppercase text-text">
-                  <InlineText text={block.text} />
+                  <InlineText text={b.text} />
+                  {printing ? <StreamingCaret compact={compact} /> : null}
                 </p>
                 <span className="h-px flex-1 bg-gradient-to-l from-overlay-3 to-transparent" />
               </div>
             )
           }
-          if (block.level === 2) {
+          if (b.level === 2) {
             return (
-              <div key={bi} className="flex items-center gap-2 pt-1">
+              <div key={bi} className={`flex items-center gap-2 pt-1 ${wrapClass}`}>
                 <span className="w-1.5 h-1.5 rounded-full bg-accent/75 shrink-0" />
                 <p className="font-semibold text-text border-b border-border-subtle pb-1 flex-1">
-                  <InlineText text={block.text} />
+                  <InlineText text={b.text} />
+                  {printing ? <StreamingCaret compact={compact} /> : null}
                 </p>
               </div>
             )
           }
-          return <p key={bi} className="font-medium text-text-secondary"><InlineText text={block.text} /></p>
-        }
-
-        if (block.type === "paragraph") {
           return (
-            <p key={bi} className="whitespace-pre-wrap">
-              <InlineText text={block.lines.join("\n")} />
+            <p key={bi} className={`font-medium text-text-secondary ${wrapClass}`}>
+              <InlineText text={b.text} />
+              {printing ? <StreamingCaret compact={compact} /> : null}
             </p>
           )
         }
 
-        if (block.type === "hr") {
+        if (b.type === "paragraph") {
+          return (
+            <p key={bi} className={`whitespace-pre-wrap ${wrapClass}`}>
+              <InlineText text={b.lines.join("\n")} />
+              {printing ? <StreamingCaret compact={compact} /> : null}
+            </p>
+          )
+        }
+
+        if (b.type === "hr") {
           return (
             <hr
               key={bi}
-              className={compact ? "border-0 h-px bg-overlay-2 my-2" : "border-0 h-px bg-overlay-3 my-3"}
+              className={[compact ? "border-0 h-px bg-overlay-2 my-2" : "border-0 h-px bg-overlay-3 my-3", wrapClass].join(" ")}
             />
           )
         }
 
-        if (block.type === "command") {
+        if (b.type === "command") {
           return (
-            <div key={bi}>
-              {block.before && <p className="whitespace-pre-wrap mb-1"><InlineText text={block.before} /></p>}
-              <CommandBlock text={block.command} />
-              {block.after && <p className="whitespace-pre-wrap mt-1"><InlineText text={block.after} /></p>}
+            <div key={bi} className={wrapClass}>
+              {b.before && <p className="whitespace-pre-wrap mb-1"><InlineText text={b.before} /></p>}
+              <CommandBlock text={b.command} />
+              {b.after && <p className="whitespace-pre-wrap mt-1"><InlineText text={b.after} /></p>}
+              {printing ? <StreamingCaret compact={compact} /> : null}
             </div>
           )
         }
 
-        if (block.type === "code") {
-          if (isDiagramLang(block.lang)) {
+        if (b.type === "code") {
+          if (isDiagramLang(b.lang)) {
             // If the JSON block is incomplete, attempting to render broken JSON
             // produces a DiagramError flash — show a loading pill instead.
             {
               let isComplete = false
-              try { JSON.parse(block.text); isComplete = true } catch { /* incomplete JSON */ }
+              try { JSON.parse(b.text); isComplete = true } catch { /* incomplete JSON */ }
               if (!isComplete) {
-                return <StructuredPendingBlock key={bi} lang={block.lang} />
+                return <StructuredPendingBlock key={bi} lang={b.lang} />
               }
             }
-            return <InlineDiagram key={bi} kind={block.lang} source={block.text} />
+            return (
+              <div key={bi} className={`${wrapClass} ${printing ? "stream-diagram-enter" : ""}`}>
+                <InlineDiagram kind={b.lang} source={b.text} />
+              </div>
+            )
           }
-          // Defensive: the agent sometimes wraps a chart payload in a generic
-          // ```json (or untagged) fence. If the JSON shape is recognisable as
-          // a known chart kind, render it as a diagram instead of raw text.
-          // tryInferDiagramKind calls JSON.parse internally and returns null on
-          // failure, so this path is already safe during streaming.
-          const lowerLang = (block.lang ?? "").toLowerCase()
+          const lowerLang = (b.lang ?? "").toLowerCase()
           if (lowerLang === "" || lowerLang === "json" || lowerLang === "json5") {
-            const inferred = tryInferDiagramKind(block.text)
+            const inferred = tryInferDiagramKind(b.text)
             if (inferred) {
-              return <InlineDiagram key={bi} kind={inferred} source={block.text} />
+              return (
+                <div key={bi} className={`${wrapClass} ${printing ? "stream-diagram-enter" : ""}`}>
+                  <InlineDiagram kind={inferred} source={b.text} />
+                </div>
+              )
             }
           }
           return (
-            <div key={bi} className={compact ? "" : "rounded-lg overflow-hidden border border-border-subtle"}>
+            <div key={bi} className={[compact ? "" : "rounded-lg overflow-hidden border border-border-subtle", wrapClass].join(" ")}>
               {compact ? (
-                <CompactCodeBlock lang={block.lang} text={block.text} />
+                <CompactCodeBlock lang={b.lang} text={b.text} />
               ) : (
                 <>
-                  {block.lang && (
+                  {b.lang && (
                     <div className="px-3 py-1 text-base text-text-muted font-mono border-b border-border-subtle tracking-wide">
-                      {block.lang}
+                      {b.lang}
                     </div>
                   )}
                   <pre className="px-3 py-2.5 text-base font-mono text-text-secondary overflow-x-auto leading-relaxed">
-                    {block.text}
+                    {b.text}
                   </pre>
                 </>
               )}
@@ -615,10 +522,10 @@ export function SmartAnswer({
           )
         }
 
-        if (block.type === "bullet-list") {
+        if (b.type === "bullet-list") {
           return (
-            <ul key={bi} className="space-y-2">
-              {block.items.map((item, ii) => (
+            <ul key={bi} className={`space-y-2 ${wrapClass}`}>
+              {b.items.map((item, ii) => (
                 (() => {
                   const commandItem = parseCommandLikeItem(item)
                   if (commandItem) {
@@ -648,13 +555,13 @@ export function SmartAnswer({
           )
         }
 
-        if (block.type === "ordered-list") {
-          const tableData = tryConvertOrderedListToTable(block.items)
+        if (b.type === "ordered-list") {
+          const tableData = tryConvertOrderedListToTable(b.items)
           if (tableData) {
             return (
-              <div key={bi} className="py-2">
+              <div key={bi} className={`py-2 ${wrapClass}`}>
                 {compact ? (
-                  <CompactTable headers={tableData.headers} rows={tableData.rows} />
+                  <CompactTable headers={tableData.headers} rows={tableData.rows} animateRows={printing} />
                 ) : (
                   <DataTable
                     headers={tableData.headers}
@@ -667,8 +574,8 @@ export function SmartAnswer({
             )
           }
           return (
-            <ol key={bi} className="space-y-1.5">
-              {block.items.map((item, ii) => (
+            <ol key={bi} className={`space-y-1.5 ${wrapClass}`}>
+              {b.items.map((item, ii) => (
                 <li key={ii} className="flex items-stretch gap-0 rounded-md overflow-hidden border border-border-subtle bg-overlay-1">
                   <span className="shrink-0 flex items-center justify-center w-8 bg-accent-soft text-accent font-bold text-base border-r border-border-subtle">
                     {item.num}
@@ -682,19 +589,26 @@ export function SmartAnswer({
           )
         }
 
-        if (block.type === "table") {
+        if (b.type === "table") {
+          const tablePrinting = printing && reveal?.partial?.kind === "table"
           return (
-            <div key={bi} className="py-2">
+            <div key={bi} className={`py-2 ${wrapClass}`}>
               {compact ? (
-                <CompactTable headers={block.headers} rows={block.rows} />
+                <CompactTable headers={b.headers} rows={b.rows} animateRows={tablePrinting} />
               ) : (
                 <DataTable
-                  headers={block.headers}
-                  rows={block.rows}
+                  headers={b.headers}
+                  rows={b.rows}
                   renderCell={(v) => <InlineText text={v} />}
                   renderHeader={(v) => <InlineText text={v} />}
                 />
               )}
+              {tablePrinting && b.rows.length < (block.type === "table" ? block.rows.length : 0) ? (
+                <div className="flex items-center gap-2 px-1 pt-1">
+                  <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-pulse shrink-0" />
+                  <span className="text-[12px] text-text-muted">Adding rows…</span>
+                </div>
+              ) : null}
             </div>
           )
         }
