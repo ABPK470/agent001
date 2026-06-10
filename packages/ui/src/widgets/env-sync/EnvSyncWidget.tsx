@@ -50,6 +50,7 @@ export function EnvSync() {
   const entityType = form.entityType as SyncEntityType
 
   const [previewing, setPreviewing] = useState(false)
+  const [planLoading, setPlanLoading] = useState(false)
   const [previewErr, setPreviewErr] = useState<string | null>(null)
   const [plan, setPlan] = useState<SyncPlan | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -149,6 +150,63 @@ export function EnvSync() {
 
   const loadedPlanIdRef = useRef<string | null>(null)
 
+  function applyLoadedPlan(nextPlan: SyncPlan) {
+    const planEntityType = getPlanEntityType(nextPlan) ?? entityType
+    const entityIdStr = String(nextPlan.entity.id)
+    setPlan(nextPlan)
+    setPreviewErr(null)
+    setExpanded(new Set())
+    setForm({
+      planId: nextPlan.planId,
+      source: nextPlan.source,
+      target: nextPlan.target,
+      entityType: planEntityType,
+      entityId: "",
+      enabledOptionalTables: nextPlan.recipeSnapshot?.enabledOptionalTables ?? null,
+    })
+    setSearchDraft(
+      nextPlan.entity.displayName
+        ? `${nextPlan.entity.displayName} (#${entityIdStr})`
+        : entityIdStr,
+    )
+    planSigRef.current = buildPlanFormSig(nextPlan, definitions, force, searchMode)
+    loadedPlanIdRef.current = nextPlan.planId
+    if (!isFirstMountRef.current) setHasNewAgentSync(true)
+  }
+
+  async function openPlanFromHistory(planId: string) {
+    loadedPlanIdRef.current = planId
+    planSigRef.current = null
+    setModal(null)
+    setHasNewAgentSync(false)
+    setPreviewErr(null)
+    setPlan(null)
+    setExpanded(new Set())
+    setExecModalOpen(false)
+    if (exec.kind !== "running") resetExec()
+    setForm({ planId })
+    setPlanLoading(true)
+    try {
+      const nextPlan = await api.syncPlan(planId)
+      if (nextPlan.error) {
+        setPreviewErr(`Plan ${planId} not found — it may have been pruned from history.`)
+        setForm({ planId: null })
+        loadedPlanIdRef.current = null
+        return
+      }
+      applyLoadedPlan(nextPlan)
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      setPreviewErr(/not found|expired/i.test(msg)
+        ? "Plan not found — it may have been pruned from history."
+        : `Failed to load plan: ${msg}`)
+      setForm({ planId: null })
+      loadedPlanIdRef.current = null
+    } finally {
+      setPlanLoading(false)
+    }
+  }
+
   useEffect(() => {
     let dead = false
     Promise.all([api.syncEnvironments(), api.syncDefinitions()])
@@ -178,22 +236,7 @@ export function EnvSync() {
         loadedPlanIdRef.current = null
         return
       }
-      setPlan(nextPlan)
-      setPreviewErr(null)
-      setExpanded(new Set())
-      const entityIdStr = String(nextPlan.entity.id)
-      const planEntityType = getPlanEntityType(nextPlan) ?? form.entityType
-      setForm({
-        source: nextPlan.source,
-        target: nextPlan.target,
-        entityType: planEntityType,
-        entityId: "",
-        enabledOptionalTables: nextPlan.recipeSnapshot?.enabledOptionalTables ?? null,
-      })
-      setSearchDraft("")
-      const hydratedDefinition = definitions.find((entry) => entry.id === planEntityType) ?? null
-      planSigRef.current = `${nextPlan.source}|${nextPlan.target}|${planEntityType}|${entityIdStr}|${force}|${searchMode}|${[...normalizeOptionalTableSelection(hydratedDefinition, nextPlan.recipeSnapshot?.enabledOptionalTables ?? null)].sort().join(",")}`
-      if (!isFirstMountRef.current) setHasNewAgentSync(true)
+      applyLoadedPlan(nextPlan)
     }).catch((error) => {
       const msg = error instanceof Error ? error.message : String(error)
       setPreviewErr(/not found|expired/i.test(msg)
@@ -261,13 +304,26 @@ export function EnvSync() {
   useEffect(() => {
     if (!plan || !planSigRef.current) return
     if (planSigRef.current === formSig) return
+    const planEntityType = getPlanEntityType(plan)
+    const planEntityId = String(plan.entity.id)
+    // Definitions / optional-table normalization can update formSig after hydration
+    // without the user changing the loaded plan — re-sync instead of discarding.
+    if (
+      plan.source === source &&
+      plan.target === target &&
+      planEntityType === entityType &&
+      planEntityId === resolvedEntityId
+    ) {
+      planSigRef.current = formSig
+      return
+    }
     setPlan(null)
     setForm({ planId: null })
     setExpanded(new Set())
     setExecModalOpen(false)
     if (exec.kind !== "running") resetExec()
     planSigRef.current = null
-  }, [formSig, plan, exec.kind, setForm])
+  }, [formSig, plan, source, target, entityType, resolvedEntityId, exec.kind, setForm])
 
   function onExecConfirmed() {
     if (!plan) return
@@ -477,6 +533,8 @@ export function EnvSync() {
         </div>
       ) : previewing ? (
         <Loading>Building plan…</Loading>
+      ) : planLoading ? (
+        <Loading>Loading plan…</Loading>
       ) : plan ? (
         <PlanView plan={plan} expanded={expanded} setExpanded={setExpanded} exec={exec} />
       ) : (
@@ -490,13 +548,7 @@ export function EnvSync() {
       )}
       {modal === "history" && (
         <ModalShell title="Sync History" icon={<History size={20} className="text-text-muted" />} onClose={() => { setModal(null); setHasNewAgentSync(false) }}>
-          <HistoryContent onOpen={(planId) => {
-            loadedPlanIdRef.current = null
-            setPlan(null)
-            setForm({ planId })
-            setModal(null)
-            setHasNewAgentSync(false)
-          }} />
+          <HistoryContent onOpen={(planId) => { void openPlanFromHistory(planId) }} />
         </ModalShell>
       )}
       {execModalOpen && (plan || execPlanId) && (
@@ -509,6 +561,19 @@ export function EnvSync() {
 function getPlanEntityType(plan: SyncPlan): SyncEntityType | null {
   const raw = plan.executionContract?.definitionId ?? plan.recipeSnapshot?.entityType ?? plan.entity.type
   return isSyncEntityType(raw) ? raw : null
+}
+
+function buildPlanFormSig(
+  plan: SyncPlan,
+  definitions: PublishedSyncDefinition[],
+  force: boolean,
+  searchMode: "id" | "name",
+): string {
+  const planEntityType = getPlanEntityType(plan) ?? "contract"
+  const entityIdStr = String(plan.entity.id)
+  const hydratedDefinition = definitions.find((entry) => entry.id === planEntityType) ?? null
+  const tables = [...normalizeOptionalTableSelection(hydratedDefinition, plan.recipeSnapshot?.enabledOptionalTables ?? null)].sort().join(",")
+  return `${plan.source}|${plan.target}|${planEntityType}|${entityIdStr}|${force}|${searchMode}|${tables}`
 }
 
 function isSyncEntityType(value: string): value is SyncEntityType {

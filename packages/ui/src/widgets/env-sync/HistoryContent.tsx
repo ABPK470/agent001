@@ -235,8 +235,12 @@ function HistoryPlanRow({ group, onOpen }: { group: SyncHistoryGroup; onOpen?: (
               {group.execute && <span className="px-2 py-0.5 rounded border border-border-subtle text-[11px] text-text-muted">Execute</span>}
               {onOpen && (
                 <button
+                  type="button"
                   className="text-text-muted hover:text-accent/80 transition-colors"
-                  onClick={() => onOpen(group.planId)}
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpen(group.planId)
+                  }}
                   title="View plan"
                 >
                   <View size={16} />
