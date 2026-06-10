@@ -353,11 +353,12 @@ export function listAvailableTools(): ToolInfo[] {
  * Read/write filesystem stays scoped to the run's sandbox by existing
  * filesystem-security checks.
  *
- * ABI sync tools (list_environments, sync_preview, sync_execute,
- * compare_catalogs) ARE included here because the system prompt always
- * injects the ABI sync guidance. A mismatch — system prompt says "use
- * sync_preview" but the tool is absent from the LLM schema — causes the
- * agent to fall back to asking for clarification instead of executing.
+ * ABI sync tools (list_environments, search_sync_entities, sync_preview,
+ * sync_execute, compare_catalogs) ARE included here because the system prompt
+ * always injects the ABI sync guidance. A mismatch — system prompt says "use
+ * sync_preview" or "search_sync_entities" but the tool is absent from the LLM
+ * schema — causes the agent to fall back to asking for clarification instead of
+ * executing.
  * Sync tools are read/preview-safe; sync_execute requires explicit
  * user confirmation via planId, so the safety rail is the plan TTL and
  * the confirmation step, not tool-level exclusion.
@@ -383,6 +384,7 @@ const VISITOR_TOOL_NAMES: ReadonlySet<string> = new Set([
   "inspect_definition",
   // ABI sync — must match what the system prompt advertises
   "list_environments",
+  "search_sync_entities",
   "sync_preview",
   "sync_execute",
   "compare_catalogs",

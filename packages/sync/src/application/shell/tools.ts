@@ -1,4 +1,4 @@
-/**
+ /**
  * Sync tools — agent-facing wrappers around the orchestrator.
  *
  *   compare_catalogs : drift detection between source/target environments
@@ -7,13 +7,13 @@
  */
 
 import type { ExecutableTool, Tool, ToolMetadata } from "@mia/agent"
+import { parseEntityInstanceRef } from "../../domain/entity-instance-ref.js"
 import { getEnvironments } from "../../domain/environments.js"
 import type { EntityType } from "../../domain/recipes.js"
 import { getPool, type SyncRuntimeHost } from "../../ports/index.js"
-import { parseEntityInstanceRef } from "../../domain/entity-instance-ref.js"
 import { executeSync, previewSync, resolveSyncEntitySearch, searchEntities } from "./orchestrator/index.js"
-import { formatSyncPreviewDashboardFence } from "./preview-dashboard.js"
 import { loadPlan } from "./plan-store.js"
+import { formatSyncPreviewDashboardFence } from "./preview-dashboard.js"
 
 const VALID_ENTITY_TYPES = new Set<EntityType>([
   "contract",
