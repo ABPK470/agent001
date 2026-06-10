@@ -10,7 +10,7 @@ import type { ExecutableTool, Tool, ToolMetadata } from "@mia/agent"
 import { getEnvironments } from "../../domain/environments.js"
 import type { EntityType } from "../../domain/recipes.js"
 import { getPool, type SyncRuntimeHost } from "../../ports/index.js"
-import { executeSync, previewSync } from "./orchestrator/index.js"
+import { executeSync, previewSync, searchEntities } from "./orchestrator/index.js"
 import { loadPlan } from "./plan-store.js"
 
 const VALID_ENTITY_TYPES = new Set<EntityType>([
@@ -128,6 +128,88 @@ async function fetchSchema(
   return { tables, cols }
 }
 
+// ── search_sync_entities ─────────────────────────────────────────
+
+function buildSearchSyncEntitiesTool(host: SyncRuntimeHost): Tool {
+  return {
+    name: "search_sync_entities",
+    description:
+      "Search for ABI sync entities by display name in a source environment. " +
+      "Use when the user gives an entity NAME (e.g. 'ACSRawTest') rather than a numeric primary key. " +
+      "Queries the recipe root table for the entity type (e.g. core.Contract.name for contract). " +
+      "Do NOT use search_catalog for sync entity lookup — it returns unrelated warehouse tables.",
+    parameters: {
+      type: "object",
+      properties: {
+        entityType: {
+          type: "string",
+          description: `Entity type. One of: ${[...VALID_ENTITY_TYPES].join(", ")}.`
+        },
+        source: {
+          type: "string",
+          description: "Source environment / MSSQL connection to search in (same as sync source)."
+        },
+        q: {
+          type: "string",
+          description: "Name fragment to match (case-insensitive LIKE search on the entity label column)."
+        },
+        limit: {
+          type: "number",
+          description: "Max results (default 20, max 50).",
+          default: 20
+        }
+      },
+      required: ["entityType", "source", "q"]
+    },
+    async execute(args) {
+      const entityType = String(args.entityType) as EntityType
+      if (!VALID_ENTITY_TYPES.has(entityType)) {
+        return `Error: invalid entityType "${entityType}". Must be one of: ${[...VALID_ENTITY_TYPES].join(", ")}`
+      }
+      const source = String(args.source).trim()
+      const q = String(args.q).trim()
+      if (!q) return "Error: q (search query) is required."
+      const limit = Math.min(Math.max(Number(args.limit) || 20, 1), 50)
+      try {
+        const hits = await searchEntities(host, entityType, source, q, limit)
+        if (hits.length === 0) {
+          return `No ${entityType} entities matching "${q}" in ${source}. Try a shorter fragment or verify the source environment.`
+        }
+        const lines = [`${hits.length} match(es) for ${entityType} "${q}" in ${source}:`]
+        for (const hit of hits) {
+          lines.push(`  • id=${hit.id}${hit.name ? ` — ${hit.name}` : ""}`)
+        }
+        if (hits.length === 1) {
+          lines.push("")
+          lines.push(`Use entityId=${hits[0]!.id} in sync_preview.`)
+        } else {
+          lines.push("")
+          lines.push("Multiple matches — pick the correct id or ask the user to disambiguate.")
+        }
+        return lines.join("\n")
+      } catch (e) {
+        return `Error: ${e instanceof Error ? e.message : String(e)}`
+      }
+    }
+  }
+}
+
+export const searchSyncEntitiesToolMetadata: ToolMetadata = (() => {
+  const stub = {} as SyncRuntimeHost
+  const t = buildSearchSyncEntitiesTool(stub)
+  return {
+    name: t.name,
+    description: t.description,
+    parameters: t.parameters
+  }
+})()
+
+export const searchSyncEntitiesTool = searchSyncEntitiesToolMetadata
+
+export function createSearchSyncEntitiesTool(host: SyncRuntimeHost): ExecutableTool {
+  return buildSearchSyncEntitiesTool(host)
+}
+
 // ── sync_preview ─────────────────────────────────────────────────
 
 function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
@@ -136,7 +218,8 @@ function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
     description:
       "Compute a SyncPlan for migrating one ABI entity (Contract / Dataset / Rule / Pipeline / Gate Metadata / Content) " +
       "from a source environment to a target environment. READ-ONLY — only computes the diff, does not modify data. " +
-      "Returns a planId you can later pass to sync_execute. Use compare_catalogs first if drift is suspected. " +
+      "Returns a planId you can later pass to sync_execute. Requires the entity primary key (entityId) — if the user " +
+      "gave a name, call search_sync_entities first. Use compare_catalogs first if drift is suspected. " +
       "Always emit the returned summary inline in your chat answer using a `dashboard` fenced block; never write the " +
       "result to a file.",
     parameters: {

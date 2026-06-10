@@ -83,9 +83,11 @@ import {
   compareCatalogsTool,
   createCompareCatalogsTool,
   createListEnvironmentsTool,
+  createSearchSyncEntitiesTool,
   createSyncExecuteTool,
   createSyncPreviewTool,
   listEnvironmentsTool,
+  searchSyncEntitiesTool,
   syncExecuteTool,
   syncPreviewTool
 } from "@mia/sync"
@@ -137,6 +139,7 @@ const STATIC_TOOL_BINDERS: readonly StaticToolBinder[] = [
   { metadata: searchCatalogTool, bind: (host) => createSearchCatalogTool(host) },
   // ── ABI environment sync ──
   { metadata: compareCatalogsTool, bind: (host) => createCompareCatalogsTool(host) },
+  { metadata: searchSyncEntitiesTool, bind: (host) => createSearchSyncEntitiesTool(host) },
   { metadata: syncPreviewTool, bind: (host) => createSyncPreviewTool(host) },
   { metadata: syncExecuteTool, bind: (host) => createSyncExecuteTool(host) },
   { metadata: listEnvironmentsTool, bind: (host) => createListEnvironmentsTool(host) },

@@ -87,7 +87,7 @@ export interface SectionDecision {
 }
 
 const SYNC_SHAPE_RE =
-  /\bsync\b.*\benviron|\benviron.*\bsync\b|\babi.sync\b|\bsync.preview\b|\bsync.execute\b|\blist.environments\b|\bcompare.catalog|\bsync.contract\b|\bcontract.sync\b|\bsync.recipe\b|\bsync.entity\b|\benv.sync\b/i
+  /\b(?:sync|synchroni[sz]e)\b.*\b(?:from|to)\b|\b(?:sync|synchroni[sz]e)\b.*\benviron|\benviron.*\b(?:sync|synchroni[sz]e)\b|\babi.sync\b|\bsync.preview\b|\bsync.execute\b|\blist.environments\b|\bcompare.catalog|\bsync.contract\b|\bcontract.sync\b|\bsync.recipe\b|\bsync.entity\b|\benv.sync\b|\bsearch[\s._-]?sync[\s._-]?entit/i
 
 // ── DB gate — two-signal scorer ────────────────────────────────────
 //
@@ -272,7 +272,7 @@ export interface DbScoreResult {
  * below; centralised here so the scorer never has to import them.
  */
 const DB_TOOL_TRACE_RE =
-  /\b(?:query_mssql|explore_mssql_schema|search_catalog|inspect_definition|discover_relationships|profile_data|export_query_to_file|compare_catalogs|sync_preview|sync_execute|list_environments)\b/i
+  /\b(?:query_mssql|explore_mssql_schema|search_catalog|inspect_definition|discover_relationships|profile_data|export_query_to_file|compare_catalogs|search_sync_entities|sync_preview|sync_execute|list_environments)\b/i
 
 /** Cap on how much context text the scorer scans — keeps regex cost bounded. */
 const CONTEXT_SCAN_CAP = 8000
@@ -420,6 +420,7 @@ const DB_DISCOVERY_TOOL_NAMES: ReadonlySet<string> = new Set([
 
 const SYNC_TOOL_NAMES: ReadonlySet<string> = new Set([
   "list_environments",
+  "search_sync_entities",
   "sync_preview",
   "sync_execute",
   "compare_catalogs"

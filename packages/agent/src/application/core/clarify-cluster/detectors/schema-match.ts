@@ -38,8 +38,15 @@ import { goalTokens } from "./stopwords.js"
  * those prevents the agent from using search_catalog or schema exploration to
  * resolve the path itself. The detector still blocks on ambiguous schema/table
  * names, and skips metric-position tokens like "by revenue".
+ *
+ * 1.4.0: primary-identifier matching — a goal token matches a table only
+ * when it names that object (exact name, or camelCase prefix word like
+ * Revenue→RevenueRaw), not when it is an incidental substring inside a
+ * compound name (sync inside BookSyncFromPlReporting). Also honours
+ * `ctx.domainVocabulary` for operational workflow parameters loaded from
+ * runtime registries (sync definitions, environments).
  */
-const VERSION = "1.3.0"
+const VERSION = "1.4.0"
 
 /** Catches `schema.object` references in goal text. Case-insensitive on
  *  the catalog side via `CatalogGraph.getTable`. Underscores and digits
@@ -115,6 +122,23 @@ function hasRecentAssistantTurn(messages: readonly ClarifyContext["messages"][nu
   return false
 }
 
+/**
+ * True when `token` is how a user would name this table — the object's own
+ * name or its leading camelCase word (Revenue, RevenueRaw) — not an
+ * incidental token buried inside a compound name (sync inside BookSync…).
+ */
+function isPrimaryTableNameToken(tableName: string, token: string): boolean {
+  const lower = tableName.toLowerCase()
+  const singular = token.endsWith("s") && token.length > 3 ? token.slice(0, -1) : token
+  if (lower === token || lower === singular || lower === `${singular}s`) return true
+  const nameTokens = tokenize(tableName)
+  if (nameTokens.length === 0) return false
+  const head = nameTokens[0]!
+  if (head === token || head === singular) return true
+  if (nameTokens.length === 1 && nameTokens[0] === token) return true
+  return false
+}
+
 function objectNameMatches(catalog: CatalogGraph, token: string): Set<string> {
   const out = new Set<string>()
   for (const [key, table] of catalog.tables) {
@@ -122,8 +146,7 @@ function objectNameMatches(catalog: CatalogGraph, token: string): Set<string> {
       out.add(key)
       continue
     }
-    const nameTokens = tokenize(table.name)
-    if (nameTokens.includes(token)) out.add(key)
+    if (isPrimaryTableNameToken(table.name, token)) out.add(key)
   }
   return out
 }
@@ -152,6 +175,7 @@ export const schemaMatchDetector: Detector = {
     // archive.* table names. Fed from system-messages.ts which now
     // passes the prior-turns synthetic transcript via ctx.messages.
     if (looksCoreferential(ctx.goal) && hasRecentAssistantTurn(ctx.messages)) return []
+    const reserved = ctx.domainVocabulary?.reservedTokens
     // Qualified-name guard: any `schema.object` the user already typed
     // and that resolves against the live catalog (with mirrorSchema
     // fallback) consumes BOTH halves — the user disambiguated themselves.
@@ -160,6 +184,7 @@ export const schemaMatchDetector: Detector = {
     const seenTokens = new Set<string>()
     for (const token of goalTokens(ctx.goal)) {
       if (token.length < MIN_TOKEN_LEN) continue
+      if (reserved?.has(token)) continue
       if (consumed.has(token)) continue
       if (seenTokens.has(token)) continue
       if (isMetricContext(ctx.goal, token)) continue

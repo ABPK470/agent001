@@ -93,6 +93,35 @@ describe("schemaMatchDetector", () => {
     expect(schemaMatchDetector.detect(ctx({ goal: "show sales totals", catalog: cat }))).toEqual([])
   })
 
+  it("does not treat incidental camelCase substrings as ambiguous table names", () => {
+    const cat = catalogFrom([
+      table("archive", "BookSyncFromPlReporting"),
+      table("agent", "vSemaphore_syncData"),
+      table("core", "Contract"),
+      table("agent", "vPipelineRunContract")
+    ])
+    expect(
+      schemaMatchDetector.detect(
+        ctx({ goal: "pls sync contract acrwawtest from uat to dev", catalog: cat })
+      )
+    ).toEqual([])
+  })
+
+  it("honours domainVocabulary reserved tokens from operational registries", () => {
+    const cat = catalogFrom([
+      table("core", "Contract"),
+      table("core", "ContractColumn")
+    ])
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "sync contract acrwawtest from uat to dev",
+        catalog: cat,
+        domainVocabulary: { reservedTokens: new Set(["contract", "uat", "dev"]) }
+      })
+    )
+    expect(findings).toEqual([])
+  })
+
   it("stays silent when no catalog is available", () => {
     expect(schemaMatchDetector.detect(ctx({ goal: "show top revenue" }))).toEqual([])
   })

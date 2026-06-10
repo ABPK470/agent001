@@ -84,6 +84,7 @@ export const termUndefinedDetector: Detector = {
 
   detect(ctx) {
     if (!ctx.catalog) return []
+    const reserved = ctx.domainVocabulary?.reservedTokens
     const out = []
     const seen = new Set<string>()
     const matches = ctx.goal.match(CAPITALISED_PHRASE) ?? []
@@ -97,6 +98,9 @@ export const termUndefinedDetector: Detector = {
       if (!phrase.includes(" ") && isStopword(phrase)) continue
       if (isKnownInCatalog(lc, ctx.catalog)) continue
       if (isKnownToTenant(lc, ctx.tenant)) continue
+      if (reserved?.has(lc)) continue
+      const phraseTokens = lc.split(/\s+/).filter((t) => t.length > 0)
+      if (phraseTokens.some((t) => reserved?.has(t))) continue
       out.push({
         id: makeFindingId("term-undefined", lc),
         kind: "term-undefined" as const,

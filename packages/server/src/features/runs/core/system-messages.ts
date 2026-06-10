@@ -16,6 +16,7 @@ import {
   runLlmPlanner,
   shouldInvokePlanner
 } from "@mia/agent"
+import { buildSyncOperationalVocabularyForHost } from "@mia/sync"
 import { getAttachment, type AttachmentRow } from "../../../platform/persistence/attachments.js"
 import type { DbToolResult } from "../../../platform/persistence/sqlite.js"
 import type { ClarificationsPort } from "../../../ports/clarifications.js"
@@ -361,6 +362,10 @@ export async function buildSystemMessages(opts: {
           content: t.answer ?? "(no answer recorded)"
         })
       }
+      const domainVocabulary =
+        decision.includeAbiSync && opts.host
+          ? { reservedTokens: buildSyncOperationalVocabularyForHost(opts.host) }
+          : undefined
       const ctx = {
         goal,
         catalog,
@@ -375,7 +380,8 @@ export async function buildSystemMessages(opts: {
         // free to paraphrase prior prose. Defined unconditionally so
         // the detector knows it is running server-side (vs. CLI/tests
         // where the field is absent and the detector no-ops).
-        priorResultsCount: priorResults.length
+        priorResultsCount: priorResults.length,
+        ...(domainVocabulary ? { domainVocabulary } : {})
       }
       let findings = detectAmbiguities(ctx)
       if (

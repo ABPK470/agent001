@@ -142,6 +142,13 @@ export interface ClarifyContext {
    * tests with no orchestrator); detector then no-ops.
    */
   readonly priorResultsCount?: number
+  /**
+   * Tokens naming parameters of an active operational workflow (e.g. sync
+   * definition ids, environment names from published registries). When a
+   * goal token appears here, catalog-table disambiguation is suppressed —
+   * the workflow's own tools resolve the reference.
+   */
+  readonly domainVocabulary?: { readonly reservedTokens: ReadonlySet<string> }
 }
 
 export interface Detector {
