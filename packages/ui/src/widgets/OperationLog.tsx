@@ -565,6 +565,18 @@ function ActivityRow({ activity, pipelineKind, pipelineId, expanded, onToggle, e
               {activity.error}
             </div>
           )}
+          {activity.events.length === 0 && (activity.summary || activity.details) && (
+            <div className="px-2 py-1.5 space-y-1.5">
+              {activity.summary && (
+                <p className="text-[11px] text-text-muted leading-relaxed">{activity.summary}</p>
+              )}
+              {activity.details && Object.keys(activity.details).length > 0 && (
+                <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-[10.5px] leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
+                  {JSON.stringify(activity.details, null, 2)}
+                </pre>
+              )}
+            </div>
+          )}
           {activity.events.map((ev, idx) => {
             const key = `${pipelineId}|${activity.id}|${idx}`
             return (
@@ -656,12 +668,32 @@ function pickEventSummary(ev: OperationEvent): string {
       return `${counts["insert"] ?? 0} ins · ${counts["update"] ?? 0} upd · ${counts["delete"] ?? 0} del`
     }
   }
+  if (ev.type === "sync.preview.started") {
+    return `${ev.data["source"] ?? "?"} → ${ev.data["target"] ?? "?"}`
+  }
   if (ev.type === "sync.preview.completed") {
     const totals = ev.data["totals"]
     if (totals && typeof totals === "object") {
       const counts = totals as Record<string, unknown>
       return `${counts["insert"] ?? 0} ins · ${counts["update"] ?? 0} upd · ${counts["delete"] ?? 0} del`
     }
+  }
+  if (ev.type === "sync.preview.table.done") {
+    const counts =
+      ev.data["counts"] && typeof ev.data["counts"] === "object"
+        ? (ev.data["counts"] as Record<string, unknown>)
+        : ev.data
+    const ins = counts["insert"] ?? 0
+    const upd = counts["update"] ?? 0
+    const del = counts["delete"] ?? 0
+    const table = ev.data["table"] ?? "table"
+    const durationMs = ev.data["durationMs"]
+    return `${table} · ${ins} ins · ${upd} upd · ${del} del${typeof durationMs === "number" ? ` · ${durationMs}ms` : ""}`
+  }
+  if (ev.type === "sync.preview.table.start") {
+    const table = ev.data["table"] ?? "table"
+    const predicate = ev.data["predicate"]
+    return predicate && typeof predicate === "string" ? `${table} · ${predicate}` : String(table)
   }
   if (ev.type === "sync.execute.table.start") {
     const table = ev.data["table"] ?? "table"

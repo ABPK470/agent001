@@ -6,7 +6,7 @@
  * display placeholder like "anonymous".
  */
 export function syncPlanActorUpn(plan: {
-  governanceDecision?: { targetEnvironment?: { actorUpn?: string | null } }
+  governanceDecision?: { targetEnvironment?: { actorUpn?: string | null } } | null
 }): string | null {
   const upn = plan.governanceDecision?.targetEnvironment?.actorUpn
   return typeof upn === "string" && upn.trim().length > 0 ? upn.trim() : null

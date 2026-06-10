@@ -49,9 +49,11 @@ export interface PreviewInput {
 
 export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
   const previewId = randomUUID()
+  const planId = allocPlanId()
   const t0 = Date.now()
   emit(input.host, EventType.SyncPreviewStarted, {
     previewId,
+    planId,
     entityType: input.entityType,
     entityId: input.entityId,
     source: input.source,
@@ -65,12 +67,13 @@ export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
     source: input.source,
     target: input.target
   }
-  return previewSyncInner(input, previewId, t0, telemetryContext)
+  return previewSyncInner(input, previewId, planId, t0, telemetryContext)
 }
 
 async function previewSyncInner(
   input: PreviewInput,
   previewId: string,
+  planId: string,
   t0: number,
   telemetryContext: SyncTelemetryContext
 ): Promise<SyncPlan> {
@@ -210,7 +213,7 @@ async function previewSyncInner(
         const predicate = expandedIds
           ? instantiatePredicateWithTree(t.predicate, input.entityId, expandedIds)
           : instantiatePredicate(t.predicate, input.entityId)
-        emit(input.host, EventType.SyncPreviewTableStart, { previewId, table: t.name, predicate })
+        emit(input.host, EventType.SyncPreviewTableStart, { previewId, planId, table: t.name, predicate })
         try {
           const r = await diffTable(
             input.host,
@@ -224,7 +227,11 @@ async function previewSyncInner(
           )
           emit(input.host, EventType.SyncPreviewTableDone, {
             previewId,
+            planId,
             table: t.name,
+            insert: r.counts.insert,
+            update: r.counts.update,
+            delete: r.counts.delete,
             counts: r.counts,
             durationMs: r.diffDurationMs
           })
@@ -234,7 +241,7 @@ async function previewSyncInner(
           // would otherwise swallow it into a single-line warning string.
           const errMsg = e instanceof Error ? e.message : String(e)
           console.error(`[sync.preview] diffTable(${t.name}) failed after retries:`, e)
-          emit(input.host, EventType.SyncPreviewTableFailed, { previewId, table: t.name, error: errMsg })
+          emit(input.host, EventType.SyncPreviewTableFailed, { previewId, planId, table: t.name, error: errMsg })
           return {
             table: t.name,
             scopePredicate: predicate,
@@ -375,7 +382,7 @@ async function previewSyncInner(
     ]
 
     const plan: SyncPlan = {
-      planId: allocPlanId(),
+      planId,
       createdAt,
       createdAtMs,
       entity: { type: input.entityType, id: input.entityId, displayName },
@@ -477,6 +484,7 @@ async function previewSyncInner(
     const errMsg = e instanceof Error ? e.message : String(e)
     emit(input.host, EventType.SyncPreviewFailed, {
       previewId,
+      planId,
       entityType: input.entityType,
       entityId: input.entityId,
       source: input.source,

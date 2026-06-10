@@ -57,6 +57,7 @@ export interface OperationActivity {
   endedAt: string | null
   durationMs: number | null
   summary?: string // optional one-line outcome ("12 rows applied", "0 ins / 0 upd")
+  details?: Record<string, unknown> // structured context when no raw events exist (decision log)
   error?: string
   events: OperationEvent[]
 }
@@ -110,12 +111,23 @@ export function listOperations(opts: ListOperationsOpts = {}): {
   // Without this, a preview+execute pair for the same plan collapses into a
   // single entry, and agent-triggered sync traces disappear inside the parent
   // run pipeline.
+  //
+  // Preview table events historically carried previewId but not planId (planId
+  // was allocated late). Build a previewId → planId map from any event that
+  // carries both so older traces still bucket correctly.
+  const previewToPlan = new Map<string, string>()
+  for (const ev of chrono) {
+    const planId = strField(ev.data, "planId")
+    const previewId = strField(ev.data, "previewId")
+    if (planId && previewId) previewToPlan.set(previewId, planId)
+  }
+
   type Bucket = { kind: OperationKind; key: string; events: OperationEvent[]; planId?: string }
   const buckets = new Map<string, Bucket>()
 
   for (const ev of chrono) {
     const runId = strField(ev.data, "runId")
-    const planId = strField(ev.data, "planId")
+    const planId = resolveSyncPlanId(ev, previewToPlan)
 
     let kind: OperationKind
     let key: string
@@ -208,6 +220,34 @@ function safeParse(s: string): Record<string, unknown> {
 function strField(d: Record<string, unknown>, k: string): string | null {
   const v = d[k]
   return typeof v === "string" && v.length > 0 ? v : null
+}
+
+function resolveSyncPlanId(
+  ev: OperationEvent,
+  previewToPlan: Map<string, string>
+): string | null {
+  const planId = strField(ev.data, "planId")
+  if (planId) return planId
+  const previewId = strField(ev.data, "previewId")
+  if (previewId) return previewToPlan.get(previewId) ?? null
+  return null
+}
+
+function readTableCounts(data: Record<string, unknown>): {
+  insert: number
+  update: number
+  delete: number
+} | null {
+  const counts = data["counts"]
+  const source =
+    counts && typeof counts === "object" && !Array.isArray(counts)
+      ? (counts as Record<string, unknown>)
+      : data
+  const insert = numField(source, "insert")
+  const update = numField(source, "update")
+  const del = numField(source, "delete")
+  if (insert == null && update == null && del == null) return null
+  return { insert: insert ?? 0, update: update ?? 0, delete: del ?? 0 }
 }
 
 function durationOf(start: string, end: string | null): number | null {
@@ -532,20 +572,68 @@ function buildDecisionActivities(
     endedAt: decision.recordedAt ?? fallbackTimestamp,
     durationMs: 0,
     summary: decision.summary,
+    ...(decision.details ? { details: decision.details } : {}),
     events: []
   }))
 }
 
 function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity[] {
   // One activity per table scan (table.start → table.done).
-  // Phase events (started, completed, failed, drift) → single "phases" activity.
+  // Lifecycle events (started, completed, failed) become named top-level activities.
   const activities: OperationActivity[] = []
-  const phaseEvents: OperationEvent[] = []
+  const miscEvents: OperationEvent[] = []
   const openTables = new Map<string, OperationActivity>()
 
   for (const ev of events) {
     const t = ev.type
     const table = strField(ev.data, "table")
+
+    if (t === EventType.SyncPreviewStarted) {
+      const source = strField(ev.data, "source")
+      const target = strField(ev.data, "target")
+      activities.push({
+        id: "preview-started",
+        name: "Preview started",
+        status: OperationStatus.Success,
+        startedAt: ev.timestamp,
+        endedAt: ev.timestamp,
+        durationMs: 0,
+        summary: source && target ? `${source} → ${target}` : undefined,
+        events: [ev]
+      })
+      continue
+    }
+    if (t === EventType.SyncPreviewCompleted) {
+      const totals = ev.data["totals"] as Record<string, unknown> | undefined
+      const summary = totals
+        ? `${totals["insert"] ?? 0} ins · ${totals["update"] ?? 0} upd · ${totals["delete"] ?? 0} del`
+        : undefined
+      activities.push({
+        id: "preview-completed",
+        name: "Preview completed",
+        status: OperationStatus.Success,
+        startedAt: ev.timestamp,
+        endedAt: ev.timestamp,
+        durationMs: numField(ev.data, "durationMs"),
+        summary,
+        events: [ev]
+      })
+      continue
+    }
+    if (t === EventType.SyncPreviewFailed) {
+      activities.push({
+        id: "preview-failed",
+        name: "Preview failed",
+        status: OperationStatus.Failed,
+        startedAt: ev.timestamp,
+        endedAt: ev.timestamp,
+        durationMs: numField(ev.data, "durationMs"),
+        error: strField(ev.data, "error") ?? undefined,
+        events: [ev]
+      })
+      continue
+    }
+
     if (t === EventType.SyncPreviewTableStart && table) {
       const act: OperationActivity = {
         id: `tbl:${table}:${activities.length}`,
@@ -568,15 +656,16 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
         open.durationMs = durationOf(open.startedAt, ev.timestamp)
         open.status = t === EventType.SyncPreviewTableDone ? OperationStatus.Success : OperationStatus.Failed
         if (t === EventType.SyncPreviewTableFailed) open.error = strField(ev.data, "error") ?? "scan failed"
-        const ins = numField(ev.data, "insert"),
-          upd = numField(ev.data, "update"),
-          del = numField(ev.data, "delete")
-        if (ins != null && upd != null && del != null) {
-          open.summary = `${ins} ins · ${upd} upd · ${del} del`
+        const counts = readTableCounts(ev.data)
+        if (counts) {
+          open.summary = `${counts.insert} ins · ${counts.update} upd · ${counts.delete} del`
         }
+        const scanMs = numField(ev.data, "durationMs")
+        if (scanMs != null && open.summary) open.summary += ` · ${scanMs}ms`
+        else if (scanMs != null) open.summary = `${scanMs}ms`
         openTables.delete(table)
       } else {
-        phaseEvents.push(ev)
+        miscEvents.push(ev)
       }
       continue
     }
@@ -584,23 +673,24 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
       openTables.get(table)!.events.push(ev)
       continue
     }
-    phaseEvents.push(ev)
+    miscEvents.push(ev)
   }
 
-  if (phaseEvents.length > 0) {
-    const start = phaseEvents[0].timestamp
-    const end = phaseEvents[phaseEvents.length - 1].timestamp
-    activities.unshift({
-      id: "phases",
-      name: "phases",
-      status: inferPipelineStatus(phaseEvents),
+  if (miscEvents.length > 0) {
+    const start = miscEvents[0].timestamp
+    const end = miscEvents[miscEvents.length - 1].timestamp
+    activities.push({
+      id: "preview-other",
+      name: "Other preview events",
+      status: inferPipelineStatus(miscEvents),
       startedAt: start,
       endedAt: end,
       durationMs: durationOf(start, end),
-      events: phaseEvents
+      events: miscEvents
     })
   }
 
+  activities.sort((a, b) => a.startedAt.localeCompare(b.startedAt))
   return activities
 }
 

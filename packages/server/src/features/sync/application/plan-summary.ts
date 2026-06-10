@@ -10,6 +10,7 @@ export interface SyncDecisionSummary {
   severity: string | null
   title: string
   summary: string
+  details?: Record<string, unknown>
 }
 
 export interface SyncPlanSummary {
@@ -108,6 +109,7 @@ function asDecisionLog(value: unknown): SyncDecisionSummary[] {
     const title = asString(record["title"])
     const summary = asString(record["summary"])
     if (!title || !summary) return []
+    const details = asRecord(record["details"])
     return [
       {
         id: asString(record["id"]) ?? title,
@@ -116,7 +118,8 @@ function asDecisionLog(value: unknown): SyncDecisionSummary[] {
         category: asString(record["category"]),
         severity: asString(record["severity"]),
         title,
-        summary
+        summary,
+        ...(details ? { details } : {})
       }
     ]
   })

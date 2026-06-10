@@ -223,4 +223,120 @@ describe("listOperations sync bucketing", () => {
     )
     expect(execute.activities.some((activity) => activity.name === "metadata-sync")).toBe(true)
   })
+
+  it("correlates legacy preview events by previewId when planId is only on completed", async () => {
+    const previewId = "prev-legacy-1"
+    const planId = "plan-legacy-1"
+    listEvents.mockReturnValue([
+      {
+        type: EventType.SyncPreviewCompleted,
+        created_at: "2026-05-28T11:02:55.000Z",
+        data: JSON.stringify({
+          previewId,
+          planId,
+          totals: { insert: 102, update: 0, delete: 0 }
+        })
+      },
+      {
+        type: EventType.SyncPreviewTableDone,
+        created_at: "2026-05-28T11:02:50.000Z",
+        data: JSON.stringify({
+          previewId,
+          table: "Contract",
+          counts: { insert: 100, update: 0, delete: 0 },
+          durationMs: 1200
+        })
+      },
+      {
+        type: EventType.SyncPreviewTableStart,
+        created_at: "2026-05-28T11:02:48.000Z",
+        data: JSON.stringify({ previewId, table: "Contract" })
+      },
+      {
+        type: EventType.SyncPreviewStarted,
+        created_at: "2026-05-28T11:02:41.000Z",
+        data: JSON.stringify({ previewId, source: "uat", target: "dev" })
+      }
+    ])
+
+    getRun.mockReturnValue(undefined)
+    getSyncRun.mockReturnValue({
+      status: "success",
+      finished_at: "2026-05-28T11:02:55.000Z",
+      duration_ms: 14000,
+      entity_display_name: "ACSRawTest",
+      entity_type: "contract",
+      entity_id: "5128",
+      source: "uat",
+      target: "dev",
+      error: null
+    })
+    getSyncRunPlanJson.mockReturnValue(null)
+
+    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const result = listOperations({ limit: 50 })
+    const preview = result.operations.find((op) => op.kind === OperationKind.SyncPreview)
+
+    expect(preview).toBeDefined()
+    expect(preview?.eventCount).toBe(4)
+    expect(preview?.activities.some((a) => a.name === "Contract")).toBe(true)
+    expect(preview?.activities.some((a) => a.name === "Preview started")).toBe(true)
+    expect(preview?.activities.some((a) => a.name === "Preview completed")).toBe(true)
+    const contract = preview?.activities.find((a) => a.name === "Contract")
+    expect(contract?.summary).toBe("100 ins · 0 upd · 0 del · 1200ms")
+    expect(contract?.events).toHaveLength(2)
+  })
+
+  it("exposes decision log details on activities without raw events", async () => {
+    listEvents.mockReturnValue([
+      {
+        type: EventType.SyncPreviewCompleted,
+        created_at: "2026-05-28T11:02:55.000Z",
+        data: JSON.stringify({ planId: "plan-4", totals: { insert: 1, update: 0, delete: 0 } })
+      },
+      {
+        type: EventType.SyncPreviewStarted,
+        created_at: "2026-05-28T11:02:41.000Z",
+        data: JSON.stringify({ planId: "plan-4", source: "uat", target: "dev" })
+      }
+    ])
+
+    getRun.mockReturnValue(undefined)
+    getSyncRun.mockReturnValue({
+      status: "success",
+      finished_at: "2026-05-28T11:02:55.000Z",
+      duration_ms: 14000,
+      entity_display_name: "ACSRawTest",
+      entity_type: "contract",
+      entity_id: "5128",
+      source: "uat",
+      target: "dev",
+      error: null
+    })
+    getSyncRunPlanJson.mockReturnValue(
+      JSON.stringify({
+        planId: "plan-4",
+        decisionLog: [
+          {
+            id: "table-scope",
+            recordedAt: "2026-05-28T11:02:41.000Z",
+            stage: "preview",
+            category: "scope",
+            severity: "info",
+            title: "Table scope selected",
+            summary: "8 table(s) included.",
+            details: { tableCount: 8, excludedFkOnly: ["AuditLog"] }
+          }
+        ]
+      })
+    )
+
+    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const result = listOperations({ limit: 50 })
+    const preview = result.operations[0]
+    const scope = preview.activities.find((a) => a.name === "Table scope selected")
+
+    expect(scope?.events).toHaveLength(0)
+    expect(scope?.details).toEqual({ tableCount: 8, excludedFkOnly: ["AuditLog"] })
+  })
 })

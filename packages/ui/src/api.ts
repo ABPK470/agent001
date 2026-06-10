@@ -24,6 +24,9 @@ import type {
     WorkspaceDiff,
     WorkspaceDiffApplyResult,
 } from "./types"
+import { OperationKind, OperationStatus } from "@mia/shared-enums"
+
+export { OperationKind, OperationStatus }
 
 const BASE = ""
 
@@ -711,8 +714,6 @@ function fileToBase64(file: File): Promise<string> {
   })
 }
 
-export { OperationKind, OperationStatus } from "@mia/shared-enums"
-
 export interface OperationEvent {
   type: string
   timestamp: string
@@ -726,6 +727,7 @@ export interface OperationActivity {
   endedAt: string | null
   durationMs: number | null
   summary?: string
+  details?: Record<string, unknown>
   error?: string
   events: OperationEvent[]
 }
