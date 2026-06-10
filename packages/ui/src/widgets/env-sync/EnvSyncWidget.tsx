@@ -28,6 +28,10 @@ import { HistoryContent } from "./HistoryContent"
 import { PlanView } from "./PlanTables"
 import type { ModalKind, SearchHit } from "./types"
 
+function formatSearchHitLabel(hit: SearchHit): string {
+  return hit.name ? `${hit.name} (#${hit.id})` : String(hit.id)
+}
+
 export function EnvSync() {
   const [envs, setEnvs] = useState<SyncEnvironment[]>([])
   const [definitions, setDefinitions] = useState<PublishedSyncDefinition[]>([])
@@ -93,12 +97,13 @@ export function EnvSync() {
       setSearchOpen(false)
       setSearchErr(null)
     }
-    document.addEventListener("mousedown", handle)
-    return () => document.removeEventListener("mousedown", handle)
+    document.addEventListener("click", handle)
+    return () => document.removeEventListener("click", handle)
   }, [])
 
   function onSearchInput(value: string) {
     setSearchErr(null)
+    if (entityId) setForm({ entityId: "" })
     setSearchDraft(value)
     if (!value.trim() || !source) {
       setSearchResults([])
@@ -131,10 +136,15 @@ export function EnvSync() {
 
   function pickSearchHit(hit: SearchHit) {
     setForm({ entityId: String(hit.id) })
-    setSearchDraft("")
+    setSearchDraft(formatSearchHitLabel(hit))
     setSearchOpen(false)
     setSearchResults([])
     setSearchErr(null)
+    setSearchLoading(false)
+    if (searchTimerRef.current) {
+      clearTimeout(searchTimerRef.current)
+      searchTimerRef.current = null
+    }
   }
 
   const loadedPlanIdRef = useRef<string | null>(null)
@@ -290,8 +300,8 @@ export function EnvSync() {
 
   return (
     <div ref={rootRef} className="h-full overflow-hidden flex flex-col gap-3 text-text pb-1">
-      <div className="rounded-lg border border-border-subtle shrink-0">
-        <div className={`px-3 py-2 ${stacked ? "flex flex-col gap-2" : "flex items-center gap-2"}`}>
+      <div className="rounded-lg border border-border-subtle shrink-0 overflow-visible z-20">
+        <div className={`px-3 py-2 overflow-visible ${stacked ? "flex flex-col gap-2" : "flex items-center gap-2"}`}>
           <div className={`flex items-center gap-2 ${stacked ? "w-full" : "shrink-0"}`}>
             {!compact && <span className="text-xs font-medium text-text-muted/50 uppercase tracking-wide shrink-0">From</span>}
             <Listbox value={source} options={srcOpts} onChange={(value) => setForm({ source: value })} size="md" variant="ghost" ariaLabel="Source" className="w-24" />
@@ -331,9 +341,9 @@ export function EnvSync() {
               {!tiny && (searchMode === "id" ? "ID" : "Name")}
             </button>
 
-            <div className="relative flex-1 min-w-0" ref={searchBoxRef}>
-              <div className={searchLoading ? "search-live-ring rounded-md p-[1.5px]" : "rounded-md"}>
-                <div className={searchLoading ? "search-live-ring__inner relative rounded-[calc(0.375rem-1.5px)]" : "relative"}>
+            <div className="relative flex-1 min-w-0 overflow-visible" ref={searchBoxRef}>
+              <div className={searchLoading ? "search-live-ring rounded-md p-[2px]" : "rounded-md"}>
+                <div className={searchLoading ? "search-live-ring__inner relative rounded-[calc(0.375rem-2px)]" : "relative"}>
                   <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted/40 pointer-events-none z-10" />
                   <input
                     value={searchDraft}
@@ -343,16 +353,28 @@ export function EnvSync() {
                     placeholder={searchMode === "id" ? (definition?.idColumn ?? "id") : (definition?.labelColumn ?? "name")}
                     aria-busy={searchLoading}
                     className={[
-                      "w-full bg-base text-text text-sm pl-7 pr-2 py-1.5 rounded-md outline-none placeholder:text-text-muted/40 font-mono",
-                      searchLoading ? "border border-transparent" : "border border-border-subtle focus:border-accent",
+                      "w-full bg-base text-text text-sm pl-7 py-1.5 rounded-md outline-none placeholder:text-text-muted/40",
+                      entityId && !searchLoading ? "pr-7 font-sans" : "pr-7 font-mono",
+                      searchLoading ? "border border-transparent" : entityId ? "border border-accent/50 focus:border-accent" : "border border-border-subtle focus:border-accent",
                     ].join(" ")}
                   />
+                  {searchLoading && (
+                    <Loader2
+                      size={14}
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-accent animate-spin pointer-events-none z-10"
+                      aria-hidden
+                    />
+                  )}
                   {searchOpen && searchResults.length > 0 && (
-                    <div className="absolute top-full left-0 mt-1 w-full max-w-[24rem] max-h-[min(280px,50vh)] overflow-y-auto bg-elevated border border-border rounded shadow-lg z-50">
+                    <div className="absolute top-full left-0 mt-1 w-full max-w-[24rem] max-h-[min(280px,50vh)] overflow-y-auto bg-elevated border border-border rounded shadow-lg z-[100]">
                       {searchResults.map((hit) => (
                         <button
                           key={String(hit.id)}
-                          onClick={() => pickSearchHit(hit)}
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault()
+                            pickSearchHit(hit)
+                          }}
                           className="w-full text-left px-3 py-1.5 text-sm hover:bg-surface transition-colors flex items-center gap-3"
                         >
                           <span className="text-text-muted font-mono text-sm shrink-0">{String(hit.id)}</span>
@@ -362,7 +384,7 @@ export function EnvSync() {
                     </div>
                   )}
                   {!searchOpen && !searchLoading && searchErr && (
-                    <div className="absolute top-full left-0 mt-1 w-64 bg-elevated border border-border rounded shadow-lg z-50 px-3 py-2 text-xs text-text-muted">
+                    <div className="absolute top-full left-0 mt-1 w-64 bg-elevated border border-border rounded shadow-lg z-[100] px-3 py-2 text-xs text-text-muted">
                       {searchErr}
                     </div>
                   )}
