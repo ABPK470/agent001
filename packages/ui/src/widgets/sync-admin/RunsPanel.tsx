@@ -5,6 +5,11 @@ import { useEffect, useMemo, useState } from "react"
 import { api } from "../../api"
 import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../util"
+import {
+  readAllowedSchemas,
+  readExecutionContractSteps,
+  readExecutionContractVersion
+} from "./plan-contract"
 import { DetailRow, Empty, ListItem, PanelChrome, SplitView } from "./shared"
 
 interface SyncRunRow {
@@ -15,7 +20,7 @@ interface SyncRunRow {
   source: string
   target: string
   actorUpn: string | null
-  status: "started" | "success" | "failed"
+  status: "started" | "preview" | "success" | "failed"
   error: string | null
   startedAt: string
   finishedAt: string | null
@@ -68,8 +73,9 @@ export function RunsPanel(): JSX.Element {
     setErr(null)
     try {
       const next = await api.syncRuns(100)
-      setItems(next)
-      if (!selected && next[0]) setSelected(next[0].planId)
+      const rows = Array.isArray(next) ? next : []
+      setItems(rows)
+      if (!selected && rows[0]) setSelected(rows[0].planId)
     } catch (error) {
       setErr(error instanceof Error ? error.message : String(error))
     } finally {
@@ -113,6 +119,11 @@ function RunDetail({ run, plan, busy, err }: { run: SyncRunRow; plan: SyncPlan |
   const decisionLog = plan?.decisionLog ?? []
   const governance = plan?.governanceDecision ?? null
   const executionContract = plan?.executionContract ?? null
+  const contractSteps = executionContract ? readExecutionContractSteps(executionContract) : []
+  const contractVersion = executionContract ? readExecutionContractVersion(executionContract) : "—"
+  const allowedSchemas = executionContract ? readAllowedSchemas(executionContract) : []
+  const governanceWarnings = governance?.warnings ?? []
+  const freezeWindowIds = governance?.governance?.freezeWindowIds ?? []
 
   return (
     <div className="space-y-5 p-5 text-xs">
@@ -148,13 +159,13 @@ function RunDetail({ run, plan, busy, err }: { run: SyncRunRow; plan: SyncPlan |
           <div className="overflow-x-auto">
             <dl className="grid min-w-[320px] grid-cols-[140px_1fr] gap-x-4 gap-y-1.5">
               <DetailRow label="definition" value={executionContract.definitionId} />
-              <DetailRow label="version" value={executionContract.definitionVersion} />
-              <DetailRow label="schemas" value={executionContract.allowedSchemas.join(", ") || "—"} />
-              <DetailRow label="steps" value={String(executionContract.steps.length)} />
+              <DetailRow label="version" value={contractVersion} />
+              <DetailRow label="schemas" value={allowedSchemas.join(", ") || "—"} />
+              <DetailRow label="steps" value={String(contractSteps.length)} />
             </dl>
           </div>
           <div className="mt-3 space-y-2">
-            {executionContract.steps.map((step, index) => (
+            {contractSteps.map((step, index) => (
               <div key={step.id} className="rounded border border-border-subtle bg-overlay-1/40 px-3 py-2">
                 <div className="flex items-center gap-2">
                   <span className="font-mono text-text-muted/45">{index + 1}</span>
@@ -179,12 +190,12 @@ function RunDetail({ run, plan, busy, err }: { run: SyncRunRow; plan: SyncPlan |
               <DetailRow label="risk multiplier" value={String(governance.governance.riskMultiplier)} />
               <DetailRow label="target role" value={governance.targetEnvironment.role} />
               <DetailRow label="actor allowed" value={governance.targetEnvironment.actorAllowed === null ? "not evaluated" : (governance.targetEnvironment.actorAllowed ? "yes" : "no")} />
-              <DetailRow label="freeze refs" value={governance.governance.freezeWindowIds.join(", ") || "none"} />
+              <DetailRow label="freeze refs" value={freezeWindowIds.join(", ") || "none"} />
             </dl>
           </div>
-          {governance.warnings.length > 0 && (
+          {governanceWarnings.length > 0 && (
             <div className="mt-3 rounded border border-warning/20 bg-warning/5 px-3 py-2 text-warning">
-              {governance.warnings.map((warning) => <div key={warning}>• {warning}</div>)}
+              {governanceWarnings.map((warning) => <div key={warning}>• {warning}</div>)}
             </div>
           )}
         </section>
@@ -223,6 +234,8 @@ function statusTone(status: SyncRunRow["status"]): string {
       return "border-success/30 bg-success-soft text-success"
     case "failed":
       return "border-error/30 bg-error-soft text-error"
+    case "preview":
+      return "border-info/30 bg-info-soft text-info"
     default:
       return "border-border-subtle bg-overlay-2 text-text-muted"
   }

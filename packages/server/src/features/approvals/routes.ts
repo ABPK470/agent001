@@ -48,6 +48,54 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
     }
   )
 
+  app.get<{ Querystring: { tenant?: string } }>("/api/approvals/policies", async (req) => {
+    const tenantId = resolveTenant(req)
+    return db.listApprovalPolicies(tenantId)
+  })
+
+  app.put<{
+    Querystring: { tenant?: string }
+    Body: {
+      targetEnv?: string
+      riskTier: string
+      kind: "none" | "single" | "dual"
+      approvers?: string[]
+      bypassRole?: string | null
+    }
+  }>("/api/approvals/policies", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
+    const tenantId = resolveTenant(req)
+    const riskTier = req.body?.riskTier?.trim()
+    if (!riskTier || !["low", "medium", "high", "critical"].includes(riskTier)) {
+      reply.code(400)
+      return { error: "riskTier must be one of low, medium, high, critical" }
+    }
+    const kind = req.body?.kind
+    if (!kind || !["none", "single", "dual"].includes(kind)) {
+      reply.code(400)
+      return { error: "kind must be one of none, single, dual" }
+    }
+    db.upsertApprovalPolicy(
+      {
+        tenantId,
+        targetEnv: req.body.targetEnv?.trim() || "*",
+        riskTier: riskTier as RiskTier,
+        policy: kind,
+        approvers: Array.isArray(req.body.approvers) ? req.body.approvers : [],
+        bypassRole: req.body.bypassRole ?? "admin"
+      },
+      req.session.upn
+    )
+    broadcast({
+      type: EventType.SyncPolicySaved,
+      data: { tenantId, targetEnv: req.body.targetEnv?.trim() || "*", riskTier, kind, actor: req.session.upn }
+    })
+    return { ok: true }
+  })
+
   app.get<{ Params: { id: string } }>("/api/approvals/:id", async (req, reply) => {
     const approval = db.getApproval(req.params.id)
     if (!approval) {

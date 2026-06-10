@@ -330,7 +330,7 @@ export const api = {
       source: string
       target: string
       actorUpn: string | null
-      status: "started" | "success" | "failed"
+      status: "started" | "preview" | "success" | "failed"
       error: string | null
       startedAt: string
       finishedAt: string | null
@@ -630,7 +630,13 @@ export const api = {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
     return json<Array<Record<string, unknown>>>(`/api/approvals/policies${qs}`)
   },
-  upsertApprovalPolicy: (body: { riskTier: string; kind: "none"|"single"|"dual"; ttlMs: number; allowSelfRequester?: boolean; bypassRole?: string }, tenant?: string) => {
+  upsertApprovalPolicy: (body: {
+    targetEnv?: string
+    riskTier: string
+    kind: "none" | "single" | "dual"
+    approvers?: string[]
+    bypassRole?: string | null
+  }, tenant?: string) => {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
     return json<{ ok: boolean }>(`/api/approvals/policies${qs}`, { method: "PUT", body: JSON.stringify(body) })
   },

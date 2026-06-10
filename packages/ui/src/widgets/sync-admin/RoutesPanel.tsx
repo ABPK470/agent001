@@ -24,9 +24,27 @@ interface Route {
   filter_json: string
   channel:     Channel
   target:      string
-  enabled:     number
+  enabled:     boolean
   updated_at:  string
   updated_by:  string
+}
+
+function normalizeRoute(row: Record<string, unknown>): Route {
+  const filter = row["filter"]
+  const filterJson = typeof row["filter_json"] === "string"
+    ? row["filter_json"]
+    : JSON.stringify(filter && typeof filter === "object" ? filter : {})
+  return {
+    id: String(row["id"] ?? ""),
+    tenant_id: String(row["tenant_id"] ?? row["tenantId"] ?? ""),
+    event_type: String(row["event_type"] ?? row["eventType"] ?? ""),
+    filter_json: filterJson,
+    channel: String(row["channel"] ?? "email") as Channel,
+    target: String(row["target"] ?? ""),
+    enabled: row["enabled"] === true || row["enabled"] === 1,
+    updated_at: String(row["updated_at"] ?? row["updatedAt"] ?? ""),
+    updated_by: String(row["updated_by"] ?? row["updatedBy"] ?? ""),
+  }
 }
 
 interface Draft { eventType: string; channel: Channel; target: string; filter: string; enabled: boolean }
@@ -61,7 +79,10 @@ export function RoutesPanel(): JSX.Element {
 
   async function refresh(): Promise<void> {
     setBusy(true); setErr(null)
-    try { setItems((await api.listNotificationRoutes()) as unknown as Route[]) }
+    try {
+      const rows = await api.listNotificationRoutes()
+      setItems((rows as Array<Record<string, unknown>>).map(normalizeRoute))
+    }
     catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
     finally { setBusy(false) }
   }

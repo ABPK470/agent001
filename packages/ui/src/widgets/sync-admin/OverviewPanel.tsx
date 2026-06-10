@@ -65,7 +65,7 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
     loadingRef.current = true
     setBusy(true); setErr(null)
     try {
-      const [envs, runs, strats, frz, sched, pols, rts] = await Promise.all([
+      const results = await Promise.allSettled([
         api.syncEnvironments(),
         api.syncRuns(100),
         api.listEntityRegistryStrategies(),
@@ -74,6 +74,26 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
         api.listApprovalPolicies(),
         api.listNotificationRoutes(),
       ])
+      const failures = results
+        .map((result, index) => ({ result, index }))
+        .filter((entry): entry is { result: PromiseRejectedResult; index: number } => entry.result.status === "rejected")
+      if (failures.length > 0) {
+        const labels = ["environments", "runs", "strategies", "freeze windows", "schedules", "policies", "notification routes"]
+        setErr(
+          failures
+            .map(({ result, index }) => `${labels[index]}: ${result.reason instanceof Error ? result.reason.message : String(result.reason)}`)
+            .join(" · ")
+        )
+      }
+
+      const envs = results[0].status === "fulfilled" ? results[0].value : []
+      const runs = results[1].status === "fulfilled" ? results[1].value : []
+      const strats = results[2].status === "fulfilled" ? results[2].value : { items: [] }
+      const frz = results[3].status === "fulfilled" ? results[3].value : { items: [] }
+      const sched = results[4].status === "fulfilled" ? results[4].value : []
+      const pols = results[5].status === "fulfilled" ? results[5].value : []
+      const rts = results[6].status === "fulfilled" ? results[6].value : []
+
       const now = Date.now()
       const freezes = { active: 0, scheduled: 0, past: 0 }
       for (const w of frz.items) {
@@ -83,9 +103,17 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
         else              freezes.active++
       }
       const schedules = { enabled: 0, disabled: 0 }
-      for (const s of sched as unknown as Array<{ enabled: number }>) (s.enabled ? schedules.enabled++ : schedules.disabled++)
+      for (const s of sched as Array<{ enabled?: boolean | number }>) {
+        const on = s.enabled === true || s.enabled === 1
+        if (on) schedules.enabled++
+        else schedules.disabled++
+      }
       const routes = { enabled: 0, disabled: 0 }
-      for (const r of rts as unknown as Array<{ enabled: number }>) (r.enabled ? routes.enabled++ : routes.disabled++)
+      for (const r of rts as Array<{ enabled?: boolean | number }>) {
+        const on = r.enabled === true || r.enabled === 1
+        if (on) routes.enabled++
+        else routes.disabled++
+      }
       setCounts({
         envs:       envs.length,
         runs:       runs.length,
