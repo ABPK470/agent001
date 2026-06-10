@@ -1,31 +1,20 @@
 /**
  * TypewriterAnswer — streaming answer renderer with paced reveal.
  *
- * We can't rely on the network delivering tokens at a smooth cadence:
- *   - Some upstream LLMs (Databricks/Copilot proxies) buffer and emit
- *     large content chunks in bursts, so the UI would otherwise jump
- *     from empty to a full paragraph in one frame.
- *   - TCP buffering, dev proxies, and browser EventSource batching can
- *     turn a token-by-token stream into a single arrival.
- *
- * Solution: keep a local cursor that advances at a controlled pace
- * (rAF-driven, characters per frame) towards the latest received text.
- * When new text arrives we don't render it directly — we move the
- * target, and the cursor catches up smoothly. This guarantees visible
- * word-by-word streaming regardless of how the network delivers chunks.
- *
- * Once streaming ends, we hand off to SmartAnswer for full markdown.
+ * Network token delivery is bursty; we pace a local cursor so prose still
+ * feels live. Structured blocks (tables, charts, dashboards) render through
+ * SmartAnswer as soon as they are structurally complete — never as raw
+ * markdown / JSON characters. In-progress structured tails show skeletons.
  */
 
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
+import { joinStreamingParts, splitStreamingAnswer } from "./answer-stream-layout"
 import { SmartAnswer } from "./SmartAnswer"
+import { StructuredPendingBlock, TablePendingBlock } from "./StreamingBlocks"
 
-// Target reveal rate. ~36 wpm × 5 chars/word ≈ 180 cps — comfortable reading
-// pace that still feels live. We let the cursor catch up faster when far
-// behind so the UI never falls minutes behind a giant burst.
-const BASE_CHARS_PER_SECOND = 180
-const CATCHUP_MULTIPLIER = 4
-const CATCHUP_THRESHOLD_CHARS = 160
+const BASE_CHARS_PER_SECOND = 220
+const CATCHUP_MULTIPLIER = 5
+const CATCHUP_THRESHOLD_CHARS = 120
 
 export function TypewriterAnswer({
   text,
@@ -42,10 +31,8 @@ export function TypewriterAnswer({
   const rafRef = useRef<number | null>(null)
   const targetRef = useRef(text)
 
-  // Always observe the latest text from the rAF loop without re-subscribing.
   targetRef.current = text
 
-  // Reset when text shrinks (new run / stream.reset cleared the buffer).
   useEffect(() => {
     if (text.length < cursorRef.current) {
       cursorRef.current = text.length
@@ -53,10 +40,6 @@ export function TypewriterAnswer({
     }
   }, [text])
 
-  // Run the cursor while we're either still receiving OR still catching up.
-  // The dependency on `text` re-arms the loop when more text arrives after
-  // the cursor had idled, and on `streaming` flipping to false (so we still
-  // animate the tail of the final answer instead of snapping it in).
   useEffect(() => {
     let cancelled = false
     if (!streaming && cursorRef.current >= text.length) return
@@ -69,22 +52,20 @@ export function TypewriterAnswer({
         const dt = Math.min(now - last, 100)
         lastTickRef.current = now
         const behind = target - cursorRef.current
-        const cps = behind > CATCHUP_THRESHOLD_CHARS
-          ? BASE_CHARS_PER_SECOND * CATCHUP_MULTIPLIER
-          : BASE_CHARS_PER_SECOND
+        const cps =
+          behind > CATCHUP_THRESHOLD_CHARS
+            ? BASE_CHARS_PER_SECOND * CATCHUP_MULTIPLIER
+            : BASE_CHARS_PER_SECOND
         const advance = Math.max(1, Math.ceil((cps * dt) / 1000))
         cursorRef.current = Math.min(target, cursorRef.current + advance)
         setRevealed(cursorRef.current)
         rafRef.current = requestAnimationFrame(tick)
         return
       }
-      // Caught up.
       lastTickRef.current = null
       if (streaming) {
-        // More text may arrive — keep the loop alive idling.
         rafRef.current = requestAnimationFrame(tick)
       } else {
-        // Streaming ended and we've revealed everything — done.
         rafRef.current = null
       }
     }
@@ -97,17 +78,63 @@ export function TypewriterAnswer({
     }
   }, [streaming, text])
 
+  const layout = useMemo(() => splitStreamingAnswer(text), [text])
+
+  const proseTail = useMemo(() => {
+    if (layout.remainderKind !== "prose" || !layout.remainder) return ""
+    const proseStart = layout.committed ? layout.committed.length + 2 : 0
+    const slice = layout.remainder.slice(0, Math.max(0, revealed - proseStart))
+    const atEnd = !streaming && revealed >= text.length
+    return snapToWordBoundary(slice, atEnd)
+  }, [layout, revealed, streaming, text.length])
+
+  const renderText = useMemo(
+    () => joinStreamingParts(layout.committed, proseTail),
+    [layout.committed, proseTail],
+  )
+
+  const showStructuredPending =
+    streaming &&
+    (layout.remainderKind === "fenced" || layout.remainderKind === "table") &&
+    layout.remainder.length > 0
+
+  const showProseCursor =
+    streaming &&
+    layout.remainderKind === "prose" &&
+    (renderText.length > 0 || layout.remainder.length > 0)
+
   if (!streaming && revealed >= text.length) {
     return <SmartAnswer text={text} compact={compact} />
   }
 
-  const slice = text.slice(0, revealed)
-  const display = snapToWordBoundary(slice, !streaming && revealed >= text.length)
-
   return (
-    <div className="text-text-secondary text-base leading-relaxed w-full min-w-0 space-y-2">
-      <div className="whitespace-pre-wrap break-words">{display}</div>
+    <div
+      className={[
+        compact ? "text-text-secondary text-[13px] leading-6 w-full min-w-0" : "text-text-secondary text-base leading-relaxed w-full min-w-0",
+        "space-y-2",
+      ].join(" ")}
+    >
+      {renderText ? <SmartAnswer text={renderText} streaming compact={compact} /> : null}
+      {showStructuredPending && layout.remainderKind === "fenced" ? (
+        <StructuredPendingBlock lang={layout.fencedLang ?? "text"} />
+      ) : null}
+      {showStructuredPending && layout.remainderKind === "table" ? (
+        <TablePendingBlock raw={layout.remainder} />
+      ) : null}
+      {showProseCursor ? <StreamingCursor compact={compact} /> : null}
     </div>
+  )
+}
+
+function StreamingCursor({ compact }: { compact?: boolean }) {
+  return (
+    <span
+      className={[
+        "inline-block w-[2px] bg-accent/75 animate-pulse align-middle",
+        compact ? "h-[14px] ml-0.5" : "h-[1.1em] ml-0.5",
+      ].join(" ")}
+      aria-hidden
+    />
   )
 }
 

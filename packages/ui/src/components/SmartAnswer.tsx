@@ -15,6 +15,7 @@ import { Check, Copy } from "lucide-react"
 import React from "react"
 import { DataTable } from "./DataTable"
 import { InlineDiagram, isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
+import { StructuredPendingBlock } from "./StreamingBlocks"
 
 // Context that flips inline rendering (e.g. inline `code` chips) to a
 // lighter, less-decorated style. Used by the term-chat widget.
@@ -577,12 +578,7 @@ export function SmartAnswer({
               let isComplete = false
               try { JSON.parse(block.text); isComplete = true } catch { /* incomplete JSON */ }
               if (!isComplete) {
-                return (
-                  <div key={bi} className="rounded-lg border border-border-subtle px-3 py-2 flex items-center gap-2">
-                    <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-pulse shrink-0" />
-                    <span className="text-base text-text-muted font-mono">{block.lang} chart rendering…</span>
-                  </div>
-                )
+                return <StructuredPendingBlock key={bi} lang={block.lang} />
               }
             }
             return <InlineDiagram key={bi} kind={block.lang} source={block.text} />

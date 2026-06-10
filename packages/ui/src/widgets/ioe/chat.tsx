@@ -9,6 +9,7 @@ import { useEffect, useRef, useState } from "react"
 import { api } from "../../api"
 import { CodeBlock, extractToolCode } from "../../components/CodeBlock"
 import { SmartAnswer } from "../../components/SmartAnswer"
+import { TypewriterAnswer } from "../../components/TypewriterAnswer"
 import { ChatMode } from "../../enums"
 import { C, type ChatMessage } from "./constants"
 
@@ -548,7 +549,7 @@ function StreamingAnswerBubble({ text, activity }: { text: string; activity?: st
         className="flex-1 min-w-0 rounded-lg px-3 py-2 space-y-2"
         style={{ background: C.base, border: `1px solid ${C.border}` }}
       >
-        <SmartAnswer text={text} streaming />
+        <TypewriterAnswer text={text} streaming />
         <div className="flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: C.accent + "90" }} />
           <span
