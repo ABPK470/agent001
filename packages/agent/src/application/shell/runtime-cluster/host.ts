@@ -103,6 +103,8 @@ export interface SyncEventsHost {
 
 export interface SyncRunsHost {
   sink: SyncRunSink
+  /** Run/agent owner UPN for sync persistence when preview input omits `userUpn`. */
+  actorUpn: string | null
 }
 
 export interface SyncGovernanceHost {

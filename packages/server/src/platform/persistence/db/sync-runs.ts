@@ -7,6 +7,9 @@
  */
 
 import { isSyncRunStatus, SYNC_RUN_STATUSES, SyncRunStatus } from "@mia/shared-enums"
+import {
+  requireSyncRunActorUpn
+} from "../../../features/sync/application/plan-actor.js"
 import { getDb } from "./connection.js"
 
 export interface SyncRunRow {
@@ -63,6 +66,7 @@ export interface RecordSyncRunStartInput {
 }
 
 export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
+  const actorUpn = requireSyncRunActorUpn(i.actorUpn, "recordSyncRunStart")
   const c = asCounts(i.previewTotals)
   getDb()
     .prepare(
@@ -79,7 +83,7 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
       i.entityDisplayName,
       i.source,
       i.target,
-      i.actorUpn ?? "anonymous",
+      actorUpn,
       c.insert ?? 0,
       c.update ?? 0,
       c.delete ?? 0,
@@ -159,6 +163,7 @@ export function recordSyncRunPreview(i: {
   previewTotals: unknown
   planJson: string
 }): void {
+  const actorUpn = requireSyncRunActorUpn(i.actorUpn, "recordSyncRunPreview")
   const c = asCounts(i.previewTotals)
   // Don't clobber an in-progress / completed run with a "preview" status.
   // Use INSERT … ON CONFLICT to only overwrite plan_json + preview metadata
@@ -185,7 +190,7 @@ export function recordSyncRunPreview(i: {
       i.entityDisplayName,
       i.source,
       i.target,
-      i.actorUpn ?? "anonymous",
+      actorUpn,
       c.insert ?? 0,
       c.update ?? 0,
       c.delete ?? 0,

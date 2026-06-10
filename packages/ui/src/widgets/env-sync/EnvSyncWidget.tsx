@@ -176,7 +176,7 @@ export function EnvSync() {
       })
       if (entityName) setDisplayLabel(`${entityName} (${entityIdStr})`)
       const hydratedDefinition = definitions.find((entry) => entry.id === planEntityType) ?? null
-      planSigRef.current = `${nextPlan.source}|${nextPlan.target}|${planEntityType}|${entityIdStr}|false|id|${[...normalizeOptionalTableSelection(hydratedDefinition, nextPlan.recipeSnapshot?.enabledOptionalTables ?? null)].sort().join(",")}`
+      planSigRef.current = `${nextPlan.source}|${nextPlan.target}|${planEntityType}|${entityIdStr}|${force}|${searchMode}|${[...normalizeOptionalTableSelection(hydratedDefinition, nextPlan.recipeSnapshot?.enabledOptionalTables ?? null)].sort().join(",")}`
       if (!isFirstMountRef.current) setHasNewAgentSync(true)
     }).catch((error) => {
       const msg = error instanceof Error ? error.message : String(error)
@@ -186,7 +186,7 @@ export function EnvSync() {
       setForm({ planId: null })
       loadedPlanIdRef.current = null
     })
-  }, [form.planId, plan?.planId, definitions, form.entityType, setForm])
+  }, [form.planId, plan?.planId, definitions, form.entityType, force, searchMode, setForm])
 
   useEffect(() => { isFirstMountRef.current = false }, [])
 
@@ -228,9 +228,10 @@ export function EnvSync() {
         setPreviewErr(result.error)
         setForm({ planId: null })
       } else {
+        loadedPlanIdRef.current = result.planId
+        planSigRef.current = formSig
         setPlan(result)
         setForm({ planId: result.planId })
-        planSigRef.current = `${source}|${target}|${entityType}|${entityId}|${force}|${searchMode}|${[...enabledOptionalTables].sort().join(",")}`
       }
     } catch (error) {
       setPreviewErr(error instanceof Error ? error.message : String(error))

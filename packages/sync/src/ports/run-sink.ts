@@ -24,6 +24,7 @@ export interface SyncRunFinishInput {
 export interface SyncRunSink {
   start(input: SyncRunStartInput): void
   finish(input: SyncRunFinishInput): void
-  savePlan?(plan: SyncPlan): void
+  /** Optional host-level actor when the plan body does not carry `userUpn`. */
+  savePlan?(plan: SyncPlan, actorUpn?: string | null): void
   loadPlan?(planId: string): SyncPlan | null
 }

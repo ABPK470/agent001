@@ -464,6 +464,7 @@ async function previewSyncInner(
       decisionLogCount: decisionLog.length,
       entityType: input.entityType,
       entityId: input.entityId,
+      entityDisplayName: displayName,
       source: input.source,
       target: input.target,
       totals,

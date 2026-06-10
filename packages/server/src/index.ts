@@ -64,6 +64,7 @@ import { registerProfileRoutes } from "./features/profile/routes.js"
 import { registerProposerRoutes, startScheduler, stopScheduler } from "./features/proposer/index.js"
 import { AgentOrchestrator } from "./features/runs/orchestrator.js"
 import { registerRunRoutes } from "./features/runs/routes.js"
+import { createSyncEventSink, createSyncRunSink } from "./bootstrap/sync.js"
 import {
   ensureSyncDefinitionConfigs,
   loadPersistedSyncEnvironments,
@@ -86,7 +87,6 @@ import {
   getDbPath,
   getDbStats,
   getLlmConfig,
-  getSyncRunPlanJson,
   listFreezeWindowDefinitionsForTenant,
   migrateApiRequests,
   migrateEventLog,
@@ -94,9 +94,6 @@ import {
   migrateWebhookDrains,
   normaliseUnknownRunStatuses,
   pruneOldData,
-  recordSyncRunFinish,
-  recordSyncRunPreview,
-  recordSyncRunStart,
   saveApiRequest,
   tryBuildSignerFromEnv
 } from "./platform/persistence/index.js"
@@ -126,53 +123,8 @@ async function main() {
   const mssqlSetup = setupMssql(_projectRoot)
   const syncEnvironments = loadPersistedSyncEnvironments(_projectRoot, mssqlSetup.configs)
   ensureSyncDefinitionConfigs(_projectRoot)
-  const syncEventSink: AgentHost["sync"]["events"]["sink"] = (ev) => {
-    broadcast({ type: ev.type, data: ev.data })
-  }
-  const syncRunSink: AgentHost["sync"]["runs"]["sink"] = {
-    start: (i) => {
-      try {
-        recordSyncRunStart(i)
-      } catch (e) {
-        console.warn("[sync] recordSyncRunStart failed:", e)
-      }
-    },
-    finish: (i) => {
-      try {
-        recordSyncRunFinish(i)
-      } catch (e) {
-        console.warn("[sync] recordSyncRunFinish failed:", e)
-      }
-    },
-    // Durable plan-body persistence — survives restarts so the History modal
-    // can re-hydrate the diff for any past sync run (UI- or agent-initiated).
-    savePlan: (plan) => {
-      try {
-        recordSyncRunPreview({
-          planId: plan.planId,
-          entityType: plan.executionContract?.definitionId ?? plan.recipeSnapshot.entityType,
-          entityId: plan.entity.id,
-          entityDisplayName: plan.entity.displayName,
-          source: plan.source,
-          target: plan.target,
-          actorUpn: null,
-          previewTotals: plan.totals,
-          planJson: JSON.stringify(plan)
-        })
-      } catch (e) {
-        console.warn("[sync] recordSyncRunPreview failed:", e)
-      }
-    },
-    loadPlan: (planId) => {
-      try {
-        const json = getSyncRunPlanJson(planId)
-        return json ? JSON.parse(json) : null
-      } catch (e) {
-        console.warn("[sync] getSyncRunPlanJson failed:", e)
-        return null
-      }
-    }
-  }
+  const syncEventSink = createSyncEventSink()
+  const syncRunSink = createSyncRunSink()
 
   // Shared catalog registry: same Map threaded into the boot host and every
   // per-run host. buildCatalog() populates it; tools read via getCatalog(host).
@@ -185,7 +137,7 @@ async function main() {
     catalogDefaultCachePath,
     sync: {
       events: { sink: syncEventSink },
-      runs: { sink: syncRunSink },
+      runs: { sink: syncRunSink, actorUpn: null },
       environments: { items: syncEnvironments.environments },
       project: { dbProjectRoot: _projectRoot },
       governance: { freezeWindowsReader: () => listFreezeWindowDefinitionsForTenant() }

@@ -172,7 +172,8 @@ function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
           entityId: args.entityId as string | number,
           source: String(args.source),
           target: String(args.target),
-          force: Boolean(args.force)
+          force: Boolean(args.force),
+          userUpn: host.sync.runs.actorUpn ?? undefined
         })
         // Compact summary; full plan available via /api/sync/plan/:planId
         const lines: string[] = []

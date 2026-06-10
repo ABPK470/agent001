@@ -426,6 +426,37 @@ function groupAgentRunActivities(events: OperationEvent[]): OperationActivity[] 
   return activities
 }
 
+function extractSyncEntityHintsFromEvents(events: OperationEvent[]): {
+  entityType: string | null
+  entityId: string | null
+  entityDisplayName: string | null
+  source: string | null
+  target: string | null
+  definitionId: string | null
+} {
+  let entityType: string | null = null
+  let entityId: string | null = null
+  let entityDisplayName: string | null = null
+  let source: string | null = null
+  let target: string | null = null
+  let definitionId: string | null = null
+
+  for (const ev of events) {
+    if (!ev.type.startsWith("sync.preview") && !ev.type.startsWith("sync.execute")) continue
+    entityType ??= strField(ev.data, "entityType")
+    definitionId ??= strField(ev.data, "definitionId")
+    const rawId = ev.data["entityId"]
+    if (entityId == null && (typeof rawId === "string" || typeof rawId === "number")) {
+      entityId = String(rawId)
+    }
+    entityDisplayName ??= strField(ev.data, "entityDisplayName") ?? strField(ev.data, "entityName")
+    source ??= strField(ev.data, "source")
+    target ??= strField(ev.data, "target")
+  }
+
+  return { entityType, entityId, entityDisplayName, source, target, definitionId }
+}
+
 function buildSyncPipeline(
   planId: string,
   kind: typeof OperationKind.SyncPreview | typeof OperationKind.SyncExecute,
@@ -433,6 +464,7 @@ function buildSyncPipeline(
 ): OperationPipeline {
   const meta = db.getSyncRun?.(planId)
   const planSummary = loadPersistedSyncPlanSummary(planId)
+  const eventHints = extractSyncEntityHintsFromEvents(events)
   const startedAt = events[0].timestamp
   const lastEv = events[events.length - 1]
   const status: OperationStatus =
@@ -442,16 +474,24 @@ function buildSyncPipeline(
         ? OperationStatus.Failed
         : inferPipelineStatus(events)
   const endedAt = meta?.finished_at ?? (status !== OperationStatus.Running ? lastEv.timestamp : null)
-  const entityType = planSummary?.entityType ?? meta?.entity_type ?? null
-  const entityTypeLabel = humanizeEntityType(planSummary?.definitionId ?? entityType)
+  const entityType = planSummary?.entityType ?? meta?.entity_type ?? eventHints.entityType ?? null
+  const entityTypeLabel = humanizeEntityType(
+    planSummary?.definitionId ?? eventHints.definitionId ?? entityType
+  )
+  const entityRef = `${entityType ?? eventHints.entityType ?? "?"}#${meta?.entity_id ?? eventHints.entityId ?? "?"}`
   const entityName =
-    planSummary?.entityName ?? meta?.entity_display_name ?? `${entityType ?? "?"}#${meta?.entity_id ?? "?"}`
+    planSummary?.entityName ??
+    meta?.entity_display_name ??
+    eventHints.entityDisplayName ??
+    entityRef
   const route =
     planSummary?.source && planSummary?.target
       ? `${planSummary.source} → ${planSummary.target}`
       : meta
         ? `${meta.source} → ${meta.target}`
-        : ""
+        : eventHints.source && eventHints.target
+          ? `${eventHints.source} → ${eventHints.target}`
+          : ""
   const subtitleParts = [route]
   if (planSummary?.definitionPublishedVersion)
     subtitleParts.push(`def ${planSummary.definitionPublishedVersion}`)

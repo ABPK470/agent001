@@ -266,7 +266,7 @@ export function savePlan(host: SyncPlanStoreHost, plan: SyncPlan): void {
   // and the disk-JSON 24h TTL — required so the History modal can re-hydrate
   // older plans on demand.
   try {
-    host.sync.runs.sink.savePlan?.(plan)
+    host.sync.runs.sink.savePlan?.(plan, host.sync.runs.actorUpn)
   } catch {
     /* sink failure must not break preview */
   }

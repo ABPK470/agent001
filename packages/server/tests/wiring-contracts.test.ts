@@ -353,12 +353,6 @@ const AUDIT_ALLOWLIST: AllowlistEntry[] = [
   // for tenancy filtering — they only render as a string in the UI.
   // (Verified: db/audit_log table uses these only as display text.)
   {
-    file: "db/sync-runs.ts",
-    match: 'i.actorUpn ?? "anonymous"',
-    reason:
-      "actor_upn column on sync_runs is display-only for the history UI; isolation is enforced by separate fk/owner columns."
-  },
-  {
     file: "api/policies.ts",
     match: 'req.session?.upn ?? "unknown"',
     reason: "Audit log actor field — display-only, not used as a tenancy/key column."

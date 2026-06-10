@@ -287,7 +287,7 @@ function composeExecutionTools(
                   entityDisplayName: null,
                   source: String(args["source"] ?? ""),
                   target: String(args["target"] ?? ""),
-                  actorUpn: "agent",
+                  actorUpn: activeRun?.ownerUpn ?? null,
                   previewTotals
                 })
               } catch (error) {

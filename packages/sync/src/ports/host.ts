@@ -53,6 +53,7 @@ export interface SyncEventsHost {
 
 export interface SyncRunsHost {
   sink: SyncRunSink
+  actorUpn: string | null
 }
 
 export interface SyncEnvironmentRegistry {

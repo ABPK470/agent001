@@ -1,5 +1,6 @@
 import type { AgentHost } from "@mia/agent"
 import { ensureSyncDefinitionConfigs, loadPersistedSyncEnvironments } from "../features/sync/index.js"
+import { syncPlanActorUpn } from "../features/sync/application/plan-actor.js"
 import { broadcast } from "../platform/events/broadcaster.js"
 import {
   getSyncRunPlanJson,
@@ -36,8 +37,9 @@ export function createSyncRunSink(): AgentHost["sync"]["runs"]["sink"] {
         console.warn("[sync] recordSyncRunFinish failed:", error)
       }
     },
-    savePlan: (plan) => {
+    savePlan: (plan, actorUpn) => {
       try {
+        const resolvedActorUpn = syncPlanActorUpn(plan) ?? actorUpn ?? null
         recordSyncRunPreview({
           planId: plan.planId,
           entityType: plan.executionContract?.definitionId ?? plan.recipeSnapshot.entityType,
@@ -45,7 +47,7 @@ export function createSyncRunSink(): AgentHost["sync"]["runs"]["sink"] {
           entityDisplayName: plan.entity.displayName,
           source: plan.source,
           target: plan.target,
-          actorUpn: null,
+          actorUpn: resolvedActorUpn,
           previewTotals: plan.totals,
           planJson: JSON.stringify(plan)
         })

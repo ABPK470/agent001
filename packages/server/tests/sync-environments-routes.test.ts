@@ -36,7 +36,7 @@ function createHost(root: string): AgentHost {
     },
     sync: {
       events: { sink: () => {} },
-      runs: { sink: { start: () => {}, finish: () => {}, savePlan: () => {}, loadPlan: () => null } },
+      runs: { sink: { start: () => {}, finish: () => {}, savePlan: () => {}, loadPlan: () => null }, actorUpn: null },
       governance: { freezeWindowsReader: () => [] },
       environments: { items: new Map() },
       plans: { diskRoot: null, memCache: new Map() },

@@ -108,7 +108,10 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const syncOptions = options.sync
   const syncState = {
     events: { sink: syncOptions?.events?.sink ?? NOOP_SYNC_EVENT_SINK },
-    runs: { sink: syncOptions?.runs?.sink ?? NOOP_SYNC_RUN_SINK },
+    runs: {
+      sink: syncOptions?.runs?.sink ?? NOOP_SYNC_RUN_SINK,
+      actorUpn: syncOptions?.runs?.actorUpn ?? null
+    },
     governance: {
       freezeWindowsReader: syncOptions?.governance?.freezeWindowsReader ?? EMPTY_FREEZE_WINDOWS_READER
     },

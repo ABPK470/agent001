@@ -118,7 +118,7 @@ export interface BootCatalogState {
 
 export interface BootSyncState {
   events: { sink: SyncEventSink }
-  runs: { sink: SyncRunSink }
+  runs: { sink: SyncRunSink; actorUpn: string | null }
   governance: { freezeWindowsReader: () => readonly FreezeWindowDefinition[] }
   environments: { items: Map<string, SyncEnvironment> }
   plans: { diskRoot: string | null; memCache: Map<string, SyncPlan> }
