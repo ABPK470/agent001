@@ -10,7 +10,7 @@ import { getEnvironments } from "./environments.js"
 import { listPublishedSyncDefinitions } from "./published-definitions.js"
 import type { SyncEnvironmentRegistryHost, SyncProjectRootHost } from "../ports/index.js"
 
-function splitIdentifierTokens(value: string): string[] {
+export function splitIdentifierTokens(value: string): string[] {
   return value
     .replace(/([a-z])([A-Z])/g, "$1_$2")
     .replace(/([A-Z]+)([A-Z][a-z])/g, "$1_$2")
@@ -31,6 +31,7 @@ export function buildSyncOperationalVocabulary(
   for (const def of listPublishedSyncDefinitions(host, projectRoot)) {
     out.add(def.id.toLowerCase())
     for (const token of splitIdentifierTokens(def.id)) out.add(token)
+    for (const token of splitIdentifierTokens(def.displayName)) out.add(token)
   }
   for (const env of getEnvironments(host)) {
     out.add(env.name.toLowerCase())

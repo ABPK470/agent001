@@ -74,6 +74,7 @@ export function shouldInvokePlanner(
   // catalog questions that re-block the conversation — the exact
   // failure mode that motivated this guard.
   if (looksCoreferential(ctx.goal) && hasRecentAssistantTurn(ctx.messages)) return false
+  if (ctx.syncOperationIntent) return false
   return true
 }
 

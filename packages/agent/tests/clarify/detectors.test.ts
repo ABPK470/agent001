@@ -107,6 +107,28 @@ describe("schemaMatchDetector", () => {
     ).toEqual([])
   })
 
+  it("does not block sync entity instance names when syncOperationIntent is set", () => {
+    const cat = catalogFrom([
+      table("archive", "abcd"),
+      table("fact", "abcd")
+    ])
+    const findings = schemaMatchDetector.detect(
+      ctx({
+        goal: "sync contract abcd from uat to dev",
+        catalog: cat,
+        syncOperationIntent: {
+          entityType: "contract",
+          entityQuery: "abcd",
+          entityId: null,
+          source: "uat",
+          target: "dev",
+          reservedTokens: new Set(["abcd", "contract", "uat", "dev", "sync"])
+        }
+      })
+    )
+    expect(findings).toEqual([])
+  })
+
   it("honours domainVocabulary reserved tokens from operational registries", () => {
     const cat = catalogFrom([
       table("core", "Contract"),

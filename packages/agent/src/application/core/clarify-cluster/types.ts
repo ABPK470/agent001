@@ -149,6 +149,33 @@ export interface ClarifyContext {
    * the workflow's own tools resolve the reference.
    */
   readonly domainVocabulary?: { readonly reservedTokens: ReadonlySet<string> }
+  /**
+   * Deterministic parse of a natural-language ABI sync preview goal
+   * (sync + published entity type + from env to env). When set, catalog
+   * disambiguation must not fire on entity instance names.
+   */
+  readonly syncOperationIntent?: {
+    readonly entityType: string
+    readonly entityQuery: string | null
+    readonly entityId: string | null
+    readonly source: string
+    readonly target: string
+    readonly reservedTokens: ReadonlySet<string>
+  }
+}
+
+/** Drop catalog-disambiguation findings superseded by a sync operation parse. */
+export function filterFindingsForSyncIntent(
+  findings: readonly AmbiguityFinding[],
+  intent: ClarifyContext["syncOperationIntent"]
+): AmbiguityFinding[] {
+  if (!intent) return [...findings]
+  return findings.filter((f) => {
+    if (f.kind !== "schema-match" && f.kind !== "term-undefined") return true
+    const subject = f.subject.toLowerCase()
+    if (intent.reservedTokens.has(subject)) return false
+    return !subject.split(/\s+/).some((t) => intent.reservedTokens.has(t.toLowerCase()))
+  })
 }
 
 export interface Detector {

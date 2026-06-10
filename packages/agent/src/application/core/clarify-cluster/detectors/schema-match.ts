@@ -12,6 +12,7 @@ import { MessageRole } from "../../../../domain/enums/message.js"
 import { tokenize, type CatalogGraph } from "../../../../tools/index.js"
 import type { ClarifyContext, Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
+import { mergeReservedTokens } from "./reserved-tokens.js"
 import { goalTokens } from "./stopwords.js"
 
 /**
@@ -175,7 +176,7 @@ export const schemaMatchDetector: Detector = {
     // archive.* table names. Fed from system-messages.ts which now
     // passes the prior-turns synthetic transcript via ctx.messages.
     if (looksCoreferential(ctx.goal) && hasRecentAssistantTurn(ctx.messages)) return []
-    const reserved = ctx.domainVocabulary?.reservedTokens
+    const reserved = mergeReservedTokens(ctx)
     // Qualified-name guard: any `schema.object` the user already typed
     // and that resolves against the live catalog (with mirrorSchema
     // fallback) consumes BOTH halves — the user disambiguated themselves.

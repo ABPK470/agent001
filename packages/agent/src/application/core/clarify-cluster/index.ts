@@ -23,7 +23,12 @@ import { timeRangeDetector } from "./detectors/time-range.js"
 import { writeConfirmationDetector } from "./detectors/write-confirmation.js"
 import type { AmbiguityFinding, ClarifyContext, Detector, ResolvedClarification } from "./types.js"
 
-export { CLARIFY_BLOCK_BUDGET_BYTES, makeFindingId, slugSubject } from "./types.js"
+export {
+  CLARIFY_BLOCK_BUDGET_BYTES,
+  filterFindingsForSyncIntent,
+  makeFindingId,
+  slugSubject
+} from "./types.js"
 
 export { runDetectors }
 

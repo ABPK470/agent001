@@ -12,6 +12,7 @@ import type { TenantConfig } from "../../../shell/tenant-config.js"
 import type { CatalogGraph } from "../../../../tools/index.js"
 import type { Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
+import { mergeReservedTokens } from "./reserved-tokens.js"
 import { isStopword } from "./stopwords.js"
 
 const VERSION = "1.0.0"
@@ -84,7 +85,7 @@ export const termUndefinedDetector: Detector = {
 
   detect(ctx) {
     if (!ctx.catalog) return []
-    const reserved = ctx.domainVocabulary?.reservedTokens
+    const reserved = mergeReservedTokens(ctx)
     const out = []
     const seen = new Set<string>()
     const matches = ctx.goal.match(CAPITALISED_PHRASE) ?? []

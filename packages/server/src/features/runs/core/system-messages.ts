@@ -7,6 +7,7 @@ import {
   CLARIFICATION_DISCIPLINE_SECTION,
   DEFAULT_SYSTEM_PROMPT,
   detectAmbiguities,
+  filterFindingsForSyncIntent,
   getCatalog,
   getCatalogSchemaFingerprint,
   getTenantConfig,
@@ -16,7 +17,11 @@ import {
   runLlmPlanner,
   shouldInvokePlanner
 } from "@mia/agent"
-import { buildSyncOperationalVocabularyForHost } from "@mia/sync"
+import {
+  buildSyncOperationalVocabularyForHost,
+  formatSyncOperationIntentBlock,
+  parseSyncOperationIntentForHost
+} from "@mia/sync"
 import { getAttachment, type AttachmentRow } from "../../../platform/persistence/attachments.js"
 import type { DbToolResult } from "../../../platform/persistence/sqlite.js"
 import type { ClarificationsPort } from "../../../ports/clarifications.js"
@@ -283,6 +288,7 @@ export async function buildSystemMessages(opts: {
   const coordinationTopic = opts.coordinationTopic ?? ""
 
   const decision = decideSections({ goal, memory: perTier })
+  const syncOperationIntent = opts.host ? parseSyncOperationIntentForHost(goal, opts.host) : null
 
   // Observability: surface the per-run section decision exactly once, so any
   // future "why was the persona injected?" / "why is the prompt so big?"
@@ -363,7 +369,7 @@ export async function buildSystemMessages(opts: {
         })
       }
       const domainVocabulary =
-        decision.includeAbiSync && opts.host
+        (decision.includeAbiSync || syncOperationIntent) && opts.host
           ? { reservedTokens: buildSyncOperationalVocabularyForHost(opts.host) }
           : undefined
       const ctx = {
@@ -381,9 +387,17 @@ export async function buildSystemMessages(opts: {
         // the detector knows it is running server-side (vs. CLI/tests
         // where the field is absent and the detector no-ops).
         priorResultsCount: priorResults.length,
-        ...(domainVocabulary ? { domainVocabulary } : {})
+        ...(domainVocabulary ? { domainVocabulary } : {}),
+        ...(syncOperationIntent ? { syncOperationIntent } : {})
       }
-      let findings = detectAmbiguities(ctx)
+      if (syncOperationIntent) {
+        systemMessages.push({
+          role: MessageRole.System,
+          content: formatSyncOperationIntentBlock(syncOperationIntent),
+          section: "system_law"
+        })
+      }
+      let findings = filterFindingsForSyncIntent(detectAmbiguities(ctx), syncOperationIntent ?? undefined)
       if (
         decision.includeDataPersona &&
         findings.length === 0 &&
@@ -515,7 +529,7 @@ export async function buildSystemMessages(opts: {
   // Section 1b: ABI sync SME — injected ONLY when the goal is sync-related.
   // Keeping this out of the default system prompt saves 3-5K tokens per call
   // on all non-sync tasks (coding, data analysis, etc.).
-  if (decision.includeAbiSync) {
+  if (decision.includeAbiSync || syncOperationIntent) {
     systemMessages.push({
       role: MessageRole.System,
       content: renderPromptVars(ABI_SYNC_SECTION, promptVars),
