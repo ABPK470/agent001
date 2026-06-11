@@ -853,9 +853,36 @@ textarea.input {
 .chathome {
   background: var(--canvas);
   --hero-pill-shadow-live: none;
+  /* Must match .chathome background — NOT --surface/--panel-2 (causes grey band). */
+  --chathome-scroll-fade: var(--canvas);
 }
 :root[data-theme="light"] .chathome {
   background: var(--panel);
+  --chathome-scroll-fade: var(--panel);
+}
+
+/* Home chat: scroll content dissolves into page bg (short, fully transparent tail). */
+.chathome-transcript-top-fade {
+  pointer-events: none;
+  height: 14px;
+  background: linear-gradient(
+    to bottom,
+    var(--chathome-scroll-fade) 0%,
+    color-mix(in srgb, var(--chathome-scroll-fade) 42%, transparent) 38%,
+    transparent 100%
+  );
+}
+
+/* Above the bottom input — content fades out before the pill (pill stays crisp). */
+.chathome-input-edge-fade {
+  pointer-events: none;
+  height: 20px;
+  background: linear-gradient(
+    to top,
+    var(--chathome-scroll-fade) 0%,
+    color-mix(in srgb, var(--chathome-scroll-fade) 48%, transparent) 42%,
+    transparent 100%
+  );
 }
 
 /* Hero pill — light mode only, ChatHomePage only.

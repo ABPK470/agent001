@@ -1515,26 +1515,31 @@ function ToolPill({ row, isLast, isLiveRun = false }: { row: ToolRow; isLast: bo
 // single collapsible header. Default-collapsed once the iteration is
 // done so the thread stays scannable; auto-expanded while the
 // iteration is still running so the user sees live activity.
-function IterationBlock({ part, isLiveRun = false }: { part: ResponseIterationPart; isLiveRun?: boolean }) {
+function IterationBlock({
+  part,
+  isLiveRun = false,
+  isLastIteration = false,
+  hasNarrativeAfter = false,
+}: {
+  part: ResponseIterationPart
+  isLiveRun?: boolean
+  isLastIteration?: boolean
+  hasNarrativeAfter?: boolean
+}) {
   const { preserveToggle } = useChatScroll()
-  const [open, setOpen] = useState(part.hasRunning && isLiveRun)
-  // If a previously-collapsed block flips back to running (rare — only
-  // happens via re-render with stale state), respect that and re-expand.
-  // We don't auto-collapse on transition to done: once the user opened
-  // it, it stays open; once an iteration finishes naturally we collapse
-  // it ONLY if the user hasn't interacted yet.
+  const [open, setOpen] = useState(false)
   const userToggledRef = useRef(false)
-  const wasRunningRef = useRef(part.hasRunning)
+  // Live: keep the newest iteration open while tools stream in; fold only
+  // once a narration paragraph lands for that step (not when tools finish).
   useEffect(() => {
     if (userToggledRef.current) return
-    if (wasRunningRef.current && !part.hasRunning) {
-      // Just finished — collapse now that the action is over.
-      setOpen(false)
-    } else if (part.hasRunning && isLiveRun) {
+    if (!isLiveRun) return
+    if (isLastIteration && !hasNarrativeAfter) {
       setOpen(true)
+    } else if (hasNarrativeAfter) {
+      setOpen(false)
     }
-    wasRunningRef.current = part.hasRunning && isLiveRun
-  }, [part.hasRunning, isLiveRun])
+  }, [isLiveRun, isLastIteration, hasNarrativeAfter, part.hasRunning])
 
   const buttonRef = useRef<HTMLButtonElement>(null)
   const errored = part.tools.some((p) => p.row.status === "error")
@@ -2002,6 +2007,22 @@ function RunMessageImpl({
   const isDone = !isRunActiveStatus(run.status)
   const isLiveRun = isActive && !isDone
 
+  const iterationMeta = useMemo(() => {
+    const lastIterationIndex = responseParts.reduce(
+      (last, candidate, index) => (candidate.kind === "iteration-block" ? index : last),
+      -1,
+    )
+    const meta = new Map<string, { isLastIteration: boolean; hasNarrativeAfter: boolean }>()
+    responseParts.forEach((candidate, index) => {
+      if (candidate.kind !== "iteration-block") return
+      meta.set(candidate.id, {
+        isLastIteration: index === lastIterationIndex,
+        hasNarrativeAfter: responseParts.slice(index + 1).some((p) => p.kind === "narrative"),
+      })
+    })
+    return meta
+  }, [responseParts])
+
   const renderedParts = useMemo(() => {
     // Copilot-style flat thread: every responsePart renders as a single
     // row in chronological order. No DetailViewport buffering, no
@@ -2035,7 +2056,16 @@ function RunMessageImpl({
       }
 
       if (part.kind === "iteration-block") {
-        items.push(<IterationBlock key={part.id} part={part} isLiveRun={isLiveRun} />)
+        const meta = iterationMeta.get(part.id)
+        items.push(
+          <IterationBlock
+            key={part.id}
+            part={part}
+            isLiveRun={isLiveRun}
+            isLastIteration={meta?.isLastIteration ?? false}
+            hasNarrativeAfter={meta?.hasNarrativeAfter ?? false}
+          />,
+        )
         if (part.hasRunning) lastToolHasRunning = true
         else lastToolHasRunning = false
         return
@@ -2108,7 +2138,7 @@ function RunMessageImpl({
     }
 
     return items
-  }, [isLiveRun, onRespond, responseParts])
+  }, [isLiveRun, iterationMeta, onRespond, responseParts])
 
   // Show workspace diff card when run completes with file changes
   const showDiff = isDone && (run.pendingWorkspaceChanges ?? 0) > 0
@@ -2367,9 +2397,9 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
   const [scrollToRunId, setScrollToRunId] = useState<string | null>(null)
   const [visibleRunCount, setVisibleRunCount] = useState(INITIAL_VISIBLE_RUNS)
+  const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
   const isHomeMode = mode === "home"
   const streamingAnswer = activeRun?.streamingAnswer ?? ""
 
@@ -2384,7 +2414,9 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     resetKey: scrollToRunId,
     initialScroll: "none",
     followWhen: isRunning || Boolean(activeRun?.streamingAnswer),
-    onScrollPosition: (scrollTop) => setTranscriptFadeTop(scrollTop > 4),
+    onScrollPosition: (scrollTop) => {
+      if (isHomeMode) setTranscriptFadeTop(scrollTop > 6)
+    },
   })
 
   // Reset the textarea to its intrinsic 1-row height when empty and to
@@ -2838,7 +2870,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       {isHomeMode && transcriptFadeTop && !showEmptyState && (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-surface via-surface to-transparent"
+          className="chathome-transcript-top-fade absolute inset-x-0 top-0 z-10"
         />
       )}
 
@@ -2853,8 +2885,14 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       </ChatScrollProvider>
 
       {!showEmptyState && (
-        <div className={`shrink-0 pb-4 ${isHomeMode ? "px-6" : "px-5"}`}>
-          <div className={isHomeMode ? HOME_CHAT_COLUMN_CLASS : "w-[90%] mx-auto"}>
+        <div className={`relative shrink-0 pb-4 ${isHomeMode ? "px-6 pt-2" : "px-5"}`}>
+          {isHomeMode && (
+            <div
+              aria-hidden
+              className="chathome-input-edge-fade pointer-events-none absolute inset-x-0 -top-4 z-10"
+            />
+          )}
+          <div className={`relative z-20 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : "w-[90%] mx-auto"}`}>
             <TermChatInputBar
               input={input}
               isRunning={isRunning}
