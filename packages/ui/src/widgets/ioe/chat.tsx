@@ -202,15 +202,29 @@ export function ChatPanel({
             <span className="text-[13px]">No conversation yet</span>
             <span className="text-[13px]">Start a run to see the agent&apos;s reasoning</span>
           </div>
+        ) : isRunning && lastUserMessageIndex >= 0 ? (
+          <>
+            {visibleMessages.slice(0, lastUserMessageIndex).map((msg, i) => (
+              <ChatBubble key={`before-${i}`} message={msg} mode={chatMode} />
+            ))}
+            <div className="relative">
+              <StickyUserGoal sticky align="start" className="mb-2">
+                <UserGoalBubble content={visibleMessages[lastUserMessageIndex]!.content} />
+              </StickyUserGoal>
+              {visibleMessages.slice(lastUserMessageIndex + 1).map((msg, i) => (
+                <ChatBubble key={`after-${i}`} message={msg} mode={chatMode} />
+              ))}
+              {!hasPending && (
+                streamingAnswer
+                  ? <StreamingAnswerBubble text={streamingAnswer} activity={currentActivity} />
+                  : <ActivityBubble activity={currentActivity ?? "Thinking"} />
+              )}
+            </div>
+          </>
         ) : (
           <>
             {visibleMessages.map((msg, i) => (
-              <ChatBubble
-                key={i}
-                message={msg}
-                mode={chatMode}
-                sticky={isRunning && msg.role === "user" && i === lastUserMessageIndex}
-              />
+              <ChatBubble key={i} message={msg} mode={chatMode} />
             ))}
             {isRunning && !hasPending && (
               streamingAnswer
@@ -421,26 +435,28 @@ export function ChatPanel({
   )
 }
 
-function ChatBubble({ message: msg, sticky = false }: { message: ChatMessage; mode: ChatMode; sticky?: boolean }) {
+function UserGoalBubble({ content }: { content: string }) {
+  return (
+    <div className="flex items-start gap-2 max-w-full">
+      <div
+        className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
+        style={{ background: C.accent + "30" }}
+      >
+        <User size={14} style={{ color: C.accent }} />
+      </div>
+      <div
+        className="flex-1 rounded-lg px-3 py-2 text-[13px]"
+        style={{ background: C.elevated, color: C.text }}
+      >
+        {content}
+      </div>
+    </div>
+  )
+}
+
+function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) {
   if (msg.role === "user") {
-    return (
-      <StickyUserGoal sticky={sticky}>
-        <div className="flex items-start gap-2">
-          <div
-            className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
-            style={{ background: C.accent + "30" }}
-          >
-            <User size={14} style={{ color: C.accent }} />
-          </div>
-          <div
-            className="flex-1 rounded-lg px-3 py-2 text-[13px]"
-            style={{ background: C.elevated, color: C.text }}
-          >
-            {msg.content}
-          </div>
-        </div>
-      </StickyUserGoal>
-    )
+    return <UserGoalBubble content={msg.content} />
   }
   if (msg.role === "thinking") {
     return (

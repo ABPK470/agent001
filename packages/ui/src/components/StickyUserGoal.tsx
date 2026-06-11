@@ -1,29 +1,31 @@
 import type { ReactNode } from "react"
 
 /**
- * Keeps the user goal visible at the top of the chat scroll area while the
- * agent is still generating output for that run.
+ * Pins the user's goal to the top of the chat scrollport while the agent is
+ * still working on that run. Must be a direct child of the run block that
+ * also contains the (long) assistant output — otherwise CSS sticky cannot
+ * span the scroll range.
  */
 export function StickyUserGoal({
   sticky,
+  align = "end",
   children,
   className = "",
 }: {
   sticky: boolean
+  align?: "start" | "end"
   children: ReactNode
   className?: string
 }) {
+  const rowAlign = align === "end" ? "justify-end" : "justify-start"
+
   if (!sticky) {
-    return <div className={className}>{children}</div>
+    return <div className={`flex w-full ${rowAlign} ${className}`}>{children}</div>
   }
 
   return (
     <div
-      className={`sticky top-0 z-20 -mx-1 px-1 pt-1 pb-3 bg-surface/95 backdrop-blur-sm supports-[backdrop-filter]:bg-surface/85 ${className}`}
-      style={{
-        backgroundImage:
-          "linear-gradient(to bottom, color-mix(in oklab, var(--color-surface) 96%, transparent) 0%, color-mix(in oklab, var(--color-surface) 82%, transparent) 78%, transparent 100%)",
-      }}
+      className={`sticky top-0 z-30 flex w-full ${rowAlign} border-b border-border-subtle/50 bg-surface py-2 shadow-[0_6px_16px_-8px_rgba(0,0,0,0.45)] ${className}`}
     >
       {children}
     </div>

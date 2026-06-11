@@ -605,11 +605,10 @@ export function AgentChat() {
                       const runIsActive = run.id === activeRunId
                       const runIsGenerating = runIsActive && isRunning
                       return (
-                      <div key={run.id} className="space-y-2 rounded-lg p-2">
-                          {/* Goal (user message) — sticky while this run is generating */}
-                          <div className="flex justify-end">
-                              <StickyUserGoal sticky={runIsGenerating} className="max-w-[95%]">
-                              <div className="flex items-start gap-2">
+                      <div key={run.id} className="space-y-2 rounded-lg p-2 relative">
+                          {/* Goal — sticky for the full height of this run's output */}
+                          <StickyUserGoal sticky={runIsGenerating} align="end" className="mb-1">
+                              <div className="flex items-start gap-2 max-w-[95%]">
                                   <span className="text-text text-base bg-accent/10 rounded-xl rounded-tr-sm px-3 py-1.5 leading-relaxed">
                                       {run.goal}
                                   </span>
@@ -617,8 +616,7 @@ export function AgentChat() {
                                       <User size={14} className="text-accent" />
                                   </div>
                               </div>
-                              </StickyUserGoal>
-                          </div>
+                          </StickyUserGoal>
 
                           {/* Answer (agent response) — left-aligned. User-safe failure
                 messages get a distinct, smaller notice style with the run

@@ -2565,16 +2565,6 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const isHomeMode = mode === "home"
-  const transcriptMaskStyle = useMemo<React.CSSProperties>(() => {
-    if (!isHomeMode || showEmptyState || !transcriptFadeTop) return {}
-    const mask = "linear-gradient(180deg, transparent 0px, black 34px, black 100%)"
-    return {
-      WebkitMaskImage: mask,
-      maskImage: mask,
-      WebkitMaskRepeat: "no-repeat",
-      maskRepeat: "no-repeat",
-    }
-  }, [isHomeMode, showEmptyState, transcriptFadeTop])
 
   return (
     <div
@@ -2636,7 +2626,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
         {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
         onScroll={onTranscriptScroll}
         className={`relative flex-1 overflow-y-auto min-h-0 ${isHomeMode && showEmptyState ? "px-6 pt-8 pb-10" : isHomeMode ? "px-6 pt-2 pb-5 space-y-8" : "px-6 py-5 space-y-10"}`}
-        style={{ ...transcriptMaskStyle, overflowAnchor: "none" }}
+        style={{ overflowAnchor: "none" }}
       >
         <div
           ref={transcriptInnerRef}
@@ -2695,10 +2685,14 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
             const runIsActive = run.id === activeRunId
             const runIsGenerating = runIsActive && isRunActiveStatus(run.status)
             return (
-            <div key={run.id} className="space-y-6">
-              {/* User goal — sticky at top while this run is still generating */}
-              <div className={`flex justify-end ${isHomeMode ? "py-2" : "py-8"}`}>
-                <StickyUserGoal sticky={runIsGenerating} className="max-w-[82%] w-full flex justify-end">
+            <div key={run.id} className={`relative ${isHomeMode ? "mb-8" : "mb-10"}`}>
+              {/* User goal — sticky for the full height of this run's output */}
+              <StickyUserGoal
+                sticky={runIsGenerating}
+                align="end"
+                className={isHomeMode ? "mb-3" : "mb-6 pt-4"}
+              >
+                <div className="max-w-[82%] w-full flex justify-end">
                 {run.upn && run.upn.toLowerCase() !== me?.upn?.toLowerCase() && (
                   <div className="flex flex-col items-end gap-1.5">
                     <span className="text-[11px] font-medium text-text-muted uppercase tracking-wide px-1.5">
@@ -2720,8 +2714,8 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
                     <UserGoalText text={run.goal} />
                   </div>
                 )}
-                </StickyUserGoal>
-              </div>
+                </div>
+              </StickyUserGoal>
 
               {/* Agent response */}
               <div className={isHomeMode ? "" : "pr-6"}>
@@ -2738,6 +2732,13 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
         </div>
       </div>
+
+      {isHomeMode && transcriptFadeTop && !showEmptyState && (
+        <div
+          aria-hidden
+          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-10 bg-gradient-to-b from-surface via-surface/90 to-transparent"
+        />
+      )}
 
       {showJumpButton && !showEmptyState && (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
