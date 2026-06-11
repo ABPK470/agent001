@@ -11,7 +11,7 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
 import { AttachmentChips, type PendingAttachment } from "../components/AttachmentChips"
-import { ChatScrollProvider } from "../components/ChatScrollContext"
+import { ChatScrollProvider, useChatScroll } from "../components/ChatScrollContext"
 import { CodeBlock, extractToolCode } from "../components/CodeBlock"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
 import { SmartAnswer } from "../components/SmartAnswer"
