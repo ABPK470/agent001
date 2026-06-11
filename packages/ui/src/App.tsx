@@ -1,8 +1,9 @@
-import { Activity, MoreVertical, Shield, X } from "lucide-react"
+import { Activity, MessageSquare, MoreVertical, Shield, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api, createEventStream, createPopoutEventRelay } from "./api"
 import { Canvas, type CanvasHandle } from "./components/Canvas"
 import { ChatHomePage } from "./components/ChatHomePage"
+import { ThreadHomePage } from "./features/threads/ThreadHomePage"
 import { MobileNav } from "./components/MobileNav"
 import { PolicyEditor } from "./components/PolicyEditor"
 import { Toolbar } from "./components/Toolbar"
@@ -17,6 +18,12 @@ import { useMe } from "./hooks/useMe"
 import { useStore } from "./store"
 import type { AuditEntry, LogEntry, Step, WidgetType } from "./types"
 import { widgetRegistry } from "./widgets"
+
+type HomeShellMode = "chat" | "thread"
+
+function resolveHomeShellMode(): HomeShellMode {
+  return import.meta.env.VITE_HOME_SHELL === "legacy" ? "chat" : "thread"
+}
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
   "agent-chat": "Agent Chat",
@@ -73,7 +80,7 @@ export function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
-  const [shellMode, setShellMode] = useState<"chat" | "platform">("chat")
+  const [shellMode, setShellMode] = useState<HomeShellMode | "platform">(resolveHomeShellMode())
   // Becomes true when the login overlay starts its final fade so ChatHomePage
   // crossfades with it instead of waiting for it to fully disappear.
   const [shellRevealing, setShellRevealing] = useState(false)
@@ -162,7 +169,7 @@ export function App() {
 
   useEffect(() => {
     if (!me?.upn) return
-    setShellMode("chat")
+    setShellMode(resolveHomeShellMode())
   }, [me?.upn])
 
   // Reset reveal flag each time we return to login so the next login
@@ -449,6 +456,19 @@ export function App() {
   }
   const widgets = currentView?.widgets ?? []
 
+  if (shellMode === "thread") {
+    return (
+      <>
+        {welcomeOverlay}
+        <ThreadHomePage
+          connected={connected}
+          onOpenPlatform={() => setShellMode("platform")}
+          onLogout={handleSwitchUser}
+        />
+      </>
+    )
+  }
+
   if (shellMode === "chat") {
     return (
       <>
@@ -513,6 +533,12 @@ export function App() {
                       <Activity size={15} /> Usage
                     </button>
                     )}
+                    <button
+                      className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-text-secondary active:bg-overlay-2"
+                      onClick={() => { setShellMode(resolveHomeShellMode()); setMobileMenuOpen(false) }}
+                    >
+                      <MessageSquare size={15} /> Home chat
+                    </button>
                     <button
                       className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-text-secondary active:bg-overlay-2"
                       onClick={() => { setPolicyOpen(true); setMobileMenuOpen(false) }}
@@ -596,7 +622,7 @@ export function App() {
         onAddWidget={() => canvasRef.current?.openCatalog()}
         onSwitchUser={handleSwitchUser}
         onSwitchUi={handleSwitchUi}
-        onShowChatHome={() => setShellMode("chat")}
+        onShowChatHome={() => setShellMode(resolveHomeShellMode())}
         me={me}
       />
       <Canvas ref={canvasRef} />

@@ -9,7 +9,7 @@
 import { DEFAULT_SYSTEM_PROMPT, PolicyEffect } from "@mia/agent"
 import { BUNDLED_SCD2_STRATEGIES } from "@mia/sync"
 import Database from "better-sqlite3"
-import { createHash } from "node:crypto"
+import { createHash, randomUUID } from "node:crypto"
 import { mkdirSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
@@ -47,7 +47,7 @@ export function _setDb(db: Database.Database): void {
 // other tables are re-created from scratch with the declarative schema
 // below. Use sparingly — this WILL drop data; only safe in dev.
 
-export const SCHEMA_VERSION = 23
+export const SCHEMA_VERSION = 24
 const SEED_VERSION = SCHEMA_VERSION
 // v19: introduce real `users` table; identity is no longer self-declared.
 //      upn becomes NOT NULL FK on every per-user table. Triggers a one-time
@@ -75,6 +75,9 @@ const SEED_VERSION = SCHEMA_VERSION
 //      the IOE BusFeed editor can replay after reconnect, and Help/
 //      Question protocol messages survive client disconnects. Additive
 //      table + indexes only; no hard reset.
+// v24: introduce `threads` table and `runs.thread_id` for named
+//      conversation workspaces grouping multiple runs. Additive migration
+//      with one-time backfill from (upn, session_id) groups.
 const HARD_RESET_THRESHOLD = 19
 
 function tableSessionFkIsCascade(db: Database.Database, table: string): boolean {
@@ -352,6 +355,72 @@ function migrateAuditLogScopes(db: Database.Database): void {
   db.pragma("foreign_keys = ON")
 }
 
+/** v24: threads table + runs.thread_id with one-time backfill from session groups. */
+function migrateThreadsV24(
+  db: Database.Database,
+  getMetaValue: (key: string) => string | undefined,
+  setMetaValue: (key: string, value: string) => void
+): void {
+  const runsCols = db.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>
+  if (!runsCols.some((c) => c.name === "thread_id")) {
+    db.exec("ALTER TABLE runs ADD COLUMN thread_id TEXT REFERENCES threads(id) ON DELETE SET NULL")
+  }
+  db.exec("CREATE INDEX IF NOT EXISTS idx_runs_thread ON runs(thread_id, created_at ASC)")
+
+  if (getMetaValue("threads_backfill_v24") === "1") return
+
+  const groups = db
+    .prepare(
+      `
+      SELECT upn, session_id, MIN(created_at) AS first_at, MIN(goal) AS first_goal
+      FROM runs
+      WHERE thread_id IS NULL AND parent_run_id IS NULL
+      GROUP BY upn, session_id
+    `
+    )
+    .all() as Array<{ upn: string; session_id: string | null; first_at: string; first_goal: string }>
+
+  const insertThread = db.prepare(
+    `
+    INSERT INTO threads (id, upn, title, created_at, updated_at, archived_at, pinned)
+    VALUES (@id, @upn, @title, @created_at, @updated_at, NULL, 0)
+  `
+  )
+  const assignThread = db.prepare(
+    `
+    UPDATE runs
+    SET thread_id = @threadId
+    WHERE upn = @upn
+      AND ((@sessionId IS NOT NULL AND session_id = @sessionId)
+        OR (@sessionId IS NULL AND session_id IS NULL))
+      AND thread_id IS NULL
+  `
+  )
+
+  const titleFromGoal = (goal: string): string => {
+    const trimmed = goal.trim().replace(/\s+/g, " ")
+    if (!trimmed) return "Imported"
+    return trimmed.length > 72 ? `${trimmed.slice(0, 69)}…` : trimmed
+  }
+
+  db.transaction(() => {
+    for (const group of groups) {
+      const threadId = randomUUID()
+      const title = titleFromGoal(group.first_goal)
+      insertThread.run({
+        id: threadId,
+        upn: group.upn,
+        title,
+        created_at: group.first_at,
+        updated_at: group.first_at
+      })
+      assignThread.run({ threadId, upn: group.upn, sessionId: group.session_id })
+    }
+  })()
+
+  setMetaValue("threads_backfill_v24", "1")
+}
+
 /** @internal — exported for testing. */
 export function _migrate(db: Database.Database): void {
   db.exec(`
@@ -470,6 +539,18 @@ export function _migrate(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_sessions_upn       ON sessions(upn);
     CREATE INDEX IF NOT EXISTS idx_sessions_last_seen ON sessions(last_seen_at);
 
+    -- ── threads: named conversation workspaces (group runs) ─────
+    CREATE TABLE IF NOT EXISTS threads (
+      id           TEXT PRIMARY KEY,
+      upn          TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
+      title        TEXT NOT NULL DEFAULT 'New thread',
+      created_at   TEXT NOT NULL,
+      updated_at   TEXT NOT NULL,
+      archived_at  TEXT,
+      pinned       INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1))
+    );
+    CREATE INDEX IF NOT EXISTS idx_threads_upn_updated ON threads(upn, updated_at DESC);
+
     -- ── agent_definitions ────────────────────────────────────────
     -- The 'tools' column has been dropped: tools are always resolved from
     -- ALL_TOOLS in code, never from the DB.
@@ -500,6 +581,7 @@ export function _migrate(db: Database.Database): void {
       parent_run_id  TEXT REFERENCES runs(id) ON DELETE SET NULL,
       agent_id       TEXT REFERENCES agent_definitions(id) ON DELETE SET NULL,
       session_id     TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
+      thread_id      TEXT REFERENCES threads(id) ON DELETE SET NULL,
       upn            TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
       display_name   TEXT NOT NULL,
       created_at     TEXT NOT NULL,
@@ -1212,6 +1294,7 @@ export function _migrate(db: Database.Database): void {
   // each module's own init also calls migrateSessionFkSetNull so a fresh
   // boot fixes them in any order.
   migrateSessionFkSetNull(db)
+  migrateThreadsV24(db, getMetaValue, setMetaValue)
 
   // ── Seed bundled SCD2 strategies into the `_default` tenant ─────
   // Idempotent: only inserts strategies that don't already exist. We

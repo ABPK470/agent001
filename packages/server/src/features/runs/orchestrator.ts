@@ -90,6 +90,20 @@ export class AgentOrchestrator {
 
   // ── Run lifecycle ─────────────────────────────────────────────
 
+  private resolveThreadId(
+    requestedThreadId: string | undefined,
+    session: CurrentSession | null
+  ): string | null {
+    if (!session?.upn) return null
+    if (requestedThreadId) {
+      const existing = db.getThread(requestedThreadId)
+      if (existing && existing.upn.toLowerCase() === session.upn.toLowerCase()) {
+        return existing.id
+      }
+    }
+    return db.createThread(session.upn).id
+  }
+
   startRun(goal: string, config?: AgentRunConfig, session: CurrentSession | null = null): string {
     const runId = randomUUID()
     const controller = new AbortController()
@@ -127,6 +141,8 @@ export class AgentOrchestrator {
     // at server boot via policy-seeder.ts). Operators edit/delete them
     // through the admin UI; this loop already loaded them above.
 
+    const threadId = this.resolveThreadId(config?.threadId, session)
+
     this.activeRuns.set(runId, {
       id: runId,
       goal,
@@ -139,7 +155,8 @@ export class AgentOrchestrator {
       role,
       attachmentIds: config?.attachmentIds ?? [],
       ownerUpn: session?.upn ?? null,
-      sessionId: session?.sid ?? null
+      sessionId: session?.sid ?? null,
+      threadId
     })
 
     // Persist the run row BEFORE broadcasting or writing trace entries.
@@ -160,9 +177,15 @@ export class AgentOrchestrator {
       created_at: new Date().toISOString(),
       completed_at: null,
       session_id: session?.sid ?? null,
+      thread_id: threadId,
       upn: session?.upn ?? null,
       display_name: session?.displayName ?? null
     })
+
+    if (threadId) {
+      db.touchThread(threadId)
+      db.autoTitleThreadFromGoal(threadId, goal)
+    }
 
     broadcast({
       type: EventType.RunQueued,
@@ -205,6 +228,7 @@ export class AgentOrchestrator {
           created_at: existing?.created_at ?? new Date().toISOString(),
           completed_at: new Date().toISOString(),
           session_id: existing?.session_id ?? session?.sid ?? null,
+          thread_id: existing?.thread_id ?? threadId,
           upn: existing?.upn ?? session?.upn ?? null,
           display_name: existing?.display_name ?? session?.displayName ?? null
         })
@@ -293,7 +317,8 @@ export class AgentOrchestrator {
       role: resumeRole,
       attachmentIds: [],
       ownerUpn: resumeSession?.upn ?? null,
-      sessionId: resumeSession?.sid ?? null
+      sessionId: resumeSession?.sid ?? null,
+      threadId: originalRun.thread_id ?? null
     })
 
     // Persist the resumed-run row BEFORE broadcasting or writing trace
@@ -312,9 +337,14 @@ export class AgentOrchestrator {
       created_at: new Date().toISOString(),
       completed_at: null,
       session_id: resumeSession?.sid ?? null,
+      thread_id: originalRun.thread_id ?? null,
       upn: resumeSession?.upn ?? null,
       display_name: resumeSession?.displayName ?? null
     })
+
+    if (originalRun.thread_id) {
+      db.touchThread(originalRun.thread_id)
+    }
 
     broadcast({
       type: EventType.RunQueued,

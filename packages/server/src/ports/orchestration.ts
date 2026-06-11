@@ -54,6 +54,8 @@ export interface ActiveRun {
   ownerUpn: string | null
   /** Originating session id (cookie sid). Null for service-internal runs. */
   sessionId: string | null
+  /** Conversation thread this run belongs to. */
+  threadId: string | null
 }
 
 // ── Public API types ──────────────────────────────────────────────
@@ -69,6 +71,8 @@ export interface AgentRunConfig {
    * knows what it can pull into the sandbox via the attachment tools.
    */
   attachmentIds?: string[]
+  /** Attach run to an existing thread; server creates one when omitted. */
+  threadId?: string
 }
 
 export interface OrchestratorConfig {

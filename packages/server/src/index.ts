@@ -64,6 +64,7 @@ import { registerProfileRoutes } from "./features/profile/routes.js"
 import { registerProposerRoutes, startScheduler, stopScheduler } from "./features/proposer/index.js"
 import { AgentOrchestrator } from "./features/runs/orchestrator.js"
 import { registerRunRoutes } from "./features/runs/routes.js"
+import { registerThreadRoutes } from "./features/threads/index.js"
 import { createSyncEventSink, createSyncRunSink } from "./bootstrap/sync.js"
 import {
   ensureSyncDefinitionConfigs,
@@ -701,6 +702,7 @@ async function buildApp(opts: AppOpts) {
   })
 
   registerRunRoutes(app, orchestrator)
+  registerThreadRoutes(app, orchestrator)
   registerAgentRoutes(app, orchestrator)
   registerBrowserRoutes(app)
   registerLayoutRoutes(app)

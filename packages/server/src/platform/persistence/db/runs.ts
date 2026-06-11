@@ -32,6 +32,7 @@ export interface DbRun {
   created_at: string
   completed_at: string | null
   session_id?: string | null
+  thread_id?: string | null
   upn?: string | null
   display_name?: string | null
 }
@@ -46,8 +47,8 @@ export interface DbRun {
 // updates the row in place and does not fire cascade deletes.
 const upsertRun = () =>
   getDb().prepare(`
-  INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, upn, display_name)
-  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @created_at, @completed_at, @session_id, @upn, @display_name)
+  INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, thread_id, upn, display_name)
+  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @created_at, @completed_at, @session_id, @thread_id, @upn, @display_name)
   ON CONFLICT(id) DO UPDATE SET
     goal          = excluded.goal,
     status        = excluded.status,
@@ -59,6 +60,7 @@ const upsertRun = () =>
     created_at    = excluded.created_at,
     completed_at  = excluded.completed_at,
     session_id    = excluded.session_id,
+    thread_id     = excluded.thread_id,
     upn           = excluded.upn,
     display_name  = excluded.display_name
 `)
@@ -76,12 +78,18 @@ export function saveRun(run: DbRun): void {
   // Stamp session/upn from AsyncLocalStorage if the caller didn't provide them.
   // Existing rows keep their stamp on update (we read first via getRun and merge).
   const existing = getDb()
-    .prepare("SELECT session_id, upn, display_name FROM runs WHERE id = ?")
-    .get(run.id) as { session_id: string | null; upn: string | null; display_name: string | null } | undefined
+    .prepare("SELECT session_id, thread_id, upn, display_name FROM runs WHERE id = ?")
+    .get(run.id) as {
+    session_id: string | null
+    thread_id: string | null
+    upn: string | null
+    display_name: string | null
+  } | undefined
   const resolvedSessionId = resolveExistingSessionId(run.session_id ?? existing?.session_id ?? null)
   upsertRun().run({
     ...run,
     session_id: resolvedSessionId,
+    thread_id: run.thread_id ?? existing?.thread_id ?? null,
     upn: run.upn ?? existing?.upn ?? null,
     display_name: run.display_name ?? existing?.display_name ?? null
   })
@@ -140,8 +148,28 @@ export function dbRunToWire(row: DbRun, extras: RunWireExtras): Run {
     llmCalls: extras.llmCalls,
     pendingWorkspaceChanges: extras.pendingWorkspaceChanges,
     upn: row.upn ?? null,
-    displayName: row.display_name ?? null
+    displayName: row.display_name ?? null,
+    threadId: row.thread_id ?? null
   }
+}
+
+export function listRunsWithUsageForThread(
+  threadId: string,
+  limit = 200,
+  offset = 0
+): DbRunWithUsage[] {
+  return getDb()
+    .prepare(
+      `
+      SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
+      FROM runs r
+      LEFT JOIN token_usage t ON t.run_id = r.id
+      WHERE r.thread_id = @threadId
+      ORDER BY r.created_at ASC
+      LIMIT @limit OFFSET @offset
+    `
+    )
+    .all({ threadId, limit, offset }) as DbRunWithUsage[]
 }
 
 export function listRunsWithUsage(limit = 100, offset = 0): DbRunWithUsage[] {

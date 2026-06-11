@@ -1031,6 +1031,346 @@ textarea.input {
   transform: translateY(0) scale(1);
 }
 
+/* ── Thread rail — frosted panel (matches header icon chips), ASCII shows through ── */
+.chathome--threads .chathome-content {
+  background: transparent;
+}
+
+.thread-rail {
+  overflow: visible;
+  background: transparent;
+  border: none;
+  pointer-events: none;
+  transition: width 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.thread-rail--desktop {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  z-index: 20;
+  display: none;
+  padding: 0.65rem 0 0.65rem 0.55rem;
+  box-sizing: border-box;
+}
+
+@media (min-width: 768px) {
+  .thread-rail--desktop {
+    display: block;
+  }
+}
+
+.thread-rail--expanded {
+  width: 18.5rem;
+}
+
+.thread-rail--collapsed {
+  width: 0;
+}
+
+.thread-rail-inner {
+  position: relative;
+  width: 18rem;
+  height: 100%;
+  padding: 0.75rem 0.95rem 0.85rem 1rem;
+  opacity: 1;
+  pointer-events: auto;
+  transition: opacity 200ms ease, transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Match hero input pill — same recessed surface on ChatHome / ThreadHome */
+:root[data-theme="light"] .chathome--threads .thread-rail-inner,
+:root[data-theme="light"] .chathome--threads .thread-rail-collapsed-trigger {
+  background: var(--panel-2);
+  border-color: rgba(30, 25, 20, 0.07);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+  --tw-ring-color: transparent;
+}
+
+.thread-rail--collapsed .thread-rail-inner {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateX(-6px);
+}
+
+.thread-rail--mobile-open {
+  position: fixed;
+  inset-block: 0;
+  left: 0;
+  z-index: 50;
+  display: flex;
+  width: min(88vw, 18.5rem);
+  padding: 2.75rem 0 0.65rem 0.55rem;
+  pointer-events: auto;
+  box-sizing: border-box;
+}
+
+.thread-rail--mobile-open .thread-rail-inner {
+  width: 100%;
+  opacity: 1;
+  pointer-events: auto;
+  transform: none;
+}
+
+.thread-rail-scrim {
+  background: color-mix(in srgb, var(--canvas) 18%, transparent);
+  backdrop-filter: blur(2px);
+}
+
+:root[data-theme="light"] .thread-rail-scrim {
+  background: color-mix(in srgb, var(--panel) 22%, transparent);
+}
+
+.thread-rail-section-head {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.65rem;
+  padding-bottom: 0.55rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 28%, transparent);
+}
+
+.thread-rail-section-label {
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-muted);
+}
+
+.thread-rail-section-actions {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.thread-rail-new,
+.thread-rail-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.2rem 0.35rem;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 450;
+  color: var(--text-muted);
+  border-radius: 0.4rem;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.thread-rail-new:hover,
+.thread-rail-toggle:hover,
+.thread-rail-new:focus-visible,
+.thread-rail-toggle:focus-visible {
+  color: var(--text);
+  background: color-mix(in srgb, var(--panel) 38%, transparent);
+}
+
+.thread-rail-toggle {
+  color: var(--text-faint);
+}
+
+.thread-rail-list {
+  padding-top: 0.15rem;
+}
+
+.thread-rail-item-wrap {
+  margin-bottom: 0.1rem;
+}
+
+.thread-rail-item-row {
+  display: flex;
+  align-items: center;
+  gap: 0.1rem;
+  min-width: 0;
+  padding: 0.2rem 0.25rem 0.2rem 0.45rem;
+  border-radius: 0.55rem;
+  border-left: 2px solid transparent;
+  transition:
+    background-color 160ms ease,
+    border-color 200ms ease;
+}
+
+.thread-rail-item-wrap:hover .thread-rail-item-row,
+.thread-rail-item-wrap--menu-open .thread-rail-item-row,
+.thread-rail-item-wrap--active .thread-rail-item-row {
+  background: var(--overlay-2);
+}
+
+.thread-rail-item-wrap--active .thread-rail-item-row {
+  border-left-color: color-mix(in srgb, var(--accent) 72%, transparent);
+}
+
+.thread-rail-item {
+  display: block;
+  min-width: 0;
+  padding: 0.28rem 0.15rem 0.28rem 0.35rem;
+  color: var(--text-muted);
+  transition: color 160ms ease;
+}
+
+.thread-rail-item-wrap:hover .thread-rail-item,
+.thread-rail-item-wrap--menu-open .thread-rail-item,
+.thread-rail-item-wrap--active .thread-rail-item {
+  color: var(--text);
+}
+
+.thread-rail-item-title {
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+}
+
+.thread-rail-item-pin {
+  opacity: 0.72;
+}
+
+.thread-rail-item-meta {
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--text-faint);
+}
+
+.thread-rail-item-wrap--active .thread-rail-item-meta {
+  color: color-mix(in srgb, var(--text-muted) 72%, var(--text-faint));
+}
+
+.thread-rail-item-menu {
+  width: 0;
+  overflow: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    width 140ms ease,
+    opacity 140ms ease;
+}
+
+.thread-rail-item-wrap:hover .thread-rail-item-menu,
+.thread-rail-item-wrap--menu-open .thread-rail-item-menu,
+.thread-rail-item-wrap:focus-within .thread-rail-item-menu {
+  width: 1.65rem;
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.thread-rail-item-menu-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.55rem;
+  height: 1.55rem;
+  border-radius: 0.4rem;
+  color: var(--text-faint);
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.thread-rail-item-menu-btn:hover,
+.thread-rail-item-menu-btn:focus-visible {
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--overlay-2) 80%, transparent);
+}
+
+.thread-rail-item-dropdown {
+  min-width: 7.75rem;
+  padding: 0.25rem;
+  border-radius: 0.55rem;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  box-shadow: 0 10px 28px color-mix(in srgb, var(--canvas) 55%, transparent);
+}
+
+.thread-rail-item-dropdown--portal {
+  position: fixed;
+  z-index: 200;
+  transform: translateX(-100%);
+}
+
+:root[data-theme="dark"] .thread-rail-item-dropdown {
+  background: color-mix(in srgb, var(--panel) 92%, transparent);
+}
+
+.thread-rail-item-dropdown-item {
+  display: flex;
+  width: 100%;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.4rem 0.55rem;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text-muted);
+  border-radius: 0.4rem;
+  text-align: left;
+  transition: color 160ms ease, background-color 160ms ease;
+}
+
+.thread-rail-item-dropdown-item:hover,
+.thread-rail-item-dropdown-item:focus-visible {
+  color: var(--text);
+  background: var(--overlay-2);
+}
+
+.thread-rail-rename-input {
+  width: 100%;
+  padding: 0.45rem 0.55rem;
+  font-size: 13px;
+  line-height: 1.5;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  background: var(--overlay-2);
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  border-radius: 0.55rem;
+  outline: none;
+}
+
+.thread-rail-rename-input:focus {
+  border-color: color-mix(in srgb, var(--accent) 65%, var(--border-subtle));
+}
+
+.thread-rail-collapsed-trigger {
+  position: fixed;
+  left: 0.85rem;
+  bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
+  z-index: 25;
+  align-items: center;
+  gap: 0.45rem;
+  padding: 0.45rem 0.75rem;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-muted);
+  transition: color 160ms ease, border-color 160ms ease;
+}
+
+.thread-rail-collapsed-trigger:hover,
+.thread-rail-collapsed-trigger:focus-visible {
+  color: var(--text);
+  border-color: var(--border-strong);
+}
+
+.thread-rail-stage {
+  /* Rail is ink on the canvas — chat keeps full width and center column. */
+  min-width: 0;
+  overflow: visible;
+}
+
+.thread-rail-mobile-trigger {
+  padding: 0.2rem 0.35rem;
+  font-size: 13px;
+  line-height: 1.5;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+  color: var(--text-muted);
+  transition: color 160ms ease;
+}
+
+.thread-rail-mobile-trigger:hover {
+  color: var(--text-muted);
+}
+
 /* Crystal cells — glyphs that haven't settled yet appear as muted
    ASCII noise (same ink as the field) so the text reads as coalescing
    out of the bg, then locks into normal weight. Monospace width keeps

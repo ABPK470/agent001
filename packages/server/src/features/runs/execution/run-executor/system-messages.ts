@@ -32,10 +32,11 @@ export async function buildExecutionSystemMessages(
 ): Promise<ExecutionSystemMessagesBundle> {
   const { request, interaction, messaging } = input
   const priorTurns =
-    envBase.activeRun?.sessionId &&
     envBase.activeRun?.ownerUpn &&
+    (envBase.activeRun.threadId || envBase.activeRun.sessionId) &&
     envBase.runWorkspace.taskType !== "code_generation"
       ? loadPriorTurns({
+          threadId: envBase.activeRun.threadId,
           sessionId: envBase.activeRun.sessionId,
           excludeRunId: request.runId,
           upn: envBase.activeRun.ownerUpn,

@@ -47,16 +47,46 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
 
 export const api = {
   // Runs
-  listRuns: (opts?: { scope?: "session" | "all" }) =>
-    json<Run[]>(`/api/runs${opts?.scope ? `?scope=${opts.scope}` : ""}`),
+  listRuns: (opts?: { scope?: "session" | "all"; threadId?: string }) => {
+    const params = new URLSearchParams()
+    if (opts?.scope) params.set("scope", opts.scope)
+    if (opts?.threadId) params.set("threadId", opts.threadId)
+    const qs = params.toString()
+    return json<Run[]>(`/api/runs${qs ? `?${qs}` : ""}`)
+  },
+  listThreads: (opts?: { includeArchived?: boolean }) =>
+    json<import("@mia/shared-types").Thread[]>(
+      `/api/threads${opts?.includeArchived ? "?includeArchived=1" : ""}`
+    ),
+  createThread: (title?: string) =>
+    json<import("@mia/shared-types").Thread>("/api/threads", {
+      method: "POST",
+      body: JSON.stringify(title ? { title } : {}),
+    }),
+  updateThread: (
+    id: string,
+    patch: { title?: string; pinned?: boolean; archived?: boolean }
+  ) =>
+    json<import("@mia/shared-types").Thread>(`/api/threads/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  listThreadRuns: (threadId: string) =>
+    json<Run[]>(`/api/threads/${threadId}/runs`),
   getRun: (id: string) => json<RunDetail>(`/api/runs/${id}`),
-  startRun: (goal: string, agentId?: string, attachmentIds?: string[]) =>
+  startRun: (
+    goal: string,
+    agentId?: string,
+    attachmentIds?: string[],
+    threadId?: string
+  ) =>
     json<{ runId: string; attachmentIds?: string[] }>("/api/runs", {
       method: "POST",
       body: JSON.stringify({
         goal,
         ...(agentId ? { agentId } : {}),
         ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
+        ...(threadId ? { threadId } : {}),
       }),
     }),
   cancelRun: (id: string) => json<{ ok: boolean }>(`/api/runs/${id}/cancel`, {

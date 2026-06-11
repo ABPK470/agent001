@@ -38,7 +38,8 @@ export interface PriorTurn {
 }
 
 export interface LoadPriorTurnsOptions {
-  readonly sessionId: string
+  readonly sessionId?: string | null
+  readonly threadId?: string | null
   /** Exclude the current run id so the live request never references itself. */
   readonly excludeRunId?: string | null
   /** Tenant scope. Required — every persisted run row has a non-null upn
@@ -58,17 +59,23 @@ export interface LoadPriorTurnsOptions {
  */
 export function loadPriorTurns(opts: LoadPriorTurnsOptions): PriorTurn[] {
   const limit = opts.limit ?? 3
-  if (!opts.sessionId || !opts.upn || limit <= 0) return []
+  if (!opts.upn || limit <= 0) return []
+  if (!opts.threadId && !opts.sessionId) return []
+
+  const scopeClause = opts.threadId
+    ? "thread_id = @threadId"
+    : "session_id = @sessionId"
+
   // Inclusion: completed + failed terminal states. We deliberately skip
   // cancelled/crashed because their answers are usually absent or noisy.
   // Top-level only: `parent_run_id IS NULL` keeps delegated child runs
-  // (which inherit the session id) out of the anchor.
+  // out of the anchor.
   const rows = getDb()
     .prepare(
       `
       SELECT id, goal, status, answer, created_at, completed_at, parent_run_id, upn
       FROM runs
-      WHERE session_id = @sessionId
+      WHERE ${scopeClause}
         AND upn = @upn
         AND parent_run_id IS NULL
         AND status IN ('completed', 'failed')
@@ -78,7 +85,8 @@ export function loadPriorTurns(opts: LoadPriorTurnsOptions): PriorTurn[] {
     `
     )
     .all({
-      sessionId: opts.sessionId,
+      threadId: opts.threadId ?? null,
+      sessionId: opts.sessionId ?? null,
       excludeRunId: opts.excludeRunId ?? null,
       upn: opts.upn,
       limit

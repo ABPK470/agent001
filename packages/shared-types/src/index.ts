@@ -47,6 +47,16 @@ export type {
 
 // ── Run ──────────────────────────────────────────────────────────
 
+export interface Thread {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  archivedAt?: string | null
+  pinned?: boolean
+  runCount?: number
+}
+
 export interface Run {
   id: string
   goal: string
@@ -56,6 +66,7 @@ export interface Run {
   error: string | null
   parentRunId: string | null
   agentId: string | null
+  threadId?: string | null
   createdAt: string
   completedAt: string | null
   totalTokens: number

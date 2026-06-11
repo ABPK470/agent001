@@ -9,6 +9,18 @@ export {
 } from "./agent-messages.js"
 
 export {
+  autoTitleThreadFromGoal,
+  createThread,
+  dbThreadToWire,
+  getThread,
+  listThreadsForUser,
+  touchThread,
+  updateThread,
+  type DbThread,
+  type DbThreadWithRunCount
+} from "./threads.js"
+
+export {
   dbRunToWire,
   findStaleRuns,
   getAuditLog,
@@ -20,6 +32,7 @@ export {
   getUsageTotals,
   listRuns,
   listRunsWithUsage,
+  listRunsWithUsageForThread,
   listRunsWithUsageForUser,
   listTokenUsage,
   markRunCancelled,

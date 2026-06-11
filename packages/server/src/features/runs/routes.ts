@@ -13,8 +13,30 @@ import { canAccessRun } from "../auth/application/access.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 
 export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
-  app.get<{ Querystring: { scope?: "session" | "all" } }>("/api/runs", async (req) => {
+  app.get<{ Querystring: { scope?: "session" | "all"; threadId?: string } }>("/api/runs", async (req, reply) => {
     const s = req.session
+    const threadId = req.query.threadId
+    if (threadId) {
+      const thread = db.getThread(threadId)
+      if (!thread || !s?.upn || thread.upn.toLowerCase() !== s.upn.toLowerCase()) {
+        reply.code(404)
+        return { error: "Thread not found" }
+      }
+      const runs = db.listRunsWithUsageForThread(threadId)
+      return runs.map((run): Run => {
+        const diff = orchestrator.getRunWorkspaceDiff(run.id)
+        const pendingWorkspaceChanges = diff
+          ? diff.added.length + diff.modified.length + diff.deleted.length
+          : 0
+        return db.dbRunToWire(run, {
+          totalTokens: run.total_tokens ?? 0,
+          promptTokens: run.prompt_tokens ?? 0,
+          completionTokens: run.completion_tokens ?? 0,
+          llmCalls: run.llm_calls ?? 0,
+          pendingWorkspaceChanges
+        })
+      })
+    }
     const sessionOnly = req.query.scope === "session"
     const runs = db.listRunsWithUsageForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null, sessionOnly })
     return runs.map((run): Run => {
@@ -123,10 +145,10 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     } satisfies RunDetail
   })
 
-  app.post<{ Body: { goal: string; agentId?: string; attachmentIds?: string[] } }>(
+  app.post<{ Body: { goal: string; agentId?: string; attachmentIds?: string[]; threadId?: string } }>(
     "/api/runs",
     async (req, reply) => {
-      const { goal, agentId, attachmentIds } = req.body
+      const { goal, agentId, attachmentIds, threadId } = req.body
       if (!goal || typeof goal !== "string") {
         reply.code(400)
         return { error: "goal is required" }
@@ -168,7 +190,8 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
           {
             agentId: agent.id,
             systemPrompt: db.resolveAgentSystemPrompt(agent),
-            attachmentIds: resolvedAttachmentIds
+            attachmentIds: resolvedAttachmentIds,
+            threadId
           },
           req.session ?? null
         )
@@ -176,7 +199,11 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         return { runId, agentId: agent.id, attachmentIds: resolvedAttachmentIds }
       }
 
-      const runId = orchestrator.startRun(goal, { attachmentIds: resolvedAttachmentIds }, req.session ?? null)
+      const runId = orchestrator.startRun(
+        goal,
+        { attachmentIds: resolvedAttachmentIds, threadId },
+        req.session ?? null
+      )
       reply.code(201)
       return { runId, attachmentIds: resolvedAttachmentIds }
     }
@@ -225,13 +252,21 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       }
       const runId = orchestrator.startRun(
         original.goal,
-        { agentId: agent.id, systemPrompt: db.resolveAgentSystemPrompt(agent) },
+        {
+          agentId: agent.id,
+          systemPrompt: db.resolveAgentSystemPrompt(agent),
+          threadId: original.thread_id ?? undefined
+        },
         req.session ?? null
       )
       reply.code(201)
       return { runId, agentId: agent.id }
     }
-    const runId = orchestrator.startRun(original.goal, undefined, req.session ?? null)
+    const runId = orchestrator.startRun(
+      original.goal,
+      { threadId: original.thread_id ?? undefined },
+      req.session ?? null
+    )
     reply.code(201)
     return { runId }
   })

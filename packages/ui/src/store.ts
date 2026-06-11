@@ -19,6 +19,7 @@ import type {
   RunDetail,
   SseEvent,
   Step,
+  Thread,
   TraceEntry,
   ViewConfig,
   Widget,
@@ -145,6 +146,17 @@ interface AppState {
   setRuns: (runs: Run[]) => void
   setActiveRun: (id: string | null) => void
   upsertRun: (run: Partial<Run> & { id: string }) => void
+
+  // Threads (home chat workspaces)
+  threads: Thread[]
+  activeThreadId: string | null
+  threadSidebarCollapsed: boolean
+  setThreads: (threads: Thread[]) => void
+  upsertThread: (thread: Thread) => void
+  setActiveThreadId: (id: string | null) => void
+  setThreadSidebarCollapsed: (collapsed: boolean) => void
+  selectThread: (id: string | null) => Promise<void>
+  createNewThread: () => Promise<string>
 
   // Steps (for active run)
   steps: Step[]
@@ -990,11 +1002,62 @@ export const useStore = create<AppState>()(
         // selection. This used to be the root cause of "I started a run in
         // termchat, switched to IOE, came back, and my run is gone" — a
         // sync.run started by IOE silently became the new active run.
+        const appendToThread =
+          s.activeThreadId &&
+          (run.threadId === s.activeThreadId || !run.threadId)
         return {
-          runs: [run as Run, ...s.runs],
+          runs: appendToThread ? [...s.runs, run as Run] : [run as Run, ...s.runs],
           activeRunId: s.activeRunId ?? run.id,
         }
       }),
+
+      threads: [],
+      activeThreadId: null,
+      threadSidebarCollapsed: false,
+      setThreads: (threads) => set({ threads }),
+      upsertThread: (thread) =>
+        set((s) => {
+          const index = s.threads.findIndex((t) => t.id === thread.id)
+          if (index < 0) return { threads: [thread, ...s.threads] }
+          const next = [...s.threads]
+          next[index] = { ...next[index], ...thread }
+          next.sort((a, b) => {
+            if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1
+            return b.updatedAt.localeCompare(a.updatedAt)
+          })
+          return { threads: next }
+        }),
+      setActiveThreadId: (activeThreadId) => set({ activeThreadId }),
+      setThreadSidebarCollapsed: (threadSidebarCollapsed) => set({ threadSidebarCollapsed }),
+      selectThread: async (threadId) => {
+        set({
+          activeThreadId: threadId,
+          activeRunId: null,
+          steps: [],
+          trace: [],
+          audit: [],
+          pendingInput: null,
+        })
+        if (!threadId) {
+          set({ runs: [] })
+          return
+        }
+        try {
+          const runs = await api.listThreadRuns(threadId)
+          set({ runs })
+          if (runs.length > 0) {
+            get().setActiveRun(runs[runs.length - 1]!.id)
+          }
+        } catch {
+          set({ runs: [] })
+        }
+      },
+      createNewThread: async () => {
+        const thread = await api.createThread()
+        set((s) => ({ threads: [thread, ...s.threads] }))
+        await get().selectThread(thread.id)
+        return thread.id
+      },
 
       // Steps
       steps: [],
@@ -1205,7 +1268,19 @@ export const useStore = create<AppState>()(
               coherentStream: "",
               auditTrail: [],
               stepData: [],
+              threadId: get().activeThreadId,
             })
+            if (get().activeThreadId) {
+              const threadId = get().activeThreadId!
+              const existing = get().threads.find((t) => t.id === threadId)
+              if (existing) {
+                store.upsertThread({
+                  ...existing,
+                  updatedAt: timestamp,
+                  runCount: (existing.runCount ?? 0) + 1,
+                })
+              }
+            }
             break
 
           case "run.started":
@@ -1757,6 +1832,8 @@ export const useStore = create<AppState>()(
         views: state.views,
         activeViewId: state.activeViewId,
         selectedAgentId: state.selectedAgentId,
+        activeThreadId: state.activeThreadId,
+        threadSidebarCollapsed: state.threadSidebarCollapsed,
         ioeLayout: state.ioeLayout,
         envSyncForm: { ...state.envSyncForm, entityId: "", planId: null },
       }),

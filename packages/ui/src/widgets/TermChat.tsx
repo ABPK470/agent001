@@ -2583,7 +2583,15 @@ function TermChatInputBar({
 
 // ── Main widget ───────────────────────────────────────────────────
 
-export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "widget" | "home"; heroRevealProgress?: number } = {}) {
+export function TermChat({
+  mode = "widget",
+  threadId: threadIdProp,
+  heroRevealProgress = 1,
+}: {
+  mode?: "widget" | "home" | "thread"
+  threadId?: string
+  heroRevealProgress?: number
+} = {}) {
   const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
@@ -2610,7 +2618,9 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   const [visibleRunCount, setVisibleRunCount] = useState(INITIAL_VISIBLE_RUNS)
   const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
   const [unpinnedGoalRunIds, setUnpinnedGoalRunIds] = useState<Set<string>>(() => new Set())
-  const isHomeMode = mode === "home"
+  const isThreadMode = mode === "thread"
+  const isHomeMode = mode === "home" || isThreadMode
+  const activeThreadId = threadIdProp ?? useStore((s) => s.activeThreadId)
   const streamingAnswer = activeRun?.streamingAnswer ?? ""
 
   const {
@@ -2677,7 +2687,12 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     setInput("")
     setSending(true)
     try {
-      const { runId } = await api.startRun(effectiveGoal, selectedAgent?.id, attachmentIds.length > 0 ? attachmentIds : undefined)
+      const { runId } = await api.startRun(
+        effectiveGoal,
+        selectedAgent?.id,
+        attachmentIds.length > 0 ? attachmentIds : undefined,
+        isThreadMode ? activeThreadId ?? undefined : undefined
+      )
       setActiveRun(runId)
       setScrollToRunId(runId)
       requestAnimationFrame(() => scrollToBottom("instant"))
@@ -2697,7 +2712,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     } finally {
       setSending(false)
     }
-  }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom])
+  }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom, isThreadMode, activeThreadId])
 
   const cancel = useCallback(async () => {
     if (!activeRunId) return
@@ -2791,7 +2806,12 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   // matters: if `activeRunId` ever drifts to a different run (another
   // widget calling setActiveRun, an unrelated background SSE event, etc.)
   // the run the user just started would otherwise vanish from view.
-  const visibleRuns = useMemo(() => runs.slice(0, visibleRunCount), [runs, visibleRunCount])
+  const visibleRuns = useMemo(() => {
+    if (isThreadMode) {
+      return runs.slice(Math.max(0, runs.length - visibleRunCount))
+    }
+    return runs.slice(0, visibleRunCount)
+  }, [runs, visibleRunCount, isThreadMode])
 
   const displayRuns = useMemo(() => {
     const history = visibleRuns
@@ -2804,7 +2824,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
-  const canLoadMoreHistory = visibleRunCount < runs.length
+  const canLoadMoreHistory = visibleRunCount < runs.length && !isThreadMode
 
   const didSelectLatestRef = useRef(false)
   const didInitialAnchorRef = useRef(false)
@@ -3011,10 +3031,10 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
               <div className={`relative z-10 w-full ${isHomeMode ? "space-y-8" : "max-w-[860px] space-y-8"}`}>
                 <div className={`chathome-empty-copy ${isHomeMode ? "space-y-3" : "space-y-2"}`}>
                   <p className={isHomeMode ? "text-[clamp(1.8rem,3.8vw,3.1rem)] leading-[1.02] tracking-[-0.04em] text-text font-medium" : "text-[24px] leading-tight tracking-[-0.02em] text-text font-medium"}>
-                    {isHomeMode ? "How can I help?" : "What are you working on?"}
+                    {isThreadMode ? "Start a new thread" : isHomeMode ? "How can I help?" : "What are you working on?"}
                   </p>
                   <p className={isHomeMode ? "text-[14px] leading-6 text-text-muted max-w-[580px] mx-auto" : "text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto"}>
-                    {isHomeMode
+                    {isHomeMode || isThreadMode
                       ? "Start with a goal, question, or task."
                       : "Query business data, inspect metadata or run environment synchronization."}
                   </p>
