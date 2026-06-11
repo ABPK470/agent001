@@ -363,7 +363,7 @@ export function AgentChat() {
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
     initialScroll: "bottom",
-    scrollTriggers: [streamingAnswer, steps.length, trace.length],
+    followWhen: isRunning || Boolean(streamingAnswer),
   })
 
   // Currently-running step for progress display

@@ -1561,7 +1561,7 @@ function IterationBlock({ part }: { part: ResponseIterationPart }) {
       </button>
       {open && (
         <div className="mt-0.5 pl-4 border-l border-border-subtle ml-[5px]">
-          <IterationToolList tools={part.tools} />
+          <IterationToolList tools={part.tools} stickToBottom={part.hasRunning} />
         </div>
       )}
     </div>
@@ -1576,10 +1576,14 @@ function IterationBlock({ part }: { part: ResponseIterationPart }) {
 // appended tool rows stay in view.
 const ITERATION_BODY_MAX_HEIGHT = 300
 
-function IterationToolList({ tools }: { tools: ResponseToolPart[] }) {
+function IterationToolList({ tools, stickToBottom = false }: { tools: ResponseToolPart[]; stickToBottom?: boolean }) {
   const ref = useRef<HTMLDivElement>(null)
-  const stickBottomRef = useRef(true)
+  const stickBottomRef = useRef(stickToBottom)
   const [edges, setEdges] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false })
+
+  useEffect(() => {
+    if (stickToBottom) stickBottomRef.current = true
+  }, [stickToBottom])
 
   useLayoutEffect(() => {
     const el = ref.current
@@ -1598,12 +1602,17 @@ function IterationToolList({ tools }: { tools: ResponseToolPart[] }) {
     if (stickBottomRef.current) el.scrollTop = el.scrollHeight
     update()
     el.addEventListener("scroll", onScroll, { passive: true })
+    let resizeRaf = 0
     const ro = new ResizeObserver(() => {
-      if (stickBottomRef.current) el.scrollTop = el.scrollHeight
-      update()
+      cancelAnimationFrame(resizeRaf)
+      resizeRaf = requestAnimationFrame(() => {
+        if (stickBottomRef.current) el.scrollTop = el.scrollHeight
+        update()
+      })
     })
     ro.observe(el)
     return () => {
+      cancelAnimationFrame(resizeRaf)
       el.removeEventListener("scroll", onScroll)
       ro.disconnect()
     }
@@ -2405,12 +2414,8 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     showJumpButton,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
-    initialScroll: isHomeMode ? "none" : "bottom",
-    scrollTriggers: [
-      activeRun?.trace?.length,
-      activeRun?.coherentStream,
-      activeRun?.streamingAnswer,
-    ],
+    initialScroll: "none",
+    followWhen: isRunning || Boolean(activeRun?.streamingAnswer),
     onScrollPosition: (scrollTop) => setTranscriptFadeTop(scrollTop > 4),
   })
 

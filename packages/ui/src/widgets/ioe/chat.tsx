@@ -88,7 +88,7 @@ export function ChatPanel({
     pauseAutoScroll,
     showJumpButton,
   } = useStickToBottomScroll({
-    scrollTriggers: [messages, pendingInput, streamingAnswer, isRunning],
+    followWhen: isRunning || Boolean(streamingAnswer),
   })
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {

@@ -4,8 +4,6 @@ import { isNearBottom, scrollHostToBottom } from "../lib/chatScroll"
 export interface UseStickToBottomScrollOptions {
   /** Pixels from bottom to still count as "following" live output. */
   threshold?: number
-  /** When these change, scroll to bottom if stuck and user is not engaged. */
-  scrollTriggers?: unknown[]
   /**
    * When this changes after mount (e.g. user just started a new run), jump to
    * bottom once. Do NOT pass ambient active-run ids — that causes scroll frenzy
@@ -15,32 +13,46 @@ export interface UseStickToBottomScrollOptions {
   /** Whether to jump to bottom on first mount. Prefer `none` for home chat. */
   initialScroll?: "none" | "bottom"
   onScrollPosition?: (scrollTop: number, host: HTMLDivElement) => void
+  /**
+   * When false, growing content does not auto-scroll even if the user is at
+   * the bottom. Use while idle so historical hydration / trace patches do not
+   * yank the viewport. Live generation should pass true.
+   */
+  followWhen?: boolean
 }
 
 export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = {}) {
   const {
     threshold = 120,
-    scrollTriggers = [],
     resetKey = null,
     initialScroll = "none",
     onScrollPosition,
+    followWhen = true,
   } = options
 
   const scrollHostRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
   const shouldStickRef = useRef(initialScroll === "bottom")
   const userEngagedRef = useRef(false)
+  const followWhenRef = useRef(followWhen)
   const previousResetKeyRef = useRef<string | null | undefined>(undefined)
   const hasInitializedRef = useRef(false)
+  const programmaticScrollRef = useRef(false)
   const [showJumpButton, setShowJumpButton] = useState(false)
+
+  followWhenRef.current = followWhen
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "instant") => {
     const host = scrollHostRef.current
     if (!host) return
+    programmaticScrollRef.current = true
     scrollHostToBottom(host, behavior)
     shouldStickRef.current = true
     userEngagedRef.current = false
     setShowJumpButton(false)
+    requestAnimationFrame(() => {
+      programmaticScrollRef.current = false
+    })
   }, [])
 
   const pauseAutoScroll = useCallback(() => {
@@ -52,6 +64,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
   const onScroll = useCallback(() => {
     const host = scrollHostRef.current
     if (!host) return
+    if (programmaticScrollRef.current) return
     const near = isNearBottom(host, threshold)
     shouldStickRef.current = near
     if (near) {
@@ -63,6 +76,19 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     onScrollPosition?.(host.scrollTop, host)
   }, [threshold, onScrollPosition])
 
+  const stickIfFollowing = useCallback(() => {
+    const host = scrollHostRef.current
+    if (!host) return
+    if (!shouldStickRef.current || userEngagedRef.current) return
+    if (!followWhenRef.current) return
+    programmaticScrollRef.current = true
+    scrollHostToBottom(host)
+    onScrollPosition?.(host.scrollTop, host)
+    requestAnimationFrame(() => {
+      programmaticScrollRef.current = false
+    })
+  }, [onScrollPosition])
+
   useLayoutEffect(() => {
     const host = scrollHostRef.current
     if (!host) return
@@ -71,8 +97,12 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
       hasInitializedRef.current = true
       previousResetKeyRef.current = resetKey
       if (initialScroll === "bottom") {
+        programmaticScrollRef.current = true
         scrollHostToBottom(host)
         shouldStickRef.current = true
+        requestAnimationFrame(() => {
+          programmaticScrollRef.current = false
+        })
       } else {
         // Do not infer stick from isNearBottom on mount — with little or no
         // content every surface looks "at bottom", then panics as runs hydrate.
@@ -88,16 +118,14 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     if (resetChanged) {
       shouldStickRef.current = true
       userEngagedRef.current = false
+      programmaticScrollRef.current = true
       scrollHostToBottom(host)
       setShowJumpButton(false)
-      return
+      requestAnimationFrame(() => {
+        programmaticScrollRef.current = false
+      })
     }
-
-    if (shouldStickRef.current && !userEngagedRef.current) {
-      scrollHostToBottom(host)
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollTriggers are the intentional deps
-  }, [resetKey, initialScroll, threshold, ...scrollTriggers])
+  }, [resetKey, initialScroll])
 
   useEffect(() => {
     const host = scrollHostRef.current
@@ -107,12 +135,9 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     let resizeRaf = 0
     const observer = new ResizeObserver(() => {
       if (!hasInitializedRef.current) return
-      if (!shouldStickRef.current || userEngagedRef.current) return
       cancelAnimationFrame(resizeRaf)
       resizeRaf = requestAnimationFrame(() => {
-        if (!shouldStickRef.current || userEngagedRef.current) return
-        scrollHostToBottom(host)
-        onScrollPosition?.(host.scrollTop, host)
+        stickIfFollowing()
       })
     })
 
@@ -121,7 +146,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
       cancelAnimationFrame(resizeRaf)
       observer.disconnect()
     }
-  }, [onScrollPosition])
+  }, [stickIfFollowing])
 
   return {
     scrollHostRef,
