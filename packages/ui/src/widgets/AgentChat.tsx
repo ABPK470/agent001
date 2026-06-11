@@ -362,9 +362,11 @@ export function AgentChat() {
     showJumpButton,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
-    initialScroll: "bottom",
+    initialScroll: "none",
     followWhen: isRunning || Boolean(streamingAnswer),
   })
+
+  const didInitialAnchorRef = useRef(false)
 
   // Currently-running step for progress display
   const runningStep = useMemo(() => {
@@ -586,6 +588,17 @@ export function AgentChat() {
 
   // Show recent runs as "conversation"
   const recentRuns = runs.slice(0, 20)
+
+  useEffect(() => {
+    if (recentRuns.length === 0) return
+    if (didInitialAnchorRef.current) return
+    didInitialAnchorRef.current = true
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollToBottom("instant", { stick: isRunning || Boolean(streamingAnswer) })
+      })
+    })
+  }, [recentRuns.length, isRunning, streamingAnswer, scrollToBottom])
 
   return (
       <div ref={rootRef} className="flex flex-col h-full gap-2">

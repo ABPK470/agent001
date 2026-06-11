@@ -20,7 +20,7 @@ import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
 import { useMe } from "../hooks/useMe"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
-import { CHAT_SCROLL_HOST_ATTR } from "../lib/chatScroll"
+import { CHAT_SCROLL_HOST_ATTR, isNearBottom } from "../lib/chatScroll"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
@@ -1976,6 +1976,7 @@ function WorkspaceDiffCard({ runId }: { runId: string }) {
 function RunMessageImpl({
   run,
   isActive,
+  isLatestTurn,
   pendingInput,
   onRespond,
 }: {
@@ -1989,10 +1990,12 @@ function RunMessageImpl({
     streamingAnswer?: string
   }
   isActive: boolean
+  isLatestTurn: boolean
   pendingInput?: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   onRespond: (response: string) => void
 }) {
-  const { scrollHostRef, hydrateRunTrace } = useChatScroll()
+  const { scrollHostRef, hydrateRunTrace, historyHydrationEnabled } = useChatScroll()
+  const mayHydrateTrace = isLatestTurn || historyHydrationEnabled
   const containerRef = useRef<HTMLDivElement>(null)
   const requestedTraceRef = useRef(false)
   const [isNearViewport, setIsNearViewport] = useState(false)
@@ -2005,6 +2008,7 @@ function RunMessageImpl({
   const isDone = !isRunActiveStatus(run.status)
 
   useEffect(() => {
+    if (!mayHydrateTrace) return
     const node = containerRef.current
     if (!node) return
 
@@ -2036,9 +2040,10 @@ function RunMessageImpl({
       cancelAnimationFrame(raf)
       observer?.disconnect()
     }
-  }, [scrollHostRef])
+  }, [scrollHostRef, mayHydrateTrace])
 
   useEffect(() => {
+    if (!mayHydrateTrace) return
     if (!isDone) return
     if (!isNearViewport) return
     if (trace.length > 0) return
@@ -2049,7 +2054,7 @@ function RunMessageImpl({
     hydrateRunTrace(run.id).catch(() => {
       requestedTraceRef.current = false
     })
-  }, [isDone, isNearViewport, run.id, trace.length, hydrateRunTrace])
+  }, [mayHydrateTrace, isDone, isNearViewport, run.id, trace.length, hydrateRunTrace])
 
   const renderedParts = useMemo(() => {
     // Copilot-style flat thread: every responsePart renders as a single
@@ -2199,6 +2204,7 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
   return (
     prev.run === next.run
     && prev.isActive === next.isActive
+    && prev.isLatestTurn === next.isLatestTurn
     && prev.onRespond === next.onRespond
     // pendingInput only matters for the run it targets
     && (prev.pendingInput?.runId === next.pendingInput?.runId
@@ -2412,6 +2418,8 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
   const [scrollToRunId, setScrollToRunId] = useState<string | null>(null)
+  const [historyHydrationEnabled, setHistoryHydrationEnabled] = useState(false)
+  const initialAnchorDoneRef = useRef(false)
   const isHomeMode = mode === "home"
 
   const {
@@ -2423,10 +2431,19 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     showJumpButton,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
-    initialScroll: "bottom",
+    initialScroll: "none",
     followWhen: isRunning || Boolean(activeRun?.streamingAnswer),
     onScrollPosition: (scrollTop) => setTranscriptFadeTop(scrollTop > 4),
   })
+
+  const handleTranscriptScroll = useCallback(() => {
+    onTranscriptScroll()
+    if (!initialAnchorDoneRef.current) return
+    const host = scrollHostRef.current
+    if (host && !isNearBottom(host, 120)) {
+      setHistoryHydrationEnabled(true)
+    }
+  }, [onTranscriptScroll])
 
   // Reset the textarea to its intrinsic 1-row height when empty and to
   // its content's scrollHeight when not. Called both from the callback
@@ -2585,11 +2602,16 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
   const traceHydratingRef = useRef(new Set<string>())
   const traceHydrateWaitersRef = useRef(new Map<string, Array<() => void>>())
+  const historyHydrationEnabledRef = useRef(false)
+  historyHydrationEnabledRef.current = historyHydrationEnabled
 
   const ensureRunTrace = useCallback(async (runId: string) => {
     const run = runs.find((r) => r.id === runId)
     if (!run || isRunActiveStatus(run.status)) return
     if ((run.trace?.length ?? 0) > 0) return
+
+    const latestId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
+    if (latestId && runId !== latestId && !historyHydrationEnabledRef.current) return
 
     if (traceHydratingRef.current.has(runId)) {
       await new Promise<void>((resolve) => {
@@ -2617,14 +2639,14 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       traceHydrateWaitersRef.current.delete(runId)
       waiters.forEach((resolve) => resolve())
     }
-  }, [runs, upsertRun])
+  }, [runs, upsertRun, displayRuns])
 
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
 
   const didInitialAnchorRef = useRef(false)
 
-  // Hydrate the latest turn, then settle at the bottom once per mount (runs
-  // often arrive async from listRuns after the scroll host first paints).
+  // Open on the latest turn only: hydrate its trace, then scroll once. Older
+  // turns stay goal-only until the user scrolls up (historyHydrationEnabled).
   useEffect(() => {
     if (!latestDisplayRunId || displayRuns.length === 0) return
     if (didInitialAnchorRef.current) return
@@ -2638,7 +2660,9 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       const stick = Boolean(latest && isRunActiveStatus(latest.status))
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          if (!cancelled) scrollToBottom("instant", { stick })
+          if (cancelled) return
+          scrollToBottom("instant", { stick })
+          initialAnchorDoneRef.current = true
         })
       })
     })()
@@ -2711,12 +2735,17 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       )}
 
       {/* Message list */}
-      <ChatScrollProvider pauseAutoScroll={pauseAutoScroll} scrollHostRef={scrollHostRef} hydrateRunTrace={ensureRunTrace}>
+      <ChatScrollProvider
+        pauseAutoScroll={pauseAutoScroll}
+        scrollHostRef={scrollHostRef}
+        hydrateRunTrace={ensureRunTrace}
+        historyHydrationEnabled={historyHydrationEnabled}
+      >
       <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={scrollHostRef}
         {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
-        onScroll={onTranscriptScroll}
+        onScroll={handleTranscriptScroll}
         className={`relative flex-1 overflow-y-auto min-h-0 ${isHomeMode && showEmptyState ? "px-6 pt-8 pb-10" : isHomeMode ? "px-6 pt-0 pb-4 space-y-6" : "px-6 py-5 space-y-10"}`}
         style={{ overflowAnchor: "none" }}
       >
@@ -2773,7 +2802,15 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
             </div>
           )}
 
-          {!showEmptyState && displayRuns.map((run) => (
+          {!showEmptyState && displayRuns.map((run, runIndex) => {
+            const isLatestTurn = runIndex === displayRuns.length - 1
+            const showResponseBody =
+              isLatestTurn
+              || historyHydrationEnabled
+              || isRunActiveStatus(run.status)
+              || (run.trace?.length ?? 0) > 0
+
+            return (
             <div key={run.id} className={`relative ${isHomeMode ? "mb-6" : "mb-10"}`}>
               <StickyUserGoal
                 align="end"
@@ -2805,17 +2842,21 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
                 </div>
               </StickyUserGoal>
 
-              {/* Agent response */}
-              <div className={isHomeMode ? "" : "pr-6"}>
-                <RunMessage
-                  run={run}
-                  isActive={run.id === activeRunId}
-                  pendingInput={pendingInput}
-                  onRespond={handleRespond}
-                />
-              </div>
+              {/* Agent response — only latest turn on open; older turns hydrate on scroll-up */}
+              {showResponseBody && (
+                <div className={isHomeMode ? "" : "pr-6"}>
+                  <RunMessage
+                    run={run}
+                    isActive={run.id === activeRunId}
+                    isLatestTurn={isLatestTurn}
+                    pendingInput={pendingInput}
+                    onRespond={handleRespond}
+                  />
+                </div>
+              )}
             </div>
-          ))}
+            )
+          })}
 
         </div>
       </div>

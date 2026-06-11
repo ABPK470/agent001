@@ -88,9 +88,29 @@ export function ChatPanel({
     pauseAutoScroll,
     showJumpButton,
   } = useStickToBottomScroll({
-    initialScroll: "bottom",
+    initialScroll: "none",
     followWhen: isRunning || Boolean(streamingAnswer),
   })
+
+  const didInitialAnchorRef = useRef(false)
+
+  const chatTurns = useMemo(() => {
+    const visible = chatMode === ChatMode.Simple
+      ? messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "input-request")
+      : messages
+    return groupChatTurns(visible)
+  }, [messages, chatMode])
+
+  useEffect(() => {
+    if (chatTurns.length === 0 && !isRunning) return
+    if (didInitialAnchorRef.current) return
+    didInitialAnchorRef.current = true
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollToBottom("instant", { stick: isRunning || Boolean(streamingAnswer) })
+      })
+    })
+  }, [chatTurns.length, isRunning, streamingAnswer, scrollToBottom])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -138,8 +158,6 @@ export function ChatPanel({
   const visibleMessages = chatMode === ChatMode.Simple
     ? messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "input-request")
     : messages
-
-  const chatTurns = useMemo(() => groupChatTurns(visibleMessages), [visibleMessages])
 
   return (
     <div className="flex flex-col h-full" style={{ background: C.surface }}>
