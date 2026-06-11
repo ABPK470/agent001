@@ -10,18 +10,22 @@ export const STICKY_GOAL_HOME_TOP = "top-3.5"
 export function StickyUserGoal({
   align = "end",
   topClass = "top-0",
+  pinned = true,
   children,
   className = "",
 }: {
   align?: "start" | "end"
   topClass?: string
+  /** When false, the goal stays in normal document flow (unpinned). */
+  pinned?: boolean
   children: ReactNode
   className?: string
 }) {
   const rowAlign = align === "end" ? "justify-end" : "justify-start"
+  const positionClass = pinned ? `sticky ${topClass} z-30` : "relative"
 
   return (
-    <div className={`sticky ${topClass} z-30 flex w-full ${rowAlign} pt-1 pb-2 ${className}`}>
+    <div className={`${positionClass} flex w-full ${rowAlign} pt-1 pb-2 ${className}`}>
       {children}
     </div>
   )

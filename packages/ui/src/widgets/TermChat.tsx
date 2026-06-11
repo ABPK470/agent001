@@ -6,7 +6,7 @@
  * happens. Complexity is hidden by default; every detail is one click away.
  */
 
-import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, Plus, Send, Square } from "lucide-react"
+import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, PinOff, Plus, Send, Square } from "lucide-react"
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
@@ -108,6 +108,151 @@ function UserGoalText({ text }: { text: string }): React.ReactElement {
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         </button>
       )}
+    </div>
+  )
+}
+
+function UserGoalBubble({ goal }: { goal: string }): React.ReactElement {
+  return (
+    <div
+      className="max-w-full px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
+      style={{ boxShadow: "var(--shadow-bubble)" }}
+    >
+      <UserGoalText text={goal} />
+    </div>
+  )
+}
+
+function ChatTurn({
+  run,
+  isActive,
+  isHomeMode,
+  me,
+  unpinned,
+  onUnpin,
+  onClearUnpin,
+  pendingInput,
+  onRespond,
+}: {
+  run: {
+    id: string
+    goal: string
+    upn?: string | null
+    displayName?: string | null
+    status: string
+    answer: string | null
+    error: string | null
+    pendingWorkspaceChanges?: number
+    trace?: TraceEntry[]
+    streamingAnswer?: string
+  }
+  isActive: boolean
+  isHomeMode: boolean
+  me: { upn?: string | null } | null
+  unpinned: boolean
+  onUnpin: (runId: string) => void
+  onClearUnpin: (runId: string) => void
+  pendingInput?: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
+  onRespond: (response: string) => void
+}): React.ReactElement {
+  const turnRef = useRef<HTMLDivElement>(null)
+  const { pauseAutoScroll, scrollHostRef } = useChatScroll()
+
+  useEffect(() => {
+    if (!unpinned) return
+    const host = scrollHostRef.current
+    const turn = turnRef.current
+    if (!host || !turn) return
+
+    const stickyOffsetPx = isHomeMode ? 14 : 0
+    let ignoreNextScroll = true
+
+    const maybeRepin = () => {
+      if (ignoreNextScroll) {
+        ignoreNextScroll = false
+        return
+      }
+
+      const hostRect = host.getBoundingClientRect()
+      const turnRect = turn.getBoundingClientRect()
+
+      if (turnRect.bottom < hostRect.top || turnRect.top > hostRect.bottom) {
+        onClearUnpin(run.id)
+        return
+      }
+
+      if (turnRect.top >= hostRect.top + stickyOffsetPx - 2) {
+        onClearUnpin(run.id)
+      }
+    }
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) {
+          onClearUnpin(run.id)
+        }
+      },
+      { root: host, threshold: 0 },
+    )
+    observer.observe(turn)
+    host.addEventListener("scroll", maybeRepin, { passive: true })
+
+    return () => {
+      observer.disconnect()
+      host.removeEventListener("scroll", maybeRepin)
+    }
+  }, [unpinned, onClearUnpin, run.id, scrollHostRef, isHomeMode])
+
+  const handleUnpin = () => {
+    pauseAutoScroll()
+    onUnpin(run.id)
+  }
+
+  const isOwnGoal = !run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()
+  const pinned = !unpinned
+
+  return (
+    <div ref={turnRef} className={`relative ${isHomeMode ? "mb-6" : "mb-10"}`}>
+      <StickyUserGoal
+        align="end"
+        topClass={isHomeMode ? STICKY_GOAL_HOME_TOP : "top-0"}
+        className={isHomeMode ? "mb-1 pt-0" : "mb-4"}
+        pinned={pinned}
+      >
+        <div className="group/sticky-goal max-w-[82%] flex items-start justify-end gap-1.5">
+          <div className="min-w-0">
+            {!isOwnGoal && (
+              <div className="flex flex-col items-end gap-1.5">
+                <span className="px-1.5 text-[11px] font-medium uppercase tracking-wide text-text-muted">
+                  {run.displayName ?? run.upn}
+                </span>
+                <UserGoalBubble goal={run.goal} />
+              </div>
+            )}
+            {isOwnGoal && <UserGoalBubble goal={run.goal} />}
+          </div>
+          {pinned && (
+            <button
+              type="button"
+              onClick={handleUnpin}
+              className="shrink-0 mt-2.5 rounded-lg p-1.5 text-text-muted opacity-55 transition-opacity hover:bg-panel/80 hover:text-text hover:opacity-100 focus:opacity-100"
+              title="Unpin message"
+              aria-label="Unpin message"
+            >
+              <PinOff size={15} strokeWidth={2} />
+            </button>
+          )}
+        </div>
+      </StickyUserGoal>
+
+      <div className={isHomeMode ? "" : "pr-6"}>
+        <RunMessage
+          run={run}
+          isActive={isActive}
+          pendingInput={pendingInput}
+          onRespond={onRespond}
+        />
+      </div>
     </div>
   )
 }
@@ -2400,6 +2545,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   const [scrollToRunId, setScrollToRunId] = useState<string | null>(null)
   const [visibleRunCount, setVisibleRunCount] = useState(INITIAL_VISIBLE_RUNS)
   const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
+  const [unpinnedGoalRunIds, setUnpinnedGoalRunIds] = useState<Set<string>>(() => new Set())
   const isHomeMode = mode === "home"
   const streamingAnswer = activeRun?.streamingAnswer ?? ""
 
@@ -2529,6 +2675,24 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     clearPendingInput()
     try { await api.respondToRun(pendingInput.runId, response) } catch { /* ignore */ }
   }, [pendingInput, clearPendingInput])
+
+  const unpinGoal = useCallback((runId: string) => {
+    setUnpinnedGoalRunIds((prev) => {
+      if (prev.has(runId)) return prev
+      const next = new Set(prev)
+      next.add(runId)
+      return next
+    })
+  }, [])
+
+  const clearUnpinnedGoal = useCallback((runId: string) => {
+    setUnpinnedGoalRunIds((prev) => {
+      if (!prev.has(runId)) return prev
+      const next = new Set(prev)
+      next.delete(runId)
+      return next
+    })
+  }, [])
 
   const onKey = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === "Enter" && !e.shiftKey) {
@@ -2822,46 +2986,18 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
           )}
 
           {!showEmptyState && displayRuns.map((run) => (
-            <div key={run.id} className={`relative ${isHomeMode ? "mb-6" : "mb-10"}`}>
-              <StickyUserGoal
-                align="end"
-                topClass={isHomeMode ? STICKY_GOAL_HOME_TOP : "top-0"}
-                className={isHomeMode ? "mb-1 pt-0" : "mb-4"}
-              >
-                <div className="max-w-[82%]">
-                {run.upn && run.upn.toLowerCase() !== me?.upn?.toLowerCase() && (
-                  <div className="flex flex-col items-end gap-1.5">
-                    <span className="text-[11px] font-medium text-text-muted uppercase tracking-wide px-1.5">
-                      {run.displayName ?? run.upn}
-                    </span>
-                    <div
-                      className="max-w-full px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
-                      style={{ boxShadow: "var(--shadow-bubble)" }}
-                    >
-                      <UserGoalText text={run.goal} />
-                    </div>
-                  </div>
-                )}
-                {(!run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()) && (
-                  <div
-                    className="max-w-full px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
-                    style={{ boxShadow: "var(--shadow-bubble)" }}
-                  >
-                    <UserGoalText text={run.goal} />
-                  </div>
-                )}
-                </div>
-              </StickyUserGoal>
-
-              <div className={isHomeMode ? "" : "pr-6"}>
-                <RunMessage
-                  run={run}
-                  isActive={run.id === activeRunId}
-                  pendingInput={pendingInput}
-                  onRespond={handleRespond}
-                />
-              </div>
-            </div>
+            <ChatTurn
+              key={run.id}
+              run={run}
+              isActive={run.id === activeRunId}
+              isHomeMode={isHomeMode}
+              me={me}
+              unpinned={unpinnedGoalRunIds.has(run.id)}
+              onUnpin={unpinGoal}
+              onClearUnpin={clearUnpinnedGoal}
+              pendingInput={pendingInput}
+              onRespond={handleRespond}
+            />
           ))}
 
         </div>
