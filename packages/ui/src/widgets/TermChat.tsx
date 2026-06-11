@@ -1992,7 +1992,7 @@ function RunMessageImpl({
   pendingInput?: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   onRespond: (response: string) => void
 }) {
-  const upsertRun = useStore((s) => s.upsertRun)
+  const { scrollHostRef, hydrateRunTrace } = useChatScroll()
   const containerRef = useRef<HTMLDivElement>(null)
   const requestedTraceRef = useRef(false)
   const [isNearViewport, setIsNearViewport] = useState(false)
@@ -2008,40 +2008,48 @@ function RunMessageImpl({
     const node = containerRef.current
     if (!node) return
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (entry?.isIntersecting) {
-          setIsNearViewport(true)
-          observer.disconnect()
-        }
-      },
-      { rootMargin: "600px 0px" },
-    )
+    let observer: IntersectionObserver | null = null
+    let raf = 0
 
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [])
+    const attach = () => {
+      const root = scrollHostRef.current
+      if (!root) return false
+      observer = new IntersectionObserver(
+        ([entry]) => {
+          if (entry?.isIntersecting) {
+            setIsNearViewport(true)
+            observer?.disconnect()
+            observer = null
+          }
+        },
+        { root, rootMargin: "64px 0px 64px 0px", threshold: 0 },
+      )
+      observer.observe(node)
+      return true
+    }
+
+    if (!attach()) {
+      raf = requestAnimationFrame(() => { attach() })
+    }
+
+    return () => {
+      cancelAnimationFrame(raf)
+      observer?.disconnect()
+    }
+  }, [scrollHostRef])
 
   useEffect(() => {
     if (!isDone) return
     if (!isNearViewport) return
     if (trace.length > 0) return
     if (requestedTraceRef.current) return
+    if (!hydrateRunTrace) return
 
     requestedTraceRef.current = true
-    api.getRunTrace(run.id)
-      .then((rawTrace) => {
-        upsertRun({
-          id: run.id,
-          trace: rawTrace as TraceEntry[],
-          streamingAnswer: "",
-          coherentStream: "",
-        })
-      })
-      .catch(() => {
-        requestedTraceRef.current = false
-      })
-  }, [isDone, isNearViewport, run.id, trace.length, upsertRun])
+    hydrateRunTrace(run.id).catch(() => {
+      requestedTraceRef.current = false
+    })
+  }, [isDone, isNearViewport, run.id, trace.length, hydrateRunTrace])
 
   const renderedParts = useMemo(() => {
     // Copilot-style flat thread: every responsePart renders as a single
@@ -2392,6 +2400,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
+  const upsertRun = useStore((s) => s.upsertRun)
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const pendingInput = useStore((s) => s.pendingInput)
   const clearPendingInput = useStore((s) => s.clearPendingInput)
@@ -2414,7 +2423,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     showJumpButton,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
-    initialScroll: "none",
+    initialScroll: "bottom",
     followWhen: isRunning || Boolean(activeRun?.streamingAnswer),
     onScrollPosition: (scrollTop) => setTranscriptFadeTop(scrollTop > 4),
   })
@@ -2574,6 +2583,81 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
 
+  const traceHydratingRef = useRef(new Set<string>())
+  const traceHydrateWaitersRef = useRef(new Map<string, Array<() => void>>())
+
+  const ensureRunTrace = useCallback(async (runId: string) => {
+    const run = runs.find((r) => r.id === runId)
+    if (!run || isRunActiveStatus(run.status)) return
+    if ((run.trace?.length ?? 0) > 0) return
+
+    if (traceHydratingRef.current.has(runId)) {
+      await new Promise<void>((resolve) => {
+        const waiters = traceHydrateWaitersRef.current.get(runId) ?? []
+        waiters.push(resolve)
+        traceHydrateWaitersRef.current.set(runId, waiters)
+      })
+      return
+    }
+
+    traceHydratingRef.current.add(runId)
+    try {
+      const rawTrace = await api.getRunTrace(runId)
+      upsertRun({
+        id: runId,
+        trace: rawTrace as TraceEntry[],
+        streamingAnswer: "",
+        coherentStream: "",
+      })
+    } catch {
+      throw new Error("trace fetch failed")
+    } finally {
+      traceHydratingRef.current.delete(runId)
+      const waiters = traceHydrateWaitersRef.current.get(runId) ?? []
+      traceHydrateWaitersRef.current.delete(runId)
+      waiters.forEach((resolve) => resolve())
+    }
+  }, [runs, upsertRun])
+
+  const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
+
+  const didInitialAnchorRef = useRef(false)
+
+  // Hydrate the latest turn, then settle at the bottom once per mount (runs
+  // often arrive async from listRuns after the scroll host first paints).
+  useEffect(() => {
+    if (!latestDisplayRunId || displayRuns.length === 0) return
+    if (didInitialAnchorRef.current) return
+    didInitialAnchorRef.current = true
+
+    let cancelled = false
+    void (async () => {
+      await ensureRunTrace(latestDisplayRunId)
+      if (cancelled) return
+      const latest = useStore.getState().runs.find((r) => r.id === latestDisplayRunId)
+      const stick = Boolean(latest && isRunActiveStatus(latest.status))
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          if (!cancelled) scrollToBottom("instant", { stick })
+        })
+      })
+    })()
+
+    return () => { cancelled = true }
+  }, [latestDisplayRunId, displayRuns.length, ensureRunTrace, scrollToBottom])
+
+  const jumpToLatest = useCallback(async () => {
+    if (latestDisplayRunId) {
+      await ensureRunTrace(latestDisplayRunId)
+    }
+    // Two frames: let React commit trace-driven layout before measuring scrollHeight.
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        scrollToBottom("instant", { stick: false })
+      })
+    })
+  }, [latestDisplayRunId, ensureRunTrace, scrollToBottom])
+
   return (
     <div
       className="relative flex flex-col h-full bg-transparent text-text font-sans"
@@ -2627,13 +2711,13 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       )}
 
       {/* Message list */}
-      <ChatScrollProvider pauseAutoScroll={pauseAutoScroll}>
+      <ChatScrollProvider pauseAutoScroll={pauseAutoScroll} scrollHostRef={scrollHostRef} hydrateRunTrace={ensureRunTrace}>
       <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={scrollHostRef}
         {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
         onScroll={onTranscriptScroll}
-        className={`relative flex-1 overflow-y-auto min-h-0 ${isHomeMode && showEmptyState ? "px-6 pt-8 pb-10" : isHomeMode ? "px-6 pt-2 pb-5 space-y-8" : "px-6 py-5 space-y-10"}`}
+        className={`relative flex-1 overflow-y-auto min-h-0 ${isHomeMode && showEmptyState ? "px-6 pt-8 pb-10" : isHomeMode ? "px-6 pt-0 pb-4 space-y-6" : "px-6 py-5 space-y-10"}`}
         style={{ overflowAnchor: "none" }}
       >
         <div
@@ -2690,11 +2774,11 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
           )}
 
           {!showEmptyState && displayRuns.map((run) => (
-            <div key={run.id} className={`relative ${isHomeMode ? "mb-8" : "mb-10"}`}>
+            <div key={run.id} className={`relative ${isHomeMode ? "mb-6" : "mb-10"}`}>
               <StickyUserGoal
                 align="end"
                 topClass={isHomeMode ? STICKY_GOAL_HOME_TOP : "top-0"}
-                className={isHomeMode ? "mb-2" : "mb-4"}
+                className={isHomeMode ? "mb-1 pt-0" : "mb-4"}
               >
                 <div className="max-w-[82%]">
                 {run.upn && run.upn.toLowerCase() !== me?.upn?.toLowerCase() && (
@@ -2739,14 +2823,14 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       {isHomeMode && transcriptFadeTop && !showEmptyState && (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-surface via-surface/90 to-transparent"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-6 bg-gradient-to-b from-surface via-surface to-transparent"
         />
       )}
 
       {showJumpButton && !showEmptyState && (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
           <div className="pointer-events-auto">
-            <ScrollToLatestButton onClick={() => scrollToBottom("instant")} />
+            <ScrollToLatestButton onClick={() => { void jumpToLatest() }} />
           </div>
         </div>
       )}
@@ -2754,7 +2838,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       </ChatScrollProvider>
 
       {!showEmptyState && (
-        <div className="shrink-0 px-5 pb-5">
+        <div className="shrink-0 px-5 pb-4">
           <TermChatInputBar
             input={input}
             isRunning={isRunning}

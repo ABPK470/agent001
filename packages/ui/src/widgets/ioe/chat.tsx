@@ -88,6 +88,7 @@ export function ChatPanel({
     pauseAutoScroll,
     showJumpButton,
   } = useStickToBottomScroll({
+    initialScroll: "bottom",
     followWhen: isRunning || Boolean(streamingAnswer),
   })
 
@@ -177,7 +178,7 @@ export function ChatPanel({
         </div>
       </div>
 
-      <ChatScrollProvider pauseAutoScroll={pauseAutoScroll}>
+      <ChatScrollProvider pauseAutoScroll={pauseAutoScroll} scrollHostRef={scrollRef}>
       <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={scrollRef}
@@ -223,7 +224,7 @@ export function ChatPanel({
       {showJumpButton && (
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
           <div className="pointer-events-auto">
-            <ScrollToLatestButton onClick={() => scrollToBottom("instant")} />
+            <ScrollToLatestButton onClick={() => scrollToBottom("instant", { stick: false })} />
           </div>
         </div>
       )}

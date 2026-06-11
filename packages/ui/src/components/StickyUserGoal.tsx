@@ -1,7 +1,7 @@
 import type { ReactNode } from "react"
 
-/** Clearance below the home-chat top fade overlay (`h-10`). */
-export const STICKY_GOAL_HOME_TOP = "top-10"
+/** Clearance below the home-chat top fade overlay (`h-6`). */
+export const STICKY_GOAL_HOME_TOP = "top-6"
 
 /**
  * Pins a user goal bubble while scrolling through that turn's output.

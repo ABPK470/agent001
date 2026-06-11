@@ -21,6 +21,11 @@ export interface UseStickToBottomScrollOptions {
   followWhen?: boolean
 }
 
+export type ScrollToBottomOptions = {
+  /** When false, jump without enabling live follow (avoids resize yank after hydrate). */
+  stick?: boolean
+}
+
 export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = {}) {
   const {
     threshold = 120,
@@ -42,13 +47,17 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
 
   followWhenRef.current = followWhen
 
-  const scrollToBottom = useCallback((behavior: ScrollBehavior = "instant") => {
+  const scrollToBottom = useCallback((behavior: ScrollBehavior = "instant", options?: ScrollToBottomOptions) => {
     const host = scrollHostRef.current
     if (!host) return
     programmaticScrollRef.current = true
     scrollHostToBottom(host, behavior)
-    shouldStickRef.current = true
-    userEngagedRef.current = false
+    if (options?.stick !== false) {
+      shouldStickRef.current = true
+      userEngagedRef.current = false
+    } else {
+      shouldStickRef.current = false
+    }
     setShowJumpButton(false)
     requestAnimationFrame(() => {
       programmaticScrollRef.current = false

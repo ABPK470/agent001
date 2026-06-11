@@ -589,7 +589,7 @@ export function AgentChat() {
 
   return (
       <div ref={rootRef} className="flex flex-col h-full gap-2">
-          <ChatScrollProvider pauseAutoScroll={pauseAutoScroll}>
+          <ChatScrollProvider pauseAutoScroll={pauseAutoScroll} scrollHostRef={scrollContainerRef}>
           <div className="relative flex-1 min-h-0 flex flex-col">
           {/* Messages area */}
           <div
@@ -1304,7 +1304,7 @@ export function AgentChat() {
           {showJumpButton && (
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
               <div className="pointer-events-auto">
-                <ScrollToLatestButton onClick={() => scrollToBottom("instant")} />
+                <ScrollToLatestButton onClick={() => scrollToBottom("instant", { stick: false })} />
               </div>
             </div>
           )}
