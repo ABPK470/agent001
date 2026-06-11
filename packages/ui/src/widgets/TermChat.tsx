@@ -1426,10 +1426,11 @@ function ScrollMaskedDetails({ text, maxHeight }: { text: string; maxHeight: num
   )
 }
 
-function ToolPill({ row, isLast }: { row: ToolRow; isLast: boolean }) {
+function ToolPill({ row, isLast, isLiveRun = false }: { row: ToolRow; isLast: boolean; isLiveRun?: boolean }) {
   const { preserveToggle } = useChatScroll()
   const label = TOOL_LABELS[row.tool] ?? row.tool
-  const calmRunning = row.status === "running" && row.tool === "ask_user"
+  const isRunning = row.status === "running" && isLiveRun
+  const calmRunning = isRunning && row.tool === "ask_user"
   const [expanded, setExpanded] = useState(false)
   // Pill preview uses `summary` (short — argsSummary like `command="python3 -"`
   // or extracted target). The expanded body now renders TWO blocks: the
@@ -1449,7 +1450,7 @@ function ToolPill({ row, isLast }: { row: ToolRow; isLast: boolean }) {
     <div className="relative py-0.5">
       {!isLast && <div className="pointer-events-none absolute left-[11px] top-[20px] -bottom-1 w-px bg-border-subtle" />}
       <div className="flex items-start gap-2 min-w-0 px-2 py-1">
-        <span className={["shrink-0 w-1.5 h-1.5 rounded-full mt-[7px]", row.status === "running" ? calmRunning ? "bg-text-muted" : "bg-text-secondary animate-pulse" : row.status === "done" ? "bg-text-muted" : "bg-text-faint"].join(" ")} />
+        <span className={["shrink-0 w-1.5 h-1.5 rounded-full mt-[7px]", isRunning ? calmRunning ? "bg-text-muted" : "bg-text-secondary animate-pulse" : row.status === "done" || row.status === "running" ? "bg-text-muted" : "bg-text-faint"].join(" ")} />
         {/* Cap the pill content (label + preview) at 80% of the
             iteration-column width before CSS ellipsis kicks in, so even
             short paths leave breathing room on the right and the
@@ -1514,9 +1515,9 @@ function ToolPill({ row, isLast }: { row: ToolRow; isLast: boolean }) {
 // single collapsible header. Default-collapsed once the iteration is
 // done so the thread stays scannable; auto-expanded while the
 // iteration is still running so the user sees live activity.
-function IterationBlock({ part }: { part: ResponseIterationPart }) {
+function IterationBlock({ part, isLiveRun = false }: { part: ResponseIterationPart; isLiveRun?: boolean }) {
   const { preserveToggle } = useChatScroll()
-  const [open, setOpen] = useState(part.hasRunning)
+  const [open, setOpen] = useState(part.hasRunning && isLiveRun)
   // If a previously-collapsed block flips back to running (rare — only
   // happens via re-render with stale state), respect that and re-expand.
   // We don't auto-collapse on transition to done: once the user opened
@@ -1529,11 +1530,11 @@ function IterationBlock({ part }: { part: ResponseIterationPart }) {
     if (wasRunningRef.current && !part.hasRunning) {
       // Just finished — collapse now that the action is over.
       setOpen(false)
-    } else if (part.hasRunning) {
+    } else if (part.hasRunning && isLiveRun) {
       setOpen(true)
     }
-    wasRunningRef.current = part.hasRunning
-  }, [part.hasRunning])
+    wasRunningRef.current = part.hasRunning && isLiveRun
+  }, [part.hasRunning, isLiveRun])
 
   const buttonRef = useRef<HTMLButtonElement>(null)
   const errored = part.tools.some((p) => p.row.status === "error")
@@ -1561,7 +1562,7 @@ function IterationBlock({ part }: { part: ResponseIterationPart }) {
       </button>
       {open && (
         <div className="mt-0.5 pl-4 border-l border-border-subtle ml-[5px]">
-          <IterationToolList tools={part.tools} stickToBottom={part.hasRunning} />
+          <IterationToolList tools={part.tools} stickToBottom={part.hasRunning && isLiveRun} />
         </div>
       )}
     </div>
@@ -1999,6 +2000,7 @@ function RunMessageImpl({
     [trace, run.status, liveStreamingAnswer, run.answer, run.error, pendingInput, run.id],
   )
   const isDone = !isRunActiveStatus(run.status)
+  const isLiveRun = isActive && !isDone
 
   const renderedParts = useMemo(() => {
     // Copilot-style flat thread: every responsePart renders as a single
@@ -2026,14 +2028,14 @@ function RunMessageImpl({
         // yet (lives at the head of the in-flight iteration). Render it
         // as its own line; once the next iteration boundary fires it
         // will be replaced by an iteration-block.
-        items.push(<ToolPill key={part.id} row={part.row} isLast={false} />)
+        items.push(<ToolPill key={part.id} row={part.row} isLast={false} isLiveRun={isLiveRun} />)
         if (part.row.status === "running") lastToolHasRunning = true
         else lastToolHasRunning = false
         return
       }
 
       if (part.kind === "iteration-block") {
-        items.push(<IterationBlock key={part.id} part={part} />)
+        items.push(<IterationBlock key={part.id} part={part} isLiveRun={isLiveRun} />)
         if (part.hasRunning) lastToolHasRunning = true
         else lastToolHasRunning = false
         return
@@ -2058,18 +2060,19 @@ function RunMessageImpl({
       }
 
       if (part.kind === "markdown") {
-        // Always route through TypewriterAnswer so the local reveal cursor
-        // gets a chance to animate the tail of the final answer if the
-        // run completed before the typewriter caught up. TypewriterAnswer
-        // hands off to SmartAnswer once streaming=false AND the cursor
-        // has reached the end of the text.
+        // History runs render instantly (AgentChat-style). Only the live
+        // active run uses the typewriter reveal.
         items.push(
-          <TypewriterAnswer
-            key={part.id}
-            text={part.text}
-            streaming={part.streaming === true}
-            compact
-          />,
+          isLiveRun ? (
+            <TypewriterAnswer
+              key={part.id}
+              text={part.text}
+              streaming={part.streaming === true}
+              compact
+            />
+          ) : (
+            <SmartAnswer key={part.id} text={part.text} compact />
+          ),
         )
         return
       }
@@ -2092,7 +2095,7 @@ function RunMessageImpl({
     // Pick the milestone label from the most recent primary activity
     // part if any, otherwise fall back to a generic "Working".
     let milestoneLabel = deriveActiveMilestoneLabel(responseParts)
-    if (!isDone && !hasStreamingAnswer) {
+    if (isLiveRun && !hasStreamingAnswer) {
       // Suppress `lastToolHasRunning` to silence noise (avoid unused warning)
       void lastToolHasRunning
       items.push(
@@ -2105,7 +2108,7 @@ function RunMessageImpl({
     }
 
     return items
-  }, [isDone, onRespond, responseParts])
+  }, [isLiveRun, onRespond, responseParts])
 
   // Show workspace diff card when run completes with file changes
   const showDiff = isDone && (run.pendingWorkspaceChanges ?? 0) > 0
