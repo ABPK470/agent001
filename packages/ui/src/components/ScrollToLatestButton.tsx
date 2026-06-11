@@ -1,23 +1,22 @@
 import { ArrowDown } from "lucide-react"
 
+/** Matches TermChatInputBar send control — icon-only scroll-to-bottom affordance. */
 export function ScrollToLatestButton({
   onClick,
-  label = "Latest",
   className = "",
 }: {
   onClick: () => void
-  label?: string
   className?: string
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-full text-[12px] font-medium text-accent bg-panel-2 border border-accent/30 shadow-md hover:bg-panel-2 hover:border-accent/50 transition-colors ${className}`}
       aria-label="Scroll to latest output"
+      title="Latest output"
+      className={`flex items-center justify-center w-10 h-10 rounded-xl bg-elevated dark:bg-overlay-2 border border-border ring-1 ring-overlay-1 text-text-muted hover:text-text hover:bg-overlay-hover transition-colors shadow-sm ${className}`}
     >
-      <ArrowDown size={13} />
-      {label}
+      <ArrowDown size={18} />
     </button>
   )
 }

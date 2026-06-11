@@ -15,7 +15,7 @@ import { ChatScrollProvider, useChatScroll } from "../components/ChatScrollConte
 import { CodeBlock, extractToolCode } from "../components/CodeBlock"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
 import { SmartAnswer } from "../components/SmartAnswer"
-import { StickyUserGoal } from "../components/StickyUserGoal"
+import { STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
 import { useMe } from "../hooks/useMe"
@@ -2686,7 +2686,11 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
           {!showEmptyState && displayRuns.map((run) => (
             <div key={run.id} className={`relative ${isHomeMode ? "mb-8" : "mb-10"}`}>
-              <StickyUserGoal align="end" className={isHomeMode ? "mb-2" : "mb-4"}>
+              <StickyUserGoal
+                align="end"
+                topClass={isHomeMode ? STICKY_GOAL_HOME_TOP : "top-0"}
+                className={isHomeMode ? "mb-2" : "mb-4"}
+              >
                 <div className="max-w-[82%]">
                 {run.upn && run.upn.toLowerCase() !== me?.upn?.toLowerCase() && (
                   <div className="flex flex-col items-end gap-1.5">
@@ -2730,14 +2734,14 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       {isHomeMode && transcriptFadeTop && !showEmptyState && (
         <div
           aria-hidden
-          className="pointer-events-none absolute inset-x-0 top-0 z-20 h-10 bg-gradient-to-b from-surface via-surface/90 to-transparent"
+          className="pointer-events-none absolute inset-x-0 top-0 z-10 h-10 bg-gradient-to-b from-surface via-surface/90 to-transparent"
         />
       )}
 
       {showJumpButton && !showEmptyState && (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
           <div className="pointer-events-auto">
-            <ScrollToLatestButton onClick={() => scrollToBottom("instant")} label="Latest output" />
+            <ScrollToLatestButton onClick={() => scrollToBottom("instant")} />
           </div>
         </div>
       )}

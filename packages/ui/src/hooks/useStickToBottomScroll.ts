@@ -74,7 +74,10 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
         scrollHostToBottom(host)
         shouldStickRef.current = true
       } else {
-        shouldStickRef.current = isNearBottom(host, threshold)
+        // Do not infer stick from isNearBottom on mount — with little or no
+        // content every surface looks "at bottom", then panics as runs hydrate.
+        shouldStickRef.current = false
+        userEngagedRef.current = false
       }
       return
     }
@@ -101,15 +104,23 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     const inner = contentRef.current
     if (!host || !inner) return
 
+    let resizeRaf = 0
     const observer = new ResizeObserver(() => {
       if (!hasInitializedRef.current) return
       if (!shouldStickRef.current || userEngagedRef.current) return
-      scrollHostToBottom(host)
-      onScrollPosition?.(host.scrollTop, host)
+      cancelAnimationFrame(resizeRaf)
+      resizeRaf = requestAnimationFrame(() => {
+        if (!shouldStickRef.current || userEngagedRef.current) return
+        scrollHostToBottom(host)
+        onScrollPosition?.(host.scrollTop, host)
+      })
     })
 
     observer.observe(inner)
-    return () => observer.disconnect()
+    return () => {
+      cancelAnimationFrame(resizeRaf)
+      observer.disconnect()
+    }
   }, [onScrollPosition])
 
   return {

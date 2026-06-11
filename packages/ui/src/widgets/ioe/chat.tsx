@@ -223,7 +223,7 @@ export function ChatPanel({
       {showJumpButton && (
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
           <div className="pointer-events-auto">
-            <ScrollToLatestButton onClick={() => scrollToBottom("instant")} label="Latest output" />
+            <ScrollToLatestButton onClick={() => scrollToBottom("instant")} />
           </div>
         </div>
       )}
