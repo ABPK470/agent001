@@ -723,8 +723,8 @@ export function IntroConversation({
                 ref={scrollRef}
                 className="intro3-scroll-area flex-1 overflow-y-auto px-6 py-5 min-h-0"
               >
-                <div className="intro3-scroll-inner w-[90%] max-w-[840px] min-h-full mx-auto flex flex-col">
-                  <div className="w-full max-w-[840px] mx-auto space-y-4">
+                <div className="intro3-scroll-inner w-[94%] max-w-[960px] min-h-full mx-auto flex flex-col">
+                  <div className="w-full max-w-[960px] mx-auto space-y-4">
                     {msgs.map((m, i) => {
                       const isLast = i === msgs.length - 1
                       if (m.role === "user") {

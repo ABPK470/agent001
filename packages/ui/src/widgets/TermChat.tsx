@@ -2160,7 +2160,8 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
 })
 
 const FORCE_EMPTY_STATE_PREVIEW = false
-const HOME_CHAT_MAX_WIDTH_CLASS = "max-w-[840px]"
+/** Shared home-chat column — transcript, goals, and input bar stay aligned. */
+const HOME_CHAT_COLUMN_CLASS = "w-[94%] max-w-[960px] mx-auto"
 /** Newest runs shown on open; active run pinned at bottom of this window. */
 const INITIAL_VISIBLE_RUNS = 10
 /** Older runs revealed + hydrated when the user scrolls into history. */
@@ -2734,8 +2735,8 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
         <div
           ref={transcriptInnerRef}
           className={showEmptyState
-            ? `w-[90%] ${isHomeMode ? `${HOME_CHAT_MAX_WIDTH_CLASS} pb-[10vh]` : "max-w-[1400px]"} min-h-full mx-auto flex flex-col justify-center`
-            : `relative z-10 w-[90%] ${isHomeMode ? HOME_CHAT_MAX_WIDTH_CLASS : "max-w-[1400px]"} mx-auto`
+            ? `${isHomeMode ? `${HOME_CHAT_COLUMN_CLASS} pb-[10vh]` : "w-[90%] max-w-[1400px] mx-auto"} min-h-full flex flex-col justify-center`
+            : `relative z-10 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : "w-[90%] max-w-[1400px] mx-auto"}`
           }
           style={{ overflowAnchor: "none" }}
         >
@@ -2747,12 +2748,12 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
                   className="chathome-empty-spotlight pointer-events-none absolute inset-x-0 top-1/2 h-[360px] -translate-y-[16%]"
                 />
               )}
-              <div className={`relative z-10 w-full ${isHomeMode ? `${HOME_CHAT_MAX_WIDTH_CLASS} space-y-8` : "max-w-[860px] space-y-8"}`}>
+              <div className={`relative z-10 w-full ${isHomeMode ? "space-y-8" : "max-w-[860px] space-y-8"}`}>
                 <div className={`chathome-empty-copy ${isHomeMode ? "space-y-3" : "space-y-2"}`}>
                   <p className={isHomeMode ? "text-[clamp(1.8rem,3.8vw,3.1rem)] leading-[1.02] tracking-[-0.04em] text-text font-medium" : "text-[24px] leading-tight tracking-[-0.02em] text-text font-medium"}>
                     {isHomeMode ? "How can I help?" : "What are you working on?"}
                   </p>
-                  <p className={isHomeMode ? "text-[14px] leading-6 text-text-muted max-w-[520px] mx-auto" : "text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto"}>
+                  <p className={isHomeMode ? "text-[14px] leading-6 text-text-muted max-w-[580px] mx-auto" : "text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto"}>
                     {isHomeMode
                       ? "Start with a goal, question, or task."
                       : "Query business data, inspect metadata or run environment synchronization."}
@@ -2772,7 +2773,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
                     onSend={send}
                     onAttach={openFilePicker}
                     onRemoveAttachment={removeAttachment}
-                    className={isHomeMode ? `w-full ${HOME_CHAT_MAX_WIDTH_CLASS}` : "w-full max-w-[860px]"}
+                    className={isHomeMode ? "w-full" : "w-full max-w-[860px]"}
                     variant={isHomeMode ? "hero" : "default"}
                     heroRevealProgress={heroRevealProgress}
                   />
@@ -2852,27 +2853,29 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       </ChatScrollProvider>
 
       {!showEmptyState && (
-        <div className="shrink-0 px-5 pb-4">
-          <TermChatInputBar
-            input={input}
-            isRunning={isRunning}
-            pendingInput={pendingInput}
-            sending={sending}
-            textareaRef={setTextareaRef}
-            attachments={pendingAttachments}
-            onChange={setInput}
-            onKeyDown={onKey}
-            onCancel={cancel}
-            onSend={send}
-            onAttach={openFilePicker}
-            onRemoveAttachment={removeAttachment}
-            className={isHomeMode ? `w-full ${HOME_CHAT_MAX_WIDTH_CLASS}` : "w-[90%]"}
-            variant={isHomeMode ? "hero" : "default"}
-            heroRevealProgress={heroRevealProgress}
-          />
-          {attachError && (
-            <p className="mt-1.5 text-[12px] text-error text-center">{attachError}</p>
-          )}
+        <div className={`shrink-0 pb-4 ${isHomeMode ? "px-6" : "px-5"}`}>
+          <div className={isHomeMode ? HOME_CHAT_COLUMN_CLASS : "w-[90%] mx-auto"}>
+            <TermChatInputBar
+              input={input}
+              isRunning={isRunning}
+              pendingInput={pendingInput}
+              sending={sending}
+              textareaRef={setTextareaRef}
+              attachments={pendingAttachments}
+              onChange={setInput}
+              onKeyDown={onKey}
+              onCancel={cancel}
+              onSend={send}
+              onAttach={openFilePicker}
+              onRemoveAttachment={removeAttachment}
+              className="w-full"
+              variant={isHomeMode ? "hero" : "default"}
+              heroRevealProgress={heroRevealProgress}
+            />
+            {attachError && (
+              <p className="mt-1.5 text-[12px] text-error text-center">{attachError}</p>
+            )}
+          </div>
         </div>
       )}
     </div>
