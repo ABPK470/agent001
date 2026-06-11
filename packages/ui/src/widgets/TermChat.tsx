@@ -11,11 +11,16 @@ import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useSta
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
 import { AttachmentChips, type PendingAttachment } from "../components/AttachmentChips"
+import { ChatScrollProvider, useChatScroll } from "../components/ChatScrollContext"
 import { CodeBlock, extractToolCode } from "../components/CodeBlock"
+import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
 import { SmartAnswer } from "../components/SmartAnswer"
+import { StickyUserGoal } from "../components/StickyUserGoal"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
 import { useMe } from "../hooks/useMe"
+import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
+import { CHAT_SCROLL_HOST_ATTR } from "../lib/chatScroll"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
@@ -47,6 +52,7 @@ function isUserGoalOverflowing(node: HTMLDivElement): boolean {
 }
 
 function UserGoalText({ text }: { text: string }): React.ReactElement {
+  const { pauseAutoScroll } = useChatScroll()
   const [expanded, setExpanded] = useState(false)
   const [collapsible, setCollapsible] = useState(false)
   const textRef = useRef<HTMLDivElement | null>(null)
@@ -92,7 +98,10 @@ function UserGoalText({ text }: { text: string }): React.ReactElement {
       {collapsible && (
         <button
           type="button"
-          onClick={() => setExpanded((value) => !value)}
+          onClick={() => {
+            pauseAutoScroll()
+            setExpanded((value) => !value)
+          }}
           className="inline-flex items-center gap-1 text-[13px] font-medium text-text-muted transition-colors hover:text-text"
         >
           <span>{expanded ? "Show less" : "Show more"}</span>
@@ -935,21 +944,6 @@ function sqlQualitySignature(
   return `executed::${summarizeSqlQualityEntry(entry)}`
 }
 
-function preserveToggleAnchor(button: HTMLButtonElement | null, toggle: () => void) {
-  if (!button) {
-    toggle()
-    return
-  }
-  const scrollHost = button.closest(".overflow-y-auto") as HTMLDivElement | null
-  const beforeTop = button.getBoundingClientRect().top
-  toggle()
-  requestAnimationFrame(() => {
-    if (!scrollHost || !button.isConnected) return
-    const afterTop = button.getBoundingClientRect().top
-    scrollHost.scrollTop += afterTop - beforeTop
-  })
-}
-
 function buildResponseParts(
   trace: TraceEntry[],
   runStatus: string,
@@ -1385,10 +1379,6 @@ function findNestedScrollable(target: EventTarget | null, container: HTMLDivElem
   return null
 }
 
-function isNearBottom(el: HTMLDivElement, threshold = 120): boolean {
-  return el.scrollHeight - el.scrollTop - el.clientHeight <= threshold
-}
-
 // Inline scrollable detail area for raw (non-extracted) tool payloads.
 // Inherits the surrounding panel background (no dark slab) and applies
 // a soft fade mask on top/bottom only when content actually overflows
@@ -1437,6 +1427,7 @@ function ScrollMaskedDetails({ text, maxHeight }: { text: string; maxHeight: num
 }
 
 function ToolPill({ row, isLast }: { row: ToolRow; isLast: boolean }) {
+  const { preserveToggle } = useChatScroll()
   const label = TOOL_LABELS[row.tool] ?? row.tool
   const calmRunning = row.status === "running" && row.tool === "ask_user"
   const [expanded, setExpanded] = useState(false)
@@ -1468,7 +1459,7 @@ function ToolPill({ row, isLast }: { row: ToolRow; isLast: boolean }) {
             <button
               ref={buttonRef}
               type="button"
-              onClick={() => preserveToggleAnchor(buttonRef.current, () => setExpanded((value) => !value))}
+              onClick={() => preserveToggle(buttonRef.current, () => setExpanded((value) => !value))}
               className="inline-flex min-w-0 max-w-full items-center gap-2 text-left transition-colors outline-none focus-visible:outline-none group cursor-pointer"
               style={{ width: "fit-content", maxWidth: "100%" }}
             >
@@ -1524,6 +1515,7 @@ function ToolPill({ row, isLast }: { row: ToolRow; isLast: boolean }) {
 // done so the thread stays scannable; auto-expanded while the
 // iteration is still running so the user sees live activity.
 function IterationBlock({ part }: { part: ResponseIterationPart }) {
+  const { preserveToggle } = useChatScroll()
   const [open, setOpen] = useState(part.hasRunning)
   // If a previously-collapsed block flips back to running (rare — only
   // happens via re-render with stale state), respect that and re-expand.
@@ -1558,7 +1550,7 @@ function IterationBlock({ part }: { part: ResponseIterationPart }) {
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => preserveToggleAnchor(buttonRef.current, () => {
+        onClick={() => preserveToggle(buttonRef.current, () => {
           userToggledRef.current = true
           setOpen((v) => !v)
         })}
@@ -1833,6 +1825,7 @@ function HistoryDisclosure({
 }: {
   parts: Array<ResponseProgressPart | ResponseToolPart>
 }) {
+  const { preserveToggle } = useChatScroll()
   const [open, setOpen] = useState(false)
   const summary = summarizeHistory(parts)
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -1844,7 +1837,7 @@ function HistoryDisclosure({
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => preserveToggleAnchor(buttonRef.current, () => setOpen((value) => !value))}
+        onClick={() => preserveToggle(buttonRef.current, () => setOpen((value) => !value))}
         className="inline-flex max-w-full items-center gap-1.5 py-1 text-left text-[13px] text-text-faint hover:text-text-secondary transition-colors"
       >
         {open ? <ChevronDown size={12} strokeWidth={1.5} className="text-text-faint shrink-0" /> : <ChevronRight size={12} strokeWidth={1.5} className="text-text-faint shrink-0" />}
@@ -2397,14 +2390,27 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   const activeRun = runs.find((r) => r.id === activeRunId)
   const isRunning = isRunActiveStatus(activeRun?.status)
 
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const scrollHostRef = useRef<HTMLDivElement>(null)
-  const transcriptInnerRef = useRef<HTMLDivElement>(null)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const shouldStickToBottomRef = useRef(true)
-  const previousActiveRunIdRef = useRef<string | null>(null)
   const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
+
+  const {
+    scrollHostRef,
+    contentRef: transcriptInnerRef,
+    onScroll: onTranscriptScroll,
+    scrollToBottom,
+    pauseAutoScroll,
+    showJumpButton,
+  } = useStickToBottomScroll({
+    resetKey: activeRunId,
+    scrollTriggers: [
+      runs.length,
+      activeRun?.trace?.length,
+      activeRun?.coherentStream,
+      activeRun?.streamingAnswer,
+    ],
+    onScrollPosition: (scrollTop) => setTranscriptFadeTop(scrollTop > 4),
+  })
 
   // Reset the textarea to its intrinsic 1-row height when empty and to
   // its content's scrollHeight when not. Called both from the callback
@@ -2432,37 +2438,6 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   // Load agents
   useEffect(() => {
     api.listAgents().then(setAgents).catch(() => { /* ignore */ })
-  }, [])
-
-  // Follow new output only when the transcript is already pinned near the bottom.
-  // Using direct scrollTop updates avoids the visible whole-pane smooth-scroll flicker.
-  useLayoutEffect(() => {
-    const host = scrollHostRef.current
-    if (!host) return
-    const activeRunChanged = previousActiveRunIdRef.current !== activeRunId
-    previousActiveRunIdRef.current = activeRunId
-    if (activeRunChanged || shouldStickToBottomRef.current) {
-      host.scrollTop = host.scrollHeight
-      shouldStickToBottomRef.current = true
-    }
-  }, [activeRunId, runs.length, activeRun?.trace?.length, activeRun?.coherentStream, activeRun?.streamingAnswer])
-
-  // Keep the transcript pinned during internal content growth (for example the
-  // shared word-by-word answer reveal) without forcing scroll when the user has
-  // intentionally moved away from the bottom.
-  useEffect(() => {
-    const host = scrollHostRef.current
-    const inner = transcriptInnerRef.current
-    if (!host || !inner) return
-
-    const observer = new ResizeObserver(() => {
-      if (!shouldStickToBottomRef.current) return
-      host.scrollTop = host.scrollHeight
-      setTranscriptFadeTop(host.scrollTop > 4)
-    })
-
-    observer.observe(inner)
-    return () => observer.disconnect()
   }, [])
 
   // Auto-grow textarea as the user types. Uses useLayoutEffect so the
@@ -2572,13 +2547,6 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     return () => host.removeEventListener("wheel", handleWheel, { capture: true })
   }, [])
 
-  const onTranscriptScroll = useCallback(() => {
-    const host = scrollHostRef.current
-    if (!host) return
-    shouldStickToBottomRef.current = isNearBottom(host)
-    setTranscriptFadeTop(host.scrollTop > 4)
-  }, [])
-
   // Build message list: each "run" is a (user msg, assistant response) pair.
   // Show every non-active run (terminal OR in-flight) as history, oldest
   // first, with the active run pinned at the bottom so the input bar
@@ -2661,11 +2629,14 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       )}
 
       {/* Message list */}
+      <ChatScrollProvider pauseAutoScroll={pauseAutoScroll}>
+      <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={scrollHostRef}
+        {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
         onScroll={onTranscriptScroll}
         className={`relative flex-1 overflow-y-auto min-h-0 ${isHomeMode && showEmptyState ? "px-6 pt-8 pb-10" : isHomeMode ? "px-6 pt-2 pb-5 space-y-8" : "px-6 py-5 space-y-10"}`}
-        style={transcriptMaskStyle}
+        style={{ ...transcriptMaskStyle, overflowAnchor: "none" }}
       >
         <div
           ref={transcriptInnerRef}
@@ -2673,6 +2644,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
             ? `w-[90%] ${isHomeMode ? `${HOME_CHAT_MAX_WIDTH_CLASS} pb-[10vh]` : "max-w-[1400px]"} min-h-full mx-auto flex flex-col justify-center`
             : `relative z-10 w-[90%] ${isHomeMode ? HOME_CHAT_MAX_WIDTH_CLASS : "max-w-[1400px]"} mx-auto`
           }
+          style={{ overflowAnchor: "none" }}
         >
           {showEmptyState && (
             <div className={`chathome-empty-state relative flex flex-col items-center justify-center px-6 text-center ${isHomeMode ? "min-h-[68vh]" : "min-h-[58vh]"}`}>
@@ -2719,17 +2691,21 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
             </div>
           )}
 
-          {!showEmptyState && displayRuns.map((run) => (
+          {!showEmptyState && displayRuns.map((run) => {
+            const runIsActive = run.id === activeRunId
+            const runIsGenerating = runIsActive && isRunActiveStatus(run.status)
+            return (
             <div key={run.id} className="space-y-6">
-              {/* User goal — with optional attribution for admin-view runs */}
+              {/* User goal — sticky at top while this run is still generating */}
               <div className={`flex justify-end ${isHomeMode ? "py-2" : "py-8"}`}>
+                <StickyUserGoal sticky={runIsGenerating} className="max-w-[82%] w-full flex justify-end">
                 {run.upn && run.upn.toLowerCase() !== me?.upn?.toLowerCase() && (
                   <div className="flex flex-col items-end gap-1.5">
                     <span className="text-[11px] font-medium text-text-muted uppercase tracking-wide px-1.5">
                       {run.displayName ?? run.upn}
                     </span>
                     <div
-                      className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
+                      className="max-w-full px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
                       style={{ boxShadow: "var(--shadow-bubble)" }}
                     >
                       <UserGoalText text={run.goal} />
@@ -2738,12 +2714,13 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
                 )}
                 {(!run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()) && (
                   <div
-                    className="max-w-[82%] px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
+                    className="max-w-full px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
                     style={{ boxShadow: "var(--shadow-bubble)" }}
                   >
                     <UserGoalText text={run.goal} />
                   </div>
                 )}
+                </StickyUserGoal>
               </div>
 
               {/* Agent response */}
@@ -2756,11 +2733,21 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
                 />
               </div>
             </div>
-          ))}
+          )
+          })}
 
-          <div ref={bottomRef} />
         </div>
       </div>
+
+      {showJumpButton && !showEmptyState && (
+        <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
+          <div className="pointer-events-auto">
+            <ScrollToLatestButton onClick={() => scrollToBottom("smooth")} label="Latest output" />
+          </div>
+        </div>
+      )}
+      </div>
+      </ChatScrollProvider>
 
       {!showEmptyState && (
         <div className="shrink-0 px-5 pb-5">

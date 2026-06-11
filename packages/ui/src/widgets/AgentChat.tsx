@@ -10,9 +10,14 @@ import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronRight, Clock, Fol
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
+import { ChatScrollProvider } from "../components/ChatScrollContext"
+import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
 import { SmartAnswer } from "../components/SmartAnswer"
+import { StickyUserGoal } from "../components/StickyUserGoal"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { useContainerSize } from "../hooks/useContainerSize"
+import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
+import { CHAT_SCROLL_HOST_ATTR, preserveScrollAnchor } from "../lib/chatScroll"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
@@ -315,9 +320,6 @@ export function AgentChat() {
   const clearPendingInput = useStore((s) => s.clearPendingInput)
   const dismissedWorkspaceDiffRunIds = useStore((s) => s.dismissedWorkspaceDiffRunIds)
   const dismissWorkspaceDiff = useStore((s) => s.dismissWorkspaceDiff)
-  const bottomRef = useRef<HTMLDivElement>(null)
-  const scrollContainerRef = useRef<HTMLDivElement>(null)
-  const messagesInnerRef = useRef<HTMLDivElement>(null)
   const recognitionRef = useRef<SpeechRecognitionInstance | null>(null)
   const pickerRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -348,6 +350,18 @@ export function AgentChat() {
   const coherentStream = activeRun?.coherentStream ?? ""
   const isRunning = activeRun?.status === "pending" || activeRun?.status === "running" || activeRun?.status === "planning"
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
+
+  const {
+    scrollHostRef: scrollContainerRef,
+    contentRef: messagesInnerRef,
+    onScroll,
+    scrollToBottom,
+    pauseAutoScroll,
+    showJumpButton,
+  } = useStickToBottomScroll({
+    resetKey: activeRunId,
+    scrollTriggers: [runs.length, streamingAnswer, steps.length, trace.length],
+  })
 
   // Currently-running step for progress display
   const runningStep = useMemo(() => {
@@ -455,34 +469,6 @@ export function AgentChat() {
     if (pickerOpen) document.addEventListener("mousedown", handleClick)
     return () => document.removeEventListener("mousedown", handleClick)
   }, [pickerOpen])
-
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: streamingAnswer ? "instant" : "smooth" })
-  }, [runs, streamingAnswer, steps])
-
-  // ResizeObserver: auto-scroll whenever the message content grows (new tool cards,
-  // TypewriterAnswer word reveals, etc.) — but only when already near the bottom.
-  useEffect(() => {
-    const inner = messagesInnerRef.current
-    const outer = scrollContainerRef.current
-    if (!inner || !outer) return
-    const ro = new ResizeObserver(() => {
-      const distFromBottom = outer.scrollHeight - outer.scrollTop - outer.clientHeight
-      if (distFromBottom < 200) {
-        bottomRef.current?.scrollIntoView({ behavior: "instant" })
-      }
-    })
-    ro.observe(inner)
-    return () => ro.disconnect()
-  }, [])
-
-  // Scroll to bottom on initial mount (after DOM paints)
-  useEffect(() => {
-    const t = setTimeout(() => {
-      bottomRef.current?.scrollIntoView({ behavior: "instant" })
-    }, 100)
-    return () => clearTimeout(t)
-  }, [])
 
   // Cleanup recognition on unmount
   useEffect(() => {
@@ -598,20 +584,32 @@ export function AgentChat() {
 
   return (
       <div ref={rootRef} className="flex flex-col h-full gap-2">
+          <ChatScrollProvider pauseAutoScroll={pauseAutoScroll}>
+          <div className="relative flex-1 min-h-0 flex flex-col">
           {/* Messages area */}
-          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto">
-              <div ref={messagesInnerRef} className="space-y-3 py-1">
+          <div
+              ref={scrollContainerRef}
+              {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
+              onScroll={onScroll}
+              className="flex-1 overflow-y-auto min-h-0"
+              style={{ overflowAnchor: "none" }}
+          >
+              <div ref={messagesInnerRef} className="space-y-3 py-1" style={{ overflowAnchor: "none" }}>
                   {recentRuns.length === 0 && (
                       <div className="text-text-muted text-sm text-center pt-8">
                           {/* Hi there! I'm MI:A */}
                       </div>
                   )}
 
-                  {[...recentRuns].reverse().map((run) => (
+                  {[...recentRuns].reverse().map((run) => {
+                      const runIsActive = run.id === activeRunId
+                      const runIsGenerating = runIsActive && isRunning
+                      return (
                       <div key={run.id} className="space-y-2 rounded-lg p-2">
-                          {/* Goal (user message) — right-aligned */}
+                          {/* Goal (user message) — sticky while this run is generating */}
                           <div className="flex justify-end">
-                              <div className="flex items-start gap-2 max-w-[95%]">
+                              <StickyUserGoal sticky={runIsGenerating} className="max-w-[95%]">
+                              <div className="flex items-start gap-2">
                                   <span className="text-text text-base bg-accent/10 rounded-xl rounded-tr-sm px-3 py-1.5 leading-relaxed">
                                       {run.goal}
                                   </span>
@@ -619,6 +617,7 @@ export function AgentChat() {
                                       <User size={14} className="text-accent" />
                                   </div>
                               </div>
+                              </StickyUserGoal>
                           </div>
 
                           {/* Answer (agent response) — left-aligned. User-safe failure
@@ -793,8 +792,10 @@ export function AgentChat() {
                                                                       if (
                                                                           canExpand
                                                                       )
-                                                                          toggleStep(
-                                                                              step.id,
+                                                                          preserveScrollAnchor(
+                                                                              e.currentTarget,
+                                                                              () => toggleStep(step.id),
+                                                                              pauseAutoScroll,
                                                                           );
                                                                   }}
                                                                   disabled={
@@ -1025,8 +1026,10 @@ export function AgentChat() {
                                                                                           if (
                                                                                               canExpand
                                                                                           )
-                                                                                              toggleStep(
-                                                                                                  step.id,
+                                                                                              preserveScrollAnchor(
+                                                                                                  e.currentTarget,
+                                                                                                  () => toggleStep(step.id),
+                                                                                                  pauseAutoScroll,
                                                                                               );
                                                                                       }}
                                                                                       disabled={
@@ -1295,10 +1298,20 @@ export function AgentChat() {
                                   </div>
                               )}
                       </div>
-                  ))}
-                  <div ref={bottomRef} />
+                  )
+                  })}
               </div>
           </div>
+
+          {showJumpButton && (
+            <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+              <div className="pointer-events-auto">
+                <ScrollToLatestButton onClick={() => scrollToBottom("smooth")} label="Latest output" />
+              </div>
+            </div>
+          )}
+          </div>
+          </ChatScrollProvider>
 
           {/* Agent picker + Input */}
           <div className="shrink-0 space-y-2">

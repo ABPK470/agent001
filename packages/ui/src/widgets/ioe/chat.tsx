@@ -5,12 +5,17 @@
 
 import { AlertCircle, Brain, HelpCircle, MessageSquare, Paperclip, Send, Square, User, Wrench, X } from "lucide-react"
 import type React from "react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../api"
+import { ChatScrollProvider } from "../../components/ChatScrollContext"
 import { CodeBlock, extractToolCode } from "../../components/CodeBlock"
+import { ScrollToLatestButton } from "../../components/ScrollToLatestButton"
 import { SmartAnswer } from "../../components/SmartAnswer"
+import { StickyUserGoal } from "../../components/StickyUserGoal"
 import { TypewriterAnswer } from "../../components/TypewriterAnswer"
 import { ChatMode } from "../../enums"
+import { useStickToBottomScroll } from "../../hooks/useStickToBottomScroll"
+import { CHAT_SCROLL_HOST_ATTR } from "../../lib/chatScroll"
 import { C, type ChatMessage } from "./constants"
 
 export { ChatMode } from "../../enums"
@@ -69,12 +74,22 @@ export function ChatPanel({
   currentActivity?: string
   streamingAnswer?: string
 }) {
-  const scrollRef = useRef<HTMLDivElement>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const goalTextareaRef = useRef<HTMLTextAreaElement>(null)
   const [responseInput, setResponseInput] = useState("")
   const [killMessageInput, setKillMessageInput] = useState("")
   const [chatMode, setChatMode] = useState<ChatMode>(ChatMode.Simple)
+
+  const {
+    scrollHostRef: scrollRef,
+    contentRef: messagesInnerRef,
+    onScroll,
+    scrollToBottom,
+    pauseAutoScroll,
+    showJumpButton,
+  } = useStickToBottomScroll({
+    scrollTriggers: [messages, pendingInput, streamingAnswer, isRunning],
+  })
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -97,10 +112,6 @@ export function ChatPanel({
     }
     if (results.length > 0) onAttach(results)
   }
-  useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
-  }, [messages.length, pendingInput, streamingAnswer])
-
   // Reset textarea height when goalInput is cleared externally (e.g. after submit)
   useEffect(() => {
     if (!goalInput && goalTextareaRef.current) goalTextareaRef.current.style.height = "auto"
@@ -126,6 +137,14 @@ export function ChatPanel({
   const visibleMessages = chatMode === ChatMode.Simple
     ? messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "input-request")
     : messages
+
+  const lastUserMessageIndex = useMemo(() => {
+    let idx = -1
+    for (let i = 0; i < visibleMessages.length; i++) {
+      if (visibleMessages[i]?.role === "user") idx = i
+    }
+    return idx
+  }, [visibleMessages])
 
   return (
     <div className="flex flex-col h-full" style={{ background: C.surface }}>
@@ -164,7 +183,16 @@ export function ChatPanel({
         </div>
       </div>
 
-      <div ref={scrollRef} className="flex-1 overflow-y-auto px-3 py-3 space-y-3 min-h-0">
+      <ChatScrollProvider pauseAutoScroll={pauseAutoScroll}>
+      <div className="relative flex-1 min-h-0 flex flex-col">
+      <div
+        ref={scrollRef}
+        {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
+        onScroll={onScroll}
+        className="flex-1 overflow-y-auto px-3 py-3 min-h-0"
+        style={{ overflowAnchor: "none" }}
+      >
+        <div ref={messagesInnerRef} className="space-y-3" style={{ overflowAnchor: "none" }}>
         {visibleMessages.length === 0 && !isRunning ? (
           <div
             className="flex flex-col items-center justify-center h-full gap-2"
@@ -176,7 +204,14 @@ export function ChatPanel({
           </div>
         ) : (
           <>
-            {visibleMessages.map((msg, i) => <ChatBubble key={i} message={msg} mode={chatMode} />)}
+            {visibleMessages.map((msg, i) => (
+              <ChatBubble
+                key={i}
+                message={msg}
+                mode={chatMode}
+                sticky={isRunning && msg.role === "user" && i === lastUserMessageIndex}
+              />
+            ))}
             {isRunning && !hasPending && (
               streamingAnswer
                 ? <StreamingAnswerBubble text={streamingAnswer} activity={currentActivity} />
@@ -184,7 +219,18 @@ export function ChatPanel({
             )}
           </>
         )}
+        </div>
       </div>
+
+      {showJumpButton && (
+        <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
+          <div className="pointer-events-auto">
+            <ScrollToLatestButton onClick={() => scrollToBottom("smooth")} label="Latest output" />
+          </div>
+        </div>
+      )}
+      </div>
+      </ChatScrollProvider>
 
       {/* Executing tool calls — kill bar */}
       {hasExecutingTools && onKillToolCall && (
@@ -375,23 +421,25 @@ export function ChatPanel({
   )
 }
 
-function ChatBubble({ message: msg }: { message: ChatMessage; mode: ChatMode }) {
+function ChatBubble({ message: msg, sticky = false }: { message: ChatMessage; mode: ChatMode; sticky?: boolean }) {
   if (msg.role === "user") {
     return (
-      <div className="flex items-start gap-2">
-        <div
-          className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
-          style={{ background: C.accent + "30" }}
-        >
-          <User size={14} style={{ color: C.accent }} />
+      <StickyUserGoal sticky={sticky}>
+        <div className="flex items-start gap-2">
+          <div
+            className="shrink-0 w-7 h-7 rounded-full flex items-center justify-center"
+            style={{ background: C.accent + "30" }}
+          >
+            <User size={14} style={{ color: C.accent }} />
+          </div>
+          <div
+            className="flex-1 rounded-lg px-3 py-2 text-[13px]"
+            style={{ background: C.elevated, color: C.text }}
+          >
+            {msg.content}
+          </div>
         </div>
-        <div
-          className="flex-1 rounded-lg px-3 py-2 text-[13px]"
-          style={{ background: C.elevated, color: C.text }}
-        >
-          {msg.content}
-        </div>
-      </div>
+      </StickyUserGoal>
     )
   }
   if (msg.role === "thinking") {
