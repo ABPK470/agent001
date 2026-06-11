@@ -2393,6 +2393,8 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
+  const [scrollToRunId, setScrollToRunId] = useState<string | null>(null)
+  const isHomeMode = mode === "home"
 
   const {
     scrollHostRef,
@@ -2402,9 +2404,9 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     pauseAutoScroll,
     showJumpButton,
   } = useStickToBottomScroll({
-    resetKey: activeRunId,
+    resetKey: scrollToRunId,
+    initialScroll: isHomeMode ? "none" : "bottom",
     scrollTriggers: [
-      runs.length,
       activeRun?.trace?.length,
       activeRun?.coherentStream,
       activeRun?.streamingAnswer,
@@ -2462,6 +2464,8 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     try {
       const { runId } = await api.startRun(effectiveGoal, selectedAgent?.id, attachmentIds.length > 0 ? attachmentIds : undefined)
       setActiveRun(runId)
+      setScrollToRunId(runId)
+      requestAnimationFrame(() => scrollToBottom("instant"))
       // Only clear chips after a successful start so the user doesn't
       // lose context if the request failed mid-flight.
       setPendingAttachments([])
@@ -2478,7 +2482,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     } finally {
       setSending(false)
     }
-  }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments])
+  }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom])
 
   const cancel = useCallback(async () => {
     if (!activeRunId) return
@@ -2564,7 +2568,6 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   }, [runs, activeRunId, activeRun])
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
-  const isHomeMode = mode === "home"
 
   return (
     <div
@@ -2681,18 +2684,10 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
             </div>
           )}
 
-          {!showEmptyState && displayRuns.map((run) => {
-            const runIsActive = run.id === activeRunId
-            const runIsGenerating = runIsActive && isRunActiveStatus(run.status)
-            return (
+          {!showEmptyState && displayRuns.map((run) => (
             <div key={run.id} className={`relative ${isHomeMode ? "mb-8" : "mb-10"}`}>
-              {/* User goal — sticky for the full height of this run's output */}
-              <StickyUserGoal
-                sticky={runIsGenerating}
-                align="end"
-                className={isHomeMode ? "mb-3" : "mb-6 pt-4"}
-              >
-                <div className="max-w-[82%] w-full flex justify-end">
+              <StickyUserGoal align="end" className={isHomeMode ? "mb-2" : "mb-4"}>
+                <div className="max-w-[82%]">
                 {run.upn && run.upn.toLowerCase() !== me?.upn?.toLowerCase() && (
                   <div className="flex flex-col items-end gap-1.5">
                     <span className="text-[11px] font-medium text-text-muted uppercase tracking-wide px-1.5">
@@ -2727,8 +2722,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
                 />
               </div>
             </div>
-          )
-          })}
+          ))}
 
         </div>
       </div>
@@ -2743,7 +2737,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       {showJumpButton && !showEmptyState && (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
           <div className="pointer-events-auto">
-            <ScrollToLatestButton onClick={() => scrollToBottom("smooth")} label="Latest output" />
+            <ScrollToLatestButton onClick={() => scrollToBottom("instant")} label="Latest output" />
           </div>
         </div>
       )}

@@ -351,6 +351,8 @@ export function AgentChat() {
   const isRunning = activeRun?.status === "pending" || activeRun?.status === "running" || activeRun?.status === "planning"
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
 
+  const [scrollToRunId, setScrollToRunId] = useState<string | null>(null)
+
   const {
     scrollHostRef: scrollContainerRef,
     contentRef: messagesInnerRef,
@@ -359,8 +361,9 @@ export function AgentChat() {
     pauseAutoScroll,
     showJumpButton,
   } = useStickToBottomScroll({
-    resetKey: activeRunId,
-    scrollTriggers: [runs.length, streamingAnswer, steps.length, trace.length],
+    resetKey: scrollToRunId,
+    initialScroll: "bottom",
+    scrollTriggers: [streamingAnswer, steps.length, trace.length],
   })
 
   // Currently-running step for progress display
@@ -493,6 +496,8 @@ export function AgentChat() {
       const agentId = selectedAgent?.id
       const { runId } = await api.startRun(goal, agentId, attachmentIds)
       setActiveRun(runId)
+      setScrollToRunId(runId)
+      requestAnimationFrame(() => scrollToBottom("instant"))
     } catch (err) {
       // Surface the server error and clear any optimistic activeRun so
       // the chat doesn't get stuck on "Working" when startRun never
@@ -601,13 +606,9 @@ export function AgentChat() {
                       </div>
                   )}
 
-                  {[...recentRuns].reverse().map((run) => {
-                      const runIsActive = run.id === activeRunId
-                      const runIsGenerating = runIsActive && isRunning
-                      return (
+                  {[...recentRuns].reverse().map((run) => (
                       <div key={run.id} className="space-y-2 rounded-lg p-2 relative">
-                          {/* Goal — sticky for the full height of this run's output */}
-                          <StickyUserGoal sticky={runIsGenerating} align="end" className="mb-1">
+                          <StickyUserGoal align="end" className="mb-1">
                               <div className="flex items-start gap-2 max-w-[95%]">
                                   <span className="text-text text-base bg-accent/10 rounded-xl rounded-tr-sm px-3 py-1.5 leading-relaxed">
                                       {run.goal}
@@ -1296,15 +1297,14 @@ export function AgentChat() {
                                   </div>
                               )}
                       </div>
-                  )
-                  })}
+                  ))}
               </div>
           </div>
 
           {showJumpButton && (
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
               <div className="pointer-events-auto">
-                <ScrollToLatestButton onClick={() => scrollToBottom("smooth")} label="Latest output" />
+                <ScrollToLatestButton onClick={() => scrollToBottom("instant")} label="Latest output" />
               </div>
             </div>
           )}

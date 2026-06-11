@@ -138,13 +138,7 @@ export function ChatPanel({
     ? messages.filter((m) => m.role === "user" || m.role === "assistant" || m.role === "input-request")
     : messages
 
-  const lastUserMessageIndex = useMemo(() => {
-    let idx = -1
-    for (let i = 0; i < visibleMessages.length; i++) {
-      if (visibleMessages[i]?.role === "user") idx = i
-    }
-    return idx
-  }, [visibleMessages])
+  const chatTurns = useMemo(() => groupChatTurns(visibleMessages), [visibleMessages])
 
   return (
     <div className="flex flex-col h-full" style={{ background: C.surface }}>
@@ -202,35 +196,25 @@ export function ChatPanel({
             <span className="text-[13px]">No conversation yet</span>
             <span className="text-[13px]">Start a run to see the agent&apos;s reasoning</span>
           </div>
-        ) : isRunning && lastUserMessageIndex >= 0 ? (
-          <>
-            {visibleMessages.slice(0, lastUserMessageIndex).map((msg, i) => (
-              <ChatBubble key={`before-${i}`} message={msg} mode={chatMode} />
-            ))}
-            <div className="relative">
-              <StickyUserGoal sticky align="start" className="mb-2">
-                <UserGoalBubble content={visibleMessages[lastUserMessageIndex]!.content} />
-              </StickyUserGoal>
-              {visibleMessages.slice(lastUserMessageIndex + 1).map((msg, i) => (
-                <ChatBubble key={`after-${i}`} message={msg} mode={chatMode} />
-              ))}
-              {!hasPending && (
-                streamingAnswer
-                  ? <StreamingAnswerBubble text={streamingAnswer} activity={currentActivity} />
-                  : <ActivityBubble activity={currentActivity ?? "Thinking"} />
-              )}
-            </div>
-          </>
         ) : (
           <>
-            {visibleMessages.map((msg, i) => (
-              <ChatBubble key={i} message={msg} mode={chatMode} />
+            {chatTurns.map((turn, turnIndex) => (
+              <div key={`turn-${turnIndex}`} className="relative mb-4">
+                <StickyUserGoal align="start">
+                  <UserGoalBubble content={turn.user.content} />
+                </StickyUserGoal>
+                <div className="space-y-3">
+                  {turn.responses.map((msg, i) => (
+                    <ChatBubble key={`${turnIndex}-${i}`} message={msg} mode={chatMode} />
+                  ))}
+                  {isRunning && turnIndex === chatTurns.length - 1 && !hasPending && (
+                    streamingAnswer
+                      ? <StreamingAnswerBubble text={streamingAnswer} activity={currentActivity} />
+                      : <ActivityBubble activity={currentActivity ?? "Thinking"} />
+                  )}
+                </div>
+              </div>
             ))}
-            {isRunning && !hasPending && (
-              streamingAnswer
-                ? <StreamingAnswerBubble text={streamingAnswer} activity={currentActivity} />
-                : <ActivityBubble activity={currentActivity ?? "Thinking"} />
-            )}
           </>
         )}
         </div>
@@ -239,7 +223,7 @@ export function ChatPanel({
       {showJumpButton && (
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
           <div className="pointer-events-auto">
-            <ScrollToLatestButton onClick={() => scrollToBottom("smooth")} label="Latest output" />
+            <ScrollToLatestButton onClick={() => scrollToBottom("instant")} label="Latest output" />
           </div>
         </div>
       )}
@@ -433,6 +417,22 @@ export function ChatPanel({
       </div>
     </div>
   )
+}
+
+function groupChatTurns(messages: ChatMessage[]): Array<{ user: ChatMessage; responses: ChatMessage[] }> {
+  const turns: Array<{ user: ChatMessage; responses: ChatMessage[] }> = []
+  let current: { user: ChatMessage; responses: ChatMessage[] } | null = null
+
+  for (const msg of messages) {
+    if (msg.role === "user") {
+      if (current) turns.push(current)
+      current = { user: msg, responses: [] }
+    } else if (current) {
+      current.responses.push(msg)
+    }
+  }
+  if (current) turns.push(current)
+  return turns
 }
 
 function UserGoalBubble({ content }: { content: string }) {

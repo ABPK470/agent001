@@ -6,9 +6,14 @@ export interface UseStickToBottomScrollOptions {
   threshold?: number
   /** When these change, scroll to bottom if stuck and user is not engaged. */
   scrollTriggers?: unknown[]
-  /** When this changes (e.g. active run id), force one stick-to-bottom. */
+  /**
+   * When this changes after mount (e.g. user just started a new run), jump to
+   * bottom once. Do NOT pass ambient active-run ids — that causes scroll frenzy
+   * when the chat surface remounts (home ↔ widgets).
+   */
   resetKey?: string | null
-  /** Optional hook for top fade masks etc. */
+  /** Whether to jump to bottom on first mount. Prefer `none` for home chat. */
+  initialScroll?: "none" | "bottom"
   onScrollPosition?: (scrollTop: number, host: HTMLDivElement) => void
 }
 
@@ -17,14 +22,16 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     threshold = 120,
     scrollTriggers = [],
     resetKey = null,
+    initialScroll = "none",
     onScrollPosition,
   } = options
 
   const scrollHostRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
-  const shouldStickRef = useRef(true)
+  const shouldStickRef = useRef(initialScroll === "bottom")
   const userEngagedRef = useRef(false)
   const previousResetKeyRef = useRef<string | null | undefined>(undefined)
+  const hasInitializedRef = useRef(false)
   const [showJumpButton, setShowJumpButton] = useState(false)
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "instant") => {
@@ -60,7 +67,19 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     const host = scrollHostRef.current
     if (!host) return
 
-    const resetChanged = previousResetKeyRef.current !== resetKey
+    if (!hasInitializedRef.current) {
+      hasInitializedRef.current = true
+      previousResetKeyRef.current = resetKey
+      if (initialScroll === "bottom") {
+        scrollHostToBottom(host)
+        shouldStickRef.current = true
+      } else {
+        shouldStickRef.current = isNearBottom(host, threshold)
+      }
+      return
+    }
+
+    const resetChanged = resetKey != null && previousResetKeyRef.current !== resetKey
     previousResetKeyRef.current = resetKey
 
     if (resetChanged) {
@@ -75,7 +94,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
       scrollHostToBottom(host)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- scrollTriggers are the intentional deps
-  }, [resetKey, ...scrollTriggers])
+  }, [resetKey, initialScroll, threshold, ...scrollTriggers])
 
   useEffect(() => {
     const host = scrollHostRef.current
@@ -83,6 +102,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     if (!host || !inner) return
 
     const observer = new ResizeObserver(() => {
+      if (!hasInitializedRef.current) return
       if (!shouldStickRef.current || userEngagedRef.current) return
       scrollHostToBottom(host)
       onScrollPosition?.(host.scrollTop, host)
