@@ -28,7 +28,7 @@ import { formatMs } from "../util"
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
 const ATTACH_MAX_BYTES = 32 * 1024 * 1024
-const USER_GOAL_COLLAPSE_LINES = 8
+const USER_GOAL_COLLAPSE_LINES = 3
 
 function isUserGoalOverflowing(node: HTMLDivElement): boolean {
   const prevDisplay = node.style.display
