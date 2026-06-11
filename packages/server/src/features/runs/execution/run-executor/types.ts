@@ -159,6 +159,8 @@ export type ToolResolutionContext = {
   signal: AbortSignal
   activeRun: ActiveRunRecord | undefined
   runWorkspace: RunWorkspace
+  perRunHost: AgentHost
+  runContext: ReturnType<typeof import("@mia/agent").makeRunContext>
   state: RunState
   policyCtx: HostedPolicyContext
   services: ExecuteRunSideEffectServices

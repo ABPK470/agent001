@@ -39,6 +39,49 @@ describe("run-workspace", () => {
     expect(shouldUseIsolatedWorkspace("Implement API endpoint", false)).toBe(true)
   })
 
+  it("marks source-only artifacts as deleted when the sandbox never received them", async () => {
+    const sourceRoot = await createTempDir("leak-source-")
+    const execRoot = await createTempDir("leak-exec-")
+
+    await writeFile(join(sourceRoot, "README.md"), "# workspace\n")
+    await writeFile(join(execRoot, "README.md"), "# workspace\n")
+    // Simulates the pre-fix bug: write_file targeted sourceRoot instead of the
+    // isolated execution copy, so the new app exists only in the real workspace.
+    await mkdir(join(sourceRoot, "pong"), { recursive: true })
+    await writeFile(join(sourceRoot, "pong/index.html"), "<html></html>\n")
+
+    const diff = await computeWorkspaceDiff(sourceRoot, execRoot)
+    expect(diff.added).toEqual([])
+    expect(diff.deleted).toEqual(["pong/index.html"])
+
+    await applyWorkspaceDiff({ sourceRoot, executionRoot: execRoot, diff })
+    let exists = true
+    try {
+      await stat(join(sourceRoot, "pong/index.html"))
+    } catch {
+      exists = false
+    }
+    expect(exists).toBe(false)
+  })
+
+  it("promotes sandbox-only artifacts into the source tree on apply", async () => {
+    const sourceRoot = await createTempDir("promote-source-")
+    const execRoot = await createTempDir("promote-exec-")
+
+    await writeFile(join(sourceRoot, "README.md"), "# workspace\n")
+    await writeFile(join(execRoot, "README.md"), "# workspace\n")
+    await mkdir(join(execRoot, "pong"), { recursive: true })
+    await writeFile(join(execRoot, "pong/index.html"), "<html></html>\n")
+
+    const diff = await computeWorkspaceDiff(sourceRoot, execRoot)
+    expect(diff.added).toEqual(["pong/index.html"])
+    expect(diff.deleted).toEqual([])
+
+    await applyWorkspaceDiff({ sourceRoot, executionRoot: execRoot, diff })
+    const promoted = await readFile(join(sourceRoot, "pong/index.html"), "utf8")
+    expect(promoted).toContain("<html>")
+  })
+
   it("computes and applies workspace diffs", async () => {
     const sourceRoot = await createTempDir("source-")
     const execRoot = await createTempDir("exec-")

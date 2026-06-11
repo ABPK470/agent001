@@ -28,6 +28,8 @@ export async function prepareExecutionEnvironment(
     signal: runtime.controller.signal,
     activeRun: workspace.activeRun,
     runWorkspace: workspace.runWorkspace,
+    perRunHost: host.perRunHost,
+    runContext: host.runContext,
     state: state.state,
     policyCtx: host.policyCtx,
     services: sideEffects,

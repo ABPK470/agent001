@@ -33,7 +33,8 @@ function createGovernanceServices(services: ToolResolutionContext["services"]): 
 }
 
 export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise<ToolResolution> {
-  const { request, signal, activeRun, runWorkspace, state, policyCtx, services, tracing } = ctx
+  const { request, signal, activeRun, runWorkspace, perRunHost, runContext, state, policyCtx, services, tracing } =
+    ctx
   const governanceServices = createGovernanceServices(services)
   const governRuntimeTool = (tool: Tool) =>
     governTool(tool, governanceServices, state, {
@@ -73,7 +74,12 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
     episodic: perTier.episodic
   })
   const toolDecision = decideSections({ goal: request.goal, memory: perTier, context: classificationContext })
-  const toolFilter = filterToolsByGoal(request.tools, toolDecision)
+  // Rebuild tools from the per-run host so filesystem/shell paths target the
+  // isolated execution root — NOT the boot-time orchestrator workspace.
+  // `request.tools` is only used for the allowed-name set (visitor allowlist).
+  const allowedToolNames = new Set(request.tools.map((tool) => tool.name))
+  const hostBoundTools = getAllTools(perRunHost, runContext).filter((tool) => allowedToolNames.has(tool.name))
+  const toolFilter = filterToolsByGoal(hostBoundTools, toolDecision)
 
   if (!toolFilter.passThrough) {
     console.log(
