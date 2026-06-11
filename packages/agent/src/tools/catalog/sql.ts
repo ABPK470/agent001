@@ -1,5 +1,6 @@
 // ── SQL introspection queries ────────────────────────────────────
 
+/** Tables and views with schema and row counts. */
 export const Q_OBJECTS = `
   SELECT
     s.name       AS schema_name,
@@ -16,6 +17,7 @@ export const Q_OBJECTS = `
   ORDER BY s.name, o.name
 `
 
+/** Tables/views and its columns with column name, data type, max length, nullability, and primary key flag. */
 export const Q_COLUMNS = `
   ;WITH pk_cols AS (
     SELECT ic.object_id, ic.column_id
@@ -41,6 +43,7 @@ export const Q_COLUMNS = `
   ORDER BY s.name, t.name, c.column_id
 `
 
+/** All foreign key relationships, with constraint name, FROM schema/table/column, and TO schema/table/column. */
 export const Q_FKS = `
   SELECT
     fk.name  AS constraint_name,
@@ -61,12 +64,7 @@ export const Q_FKS = `
   ORDER BY fk.name, fkc.constraint_column_id
 `
 
-/**
- * All columns for all sys.* schema objects (catalog views + DMVs + TVFs).
- * Fetched at catalog build time so the agent knows what columns each sys object has.
- * Covers ALL objects in the sys schema — not filtered — so every catalog view, DMV,
- * TVF, and system table is indexed for keyword search. Runs once at startup.
- */
+/** List all columns in SQL Server system catalog views/tables. */
 export const Q_SYS_COLUMNS = `
   SELECT
     o.name       AS object_name,
@@ -80,20 +78,7 @@ export const Q_SYS_COLUMNS = `
   ORDER BY o.name, c.column_id
 `
 
-/**
- * All view → source (table + view) dependencies — the single dep query used at startup.
- *
- * Replaces the old Q_VIEW_DEPS (view→table only) and Q_PUBLISH_VIEW_DEPS (publish→publish).
- * source_type: 'U' = physical table, 'V' = view.
- *
- * Used for two purposes in graph.ts build():
- *   (1) viewSourceRows: filter source_type='U', sum physical table row counts per view
- *   (2) auto-lineage:   build ViewLineage entries for ALL views from this dep graph
- *
- * sys.sql_expression_dependencies is pure catalog metadata — runs in milliseconds.
- * referenced_class = 1 = OBJECT_OR_COLUMN dependencies (tables and views).
- * Self-references excluded (referencing_id != referenced_id).
- */
+/** Find view dependencies, shows which tables or views are referenced by each view. */
 export const Q_FULL_VIEW_DEPS = `
   SELECT
     vs.name + '.' + v.name   AS view_name,
@@ -110,13 +95,7 @@ export const Q_FULL_VIEW_DEPS = `
   ORDER BY view_name, source_name
 `
 
-/**
- * SQL definition text for every user-defined view.
- * Sourced from sys.sql_modules (pure catalog metadata, runs in milliseconds).
- * Stored in the catalog so the agent can read actual view SQL when needed for
- * deeper analysis — no guessing about join conditions.
- * Non-fatal: restricted permissions or encrypted modules return empty rows.
- */
+/** Definitions / source code of all user-created views. */
 export const Q_VIEW_DEFINITIONS = `
   SELECT
     s.name + '.' + o.name AS qualified_name,
@@ -129,21 +108,11 @@ export const Q_VIEW_DEFINITIONS = `
   ORDER BY s.name, o.name
 `
 
-/**
- * Object-level extended properties used for in-database lineage curation.
- *
- * Returns every extended property whose name is `MS_Description`,
- * `lineage_dim_joins`, or `lineage_feeds`, scoped to user objects only
- * (is_ms_shipped = 0). One row per (object, property) — column-level
- * properties (minor_id > 0) are NOT included because the convention
- * stores everything at the object level as JSON arrays.
- *
- * See lineage-extended-properties.ts for the convention contract.
- */
+/** Extended Properties tables/views */
 export const Q_LINEAGE_PROPERTIES = `
   SELECT
     s.name + '.' + o.name        AS qualified_name,
-    o.type                        AS object_type,   -- 'U' | 'V'
+    o.type                        AS object_type,
     CAST(ep.name AS NVARCHAR(128)) AS property_name,
     CAST(ep.value AS NVARCHAR(MAX)) AS property_value
   FROM sys.extended_properties ep

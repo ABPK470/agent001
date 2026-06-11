@@ -6,7 +6,7 @@
  * happens. Complexity is hidden by default; every detail is one click away.
  */
 
-import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, PinOff, Plus, Send, Square } from "lucide-react"
+import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, Dot, Plus, Send, Square } from "lucide-react"
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
@@ -112,13 +112,41 @@ function UserGoalText({ text }: { text: string }): React.ReactElement {
   )
 }
 
-function UserGoalBubble({ goal }: { goal: string }): React.ReactElement {
+function UserGoalBubble({
+  goal,
+  showUnpin,
+  onUnpin,
+}: {
+  goal: string
+  showUnpin?: boolean
+  onUnpin?: () => void
+}): React.ReactElement {
+  const shellClass =
+    "max-w-full rounded-2xl border border-border-subtle bg-panel-2 text-[15px] leading-relaxed text-text dark:bg-bubble-user"
+  const shellStyle = { boxShadow: "var(--shadow-bubble)" }
+
+  if (!showUnpin || !onUnpin) {
+    return (
+      <div className={`${shellClass} px-4 py-2.5`} style={shellStyle}>
+        <UserGoalText text={goal} />
+      </div>
+    )
+  }
+
   return (
-    <div
-      className="max-w-full px-4 py-2.5 bg-panel-2 dark:bg-bubble-user border border-border-subtle rounded-2xl text-[15px] text-text leading-relaxed"
-      style={{ boxShadow: "var(--shadow-bubble)" }}
-    >
-      <UserGoalText text={goal} />
+    <div className={`flex items-stretch gap-1 p-1 ${shellClass}`} style={shellStyle}>
+      <div className="min-w-0 flex-1 rounded-xl px-3 py-1.5">
+        <UserGoalText text={goal} />
+      </div>
+      <button
+        type="button"
+        onClick={onUnpin}
+        className="flex shrink-0 items-center rounded-xl bg-panel px-2.5 text-text-muted transition-colors hover:bg-panel-2 hover:text-text-muted dark:bg-black/10 dark:hover:bg-bubble-user"
+        title="Unpin message"
+        aria-label="Unpin message"
+      >
+        <Dot size={15} strokeWidth={2} />
+      </button>
     </div>
   )
 }
@@ -156,7 +184,53 @@ function ChatTurn({
   onRespond: (response: string) => void
 }): React.ReactElement {
   const turnRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
+  const stickyRef = useRef<HTMLDivElement>(null)
+  const [isStuck, setIsStuck] = useState(false)
   const { pauseAutoScroll, scrollHostRef } = useChatScroll()
+
+  const pinned = !unpinned
+  const showUnpin = pinned && isStuck
+
+  useEffect(() => {
+    if (!pinned) {
+      setIsStuck(false)
+      return
+    }
+
+    const host = scrollHostRef.current
+    const sentinel = sentinelRef.current
+    const sticky = stickyRef.current
+    if (!host || !sentinel || !sticky) return
+
+    const stickyOffsetPx = isHomeMode ? 14 : 0
+
+    const updateStuck = () => {
+      const hostRect = host.getBoundingClientRect()
+      const sentinelRect = sentinel.getBoundingClientRect()
+      const stickyRect = sticky.getBoundingClientRect()
+      const stickLine = hostRect.top + stickyOffsetPx
+      const sentinelPast = sentinelRect.bottom <= stickLine + 1
+      const stickyVisible =
+        stickyRect.bottom > hostRect.top && stickyRect.top < hostRect.bottom
+      const atStickLine = Math.abs(stickyRect.top - stickLine) <= 2
+      setIsStuck(sentinelPast && stickyVisible && atStickLine)
+    }
+
+    updateStuck()
+    host.addEventListener("scroll", updateStuck, { passive: true })
+    const resizeObserver = typeof ResizeObserver !== "undefined"
+      ? new ResizeObserver(updateStuck)
+      : null
+    resizeObserver?.observe(host)
+    window.addEventListener("resize", updateStuck)
+
+    return () => {
+      host.removeEventListener("scroll", updateStuck)
+      resizeObserver?.disconnect()
+      window.removeEventListener("resize", updateStuck)
+    }
+  }, [pinned, scrollHostRef, isHomeMode])
 
   useEffect(() => {
     if (!unpinned) return
@@ -209,38 +283,28 @@ function ChatTurn({
   }
 
   const isOwnGoal = !run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()
-  const pinned = !unpinned
 
   return (
     <div ref={turnRef} className={`relative ${isHomeMode ? "mb-6" : "mb-10"}`}>
+      <div ref={sentinelRef} className="h-px w-full shrink-0" aria-hidden />
       <StickyUserGoal
+        ref={stickyRef}
         align="end"
         topClass={isHomeMode ? STICKY_GOAL_HOME_TOP : "top-0"}
         className={isHomeMode ? "mb-1 pt-0" : "mb-4"}
         pinned={pinned}
       >
-        <div className="group/sticky-goal max-w-[82%] flex items-start justify-end gap-1.5">
-          <div className="min-w-0">
-            {!isOwnGoal && (
-              <div className="flex flex-col items-end gap-1.5">
-                <span className="px-1.5 text-[11px] font-medium uppercase tracking-wide text-text-muted">
-                  {run.displayName ?? run.upn}
-                </span>
-                <UserGoalBubble goal={run.goal} />
-              </div>
-            )}
-            {isOwnGoal && <UserGoalBubble goal={run.goal} />}
-          </div>
-          {pinned && (
-            <button
-              type="button"
-              onClick={handleUnpin}
-              className="shrink-0 mt-2.5 rounded-lg p-1.5 text-text-muted opacity-55 transition-opacity hover:bg-panel/80 hover:text-text hover:opacity-100 focus:opacity-100"
-              title="Unpin message"
-              aria-label="Unpin message"
-            >
-              <PinOff size={15} strokeWidth={2} />
-            </button>
+        <div className="max-w-[82%] min-w-0">
+          {!isOwnGoal && (
+            <div className="flex flex-col items-end gap-1.5">
+              <span className="px-1.5 text-[11px] font-medium uppercase tracking-wide text-text-muted">
+                {run.displayName ?? run.upn}
+              </span>
+              <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
+            </div>
+          )}
+          {isOwnGoal && (
+            <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
           )}
         </div>
       </StickyUserGoal>
