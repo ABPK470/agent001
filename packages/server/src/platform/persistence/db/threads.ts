@@ -105,6 +105,49 @@ export function autoTitleThreadFromGoal(threadId: string, goal: string): void {
   updateThread(threadId, { title })
 }
 
+/** List run ids owned by a thread (caller must verify thread access). */
+export function listRunIdsForThread(threadId: string, upn: string): string[] {
+  const rows = getDb()
+    .prepare(
+      `
+      SELECT id FROM runs
+      WHERE thread_id = ? AND upn = ?
+    `
+    )
+    .all(threadId, upn.toLowerCase()) as Array<{ id: string }>
+  return rows.map((r) => r.id)
+}
+
+/**
+ * Permanently delete a thread and every run-scoped artifact (memory, trace,
+ * attachments, notifications, …). Memory rows use ON DELETE SET NULL on
+ * runs, so they are removed explicitly before run deletion.
+ */
+export function deleteThreadAndRuns(threadId: string, upn: string): { deletedRuns: number } | null {
+  const thread = getThread(threadId)
+  if (!thread || thread.upn.toLowerCase() !== upn.toLowerCase()) return null
+
+  const runIds = listRunIdsForThread(threadId, upn)
+  const db = getDb()
+
+  const purge = db.transaction(() => {
+    if (runIds.length > 0) {
+      const placeholders = runIds.map(() => "?").join(",")
+      db.prepare(`DELETE FROM memory_entries WHERE run_id IN (${placeholders})`).run(...runIds)
+      db.prepare(`DELETE FROM procedural_memories WHERE run_id IN (${placeholders})`).run(...runIds)
+      for (const runId of runIds) {
+        db.prepare(`DELETE FROM event_log WHERE json_extract(data, '$.runId') = ?`).run(runId)
+      }
+      db.prepare(`DELETE FROM runs WHERE thread_id = ? AND upn = ?`).run(threadId, upn.toLowerCase())
+    }
+    db.prepare(`UPDATE conversations SET thread_id = NULL WHERE thread_id = ?`).run(threadId)
+    db.prepare(`DELETE FROM threads WHERE id = ? AND upn = ?`).run(threadId, upn.toLowerCase())
+  })
+
+  purge()
+  return { deletedRuns: runIds.length }
+}
+
 export function dbThreadToWire(row: DbThreadWithRunCount | DbThread): import("@mia/shared-types").Thread {
   const runCount = "run_count" in row ? row.run_count : undefined
   return {

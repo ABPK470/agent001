@@ -81,4 +81,23 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
     }
     return mapRuns(db.listRunsWithUsageForThread(thread.id), orchestrator)
   })
+
+  app.delete<{ Params: { id: string } }>("/api/threads/:id", async (req, reply) => {
+    const upn = req.session?.upn
+    if (!upn) {
+      reply.code(401)
+      return { error: "Unauthorized" }
+    }
+    const thread = db.getThread(req.params.id)
+    if (!thread || !canAccessThread(req.session, thread)) {
+      reply.code(404)
+      return { error: "Thread not found" }
+    }
+    const result = orchestrator.purgeThread(thread.id, upn)
+    if (!result) {
+      reply.code(404)
+      return { error: "Thread not found" }
+    }
+    return { ok: true, deletedRuns: result.deletedRuns }
+  })
 }

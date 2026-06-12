@@ -13,14 +13,17 @@ import {
     Database,
     Eye,
     FileText,
+    GitCompareArrows,
     GitMerge,
     History,
     LayoutDashboard,
     MessageSquare,
+    NotebookTabs,
     ScrollText,
     Settings,
     Shield,
     Ship,
+    TableProperties,
     X
 } from "lucide-react"
 import type { ComponentType } from "react"
@@ -35,11 +38,11 @@ interface Props {
 }
 
 const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: ComponentType<{ size?: number, className?: string }> }> = [
-  { type: "thread-nav",    label: "Threads",       desc: "Select the active thread and run for chat widgets", Icon: MessageSquare },
+  { type: "thread-nav",    label: "Threads",       desc: "Select the active thread and run for chat widgets", Icon: GitMerge },
   { type: "term-chat",     label: "MI:A Chat",     desc: "Send goals to the agent and see responses",   Icon: MessageSquare },
   { type: "env-sync",      label: "Sync",          desc: "Pick source, target, entity, preview and execute changes", Icon: Ship },
   { type: "mymi-db",       label: "Mymi DB",       desc: "Browse MyMI DB schemas, tables, views, and preview data", Icon: Database },
-  { type: "operation-log", label: "Pipelines",     desc: "Pipeline monitor — agent runs, sync",         Icon: History },
+  { type: "operation-log", label: "Pipelines",     desc: "Pipeline monitor — agent runs, sync",         Icon: NotebookTabs },
   { type: "live-logs",     label: "Event Stream",  desc: "Real-time SSE event stream",                  Icon: ScrollText },
   { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: History },
   { type: "agent-chat",    label: "Agent Chat",    desc: "Older version of agent chat",                 Icon: MessageSquare },
@@ -51,8 +54,8 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "operator-env",  label: "IOE",           desc: "IDE like, all data, full control",            Icon: LayoutDashboard },
   { type: "debug-inspector", label: "Trace",       desc: "System prompts, tool resolution, LLM requests & responses", Icon: Bug },
   { type: "active-users",  label: "Active Users",  desc: "Who's online, what they're running",          Icon: Activity },
-  { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform", Icon: Database },
-  { type: "sync-proposals", label: "Sync Proposals", desc: "Review reconciliation proposals, annotations, and ranking", Icon: GitMerge },
+  { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform", Icon: TableProperties },
+  { type: "sync-proposals", label: "Sync Proposals", desc: "Review reconciliation proposals, annotations, and ranking", Icon: GitCompareArrows },
   { type: "sync-evidence",  label: "Sync Evidence",  desc: "Signed evidence envelopes — download and verify",            Icon: FileText },
   { type: "sync-admin",     label: "Sync Admin",     desc: "Runs, approvals, environments, schedules, approval policies, and notifications", Icon: Settings },
 ]

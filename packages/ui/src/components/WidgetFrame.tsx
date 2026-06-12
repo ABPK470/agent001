@@ -82,7 +82,7 @@ export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
     )
   }
 
-  const isTransparent = type === "term-chat"
+  const isTransparent = type === "term-chat" || type === "thread-nav"
 
   return (
     <div

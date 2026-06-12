@@ -6,7 +6,7 @@
  * Layout: operations grouped by day.
  */
 
-import { Brain, ChevronRight, Database, Loader2, Search, Settings, X, XCircle } from "lucide-react"
+import { Brain, ChevronRight, Database, Filter, Loader2, Search, Settings, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline, OperationsResponse } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
@@ -187,7 +187,10 @@ export function OperationLog() {
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
   const rootRef = useRef<HTMLDivElement>(null)
   const { width } = useContainerSize(rootRef)
-  const compact = width > 0 && width < 640
+  const compact = width > 0 && width < 860
+  const tiny = width > 0 && width < 480
+  const [statusesOpen, setStatusesOpen] = useState(false)
+  const [searchOpen, setSearchOpen] = useState(false)
 
   // ── SSE ──────────────────────────────────────────────────────
   useEffect(() => {
@@ -256,58 +259,104 @@ export function OperationLog() {
   return (
     <div ref={rootRef} className="h-full flex flex-col gap-2.5 overflow-hidden text-text">
 
-      {/* ── Toolbar ─────────────────────────────────────── */}
+      {/* ── Toolbar (container-aware — same pattern as Event Stream) ── */}
       <div className="rounded-lg border border-border-subtle bg-overlay-1 shrink-0">
-        <div className={`px-3 py-2 ${compact ? "space-y-2.5" : "flex items-center gap-1.5"}`}>
+        <div className={`flex items-center gap-1.5 px-3 py-2 ${compact ? "flex-wrap" : ""}`}>
+          {/* Kind: all | agent | sync */}
+          {(["all", "agent", "sync"] as const).map(v => {
+            const active = v === kindView
+            const label = v === "sync" ? (compact || tiny ? "sync" : "synchronization") : v
+            return (
+              <button key={v} onClick={() => setKindView(v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                  active ? "bg-accent/15 text-accent font-medium" : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
+                }`}
+              >{label}</button>
+            )
+          })}
 
-          <div className={`min-w-0 ${compact ? "flex flex-wrap items-center gap-1.5" : "flex items-center gap-1.5 flex-1 min-w-0"}`}>
-            {/* Kind: all | agent | synchronization */}
-            {(["all", "agent", "sync"] as const).map(v => {
-              const active = v === kindView
-              const label  = v === "sync" ? "synchronization" : v
-              return (
-                <button key={v} onClick={() => setKindView(v)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap ${
-                    active ? "bg-accent/15 text-accent font-medium" : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
-                  }`}
-                >{label}</button>
-              )
-            })}
+          {!compact && <div className="h-4 w-px bg-overlay-3 mx-1 shrink-0" />}
 
-            <div className={`bg-overlay-3 shrink-0 ${compact ? "hidden" : "h-4 w-px mx-1"}`} />
+          {/* Status chips — inline when wide, dropdown when compact */}
+          {!compact ? (
+            <>
+              {ALL_STATUSES.map(s => {
+                const on = statuses.has(s)
+                const m  = STATUS_META[s]
+                return (
+                  <button key={s} onClick={() => toggleStatus(s)}
+                    className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap shrink-0 ${
+                      on ? `${m.tone} font-medium` : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
+                    }`}
+                  >{s}</button>
+                )
+              })}
+              {statuses.size > 0 && (
+                <button onClick={() => setStatuses(new Set())}
+                  className="p-1.5 rounded-md transition-colors text-text-muted/60 hover:text-text hover:bg-elevated/40 shrink-0"
+                  title="Clear status filters"
+                ><X size={14} /></button>
+              )}
+            </>
+          ) : (
+            <div className="relative shrink-0">
+              <button
+                onClick={() => setStatusesOpen(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap ${
+                  statuses.size > 0
+                    ? "bg-accent/15 text-accent font-medium"
+                    : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
+                }`}
+              >
+                <Filter size={13} />
+                {statuses.size === 0 ? "status" : `${statuses.size} status`}
+              </button>
+              {statusesOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setStatusesOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1 z-50 bg-elevated border border-border rounded-md shadow-2xl py-1 min-w-[160px]">
+                    {ALL_STATUSES.map(s => {
+                      const on = statuses.has(s)
+                      const m = STATUS_META[s]
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => toggleStatus(s)}
+                          className={`flex items-center justify-between gap-3 w-full text-left px-3 py-2 text-[13px] transition-colors ${
+                            on ? `${m.tone} font-medium` : "text-text-muted hover:text-text hover:bg-overlay-2"
+                          }`}
+                        >
+                          <span>{s}</span>
+                        </button>
+                      )
+                    })}
+                    {statuses.size > 0 && (
+                      <button
+                        onClick={() => setStatuses(new Set())}
+                        className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-[12px] text-text-muted hover:text-text hover:bg-overlay-2"
+                      >
+                        <X size={12} />
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                </>
+              )}
+            </div>
+          )}
 
-            {/* Status chips */}
-            {ALL_STATUSES.map(s => {
-              const on = statuses.has(s)
-              const m  = STATUS_META[s]
-              return (
-                <button key={s} onClick={() => toggleStatus(s)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap ${
-                    on ? `${m.tone} font-medium` : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
-                  }`}
-                >{s}</button>
-              )
-            })}
+          <div className="flex-1 min-w-0" />
 
-            {statuses.size > 0 && (
-              <button onClick={() => setStatuses(new Set())}
-                className="p-1.5 rounded-md transition-colors text-text-muted/60 hover:text-text hover:bg-elevated/40 shrink-0"
-                title="Clear status filters"
-              ><X size={14} /></button>
-            )}
-          </div>
-
-          <div className={`min-w-0 ${compact ? "flex items-center gap-2" : "ml-auto flex items-center gap-2 flex-[0_1_32rem] min-w-[18rem]"}`}>
-
-            {/* Search — big, fills remaining space */}
-            <div className={`relative flex items-center min-w-0 ${compact ? "flex-1" : "flex-1 min-w-[16rem]"}`}>
+          {/* Search — full input when wide, icon + second row when compact */}
+          {!compact ? (
+            <div className="relative flex items-center flex-1 min-w-0 max-w-lg shrink-0">
               <Search size={13} className="absolute left-2.5 text-text-muted/50 pointer-events-none" />
               <input
                 type="text"
                 placeholder="Filter operations…"
                 value={search}
                 onChange={e => { setSearch(e.target.value); if (!e.target.value) setHistResults(null) }}
-                className="pl-8 pr-7 py-1.5 h-[40px] w-full text-[13px] bg-base border border-border rounded-md text-text placeholder:text-text-muted/50 outline-none focus:border-accent transition-colors"
+                className="pl-8 pr-7 py-1.5 h-[32px] w-full text-[13px] bg-base border border-border rounded-md text-text placeholder:text-text-muted/50 outline-none focus:border-accent transition-colors"
               />
               {histLoading && <Loader2 size={12} className="absolute right-2.5 animate-spin text-text-muted/40" />}
               {search && !histLoading && (
@@ -317,16 +366,49 @@ export function OperationLog() {
                 </button>
               )}
             </div>
+          ) : (
+            <button
+              onClick={() => setSearchOpen(v => !v)}
+              title="Search operations"
+              className={`p-1.5 rounded-md transition-colors shrink-0 ${
+                search || searchOpen || histLoading ? "bg-accent/15 text-accent" : "text-text-muted/60 hover:text-text hover:bg-elevated/40"
+              }`}
+            >
+              {histLoading ? <Loader2 size={15} className="animate-spin" /> : <Search size={15} />}
+            </button>
+          )}
 
-            {/* Count: filtered / total-non-system */}
+          {!tiny && (
             <span className="text-[12px] text-text-muted tabular-nums shrink-0 px-1.5">
               {filtered.length !== nonSystem.length
                 ? <>{filtered.length}<span className="text-text-muted/40">/{nonSystem.length}</span></>
                 : nonSystem.length}
             </span>
-          </div>
-
+          )}
         </div>
+
+        {compact && searchOpen && (
+          <div className="px-3 pb-2 border-t border-border-subtle pt-2">
+            <div className="relative flex items-center w-full">
+              <Search size={13} className="absolute left-2.5 text-text-muted/50 pointer-events-none" />
+              <input
+                type="text"
+                autoFocus
+                placeholder="Filter operations…"
+                value={search}
+                onChange={e => { setSearch(e.target.value); if (!e.target.value) setHistResults(null) }}
+                className="pl-8 pr-7 py-1.5 h-[32px] w-full text-[13px] bg-base border border-border rounded-md text-text placeholder:text-text-muted/50 outline-none focus:border-accent transition-colors"
+              />
+              {histLoading && <Loader2 size={12} className="absolute right-2.5 animate-spin text-text-muted/40" />}
+              {search && !histLoading && (
+                <button className="absolute right-2 text-text-muted hover:text-text"
+                  onClick={() => { setSearch(""); setHistResults(null) }}>
+                  <X size={13} />
+                </button>
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ── Body ────────────────────────────────────────── */}

@@ -1,9 +1,10 @@
-import { MoreVertical, PanelLeft, PanelLeftClose, Pin, Plus, X } from "lucide-react"
+import { MoreVertical, PanelLeft, PanelLeftClose, Pencil, Pin, Plus, Trash2, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { api } from "../../api"
 import { useStore } from "../../store"
 import type { Thread } from "../../types"
+import { DeleteThreadModal } from "./DeleteThreadModal"
 
 interface Props {
   threads: Thread[]
@@ -27,7 +28,10 @@ function ThreadRailItem({
   onSelect: () => void
 }) {
   const upsertThread = useStore((s) => s.upsertThread)
+  const deleteThread = useStore((s) => s.deleteThread)
   const [editing, setEditing] = useState(false)
+  const [deleteOpen, setDeleteOpen] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null)
   const [draft, setDraft] = useState(thread.title || "New thread")
@@ -119,6 +123,19 @@ function ThreadRailItem({
     closeMenu()
     setDraft(displayTitle)
     setEditing(true)
+  }
+
+  const requestDelete = () => {
+    closeMenu()
+    setDeleteOpen(true)
+  }
+
+  const confirmDelete = () => {
+    setDeleting(true)
+    void deleteThread(thread.id).finally(() => {
+      setDeleting(false)
+      setDeleteOpen(false)
+    })
   }
 
   const toggleMenu = (event: React.MouseEvent) => {
@@ -264,13 +281,32 @@ function ThreadRailItem({
                 className="thread-rail-item-dropdown-item"
                 onClick={startRename}
               >
+                <Pencil size={13} strokeWidth={1.75} />
                 <span>Rename</span>
+              </button>
+              <button
+                type="button"
+                role="menuitem"
+                className="thread-rail-item-dropdown-item thread-rail-item-dropdown-item--danger"
+                onClick={requestDelete}
+              >
+                <Trash2 size={13} strokeWidth={1.75} />
+                <span>Delete</span>
               </button>
             </div>,
             document.body,
           )}
         </div>
       </div>
+
+      {deleteOpen && (
+        <DeleteThreadModal
+          thread={thread}
+          busy={deleting}
+          onClose={() => { if (!deleting) setDeleteOpen(false) }}
+          onConfirm={confirmDelete}
+        />
+      )}
     </div>
   )
 }

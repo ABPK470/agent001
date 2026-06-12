@@ -159,6 +159,7 @@ interface AppState {
   selectThread: (id: string | null) => Promise<void>
   selectRun: (runId: string, threadId: string) => Promise<void>
   bootstrapThreads: () => Promise<void>
+  deleteThread: (threadId: string) => Promise<void>
   createNewThread: () => Promise<string>
 
   // Steps (for active run)
@@ -1098,6 +1099,19 @@ export const useStore = create<AppState>()(
         const run = get().runs.find((r) => r.id === runId)
         if (!run || run.threadId !== threadId) return
         get().setActiveRun(runId)
+      },
+      deleteThread: async (threadId) => {
+        await api.deleteThread(threadId)
+        const remaining = get().threads.filter((t) => t.id !== threadId)
+        const wasActive = get().activeThreadId === threadId
+        if (!wasActive) {
+          set({ threads: remaining })
+          return
+        }
+        set({ threads: remaining, activeThreadId: null, activeRunId: null, runs: [] })
+        const nextId = remaining[0]?.id
+        if (nextId) await get().selectThread(nextId)
+        else await get().createNewThread()
       },
 
       // Steps

@@ -70,6 +70,10 @@ export const api = {
       method: "PATCH",
       body: JSON.stringify(patch),
     }),
+  deleteThread: (id: string) =>
+    json<{ ok: boolean; deletedRuns: number }>(`/api/threads/${id}`, {
+      method: "DELETE",
+    }),
   listThreadRuns: (threadId: string) =>
     json<Run[]>(`/api/threads/${threadId}/runs`),
   getRun: (id: string) => json<RunDetail>(`/api/runs/${id}`),

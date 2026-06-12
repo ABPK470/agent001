@@ -13,7 +13,7 @@ import {
 import { randomUUID } from "node:crypto"
 import { bootHostDepsToConfigureAgentOptions } from "../../bootstrap/config.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../../bootstrap/workspace.js"
-import { cleanupStaleRunWorkspaces } from "../../bootstrap/workspace.js"
+import { cleanupRunWorkspace, cleanupStaleRunWorkspaces } from "../../bootstrap/workspace.js"
 import { broadcast } from "../../platform/events/broadcaster.js"
 import { cleanupExpiredCache } from "../../platform/persistence/index.js"
 import * as db from "../../platform/persistence/sqlite.js"
@@ -448,6 +448,22 @@ export class AgentOrchestrator {
       boundSave,
       createNotification
     )
+  }
+
+  /** Cancel in-flight runs, drop workspace caches, then purge DB rows. */
+  purgeThread(threadId: string, upn: string): { deletedRuns: number } | null {
+    const runIds = db.listRunIdsForThread(threadId, upn)
+    for (const runId of runIds) {
+      this.cancelRun(runId)
+      this.queue.remove(runId)
+      this.completedRunDiffs.delete(runId)
+      const workspace =
+        this.completedRunWorkspaces.get(runId) ?? this.activeRuns.get(runId)?.workspace
+      this.completedRunWorkspaces.delete(runId)
+      this.activeRuns.delete(runId)
+      if (workspace) void cleanupRunWorkspace(workspace).catch(() => {})
+    }
+    return db.deleteThreadAndRuns(threadId, upn)
   }
 
   // ── Private: delegate to run-executor ────────────────────────
