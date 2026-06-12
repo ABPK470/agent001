@@ -31,6 +31,21 @@ import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
 
+/** Pin/unpin dot layout — home + thread share one profile; widget has its own. */
+type GoalPinProfile = "home" | "widget"
+
+function goalPinLayout(profile: GoalPinProfile): {
+  stickyOffsetPx: number
+  topClass: string
+  stuckScrollThreshold: number
+} {
+  if (profile === "widget") {
+    // Widget scroll host uses py-5; align sticky + stuck detection with that inset.
+    return { stickyOffsetPx: 20, topClass: "top-5", stuckScrollThreshold: 6 }
+  }
+  return { stickyOffsetPx: 14, topClass: STICKY_GOAL_HOME_TOP, stuckScrollThreshold: 20 }
+}
+
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
 const ATTACH_MAX_BYTES = 32 * 1024 * 1024
@@ -164,6 +179,7 @@ function ChatTurn({
   run,
   isActive,
   isHomeMode,
+  pinProfile,
   me,
   unpinned,
   onUnpin,
@@ -185,6 +201,7 @@ function ChatTurn({
   }
   isActive: boolean
   isHomeMode: boolean
+  pinProfile: GoalPinProfile
   me: { upn?: string | null } | null
   unpinned: boolean
   onUnpin: (runId: string) => void
@@ -197,6 +214,7 @@ function ChatTurn({
   const stickyRef = useRef<HTMLDivElement>(null)
   const [isStuck, setIsStuck] = useState(false)
   const { pauseAutoScroll, scrollHostRef } = useChatScroll()
+  const { stickyOffsetPx, topClass: pinTopClass, stuckScrollThreshold } = goalPinLayout(pinProfile)
 
   const pinned = !unpinned
   const showUnpin = pinned && isStuck
@@ -212,15 +230,23 @@ function ChatTurn({
     const sticky = stickyRef.current
     if (!host || !sentinel || !sticky) return
 
-    const stickyOffsetPx = isHomeMode ? 14 : 0
-
     const updateStuck = () => {
       const hostRect = host.getBoundingClientRect()
       const sentinelRect = sentinel.getBoundingClientRect()
-      const stickyRect = sticky.getBoundingClientRect()
       const stickLine = hostRect.top + stickyOffsetPx
-      const scrolled = host.scrollTop > 20
+      const scrolled = host.scrollTop > stuckScrollThreshold
+
+      // Widget: sticky CSS already pins the goal — show the dot when the
+      // sentinel has scrolled past the stick line (no rect equality check;
+      // that was never true in the nested widget scrollport).
+      if (pinProfile === "widget") {
+        setIsStuck(scrolled && sentinelRect.bottom <= stickLine)
+        return
+      }
+
       const sentinelPast = sentinelRect.bottom < stickLine - 4
+
+      const stickyRect = sticky.getBoundingClientRect()
       const stickyVisible =
         stickyRect.bottom > hostRect.top && stickyRect.top < hostRect.bottom
       const atStickLine = stickyRect.top <= stickLine + 1
@@ -240,7 +266,7 @@ function ChatTurn({
       resizeObserver?.disconnect()
       window.removeEventListener("resize", updateStuck)
     }
-  }, [pinned, scrollHostRef, isHomeMode])
+  }, [pinned, scrollHostRef, pinProfile, stickyOffsetPx, stuckScrollThreshold])
 
   useEffect(() => {
     if (!unpinned) return
@@ -248,7 +274,6 @@ function ChatTurn({
     const turn = turnRef.current
     if (!host || !turn) return
 
-    const stickyOffsetPx = isHomeMode ? 14 : 0
     let ignoreNextScroll = true
 
     const maybeRepin = () => {
@@ -276,7 +301,9 @@ function ChatTurn({
           onClearUnpin(run.id)
         }
       },
-      { root: host, threshold: 0 },
+      pinProfile === "widget"
+        ? { root: host, threshold: 0, rootMargin: `-${stickyOffsetPx}px 0px 0px 0px` }
+        : { root: host, threshold: 0 },
     )
     observer.observe(turn)
     host.addEventListener("scroll", maybeRepin, { passive: true })
@@ -285,7 +312,7 @@ function ChatTurn({
       observer.disconnect()
       host.removeEventListener("scroll", maybeRepin)
     }
-  }, [unpinned, onClearUnpin, run.id, scrollHostRef, isHomeMode])
+  }, [unpinned, onClearUnpin, run.id, scrollHostRef, pinProfile, stickyOffsetPx])
 
   const handleUnpin = () => {
     pauseAutoScroll()
@@ -300,7 +327,7 @@ function ChatTurn({
       <StickyUserGoal
         ref={stickyRef}
         align="end"
-        topClass={isHomeMode ? STICKY_GOAL_HOME_TOP : "top-0"}
+        topClass={pinProfile === "home" ? STICKY_GOAL_HOME_TOP : pinTopClass}
         className={isHomeMode ? "mb-1 pt-0" : "mb-4"}
         pinned={pinned}
       >
@@ -2621,6 +2648,7 @@ export function TermChat({
   const [unpinnedGoalRunIds, setUnpinnedGoalRunIds] = useState<Set<string>>(() => new Set())
   const isThreadMode = mode === "thread"
   const isHomeMode = mode === "home" || isThreadMode
+  const pinProfile: GoalPinProfile = mode === "widget" ? "widget" : "home"
   const activeThreadId = threadIdProp ?? useStore((s) => s.activeThreadId)
   const streamingAnswer = activeRun?.streamingAnswer ?? ""
 
@@ -2807,12 +2835,19 @@ export function TermChat({
   // matters: if `activeRunId` ever drifts to a different run (another
   // widget calling setActiveRun, an unrelated background SSE event, etc.)
   // the run the user just started would otherwise vanish from view.
+  // Always paginate the most recent N runs in chronological order.
+  // Thread home loads ASC, global listRuns loads DESC — normalize here so
+  // widget mode after chat/thread home does not slice the wrong end.
   const visibleRuns = useMemo(() => {
-    if (isThreadMode) {
-      return runs.slice(Math.max(0, runs.length - visibleRunCount))
-    }
-    return runs.slice(0, visibleRunCount)
-  }, [runs, visibleRunCount, isThreadMode])
+    const scoped =
+      isThreadMode && activeThreadId
+        ? runs.filter((r) => r.threadId === activeThreadId)
+        : runs
+    const chronological = [...scoped].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    )
+    return chronological.slice(Math.max(0, chronological.length - visibleRunCount))
+  }, [runs, visibleRunCount, isThreadMode, activeThreadId])
 
   const displayRuns = useMemo(() => {
     const history = visibleRuns
@@ -2825,7 +2860,14 @@ export function TermChat({
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
-  const canLoadMoreHistory = visibleRunCount < runs.length && !isThreadMode
+  const scopedRunCount = useMemo(() => {
+    if (isThreadMode && activeThreadId) {
+      return runs.filter((r) => r.threadId === activeThreadId).length
+    }
+    return runs.length
+  }, [runs, isThreadMode, activeThreadId])
+
+  const canLoadMoreHistory = visibleRunCount < scopedRunCount
 
   const didSelectLatestRef = useRef(false)
   const didInitialAnchorRef = useRef(false)
@@ -2871,7 +2913,7 @@ export function TermChat({
     didSelectLatestRef.current = false
     didInitialAnchorRef.current = false
     hadActiveTraceRef.current = false
-  }, [me?.upn])
+  }, [me?.upn, mode, activeThreadId])
 
   // Scroll-up pagination: reveal + hydrate the next HISTORY_PAGE_SIZE older runs.
   useEffect(() => {
@@ -2884,7 +2926,7 @@ export function TermChat({
         if (!entry?.isIntersecting || historyLoadLockRef.current) return
         historyLoadLockRef.current = true
         pendingScrollPreserveRef.current = host.scrollHeight
-        setVisibleRunCount((prev) => Math.min(prev + HISTORY_PAGE_SIZE, runs.length))
+        setVisibleRunCount((prev) => Math.min(prev + HISTORY_PAGE_SIZE, scopedRunCount))
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             historyLoadLockRef.current = false
@@ -2895,7 +2937,7 @@ export function TermChat({
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [canLoadMoreHistory, runs.length])
+  }, [canLoadMoreHistory, scopedRunCount])
 
   useLayoutEffect(() => {
     const host = scrollHostRef.current
@@ -3076,6 +3118,7 @@ export function TermChat({
               run={run}
               isActive={run.id === activeRunId}
               isHomeMode={isHomeMode}
+              pinProfile={pinProfile}
               me={me}
               unpinned={unpinnedGoalRunIds.has(run.id)}
               onUnpin={unpinGoal}

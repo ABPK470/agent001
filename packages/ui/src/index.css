@@ -1118,7 +1118,7 @@ textarea.input {
 }
 
 .thread-rail--desktop .thread-rail-inner--overlay {
-  background-color: color-mix(in srgb, var(--panel-2) 1%, transparent);
+  background-color: color-mix(in srgb, var(--panel-2) 5%, transparent);
 }
 
 .thread-rail--collapsed .thread-rail-inner {

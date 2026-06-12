@@ -543,8 +543,14 @@ export function AgentChat() {
     setListening(true)
   }, [listening])
 
-  // Show recent runs as "conversation"
-  const recentRuns = runs.slice(0, 20)
+  // Show recent runs as "conversation" (newest first regardless of store order).
+  const recentRuns = useMemo(
+    () =>
+      [...runs]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 20),
+    [runs],
+  )
 
   useEffect(() => {
     if (recentRuns.length === 0) return

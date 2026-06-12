@@ -228,29 +228,54 @@ export function App() {
     return () => stream.close()
   }, [handleEvent, setConnected, popOut, me?.upn])
 
-  // Load initial runs + auto-select the most recent. Re-runs on identity
-  // change so each user only sees runs the server scopes to them.
+  // Load runs for this identity. Re-runs only on login/logout — NOT when
+  // chat widgets appear on the canvas (shouldHydrateSelectedRun), which
+  // used to refetch, drop in-memory thread rows, and clear activeRunId.
   useEffect(() => {
     if (!me) return
-    api.listRuns().then(async (runs) => {
+    api.listRuns().then((runs) => {
       setRuns(runs)
-      // Reset run-specific UI state on identity change. NOTE: we deliberately
-      // don't reset `logs` — LiveLogs is a platform-wide event stream backed
-      // by `event_log` (sync, system, audit, all runs) and is hydrated by
-      // a separate effect below. Resetting it here would also wipe other
-      // users' visibility into pending sync events on a single workstation.
       const currentActive = useStore.getState().activeRunId
-      const stillVisible = currentActive && runs.some((r) => r.id === currentActive)
+      const stillVisible =
+        currentActive &&
+        useStore.getState().runs.some((r) => r.id === currentActive)
       if (!stillVisible) {
         setActiveRun(null)
-        setSteps([]); setAudit([]); setTrace([])
-      }
-      if (shouldHydrateSelectedRun && runs.length > 0 && !useStore.getState().activeRunId) {
-        const latest = runs[0]
-        setActiveRun(latest.id)
+        setSteps([])
+        setAudit([])
+        setTrace([])
       }
     }).catch(() => {})
-  }, [me?.upn, setRuns, setActiveRun, setSteps, setAudit, setTrace, shouldHydrateSelectedRun])
+  }, [me?.upn, setRuns, setActiveRun, setSteps, setAudit, setTrace])
+
+  // Sync run list when entering platform view (chat home → widgets).
+  useEffect(() => {
+    if (!me || shellMode !== "platform") return
+    api.listRuns().then(setRuns).catch(() => {})
+  }, [me?.upn, shellMode, setRuns])
+
+  // Auto-select latest run only when a run-scoped widget is visible and
+  // nothing is selected yet.
+  useEffect(() => {
+    if (!me || !shouldHydrateSelectedRun) return
+    if (useStore.getState().activeRunId) return
+    const pickLatest = (rows: Array<{ id: string; createdAt: string }>) => {
+      if (rows.length === 0) return
+      const latest = [...rows].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0]
+      if (latest) setActiveRun(latest.id)
+    }
+    const cached = useStore.getState().runs
+    if (cached.length > 0) {
+      pickLatest(cached)
+      return
+    }
+    api.listRuns().then((runs) => {
+      setRuns(runs)
+      if (!useStore.getState().activeRunId) pickLatest(runs)
+    }).catch(() => {})
+  }, [me?.upn, shouldHydrateSelectedRun, setRuns, setActiveRun])
 
   // Reload notifications on identity change so each user only sees their own.
   useEffect(() => {

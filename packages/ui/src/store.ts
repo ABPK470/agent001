@@ -927,22 +927,27 @@ export const useStore = create<AppState>()(
       // happened when widgets like RunHistory re-fetched the run list on
       // mount: switching to a view containing RunHistory and then back
       // to TermChat would erase the active run's narrative + tool calls.
+      //
+      // Also keep in-memory-only rows (in-flight runs, thread-scoped rows
+      // not yet visible in the latest listRuns response) so switching from
+      // chat home → platform widgets does not blank the conversation.
       setRuns: (runs) => set((s) => {
         const prevById = new Map(s.runs.map((r) => [r.id, r]))
+        const incomingIds = new Set(runs.map((r) => r.id))
         const merged = runs.map((incoming) => {
           const existing = prevById.get(incoming.id)
           if (!existing) return incoming
           return {
             ...incoming,
-            // Preserve fields the listRuns endpoint does not ship.
-            trace: existing.trace ?? incoming.trace,
+            trace: existing.trace?.length ? existing.trace : (incoming.trace ?? existing.trace),
             streamingAnswer: existing.streamingAnswer ?? incoming.streamingAnswer,
             coherentStream: existing.coherentStream ?? incoming.coherentStream,
             stepData: existing.stepData?.length ? existing.stepData : incoming.stepData,
             auditTrail: existing.auditTrail?.length ? existing.auditTrail : incoming.auditTrail,
           }
         })
-        return { runs: merged }
+        const orphans = s.runs.filter((r) => !incomingIds.has(r.id))
+        return { runs: orphans.length > 0 ? [...merged, ...orphans] : merged }
       }),
       setActiveRun: (activeRunId) => {
         set({ activeRunId })
