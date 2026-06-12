@@ -1,4 +1,4 @@
-export { _migrate, _setDb, getDb, getDbPath, migrateSessionFkSetNull } from "./connection.js"
+export { _migrate, _setDb, getDb, getDbPath } from "./connection.js"
 
 export {
   findReplyTo,
@@ -120,20 +120,17 @@ export {
   listNotificationsForUser,
   markAllNotificationsRead,
   markNotificationRead,
-  migrateNotifications,
   saveNotification,
   type DbNotification
 } from "./notifications.js"
 
-export { listApiRequests, migrateApiRequests, saveApiRequest, type DbApiRequest } from "./api-requests.js"
+export { listApiRequests, saveApiRequest, type DbApiRequest } from "./api-requests.js"
 
 export {
   deleteWebhookDrain,
   getWebhookDrain,
   listEvents,
   listWebhookDrains,
-  migrateEventLog,
-  migrateWebhookDrains,
   saveEvent,
   saveWebhookDrain,
   searchEvents,

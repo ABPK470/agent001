@@ -4,22 +4,6 @@
 
 import { getDb } from "./connection.js"
 
-export function migrateApiRequests(): void {
-  getDb().exec(`
-    CREATE TABLE IF NOT EXISTS api_requests (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      method TEXT NOT NULL,
-      url TEXT NOT NULL,
-      status_code INTEGER NOT NULL,
-      duration_ms REAL NOT NULL,
-      request_body TEXT,
-      response_summary TEXT,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_api_requests_time ON api_requests(created_at DESC);
-  `)
-}
-
 export interface DbApiRequest {
   id?: number
   method: string

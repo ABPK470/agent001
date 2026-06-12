@@ -135,7 +135,6 @@ export async function buildFixture(): Promise<Fixture> {
   db.pragma("foreign_keys = OFF")
 
   const mem = await import("../../src/platform/persistence/memory/index.js")
-  mem.migrateMemory()
 
   const cleanup = (): void => {
     try {

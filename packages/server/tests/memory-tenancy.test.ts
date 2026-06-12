@@ -3,7 +3,7 @@
  * shared-row escape hatch.
  *
  * Mirrors the attachment-test setup: each test gets a fresh in-memory SQLite
- * via _setDb + _migrate, and the memory module's migrateMemory() runs after.
+ * via _setDb + _migrate (migrations, seeds, and memory FTS).
  */
 
 import Database from "better-sqlite3"
@@ -37,12 +37,9 @@ async function setupMemory() {
   const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  // _migrate re-enables foreign_keys after the hard-reset; turn it off
-  // again so this suite can use synthetic runIds without seeding parents.
-  // Cascade behaviour is verified by dedicated FK tests.
+  // _migrate enables foreign_keys; turn off again so this suite can use
+  // synthetic runIds without seeding parent runs.
   testDb.pragma("foreign_keys = OFF")
-  const { migrateMemory } = await import("../src/platform/persistence/memory/index.js")
-  migrateMemory()
   return await import("../src/platform/persistence/memory/index.js")
 }
 

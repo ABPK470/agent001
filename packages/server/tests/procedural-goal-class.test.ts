@@ -27,12 +27,7 @@ beforeEach(async () => {
   const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  // _migrate re-enables foreign_keys after the hard-reset; turn it off
-  // again so this suite can use synthetic runIds without seeding the
-  // runs table. Cascade behaviour is covered by dedicated FK tests.
   testDb.pragma("foreign_keys = OFF")
-  const { migrateMemory } = await import("../src/platform/persistence/memory/index.js")
-  migrateMemory()
 })
 
 afterEach(() => {

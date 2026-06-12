@@ -21,7 +21,7 @@ export {
 } from "./maintenance.js"
 export { extractProcedural, markProceduralFailed, searchProcedures, storeProcedural } from "./procedural.js"
 export { retrieveContext, searchEntries } from "./retrieval.js"
-export { migrateMemory, rowToEntry } from "./schema.js"
+export { initMemoryFts, rowToEntry } from "./schema.js"
 export { truncateAtBoundary } from "./scoring.js"
 export { listTableVerdicts, recordTableVerdict } from "./table-verdict.js"
 export type {

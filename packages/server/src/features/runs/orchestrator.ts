@@ -14,9 +14,8 @@ import { randomUUID } from "node:crypto"
 import { bootHostDepsToConfigureAgentOptions } from "../../bootstrap/config.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "../../bootstrap/workspace.js"
 import { cleanupStaleRunWorkspaces } from "../../bootstrap/workspace.js"
-import { migrateEffects } from "../../platform/effects/index.js"
 import { broadcast } from "../../platform/events/broadcaster.js"
-import { cleanupExpiredCache, migrateMemory } from "../../platform/persistence/index.js"
+import { cleanupExpiredCache } from "../../platform/persistence/index.js"
 import * as db from "../../platform/persistence/sqlite.js"
 import { AgentBus, createBusTools } from "../../platform/queue/agent-bus.js"
 import { RunPriority, RunQueue } from "../../platform/queue/run-queue.js"
@@ -64,8 +63,6 @@ export class AgentOrchestrator {
     this.workspace = config.workspace ?? null
     this.bootHostDeps = config.bootHostDeps
     this.queue = new RunQueue()
-    migrateMemory()
-    migrateEffects()
     const ttlMs = Number(process.env["AGENT_RUN_WORKSPACE_TTL_MS"] ?? 6 * 60 * 60 * 1000)
     if (Number.isFinite(ttlMs) && ttlMs >= 0) {
       void cleanupStaleRunWorkspaces(ttlMs)

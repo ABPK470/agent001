@@ -5,7 +5,7 @@
  * This module owns the durable backing store and exposes a read helper the
  * server passes into `configureAgent({ sync: { governance: { freezeWindowsReader } } })`.
  *
- * Schema is created in `connection.ts::_migrate`; this file only
+ * Schema is created in `migrations/0001_baseline.ts`; this file only
  * holds the CRUD helpers and the registry-rehydrate routine.
  */
 

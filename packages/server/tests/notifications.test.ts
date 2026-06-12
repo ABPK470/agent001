@@ -13,7 +13,6 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   markRunCrashed,
-  migrateNotifications,
   saveNotification,
   type DbNotification
 } from "../src/platform/persistence/db/index.js"
@@ -31,7 +30,6 @@ beforeEach(() => {
   testDb.pragma("foreign_keys = ON")
   _setDb(testDb)
   _migrate(testDb)
-  migrateNotifications()
   seedUser(testDb, TEST_UPN)
 })
 

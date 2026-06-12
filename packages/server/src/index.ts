@@ -89,16 +89,12 @@ import {
   getDbStats,
   getLlmConfig,
   listFreezeWindowDefinitionsForTenant,
-  migrateApiRequests,
-  migrateEventLog,
-  migrateNotifications,
-  migrateWebhookDrains,
   normaliseUnknownRunStatuses,
   pruneOldData,
   saveApiRequest,
   tryBuildSignerFromEnv
 } from "./platform/persistence/index.js"
-import { migrateMemory, prune as pruneMemory } from "./platform/persistence/memory.js"
+import { prune as pruneMemory } from "./platform/persistence/memory.js"
 import { touchSession } from "./platform/persistence/sessions.js"
 import {
   MessageQueue,
@@ -106,8 +102,7 @@ import {
   SqliteConversationStore,
   SqliteQueueStore,
   TeamsChannel,
-  listChannelConfigs,
-  migrateChannels
+  listChannelConfigs
 } from "./platform/queue/channels/index.js"
 import { initSandbox } from "./platform/sandbox/index.js"
 
@@ -333,12 +328,6 @@ function registerShutdown({
 
 function initDatabase(): void {
   getDb()
-  migrateChannels()
-  migrateNotifications()
-  migrateApiRequests()
-  migrateEventLog()
-  migrateWebhookDrains()
-  migrateMemory()
   console.log(`Database initialized (${getDbPath()})`)
 
   // Heal any legacy runs.status values that don't match the canonical

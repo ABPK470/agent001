@@ -28,8 +28,6 @@ async function setupDb() {
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
-  const { migrateMemory } = await import("../src/platform/persistence/memory/index.js")
-  migrateMemory()
   return await import("../src/features/runs/execution/tool-result-persister.js")
 }
 

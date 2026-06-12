@@ -197,8 +197,7 @@ packages/server/src/
 ### The boot sequence (`index.ts`)
 
 Startup is deterministic and observable — each step logs. In order: load `.env`
-→ open SQLite and run migrations (healing legacy data, seeding the bootstrap
-admin) → resolve the agent workspace → configure the Docker sandbox (falling
+→ open SQLite, run pending migrations, and seed defaults → resolve the agent workspace → configure the Docker sandbox (falling
 back to host execution if Docker is absent) → set up MSSQL connections → load
 sync environments → **build the boot `AgentHost` via `configureAgent(...)`**
 (wiring sync sinks, catalog registry, shell/browser adapters) → seed default
@@ -251,7 +250,7 @@ This is the core of the server. `AgentOrchestrator`
 
 | Subsystem | Responsibility |
 |---|---|
-| `persistence/` | The SQLite layer (better-sqlite3, WAL): all tables, queries, migrations, attachments, memory, evidence. `SCHEMA_VERSION = 23`. |
+| `persistence/` | The SQLite layer (better-sqlite3, WAL): all tables, queries, numbered migrations (`persistence/migrations/`), attachments, memory, evidence. |
 | `events/` | The `EventBroadcaster` — the single SSE transport. Per-client identity, run-ownership filtering, event-log persistence, webhook drains, heartbeats. |
 | `queue/` | The `RunQueue` (priority, slot-limited parallelism) and the `AgentBus` (persistence-backed inter-run message buffer). |
 | `sandbox/` | Docker-based isolated shell and browser execution, with a host fallback when Docker is unavailable. |
