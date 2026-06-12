@@ -2664,7 +2664,7 @@ export function TermChat({
     initialScroll: "none",
     followWhen: isRunning || Boolean(activeRun?.streamingAnswer),
     onScrollPosition: (scrollTop) => {
-      if (isHomeMode) setTranscriptFadeTop(scrollTop > 6)
+      if (isHomeMode) setTranscriptFadeTop(scrollTop > 16)
     },
   })
 
@@ -3055,11 +3055,14 @@ export function TermChat({
         className={`relative flex-1 overflow-y-auto min-h-0 ${isHomeMode && showEmptyState ? "px-6 pt-8 pb-10" : isHomeMode ? "px-6 pt-0 pb-4 space-y-6" : "px-6 py-5 space-y-10"}`}
         style={{ overflowAnchor: "none" }}
       >
+        {isHomeMode && transcriptFadeTop && !showEmptyState && (
+          <div aria-hidden className="chathome-transcript-top-scrim" />
+        )}
         <div
           ref={transcriptInnerRef}
           className={showEmptyState
             ? `${isHomeMode ? `${HOME_CHAT_COLUMN_CLASS} pb-[10vh]` : "w-[90%] max-w-[1400px] mx-auto"} min-h-full flex flex-col justify-center`
-            : `relative z-10 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : "w-[90%] max-w-[1400px] mx-auto"}`
+            : `relative ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : "w-[90%] max-w-[1400px] mx-auto"}`
           }
           style={{ overflowAnchor: "none" }}
         >
@@ -3130,13 +3133,6 @@ export function TermChat({
 
         </div>
       </div>
-
-      {isHomeMode && transcriptFadeTop && !showEmptyState && (
-        <div
-          aria-hidden
-          className="chathome-transcript-top-fade absolute inset-x-0 top-0 z-10"
-        />
-      )}
 
       {showJumpButton && !showEmptyState && (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">

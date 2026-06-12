@@ -90,8 +90,8 @@ export function App() {
   const [shellMode, setShellMode] = useState<HomeShellMode | "platform">(resolveHomeShellMode())
   const [shellVisible, setShellVisible] = useState(true)
   const shellTimerRef = useRef<number | null>(null)
-  // Becomes true when the login overlay starts its final fade so ChatHomePage
-  // crossfades with it instead of waiting for it to fully disappear.
+  // Becomes true when the login overlay starts its final fade so the home
+  // shell crossfades with it instead of waiting for it to fully disappear.
   const [shellRevealing, setShellRevealing] = useState(false)
   const [chatHomeHeroStage, setChatHomeHeroStage] = useState<"hidden" | "pill" | "copy">("hidden")
   const [chatHomeHeroRevealProgress, setChatHomeHeroRevealProgress] = useState(0)
@@ -440,7 +440,6 @@ export function App() {
         onSubmit={loginOrRegister}
         onDone={() => {
           setChatHomeHeroRevealProgress(1)
-          setChatHomeHeroStage("copy")
           setPhase(AppPhase.Shell)
         }}
         onFading={() => setShellRevealing(true)}
@@ -448,6 +447,7 @@ export function App() {
           setChatHomeHeroStage("pill")
           setChatHomeHeroRevealProgress(0)
         }}
+        onEntered={() => setChatHomeHeroStage("copy")}
         onPillRevealProgress={setChatHomeHeroRevealProgress}
       />
     ) : phase === AppPhase.Outro ? (
@@ -517,6 +517,10 @@ export function App() {
   if (shellMode === "thread") {
     shellBody = (
       <ThreadHomePage
+        morphLanding={phase === AppPhase.Login && !!me}
+        revealed={shellRevealing || phase === AppPhase.Shell}
+        heroStage={phase === AppPhase.Shell ? "copy" : chatHomeHeroStage}
+        heroRevealProgress={phase === AppPhase.Shell ? 1 : chatHomeHeroRevealProgress}
         connected={connected}
         onOpenPlatform={() => transitionShellMode("platform")}
         onLogout={handleSwitchUser}

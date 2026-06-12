@@ -855,32 +855,65 @@ textarea.input {
   --hero-pill-shadow-live: none;
   /* Must match .chathome background — NOT --surface/--panel-2 (causes grey band). */
   --chathome-scroll-fade: var(--canvas);
+  /* Transcript scroll: how far content takes to dissolve at the top edge. */
+  --chathome-scroll-fade-top: 3.75rem;
 }
 :root[data-theme="light"] .chathome {
   background: var(--panel);
   --chathome-scroll-fade: var(--panel);
 }
 
-/* Home chat: scroll content dissolves into page bg (short, fully transparent tail). */
-.chathome-transcript-top-fade {
+/*
+ * Chathome fade system (three independent layers):
+ *
+ * 1. .chathome-frame mask-image — fades the ASCII *texture* at viewport
+ *    edges so glyphs organically disappear toward the centre chat column.
+ *
+ * 2. .chathome-transcript-top-scrim — sticky top scrim inside the scroller.
+ *    Fades scrolling text underneath; pinned user pills stay at z-30 above the
+ *    scrim (z-20). Do NOT mask the scroll host — that fades pills too.
+ *
+ * 3. .chathome-input-edge-fade — soft gradient band above the docked input
+ *    pill so the last messages ease out before the chrome (pill stays crisp).
+ */
+
+/* Sticky top scrim — scrolling text fades underneath; pinned pills sit above at z-30. */
+.chathome-transcript-top-scrim {
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  display: block;
+  height: var(--chathome-scroll-fade-top);
+  margin-bottom: calc(-1 * var(--chathome-scroll-fade-top));
   pointer-events: none;
-  height: 14px;
   background: linear-gradient(
     to bottom,
-    var(--chathome-scroll-fade) 0%,
-    color-mix(in srgb, var(--chathome-scroll-fade) 42%, transparent) 38%,
+    color-mix(in srgb, var(--chathome-scroll-fade) 55%, transparent) 0%,
+    color-mix(in srgb, var(--chathome-scroll-fade) 22%, transparent) 58%,
+    transparent 100%
+  );
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    rgba(0, 0, 0, 0.72) 58%,
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    #000 0%,
+    rgba(0, 0, 0, 0.72) 58%,
     transparent 100%
   );
 }
 
-/* Above the bottom input — content fades out before the pill (pill stays crisp). */
+/* Above the bottom input — content eases out before the pill (pill stays crisp). */
 .chathome-input-edge-fade {
   pointer-events: none;
-  height: 20px;
+  height: 2.25rem;
   background: linear-gradient(
     to top,
     var(--chathome-scroll-fade) 0%,
-    color-mix(in srgb, var(--chathome-scroll-fade) 48%, transparent) 42%,
+    color-mix(in srgb, var(--chathome-scroll-fade) 22%, transparent) 52%,
     transparent 100%
   );
 }
@@ -914,10 +947,10 @@ textarea.input {
 .chathome-frame {
   -webkit-mask-image:
     linear-gradient(180deg,
-      rgba(0,0,0,1) 0%, rgba(0,0,0,1) 2%,
-      rgba(0,0,0,0.55) 4%, rgba(0,0,0,0) 6%,
-      rgba(0,0,0,0) 86%,
-      rgba(0,0,0,0.55) 90%, rgba(0,0,0,1) 94%, rgba(0,0,0,1) 100%),
+      rgba(0,0,0,1) 0%, rgba(0,0,0,1) 1.5%,
+      rgba(0,0,0,0.72) 5%, rgba(0,0,0,0.38) 9.5%, rgba(0,0,0,0.14) 13.5%, rgba(0,0,0,0) 17%,
+      rgba(0,0,0,0) 84%,
+      rgba(0,0,0,0.14) 87.5%, rgba(0,0,0,0.38) 91.5%, rgba(0,0,0,0.72) 95.5%, rgba(0,0,0,1) 98.5%, rgba(0,0,0,1) 100%),
     linear-gradient(90deg,
       rgba(0,0,0,1) 0%, rgba(0,0,0,1) 3%,
       rgba(0,0,0,0.55) 6%, rgba(0,0,0,0) 10%,
@@ -926,10 +959,10 @@ textarea.input {
   -webkit-mask-composite: source-over;
   mask-image:
     linear-gradient(180deg,
-      rgba(0,0,0,1) 0%, rgba(0,0,0,1) 2%,
-      rgba(0,0,0,0.55) 4%, rgba(0,0,0,0) 6%,
-      rgba(0,0,0,0) 86%,
-      rgba(0,0,0,0.55) 90%, rgba(0,0,0,1) 94%, rgba(0,0,0,1) 100%),
+      rgba(0,0,0,1) 0%, rgba(0,0,0,1) 1.5%,
+      rgba(0,0,0,0.72) 5%, rgba(0,0,0,0.38) 9.5%, rgba(0,0,0,0.14) 13.5%, rgba(0,0,0,0) 17%,
+      rgba(0,0,0,0) 84%,
+      rgba(0,0,0,0.14) 87.5%, rgba(0,0,0,0.38) 91.5%, rgba(0,0,0,0.72) 95.5%, rgba(0,0,0,1) 98.5%, rgba(0,0,0,1) 100%),
     linear-gradient(90deg,
       rgba(0,0,0,1) 0%, rgba(0,0,0,1) 3%,
       rgba(0,0,0,0.55) 6%, rgba(0,0,0,0) 10%,
@@ -1044,6 +1077,30 @@ textarea.input {
   background: transparent;
 }
 
+/* Login landing: keep one TermChat instance full-width; fade thread chrome in
+   after the intro overlay dissolves instead of swapping the whole chat tree. */
+.chathome--threads:not(.chathome--chrome-revealed) .thread-rail,
+.chathome--threads:not(.chathome--chrome-revealed) .thread-rail-collapsed-trigger,
+.chathome--threads:not(.chathome--chrome-revealed) .chathome-threads-header-btn {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.chathome--threads .thread-rail,
+.chathome--threads .thread-rail-collapsed-trigger,
+.chathome--threads .chathome-threads-header-btn {
+  transition: opacity 420ms cubic-bezier(0.4, 0, 0.2, 1) 60ms;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chathome--threads .thread-rail,
+  .chathome--threads .thread-rail-collapsed-trigger,
+  .chathome--threads .chathome-threads-header-btn {
+    transition-duration: 0ms;
+    transition-delay: 0ms;
+  }
+}
+
 .thread-rail {
   overflow: visible;
   background: transparent;
@@ -1118,7 +1175,7 @@ textarea.input {
 }
 
 .thread-rail--desktop .thread-rail-inner--overlay {
-  background-color: color-mix(in srgb, var(--panel-2) 5%, transparent);
+  background-color: color-mix(in srgb, var(--panel-2) 1%, transparent);
 }
 
 .thread-rail--collapsed .thread-rail-inner {

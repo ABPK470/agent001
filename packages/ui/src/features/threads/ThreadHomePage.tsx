@@ -13,12 +13,21 @@ interface Props {
   connected: boolean
   onOpenPlatform: () => void
   onLogout: () => void
+  /** True while the login overlay is morphing into the shell (phase=Login && me). */
+  morphLanding?: boolean
+  revealed?: boolean
+  heroStage?: "hidden" | "pill" | "copy"
+  heroRevealProgress?: number
 }
 
 export function ThreadHomePage({
   connected,
   onOpenPlatform,
   onLogout,
+  morphLanding = false,
+  revealed = true,
+  heroStage,
+  heroRevealProgress = 1,
 }: Props): React.ReactElement {
   const threads = useStore((s) => s.threads)
   const activeThreadId = useStore((s) => s.activeThreadId)
@@ -30,7 +39,36 @@ export function ThreadHomePage({
 
   const [threadsDrawerOpen, setThreadsDrawerOpen] = useState(false)
   const [bootstrapped, setBootstrapped] = useState(false)
+  const [landingHandoff, setLandingHandoff] = useState(morphLanding)
+  const [chromeRevealed, setChromeRevealed] = useState(() => !morphLanding)
+  const [materialised, setMaterialised] = useState(revealed)
   const { viewportWidth, railFits } = useThreadRailLayout()
+
+  useEffect(() => {
+    if (revealed && !materialised) setMaterialised(true)
+  }, [revealed, materialised])
+
+  useEffect(() => {
+    if (morphLanding) {
+      setLandingHandoff(true)
+      setChromeRevealed(false)
+    }
+  }, [morphLanding])
+
+  // Overlay fade finishes before onDone clears morphLanding — reveal thread
+  // chrome on the next frame so the input pill never unmounts or jumps.
+  useEffect(() => {
+    if (morphLanding || !landingHandoff || chromeRevealed) return
+    const frame = requestAnimationFrame(() => setChromeRevealed(true))
+    return () => cancelAnimationFrame(frame)
+  }, [morphLanding, landingHandoff, chromeRevealed])
+
+  useEffect(() => {
+    if (chromeRevealed && landingHandoff) setLandingHandoff(false)
+  }, [chromeRevealed, landingHandoff])
+
+  const resolvedHeroStage = heroStage ?? (revealed ? "copy" : "hidden")
+  const stateClass = `${materialised ? "chathome--revealed" : "chathome--veiled"}${resolvedHeroStage !== "hidden" ? " chathome--hero-ready" : ""}${resolvedHeroStage === "pill" ? " chathome--hero-pill" : ""}${resolvedHeroStage === "copy" ? " chathome--hero-copy-ready" : ""}`
 
   useEffect(() => {
     let cancelled = false
@@ -99,7 +137,9 @@ export function ThreadHomePage({
   }, [railFits])
 
   return (
-    <div className="chathome chathome--threads chathome--revealed chathome--hero-ready chathome--hero-copy-ready relative flex h-screen flex-col overflow-hidden text-text">
+    <div
+      className={`chathome chathome--threads ${chromeRevealed ? "chathome--chrome-revealed" : ""} ${stateClass} relative flex h-screen flex-col overflow-hidden text-text`}
+    >
       <div className="chathome-frame pointer-events-none absolute inset-0 overflow-hidden">
         <IntroAsciiField surface="home" />
       </div>
@@ -120,7 +160,7 @@ export function ThreadHomePage({
                 onClick={handleOpenThreads}
                 title="Open threads"
                 aria-label="Open threads"
-                className="flex h-10 w-10 items-center justify-center rounded-lg bg-panel/72 text-text-muted backdrop-blur transition-colors hover:bg-overlay-hover hover:text-text"
+                className="chathome-threads-header-btn flex h-10 w-10 items-center justify-center rounded-lg bg-panel/72 text-text-muted backdrop-blur transition-colors hover:bg-overlay-hover hover:text-text"
               >
                 <PanelLeft size={17} strokeWidth={1.75} />
               </button>
@@ -161,7 +201,11 @@ export function ThreadHomePage({
 
           <div className="thread-rail-chat flex min-h-0 min-w-0 flex-1 flex-col">
             {bootstrapped && activeThreadId && (
-              <TermChat key={activeThreadId} mode="thread" threadId={activeThreadId} />
+              <TermChat
+                mode="thread"
+                threadId={activeThreadId}
+                heroRevealProgress={heroRevealProgress}
+              />
             )}
           </div>
         </main>

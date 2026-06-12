@@ -100,26 +100,28 @@ function IntroConversationLoginAdapter({
   const [morphTarget, setMorphTarget]   =
     useState<IntroMorphTarget | undefined>(undefined)
 
-  // The authenticated default surface is now the dedicated chat home page,
-  // so the intro always lands on a chat-shaped shell. Keep the empty-vs-chat
-  // distinction so the input bar still morphs to the right resting layout.
+  // Decide empty-vs-chat morph from the active thread's runs once the shell
+  // has bootstrapped — not from stale global state at login time.
   function detectMode(): IntroMorphMode {
     try {
       const s = useStore.getState()
-      return (s.runs?.length ?? 0) === 0 ? "empty" : "chat"
+      const threadId = s.activeThreadId
+      const scoped = threadId
+        ? s.runs.filter((r) => r.threadId === threadId)
+        : s.runs
+      return scoped.length === 0 ? "empty" : "chat"
     } catch {
       return "chat"
     }
   }
 
-  // After login succeeds, fire onFading (which mounts chathome under
-  // the overlay), then poll across animation frames until the
-  // destination input pill is in the DOM with a non-zero rect — that's
-  // where the AsciiConverge layer needs to flow the glyphs into.
-  // Once measured, trigger the entering morph.
-  function measureAndTrigger(_mode: IntroMorphMode) {
-    onFading?.()  // chat-home reveal starts NOW
+  // After login succeeds, fire onFading (which mounts the shell under
+  // the overlay), then poll until thread bootstrap paints the real input
+  // pill — empty hero or bottom chat bar — before starting the morph.
+  function measureAndTrigger() {
+    onFading?.()  // shell reveal starts NOW
     let attempts = 0
+    const maxAttempts = 180
     const tryMeasure = () => {
       attempts++
       const el = document.querySelector<HTMLElement>(
@@ -127,6 +129,7 @@ function IntroConversationLoginAdapter({
       )
       const r = el?.getBoundingClientRect()
       if (r && r.width > 0 && r.height > 0) {
+        setMorphMode(detectMode())
         setMorphTarget({
           left: r.left,
           top: r.top,
@@ -138,10 +141,11 @@ function IntroConversationLoginAdapter({
         requestAnimationFrame(() => setEnterTrigger(true))
         return
       }
-      if (attempts < 30) {
+      if (attempts < maxAttempts) {
         requestAnimationFrame(tryMeasure)
       } else {
         // Last resort — fire anyway so we don't hang the flow.
+        setMorphMode(detectMode())
         setEnterTrigger(true)
       }
     }
@@ -168,10 +172,8 @@ function IntroConversationLoginAdapter({
         onEnteringStart={onEnteringStart}
         onPillRevealProgress={onPillRevealProgress}
         onLoginSuccess={() => {
-          const mode = detectMode()
-          setMorphMode(mode)
           setPhase("layered")
-          measureAndTrigger(mode)
+          measureAndTrigger()
         }}
         onEntered={() => {
           // Login content has gone — start the overlay wrapper fade.
