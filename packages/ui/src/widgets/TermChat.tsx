@@ -3010,7 +3010,7 @@ export function TermChat({
 
   return (
     <div
-      className="relative flex flex-col h-full bg-transparent text-text font-sans"
+      className={`relative flex flex-col h-full bg-transparent text-text font-sans${mode === "widget" ? " termchat-widget" : ""}`}
       onDragEnter={(e) => {
         if (e.dataTransfer?.types.includes("Files")) {
           e.preventDefault()

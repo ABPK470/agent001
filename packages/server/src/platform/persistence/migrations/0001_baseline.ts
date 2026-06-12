@@ -71,6 +71,9 @@ const BASELINE_SQL = `
       pinned       INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1))
     );
     CREATE INDEX IF NOT EXISTS idx_threads_upn_updated ON threads(upn, updated_at DESC);
+    -- Widget workspace: at most one active "Platform" thread per user.
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_platform_per_user
+      ON threads(upn) WHERE title = 'Platform' AND archived_at IS NULL;
 
     -- ── agent_definitions ────────────────────────────────────────
     -- The 'tools' column has been dropped: tools are always resolved from

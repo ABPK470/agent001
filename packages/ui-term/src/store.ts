@@ -67,6 +67,8 @@ interface State {
   clearPendingInput: () => void
 }
 
+let ensurePlatformThreadInflight: Promise<string> | null = null
+
 export const useStore = create<State>((set, get) => ({
   connected: false,
   setConnected: (v) => set({ connected: v }),
@@ -93,9 +95,17 @@ export const useStore = create<State>((set, get) => ({
   ensurePlatformThread: async () => {
     const cached = get().platformThreadId
     if (cached) return cached
-    const thread = await api.createThread("Platform")
-    set({ platformThreadId: thread.id })
-    return thread.id
+    if (ensurePlatformThreadInflight) return ensurePlatformThreadInflight
+    ensurePlatformThreadInflight = (async () => {
+      try {
+        const thread = await api.ensurePlatformThread()
+        set({ platformThreadId: thread.id })
+        return thread.id
+      } finally {
+        ensurePlatformThreadInflight = null
+      }
+    })()
+    return ensurePlatformThreadInflight
   },
   // Keys of events already in the events array — prevents backfill+SSE overlap dupes.
   _eventSeen: new Set<string>(),

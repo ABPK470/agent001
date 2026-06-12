@@ -36,6 +36,13 @@ describe("runMigrations", () => {
     const convCols = testDb.prepare("PRAGMA table_info(conversations)").all() as Array<{ name: string }>
     expect(convCols.some((c) => c.name === "thread_id")).toBe(true)
 
+    const platformIdx = testDb
+      .prepare(
+        "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_threads_platform_per_user'"
+      )
+      .get()
+    expect(platformIdx).toBeTruthy()
+
     const attachSql = (
       testDb.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments'").get() as {
         sql: string

@@ -1060,6 +1060,16 @@ textarea.input {
   transform: translateY(0) scale(1);
 }
 
+/* TermChat widget / pop-out: empty-state copy + pill are not inside .chathome,
+   so the login hero choreography never runs — show them immediately. */
+.termchat-widget .chathome-empty-input,
+.termchat-widget .chathome-empty-copy {
+  opacity: 1;
+  visibility: visible;
+  filter: none;
+  transform: none;
+}
+
 /* ── Thread rail — frosted panel (matches header icon chips), ASCII shows through ── */
 .chathome--threads {
   /* Match header px-3 / sm:px-6 and TermChat input pb-4 (1rem). */

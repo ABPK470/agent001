@@ -20,6 +20,16 @@ export interface DbThreadWithRunCount extends DbThread {
 }
 
 const DEFAULT_TITLE = "New thread"
+export const PLATFORM_THREAD_TITLE = "Platform"
+
+function isUniqueConstraintError(err: unknown): boolean {
+  return (
+    typeof err === "object" &&
+    err !== null &&
+    "code" in err &&
+    (err as { code: string }).code === "SQLITE_CONSTRAINT_UNIQUE"
+  )
+}
 
 export function createThread(upn: string, title = DEFAULT_TITLE): DbThread {
   const now = new Date().toISOString()
@@ -41,6 +51,38 @@ export function createThread(upn: string, title = DEFAULT_TITLE): DbThread {
     )
     .run(row)
   return row
+}
+
+/** Idempotent — one active Platform thread per user (enforced by partial unique index). */
+export function ensurePlatformThread(upn: string): DbThread {
+  const existing = getDb()
+    .prepare(
+      `
+      SELECT * FROM threads
+      WHERE upn = ? AND title = ? AND archived_at IS NULL
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `
+    )
+    .get(upn, PLATFORM_THREAD_TITLE) as DbThread | undefined
+  if (existing) return existing
+  try {
+    return createThread(upn, PLATFORM_THREAD_TITLE)
+  } catch (err) {
+    if (!isUniqueConstraintError(err)) throw err
+    const raced = getDb()
+      .prepare(
+        `
+        SELECT * FROM threads
+        WHERE upn = ? AND title = ? AND archived_at IS NULL
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `
+      )
+      .get(upn, PLATFORM_THREAD_TITLE) as DbThread | undefined
+    if (raced) return raced
+    throw err
+  }
 }
 
 export function getThread(id: string): DbThread | undefined {
@@ -98,7 +140,7 @@ export function touchThread(id: string, at = new Date().toISOString()): void {
 
 export function autoTitleThreadFromGoal(threadId: string, goal: string): void {
   const thread = getThread(threadId)
-  if (!thread || thread.title !== DEFAULT_TITLE) return
+  if (!thread || (thread.title !== DEFAULT_TITLE && thread.title !== PLATFORM_THREAD_TITLE)) return
   const trimmed = goal.trim().replace(/\s+/g, " ")
   if (!trimmed) return
   const title = trimmed.length > 72 ? `${trimmed.slice(0, 69)}…` : trimmed

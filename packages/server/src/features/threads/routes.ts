@@ -48,6 +48,19 @@ export function registerThreadRoutes(app: FastifyInstance, orchestrator: AgentOr
     return db.dbThreadToWire({ ...thread, run_count: 0 })
   })
 
+  /** Idempotent widget workspace thread — one active "Platform" row per user. */
+  app.post("/api/threads/ensure-platform", async (req, reply) => {
+    const upn = req.session?.upn
+    if (!upn) {
+      reply.code(401)
+      return { error: "Unauthorized" }
+    }
+    const thread = db.ensurePlatformThread(upn)
+    const row = db.listThreadsForUser(upn).find((r) => r.id === thread.id)
+    reply.code(200)
+    return db.dbThreadToWire(row ?? { ...thread, run_count: 0 })
+  })
+
   app.patch<{
     Params: { id: string }
     Body: { title?: string; pinned?: boolean; archived?: boolean }

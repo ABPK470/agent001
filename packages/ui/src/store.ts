@@ -28,6 +28,9 @@ import type {
 } from "./types"
 import { randomId } from "./util"
 
+/** Coalesce concurrent ensurePlatformThread() calls (widget mount + platform view). */
+let ensurePlatformThreadInflight: Promise<string> | null = null
+
 function patchRunFields(runs: Run[], runId: string, patch: Partial<Run>): Run[] {
   const index = runs.findIndex((run) => run.id === runId)
   if (index < 0) return runs
@@ -1077,17 +1080,31 @@ export const useStore = create<AppState>()(
         ) {
           return state.platformThreadId
         }
-        const existing = state.threads.find((t) => t.title === "Platform")
-        if (existing) {
-          set({ platformThreadId: existing.id })
-          return existing.id
+        const cached = state.threads.find((t) => t.title === "Platform")
+        if (cached) {
+          set({ platformThreadId: cached.id })
+          return cached.id
         }
-        const thread = await api.createThread("Platform")
-        set((s) => ({
-          threads: [thread, ...s.threads],
-          platformThreadId: thread.id,
-        }))
-        return thread.id
+        if (ensurePlatformThreadInflight) return ensurePlatformThreadInflight
+
+        ensurePlatformThreadInflight = (async () => {
+          try {
+            const thread = await api.ensurePlatformThread()
+            set((s) => {
+              const idx = s.threads.findIndex((t) => t.id === thread.id)
+              const threads =
+                idx >= 0
+                  ? s.threads.map((t, i) => (i === idx ? thread : t))
+                  : [thread, ...s.threads.filter((t) => t.title !== "Platform" || t.id === thread.id)]
+              return { threads, platformThreadId: thread.id }
+            })
+            return thread.id
+          } finally {
+            ensurePlatformThreadInflight = null
+          }
+        })()
+
+        return ensurePlatformThreadInflight
       },
 
       // Steps
