@@ -6,7 +6,7 @@
  * happens. Complexity is hidden by default; every detail is one click away.
  */
 
-import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, Dot, Plus, Send, Square } from "lucide-react"
+import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, Dot, Plus, Square } from "lucide-react"
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
@@ -346,7 +346,7 @@ function ChatTurn({
         </div>
       </StickyUserGoal>
 
-      <div className={isHomeMode ? "" : "pr-6"}>
+      <div>
         <RunMessage
           run={run}
           isActive={isActive}
@@ -2429,6 +2429,8 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
 const FORCE_EMPTY_STATE_PREVIEW = false
 /** Shared home-chat column — transcript, goals, and input bar stay aligned. */
 const HOME_CHAT_COLUMN_CLASS = "w-[94%] max-w-[960px] mx-auto"
+/** Widget / pop-out chat column — transcript and input share the same width. */
+const WIDGET_CHAT_COLUMN_CLASS = "w-[90%] max-w-[1400px] mx-auto"
 /** Newest runs shown on open; active run pinned at bottom of this window. */
 const INITIAL_VISIBLE_RUNS = 10
 /** Older runs revealed + hydrated when the user scrolls into history. */
@@ -2597,10 +2599,10 @@ function TermChatInputBar({
                               (!input.trim() && attachments.length === 0) ||
                               sending
                           }
-                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-accent hover:bg-accent-hover text-text-on-accent transition-colors disabled:opacity-40"
+                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-overlay-2 hover:bg-overlay-hover text-text-muted hover:text-text transition-colors disabled:opacity-30"
                           title="Send"
                       >
-                          <Send size={16} />
+                          <ArrowUp size={18} />
                       </button>
                   )}
               </div>
@@ -3069,8 +3071,8 @@ export function TermChat({
         <div
           ref={transcriptInnerRef}
           className={showEmptyState
-            ? `${isHomeMode ? `${HOME_CHAT_COLUMN_CLASS} pb-[10vh]` : "w-[90%] max-w-[1400px] mx-auto"} min-h-full flex flex-col justify-center`
-            : `relative ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : "w-[90%] max-w-[1400px] mx-auto"}`
+            ? `${isHomeMode ? `${HOME_CHAT_COLUMN_CLASS} pb-[10vh]` : `${WIDGET_CHAT_COLUMN_CLASS} pb-[10vh]`} min-h-full flex flex-col justify-center`
+            : `relative ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : WIDGET_CHAT_COLUMN_CLASS}`
           }
           style={{ overflowAnchor: "none" }}
         >
@@ -3153,14 +3155,14 @@ export function TermChat({
       </ChatScrollProvider>
 
       {!showEmptyState && (
-        <div className={`relative shrink-0 pb-4 ${isHomeMode ? "px-6 pt-2" : "px-5"}`}>
+        <div className="relative shrink-0 px-6 pb-4 pt-2">
           {isHomeMode && (
             <div
               aria-hidden
               className="chathome-input-edge-fade pointer-events-none absolute inset-x-0 -top-4 z-10"
             />
           )}
-          <div className={`relative z-20 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : "w-[90%] mx-auto"}`}>
+          <div className={`relative z-20 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : WIDGET_CHAT_COLUMN_CLASS}`}>
             <TermChatInputBar
               input={input}
               isRunning={isRunning}
