@@ -15,7 +15,13 @@ import {
   uploadAttachment,
   type AttachmentRow
 } from "../../platform/persistence/attachments.js"
-import { AttachmentScope } from "../../shared/enums/attachments.js"
+import { AttachmentScope, isAttachmentScope } from "../../shared/enums/attachments.js"
+
+/** Accept legacy `session` uploads during API transition. */
+function normalizeAttachmentScope(scope: unknown): AttachmentScope | null {
+  if (scope === "session") return AttachmentScope.UserDraft
+  return isAttachmentScope(scope) ? scope : null
+}
 
 const MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 
@@ -92,7 +98,7 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
         reply.code(413)
         return { error: `payload exceeds ${MAX_UPLOAD_BYTES} bytes` }
       }
-      const scope: AttachmentScope = body.scope ?? AttachmentScope.Session
+      const scope: AttachmentScope = normalizeAttachmentScope(body.scope) ?? AttachmentScope.UserDraft
       if (scope === "run" && !body.runId) {
         reply.code(400)
         return { error: "runId is required when scope === 'run'" }

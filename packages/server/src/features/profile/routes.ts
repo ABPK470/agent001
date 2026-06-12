@@ -24,7 +24,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       ...usage,
       retention: {
         runDays: retention.runDays,
-        sessionDays: retention.sessionDays,
+        userDraftDays: retention.userDraftDays,
         workspaceAssetDays: retention.workspaceAssetDays
       }
     }

@@ -125,7 +125,7 @@ export function createServerAttachmentService(
       const { runId } = ctx
       // Visibility model: the agent should see anything the user could
       // reasonably have attached to this run — items explicitly bound to
-      // Items bound to this run plus any the user owns (scope=session drafts).
+      // Items bound to this run plus any user_draft uploads the owner staged pre-run.
       const baseFilter: { scope?: AttachmentRow["scope"]; q?: string } = {
         ...(filter?.scope ? { scope: filter.scope } : {}),
         ...(filter?.q ? { q: filter.q } : {})

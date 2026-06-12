@@ -5,7 +5,7 @@
  * operators can tune for their deployment without code changes:
  *
  *   MIA_ATTACHMENT_RETENTION_RUN_DAYS              (default 30)
- *   MIA_ATTACHMENT_RETENTION_SESSION_DAYS          (default 7)
+ *   MIA_ATTACHMENT_RETENTION_USER_DRAFT_DAYS       (default 7; legacy: MIA_ATTACHMENT_RETENTION_SESSION_DAYS)
  *   MIA_ATTACHMENT_RETENTION_WORKSPACE_ASSET_DAYS  (default 365)
  *   MIA_ATTACHMENT_OWNER_QUOTA_BYTES               (default 256 MiB)
  *
@@ -25,7 +25,7 @@ const MIB = 1024 * 1024
 
 export interface RetentionPolicy {
   runDays: number
-  sessionDays: number
+  userDraftDays: number
   workspaceAssetDays: number
   ownerQuotaBytes: number
 }
@@ -40,7 +40,10 @@ function envInt(key: string, fallback: number): number {
 export function getRetentionPolicy(): RetentionPolicy {
   return {
     runDays: envInt("MIA_ATTACHMENT_RETENTION_RUN_DAYS", 30),
-    sessionDays: envInt("MIA_ATTACHMENT_RETENTION_SESSION_DAYS", 7),
+    userDraftDays: envInt(
+      "MIA_ATTACHMENT_RETENTION_USER_DRAFT_DAYS",
+      envInt("MIA_ATTACHMENT_RETENTION_SESSION_DAYS", 7)
+    ),
     workspaceAssetDays: envInt("MIA_ATTACHMENT_RETENTION_WORKSPACE_ASSET_DAYS", 365),
     ownerQuotaBytes: envInt("MIA_ATTACHMENT_OWNER_QUOTA_BYTES", 256 * MIB)
   }
@@ -56,8 +59,8 @@ export function computeRetentionUntil(scope: AttachmentScope, now: Date = new Da
   const days =
     scope === AttachmentScope.Run
       ? policy.runDays
-      : scope === AttachmentScope.Session
-        ? policy.sessionDays
+      : scope === AttachmentScope.UserDraft
+        ? policy.userDraftDays
         : policy.workspaceAssetDays
   return new Date(now.getTime() + days * DAY_MS).toISOString()
 }

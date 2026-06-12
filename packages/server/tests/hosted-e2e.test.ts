@@ -84,7 +84,7 @@ describe("hosted-mode end-to-end happy path", () => {
 
     // 1. user upload (mimics POST /api/attachments)
     const uploaded = await uploadAttachment({
-      scope: "session",
+      scope: "user_draft",
       ownerUpn: "alice@example.com",
       originalName: "input.csv",
       mediaType: "text/csv",

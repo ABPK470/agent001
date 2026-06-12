@@ -125,7 +125,7 @@ export function ChatPanel({
         continue
       }
       try {
-        const meta = await api.uploadAttachment(file, { scope: "session" })
+        const meta = await api.uploadAttachment(file, { scope: "user_draft" })
         results.push({ id: meta.id, name: meta.normalizedName, sizeBytes: meta.sizeBytes })
       } catch (err) {
         console.error(`Upload failed for "${file.name}":`, err)

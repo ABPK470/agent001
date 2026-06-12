@@ -103,7 +103,7 @@ export const api = {
         name:          file.name,
         mediaType:     file.type || "application/octet-stream",
         contentBase64,
-        scope:         "session",
+        scope:         "user_draft",
       }),
     })
   },
@@ -114,7 +114,7 @@ export const api = {
 
 export interface UploadedAttachment {
   id:             string
-  scope:          "run" | "session" | "workspace_asset"
+  scope:          "run" | "user_draft" | "workspace_asset"
   originalName:   string
   normalizedName: string
   mediaType:      string

@@ -425,7 +425,7 @@ export const api = {
    * here so callers never touch raw bytes.
    */
   uploadAttachment: async (file: File, opts?: {
-    scope?: "session" | "run" | "workspace_asset"
+    scope?: "user_draft" | "run" | "workspace_asset"
     runId?: string
     purposeTag?: string
   }): Promise<UploadedAttachment> => {
@@ -436,7 +436,7 @@ export const api = {
         name:          file.name,
         mediaType:     file.type || "application/octet-stream",
         contentBase64,
-        scope:         opts?.scope ?? "session",
+        scope:         opts?.scope ?? "user_draft",
         ...(opts?.runId      ? { runId:      opts.runId }      : {}),
         ...(opts?.purposeTag ? { purposeTag: opts.purposeTag } : {}),
       }),
@@ -716,7 +716,7 @@ export const api = {
 
 export interface UploadedAttachment {
   id:             string
-  scope:          "run" | "session" | "workspace_asset"
+  scope:          "run" | "user_draft" | "workspace_asset"
   originalName:   string
   normalizedName: string
   mediaType:      string
