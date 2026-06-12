@@ -27,6 +27,8 @@ export interface Me {
   upn: string
   displayName: string
   isAdmin: boolean
+  /** Widget continuity thread — provisioned server-side at account creation. */
+  workspaceThreadId: string
 }
 
 export function useMe(): {

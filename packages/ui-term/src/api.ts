@@ -38,8 +38,7 @@ export const api = {
       method: "POST",
       body: JSON.stringify(title ? { title } : {}),
     }),
-  ensurePlatformThread: () =>
-    json<{ id: string }>("/api/threads/ensure-platform", { method: "POST", body: "{}" }),
+  whoami:       () => json<{ workspaceThreadId: string }>("/api/auth/whoami"),
   startRun:     (goal: string, agentId: string | undefined, attachmentIds: string[] | undefined, threadId: string) =>
     json<{ runId: string; attachmentIds?: string[] }>("/api/runs", {
       method: "POST",

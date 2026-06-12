@@ -65,15 +65,16 @@ const BASELINE_SQL = `
       id           TEXT PRIMARY KEY,
       upn          TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
       title        TEXT NOT NULL DEFAULT 'New thread',
+      kind         TEXT NOT NULL DEFAULT 'conversation' CHECK (kind IN ('conversation', 'workspace')),
       created_at   TEXT NOT NULL,
       updated_at   TEXT NOT NULL,
       archived_at  TEXT,
       pinned       INTEGER NOT NULL DEFAULT 0 CHECK (pinned IN (0, 1))
     );
     CREATE INDEX IF NOT EXISTS idx_threads_upn_updated ON threads(upn, updated_at DESC);
-    -- Widget workspace: at most one active "Platform" thread per user.
-    CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_platform_per_user
-      ON threads(upn) WHERE title = 'Platform' AND archived_at IS NULL;
+    -- Widget workspace: one active workspace thread per user (not listed in sidebar).
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_threads_workspace_per_user
+      ON threads(upn) WHERE kind = 'workspace' AND archived_at IS NULL;
 
     -- ── agent_definitions ────────────────────────────────────────
     -- The 'tools' column has been dropped: tools are always resolved from

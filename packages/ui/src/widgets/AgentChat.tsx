@@ -453,7 +453,8 @@ export function AgentChat() {
     if (textareaRef.current) textareaRef.current.style.height = "auto"
     try {
       const agentId = selectedAgent?.id
-      const threadId = await useStore.getState().ensurePlatformThread()
+      const threadId = useStore.getState().workspaceThreadId
+      if (!threadId) throw new Error("Workspace thread not ready")
       const { runId } = await api.startRun(goal, agentId, attachmentIds, threadId)
       setActiveRun(runId)
       setScrollToRunId(runId)

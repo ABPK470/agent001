@@ -18,6 +18,7 @@ import {
   updateLastLoginAt,
   type DbUser
 } from "../../../platform/persistence/users.js"
+import { provisionWorkspaceThread } from "../../../platform/persistence/db/threads.js"
 import { UserSource } from "../../../shared/enums/auth.js"
 
 const BCRYPT_ROUNDS = 10 // dev-grade; raise if/when production volume warrants
@@ -77,6 +78,7 @@ export function registerLocalUser(input: RegisterInput): DbUser {
   })
   const created = findUserByUpn(upn)
   if (!created) throw new AuthError("user creation failed", 500)
+  provisionWorkspaceThread(upn)
   return created
 }
 
@@ -121,6 +123,7 @@ export function upsertSsoUser(input: SsoUpsertInput): DbUser {
   })
   const created = findUserByUpn(upn)
   if (!created) throw new AuthError("sso user creation failed", 500)
+  provisionWorkspaceThread(upn)
   return created
 }
 

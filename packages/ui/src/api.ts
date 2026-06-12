@@ -62,12 +62,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify(title ? { title } : {}),
     }),
-  /** One Platform thread per user — safe under concurrent widget mounts. */
-  ensurePlatformThread: () =>
-    json<import("@mia/shared-types").Thread>("/api/threads/ensure-platform", {
-      method: "POST",
-      body: "{}",
-    }),
   updateThread: (
     id: string,
     patch: { title?: string; pinned?: boolean; archived?: boolean }

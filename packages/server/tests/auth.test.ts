@@ -104,7 +104,9 @@ describe("auth routes — local registration", () => {
         headers: { cookie }
       })
       expect(who.statusCode).toBe(200)
-      expect(who.json()).toMatchObject({ upn: "alice", displayName: "Alice", isAdmin: false })
+      const whoBody = who.json() as { upn: string; displayName: string; isAdmin: boolean; workspaceThreadId: string }
+      expect(whoBody).toMatchObject({ upn: "alice", displayName: "Alice", isAdmin: false })
+      expect(whoBody.workspaceThreadId).toMatch(/^[0-9a-f-]{36}$/i)
     } finally {
       await app.close()
     }

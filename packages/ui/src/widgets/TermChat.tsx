@@ -2650,12 +2650,11 @@ export function TermChat({
   const isHomeMode = mode === "home" || isThreadMode
   const pinProfile: GoalPinProfile = mode === "widget" ? "widget" : "home"
   const activeThreadId = threadIdProp ?? useStore((s) => s.activeThreadId)
-  const platformThreadId = useStore((s) => s.platformThreadId)
-  const ensurePlatformThread = useStore((s) => s.ensurePlatformThread)
+  const workspaceThreadId = useStore((s) => s.workspaceThreadId)
   const continuityThreadId = isThreadMode
     ? activeThreadId
     : mode === "widget"
-      ? platformThreadId
+      ? workspaceThreadId
       : activeThreadId
   const streamingAnswer = activeRun?.streamingAnswer ?? ""
 
@@ -2703,11 +2702,6 @@ export function TermChat({
     api.listAgents().then(setAgents).catch(() => { /* ignore */ })
   }, [])
 
-  useEffect(() => {
-    if (mode !== "widget") return
-    void ensurePlatformThread().catch(() => {})
-  }, [mode, ensurePlatformThread])
-
   // Auto-grow textarea as the user types. Uses useLayoutEffect so the
   // height is committed before the browser paints — no visible jump.
   useLayoutEffect(() => {
@@ -2728,11 +2722,9 @@ export function TermChat({
     setInput("")
     setSending(true)
     try {
-      const threadId =
-        continuityThreadId ??
-        (mode === "widget" ? await ensurePlatformThread() : activeThreadId)
+      const threadId = continuityThreadId
       if (!threadId) {
-        throw new Error("No thread selected")
+        throw new Error(mode === "widget" ? "Workspace thread not ready" : "No thread selected")
       }
       const { runId } = await api.startRun(
         effectiveGoal,
@@ -2759,7 +2751,7 @@ export function TermChat({
     } finally {
       setSending(false)
     }
-  }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, activeThreadId, ensurePlatformThread, mode])
+  }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, mode])
 
   const cancel = useCallback(async () => {
     if (!activeRunId) return

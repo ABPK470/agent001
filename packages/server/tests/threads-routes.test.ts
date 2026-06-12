@@ -94,24 +94,17 @@ describe("thread routes", () => {
     expect(threads.some((t) => t.id === created.id)).toBe(true)
   })
 
-  it("ensure-platform is idempotent under concurrent calls", async () => {
+  it("excludes the workspace thread from GET /api/threads", async () => {
     const built = await buildApp(fakeSession())
     app = built.app
+    const { getWorkspaceThread } = await import("../src/platform/persistence/db/threads.js")
 
-    const [a, b, c] = await Promise.all([
-      app.inject({ method: "POST", url: "/api/threads/ensure-platform" }),
-      app.inject({ method: "POST", url: "/api/threads/ensure-platform" }),
-      app.inject({ method: "POST", url: "/api/threads/ensure-platform" })
-    ])
-    expect(a.statusCode).toBe(200)
-    expect(b.statusCode).toBe(200)
-    expect(c.statusCode).toBe(200)
-    const ids = [a, b, c].map((r) => (r.json() as { id: string }).id)
-    expect(new Set(ids).size).toBe(1)
+    const workspace = getWorkspaceThread("alice@example.com")
+    expect(workspace).toBeDefined()
 
     const listRes = await app.inject({ method: "GET", url: "/api/threads" })
-    const platform = (listRes.json() as Array<{ title: string }>).filter((t) => t.title === "Platform")
-    expect(platform).toHaveLength(1)
+    const threads = listRes.json() as Array<{ id: string }>
+    expect(threads.some((t) => t.id === workspace!.id)).toBe(false)
   })
 
   it("forwards threadId to orchestrator.startRun", async () => {

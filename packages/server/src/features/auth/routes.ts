@@ -3,6 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
+import { resolveWorkspaceThreadId } from "../../platform/persistence/db/threads.js"
 import { AuthError, registerLocalUser, verifyLocalLogin } from "./application/users.js"
 import { loginAndSetCookie } from "./runtime/identity.js"
 
@@ -43,7 +44,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       return {
         upn: user.upn,
         displayName: user.display_name,
-        isAdmin: user.is_admin === 1
+        isAdmin: user.is_admin === 1,
+        workspaceThreadId: resolveWorkspaceThreadId(user.upn)
       }
     } catch (err) {
       if (err instanceof AuthError) {
@@ -69,7 +71,8 @@ export async function registerAuthRoutes(app: FastifyInstance): Promise<void> {
       return {
         upn: user.upn,
         displayName: user.display_name,
-        isAdmin: user.is_admin === 1
+        isAdmin: user.is_admin === 1,
+        workspaceThreadId: resolveWorkspaceThreadId(user.upn)
       }
     } catch (err) {
       if (err instanceof AuthError) {

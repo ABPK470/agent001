@@ -28,9 +28,6 @@ import type {
 } from "./types"
 import { randomId } from "./util"
 
-/** Coalesce concurrent ensurePlatformThread() calls (widget mount + platform view). */
-let ensurePlatformThreadInflight: Promise<string> | null = null
-
 function patchRunFields(runs: Run[], runId: string, patch: Partial<Run>): Run[] {
   const index = runs.findIndex((run) => run.id === runId)
   if (index < 0) return runs
@@ -161,10 +158,9 @@ interface AppState {
   setThreadSidebarCollapsed: (collapsed: boolean) => void
   selectThread: (id: string | null) => Promise<void>
   createNewThread: () => Promise<string>
-  /** Platform widget chat workspace — explicit thread, not session-scoped. */
-  platformThreadId: string | null
-  setPlatformThreadId: (id: string | null) => void
-  ensurePlatformThread: () => Promise<string>
+  /** Widget continuity thread — set from whoami after login; server-provisioned. */
+  workspaceThreadId: string | null
+  setWorkspaceThreadId: (id: string | null) => void
 
   // Steps (for active run)
   steps: Step[]
@@ -1070,42 +1066,8 @@ export const useStore = create<AppState>()(
         await get().selectThread(thread.id)
         return thread.id
       },
-      platformThreadId: null,
-      setPlatformThreadId: (platformThreadId) => set({ platformThreadId }),
-      ensurePlatformThread: async () => {
-        const state = get()
-        if (
-          state.platformThreadId &&
-          state.threads.some((t) => t.id === state.platformThreadId)
-        ) {
-          return state.platformThreadId
-        }
-        const cached = state.threads.find((t) => t.title === "Platform")
-        if (cached) {
-          set({ platformThreadId: cached.id })
-          return cached.id
-        }
-        if (ensurePlatformThreadInflight) return ensurePlatformThreadInflight
-
-        ensurePlatformThreadInflight = (async () => {
-          try {
-            const thread = await api.ensurePlatformThread()
-            set((s) => {
-              const idx = s.threads.findIndex((t) => t.id === thread.id)
-              const threads =
-                idx >= 0
-                  ? s.threads.map((t, i) => (i === idx ? thread : t))
-                  : [thread, ...s.threads.filter((t) => t.title !== "Platform" || t.id === thread.id)]
-              return { threads, platformThreadId: thread.id }
-            })
-            return thread.id
-          } finally {
-            ensurePlatformThreadInflight = null
-          }
-        })()
-
-        return ensurePlatformThreadInflight
-      },
+      workspaceThreadId: null,
+      setWorkspaceThreadId: (workspaceThreadId) => set({ workspaceThreadId }),
 
       // Steps
       steps: [],
@@ -1874,7 +1836,7 @@ export const useStore = create<AppState>()(
         activeViewId: state.activeViewId,
         selectedAgentId: state.selectedAgentId,
         activeThreadId: state.activeThreadId,
-        platformThreadId: state.platformThreadId,
+        workspaceThreadId: state.workspaceThreadId,
         threadSidebarCollapsed: state.threadSidebarCollapsed,
         ioeLayout: state.ioeLayout,
         envSyncForm: { ...state.envSyncForm, entityId: "", planId: null },

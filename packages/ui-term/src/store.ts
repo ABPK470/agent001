@@ -56,8 +56,8 @@ interface State {
 
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
 
-  platformThreadId: string | null
-  ensurePlatformThread: () => Promise<string>
+  workspaceThreadId: string | null
+  setWorkspaceThreadId: (id: string | null) => void
 
   pushEvent: (e: SseEvent) => void
   /** Replay historical events into the transcript only — does NOT touch the ops events buffer. */
@@ -66,8 +66,6 @@ interface State {
   resetTranscript: (runId: string | null) => void
   clearPendingInput: () => void
 }
-
-let ensurePlatformThreadInflight: Promise<string> | null = null
 
 export const useStore = create<State>((set, get) => ({
   connected: false,
@@ -91,22 +89,8 @@ export const useStore = create<State>((set, get) => ({
   transcript: [],
   streamingAnswer: "",
   pendingInput: null,
-  platformThreadId: null,
-  ensurePlatformThread: async () => {
-    const cached = get().platformThreadId
-    if (cached) return cached
-    if (ensurePlatformThreadInflight) return ensurePlatformThreadInflight
-    ensurePlatformThreadInflight = (async () => {
-      try {
-        const thread = await api.ensurePlatformThread()
-        set({ platformThreadId: thread.id })
-        return thread.id
-      } finally {
-        ensurePlatformThreadInflight = null
-      }
-    })()
-    return ensurePlatformThreadInflight
-  },
+  workspaceThreadId: null,
+  setWorkspaceThreadId: (workspaceThreadId) => set({ workspaceThreadId }),
   // Keys of events already in the events array — prevents backfill+SSE overlap dupes.
   _eventSeen: new Set<string>(),
 

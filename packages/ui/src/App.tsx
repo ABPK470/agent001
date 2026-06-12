@@ -96,6 +96,7 @@ export function App() {
   const [chatHomeHeroStage, setChatHomeHeroStage] = useState<"hidden" | "pill" | "copy">("hidden")
   const [chatHomeHeroRevealProgress, setChatHomeHeroRevealProgress] = useState(0)
   const { me, loading: meLoading, refresh: refreshMe, logout } = useMe()
+  const setWorkspaceThreadId = useStore((s) => s.setWorkspaceThreadId)
 
   const popOut = getPopOutWidget()
   const currentView = useMemo(
@@ -228,6 +229,10 @@ export function App() {
     return () => stream.close()
   }, [handleEvent, setConnected, popOut, me?.upn])
 
+  useEffect(() => {
+    setWorkspaceThreadId(me?.workspaceThreadId ?? null)
+  }, [me?.workspaceThreadId, setWorkspaceThreadId])
+
   // Load runs for this identity. Re-runs only on login/logout — NOT when
   // chat widgets appear on the canvas (shouldHydrateSelectedRun), which
   // used to refetch, drop in-memory thread rows, and clear activeRunId.
@@ -251,7 +256,6 @@ export function App() {
   // Sync run list when entering platform view (chat home → widgets).
   useEffect(() => {
     if (!me || shellMode !== "platform") return
-    void useStore.getState().ensurePlatformThread().catch(() => {})
     api.listRuns().then(setRuns).catch(() => {})
   }, [me?.upn, shellMode, setRuns])
 

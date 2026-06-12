@@ -26,6 +26,7 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
+import { resolveWorkspaceThreadId } from "../../../platform/persistence/db/threads.js"
 import { createSession, deleteSession, getSessionWithUser } from "../../../platform/persistence/sessions.js"
 import { upsertSsoUser } from "../application/users.js"
 import type { CurrentSession } from "./context.js"
@@ -214,7 +215,8 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
     return {
       upn: req.session.upn,
       displayName: req.session.displayName,
-      isAdmin: req.session.isAdmin
+      isAdmin: req.session.isAdmin,
+      workspaceThreadId: resolveWorkspaceThreadId(req.session.upn)
     }
   })
 
