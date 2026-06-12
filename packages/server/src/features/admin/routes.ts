@@ -42,7 +42,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     const rows = getDb()
       .prepare(
         `
-				SELECT id, goal, status, step_count, created_at, session_id, upn, display_name
+				SELECT id, goal, status, step_count, created_at, upn, display_name
 				FROM runs
 				WHERE id IN (${placeholders})
 				ORDER BY created_at DESC
@@ -54,7 +54,6 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
       status: string
       step_count: number
       created_at: string
-      session_id: string
       upn: string
       display_name: string
     }>
@@ -65,7 +64,6 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
         status: row.status,
         stepCount: row.step_count,
         createdAt: row.created_at,
-        sessionId: row.session_id,
         upn: row.upn,
         displayName: row.display_name
       }))

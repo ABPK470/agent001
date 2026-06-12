@@ -136,7 +136,8 @@ describe("procedural recall — Gap 5 class-tag overlap", () => {
       runId: "r4",
       upn: "user@example.com"
     })
-    expect(proc.trigger).toContain("[goalclasses")
+    expect(proc).not.toBeNull()
+    expect(proc!.trigger).toContain("[goalclasses")
     expect(proc.trigger).toContain("aggregateby")
     expect(proc.trigger).toContain("pivotbydim")
   })

@@ -3,8 +3,8 @@
  *
  *   thread_id  → which conversation/workspace prior turns & tool results belong to
  *   upn        → who owns the data (access control)
- *   session_id → auth transport only (cookie sid); stamped on runs for audit,
- *                never used to load prior_turns, prior_results, or memory
+ * Auth login cookies live in the `sessions` table only — not copied onto runs
+ * or memory rows. Agent context never keys on cookie sid.
  *
  * Every authenticated run MUST carry an explicit thread_id chosen by the client.
  * The server does not mint threads, does not fall back to session scope, and does

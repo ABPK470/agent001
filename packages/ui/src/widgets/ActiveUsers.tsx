@@ -44,7 +44,7 @@ interface UserSummary {
 }
 
 interface ActiveRunRow {
-  runId: string; goal: string; status: string; sessionId: string | null
+  runId: string; goal: string; status: string
   upn: string | null; displayName: string | null; createdAt: string; stepCount: number
 }
 
@@ -228,7 +228,7 @@ export function ActiveUsers(): ReactNode {
   const runsByIdentifier = useMemo(() => {
     const m = new Map<string, ActiveRunRow[]>()
     for (const r of activeRuns) {
-      const key = r.upn ?? (r.sessionId ? `sid:${r.sessionId}` : null)
+      const key = r.upn
       if (!key) continue
       const list = m.get(key) ?? []
       list.push(r)

@@ -23,7 +23,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
     const session = req.session
     const notifications = session?.isAdmin
       ? db.listNotifications(limit)
-      : db.listNotificationsForUser({ upn: session?.upn ?? null, sid: session?.sid ?? null }, limit)
+      : db.listNotificationsForUser(session!.upn, limit)
     return notifications.map((notification) => ({
       id: notification.id,
       type: notification.type,
@@ -42,10 +42,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
     return {
       count: session?.isAdmin
         ? db.getUnreadNotificationCount()
-        : db.getUnreadNotificationCountForUser({
-            upn: session?.upn ?? null,
-            sid: session?.sid ?? null
-          })
+        : db.getUnreadNotificationCountForUser(session!.upn)
     }
   })
 
@@ -64,10 +61,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
     if (session?.isAdmin) {
       db.markAllNotificationsRead()
     } else {
-      const notifications = db.listNotificationsForUser(
-        { upn: session?.upn ?? null, sid: session?.sid ?? null },
-        10_000
-      )
+      const notifications = db.listNotificationsForUser(session!.upn, 10_000)
       for (const notification of notifications)
         if (notification.read === 0) db.markNotificationRead(notification.id)
     }

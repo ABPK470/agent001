@@ -64,9 +64,9 @@ function seedRun(
   db.prepare(
     `
     INSERT OR REPLACE INTO runs
-      (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, thread_id, upn, display_name)
+      (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
     VALUES
-      (@id, @goal, @status, NULL, 1, NULL, NULL, NULL, @created_at, @completed_at, NULL, @thread_id, @upn, @display_name)
+      (@id, @goal, @status, NULL, 1, NULL, NULL, NULL, @created_at, @completed_at, @thread_id, @upn, @display_name)
   `
   ).run({
     id: runId,
@@ -128,7 +128,6 @@ export async function buildFixture(): Promise<Fixture> {
       answer: inputs.answer,
       status: "completed",
       agentId: inputs.agentId ?? null,
-      sessionId: null,
       tools: [],
       stepCount: 1,
       trace: (inputs.trace ?? []) as Array<{ kind: string; tool?: string; text?: string }>,

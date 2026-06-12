@@ -58,8 +58,7 @@ function createPolicyContext(
     runMode: role === PolicyRole.HostedUser ? PolicyRunMode.Hosted : PolicyRunMode.Developer,
     role,
     sandboxRoot: runWorkspace.executionRoot,
-    actorUpn: activeRun?.ownerUpn ?? null,
-    sessionId: activeRun?.sessionId ?? null
+    actorUpn: activeRun?.ownerUpn ?? null
   }
 }
 

@@ -35,7 +35,6 @@ function publicView(row: AttachmentRow): Record<string, unknown> {
     id: row.id,
     scope: row.scope,
     runId: row.run_id,
-    sessionId: row.session_id,
     ownerUpn: row.owner_upn,
     originalName: row.original_name,
     normalizedName: row.normalized_name,
@@ -105,8 +104,7 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
           mediaType: body.mediaType || "application/octet-stream",
           scope,
           runId: body.runId ?? null,
-          sessionId: req.session!.sid,
-          ownerUpn: req.session!.upn ?? null,
+          ownerUpn: req.session!.upn,
           purposeTag: body.purposeTag ?? null,
           goalSnapshot: body.goalSnapshot ?? null,
           tags: body.tags

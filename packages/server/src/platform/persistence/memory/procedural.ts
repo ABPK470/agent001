@@ -22,7 +22,6 @@ function rowToProcedural(row: Record<string, unknown>): ProceduralMemory {
     failureCount: row.failure_count as number,
     runId: row.run_id as string,
     upn: (row.upn as string) ?? null,
-    sessionId: (row.session_id as string) ?? null,
     shared: (row.shared as number) === 1,
     createdAt: row.created_at as string,
     updatedAt: row.updated_at as string
@@ -40,54 +39,25 @@ export function storeProcedural(opts: {
   trigger: string
   toolSequence: Array<{ tool: string; argsPattern: Record<string, unknown> }>
   runId: string
-  /** Owner UPN — scopes recall so different tenants do not share recipes. */
-  upn?: string | null
-  /** Originating session id (cookie sid). Optional. */
-  sessionId?: string | null
+  /** Owner UPN — required; scopes write dedup and recall. */
+  upn: string
   /** Cross-user shared recipe. Defaults to false. */
   shared?: boolean
-}): ProceduralMemory {
-  const now = new Date().toISOString()
+}): ProceduralMemory | null {
+  const upn = opts.upn.trim()
+  if (!upn) return null
 
+  const now = new Date().toISOString()
   const seqHash = hashToolSequence(opts.toolSequence)
-  // Per-tenant dedup: two users may legitimately have the same tool sequence
-  // for the same trigger; we don't want a recipe written by user A to mask
-  // user B's identical-but-tenant-private execution. Lookup is therefore
-  // scoped by upn AND sequence-hash prefix. For temporary null-UPN sessions,
-  // scope by sid so anonymous browsers do not share procedural recipes.
-  const upn = opts.upn ?? null
-  const existing =
-    upn === null
-      ? ((opts.sessionId
-          ? getDb()
-              .prepare(
-                `
-          SELECT id, success_count FROM procedural_memories
-          WHERE id LIKE ? || '%'
-            AND upn IS NULL
-            AND session_id = ?
-        `
-              )
-              .get(seqHash.slice(0, 12), opts.sessionId)
-          : getDb()
-              .prepare(
-                `
-          SELECT id, success_count FROM procedural_memories
-          WHERE id LIKE ? || '%'
-            AND upn IS NULL
-            AND session_id IS NULL
-        `
-              )
-              .get(seqHash.slice(0, 12))) as { id: string; success_count: number } | undefined)
-      : (getDb()
-          .prepare(
-            `
+  const existing = getDb()
+    .prepare(
+      `
         SELECT id, success_count FROM procedural_memories
         WHERE id LIKE ? || '%'
           AND upn = ?
       `
-          )
-          .get(seqHash.slice(0, 12), upn) as { id: string; success_count: number } | undefined)
+    )
+    .get(seqHash.slice(0, 12), upn) as { id: string; success_count: number } | undefined
 
   if (existing) {
     getDb()
@@ -104,19 +74,12 @@ export function storeProcedural(opts: {
 
   const proc: ProceduralMemory = {
     id: randomUUID(),
-    // Gap 5: append CamelCase class tags to the stored trigger so the
-    // FTS index covers them. A second goal sharing the SHAPE but no
-    // surface tokens (e.g. "top 50 clients by revenue" vs the recorded
-    // "list top 3 products based on revenue for April 2025") will still
-    // recall this recipe via class-tag overlap. UI inspectors can strip
-    // the `\n[goalclasses …]` tail when displaying the original goal.
     trigger: opts.trigger + renderClassTail(extractGoalClasses(opts.trigger)),
     toolSequence: opts.toolSequence,
     successCount: 1,
     failureCount: 0,
     runId: opts.runId,
     upn,
-    sessionId: opts.sessionId ?? null,
     shared: opts.shared ?? false,
     createdAt: now,
     updatedAt: now
@@ -125,8 +88,8 @@ export function storeProcedural(opts: {
   getDb()
     .prepare(
       `
-    INSERT INTO procedural_memories (id, trigger, tool_sequence, success_count, failure_count, run_id, upn, session_id, shared, created_at, updated_at)
-    VALUES (@id, @trigger, @tool_sequence, @success_count, @failure_count, @run_id, @upn, @session_id, @shared, @created_at, @updated_at)
+    INSERT INTO procedural_memories (id, trigger, tool_sequence, success_count, failure_count, run_id, upn, shared, created_at, updated_at)
+    VALUES (@id, @trigger, @tool_sequence, @success_count, @failure_count, @run_id, @upn, @shared, @created_at, @updated_at)
   `
     )
     .run({
@@ -136,7 +99,6 @@ export function storeProcedural(opts: {
       failure_count: proc.failureCount,
       run_id: proc.runId,
       upn: proc.upn,
-      session_id: proc.sessionId,
       shared: proc.shared ? 1 : 0,
       created_at: proc.createdAt,
       updated_at: proc.updatedAt
@@ -176,9 +138,11 @@ export function extractProcedural(run: {
   id: string
   goal: string
   trace: Array<{ kind: string; tool?: string; argsSummary?: string }>
-  upn?: string | null
-  sessionId?: string | null
+  upn: string
 }): ProceduralMemory | null {
+  const upn = run.upn.trim()
+  if (!upn) return null
+
   const toolCalls = run.trace
     .filter((t) => t.kind === "tool-call" && t.tool)
     .map((t) => ({
@@ -192,37 +156,18 @@ export function extractProcedural(run: {
     trigger: run.goal,
     toolSequence: toolCalls,
     runId: run.id,
-    upn: run.upn ?? null,
-    sessionId: run.sessionId ?? null
+    upn
   })
 }
 
-export function searchProcedures(
-  goal: string,
-  limit = 5,
-  upn?: string | null
-): ProceduralMemory[] {
-  // Gap 5: include the goal's class tags in the FTS query so a new
-  // surface-different but shape-similar goal can recall an older
-  // recipe via class-tag overlap. The classes are deterministic
-  // CamelCase tokens (e.g. "rankbymetric timefiltered pivotbydim"),
-  // so adding them to the input is a pure OR-broadening — never a
-  // false-negative against the existing literal-token recall.
+export function searchProcedures(goal: string, limit = 5, upn: string): ProceduralMemory[] {
+  const owner = upn.trim()
+  if (!owner) return []
+
   const classes = extractGoalClasses(goal)
   const augmented = classes.length > 0 ? `${goal} ${classes.join(" ")}` : goal
   const ftsQuery = sanitizeFtsQuery(augmented)
   if (!ftsQuery) return []
-
-  let tenantClause = ""
-  const tenantParams: unknown[] = []
-  if (upn !== undefined) {
-    if (upn === null) {
-      tenantClause = " AND p.shared = 1"
-    } else {
-      tenantClause = " AND (p.upn = ? OR p.shared = 1)"
-      tenantParams.push(upn)
-    }
-  }
 
   const rows = getDb()
     .prepare(
@@ -230,13 +175,14 @@ export function searchProcedures(
     SELECT p.*, procedural_fts.rank AS fts_rank
     FROM procedural_memories p
     JOIN procedural_fts ON p.rowid = procedural_fts.rowid
-    WHERE procedural_fts MATCH ?${tenantClause}
+    WHERE procedural_fts MATCH ?
+      AND (p.upn = ? OR p.shared = 1)
     ORDER BY (CAST(p.success_count AS REAL) / MAX(p.success_count + p.failure_count, 1)) DESC,
              procedural_fts.rank ASC
     LIMIT ?
   `
     )
-    .all(ftsQuery, ...tenantParams, limit) as Array<Record<string, unknown>>
+    .all(ftsQuery, owner, limit) as Array<Record<string, unknown>>
 
   return rows.map(rowToProcedural)
 }

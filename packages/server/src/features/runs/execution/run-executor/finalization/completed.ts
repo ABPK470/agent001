@@ -58,27 +58,28 @@ export async function finalizeCompletedRun(
   const persistedToolTrace = buildPersistedToolTrace(env.state.run.steps)
   const taskInternallyFailed = hasInternalTaskFailure(answer)
 
-  ingestRunTurns({
-    id: request.runId,
-    goal: request.goal,
-    answer: taskInternallyFailed ? null : answer,
-    status: taskInternallyFailed ? RunStatus.Failed : RunStatus.Completed,
-    agentId: request.agentId,
-    sessionId: env.activeRun?.sessionId ?? null,
-    tools: [...new Set(env.state.run.steps.map((step) => step.action))],
-    stepCount: env.state.run.steps.length,
-    error: taskInternallyFailed ? answer.slice(0, 200) : undefined,
-    trace: persistedToolTrace,
-    upn: env.activeRun?.ownerUpn ?? null
-  })
-  extractProcedural({
-    id: request.runId,
-    goal: request.goal,
-    trace: persistedToolTrace,
-    upn: env.activeRun?.ownerUpn ?? null,
-    sessionId: env.activeRun?.sessionId ?? null
-  })
-  consolidate({ minAgeHours: 24, upn: env.activeRun?.ownerUpn ?? null })
+  const ownerUpn = env.activeRun?.ownerUpn
+  if (ownerUpn) {
+    ingestRunTurns({
+      id: request.runId,
+      goal: request.goal,
+      answer: taskInternallyFailed ? null : answer,
+      status: taskInternallyFailed ? RunStatus.Failed : RunStatus.Completed,
+      agentId: request.agentId,
+      tools: [...new Set(env.state.run.steps.map((step) => step.action))],
+      stepCount: env.state.run.steps.length,
+      error: taskInternallyFailed ? answer.slice(0, 200) : undefined,
+      trace: persistedToolTrace,
+      upn: ownerUpn
+    })
+    extractProcedural({
+      id: request.runId,
+      goal: request.goal,
+      trace: persistedToolTrace,
+      upn: ownerUpn
+    })
+    consolidate({ minAgeHours: 24, upn: ownerUpn })
+  }
 
   broadcast({
     type: EventType.RunCompleted,

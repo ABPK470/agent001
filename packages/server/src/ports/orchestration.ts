@@ -52,8 +52,6 @@ export interface ActiveRun {
    * originating user can later see them.
    */
   ownerUpn: string | null
-  /** Originating session id (cookie sid). Null for service-internal runs. */
-  sessionId: string | null
   /** Conversation thread this run belongs to. */
   threadId: string | null
 }

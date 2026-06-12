@@ -23,7 +23,6 @@ export interface UploadAttachmentInput {
   mediaType: string
   scope: AttachmentScope
   runId?: string | null
-  sessionId?: string | null
   ownerUpn?: string | null
   purposeTag?: string | null
   goalSnapshot?: string | null
@@ -79,7 +78,6 @@ export async function uploadAttachment(input: UploadAttachmentInput): Promise<At
   const row = insertAttachment({
     scope: input.scope,
     runId: input.runId,
-    sessionId: input.sessionId,
     ownerUpn: input.ownerUpn,
     originalName: input.originalName,
     normalizedName: normalizeName(input.originalName),

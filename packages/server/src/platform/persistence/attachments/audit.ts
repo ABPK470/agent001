@@ -25,7 +25,6 @@ function payloadFor(row: AttachmentRow): Record<string, unknown> {
     scope: row.scope,
     ownerUpn: row.owner_upn,
     runId: row.run_id,
-    sessionId: row.session_id,
     sizeBytes: row.size_bytes,
     mediaType: row.media_type,
     source: row.source,

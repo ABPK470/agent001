@@ -112,7 +112,7 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
       reply.code(400)
       return { error: "goal is required" }
     }
-    const procedures = searchProcedures(goal, limit ?? 5, tenantScope(req), req.session?.sid)
+    const procedures = searchProcedures(goal, limit ?? 5, req.session!.upn)
     return procedures.map((procedure) => ({
       id: procedure.id,
       trigger: procedure.trigger,

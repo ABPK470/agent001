@@ -35,6 +35,7 @@ import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
 import type { ExecuteRunCommand } from "./execution/run-executor/types.js"
 import { applyRunWorkspaceDiff, captureRunWorkspaceDiff } from "./execution/workspace-effects.js"
+import { requireSessionUpn } from "../auth/application/access.js"
 import { requireOwnedThreadId } from "./continuity.js"
 import { filterToolsForVisitor, getAllTools } from "./tooling/registry.js"
 
@@ -88,15 +89,12 @@ export class AgentOrchestrator {
 
   // ── Run lifecycle ─────────────────────────────────────────────
 
-  private resolveThreadId(
-    requestedThreadId: string | undefined,
-    session: CurrentSession | null
-  ): string | null {
-    if (!session?.upn) return null
-    return requireOwnedThreadId(requestedThreadId, session.upn)
+  private resolveThreadId(requestedThreadId: string | undefined, upn: string): string {
+    return requireOwnedThreadId(requestedThreadId, upn)
   }
 
   startRun(goal: string, config?: AgentRunConfig, session: CurrentSession | null = null): string {
+    const upn = requireSessionUpn(session)
     const runId = randomUUID()
     const controller = new AbortController()
     const services = createEngineServices()
@@ -110,12 +108,8 @@ export class AgentOrchestrator {
     // headless browser). Captured here at run-start time when AsyncLocalStorage
     // still holds the originating request's session. Admin sessions get the
     // full toolset unchanged.
-    const role: PolicyRole = !session
-      ? PolicyRole.Admin
-      : session.isAdmin
-        ? PolicyRole.Admin
-        : PolicyRole.HostedUser
-    if (session && !session.isAdmin) {
+    const role: PolicyRole = session!.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
+    if (!session!.isAdmin) {
       tools = filterToolsForVisitor(tools)
     }
     const bus = new AgentBus(runId)
@@ -133,7 +127,7 @@ export class AgentOrchestrator {
     // at server boot via policy-seeder.ts). Operators edit/delete them
     // through the admin UI; this loop already loaded them above.
 
-    const threadId = this.resolveThreadId(config?.threadId, session)
+    const threadId = this.resolveThreadId(config?.threadId, upn)
 
     this.activeRuns.set(runId, {
       id: runId,
@@ -146,8 +140,7 @@ export class AgentOrchestrator {
       workspace: null,
       role,
       attachmentIds: config?.attachmentIds ?? [],
-      ownerUpn: session?.upn ?? null,
-      sessionId: session?.sid ?? null,
+      ownerUpn: upn,
       threadId
     })
 
@@ -168,10 +161,9 @@ export class AgentOrchestrator {
       agent_id: agentId,
       created_at: new Date().toISOString(),
       completed_at: null,
-      session_id: session?.sid ?? null,
       thread_id: threadId,
-      upn: session?.upn ?? null,
-      display_name: session?.displayName ?? null
+      upn,
+      display_name: session!.displayName
     })
 
     if (threadId) {
@@ -219,7 +211,6 @@ export class AgentOrchestrator {
           agent_id: agentId,
           created_at: existing?.created_at ?? new Date().toISOString(),
           completed_at: new Date().toISOString(),
-          session_id: existing?.session_id ?? session?.sid ?? null,
           thread_id: existing?.thread_id ?? threadId,
           upn: existing?.upn ?? session?.upn ?? null,
           display_name: existing?.display_name ?? session?.displayName ?? null
@@ -256,9 +247,16 @@ export class AgentOrchestrator {
   }
 
   resumeRun(runId: string, resumeSession: CurrentSession | null = null): string | null {
+    let upn: string
+    try {
+      upn = requireSessionUpn(resumeSession)
+    } catch {
+      return null
+    }
     const checkpoint = db.getCheckpoint(runId)
     const originalRun = db.getRun(runId)
     if (!checkpoint || !originalRun) return null
+    if (originalRun.upn?.toLowerCase() !== upn.toLowerCase()) return null
     if (this.activeRuns.has(runId)) return null
     if (originalRun.status === RunStatus.Completed) return null
 
@@ -292,11 +290,7 @@ export class AgentOrchestrator {
     // policy_rules at server boot via policy-seeder.ts, so loading dbRules
     // above already covers them.)
 
-    const resumeRole: PolicyRole = !resumeSession
-      ? PolicyRole.Admin
-      : resumeSession.isAdmin
-        ? PolicyRole.Admin
-        : PolicyRole.HostedUser
+    const resumeRole: PolicyRole = resumeSession!.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
     this.activeRuns.set(newRunId, {
       id: newRunId,
       goal: originalRun.goal,
@@ -308,8 +302,7 @@ export class AgentOrchestrator {
       workspace: null,
       role: resumeRole,
       attachmentIds: [],
-      ownerUpn: resumeSession?.upn ?? null,
-      sessionId: resumeSession?.sid ?? null,
+      ownerUpn: upn,
       threadId: originalRun.thread_id ?? null
     })
 
@@ -328,10 +321,9 @@ export class AgentOrchestrator {
       agent_id: originalRun.agent_id ?? null,
       created_at: new Date().toISOString(),
       completed_at: null,
-      session_id: resumeSession?.sid ?? null,
       thread_id: originalRun.thread_id ?? null,
-      upn: resumeSession?.upn ?? null,
-      display_name: resumeSession?.displayName ?? null
+      upn,
+      display_name: resumeSession!.displayName
     })
 
     if (originalRun.thread_id) {

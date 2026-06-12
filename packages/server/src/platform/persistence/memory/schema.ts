@@ -113,7 +113,6 @@ export function rowToEntry(row: Record<string, unknown>): MemoryEntry {
     confidence: (row.confidence as number) ?? 0.5,
     salience: (row.salience as number) ?? 0.5,
     accessCount: (row.access_count as number) ?? 0,
-    sessionId: (row.session_id as string) ?? null,
     runId: (row.run_id as string) ?? null,
     parentId: (row.parent_id as string) ?? null,
     upn: (row.upn as string) ?? null,

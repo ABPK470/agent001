@@ -36,7 +36,7 @@ async function buildApp(opts: BuildOptions): Promise<FastifyInstance> {
   app.addHook("onRequest", async (req) => {
     if (opts.session) {
       ;(req as unknown as { session: CurrentSession }).session = opts.session
-      // FK on attachments.session_id + owner_upn require parent rows.
+      // FK on attachments.owner_upn requires a users row.
       const { seedUser, seedSession } = await import("./_fk-helpers.js")
       seedUser(testDb, opts.session.upn, {
         displayName: opts.session.displayName,

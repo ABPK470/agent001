@@ -187,7 +187,6 @@ describe("buildSystemMessages — clarification ctx is fed prior-turns transcrip
         {
           id: 1,
           run_id: "r1",
-          session_id: "s1",
           tool_call_id: "tc-1",
           tool_name: "query_mssql",
           args_json: "{}",

@@ -31,13 +31,8 @@ describe("runMigrations", () => {
     const runsCols = testDb.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>
     expect(runsCols.some((c) => c.name === "thread_id")).toBe(true)
 
-    const sessionFk = testDb.prepare("PRAGMA foreign_key_list(runs)").all() as Array<{
-      table: string
-      from: string
-      on_delete: string
-    }>
-    const runsSessionFk = sessionFk.find((r) => r.table === "sessions" && r.from === "session_id")
-    expect(runsSessionFk?.on_delete).toBe("SET NULL")
+    const runsColsAfter = testDb.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>
+    expect(runsColsAfter.some((c) => c.name === "session_id")).toBe(false)
   })
 
   it("is idempotent across repeated runs", () => {

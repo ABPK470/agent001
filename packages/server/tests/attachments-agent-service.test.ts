@@ -44,8 +44,7 @@ function makeCtx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext {
     runMode: over.runMode ?? "hosted",
     role: over.role ?? "hosted_user",
     sandboxRoot: over.sandboxRoot ?? sandboxRoot,
-    actorUpn: over.actorUpn ?? null,
-    sessionId: over.sessionId ?? null
+    actorUpn: over.actorUpn ?? null
   }
 }
 
@@ -207,16 +206,15 @@ describe("server attachment service", () => {
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
-    const { seedRun, seedSession } = await import("./_fk-helpers.js")
-    seedSession(testDb, "sid-x")
-    seedRun(testDb, "run-promote", { sessionSid: "sid-x" })
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "run-promote", { upn: "owner@example.com" })
 
     // Simulate the agent producing a report inside the sandbox.
     mkdirSync(join(sandboxRoot, "out"), { recursive: true })
     writeFileSync(join(sandboxRoot, "out/report.csv"), "a,b\n1,2\n")
 
     const meta = await withAttachmentService(
-      makeCtx({ runId: "run-promote", actorUpn: "owner@example.com", sessionId: "sid-x" }),
+      makeCtx({ runId: "run-promote", actorUpn: "owner@example.com" }),
       (service) => service.promoteFromSandbox("out/report.csv")
     )
 
@@ -230,7 +228,6 @@ describe("server attachment service", () => {
     expect(row?.scope).toBe("workspace_asset")
     expect(row?.run_id).toBe("run-promote")
     expect(row?.owner_upn).toBe("owner@example.com")
-    expect(row?.session_id).toBe("sid-x")
   })
 
   it("promoteFromSandbox refuses paths that escape the sandbox", async () => {

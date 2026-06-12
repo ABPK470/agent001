@@ -48,8 +48,8 @@ function seedThreadAndRuns(runIds: string[]): void {
   for (const runId of runIds) {
     testDb
       .prepare(
-        `INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, thread_id, upn, display_name)
-         VALUES (?, 'goal', 'completed', NULL, 1, NULL, NULL, NULL, datetime('now'), datetime('now'), NULL, ?, ?, ?)`
+        `INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
+         VALUES (?, 'goal', 'completed', NULL, 1, NULL, NULL, NULL, datetime('now'), datetime('now'), ?, ?, ?)`
       )
       .run(runId, THREAD_ID, UPN, UPN)
   }
@@ -66,7 +66,6 @@ describe("persistToolResult", () => {
 
     const ok = persistToolResult({
       runId: "run-1",
-      sessionId: "sid-1",
       upn: "pka",
       goal: "find top products by revenue",
       iteration: 1,
@@ -84,17 +83,15 @@ describe("persistToolResult", () => {
 
     expect(ok).toBe(true)
     const row = testDb
-      .prepare("SELECT run_id, session_id, tool_call_id, tool_name, row_count FROM tool_results")
+      .prepare("SELECT run_id, tool_call_id, tool_name, row_count FROM tool_results")
       .get() as {
       run_id: string
-      session_id: string
       tool_call_id: string
       tool_name: string
       row_count: number
     }
     expect(row).toMatchObject({
       run_id: "run-1",
-      session_id: "sid-1",
       tool_call_id: "tc-1",
       tool_name: "query_mssql",
       row_count: 2
@@ -106,7 +103,6 @@ describe("persistToolResult", () => {
 
     persistToolResult({
       runId: "run-2",
-      sessionId: "sid-2",
       upn: "pka",
       goal: "which product out of these 10 brings the least revenue",
       iteration: 1,
@@ -125,7 +121,7 @@ describe("persistToolResult", () => {
 
     const artifact = testDb
       .prepare(
-        `SELECT tier, role, source, upn, session_id, run_id, content, metadata
+        `SELECT tier, role, source, upn, run_id, content, metadata
        FROM memory_entries WHERE json_extract(metadata, '$.type') = 'referable_artifact'`
       )
       .get() as {
@@ -133,7 +129,6 @@ describe("persistToolResult", () => {
       role: string
       source: string
       upn: string
-      session_id: string
       run_id: string
       content: string
       metadata: string
@@ -143,7 +138,6 @@ describe("persistToolResult", () => {
     expect(artifact.role).toBe("summary")
     expect(artifact.source).toBe("tool")
     expect(artifact.upn).toBe("pka")
-    expect(artifact.session_id).toBe("sid-2")
     expect(artifact.run_id).toBe("run-2")
     expect(artifact.content).toContain("[artifact:data_result]")
     expect(artifact.content).toContain("FX CURRENCY FORWARD")
@@ -161,7 +155,6 @@ describe("persistToolResult", () => {
 
     persistToolResult({
       runId: "run-live-shape",
-      sessionId: "sid-live-shape",
       upn: "pka",
       goal: "top 10 products by 2025 revenue",
       iteration: 1,
@@ -201,7 +194,6 @@ describe("persistToolResult", () => {
 
     persistToolResult({
       runId: "run-3",
-      sessionId: "sid-3",
       upn: "pka",
       goal: "find top products by revenue",
       iteration: 1,
@@ -225,7 +217,6 @@ describe("persistToolResult", () => {
 
     const ok = persistToolResult({
       runId: "run-4",
-      sessionId: "sid-4",
       upn: "pka",
       goal: "top products by revenue",
       iteration: 1,
@@ -251,13 +242,12 @@ describe("persistToolResult", () => {
     testDb
       .prepare(
         `
-      INSERT INTO tool_results (run_id, session_id, tool_call_id, tool_name, args_json, result_json, row_count, bytes, truncated, goal_excerpt, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      INSERT INTO tool_results (run_id, tool_call_id, tool_name, args_json, result_json, row_count, bytes, truncated, goal_excerpt, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `
       )
       .run(
         "run-denied",
-        "sid-5",
         "tc-denied",
         "query_mssql",
         "{}",
@@ -274,13 +264,12 @@ describe("persistToolResult", () => {
     testDb
       .prepare(
         `
-      INSERT INTO tool_results (run_id, session_id, tool_call_id, tool_name, args_json, result_json, row_count, bytes, truncated, goal_excerpt, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+      INSERT INTO tool_results (run_id, tool_call_id, tool_name, args_json, result_json, row_count, bytes, truncated, goal_excerpt, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
     `
       )
       .run(
         "run-valid",
-        "sid-5",
         "tc-valid",
         "query_mssql",
         "{}",

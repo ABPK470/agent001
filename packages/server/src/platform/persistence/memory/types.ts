@@ -17,7 +17,6 @@ export interface MemoryEntry {
   confidence: number
   salience: number
   accessCount: number
-  sessionId: string | null
   runId: string | null
   parentId: string | null
   /**
@@ -46,7 +45,6 @@ export interface ProceduralMemory {
   failureCount: number
   runId: string
   upn: string | null
-  sessionId: string | null
   shared: boolean
   createdAt: string
   updatedAt: string

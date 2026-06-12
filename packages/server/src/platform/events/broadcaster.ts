@@ -54,7 +54,7 @@ export class EventBroadcaster {
   /** Internal subscribers — notified after every broadcast() call. */
   private readonly subscribers = new Set<(event: SseEvent) => void>()
   /** Tiny LRU of runId → owner. Cleared after this many entries. */
-  private readonly ownerCache = new Map<string, { upn: string | null; sid: string | null }>()
+  private readonly ownerCache = new Map<string, { upn: string | null }>()
 
   /**
    * Register an SSE client. Returns a disposer that the route handler must
@@ -146,12 +146,12 @@ export class EventBroadcaster {
   }
 
   /** Look up which session/upn owns a runId. Cached for perf. */
-  private resolveOwner(runId: string): { upn: string | null; sid: string | null } | null {
+  private resolveOwner(runId: string): { upn: string | null } | null {
     const hit = this.ownerCache.get(runId)
     if (hit) return hit
     const run = getRun(runId)
     if (!run) return null
-    const owner = { upn: run.upn ?? null, sid: run.session_id ?? null }
+    const owner = { upn: run.upn ?? null }
     if (this.ownerCache.size > 1024) this.ownerCache.clear()
     this.ownerCache.set(runId, owner)
     return owner

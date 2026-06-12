@@ -11,7 +11,7 @@ import {
   loadPriorTurns,
   PRIOR_TURN_ANSWER_MAX_CHARS
 } from "../src/features/runs/core/data-blocks/prior-turns.js"
-import { seedSession, seedUser } from "./_fk-helpers.js"
+import { seedUser } from "./_fk-helpers.js"
 
 let db: Database.Database
 let dataDir: string
@@ -40,7 +40,6 @@ afterEach(() => {
   else process.env["MIA_DATA_DIR"] = originalDataDir
 })
 
-const SID = "anon:0123456789abcdef0123456789abcdef"
 const UPN = "alice@example.com"
 const THREAD_ID = "11111111-1111-4111-8111-111111111111"
 const OTHER_THREAD_ID = "22222222-2222-4222-8222-222222222222"
@@ -62,24 +61,21 @@ interface InsertRun {
   status?: string
   completedMinutesAgo?: number
   parentRunId?: string | null
-  sessionId?: string
   upn?: string
   threadId?: string
 }
 
 function insertRun(r: InsertRun): void {
-  const sid = r.sessionId ?? SID
   const upn = r.upn ?? UPN
   const threadId = r.threadId ?? THREAD_ID
   seedThread(threadId, upn)
-  seedSession(db, sid, upn)
   const completedAt =
     r.completedMinutesAgo == null ? null : new Date(Date.now() + r.completedMinutesAgo * 60_000).toISOString()
   const createdAt = completedAt ?? new Date(Date.now() + (r.completedMinutesAgo ?? 0) * 60_000).toISOString()
   db.prepare(
     `
-    INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, thread_id, upn, display_name)
-    VALUES (@id, @goal, @status, @answer, 1, NULL, @parent_run_id, NULL, @created_at, @completed_at, @session_id, @thread_id, @upn, @display_name)
+    INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
+    VALUES (@id, @goal, @status, @answer, 1, NULL, @parent_run_id, NULL, @created_at, @completed_at, @thread_id, @upn, @display_name)
   `
   ).run({
     display_name: upn ?? "anon",
@@ -90,7 +86,6 @@ function insertRun(r: InsertRun): void {
     parent_run_id: r.parentRunId ?? null,
     created_at: createdAt,
     completed_at: completedAt,
-    session_id: sid,
     thread_id: threadId,
     upn
   })

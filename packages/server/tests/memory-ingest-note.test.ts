@@ -56,7 +56,7 @@ describe("ingestAgentNote", () => {
 
     const row = testDb
       .prepare(
-        `SELECT tier, role, source, confidence, content, upn, session_id, metadata
+        `SELECT tier, role, source, confidence, content, upn, metadata
        FROM memory_entries WHERE id = ?`
       )
       .get(res.id) as {
@@ -66,7 +66,6 @@ describe("ingestAgentNote", () => {
       confidence: number
       content: string
       upn: string
-      session_id: string
       metadata: string
     }
 
@@ -75,7 +74,6 @@ describe("ingestAgentNote", () => {
     expect(row.source).toBe("agent")
     expect(row.confidence).toBe(0.75) // no evidence → baseline
     expect(row.upn).toBe("alice@corp")
-    expect(row.session_id).toBeNull()
     expect(row.content).toContain("[note:column_semantics]")
     expect(row.content).toContain("publish.Revenue.RevenueZARMTD")
     expect(row.content).toContain("non-summable")

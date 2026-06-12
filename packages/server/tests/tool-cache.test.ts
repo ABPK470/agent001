@@ -35,13 +35,13 @@ describe("tool-cache", () => {
     const a = await getOrCompute({
       tool: "fetch_url",
       input: { url: "https://example.com" },
-      sessionId: "sess-1",
+      upn: "sess-1",
       compute
     })
     const b = await getOrCompute({
       tool: "fetch_url",
       input: { url: "https://example.com" },
-      sessionId: "sess-1",
+      upn: "sess-1",
       compute
     })
 
@@ -51,7 +51,7 @@ describe("tool-cache", () => {
     expect(b.value).toEqual({ hello: "world" })
   })
 
-  it("partitions by sessionId so two sessions cannot poison each other", async () => {
+  it("partitions by upn so two sessions cannot poison each other", async () => {
     const { getOrCompute } = await import("../src/platform/persistence/tool-cache.js")
     let aCalls = 0,
       bCalls = 0
@@ -67,13 +67,13 @@ describe("tool-cache", () => {
     await getOrCompute({
       tool: "fetch_url",
       input: { url: "https://x.test" },
-      sessionId: "sess-alice",
+      upn: "sess-alice",
       compute: computeA
     })
     await getOrCompute({
       tool: "fetch_url",
       input: { url: "https://x.test" },
-      sessionId: "sess-bob",
+      upn: "sess-bob",
       compute: computeB
     })
 
@@ -85,13 +85,13 @@ describe("tool-cache", () => {
     const aHit = await getOrCompute({
       tool: "fetch_url",
       input: { url: "https://x.test" },
-      sessionId: "sess-alice",
+      upn: "sess-alice",
       compute: computeA
     })
     const bHit = await getOrCompute({
       tool: "fetch_url",
       input: { url: "https://x.test" },
-      sessionId: "sess-bob",
+      upn: "sess-bob",
       compute: computeB
     })
     expect(aHit.value).toBe("alice-result")
@@ -107,11 +107,11 @@ describe("tool-cache", () => {
       calls++
       return calls
     }
-    await getOrCompute({ tool: "schema_dump", input: { a: 1, b: 2 }, sessionId: "s", compute })
+    await getOrCompute({ tool: "schema_dump", input: { a: 1, b: 2 }, upn: "s", compute })
     const second = await getOrCompute({
       tool: "schema_dump",
       input: { b: 2, a: 1 },
-      sessionId: "s",
+      upn: "s",
       compute
     })
     expect(calls).toBe(1)
@@ -127,18 +127,18 @@ describe("tool-cache", () => {
       return "v"
     }
 
-    await getOrCompute({ tool: "t", input: { k: 1 }, sessionId: "s", ttlMs: 10, compute })
+    await getOrCompute({ tool: "t", input: { k: 1 }, upn: "s", ttlMs: 10, compute })
     await new Promise((r) => setTimeout(r, 25))
 
     // Direct read: expired \u2192 null
-    const stale = await readCache({ tool: "t", input: { k: 1 }, sessionId: "s" })
+    const stale = await readCache({ tool: "t", input: { k: 1 }, upn: "s" })
     expect(stale).toBeNull()
 
     // getOrCompute re-runs the computation and replaces the entry.
     const refreshed = await getOrCompute({
       tool: "t",
       input: { k: 1 },
-      sessionId: "s",
+      upn: "s",
       ttlMs: 10,
       compute
     })
@@ -155,40 +155,40 @@ describe("tool-cache", () => {
     expect(after.files).toBe(0)
   })
 
-  it("rejects unsafe sessionIds so cache cannot escape its partition", async () => {
+  it("rejects unsafe upns so cache cannot escape its partition", async () => {
     const { writeCache, readCache } = await import("../src/platform/persistence/tool-cache.js")
-    // A sessionId containing path-traversal characters must be rejected
+    // A upn containing path-traversal characters must be rejected
     // outright \u2014 throwing loudly is preferred over silently mapping to a
     // shared "invalid" bucket, since the latter collapsed every malformed
     // caller into one shared partition (the bug class fixed in
     // wiring-contracts.test.ts B-AUDIT). identity.ts:resolveSession()
     // guarantees real callers always have a clean sid.
-    await expect(writeCache({ tool: "t", input: 1, sessionId: "../escape", value: "evil" })).rejects.toThrow(
-      /invalid sessionId/
+    await expect(writeCache({ tool: "t", input: 1, upn: "../escape", value: "evil" })).rejects.toThrow(
+      /invalid upn/
     )
-    await expect(readCache({ tool: "t", input: 1, sessionId: "../escape" })).rejects.toThrow(
-      /invalid sessionId/
+    await expect(readCache({ tool: "t", input: 1, upn: "../escape" })).rejects.toThrow(
+      /invalid upn/
     )
-    // An empty / whitespace sessionId is also rejected (no shared bucket).
-    await expect(writeCache({ tool: "t", input: 1, sessionId: "", value: "evil" })).rejects.toThrow(
-      /invalid sessionId/
+    // An empty / whitespace upn is also rejected (no shared bucket).
+    await expect(writeCache({ tool: "t", input: 1, upn: "", value: "evil" })).rejects.toThrow(
+      /invalid upn/
     )
     // A well-formed neighbouring session never sees any leaked entry.
-    const other = await readCache<string>({ tool: "t", input: 1, sessionId: "real-session" })
+    const other = await readCache<string>({ tool: "t", input: 1, upn: "real-session" })
     expect(other).toBeNull()
   })
 
   it("clearSessionCache removes only the targeted session", async () => {
     const { getOrCompute, clearSessionCache, getCacheStats } =
       await import("../src/platform/persistence/tool-cache.js")
-    await getOrCompute({ tool: "t", input: 1, sessionId: "keep-me", compute: async () => 1 })
-    await getOrCompute({ tool: "t", input: 1, sessionId: "drop-me", compute: async () => 2 })
+    await getOrCompute({ tool: "t", input: 1, upn: "keep-me", compute: async () => 1 })
+    await getOrCompute({ tool: "t", input: 1, upn: "drop-me", compute: async () => 2 })
 
     const removed = await clearSessionCache("drop-me")
     expect(removed.removed).toBeGreaterThan(0)
 
     const stats = await getCacheStats()
-    expect(stats.sessions).toBe(1)
+    expect(stats.users).toBe(1)
     expect(stats.files).toBe(1)
   })
 })

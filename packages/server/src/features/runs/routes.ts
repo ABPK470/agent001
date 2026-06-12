@@ -9,13 +9,19 @@ import { getAttachment, type AttachmentRow } from "../../platform/persistence/at
 import { flagRunMemory } from "../../platform/persistence/memory.js"
 import * as db from "../../platform/persistence/sqlite.js"
 import { MemoryValidationAction } from "../../shared/enums/memory.js"
-import { canAccessRun } from "../auth/application/access.js"
+import { AuthRequiredError, canAccessRun, requireSessionUpn } from "../auth/application/access.js"
 import { ContinuityError } from "../runs/continuity.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 
 export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
   app.get<{ Querystring: { threadId?: string } }>("/api/runs", async (req, reply) => {
-    const s = req.session
+    try {
+      requireSessionUpn(req.session)
+    } catch {
+      reply.code(401)
+      return { error: "Authentication required" }
+    }
+    const s = req.session!
     const threadId = req.query.threadId
     if (threadId) {
       const thread = db.getThread(threadId)
@@ -38,7 +44,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         })
       })
     }
-    const runs = db.listRunsWithUsageForUser({ upn: s?.upn ?? null })
+    const runs = db.listRunsWithUsageForUser({ upn: s.upn })
     return runs.map((run): Run => {
       const diff = orchestrator.getRunWorkspaceDiff(run.id)
       const pendingWorkspaceChanges = diff
@@ -148,6 +154,12 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.post<{ Body: { goal: string; agentId?: string; attachmentIds?: string[]; threadId?: string } }>(
     "/api/runs",
     async (req, reply) => {
+      try {
+        requireSessionUpn(req.session)
+      } catch {
+        reply.code(401)
+        return { error: "Authentication required" }
+      }
       const { goal, agentId, attachmentIds, threadId } = req.body
       if (!goal || typeof goal !== "string") {
         reply.code(400)
@@ -156,7 +168,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
 
       const resolvedAttachmentIds: string[] = []
       if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
-        const session = req.session
+        const session = req.session!
         const seen = new Set<string>()
         for (const id of attachmentIds) {
           if (typeof id !== "string" || seen.has(id)) continue
@@ -167,9 +179,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
             return { error: `attachment not found: ${id}` }
           }
           const allowed =
-            !session ||
-            session.isAdmin ||
-            (row.owner_upn && row.owner_upn === session.upn)
+            session.isAdmin || (row.owner_upn && row.owner_upn === session.upn)
           if (!allowed) {
             reply.code(403)
             return { error: `attachment not accessible: ${id}` }
@@ -193,7 +203,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
               attachmentIds: resolvedAttachmentIds,
               threadId
             },
-            req.session ?? null
+            req.session!
           )
           reply.code(201)
           return { runId, agentId: agent.id, attachmentIds: resolvedAttachmentIds }
@@ -202,11 +212,15 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         const runId = orchestrator.startRun(
           goal,
           { attachmentIds: resolvedAttachmentIds, threadId },
-          req.session ?? null
+          req.session!
         )
         reply.code(201)
         return { runId, attachmentIds: resolvedAttachmentIds }
       } catch (err) {
+        if (err instanceof AuthRequiredError) {
+          reply.code(401)
+          return { error: err.message }
+        }
         if (err instanceof ContinuityError) {
           reply.code(400)
           return { error: err.message }

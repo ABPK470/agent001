@@ -67,7 +67,7 @@ describe("run routes", () => {
     })
   })
 
-  it("passes null session for unauthenticated callers", async () => {
+  it("rejects unauthenticated callers with 401", async () => {
     const built = await buildApp(null)
     app = built.app
 
@@ -77,8 +77,7 @@ describe("run routes", () => {
       payload: { goal: "anonymous run" }
     })
 
-    expect(res.statusCode).toBe(201)
-    const [, , forwardedSession] = built.startRun.mock.calls[0] ?? []
-    expect(forwardedSession).toBeNull()
+    expect(res.statusCode).toBe(401)
+    expect(built.startRun).not.toHaveBeenCalled()
   })
 })

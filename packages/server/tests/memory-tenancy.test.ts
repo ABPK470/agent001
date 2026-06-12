@@ -56,8 +56,8 @@ function seedRun(runId: string, threadId: string, upn: string, goal = "goal"): v
     .run(threadId, upn)
   testDb
     .prepare(
-      `INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, thread_id, upn, display_name)
-       VALUES (?, ?, 'completed', NULL, 1, NULL, NULL, NULL, datetime('now'), datetime('now'), NULL, ?, ?, ?)`
+      `INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
+       VALUES (?, ?, 'completed', NULL, 1, NULL, NULL, NULL, datetime('now'), datetime('now'), ?, ?, ?)`
     )
     .run(runId, goal, threadId, upn, upn)
 }
@@ -122,7 +122,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         source: "agent",
         confidence: 0.9,
         runId: `r-a-${tier}`,
-        sessionId: "default",
         upn: "alice@corp"
       })
       mem.ingestTurn({
@@ -132,14 +131,12 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         source: "agent",
         confidence: 0.9,
         runId: `r-b-${tier}`,
-        sessionId: "default",
         upn: "bob@corp"
       })
     }
 
     const aliceCtx = await mem.retrieveContext("cross-tier-leak-canary shared-keyword", {
-      upn: "alice@corp",
-      sessionId: "default"
+      upn: "alice@corp"
     })
     for (const r of aliceCtx.results) {
       expect(r.entry.content).not.toContain("bravo")
@@ -147,8 +144,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     }
 
     const bobCtx = await mem.retrieveContext("cross-tier-leak-canary shared-keyword", {
-      upn: "bob@corp",
-      sessionId: "default"
+      upn: "bob@corp"
     })
     for (const r of bobCtx.results) {
       expect(r.entry.content).not.toContain("alpha")
@@ -224,7 +220,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       source: "tool",
       confidence: 0.7,
       runId: "ra",
-      sessionId: "default",
       upn: "alice@corp"
     })
     const bobFirst = mem.ingestTurn({
@@ -234,7 +229,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       source: "tool",
       confidence: 0.7,
       runId: "rb",
-      sessionId: "default",
       upn: "bob@corp"
     })
 
@@ -250,13 +244,12 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       source: "tool",
       confidence: 0.7,
       runId: "ra",
-      sessionId: "default",
       upn: "alice@corp"
     })
     expect(aliceSecond).toBeNull()
   })
 
-  it("anonymous (upn=null) callers see only legacy/shared rows, never named-user data", async () => {
+  it("retrieveContext without upn returns empty (agent requires authentication)", async () => {
     const mem = await setupMemory()
 
     mem.ingestTurn({
@@ -268,24 +261,10 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
       runId: "ra",
       upn: "alice@corp"
     })
-    mem.ingestTurn({
-      tier: "semantic",
-      role: "system",
-      content: "legacy unowned row marker-anon-test-aaa",
-      source: "system",
-      confidence: 0.9,
-      runId: "r-legacy",
-      upn: null
-    })
 
-    const anonHits = await mem.searchEntries("marker-anon-test-aaa", {
-      tier: "semantic",
-      budget: { maxTokens: 4000, maxItems: 5 },
-      upn: null
-    })
-    // Anonymous should see the legacy row (upn IS NULL) but NOT alice's row.
-    expect(anonHits.length).toBe(1)
-    expect(anonHits[0]!.entry.content).toContain("legacy unowned")
+    const empty = await mem.retrieveContext("marker-anon-test-aaa", {})
+    expect(empty.results).toHaveLength(0)
+    expect(empty.context).toBe("")
   })
 
   it("episodic upsert is scoped per-tenant (alice's failure does not overwrite bob's success)", async () => {
@@ -426,7 +405,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         "Refactor any failed scripts and migrate the data on success.",
       status: "completed",
       agentId: null,
-      sessionId: null,
       tools: ["read_file"],
       stepCount: 4,
       trace: [],
@@ -463,7 +441,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         "This refactor reclaims about 12 percent of the heap on success.",
       status: "completed",
       agentId: null,
-      sessionId: null,
       tools: ["mssql"],
       stepCount: 2,
       trace: [],
@@ -499,7 +476,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         "Refactor any failed steps until success is completed.",
       status: "completed",
       agentId: null,
-      sessionId: null,
       tools: ["fs"],
       stepCount: 3,
       trace: [],
@@ -536,7 +512,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         "alpha-followup-roundtrip-marker.",
       status: "completed",
       agentId: null,
-      sessionId: null,
       tools: ["mssql"],
       stepCount: 2,
       trace: [],
@@ -552,7 +527,6 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
         "bravo-followup-roundtrip-marker.",
       status: "completed",
       agentId: null,
-      sessionId: null,
       tools: ["mssql"],
       stepCount: 2,
       trace: [],
@@ -623,16 +597,16 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     }
 
     const threadIdAnchor = "activeRun?.threadId"
-    const upnAnchor = "activeRun?.ownerUpn"
+    const upnAnchor = /activeRun\?\.ownerUpn|^ownerUpn$/
 
     for (const expr of retrieveThreadIds) {
       expect(expr, "retrieveContext threadId must reference activeRun?.threadId").toContain(threadIdAnchor)
     }
     for (const expr of retrieveUpns) {
-      expect(expr, "retrieveContext upn must reference activeRun?.ownerUpn").toContain(upnAnchor)
+      expect(expr, "retrieveContext upn must reference activeRun?.ownerUpn").toMatch(upnAnchor)
     }
     for (const expr of ingestUpns) {
-      expect(expr, "ingestRunTurns upn must reference activeRun?.ownerUpn").toContain(upnAnchor)
+      expect(expr, "ingestRunTurns upn must reference owner identity").toMatch(upnAnchor)
     }
   })
 })

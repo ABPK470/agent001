@@ -57,16 +57,16 @@ describe("Layer C — C2: working memory respects WORKING_SESSION_WINDOW_H cutof
       .run(ALICE_THREAD, ALICE)
     fixture.db
       .prepare(
-        `INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, thread_id, upn, display_name)
-         VALUES ('run-old-c2', 'old', 'completed', NULL, 1, NULL, NULL, NULL, ?, ?, NULL, ?, ?, ?)`
+        `INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
+         VALUES ('run-old-c2', 'old', 'completed', NULL, 1, NULL, NULL, NULL, ?, ?, ?, ?, ?)`
       )
       .run(oldStamp, oldStamp, ALICE_THREAD, ALICE, ALICE)
     fixture.db
       .prepare(
         `
       INSERT INTO memory_entries
-        (id, tier, role, content, metadata, source, confidence, salience, access_count, session_id, run_id, parent_id, upn, shared, created_at, updated_at)
-      VALUES (?, 'working', 'system', ?, '{}', 'agent', 0.9, 0.5, 0, NULL, 'run-old-c2', NULL, ?, 0, ?, ?)
+        (id, tier, role, content, metadata, source, confidence, salience, access_count, run_id, parent_id, upn, shared, created_at, updated_at)
+      VALUES (?, 'working', 'system', ?, '{}', 'agent', 0.9, 0.5, 0, 'run-old-c2', NULL, ?, 0, ?, ?)
     `
       )
       .run(

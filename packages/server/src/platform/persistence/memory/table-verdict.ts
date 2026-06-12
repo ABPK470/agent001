@@ -123,11 +123,11 @@ export function recordTableVerdict(input: TableVerdictInput): TableVerdict {
       `
     INSERT INTO memory_entries (
       id, tier, role, content, metadata, source, confidence, salience,
-      access_count, session_id, run_id, parent_id, upn, shared,
+      access_count, run_id, parent_id, upn, shared,
       created_at, updated_at
     ) VALUES (
       @id, @tier, @role, @content, @metadata, @source, @confidence, @salience,
-      0, @session_id, @run_id, NULL, @upn, @shared,
+      0, @run_id, NULL, @upn, @shared,
       @created_at, @updated_at
     )
   `
@@ -143,7 +143,6 @@ export function recordTableVerdict(input: TableVerdictInput): TableVerdict {
       // Verdicts are inherently high-value: a deliberate role classification
       // is worth more than the prose-length salience heuristic would award.
       salience: 0.9,
-      session_id: null,
       run_id: input.runId ?? null,
       upn: input.upn ?? null,
       shared: (input.shared ?? true) ? 1 : 0,

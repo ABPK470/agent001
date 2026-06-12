@@ -41,12 +41,8 @@ export async function retrieveContext(
     threadId?: string
     runId?: string
     budget?: MemoryBudget
-    /**
-     * Owner UPN — scopes ALL tiers (working/episodic/semantic) to this user
-     * plus any rows explicitly marked shared=true. Pass null/undefined for
-     * unauthenticated callers; those see only legacy/global rows.
-     */
-    upn?: string | null
+    /** Owner UPN — required for agent runs; scopes all tiers to this user (+ shared rows). */
+    upn?: string
     /** Optional host — used to read the live catalog schema fingerprint. */
     host?: import("@mia/agent").AgentHost
   }
@@ -55,6 +51,15 @@ export async function retrieveContext(
   results: UnifiedSearchResult[]
   perTier: { working: string; episodic: string; semantic: string }
 }> {
+  const ownerUpn = opts?.upn?.trim()
+  if (!ownerUpn) {
+    return {
+      context: "",
+      results: [],
+      perTier: { working: "", episodic: "", semantic: "" }
+    }
+  }
+
   const budget = opts?.budget ?? DEFAULT_BUDGET
   const now = new Date()
   const allResults: UnifiedSearchResult[] = []
@@ -71,13 +76,13 @@ export async function retrieveContext(
       budget: tierBudget,
       threadId: tier === MemoryTier.Working ? opts?.threadId : undefined,
       excludeRunId: opts?.runId,
-      upn: opts?.upn ?? null
+      upn: ownerUpn
     })
     allResults.push(...results)
   }
 
   // Also search procedural memories (kept for activation tracking, not injected into prompt)
-  const procedures = searchProcedures(goal, 3, opts?.upn ?? null)
+  const procedures = searchProcedures(goal, 3, ownerUpn)
 
   // Phase 5: demote (don't delete) entries whose provenance no longer
   // matches the current environment. A row stamped with a stale
