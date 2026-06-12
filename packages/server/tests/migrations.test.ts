@@ -31,8 +31,18 @@ describe("runMigrations", () => {
     const runsCols = testDb.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>
     expect(runsCols.some((c) => c.name === "thread_id")).toBe(true)
 
-    const runsColsAfter = testDb.prepare("PRAGMA table_info(runs)").all() as Array<{ name: string }>
-    expect(runsColsAfter.some((c) => c.name === "session_id")).toBe(false)
+    expect(runsCols.some((c) => c.name === "session_id")).toBe(false)
+
+    const convCols = testDb.prepare("PRAGMA table_info(conversations)").all() as Array<{ name: string }>
+    expect(convCols.some((c) => c.name === "thread_id")).toBe(true)
+
+    const attachSql = (
+      testDb.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments'").get() as {
+        sql: string
+      }
+    ).sql
+    expect(attachSql).toContain("'user_draft'")
+    expect(attachSql).not.toContain("'session'")
   })
 
   it("is idempotent across repeated runs", () => {

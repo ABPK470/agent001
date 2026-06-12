@@ -85,12 +85,9 @@ const BASELINE_SQL = `
     );
 
     -- ── runs: every run is owned by a user (hard FK on upn). ─────
-    -- session_id is captured for traceability but uses SET NULL on
-    -- delete: logout (DELETE FROM sessions) must NOT cascade-wipe
-    -- the user's chat history. parent_run_id and agent_id likewise
-    -- SET NULL so deleting a parent run or agent definition leaves
-    -- the child row intact for audit. The legacy 'data' column has
-    -- been dropped (was never read).
+    -- Continuity is thread_id + upn; auth cookies live in sessions only.
+    -- parent_run_id and agent_id SET NULL so deleting a parent run or
+    -- agent definition leaves the child row intact for audit.
     CREATE TABLE IF NOT EXISTS runs (
       id             TEXT PRIMARY KEY,
       goal           TEXT NOT NULL,
@@ -101,14 +98,12 @@ const BASELINE_SQL = `
       error          TEXT,
       parent_run_id  TEXT REFERENCES runs(id) ON DELETE SET NULL,
       agent_id       TEXT REFERENCES agent_definitions(id) ON DELETE SET NULL,
-      session_id     TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
       thread_id      TEXT REFERENCES threads(id) ON DELETE SET NULL,
       upn            TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
       display_name   TEXT NOT NULL,
       created_at     TEXT NOT NULL,
       completed_at   TEXT
     );
-    CREATE INDEX IF NOT EXISTS idx_runs_session ON runs(session_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_runs_upn     ON runs(upn, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_runs_parent  ON runs(parent_run_id);
 
@@ -169,20 +164,16 @@ const BASELINE_SQL = `
     -- as <prior_turns>, the model treated its own paraphrase as
     -- evidence, and confabulated quantified output. tool_results stores
     -- the raw structured payload of every tool call so a later turn
-    -- (same session) can ground on actual rows instead of paraphrase.
+    -- (same thread) can ground on actual rows instead of paraphrase.
     --
     -- result_json is JSON-text (SQLite has no native JSON column type).
     -- Capped writers MUST enforce {row_count, bytes, truncated} so a
     -- 10M-row export never lands here verbatim — see writer in
     -- agent/src/agent/iteration-tool-round.ts.
-    --
-    -- session_id is denormalised for fast loader queries on the hot
-    -- path (<prior_results> rendered every turn). FK still points to
-    -- runs(id) for cascade-on-purge.
+    -- Thread scope comes from JOIN on runs.thread_id at load time.
     CREATE TABLE IF NOT EXISTS tool_results (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
       run_id        TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
-      session_id    TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
       tool_call_id  TEXT NOT NULL,
       tool_name     TEXT NOT NULL,
       args_json     TEXT NOT NULL DEFAULT '{}',
@@ -194,7 +185,6 @@ const BASELINE_SQL = `
       created_at    TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_tool_results_run     ON tool_results(run_id);
-    CREATE INDEX IF NOT EXISTS idx_tool_results_session ON tool_results(session_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_tool_results_tool    ON tool_results(tool_name);
 
     -- ── Inter-agent bus messages ─────────────────────────────────
@@ -336,16 +326,13 @@ const BASELINE_SQL = `
     );
 
     -- ── Attachments ──────────────────────────────────────────────
-    -- session_id and run_id are nullable to support 'workspace_asset'
-    -- scope (cross-session / cross-run org assets). Both FKs SET NULL
-    -- on parent delete so logout never wipes the user's uploads — the
-    -- user (owner_upn) is the durable owner.
+    -- user_draft = pre-run staging owned by owner_upn; run_id nullable
+    -- for workspace_asset scope (cross-run org assets).
     CREATE TABLE IF NOT EXISTS attachments (
       id              TEXT PRIMARY KEY,
       scope           TEXT NOT NULL
-        CHECK (scope IN ('run','session','workspace_asset')),
-      run_id          TEXT REFERENCES runs(id)     ON DELETE SET NULL,
-      session_id      TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
+        CHECK (scope IN ('run','user_draft','workspace_asset')),
+      run_id          TEXT REFERENCES runs(id) ON DELETE SET NULL,
       owner_upn       TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
       original_name   TEXT NOT NULL,
       normalized_name TEXT NOT NULL,
@@ -367,7 +354,6 @@ const BASELINE_SQL = `
       retention_until TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_attachments_run     ON attachments(run_id);
-    CREATE INDEX IF NOT EXISTS idx_attachments_session ON attachments(session_id);
     CREATE INDEX IF NOT EXISTS idx_attachments_owner   ON attachments(owner_upn);
     CREATE INDEX IF NOT EXISTS idx_attachments_hash    ON attachments(content_hash);
 
@@ -802,14 +788,12 @@ const BASELINE_SQL = `
       run_id     TEXT REFERENCES runs(id)     ON DELETE CASCADE,
       step_id    TEXT,
       owner_upn  TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
-      session_id TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
       actions    TEXT NOT NULL DEFAULT '[]',
       read       INTEGER NOT NULL DEFAULT 0,
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_notifications_read     ON notifications(read, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_notifications_owner    ON notifications(owner_upn, created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_notifications_session  ON notifications(session_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_notifications_run      ON notifications(run_id);
 
     CREATE TABLE IF NOT EXISTS api_requests (
@@ -849,6 +833,7 @@ const BASELINE_SQL = `
       sender_id     TEXT NOT NULL,
       sender_name   TEXT,
       active_run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
+      thread_id     TEXT REFERENCES threads(id) ON DELETE SET NULL,
       created_at    TEXT NOT NULL,
       updated_at    TEXT NOT NULL,
       UNIQUE(channel_type, sender_id)
@@ -907,7 +892,6 @@ const BASELINE_SQL = `
       confidence   REAL NOT NULL DEFAULT 0.5,
       salience     REAL NOT NULL DEFAULT 0.5,
       access_count INTEGER NOT NULL DEFAULT 0,
-      session_id   TEXT REFERENCES sessions(sid)      ON DELETE SET NULL,
       run_id       TEXT REFERENCES runs(id)           ON DELETE SET NULL,
       parent_id    TEXT REFERENCES memory_entries(id) ON DELETE SET NULL,
       upn          TEXT,
@@ -916,7 +900,6 @@ const BASELINE_SQL = `
       updated_at   TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_me_tier    ON memory_entries(tier);
-    CREATE INDEX IF NOT EXISTS idx_me_session ON memory_entries(session_id);
     CREATE INDEX IF NOT EXISTS idx_me_run     ON memory_entries(run_id);
     CREATE INDEX IF NOT EXISTS idx_me_created ON memory_entries(created_at);
     CREATE INDEX IF NOT EXISTS idx_me_upn     ON memory_entries(upn);
@@ -929,14 +912,12 @@ const BASELINE_SQL = `
       success_count INTEGER NOT NULL DEFAULT 1,
       failure_count INTEGER NOT NULL DEFAULT 0,
       run_id        TEXT REFERENCES runs(id)      ON DELETE SET NULL,
-      session_id    TEXT REFERENCES sessions(sid) ON DELETE SET NULL,
       upn           TEXT,
       shared        INTEGER NOT NULL DEFAULT 0,
       created_at    TEXT NOT NULL,
       updated_at    TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS idx_proc_upn     ON procedural_memories(upn);
-    CREATE INDEX IF NOT EXISTS idx_proc_session ON procedural_memories(session_id);
     CREATE INDEX IF NOT EXISTS idx_proc_shared  ON procedural_memories(shared);
 
     CREATE TABLE IF NOT EXISTS memory_vectors (

@@ -1,14 +1,11 @@
 /**
- * Database migrations runner 
+ * Database migrations runner
  *
  * Add `0002_foo.ts`, import it below, append to MIGRATIONS.
  */
 
 import type Database from "better-sqlite3"
 import { runBaselineMigration } from "./0001_baseline.js"
-import { runConversationThreadIdMigration } from "./0002_conversation_thread_id.js"
-import { runDropSessionIdColumnsMigration } from "./0003_drop_session_id_columns.js"
-import { runAttachmentScopeUserDraftMigration } from "./0004_attachment_scope_user_draft.js"
 
 export interface Migration {
   version: number
@@ -18,10 +15,7 @@ export interface Migration {
 
 // Ordered list of migrations — append only; never reorder applied migrations.
 export const MIGRATIONS: readonly Migration[] = [
-  { version: 1, name: "baseline", up: runBaselineMigration },
-  { version: 2, name: "conversation_thread_id", up: runConversationThreadIdMigration },
-  { version: 3, name: "drop_session_id_columns", up: runDropSessionIdColumnsMigration },
-  { version: 4, name: "attachment_scope_user_draft", up: runAttachmentScopeUserDraftMigration }
+  { version: 1, name: "baseline", up: runBaselineMigration }
 ]
 
 // Apply pending migrations once each. Called on server boot.
@@ -84,5 +78,3 @@ function recordMigration(db: Database.Database, migration: Migration): void {
     "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, datetime('now'))"
   ).run(migration.version, migration.name)
 }
-
-
