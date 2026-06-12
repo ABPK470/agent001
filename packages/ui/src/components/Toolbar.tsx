@@ -264,14 +264,7 @@ export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, onShowChatHome,
                   admin
                 </span>
               )}
-              <button
-                onClick={() => onShowChatHome?.()}
-                title="Open chat home"
-                className="flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-text hover:bg-overlay-hover transition-colors"
-              >
-                <MessageSquare size={15} />
-              </button>
-              <button
+               <button
                 onClick={() => onSwitchUi?.()}
                 title="Switch to terminal UI (MI:A/term)"
                 className="flex items-center justify-center w-9 h-9 rounded-lg text-accent hover:text-accent-hover hover:bg-overlay-hover transition-colors"
@@ -280,12 +273,20 @@ export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, onShowChatHome,
                 <Terminal size={16} />
               </button>
               <button
+                onClick={() => onShowChatHome?.()}
+                title="Open chat home"
+                className="flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-text hover:bg-overlay-hover transition-colors"
+              >
+                <MessageSquare size={15} />
+              </button>
+              <button
                 onClick={() => onSwitchUser?.()}
                 title="Switch user"
                 className="flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-text hover:bg-overlay-hover transition-colors"
               >
                 <LogOut size={15} />
               </button>
+              
             </div>
           )}
         </div>
