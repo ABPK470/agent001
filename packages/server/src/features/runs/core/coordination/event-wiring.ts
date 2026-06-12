@@ -1,5 +1,6 @@
 import type { DomainEvent, Unsubscribe } from "@mia/agent"
 import { EventType } from "@mia/agent"
+import { presentToolCall, serializeToolCallArgs } from "@mia/shared-types"
 import { broadcast, toBroadcastData } from "../../../../platform/events/broadcaster.js"
 import * as db from "../../../../platform/persistence/sqlite.js"
 import type { NotificationOpts } from "../../../../ports/orchestration.js"
@@ -78,16 +79,8 @@ export function wireEventBroadcasting(
         const toolName = (data["action"] as string) ?? "unknown"
         const stepId = data["stepId"] as string
         const input = (data["input"] as Record<string, unknown>) ?? {}
-        const argsFormatted = JSON.stringify(input, null, 2)
-        const keys = Object.keys(input)
-        // Keep the full single-arg value; the UI clips with CSS ellipsis
-        // so users see "…" when the available width runs out.
-        const argsSummary =
-          keys.length > 0
-            ? keys.length === 1
-              ? `${keys[0]}=${JSON.stringify(input[keys[0]])}`
-              : `${keys.length} args`
-            : ""
+        const { summary: argsSummary } = presentToolCall(toolName, input)
+        const argsFormatted = serializeToolCallArgs(input)
         // invocationId MUST be present so the UI can pair tool-call with
         // its later tool-result/tool-error entry. Without it, historical
         // trace replay (TermChat / AgentChat / IOE chat) drops the result

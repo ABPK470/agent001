@@ -6,6 +6,7 @@
  * Includes agent picker to select which configured agent to use.
  */
 
+import { toolCallDetailPreview } from "@mia/shared-types"
 import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronRight, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
@@ -135,52 +136,8 @@ function formatToolOutput(output: Record<string, unknown>, error: string | null)
   catch { return String(result ?? "") }
 }
 
-// Brief detail extractor — pulls the most human-readable arg from tool inputs
 function getToolDetail(tool: string, input: Record<string, unknown>): string | null {
-  switch (tool) {
-    case "query_mssql":
-    case "export_query_to_file": {
-      const q = String(input["query"] ?? "").trim()
-      if (!q) return null
-      // First meaningful line, stripped of leading whitespace, max 120 chars
-      const firstLine = q.replace(/\s+/g, " ").slice(0, 120)
-      return firstLine + (q.length > 120 ? "…" : "")
-    }
-    case "search_catalog":
-      return String(input["query"] ?? input["q"] ?? "")  || null
-    case "inspect_definition":
-      return String(input["name"] ?? input["objectName"] ?? "") || null
-    case "explore_mssql_schema":
-      return String(input["table"] ?? input["schema"] ?? "") || null
-    case "read_file":
-    case "write_file":
-    case "append_file":
-    case "replace_in_file":
-    case "list_directory":
-      return String(input["path"] ?? input["filePath"] ?? "") || null
-    case "search_files":
-      return String(input["pattern"] ?? input["query"] ?? "") || null
-    case "run_command":
-      return String(input["command"] ?? "").slice(0, 120) || null
-    case "fetch_url":
-    case "browse_web":
-      return String(input["url"] ?? "") || null
-    case "sync_preview":
-    case "sync_execute": {
-      const parts: string[] = []
-      if (input["planId"]) parts.push(`planId=${input["planId"]}`)
-      if (input["confirm"] !== undefined) parts.push(`confirm=${input["confirm"]}`)
-      if (input["entityType"]) parts.push(`${input["entityType"]}`)
-      if (input["entityId"]) parts.push(`#${input["entityId"]}`)
-      return parts.join(" ") || null
-    }
-    default:
-      // Fallback: first string-valued arg
-      for (const v of Object.values(input)) {
-        if (typeof v === "string" && v.trim()) return v.slice(0, 100)
-      }
-      return null
-  }
+  return toolCallDetailPreview(tool, input)
 }
 
 // ── Workspace changes card ─────────────────────────────────────────

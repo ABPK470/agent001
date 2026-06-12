@@ -34,6 +34,7 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@mia/shared-types": "*",
     "@mia/sync": "*",
     "@mia/shared-enums": "*",
     "mssql": "^12.2.1",

@@ -5,6 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto"
+import { stripRuntimeToolArgs } from "@mia/shared-types"
 import type { ExecutableTool } from "../../../domain/agent-types.js"
 import {
   type ExecutionRecord,
@@ -56,7 +57,8 @@ export function governTool(
     parameters: tool.parameters,
 
     async execute(args: Record<string, unknown>): Promise<string> {
-      const step = createToolStep(tool.name, args, state)
+      const persistedArgs = stripRuntimeToolArgs(args)
+      const step = createToolStep(tool.name, persistedArgs, state)
       state.run.steps.push(step)
 
       // 1. Policy check — can this tool run?
@@ -79,7 +81,7 @@ export function governTool(
           })
           // Emit approval.required event so the orchestrator can create a notification
           await services.eventBus.publish(
-            approvalRequired(state.run.id, step.id, tool.name, args, policyResult)
+            approvalRequired(state.run.id, step.id, tool.name, persistedArgs, policyResult)
           )
           await services.runRepo.save(state.run)
           return `BLOCKED: ${policyResult}. This tool call was prevented by a governance policy. The user has been notified and may adjust policies and resume the run.`
@@ -111,7 +113,7 @@ export function governTool(
         action: "tool.invoked",
         resourceType: "AgentRun",
         resourceId: state.run.id,
-        detail: { tool: tool.name, args, stepId: step.id }
+        detail: { tool: tool.name, args: persistedArgs, stepId: step.id }
       })
 
       // 4. Execute the tool — with timeout + abort + retry on transient errors

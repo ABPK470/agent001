@@ -7,6 +7,11 @@
  * contents in a readable block rather than raw escaped JSON.
  */
 
+import {
+  presentToolCallFromFormatted,
+  stripRuntimeToolArgs,
+  type ToolCallArtifact,
+} from "@mia/shared-types"
 import { Check, Copy } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { C } from "../widgets/ioe/constants"
@@ -151,63 +156,37 @@ export function CodeBlock({
   )
 }
 
-// ── Tool arg extraction ──────────────────────────────────────────
+// ── Tool arg extraction (delegates to @mia/shared-types) ─────────
 
-/** Which field in each tool's input holds the "main code" artifact. */
-const TOOL_CODE_FIELDS: Record<string, { field: string; lang: string }> = {
-  query_mssql:     { field: "query",       lang: "sql" },
-  run_command:     { field: "command",     lang: "sh"  },
-  write_file:      { field: "content",     lang: "auto" },
-  append_file:     { field: "content",     lang: "auto" },
-  replace_in_file: { field: "new_content", lang: "auto" },
-  // fetch_url has url but that's not code, skip intentionally
+export { stripRuntimeToolArgs as sanitizeToolArgs }
+
+export function parseToolArgsFormatted(argsFormatted: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(argsFormatted) as unknown
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
+    return stripRuntimeToolArgs(parsed as Record<string, unknown>)
+  } catch {
+    return null
+  }
 }
 
-function guessLangFromPath(path: string): string {
-  const ext = (path ?? "").split(".").pop()?.toLowerCase() ?? ""
-  const MAP: Record<string, string> = {
-    ts: "ts", tsx: "ts", js: "js", jsx: "js", mjs: "js",
-    sql: "sql", py: "python", sh: "sh", bash: "sh", zsh: "sh",
-    json: "json", html: "html", css: "css", scss: "scss", md: "markdown",
-  }
-  return MAP[ext] ?? "text"
+/** Human-readable tool input for the trace expand panel. */
+export function formatToolInputDisplay(toolName: string, argsFormatted: string): string {
+  return presentToolCallFromFormatted(toolName, argsFormatted).display
 }
 
 /**
  * Extract the primary code artifact from tool call arguments.
- * Accepts either a parsed args object (as used in StepTimeline step.input)
- * or a JSON string (as used in TraceEntry.argsFormatted from the IOE trace).
- *
- * Returns null when the tool doesn't produce displayable code, or when there
- * is no non-empty string value in the expected field.
+ * Accepts either a parsed args object or persisted argsFormatted JSON.
  */
 export function extractToolCode(
   toolName: string,
   args: Record<string, unknown> | string,
-): { code: string; lang: string; field: string } | null {
-  const parsed: Record<string, unknown> | null =
-    typeof args === "string"
-      ? (() => { try { return JSON.parse(args) as Record<string, unknown> } catch { return null } })()
-      : args
-
-  if (!parsed) return null
-
-  const spec = TOOL_CODE_FIELDS[toolName]
-  if (!spec) return null
-
-  const code = parsed[spec.field]
-  if (typeof code !== "string" || !code.trim()) return null
-
-  const lang =
-    spec.lang === "auto"
-      ? guessLangFromPath(
-          (parsed.path as string | undefined) ??
-          (parsed.file_path as string | undefined) ??
-          "",
-        )
-      : spec.lang
-
-  return { code, lang, field: spec.field }
+): ToolCallArtifact | null {
+  if (typeof args === "string") {
+    return presentToolCallFromFormatted(toolName, args).artifact
+  }
+  return presentToolCallFromFormatted(toolName, JSON.stringify(args)).artifact
 }
 
 // ── Pipe-delimited table parser ──────────────────────────────────

@@ -1253,3 +1253,19 @@ export interface RollbackPreview {
   wouldSkip: Array<{ effectId: string; target: string; reason: string }>
   wouldFail: Array<{ effectId: string; target: string; reason: string }>
 }
+
+export {
+  TOOL_PRESENTATION,
+  TOOL_TRACE_ARG,
+  presentToolCall,
+  presentToolCallFromFormatted,
+  serializeToolCallArgs,
+  stripRuntimeToolArgs,
+  toolCallDetailPreview,
+  toolCallPreview
+} from "./tool-call-presentation.js"
+export type {
+  ToolCallArtifact,
+  ToolCallPresentation,
+  ToolPresentationSpec
+} from "./tool-call-presentation.js"

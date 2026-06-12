@@ -5,6 +5,7 @@
  * views, widgets, runs, logs, audit, connection status.
  */
 
+import { presentToolCall, serializeToolCallArgs } from "@mia/shared-types"
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import { api } from "./api"
@@ -1380,15 +1381,8 @@ export const useStore = create<AppState>()(
             const toolName = (data["action"] as string) ?? "unknown"
             const stepId = data["stepId"] as string
             const input = (data["input"] as Record<string, unknown>) ?? {}
-            const argsFormatted = JSON.stringify(input, null, 2)
-            const keys = Object.keys(input)
-            // Don't pre-truncate here — the pill row uses CSS
-            // text-ellipsis to clip with "..." when it overflows the
-            // available width. Slicing in JS would lop the path mid-word
-            // with no ellipsis, hiding from the user that there's more.
-            const argsSummary = keys.length > 0
-              ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}` : `${keys.length} args`
-              : ""
+            const { summary: argsSummary } = presentToolCall(toolName, input)
+            const argsFormatted = serializeToolCallArgs(input)
             const traceEntry: TraceEntry = { kind: "tool-call", invocationId: stepId, toolCallId: null, tool: toolName, argsSummary, argsFormatted }
             store.addTrace(traceEntry)
             const runId = (data["runId"] as string) ?? get().activeRunId

@@ -12,7 +12,13 @@ import { api } from "../api"
 import { AskUserPrompt } from "../components/AskUserPrompt"
 import { AttachmentChips, type PendingAttachment } from "../components/AttachmentChips"
 import { ChatScrollProvider, useChatScroll } from "../components/ChatScrollContext"
-import { CodeBlock, extractToolCode } from "../components/CodeBlock"
+import { presentToolCallFromFormatted, toolCallPreview } from "@mia/shared-types"
+import {
+  CodeBlock,
+  extractToolCode,
+  formatToolInputDisplay,
+  parseToolArgsFormatted,
+} from "../components/CodeBlock"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
 import { SmartAnswer } from "../components/SmartAnswer"
 import { STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
@@ -617,31 +623,33 @@ function extractToolTarget(tool: string, argsFormatted: string, argsSummary: str
 
   // Args JSON path — preferred, exposes the real field names.
   if (args) {
+    const displayArgs = parseToolArgsFormatted(argsFormatted) ?? args
+    const preview = toolCallPreview(tool, displayArgs)
+    if (preview) return preview
     for (const k of ["path", "filePath", "file", "filename", "filepath", "target"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (typeof v === "string" && v) return basename(v)
     }
     for (const k of ["paths", "files"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") return basename(v[0])
     }
     for (const k of ["command", "cmd"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (typeof v === "string" && v) return shortCommand(v)
     }
     for (const k of ["url", "href"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (typeof v === "string" && v) return urlHost(v)
     }
     for (const k of ["query", "pattern", "q", "search"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (typeof v === "string" && v) return shortQuery(v)
     }
     for (const k of ["agent", "agentId", "delegateTo", "to"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (typeof v === "string" && v) return v
     }
-    void tool
   }
 
   // Fallback — argsSummary has the form `key="value"` for single-arg tools.
@@ -962,20 +970,8 @@ function compactToolPreview(text: string): string {
 // the raw argsFormatted JSON. Always preferred over the persisted
 // `argsSummary`, which historically was sliced to 60 chars server-side.
 // Single-arg → `key="value"`. Multi-arg → `N args`.
-function buildArgsSummary(argsFormatted: string): string {
-  try {
-    const parsed = JSON.parse(argsFormatted) as unknown
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return ""
-    const entries = Object.entries(parsed as Record<string, unknown>)
-    if (entries.length === 0) return ""
-    if (entries.length === 1) {
-      const [k, v] = entries[0]
-      return `${k}=${JSON.stringify(v)}`
-    }
-    return `${entries.length} args`
-  } catch {
-    return ""
-  }
+function buildArgsSummary(tool: string, argsFormatted: string): string {
+  return presentToolCallFromFormatted(tool, argsFormatted).summary
 }
 
 function humanizeStepName(stepName: string): string {
@@ -1430,7 +1426,7 @@ function buildResponseParts(
             // traces (which had argsSummary sliced to 60 chars) also
             // render the full single-arg value. Fall back to the
             // persisted argsSummary only if JSON parsing fails.
-            summary: buildArgsSummary(entry.argsFormatted) || entry.argsSummary || compactToolPreview(entry.argsFormatted),
+            summary: buildArgsSummary(entry.tool, entry.argsFormatted) || entry.argsSummary || compactToolPreview(entry.argsFormatted),
             argsFormatted: entry.argsFormatted,
             // details holds the OUTPUT only — populated on tool-result /
             // tool-error. argsFormatted holds the INPUT separately.
@@ -1656,6 +1652,7 @@ function ToolPill({ row, isLast, isLiveRun = false }: { row: ToolRow; isLast: bo
   const hasOutput = Boolean(row.details && row.details.trim().length > 0)
   const canExpand = hasInput || hasOutput
   const extractedInput = row.argsFormatted ? extractToolCode(row.tool, row.argsFormatted) : null
+  const displayInput = row.argsFormatted ? formatToolInputDisplay(row.tool, row.argsFormatted) : ""
   const extractedOutput = row.details ? extractToolCode(row.tool, row.details) : null
   const isError = row.status === "error"
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -1705,7 +1702,7 @@ function ToolPill({ row, isLast, isLiveRun = false }: { row: ToolRow; isLast: bo
               {extractedInput ? (
                 <CodeBlock code={extractedInput.code} lang={extractedInput.lang} maxHeight={176} />
               ) : (
-                <ScrollMaskedDetails text={row.argsFormatted} maxHeight={176} />
+                <ScrollMaskedDetails text={displayInput} maxHeight={176} />
               )}
             </div>
           )}
