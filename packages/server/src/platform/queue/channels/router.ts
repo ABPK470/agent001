@@ -198,7 +198,6 @@ function ensureChannelUser(session: CurrentSession): void {
     passwordHash: null,
     source: UserSource.Sso
   })
-  db.provisionWorkspaceThread(session.upn)
 }
 
 function buildChannelSession(message: InboundMessage): CurrentSession {

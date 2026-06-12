@@ -2637,9 +2637,6 @@ export function TermChat({
   const pendingInput = useStore((s) => s.pendingInput)
   const clearPendingInput = useStore((s) => s.clearPendingInput)
 
-  const activeRun = runs.find((r) => r.id === activeRunId)
-  const isRunning = isRunActiveStatus(activeRun?.status)
-
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
   const [scrollToRunId, setScrollToRunId] = useState<string | null>(null)
@@ -2650,13 +2647,17 @@ export function TermChat({
   const isHomeMode = mode === "home" || isThreadMode
   const pinProfile: GoalPinProfile = mode === "widget" ? "widget" : "home"
   const activeThreadId = threadIdProp ?? useStore((s) => s.activeThreadId)
-  const workspaceThreadId = useStore((s) => s.workspaceThreadId)
-  const continuityThreadId = isThreadMode
-    ? activeThreadId
-    : mode === "widget"
-      ? workspaceThreadId
-      : activeThreadId
-  const streamingAnswer = activeRun?.streamingAnswer ?? ""
+  const continuityThreadId = activeThreadId
+  const scopedActiveRunId =
+    activeRunId &&
+    runs.some((r) => r.id === activeRunId && r.threadId === continuityThreadId)
+      ? activeRunId
+      : null
+  const scopedActiveRun = scopedActiveRunId
+    ? runs.find((r) => r.id === scopedActiveRunId)
+    : undefined
+  const isRunning = isRunActiveStatus(scopedActiveRun?.status)
+  const streamingAnswer = scopedActiveRun?.streamingAnswer ?? ""
 
   const {
     scrollHostRef,
@@ -2668,7 +2669,7 @@ export function TermChat({
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
     initialScroll: "none",
-    followWhen: isRunning || Boolean(activeRun?.streamingAnswer),
+    followWhen: isRunning || Boolean(scopedActiveRun?.streamingAnswer),
     onScrollPosition: (scrollTop) => {
       if (isHomeMode) setTranscriptFadeTop(scrollTop > 16)
     },
@@ -2724,7 +2725,7 @@ export function TermChat({
     try {
       const threadId = continuityThreadId
       if (!threadId) {
-        throw new Error(mode === "widget" ? "Workspace thread not ready" : "No thread selected")
+        throw new Error("No thread selected")
       }
       const { runId } = await api.startRun(
         effectiveGoal,
@@ -2754,9 +2755,9 @@ export function TermChat({
   }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, mode])
 
   const cancel = useCallback(async () => {
-    if (!activeRunId) return
-    try { await api.cancelRun(activeRunId) } catch { /* ignore */ }
-  }, [activeRunId])
+    if (!scopedActiveRunId) return
+    try { await api.cancelRun(scopedActiveRunId) } catch { /* ignore */ }
+  }, [scopedActiveRunId])
 
   const uploadFiles = useCallback(async (files: File[]) => {
     if (files.length === 0) return
@@ -2860,12 +2861,12 @@ export function TermChat({
 
   const displayRuns = useMemo(() => {
     const history = visibleRuns
-      .filter((r) => r.id !== activeRunId)
+      .filter((r) => r.id !== scopedActiveRunId)
       .slice()
       .reverse()
-    if (activeRun) return [...history, activeRun]
+    if (scopedActiveRun) return [...history, scopedActiveRun]
     return history
-  }, [visibleRuns, activeRunId, activeRun])
+  }, [visibleRuns, scopedActiveRunId, scopedActiveRun])
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
@@ -2885,7 +2886,7 @@ export function TermChat({
   const traceHydratingRef = useRef(new Set<string>())
 
   const hydrateRunTrace = useCallback(async (runId: string) => {
-    if (runId === activeRunId) return
+    if (runId === scopedActiveRunId) return
     const run = runs.find((r) => r.id === runId)
     if (!run || isRunActiveStatus(run.status)) return
     if ((run.trace?.length ?? 0) > 0) return
@@ -2903,17 +2904,17 @@ export function TermChat({
     } finally {
       traceHydratingRef.current.delete(runId)
     }
-  }, [activeRunId, runs, upsertRun])
+  }, [scopedActiveRunId, runs, upsertRun])
 
   // Full trace for every visible completed run (active/latest uses setActiveRun).
   useEffect(() => {
     for (const run of visibleRuns) {
-      if (run.id === activeRunId) continue
+      if (run.id === scopedActiveRunId) continue
       if (isRunActiveStatus(run.status)) continue
       if ((run.trace?.length ?? 0) > 0) continue
       void hydrateRunTrace(run.id)
     }
-  }, [visibleRuns, activeRunId, hydrateRunTrace])
+  }, [visibleRuns, scopedActiveRunId, hydrateRunTrace])
 
   useEffect(() => {
     setVisibleRunCount(INITIAL_VISIBLE_RUNS)
@@ -2976,11 +2977,11 @@ export function TermChat({
 
   // Re-settle once when the active run's trace first arrives from setActiveRun.
   useEffect(() => {
-    if (!activeRunId || activeRunId !== latestDisplayRunId) {
+    if (!scopedActiveRunId || scopedActiveRunId !== latestDisplayRunId) {
       hadActiveTraceRef.current = false
       return
     }
-    const traceLen = activeRun?.trace?.length ?? 0
+    const traceLen = scopedActiveRun?.trace?.length ?? 0
     if (traceLen === 0) return
     if (hadActiveTraceRef.current) return
     hadActiveTraceRef.current = true
@@ -2989,7 +2990,7 @@ export function TermChat({
         scrollToBottom("instant", { stick: isRunning || Boolean(streamingAnswer) })
       })
     })
-  }, [activeRunId, latestDisplayRunId, activeRun?.trace?.length, isRunning, streamingAnswer, scrollToBottom])
+  }, [scopedActiveRunId, latestDisplayRunId, scopedActiveRun?.trace?.length, isRunning, streamingAnswer, scrollToBottom])
 
   const jumpToLatest = useCallback(() => {
     if (latestDisplayRunId) setActiveRun(latestDisplayRunId)
@@ -3126,7 +3127,7 @@ export function TermChat({
             <ChatTurn
               key={run.id}
               run={run}
-              isActive={run.id === activeRunId}
+              isActive={run.id === scopedActiveRunId}
               isHomeMode={isHomeMode}
               pinProfile={pinProfile}
               me={me}

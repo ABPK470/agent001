@@ -56,8 +56,8 @@ interface State {
 
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
 
-  workspaceThreadId: string | null
-  setWorkspaceThreadId: (id: string | null) => void
+  activeThreadId: string | null
+  bootstrapThreads: () => Promise<string>
 
   pushEvent: (e: SseEvent) => void
   /** Replay historical events into the transcript only — does NOT touch the ops events buffer. */
@@ -89,8 +89,22 @@ export const useStore = create<State>((set, get) => ({
   transcript: [],
   streamingAnswer: "",
   pendingInput: null,
-  workspaceThreadId: null,
-  setWorkspaceThreadId: (workspaceThreadId) => set({ workspaceThreadId }),
+  activeThreadId: null,
+  bootstrapThreads: async () => {
+    const listed = await api.listThreads()
+    const persisted = get().activeThreadId
+    const target =
+      (persisted && listed.some((t) => t.id === persisted) && persisted) ||
+      listed[0]?.id ||
+      null
+    if (target) {
+      set({ activeThreadId: target })
+      return target
+    }
+    const created = await api.createThread()
+    set({ activeThreadId: created.id })
+    return created.id
+  },
   // Keys of events already in the events array — prevents backfill+SSE overlap dupes.
   _eventSeen: new Set<string>(),
 

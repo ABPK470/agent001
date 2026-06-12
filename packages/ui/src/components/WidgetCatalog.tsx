@@ -35,6 +35,7 @@ interface Props {
 }
 
 const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: ComponentType<{ size?: number, className?: string }> }> = [
+  { type: "thread-nav",    label: "Threads",       desc: "Select the active thread and run for chat widgets", Icon: MessageSquare },
   { type: "term-chat",     label: "MI:A Chat",     desc: "Send goals to the agent and see responses",   Icon: MessageSquare },
   { type: "env-sync",      label: "Sync",          desc: "Pick source, target, entity, preview and execute changes", Icon: Ship },
   { type: "mymi-db",       label: "Mymi DB",       desc: "Browse MyMI DB schemas, tables, views, and preview data", Icon: Database },

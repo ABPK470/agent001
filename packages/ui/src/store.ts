@@ -157,10 +157,9 @@ interface AppState {
   setActiveThreadId: (id: string | null) => void
   setThreadSidebarCollapsed: (collapsed: boolean) => void
   selectThread: (id: string | null) => Promise<void>
+  selectRun: (runId: string, threadId: string) => Promise<void>
+  bootstrapThreads: () => Promise<void>
   createNewThread: () => Promise<string>
-  /** Widget continuity thread — set from whoami after login; server-provisioned. */
-  workspaceThreadId: string | null
-  setWorkspaceThreadId: (id: string | null) => void
 
   // Steps (for active run)
   steps: Step[]
@@ -357,6 +356,7 @@ function makeDefaultView(): ViewConfig {
 // ── Widget default sizes ─────────────────────────────────────────
 
 export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, minH: number }> = {
+  "thread-nav":    { w: 3, h: 10, minW: 2, minH: 4 },
   "agent-chat":    { w: 4, h: 8,  minW: 2, minH: 2 },
   "term-chat":     { w: 4, h: 8,  minW: 2, minH: 2 },
   "run-status":    { w: 4, h: 4,  minW: 2, minH: 2 },
@@ -953,6 +953,17 @@ export const useStore = create<AppState>()(
         return { runs: orphans.length > 0 ? [...merged, ...orphans] : merged }
       }),
       setActiveRun: (activeRunId) => {
+        if (activeRunId) {
+          const state = get()
+          const run = state.runs.find((r) => r.id === activeRunId)
+          if (
+            state.activeThreadId &&
+            run?.threadId &&
+            run.threadId !== state.activeThreadId
+          ) {
+            return
+          }
+        }
         set({ activeRunId })
         if (!activeRunId) return
         // Load historical run data into the store so all widgets reflect
@@ -1014,8 +1025,8 @@ export const useStore = create<AppState>()(
         const appendToThread =
           s.activeThreadId && run.threadId === s.activeThreadId
         return {
-          runs: appendToThread ? [...s.runs, run as Run] : [run as Run, ...s.runs],
-          activeRunId: s.activeRunId ?? run.id,
+          runs: appendToThread ? [...s.runs, run as Run] : s.runs,
+          activeRunId: s.activeRunId ?? (appendToThread ? run.id : s.activeRunId),
         }
       }),
 
@@ -1066,8 +1077,28 @@ export const useStore = create<AppState>()(
         await get().selectThread(thread.id)
         return thread.id
       },
-      workspaceThreadId: null,
-      setWorkspaceThreadId: (workspaceThreadId) => set({ workspaceThreadId }),
+      bootstrapThreads: async () => {
+        const listed = await api.listThreads()
+        set({ threads: listed })
+        const persistedId = get().activeThreadId
+        const target =
+          (persistedId && listed.some((t) => t.id === persistedId) && persistedId) ||
+          listed[0]?.id ||
+          null
+        if (target) {
+          await get().selectThread(target)
+          return
+        }
+        await get().createNewThread()
+      },
+      selectRun: async (runId, threadId) => {
+        if (get().activeThreadId !== threadId) {
+          await get().selectThread(threadId)
+        }
+        const run = get().runs.find((r) => r.id === runId)
+        if (!run || run.threadId !== threadId) return
+        get().setActiveRun(runId)
+      },
 
       // Steps
       steps: [],
@@ -1836,7 +1867,6 @@ export const useStore = create<AppState>()(
         activeViewId: state.activeViewId,
         selectedAgentId: state.selectedAgentId,
         activeThreadId: state.activeThreadId,
-        workspaceThreadId: state.workspaceThreadId,
         threadSidebarCollapsed: state.threadSidebarCollapsed,
         ioeLayout: state.ioeLayout,
         envSyncForm: { ...state.envSyncForm, entityId: "", planId: null },

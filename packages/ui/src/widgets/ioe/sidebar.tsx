@@ -384,52 +384,6 @@ export function ComparePanel({
   )
 }
 
-// ── Runs ─────────────────────────────────────────────────────────
-
-export function RunsPanel({
-  runs,
-  activeRunId,
-  onSelect,
-}: {
-  runs: Run[]
-  activeRunId: string | null
-  onSelect: (id: string) => void
-}) {
-  return (
-    <div className="text-[13px]">
-      {runs.length === 0 ? (
-        <div className="px-4 py-3" style={{ color: C.dim }}>No runs yet</div>
-      ) : (
-        runs.map((r) => (
-          <button
-            key={r.id}
-            className="w-full text-left flex items-start gap-2 px-3 py-1.5 transition-colors hover:bg-overlay-2 cursor-pointer"
-            style={{ background: r.id === activeRunId ? "rgba(123,111,199,0.08)" : "transparent" }}
-            onClick={() => onSelect(r.id)}
-          >
-            <span
-              className="inline-block w-2 h-2 rounded-full mt-1 shrink-0"
-              style={{ background: statusDot(r.status) }}
-            />
-            <div className="min-w-0 flex-1">
-              <Tip text={r.goal}>
-                <div className="truncate" style={{ color: C.text }}>{r.goal}</div>
-              </Tip>
-              <div className="flex items-center gap-2 mt-0.5" style={{ color: C.dim }}>
-                <span>{r.status}</span>
-                <span>{timeAgo(r.createdAt)}</span>
-                {r.stepCount > 0 && <span>{r.stepCount} steps</span>}
-                {r.totalTokens > 0 && <span>{fmtTokens(r.totalTokens)} tk</span>}
-                {(r.pendingWorkspaceChanges ?? 0) > 0 && <span style={{ color: C.warning }}>{r.pendingWorkspaceChanges} pending</span>}
-              </div>
-            </div>
-          </button>
-        ))
-      )}
-    </div>
-  )
-}
-
 // ── Search results ───────────────────────────────────────────────
 
 export function SearchResultsList({ results }: { results: SearchResult[] | null }) {

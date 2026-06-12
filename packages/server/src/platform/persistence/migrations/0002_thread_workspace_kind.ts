@@ -5,13 +5,15 @@
 
 import type Database from "better-sqlite3"
 import { randomUUID } from "node:crypto"
-import { ThreadKind } from "../../../shared/enums/thread.js"
+
+const CONVERSATION = "conversation"
+const WORKSPACE = "workspace"
 
 export function runThreadWorkspaceKindMigration(db: Database.Database): void {
   const columns = db.pragma("table_info(threads)") as Array<{ name: string }>
   if (!columns.some((c) => c.name === "kind")) {
     db.exec(
-      `ALTER TABLE threads ADD COLUMN kind TEXT NOT NULL DEFAULT '${ThreadKind.Conversation}'`
+      `ALTER TABLE threads ADD COLUMN kind TEXT NOT NULL DEFAULT '${CONVERSATION}'`
     )
   }
 
@@ -38,7 +40,7 @@ export function runThreadWorkspaceKindMigration(db: Database.Database): void {
       )
       .all(upn) as Array<{ id: string }>
     if (rows.length === 0) continue
-    promote.run(ThreadKind.Workspace, rows[0]!.id)
+    promote.run(WORKSPACE, rows[0]!.id)
     for (let i = 1; i < rows.length; i++) {
       archive.run(rows[i]!.id)
     }
@@ -61,12 +63,12 @@ export function runThreadWorkspaceKindMigration(db: Database.Database): void {
 
   const now = new Date().toISOString()
   for (const { upn } of users) {
-    if (hasWorkspace.get(upn, ThreadKind.Workspace)) continue
+    if (hasWorkspace.get(upn, WORKSPACE)) continue
     insertWorkspace.run({
       id: randomUUID(),
       upn,
       title: "New thread",
-      kind: ThreadKind.Workspace,
+      kind: WORKSPACE,
       created_at: now,
       updated_at: now
     })

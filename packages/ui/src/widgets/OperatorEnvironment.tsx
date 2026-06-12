@@ -25,6 +25,7 @@ import { api } from "../api"
 import { RunStatus } from "../enums"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useMe } from "../hooks/useMe"
+import { ThreadRunsPanel } from "../features/threads/ThreadRunsPanel"
 import { useStore } from "../store"
 import type { AgentDefinition, PolicyRule, ToolInfo, TraceEntry } from "../types"
 import { fmtTokens } from "../util"
@@ -49,7 +50,6 @@ import { ActionBtn, TipProvider, useResizable } from "./ioe/primitives"
 import {
     ComparePanel,
     DetailsPanel,
-    RunsPanel,
     SearchResultsList,
 } from "./ioe/sidebar"
 
@@ -245,7 +245,7 @@ export function OperatorEnvironment() {
       // import_attachment to inspect or pull them into the sandbox.
       const attachmentIds = goalAttachments.map((a) => a.id)
       const agentId = selectedAgentId ?? agents[0]?.id
-      const threadId = useStore.getState().workspaceThreadId
+      const threadId = useStore.getState().activeThreadId
       if (!threadId) return
       const { runId } = await api.startRun(goal, agentId || undefined, attachmentIds, threadId)
       setActiveRun(runId)
@@ -447,7 +447,7 @@ export function OperatorEnvironment() {
 
   const renderSidebarSection = (section: SidebarSection) => {
     if (section === SidebarSection.Runs)
-      return <RunsPanel runs={runs} activeRunId={activeRunId} onSelect={setActiveRun} />
+      return <ThreadRunsPanel variant="ioe" />
     if (section === SidebarSection.Compare)
       return <ComparePanel runs={runs} onCompare={handleCompare}
         result={compareResult} loading={compareLoading} error={compareError} />

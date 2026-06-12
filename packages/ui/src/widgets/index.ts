@@ -25,9 +25,11 @@ import { SyncApprovals } from "./SyncApprovals"
 import { SyncEvidence } from "./SyncEvidence"
 import { SyncProposals } from "./SyncProposals"
 import { TermChat } from "./TermChat"
+import { ThreadNav } from "./ThreadNav"
 import { ToolStats } from "./ToolStats"
 
 export const widgetRegistry: Record<WidgetType, ComponentType> = {
+  "thread-nav": ThreadNav,
   "agent-chat": AgentChat,
   "term-chat": TermChat,
   "agent-viz": AgentViz,

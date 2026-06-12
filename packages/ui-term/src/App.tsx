@@ -125,14 +125,12 @@ export function App() {
   const logRef    = useRef<LogPaneHandle>(null)
   const streamRef = useRef<StreamPaneHandle>(null)
 
-  const setWorkspaceThreadId = useStore((s) => s.setWorkspaceThreadId)
+  const bootstrapThreads = useStore((s) => s.bootstrapThreads)
 
   useEffect(() => {
     if (!me || needsWelcome) return
-    api.whoami()
-      .then((session) => setWorkspaceThreadId(session.workspaceThreadId))
-      .catch(() => setWorkspaceThreadId(null))
-  }, [me, needsWelcome, setWorkspaceThreadId])
+    void bootstrapThreads().catch(() => {})
+  }, [me, needsWelcome, bootstrapThreads])
 
   // ── Identity-bound SSE subscription ──
   useEffect(() => {
@@ -205,8 +203,8 @@ export function App() {
 
     try {
       const attachmentIds = pendingAttachments.map((a) => a.id)
-      const threadId = useStore.getState().workspaceThreadId
-      if (!threadId) throw new Error("Workspace thread not ready")
+      const threadId = useStore.getState().activeThreadId
+      if (!threadId) throw new Error("No thread selected")
       const { runId } = await api.startRun(text, undefined, attachmentIds, threadId)
       resetTranscript(runId); setActiveRun(runId)
       // Bind-once semantics: attachments are consumed by the run that

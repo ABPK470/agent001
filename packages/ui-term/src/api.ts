@@ -33,12 +33,12 @@ export const api = {
   // runs
   listRuns:     () => json<Run[]>("/api/runs"),
   getRun:       (id: string) => json<RunDetail>(`/api/runs/${id}`),
+  listThreads:  () => json<Array<{ id: string; title: string }>>("/api/threads"),
   createThread: (title?: string) =>
     json<{ id: string }>("/api/threads", {
       method: "POST",
       body: JSON.stringify(title ? { title } : {}),
     }),
-  whoami:       () => json<{ workspaceThreadId: string }>("/api/auth/whoami"),
   startRun:     (goal: string, agentId: string | undefined, attachmentIds: string[] | undefined, threadId: string) =>
     json<{ runId: string; attachmentIds?: string[] }>("/api/runs", {
       method: "POST",

@@ -94,19 +94,6 @@ describe("thread routes", () => {
     expect(threads.some((t) => t.id === created.id)).toBe(true)
   })
 
-  it("excludes the workspace thread from GET /api/threads", async () => {
-    const built = await buildApp(fakeSession())
-    app = built.app
-    const { getWorkspaceThread } = await import("../src/platform/persistence/db/threads.js")
-
-    const workspace = getWorkspaceThread("alice@example.com")
-    expect(workspace).toBeDefined()
-
-    const listRes = await app.inject({ method: "GET", url: "/api/threads" })
-    const threads = listRes.json() as Array<{ id: string }>
-    expect(threads.some((t) => t.id === workspace!.id)).toBe(false)
-  })
-
   it("forwards threadId to orchestrator.startRun", async () => {
     const built = await buildApp(fakeSession())
     app = built.app

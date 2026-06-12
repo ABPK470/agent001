@@ -1,6 +1,5 @@
 import { LayoutGrid, LogOut, PanelLeft } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
-import { api } from "../../api"
 import { IntroAsciiField } from "../../components/IntroAsciiField"
 import { MiaWordmark } from "../../components/IntroConversation"
 import { Logo } from "../../components/Logo"
@@ -32,7 +31,7 @@ export function ThreadHomePage({
   const threads = useStore((s) => s.threads)
   const activeThreadId = useStore((s) => s.activeThreadId)
   const collapsed = useStore((s) => s.threadSidebarCollapsed)
-  const setThreads = useStore((s) => s.setThreads)
+  const bootstrapThreads = useStore((s) => s.bootstrapThreads)
   const selectThread = useStore((s) => s.selectThread)
   const createNewThread = useStore((s) => s.createNewThread)
   const setThreadSidebarCollapsed = useStore((s) => s.setThreadSidebarCollapsed)
@@ -72,31 +71,15 @@ export function ThreadHomePage({
 
   useEffect(() => {
     let cancelled = false
-    ;(async () => {
-      try {
-        const listed = await api.listThreads()
-        if (cancelled) return
-        setThreads(listed)
-        const persistedId = useStore.getState().activeThreadId
-        const target =
-          (persistedId && listed.some((t) => t.id === persistedId) && persistedId) ||
-          listed[0]?.id ||
-          null
-        if (target) {
-          await selectThread(target)
-        } else {
-          await createNewThread()
-        }
-      } catch {
-        if (!cancelled) await createNewThread().catch(() => {})
-      } finally {
+    void bootstrapThreads()
+      .catch(() => {})
+      .finally(() => {
         if (!cancelled) setBootstrapped(true)
-      }
-    })()
+      })
     return () => {
       cancelled = true
     }
-  }, [setThreads, selectThread, createNewThread])
+  }, [bootstrapThreads])
 
   const handleNewThread = useCallback(async () => {
     await createNewThread()

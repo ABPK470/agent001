@@ -12,6 +12,7 @@ import type { WidgetType } from "../types"
 import { widgetRegistry } from "../widgets"
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
+  "thread-nav": "Threads",
   "agent-chat": "Agent Chat",
   "term-chat": "Chat",
   "agent-viz": "Agent Viz",

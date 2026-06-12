@@ -17,17 +17,13 @@ export function RunHistory() {
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
-  const setRuns = useStore((s) => s.setRuns)
+  const activeThreadId = useStore((s) => s.activeThreadId)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [rolledBackIds, setRolledBackIds] = useState<Set<string>>(new Set())
   // Load agents
   useEffect(() => {
     api.listAgents().then(setAgents).catch(() => {})
   }, [])
-
-  useEffect(() => {
-    api.listRuns().then(setRuns).catch(() => {})
-  }, [setRuns])
 
   const agentName = (id: string | null) => {
     if (!id) return null
@@ -38,11 +34,21 @@ export function RunHistory() {
     setActiveRun(runId)
   }
 
+  if (!activeThreadId) {
+    return (
+      <div className="flex flex-col h-full">
+        <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
+          Select a thread
+        </div>
+      </div>
+    )
+  }
+
   if (runs.length === 0) {
     return (
       <div className="flex flex-col h-full">
         <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
-          No runs yet
+          No runs in this thread
         </div>
       </div>
     )

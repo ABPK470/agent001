@@ -33,6 +33,7 @@ function shellTransitionDelay(): number {
 }
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
+  "thread-nav": "Threads",
   "agent-chat": "Agent Chat",
   "term-chat": "MI:A Chat",
   "agent-viz": "Agent Viz",
@@ -96,7 +97,7 @@ export function App() {
   const [chatHomeHeroStage, setChatHomeHeroStage] = useState<"hidden" | "pill" | "copy">("hidden")
   const [chatHomeHeroRevealProgress, setChatHomeHeroRevealProgress] = useState(0)
   const { me, loading: meLoading, refresh: refreshMe, logout } = useMe()
-  const setWorkspaceThreadId = useStore((s) => s.setWorkspaceThreadId)
+  const bootstrapThreads = useStore((s) => s.bootstrapThreads)
 
   const popOut = getPopOutWidget()
   const currentView = useMemo(
@@ -229,35 +230,11 @@ export function App() {
     return () => stream.close()
   }, [handleEvent, setConnected, popOut, me?.upn])
 
-  useEffect(() => {
-    setWorkspaceThreadId(me?.workspaceThreadId ?? null)
-  }, [me?.workspaceThreadId, setWorkspaceThreadId])
-
-  // Load runs for this identity. Re-runs only on login/logout — NOT when
-  // chat widgets appear on the canvas (shouldHydrateSelectedRun), which
-  // used to refetch, drop in-memory thread rows, and clear activeRunId.
+  // Load threads + active thread runs on login. Thread-scoped — not global listRuns.
   useEffect(() => {
     if (!me) return
-    api.listRuns().then((runs) => {
-      setRuns(runs)
-      const currentActive = useStore.getState().activeRunId
-      const stillVisible =
-        currentActive &&
-        useStore.getState().runs.some((r) => r.id === currentActive)
-      if (!stillVisible) {
-        setActiveRun(null)
-        setSteps([])
-        setAudit([])
-        setTrace([])
-      }
-    }).catch(() => {})
-  }, [me?.upn, setRuns, setActiveRun, setSteps, setAudit, setTrace])
-
-  // Sync run list when entering platform view (chat home → widgets).
-  useEffect(() => {
-    if (!me || shellMode !== "platform") return
-    api.listRuns().then(setRuns).catch(() => {})
-  }, [me?.upn, shellMode, setRuns])
+    void bootstrapThreads().catch(() => {})
+  }, [me?.upn, bootstrapThreads])
 
   // Auto-select latest run only when a run-scoped widget is visible and
   // nothing is selected yet.
@@ -276,7 +253,9 @@ export function App() {
       pickLatest(cached)
       return
     }
-    api.listRuns().then((runs) => {
+    const threadId = useStore.getState().activeThreadId
+    if (!threadId) return
+    api.listRuns({ threadId }).then((runs) => {
       setRuns(runs)
       if (!useStore.getState().activeRunId) pickLatest(runs)
     }).catch(() => {})
@@ -356,8 +335,10 @@ export function App() {
     // No API fallback — popout receives live events via BroadcastChannel relay.
     // If no stashed state, the popout starts empty and accumulates from the stream.
 
-    // Load runs list for widgets that need it
-    api.listRuns().then((runs) => setRuns(runs)).catch(() => {})
+    const threadId = useStore.getState().activeThreadId
+    if (threadId) {
+      api.listRuns({ threadId }).then((runs) => setRuns(runs)).catch(() => {})
+    }
 
     // Sync from main window — receive full live state on activeRunId change
     const sync = new BroadcastChannel(SYNC_CHANNEL)

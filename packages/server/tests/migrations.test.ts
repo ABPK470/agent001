@@ -37,14 +37,7 @@ describe("runMigrations", () => {
     expect(convCols.some((c) => c.name === "thread_id")).toBe(true)
 
     const threadCols = testDb.prepare("PRAGMA table_info(threads)").all() as Array<{ name: string }>
-    expect(threadCols.some((c) => c.name === "kind")).toBe(true)
-
-    const workspaceIdx = testDb
-      .prepare(
-        "SELECT name FROM sqlite_master WHERE type='index' AND name='idx_threads_workspace_per_user'"
-      )
-      .get()
-    expect(workspaceIdx).toBeTruthy()
+    expect(threadCols.some((c) => c.name === "kind")).toBe(false)
 
     const attachSql = (
       testDb.prepare("SELECT sql FROM sqlite_master WHERE type='table' AND name='attachments'").get() as {

@@ -14,6 +14,7 @@ import { useStore } from "../store"
 import type { WidgetType } from "../types"
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
+  "thread-nav": "Threads",
   "agent-chat": "Agent Chat",
   "term-chat": "Chat",
   "agent-viz": "Agent Viz",

@@ -6,12 +6,11 @@
  *   - runs(upn) → users
  */
 import type Database from "better-sqlite3"
-import { provisionWorkspaceThread } from "../src/platform/persistence/db/threads.js"
 
 export function seedUser(
   db: Database.Database,
   upn: string,
-  opts: { displayName?: string; isAdmin?: boolean; skipWorkspace?: boolean } = {}
+  opts: { displayName?: string; isAdmin?: boolean } = {}
 ): void {
   db.prepare(
     `INSERT OR IGNORE INTO users (upn, username, display_name, is_admin, source, created_at)
@@ -22,9 +21,6 @@ export function seedUser(
     opts.displayName ?? upn,
     opts.isAdmin ? 1 : 0
   )
-  if (!opts.skipWorkspace) {
-    provisionWorkspaceThread(upn)
-  }
 }
 
 export function seedSession(db: Database.Database, sid: string, upn: string = "test-user@local"): void {

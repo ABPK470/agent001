@@ -418,6 +418,7 @@ export interface Widget {
 }
 
 export type WidgetType =
+  | "thread-nav"
   | "agent-chat"
   | "term-chat"
   | "run-status"
@@ -447,6 +448,7 @@ export type WidgetType =
  * exists) but are rendered as disabled cards. Admins get the full set.
  */
 export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
+  "thread-nav",
   "term-chat",
   "env-sync",
   "live-logs",

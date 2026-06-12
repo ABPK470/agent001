@@ -11,13 +11,9 @@ export {
 export {
   autoTitleThreadFromGoal,
   createThread,
-  createWorkspaceThread,
   dbThreadToWire,
   getThread,
-  getWorkspaceThread,
   listThreadsForUser,
-  provisionWorkspaceThread,
-  resolveWorkspaceThreadId,
   touchThread,
   updateThread,
   type DbThread,
