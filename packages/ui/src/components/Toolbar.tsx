@@ -101,7 +101,7 @@ export function Toolbar({ onAddWidget, onSwitchUser, onSwitchUi, onShowChatHome,
 
   return (
     <>
-      <header className="flex items-center px-3 sm:px-6 h-14 bg-canvas shrink-0 select-none gap-2 sm:gap-4">
+      <header className="flex h-14 shrink-0 select-none items-center gap-2 px-4 sm:gap-4 sm:px-6 bg-canvas">
         <Logo size={30} online={connected} />
 
         {/* View tabs */}

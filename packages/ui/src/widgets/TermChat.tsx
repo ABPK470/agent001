@@ -122,31 +122,34 @@ function UserGoalBubble({
   onUnpin?: () => void
 }): React.ReactElement {
   const shellClass =
-    "max-w-full rounded-2xl border border-border-subtle bg-panel-2 text-[15px] leading-relaxed text-text dark:bg-bubble-user"
+    "max-w-full overflow-hidden rounded-2xl border border-border-subtle bg-panel-2 text-[15px] leading-relaxed text-text dark:bg-bubble-user"
   const shellStyle = { boxShadow: "var(--shadow-bubble)" }
+  const bodyClass = "min-w-0 px-4 py-2.5"
 
   if (!showUnpin || !onUnpin) {
     return (
-      <div className={`${shellClass} px-4 py-2.5`} style={shellStyle}>
-        <UserGoalText text={goal} />
+      <div className={shellClass} style={shellStyle}>
+        <div className={bodyClass}>
+          <UserGoalText text={goal} />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className={`flex items-stretch gap-1 p-1 ${shellClass}`} style={shellStyle}>
-      <div className="min-w-0 flex-1 rounded-xl px-3 py-1.5">
-        <UserGoalText text={goal} />
-      </div>
+    <div className={`inline-flex max-w-full items-stretch ${shellClass}`} style={shellStyle}>
       <button
         type="button"
         onClick={onUnpin}
-        className="flex shrink-0 items-center rounded-xl bg-panel px-2.5 text-text-muted transition-colors hover:bg-panel-2 hover:text-text-muted dark:bg-black/10 dark:hover:bg-bubble-user"
+        className="flex shrink-0 items-center self-stretch border-r border-border-subtle/70 bg-panel px-2.5 text-text-muted transition-colors hover:bg-panel-2 hover:text-text dark:border-white/8 dark:bg-black/10 dark:hover:bg-black/20"
         title="Unpin message"
         aria-label="Unpin message"
       >
         <Dot size={15} strokeWidth={2} />
       </button>
+      <div className={bodyClass}>
+        <UserGoalText text={goal} />
+      </div>
     </div>
   )
 }
@@ -210,11 +213,12 @@ function ChatTurn({
       const sentinelRect = sentinel.getBoundingClientRect()
       const stickyRect = sticky.getBoundingClientRect()
       const stickLine = hostRect.top + stickyOffsetPx
-      const sentinelPast = sentinelRect.bottom <= stickLine + 1
+      const scrolled = host.scrollTop > 20
+      const sentinelPast = sentinelRect.bottom < stickLine - 4
       const stickyVisible =
         stickyRect.bottom > hostRect.top && stickyRect.top < hostRect.bottom
-      const atStickLine = Math.abs(stickyRect.top - stickLine) <= 2
-      setIsStuck(sentinelPast && stickyVisible && atStickLine)
+      const atStickLine = stickyRect.top <= stickLine + 1
+      setIsStuck(scrolled && sentinelPast && stickyVisible && atStickLine)
     }
 
     updateStuck()
@@ -2466,7 +2470,7 @@ function TermChatInputBar({
   return (
       <div
           data-intro-target="termchat-input"
-          className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
+          className={`chathome-chrome-pill ${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
           style={heroStyle}
       >
           <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />

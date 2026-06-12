@@ -41,7 +41,7 @@ export function ChatHomePage({
           </div>
 
           <div className="chathome-content relative z-10 flex h-full min-h-0 flex-col">
-              <header className="flex h-11 shrink-0 items-center justify-between px-3 sm:px-6">
+              <header className="flex h-12 shrink-0 items-center justify-between px-4 sm:h-14 sm:px-6">
                   <div className="flex min-w-0 items-center gap-3">
                       <Logo size={30} online={connected} />
                       <div className="flex min-w-0 items-center gap-2.5 text-text">

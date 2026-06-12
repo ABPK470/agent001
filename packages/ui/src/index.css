@@ -885,19 +885,15 @@ textarea.input {
   );
 }
 
-/* Hero pill — light mode only, ChatHomePage only.
-   ChatHomePage's background is --panel (#fbf8f1, lifted widget tone).
-   Default `bg-elevated` resolves to pure white which screams against
-   the warm paper. Drop the pill to --canvas (#f6f2ea) so it sits one
-   shade *below* the page surface as a quiet recessed inset rather
-   than a bright card on top. */
-:root[data-theme="light"] .chathome [data-intro-target="termchat-input"] {
-  background: var(--panel-2);
+/* Chathome chrome pills — input bar + expanded thread sidebar (not collapsed pill). */
+:root[data-theme="light"] .chathome-chrome-pill {
+  background-color: var(--panel-2);
   border-color: rgba(30, 25, 20, 0.07);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
   --tw-ring-color: transparent;
 }
-:root[data-theme="light"] .chathome [data-intro-target="termchat-input"]:focus-within {
+
+:root[data-theme="light"] .chathome-chrome-pill:focus-within {
   border-color: rgba(30, 25, 20, 0.14);
   --tw-ring-color: rgba(30, 25, 20, 0.04);
 }
@@ -1032,6 +1028,18 @@ textarea.input {
 }
 
 /* ── Thread rail — frosted panel (matches header icon chips), ASCII shows through ── */
+.chathome--threads {
+  /* Match header px-3 / sm:px-6 and TermChat input pb-4 (1rem). */
+  --thread-rail-inset-x: 0.75rem;
+  --thread-rail-inset-bottom: 1rem;
+}
+
+@media (min-width: 640px) {
+  .chathome--threads {
+    --thread-rail-inset-x: 1.5rem;
+  }
+}
+
 .chathome--threads .chathome-content {
   background: transparent;
 }
@@ -1041,9 +1049,9 @@ textarea.input {
   background: transparent;
   border: none;
   pointer-events: none;
-  transition: width 280ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
+/* Desktop: overlay in the left gutter — chat stays full width, never reflows */
 .thread-rail--desktop {
   position: absolute;
   left: 0;
@@ -1051,11 +1059,11 @@ textarea.input {
   bottom: 0;
   z-index: 20;
   display: none;
-  padding: 0.65rem 0 0.65rem 0.55rem;
+  padding: 0.5rem 0 var(--thread-rail-inset-bottom) var(--thread-rail-inset-x);
   box-sizing: border-box;
 }
 
-@media (min-width: 768px) {
+@media (min-width: 1024px) {
   .thread-rail--desktop {
     display: block;
   }
@@ -1065,33 +1073,57 @@ textarea.input {
   width: 18.5rem;
 }
 
-.thread-rail--collapsed {
+.thread-rail--collapsed:not(.thread-rail--desktop) {
   width: 0;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+/* Expanded in store but viewport gutter too narrow — header icon + drawer only */
+.thread-rail--offstage {
+  display: none;
+  width: 0;
+  padding: 0;
+}
+
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .thread-rail--expanded {
+    width: 16.25rem;
+  }
+
+  .thread-rail-inner {
+    width: 15.75rem;
+  }
 }
 
 .thread-rail-inner {
   position: relative;
   width: 18rem;
   height: 100%;
-  padding: 0.75rem 0.95rem 0.85rem 1rem;
+  padding: 0.4rem 0.45rem 0.45rem 0.5rem;
   opacity: 1;
   pointer-events: auto;
-  transition: opacity 200ms ease, transform 280ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 240ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Match hero input pill — same recessed surface on ChatHome / ThreadHome */
-:root[data-theme="light"] .chathome--threads .thread-rail-inner,
-:root[data-theme="light"] .chathome--threads .thread-rail-collapsed-trigger {
-  background: var(--panel-2);
-  border-color: rgba(30, 25, 20, 0.07);
-  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
-  --tw-ring-color: transparent;
+/* Expanded overlay rail — no chrome, tint only, blends into the canvas */
+.thread-rail-inner--overlay {
+  border: none;
+  border-radius: 1rem;
+  box-shadow: none;
+  outline: none;
+  backdrop-filter: none;
+  background: transparent;
+  --tw-ring-shadow: 0 0 #0000;
+}
+
+.thread-rail--desktop .thread-rail-inner--overlay {
+  background-color: color-mix(in srgb, var(--panel-2) 1%, transparent);
 }
 
 .thread-rail--collapsed .thread-rail-inner {
   opacity: 0;
   pointer-events: none;
-  transform: translateX(-6px);
 }
 
 .thread-rail--mobile-open {
@@ -1100,10 +1132,38 @@ textarea.input {
   left: 0;
   z-index: 50;
   display: flex;
-  width: min(88vw, 18.5rem);
-  padding: 2.75rem 0 0.65rem 0.55rem;
+  width: min(92vw, 20rem);
+  padding: 0.5rem 0 var(--thread-rail-inset-bottom) var(--thread-rail-inset-x);
   pointer-events: auto;
   box-sizing: border-box;
+  animation: thread-rail-drawer-in 220ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+@keyframes thread-rail-drawer-in {
+  from {
+    transform: translateX(-100%);
+    opacity: 0.6;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .thread-rail,
+  .thread-rail-inner,
+  .thread-rail-collapsed-trigger {
+    transition-duration: 0ms;
+  }
+
+  .thread-rail--mobile-open {
+    animation: none;
+  }
+
+  .thread-rail-scrim {
+    animation: none;
+  }
 }
 
 .thread-rail--mobile-open .thread-rail-inner {
@@ -1114,26 +1174,39 @@ textarea.input {
 }
 
 .thread-rail-scrim {
-  background: color-mix(in srgb, var(--canvas) 18%, transparent);
-  backdrop-filter: blur(2px);
+  background: var(--scrim);
+  animation: thread-rail-scrim-in 180ms ease;
 }
 
-:root[data-theme="light"] .thread-rail-scrim {
-  background: color-mix(in srgb, var(--panel) 22%, transparent);
+@keyframes thread-rail-scrim-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.thread-rail-inner--drawer {
+  background: var(--panel);
+  border-color: var(--border);
+  box-shadow: 4px 0 24px color-mix(in srgb, var(--canvas) 55%, transparent);
+  --tw-ring-color: transparent;
 }
 
 .thread-rail-section-head {
   display: flex;
   align-items: center;
   gap: 0.5rem;
-  margin-bottom: 0.65rem;
-  padding-bottom: 0.55rem;
+  min-height: 2.5rem;
+  margin-bottom: 0.35rem;
+  padding: 0 0.1rem 0.3rem;
   border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 28%, transparent);
 }
 
 .thread-rail-section-label {
-  font-size: 13px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.25;
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text-muted);
@@ -1143,21 +1216,32 @@ textarea.input {
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  gap: 0.35rem;
+  gap: 0.25rem;
 }
 
 .thread-rail-new,
 .thread-rail-toggle {
   display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  padding: 0.2rem 0.35rem;
-  font-size: 13px;
-  line-height: 1.5;
-  font-weight: 450;
+  justify-content: center;
+  gap: 0.35rem;
+  min-height: 2.5rem;
   color: var(--text-muted);
-  border-radius: 0.4rem;
+  border-radius: 0.5rem;
   transition: color 160ms ease, background-color 160ms ease;
+}
+
+.thread-rail-new {
+  padding: 0 0.55rem;
+  font-size: 13px;
+  line-height: 1.25;
+  font-weight: 500;
+}
+
+.thread-rail-toggle {
+  width: 2.5rem;
+  padding: 0;
+  color: var(--text-muted);
 }
 
 .thread-rail-new:hover,
@@ -1168,29 +1252,22 @@ textarea.input {
   background: color-mix(in srgb, var(--panel) 38%, transparent);
 }
 
-.thread-rail-toggle {
-  color: var(--text-faint);
-}
-
 .thread-rail-list {
-  padding-top: 0.15rem;
+  padding-top: 0.05rem;
 }
 
 .thread-rail-item-wrap {
-  margin-bottom: 0.1rem;
+  margin-bottom: 0.05rem;
 }
 
 .thread-rail-item-row {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 0.1rem;
   min-width: 0;
   padding: 0.2rem 0.25rem 0.2rem 0.45rem;
-  border-radius: 0.55rem;
-  border-left: 2px solid transparent;
-  transition:
-    background-color 160ms ease,
-    border-color 200ms ease;
+  border-radius: 0.65rem;
+  transition: background-color 160ms ease;
 }
 
 .thread-rail-item-wrap:hover .thread-rail-item-row,
@@ -1199,8 +1276,10 @@ textarea.input {
   background: var(--overlay-2);
 }
 
-.thread-rail-item-wrap--active .thread-rail-item-row {
-  border-left-color: color-mix(in srgb, var(--accent) 72%, transparent);
+:root[data-theme="light"] .thread-rail-item-wrap:hover .thread-rail-item-row,
+:root[data-theme="light"] .thread-rail-item-wrap--menu-open .thread-rail-item-row,
+:root[data-theme="light"] .thread-rail-item-wrap--active .thread-rail-item-row {
+  background: rgba(30, 25, 20, 0.045);
 }
 
 .thread-rail-item {
@@ -1209,6 +1288,18 @@ textarea.input {
   padding: 0.28rem 0.15rem 0.28rem 0.35rem;
   color: var(--text-muted);
   transition: color 160ms ease;
+}
+
+.thread-rail-item-title-line {
+  position: relative;
+  min-width: 0;
+}
+
+.thread-rail-item-wrap--pinned .thread-rail-item,
+.thread-rail-item-wrap:hover .thread-rail-item,
+.thread-rail-item-wrap--menu-open .thread-rail-item,
+.thread-rail-item-wrap:focus-within .thread-rail-item {
+  padding-right: 1.65rem;
 }
 
 .thread-rail-item-wrap:hover .thread-rail-item,
@@ -1224,10 +1315,6 @@ textarea.input {
   letter-spacing: -0.01em;
 }
 
-.thread-rail-item-pin {
-  opacity: 0.72;
-}
-
 .thread-rail-item-meta {
   font-size: 11px;
   line-height: 1.3;
@@ -1239,19 +1326,21 @@ textarea.input {
 }
 
 .thread-rail-item-menu {
-  width: 0;
-  overflow: hidden;
+  position: absolute;
+  top: 50%;
+  right: 0.25rem;
+  width: 1.55rem;
+  height: 1.55rem;
+  transform: translateY(-50%);
   opacity: 0;
   pointer-events: none;
-  transition:
-    width 140ms ease,
-    opacity 140ms ease;
+  transition: opacity 140ms ease;
 }
 
+.thread-rail-item-wrap--pinned .thread-rail-item-menu,
 .thread-rail-item-wrap:hover .thread-rail-item-menu,
 .thread-rail-item-wrap--menu-open .thread-rail-item-menu,
 .thread-rail-item-wrap:focus-within .thread-rail-item-menu {
-  width: 1.65rem;
   opacity: 1;
   pointer-events: auto;
 }
@@ -1264,13 +1353,53 @@ textarea.input {
   height: 1.55rem;
   border-radius: 0.4rem;
   color: var(--text-faint);
-  transition: color 160ms ease, background-color 160ms ease;
+  transition:
+    color 160ms ease,
+    background-color 160ms ease,
+    opacity 140ms ease;
+}
+
+.thread-rail-item-pin-slot,
+.thread-rail-item-options-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+}
+
+/* Default: pin visible in slot; … hidden */
+.thread-rail-item-pin-slot {
+  opacity: 1;
+  pointer-events: none;
+}
+
+.thread-rail-item-options-btn {
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* Hover / menu open: … takes the slot; pin steps aside */
+.thread-rail-item-wrap:hover .thread-rail-item-pin-slot,
+.thread-rail-item-wrap--menu-open .thread-rail-item-pin-slot,
+.thread-rail-item-wrap:focus-within .thread-rail-item-pin-slot {
+  opacity: 0;
+}
+
+.thread-rail-item-wrap:hover .thread-rail-item-options-btn,
+.thread-rail-item-wrap--menu-open .thread-rail-item-options-btn,
+.thread-rail-item-wrap:focus-within .thread-rail-item-options-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* Unpinned: only show … on hover */
+.thread-rail-item-wrap:not(.thread-rail-item-wrap--pinned) .thread-rail-item-pin-slot {
+  display: none;
 }
 
 .thread-rail-item-menu-btn:hover,
 .thread-rail-item-menu-btn:focus-visible {
   color: var(--text-muted);
-  background: color-mix(in srgb, var(--overlay-2) 80%, transparent);
+  background: transparent;
 }
 
 .thread-rail-item-dropdown {
@@ -1312,6 +1441,63 @@ textarea.input {
   background: var(--overlay-2);
 }
 
+/* Full title bubble — appears to the right when the row title is truncated */
+.thread-rail-title-tooltip {
+  position: fixed;
+  z-index: 210;
+  max-width: min(22rem, calc(100vw - 1.5rem));
+  padding: 0.42rem 0.62rem;
+  font-size: 13px;
+  line-height: 1.45;
+  font-weight: 450;
+  letter-spacing: -0.01em;
+  color: var(--text);
+  overflow-wrap: anywhere;
+  pointer-events: none;
+  border-radius: 0.55rem;
+  border: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  background: var(--panel-2);
+  box-shadow: 0 8px 24px color-mix(in srgb, var(--canvas) 50%, transparent);
+  transform: translateY(-50%);
+  animation: thread-rail-title-tooltip-in 140ms ease;
+}
+
+.thread-rail-title-tooltip::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: -5px;
+  width: 10px;
+  height: 10px;
+  background: var(--panel-2);
+  border-left: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--border-subtle) 70%, transparent);
+  transform: translateY(-50%) rotate(45deg);
+}
+
+:root[data-theme="light"] .thread-rail-title-tooltip {
+  background: #fff;
+  border-color: rgba(30, 25, 20, 0.08);
+  box-shadow: 0 8px 22px rgba(30, 25, 20, 0.08);
+}
+
+:root[data-theme="light"] .thread-rail-title-tooltip::before {
+  background: #fff;
+  border-left-color: rgba(30, 25, 20, 0.08);
+  border-bottom-color: rgba(30, 25, 20, 0.08);
+}
+
+@keyframes thread-rail-title-tooltip-in {
+  from {
+    opacity: 0;
+    transform: translateY(-50%) translateX(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(-50%) translateX(0);
+  }
+}
+
 .thread-rail-rename-input {
   width: 100%;
   padding: 0.45rem 0.55rem;
@@ -1320,55 +1506,66 @@ textarea.input {
   letter-spacing: -0.01em;
   color: var(--text);
   background: var(--overlay-2);
-  border: 1px solid color-mix(in srgb, var(--accent) 45%, var(--border-subtle));
+  border: 1px solid var(--border-subtle);
   border-radius: 0.55rem;
   outline: none;
 }
 
 .thread-rail-rename-input:focus {
-  border-color: color-mix(in srgb, var(--accent) 65%, var(--border-subtle));
+  border-color: var(--border);
 }
 
+/* Weightless — ink on canvas, no panel chrome (distinct from expanded sidebar) */
 .thread-rail-collapsed-trigger {
   position: fixed;
-  left: 0.85rem;
-  bottom: calc(1.1rem + env(safe-area-inset-bottom, 0px));
+  left: var(--thread-rail-inset-x);
+  bottom: calc(var(--thread-rail-inset-bottom) + env(safe-area-inset-bottom, 0px));
   z-index: 25;
   align-items: center;
-  gap: 0.45rem;
-  padding: 0.45rem 0.75rem;
-  font-size: 13px;
-  line-height: 1.5;
+  gap: 0.5rem;
+  margin: 0;
+  min-height: 2.5rem;
+  padding: 0 0.5rem 0 0.15rem;
+  font-size: 15px;
+  line-height: 1.25;
   font-weight: 500;
   letter-spacing: -0.01em;
   color: var(--text-muted);
-  transition: color 160ms ease, border-color 160ms ease;
+  background: transparent;
+  border: none;
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity 240ms cubic-bezier(0.4, 0, 0.2, 1),
+    color 160ms ease;
+}
+
+.thread-rail-collapsed-trigger--visible {
+  opacity: 0.88;
+  pointer-events: auto;
 }
 
 .thread-rail-collapsed-trigger:hover,
 .thread-rail-collapsed-trigger:focus-visible {
   color: var(--text);
-  border-color: var(--border-strong);
+  opacity: 1;
 }
 
 .thread-rail-stage {
-  /* Rail is ink on the canvas — chat keeps full width and center column. */
+  position: relative;
+  display: flex;
   min-width: 0;
+  flex: 1;
   overflow: visible;
 }
 
-.thread-rail-mobile-trigger {
-  padding: 0.2rem 0.35rem;
-  font-size: 13px;
-  line-height: 1.5;
-  font-weight: 500;
-  letter-spacing: -0.01em;
-  color: var(--text-muted);
-  transition: color 160ms ease;
-}
-
-.thread-rail-mobile-trigger:hover {
-  color: var(--text-muted);
+.thread-rail-chat {
+  position: relative;
+  z-index: 1;
+  min-width: 0;
+  flex: 1;
+  width: 100%;
 }
 
 /* Crystal cells — glyphs that haven't settled yet appear as muted
@@ -1396,6 +1593,7 @@ textarea.input {
 /* Same font / palette as WelcomeIntro: mono, single text colour, bold. */
 .intro3-wordmark {
   display: inline-flex;
+  flex-shrink: 0;
   white-space: nowrap;
   overflow: hidden;
   font-family: var(--font-mono);
@@ -1440,6 +1638,23 @@ textarea.input {
 .intro3-route-overlay--fading {
   opacity: 0;
   pointer-events: none;
+}
+
+/* ── Chat ↔ platform shell crossfade ───────────────────────────────── */
+.app-shell-view {
+  opacity: 1;
+  transition: opacity 280ms cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.app-shell-view--fading {
+  opacity: 0;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-shell-view {
+    transition-duration: 0ms;
+  }
 }
 .intro3-wm-letter {
   display: inline-block;

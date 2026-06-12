@@ -1,5 +1,5 @@
 import { Activity, MessageSquare, MoreVertical, Shield, X } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { api, createEventStream, createPopoutEventRelay } from "./api"
 import { Canvas, type CanvasHandle } from "./components/Canvas"
 import { ChatHomePage } from "./components/ChatHomePage"
@@ -23,6 +23,13 @@ type HomeShellMode = "chat" | "thread"
 
 function resolveHomeShellMode(): HomeShellMode {
   return import.meta.env.VITE_HOME_SHELL === "legacy" ? "chat" : "thread"
+}
+
+const SHELL_TRANSITION_MS = 280
+
+function shellTransitionDelay(): number {
+  if (typeof window === "undefined") return SHELL_TRANSITION_MS
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : SHELL_TRANSITION_MS
 }
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
@@ -81,6 +88,8 @@ export function App() {
   const [policyOpen, setPolicyOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
   const [shellMode, setShellMode] = useState<HomeShellMode | "platform">(resolveHomeShellMode())
+  const [shellVisible, setShellVisible] = useState(true)
+  const shellTimerRef = useRef<number | null>(null)
   // Becomes true when the login overlay starts its final fade so ChatHomePage
   // crossfades with it instead of waiting for it to fully disappear.
   const [shellRevealing, setShellRevealing] = useState(false)
@@ -169,8 +178,27 @@ export function App() {
 
   useEffect(() => {
     if (!me?.upn) return
+    setShellVisible(true)
     setShellMode(resolveHomeShellMode())
   }, [me?.upn])
+
+  useEffect(() => () => {
+    if (shellTimerRef.current) window.clearTimeout(shellTimerRef.current)
+  }, [])
+
+  const transitionShellMode = useCallback((next: HomeShellMode | "platform") => {
+    setShellMode((current) => {
+      if (current === next) return current
+      setShellVisible(false)
+      if (shellTimerRef.current) window.clearTimeout(shellTimerRef.current)
+      const delay = shellTransitionDelay()
+      shellTimerRef.current = window.setTimeout(() => {
+        setShellMode(next)
+        requestAnimationFrame(() => setShellVisible(true))
+      }, delay)
+      return current
+    })
+  }, [])
 
   // Reset reveal flag each time we return to login so the next login
   // starts with the chat content hidden. Also clear the shared ASCII
@@ -455,46 +483,33 @@ export function App() {
     )
   }
   const widgets = currentView?.widgets ?? []
-
-  if (shellMode === "thread") {
-    return (
-      <>
-        {welcomeOverlay}
-        <ThreadHomePage
-          connected={connected}
-          onOpenPlatform={() => setShellMode("platform")}
-          onLogout={handleSwitchUser}
-        />
-      </>
-    )
-  }
-
-  if (shellMode === "chat") {
-    return (
-      <>
-        {welcomeOverlay}
-        <ChatHomePage
-          revealed={shellRevealing || phase === AppPhase.Shell}
-          heroStage={phase === AppPhase.Shell ? "copy" : chatHomeHeroStage}
-          heroRevealProgress={phase === AppPhase.Shell ? 1 : chatHomeHeroRevealProgress}
-          connected={connected}
-          onOpenPlatform={() => setShellMode("platform")}
-          onLogout={handleSwitchUser}
-        />
-      </>
-    )
-  }
-
-  // Clamp mobile index if widgets were removed
   const clampedIdx = Math.min(mobileWidgetIdx, Math.max(0, widgets.length - 1))
   const currentWidget = widgets[clampedIdx]
   const WidgetComponent = currentWidget ? widgetRegistry[currentWidget.type] : null
 
-  // ── Mobile layout ──
-  if (isMobile) {
-    return (
-      <>
-      {welcomeOverlay}
+  let shellBody: ReactNode
+
+  if (shellMode === "thread") {
+    shellBody = (
+      <ThreadHomePage
+        connected={connected}
+        onOpenPlatform={() => transitionShellMode("platform")}
+        onLogout={handleSwitchUser}
+      />
+    )
+  } else if (shellMode === "chat") {
+    shellBody = (
+      <ChatHomePage
+        revealed={shellRevealing || phase === AppPhase.Shell}
+        heroStage={phase === AppPhase.Shell ? "copy" : chatHomeHeroStage}
+        heroRevealProgress={phase === AppPhase.Shell ? 1 : chatHomeHeroRevealProgress}
+        connected={connected}
+        onOpenPlatform={() => transitionShellMode("platform")}
+        onLogout={handleSwitchUser}
+      />
+    )
+  } else if (isMobile) {
+    shellBody = (
       <div className="flex flex-col h-[100dvh] bg-base">
         {/* Compact header */}
         <header className="flex items-center gap-3 px-4 h-12 bg-surface shrink-0 select-none">
@@ -535,7 +550,7 @@ export function App() {
                     )}
                     <button
                       className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-text-secondary active:bg-overlay-2"
-                      onClick={() => { setShellMode(resolveHomeShellMode()); setMobileMenuOpen(false) }}
+                      onClick={() => { transitionShellMode(resolveHomeShellMode()); setMobileMenuOpen(false) }}
                     >
                       <MessageSquare size={15} /> Home chat
                     </button>
@@ -609,25 +624,31 @@ export function App() {
         {policyOpen && <PolicyEditor onClose={() => setPolicyOpen(false)} />}
         {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       </div>
-      </>
+    )
+  } else {
+    shellBody = (
+      <div className="flex flex-col h-screen bg-base">
+        <Toolbar
+          onAddWidget={() => canvasRef.current?.openCatalog()}
+          onSwitchUser={handleSwitchUser}
+          onSwitchUi={handleSwitchUi}
+          onShowChatHome={() => transitionShellMode(resolveHomeShellMode())}
+          me={me}
+        />
+        <Canvas ref={canvasRef} />
+        <WidgetModal />
+      </div>
     )
   }
 
-  // ── Desktop layout ─────────────────────────────────────────────
   return (
     <>
-    {welcomeOverlay}
-    <div className="flex flex-col h-screen bg-base">
-      <Toolbar
-        onAddWidget={() => canvasRef.current?.openCatalog()}
-        onSwitchUser={handleSwitchUser}
-        onSwitchUi={handleSwitchUi}
-        onShowChatHome={() => setShellMode(resolveHomeShellMode())}
-        me={me}
-      />
-      <Canvas ref={canvasRef} />
-      <WidgetModal />
-    </div>
+      {welcomeOverlay}
+      <div
+        className={`app-shell-view h-screen min-h-[100dvh] ${shellVisible ? "" : "app-shell-view--fading"}`}
+      >
+        {shellBody}
+      </div>
     </>
   )
 }

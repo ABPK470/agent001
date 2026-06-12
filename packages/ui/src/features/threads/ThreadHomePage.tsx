@@ -1,4 +1,4 @@
-import { LayoutGrid, LogOut } from "lucide-react"
+import { LayoutGrid, LogOut, PanelLeft } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { api } from "../../api"
 import { IntroAsciiField } from "../../components/IntroAsciiField"
@@ -7,6 +7,7 @@ import { Logo } from "../../components/Logo"
 import { useStore } from "../../store"
 import { TermChat } from "../../widgets/TermChat"
 import { ThreadSidebar } from "./ThreadSidebar"
+import { useThreadRailLayout } from "./useThreadRailLayout"
 
 interface Props {
   connected: boolean
@@ -27,8 +28,9 @@ export function ThreadHomePage({
   const createNewThread = useStore((s) => s.createNewThread)
   const setThreadSidebarCollapsed = useStore((s) => s.setThreadSidebarCollapsed)
 
-  const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false)
+  const [threadsDrawerOpen, setThreadsDrawerOpen] = useState(false)
   const [bootstrapped, setBootstrapped] = useState(false)
+  const { viewportWidth, railFits } = useThreadRailLayout()
 
   useEffect(() => {
     let cancelled = false
@@ -60,17 +62,41 @@ export function ThreadHomePage({
 
   const handleNewThread = useCallback(async () => {
     await createNewThread()
-    setMobileSidebarOpen(false)
+    setThreadsDrawerOpen(false)
   }, [createNewThread])
 
+  const handleOpenThreads = useCallback(() => {
+    if (railFits) {
+      setThreadSidebarCollapsed(false)
+      return
+    }
+    setThreadsDrawerOpen(true)
+  }, [railFits, setThreadSidebarCollapsed])
+
+  const showHeaderThreadsButton =
+    !railFits || viewportWidth < 1024 || (collapsed && viewportWidth < 1280)
+
   useEffect(() => {
-    if (!mobileSidebarOpen) return
+    if (!threadsDrawerOpen) return
     const onKey = (event: KeyboardEvent) => {
-      if (event.key === "Escape") setMobileSidebarOpen(false)
+      if (event.key === "Escape") setThreadsDrawerOpen(false)
     }
     window.addEventListener("keydown", onKey)
     return () => window.removeEventListener("keydown", onKey)
-  }, [mobileSidebarOpen])
+  }, [threadsDrawerOpen])
+
+  useEffect(() => {
+    if (!threadsDrawerOpen) return
+    const prev = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = prev
+    }
+  }, [threadsDrawerOpen])
+
+  useEffect(() => {
+    if (railFits) setThreadsDrawerOpen(false)
+  }, [railFits])
 
   return (
     <div className="chathome chathome--threads chathome--revealed chathome--hero-ready chathome--hero-copy-ready relative flex h-screen flex-col overflow-hidden text-text">
@@ -79,21 +105,26 @@ export function ThreadHomePage({
       </div>
 
       <div className="chathome-content relative z-10 flex h-full min-h-0 flex-col">
-        <header className="flex h-11 shrink-0 items-center justify-between px-3 sm:px-6">
+        <header className="flex h-12 shrink-0 items-center justify-between px-4 sm:h-14 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <button
-              type="button"
-              className="thread-rail-mobile-trigger md:hidden"
-              onClick={() => setMobileSidebarOpen(true)}
-              aria-label="Open threads"
-            >
-              threads
-            </button>
             <Logo size={30} online={connected} />
-            <MiaWordmark />
+            <div className="flex shrink-0 items-center gap-2.5 text-text">
+              <MiaWordmark />
+            </div>
           </div>
 
           <div className="flex items-center gap-2">
+            {showHeaderThreadsButton && (
+              <button
+                type="button"
+                onClick={handleOpenThreads}
+                title="Open threads"
+                aria-label="Open threads"
+                className="flex h-10 w-10 items-center justify-center rounded-lg bg-panel/72 text-text-muted backdrop-blur transition-colors hover:bg-overlay-hover hover:text-text"
+              >
+                <PanelLeft size={17} strokeWidth={1.75} />
+              </button>
+            )}
             <button
               type="button"
               onClick={onOpenPlatform}
@@ -120,14 +151,15 @@ export function ThreadHomePage({
             threads={threads}
             activeThreadId={activeThreadId}
             collapsed={collapsed}
+            railFits={railFits}
             onToggleCollapsed={() => setThreadSidebarCollapsed(!collapsed)}
             onSelect={selectThread}
             onNewThread={handleNewThread}
-            mobileOpen={mobileSidebarOpen}
-            onMobileClose={() => setMobileSidebarOpen(false)}
+            drawerOpen={threadsDrawerOpen}
+            onDrawerClose={() => setThreadsDrawerOpen(false)}
           />
 
-          <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          <div className="thread-rail-chat flex min-h-0 min-w-0 flex-1 flex-col">
             {bootstrapped && activeThreadId && (
               <TermChat key={activeThreadId} mode="thread" threadId={activeThreadId} />
             )}

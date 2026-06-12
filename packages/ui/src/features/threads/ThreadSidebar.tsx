@@ -1,20 +1,20 @@
-import { MoreHorizontal, PanelLeft, PanelLeftClose, Pin, Plus } from "lucide-react"
+import { MoreVertical, PanelLeft, PanelLeftClose, Pin, Plus, X } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { api } from "../../api"
 import { useStore } from "../../store"
 import type { Thread } from "../../types"
-import { timeAgo } from "../../util"
 
 interface Props {
   threads: Thread[]
   activeThreadId: string | null
   collapsed: boolean
+  railFits: boolean
   onToggleCollapsed: () => void
   onSelect: (threadId: string) => void
   onNewThread: () => void
-  mobileOpen?: boolean
-  onMobileClose?: () => void
+  drawerOpen?: boolean
+  onDrawerClose?: () => void
 }
 
 function ThreadRailItem({
@@ -35,11 +35,22 @@ function ThreadRailItem({
   const menuRef = useRef<HTMLDivElement>(null)
   const menuBtnRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
+  const rowRef = useRef<HTMLDivElement>(null)
+  const titleRef = useRef<HTMLSpanElement>(null)
+  const [titleTooltipOpen, setTitleTooltipOpen] = useState(false)
+  const [titleTooltipAnchor, setTitleTooltipAnchor] = useState<DOMRect | null>(null)
+  const [titleTruncated, setTitleTruncated] = useState(false)
   const displayTitle = thread.title || "New thread"
+
+  const closeTitleTooltip = () => {
+    setTitleTooltipOpen(false)
+    setTitleTooltipAnchor(null)
+  }
 
   const closeMenu = () => {
     setMenuOpen(false)
     setMenuAnchor(null)
+    closeTitleTooltip()
   }
 
   useEffect(() => {
@@ -122,6 +133,23 @@ function ThreadRailItem({
     setMenuOpen(true)
   }
 
+  const refreshTitleTruncation = () => {
+    const el = titleRef.current
+    if (!el) return false
+    const truncated = el.scrollWidth > el.clientWidth + 1
+    setTitleTruncated(truncated)
+    return truncated
+  }
+
+  const openTitleTooltip = () => {
+    if (menuOpen || editing) return
+    if (!refreshTitleTruncation()) return
+    const rect = rowRef.current?.getBoundingClientRect()
+    if (!rect) return
+    setTitleTooltipAnchor(rect)
+    setTitleTooltipOpen(true)
+  }
+
   if (editing) {
     return (
       <div className="thread-rail-item-wrap thread-rail-item-wrap--editing">
@@ -151,43 +179,65 @@ function ThreadRailItem({
   return (
     <div
       className={`thread-rail-item-wrap group ${active ? "thread-rail-item-wrap--active" : ""} ${
-        menuOpen ? "thread-rail-item-wrap--menu-open" : ""
-      }`}
+        thread.pinned ? "thread-rail-item-wrap--pinned" : ""
+      } ${menuOpen ? "thread-rail-item-wrap--menu-open" : ""}`}
     >
-      <div className="thread-rail-item-row">
+      <div
+        ref={rowRef}
+        className="thread-rail-item-row"
+        onMouseEnter={openTitleTooltip}
+        onMouseLeave={closeTitleTooltip}
+        onFocus={openTitleTooltip}
+        onBlur={closeTitleTooltip}
+      >
         <button
           type="button"
           onClick={onSelect}
           className="thread-rail-item min-w-0 flex-1 text-left"
-          title={displayTitle}
         >
-          <span className="thread-rail-item-title flex min-w-0 items-center gap-1">
-            {thread.pinned && (
-              <Pin
-                size={11}
-                strokeWidth={1.75}
-                className="thread-rail-item-pin shrink-0 text-text-faint"
-                aria-hidden
-              />
-            )}
-            <span className="min-w-0 truncate">{displayTitle}</span>
-          </span>
-          <span className="thread-rail-item-meta mt-0.5 block truncate">{timeAgo(thread.updatedAt)}</span>
+          <div className="thread-rail-item-title-line min-w-0">
+            <span ref={titleRef} className="thread-rail-item-title block min-w-0 truncate">
+              {displayTitle}
+            </span>
+          </div>
         </button>
 
         <div ref={menuRef} className="thread-rail-item-menu relative shrink-0">
+          {thread.pinned && (
+            <span
+              className="thread-rail-item-menu-btn thread-rail-item-pin-slot"
+              title="Pinned"
+              aria-label="Pinned"
+            >
+              <Pin size={15} strokeWidth={1.75} />
+            </span>
+          )}
           <button
             ref={menuBtnRef}
             type="button"
             onClick={toggleMenu}
-            className="thread-rail-item-menu-btn"
+            className="thread-rail-item-menu-btn thread-rail-item-options-btn"
             title="Thread options"
             aria-label="Thread options"
             aria-expanded={menuOpen}
             aria-haspopup="menu"
           >
-            <MoreHorizontal size={15} strokeWidth={1.75} />
+            <MoreVertical size={15} strokeWidth={1.75} />
           </button>
+
+          {titleTooltipOpen && titleTooltipAnchor && titleTruncated && createPortal(
+            <div
+              className="thread-rail-title-tooltip"
+              role="tooltip"
+              style={{
+                top: titleTooltipAnchor.top + titleTooltipAnchor.height / 2,
+                left: titleTooltipAnchor.right + 10,
+              }}
+            >
+              {displayTitle}
+            </div>,
+            document.body,
+          )}
 
           {menuOpen && menuAnchor && createPortal(
             <div
@@ -229,34 +279,46 @@ export function ThreadSidebar({
   threads,
   activeThreadId,
   collapsed,
+  railFits,
   onToggleCollapsed,
   onSelect,
   onNewThread,
-  mobileOpen = false,
-  onMobileClose,
+  drawerOpen = false,
+  onDrawerClose,
 }: Props): React.ReactElement {
   const railLabel = collapsed ? "Show threads" : "Hide threads"
 
   return (
     <>
-      {mobileOpen && (
+      {drawerOpen && (
         <button
           type="button"
           aria-label="Close threads"
-          className="thread-rail-scrim fixed inset-0 z-40 md:hidden"
-          onClick={onMobileClose}
+          className="thread-rail-scrim fixed inset-0 z-40"
+          onClick={onDrawerClose}
         />
       )}
 
       <aside
         className={`thread-rail ${collapsed ? "thread-rail--collapsed" : "thread-rail--expanded"} ${
-          mobileOpen ? "thread-rail--mobile-open" : "thread-rail--desktop"
+          drawerOpen
+            ? "thread-rail--mobile-open"
+            : railFits
+              ? "thread-rail--desktop"
+              : "thread-rail--offstage"
         }`}
         aria-label="Threads"
+        aria-hidden={!railFits && !drawerOpen}
       >
-        <div className="thread-rail-inner flex h-full min-h-0 flex-col rounded-[24px] border border-border bg-elevated ring-1 ring-overlay-1 dark:bg-overlay-2">
+        <div
+          className={`thread-rail-inner flex h-full min-h-0 flex-col ${
+            drawerOpen
+              ? "thread-rail-inner--drawer rounded-[24px] border border-border bg-panel"
+              : "thread-rail-inner--overlay"
+          }`}
+        >
           <div className="thread-rail-section-head">
-            <span className="thread-rail-section-label">Threads</span>
+            {/* <span className="thread-rail-section-label">Threads</span> */}
             <div className="thread-rail-section-actions">
               <button
                 type="button"
@@ -264,19 +326,33 @@ export function ThreadSidebar({
                 className="thread-rail-new"
                 title="New thread"
               >
-                <Plus size={14} strokeWidth={2} />
+                <Plus size={16} strokeWidth={2} />
                 <span>New</span>
               </button>
-              <button
-                type="button"
-                onClick={onToggleCollapsed}
-                className="thread-rail-toggle hidden md:inline-flex"
-                title={railLabel}
-                aria-label={railLabel}
-                aria-expanded
-              >
-                <PanelLeftClose size={15} strokeWidth={1.75} />
-              </button>
+              {drawerOpen ? (
+                <button
+                  type="button"
+                  onClick={onDrawerClose}
+                  className="thread-rail-toggle"
+                  title="Close threads"
+                  aria-label="Close threads"
+                >
+                  <X size={17} strokeWidth={1.75} />
+                </button>
+              ) : (
+                railFits && (
+                  <button
+                    type="button"
+                    onClick={onToggleCollapsed}
+                    className="thread-rail-toggle hidden lg:inline-flex"
+                    title={railLabel}
+                    aria-label={railLabel}
+                    aria-expanded
+                  >
+                    <PanelLeftClose size={17} strokeWidth={1.75} />
+                  </button>
+                )
+              )}
             </div>
           </div>
 
@@ -288,7 +364,7 @@ export function ThreadSidebar({
                 active={thread.id === activeThreadId}
                 onSelect={() => {
                   onSelect(thread.id)
-                  onMobileClose?.()
+                  onDrawerClose?.()
                 }}
               />
             ))}
@@ -296,16 +372,18 @@ export function ThreadSidebar({
         </div>
       </aside>
 
-      {collapsed && !mobileOpen && (
+      {railFits && !drawerOpen && (
         <button
           type="button"
           onClick={onToggleCollapsed}
-          className="thread-rail-collapsed-trigger hidden md:inline-flex rounded-[24px] border border-border bg-elevated ring-1 ring-overlay-1 dark:bg-overlay-2"
+          className={`thread-rail-collapsed-trigger hidden xl:inline-flex ${
+            collapsed ? "thread-rail-collapsed-trigger--visible" : ""
+          }`}
           title={railLabel}
           aria-label={railLabel}
           aria-expanded={false}
         >
-          <PanelLeft size={15} strokeWidth={1.75} />
+          <PanelLeft size={17} strokeWidth={1.75} />
           <span>Threads</span>
         </button>
       )}
