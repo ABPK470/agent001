@@ -47,7 +47,6 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
       const results = await searchEntries(query, {
         tier,
         budget: { maxTokens: 8000, maxItems: limit },
-        sessionId: req.session?.sid,
         upn: tenantScope(req)
       })
       return results.map((result) => ({
@@ -90,8 +89,7 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
       return { error: "goal is required" }
     }
     const { context, results } = await retrieveContext(goal, {
-      upn: tenantScope(req),
-      sessionId: req.session?.sid
+      upn: tenantScope(req)
     })
     return {
       context,

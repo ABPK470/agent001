@@ -453,7 +453,8 @@ export function AgentChat() {
     if (textareaRef.current) textareaRef.current.style.height = "auto"
     try {
       const agentId = selectedAgent?.id
-      const { runId } = await api.startRun(goal, agentId, attachmentIds)
+      const threadId = await useStore.getState().ensurePlatformThread()
+      const { runId } = await api.startRun(goal, agentId, attachmentIds, threadId)
       setActiveRun(runId)
       setScrollToRunId(runId)
       requestAnimationFrame(() => scrollToBottom("instant"))

@@ -64,7 +64,6 @@ export interface TableVerdictInput {
   connection?: string
   /** 0..1 confidence. Defaults to 0.85 (the agent has made a deliberate call). */
   confidence?: number
-  sessionId?: string | null
   runId?: string | null
   upn?: string | null
   /** Shared across users by default — verdicts are objective DB facts. */
@@ -144,7 +143,7 @@ export function recordTableVerdict(input: TableVerdictInput): TableVerdict {
       // Verdicts are inherently high-value: a deliberate role classification
       // is worth more than the prose-length salience heuristic would award.
       salience: 0.9,
-      session_id: input.sessionId ?? null,
+      session_id: null,
       run_id: input.runId ?? null,
       upn: input.upn ?? null,
       shared: (input.shared ?? true) ? 1 : 0,

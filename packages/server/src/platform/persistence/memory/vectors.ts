@@ -1,5 +1,6 @@
+import { MemoryTier } from "../../../shared/enums/memory.js"
 import { getDb } from "../sqlite.js"
-import type { MemoryEntry, MemoryTier } from "./types.js"
+import type { MemoryEntry } from "./types.js"
 
 // ── Vector embeddings (Ollama) ───────────────────────────────────
 
@@ -74,7 +75,7 @@ export async function vectorSearch(
    * Pushed into SQL so a chatty tenant cannot starve other tenants of recall.
    */
   upn?: string | null,
-  sessionId?: string | null
+  threadId?: string | null
 ): Promise<Array<{ entryId: string; similarity: number }>> {
   const queryVec = await getEmbedding(query)
   if (!queryVec) return []
@@ -90,32 +91,13 @@ export async function vectorSearch(
     where.push("e.tier = ?")
     params.push(tier)
   }
+  if (tier === MemoryTier.Working && threadId && upn) {
+    where.push("e.run_id IN (SELECT id FROM runs WHERE thread_id = ? AND upn = ?)")
+    params.push(threadId, upn)
+  }
   if (upn !== undefined) {
     if (upn === null) {
       where.push("(v.upn IS NULL OR v.shared = 1)")
-      // Temporary anonymous isolation: only the current sid can see its
-      // private episodic vector rows. Shared rows remain global.
-      if (tier === "episodic") {
-        if (sessionId) {
-          where.push("(v.shared = 1 OR e.session_id = ?)")
-          params.push(sessionId)
-        } else {
-          where.push("v.shared = 1")
-        }
-      } else if (!tier) {
-        if (sessionId) {
-          where.push("(e.tier != 'episodic' OR v.shared = 1 OR e.session_id = ?)")
-          params.push(sessionId)
-        } else {
-          where.push("(e.tier != 'episodic' OR v.shared = 1)")
-        }
-      }
-    } else if (sessionId) {
-      // Sid-scope bridge — see retrieval.ts named-user predicate (Layer C C4).
-      // Lets the welcome-modal flow keep continuity across the upn promotion
-      // by including legacy anon rows from the same sid.
-      where.push("(v.upn = ? OR v.shared = 1 OR (v.upn IS NULL AND e.session_id = ?))")
-      params.push(upn, sessionId)
     } else {
       where.push("(v.upn = ? OR v.shared = 1)")
       params.push(upn)

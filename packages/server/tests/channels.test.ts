@@ -6,7 +6,8 @@
  *   - Message router (inbound → run, run complete → outbound)
  */
 
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import Database from "better-sqlite3"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 import type { QueueStore } from "../src/platform/queue/channels/queue.js"
 import { MessageQueue } from "../src/platform/queue/channels/queue.js"
 import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/platform/queue/channels/retry.js"
@@ -79,6 +80,10 @@ function memoryConversationStore(): ConversationStore {
     updateActiveRun(id, runId) {
       const conv = conversations.get(id)
       if (conv) conv.activeRunId = runId
+    },
+    updateThreadId(id, threadId) {
+      const conv = conversations.get(id)
+      if (conv) conv.threadId = threadId
     },
     get(id) {
       return conversations.get(id)
@@ -327,11 +332,17 @@ describe("MessageRouter", () => {
   let router: MessageRouter
   let trigger: RunTrigger
   let runId: string
+  let testDb: Database.Database
 
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.mock("../src/platform/events/broadcaster.js", () => ({
       broadcast: vi.fn()
     }))
+
+    testDb = new Database(":memory:")
+    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+    _setDb(testDb)
+    _migrate(testDb)
 
     store = memoryQueueStore()
     convStore = memoryConversationStore()
@@ -340,6 +351,10 @@ describe("MessageRouter", () => {
     runId = "run-001"
     trigger = { startRun: vi.fn(() => runId) }
     router = new MessageRouter(queue, convStore, trigger)
+  })
+
+  afterEach(() => {
+    testDb.close()
   })
 
   it("creates a conversation and starts a run on inbound message", () => {
@@ -430,9 +445,13 @@ describe("MessageRouter", () => {
 
     const firstSession = vi.mocked(trigger.startRun).mock.calls[0]?.[1]
     const secondSession = vi.mocked(trigger.startRun).mock.calls[1]?.[1]
+    const firstThreadId = vi.mocked(trigger.startRun).mock.calls[0]?.[2]
+    const secondThreadId = vi.mocked(trigger.startRun).mock.calls[1]?.[2]
     expect(firstSession?.sid).toBeTruthy()
     expect(secondSession?.sid).toBe(firstSession?.sid)
     expect(secondSession?.upn).toBe(firstSession?.upn)
+    expect(firstThreadId).toBeTruthy()
+    expect(secondThreadId).toBe(firstThreadId)
   })
 
   it("sends reply through the queue on run completion", async () => {

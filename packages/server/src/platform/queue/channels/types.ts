@@ -109,6 +109,8 @@ export interface Conversation {
   senderName: string | null
   /** The currently active agent run for this conversation. */
   activeRunId: string | null
+  /** Continuity thread for all runs in this channel conversation. */
+  threadId: string | null
   createdAt: Date
   updatedAt: Date
 }

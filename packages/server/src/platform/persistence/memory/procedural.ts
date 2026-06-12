@@ -200,8 +200,7 @@ export function extractProcedural(run: {
 export function searchProcedures(
   goal: string,
   limit = 5,
-  upn?: string | null,
-  sessionId?: string | null
+  upn?: string | null
 ): ProceduralMemory[] {
   // Gap 5: include the goal's class tags in the FTS query so a new
   // surface-different but shape-similar goal can recall an older
@@ -214,19 +213,11 @@ export function searchProcedures(
   const ftsQuery = sanitizeFtsQuery(augmented)
   if (!ftsQuery) return []
 
-  // Tenant scope mirrors searchEntries: rows owned by the caller plus shared
-  // recipes (admin-curated). For the temporary null-UPN path, sid scopes
-  // private procedural memory so anonymous browsers do not share recipes.
   let tenantClause = ""
   const tenantParams: unknown[] = []
   if (upn !== undefined) {
     if (upn === null) {
-      if (sessionId) {
-        tenantClause = " AND ((p.upn IS NULL AND p.session_id = ?) OR p.shared = 1)"
-        tenantParams.push(sessionId)
-      } else {
-        tenantClause = " AND p.shared = 1"
-      }
+      tenantClause = " AND p.shared = 1"
     } else {
       tenantClause = " AND (p.upn = ? OR p.shared = 1)"
       tenantParams.push(upn)

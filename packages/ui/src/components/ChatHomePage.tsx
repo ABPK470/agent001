@@ -1,5 +1,7 @@
 import { LayoutGrid, LogOut } from "lucide-react"
 import { useEffect, useState } from "react"
+import { api } from "../api"
+import { useStore } from "../store"
 import { TermChat } from "../widgets/TermChat"
 import { IntroAsciiField } from "./IntroAsciiField"
 import { MiaWordmark } from "./IntroConversation"
@@ -23,10 +25,36 @@ export function ChatHomePage({
   heroRevealProgress = 1,
 }: Props) {
   const [materialised, setMaterialised] = useState(revealed)
+  const setThreads = useStore((s) => s.setThreads)
+  const selectThread = useStore((s) => s.selectThread)
+  const createNewThread = useStore((s) => s.createNewThread)
 
   useEffect(() => {
     if (revealed && !materialised) setMaterialised(true)
   }, [revealed, materialised])
+
+  useEffect(() => {
+    let cancelled = false
+    ;(async () => {
+      try {
+        const listed = await api.listThreads()
+        if (cancelled) return
+        setThreads(listed)
+        const persistedId = useStore.getState().activeThreadId
+        const target =
+          (persistedId && listed.some((t) => t.id === persistedId) && persistedId) ||
+          listed[0]?.id ||
+          null
+        if (target) await selectThread(target)
+        else await createNewThread()
+      } catch {
+        if (!cancelled) await createNewThread().catch(() => {})
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [setThreads, selectThread, createNewThread])
 
   const resolvedHeroStage = heroStage ?? (revealed ? "copy" : "hidden")
 

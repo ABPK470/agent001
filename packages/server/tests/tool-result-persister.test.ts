@@ -31,9 +31,33 @@ async function setupDb() {
   return await import("../src/features/runs/execution/tool-result-persister.js")
 }
 
-async function loadPriorResultsForSession(sessionId: string) {
+const THREAD_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
+const UPN = "pka@corp"
+
+function seedThreadAndRuns(runIds: string[]): void {
+  testDb.prepare(`INSERT OR IGNORE INTO users (upn, display_name, is_admin, source) VALUES (?, ?, 0, 'local')`).run(
+    UPN,
+    UPN
+  )
+  testDb
+    .prepare(
+      `INSERT OR IGNORE INTO threads (id, upn, title, created_at, updated_at, archived_at, pinned)
+       VALUES (?, ?, 'Test', datetime('now'), datetime('now'), NULL, 0)`
+    )
+    .run(THREAD_ID, UPN)
+  for (const runId of runIds) {
+    testDb
+      .prepare(
+        `INSERT OR REPLACE INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, thread_id, upn, display_name)
+         VALUES (?, 'goal', 'completed', NULL, 1, NULL, NULL, NULL, datetime('now'), datetime('now'), NULL, ?, ?, ?)`
+      )
+      .run(runId, THREAD_ID, UPN, UPN)
+  }
+}
+
+async function loadPriorResultsForThread() {
   const { loadPriorResults } = await import("../src/features/runs/core/data-blocks/prior-results-block.js")
-  return loadPriorResults({ sessionId })
+  return loadPriorResults({ threadId: THREAD_ID, upn: UPN })
 }
 
 describe("persistToolResult", () => {
@@ -222,6 +246,7 @@ describe("persistToolResult", () => {
 
   it("filters legacy governance-denied rows out of prior_results", async () => {
     await setupDb()
+    seedThreadAndRuns(["run-denied", "run-valid"])
 
     testDb
       .prepare(
@@ -269,7 +294,7 @@ describe("persistToolResult", () => {
         "top products by revenue"
       )
 
-    const rows = await loadPriorResultsForSession("sid-5")
+    const rows = await loadPriorResultsForThread()
     expect(rows).toHaveLength(1)
     expect(rows[0]?.run_id).toBe("run-valid")
   })

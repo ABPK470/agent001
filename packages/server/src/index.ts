@@ -500,7 +500,8 @@ function initMessaging(orchestrator: AgentOrchestrator) {
   const conversationStore = new SqliteConversationStore()
   const messageQueue = new MessageQueue(queueStore)
   const messageRouter = new MessageRouter(messageQueue, conversationStore, {
-    startRun: (goal, session) => orchestrator.startRun(goal, undefined, session ?? null)
+    startRun: (goal, session, threadId) =>
+      orchestrator.startRun(goal, threadId ? { threadId } : undefined, session ?? null)
   })
   orchestrator.setMessageRouter(messageRouter)
 

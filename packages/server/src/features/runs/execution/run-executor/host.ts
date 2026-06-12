@@ -36,7 +36,6 @@ function createRunContextForExecution(
             claim: payload.claim,
             evidence: payload.evidence,
             category: payload.category,
-            sessionId: activeRun?.sessionId ?? null,
             runId,
             upn: activeRun?.ownerUpn ?? null
           })

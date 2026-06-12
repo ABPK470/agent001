@@ -28,8 +28,8 @@ export class SqliteConversationStore implements ConversationStore {
     getDb()
       .prepare(
         `
-      INSERT OR REPLACE INTO conversations (id, channel_type, sender_id, sender_name, active_run_id, created_at, updated_at)
-      VALUES (@id, @channel_type, @sender_id, @sender_name, @active_run_id, @created_at, @updated_at)
+      INSERT OR REPLACE INTO conversations (id, channel_type, sender_id, sender_name, active_run_id, thread_id, created_at, updated_at)
+      VALUES (@id, @channel_type, @sender_id, @sender_name, @active_run_id, @thread_id, @created_at, @updated_at)
     `
       )
       .run({
@@ -38,9 +38,16 @@ export class SqliteConversationStore implements ConversationStore {
         sender_id: conv.senderId,
         sender_name: conv.senderName,
         active_run_id: conv.activeRunId,
+        thread_id: conv.threadId,
         created_at: conv.createdAt.toISOString(),
         updated_at: conv.updatedAt.toISOString()
       })
+  }
+
+  updateThreadId(id: string, threadId: string): void {
+    getDb()
+      .prepare("UPDATE conversations SET thread_id = ?, updated_at = ? WHERE id = ?")
+      .run(threadId, new Date().toISOString(), id)
   }
 
   updateActiveRun(id: string, runId: string | null): void {
@@ -260,6 +267,7 @@ interface DbConversation {
   sender_id: string
   sender_name: string | null
   active_run_id: string | null
+  thread_id: string | null
   created_at: string
   updated_at: string
 }
@@ -271,6 +279,7 @@ function toConversation(row: DbConversation): Conversation {
     senderId: row.sender_id,
     senderName: row.sender_name,
     activeRunId: row.active_run_id,
+    threadId: row.thread_id ?? null,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at)
   }

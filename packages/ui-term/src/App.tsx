@@ -196,7 +196,8 @@ export function App() {
 
     try {
       const attachmentIds = pendingAttachments.map((a) => a.id)
-      const { runId } = await api.startRun(text, undefined, attachmentIds)
+      const threadId = await useStore.getState().ensurePlatformThread()
+      const { runId } = await api.startRun(text, undefined, attachmentIds, threadId)
       resetTranscript(runId); setActiveRun(runId)
       // Bind-once semantics: attachments are consumed by the run that
       // started, the chip strip clears so the next prompt is "fresh".

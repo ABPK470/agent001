@@ -158,6 +158,10 @@ interface AppState {
   setThreadSidebarCollapsed: (collapsed: boolean) => void
   selectThread: (id: string | null) => Promise<void>
   createNewThread: () => Promise<string>
+  /** Platform widget chat workspace — explicit thread, not session-scoped. */
+  platformThreadId: string | null
+  setPlatformThreadId: (id: string | null) => void
+  ensurePlatformThread: () => Promise<string>
 
   // Steps (for active run)
   steps: Step[]
@@ -1009,8 +1013,7 @@ export const useStore = create<AppState>()(
         // termchat, switched to IOE, came back, and my run is gone" — a
         // sync.run started by IOE silently became the new active run.
         const appendToThread =
-          s.activeThreadId &&
-          (run.threadId === s.activeThreadId || !run.threadId)
+          s.activeThreadId && run.threadId === s.activeThreadId
         return {
           runs: appendToThread ? [...s.runs, run as Run] : [run as Run, ...s.runs],
           activeRunId: s.activeRunId ?? run.id,
@@ -1062,6 +1065,28 @@ export const useStore = create<AppState>()(
         const thread = await api.createThread()
         set((s) => ({ threads: [thread, ...s.threads] }))
         await get().selectThread(thread.id)
+        return thread.id
+      },
+      platformThreadId: null,
+      setPlatformThreadId: (platformThreadId) => set({ platformThreadId }),
+      ensurePlatformThread: async () => {
+        const state = get()
+        if (
+          state.platformThreadId &&
+          state.threads.some((t) => t.id === state.platformThreadId)
+        ) {
+          return state.platformThreadId
+        }
+        const existing = state.threads.find((t) => t.title === "Platform")
+        if (existing) {
+          set({ platformThreadId: existing.id })
+          return existing.id
+        }
+        const thread = await api.createThread("Platform")
+        set((s) => ({
+          threads: [thread, ...s.threads],
+          platformThreadId: thread.id,
+        }))
         return thread.id
       },
 
@@ -1832,6 +1857,7 @@ export const useStore = create<AppState>()(
         activeViewId: state.activeViewId,
         selectedAgentId: state.selectedAgentId,
         activeThreadId: state.activeThreadId,
+        platformThreadId: state.platformThreadId,
         threadSidebarCollapsed: state.threadSidebarCollapsed,
         ioeLayout: state.ioeLayout,
         envSyncForm: { ...state.envSyncForm, entityId: "", planId: null },

@@ -95,7 +95,7 @@ import { ingestAgentNote, recordTableVerdict } from "../../../platform/persisten
 import {
   getToolResult,
   isRecallableToolResult,
-  loadRecentToolResults
+  loadRecentToolResultsForThread
 } from "../../../platform/persistence/tool-results.js"
 
 export { thinkTool }
@@ -431,12 +431,9 @@ export interface PerRunToolContext {
    */
   askUserResolve: (question: string, options: string[] | undefined, sensitive: boolean) => Promise<string>
   /**
-   * Run-scoped identifiers needed by the `note` tool factory so agent-authored
-   * memory writes carry correct tenant + session provenance. May be null when
-   * the run is anonymous or pre-session (rare; the note will still be stored
-   * but won't be retrievable via session-scoped working-memory queries).
+   * Run-scoped identifiers for memory + recall tools. Continuity is thread-scoped.
    */
-  sessionId: string | null
+  threadId: string | null
   upn: string | null
 }
 
@@ -484,7 +481,7 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
           claim: payload.claim,
           evidence: payload.evidence,
           category: payload.category,
-          sessionId: ctx.sessionId,
+          threadId: ctx.threadId,
           runId: ctx.runId,
           upn: ctx.upn
         })
@@ -507,7 +504,7 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
             role: payload.role,
             evidence: payload.evidence,
             observedFromGoal: payload.observedFromGoal,
-            sessionId: ctx.sessionId,
+            threadId: ctx.threadId,
             runId: ctx.runId,
             upn: ctx.upn
           })
@@ -518,9 +515,8 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
       })
     )
   ],
-  // recall_prior_result — no-amnesia Phase 9. Fetches the full payload of a
-  // tool call from an earlier turn in the same session. Backed by the
-  // tool_results table. Read-only, no governance needed beyond defaults.
+  // recall_prior_result — fetches the full payload of a tool call from an
+  // earlier turn in the same thread. Backed by the tool_results table.
   (ctx) => [
     ctx.govern(
       bindRecallPriorResultTool(async (payload) => {
@@ -541,21 +537,22 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
             }
             return formatRecall(row, payload.full === true)
           }
-          // Path 2: turn-relative lookup. Requires a session.
-          if (!ctx.sessionId) {
+          // Path 2: turn-relative lookup within the current thread.
+          if (!ctx.threadId || !ctx.upn) {
             return {
               ok: false,
-              reason: "no session bound to this run; pass runId + toolCallId from <prior_results> instead"
+              reason: "no thread bound to this run; pass runId + toolCallId from <prior_results> instead"
             }
           }
           const limit = Math.abs(payload.turn ?? -1)
           const toolNames = payload.toolName ? [payload.toolName] : undefined
-          const rows = loadRecentToolResults({
-            sessionId: ctx.sessionId,
+          const rows = loadRecentToolResultsForThread({
+            threadId: ctx.threadId,
+            upn: ctx.upn,
             limit: Math.max(limit, 25),
             ...(toolNames ? { toolNames } : {})
           })
-          // loadRecentToolResults returns newest-first; turn=-1 → rows[0], -2 → rows[1].
+          // Newest-first; turn=-1 → rows[0], -2 → rows[1].
           // Exclude the current run so the model never recalls its own in-flight call.
           const filtered = rows.filter((r) => r.run_id !== ctx.runId && isRecallableToolResult(r))
           const target = filtered[limit - 1]

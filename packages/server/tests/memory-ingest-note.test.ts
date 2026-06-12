@@ -47,7 +47,6 @@ describe("ingestAgentNote", () => {
       subject: "publish.Revenue.RevenueZARMTD",
       claim: "cumulative MTD column; non-summable across periods",
       category: "column_semantics",
-      sessionId: "s1",
       runId: "r1",
       upn: "alice@corp"
     })
@@ -76,7 +75,7 @@ describe("ingestAgentNote", () => {
     expect(row.source).toBe("agent")
     expect(row.confidence).toBe(0.75) // no evidence → baseline
     expect(row.upn).toBe("alice@corp")
-    expect(row.session_id).toBe("s1")
+    expect(row.session_id).toBeNull()
     expect(row.content).toContain("[note:column_semantics]")
     expect(row.content).toContain("publish.Revenue.RevenueZARMTD")
     expect(row.content).toContain("non-summable")
@@ -94,7 +93,6 @@ describe("ingestAgentNote", () => {
       subject: "publish.Revenue",
       claim: "row count 1.2M as of 2026-01",
       evidence: "profile_data result: distinct values per client = 12 per year",
-      sessionId: "s1",
       upn: "alice@corp"
     })
 
@@ -114,25 +112,22 @@ describe("ingestAgentNote", () => {
     const res = mem.ingestAgentNote({
       subject: "join:A↔B",
       claim: "FK on pkClient",
-      sessionId: "s1",
       upn: "alice@corp"
     })
     expect(res.ok).toBe(true)
   })
 
-  it("dedups a second identical note in the same session", async () => {
+  it("dedups a second identical note for the same user", async () => {
     const mem = await setupMemory()
     const a = mem.ingestAgentNote({
       subject: "publish.Balance.BalanceZAR",
       claim: "snapshot balance column; sum across clients meaningful, sum across time is not",
-      sessionId: "s1",
       upn: "alice@corp"
     })
     expect(a.ok).toBe(true)
     const b = mem.ingestAgentNote({
       subject: "publish.Balance.BalanceZAR",
       claim: "snapshot balance column; sum across clients meaningful, sum across time is not",
-      sessionId: "s1",
       upn: "alice@corp"
     })
     expect(b.ok).toBe(false)
@@ -140,7 +135,7 @@ describe("ingestAgentNote", () => {
     expect(b.reason).toBe("duplicate")
 
     const count = testDb
-      .prepare(`SELECT COUNT(*) AS n FROM memory_entries WHERE upn = 'alice@corp' AND session_id = 's1'`)
+      .prepare(`SELECT COUNT(*) AS n FROM memory_entries WHERE upn = 'alice@corp'`)
       .get() as { n: number }
     expect(count.n).toBe(1)
   })
@@ -150,17 +145,13 @@ describe("ingestAgentNote", () => {
     const a = mem.ingestAgentNote({
       subject: "publish.Revenue",
       claim: "alice-only-fact-keyword-XYZABC123",
-      sessionId: "s1",
       upn: "alice@corp"
     })
     expect(a.ok).toBe(true)
 
-    // Same subject + claim from a different UPN should NOT collide with Alice's
-    // entry because dedup is tenant-scoped.
     const b = mem.ingestAgentNote({
       subject: "publish.Revenue",
       claim: "alice-only-fact-keyword-XYZABC123",
-      sessionId: "s1",
       upn: "bob@corp"
     })
     expect(b.ok).toBe(true)
@@ -175,12 +166,12 @@ describe("ingestAgentNote", () => {
 
   it("rejects empty subject or claim with invalid_input", async () => {
     const mem = await setupMemory()
-    const a = mem.ingestAgentNote({ subject: "  ", claim: "ok", sessionId: "s1", upn: "u" })
+    const a = mem.ingestAgentNote({ subject: "  ", claim: "ok", upn: "u" })
     expect(a.ok).toBe(false)
     if (a.ok) return
     expect(a.reason).toBe("invalid_input")
 
-    const b = mem.ingestAgentNote({ subject: "ok", claim: "", sessionId: "s1", upn: "u" })
+    const b = mem.ingestAgentNote({ subject: "ok", claim: "", upn: "u" })
     expect(b.ok).toBe(false)
     if (b.ok) return
     expect(b.reason).toBe("invalid_input")
@@ -191,7 +182,6 @@ describe("ingestAgentNote", () => {
     const res = mem.ingestAgentNote({
       subject: "publish.Foo",
       claim: "miscellaneous note about a table that does not fit a category",
-      sessionId: "s1",
       upn: "alice@corp"
     })
     expect(res.ok).toBe(true)

@@ -888,8 +888,8 @@ textarea.input {
   pointer-events: none;
   background: linear-gradient(
     to bottom,
-    color-mix(in srgb, var(--chathome-scroll-fade) 55%, transparent) 0%,
-    color-mix(in srgb, var(--chathome-scroll-fade) 22%, transparent) 58%,
+    color-mix(in srgb, var(--chathome-scroll-fade) 75%, transparent) 0%,
+    color-mix(in srgb, var(--chathome-scroll-fade) 24%, transparent) 88%,
     transparent 100%
   );
   -webkit-mask-image: linear-gradient(
@@ -1175,7 +1175,7 @@ textarea.input {
 }
 
 .thread-rail--desktop .thread-rail-inner--overlay {
-  background-color: color-mix(in srgb, var(--panel-2) 1%, transparent);
+  background-color: color-mix(in srgb, var(--panel) 1%, transparent);
 }
 
 .thread-rail--collapsed .thread-rail-inner {

@@ -10,10 +10,11 @@ import { flagRunMemory } from "../../platform/persistence/memory.js"
 import * as db from "../../platform/persistence/sqlite.js"
 import { MemoryValidationAction } from "../../shared/enums/memory.js"
 import { canAccessRun } from "../auth/application/access.js"
+import { ContinuityError } from "../runs/continuity.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 
 export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
-  app.get<{ Querystring: { scope?: "session" | "all"; threadId?: string } }>("/api/runs", async (req, reply) => {
+  app.get<{ Querystring: { threadId?: string } }>("/api/runs", async (req, reply) => {
     const s = req.session
     const threadId = req.query.threadId
     if (threadId) {
@@ -37,8 +38,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         })
       })
     }
-    const sessionOnly = req.query.scope === "session"
-    const runs = db.listRunsWithUsageForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null, sessionOnly })
+    const runs = db.listRunsWithUsageForUser({ upn: s?.upn ?? null })
     return runs.map((run): Run => {
       const diff = orchestrator.getRunWorkspaceDiff(run.id)
       const pendingWorkspaceChanges = diff
@@ -169,8 +169,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
           const allowed =
             !session ||
             session.isAdmin ||
-            (row.owner_upn && row.owner_upn === session.upn) ||
-            (row.session_id && row.session_id === session.sid)
+            (row.owner_upn && row.owner_upn === session.upn)
           if (!allowed) {
             reply.code(403)
             return { error: `attachment not accessible: ${id}` }
@@ -179,33 +178,41 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         }
       }
 
-      if (agentId) {
-        const agent = db.getAgentDefinition(agentId)
-        if (!agent) {
-          reply.code(400)
-          return { error: `Agent not found: ${agentId}` }
+      try {
+        if (agentId) {
+          const agent = db.getAgentDefinition(agentId)
+          if (!agent) {
+            reply.code(400)
+            return { error: `Agent not found: ${agentId}` }
+          }
+          const runId = orchestrator.startRun(
+            goal,
+            {
+              agentId: agent.id,
+              systemPrompt: db.resolveAgentSystemPrompt(agent),
+              attachmentIds: resolvedAttachmentIds,
+              threadId
+            },
+            req.session ?? null
+          )
+          reply.code(201)
+          return { runId, agentId: agent.id, attachmentIds: resolvedAttachmentIds }
         }
+
         const runId = orchestrator.startRun(
           goal,
-          {
-            agentId: agent.id,
-            systemPrompt: db.resolveAgentSystemPrompt(agent),
-            attachmentIds: resolvedAttachmentIds,
-            threadId
-          },
+          { attachmentIds: resolvedAttachmentIds, threadId },
           req.session ?? null
         )
         reply.code(201)
-        return { runId, agentId: agent.id, attachmentIds: resolvedAttachmentIds }
+        return { runId, attachmentIds: resolvedAttachmentIds }
+      } catch (err) {
+        if (err instanceof ContinuityError) {
+          reply.code(400)
+          return { error: err.message }
+        }
+        throw err
       }
-
-      const runId = orchestrator.startRun(
-        goal,
-        { attachmentIds: resolvedAttachmentIds, threadId },
-        req.session ?? null
-      )
-      reply.code(201)
-      return { runId, attachmentIds: resolvedAttachmentIds }
     }
   )
 

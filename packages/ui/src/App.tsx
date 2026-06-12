@@ -251,6 +251,7 @@ export function App() {
   // Sync run list when entering platform view (chat home → widgets).
   useEffect(() => {
     if (!me || shellMode !== "platform") return
+    void useStore.getState().ensurePlatformThread().catch(() => {})
     api.listRuns().then(setRuns).catch(() => {})
   }, [me?.upn, shellMode, setRuns])
 

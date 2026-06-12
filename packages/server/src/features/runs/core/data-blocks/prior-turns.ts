@@ -1,20 +1,15 @@
 /**
  * Prior-turn loader — surfaces the last N completed runs in the same
- * session so the orchestrator can inject them as a first-class
+ * thread so the orchestrator can inject them as a first-class
  * `<prior_turns>` system anchor and feed them to the clarification
  * detector.
  *
- * The `runs` table is the authoritative session timeline: every user
- * message in a chat is a separate row sharing the same `session_id`.
+ * Continuity is scoped exclusively by `thread_id` (see continuity.ts).
  * We bypass the FTS/vector retrieval pipeline here on purpose — for
  * pronoun-only follow-ups ("plot it", "filter that") FTS over the
  * current goal returns nothing useful, but the most recent rows in
- * the same session are exactly what the LLM needs to resolve the
+ * the same thread are exactly what the LLM needs to resolve the
  * reference.
- *
- * Tenant-scoped via `upn` (matching listRunsWithUsageForUser policy)
- * and filtered to top-level user turns (`parent_run_id IS NULL`) so
- * internal delegation chatter does not pollute the anchor.
  */
 
 import { truncateAtBoundary } from "../../../../platform/persistence/memory.js"
@@ -38,44 +33,29 @@ export interface PriorTurn {
 }
 
 export interface LoadPriorTurnsOptions {
-  readonly sessionId?: string | null
-  readonly threadId?: string | null
+  readonly threadId: string
   /** Exclude the current run id so the live request never references itself. */
   readonly excludeRunId?: string | null
-  /** Tenant scope. Required — every persisted run row has a non-null upn
-   *  (anonymous-cookie users are mapped to an auto-provisioned upn in
-   *  auth/identity.ts), so a null upn would never return any rows. */
+  /** Tenant scope. Required — every persisted run row has a non-null upn. */
   readonly upn: string
   /** Hard cap on the number of prior turns returned. Default: 3. */
   readonly limit?: number
 }
 
 /**
- * Load the most recent completed (or failed) top-level runs that share
- * the given session. Returns newest-first. Answers are truncated.
- *
- * Synchronous because better-sqlite3 is synchronous and the orchestrator
- * is already on the request thread.
+ * Load the most recent completed (or failed) top-level runs in a thread.
+ * Returns newest-first. Answers are truncated.
  */
 export function loadPriorTurns(opts: LoadPriorTurnsOptions): PriorTurn[] {
   const limit = opts.limit ?? 3
-  if (!opts.upn || limit <= 0) return []
-  if (!opts.threadId && !opts.sessionId) return []
+  if (!opts.upn || !opts.threadId || limit <= 0) return []
 
-  const scopeClause = opts.threadId
-    ? "thread_id = @threadId"
-    : "session_id = @sessionId"
-
-  // Inclusion: completed + failed terminal states. We deliberately skip
-  // cancelled/crashed because their answers are usually absent or noisy.
-  // Top-level only: `parent_run_id IS NULL` keeps delegated child runs
-  // out of the anchor.
   const rows = getDb()
     .prepare(
       `
       SELECT id, goal, status, answer, created_at, completed_at, parent_run_id, upn
       FROM runs
-      WHERE ${scopeClause}
+      WHERE thread_id = @threadId
         AND upn = @upn
         AND parent_run_id IS NULL
         AND status IN ('completed', 'failed')
@@ -85,8 +65,7 @@ export function loadPriorTurns(opts: LoadPriorTurnsOptions): PriorTurn[] {
     `
     )
     .all({
-      threadId: opts.threadId ?? null,
-      sessionId: opts.sessionId ?? null,
+      threadId: opts.threadId,
       excludeRunId: opts.excludeRunId ?? null,
       upn: opts.upn,
       limit

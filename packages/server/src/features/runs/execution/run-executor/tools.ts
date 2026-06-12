@@ -55,7 +55,7 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
   if (shouldUseMemory) {
     try {
       const result = await retrieveContext(request.goal, {
-        sessionId: activeRun?.sessionId ?? undefined,
+        threadId: activeRun?.threadId ?? undefined,
         runId: request.runId,
         upn: activeRun?.ownerUpn ?? null
       })
@@ -259,7 +259,7 @@ function composeExecutionTools(
         interaction.registerPendingInput(request.runId, { resolve })
       })
     },
-    sessionId: activeRun?.sessionId ?? null,
+    threadId: activeRun?.threadId ?? null,
     upn: activeRun?.ownerUpn ?? null
   })
 

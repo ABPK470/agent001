@@ -13,6 +13,7 @@
  */
 
 import { create } from "zustand"
+import { api } from "./api"
 import type { Run, SseEvent } from "./types"
 
 const MAX_EVENTS = 5000
@@ -55,6 +56,9 @@ interface State {
 
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
 
+  platformThreadId: string | null
+  ensurePlatformThread: () => Promise<string>
+
   pushEvent: (e: SseEvent) => void
   /** Replay historical events into the transcript only — does NOT touch the ops events buffer. */
   hydrateTranscript: (events: SseEvent[], runId: string) => void
@@ -85,6 +89,14 @@ export const useStore = create<State>((set, get) => ({
   transcript: [],
   streamingAnswer: "",
   pendingInput: null,
+  platformThreadId: null,
+  ensurePlatformThread: async () => {
+    const cached = get().platformThreadId
+    if (cached) return cached
+    const thread = await api.createThread("Platform")
+    set({ platformThreadId: thread.id })
+    return thread.id
+  },
   // Keys of events already in the events array — prevents backfill+SSE overlap dupes.
   _eventSeen: new Set<string>(),
 

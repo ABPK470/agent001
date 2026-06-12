@@ -176,39 +176,25 @@ function readSrc(absPath: string): string {
   return readFileSync(absPath, "utf8")
 }
 
-// ── B1 — sessionId pair lock (memory write/read) ─────────────────
+// ── B1 — threadId pair lock (memory write/read) ─────────────────
 
-describe("Wiring contracts: memory write↔read pair on sessionId", () => {
-  it("B1: every retrieveContext + ingestRunTurns sessionId expression references activeRun?.sessionId", () => {
+describe("Wiring contracts: memory write↔read pair on threadId", () => {
+  it("B1: retrieveContext threadId expression references activeRun?.threadId", () => {
     const retrieveSrc = readSrc(RUN_EXECUTOR_TOOLS)
-    const ingestSrc = readSrc(RUN_EXECUTOR_FINALIZATION)
     const retrieveCalls = extractObjectArgCalls(retrieveSrc, "retrieveContext")
-    const ingestCalls = extractObjectArgCalls(ingestSrc, "ingestRunTurns")
 
     expect(
       retrieveCalls.length,
       "expected at least one retrieveContext call in run-executor.ts"
     ).toBeGreaterThan(0)
-    expect(
-      ingestCalls.length,
-      "expected at least one ingestRunTurns call in run-executor.ts"
-    ).toBeGreaterThan(0)
 
-    const ANCHOR = "activeRun?.sessionId"
+    const ANCHOR = "activeRun?.threadId"
     for (const c of retrieveCalls) {
-      const expr = c.fields.get("sessionId")
-      expect(expr, `retrieveContext at line ${c.line} must specify sessionId`).toBeDefined()
+      const expr = c.fields.get("threadId")
+      expect(expr, `retrieveContext at line ${c.line} must specify threadId`).toBeDefined()
       expect(
         expr,
-        `retrieveContext at line ${c.line}: sessionId expression must reference ${ANCHOR}`
-      ).toContain(ANCHOR)
-    }
-    for (const c of ingestCalls) {
-      const expr = c.fields.get("sessionId")
-      expect(expr, `ingestRunTurns at line ${c.line} must specify sessionId`).toBeDefined()
-      expect(
-        expr,
-        `ingestRunTurns at line ${c.line}: sessionId expression must reference ${ANCHOR}`
+        `retrieveContext at line ${c.line}: threadId expression must reference ${ANCHOR}`
       ).toContain(ANCHOR)
     }
   })

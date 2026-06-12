@@ -100,24 +100,29 @@ export function registerAgentRoutes(app: FastifyInstance, orchestrator: AgentOrc
     return { ok: true }
   })
 
-  app.post<{ Params: { id: string }; Body: { goal: string } }>("/api/agents/:id/runs", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { goal: string; threadId: string } }>("/api/agents/:id/runs", async (req, reply) => {
     const agent = db.getAgentDefinition(req.params.id)
     if (!agent) {
       reply.code(404)
       return { error: "Agent not found" }
     }
 
-    const { goal } = req.body
+    const { goal, threadId } = req.body
     if (!goal || typeof goal !== "string") {
       reply.code(400)
       return { error: "goal is required" }
+    }
+    if (!threadId || typeof threadId !== "string") {
+      reply.code(400)
+      return { error: "threadId is required" }
     }
 
     const runId = orchestrator.startRun(
       goal,
       {
         agentId: agent.id,
-        systemPrompt: db.resolveAgentSystemPrompt(agent)
+        systemPrompt: db.resolveAgentSystemPrompt(agent),
+        threadId
       },
       req.session ?? null
     )

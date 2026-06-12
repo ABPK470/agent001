@@ -62,7 +62,7 @@ export {
   getToolResult,
   isRecallableToolResult,
   isRecallableToolText,
-  loadRecentToolResults,
+  loadRecentToolResultsForThread,
   loadToolResultsForRun,
   saveToolResult,
   type DbToolResult

@@ -35,6 +35,7 @@ import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
 import type { ExecuteRunCommand } from "./execution/run-executor/types.js"
 import { applyRunWorkspaceDiff, captureRunWorkspaceDiff } from "./execution/workspace-effects.js"
+import { requireOwnedThreadId } from "./continuity.js"
 import { filterToolsForVisitor, getAllTools } from "./tooling/registry.js"
 
 export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestration.js"
@@ -92,13 +93,7 @@ export class AgentOrchestrator {
     session: CurrentSession | null
   ): string | null {
     if (!session?.upn) return null
-    if (requestedThreadId) {
-      const existing = db.getThread(requestedThreadId)
-      if (existing && existing.upn.toLowerCase() === session.upn.toLowerCase()) {
-        return existing.id
-      }
-    }
-    return db.createThread(session.upn).id
+    return requireOwnedThreadId(requestedThreadId, session.upn)
   }
 
   startRun(goal: string, config?: AgentRunConfig, session: CurrentSession | null = null): string {

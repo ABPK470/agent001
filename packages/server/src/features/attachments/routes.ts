@@ -64,9 +64,7 @@ function requireSession(req: FastifyRequest, reply: FastifyReply): boolean {
 function canViewAttachment(req: FastifyRequest, row: AttachmentRow): boolean {
   if (!req.session) return false
   if (req.session.isAdmin) return true
-  if (row.owner_upn && row.owner_upn === req.session.upn) return true
-  if (row.session_id && row.session_id === req.session.sid) return true
-  return false
+  return !!(row.owner_upn && row.owner_upn === req.session.upn)
 }
 
 export function registerAttachmentRoutes(app: FastifyInstance): void {

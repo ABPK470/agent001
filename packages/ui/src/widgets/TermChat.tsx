@@ -2650,6 +2650,13 @@ export function TermChat({
   const isHomeMode = mode === "home" || isThreadMode
   const pinProfile: GoalPinProfile = mode === "widget" ? "widget" : "home"
   const activeThreadId = threadIdProp ?? useStore((s) => s.activeThreadId)
+  const platformThreadId = useStore((s) => s.platformThreadId)
+  const ensurePlatformThread = useStore((s) => s.ensurePlatformThread)
+  const continuityThreadId = isThreadMode
+    ? activeThreadId
+    : mode === "widget"
+      ? platformThreadId
+      : activeThreadId
   const streamingAnswer = activeRun?.streamingAnswer ?? ""
 
   const {
@@ -2696,6 +2703,11 @@ export function TermChat({
     api.listAgents().then(setAgents).catch(() => { /* ignore */ })
   }, [])
 
+  useEffect(() => {
+    if (mode !== "widget") return
+    void ensurePlatformThread().catch(() => {})
+  }, [mode, ensurePlatformThread])
+
   // Auto-grow textarea as the user types. Uses useLayoutEffect so the
   // height is committed before the browser paints — no visible jump.
   useLayoutEffect(() => {
@@ -2716,11 +2728,17 @@ export function TermChat({
     setInput("")
     setSending(true)
     try {
+      const threadId =
+        continuityThreadId ??
+        (mode === "widget" ? await ensurePlatformThread() : activeThreadId)
+      if (!threadId) {
+        throw new Error("No thread selected")
+      }
       const { runId } = await api.startRun(
         effectiveGoal,
         selectedAgent?.id,
         attachmentIds.length > 0 ? attachmentIds : undefined,
-        isThreadMode ? activeThreadId ?? undefined : undefined
+        threadId
       )
       setActiveRun(runId)
       setScrollToRunId(runId)
@@ -2741,7 +2759,7 @@ export function TermChat({
     } finally {
       setSending(false)
     }
-  }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom, isThreadMode, activeThreadId])
+  }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, activeThreadId, ensurePlatformThread, mode])
 
   const cancel = useCallback(async () => {
     if (!activeRunId) return
@@ -2839,15 +2857,14 @@ export function TermChat({
   // Thread home loads ASC, global listRuns loads DESC — normalize here so
   // widget mode after chat/thread home does not slice the wrong end.
   const visibleRuns = useMemo(() => {
-    const scoped =
-      isThreadMode && activeThreadId
-        ? runs.filter((r) => r.threadId === activeThreadId)
-        : runs
+    const scoped = continuityThreadId
+      ? runs.filter((r) => r.threadId === continuityThreadId)
+      : runs
     const chronological = [...scoped].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     )
     return chronological.slice(Math.max(0, chronological.length - visibleRunCount))
-  }, [runs, visibleRunCount, isThreadMode, activeThreadId])
+  }, [runs, visibleRunCount, continuityThreadId])
 
   const displayRuns = useMemo(() => {
     const history = visibleRuns
@@ -2861,11 +2878,9 @@ export function TermChat({
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
   const scopedRunCount = useMemo(() => {
-    if (isThreadMode && activeThreadId) {
-      return runs.filter((r) => r.threadId === activeThreadId).length
-    }
-    return runs.length
-  }, [runs, isThreadMode, activeThreadId])
+    if (!continuityThreadId) return runs.length
+    return runs.filter((r) => r.threadId === continuityThreadId).length
+  }, [runs, continuityThreadId])
 
   const canLoadMoreHistory = visibleRunCount < scopedRunCount
 

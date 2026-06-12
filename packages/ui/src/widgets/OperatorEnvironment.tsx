@@ -245,7 +245,8 @@ export function OperatorEnvironment() {
       // import_attachment to inspect or pull them into the sandbox.
       const attachmentIds = goalAttachments.map((a) => a.id)
       const agentId = selectedAgentId ?? agents[0]?.id
-      const { runId } = await api.startRun(goal, agentId || undefined, attachmentIds)
+      const threadId = await useStore.getState().ensurePlatformThread()
+      const { runId } = await api.startRun(goal, agentId || undefined, attachmentIds, threadId)
       setActiveRun(runId)
       setGoalInput("")
       setGoalAttachments([])

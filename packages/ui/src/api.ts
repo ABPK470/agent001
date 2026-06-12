@@ -47,9 +47,8 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
 
 export const api = {
   // Runs
-  listRuns: (opts?: { scope?: "session" | "all"; threadId?: string }) => {
+  listRuns: (opts?: { threadId?: string }) => {
     const params = new URLSearchParams()
-    if (opts?.scope) params.set("scope", opts.scope)
     if (opts?.threadId) params.set("threadId", opts.threadId)
     const qs = params.toString()
     return json<Run[]>(`/api/runs${qs ? `?${qs}` : ""}`)
@@ -76,17 +75,17 @@ export const api = {
   getRun: (id: string) => json<RunDetail>(`/api/runs/${id}`),
   startRun: (
     goal: string,
-    agentId?: string,
-    attachmentIds?: string[],
-    threadId?: string
+    agentId: string | undefined,
+    attachmentIds: string[] | undefined,
+    threadId: string
   ) =>
     json<{ runId: string; attachmentIds?: string[] }>("/api/runs", {
       method: "POST",
       body: JSON.stringify({
         goal,
+        threadId,
         ...(agentId ? { agentId } : {}),
         ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
-        ...(threadId ? { threadId } : {}),
       }),
     }),
   cancelRun: (id: string) => json<{ ok: boolean }>(`/api/runs/${id}/cancel`, {

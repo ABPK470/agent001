@@ -6,6 +6,7 @@
 
 import type Database from "better-sqlite3"
 import { runBaselineMigration } from "./0001_baseline.js"
+import { runConversationThreadIdMigration } from "./0002_conversation_thread_id.js"
 
 export interface Migration {
   version: number
@@ -15,7 +16,8 @@ export interface Migration {
 
 // Ordered list of migrations — append only; never reorder applied migrations.
 export const MIGRATIONS: readonly Migration[] = [
-  { version: 1, name: "baseline", up: runBaselineMigration }
+  { version: 1, name: "baseline", up: runBaselineMigration },
+  { version: 2, name: "conversation_thread_id", up: runConversationThreadIdMigration }
 ]
 
 // Apply pending migrations once each. Called on server boot.

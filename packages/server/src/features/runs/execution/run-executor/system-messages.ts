@@ -33,11 +33,10 @@ export async function buildExecutionSystemMessages(
   const { request, interaction, messaging } = input
   const priorTurns =
     envBase.activeRun?.ownerUpn &&
-    (envBase.activeRun.threadId || envBase.activeRun.sessionId) &&
+    envBase.activeRun.threadId &&
     envBase.runWorkspace.taskType !== "code_generation"
       ? loadPriorTurns({
           threadId: envBase.activeRun.threadId,
-          sessionId: envBase.activeRun.sessionId,
           excludeRunId: request.runId,
           upn: envBase.activeRun.ownerUpn,
           limit: 3
@@ -45,8 +44,14 @@ export async function buildExecutionSystemMessages(
       : []
 
   const priorResults =
-    envBase.activeRun?.sessionId && envBase.runWorkspace.taskType !== "code_generation"
-      ? loadPriorResults({ sessionId: envBase.activeRun.sessionId, excludeRunId: request.runId })
+    envBase.activeRun?.threadId &&
+    envBase.activeRun.ownerUpn &&
+    envBase.runWorkspace.taskType !== "code_generation"
+      ? loadPriorResults({
+          threadId: envBase.activeRun.threadId,
+          upn: envBase.activeRun.ownerUpn,
+          excludeRunId: request.runId
+        })
       : []
 
   const systemMessages = await buildSystemMessages({

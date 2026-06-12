@@ -95,17 +95,8 @@ export class EventBroadcaster {
 
     const allowed = (identity: WsClientIdentity): boolean => {
       if (!owner) return true
-      const matchesUpn =
-        !!identity.upn && !!owner.upn && identity.upn.toLowerCase() === owner.upn.toLowerCase()
-      // Sid match was previously gated on `!identity.upn`. That gate caused
-      // the chat-stuck-on-Thinking bug: a client whose SSE socket was opened
-      // pre-welcome (identity.upn=null) and later got a new cookie (new sid
-      // + upn) could never receive run events again — matchesUpn was false
-      // (server-side identity still had upn=null) AND matchesSid was false
-      // (sid mismatch). Sids are per-cookie unique, so matching by sid is
-      // safe regardless of whether the client also carries a UPN.
-      const matchesSid = !!owner.sid && !!identity.sid && owner.sid === identity.sid
-      return matchesUpn || matchesSid
+      if (!owner.upn || !identity.upn) return false
+      return identity.upn.toLowerCase() === owner.upn.toLowerCase()
     }
 
     for (const [, { sink, identity }] of this.sseClients) {

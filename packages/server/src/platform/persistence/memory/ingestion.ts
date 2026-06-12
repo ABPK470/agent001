@@ -62,19 +62,16 @@ export function ingestTurn(opts: {
     return null
   }
 
-  // Dedup: check against recent entries (same session/run AND same tenant).
-  // Without the upn predicate user A's entry could mask a near-identical
-  // legitimate entry from user B.
+  // Dedup: check against recent entries for the same tenant (upn).
   const recentRows = getDb()
     .prepare(
       `
     SELECT content FROM memory_entries
-    WHERE (session_id = ? OR run_id = ?)
-      AND ((upn IS NULL AND ? IS NULL) OR upn = ?)
+    WHERE ((upn IS NULL AND @upn IS NULL) OR upn = @upn)
     ORDER BY created_at DESC LIMIT 20
   `
     )
-    .all(opts.sessionId ?? "", opts.runId ?? "", opts.upn ?? null, opts.upn ?? null) as Array<{
+    .all({ upn: opts.upn ?? null }) as Array<{
     content: string
   }>
 
@@ -422,7 +419,6 @@ export interface AgentNoteInput {
   claim: string
   evidence?: string
   category?: string
-  sessionId?: string | null
   runId?: string | null
   upn?: string | null
 }
@@ -465,7 +461,7 @@ export function ingestAgentNote(input: AgentNoteInput): AgentNoteResult {
     },
     source: MemorySource.Agent,
     confidence: evidenceTail ? 0.85 : 0.75,
-    sessionId: input.sessionId ?? null,
+    sessionId: null,
     runId: input.runId ?? null,
     upn: input.upn ?? null,
     // Notes derive value from their subject (a qualified name) rather than
