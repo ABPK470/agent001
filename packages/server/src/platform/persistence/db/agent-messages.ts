@@ -11,7 +11,7 @@
 
 import { randomUUID } from "node:crypto"
 import { BusProtocol, isBusProtocol } from "../../../shared/enums/bus.js"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface AgentMessageRow {
   id: string

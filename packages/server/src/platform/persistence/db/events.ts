@@ -2,7 +2,7 @@
  * Unified event log & webhook drain persistence.
  */
 
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface DbEvent {
   id: number

@@ -2,10 +2,11 @@
  * Server startup — ordered wiring from persistence through HTTP listen and shutdown.
  */
 
+import { bootstrapAdminFromEnv } from "../features/auth/index.js"
+import { openDatabase, runDatabaseMaintenance } from "../platform/persistence/index.js"
 import { buildApp } from "../app/build-app.js"
 import { printStartupBanner } from "./banner.js"
 import { createServerContext } from "./context.js"
-import { initDatabase } from "./database.js"
 import { buildLlmAndCatalog } from "./llm.js"
 import { initMessaging } from "./messaging.js"
 import { createOrchestrator } from "./orchestrator-factory.js"
@@ -22,8 +23,10 @@ function recoverStaleRuns(orchestrator: ReturnType<typeof createOrchestrator>): 
 }
 
 export async function startServer(): Promise<void> {
-  // 1. Persistence
-  initDatabase()
+  // 1. Persistence — open SQLite, then one-time boot hygiene
+  openDatabase()
+  runDatabaseMaintenance()
+  bootstrapAdminFromEnv()
 
   // 2. Platform runtime (sandbox, MSSQL, sync, boot host)
   const ctx = await createServerContext()

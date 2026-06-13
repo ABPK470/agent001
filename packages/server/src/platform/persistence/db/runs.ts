@@ -4,7 +4,7 @@
 
 import { isRunStatus, RUN_STATUSES, RunStatus } from "@mia/agent"
 import type { Run } from "@mia/shared-types"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 // ── Run queries ──────────────────────────────────────────────────
 

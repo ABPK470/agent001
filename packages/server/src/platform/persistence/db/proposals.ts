@@ -25,7 +25,7 @@ import {
   type RiskTier
 } from "@mia/sync"
 import { randomUUID } from "node:crypto"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 // ── proposer_runs ────────────────────────────────────────────────
 

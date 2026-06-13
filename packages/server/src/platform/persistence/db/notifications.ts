@@ -2,7 +2,7 @@
  * Notification persistence.
  */
 
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface DbNotification {
   id: string

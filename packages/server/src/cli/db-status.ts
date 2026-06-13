@@ -3,10 +3,10 @@
  * Usage: npm run db:status
  */
 
-import { getDb, getDbPath } from "../platform/persistence/db/connection.js"
+import { getDbPath, openDatabase } from "../platform/persistence/connection.js"
 import { listMigrations } from "../platform/persistence/migrations/index.js"
 
-const db = getDb()
+const db = openDatabase()
 const rows = listMigrations(db)
 
 console.log(`Database: ${getDbPath()}\n`)

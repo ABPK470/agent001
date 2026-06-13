@@ -2,7 +2,7 @@
  * Data lifecycle — reset, pruning, and stats.
  */
 
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 // ── Data reset (preserve policies + layouts) ─────────────────────
 

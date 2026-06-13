@@ -13,7 +13,7 @@
  * Continuity scope: thread_id + upn via JOIN on runs (not cookie session).
  */
 
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface DbToolResult {
   id?: number

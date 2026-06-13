@@ -1,16 +1,18 @@
-import { bootstrapAdminFromEnv } from "../features/auth/index.js"
-import { pruneExpiredAttachments } from "../platform/persistence/attachments.js"
-import {
-  getDb,
-  getDbPath,
-  normaliseUnknownRunStatuses,
-  pruneOldData
-} from "../platform/persistence/index.js"
-import { prune as pruneMemory } from "../platform/persistence/memory.js"
+/**
+ * Post-open database maintenance — run once at server boot after {@link openDatabase}.
+ *
+ * Hygiene only (status normalisation, retention pruning). Auth bootstrap is separate
+ * in start-server because it is an application concern, not persistence internals.
+ */
 
-export function initDatabase(): void {
-  getDb()
-  console.log(`Database initialized (${getDbPath()})`)
+import { pruneExpiredAttachments } from "./attachments.js"
+import { getDbPath } from "./connection.js"
+import { normaliseUnknownRunStatuses } from "./db/runs.js"
+import { pruneOldData } from "./db/lifecycle.js"
+import { prune as pruneMemory } from "./memory.js"
+
+export function runDatabaseMaintenance(): void {
+  console.log(`Database opened (${getDbPath()})`)
 
   const normalised = normaliseUnknownRunStatuses()
   if (normalised > 0) {
@@ -33,6 +35,4 @@ export function initDatabase(): void {
   if (memPrune.deleted > 0) {
     console.log(`Pruned ${memPrune.deleted} stale/duplicate memory entries`)
   }
-
-  bootstrapAdminFromEnv()
 }

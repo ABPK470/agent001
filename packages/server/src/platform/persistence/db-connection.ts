@@ -1,1 +1,1 @@
-export * from "./db/connection.js"
+export * from "./connection.js"

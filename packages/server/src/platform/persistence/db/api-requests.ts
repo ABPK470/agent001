@@ -2,7 +2,7 @@
  * API request logging persistence.
  */
 
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface DbApiRequest {
   id?: number

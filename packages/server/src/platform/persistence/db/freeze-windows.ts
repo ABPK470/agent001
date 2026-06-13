@@ -10,7 +10,7 @@
  */
 
 import { DEFAULT_TENANT_ID, installFreezeWindowRegistry, type FreezeWindowDefinition } from "@mia/sync"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 // ── Public type (matches shared-types `FreezeWindow`) ───────────
 

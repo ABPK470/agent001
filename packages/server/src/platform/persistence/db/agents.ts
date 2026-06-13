@@ -3,7 +3,7 @@
  */
 
 import { DEFAULT_SYSTEM_PROMPT } from "@mia/agent"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 import { LlmProvider } from "../../../shared/enums/llm.js"
 
 // ── LLM config ───────────────────────────────────────────────────
@@ -80,7 +80,7 @@ export function deleteAgentDefinition(id: string): void {
  * from `packages/agent/prompts/default-system.md` (DEFAULT_SYSTEM_PROMPT)
  * regardless of what is stored in the DB. The stored row is a display-only
  * mirror that gets re-synced on every server startup
- * (see `db/connection.ts` seed).
+ * (see `connection.ts` seed).
  *
  * Custom agents (any non-"default" id) ARE persisted — that is the whole
  * point of letting an operator fork a prompt — and their stored prompt is

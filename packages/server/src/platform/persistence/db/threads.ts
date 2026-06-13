@@ -3,7 +3,7 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface DbThread {
   id: string

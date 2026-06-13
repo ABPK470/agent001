@@ -1,4 +1,4 @@
-export { _migrate, _setDb, getDb, getDbPath } from "./connection.js"
+export { _migrate, _setDb, getDb, getDbPath, openDatabase } from "../connection.js"
 
 export {
   findReplyTo,

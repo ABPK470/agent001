@@ -13,7 +13,7 @@
  */
 
 import { UserSource } from "../../../shared/enums/auth.js"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface DbUser {
   upn: string // canonical, lowercased

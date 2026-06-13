@@ -10,7 +10,7 @@ import { isSyncRunStatus, SYNC_RUN_STATUSES, SyncRunStatus } from "@mia/shared-e
 import {
   requireSyncRunActorUpn
 } from "../../../features/sync/application/plan-actor.js"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface SyncRunRow {
   plan_id: string
