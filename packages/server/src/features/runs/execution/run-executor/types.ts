@@ -11,7 +11,7 @@ import {
   type Tool,
   type Unsubscribe
 } from "@mia/agent"
-import { type WorkspaceDiff, type prepareRunWorkspace } from "../../../../bootstrap/workspace.js"
+import { type WorkspaceDiff, type prepareRunWorkspace } from "../../workspace/index.js"
 import type { AgentBus } from "../../../../platform/queue/agent-bus.js"
 import { type RunPriority } from "../../../../platform/queue/run-queue.js"
 import type { ClarificationsRegistryPort } from "../../../../ports/clarifications.js"

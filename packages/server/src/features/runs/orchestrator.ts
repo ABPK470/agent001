@@ -11,9 +11,9 @@ import {
   type Tool
 } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { bootHostDepsToConfigureAgentOptions } from "../../bootstrap/config.js"
-import type { RunWorkspaceContext, WorkspaceDiff } from "../../bootstrap/workspace.js"
-import { cleanupRunWorkspace, cleanupStaleRunWorkspaces } from "../../bootstrap/workspace.js"
+import { bootHostDepsToConfigureAgentOptions } from "../../bootstrap/boot-host-adapter.js"
+import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace/index.js"
+import { cleanupRunWorkspace, cleanupStaleRunWorkspaces } from "./workspace/index.js"
 import { broadcast } from "../../platform/events/broadcaster.js"
 import { cleanupExpiredCache } from "../../platform/persistence/index.js"
 import * as db from "../../platform/persistence/sqlite.js"

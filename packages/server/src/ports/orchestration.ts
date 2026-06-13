@@ -19,7 +19,7 @@ import type {
   SyncPlan,
   SyncRunSink
 } from "@mia/sync"
-import type { RunWorkspaceContext, WorkspaceDiff } from "../bootstrap/workspace.js"
+import type { RunWorkspaceContext, WorkspaceDiff } from "../features/runs/workspace/index.js"
 import type { AgentBus } from "../platform/queue/agent-bus.js"
 import type { RunQueue } from "../platform/queue/run-queue.js"
 import type { MessageRouterPort } from "./channels.js"

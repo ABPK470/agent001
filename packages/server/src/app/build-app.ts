@@ -52,7 +52,7 @@ import type { Signer } from "../platform/persistence/evidence.js"
 import { touchSession } from "../platform/persistence/sessions.js"
 import type { MessageQueue, MessageRouter } from "../platform/queue/channels/index.js"
 import type { LlmCompletionPort } from "@mia/sync"
-import type { WorkspaceRef } from "../bootstrap/agent-workspace.js"
+import type { ServerWorkspaceRef } from "../bootstrap/server-workspace.js"
 
 export interface BuildAppOptions {
   readonly projectRoot: string
@@ -60,7 +60,7 @@ export interface BuildAppOptions {
   readonly messageQueue: MessageQueue
   readonly messageRouter: MessageRouter
   readonly uiDist: string
-  readonly workspace: WorkspaceRef
+  readonly workspace: ServerWorkspaceRef
   readonly evidenceStorageRoot: string
   readonly evidenceSigner: Signer | null
   readonly llmPortHolder: { current: LlmCompletionPort }

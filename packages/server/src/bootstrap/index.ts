@@ -1,12 +1,14 @@
-export * from "./config.js"
-export * from "./llm.js"
-export * from "./sync.js"
-export * from "./workspace.js"
+export { bootHostDepsToConfigureAgentOptions } from "./boot-host-adapter.js"
+export { buildLlmAndCatalog } from "./llm.js"
+export { createSyncEventSink, createSyncRunSink, loadBootSyncEnvironments } from "./sync.js"
 export { initDatabase } from "./database.js"
 export { createServerContext, buildBootHostDeps, type ServerContext } from "./context.js"
 export { configureSandbox, type SandboxRuntime } from "./sandbox.js"
-export { resolveAgentWorkspace, createWorkspaceRef, type WorkspaceRef } from "./agent-workspace.js"
-export { bindWorkspace } from "./workspace-binding.js"
+export {
+  resolveServerWorkspace,
+  createServerWorkspaceRef,
+  type ServerWorkspaceRef
+} from "./server-workspace.js"
 export { createOrchestrator } from "./orchestrator-factory.js"
 export { initMessaging, type MessagingRuntime } from "./messaging.js"
 export { startSidecars, type ServerSidecars } from "./sidecars.js"

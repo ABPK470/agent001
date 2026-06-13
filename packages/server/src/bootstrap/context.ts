@@ -8,14 +8,18 @@ import { seedDefaultPoliciesIfMissing } from "../features/policies/application/p
 import { setupMssql } from "../platform/mssql/setup.js"
 import { listFreezeWindowDefinitionsForTenant } from "../platform/persistence/index.js"
 import type { BootHostDeps } from "../ports/orchestration.js"
-import { createWorkspaceRef, resolveAgentWorkspace, type WorkspaceRef } from "./agent-workspace.js"
+import {
+  createServerWorkspaceRef,
+  resolveServerWorkspace,
+  type ServerWorkspaceRef
+} from "./server-workspace.js"
 import { projectRoot } from "./paths.js"
 import { configureSandbox, type SandboxRuntime } from "./sandbox.js"
 import { createSyncEventSink, createSyncRunSink, loadBootSyncEnvironments } from "./sync.js"
 
 export interface ServerContext {
   readonly projectRoot: string
-  readonly workspace: WorkspaceRef
+  readonly workspace: ServerWorkspaceRef
   readonly sandbox: SandboxRuntime
   readonly bootHost: AgentHost
   readonly mssqlSummary: string
@@ -35,7 +39,7 @@ function logSyncEnvironments(syncEnvironments: ServerContext["syncEnvironments"]
 }
 
 export async function createServerContext(): Promise<ServerContext> {
-  const workspace = createWorkspaceRef(resolveAgentWorkspace())
+  const workspace = createServerWorkspaceRef(resolveServerWorkspace())
   const sandbox = await configureSandbox(() => workspace.get())
 
   const mssqlSetup = setupMssql(projectRoot)

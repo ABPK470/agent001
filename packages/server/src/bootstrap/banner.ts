@@ -1,5 +1,5 @@
 import { existsSync } from "node:fs"
-import { getRunProfile } from "./workspace.js"
+import { getRunProfile } from "../features/runs/workspace/index.js"
 import { listenPort } from "./paths.js"
 
 export function printStartupBanner(opts: {

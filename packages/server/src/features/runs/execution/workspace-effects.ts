@@ -1,11 +1,11 @@
 import type { Tool } from "@mia/agent"
 import { EventType } from "@mia/agent"
-import type { RunWorkspaceContext, WorkspaceDiff } from "../../../bootstrap/workspace.js"
+import type { RunWorkspaceContext, WorkspaceDiff } from "../workspace/index.js"
 import {
   applyWorkspaceDiff,
   cleanupRunWorkspace,
   computeWorkspaceDiff
-} from "../../../bootstrap/workspace.js"
+} from "../workspace/index.js"
 import { recordEffect, recordFileWrite } from "../../../platform/effects/index.js"
 import { broadcastTrace } from "../../../platform/events/broadcaster.js"
 import type { ActiveRun, NotificationOpts } from "../../../ports/orchestration.js"

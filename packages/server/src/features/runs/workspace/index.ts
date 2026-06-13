@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { cp, mkdir, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join, relative, resolve } from "node:path"
-import { RunProfile, RunTaskType } from "../shared/enums/run-workspace.js"
+import { RunProfile, RunTaskType } from "../../../shared/enums/run-workspace.js"
 
 export { RunTaskType }
 

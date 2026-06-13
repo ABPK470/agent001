@@ -6,10 +6,10 @@
   "exports": {
     ".": "./src/index.ts",
     "./bootstrap": "./src/bootstrap/index.ts",
-    "./bootstrap/config": "./src/bootstrap/config.ts",
+    "./bootstrap/boot-host-adapter": "./src/bootstrap/boot-host-adapter.ts",
     "./bootstrap/llm": "./src/bootstrap/llm.ts",
     "./bootstrap/sync": "./src/bootstrap/sync.ts",
-    "./bootstrap/workspace": "./src/bootstrap/workspace.ts",
+    "./features/runs/workspace": "./src/features/runs/workspace/index.ts",
     "./features": "./src/features/index.ts",
     "./platform": "./src/platform/index.ts",
     "./platform/effects": "./src/platform/effects/index.ts",

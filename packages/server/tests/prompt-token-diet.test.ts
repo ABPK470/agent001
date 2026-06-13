@@ -23,7 +23,7 @@ import {
 } from "../src/features/runs/core/decide-sections.js"
 import { buildToolContext } from "../src/features/runs/core/prompt/builder.js"
 import { buildSystemMessages } from "../src/features/runs/core/system-messages.js"
-import type { RunWorkspaceContext } from "../src/bootstrap/workspace.js"
+import type { RunWorkspaceContext } from "../src/features/runs/workspace/index.js"
 
 const RW: RunWorkspaceContext = {
   runId: "run-x",

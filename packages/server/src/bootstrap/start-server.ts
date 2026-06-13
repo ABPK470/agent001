@@ -1,5 +1,5 @@
 /**
- * Server bootstrap — wires persistence, platform runtime, HTTP, and shutdown.
+ * Server startup — ordered wiring from persistence through HTTP listen and shutdown.
  */
 
 import { buildApp } from "../app/build-app.js"
@@ -10,9 +10,9 @@ import { buildLlmAndCatalog } from "./llm.js"
 import { initMessaging } from "./messaging.js"
 import { createOrchestrator } from "./orchestrator-factory.js"
 import { listenHost, listenPort, resolveUiDist } from "./paths.js"
+import { createServerWorkspaceRef } from "./server-workspace.js"
 import { registerGracefulShutdown } from "./shutdown.js"
 import { startSidecars } from "./sidecars.js"
-import { bindWorkspace } from "./workspace-binding.js"
 
 function recoverStaleRuns(orchestrator: ReturnType<typeof createOrchestrator>): void {
   const recovery = orchestrator.recoverStaleRuns()
@@ -22,22 +22,33 @@ function recoverStaleRuns(orchestrator: ReturnType<typeof createOrchestrator>): 
 }
 
 export async function startServer(): Promise<void> {
+  // 1. Persistence
   initDatabase()
 
+  // 2. Platform runtime (sandbox, MSSQL, sync, boot host)
   const ctx = await createServerContext()
+
+  // 3. LLM + catalog
   const llm = await buildLlmAndCatalog(ctx.bootHost, ctx.mssqlSummary)
+
+  // 4. Background services (evidence signer, proposer scheduler, notifications)
   const sidecars = startSidecars({ bootHost: ctx.bootHost, llm })
 
+  // 5. Run orchestration + messaging
   const orchestrator = createOrchestrator(ctx, llm)
-  const workspace = bindWorkspace(ctx, orchestrator)
+  const workspace = createServerWorkspaceRef(ctx.workspace.get(), (path) =>
+    orchestrator.setWorkspace(path)
+  )
   const messaging = initMessaging(orchestrator)
 
+  // 6. HTTP application
+  const uiDist = resolveUiDist()
   const app = await buildApp({
     projectRoot: ctx.projectRoot,
     orchestrator,
     messageQueue: messaging.messageQueue,
     messageRouter: messaging.messageRouter,
-    uiDist: resolveUiDist(),
+    uiDist,
     workspace,
     evidenceStorageRoot: sidecars.evidenceStorageRoot,
     evidenceSigner: sidecars.evidenceSigner,
@@ -45,14 +56,16 @@ export async function startServer(): Promise<void> {
     bootHost: ctx.bootHost
   })
 
+  // 7. Listen
   await app.listen({ port: listenPort, host: listenHost })
   recoverStaleRuns(orchestrator)
   printStartupBanner({
     mssqlSummary: ctx.mssqlSummary,
     channelConfigs: messaging.channelConfigs,
-    uiDist: resolveUiDist()
+    uiDist
   })
 
+  // 8. Graceful shutdown
   registerGracefulShutdown({
     app,
     orchestrator,

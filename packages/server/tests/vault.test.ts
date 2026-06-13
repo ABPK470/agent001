@@ -28,7 +28,7 @@ afterEach(() => {
 
 describe("vault", () => {
   it("auto-generates a key file on first use and round-trips text", async () => {
-    const { _resetVaultKeyCache, seal, open } = await import("../src/crypto/vault.js")
+    const { _resetVaultKeyCache, seal, open } = await import("../src/shared/utils/vault.js")
     _resetVaultKeyCache()
 
     const sealed = seal("hello world")
@@ -44,7 +44,7 @@ describe("vault", () => {
   })
 
   it("rejects tampered ciphertext", async () => {
-    const { _resetVaultKeyCache, seal, open } = await import("../src/crypto/vault.js")
+    const { _resetVaultKeyCache, seal, open } = await import("../src/shared/utils/vault.js")
     _resetVaultKeyCache()
     const sealed = seal("secret")
     sealed.encPayload[0] = sealed.encPayload[0]! ^ 0x01
@@ -52,7 +52,7 @@ describe("vault", () => {
   })
 
   it("rejects tampered auth tag", async () => {
-    const { _resetVaultKeyCache, seal, open } = await import("../src/crypto/vault.js")
+    const { _resetVaultKeyCache, seal, open } = await import("../src/shared/utils/vault.js")
     _resetVaultKeyCache()
     const sealed = seal("secret")
     sealed.authTag[0] = sealed.authTag[0]! ^ 0x01
@@ -61,7 +61,7 @@ describe("vault", () => {
 
   it("uses MIA_VAULT_KEY env when set (hex 64 chars)", async () => {
     process.env["MIA_VAULT_KEY"] = "00".repeat(32)
-    const { _resetVaultKeyCache, getVaultKey } = await import("../src/crypto/vault.js")
+    const { _resetVaultKeyCache, getVaultKey } = await import("../src/shared/utils/vault.js")
     _resetVaultKeyCache()
     const k = getVaultKey()
     expect(k.length).toBe(32)
@@ -70,13 +70,13 @@ describe("vault", () => {
 
   it("rejects MIA_VAULT_KEY of wrong length", async () => {
     process.env["MIA_VAULT_KEY"] = "abcd"
-    const { _resetVaultKeyCache, getVaultKey } = await import("../src/crypto/vault.js")
+    const { _resetVaultKeyCache, getVaultKey } = await import("../src/shared/utils/vault.js")
     _resetVaultKeyCache()
     expect(() => getVaultKey()).toThrow(/MIA_VAULT_KEY/)
   })
 
   it("seals/opens JSON values", async () => {
-    const { _resetVaultKeyCache, sealJson, openJson } = await import("../src/crypto/vault.js")
+    const { _resetVaultKeyCache, sealJson, openJson } = await import("../src/shared/utils/vault.js")
     _resetVaultKeyCache()
     const sealed = sealJson({ user: "alice", pw: "p@ss" })
     expect(openJson(sealed)).toEqual({ user: "alice", pw: "p@ss" })

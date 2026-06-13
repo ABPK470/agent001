@@ -39,7 +39,7 @@ async function bootstrap(): Promise<void> {
   _migrate(testDb)
   _setDb(testDb)
   seedTestUsers(testDb)
-  const { _resetVaultKeyCache } = await import("../src/crypto/vault.js")
+  const { _resetVaultKeyCache } = await import("../src/shared/utils/vault.js")
   _resetVaultKeyCache()
 }
 

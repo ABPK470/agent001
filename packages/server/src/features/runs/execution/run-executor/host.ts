@@ -7,7 +7,7 @@ import {
   type AgentHost,
   type HostedPolicyContext
 } from "@mia/agent"
-import { bootHostDepsToConfigureAgentOptions } from "../../../../bootstrap/config.js"
+import { bootHostDepsToConfigureAgentOptions } from "../../../../bootstrap/boot-host-adapter.js"
 import { createServerAttachmentService } from "../../../../platform/persistence/attachments.js"
 import {
   ingestAgentNote,

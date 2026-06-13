@@ -4,7 +4,6 @@ import { syncPlanActorUpn } from "../features/sync/application/plan-actor.js"
 import { broadcast } from "../platform/events/broadcaster.js"
 import {
   getSyncRunPlanJson,
-  listFreezeWindowDefinitionsForTenant,
   recordSyncRunFinish,
   recordSyncRunPreview,
   recordSyncRunStart
@@ -65,8 +64,4 @@ export function createSyncRunSink(): AgentHost["sync"]["runs"]["sink"] {
       }
     }
   }
-}
-
-export function readFreezeWindows() {
-  return listFreezeWindowDefinitionsForTenant()
 }

@@ -25,7 +25,7 @@ import {
 import { getAttachment, type AttachmentRow } from "../../../platform/persistence/attachments.js"
 import type { DbToolResult } from "../../../platform/persistence/sqlite.js"
 import type { ClarificationsPort } from "../../../ports/clarifications.js"
-import type { RunWorkspaceContext } from "../../../bootstrap/workspace.js"
+import type { RunWorkspaceContext } from "../workspace/index.js"
 import { buildClarificationBlock } from "./clarification-block.js"
 import {
   renderKnownObjectsBlock,

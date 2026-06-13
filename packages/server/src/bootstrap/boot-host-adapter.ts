@@ -1,10 +1,7 @@
 import type { ConfigureAgentOptions } from "@mia/agent"
 import type { BootHostDeps } from "../ports/orchestration.js"
 
-/**
- * Normalize boot-time host deps into one canonical configureAgent input.
- * This keeps per-run host construction and boot-tool construction aligned.
- */
+/** Map boot-time host deps into configureAgent options for per-run host construction. */
 export function bootHostDepsToConfigureAgentOptions(
   bootHostDeps: BootHostDeps
 ): Partial<ConfigureAgentOptions> {
