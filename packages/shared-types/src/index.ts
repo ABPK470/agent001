@@ -8,16 +8,12 @@
  */
 
 import type {
-    DecompositionStrategy,
     DelegationEndStatus,
     DirectLoopFallbackSource,
     EffectClass,
     EscalationAction,
     EscalationReason,
     EventType,
-    PlannerNeedLevel,
-    PlannerRepairActivePath,
-    PlannerRepairCompatibilityMode,
     PlannerRoute,
     PlannerStepPhase,
     PolicySource,
@@ -27,16 +23,12 @@ import type {
 } from "@mia/shared-enums"
 
 export type {
-    DecompositionStrategy,
     DelegationEndStatus,
     DirectLoopFallbackSource,
     EffectClass,
     EscalationAction,
     EscalationReason,
     EventType,
-    PlannerNeedLevel,
-    PlannerRepairActivePath,
-    PlannerRepairCompatibilityMode,
     PlannerRoute,
     PlannerStepPhase,
     VerificationMode,
@@ -80,7 +72,6 @@ export interface Run {
   displayName?: string | null
   trace?: TraceEntry[]
   streamingAnswer?: string
-  coherentStream?: string
   auditTrail?: AuditEntry[]
   stepData?: Step[]
 }
@@ -213,17 +204,7 @@ export type TraceEntry =
   | { kind: "user-input-response"; text: string }
   // Planner entries (agenc-core planner-first routing)
   | { kind: "planning_preflight"; mode: "planner-first" }
-  | { kind: "planner-decision"; score: number; shouldPlan: boolean; route?: PlannerRoute; reason: string; coherenceNeed?: PlannerNeedLevel; coordinationNeed?: PlannerNeedLevel }
-  | { kind: "coherent-generation-start"; route: "bounded_coherent_generation" }
-  | { kind: "coherent-generation-bundle"; artifactCount: number; artifacts: Array<{ path: string; purpose: string }>; sharedContracts: string[]; invariants: string[] }
-  | { kind: "coherent-generation-materialized"; artifactCount: number; artifacts: string[]; readBackArtifacts: string[] }
-  | { kind: "coherent-generation-verified"; overall: VerifierOutcome; confidence: number; issueCount: number; systemCheckCount: number; affectedArtifacts: string[] }
-  | { kind: "coherent-generation-repair-needed"; repairAttempt: number; issueCount: number; issues: string[]; affectedArtifacts: string[] }
-  | { kind: "coherent-generation-escalated"; target: string; issueCount: number; reason: string }
-  | { kind: "coherent-generation-handoff"; artifactCount: number; verificationRoute: string }
-  | { kind: "coherent-generation-failed"; stage: string; diagnostics: string[] }
-  | { kind: "planner-coherent-bootstrap"; artifactCount: number; decompositionStrategy: DecompositionStrategy; decompositionReasons: string[]; sharedContracts: string[]; invariants: string[] }
-  | { kind: "planner-architecture-state"; lane: PlannerRoute; status: "frozen" | "preserved" | "repairing_in_place" | "abandoned"; reason: string; architecture?: string }
+  | { kind: "planner-decision"; score: number; shouldPlan: boolean; route?: PlannerRoute; reason: string }
   | { kind: "planner-generating" }
   | { kind: "planner-plan-generated"; reason: string; stepCount: number; steps: Array<{ name: string; type: string; dependsOn?: string[] }>; edges?: Array<{ from: string; to: string }> }
   | {
@@ -339,19 +320,6 @@ export type TraceEntry =
     epoch?: number
     rerunOrder: string[]
     tasks: Array<{ stepName: string; mode: VerifierMode; ownedIssueCodes: string[]; dependencyIssueCodes: string[] }>
-  }
-  | {
-    kind: "planner-repair-compatibility"
-    attempt: number
-    mode: PlannerRepairCompatibilityMode
-    activePath: PlannerRepairActivePath
-    diverged: boolean
-    divergenceScore?: number
-    divergenceThreshold?: number
-    pinnedToLegacy?: boolean
-    reasons: string[]
-    legacy: { rerunOrder: string[]; tasks: Array<{ stepName: string; mode: VerifierMode; ownedIssueCodes: string[] }> }
-    repair: { rerunOrder: string[]; tasks: Array<{ stepName: string; mode: VerifierMode; ownedIssueCodes: string[]; dependencyIssueCodes: string[] }> }
   }
   | { kind: "planner-retry"; attempt: number; reason: string; skippedSteps?: number; retrySteps?: number; rerunOrder?: string[] }
   | { kind: "planner-retry-skipped"; reason: string }

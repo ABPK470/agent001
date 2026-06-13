@@ -163,7 +163,6 @@ export const RECOVERY_HINT_RE = /\[recovery\]|no[_\s]progress|stuck|repeated[_\s
 
 /**
  * Existing-code coupling tends to require planner coordination.
- * This is a HARD override: never route coupled work to bounded coherent gen.
  */
 export const EXISTING_CODE_COUPLING_RE =
   /\b(?:existing|current|already|integrat(?:e|ion)|hook\s+into|wire\s+into|refactor|migrat(?:e|ion)|extend|modify|update|patch|rename|repair)\b/i

@@ -13,8 +13,6 @@ export { DiagnosticCategory, DiagnosticSeverity }
 
 // Re-export decision and execution envelope types from extracted modules.
 export type {
-  CoherentSharedContract,
-  CoherentSystemInvariant,
   PlannerDecision,
   PlannerRoute
 } from "./internal/types-decision.js"

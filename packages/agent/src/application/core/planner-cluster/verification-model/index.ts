@@ -283,11 +283,7 @@ export function buildChildRepairPayload(task: RepairTask): ChildRepairPayload {
     goals: task.ownedIssues.map(buildRepairGoal),
     dependencyGoals: task.dependencyContext.map(buildRepairGoal),
     requiredAcceptedArtifacts: [...task.requiredAcceptedArtifacts],
-    unresolvedDependencyBlockers,
-    preserveArchitecture: task.preserveArchitecture,
-    architectureSummary: task.architectureSummary,
-    sharedContracts: task.sharedContracts,
-    invariants: task.invariants
+    unresolvedDependencyBlockers
   }
 }
 

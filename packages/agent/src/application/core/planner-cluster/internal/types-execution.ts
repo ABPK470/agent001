@@ -8,7 +8,6 @@ export { EffectClass, StepRole, VerificationMode }
  * @module
  */
 
-import type { CoherentSharedContract, CoherentSystemInvariant } from "./types-decision.js"
 import type { VerifierIssueSeverity, VerifierOwnershipMode, VerifierRepairClass } from "./types-verifier.js"
 
 export interface ArtifactRelation {
@@ -44,10 +43,6 @@ export interface ChildRepairPayload {
   readonly dependencyGoals: readonly ChildRepairGoal[]
   readonly requiredAcceptedArtifacts: readonly string[]
   readonly unresolvedDependencyBlockers: readonly string[]
-  readonly preserveArchitecture?: boolean
-  readonly architectureSummary?: string
-  readonly sharedContracts?: readonly CoherentSharedContract[]
-  readonly invariants?: readonly CoherentSystemInvariant[]
 }
 
 export interface WorkflowStepContract {

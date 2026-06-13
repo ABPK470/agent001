@@ -1,4 +1,4 @@
-import { PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
+import { PlannerTraceKind } from "../../domain/index.js"
 /**
  * Trace-emission helpers for the planner orchestrator.
  *

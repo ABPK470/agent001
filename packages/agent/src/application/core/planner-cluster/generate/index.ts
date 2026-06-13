@@ -57,8 +57,6 @@ export interface PlanGenerationResult {
   readonly rawResponse: string | null
 }
 
-// generateCoherentBootstrap moved to ./generate/bootstrap.ts
-
 /**
  * Ask the LLM to generate a structured execution plan for a complex task.
  *
@@ -77,11 +75,8 @@ export async function generatePlan(
   const toolDescriptions = buildToolDescriptions(ctx.availableTools)
 
   // Hoist the per-call invariant prefix out of the retry loop. Previously
-  // the planner system prompt, tool descriptions, recent-history context,
-  // and the coherent-bootstrap block (often >2 KB) were rebuilt on every
-  // attempt — paying the construction cost AND defeating any provider-side
-  // prefix cache. Tag the bootstrap as `ephemeral` so Anthropic-compatible
-  // endpoints can cache it across retries.
+  // the planner system prompt, tool descriptions, and recent-history context
+  // were rebuilt on every attempt.
   const messagesPrefix: Message[] = [
     { role: MessageRole.System, content: PLANNER_SYSTEM_PROMPT, cacheHint: "ephemeral" },
     {

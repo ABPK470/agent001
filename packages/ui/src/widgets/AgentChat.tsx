@@ -304,7 +304,6 @@ export function AgentChat() {
   const activeRun = runs.find((r) => r.id === activeRunId)
   const trace = activeRun?.trace ?? []
   const streamingAnswer = activeRun?.streamingAnswer ?? ""
-  const coherentStream = activeRun?.coherentStream ?? ""
   const isRunning = activeRun?.status === "pending" || activeRun?.status === "running" || activeRun?.status === "planning"
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
 
@@ -378,13 +377,6 @@ export function AgentChat() {
       if (e.kind === "planner-retry") return `Retry #${e.attempt}`
       if (e.kind === "planner-escalation") return "Escalating"
       if (e.kind === "planner-sql-quality") return e.phase === "blocked" ? "Blocking SQL query" : "Reviewing SQL query"
-
-      // Coherent generation phases
-      if (e.kind === "coherent-generation-repair-needed") return `Repairing — ${e.issueCount} issue${e.issueCount !== 1 ? "s" : ""}`
-      if (e.kind === "coherent-generation-verified") return "Verifying"
-      if (e.kind === "coherent-generation-materialized") return "Writing files"
-      if (e.kind === "coherent-generation-bundle") return `Bundling ${e.artifactCount} file${e.artifactCount !== 1 ? "s" : ""}`
-      if (e.kind === "coherent-generation-start") return "Generating"
 
       // Planner pipeline phases
       if (e.kind === "planner-pipeline-start") return "Pipeline"
@@ -1183,15 +1175,6 @@ export function AgentChat() {
                                                                           : "Thinking")}
                                                               </span>
                                                           </div>
-                                                          {coherentStream && (
-                                                              <div className="ml-6 max-w-xs overflow-hidden">
-                                                                  <span className="text-xs text-text-muted/60 font-mono whitespace-pre-wrap break-all leading-tight">
-                                                                      {coherentStream.slice(
-                                                                          -120,
-                                                                      )}
-                                                                  </span>
-                                                              </div>
-                                                          )}
                                                       </div>
                                                   )}
 
@@ -1212,15 +1195,6 @@ export function AgentChat() {
                                                                       }
                                                                   </span>
                                                               </div>
-                                                              {coherentStream && (
-                                                                  <div className="ml-3 max-w-xs overflow-hidden">
-                                                                      <span className="text-xs text-text-muted/50 font-mono whitespace-pre-wrap break-all leading-tight">
-                                                                          {coherentStream.slice(
-                                                                              -120,
-                                                                          )}
-                                                                      </span>
-                                                                  </div>
-                                                              )}
                                                           </div>
                                                       )}
 

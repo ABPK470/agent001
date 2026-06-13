@@ -1301,22 +1301,6 @@ function buildResponseParts(
         parts = setActivityPart(parts, "plan", "Plan", "done", `${entry.stepCount} step${entry.stepCount !== 1 ? "s" : ""}`)
         parts = pushNarrativePart(parts, `narrative-plan-${index}`, `I mapped out a ${entry.stepCount}-step approach.`)
         break
-      case "coherent-generation-start":
-        parts = settlePrimaryActivities(parts, "generation")
-        parts = setActivityPart(parts, "generation", "Generating", "running", undefined, true)
-        break
-      case "coherent-generation-bundle":
-        parts = settlePrimaryActivities(parts, "generation")
-        parts = setActivityPart(parts, "generation", "Generating", "running", `${entry.artifactCount} file${entry.artifactCount !== 1 ? "s" : ""}`, true)
-        break
-      case "coherent-generation-materialized":
-        parts = setActivityPart(parts, "generation", "Generating", "done", `${entry.artifactCount} file${entry.artifactCount !== 1 ? "s" : ""} written`)
-        parts = pushNarrativePart(parts, `narrative-materialized-${index}`, `I generated ${entry.artifactCount} file${entry.artifactCount !== 1 ? "s" : ""}.`)
-        break
-      case "coherent-generation-failed":
-        parts = setActivityPart(parts, "generation", "Generating", "error", entry.stage)
-        parts = pushNarrativePart(parts, `narrative-generation-failed-${index}`, "I hit a problem while generating the result.", "error")
-        break
       case "planner-pipeline-start":
         currentPipelineAttempt = entry.attempt
         parts = setActivityPart(parts, `pipeline-${entry.attempt}`, "Pipeline", "running", entry.attempt > 1 ? `attempt ${entry.attempt}` : undefined, true)
@@ -2893,7 +2877,6 @@ export function TermChat({
         id: runId,
         trace: rawTrace as TraceEntry[],
         streamingAnswer: "",
-        coherentStream: "",
       })
     } finally {
       traceHydratingRef.current.delete(runId)

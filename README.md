@@ -77,8 +77,7 @@ and sent down the cheapest lane that can satisfy it:
 | Lane | When | How |
 |---|---|---|
 | **Direct** | Conversation, lookups, single-file edits | Plain tool loop, minimal overhead |
-| **Coherent generation** | Multi-file builds (games, UIs, scripts) | One call generates all files as a bundle; no placeholders allowed; verifier + repair loop follows |
-| **Planner** | Parallel or multi-specialist work | Structured plan → DAG → per-step verification → repair |
+| **Planner** | Multi-step or multi-specialist work | Structured plan → DAG → per-step verification → repair |
 
 **Delegation.** An agent can spawn child agents via `delegate` (sequential) or
 `delegate_parallel` (concurrent). Children share the parent's abort signal and

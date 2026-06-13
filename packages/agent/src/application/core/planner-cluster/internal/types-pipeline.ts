@@ -105,10 +105,7 @@ export interface PipelineResult {
 
 export type {
   CircuitBreakerState,
-  LegacyRetryPlan,
-  PlannerRepairCompatibilityMode,
   RepairPlan,
-  RepairPlanCompatibilityReport,
   RepairTask,
   VerificationEvidence,
   VerifierDecision,

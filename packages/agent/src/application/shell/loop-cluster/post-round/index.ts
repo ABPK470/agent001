@@ -1,8 +1,7 @@
 /**
  * Post-round processing — logic that runs after each tool execution round.
  *
- * Includes: stuck detection, coherent repair stall detection, budget
- * extension, recovery hint injection, and post-delegation verification.
+ * Includes: stuck detection, budget extension, recovery hint injection, and post-delegation verification.
  */
 
 import { buildRecoveryHints } from "../../../core/recovery.js"

@@ -241,10 +241,6 @@ interface AppState {
   appendStreamingChunk: (chunk: string) => void
   clearStreamingAnswer: () => void
 
-  // Coherent generation live token stream (shown while LLM writes the bundle)
-  coherentStream: string
-  clearCoherentStream: () => void
-
   // IOE layout persistence (survives view switches + page reload)
   ioeLayout: IoeLayout
   setIoeLayout: (patch: Partial<IoeLayout>) => void
@@ -445,7 +441,6 @@ let traceFlushScheduled = false
 // into a single store update so React rerenders once per tick instead of
 // once per event. Critical when many tools/delegations run concurrently.
 const runTraceBuf: Array<{ runId: string; entry: TraceEntry }> = []
-const runCoherentBuf = new Map<string, string>()
 const runAnswerBuf = new Map<string, string>()
 let runFlushScheduled = false
 // Answer chunks flush on requestAnimationFrame instead of microtask so the
@@ -471,31 +466,17 @@ function scheduleRunFlush(set: (fn: (s: AppState) => Partial<AppState>) => void)
   queueMicrotask(() => {
     runFlushScheduled = false
     const traceBatch = runTraceBuf.splice(0)
-    const tokenBatch = new Map(runCoherentBuf)
-    runCoherentBuf.clear()
-    if (traceBatch.length === 0 && tokenBatch.size === 0) return
+    if (traceBatch.length === 0) return
     set((s) => {
       let runs = s.runs
-      if (traceBatch.length > 0) {
-        const grouped = new Map<string, TraceEntry[]>()
-        for (const { runId, entry } of traceBatch) {
-          const arr = grouped.get(runId) ?? []
-          arr.push(entry)
-          grouped.set(runId, arr)
-        }
-        for (const [runId, entries] of grouped) {
-          runs = appendRunTraceMany(runs, runId, entries)
-        }
+      const grouped = new Map<string, TraceEntry[]>()
+      for (const { runId, entry } of traceBatch) {
+        const arr = grouped.get(runId) ?? []
+        arr.push(entry)
+        grouped.set(runId, arr)
       }
-      if (tokenBatch.size > 0) {
-        for (const [runId, addition] of tokenBatch) {
-          const idx = runs.findIndex((r) => r.id === runId)
-          if (idx < 0) continue
-          const cur = runs[idx].coherentStream ?? ""
-          const merged = cur + addition
-          if (runs === s.runs) runs = [...runs]
-          runs[idx] = { ...runs[idx], coherentStream: merged }
-        }
+      for (const [runId, entries] of grouped) {
+        runs = appendRunTraceMany(runs, runId, entries)
       }
       return { runs }
     })
@@ -743,10 +724,6 @@ function formatLogEntryInner(
       return { type: t, message: `Validation remediated`, timestamp }
     case "planner.pipeline.started":
       return { type: t, message: `Pipeline attempt ${data["attempt"]}/${data["maxRetries"]}`, timestamp }
-    case "planner.coherent.bootstrap":
-      return { type: t, message: `Coherent bootstrap — ${data["artifactCount"]} artifacts`, timestamp }
-    case "planner.architecture.state":
-      return { type: t, message: `Architecture ${data["lane"]} — ${data["status"]}`, timestamp }
 
     // Thinking
     case "agent.thinking":
@@ -925,7 +902,7 @@ export const useStore = create<AppState>()(
       // Merge incoming run rows into the store WITHOUT clobbering live,
       // SSE-accumulated per-run fields. `api.listRuns()` returns the row
       // metadata only (id/goal/status/counts) — it never carries the live
-      // `trace`, `streamingAnswer`, `coherentStream`, `stepData`, or
+      // `trace`, `streamingAnswer`, `stepData`, or
       // `auditTrail` that we accumulate from the event stream. A plain
       // `set({ runs })` would wipe all of that, which is exactly what
       // happened when widgets like RunHistory re-fetched the run list on
@@ -945,7 +922,6 @@ export const useStore = create<AppState>()(
             ...incoming,
             trace: existing.trace?.length ? existing.trace : (incoming.trace ?? existing.trace),
             streamingAnswer: existing.streamingAnswer ?? incoming.streamingAnswer,
-            coherentStream: existing.coherentStream ?? incoming.coherentStream,
             stepData: existing.stepData?.length ? existing.stepData : incoming.stepData,
             auditTrail: existing.auditTrail?.length ? existing.auditTrail : incoming.auditTrail,
           }
@@ -995,7 +971,6 @@ export const useStore = create<AppState>()(
               auditTrail: d.audit ?? [],
               trace,
               streamingAnswer: "",
-              coherentStream: "",
             }),
           }))
         }).catch(() => {})
@@ -1182,18 +1157,6 @@ export const useStore = create<AppState>()(
       // Trace — batched via microtask to avoid per-entry re-renders
       trace: [],
       addTrace: (entry) => {
-        const kind = (entry as Record<string, unknown>).kind as string | undefined
-        // coherent-generation-token events are high-frequency (one per streamed token).
-        // Accumulate them in coherentStream instead of flooding the trace array.
-        if (kind === "coherent-generation-token") {
-          const token = (entry as Record<string, unknown>).token as string ?? ""
-          set((s) => ({ coherentStream: s.coherentStream + token }))
-          return
-        }
-        // Clear coherent stream when generation completes or fails
-        if (kind === "coherent-generation-bundle" || kind === "coherent-generation-failed") {
-          set({ coherentStream: "" })
-        }
         traceBuf.push(entry)
         if (!traceFlushScheduled) {
           traceFlushScheduled = true
@@ -1265,9 +1228,6 @@ export const useStore = create<AppState>()(
       appendStreamingChunk: (chunk) => set((s) => ({ streamingAnswer: s.streamingAnswer + chunk })),
       clearStreamingAnswer: () => set({ streamingAnswer: "" }),
 
-      coherentStream: "",
-      clearCoherentStream: () => set({ coherentStream: "" }),
-
       // IOE layout
       ioeLayout: { ...DEFAULT_IOE_LAYOUT },
       setIoeLayout: (patch) => set((s) => ({ ioeLayout: { ...s.ioeLayout, ...patch } })),
@@ -1320,7 +1280,6 @@ export const useStore = create<AppState>()(
               llmCalls: 0,
               trace: [],
               streamingAnswer: "",
-              coherentStream: "",
               auditTrail: [],
               stepData: [],
               threadId: get().activeThreadId,
@@ -1830,22 +1789,11 @@ export const useStore = create<AppState>()(
           case "debug.trace": {
             const entry = data["entry"] as import("./types").TraceEntry
             if (entry) {
-              const isCoherentToken = (entry as { kind?: string }).kind === "coherent-generation-token"
-              if (!isCoherentToken) {
-                store.addTrace(entry)
-              }
+              store.addTrace(entry)
               const runId = data["runId"] as string | undefined
               if (runId) {
-                if (isCoherentToken) {
-                  const token = (entry as { token?: string }).token ?? ""
-                  if (token) {
-                    runCoherentBuf.set(runId, (runCoherentBuf.get(runId) ?? "") + token)
-                    scheduleRunFlush(set)
-                  }
-                } else {
-                  runTraceBuf.push({ runId, entry })
-                  scheduleRunFlush(set)
-                }
+                runTraceBuf.push({ runId, entry })
+                scheduleRunFlush(set)
               }
               if (runId && entry.kind === "workspace_diff") {
                 const pendingCount =

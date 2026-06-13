@@ -34,9 +34,7 @@ export function handlePlannerTrace(
         runId,
         score: e.score,
         reason: e.reason,
-        route: e.route,
-        coherenceNeed: e.coherenceNeed,
-        coordinationNeed: e.coordinationNeed
+        route: e.route
       }
     })
     services.auditService
@@ -48,51 +46,8 @@ export function handlePlannerTrace(
         detail: {
           score: e.score,
           reason: e.reason,
-          route: e.route,
-          coherenceNeed: e.coherenceNeed,
-          coordinationNeed: e.coordinationNeed
+          route: e.route
         }
-      })
-      .catch(() => {})
-  } else if (kind === "planner-coherent-bootstrap") {
-    broadcast({
-      type: EventType.PlannerCoherentBootstrap,
-      data: {
-        runId,
-        artifactCount: e.artifactCount,
-        decompositionStrategy: e.decompositionStrategy,
-        decompositionReasons: e.decompositionReasons,
-        sharedContracts: e.sharedContracts,
-        invariants: e.invariants
-      }
-    })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.coherent.bootstrap",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: {
-          artifactCount: e.artifactCount,
-          decompositionStrategy: e.decompositionStrategy,
-          decompositionReasons: e.decompositionReasons,
-          sharedContracts: e.sharedContracts,
-          invariants: e.invariants
-        }
-      })
-      .catch(() => {})
-  } else if (kind === "planner-architecture-state") {
-    broadcast({
-      type: EventType.PlannerArchitectureState,
-      data: { runId, lane: e.lane, status: e.status, reason: e.reason, architecture: e.architecture }
-    })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.architecture.state",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: { lane: e.lane, status: e.status, reason: e.reason, architecture: e.architecture }
       })
       .catch(() => {})
   } else if (kind === "planner-pipeline-end") {
@@ -186,159 +141,6 @@ export function handlePlannerTrace(
           ownershipArtifacts: e.ownershipArtifacts,
           runtimeEntities: e.runtimeEntities
         }
-      })
-      .catch(() => {})
-  } else if (kind === "coherent-generation-start") {
-    broadcast({ type: EventType.PlannerCoherentStarted, data: { runId, route: e.route } })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.coherent.started",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: { route: e.route }
-      })
-      .catch(() => {})
-  } else if (kind === "coherent-generation-bundle") {
-    broadcast({
-      type: EventType.PlannerCoherentBundle,
-      data: {
-        runId,
-        artifactCount: e.artifactCount,
-        artifacts: e.artifacts,
-        sharedContracts: e.sharedContracts,
-        invariants: e.invariants
-      }
-    })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.coherent.bundle",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: {
-          artifactCount: e.artifactCount,
-          artifacts: e.artifacts,
-          sharedContracts: e.sharedContracts,
-          invariants: e.invariants
-        }
-      })
-      .catch(() => {})
-  } else if (kind === "coherent-generation-materialized") {
-    broadcast({
-      type: EventType.PlannerCoherentMaterialized,
-      data: {
-        runId,
-        artifactCount: e.artifactCount,
-        artifacts: e.artifacts,
-        readBackArtifacts: e.readBackArtifacts
-      }
-    })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.coherent.materialized",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: {
-          artifactCount: e.artifactCount,
-          artifacts: e.artifacts,
-          readBackArtifacts: e.readBackArtifacts
-        }
-      })
-      .catch(() => {})
-  } else if (kind === "coherent-generation-verified") {
-    broadcast({
-      type: EventType.PlannerCoherentVerified,
-      data: {
-        runId,
-        overall: e.overall,
-        confidence: e.confidence,
-        issueCount: e.issueCount,
-        systemCheckCount: e.systemCheckCount,
-        affectedArtifacts: e.affectedArtifacts
-      }
-    })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.coherent.verified",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: {
-          overall: e.overall,
-          confidence: e.confidence,
-          issueCount: e.issueCount,
-          systemCheckCount: e.systemCheckCount,
-          affectedArtifacts: e.affectedArtifacts
-        }
-      })
-      .catch(() => {})
-  } else if (kind === "coherent-generation-repair-needed") {
-    broadcast({
-      type: EventType.PlannerCoherentRepairRequired,
-      data: {
-        runId,
-        repairAttempt: e.repairAttempt,
-        issueCount: e.issueCount,
-        issues: e.issues,
-        affectedArtifacts: e.affectedArtifacts
-      }
-    })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.coherent.repair.required",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: {
-          repairAttempt: e.repairAttempt,
-          issueCount: e.issueCount,
-          issues: e.issues,
-          affectedArtifacts: e.affectedArtifacts
-        }
-      })
-      .catch(() => {})
-  } else if (kind === "coherent-generation-escalated") {
-    broadcast({
-      type: EventType.PlannerCoherentRepairEscalated,
-      data: { runId, target: e.target, issueCount: e.issueCount, reason: e.reason }
-    })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.coherent.repair.escalated",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: { target: e.target, issueCount: e.issueCount, reason: e.reason }
-      })
-      .catch(() => {})
-  } else if (kind === "coherent-generation-handoff") {
-    broadcast({
-      type: EventType.PlannerCoherentHandoff,
-      data: { runId, artifactCount: e.artifactCount, verificationRoute: e.verificationRoute }
-    })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.coherent.handoff",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: { artifactCount: e.artifactCount, verificationRoute: e.verificationRoute }
-      })
-      .catch(() => {})
-  } else if (kind === "coherent-generation-failed") {
-    broadcast({
-      type: EventType.PlannerCoherentFailed,
-      data: { runId, stage: e.stage, diagnostics: e.diagnostics }
-    })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.coherent.failed",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: { stage: e.stage, diagnostics: e.diagnostics }
       })
       .catch(() => {})
   } else if (kind === "planner-step-start") {
@@ -446,41 +248,6 @@ export function handlePlannerTrace(
         resourceType: "AgentRun",
         resourceId: runId,
         detail: { attempt: e.attempt, epoch: e.epoch, rerunOrder: e.rerunOrder, tasks: e.tasks }
-      })
-      .catch(() => {})
-  } else if (kind === "planner-repair-compatibility") {
-    broadcast({
-      type: EventType.PlannerRepairCompatibility,
-      data: {
-        runId,
-        attempt: e.attempt,
-        mode: e.mode,
-        activePath: e.activePath,
-        diverged: e.diverged,
-        divergenceScore: e.divergenceScore,
-        divergenceThreshold: e.divergenceThreshold,
-        pinnedToLegacy: e.pinnedToLegacy,
-        reasons: e.reasons,
-        legacy: e.legacy,
-        repair: e.repair
-      }
-    })
-    services.auditService
-      .log({
-        actor: AuditActor.Agent,
-        action: "planner.repair.compatibility",
-        resourceType: "AgentRun",
-        resourceId: runId,
-        detail: {
-          attempt: e.attempt,
-          mode: e.mode,
-          activePath: e.activePath,
-          diverged: e.diverged,
-          divergenceScore: e.divergenceScore,
-          divergenceThreshold: e.divergenceThreshold,
-          pinnedToLegacy: e.pinnedToLegacy,
-          reasons: e.reasons
-        }
       })
       .catch(() => {})
   }

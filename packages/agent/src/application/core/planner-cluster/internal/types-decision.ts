@@ -16,15 +16,3 @@ export interface PlannerDecision {
   readonly shouldPlan: boolean
   readonly score: number
 }
-
-/** Shared contract metadata used in repair envelopes and plan prompts. */
-export interface CoherentSharedContract {
-  readonly name: string
-  readonly description: string
-}
-
-/** System invariant metadata used in repair envelopes and plan prompts. */
-export interface CoherentSystemInvariant {
-  readonly id: string
-  readonly description: string
-}

@@ -308,7 +308,7 @@ export function App() {
           case "usage":          lines.push(`USAGE  +${e.iterationTokens ?? 0} tk · total ${e.totalTokens ?? 0} · ${e.llmCalls ?? 0} calls`); break
           case "llm-request":    lines.push(`LLM REQUEST  ${e.messageCount ?? "?"} msgs · ${e.toolCount ?? 0} tools  (iter ${e.iteration ?? "?"})`); break
           case "llm-response":   lines.push(`LLM RESPONSE  ${e.durationMs ?? "?"}ms  ${(e.usage as { totalTokens?: number } | undefined)?.totalTokens ?? "?"} tok  ${(e.toolCalls as unknown[])?.length ?? 0} calls`); break
-          case "planner-decision": lines.push(`PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${Number(e.score).toFixed(2)}  route=${e.route ?? "-"}  coherence=${e.coherenceNeed ?? "-"}  coordination=${e.coordinationNeed ?? "-"}`); break
+          case "planner-decision": lines.push(`PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${Number(e.score).toFixed(2)}  route=${e.route ?? "-"}`); break
           case "planner-step-start": lines.push(`STEP  ${e.stepName}  ${e.stepType}`); break
           case "planner-step-end":   lines.push(`STEP END  ${e.stepName}  ${e.status}${e.durationMs != null ? `  ${e.durationMs}ms` : ""}`); break
           case "planner-sql-quality": lines.push(`SQL QUALITY  ${e.phase}  ${e.toolMode}  ${(e.largeObjectRefs as Array<{ name: string; count: number }> | undefined)?.map((ref) => `${ref.name}×${ref.count}`).join(" · ") ?? "no-large-refs"}${(e.missingPersistedMirrorCandidates as string[] | undefined)?.length ? `  mirror=${(e.missingPersistedMirrorCandidates as string[]).join(",")}` : ""}${(e.tempScalarSubqueryCount as number | undefined) ? `  temp-subq=${e.tempScalarSubqueryCount}` : ""}`); break

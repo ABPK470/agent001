@@ -386,7 +386,6 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
     else if (e.kind === "planner-sql-quality") items.push({ text: `SQL ${e.phase} ${e.validationCode ?? "ok"}${e.missingPersistedMirrorCandidates.length ? ` · mirror ${e.missingPersistedMirrorCandidates.join(",")}` : ""}${e.tempScalarSubqueryCount > 0 ? ` · temp-subq ${e.tempScalarSubqueryCount}` : ""}`, color: e.phase === "blocked" ? C.coral : e.validationOk ? C.success : C.warning })
     else if (e.kind === "planner-verification") items.push({ text: `VRFY ${e.overall} (${(e.confidence * 100).toFixed(0)}%)`, color: e.overall === "pass" ? C.success : C.warning })
     else if (e.kind === "planner-repair-plan") items.push({ text: `REPAIR ${e.rerunOrder.join(" → ") || "none"}`, color: C.plum })
-    else if (e.kind === "planner-repair-compatibility") items.push({ text: `COMPAT ${e.activePath} ${e.diverged ? "Δ" : "="}`, color: e.diverged ? C.warning : C.success })
     else if (e.kind === "workspace_diff") items.push({ text: `DIFF pending +${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length}`, color: C.cyan })
     else if (e.kind === "workspace_diff_applied") items.push({ text: `APPLY +${e.summary.added} ~${e.summary.modified} -${e.summary.deleted}`, color: C.success })
   }
