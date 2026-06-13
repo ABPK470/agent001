@@ -45,6 +45,7 @@ export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestrati
 
 export class AgentOrchestrator {
   private llm: LLMClient
+  private acceptingRuns = true
   private readonly activeRuns = new Map<string, ActiveRun>()
   private readonly pendingInputs = new Map<string, { resolve: (answer: string) => void }>()
   private readonly pendingKills = new Map<
@@ -87,6 +88,40 @@ export class AgentOrchestrator {
     this.messageRouter = router
   }
 
+  /** Reject new runs; in-flight work drains via {@link drainRuns}. */
+  beginShutdown(): void {
+    this.acceptingRuns = false
+  }
+
+  isAcceptingRuns(): boolean {
+    return this.acceptingRuns
+  }
+
+  /** Wait for active and queued runs to finish (best-effort, then abort stragglers). */
+  async drainRuns(timeoutMs = 60_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      const stats = this.queue.stats()
+      if (this.activeRuns.size === 0 && stats.active === 0 && stats.queued === 0) return
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    for (const run of this.activeRuns.values()) {
+      run.controller.abort()
+    }
+    const graceDeadline = Date.now() + 5_000
+    while (Date.now() < graceDeadline) {
+      const stats = this.queue.stats()
+      if (this.activeRuns.size === 0 && stats.active === 0 && stats.queued === 0) return
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+  }
+
+  private assertAcceptingRuns(): void {
+    if (!this.acceptingRuns) {
+      throw new Error("Server is shutting down; new runs are not accepted")
+    }
+  }
+
   // ── Run lifecycle ─────────────────────────────────────────────
 
   private resolveThreadId(requestedThreadId: string | undefined, upn: string): string {
@@ -94,6 +129,7 @@ export class AgentOrchestrator {
   }
 
   startRun(goal: string, config?: AgentRunConfig, session: CurrentSession | null = null): string {
+    this.assertAcceptingRuns()
     const upn = requireSessionUpn(session)
     const runId = randomUUID()
     const controller = new AbortController()
@@ -247,6 +283,7 @@ export class AgentOrchestrator {
   }
 
   resumeRun(runId: string, resumeSession: CurrentSession | null = null): string | null {
+    if (!this.acceptingRuns) return null
     let upn: string
     try {
       upn = requireSessionUpn(resumeSession)
