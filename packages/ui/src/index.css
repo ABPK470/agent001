@@ -1545,7 +1545,7 @@ textarea.input {
   display: flex;
   align-items: center;
   gap: 0.1rem;
-  min-height: 1.85rem;
+  min-height: 2.25rem;
   border-radius: 0.45rem;
   transition: background-color 140ms ease;
 }
@@ -1558,8 +1558,8 @@ textarea.input {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 1.35rem;
-  height: 1.85rem;
+  width: 1.5rem;
+  height: 2.25rem;
   flex-shrink: 0;
   color: var(--text-faint);
   border-radius: 0.35rem;
@@ -1590,7 +1590,8 @@ textarea.input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.8125rem;
+  font-size: 0.875rem;
+  font-weight: 500;
   line-height: 1.35;
   color: var(--text);
 }
@@ -1641,7 +1642,7 @@ textarea.input {
   align-items: center;
   gap: 0.4rem 0.5rem;
   width: 100%;
-  padding: 0.3rem 0.45rem 0.3rem 0.25rem;
+  padding: 0.35rem 0.45rem 0.35rem 0.25rem;
   border-radius: 0.35rem;
   text-align: left;
   transition: background-color 140ms ease;
@@ -1656,8 +1657,8 @@ textarea.input {
 }
 
 .thread-nav-run-dot {
-  width: 0.4rem;
-  height: 0.4rem;
+  width: 0.45rem;
+  height: 0.45rem;
   border-radius: 999px;
   flex-shrink: 0;
 }
@@ -1667,9 +1668,10 @@ textarea.input {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 0.75rem;
-  line-height: 1.3;
-  color: var(--text-secondary);
+  font-size: 0.875rem;
+  font-weight: 500;
+  line-height: 1.35;
+  color: var(--text);
 }
 
 .thread-nav-run--active .thread-nav-run-goal {
@@ -1678,14 +1680,14 @@ textarea.input {
 
 .thread-nav-run-meta {
   flex-shrink: 0;
-  font-size: 0.625rem;
-  color: var(--text-faint);
+  font-size: 0.8125rem;
+  color: var(--text-muted);
   white-space: nowrap;
 }
 
 .thread-nav-empty {
   padding: 0.35rem 0.5rem 0.35rem 1.35rem;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   color: var(--text-faint);
 }
 
@@ -1698,7 +1700,7 @@ textarea.input {
   padding: 0.45rem 0.5rem;
   margin-top: auto;
   flex-shrink: 0;
-  font-size: 0.75rem;
+  font-size: 0.875rem;
   font-weight: 500;
   color: var(--text-muted);
   border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);

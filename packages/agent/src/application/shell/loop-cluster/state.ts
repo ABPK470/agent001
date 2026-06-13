@@ -64,9 +64,6 @@ export interface AgentLoopState {
   completionValidated: boolean
   completionAttempted: boolean
 
-  // ── Contract guidance ──
-  lastRoundToolCallsSnapshot: readonly { name: string; isError: boolean }[]
-
   // ── Full compaction ──
   lastFullCompactionIteration: number
 
@@ -135,7 +132,6 @@ export function createAgentLoopState(maxIterations: number): AgentLoopState {
     groundednessNudged: false,
     completionValidated: false,
     completionAttempted: false,
-    lastRoundToolCallsSnapshot: [],
     lastFullCompactionIteration: INITIAL_FULL_COMPACTION_OFFSET,
     absoluteIterationCap: maxIterations + 10,
     coherentExecution: null,

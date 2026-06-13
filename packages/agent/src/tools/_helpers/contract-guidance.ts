@@ -1,22 +1,14 @@
 /**
  * Tool contract guidance — priority-sorted resolver chain for per-turn tool constraints.
  *
- * Ported from agenc-core's tool-contract-guidance pattern.
+ * Before each LLM call (`prepareIterationContext`):
+ *   1. Build a `ToolContractContext` from the current loop state.
+ *   2. Call `resolveToolContractGuidance(ctx)` — first matching resolver wins.
+ *   3. `applyToolContractGuidance` filters the tool list and yields an instruction.
  *
- * Each resolver inspects the current loop context and, if applicable, returns
- * guidance describing:
- *   - Which tools are "routed" (preferred / required) this turn
- *   - How to enforce the routing: filter tool list or inject a runtime instruction
- *   - How long the guidance is active (one_shot / sticky / countdown)
- *
- * In agent.ts, before each LLM call:
- *   1. Build a ToolContractContext from the current loop state.
- *   2. Call resolveToolContractGuidance(ctx) for the highest-priority matching guidance.
- *   3. If enforcement === "block_other_tools": filter the tools list to routedToolNames only.
- *   4. If runtimeInstruction is set: inject it as a transient system message.
- *
- * NOTE: Our LLM client does not expose toolChoice — we achieve similar effect by filtering
- * the available tools list and adding a clear instruction.
+ * Our LLM client has no `toolChoice` — hard constraints are enforced by hiding
+ * non-routed tools; soft constraints inject a system hint the model may ignore
+ * (completion guards catch finish attempts separately).
  *
  * @module
  */
@@ -28,64 +20,45 @@
 export type ToolContractEnforcement =
   /** Only routed tools are shown to the LLM this turn (hard constraint). */
   | "block_other_tools"
-  /** All tools available but inject a strong runtime instruction. */
+  /** All tools available; inject a runtime instruction. */
   | "suggestion"
 
-export type ToolContractLifetime =
-  | "one_shot" // Active for 1 LLM call, then removed
-  | "sticky" // Active until explicitly cleared (or max iterations)
-  | "countdown" // Active for remainingFires calls
-
 export interface ToolContractGuidance {
-  /** Higher number = higher priority. Resolvers are sorted descending. */
   readonly priority: number
   /** Human-readable resolver name for trace/debug. */
   readonly resolverName: string
-  /** Tool names that are "routed" for this turn. */
   readonly routedToolNames: readonly string[]
   readonly enforcement: ToolContractEnforcement
-  /** Optional instruction injected as a system message before the LLM call. */
+  /** Injected as a transient system message before the LLM call. */
   readonly runtimeInstruction?: string
-  readonly lifetime: ToolContractLifetime
-  readonly remainingFires?: number
 }
 
 /**
- * Snapshot of the agent loop state passed to each resolver.
- * All fields are read-only — resolvers must not mutate state.
+ * Snapshot of agent loop state for resolvers. Read-only — resolvers must not mutate.
  */
 export interface ToolContractContext {
-  /** Current loop iteration (0-based). */
   readonly iteration: number
-  /** Names of all tools currently available. */
   readonly availableToolNames: readonly string[]
-  /** The last round included a delegate / delegate_parallel call. */
+  /** The previous tool round included delegate / delegate_parallel. */
   readonly lastRoundHadDelegation: boolean
   /**
-   * The last delegation restricted the child to read-only / analytical tools.
-   * Such delegations don't need post-hoc verification — there's nothing to
-   * "verify" via run_command/read_file (the child only produced text).
+   * Previous delegation restricted the child to read-only tools — no file/build
+   * verification pass is needed (the child only produced text).
    */
   readonly lastDelegationWasReadOnly: boolean
-  /** Currently in the post-delegation verification window. */
-  readonly inPostDelegationVerification: boolean
-  /** Paths that must be read before a mutation is allowed. */
-  readonly artifactsRequiringReadBeforeMutation: ReadonlySet<string>
-  /** There are unverified file writes in the current session. */
-  readonly wroteUnverifiedFiles: boolean
-  /** Files written but not yet re-read (pending in-place verification). */
-  readonly writtenButNotReread: ReadonlySet<string>
-  /** Tool calls made in the last LLM round (empty on first call). */
-  readonly lastRoundToolCalls: readonly { readonly name: string; readonly isError: boolean }[]
   /**
-   * Per-key circuit breaker check — used by some resolvers to avoid routing
-   * to a tool that is known to be blocked.
+   * Completion guard opened a verification window (model tried to finish right
+   * after a mutating delegation without adequate checks).
    */
-  readonly isKeyBlocked?: (key: string) => boolean
+  readonly inPostDelegationVerification: boolean
+  /** Paths that must be read before any mutation is allowed. */
+  readonly artifactsRequiringReadBeforeMutation: ReadonlySet<string>
+  /** Source files written but not yet re-read into context. */
+  readonly writtenButNotReread: ReadonlySet<string>
 }
 
 // ============================================================================
-// Internal resolver signature
+// Resolver plumbing
 // ============================================================================
 
 type Resolver = (ctx: ToolContractContext) => ToolContractGuidance | null
@@ -96,52 +69,63 @@ interface ResolverEntry {
   readonly fn: Resolver
 }
 
-// ============================================================================
-// Resolvers (highest priority first when sorted)
-// ============================================================================
+const VERIFICATION_TOOL_NAMES = [
+  "read_file",
+  "run_command",
+  "browser_check",
+  "list_directory"
+] as const
+
+function verificationToolsAvailable(available: readonly string[]): string[] {
+  const allowed = new Set<string>(VERIFICATION_TOOL_NAMES)
+  return available.filter((name) => allowed.has(name))
+}
+
+function buildDelegationVerificationGuidance(
+  ctx: ToolContractContext,
+  verifyTools: readonly string[]
+): ToolContractGuidance {
+  const continuing = ctx.inPostDelegationVerification && !ctx.lastRoundHadDelegation
+  return {
+    priority: 300,
+    resolverName: "delegation-verification",
+    routedToolNames: verifyTools,
+    enforcement: "block_other_tools",
+    runtimeInstruction: continuing
+      ? "VERIFICATION STILL REQUIRED: You attempted to finish without adequately verifying the delegation result. " +
+        "Use read_file on the main code files, run_command for build/test, or browser_check — not just surface checks. " +
+        "Do NOT provide a final answer until you have independently verified the output."
+      : "The subagent just completed work on your behalf. " +
+        "Before taking any further action, verify the output: read the target files, " +
+        "run build/test commands, or check the browser. Do NOT start new tasks yet."
+  }
+}
 
 /**
  * Priority 300 — Delegation verification.
  *
- * Immediately after a delegation call, route the next LLM turn to verification
- * tools (read_file, run_command) to confirm the subagent's output rather than
- * launching a new task blind.
+ * After a mutating delegation, or while the post-delegation verification window
+ * is open, restrict the next turn(s) to verification tools.
  */
 const delegationVerificationResolver: ResolverEntry = {
   priority: 300,
   name: "delegation-verification",
   fn(ctx) {
     if (!ctx.lastRoundHadDelegation && !ctx.inPostDelegationVerification) return null
-    // Skip verification routing for analysis-only delegations — there's nothing
-    // for run_command/read_file to verify, and forcing it produces useless
-    // performative calls like `echo 'Verification complete.'`.
     if (ctx.lastDelegationWasReadOnly) return null
-    if (ctx.lastRoundHadDelegation) {
-      const verifyTools = ctx.availableToolNames.filter(
-        (t) => t === "read_file" || t === "run_command" || t === "browser_check" || t === "list_directory"
-      )
-      if (verifyTools.length === 0) return null
-      return {
-        priority: 300,
-        resolverName: "delegation-verification",
-        routedToolNames: verifyTools,
-        enforcement: "block_other_tools",
-        runtimeInstruction:
-          "The subagent just completed work on your behalf. " +
-          "Before taking any further action, verify the output: read the target files, " +
-          "run build/test commands, or check the browser. Do NOT start new tasks yet.",
-        lifetime: "one_shot"
-      }
-    }
-    return null
+
+    const verifyTools = verificationToolsAvailable(ctx.availableToolNames)
+    if (verifyTools.length === 0) return null
+
+    return buildDelegationVerificationGuidance(ctx, verifyTools)
   }
 }
 
 /**
  * Priority 270 — Read before mutation.
  *
- * When specific artifact paths require a read before mutation (e.g. after an
- * old_string miss), block all mutation tools and route to read_file.
+ * After replace_in_file miss or tool outcome requiring inspection, block mutations
+ * until read_file refreshes the artifact in context.
  */
 const readBeforeMutationResolver: ResolverEntry = {
   priority: 270,
@@ -159,8 +143,7 @@ const readBeforeMutationResolver: ResolverEntry = {
       runtimeInstruction:
         `REQUIRED: Read the current content of ${paths} before attempting any mutation. ` +
         "The previous write/replace failed because the content has changed. " +
-        "Read first, then plan a repair based on the actual current state.",
-      lifetime: "one_shot"
+        "Read first, then plan a repair based on the actual current state."
     }
   }
 }
@@ -168,8 +151,8 @@ const readBeforeMutationResolver: ResolverEntry = {
 /**
  * Priority 240 — Unverified writes need read-back.
  *
- * When files have been written but not yet re-read into context, suggest
- * a read_file pass to catch silent write errors or truncations.
+ * Soft nudge when source files were written but not re-read (hard block is handled
+ * by completion guards when the model tries to finish).
  */
 const verifyWrittenFilesResolver: ResolverEntry = {
   priority: 240,
@@ -177,7 +160,6 @@ const verifyWrittenFilesResolver: ResolverEntry = {
   fn(ctx) {
     if (ctx.writtenButNotReread.size === 0) return null
     if (!ctx.availableToolNames.includes("read_file")) return null
-    // Only apply this after at least 1 iteration so we don't disrupt the initial write
     if (ctx.iteration < 1) return null
 
     const paths = [...ctx.writtenButNotReread].slice(0, 2).join(", ")
@@ -188,8 +170,7 @@ const verifyWrittenFilesResolver: ResolverEntry = {
       enforcement: "suggestion",
       runtimeInstruction:
         `Consider verifying the recently written file(s): ${paths}. ` +
-        "A quick read_file or run of tests confirms the write landed correctly.",
-      lifetime: "one_shot"
+        "A quick read_file or run of tests confirms the write landed correctly."
     }
   }
 }
@@ -197,8 +178,8 @@ const verifyWrittenFilesResolver: ResolverEntry = {
 /**
  * Priority 200 — No premature text response at iteration 0.
  *
- * On the very first iteration, if tools are available, steer the model toward
- * using a tool rather than responding immediately with text.
+ * Steer the model toward tools on the first turn (completion guard `early-exit`
+ * catches text-only finish attempts).
  */
 const noPrematureTextResponseResolver: ResolverEntry = {
   priority: 200,
@@ -213,15 +194,10 @@ const noPrematureTextResponseResolver: ResolverEntry = {
       enforcement: "suggestion",
       runtimeInstruction:
         "Start by using tools to gather information or take action — " +
-        "do not respond with text only on the first turn.",
-      lifetime: "one_shot"
+        "do not respond with text only on the first turn."
     }
   }
 }
-
-// ============================================================================
-// Resolver chain
-// ============================================================================
 
 const RESOLVERS: readonly ResolverEntry[] = [
   delegationVerificationResolver,
@@ -230,10 +206,7 @@ const RESOLVERS: readonly ResolverEntry[] = [
   noPrematureTextResponseResolver
 ].sort((a, b) => b.priority - a.priority)
 
-/**
- * Run the resolver chain and return the first matching guidance (highest priority).
- * Returns null if no resolver applies.
- */
+/** First matching resolver wins (sorted by priority, highest first). */
 export function resolveToolContractGuidance(ctx: ToolContractContext): ToolContractGuidance | null {
   for (const resolver of RESOLVERS) {
     const guidance = resolver.fn(ctx)
@@ -243,21 +216,16 @@ export function resolveToolContractGuidance(ctx: ToolContractContext): ToolContr
 }
 
 // ============================================================================
-// Application helper
+// Application
 // ============================================================================
 
 export interface AppliedToolContractGuidance {
-  /** Filtered tool list — may be the same as input if enforcement is "suggestion". */
   readonly filteredToolNames: readonly string[]
-  /** Instruction to inject as a system message before the LLM call, or null. */
   readonly injectedInstruction: string | null
   readonly guidance: ToolContractGuidance
 }
 
-/**
- * Apply guidance to a tool name set.
- * Callers use filteredToolNames to build the LLM's tool list for this turn.
- */
+/** Apply guidance to the available tool name list for one LLM call. */
 export function applyToolContractGuidance(
   guidance: ToolContractGuidance,
   availableToolNames: readonly string[]
@@ -265,10 +233,8 @@ export function applyToolContractGuidance(
   let filteredToolNames: readonly string[]
 
   if (guidance.enforcement === "block_other_tools") {
-    // Intersection: only tools in both routedToolNames AND available
     const routed = new Set(guidance.routedToolNames)
     filteredToolNames = availableToolNames.filter((n) => routed.has(n))
-    // Safety: if nothing matches, fall back to full list to avoid empty tool set
     if (filteredToolNames.length === 0) filteredToolNames = availableToolNames
   } else {
     filteredToolNames = availableToolNames

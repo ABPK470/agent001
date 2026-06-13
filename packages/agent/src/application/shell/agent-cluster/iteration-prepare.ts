@@ -159,10 +159,7 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
     lastDelegationWasReadOnly: state.lastDelegationWasReadOnly,
     inPostDelegationVerification: state.inPostDelegationVerification,
     artifactsRequiringReadBeforeMutation: state.artifactsRequiringReadBeforeMutation,
-    wroteUnverifiedFiles: state.wroteUnverifiedFiles,
-    writtenButNotReread: state.writtenButNotReread,
-    lastRoundToolCalls: state.lastRoundToolCallsSnapshot,
-    isKeyBlocked: (key) => state.circuitBreaker.isKeyBlocked(key) !== null
+    writtenButNotReread: state.writtenButNotReread
   }
   const contractGuidance = resolveToolContractGuidance(contractCtx)
   let chatToolsForLLM = toolList
@@ -178,7 +175,8 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
       contractMessages.push({
         role: MessageRole.System,
         content: applied.injectedInstruction,
-        section: "history"
+        section: "history",
+        hint: true
       })
     }
     if (config.verbose) {
