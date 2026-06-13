@@ -44,8 +44,6 @@ function makeCtx(overrides: Partial<CompletionGuardContext> = {}): CompletionGua
       verbose: false,
       enableAnswerStabilityGuard: true
     },
-    runCoherentVerification: async () => null,
-    createPlannerContext: () => ({}) as never,
     onPlannerTrace: undefined,
     ...overrides
   }

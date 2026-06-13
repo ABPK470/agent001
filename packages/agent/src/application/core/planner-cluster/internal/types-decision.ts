@@ -1,22 +1,25 @@
-import { PlannerNeedLevel } from "../../domain/enums/planner.js"
-export { PlannerNeedLevel }
 /**
- * Coherent solution / bootstrap types and routing decision types.
- * Extracted from planner/types.ts.
+ * Planner routing decision types.
+ *
+ * Two execution modes only:
+ *   direct  — agent tool loop (default)
+ *   planner — structured plan + child agents
  *
  * @module
  */
 
 import type { PlanEdge } from "../types.js"
 
-export type PlannerRoute =
-  | "direct"
-  | "single_artifact_direct_burst"
-  | "bounded_coherent_generation"
-  | "planner_with_coherent_bootstrap"
-  | "full_planner_decomposition"
+export type PlannerRoute = "direct" | "planner"
 
-export type ArchitecturePreservationStatus = "frozen" | "preserved" | "repairing_in_place" | "abandoned"
+export interface PlannerDecision {
+  readonly route: PlannerRoute
+  readonly reason: string
+  readonly shouldPlan: boolean
+  readonly score: number
+}
+
+// ── Coherent bundle types (plan artifacts only — not a routing lane) ──
 
 export interface CoherentSolutionArtifact {
   readonly path: string
@@ -59,25 +62,4 @@ export interface CoherentSolutionBundle {
   readonly invariants?: readonly CoherentSystemInvariant[]
 }
 
-/**
- * Confidence the routing system has in its decision.
- */
-export type RoutingConfidence =
-  | "decisive_planner"
-  | "lean_planner"
-  | "ambiguous"
-  | "lean_coherent"
-  | "decisive_coherent"
-
-export interface PlannerDecision {
-  readonly score: number
-  readonly shouldPlan: boolean
-  readonly reason: string
-  readonly route: PlannerRoute
-  readonly coherenceNeed: PlannerNeedLevel
-  readonly coordinationNeed: PlannerNeedLevel
-  /** How confident the routing system is. "ambiguous" cases use LLM routing. */
-  readonly routingConfidence: RoutingConfidence
-  /** True when LLM classification overrode the heuristic signal layer. */
-  readonly llmClassified: boolean
-}
+export type ArchitecturePreservationStatus = "frozen" | "preserved" | "repairing_in_place" | "abandoned"

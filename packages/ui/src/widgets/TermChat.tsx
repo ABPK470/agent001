@@ -1287,16 +1287,8 @@ function buildResponseParts(
         parts = setActivityPart(parts, "plan", "Plan", "running", undefined, true)
         break
       case "planner-decision": {
-        const label = !entry.shouldPlan || entry.route === "direct" || entry.route === "single_artifact_direct_burst"
-          ? "Direct"
-          : entry.route === "bounded_coherent_generation"
-            ? "Generating"
-            : "Plan"
-        const activityId = label === "Direct"
-          ? "direct"
-          : label === "Generating"
-            ? "generation"
-            : "plan"
+        const label = !entry.shouldPlan || entry.route === "direct" ? "Direct" : "Plan"
+        const activityId = label === "Direct" ? "direct" : "plan"
         parts = settlePrimaryActivities(parts, activityId)
         parts = setActivityPart(parts, activityId, label, "running", undefined, true)
         break

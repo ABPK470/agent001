@@ -258,27 +258,11 @@ export function RunStatus() {
                 {latestPlannerDecision.route ?? (latestPlannerDecision.shouldPlan ? "planner" : "direct")}
               </div>
             </div>
-            <div className={`text-xs font-medium px-2 py-1 rounded-full ${latestPlannerDecision.route === "bounded_coherent_generation" || latestPlannerDecision.route === "planner_with_coherent_bootstrap" ? "text-success bg-success/10" : "text-text-secondary bg-overlay-2"}`}>
-              {latestPlannerDecision.route === "bounded_coherent_generation"
-                ? "Coherent"
-                : latestPlannerDecision.route === "planner_with_coherent_bootstrap"
-                  ? "Bootstrap Planner"
-                  : latestPlannerDecision.shouldPlan ? "Planner" : "Direct"}
+            <div className={`text-xs font-medium px-2 py-1 rounded-full ${latestPlannerDecision.shouldPlan ? "text-success bg-success/10" : "text-text-secondary bg-overlay-2"}`}>
+              {latestPlannerDecision.shouldPlan ? "Planner" : "Direct"}
             </div>
           </div>
           <div className="mt-2 text-[13px] text-text-secondary">{latestPlannerDecision.reason}</div>
-          {(latestPlannerDecision.coherenceNeed || latestPlannerDecision.coordinationNeed) && (
-            <div className="mt-2 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-text-secondary">
-              <div>
-                <span className="text-text-muted">Coherence Need</span>
-                <div className="font-mono mt-0.5">{latestPlannerDecision.coherenceNeed ?? "—"}</div>
-              </div>
-              <div>
-                <span className="text-text-muted">Coordination Need</span>
-                <div className="font-mono mt-0.5">{latestPlannerDecision.coordinationNeed ?? "—"}</div>
-              </div>
-            </div>
-          )}
           {latestArchitectureState && (
             <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-text-secondary">
               <div>

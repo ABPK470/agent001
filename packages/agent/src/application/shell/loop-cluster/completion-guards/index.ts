@@ -8,13 +8,11 @@ import { VerifierOutcome } from "../../../../domain/index.js"
  * priority order; the first non-null result wins.
  */
 
-import type { PlannerContext, VerifierDecision } from "../../../core/planner.js"
+import type { AgentConfig, Message, Tool } from "../../../../domain/agent-types.js"
 import { isDirectDialogueGoal } from "../../../core/goal-intent.js"
 import { MessageRole } from "../../../../domain/enums/message.js"
-import type { AgentConfig, Message, Tool } from "../../../../domain/agent-types.js"
 import type { AgentLoopState } from "../state.js"
 import { checkAnswerStability } from "./answer-stability-guard.js"
-import { checkCoherentVerification } from "./check-coherent.js"
 
 /** Result from a completion guard check. */
 export interface CompletionGuardResult {
@@ -42,11 +40,6 @@ export interface CompletionGuardContext {
     enableAnswerStabilityGuard?: boolean
     verbose: boolean
   }
-  /** Callback to run coherent verification. */
-  runCoherentVerification: (force?: boolean) => Promise<VerifierDecision | null>
-  /** Callback to create a planner context. */
-  createPlannerContext: () => PlannerContext
-  /** Callback to log planner trace events. */
   onPlannerTrace: AgentConfig["onPlannerTrace"]
 }
 
@@ -65,7 +58,6 @@ export async function runCompletionGuards(
   if (checkAnswerStability(ctx)) return null
 
   return (
-    (await checkCoherentVerification(ctx)) ??
     checkEarlyExit(ctx) ??
     checkPostDelegationVerification(ctx) ??
     checkWriteWithoutVerify(ctx) ??
@@ -87,8 +79,7 @@ function checkEarlyExit(ctx: CompletionGuardContext): CompletionGuardResult | nu
   if (
     iteration === 0 &&
     ctx.toolList.length > 0 &&
-    !state.earlyExitNudged &&
-    !(state.coherentExecution?.lastVerifierDecision?.overall === VerifierOutcome.Pass)
+    !state.earlyExitNudged
   ) {
     state.earlyExitNudged = true
     return {

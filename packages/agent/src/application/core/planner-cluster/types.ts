@@ -21,9 +21,7 @@ export type {
   CoherentSystemInvariant,
   PlannerCoherentBootstrap,
   PlannerDecision,
-  PlannerNeedLevel,
-  PlannerRoute,
-  RoutingConfidence
+  PlannerRoute
 } from "./internal/types-decision.js"
 export type {
   ArtifactRelation,

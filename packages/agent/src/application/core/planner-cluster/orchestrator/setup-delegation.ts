@@ -70,7 +70,7 @@ export function runDelegationGate(
     totalSteps: plan.steps.length,
     synthesisSteps: plan.steps.filter((s) => s.stepType === "deterministic_tool").length,
     subagentSteps: subagentProfiles,
-    explicitDelegationRequested: decision.route === "full_planner_decomposition",
+    explicitDelegationRequested: decision.route === "planner",
     config: banditThresholdAdjustment !== 0 ? { scoreThreshold: 0.2 + banditThresholdAdjustment } : undefined
   }
 

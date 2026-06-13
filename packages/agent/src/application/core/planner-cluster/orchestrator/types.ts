@@ -55,6 +55,4 @@ export interface PlannerSetupContext {
   readonly runtimeModel: PlannerRuntimeModel
   readonly decision: PlannerDecision
   readonly banditTrajectory: import("../../../shell/delegation.js").DelegationTrajectoryRecord | undefined
-  readonly compatibilityMode: PlannerRepairCompatibilityMode
-  readonly compatibilityThreshold: number
 }

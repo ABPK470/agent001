@@ -100,9 +100,6 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
     return { needsSynthesis: true }
   }
 
-  // ── Coherent repair stall detection ──
-  processCoherentRepairStall(ctx)
-
   // ── Excessive read_file detection ──
   processExcessiveReadFiles(ctx)
 
@@ -128,7 +125,7 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
 // ── Internal helpers ────────────────────────────────────────────
 
 import { MessageRole } from "../../../../domain/enums/message.js"
-import { processCoherentRepairStall, processExcessiveReadFiles } from "./file-stalls.js"
+import { processExcessiveReadFiles } from "./file-stalls.js"
 
 function processRoundBudgetExtension(ctx: PostRoundContext): void {
   const { roundToolCalls, state, config } = ctx

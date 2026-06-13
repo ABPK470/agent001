@@ -36,6 +36,7 @@ import {
 } from "@mia/agent"
 import { configurePlanStore } from "@mia/sync"
 import Fastify from "fastify"
+import { createSyncEventSink, createSyncRunSink } from "./bootstrap/sync.js"
 import { getRunProfile } from "./bootstrap/workspace.js"
 import { registerAdminRoutes } from "./features/admin/routes.js"
 import { registerAgentRoutes } from "./features/agents/routes.js"
@@ -64,8 +65,6 @@ import { registerProfileRoutes } from "./features/profile/routes.js"
 import { registerProposerRoutes, startScheduler, stopScheduler } from "./features/proposer/index.js"
 import { AgentOrchestrator } from "./features/runs/orchestrator.js"
 import { registerRunRoutes } from "./features/runs/routes.js"
-import { registerThreadRoutes } from "./features/threads/index.js"
-import { createSyncEventSink, createSyncRunSink } from "./bootstrap/sync.js"
 import {
   ensureSyncDefinitionConfigs,
   loadPersistedSyncEnvironments,
@@ -74,6 +73,7 @@ import {
   registerSyncEnvironmentRoutes,
   registerSyncRoutes
 } from "./features/sync/index.js"
+import { registerThreadRoutes } from "./features/threads/index.js"
 import { registerToolCacheRoutes } from "./features/tool-cache/routes.js"
 import { registerUsageRoutes } from "./features/usage/routes.js"
 import { registerWebhookRoutes } from "./features/webhooks/routes.js"
@@ -221,14 +221,6 @@ async function main() {
   const orchestrator = new AgentOrchestrator({
     llm,
     workspace: currentWorkspace,
-    // Boot deps explicitly threaded into every per-run AgentHost the
-    // orchestrator builds. This is the doctrine-shaped replacement for
-    // the deleted `setActiveAgentHost` / `setBootHostOptions` ambient
-    // setters. Tools migrated to explicit host/run dependencies (filesystem,
-    // search_files, ask_user, attachments, mssql export-tool, shell)
-    // close over the per-run host produced from these deps; tools that
-    // still rely on runtime-owned compatibility shims read from setBrowserCheckCwd /
-    // setBrowserContextProvider / etc. above.
     bootHostDeps: {
       attachments: serverAttachmentService,
       browser: {

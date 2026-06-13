@@ -16,12 +16,8 @@ export {
 } from "./circuit-breaker.js"
 export type { BudgetState } from "./circuit-breaker.js"
 export { assessPlannerDecision } from "./decision/index.js"
-export { generateCoherentBootstrap, generatePlan } from "./generate/index.js"
-export type {
-  CoherentBootstrapGenerationResult,
-  PlanGenerationContext,
-  PlanGenerationResult
-} from "./generate/index.js"
+export { generatePlan } from "./generate/index.js"
+export type { PlanGenerationContext, PlanGenerationResult } from "./generate/index.js"
 export { inferForcedOutputDirectoryFromGoal } from "./normalize/index.js"
 export { executePlannerPath } from "./orchestrator/index.js"
 export type { PlannerContext, PlannerResult } from "./orchestrator/index.js"
@@ -34,14 +30,11 @@ export { runDeterministicProbes, runLLMVerification, verify } from "./verifier/i
 
 // Additional public symbols (previously imported directly by tests / other clusters).
 export { parseBlueprintContractBlock } from "./blueprint-contract/index.js"
-export * from "./coherent/index.js"
 export { isValidArtifactPath } from "./generate-parse/helpers.js"
 export { isGibberishIssue } from "./pipeline-validation/index.js"
 export { compilePlannerRuntime } from "./runtime-model.js"
 export {
-  buildLegacyRetryPlan,
   buildRepairPlan,
-  compareRepairPlanCompatibility,
   enrichVerifierAssessments
 } from "./verification-model/index.js"
 export { isLLMGibberish } from "./verifier-helpers/index.js"
@@ -77,13 +70,10 @@ export type {
   PlanEdge,
   PlannerCoherentBootstrap,
   PlannerDecision,
-  PlannerNeedLevel,
-  PlannerRepairCompatibilityMode,
+  PlannerRoute,
   PlanStep,
   RepairPlan,
-  RepairPlanCompatibilityReport,
   RepairTask,
-  RoutingConfidence,
   StepAcceptanceState,
   StepRole,
   SubagentFailureClass,

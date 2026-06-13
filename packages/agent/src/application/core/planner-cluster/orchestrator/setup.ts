@@ -1,13 +1,11 @@
-import { DiagnosticSeverity, PlannerNeedLevel, PlannerTraceKind } from "../../domain/index.js"
 /**
- * Planner setup phase (Steps 1–3b): routing decision, plan generation,
- * validation, and delegation gate.  Returns either an early-exit PlannerResult
- * or a fully-resolved PlannerSetupContext ready for the execution loop.
+ * Planner setup phase: plan generation, validation, delegation gate.
+ *
  * @module
  */
 
-import { assessPlannerDecision } from "../decision/index.js"
-import { generateCoherentBootstrap, generatePlan } from "../generate/index.js"
+import { DiagnosticSeverity, PlannerTraceKind } from "../../domain/index.js"
+import { generatePlan } from "../generate/index.js"
 import { injectBlueprintStep, strengthenExistingBlueprintSteps } from "../internal/index-blueprint.js"
 import {
   applyWarningAutoFixes,
@@ -21,59 +19,29 @@ import {
   remediateValidationErrors
 } from "../normalize/index.js"
 import { compilePlannerRuntime } from "../runtime-model.js"
-import type { PlannerCoherentBootstrap } from "../types.js"
+import type { PlannerDecision } from "../types.js"
 import { validatePlan } from "../validate/index.js"
-import {
-  buildPlannerFailurePayload,
-  resolvePlannerCompatibilityMode,
-  resolvePlannerCompatibilityThreshold
-} from "./helpers.js"
+import { buildPlannerFailurePayload } from "./helpers.js"
 import { runDelegationGate } from "./setup-delegation.js"
 import type { PlannerContext, PlannerResult, PlannerSetupContext } from "./types.js"
 
-/** Discriminated union returned by runPlannerSetup. */
 export type SetupOutcome =
   | { readonly ready: false; readonly result: PlannerResult }
   | { readonly ready: true; readonly context: PlannerSetupContext }
 
-/**
- * Execute planner setup (Steps 1–3b).
- *
- * Performs routing assessment, plan generation, plan validation, and the
- * delegation decision gate.  Returns either an early-exit PlannerResult (if
- * the task should not proceed) or a PlannerSetupContext for the execution loop.
- */
 export async function runPlannerSetup(
   goal: string,
   ctx: PlannerContext,
-  options?: { forceRoute?: "full_planner_decomposition" | "planner_with_coherent_bootstrap" }
+  decision: PlannerDecision
 ): Promise<SetupOutcome> {
   const banditTuner = ctx.delegationBanditTuner
 
-  // Step 1: Should we plan?
-  // When forceRoute is set (delay-commitment fallback from coherent failure),
-  // skip the routing assessment and commit directly to the specified route.
-  const decision =
-    options?.forceRoute != null
-      ? {
-          shouldPlan: true,
-          route: options.forceRoute,
-          score: 10,
-          reason: "coherent_generation_fallback_escalation",
-          coherenceNeed: PlannerNeedLevel.High,
-          coordinationNeed: PlannerNeedLevel.Medium,
-          routingConfidence: "lean_planner" as const,
-          llmClassified: false
-        }
-      : await assessPlannerDecision(goal, ctx.history, ctx.llm, ctx.signal)
   ctx.onTrace?.({
     kind: PlannerTraceKind.Decision,
     score: decision.score,
     shouldPlan: decision.shouldPlan,
     route: decision.route,
-    reason: decision.reason,
-    coherenceNeed: decision.coherenceNeed,
-    coordinationNeed: decision.coordinationNeed
+    reason: decision.reason
   })
 
   if (!decision.shouldPlan) {
@@ -81,66 +49,11 @@ export async function runPlannerSetup(
       ready: false,
       result: {
         handled: false,
-        skipReason: `route=${decision.route} score=${decision.score} (${decision.reason})`
+        skipReason: `route=${decision.route} (${decision.reason})`
       }
     }
   }
 
-  let coherentBootstrap: PlannerCoherentBootstrap | undefined
-  if (decision.route === "planner_with_coherent_bootstrap") {
-    const bootstrapResult = await generateCoherentBootstrap(
-      ctx.llm,
-      {
-        goal,
-        workspaceRoot: ctx.workspaceRoot,
-        history: ctx.history
-      },
-      {
-        signal: ctx.signal
-      }
-    )
-
-    if (!bootstrapResult.bootstrap) {
-      ctx.onTrace?.({
-        kind: PlannerTraceKind.GenerationFailed,
-        diagnostics: bootstrapResult.diagnostics
-      })
-      const reason = `Planner bootstrap failed: ${bootstrapResult.diagnostics.map((d) => d.message).join("; ")}`
-      return {
-        ready: false,
-        result: {
-          handled: true,
-          answer: buildPlannerFailurePayload({
-            stage: "generation",
-            reason,
-            diagnostics: bootstrapResult.diagnostics,
-            score: decision.score,
-            plannerReason: decision.reason
-          }),
-          skipReason: reason
-        }
-      }
-    }
-
-    coherentBootstrap = bootstrapResult.bootstrap
-    ctx.onTrace?.({
-      kind: PlannerTraceKind.CoherentBootstrap,
-      artifactCount: coherentBootstrap.artifacts.length,
-      decompositionStrategy: coherentBootstrap.decompositionStrategy,
-      decompositionReasons: [...coherentBootstrap.decompositionReasons],
-      sharedContracts: coherentBootstrap.sharedContracts?.map((contract) => contract.name) ?? [],
-      invariants: coherentBootstrap.invariants?.map((invariant) => invariant.id) ?? []
-    })
-    ctx.onTrace?.({
-      kind: PlannerTraceKind.ArchitectureState,
-      lane: decision.route,
-      status: "frozen",
-      reason: "coherent_bootstrap_generated",
-      architecture: coherentBootstrap.architecture
-    })
-  }
-
-  // Step 2: Generate plan
   ctx.onTrace?.({ kind: PlannerTraceKind.Generating })
   const genResult = await generatePlan(
     ctx.llm,
@@ -148,9 +61,7 @@ export async function runPlannerSetup(
       goal,
       availableTools: ctx.tools,
       workspaceRoot: ctx.workspaceRoot,
-      history: ctx.history,
-      route: decision.route,
-      coherentBootstrap
+      history: ctx.history
     },
     {
       maxAttempts: 3,
@@ -180,7 +91,7 @@ export async function runPlannerSetup(
     }
   }
 
-  const plan = genResult.plan
+  const plan = { ...genResult.plan, route: decision.route }
 
   const forcedOutputDir = inferForcedOutputDirectoryFromGoal(goal)
   if (forcedOutputDir) {
@@ -200,7 +111,6 @@ export async function runPlannerSetup(
     edges: plan.edges.map((e) => ({ from: e.from, to: e.to }))
   })
 
-  // Step 3: Validate plan
   let validation = validatePlan(plan, ctx.tools)
   let errors = validation.diagnostics.filter((d) => d.severity === DiagnosticSeverity.Error)
   let warnings = validation.diagnostics.filter((d) => d.severity === DiagnosticSeverity.Warning)
@@ -244,12 +154,8 @@ export async function runPlannerSetup(
     }
   }
 
-  // Always canonicalize output directory usage before execution.
-  // This prevents late path mismatch failures caused by mixed bare-path
-  // vs subdirectory artifacts across steps.
   normalizePlanOutputDirectory(plan, forcedOutputDir ?? undefined)
 
-  // Inject warnings into step objectives as guidance (plan still runs)
   if (warnings.length > 0) {
     applyWarningAutoFixes(plan, warnings)
     ctx.onTrace?.({
@@ -260,17 +166,10 @@ export async function runPlannerSetup(
     injectWarningsIntoSteps(plan, warnings)
   }
 
-  // Global hardening: for multi-file JS plans, enforce one explicit shared
-  // state owner and propagate a typed contract to all writer steps.
   injectSharedStateOwnershipContract(plan)
   injectBrowserRuntimeContracts(plan)
   injectHelperDependencyContracts(plan)
   injectVisualStyleContracts(plan)
-
-  // Contract-First Architecture: auto-inject a blueprint step as step 0 for
-  // multi-file projects. This step generates a BLUEPRINT.md with function
-  // signatures, data types, and inter-file contracts that all implementation
-  // steps must follow. This prevents Variable Drift across child agents.
   injectBlueprintStep(plan, ctx.workspaceRoot, forcedOutputDir)
   strengthenExistingBlueprintSteps(plan, ctx.workspaceRoot, forcedOutputDir)
   const runtimeModel = compilePlannerRuntime(plan)
@@ -290,13 +189,9 @@ export async function runPlannerSetup(
     runtimeEntities: runtimeModel.runtimeEntities
   })
 
-  // Step 3b: Delegation decision gate — safety, economics, hard-block checks
   const gate = runDelegationGate(plan, goal, decision, ctx, banditTuner)
   if (gate.blocked) return { ready: false, result: gate.result }
   const banditTrajectory = gate.banditTrajectory
-
-  const compatibilityMode = resolvePlannerCompatibilityMode()
-  const compatibilityThreshold = resolvePlannerCompatibilityThreshold()
 
   return {
     ready: true,
@@ -304,9 +199,7 @@ export async function runPlannerSetup(
       plan,
       runtimeModel,
       decision,
-      banditTrajectory,
-      compatibilityMode,
-      compatibilityThreshold
+      banditTrajectory
     }
   }
 }
