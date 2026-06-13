@@ -1,3 +1,8 @@
+/**
+ * system_law sections — highest-priority rules the model must not ignore.
+ * Catalog-resolved facts and clarification blocks (must_clarify / resolved).
+ */
+
 import {
   detectAmbiguities,
   filterFindingsForSyncIntent,

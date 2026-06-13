@@ -1,3 +1,8 @@
+/**
+ * Domain knowledge sections injected when the goal looks data/sync/chart-shaped.
+ * Skipped for generic coding tasks to save tokens (persona, ABI sync, charts, ETL).
+ */
+
 import {
   ABI_SYNC_SECTION,
   BIG_TABLE_ETL_SECTION,

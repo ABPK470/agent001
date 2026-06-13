@@ -1,3 +1,8 @@
+/**
+ * Build a sync preview or execute pipeline: entity name, route, decision log,
+ * and per-table or per-step activities from sync.* events.
+ */
+
 import { EventType } from "@mia/agent"
 import { SyncRunStatus } from "@mia/shared-enums"
 import { OperationKind, OperationStatus } from "../../../../../shared/enums/operations.js"

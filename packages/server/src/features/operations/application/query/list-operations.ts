@@ -1,10 +1,6 @@
 /**
- * Operation log query — groups persisted events into pipeline → activity → event trees.
- *
- * Bucketing rules:
- *   1. Standalone sync (planId, no runId precedence for sync.* prefixes) → sync pipeline
- *   2. runId → agent run pipeline (inline sync events become activities)
- *   3. Otherwise → system bucket per minute
+ * Entry point: load recent events from SQLite, group them, return pipelines.
+ * Called by listOperations in index.ts.
  */
 
 import { isEventType } from "@mia/agent"

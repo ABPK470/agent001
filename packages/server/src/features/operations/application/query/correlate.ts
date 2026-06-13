@@ -1,3 +1,8 @@
+/**
+ * Pass 1: assign each event to a bucket (agent run, sync preview/execute, or system).
+ * Standalone sync events get their own pipeline even when they also carry a runId.
+ */
+
 import { OperationKind } from "../../../../shared/enums/operations.js"
 import type { EventBucket, OperationEvent } from "./types.js"
 import { resolveSyncPlanId, strField } from "./utils.js"

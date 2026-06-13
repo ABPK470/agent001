@@ -1,3 +1,8 @@
+/**
+ * Fixed prompt prose blocks (bus coordination, information disclosure).
+ * Injected verbatim when the run needs them — not generated at runtime.
+ */
+
 export const BUS_COORDINATION_SECTION = [
   "<bus_coordination>",
   "You are running alongside other agents in this run tree. Use the bus tools",

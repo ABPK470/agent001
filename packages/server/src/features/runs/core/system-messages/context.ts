@@ -1,3 +1,8 @@
+/**
+ * Normalize run options once and log which optional sections will be injected.
+ * Avoids repeating opts?.foo ?? default in every section builder.
+ */
+
 import { parseSyncOperationIntentForHost } from "@mia/sync"
 import { decideSections } from "../decide-sections.js"
 import type { BuildContext, BuildSystemMessagesOptions } from "./types.js"

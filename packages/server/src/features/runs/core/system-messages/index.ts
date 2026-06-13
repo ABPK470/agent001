@@ -1,8 +1,9 @@
 /**
- * Structured multi-message system prompt assembly.
+ * System prompt assembly for each agent run.
  *
- * Each section is a separate system message with a budget tag so truncation
- * can drop droppable sections independently.
+ * Builds an ordered list of system messages (not one giant string) so the
+ * token budget can drop droppable sections on long runs. Called once at run
+ * start from run-executor before the first LLM call.
  */
 
 import type { Message } from "@mia/agent"

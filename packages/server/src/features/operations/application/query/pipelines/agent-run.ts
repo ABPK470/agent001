@@ -1,3 +1,8 @@
+/**
+ * Build an agent-run pipeline: goal as title, run row for status,
+ * activities for lifecycle, tool steps, and inline sync sub-jobs.
+ */
+
 import { EventType, RunStatus } from "@mia/agent"
 import { OperationKind, OperationStatus } from "../../../../../shared/enums/operations.js"
 import * as db from "../../../../../platform/persistence/sqlite.js"

@@ -1,3 +1,8 @@
+/**
+ * system_runtime sections — tools, workspace layout, and attachment manifest.
+ * Droppable under token pressure; describes what the agent can call this run.
+ */
+
 import { MessageRole, type Message } from "@mia/agent"
 import { buildHostedRuntimeContext, buildToolContext, getWorkspaceContext } from "../prompt/builder.js"
 import type { BuildContext } from "./types.js"

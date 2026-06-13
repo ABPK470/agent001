@@ -1,3 +1,8 @@
+/**
+ * Inputs for buildSystemMessages and the normalized per-run context
+ * derived from them (section gating, sync intent, prior turns, etc.).
+ */
+
 import type { LLMClient, Tool } from "@mia/agent"
 import type { DbToolResult } from "../../../../platform/persistence/sqlite.js"
 import type { ClarificationsPort } from "../../../../ports/clarifications.js"

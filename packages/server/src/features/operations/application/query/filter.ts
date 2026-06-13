@@ -1,3 +1,7 @@
+/**
+ * Apply optional query filters (kind, status, free-text search) after pipelines are built.
+ */
+
 import type { ListOperationsOpts, OperationPipeline } from "./types.js"
 
 export function filterOperations(

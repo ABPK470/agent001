@@ -1,3 +1,8 @@
+/**
+ * Multi-agent bus rules and non-admin disclosure policy.
+ * Only added when the run has siblings or the user is not an admin.
+ */
+
 import { MessageRole, type Message } from "@mia/agent"
 import type { BuildContext } from "./types.js"
 import { BUS_COORDINATION_SECTION, INFORMATION_DISCLOSURE_SECTION } from "./static-sections.js"

@@ -1,3 +1,15 @@
+/**
+ * Injects the three memory tiers into the system prompt when retrieval found content.
+ *
+ * Working and semantic are passed through as-is. Episodic is special: it often
+ * contains a summary of an older run with the same (or similar) goal — lines like
+ * "Status: completed" and "Answer: …". When that summary looks trustworthy
+ * (completed, not failed, not a clarification punt), we prepend extra instructions
+ * telling the model it may reuse tables/columns from that answer instead of calling
+ * search_catalog again. Working/semantic never get that banner because they do not
+ * carry that prior-run shape.
+ */
+
 import { MessageRole, type Message } from "@mia/agent"
 import { buildMemoryGuidance } from "../prompt/builder.js"
 import type { BuildContext } from "./types.js"

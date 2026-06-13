@@ -1,3 +1,8 @@
+/**
+ * Small helpers shared across pipeline builders: parse JSON, read fields,
+ * compute duration, infer success/failed/running from event sequences.
+ */
+
 import {
   isCancellationEvent,
   isCompletionEvent,

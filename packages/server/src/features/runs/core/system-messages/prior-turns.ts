@@ -1,3 +1,8 @@
+/**
+ * Renders the <prior_turns> block so follow-up goals ("plot it", "filter that")
+ * resolve against the last answer instead of starting from a blank slate.
+ */
+
 import type { PriorTurn } from "../data-blocks/prior-turns.js"
 
 export function renderPriorTurnsBlock(turns: readonly PriorTurn[]): string {

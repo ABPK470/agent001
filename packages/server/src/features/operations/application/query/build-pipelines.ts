@@ -1,3 +1,8 @@
+/**
+ * Pass 2: turn each bucket into a fully populated OperationPipeline
+ * (title, status, activities) by delegating to the pipeline-specific builders.
+ */
+
 import { OperationKind } from "../../../../shared/enums/operations.js"
 import type { OperationPipeline } from "./types.js"
 import { buildAgentRunPipeline } from "./pipelines/agent-run.js"

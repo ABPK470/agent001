@@ -1,3 +1,9 @@
+/**
+ * system_anchor sections — core identity and session continuity.
+ * Base prompt, environment, prior turns/results, known warehouse objects,
+ * and clarification discipline. Kept when the budget compactor trims later sections.
+ */
+
 import {
   buildPromptVars,
   CLARIFICATION_DISCIPLINE_SECTION,

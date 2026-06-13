@@ -1,3 +1,8 @@
+/**
+ * Wire types for the operation log API response.
+ * Pipeline → Activity → Event is the three-level tree the UI renders.
+ */
+
 import type { EventType } from "@mia/agent"
 import { OperationKind, OperationStatus } from "../../../../shared/enums/operations.js"
 

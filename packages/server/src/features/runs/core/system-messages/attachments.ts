@@ -1,3 +1,8 @@
+/**
+ * One-line metadata list of files the user attached to this run.
+ * Bytes stay out of the prompt — the agent uses attachment tools to read them.
+ */
+
 import { getAttachment, type AttachmentRow } from "../../../../platform/persistence/attachments.js"
 
 export function buildAttachmentManifest(ids: string[]): string {
