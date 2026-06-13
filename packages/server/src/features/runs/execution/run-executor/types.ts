@@ -190,7 +190,7 @@ export type DelegateToolsBundle = {
 
 export type ExecutionSystemMessagesBundle = {
   effectivePrompt: string
-  systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages.js").buildSystemMessages>>
+  systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages/index.js").buildSystemMessages>>
 }
 
 export type ExecutionEnvironment = {
@@ -208,5 +208,5 @@ export type ExecutionEnvironment = {
   toolDecision: ReturnType<typeof import("../../core/decide-sections.js").decideSections>
   delegateCtx: DelegateContext
   allTools: ExecutableTool[]
-  systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages.js").buildSystemMessages>>
+  systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages/index.js").buildSystemMessages>>
 }

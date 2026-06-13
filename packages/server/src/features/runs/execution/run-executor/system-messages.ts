@@ -4,7 +4,7 @@ import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 import { loadCandidateVerdicts, loadKnownObjects } from "../../core/data-blocks/known-objects.js"
 import { loadPriorResults } from "../../core/data-blocks/prior-results-block.js"
 import { loadPriorTurns } from "../../core/data-blocks/prior-turns.js"
-import { buildSystemMessages } from "../../core/system-messages.js"
+import { buildSystemMessages } from "../../core/system-messages/index.js"
 import type {
   ActiveRunRecord,
   ExecuteRunRequestDto,

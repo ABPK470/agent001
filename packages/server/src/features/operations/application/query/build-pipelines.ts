@@ -1,0 +1,24 @@
+import { OperationKind } from "../../../../shared/enums/operations.js"
+import type { OperationPipeline } from "./types.js"
+import { buildAgentRunPipeline } from "./pipelines/agent-run.js"
+import { buildSyncPipeline } from "./pipelines/sync.js"
+import { buildSystemPipeline } from "./pipelines/system.js"
+import type { EventBucket } from "./types.js"
+
+export function buildPipelinesFromBuckets(buckets: Iterable<EventBucket>): OperationPipeline[] {
+  const operations: OperationPipeline[] = []
+
+  for (const bucket of buckets) {
+    if (bucket.kind === OperationKind.AgentRun) {
+      operations.push(buildAgentRunPipeline(bucket.key.slice(4), bucket.events))
+    } else if (bucket.kind === OperationKind.SyncPreview || bucket.kind === OperationKind.SyncExecute) {
+      const planId = bucket.planId ?? bucket.key.slice(5)
+      operations.push(buildSyncPipeline(planId, bucket.kind, bucket.events))
+    } else {
+      operations.push(buildSystemPipeline(bucket.key, bucket.events))
+    }
+  }
+
+  operations.sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+  return operations
+}

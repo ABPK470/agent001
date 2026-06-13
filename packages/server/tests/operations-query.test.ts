@@ -86,7 +86,7 @@ describe("listOperations sync bucketing", () => {
       error: null
     })
 
-    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
 
     expect(result.operations).toHaveLength(3)
@@ -140,7 +140,7 @@ describe("listOperations sync bucketing", () => {
       error: null
     })
 
-    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
 
@@ -211,7 +211,7 @@ describe("listOperations sync bucketing", () => {
       })
     )
 
-    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
 
@@ -273,7 +273,7 @@ describe("listOperations sync bucketing", () => {
     })
     getSyncRunPlanJson.mockReturnValue(null)
 
-    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const preview = result.operations.find((op) => op.kind === OperationKind.SyncPreview)
 
@@ -331,7 +331,7 @@ describe("listOperations sync bucketing", () => {
       })
     )
 
-    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const preview = result.operations[0]
     const scope = preview.activities.find((a) => a.name === "Table scope selected")
