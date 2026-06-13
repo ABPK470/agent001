@@ -1,7 +1,5 @@
 import {
-  isPlannerRepairCompatibilityMode,
   PipelineStatus,
-  PlannerRepairCompatibilityMode,
   PlannerTraceKind,
   VerifierOutcome
 } from "../../domain/index.js"
@@ -101,20 +99,6 @@ export function finalizePlannerRun(
     }
   }
   return { handled: true, answer, plan, pipelineResult, verifierDecision }
-}
-
-export function resolvePlannerCompatibilityMode(): PlannerRepairCompatibilityMode {
-  const raw = (process.env["AGENT_PLANNER_COMPAT_MODE"] ?? PlannerRepairCompatibilityMode.Shadow)
-    .trim()
-    .toLowerCase()
-  if (isPlannerRepairCompatibilityMode(raw)) return raw
-  return PlannerRepairCompatibilityMode.Shadow
-}
-
-export function resolvePlannerCompatibilityThreshold(): number {
-  const raw = Number(process.env["AGENT_PLANNER_COMPAT_THRESHOLD"] ?? 3)
-  if (!Number.isFinite(raw)) return 3
-  return Math.max(1, Math.floor(raw))
 }
 
 export function applyVerificationAcceptanceStates(

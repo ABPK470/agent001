@@ -7,12 +7,6 @@
  */
 
 import { asNonEmptyString as _asNonEmptyString, isRecord } from "../../internal/index.js"
-import type {
-  CoherentArchitectureArtifact,
-  CoherentSharedContract,
-  CoherentSystemInvariant,
-  PlanEdge
-} from "../types.js"
 
 // Re-exported to preserve the public surface; canonical definition lives in internal/json.
 export const asNonEmptyString = _asNonEmptyString
@@ -27,58 +21,6 @@ export function parseJsonObject(raw: string): Record<string, unknown> | null {
   } catch {
     return null
   }
-}
-
-export function parseBootstrapArtifacts(value: unknown): CoherentArchitectureArtifact[] {
-  if (!Array.isArray(value)) return []
-  const artifacts: CoherentArchitectureArtifact[] = []
-  for (const entry of value) {
-    if (!isRecord(entry)) continue
-    const path = asNonEmptyString(entry.path)
-    const purpose = asNonEmptyString(entry.purpose)
-    if (!path || !purpose) continue
-    artifacts.push({ path, purpose })
-  }
-  return artifacts
-}
-
-export function parseBootstrapEdges(value: unknown): PlanEdge[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  const edges: PlanEdge[] = []
-  for (const entry of value) {
-    if (!isRecord(entry)) continue
-    const from = asNonEmptyString(entry.from)
-    const to = asNonEmptyString(entry.to)
-    if (!from || !to) continue
-    edges.push({ from, to })
-  }
-  return edges.length > 0 ? edges : undefined
-}
-
-export function parseBootstrapContracts(value: unknown): CoherentSharedContract[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  const contracts: CoherentSharedContract[] = []
-  for (const entry of value) {
-    if (!isRecord(entry)) continue
-    const name = asNonEmptyString(entry.name)
-    const description = asNonEmptyString(entry.description)
-    if (!name || !description) continue
-    contracts.push({ name, description })
-  }
-  return contracts.length > 0 ? contracts : undefined
-}
-
-export function parseBootstrapInvariants(value: unknown): CoherentSystemInvariant[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  const invariants: CoherentSystemInvariant[] = []
-  for (const entry of value) {
-    if (!isRecord(entry)) continue
-    const id = asNonEmptyString(entry.id)
-    const description = asNonEmptyString(entry.description)
-    if (!id || !description) continue
-    invariants.push({ id, description })
-  }
-  return invariants.length > 0 ? invariants : undefined
 }
 
 export const PLANNER_SYSTEM_PROMPT = `You are a task decomposition planner. Your job is to break a complex task into a structured execution plan.
@@ -255,24 +197,3 @@ If requested, the last step writes a clean HTML or Markdown report summarizing f
 - NEVER use absolute paths in targetArtifacts or requiredSourceArtifacts. Always use workspace-relative paths.
 
 Respond ONLY with the JSON plan object. No markdown, no explanation outside the JSON.`
-
-export const COHERENT_BOOTSTRAP_SYSTEM_PROMPT = `You are freezing architecture before decomposition.
-
-Respond ONLY with valid JSON matching this schema:
-{
-  "summary": "what is being built",
-  "architecture": "the frozen high-level architecture",
-  "artifacts": [{ "path": "relative/path.ext", "purpose": "what this artifact owns" }],
-  "dependencyEdges": [{ "from": "artifactA", "to": "artifactB" }],
-  "sharedContracts": [{ "name": "contract_name", "description": "exact shared contract" }],
-  "invariants": [{ "id": "invariant_id", "description": "system invariant to preserve" }],
-  "decompositionStrategy": "preserve_coherence" | "decompose_by_ownership",
-  "decompositionReasons": ["why later decomposition is or is not justified"]
-}
-
-Rules:
-1. Freeze the architecture, shared contracts, and invariants first.
-2. Prefer preserve_coherence unless ownership separation is real and explicit.
-3. Multi-file greenfield work is NOT automatically decomposed.
-4. Artifact paths must be workspace-relative file paths.
-5. Do not include file contents here; this is an architecture bootstrap, not a code bundle.`

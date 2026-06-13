@@ -1,14 +1,11 @@
 /**
- * Planner decision patterns — regex constants for routing layers.
- *
- * Extracted from decision.ts for maintainability.
- * Each pattern has a clear role documented inline.
+ * Planner decision patterns — regex constants for routing.
  *
  * @module
  */
 
 // ============================================================================
-// Layer 1: Semantic hard-gate patterns
+// Direct-route gates and planner score signals
 // ============================================================================
 
 /** Multi-step work: "build X then Y", "first...then...", numbered lists */
@@ -43,10 +40,6 @@ export const VERIFICATION_RE =
 /** Simple dialogue: greeting, thanks, or lightweight opener — no tool work expected. */
 export const SIMPLE_DIALOGUE_RE =
   /^(?:hi|hello|hey|howdy|yo|sup|thanks?|thank you|thx|ty|good (?:morning|afternoon|evening|night)|what(?:'s| is) up|what is|how do|how are you|can you explain|tell me about)\b/i
-
-/** Short acknowledgements / backchannel — reply in text. */
-export const ACK_DIALOGUE_RE =
-  /^(?:ok(?:ay)?|k|sure|yes|no|yep|nope|cool|great|nice|got it|understood|sounds good|perfect|awesome)\s*[!.?]*$/i
 
 /**
  * Session / continuity meta questions — "what are we doing?", status checks.
@@ -145,10 +138,6 @@ export const DB_INVESTIGATION_RE =
 export const DATA_FETCH_PIPELINE_RE =
   /\b(?:query|fetch|get|pull|retrieve|select|show|display|list|report\s+on|generate\s+(?:a\s+)?report)\b[\s\S]{0,80}\b(?:from\s+)?(?:database|db|mssql|sql\s+server|sql|table|data)\b|\b(?:mssql|sql\s+server|database|db)\b[\s\S]{0,80}\b(?:report|table|chart|display|html|dashboard|page|export|output|result)\b/i
 
-/** High-throughput direct coding: single-artifact implementation in one file */
-export const SINGLE_ARTIFACT_BURST_RE =
-  /\b(?:single|one|only)\s+(?:file|module|component|page|script)\b|\b(?:in|into)\s+[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|html|css|sql)\b/i
-
 /**
  * Simple function/script write: "create/implement/write a factorial function",
  * "write a sorting algorithm", etc. These are single-file, single-concern tasks
@@ -157,14 +146,6 @@ export const SINGLE_ARTIFACT_BURST_RE =
  */
 export const SIMPLE_FUNCTION_WRITE_RE =
   /^\s*(?:create|implement|write|add|make)\b[^\n]{0,80}\b(?:function|method|class|script|algorithm|utility|helper|snippet|module)\b[^\n]{0,80}$/i
-
-/** User explicitly asks for a full cohesive implementation pass */
-export const COHESIVE_IMPLEMENTATION_RE =
-  /\b(?:full|complete|entire|end[- ]to[- ]end|from scratch|all logic|whole implementation)\b/i
-
-/** Strong greenfield coherence cues */
-export const COHERENCE_FIRST_RE =
-  /\b(?:playable|interactive|drag and drop|drag-and-drop|fully working|working end[- ]to[- ]end)\b/i
 
 /** Concrete file targets */
 export const TARGET_FILE_RE = /\b[\w./-]+\.(?:ts|tsx|js|jsx|py|go|rs|java|kt|html|css|sql)\b/gi
@@ -179,18 +160,6 @@ export const MULTI_TARGET_CUE_RE =
  * (the simple path failed — escalate). Mirrors agenc-core's hasPriorNoProgressSignal.
  */
 export const RECOVERY_HINT_RE = /\[recovery\]|no[_\s]progress|stuck|repeated[_\s]failure|escalat/i
-
-// ============================================================================
-// Layer 2: Advisory heuristic patterns (signals, not decisions)
-// ============================================================================
-
-/** Bounded greenfield builds benefit from coherence before decomposition */
-export const BOUNDED_COHERENT_SCOPE_RE =
-  /\b(?:build|create|implement|develop|make|write)\b[\s\S]{0,80}\b(?:app(?:lication)?|game|website|site|tool|dashboard|widget|prototype|project|starter|platform|system)\b/i
-
-/** Larger greenfield system cues justify architecture freeze before decomposition */
-export const LARGE_GREENFIELD_BOOTSTRAP_RE =
-  /\b(?:starter|platform|system|suite|workspace|tenant|billing|worker|backend|frontend|api|service|admin)\b/i
 
 /**
  * Existing-code coupling tends to require planner coordination.

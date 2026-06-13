@@ -45,14 +45,10 @@ export * from "./polish-failure.js"
 
 // Re-export all types
 export type {
-  ArchitecturePreservationStatus,
   ArtifactRelation,
   ChildExecutionResult,
   CircuitBreakerState,
-  CoherentArchitectureArtifact,
   CoherentSharedContract,
-  CoherentSolutionArtifact,
-  CoherentSolutionBundle,
   CoherentSystemInvariant,
   DeterministicToolStep,
   DiagnosticCategory,
@@ -68,7 +64,6 @@ export type {
   Plan,
   PlanDiagnostic,
   PlanEdge,
-  PlannerCoherentBootstrap,
   PlannerDecision,
   PlannerRoute,
   PlanStep,

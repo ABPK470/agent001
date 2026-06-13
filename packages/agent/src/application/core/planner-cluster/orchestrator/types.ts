@@ -8,7 +8,6 @@ import type {
   PipelineResult,
   Plan,
   PlannerDecision,
-  PlannerRepairCompatibilityMode,
   PlannerRuntimeModel,
   VerifierDecision
 } from "../types.js"

@@ -110,8 +110,7 @@ packages/agent/src/
 1. Build the initial messages (goal + system blocks + recalled memory).
 2. **Routing first.** `attemptPlannerRouting()` (in
    `application/core/planner-routing-cluster/`) scores the goal and chooses
-   _direct_, _coherent generation_, or _full planner_. If a structured lane
-   succeeds, it returns immediately.
+   _direct_ or _planner_. If the planner path succeeds, it returns immediately.
 3. Otherwise enter the **tool loop**: call the LLM → run completion guards → if
    the model asked for tools, execute each one (governed, traced), feed results
    back, repeat → if the model produced text, run post-round checks (stuck
@@ -142,7 +141,7 @@ Tool handlers receive both as arguments. Nothing is read from a global.
 | Cluster | Responsibility |
 |---|---|
 | `planner-cluster` | Decompose a goal into a verifiable artifact graph; generate, execute, and verify plans |
-| `planner-routing-cluster` | Decide _direct vs. coherent-generation vs. planner_; escalate on failure |
+| `planner-routing-cluster` | Decide _direct vs. planner_; escalate on failure |
 | `governance-cluster` | Tool-quality and execution-policy checks run before each call |
 | `recovery-cluster` | Retry policy, budget extension, circuit-breaker on repeated tool failure |
 | `clarify-cluster` | Detect unresolved ambiguity in the goal and emit a clarification request |

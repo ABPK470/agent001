@@ -137,21 +137,6 @@ export function isBlueprintLikeStep(step: SubagentTaskStep | undefined): boolean
   )
 }
 
-export function getArchitectureRepairContext(plan: Plan): {
-  preserveArchitecture: true
-  architectureSummary: string
-  sharedContracts: NonNullable<Plan["coherentBootstrap"]>["sharedContracts"]
-  invariants: NonNullable<Plan["coherentBootstrap"]>["invariants"]
-} | null {
-  if (!plan.coherentBootstrap) return null
-  return {
-    preserveArchitecture: true,
-    architectureSummary: plan.coherentBootstrap.architecture,
-    sharedContracts: plan.coherentBootstrap.sharedContracts,
-    invariants: plan.coherentBootstrap.invariants
-  }
-}
-
 export function inferAffectedArtifacts(step: SubagentTaskStep | undefined, summary: string): string[] {
   const extracted = extractPaths(summary)
   if (extracted.length > 0) return extracted

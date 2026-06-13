@@ -11,12 +11,7 @@ import { useStore } from "../store"
 import type { AgentDefinition, RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
 import { fmtTokens, statusColor, timeAgo } from "../util"
 
-type CompatibilityTrace = Extract<TraceEntry, { kind: "planner-repair-compatibility" }>
 type PlannerDecisionTrace = Extract<TraceEntry, { kind: "planner-decision" }>
-type ArchitectureStateTrace = Extract<TraceEntry, { kind: "planner-architecture-state" }>
-type CoherentMaterializedTrace = Extract<TraceEntry, { kind: "coherent-generation-materialized" }>
-type CoherentVerifiedTrace = Extract<TraceEntry, { kind: "coherent-generation-verified" }>
-type CoherentRepairTrace = Extract<TraceEntry, { kind: "coherent-generation-repair-needed" }>
 
 export function RunStatus() {
   const runs = useStore((s) => s.runs)
@@ -155,12 +150,7 @@ export function RunStatus() {
   const isActive = run.status === RunStatusEnum.Running || run.status === RunStatusEnum.Pending || run.status === RunStatusEnum.Planning
   const completedSteps = steps.filter((s) => s.status === RunStatusEnum.Completed).length
   const failedSteps = steps.filter((s) => s.status === RunStatusEnum.Failed).length
-  const latestCompatibility = [...trace].reverse().find((entry): entry is CompatibilityTrace => entry.kind === "planner-repair-compatibility")
   const latestPlannerDecision = [...trace].reverse().find((entry): entry is PlannerDecisionTrace => entry.kind === "planner-decision")
-  const latestArchitectureState = [...trace].reverse().find((entry): entry is ArchitectureStateTrace => entry.kind === "planner-architecture-state")
-  const latestCoherentMaterialized = [...trace].reverse().find((entry): entry is CoherentMaterializedTrace => entry.kind === "coherent-generation-materialized")
-  const latestCoherentVerified = [...trace].reverse().find((entry): entry is CoherentVerifiedTrace => entry.kind === "coherent-generation-verified")
-  const latestCoherentRepair = [...trace].reverse().find((entry): entry is CoherentRepairTrace => entry.kind === "coherent-generation-repair-needed")
 
   async function handleCancel() {
     if (run) await api.cancelRun(run.id).catch(() => {})
@@ -263,95 +253,6 @@ export function RunStatus() {
             </div>
           </div>
           <div className="mt-2 text-[13px] text-text-secondary">{latestPlannerDecision.reason}</div>
-          {latestArchitectureState && (
-            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-text-secondary">
-              <div>
-                <span className="text-text-muted">Architecture</span>
-                <div className="font-mono mt-0.5">{latestArchitectureState.status}</div>
-              </div>
-              <div>
-                <span className="text-text-muted">Lane</span>
-                <div className="font-mono mt-0.5">{latestArchitectureState.lane}</div>
-              </div>
-            </div>
-          )}
-          {latestCoherentMaterialized && (
-            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-text-secondary">
-              <div>
-                <span className="text-text-muted">Materialized</span>
-                <div className="font-mono mt-0.5">{latestCoherentMaterialized.artifactCount}</div>
-              </div>
-              <div>
-                <span className="text-text-muted">Read-back</span>
-                <div className="font-mono mt-0.5">{latestCoherentMaterialized.readBackArtifacts.length}</div>
-              </div>
-            </div>
-          )}
-          {latestCoherentVerified && (
-            <div className="mt-3 grid grid-cols-2 gap-x-4 gap-y-2 text-[13px] text-text-secondary">
-              <div>
-                <span className="text-text-muted">Verifier</span>
-                <div className="font-mono mt-0.5">{latestCoherentVerified.overall}</div>
-              </div>
-              <div>
-                <span className="text-text-muted">Issues</span>
-                <div className="font-mono mt-0.5">{latestCoherentVerified.issueCount}</div>
-              </div>
-            </div>
-          )}
-          {latestCoherentRepair && (
-            <div className="mt-2 text-[13px] text-warning">
-              repair attempt {latestCoherentRepair.repairAttempt} · {latestCoherentRepair.issueCount} issues
-            </div>
-          )}
-        </div>
-      )}
-
-      {latestCompatibility && (
-        <div className="rounded-xl border border-warning/20 bg-warning/[0.06] p-3">
-          <div className="flex items-center justify-between gap-3">
-            <div>
-              <div className="text-[13px] text-text-muted uppercase tracking-wide">Planner Compatibility</div>
-              <div className="text-sm text-text-secondary mt-0.5">
-                mode {latestCompatibility.mode} · active {latestCompatibility.activePath}
-              </div>
-            </div>
-            <div className={`text-xs font-medium px-2 py-1 rounded-full ${latestCompatibility.diverged ? "text-warning bg-warning/10" : "text-success bg-success/10"}`}>
-              {latestCompatibility.diverged ? "Diverged" : "Aligned"}
-            </div>
-          </div>
-          <div className="grid grid-cols-2 gap-x-4 gap-y-2 mt-3 text-[13px] text-text-secondary">
-            <div>
-              <span className="text-text-muted">Score</span>
-              <div className="font-mono mt-0.5">
-                {(latestCompatibility.divergenceScore ?? latestCompatibility.reasons.length)}/{latestCompatibility.divergenceThreshold ?? "?"}
-              </div>
-            </div>
-            <div>
-              <span className="text-text-muted">Legacy Pin</span>
-              <div className={`mt-0.5 ${latestCompatibility.pinnedToLegacy ? "text-warning" : "text-text-secondary"}`}>
-                {latestCompatibility.pinnedToLegacy ? "Pinned for this run" : "Not pinned"}
-              </div>
-            </div>
-            <div>
-              <span className="text-text-muted">Legacy Rerun</span>
-              <div className="font-mono mt-0.5 break-words">{latestCompatibility.legacy.rerunOrder.join(" -> ") || "none"}</div>
-            </div>
-            <div>
-              <span className="text-text-muted">Repair Rerun</span>
-              <div className="font-mono mt-0.5 break-words">{latestCompatibility.repair.rerunOrder.join(" -> ") || "none"}</div>
-            </div>
-          </div>
-          {latestCompatibility.reasons.length > 0 && (
-            <div className="mt-3 text-[13px] text-text-secondary space-y-1">
-              {latestCompatibility.reasons.slice(0, 3).map((reason, index) => (
-                <div key={index}>{reason}</div>
-              ))}
-              {latestCompatibility.reasons.length > 3 && (
-                <div className="text-text-muted">+{latestCompatibility.reasons.length - 3} more divergence reasons</div>
-              )}
-            </div>
-          )}
         </div>
       )}
 
