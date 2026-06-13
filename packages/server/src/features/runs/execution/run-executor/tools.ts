@@ -57,7 +57,7 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
       const result = await retrieveContext(request.goal, {
         threadId: activeRun?.threadId ?? undefined,
         runId: request.runId,
-        upn: activeRun?.ownerUpn ?? null
+        upn: activeRun?.ownerUpn ?? undefined
       })
       perTier = result.perTier
     } catch (error) {

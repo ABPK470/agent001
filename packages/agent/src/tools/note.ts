@@ -98,7 +98,12 @@ export const noteToolMetadata: ToolMetadata = {
   }
 }
 
-export const noteTool = noteToolMetadata
+export const noteTool: ExecutableTool = {
+  ...noteToolMetadata,
+  async execute() {
+    return "Error: note tool is not bound to a run handler."
+  }
+}
 
 export const noteToolDefinition: ToolDefinition<NoteHandler> = {
   metadata: noteToolMetadata,

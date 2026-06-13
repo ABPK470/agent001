@@ -481,7 +481,6 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
           claim: payload.claim,
           evidence: payload.evidence,
           category: payload.category,
-          threadId: ctx.threadId,
           runId: ctx.runId,
           upn: ctx.upn
         })
@@ -504,7 +503,6 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
             role: payload.role,
             evidence: payload.evidence,
             observedFromGoal: payload.observedFromGoal,
-            threadId: ctx.threadId,
             runId: ctx.runId,
             upn: ctx.upn
           })
