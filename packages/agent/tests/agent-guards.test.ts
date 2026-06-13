@@ -68,6 +68,55 @@ describe("Agent loop guards", () => {
     expect(answer).toBe("Done after using tools")
   })
 
+  it("allows text-only completion on iteration 0 for dialogue goals", async () => {
+    const nudges: string[] = []
+    const llm = scriptedLLM([
+      { content: "Hi! We were working on your last question — ask me to continue or start something new.", toolCalls: [] }
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      onNudge: (data) => nudges.push(data.tag)
+    })
+    const answer = await agent.run("Hello")
+
+    expect(nudges).not.toContain("early-exit-nudge")
+    expect(answer).toContain("Hi!")
+  })
+
+  it("fires early-exit-nudge when user assents to a prior assistant offer", async () => {
+    const nudges: string[] = []
+    const llm = scriptedLLM([
+      { content: "Sure, I'll split src vs tests LOC now.", toolCalls: [] },
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "splitting" } }] },
+      { content: "Done — src and tests LOC are split.", toolCalls: [] }
+    ])
+
+    const priorTurns = {
+      role: "system" as const,
+      section: "system_anchor" as const,
+      content: [
+        "<prior_turns>",
+        "Turn -1",
+        "  Goal: count LOC",
+        "  Answer:",
+        "    Total LOC is 70,617.",
+        "    If you want, I can also split it into src vs tests LOC.",
+        "</prior_turns>"
+      ].join("\n")
+    }
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      systemMessages: [priorTurns],
+      onNudge: (data) => nudges.push(data.tag)
+    })
+    const answer = await agent.run("ok")
+
+    expect(nudges).toContain("early-exit-nudge")
+    expect(answer).toContain("Done")
+  })
+
   it("fires write-without-verify when child writes files then exits", async () => {
     const nudges: string[] = []
 

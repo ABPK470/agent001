@@ -1,7 +1,5 @@
 /**
  * Tool contract guidance — priority-sorted resolver chain for per-turn tool constraints.
- *
- * Before each LLM call (`prepareIterationContext`):
  *   1. Build a `ToolContractContext` from the current loop state.
  *   2. Call `resolveToolContractGuidance(ctx)` — first matching resolver wins.
  *   3. `applyToolContractGuidance` filters the tool list and yields an instruction.
@@ -12,6 +10,9 @@
  *
  * @module
  */
+
+import { isDirectDialogueGoal } from "../../application/core/goal-intent.js"
+import type { Message } from "../../domain/agent-types.js"
 
 // ============================================================================
 // Types
@@ -55,6 +56,10 @@ export interface ToolContractContext {
   readonly artifactsRequiringReadBeforeMutation: ReadonlySet<string>
   /** Source files written but not yet re-read into context. */
   readonly writtenButNotReread: ReadonlySet<string>
+  /** Original user goal for this run — used to skip tool nudges on dialogue turns. */
+  readonly userGoal?: string
+  /** Run messages — for context-aware dialogue vs assent classification. */
+  readonly messages?: readonly Message[]
 }
 
 // ============================================================================
@@ -176,24 +181,26 @@ const verifyWrittenFilesResolver: ResolverEntry = {
 }
 
 /**
- * Priority 200 — No premature text response at iteration 0.
+ * Priority 200 — Encourage tool use on iteration 0 for task goals only.
  *
- * Steer the model toward tools on the first turn (completion guard `early-exit`
- * catches text-only finish attempts).
+ * Conversational goals (greetings, meta questions) are excluded — those should
+ * get a natural text reply without performative tool calls.
  */
-const noPrematureTextResponseResolver: ResolverEntry = {
+const encourageFirstTurnToolsResolver: ResolverEntry = {
   priority: 200,
-  name: "no-premature-text-response",
+  name: "encourage-first-turn-tools",
   fn(ctx) {
     if (ctx.iteration !== 0) return null
     if (ctx.availableToolNames.length === 0) return null
+    if (ctx.userGoal && isDirectDialogueGoal(ctx.userGoal, { messages: ctx.messages })) return null
     return {
       priority: 200,
-      resolverName: "no-premature-text-response",
+      resolverName: "encourage-first-turn-tools",
       routedToolNames: ctx.availableToolNames,
       enforcement: "suggestion",
       runtimeInstruction:
-        "Start by using tools to gather information or take action — " +
+        "This goal requires action in the environment. " +
+        "Start by using tools to gather information or make progress — " +
         "do not respond with text only on the first turn."
     }
   }
@@ -203,7 +210,7 @@ const RESOLVERS: readonly ResolverEntry[] = [
   delegationVerificationResolver,
   readBeforeMutationResolver,
   verifyWrittenFilesResolver,
-  noPrematureTextResponseResolver
+  encourageFirstTurnToolsResolver
 ].sort((a, b) => b.priority - a.priority)
 
 /** First matching resolver wins (sorted by priority, highest first). */

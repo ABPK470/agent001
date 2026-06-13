@@ -40,9 +40,20 @@ export const IMPLEMENTATION_SCOPE_RE =
 export const VERIFICATION_RE =
   /\b(?:test|verify|ensure|check|validate|confirm|working|functional|playable|interactive)\b/i
 
-/** Simple dialogue: just a question or greeting */
+/** Simple dialogue: greeting, thanks, or lightweight opener — no tool work expected. */
 export const SIMPLE_DIALOGUE_RE =
-  /^(?:hi|hello|hey|thanks?|thank you|what is|how do|can you explain|tell me about)\b/i
+  /^(?:hi|hello|hey|howdy|yo|sup|thanks?|thank you|thx|ty|good (?:morning|afternoon|evening|night)|what(?:'s| is) up|what is|how do|how are you|can you explain|tell me about)\b/i
+
+/** Short acknowledgements / backchannel — reply in text. */
+export const ACK_DIALOGUE_RE =
+  /^(?:ok(?:ay)?|k|sure|yes|no|yep|nope|cool|great|nice|got it|understood|sounds good|perfect|awesome)\s*[!.?]*$/i
+
+/**
+ * Session / continuity meta questions — "what are we doing?", status checks.
+ * Answered from conversation context, not by spawning tools.
+ */
+export const SESSION_META_DIALOGUE_RE =
+  /\b(?:what are we (?:doing|working on)|what(?:'s| is) (?:the|our) (?:plan|goal|task|status|progress)|where are we(?: at)?|what have we (?:done|been doing)|catch me up|what did we (?:do|decide|work on)|remind me what|what was (?:the|our)|status update|any updates)\b/i
 
 /** Review/analysis question: not implementation, just looking at things */
 export const REVIEW_QUESTION_RE =

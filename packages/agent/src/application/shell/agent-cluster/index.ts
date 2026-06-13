@@ -193,6 +193,7 @@ export class Agent {
         iteration: i,
         state,
         toolList: this.toolList,
+        userGoal: goal,
         modelHint: this.llm.modelHint,
         config: {
           verbose: this.config.verbose,
@@ -261,6 +262,7 @@ export class Agent {
           response,
           messages,
           iteration: i,
+          userGoal: goal,
           state,
           toolList: this.toolList,
           config: this.config,

@@ -66,6 +66,7 @@ export interface IterationPrepInput {
   iteration: number
   state: AgentLoopState
   toolList: Tool[]
+  userGoal: string
   /** Optional model identifier for token-estimate calibration (Gap 7). */
   modelHint?: string
   config: {
@@ -76,7 +77,7 @@ export interface IterationPrepInput {
 }
 
 export function prepareIterationContext(input: IterationPrepInput): IterationPrepResult {
-  const { messages, iteration: i, state, toolList, modelHint, config } = input
+  const { messages, iteration: i, state, toolList, userGoal, modelHint, config } = input
 
   // ── Full history compaction ──
   if (shouldApplyFullCompaction(messages, i, state.lastFullCompactionIteration)) {
@@ -159,7 +160,9 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
     lastDelegationWasReadOnly: state.lastDelegationWasReadOnly,
     inPostDelegationVerification: state.inPostDelegationVerification,
     artifactsRequiringReadBeforeMutation: state.artifactsRequiringReadBeforeMutation,
-    writtenButNotReread: state.writtenButNotReread
+    writtenButNotReread: state.writtenButNotReread,
+    userGoal,
+    messages
   }
   const contractGuidance = resolveToolContractGuidance(contractCtx)
   let chatToolsForLLM = toolList

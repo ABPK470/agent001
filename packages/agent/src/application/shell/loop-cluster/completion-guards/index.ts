@@ -9,6 +9,7 @@ import { VerifierOutcome } from "../../../../domain/index.js"
  */
 
 import type { PlannerContext, VerifierDecision } from "../../../core/planner.js"
+import { isDirectDialogueGoal } from "../../../core/goal-intent.js"
 import { MessageRole } from "../../../../domain/enums/message.js"
 import type { AgentConfig, Message, Tool } from "../../../../domain/agent-types.js"
 import type { AgentLoopState } from "../state.js"
@@ -30,6 +31,7 @@ export interface CompletionGuardContext {
   response: { content: string | null; toolCalls: readonly unknown[] }
   messages: Message[]
   iteration: number
+  userGoal: string
   state: AgentLoopState
   toolList: Tool[]
   config: {
@@ -80,7 +82,8 @@ export async function runCompletionGuards(
 // ── Individual guards ───────────────────────────────────────────
 
 function checkEarlyExit(ctx: CompletionGuardContext): CompletionGuardResult | null {
-  const { state, iteration } = ctx
+  const { state, iteration, userGoal } = ctx
+  if (isDirectDialogueGoal(userGoal, { messages: ctx.messages })) return null
   if (
     iteration === 0 &&
     ctx.toolList.length > 0 &&

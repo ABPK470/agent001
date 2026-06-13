@@ -34,6 +34,7 @@ describe("planner-prompt-budget trace", () => {
       iteration: 7,
       state: createAgentLoopState(3),
       toolList: [],
+      userGoal: "Real request",
       modelHint: "tiny-test-model",
       config: {
         verbose: false,
@@ -66,6 +67,7 @@ describe("planner-prompt-budget trace", () => {
       iteration: 1,
       state: createAgentLoopState(3),
       toolList: [],
+      userGoal: "hi",
       config: {
         verbose: false,
         onNudge: () => {},

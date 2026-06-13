@@ -33,6 +33,7 @@ function makeCtx(overrides: Partial<CompletionGuardContext> = {}): CompletionGua
     response: { content: ANSWER_WITH_TABLE, toolCalls: [] },
     messages: [],
     iteration: 5,
+    userGoal: "Summarize top clients",
     state,
     toolList: [],
     config: {

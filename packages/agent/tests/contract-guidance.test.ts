@@ -25,6 +25,7 @@ function ctx(overrides: Partial<ToolContractContext> = {}): ToolContractContext 
     inPostDelegationVerification: false,
     artifactsRequiringReadBeforeMutation: new Set(),
     writtenButNotReread: new Set(),
+    userGoal: "Create a file with the number 42",
     ...overrides
   }
 }
@@ -110,13 +111,51 @@ describe("resolveToolContractGuidance", () => {
         writtenButNotReread: new Set(["src/app.ts"])
       })
     )
-    expect(guidance?.resolverName).toBe("no-premature-text-response")
+    expect(guidance?.resolverName).toBe("encourage-first-turn-tools")
   })
 
-  it("suggests tool use on the first iteration when tools exist", () => {
+  it("suggests tool use on the first iteration for task goals", () => {
     const guidance = resolveToolContractGuidance(ctx({ iteration: 0 }))
-    expect(guidance?.resolverName).toBe("no-premature-text-response")
+    expect(guidance?.resolverName).toBe("encourage-first-turn-tools")
     expect(guidance?.enforcement).toBe("suggestion")
+  })
+
+  it("skips first-turn tool nudge for dialogue goals", () => {
+    const guidance = resolveToolContractGuidance(
+      ctx({ iteration: 0, userGoal: "Hello!" })
+    )
+    expect(guidance).toBeNull()
+  })
+
+  it("skips first-turn tool nudge for session meta questions", () => {
+    const guidance = resolveToolContractGuidance(
+      ctx({ iteration: 0, userGoal: "What are we doing?" })
+    )
+    expect(guidance).toBeNull()
+  })
+
+  it("nudges first-turn tools when user assents to a prior offer", () => {
+    const priorTurns = {
+      role: "system" as const,
+      section: "system_anchor" as const,
+      content: [
+        "<prior_turns>",
+        "Turn -1",
+        "  Goal: count LOC",
+        "  Answer:",
+        "    Total is 100.",
+        "    I can also split src vs tests.",
+        "</prior_turns>"
+      ].join("\n")
+    }
+    const guidance = resolveToolContractGuidance(
+      ctx({
+        iteration: 0,
+        userGoal: "ok",
+        messages: [priorTurns]
+      })
+    )
+    expect(guidance?.resolverName).toBe("encourage-first-turn-tools")
   })
 
   it("returns null when no resolver applies", () => {
@@ -164,7 +203,7 @@ describe("applyToolContractGuidance", () => {
     const applied = applyToolContractGuidance(
       {
         priority: 200,
-        resolverName: "no-premature-text-response",
+        resolverName: "encourage-first-turn-tools",
         routedToolNames: TOOLS,
         enforcement: "suggestion",
         runtimeInstruction: "use tools"
