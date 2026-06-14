@@ -92,7 +92,10 @@ export const isMemoryValidationAction = (value: unknown): value is MemoryValidat
  */
 export const EpisodicAnswerKind = {
   Substantive: "substantive",
+  /** User must disambiguate or supply context — no reusable discovery yet. */
   Clarification: "clarification",
+  /** Discovery ran but the answer reports no confirmed catalog outcome. */
+  Inconclusive: "inconclusive",
   Failure: "failure",
   Empty: "empty"
 } as const

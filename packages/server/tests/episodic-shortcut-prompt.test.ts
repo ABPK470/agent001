@@ -70,7 +70,7 @@ describe("buildMemorySections episodic shortcut", () => {
     const withChoreo = buildMemorySections(
       memoryCtx({
         ...EMPTY_MEMORY_PER_TIER,
-        episodic: "Goal: revenue\nChoreography: search_catalog → query_mssql",
+        episodic: "Goal: revenue\nStatus: completed\nAnswer: publish.Revenue",
         episodicShortcutEligible: true,
         episodicChoreography: "search_catalog → query_mssql"
       })

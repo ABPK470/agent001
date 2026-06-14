@@ -1,10 +1,12 @@
 /**
  * Episodic memory quality — classifies completed runs at ingest time.
  *
- * `shortcutEligible` means: safe to tell the model it may skip redundant
- * discovery (search_catalog, etc.) because this episodic row records a
- * prior substantive success for a similar goal. Decided from run status,
- * trace tools, and correction signals — not prose pattern matching at prompt time.
+ * `shortcutEligible` means the episodic row carries **reusable discovery
+ * evidence** (confirmed tables/columns/queries) so a future run may skip
+ * redundant search_catalog / explore_mssql_schema work.
+ *
+ * Decided from run status, tools, trace, and whether the answer actually
+ * asserts findings — not phrase-matching at prompt-build time.
  */
 
 import { isUserSafeFailureAnswer, RunStatus } from "@mia/agent"
@@ -19,7 +21,7 @@ const LOW_SIGNAL_TOOLS = new Set([
   "wait_for_response"
 ])
 
-/** Tools that indicate the run did real discovery or execution work. */
+/** Tools that indicate real execution or retrieval work beyond chat. */
 const SUBSTANTIVE_TOOLS = new Set([
   "query_mssql",
   "explore_mssql_schema",
@@ -39,6 +41,20 @@ const SUBSTANTIVE_TOOLS = new Set([
   "read_attachment",
   "render_chart"
 ])
+
+/** Tools whose purpose is warehouse / catalog discovery. */
+const DISCOVERY_TOOLS = new Set([
+  "search_catalog",
+  "explore_mssql_schema",
+  "query_mssql",
+  "inspect_definition",
+  "discover_relationships",
+  "profile_data"
+])
+
+/** Qualified SQL identifiers and FROM targets — confirmed reuse artifacts. */
+const CONFIRMED_ARTIFACT =
+  /\b(?:[a-z_][\w]*\.)+[a-z_][\w]*\b|\[[\w\s]+\]\.\[[\w\s]+\]|\bFROM\s+(?:\[[\w]+\]\.)?(?:dbo\.|\w+\.)/i
 
 export interface EpisodicRunInput {
   answer: string | null
@@ -80,8 +96,73 @@ export function classifyEpisodicRun(input: EpisodicRunInput): EpisodicRunClassif
   if (isClarificationOnlyRun(input.tools, input.trace)) {
     return { answerKind: EpisodicAnswerKind.Clarification, shortcutEligible: false }
   }
+  if (defersToUser(answer)) {
+    return { answerKind: EpisodicAnswerKind.Clarification, shortcutEligible: false }
+  }
 
-  return { answerKind: EpisodicAnswerKind.Substantive, shortcutEligible: true }
+  const attemptedDiscovery = input.tools.some((tool) => DISCOVERY_TOOLS.has(tool))
+  if (attemptedDiscovery && reportsDiscoveryMiss(answer)) {
+    return { answerKind: EpisodicAnswerKind.Inconclusive, shortcutEligible: false }
+  }
+
+  const shortcutEligible = hasReusableDiscoveryEvidence(answer, input.tools)
+  return {
+    answerKind: shortcutEligible ? EpisodicAnswerKind.Substantive : EpisodicAnswerKind.Inconclusive,
+    shortcutEligible
+  }
+}
+
+/**
+ * Shortcut-worthy when the answer gives the next run something concrete to
+ * reuse, or (without discovery tools) delivers knowledge without deferring.
+ */
+function hasReusableDiscoveryEvidence(answer: string, tools: readonly string[]): boolean {
+  if (containsConfirmedArtifacts(answer)) return true
+
+  const attemptedDiscovery = tools.some((tool) => DISCOVERY_TOOLS.has(tool))
+  if (attemptedDiscovery) return !reportsDiscoveryMiss(answer)
+
+  return !defersToUser(answer)
+}
+
+function containsConfirmedArtifacts(answer: string): boolean {
+  return CONFIRMED_ARTIFACT.test(answer)
+}
+
+/**
+ * Discovery was attempted but the answer reports no catalog hit and names
+ * no confirmed object. Distinct from clarification (user must disambiguate).
+ */
+function reportsDiscoveryMiss(answer: string): boolean {
+  if (containsConfirmedArtifacts(answer)) return false
+
+  const normalized = answer.trim().toLowerCase()
+  return /\b(?:unable to find|could(?:n't| not) find|no tables?(?:\s+\w+){0,4}\s+(?:mention|match|contain|exist)|(?:does|do) not appear(?: to exist)?|not found in (?:the )?catalog|nothing (?:in the catalog )?matches)\b/.test(
+    normalized
+  )
+}
+
+/**
+ * Answer asks the user to disambiguate or supply missing context instead of
+ * asserting facts. Leading-sentence check avoids blocking substantive answers
+ * that mention clarification deep in the text.
+ */
+function defersToUser(answer: string): boolean {
+  if (containsConfirmedArtifacts(answer)) return false
+
+  const normalized = answer.trim().toLowerCase()
+  if (!normalized) return false
+
+  const lead = normalized.slice(0, 240)
+  if (
+    /^(?:which|what (?:table|column|database|schema)|could you|can you|please clarify|please provide|let me know|if you (?:meant|mean)|do you mean)\b/.test(
+      lead
+    )
+  ) {
+    return true
+  }
+
+  return normalized.endsWith("?") && normalized.length < 280
 }
 
 function isClarificationOnlyRun(

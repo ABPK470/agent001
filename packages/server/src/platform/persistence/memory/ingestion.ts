@@ -13,10 +13,9 @@ import { stampProvenance } from "./provenance.js"
 import { computeSalience, isDuplicate, SALIENCE_THRESHOLD, truncateAtBoundary } from "./scoring.js"
 import { classifyEpisodicRun } from "./episodic-quality.js"
 import {
-  extractOrderedToolSequence,
-  formatChoreographyLine
+  extractOrderedToolSequence
 } from "./episodic-choreography.js"
-import { extractGoalClasses, renderClassTail } from "./goal-class.js"
+import { extractGoalClasses } from "./goal-class.js"
 import type { MemoryEntry } from "./types.js"
 import { embedEntry } from "./vectors.js"
 
@@ -273,10 +272,8 @@ export function ingestRunTurns(run: {
   const goalClasses = extractGoalClasses(run.goal)
   const toolSequence = classification.shortcutEligible ? extractOrderedToolSequence(run.trace) : []
 
-  const lines = [`Goal: ${run.goal}${renderClassTail(goalClasses)}`, `Status: ${run.status}`]
+  const lines = [`Goal: ${run.goal}`, `Status: ${run.status}`]
   lines.push(`Tools used: ${run.tools.join(", ")} (${run.stepCount} steps)`)
-  const choreographyLine = toolSequence.length >= 2 ? formatChoreographyLine(toolSequence) : ""
-  if (choreographyLine) lines.push(choreographyLine)
   if (run.answer) {
     const a = truncateAtBoundary(run.answer, 800, "\u2026")
     lines.push(`Answer: ${a}`)
@@ -297,7 +294,7 @@ export function ingestRunTurns(run: {
     answerKind: classification.answerKind,
     shortcutEligible: classification.shortcutEligible,
     ...(toolSequence.length >= 2 ? { toolSequence } : {}),
-    ...(goalClasses.length > 0 ? { goalClasses } : {})
+    ...(goalClasses.length > 0 ? { goalClasses, ftsGoalClasses: goalClasses.join(" ") } : {})
   }
   const episodicConfidence =
     toolErrors.length > 0

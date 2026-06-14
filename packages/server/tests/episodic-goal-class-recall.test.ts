@@ -129,8 +129,7 @@ describe("episodic recall — goal-class overlap", () => {
       "profile_data",
       "query_mssql"
     ])
-    expect(hits[0]!.entry.content).toContain("Choreography:")
-    expect(hits[0]!.entry.content).toContain("[goalclasses")
+    expect(hits[0]!.entry.metadata["ftsGoalClasses"]).toContain("rankbymetric")
   })
 
   it("still recalls on literal-token overlap", async () => {
@@ -165,7 +164,7 @@ describe("episodic recall — goal-class overlap", () => {
     expect(hits).toEqual([])
   })
 
-  it("stores goal-class tail on the episodic goal line for FTS indexing", async () => {
+  it("stores goal-class tags in metadata for FTS indexing (not in visible content)", async () => {
     const mem = await import("../src/platform/persistence/memory/index.js")
     ingestSubstantiveRun(mem, {
       id: "r4",
@@ -174,10 +173,11 @@ describe("episodic recall — goal-class overlap", () => {
     })
 
     const row = testDb
-      .prepare(`SELECT content FROM memory_entries WHERE tier = 'episodic' AND run_id = 'r4'`)
-      .get() as { content: string }
-    expect(row.content).toContain("[goalclasses")
-    expect(row.content).toContain("aggregateby")
-    expect(row.content).toContain("pivotbydim")
+      .prepare(`SELECT content, metadata FROM memory_entries WHERE tier = 'episodic' AND run_id = 'r4'`)
+      .get() as { content: string; metadata: string }
+    const meta = JSON.parse(row.metadata) as Record<string, unknown>
+    expect(row.content).not.toContain("[goalclasses")
+    expect(meta["ftsGoalClasses"]).toContain("aggregateby")
+    expect(meta["ftsGoalClasses"]).toContain("pivotbydim")
   })
 })
