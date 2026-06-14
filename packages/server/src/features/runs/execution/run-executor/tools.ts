@@ -3,6 +3,7 @@ import { SyncRunStatus } from "@mia/sync"
 import { resetEffectSeq } from "../../../../platform/effects/index.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../../../../platform/events/broadcaster.js"
 import { retrieveContext } from "../../../../platform/persistence/memory.js"
+import { EMPTY_MEMORY_PER_TIER } from "../../../../platform/persistence/memory/tier-context.js"
 import * as db from "../../../../platform/persistence/sqlite.js"
 import { RunPriority } from "../../../../platform/queue/run-queue.js"
 import { AuditActor } from "../../../../shared/enums/audit.js"
@@ -46,11 +47,7 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
     })
 
   const shouldUseMemory = !(runWorkspace.taskType === "code_generation" && !request.resume)
-  let perTier: ToolResolution["perTier"] = {
-    working: "",
-    episodic: "",
-    semantic: ""
-  }
+  let perTier: ToolResolution["perTier"] = { ...EMPTY_MEMORY_PER_TIER }
 
   if (shouldUseMemory) {
     try {

@@ -20,6 +20,8 @@ export {
   prune
 } from "./maintenance.js"
 export { extractProcedural, markProceduralFailed, searchProcedures, storeProcedural } from "./procedural.js"
+export { classifyEpisodicRun, isInternalFailureAnswer, readEpisodicShortcutEligible } from "./episodic-quality.js"
+export { EMPTY_MEMORY_PER_TIER, type MemoryPerTier } from "./tier-context.js"
 export { retrieveContext, searchEntries } from "./retrieval.js"
 export { initMemoryFts, rowToEntry } from "./schema.js"
 export { truncateAtBoundary } from "./scoring.js"

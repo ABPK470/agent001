@@ -1,21 +1,14 @@
-import { completeRunPure, EventType, isUserSafeFailureAnswer, runCompleted, type Agent } from "@mia/agent"
+import { completeRunPure, EventType, runCompleted, type Agent } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { broadcast } from "../../../../../platform/events/broadcaster.js"
 import { consolidate, extractProcedural, ingestRunTurns } from "../../../../../platform/persistence/memory.js"
+import { isInternalFailureAnswer } from "../../../../../platform/persistence/memory/episodic-quality.js"
 import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../../shared/enums/trajectory.js"
 import { persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { buildPersistedToolTrace } from "../support.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
-
-function hasInternalTaskFailure(answer: string): boolean {
-  return (
-    answer.startsWith("Task FAILED") ||
-    answer.startsWith("Task verification FAILED") ||
-    isUserSafeFailureAnswer(answer)
-  )
-}
 
 export async function finalizeCompletedRun(
   command: ExecuteRunCommand,
@@ -56,7 +49,7 @@ export async function finalizeCompletedRun(
     ? pendingDiff.added.length + pendingDiff.modified.length + pendingDiff.deleted.length
     : 0
   const persistedToolTrace = buildPersistedToolTrace(env.state.run.steps)
-  const taskInternallyFailed = hasInternalTaskFailure(answer)
+  const taskInternallyFailed = isInternalFailureAnswer(answer)
 
   const ownerUpn = env.activeRun?.ownerUpn
   if (ownerUpn) {

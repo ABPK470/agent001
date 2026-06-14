@@ -5,6 +5,7 @@
 
 import type { LLMClient, Tool } from "@mia/agent"
 import type { DbToolResult } from "../../../../platform/persistence/sqlite.js"
+import type { MemoryPerTier } from "../../../../platform/persistence/memory/tier-context.js"
 import type { ClarificationsPort } from "../../../../ports/clarifications.js"
 import type { RunWorkspaceContext } from "../../workspace/index.js"
 import type { CandidateVerdictRow, KnownObjectRow } from "../data-blocks/known-objects.js"
@@ -16,7 +17,7 @@ export interface BuildSystemMessagesOptions {
   systemPrompt: string | undefined
   allTools: Tool[]
   runWorkspace: RunWorkspaceContext
-  perTier: { working: string; episodic: string; semantic: string }
+  perTier: MemoryPerTier
   runId: string
   host?: import("@mia/agent").AgentHost
   attachmentIds?: string[]

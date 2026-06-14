@@ -21,6 +21,8 @@ import {
   WORKING_SESSION_WINDOW_H
 } from "./scoring.js"
 import type { MemoryBudget, MemoryEntry, ProceduralMemory, UnifiedSearchResult } from "./types.js"
+import { EMPTY_MEMORY_PER_TIER, type MemoryPerTier } from "./tier-context.js"
+import { readEpisodicShortcutEligible } from "./episodic-quality.js"
 import { vectorSearch } from "./vectors.js"
 
 // ── Unified Retrieval Pipeline ───────────────────────────────────
@@ -49,14 +51,14 @@ export async function retrieveContext(
 ): Promise<{
   context: string
   results: UnifiedSearchResult[]
-  perTier: { working: string; episodic: string; semantic: string }
+  perTier: MemoryPerTier
 }> {
   const ownerUpn = opts?.upn?.trim()
   if (!ownerUpn) {
     return {
       context: "",
       results: [],
-      perTier: { working: "", episodic: "", semantic: "" }
+      perTier: { ...EMPTY_MEMORY_PER_TIER }
     }
   }
 
@@ -177,10 +179,11 @@ export async function retrieveContext(
   const episodicItems = packed.filter((r) => r.entry.tier === "episodic")
   const semanticItems = packed.filter((r) => r.entry.tier === "semantic")
 
-  const perTier = {
+  const perTier: MemoryPerTier = {
     working: workingItems.length > 0 ? workingItems.map((r) => r.entry.content).join("\n") : "",
     episodic: episodicItems.length > 0 ? episodicItems.map((r) => r.entry.content).join("\n") : "",
-    semantic: semanticItems.length > 0 ? semanticItems.map((r) => r.entry.content).join("\n") : ""
+    semantic: semanticItems.length > 0 ? semanticItems.map((r) => r.entry.content).join("\n") : "",
+    episodicShortcutEligible: episodicItems.some((r) => readEpisodicShortcutEligible(r.entry.metadata))
   }
 
   broadcast({

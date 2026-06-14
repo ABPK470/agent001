@@ -1,31 +1,27 @@
 /**
  * Injects the three memory tiers into the system prompt when retrieval found content.
  *
- * Working and semantic are passed through as-is. Episodic is special: it often
- * contains a summary of an older run with the same (or similar) goal — lines like
- * "Status: completed" and "Answer: …". When that summary looks trustworthy
- * (completed, not failed, not a clarification punt), we prepend extra instructions
- * telling the model it may reuse tables/columns from that answer instead of calling
- * search_catalog again. Working/semantic never get that banner because they do not
- * carry that prior-run shape.
+ * Episodic shortcut banner uses `perTier.episodicShortcutEligible` — set at ingest
+ * from run status, tools, and trace (see episodic-quality.ts), not prose heuristics.
  */
 
 import { MessageRole, type Message } from "@mia/agent"
 import { buildMemoryGuidance } from "../prompt/builder.js"
 import type { BuildContext } from "./types.js"
 
-const PUNT_PATTERNS = [
-  "please provide more details",
-  "please clarify",
-  "if you meant",
-  "could you clarify",
-  "i wasn't able to",
-  "unable to find",
-  "no tables explicitly mention",
-  "if it refers to",
-  "let me know which",
-  "please let me know"
-]
+const EPISODIC_SHORTCUT_BANNER = [
+  "⚠️ MEMORY HIT — prior completed run found for this goal.",
+  "SHORTCUT: For tables/columns/queries already confirmed in the Answer below, use them",
+  "directly — skip redundant search_catalog or explore_mssql_schema calls for those.",
+  "The 'NEVER skip search_catalog' rule is satisfied — memory IS the prior evidence.",
+  "",
+  "IMPORTANT EXCEPTION — Tool Orchestration override:",
+  "If the goal involves an unfamiliar technical term (SQL Server internals like 'tombstone',",
+  "'ghost records', 'WAL', 'fill factor', 'spinlock', etc.), ALWAYS use fetch_url to search",
+  "the internet FIRST, regardless of what memory shows. Prior runs may have guessed wrong",
+  "about what those terms mean. Memory shortcuts apply to table/column names, not to the",
+  "interpretation of unfamiliar domain concepts."
+].join("\n")
 
 export function buildMemorySections(ctx: BuildContext): Message[] {
   const { opts, decision } = ctx
@@ -41,29 +37,8 @@ export function buildMemorySections(ctx: BuildContext): Message[] {
   }
 
   if (perTier.episodic) {
-    const episodicAnswerSection = perTier.episodic.match(/Answer:([\s\S]+?)(?=\nGoal:|\s*$)/i)?.[1] ?? ""
-    const hasPuntAnswer = PUNT_PATTERNS.some((p) => episodicAnswerSection.toLowerCase().includes(p))
-    const episodicHasCompletedEntry =
-      perTier.episodic.includes("Status: completed") &&
-      !perTier.episodic.includes("Answer: Task FAILED") &&
-      !hasPuntAnswer
-
-    const episodicContent = episodicHasCompletedEntry
-      ? [
-          "⚠️ MEMORY HIT — prior completed run found for this goal.",
-          "SHORTCUT: For tables/columns/queries already confirmed in the Answer below, use them",
-          "directly — skip redundant search_catalog or explore_mssql_schema calls for those.",
-          "The 'NEVER skip search_catalog' rule is satisfied — memory IS the prior evidence.",
-          "",
-          "IMPORTANT EXCEPTION — Tool Orchestration override:",
-          "If the goal involves an unfamiliar technical term (SQL Server internals like 'tombstone',",
-          "'ghost records', 'WAL', 'fill factor', 'spinlock', etc.), ALWAYS use fetch_url to search",
-          "the internet FIRST, regardless of what memory shows. Prior runs may have guessed wrong",
-          "about what those terms mean. Memory shortcuts apply to table/column names, not to the",
-          "interpretation of unfamiliar domain concepts.",
-          "",
-          perTier.episodic
-        ].join("\n")
+    const episodicContent = perTier.episodicShortcutEligible === true
+      ? `${EPISODIC_SHORTCUT_BANNER}\n\n${perTier.episodic}`
       : perTier.episodic
 
     messages.push({

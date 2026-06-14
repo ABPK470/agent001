@@ -4,12 +4,14 @@ import {
   MemoryIngestionExclusionReason,
   MemoryRole,
   MemorySource,
-  MemoryTier
+  MemoryTier,
+  EpisodicAnswerKind
 } from "../../../shared/enums/memory.js"
 import { broadcast } from "../../events/broadcaster.js"
 import { getDb } from "../sqlite.js"
 import { stampProvenance } from "./provenance.js"
 import { computeSalience, isDuplicate, SALIENCE_THRESHOLD, truncateAtBoundary } from "./scoring.js"
+import { classifyEpisodicRun } from "./episodic-quality.js"
 import type { MemoryEntry } from "./types.js"
 import { embedEntry } from "./vectors.js"
 
@@ -268,15 +270,28 @@ export function ingestRunTurns(run: {
   }
 
   const episodicContent = lines.join("\n")
+  const classification = classifyEpisodicRun({
+    answer: run.answer,
+    status: run.status,
+    tools: run.tools,
+    trace: run.trace,
+    hasCorrections: toolErrors.length > 0
+  })
   const episodicMeta = {
     goal: run.goal,
     tools: run.tools,
     stepCount: run.stepCount,
     status: run.status,
-    hasCorrections: toolErrors.length > 0
+    hasCorrections: toolErrors.length > 0,
+    answerKind: classification.answerKind,
+    shortcutEligible: classification.shortcutEligible
   }
-  // Lower confidence when tool errors were detected — the approach was flawed.
-  const episodicConfidence = toolErrors.length > 0 ? 0.35 : run.status === RunStatus.Completed ? 0.7 : 0.3
+  const episodicConfidence =
+    toolErrors.length > 0
+      ? 0.35
+      : classification.answerKind === EpisodicAnswerKind.Substantive
+        ? 0.7
+        : 0.3
 
   const goalPrefix = `Goal: ${run.goal}\n`
   const existingEpisodic = getDb()

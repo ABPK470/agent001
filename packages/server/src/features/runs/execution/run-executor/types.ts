@@ -14,6 +14,7 @@ import {
 import { type WorkspaceDiff, type prepareRunWorkspace } from "../../workspace/index.js"
 import type { AgentBus } from "../../../../platform/queue/agent-bus.js"
 import { type RunPriority } from "../../../../platform/queue/run-queue.js"
+import type { MemoryPerTier } from "../../../../platform/persistence/memory/tier-context.js"
 import type { ClarificationsRegistryPort } from "../../../../ports/clarifications.js"
 import type { ActiveRun, BootHostDeps, NotificationOpts } from "../../../../ports/orchestration.js"
 
@@ -150,7 +151,7 @@ export type PerRunHostBundle = {
 
 export type ToolResolution = {
   governedTools: Tool[]
-  perTier: { working: string; episodic: string; semantic: string }
+  perTier: MemoryPerTier
   toolDecision: ReturnType<typeof import("../../core/decide-sections.js").decideSections>
 }
 

@@ -5,6 +5,7 @@ import { loadCandidateVerdicts, loadKnownObjects } from "../../core/data-blocks/
 import { loadPriorResults } from "../../core/data-blocks/prior-results-block.js"
 import { loadPriorTurns } from "../../core/data-blocks/prior-turns.js"
 import { buildSystemMessages } from "../../core/system-messages/index.js"
+import type { MemoryPerTier } from "../../../../platform/persistence/memory/tier-context.js"
 import type {
   ActiveRunRecord,
   ExecuteRunRequestDto,
@@ -28,7 +29,7 @@ export async function buildExecutionSystemMessages(
     boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
     debugSeqRef: { value: number }
   },
-  perTier: { working: string; episodic: string; semantic: string }
+  perTier: MemoryPerTier
 ): Promise<ExecutionSystemMessagesBundle> {
   const { request, interaction, messaging } = input
   const priorTurns =
