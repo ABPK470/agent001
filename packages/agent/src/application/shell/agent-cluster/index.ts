@@ -10,7 +10,7 @@
  *
  * The loop orchestration lives here. Heavy lifting is delegated to:
  *   - planner-routing.ts — structured planner-first execution path
- *   - completion-guards.ts — checks when LLM wants to finish
+ *   - loop-policy — per-turn steering (turn-start + completion)
  *   - tool-execution.ts — per-tool-call execution with guards
  *   - post-round.ts — stuck detection, budget extension, recovery hints
  *   - agent-loop-state.ts — mutable state for the tool loop
@@ -22,7 +22,7 @@ import * as log from "../../../internal/index.js"
 import type { ToolCallRecord } from "../../../tools/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../domain/agent-types.js"
 import { attemptPlannerRouting } from "../../core/planner-routing.js"
-import { createAgentLoopState, DEFAULT_SYSTEM_PROMPT, runCompletionGuards } from "../loop.js"
+import { createAgentLoopState, DEFAULT_SYSTEM_PROMPT, completionContext, guardCompletion } from "../loop.js"
 import { buildInitialMessages, synthesizeFinalAnswer } from "./agent-helpers.js"
 import { prepareIterationContext } from "./iteration-prepare.js"
 import { executeToolCallsBranch } from "./iteration-tool-round.js"
@@ -240,16 +240,18 @@ export class Agent {
       if (response.toolCalls.length === 0) {
         state.completionAttempted = true
 
-        const guardResult = await runCompletionGuards({
-          response,
-          messages,
-          iteration: i,
-          userGoal: goal,
-          state,
-          toolList: this.toolList,
-          config: this.config,
-          onPlannerTrace: this.config.onPlannerTrace
-        })
+        const guardResult = await guardCompletion(
+          completionContext({
+            response,
+            messages,
+            iteration: i,
+            userGoal: goal,
+            state,
+            toolList: this.toolList,
+            config: this.config,
+            onPlannerTrace: this.config.onPlannerTrace
+          })
+        )
 
         if (guardResult) {
           if (guardResult.finalAnswer) {

@@ -36,7 +36,7 @@ export interface AgentLoopState {
   absoluteIterationCap: number
   recentTruncatedQueries: Array<{ fingerprint: string; query: string }>
   cumulativeReadFileHistory: Map<string, number>
-  lastAnswerSignature?: import("./completion-guards/answer-stability-guard.js").AnswerSignature
+  lastAnswerSignature?: import("./loop-policy/answer-stability.js").AnswerSignature
 }
 
 const INITIAL_FULL_COMPACTION_OFFSET = -8

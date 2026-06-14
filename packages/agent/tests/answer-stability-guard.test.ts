@@ -9,9 +9,9 @@ import { describe, expect, it } from "vitest"
 
 import {
   checkAnswerStability,
-  computeAnswerSignature
-} from "../src/application/shell/loop-cluster/completion-guards/answer-stability-guard.js"
-import type { CompletionGuardContext } from "../src/application/shell/loop-cluster/completion-guards/index.js"
+  computeAnswerSignature,
+  type LoopPolicyContext
+} from "../src/application/shell/loop-cluster/loop-policy/index.js"
 import { createAgentLoopState } from "../src/application/shell/loop-cluster/state.js"
 
 const ANSWER_WITH_TABLE = [
@@ -27,15 +27,16 @@ const ANSWER_WITH_TABLE = [
   "The next step is to renew Acme's contract before EOQ."
 ].join("\n")
 
-function makeCtx(overrides: Partial<CompletionGuardContext> = {}): CompletionGuardContext {
+function makeCtx(overrides: Partial<LoopPolicyContext> = {}): LoopPolicyContext {
   const state = createAgentLoopState(30)
   return {
-    response: { content: ANSWER_WITH_TABLE, toolCalls: [] },
-    messages: [],
     iteration: 5,
     userGoal: "Summarize top clients",
+    messages: [],
     state,
     toolList: [],
+    availableToolNames: [],
+    response: { content: ANSWER_WITH_TABLE, toolCalls: [] },
     config: {
       maxIterations: 30,
       enablePlanner: false,

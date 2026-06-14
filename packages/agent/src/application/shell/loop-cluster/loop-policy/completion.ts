@@ -1,103 +1,32 @@
 /**
- * Completion guards — sequential checks applied when the LLM returns
- * a response with zero tool calls (i.e. it wants to finish).
- *
- * Each guard returns either `null` (allow completion) or a nudge message
- * (block completion and continue the loop). The guards are evaluated in
- * priority order; the first non-null result wins.
+ * Completion policy — rules applied when the model returns zero tool calls.
  */
 
-import type { AgentConfig, Message, Tool } from "../../../../domain/agent-types.js"
-import { isDirectDialogueGoal } from "../../../core/goal-intent.js"
+import type { AgentConfig, Message } from "../../../../domain/agent-types.js"
 import { MessageRole } from "../../../../domain/enums/message.js"
-import type { AgentLoopState } from "../state.js"
-import { checkAnswerStability } from "./answer-stability-guard.js"
+import { isDirectDialogueGoal } from "../../../core/goal-intent.js"
+import { checkAnswerStability } from "./answer-stability.js"
+import type { CompletionBlock, CompletionRule, CompletionRuleAsync, LoopPolicyContext } from "./types.js"
 
-/** Result from a completion guard check. */
-export interface CompletionGuardResult {
-  /** If non-null, the tag for the nudge event. */
-  tag: string
-  /** The message to inject into the conversation. */
-  message: string
-  /** If set, the agent should return this as the final answer immediately. */
-  finalAnswer?: string
-}
+function earlyExit(ctx: LoopPolicyContext): CompletionBlock | null {
+  const { state, iteration, userGoal, toolList } = ctx
+  if (!userGoal || isDirectDialogueGoal(userGoal, { messages: ctx.messages })) return null
+  if (iteration !== 0 || toolList.length === 0 || state.earlyExitNudged) return null
 
-/** Context passed to completion guards. */
-export interface CompletionGuardContext {
-  response: { content: string | null; toolCalls: readonly unknown[] }
-  messages: Message[]
-  iteration: number
-  userGoal: string
-  state: AgentLoopState
-  toolList: Tool[]
-  config: {
-    maxIterations: number
-    enablePlanner: boolean
-    plannerDelegateFn: AgentConfig["plannerDelegateFn"]
-    completionValidator: AgentConfig["completionValidator"]
-    enableAnswerStabilityGuard?: boolean
-    verbose: boolean
+  state.earlyExitNudged = true
+  return {
+    tag: "early-exit-nudge",
+    message:
+      "You returned a text response without using any tools. " +
+      "You MUST use your tools to accomplish the goal — do not just describe a plan. " +
+      "Start working now by calling the appropriate tools."
   }
-  onPlannerTrace: AgentConfig["onPlannerTrace"]
 }
 
-/**
- * Run all completion guards in order. Returns the first guard result
- * that fires, or null if the agent is allowed to complete.
- */
-export async function runCompletionGuards(
-  ctx: CompletionGuardContext
-): Promise<CompletionGuardResult | null> {
-  // Phase 4: answer-stability override. If the model has converged on a
-  // structurally-identical final answer twice in a row, accept it without
-  // running the rest of the guard chain — downstream guards would otherwise
-  // re-nudge for verification/grounding and burn iterations re-rendering
-  // the same markdown. The function records the current signature on state.
-  if (checkAnswerStability(ctx)) return null
-
-  return (
-    checkEarlyExit(ctx) ??
-    checkPostDelegationVerification(ctx) ??
-    checkWriteWithoutVerify(ctx) ??
-    checkCodeReviewRequired(ctx) ??
-    checkVerificationFailed(ctx) ??
-    (await checkCompletionValidator(ctx)) ??
-    checkPrematureHandoff(ctx) ??
-    checkAnswerGroundedness(ctx)
-  )
-}
-
-// ── Individual guards ───────────────────────────────────────────
-
-// ── Individual guards ───────────────────────────────────────────
-
-function checkEarlyExit(ctx: CompletionGuardContext): CompletionGuardResult | null {
-  const { state, iteration, userGoal } = ctx
-  if (isDirectDialogueGoal(userGoal, { messages: ctx.messages })) return null
-  if (
-    iteration === 0 &&
-    ctx.toolList.length > 0 &&
-    !state.earlyExitNudged
-  ) {
-    state.earlyExitNudged = true
-    return {
-      tag: "early-exit-nudge",
-      message:
-        "You returned a text response without using any tools. " +
-        "You MUST use your tools to accomplish the goal — do not just describe a plan. " +
-        "Start working now by calling the appropriate tools."
-    }
-  }
-  return null
-}
-
-function checkPostDelegationVerification(ctx: CompletionGuardContext): CompletionGuardResult | null {
+function postDelegationVerification(ctx: LoopPolicyContext): CompletionBlock | null {
   const { state } = ctx
   if (!state.lastRoundHadDelegation) return null
 
-  // Read-only / analytical delegations have nothing to verify with run_command
-  // or read_file. Let the agent answer directly from the child's text result.
   if (state.lastDelegationWasReadOnly) {
     state.lastRoundHadDelegation = false
     state.lastDelegationWasReadOnly = false
@@ -119,7 +48,7 @@ function checkPostDelegationVerification(ctx: CompletionGuardContext): Completio
   }
 }
 
-function checkWriteWithoutVerify(ctx: CompletionGuardContext): CompletionGuardResult | null {
+function writeWithoutVerify(ctx: LoopPolicyContext): CompletionBlock | null {
   const { state } = ctx
   if (!state.wroteUnverifiedFiles || state.writeVerifyNudged) return null
 
@@ -136,7 +65,7 @@ function checkWriteWithoutVerify(ctx: CompletionGuardContext): CompletionGuardRe
   }
 }
 
-function checkCodeReviewRequired(ctx: CompletionGuardContext): CompletionGuardResult | null {
+function codeReviewRequired(ctx: LoopPolicyContext): CompletionBlock | null {
   const { state } = ctx
   if (state.writtenButNotReread.size === 0 || state.writeReviewNudged) return null
 
@@ -156,7 +85,7 @@ function checkCodeReviewRequired(ctx: CompletionGuardContext): CompletionGuardRe
   }
 }
 
-function checkVerificationFailed(ctx: CompletionGuardContext): CompletionGuardResult | null {
+function verificationFailed(ctx: LoopPolicyContext): CompletionBlock | null {
   const { state } = ctx
   if (!state.verificationFoundIssues) return null
 
@@ -172,26 +101,25 @@ function checkVerificationFailed(ctx: CompletionGuardContext): CompletionGuardRe
   }
 }
 
-async function checkCompletionValidator(ctx: CompletionGuardContext): Promise<CompletionGuardResult | null> {
+const completionValidator: CompletionRuleAsync = async (ctx) => {
   const { state, config } = ctx
-  if (!config.completionValidator || state.completionValidated) return null
+  if (!config?.completionValidator || state.completionValidated) return null
 
   state.completionValidated = true
   try {
     const issues = await config.completionValidator()
-    if (issues) {
-      return { tag: "completion-validator", message: issues }
-    }
+    if (issues) return { tag: "completion-validator", message: issues }
   } catch {
     /* validator failed — don't block the agent */
   }
   return null
 }
 
-function checkPrematureHandoff(ctx: CompletionGuardContext): CompletionGuardResult | null {
+function prematureHandoff(ctx: LoopPolicyContext): CompletionBlock | null {
   const { state, response, iteration, config, toolList } = ctx
-  const answer = response.content ?? "(no response)"
+  if (!response || !config) return null
 
+  const answer = response.content ?? "(no response)"
   const asksToContinue =
     /\b(?:would you like me to|do you want me to|should i (?:continue|proceed|implement|fix))\b/i.test(answer)
   const unresolvedGaps =
@@ -216,27 +144,16 @@ function checkPrematureHandoff(ctx: CompletionGuardContext): CompletionGuardResu
   return null
 }
 
-/**
- * Detect a degenerate / ungrounded final answer.
- *
- * Symptoms (real example: "There are 4" when the tool returned `distinct_datasets = 4262`):
- *   - Final answer is very short (< 60 chars).
- *   - Most recent tool result contains a clear scalar value (number).
- *   - The answer does NOT contain that exact value.
- *
- * In that case we nudge once: re-read the last tool result and answer again.
- */
-function checkAnswerGroundedness(ctx: CompletionGuardContext): CompletionGuardResult | null {
+function answerGroundedness(ctx: LoopPolicyContext): CompletionBlock | null {
   const { state, response, messages } = ctx
-  if (state.groundednessNudged) return null
+  if (!response || state.groundednessNudged) return null
 
   const answer = (response.content ?? "").trim()
   if (!answer || answer.length >= 60) return null
 
-  // Find the most recent tool message
   let lastToolContent: string | null = null
   for (let i = messages.length - 1; i >= 0; i--) {
-    const m = messages[i]
+    const m = messages[i]!
     if (m.role === MessageRole.Tool && typeof m.content === "string" && m.content.trim()) {
       lastToolContent = m.content
       break
@@ -245,23 +162,15 @@ function checkAnswerGroundedness(ctx: CompletionGuardContext): CompletionGuardRe
   }
   if (!lastToolContent) return null
 
-  // Extract candidate scalar values from the tool output.
-  // Patterns we care about:
-  //   "column = 4262"           → scalar formatter
-  //   bare line containing only a number (legacy table format)
   const scalarValues: string[] = []
-
-  // Pattern 1: `name = value` (new scalar format)
   const eqMatch = /^[\w]+\s*=\s*([^\n]+?)\s*$/m.exec(lastToolContent)
-  if (eqMatch) scalarValues.push(eqMatch[1].trim())
+  if (eqMatch) scalarValues.push(eqMatch[1]!.trim())
 
-  // Pattern 2: legacy table — a line containing only a numeric value
   const numericLine = /^\s*(-?\d[\d,]*(?:\.\d+)?)\s*$/m.exec(lastToolContent)
-  if (numericLine) scalarValues.push(numericLine[1].trim())
+  if (numericLine) scalarValues.push(numericLine[1]!.trim())
 
   if (scalarValues.length === 0) return null
 
-  // Normalise: strip commas/whitespace for comparison
   const norm = (s: string): string => s.replace(/[,\s]/g, "")
   const answerNorm = norm(answer)
   const missing = scalarValues.filter((v) => !answerNorm.includes(norm(v)))
@@ -276,5 +185,88 @@ function checkAnswerGroundedness(ctx: CompletionGuardContext): CompletionGuardRe
       `Expected the answer to reference: ${preview}. ` +
       "Re-read the last tool result and answer the user's question with the exact value(s) from it. " +
       "Do NOT re-run the query — the result is already in your context."
+  }
+}
+
+const COMPLETION_RULES: readonly CompletionRule[] = [
+  earlyExit,
+  postDelegationVerification,
+  writeWithoutVerify,
+  codeReviewRequired,
+  verificationFailed,
+  prematureHandoff,
+  answerGroundedness
+]
+
+const ASYNC_COMPLETION_RULES: readonly CompletionRuleAsync[] = [completionValidator]
+
+/**
+ * Evaluate completion policy. Returns a block when the run must continue,
+ * or null when the model may finish.
+ */
+export async function guardCompletion(ctx: LoopPolicyContext): Promise<CompletionBlock | null> {
+  if (!ctx.response) return null
+
+  if (checkAnswerStability(ctx)) return null
+
+  for (const rule of COMPLETION_RULES) {
+    const block = rule(ctx)
+    if (block) return block
+  }
+
+  for (const rule of ASYNC_COMPLETION_RULES) {
+    const block = await rule(ctx)
+    if (block) return block
+  }
+
+  return null
+}
+
+/** Build a completion context from the agent loop. */
+export function completionContext(input: {
+  response: { content: string | null; toolCalls: readonly unknown[] }
+  messages: Message[]
+  iteration: number
+  userGoal: string
+  state: LoopPolicyContext["state"]
+  toolList: LoopPolicyContext["toolList"]
+  config: AgentConfig
+  onPlannerTrace?: AgentConfig["onPlannerTrace"]
+}): LoopPolicyContext {
+  return {
+    iteration: input.iteration,
+    userGoal: input.userGoal,
+    messages: input.messages,
+    state: input.state,
+    toolList: input.toolList,
+    availableToolNames: input.toolList.map((t) => t.name),
+    response: input.response,
+    config: {
+      maxIterations: input.config.maxIterations ?? 30,
+      enablePlanner: input.config.enablePlanner ?? false,
+      plannerDelegateFn: input.config.plannerDelegateFn,
+      completionValidator: input.config.completionValidator,
+      enableAnswerStabilityGuard: input.config.enableAnswerStabilityGuard,
+      verbose: input.config.verbose ?? false
+    },
+    onPlannerTrace: input.onPlannerTrace
+  }
+}
+
+/** Build a turn-start context from iteration prep. */
+export function turnStartContext(input: {
+  iteration: number
+  userGoal: string
+  messages: readonly Message[]
+  state: LoopPolicyContext["state"]
+  toolList: LoopPolicyContext["toolList"]
+}): LoopPolicyContext {
+  return {
+    iteration: input.iteration,
+    userGoal: input.userGoal,
+    messages: input.messages,
+    state: input.state,
+    toolList: input.toolList,
+    availableToolNames: input.toolList.map((t) => t.name)
   }
 }
