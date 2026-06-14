@@ -13,7 +13,7 @@ import { createOrchestrator } from "./orchestrator-factory.js"
 import { listenHost, listenPort, resolveUiDist } from "./paths.js"
 import { createServerWorkspaceRef } from "./server-workspace.js"
 import { registerGracefulShutdown } from "./shutdown.js"
-import { startSidecars } from "./sidecars.js"
+import { startSyncPlatform } from "./sync-platform.js"
 
 function recoverStaleRuns(orchestrator: ReturnType<typeof createOrchestrator>): void {
   const recovery = orchestrator.recoverStaleRuns()
@@ -34,8 +34,8 @@ export async function startServer(): Promise<void> {
   // 3. LLM + catalog
   const llm = await buildLlmAndCatalog(ctx.bootHost, ctx.mssqlSummary)
 
-  // 4. Background services (evidence signer, proposer scheduler, notifications)
-  const sidecars = startSidecars({ bootHost: ctx.bootHost, llm })
+  // 4. Sync / reconciliation platform (proposer, evidence, notifications)
+  const syncPlatform = startSyncPlatform({ bootHost: ctx.bootHost, llm })
 
   // 5. Run orchestration + messaging
   const orchestrator = createOrchestrator(ctx, llm)
@@ -53,9 +53,9 @@ export async function startServer(): Promise<void> {
     messageRouter: messaging.messageRouter,
     uiDist,
     workspace,
-    evidenceStorageRoot: sidecars.evidenceStorageRoot,
-    evidenceSigner: sidecars.evidenceSigner,
-    llmPortHolder: sidecars.llmPortHolder,
+    evidenceStorageRoot: syncPlatform.evidenceStorageRoot,
+    evidenceSigner: syncPlatform.evidenceSigner,
+    llmPortHolder: syncPlatform.llmPortHolder,
     bootHost: ctx.bootHost
   })
 
@@ -75,6 +75,6 @@ export async function startServer(): Promise<void> {
     messageQueue: messaging.messageQueue,
     bootHost: ctx.bootHost,
     sandbox: ctx.sandbox.sandbox,
-    unsubscribeNotifications: sidecars.unsubscribeNotifications
+    unsubscribeNotifications: syncPlatform.unsubscribeNotifications
   })
 }

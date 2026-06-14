@@ -10,7 +10,7 @@ export {
 } from "./server-workspace.js"
 export { createOrchestrator } from "./orchestrator-factory.js"
 export { initMessaging, type MessagingRuntime } from "./messaging.js"
-export { startSidecars, type ServerSidecars } from "./sidecars.js"
+export { startSyncPlatform, type SyncPlatformRuntime } from "./sync-platform.js"
 export { registerGracefulShutdown, type GracefulShutdownDeps } from "./shutdown.js"
 export { printStartupBanner } from "./banner.js"
 export { startServer } from "./start-server.js"

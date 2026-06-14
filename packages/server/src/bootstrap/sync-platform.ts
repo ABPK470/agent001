@@ -1,3 +1,10 @@
+/**
+ * Sync / reconciliation platform bootstrap.
+ *
+ * Starts background services for the F1 reconciliation stack: proposer
+ * scheduler, evidence signing, sync LLM port, and ops notifications.
+ */
+
 import type { AgentHost, LLMClient } from "@mia/agent"
 import type { LlmCompletionPort } from "@mia/sync"
 import { resolve } from "node:path"
@@ -9,14 +16,14 @@ import type { Signer } from "../platform/persistence/evidence.js"
 import { subscribeToEvents } from "../platform/events/broadcaster.js"
 import { projectRoot } from "./paths.js"
 
-export interface ServerSidecars {
+export interface SyncPlatformRuntime {
   readonly evidenceStorageRoot: string
   readonly evidenceSigner: Signer | null
   readonly llmPortHolder: { current: LlmCompletionPort }
   readonly unsubscribeNotifications: () => void
 }
 
-export function startSidecars(opts: { bootHost: AgentHost; llm: LLMClient }): ServerSidecars {
+export function startSyncPlatform(opts: { bootHost: AgentHost; llm: LLMClient }): SyncPlatformRuntime {
   const evidenceStorageRoot = resolve(projectRoot, "packages/server/data/evidence")
   const signerResult = tryBuildSignerFromEnv()
   if (!signerResult.ok) {
