@@ -24,18 +24,35 @@ const EPISODIC_SHORTCUT_BANNER = [
   "interpretation of unfamiliar domain concepts."
 ].join("\n")
 
-const EPISODIC_CHOREOGRAPHY_PREFIX =
-  "PRIOR CHOREOGRAPHY (hint only — adapt tool args to this goal):"
+/** Weave choreography into the episodic narrative (after Tools used) — one line, no duplicate block. */
+export function injectChoreographyIntoEpisodic(episodic: string, choreography: string): string {
+  const line = `Choreography: ${choreography} (adapt args to this goal)`
+  const lines = episodic.split("\n")
+  const toolsIdx = lines.findIndex((row) => row.startsWith("Tools used:"))
+  if (toolsIdx >= 0) {
+    lines.splice(toolsIdx + 1, 0, line)
+    return lines.join("\n")
+  }
+  const statusIdx = lines.findIndex((row) => row.startsWith("Status:"))
+  if (statusIdx >= 0) {
+    lines.splice(statusIdx + 1, 0, line)
+    return lines.join("\n")
+  }
+  return `${line}\n${episodic}`
+}
 
 function buildEpisodicBlock(perTier: BuildContext["opts"]["perTier"]): string {
   const parts: string[] = []
   if (perTier.episodicShortcutEligible === true) {
     parts.push(EPISODIC_SHORTCUT_BANNER)
-    if (perTier.episodicChoreography) {
-      parts.push(`${EPISODIC_CHOREOGRAPHY_PREFIX}\n${perTier.episodicChoreography}`)
-    }
   }
-  parts.push(perTier.episodic)
+
+  const episodicBody =
+    perTier.episodicShortcutEligible === true && perTier.episodicChoreography
+      ? injectChoreographyIntoEpisodic(perTier.episodic, perTier.episodicChoreography)
+      : perTier.episodic
+
+  parts.push(episodicBody)
   return parts.join("\n\n")
 }
 

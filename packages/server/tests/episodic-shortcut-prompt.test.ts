@@ -66,25 +66,30 @@ describe("buildMemorySections episodic shortcut", () => {
     expect(String(ineligible[0]?.content)).not.toContain("MEMORY HIT")
   })
 
-  it("includes choreography hint when shortcut-eligible and choreography is present", () => {
+  it("weaves choreography into the episodic narrative when shortcut-eligible", () => {
     const withChoreo = buildMemorySections(
       memoryCtx({
         ...EMPTY_MEMORY_PER_TIER,
-        episodic: "Goal: revenue\nStatus: completed\nAnswer: publish.Revenue",
+        episodic:
+          "Goal: revenue\nStatus: completed\nTools used: search_catalog, query_mssql (2 steps)\nAnswer: publish.Revenue",
         episodicShortcutEligible: true,
         episodicChoreography: "search_catalog → query_mssql"
       })
     )
-    expect(String(withChoreo[0]?.content)).toContain("PRIOR CHOREOGRAPHY")
-    expect(String(withChoreo[0]?.content)).toContain("search_catalog → query_mssql")
+    const content = String(withChoreo[0]?.content)
+    expect(content).toContain("MEMORY HIT")
+    expect(content).not.toContain("PRIOR CHOREOGRAPHY")
+    expect(content).toContain("Choreography: search_catalog → query_mssql")
+    expect(content.indexOf("Tools used:")).toBeLessThan(content.indexOf("Choreography:"))
+    expect(content.indexOf("Choreography:")).toBeLessThan(content.indexOf("Answer:"))
 
     const withoutChoreo = buildMemorySections(
       memoryCtx({
         ...EMPTY_MEMORY_PER_TIER,
-        episodic: "Goal: revenue",
+        episodic: "Goal: revenue\nStatus: completed\nAnswer: publish.Revenue",
         episodicShortcutEligible: true
       })
     )
-    expect(String(withoutChoreo[0]?.content)).not.toContain("PRIOR CHOREOGRAPHY")
+    expect(String(withoutChoreo[0]?.content)).not.toContain("Choreography:")
   })
 })
