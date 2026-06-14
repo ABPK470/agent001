@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 import type {
@@ -11,10 +11,10 @@ import type {
 import {
   buildSyncDefinitionFlowTemplateSteps,
   buildSyncDefinitionRuntimeFlowOptions,
+  composePublishedSyncDefinition,
   defaultSyncDefinitionFlowTemplateId,
   getSyncDefinitionFlowTemplateSteps,
   loadSyncDefinitionFlowTemplateCatalog,
-  orderEntityTables,
   type EntityDefinition,
   type SyncDefinitionFlowTemplateCatalog
 } from "@mia/sync"
@@ -182,91 +182,6 @@ function seedFromRepoDefinition(
   }
 }
 
-function predicateForTable(entity: EntityDefinition, table: EntityDefinition["tables"][number]): string {
-  if (table.scope?.kind === "sql" && typeof table.scope.predicate === "string") return table.scope.predicate
-  if (table.scope?.kind === "rootPk")
-    return `${table.scope.column}${entity.selfJoinColumn ? " IN ({ids})" : " = {id}"}`
-  if (typeof table.scopeColumn === "string" && table.scopeColumn.trim().length > 0)
-    return `${table.scopeColumn} = {id}`
-  return `${entity.idColumn} = {id}`
-}
-
-function composeDefinition(
-  entity: EntityDefinition,
-  config: db.DbSyncDefinitionConfig,
-  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
-  publishedAt: string,
-  publishedVersion: string
-): PublishedSyncDefinition {
-  const executionSteps = resolveExecutionSteps(config, entity.id, flowTemplateCatalog)
-  const orderedTables = orderEntityTables(entity)
-  const executionOrder = orderedTables.map((table) => table.name)
-  const reverseOrder = entity.reverseOrder.length > 0 ? entity.reverseOrder : [...executionOrder].reverse()
-
-  return {
-    schemaVersion: 1,
-    id: entity.id,
-    displayName: entity.displayName,
-    description: entity.description,
-    rootTable: entity.rootTable,
-    idColumn: entity.idColumn,
-    labelColumn: entity.labelColumn,
-    selfJoinColumn: entity.selfJoinColumn,
-    legacy: {
-      pipelineId: entity.provenance.kind === "legacy-migration" ? entity.provenance.legacyPipelineId : null,
-      entrySproc: entity.legacyEntrySproc ?? null
-    },
-    governance: {
-      freezeWindowIds: entity.policies.freezeWindowIds,
-      riskMultiplier: entity.policies.riskMultiplier
-    },
-    strategy: {
-      strategyId: entity.scd2.strategyId,
-      strategyVersion: entity.scd2.strategyVersion
-    },
-    bindings: {
-      serviceProfileRef: config.service_profile_ref,
-      environmentPolicyRef: config.environment_policy_ref
-    },
-    ownership: {
-      team: config.ownership_team,
-      owner: config.ownership_owner,
-      reviewStatus: config.review_status,
-      notes: JSON.parse(config.ownership_notes_json) as string[]
-    },
-    metadata: {
-      tables: entity.tables.map((table) => ({
-        name: table.name,
-        scopeColumn: table.scopeColumn,
-        predicate: predicateForTable(entity, table),
-        source: table.source ?? "manual",
-        verified: Boolean(table.verified),
-        groundedByPipeline: Boolean(table.groundedByPipeline),
-        enabledByDefault: table.enabledByDefault ?? true,
-        userControllable: table.userControllable ?? false,
-        ...(table.note ? { note: table.note } : {})
-      })),
-      executionOrder,
-      reverseOrder,
-      discrepancies: entity.discrepancies.map((note) => ({
-        table: entity.rootTable,
-        kind: "drift",
-        note
-      }))
-    },
-    executionFlow: {
-      steps: executionSteps
-    },
-    provenance: {
-      kind: entity.provenance.kind === "legacy-migration" ? "legacy-migration" : "manual",
-      sourceArtifact: `entity-registry:${entity.tenantId}/${entity.id}`,
-      sourceVersion: String(entity.version)
-    },
-    publishedAt,
-    publishedVersion
-  }
-}
-
 function loadPublishedBundle(projectRoot: string): PersistedPublishedBundle | null {
   const path = resolve(projectRoot, PUBLISHED_BUNDLE_PATH)
   if (!existsSync(path)) return null
@@ -370,7 +285,7 @@ export function publishSyncDefinitionsFromDb(
 
   for (const entity of entities) {
     const config = configs.get(entity.id) ?? defaultConfigForEntity(entity, flowTemplateCatalog)
-    definitions[entity.id] = composeDefinition(
+    definitions[entity.id] = composePublishedSyncDefinition(
       entity,
       config,
       flowTemplateCatalog,
@@ -397,12 +312,4 @@ export function publishSyncDefinitionsFromDb(
     stdout: [`Wrote published definition bundle to ${outputPath}`],
     stderr: []
   }
-}
-
-export function listSeedableRepoDefinitionIds(projectRoot: string): string[] {
-  const dir = resolve(projectRoot, AUTHORED_DEFINITIONS_DIR)
-  if (!existsSync(dir)) return []
-  return readdirSync(dir)
-    .filter((name) => name.endsWith(".json"))
-    .map((name) => name.replace(/\.json$/, ""))
 }

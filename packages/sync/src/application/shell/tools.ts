@@ -9,20 +9,36 @@
 import type { ExecutableTool, Tool, ToolMetadata } from "@mia/agent"
 import { parseEntityInstanceRef } from "../../domain/entity-instance-ref.js"
 import { getEnvironments } from "../../domain/environments.js"
+import {
+  isPublishedSyncEntityType,
+  listPublishedSyncDefinitionIds
+} from "../../domain/published-definitions.js"
 import type { EntityType } from "../../domain/recipes.js"
 import { getPool, type SyncRuntimeHost } from "../../ports/index.js"
 import { executeSync, previewSync, resolveSyncEntitySearch, searchEntities } from "./orchestrator/index.js"
 import { loadPlan } from "./plan-store.js"
 import { formatSyncPreviewDashboardFence } from "./preview-dashboard.js"
 
-const VALID_ENTITY_TYPES = new Set<EntityType>([
-  "contract",
-  "dataset",
-  "rule",
-  "pipelineActivity",
-  "gateMetadata",
-  "content"
-])
+function publishedEntityTypeHint(host: SyncRuntimeHost): string {
+  try {
+    const ids = listPublishedSyncDefinitionIds(host)
+    return ids.length > 0 ? ids.join(", ") : "a published sync definition id"
+  } catch {
+    return "a published sync definition id"
+  }
+}
+
+function validatePublishedEntityType(host: SyncRuntimeHost, entityType: string): string | null {
+  try {
+    if (!isPublishedSyncEntityType(host, entityType)) {
+      const known = listPublishedSyncDefinitionIds(host)
+      return `Error: invalid entityType "${entityType}". Must be one of: ${known.join(", ") || "(none published)"}`
+    }
+    return null
+  } catch (e) {
+    return `Error: ${e instanceof Error ? e.message : String(e)}`
+  }
+}
 
 function normalizeCatalogName(name: string): string {
   return name.trim().toLowerCase()
@@ -146,7 +162,7 @@ function buildSearchSyncEntitiesTool(host: SyncRuntimeHost): Tool {
       properties: {
         entityType: {
           type: "string",
-          description: `Entity type. One of: ${[...VALID_ENTITY_TYPES].join(", ")}.`
+          description: `Published sync definition id. One of: ${publishedEntityTypeHint(host)}.`
         },
         source: {
           type: "string",
@@ -173,9 +189,8 @@ function buildSearchSyncEntitiesTool(host: SyncRuntimeHost): Tool {
     },
     async execute(args) {
       const entityType = String(args.entityType) as EntityType
-      if (!VALID_ENTITY_TYPES.has(entityType)) {
-        return `Error: invalid entityType "${entityType}". Must be one of: ${[...VALID_ENTITY_TYPES].join(", ")}`
-      }
+      const entityError = validatePublishedEntityType(host, entityType)
+      if (entityError) return entityError
       const source = String(args.source).trim()
       const rawQ = String(args.q).trim()
       if (!rawQ) return "Error: q (search query) is required."
@@ -243,7 +258,7 @@ function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
       properties: {
         entityType: {
           type: "string",
-          description: `Entity to sync. One of: ${[...VALID_ENTITY_TYPES].join(", ")}.`
+          description: `Published sync definition id to sync. One of: ${publishedEntityTypeHint(host)}.`
         },
         entityId: {
           type: ["string", "number"],
@@ -261,9 +276,8 @@ function buildSyncPreviewTool(host: SyncRuntimeHost): Tool {
     },
     async execute(args) {
       const entityType = String(args.entityType) as EntityType
-      if (!VALID_ENTITY_TYPES.has(entityType)) {
-        return `Error: invalid entityType "${entityType}". Must be one of: ${[...VALID_ENTITY_TYPES].join(", ")}`
-      }
+      const entityError = validatePublishedEntityType(host, entityType)
+      if (entityError) return entityError
       try {
         const plan = await previewSync({
           host,

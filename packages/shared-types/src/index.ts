@@ -501,18 +501,14 @@ export interface SyncRecipe {
   rootNameColumn: string | null
   legacyPipelineId: number | null
   legacyEntrySproc?: string
+  selfJoinColumn?: string | null
   tables: SyncRecipeTable[]
   executionOrder: string[]
   reverseOrder: string[]
+  postMetadataActions?: Array<{ kind: string }>
+  archiveTables?: Array<string | null>
   discrepancies: Array<{ table: string; kind: "leak" | "implicit" | "drift"; note: string }>
   generatedAt: string
-}
-
-export interface SyncRecipeBundle {
-  version: 1
-  generatedAt: string
-  introspectedFrom: string | null
-  recipes: Record<SyncEntityType, SyncRecipe | null>
 }
 
 export interface SyncPlanTableCounts {
@@ -705,6 +701,13 @@ export interface AuthoredSyncDefinition {
 export interface PublishedSyncDefinition extends AuthoredSyncDefinition {
   publishedAt: string
   publishedVersion: string
+}
+
+export interface PublishedSyncDefinitionBundle {
+  version: 1
+  publishedAt: string
+  publishedVersion: string
+  definitions: Record<string, PublishedSyncDefinition | null>
 }
 
 export interface PublishSyncDefinitionsResponse {

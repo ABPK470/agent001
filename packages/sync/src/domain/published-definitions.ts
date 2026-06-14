@@ -1,3 +1,4 @@
+import type { PublishedSyncDefinition, PublishedSyncDefinitionBundle } from "@mia/shared-types"
 import type { SyncProjectRootHost } from "../ports/index.js"
 import {
   PostMetadataActionKind,
@@ -12,79 +13,7 @@ import {
 
 const DEFAULT_PUBLISHED_DEFINITIONS_PATH = "sync-definitions/published/definitions.bundle.json"
 
-export interface PublishedSyncDefinitionGovernance {
-  freezeWindowIds: string[]
-  riskMultiplier: number
-}
-
-export interface PublishedSyncDefinitionBindings {
-  serviceProfileRef: string
-  environmentPolicyRef: string
-}
-
-export interface PublishedSyncDefinitionOwnership {
-  team: string
-  owner: string | null
-  reviewStatus: "legacy-review-required" | "reviewed"
-  notes: string[]
-}
-
-export interface PublishedSyncDefinitionStep {
-  id: string
-  phase: "pre-transaction" | "metadata" | "post-metadata" | "post-commit"
-  kind: string
-  title: string
-  description: string
-  subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
-  objectName?: string | null
-  auditObjectType?: string | null
-  pipelineName?: string | null
-}
-
-export interface PublishedSyncDefinition {
-  schemaVersion: 1
-  id: string
-  displayName: string
-  description: string
-  rootTable: string
-  idColumn: string
-  labelColumn: string | null
-  selfJoinColumn: string | null
-  legacy: {
-    pipelineId: number | null
-    entrySproc: string | null
-  }
-  governance: PublishedSyncDefinitionGovernance
-  strategy: {
-    strategyId: string
-    strategyVersion: number | "latest"
-  }
-  bindings: PublishedSyncDefinitionBindings
-  ownership: PublishedSyncDefinitionOwnership
-  metadata: {
-    tables: SyncRecipeTable[]
-    executionOrder: string[]
-    reverseOrder: string[]
-    discrepancies: SyncRecipeDiscrepancy[]
-  }
-  executionFlow: {
-    steps: PublishedSyncDefinitionStep[]
-  }
-  provenance: {
-    kind: "manual" | "legacy-migration"
-    sourceArtifact?: string | null
-    sourceVersion?: string | null
-  }
-  publishedAt: string
-  publishedVersion: string
-}
-
-export interface PublishedSyncDefinitionBundle {
-  version: 1
-  publishedAt: string
-  publishedVersion: string
-  definitions: Record<string, PublishedSyncDefinition | null>
-}
+export type { PublishedSyncDefinition, PublishedSyncDefinitionBundle }
 
 export function loadPublishedSyncDefinitionBundle(
   host: SyncProjectRootHost,
@@ -125,6 +54,17 @@ export function getPublishedSyncDefinitionForHost(
 
 export function listPublishedSyncDefinitionsForHost(host: SyncProjectRootHost): PublishedSyncDefinition[] {
   return listPublishedSyncDefinitions(host, requireProjectRoot(host))
+}
+
+export function listPublishedSyncDefinitionIds(host: SyncProjectRootHost): string[] {
+  return Object.keys(loadPublishedSyncDefinitionBundle(host, requireProjectRoot(host)).definitions).filter(
+    (id) => loadPublishedSyncDefinitionBundle(host, requireProjectRoot(host)).definitions[id] !== null
+  )
+}
+
+export function isPublishedSyncEntityType(host: SyncProjectRootHost, entityType: string): boolean {
+  const bundle = loadPublishedSyncDefinitionBundle(host, requireProjectRoot(host))
+  return entityType in bundle.definitions && bundle.definitions[entityType] !== null
 }
 
 export function getPublishedSyncRecipe(host: SyncProjectRootHost, entityId: string): SyncRecipe {

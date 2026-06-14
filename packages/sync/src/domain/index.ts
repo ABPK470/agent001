@@ -7,6 +7,7 @@
  */
 
 export * from "./catalog-drift.js"
+export * from "./compose-published-definition.js"
 export * from "./diff-engine/index.js"
 export * from "./entity-registry/index.js"
 export * from "./enums.js"

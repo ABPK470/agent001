@@ -30,6 +30,7 @@
 import { DiscoverySource, SyncRecipeDiscrepancyKind } from "../enums.js"
 import type { SyncRecipe, SyncRecipeTable } from "../recipes.js"
 import { orderEntityTables } from "./order.js"
+import { projectTablePredicate } from "./project-predicate.js"
 import { resolveEffectiveScd2 } from "./strategy-resolver.js"
 import type { EffectiveScd2, EntityDefinition, EntityTable, Scd2Strategy } from "./types.js"
 
@@ -73,7 +74,7 @@ export function projectRecipe(args: {
   const archiveTables: Array<string | null> = []
 
   for (const t of sortedTables) {
-    tables.push(projectTable(t, def.idColumn, hasSelfJoin))
+    tables.push(projectTable(t, def))
     effectiveScd2.push(resolveEffectiveScd2({ strategy, entityOverride: def.scd2.entityOverride, table: t }))
     archiveTables.push(t.archiveTable ?? deriveArchiveTable(t.name))
   }
@@ -108,9 +109,9 @@ export function projectRecipe(args: {
 
 // ── Per-table projection ────────────────────────────────────────────
 
-function projectTable(t: EntityTable, rootIdColumn: string, hasSelfJoin: boolean): SyncRecipeTable {
+function projectTable(t: EntityTable, def: EntityDefinition): SyncRecipeTable {
   const scopeColumn = t.scope.kind === "rootPk" ? t.scope.column : null
-  const predicate = projectPredicate(t, rootIdColumn, hasSelfJoin)
+  const predicate = projectTablePredicate(def, t)
   // All registry-sourced rows are presumed grounded at projection time; the
   // `verified` flag tracks human review independently.
   const source = DiscoverySource.FkAndPipeline
@@ -125,67 +126,6 @@ function projectTable(t: EntityTable, rootIdColumn: string, hasSelfJoin: boolean
     userControllable: false,
     note: t.note ?? undefined
   }
-}
-
-function projectPredicate(t: EntityTable, rootIdColumn: string, hasSelfJoin: boolean): string {
-  switch (t.scope.kind) {
-    case "rootPk": {
-      const op = hasSelfJoin ? " IN ({ids})" : " = {id}"
-      return `${quoteIdentifier(t.scope.column)}${op}`
-    }
-    case "fkPath": {
-      // Compose an EXISTS chain. The first hop joins on the *table being
-      // filtered* (`t.name`) using `fromColumn`; each subsequent hop joins
-      // the previous level on `fromColumn` = previous-level's `toColumn`.
-      // The terminal predicate matches the root id column.
-      // For correctness the projector requires at least one hop.
-      const through = t.scope.through
-      if (through.length === 0) {
-        // Defensive: validator should reject; emit a never-matches predicate.
-        return "1 = 0 -- fkPath with no hops"
-      }
-      // Alias scheme: target table is `t0`; subsequent hops `t1..tn`.
-      const aliases = through.map((_, i) => `h${i}`)
-      const joins: string[] = []
-      for (let i = 0; i < through.length; i++) {
-        const hop = through[i]!
-        const alias = aliases[i]!
-        if (i === 0) {
-          joins.push(`FROM ${hop.table} AS ${alias}`)
-        } else {
-          const prev = aliases[i - 1]!
-          const prevHop = through[i - 1]!
-          joins.push(
-            `JOIN ${hop.table} AS ${alias} ON ${alias}.${quoteIdentifier(hop.toColumn)} = ${prev}.${quoteIdentifier(prevHop.fromColumn)}`
-          )
-        }
-      }
-      const firstHop = through[0]!
-      const lastHop = through[through.length - 1]!
-      const lastAlias = aliases[aliases.length - 1]!
-      const op = hasSelfJoin ? " IN ({ids})" : " = {id}"
-      return (
-        `EXISTS (SELECT 1 ${joins.join(" ")} WHERE ${aliases[0]!}.${quoteIdentifier(firstHop.toColumn)} = ${quoteRootRef(t.name, firstHop.toColumn)} AND ${lastAlias}.${quoteIdentifier(lastHop.fromColumn)}${op})` +
-        // Reference rootIdColumn defensively to satisfy lint-arch "unused";
-        // not part of the SQL when fkPath is in play.
-        (rootIdColumn === "" ? "" : "")
-      )
-    }
-    case "sql":
-      return t.scope.predicate
-  }
-}
-
-function quoteIdentifier(id: string): string {
-  // MSSQL bracket-quote when ambiguous; conservative — only quote when
-  // there's a non-identifier char or it's a reserved word marker.
-  return /^[A-Za-z_][A-Za-z0-9_]*$/.test(id) ? id : `[${id}]`
-}
-
-function quoteRootRef(tableName: string, column: string): string {
-  // Reference the outer table (the one being filtered) by its
-  // schema-qualified name so the EXISTS sub-query is unambiguous.
-  return `${tableName}.${quoteIdentifier(column)}`
 }
 
 function deriveArchiveTable(qualified: string): string | null {

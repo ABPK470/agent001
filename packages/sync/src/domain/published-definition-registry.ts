@@ -29,7 +29,7 @@ export function createPublishedSyncDefinitionRegistry(): PublishedSyncDefinition
       if (!existsSync(fullPath)) {
         throw new Error(
           `Published sync definition bundle not found at ${relPath}. ` +
-            `Run npm run sync:definitions:compile -- --write before previewing syncs.`
+            `Publish sync definitions from the admin UI or call POST /api/sync/definitions/publish.`
         )
       }
 

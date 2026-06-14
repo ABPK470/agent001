@@ -10,13 +10,13 @@ How `@mia/sync` compares two SQL Server databases and decides what to change.
 
 A sync always targets **one entity instance** in **one direction** (source → target).
 
-An **entity** (contract, dataset, rule, …) is defined by a **recipe**:
+An **entity** (contract, dataset, rule, …) is defined by a **published sync definition**, which includes:
 
 - A list of tables (`core.Contract`, `core.ContractColumn`, …)
 - A **scope predicate** per table — restricts rows to that entity, e.g. `contractId = 2545`
 - Execution order (FK dependencies)
 
-The recipe comes from published sync definitions. Preview/execute never scan whole databases — only the tables and rows in scope for that entity.
+Published definitions live in `sync-definitions/published/definitions.bundle.json`. At runtime, `definitionToSyncRecipe()` projects them into a **SyncRecipe** for the diff engine. Preview/execute never scan whole databases — only the tables and rows in scope for that entity.
 
 ---
 
@@ -119,12 +119,13 @@ All writes run in a transaction per table batch.
 ## 7. Mental model
 
 ```
-Environments     = named MSSQL connections (two servers, two pools)
-Entity + recipe  = which tables, which rows (predicate)
-Catalog check    = do the columns exist and match?
-Row diff         = PK match + SHA2_256 content hash
-Preview          = plan (what would change)
-Execute          = MERGE/DELETE on target to match source
+Environments              = named MSSQL connections (two servers, two pools)
+Published sync definition = which tables, which rows (predicates), execution flow
+SyncRecipe                = runtime projection used by the diff engine
+Catalog check             = do the columns exist and match?
+Row diff                  = PK match + SHA2_256 content hash
+Preview                   = plan (what would change)
+Execute                   = MERGE/DELETE on target to match source
 ```
 
 **Not** a generic replication engine. **Not** timestamp-based. **Not** log shipping.

@@ -22,16 +22,6 @@
  */
 export type EntityType = string
 
-/** The historically-bundled entity ids (informational; not enforced). */
-export const BUNDLED_ENTITY_IDS = [
-  "contract",
-  "dataset",
-  "rule",
-  "pipelineActivity",
-  "gateMetadata",
-  "content"
-] as const
-
 /** How a given table was discovered as part of an entity's dependency closure. */
 import { DiscoverySource, SyncRecipeDiscrepancyKind } from "./enums.js"
 
@@ -120,30 +110,10 @@ export interface SyncRecipe {
   generatedAt: string
 }
 
-export interface SyncRecipeBundle {
-  /** Schema version of this artifact. Bump on breaking changes. */
-  version: 1
-  generatedAt: string
-  /** Source connection used during introspection (for traceability). */
-  introspectedFrom: string | null
-  recipes: Record<EntityType, SyncRecipe | null>
-}
-
 export interface ActiveSyncRecipeSelection {
   tables: SyncRecipeTable[]
   executionOrder: string[]
   reverseOrder: string[]
-}
-
-/** Return a recipe by entity type. Throws if unknown or not introspected yet. */
-export function getRecipe(bundle: SyncRecipeBundle, type: EntityType): SyncRecipe {
-  const r = bundle.recipes[type]
-  if (!r) {
-    throw new Error(
-      `No sync recipe defined for entity type "${type}" in the published definitions projection.`
-    )
-  }
-  return r
 }
 
 export function selectRecipeTables(
