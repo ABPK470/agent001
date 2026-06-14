@@ -176,10 +176,6 @@ export const EventType = {
   MemoryRetrieved: "memory.retrieved",
   MemoryConsolidated: "memory.consolidated",
 
-  // Procedural memory
-  ProceduralStored: "procedural.stored",
-  ProceduralFailed: "procedural.failed",
-
   // Attachments
   AttachmentUploaded: "attachment.uploaded",
   AttachmentImported: "attachment.imported",
@@ -238,7 +234,6 @@ export const EventNamespace = {
   SyncEnv: "sync_env",
   FreezeWindow: "freeze_window",
   Memory: "memory",
-  Procedural: "procedural",
   Attachment: "attachment",
   Effect: "effect",
   Rollback: "rollback",
@@ -263,7 +258,6 @@ const NAMESPACE_PREFIX: ReadonlyArray<readonly [string, EventNamespace]> = [
   ["freeze_window.",      EventNamespace.FreezeWindow],
   ["sync.",               EventNamespace.Sync],
   ["memory.",             EventNamespace.Memory],
-  ["procedural.",         EventNamespace.Procedural],
   ["attachment.",         EventNamespace.Attachment],
   ["effect.",             EventNamespace.Effect],
   ["snapshot.",           EventNamespace.Effect],
@@ -311,7 +305,6 @@ const FAILURE_EVENTS: ReadonlySet<EventType> = new Set([
   EventType.SyncExecuteFailed,
   EventType.SyncExecuteStepFailed,
   EventType.MessageFailed,
-  EventType.ProceduralFailed,
 ])
 
 const CANCELLATION_EVENTS: ReadonlySet<EventType> = new Set([

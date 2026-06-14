@@ -1,7 +1,7 @@
 import { completeRunPure, EventType, runCompleted, type Agent } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { broadcast } from "../../../../../platform/events/broadcaster.js"
-import { consolidate, extractProcedural, ingestRunTurns } from "../../../../../platform/persistence/memory.js"
+import { consolidate, ingestRunTurns } from "../../../../../platform/persistence/memory.js"
 import { isInternalFailureAnswer } from "../../../../../platform/persistence/memory/episodic-quality.js"
 import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
@@ -62,12 +62,6 @@ export async function finalizeCompletedRun(
       tools: [...new Set(env.state.run.steps.map((step) => step.action))],
       stepCount: env.state.run.steps.length,
       error: taskInternallyFailed ? answer.slice(0, 200) : undefined,
-      trace: persistedToolTrace,
-      upn: ownerUpn
-    })
-    extractProcedural({
-      id: request.runId,
-      goal: request.goal,
       trace: persistedToolTrace,
       upn: ownerUpn
     })

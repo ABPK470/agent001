@@ -1,24 +1,18 @@
 /**
- * Gap 5 — goal-class extraction for procedural memory recall.
+ * Goal-class tags for episodic memory recall.
  *
- * The `procedural_memories.trigger` column is the raw user goal text
- * ("list top 3 products based on revenue for April 2025"). FTS5 over
- * that field works fine for near-duplicate goals but does NOT transfer
- * across analogous-but-differently-worded goals ("top 50 clients by
- * revenue"). Both goals share the same abstract shape — rank entities
- * by an aggregate metric, possibly filtered by time — yet share almost
- * no surface tokens, so the second never recalls the first's recipe.
+ * Episodic summaries index the raw goal text plus CamelCase class tags
+ * ("list top 3 products based on revenue for April 2025"). FTS5 works for
+ * near-duplicate goals but not across analogous shapes ("top 50 clients by
+ * revenue"). Both share rank-by-metric shape yet few surface tokens.
  *
- * Fix: derive a small set of CamelCase class tags from the goal text
- * (lossy, deterministic, regex-only — no LLM call), append them to the
- * stored trigger so FTS indexes them, and OR them into the search query
- * so a new goal's class tags can match an old recipe's class tags even
- * when no surface tokens overlap.
+ * Fix: derive a small set of CamelCase class tags from the goal (regex-only,
+ * no LLM), append them to the stored episodic goal line so FTS indexes them,
+ * and augment episodic search queries with the same tags so cross-shape
+ * recall can match prior substantive runs.
  *
- * Tags are single tokens (no spaces / punctuation) so the SQLite FTS5
- * default tokenizer treats each as one term. Set is intentionally tiny —
- * extending it should be driven by recall-failure evidence, not
- * speculation.
+ * Tags are single tokens so the SQLite FTS5 tokenizer treats each as one
+ * term. Extend the classifier set only from recall-failure evidence.
  */
 
 const CLASSIFIERS: Array<{ tag: string; re: RegExp }> = [
@@ -80,4 +74,10 @@ export function extractGoalClasses(goal: string): string[] {
 export function renderClassTail(classes: readonly string[]): string {
   if (classes.length === 0) return ""
   return `\n[goalclasses ${classes.join(" ")}]`
+}
+
+/** Augment an episodic FTS query with class tags from the current goal. */
+export function augmentGoalQueryForFts(goal: string): string {
+  const classes = extractGoalClasses(goal)
+  return classes.length > 0 ? `${goal} ${classes.join(" ")}` : goal
 }

@@ -251,23 +251,6 @@ describe("Wiring contracts: memory write↔read pair on runId / excludeRunId", (
   })
 })
 
-// ── B4 — extractProcedural + searchProcedures pair on sessionId/upn ──
-
-describe("Wiring contracts: procedural memory pair on upn", () => {
-  it("B4: extractProcedural upn expression matches the memory write anchor", () => {
-    const src = readSrc(RUN_EXECUTOR_FINALIZATION)
-    const calls = extractObjectArgCalls(src, "extractProcedural")
-    expect(calls.length, "expected extractProcedural call(s) in run-executor.ts").toBeGreaterThan(0)
-
-    for (const c of calls) {
-      const upn = c.fields.get("upn")
-      expect(upn, `extractProcedural at line ${c.line} must specify upn`).toBeDefined()
-      expect(c.fields.has("sessionId"), `extractProcedural must not pass sessionId`).toBe(false)
-      expect(upn, `extractProcedural upn must reference ownerUpn`).toContain("ownerUpn")
-    }
-  })
-})
-
 // ── B5 — HostedPolicyContext + memory call alignment ──────────────
 
 describe("Wiring contracts: HostedPolicyContext fields match memory call anchors", () => {

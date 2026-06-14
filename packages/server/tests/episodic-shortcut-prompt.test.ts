@@ -65,4 +65,26 @@ describe("buildMemorySections episodic shortcut", () => {
     )
     expect(String(ineligible[0]?.content)).not.toContain("MEMORY HIT")
   })
+
+  it("includes choreography hint when shortcut-eligible and choreography is present", () => {
+    const withChoreo = buildMemorySections(
+      memoryCtx({
+        ...EMPTY_MEMORY_PER_TIER,
+        episodic: "Goal: revenue\nChoreography: search_catalog → query_mssql",
+        episodicShortcutEligible: true,
+        episodicChoreography: "search_catalog → query_mssql"
+      })
+    )
+    expect(String(withChoreo[0]?.content)).toContain("PRIOR CHOREOGRAPHY")
+    expect(String(withChoreo[0]?.content)).toContain("search_catalog → query_mssql")
+
+    const withoutChoreo = buildMemorySections(
+      memoryCtx({
+        ...EMPTY_MEMORY_PER_TIER,
+        episodic: "Goal: revenue",
+        episodicShortcutEligible: true
+      })
+    )
+    expect(String(withoutChoreo[0]?.content)).not.toContain("PRIOR CHOREOGRAPHY")
+  })
 })

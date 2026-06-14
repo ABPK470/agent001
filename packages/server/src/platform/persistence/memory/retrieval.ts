@@ -2,7 +2,8 @@ import { EventType, getCatalogSchemaFingerprint } from "@mia/agent"
 import { getDb } from "../sqlite.js"
 import { MemoryRole, MemoryTier } from "../../../shared/enums/memory.js"
 import { broadcast } from "../../events/broadcaster.js"
-import { searchProcedures } from "./procedural.js"
+import { pickEpisodicChoreographyHint } from "./episodic-choreography.js"
+import { augmentGoalQueryForFts } from "./goal-class.js"
 import { currentPolicyVersion, provenanceMultiplier } from "./provenance.js"
 import { rowToEntry } from "./schema.js"
 import {
@@ -20,7 +21,7 @@ import {
   tokenize,
   WORKING_SESSION_WINDOW_H
 } from "./scoring.js"
-import type { MemoryBudget, MemoryEntry, ProceduralMemory, UnifiedSearchResult } from "./types.js"
+import type { MemoryBudget, MemoryEntry, UnifiedSearchResult } from "./types.js"
 import { EMPTY_MEMORY_PER_TIER, type MemoryPerTier } from "./tier-context.js"
 import { readEpisodicShortcutEligible } from "./episodic-quality.js"
 import { vectorSearch } from "./vectors.js"
@@ -73,7 +74,8 @@ export async function retrieveContext(
       maxItems: Math.floor(budget.maxItems * TIER_BUDGET[tier])
     }
 
-    const results = await searchEntries(goal, {
+    const searchQuery = tier === "episodic" ? augmentGoalQueryForFts(goal) : goal
+    const results = await searchEntries(searchQuery, {
       tier,
       budget: tierBudget,
       threadId: tier === MemoryTier.Working ? opts?.threadId : undefined,
@@ -82,9 +84,6 @@ export async function retrieveContext(
     })
     allResults.push(...results)
   }
-
-  // Also search procedural memories (kept for activation tracking, not injected into prompt)
-  const procedures = searchProcedures(goal, 3, ownerUpn)
 
   // Phase 5: demote (don't delete) entries whose provenance no longer
   // matches the current environment. A row stamped with a stale
@@ -173,17 +172,24 @@ export async function retrieveContext(
       .run(now.toISOString(), ...ids)
   }
 
-  const context = formatMemoryContext(packed, procedures)
+  const context = formatMemoryContext(packed)
 
   const workingItems = packed.filter((r) => r.entry.tier === MemoryTier.Working)
   const episodicItems = packed.filter((r) => r.entry.tier === "episodic")
   const semanticItems = packed.filter((r) => r.entry.tier === "semantic")
 
+  const episodicShortcutEligible = episodicItems.some((r) =>
+    readEpisodicShortcutEligible(r.entry.metadata)
+  )
+
   const perTier: MemoryPerTier = {
     working: workingItems.length > 0 ? workingItems.map((r) => r.entry.content).join("\n") : "",
     episodic: episodicItems.length > 0 ? episodicItems.map((r) => r.entry.content).join("\n") : "",
     semantic: semanticItems.length > 0 ? semanticItems.map((r) => r.entry.content).join("\n") : "",
-    episodicShortcutEligible: episodicItems.some((r) => readEpisodicShortcutEligible(r.entry.metadata))
+    episodicShortcutEligible,
+    episodicChoreography: episodicShortcutEligible
+      ? pickEpisodicChoreographyHint(episodicItems)
+      : undefined
   }
 
   broadcast({
@@ -193,7 +199,6 @@ export async function retrieveContext(
       working: workingItems.length,
       episodic: episodicItems.length,
       semantic: semanticItems.length,
-      procedural: procedures.length,
       runId: opts?.runId ?? null
     }
   })
@@ -444,7 +449,7 @@ function getRecentEntries(
 
 // ── Output formatting ────────────────────────────────────────────
 
-function formatMemoryContext(results: UnifiedSearchResult[], _procedures: ProceduralMemory[]): string {
+function formatMemoryContext(results: UnifiedSearchResult[]): string {
   if (results.length === 0) return ""
 
   // Dedup identical or near-identical entry content across tiers (Gap 4).
@@ -486,9 +491,6 @@ function formatMemoryContext(results: UnifiedSearchResult[], _procedures: Proced
     for (const r of semantic) blocks.push(r.entry.content)
     blocks.push("</semantic_memory>")
   }
-
-  // Note: procedural memories (tool sequences) are intentionally excluded.
-  // They consume tokens without improving LLM tool selection.
 
   return ["", "<memory_context>", ...blocks, "</memory_context>", ""].join("\n")
 }

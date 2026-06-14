@@ -6,6 +6,7 @@
 
 import type Database from "better-sqlite3"
 import { runBaselineMigration } from "./0001_baseline.js"
+import { runDropProceduralMigration } from "./0004_drop_procedural.js"
 import { runRemoveThreadKindMigration } from "./0003_thread_remove_kind.js"
 import { runThreadWorkspaceKindMigration } from "./0002_thread_workspace_kind.js"
 
@@ -19,7 +20,8 @@ export interface Migration {
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
   { version: 2, name: "thread_workspace_kind", up: runThreadWorkspaceKindMigration },
-  { version: 3, name: "thread_remove_kind", up: runRemoveThreadKindMigration }
+  { version: 3, name: "thread_remove_kind", up: runRemoveThreadKindMigration },
+  { version: 4, name: "drop_procedural", up: runDropProceduralMigration }
 ]
 
 // Apply pending migrations once each. Called on server boot.

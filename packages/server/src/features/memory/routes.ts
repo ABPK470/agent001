@@ -19,7 +19,6 @@ import {
   prune,
   retrieveContext,
   searchEntries,
-  searchProcedures,
   type MemoryTier
 } from "../../platform/persistence/memory.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
@@ -104,23 +103,6 @@ export function registerMemoryRoutes(app: FastifyInstance, _orchestrator: AgentO
         combined: result.combined
       }))
     }
-  })
-
-  app.post<{ Body: { goal: string; limit?: number } }>("/api/memory/procedures", async (req, reply) => {
-    const { goal, limit } = req.body
-    if (!goal || typeof goal !== "string") {
-      reply.code(400)
-      return { error: "goal is required" }
-    }
-    const procedures = searchProcedures(goal, limit ?? 5, req.session!.upn)
-    return procedures.map((procedure) => ({
-      id: procedure.id,
-      trigger: procedure.trigger,
-      toolSequence: procedure.toolSequence,
-      successCount: procedure.successCount,
-      failureCount: procedure.failureCount,
-      createdAt: procedure.createdAt
-    }))
   })
 
   app.post("/api/memory/consolidate", async (req, reply) => {

@@ -764,8 +764,6 @@ function formatLogEntryInner(
       return { type: t, message: `Input received`, timestamp }
     case "usage.updated":
       return { type: t, message: `${data["totalTokens"]} tokens, ${data["llmCalls"]} calls`, timestamp }
-    case "procedural.stored":
-      return { type: t, message: `Procedural memory stored — ${data["trigger"]}`, timestamp }
     case "message.queued":
       return { type: t, message: `Message queued — ${data["channelType"]}`, timestamp }
     case "message.failed":

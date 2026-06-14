@@ -37,19 +37,6 @@ export interface MemoryEntry {
   updatedAt: string
 }
 
-export interface ProceduralMemory {
-  id: string
-  trigger: string
-  toolSequence: Array<{ tool: string; argsPattern: Record<string, unknown> }>
-  successCount: number
-  failureCount: number
-  runId: string
-  upn: string | null
-  shared: boolean
-  createdAt: string
-  updatedAt: string
-}
-
 export interface UnifiedSearchResult {
   entry: MemoryEntry
   relevance: number
@@ -67,7 +54,7 @@ export interface MemoryBudget {
 /** @deprecated Use MemoryEntry */
 export interface Memory {
   id: string
-  tier: MemoryTier | "procedural"
+  tier: MemoryTier
   content: string
   metadata: Record<string, unknown>
   source: MemorySource

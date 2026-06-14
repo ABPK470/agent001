@@ -12,6 +12,11 @@ import { getDb } from "../sqlite.js"
 import { stampProvenance } from "./provenance.js"
 import { computeSalience, isDuplicate, SALIENCE_THRESHOLD, truncateAtBoundary } from "./scoring.js"
 import { classifyEpisodicRun } from "./episodic-quality.js"
+import {
+  extractOrderedToolSequence,
+  formatChoreographyLine
+} from "./episodic-choreography.js"
+import { extractGoalClasses, renderClassTail } from "./goal-class.js"
 import type { MemoryEntry } from "./types.js"
 import { embedEntry } from "./vectors.js"
 
@@ -242,13 +247,6 @@ export function ingestRunTurns(run: {
 
   // 4. Store a compact episodic summary — upsert by goal so repeated runs of the
   //    same goal don't accumulate contradictory entries in memory.
-  const lines = [`Goal: ${run.goal}`, `Status: ${run.status}`]
-  lines.push(`Tools used: ${run.tools.join(", ")} (${run.stepCount} steps)`)
-  if (run.answer) {
-    const a = truncateAtBoundary(run.answer, 800, "\u2026")
-    lines.push(`Answer: ${a}`)
-  }
-  if (run.error) lines.push(`Error: ${run.error}`)
 
   // Auto-detect tool failures in the trace and record them as corrections so future
   // runs don't repeat the same failing approach (e.g. querying a non-existent table).
@@ -264,12 +262,7 @@ export function ingestRunTurns(run: {
       }
     }
   }
-  if (toolErrors.length > 0) {
-    lines.push(`Corrections (do NOT repeat these approaches):`)
-    for (const e of toolErrors) lines.push(`  - ${e}`)
-  }
 
-  const episodicContent = lines.join("\n")
   const classification = classifyEpisodicRun({
     answer: run.answer,
     status: run.status,
@@ -277,6 +270,24 @@ export function ingestRunTurns(run: {
     trace: run.trace,
     hasCorrections: toolErrors.length > 0
   })
+  const goalClasses = extractGoalClasses(run.goal)
+  const toolSequence = classification.shortcutEligible ? extractOrderedToolSequence(run.trace) : []
+
+  const lines = [`Goal: ${run.goal}${renderClassTail(goalClasses)}`, `Status: ${run.status}`]
+  lines.push(`Tools used: ${run.tools.join(", ")} (${run.stepCount} steps)`)
+  const choreographyLine = toolSequence.length >= 2 ? formatChoreographyLine(toolSequence) : ""
+  if (choreographyLine) lines.push(choreographyLine)
+  if (run.answer) {
+    const a = truncateAtBoundary(run.answer, 800, "\u2026")
+    lines.push(`Answer: ${a}`)
+  }
+  if (run.error) lines.push(`Error: ${run.error}`)
+  if (toolErrors.length > 0) {
+    lines.push(`Corrections (do NOT repeat these approaches):`)
+    for (const e of toolErrors) lines.push(`  - ${e}`)
+  }
+
+  const episodicContent = lines.join("\n")
   const episodicMeta = {
     goal: run.goal,
     tools: run.tools,
@@ -284,7 +295,9 @@ export function ingestRunTurns(run: {
     status: run.status,
     hasCorrections: toolErrors.length > 0,
     answerKind: classification.answerKind,
-    shortcutEligible: classification.shortcutEligible
+    shortcutEligible: classification.shortcutEligible,
+    ...(toolSequence.length >= 2 ? { toolSequence } : {}),
+    ...(goalClasses.length > 0 ? { goalClasses } : {})
   }
   const episodicConfidence =
     toolErrors.length > 0

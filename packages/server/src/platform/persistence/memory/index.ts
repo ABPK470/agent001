@@ -5,7 +5,6 @@ export type {
   MemoryRole,
   MemorySource,
   MemoryTier,
-  ProceduralMemory,
   UnifiedSearchResult
 } from "./types.js"
 
@@ -19,7 +18,14 @@ export {
   listMemories,
   prune
 } from "./maintenance.js"
-export { extractProcedural, markProceduralFailed, searchProcedures, storeProcedural } from "./procedural.js"
+export {
+  extractOrderedToolSequence,
+  formatChoreographyHint,
+  formatChoreographyLine,
+  pickEpisodicChoreographyHint,
+  readEpisodicToolSequence
+} from "./episodic-choreography.js"
+export { augmentGoalQueryForFts, extractGoalClasses, renderClassTail } from "./goal-class.js"
 export { classifyEpisodicRun, isInternalFailureAnswer, readEpisodicShortcutEligible } from "./episodic-quality.js"
 export { EMPTY_MEMORY_PER_TIER, type MemoryPerTier } from "./tier-context.js"
 export { retrieveContext, searchEntries } from "./retrieval.js"

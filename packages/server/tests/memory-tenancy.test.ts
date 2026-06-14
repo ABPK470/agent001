@@ -180,32 +180,55 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
     expect(aliceHits[0]!.entry.shared).toBe(true)
   })
 
-  it("procedural memories are tenant-scoped", async () => {
+  it("episodic summaries are tenant-scoped", async () => {
     const mem = await setupMemory()
+    const trace = [
+      { kind: "tool-call", tool: "search_catalog", text: "search", argsSummary: "x" },
+      { kind: "tool-call", tool: "query_mssql", text: "query", argsSummary: "SELECT" }
+    ]
 
-    mem.storeProcedural({
-      trigger: "list customer revenue alpha-procedural-trigger-keyword",
-      toolSequence: [
-        { tool: "mssql_query", argsPattern: { sql: "SELECT" } },
-        { tool: "format_csv", argsPattern: {} }
-      ],
-      runId: "ra",
+    mem.ingestRunTurns({
+      id: "ra",
+      goal: "list customer revenue alpha-episodic-choreo-keyword",
+      answer: "Revenue is in publish.Revenue.",
+      status: "completed",
+      agentId: null,
+      tools: ["search_catalog", "query_mssql"],
+      stepCount: 2,
+      trace,
       upn: "alice@corp"
     })
-    mem.storeProcedural({
-      trigger: "list customer revenue bravo-procedural-trigger-keyword",
-      toolSequence: [
-        { tool: "mssql_query", argsPattern: { sql: "SELECT" } },
-        { tool: "format_csv", argsPattern: {} }
-      ],
-      runId: "rb",
+    mem.ingestRunTurns({
+      id: "rb",
+      goal: "list customer revenue bravo-episodic-choreo-keyword",
+      answer: "Revenue is in publish.Revenue.",
+      status: "completed",
+      agentId: null,
+      tools: ["search_catalog", "query_mssql"],
+      stepCount: 2,
+      trace,
       upn: "bob@corp"
     })
 
-    expect(mem.searchProcedures("alpha-procedural-trigger-keyword", 5, "alice@corp").length).toBe(1)
-    expect(mem.searchProcedures("alpha-procedural-trigger-keyword", 5, "bob@corp").length).toBe(0)
-    expect(mem.searchProcedures("bravo-procedural-trigger-keyword", 5, "bob@corp").length).toBe(1)
-    expect(mem.searchProcedures("bravo-procedural-trigger-keyword", 5, "alice@corp").length).toBe(0)
+    const aliceHits = await mem.searchEntries("alpha-episodic-choreo-keyword", {
+      tier: "episodic",
+      budget: { maxTokens: 4000, maxItems: 5 },
+      upn: "alice@corp"
+    })
+    const bobOnAlice = await mem.searchEntries("alpha-episodic-choreo-keyword", {
+      tier: "episodic",
+      budget: { maxTokens: 4000, maxItems: 5 },
+      upn: "bob@corp"
+    })
+    const bobHits = await mem.searchEntries("bravo-episodic-choreo-keyword", {
+      tier: "episodic",
+      budget: { maxTokens: 4000, maxItems: 5 },
+      upn: "bob@corp"
+    })
+
+    expect(aliceHits.length).toBe(1)
+    expect(bobOnAlice.length).toBe(0)
+    expect(bobHits.length).toBe(1)
   })
 
   it("dedup is scoped per-tenant (alice's entry does not mask bob's)", async () => {

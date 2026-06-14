@@ -48,18 +48,6 @@ export function initMemoryFts(db: Database.Database = getDb()): void {
     }
   }
 
-  try {
-    db.exec(`
-      CREATE VIRTUAL TABLE IF NOT EXISTS procedural_fts USING fts5(
-        trigger,
-        content='procedural_memories',
-        content_rowid='rowid'
-      );
-    `)
-  } catch {
-    /* already exists */
-  }
-
   db.exec(`
     CREATE TRIGGER IF NOT EXISTS me_fts_ai AFTER INSERT ON memory_entries BEGIN
       INSERT INTO memory_entries_fts(rowid, content, metadata)
@@ -76,23 +64,6 @@ export function initMemoryFts(db: Database.Database = getDb()): void {
       VALUES ('delete', old.rowid, old.content, old.metadata);
       INSERT INTO memory_entries_fts(rowid, content, metadata)
       VALUES (new.rowid, new.content, new.metadata);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS procedural_ai AFTER INSERT ON procedural_memories BEGIN
-      INSERT INTO procedural_fts(rowid, trigger)
-      VALUES (new.rowid, new.trigger);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS procedural_ad AFTER DELETE ON procedural_memories BEGIN
-      INSERT INTO procedural_fts(procedural_fts, rowid, trigger)
-      VALUES ('delete', old.rowid, old.trigger);
-    END;
-
-    CREATE TRIGGER IF NOT EXISTS procedural_au AFTER UPDATE ON procedural_memories BEGIN
-      INSERT INTO procedural_fts(procedural_fts, rowid, trigger)
-      VALUES ('delete', old.rowid, old.trigger);
-      INSERT INTO procedural_fts(rowid, trigger)
-      VALUES (new.rowid, new.trigger);
     END;
   `)
 }

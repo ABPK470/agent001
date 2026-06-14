@@ -3,6 +3,7 @@
  *
  * Episodic shortcut banner uses `perTier.episodicShortcutEligible` — set at ingest
  * from run status, tools, and trace (see episodic-quality.ts), not prose heuristics.
+ * Choreography hints come from ordered tool sequences on the same episodic row.
  */
 
 import { MessageRole, type Message } from "@mia/agent"
@@ -23,6 +24,21 @@ const EPISODIC_SHORTCUT_BANNER = [
   "interpretation of unfamiliar domain concepts."
 ].join("\n")
 
+const EPISODIC_CHOREOGRAPHY_PREFIX =
+  "PRIOR CHOREOGRAPHY (hint only — adapt tool args to this goal):"
+
+function buildEpisodicBlock(perTier: BuildContext["opts"]["perTier"]): string {
+  const parts: string[] = []
+  if (perTier.episodicShortcutEligible === true) {
+    parts.push(EPISODIC_SHORTCUT_BANNER)
+    if (perTier.episodicChoreography) {
+      parts.push(`${EPISODIC_CHOREOGRAPHY_PREFIX}\n${perTier.episodicChoreography}`)
+    }
+  }
+  parts.push(perTier.episodic)
+  return parts.join("\n\n")
+}
+
 export function buildMemorySections(ctx: BuildContext): Message[] {
   const { opts, decision } = ctx
   const { perTier } = opts
@@ -37,13 +53,9 @@ export function buildMemorySections(ctx: BuildContext): Message[] {
   }
 
   if (perTier.episodic) {
-    const episodicContent = perTier.episodicShortcutEligible === true
-      ? `${EPISODIC_SHORTCUT_BANNER}\n\n${perTier.episodic}`
-      : perTier.episodic
-
     messages.push({
       role: MessageRole.System,
-      content: `<episodic_memory>\n${episodicContent}\n</episodic_memory>`,
+      content: `<episodic_memory>\n${buildEpisodicBlock(perTier)}\n</episodic_memory>`,
       section: "memory_episodic"
     })
   }
