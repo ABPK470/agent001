@@ -7,10 +7,15 @@
  *   - Expandable per-user run history with pagination (offset/limit)
  *   - Server-side pagination for run history (supports 1000s of runs)
  *
- * Data sources (polled every 5s):
+ * Data sources (SSE-driven, no polling):
  *   GET /api/admin/users             — aggregated per-user stats
  *   GET /api/admin/active-runs       — currently executing runs
  *   GET /api/admin/users/:id/runs    — paginated run history per user
+ *
+ * Summary + active runs refresh on run lifecycle events and
+ * `session.presence.tick`. Expanded run history reloads silently only when
+ * a run is queued or reaches a terminal state — never on presence ticks or
+ * step events, so the table does not flash while an agent is working.
  */
 
 import type { ReactNode } from "react"
@@ -18,6 +23,12 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "rea
 import { api } from "../api"
 import { useStore } from "../store"
 import { ActiveUsersRunModal, type RunPreview } from "./ActiveUsersRunModal"
+import {
+  isActiveRunStepEvent,
+  isHistoryRefreshEvent,
+  isSummaryRefreshEvent,
+  useAdminSseEvents,
+} from "./active-users-sse"
 
 // ── Types ──────────────────────────────────────────────────────
 
@@ -64,12 +75,9 @@ type SortDir = "asc" | "desc"
 
 const PAGE_SIZE = 50
 
-// Event types whose arrival means the user/run aggregates in this widget
-// may have changed. Used to gate the SSE-driven refresh — we ignore the
-// firehose of step/trace/token events and only react to lifecycle changes.
-const REFRESH_EVENT_PREFIXES = ["run.", "session.", "user.", "notification."] as const
-function isRefreshEvent(type: unknown): boolean {
-  return typeof type === "string" && REFRESH_EVENT_PREFIXES.some((p) => type.startsWith(p))
+function readSseRunId(data: Record<string, unknown>): string | null {
+  const runId = data["runId"]
+  return typeof runId === "string" && runId.length > 0 ? runId : null
 }
 
 // ── Sorting helpers ────────────────────────────────────────────
@@ -123,7 +131,7 @@ export function ActiveUsers(): ReactNode {
   const [adminBusy, setAdminBusy] = useState<string | null>(null)
   const [runModal, setRunModal] = useState<{ runId: string; preview?: RunPreview } | null>(null)
 
-  const refresh = useCallback(async () => {
+  const refreshSummary = useCallback(async () => {
     try {
       const [u, r] = await Promise.all([
         fetch("/api/admin/users", { credentials: "include" }),
@@ -145,11 +153,24 @@ export function ActiveUsers(): ReactNode {
 
   // ── Run history (paginated) ──────────────────────────────────
 
-  const loadHistory = useCallback(async (identifier: string, offset = 0) => {
-    setHistory((h) => ({
-      ...h,
-      [identifier]: { rows: h[identifier]?.rows ?? [], total: h[identifier]?.total ?? 0, offset, loading: true, error: false },
-    }))
+  const loadHistory = useCallback(async (identifier: string, offset = 0, opts?: { silent?: boolean }) => {
+    const silent = opts?.silent === true
+    setHistory((h) => {
+      const prev = h[identifier]
+      if (silent && prev?.rows.length) {
+        return { ...h, [identifier]: { ...prev, offset, error: false } }
+      }
+      return {
+        ...h,
+        [identifier]: {
+          rows: prev?.rows ?? [],
+          total: prev?.total ?? 0,
+          offset,
+          loading: true,
+          error: false,
+        },
+      }
+    })
     try {
       const res = await fetch(
         `/api/admin/users/${encodeURIComponent(identifier)}/runs?limit=${PAGE_SIZE}&offset=${offset}`,
@@ -164,7 +185,7 @@ export function ActiveUsers(): ReactNode {
     } catch {
       setHistory((h) => ({
         ...h,
-        [identifier]: { ...h[identifier], loading: false, error: true },
+        [identifier]: { ...(h[identifier] ?? { rows: [], total: 0, offset }), loading: false, error: true },
       }))
     }
   }, [])
@@ -182,13 +203,13 @@ export function ActiveUsers(): ReactNode {
     setAdminBusy(user.identifier)
     try {
       await api.setUserAdmin(user.identifier, next)
-      await refresh()
+      await refreshSummary()
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
       setAdminBusy(null)
     }
-  }, [refresh])
+  }, [refreshSummary])
 
   // Refs mirror the latest expanded/history values so the SSE-driven effect
   // below can read them without listing them as dependencies. Putting
@@ -203,43 +224,50 @@ export function ActiveUsers(): ReactNode {
   useEffect(() => { historyRef.current = history }, [history])
   useEffect(() => { loadHistoryRef.current = loadHistory }, [loadHistory])
 
-  const refreshExpandedHistory = useCallback(() => {
+  const reloadExpandedHistorySilent = useCallback(() => {
     const exp = expandedRef.current
     if (!exp) return
     const offset = historyRef.current[exp]?.offset ?? 0
-    void loadHistoryRef.current(exp, offset)
+    void loadHistoryRef.current(exp, offset, { silent: true })
   }, [])
 
-  // SSE-driven refresh: count the lifecycle events we care about and re-run
-  // the fetch whenever that count changes. No polling — the only periodic
-  // refresh in this widget used to be a 5s setInterval; it has been removed.
-  const refreshTick = useStore((s) => s.sseEventLog.filter((e) => isRefreshEvent(e.type)).length)
-
   useEffect(() => {
-    void refresh()
-    refreshExpandedHistory()
-  }, [refresh, refreshTick, refreshExpandedHistory])
+    void refreshSummary()
+  }, [refreshSummary])
 
   useEffect(() => {
     if (!connected) return
-    void refresh()
-    refreshExpandedHistory()
-  }, [connected, refresh, refreshExpandedHistory])
+    void refreshSummary()
+  }, [connected, refreshSummary])
 
   useEffect(() => {
-    const refreshVisibleData = () => {
-      if (document.visibilityState !== "visible") return
-      void refresh()
-      refreshExpandedHistory()
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void refreshSummary()
+    }
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
+  }, [refreshSummary])
+
+  const onSseEvent = useCallback((event: { type: string; data: Record<string, unknown> }) => {
+    if (isSummaryRefreshEvent(event.type)) {
+      void refreshSummary()
     }
 
-    const interval = window.setInterval(refreshVisibleData, 30_000)
-    document.addEventListener("visibilitychange", refreshVisibleData)
-    return () => {
-      window.clearInterval(interval)
-      document.removeEventListener("visibilitychange", refreshVisibleData)
+    if (isActiveRunStepEvent(event.type)) {
+      const runId = readSseRunId(event.data)
+      if (runId) {
+        setActiveRuns((prev) => prev.map((row) =>
+          row.runId === runId ? { ...row, stepCount: row.stepCount + 1 } : row,
+        ))
+      }
     }
-  }, [refresh, refreshExpandedHistory])
+
+    if (isHistoryRefreshEvent(event.type)) {
+      reloadExpandedHistorySilent()
+    }
+  }, [refreshSummary, reloadExpandedHistorySilent])
+
+  useAdminSseEvents(onSseEvent)
 
   // ── Derived data ─────────────────────────────────────────────
 
@@ -805,7 +833,7 @@ function UserDetail({ user, liveRuns, history, adminBusy, onToggleAdmin, onPageC
         {/* Table */}
         {history && history.rows.length > 0 && (
           <div>
-          <table className={`w-full border-collapse ${history.loading ? "opacity-40" : ""}`}>
+          <table className="w-full border-collapse">
             <thead className="sticky top-0 z-[16] bg-canvas">
               <tr className="bg-canvas">
                 <th className="py-2 px-3 w-6 bg-canvas" onClick={() => onRunSort("status")} />

@@ -26,6 +26,8 @@ import {
   LogWidgetToolbarFilters,
   LogWidgetToolbarSearch,
   LogWidgetToolbarTail,
+  WidgetToolbarFilterMenu,
+  WidgetToolbarFilterMenuItem,
 } from "./widget-toolbar"
 
 // ── Type chips shown in toolbar (order matters) ──────────────────
@@ -59,7 +61,6 @@ export function LiveLogs() {
   const { width: rootWidth } = useContainerSize(rootRef)
   const compact = rootWidth > 0 && rootWidth < 860
   const tiny = rootWidth > 0 && rootWidth < 480
-  const [chipsOpen, setChipsOpen] = useState(false)
 
   // DB fallback search — triggered when in-memory results = 0 and query ≥ 3 chars
   const [dbResults, setDbResults] = useState<LogEntry[]>([])
@@ -150,7 +151,7 @@ export function LiveLogs() {
   const pendingCount = paused ? Math.max(0, logs.length - snapshot.length) : 0
 
   return (
-    <div ref={rootRef} className="h-full overflow-hidden flex flex-col gap-2.5 text-text">
+    <div ref={rootRef} className="h-full min-h-0 overflow-hidden flex flex-col gap-2.5 text-text">
 
       <LogWidgetToolbar compact={compact}>
         <LogWidgetToolbarFilters>
@@ -185,48 +186,41 @@ export function LiveLogs() {
               )
             })
           ) : (
-            <div className="relative shrink-0">
-              <button
-                onClick={() => setChipsOpen((v) => !v)}
-                className={`${LOG_TOOLBAR_CHIP} ${
-                  typeFilters.size > 0 ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE
-                }`}
-              >
-                <Filter size={14} />
-                {typeFilters.size === 0 ? "all" : `${typeFilters.size} types`}
-              </button>
-              {chipsOpen && (
+            <WidgetToolbarFilterMenu
+              ariaLabel="Filter event types"
+              active={typeFilters.size > 0}
+              label={(
                 <>
-                  <div className="fixed inset-0 z-40" onClick={() => setChipsOpen(false)} />
-                  <div className="absolute left-0 top-full mt-1 z-50 bg-elevated border border-border rounded-md shadow-2xl py-1 min-w-[160px]">
-                    {EVENT_TYPES.map((et) => {
-                      const active = et === "all" ? typeFilters.size === 0 : typeFilters.has(et)
-                      const count = counts[et] ?? 0
-                      return (
-                        <button
-                          key={et}
-                          onClick={() => {
-                            if (et === "all") setTypeFilters(new Set())
-                            else setTypeFilters((prev) => {
-                              const next = new Set(prev)
-                              if (next.has(et)) next.delete(et)
-                              else next.add(et)
-                              return next
-                            })
-                          }}
-                          className={`flex items-center justify-between gap-3 w-full text-left px-3 py-2 text-[13px] transition-colors ${
-                            active ? "text-accent bg-accent/10" : "text-text-muted hover:text-text hover:bg-overlay-2"
-                          }`}
-                        >
-                          <span>{et}</span>
-                          {count > 0 && <span className="text-xs tabular-nums text-text-muted/60">{count}</span>}
-                        </button>
-                      )
-                    })}
-                  </div>
+                  <Filter size={14} />
+                  {typeFilters.size === 0 ? "all" : `${typeFilters.size} types`}
                 </>
               )}
-            </div>
+            >
+              {EVENT_TYPES.map((et) => {
+                const active = et === "all" ? typeFilters.size === 0 : typeFilters.has(et)
+                const count = counts[et] ?? 0
+                return (
+                  <WidgetToolbarFilterMenuItem
+                    key={et}
+                    label={et}
+                    active={active}
+                    count={count}
+                    onClick={() => {
+                      if (et === "all") {
+                        setTypeFilters(new Set())
+                        return
+                      }
+                      setTypeFilters((prev) => {
+                        const next = new Set(prev)
+                        if (next.has(et)) next.delete(et)
+                        else next.add(et)
+                        return next
+                      })
+                    }}
+                  />
+                )
+              })}
+            </WidgetToolbarFilterMenu>
           )}
 
           {!compact && <div className={LOG_TOOLBAR_DIVIDER} aria-hidden />}
@@ -277,7 +271,7 @@ export function LiveLogs() {
       {/* ── Log body ─────────────────────────────────────── */}
       <div
         ref={containerRef}
-        className="log-stream flex-1 overflow-y-auto"
+        className="log-stream flex-1 min-h-0 overflow-y-auto"
         onScroll={handleScroll}
       >
         {filtered.length === 0 && (

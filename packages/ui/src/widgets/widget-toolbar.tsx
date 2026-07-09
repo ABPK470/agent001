@@ -8,6 +8,8 @@
 
 import { Loader2, Search, X } from "lucide-react"
 import type { JSX, ReactNode } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
+import { createPortal } from "react-dom"
 
 /** @deprecated use WidgetToolbarChip classes via widget-toolbar__chip */
 export const LOG_TOOLBAR_CHIP = "widget-toolbar__chip"
@@ -127,6 +129,170 @@ export function WidgetToolbarCount({
         <span className="widget-toolbar__count-total">{total}</span>
       )}
     </span>
+  )
+}
+
+const FILTER_MENU_Z_BACKDROP = 250
+const FILTER_MENU_Z_PANEL = 260
+
+export interface WidgetToolbarFilterMenuProps {
+  label: ReactNode
+  active?: boolean
+  ariaLabel?: string
+  children: ReactNode
+}
+
+/** Chip trigger + portaled dropdown — escapes widget overflow clipping. */
+export function WidgetToolbarFilterMenu({
+  label,
+  active,
+  ariaLabel = "Filter",
+  children,
+}: WidgetToolbarFilterMenuProps): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number; above: boolean } | null>(null)
+  const triggerRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
+
+  function close(): void {
+    setOpen(false)
+  }
+
+  function openMenu(): void {
+    const rect = triggerRef.current?.getBoundingClientRect()
+    if (rect) {
+      setPos({
+        top: rect.bottom + 4,
+        left: rect.left,
+        minWidth: Math.max(rect.width, 168),
+        above: false,
+      })
+    }
+    setOpen(true)
+  }
+
+  function toggleMenu(): void {
+    if (open) close()
+    else openMenu()
+  }
+
+  useLayoutEffect(() => {
+    if (!open || !triggerRef.current) return
+
+    function measure(): void {
+      const trigger = triggerRef.current
+      if (!trigger) return
+      const rect = trigger.getBoundingClientRect()
+      const panelHeight = panelRef.current?.offsetHeight ?? 240
+      const viewportPad = 8
+      const spaceBelow = window.innerHeight - rect.bottom - viewportPad
+      const spaceAbove = rect.top - viewportPad
+      const above = spaceBelow < panelHeight && spaceAbove > spaceBelow
+      const top = above ? rect.top - viewportPad : rect.bottom + 4
+      setPos({
+        top,
+        left: rect.left,
+        minWidth: Math.max(rect.width, 168),
+        above,
+      })
+    }
+
+    measure()
+    const raf = requestAnimationFrame(measure)
+    const ro = panelRef.current ? new ResizeObserver(measure) : null
+    if (panelRef.current) ro?.observe(panelRef.current)
+    window.addEventListener("resize", measure)
+    window.addEventListener("scroll", measure, true)
+    return () => {
+      cancelAnimationFrame(raf)
+      ro?.disconnect()
+      window.removeEventListener("resize", measure)
+      window.removeEventListener("scroll", measure, true)
+    }
+  }, [open, children])
+
+  useEffect(() => {
+    if (!open) setPos(null)
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    function onKey(e: KeyboardEvent): void {
+      if (e.key === "Escape") close()
+    }
+    document.addEventListener("keydown", onKey)
+    return () => document.removeEventListener("keydown", onKey)
+  }, [open])
+
+  return (
+    <div className="relative shrink-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={ariaLabel}
+        aria-expanded={open}
+        aria-haspopup="menu"
+        onClick={toggleMenu}
+        className={`${LOG_TOOLBAR_CHIP} ${active ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE}`}
+      >
+        {label}
+      </button>
+      {open && createPortal(
+        <>
+          <div
+            className="fixed inset-0"
+            style={{ zIndex: FILTER_MENU_Z_BACKDROP }}
+            onClick={close}
+            aria-hidden
+          />
+          <div
+            ref={panelRef}
+            role="menu"
+            className="fixed max-h-[min(20rem,calc(100dvh-2rem))] overflow-y-auto rounded-md border border-border-subtle bg-elevated py-1 shadow-2xl"
+            style={{
+              zIndex: FILTER_MENU_Z_PANEL,
+              top: pos?.top ?? 0,
+              left: pos?.left ?? 0,
+              minWidth: pos?.minWidth ?? 168,
+              transform: pos?.above ? "translateY(-100%)" : undefined,
+              visibility: pos ? "visible" : "hidden",
+            }}
+          >
+            {children}
+          </div>
+        </>,
+        document.body,
+      )}
+    </div>
+  )
+}
+
+export function WidgetToolbarFilterMenuItem({
+  label,
+  active,
+  count,
+  onClick,
+}: {
+  label: ReactNode
+  active?: boolean
+  count?: number
+  onClick: () => void
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="menuitemcheckbox"
+      aria-checked={active}
+      onClick={onClick}
+      className={`flex w-full items-center justify-between gap-3 px-3 py-2 text-left text-[13px] transition-colors ${
+        active ? "bg-accent/10 text-accent font-medium" : "text-text-muted hover:bg-overlay-2 hover:text-text"
+      }`}
+    >
+      <span>{label}</span>
+      {count != null && count > 0 && (
+        <span className="text-xs tabular-nums text-text-muted/60">{count}</span>
+      )}
+    </button>
   )
 }
 
