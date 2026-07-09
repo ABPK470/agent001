@@ -36,6 +36,11 @@ import {
   USER_GOAL_PIN_SLOT_CLASS,
   USER_GOAL_TEXT_MAX_CLASS,
 } from "../shell/chatLayout.js"
+import {
+  homeTranscriptColumnShellClassName,
+  homeTranscriptScrollClassName,
+  transcriptFadeOverlayClass,
+} from "../shell/chatTranscriptLayout.js"
 import { useComposerDraft } from "../chat/useComposerDraft"
 import { useChatSlashActions } from "../chat/useChatSlashActions"
 import { coerceSlashOnlyInput } from "../chat/commands"
@@ -2565,13 +2570,6 @@ const INITIAL_VISIBLE_RUNS = 10
 /** Older runs revealed + hydrated when the user scrolls into history. */
 const HISTORY_PAGE_SIZE = 5
 
-function homeColumnScrollFadeClass(fadeTop: boolean, fadeBottom: boolean): string {
-  if (!fadeTop && !fadeBottom) return ""
-  if (fadeTop && fadeBottom) return " chathome-column-scroll--fade-y"
-  if (fadeTop) return " chathome-column-scroll--fade-top"
-  return " chathome-column-scroll--fade-bottom"
-}
-
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
@@ -3338,49 +3336,124 @@ export function TermChat({
             : "flex min-h-0 flex-1 flex-col px-6 py-5"
         }
       >
+      {isHomeMode ? (
+        <div className={homeTranscriptColumnShellClassName()}>
+          {transcriptFadeTop && (
+            <div className={transcriptFadeOverlayClass("top")} aria-hidden />
+          )}
+          <div
+            ref={scrollHostRef}
+            {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
+            onScroll={onTranscriptScrollWithRail}
+            className={`${homeTranscriptScrollClassName()}${
+              showEmptyState ? "" : " pb-6"
+            }`}
+            style={{ overflowAnchor: "none" }}
+          >
+            <div
+              ref={transcriptInnerRef}
+              className={
+                showEmptyState
+                  ? "min-h-full flex flex-col justify-center pb-[10vh]"
+                  : "relative space-y-6"
+              }
+              style={{ overflowAnchor: "none" }}
+            >
+              {showEmptyState && (
+                <div className={`chathome-empty-state relative flex flex-col items-center justify-center px-6 text-center ${isHomeMode ? "min-h-[68vh]" : "min-h-[58vh]"}`}>
+                  {isHomeMode && (
+                    <div
+                      aria-hidden="true"
+                      className="chathome-empty-spotlight pointer-events-none absolute inset-x-0 top-1/2 h-[360px] -translate-y-[16%]"
+                    />
+                  )}
+                  <div className={`relative z-10 w-full ${isHomeMode ? "space-y-8" : "max-w-[860px] space-y-8"}`}>
+                    <div className={`chathome-empty-copy ${isHomeMode ? "space-y-3" : "space-y-2"}`}>
+                      <p className={isHomeMode ? "text-[clamp(1.8rem,3.8vw,3.1rem)] leading-[1.02] tracking-[-0.04em] text-text font-medium" : "text-[24px] leading-tight tracking-[-0.02em] text-text font-medium"}>
+                        {isThreadMode ? "Start a new thread" : isHomeMode ? "How can I help?" : "What are you working on?"}
+                      </p>
+                      <p className={isHomeMode ? "text-[14px] leading-6 text-text-muted max-w-[580px] mx-auto" : "text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto"}>
+                        {isHomeMode || isThreadMode
+                          ? "Start with a goal, question, or task."
+                          : "Query business data, inspect metadata or run environment synchronization."}
+                      </p>
+                    </div>
+                    <div className="chathome-empty-input">
+                      <TermChatInputBar
+                        input={input}
+                        isRunning={isRunning}
+                        slashOnlyMode={slashOnlyMode}
+                        slashCommands={slashCommands}
+                        commandConsole={cmdConsole}
+                        pendingInput={pendingInput}
+                        sending={sending}
+                        textareaRef={setTextareaRef}
+                        attachments={pendingAttachments}
+                        onChange={handleInputChange}
+                        onKeyDown={onKey}
+                        onCancel={cancel}
+                        onSend={send}
+                        onAttach={openFilePicker}
+                        onRemoveAttachment={removeAttachment}
+                        className={isHomeMode ? "w-full" : "w-full max-w-[860px]"}
+                        variant={isHomeMode ? "hero" : "default"}
+                        heroRevealProgress={heroRevealProgress}
+                      />
+                    </div>
+                    {attachError && (
+                      <p className="-mt-4 text-[12px] text-error text-center">{attachError}</p>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {!showEmptyState && canLoadMoreHistory && (
+                <div ref={topSentinelRef} className="h-px w-full shrink-0" aria-hidden />
+              )}
+
+              {!showEmptyState && displayRuns.map((run) => (
+                <ChatTurn
+                  key={run.id}
+                  run={run}
+                  isActive={run.id === scopedActiveRunId}
+                  isHomeMode={isHomeMode}
+                  pinProfile={pinProfile}
+                  me={me}
+                  unpinned={unpinnedGoalRunIds.has(run.id)}
+                  onUnpin={unpinGoal}
+                  onClearUnpin={clearUnpinnedGoal}
+                  pendingInput={pendingInput}
+                  onRespond={handleRespond}
+                />
+              ))}
+            </div>
+          </div>
+          {transcriptFadeBottom && (
+            <div className={transcriptFadeOverlayClass("bottom")} aria-hidden />
+          )}
+        </div>
+      ) : (
       <div
         ref={scrollHostRef}
         {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
         onScroll={onTranscriptScrollWithRail}
-        className={
-          isHomeMode
-            ? `relative min-h-0 flex-1 overflow-y-auto ${HOME_CHAT_COLUMN_CLASS}${
-                showEmptyState ? "" : " pb-6"
-              }${homeColumnScrollFadeClass(transcriptFadeTop, transcriptFadeBottom)}`
-            : `relative min-h-0 flex-1 overflow-y-auto ${WIDGET_CHAT_COLUMN_CLASS} space-y-10`
-        }
+        className={`relative min-h-0 flex-1 overflow-y-auto overflow-x-auto ${WIDGET_CHAT_COLUMN_CLASS} space-y-10`}
         style={{ overflowAnchor: "none" }}
       >
         <div
           ref={transcriptInnerRef}
-          className={
-            showEmptyState
-              ? isHomeMode
-                ? "min-h-full flex flex-col justify-center pb-[10vh]"
-                : `${WIDGET_CHAT_COLUMN_CLASS} pb-[10vh] min-h-full flex flex-col justify-center`
-              : isHomeMode
-                ? "relative space-y-6"
-                : `relative ${WIDGET_CHAT_COLUMN_CLASS}`
-          }
+          className={`relative ${WIDGET_CHAT_COLUMN_CLASS}`}
           style={{ overflowAnchor: "none" }}
         >
           {showEmptyState && (
-            <div className={`chathome-empty-state relative flex flex-col items-center justify-center px-6 text-center ${isHomeMode ? "min-h-[68vh]" : "min-h-[58vh]"}`}>
-              {isHomeMode && (
-                <div
-                  aria-hidden="true"
-                  className="chathome-empty-spotlight pointer-events-none absolute inset-x-0 top-1/2 h-[360px] -translate-y-[16%]"
-                />
-              )}
-              <div className={`relative z-10 w-full ${isHomeMode ? "space-y-8" : "max-w-[860px] space-y-8"}`}>
-                <div className={`chathome-empty-copy ${isHomeMode ? "space-y-3" : "space-y-2"}`}>
-                  <p className={isHomeMode ? "text-[clamp(1.8rem,3.8vw,3.1rem)] leading-[1.02] tracking-[-0.04em] text-text font-medium" : "text-[24px] leading-tight tracking-[-0.02em] text-text font-medium"}>
-                    {isThreadMode ? "Start a new thread" : isHomeMode ? "How can I help?" : "What are you working on?"}
+            <div className={`chathome-empty-state relative flex flex-col items-center justify-center px-6 text-center min-h-[58vh]`}>
+              <div className="relative z-10 w-full max-w-[860px] space-y-8">
+                <div className="chathome-empty-copy space-y-2">
+                  <p className="text-[24px] leading-tight tracking-[-0.02em] text-text font-medium">
+                    What are you working on?
                   </p>
-                  <p className={isHomeMode ? "text-[14px] leading-6 text-text-muted max-w-[580px] mx-auto" : "text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto"}>
-                    {isHomeMode || isThreadMode
-                      ? "Start with a goal, question, or task."
-                      : "Query business data, inspect metadata or run environment synchronization."}
+                  <p className="text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto">
+                    Query business data, inspect metadata or run environment synchronization.
                   </p>
                 </div>
                 <div className="chathome-empty-input">
@@ -3400,8 +3473,8 @@ export function TermChat({
                     onSend={send}
                     onAttach={openFilePicker}
                     onRemoveAttachment={removeAttachment}
-                    className={isHomeMode ? "w-full" : "w-full max-w-[860px]"}
-                    variant={isHomeMode ? "hero" : "default"}
+                    className="w-full max-w-[860px]"
+                    variant="default"
                     heroRevealProgress={heroRevealProgress}
                   />
                 </div>
@@ -3431,9 +3504,9 @@ export function TermChat({
               onRespond={handleRespond}
             />
           ))}
-
         </div>
       </div>
+      )}
       </div>
 
       {showJumpButton && !showEmptyState && (

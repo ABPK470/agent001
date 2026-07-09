@@ -2298,11 +2298,39 @@ textarea.input {
  *
  * 1. .chathome-frame mask-image — fades ASCII at viewport edges (texture only).
  *
- * 2. .chathome-column-scroll--fade-* — mask on the centred column scrollport
- *    (the element with overflow-y-auto + HOME_CHAT_COLUMN_CLASS). Text dissolves
- *    into the canvas underneath; no colored scrim, no full-page band.
+ * 2. .chathome-transcript-fade--* — overlay gradients on the column shell
+ *    (pointer-events: none). Never mask the scrollport — mask clips table
+ *    borders and rings in home / thread chat.
  */
 
+.chathome-transcript-fade {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: var(--chathome-scroll-fade-edge);
+  pointer-events: none;
+  z-index: 2;
+}
+
+.chathome-transcript-fade--top {
+  top: 0;
+  background: linear-gradient(
+    to bottom,
+    var(--chathome-scroll-fade) 0%,
+    transparent 100%
+  );
+}
+
+.chathome-transcript-fade--bottom {
+  bottom: 0;
+  background: linear-gradient(
+    to top,
+    var(--chathome-scroll-fade) 0%,
+    transparent 100%
+  );
+}
+
+/* @deprecated — mask on scrollport clipped assistant table borders; use .chathome-transcript-fade */
 .chathome-column-scroll--fade-top {
   -webkit-mask-image: linear-gradient(
     to bottom,

@@ -238,12 +238,12 @@ function StreamingCaret({ compact }: { compact?: boolean }) {
 
 // ── Component ──────────────────────────────────────────────────
 
-// Lightweight compact table — used in TermChat. A simple thin border
-// frames the whole table (header + body) so it reads as a distinct
-// element against the chat background. Header gets a subtle bottom
-// rule and a slightly tinted background; rows have a faint hover tint.
-// Intentionally minimal — no per-cell borders, no chrome bar, no
-// sort/filter UI (that's the heavier DataTable elsewhere).
+// Lightweight compact table — used in TermChat. Inset border on the wrapper
+// (not ring) so home-chat scrollports do not clip the right edge; rings paint
+// outside the box and are clipped by overflow scroll containers.
+export const COMPACT_TABLE_WRAPPER_CLASS =
+  "w-full min-w-0 overflow-x-auto rounded-md border border-border-subtle my-1.5"
+
 function CompactTable({
   headers,
   rows,
@@ -254,7 +254,7 @@ function CompactTable({
   animateRows?: boolean
 }) {
   return (
-    <div className="w-full min-w-0 overflow-x-auto rounded-md ring-1 ring-border-subtle my-1.5">
+    <div className={COMPACT_TABLE_WRAPPER_CLASS}>
       {/*
         `w-auto min-w-full`: let the table choose its natural column widths
         (so 10-column result sets don't get squished into the viewport) but
