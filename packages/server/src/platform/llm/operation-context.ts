@@ -57,12 +57,20 @@ export function emitLlmInteractionRequired(prompt: LlmInteractionPrompt): void {
 }
 
 export function emitLlmInteractionCleared(): void {
-  if (!bound) return
+  const ctx = bound
+  if (!ctx) return
   broadcast({
     type: EventType.LlmInteractionCleared,
     data: {
-      operationKind: bound.operationKind,
-      operationId: bound.operationId,
+      operationKind: ctx.operationKind,
+      operationId: ctx.operationId,
     },
+  })
+}
+
+export function clearLlmInteractionForOperation(operationKind: string, operationId: string): void {
+  broadcast({
+    type: EventType.LlmInteractionCleared,
+    data: { operationKind, operationId },
   })
 }

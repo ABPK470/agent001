@@ -321,8 +321,8 @@ export function ActiveOperationBanner({
 }): JSX.Element {
   return (
     <div className="flex shrink-0 flex-col gap-0 border-b border-border-subtle">
-      <div className="flex items-center gap-2 px-3 py-2 text-xs text-text-muted">
-        <Loader2 size={14} className="shrink-0 animate-spin text-accent" aria-hidden />
+      <div className="flex items-center gap-2.5 px-3 py-2.5 text-sm text-text-muted">
+        <Loader2 size={16} className="shrink-0 animate-spin text-accent" aria-hidden />
         <span className="min-w-0 flex-1">
           {label}
           {detail ? <span className="text-text">{detail}</span> : null}
@@ -332,9 +332,9 @@ export function ActiveOperationBanner({
             type="button"
             onClick={onCancel}
             disabled={cancelBusy}
-            className="shrink-0 rounded-md border border-border-subtle px-2 py-0.5 text-text-muted transition-colors hover:bg-overlay-2 hover:text-text disabled:opacity-40"
+            className="shrink-0 rounded-md border border-border-subtle px-2.5 py-1 text-sm text-text-muted transition-colors hover:bg-overlay-2 hover:text-text disabled:opacity-40"
           >
-            {cancelBusy ? <Loader2 size={12} className="animate-spin" /> : cancelLabel}
+            {cancelBusy ? <Loader2 size={14} className="animate-spin" /> : cancelLabel}
           </button>
         ) : null}
       </div>

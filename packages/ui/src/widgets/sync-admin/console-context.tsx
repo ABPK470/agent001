@@ -1,61 +1,34 @@
-import { X } from "lucide-react"
 import type { JSX, ReactNode } from "react"
-import { createContext, useCallback, useContext, useMemo, useState } from "react"
-
-interface Notice {
-  text: string
-  kind: "ok" | "err"
-}
+import { createContext, useCallback, useContext, useMemo } from "react"
+import { ToastStack, useToasts } from "../../components/ToastStack"
 
 interface ConsoleContextValue {
-  notice: Notice | null
   notify: (message: string) => void
   notifyError: (message: string) => void
-  clearNotice: () => void
+  notifyInfo: (message: string) => void
 }
 
 const ConsoleContext = createContext<ConsoleContextValue | null>(null)
 
 export function ConsoleProvider({ children }: { children: ReactNode }): JSX.Element {
-  const [notice, setNotice] = useState<Notice | null>(null)
+  const { toasts, pushToast, dismissToast } = useToasts({ ok: 6_000, err: 12_000, info: 6_000 })
 
-  const notify = useCallback((message: string) => {
-    setNotice({ text: message, kind: "ok" })
-    window.setTimeout(() => setNotice((n) => (n?.text === message ? null : n)), 2200)
-  }, [])
-
-  const notifyError = useCallback((message: string) => {
-    setNotice({ text: message, kind: "err" })
-  }, [])
-
-  const clearNotice = useCallback(() => setNotice(null), [])
+  const notify = useCallback((message: string) => pushToast(message, "ok"), [pushToast])
+  const notifyError = useCallback((message: string) => pushToast(message, "err"), [pushToast])
+  const notifyInfo = useCallback((message: string) => pushToast(message, "info"), [pushToast])
 
   const value = useMemo(
-    () => ({ notice, notify, notifyError, clearNotice }),
-    [notice, notify, notifyError, clearNotice],
+    () => ({ notify, notifyError, notifyInfo }),
+    [notify, notifyError, notifyInfo],
   )
 
-  return <ConsoleContext.Provider value={value}>{children}</ConsoleContext.Provider>
-}
-
-/** Place inside the widget padding shell — matches entity-registry toast position. */
-export function ConsoleNotice(): JSX.Element | null {
-  const { notice, clearNotice } = useConsole()
-  if (!notice) return null
   return (
-    <div
-      className={[
-        "mb-2 flex shrink-0 items-center gap-2 rounded-lg border px-3 py-1.5 text-xs",
-        notice.kind === "err"
-          ? "border-error/30 text-error"
-          : "border-border-subtle text-text-muted",
-      ].join(" ")}
-    >
-      <span className="min-w-0 flex-1 truncate">{notice.text}</span>
-      <button type="button" onClick={clearNotice} aria-label="Dismiss" className="shrink-0 opacity-60 hover:opacity-100">
-        <X className="h-3 w-3" />
-      </button>
-    </div>
+    <ConsoleContext.Provider value={value}>
+      <div className="relative flex h-full min-h-0 flex-1 flex-col">
+        {children}
+        <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      </div>
+    </ConsoleContext.Provider>
   )
 }
 

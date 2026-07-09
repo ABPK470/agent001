@@ -14,7 +14,7 @@ export function RunProposerModal({
 }: {
   connections: SyncEnvironmentAdmin[]
   onClose: () => void
-  onStarted?: (source: string, target: string) => void
+  onStarted?: (source: string, target: string, runId: string) => void
 }): JSX.Element {
   const { notify, notifyError } = useConsole()
   const options = useMemo<ListboxOption<string>[]>(
@@ -30,8 +30,8 @@ export function RunProposerModal({
     if (source === target) return notifyError("Source and target must differ")
     setBusy(true)
     try {
-      await api.triggerProposerRun(source, target)
-      onStarted?.(source, target)
+      const res = await api.triggerProposerRun(source, target)
+      onStarted?.(source, target, res.runId)
       notify(`Scan started · ${source} → ${target}`)
       onClose()
     } catch (e) {

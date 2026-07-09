@@ -10,6 +10,7 @@ import { broadcast } from "../../platform/events/broadcaster.js"
 import * as db from "../../platform/persistence/sqlite.js"
 import { runProposer } from "./application/runner.js"
 import { cancelOperation } from "../../platform/operations/cancel-registry.js"
+import { clearLlmInteractionForOperation } from "../../platform/llm/operation-context.js"
 import { deleteSchedule, listSchedules, upsertSchedule } from "./runtime/scheduler.js"
 
 const DEFAULT_TENANT_ID = "_default"
@@ -44,11 +45,19 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
     }
     const tenantId = resolveTenant(req)
     const envPair = { source, target }
+    const runId = db.createProposerRun({
+      tenantId,
+      source,
+      target,
+      triggeredBy: req.session.upn,
+      trigger: "manual",
+    })
     const options = {
       tenantId,
       triggeredBy: req.session.upn,
       trigger: "manual" as const,
       llm: deps.getLlm?.() ?? null,
+      runId,
     }
 
     void runProposer(deps.host, envPair, options).catch((error) => {
@@ -57,7 +66,7 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
     })
 
     reply.code(202)
-    return { accepted: true, source, target }
+    return { accepted: true, source, target, runId }
   })
 
   app.post<{ Params: { id: string } }>("/api/proposer/runs/:id/cancel", async (req, reply) => {
@@ -65,15 +74,33 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
       reply.code(403)
       return { error: "admin only" }
     }
-    const cancelled = cancelOperation("proposer.run", req.params.id)
-    if (!cancelled) {
-      const row = db.getProposerRun(req.params.id)
-      if (!row || (row.status !== "running" && row.status !== "pending")) {
-        reply.code(404)
-        return { error: "No active run to cancel" }
-      }
+    const runId = req.params.id
+    const row = db.getProposerRun(runId)
+    if (!row || (row.status !== "running" && row.status !== "pending")) {
+      reply.code(404)
+      return { error: "No active run to cancel" }
     }
-    return { cancelled: true, runId: req.params.id }
+
+    const aborted = cancelOperation("proposer.run", runId)
+    clearLlmInteractionForOperation("proposer.run", runId)
+    if (!aborted) {
+      db.finishProposerRun({
+        id: runId,
+        status: "cancelled",
+        counts: { scanned: row.scanned, produced: row.produced, errors: row.errors },
+        durationMs: row.duration_ms ?? 0,
+        error: "Cancelled by user",
+      })
+      broadcast({
+        type: EventType.SyncProposerRunCancelled,
+        data: {
+          runId,
+          envPair: { source: row.source, target: row.target },
+          reason: "Cancelled by user",
+        },
+      })
+    }
+    return { cancelled: true, runId }
   })
 
   app.get<{

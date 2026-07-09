@@ -43,7 +43,7 @@ import {
   type ProposalRow
 } from "../../../platform/persistence/proposals.js"
 import { probeRowDivergence } from "../../runs/core/proposer/divergence-probe.js"
-import { bindLlmOperationContext, emitLlmInteractionCleared } from "../../../platform/llm/operation-context.js"
+import { bindLlmOperationContext, clearLlmInteractionForOperation, emitLlmInteractionCleared } from "../../../platform/llm/operation-context.js"
 import {
   registerOperation,
   throwIfCancelled,
@@ -56,6 +56,8 @@ export interface ProposerRunnerOptions extends ProposerPassOptions {
   trigger: "schedule" | "manual" | "retry"
   /** Inject the LLM port when annotation should run; null/undefined skips it. */
   llm?: LlmCompletionPort | null
+  /** When set, the run row was created by the route so the client gets an id immediately. */
+  runId?: string
 }
 
 export interface ProposerRunnerResult {
@@ -76,7 +78,7 @@ export async function runProposer(
   envPair: EnvPair,
   options: ProposerRunnerOptions
 ): Promise<ProposerRunnerResult> {
-  const runId = createProposerRun({
+  const runId = options.runId ?? createProposerRun({
     tenantId: options.tenantId,
     source: envPair.source,
     target: envPair.target,
@@ -118,8 +120,8 @@ export async function runProposer(
       try {
         annotatedCount = await annotateInserted(options.tenantId, insertedIds, options.llm, signal)
       } finally {
-        bindLlmOperationContext(null)
         emitLlmInteractionCleared()
+        bindLlmOperationContext(null)
       }
       throwIfCancelled(signal)
     }
@@ -172,8 +174,8 @@ export async function runProposer(
     broadcast({ type: EventType.SyncProposerRunFailed, data: { runId, error: msg } })
     throw e
   } finally {
-    bindLlmOperationContext(null)
     emitLlmInteractionCleared()
+    bindLlmOperationContext(null)
     unregisterOperation("proposer.run", runId)
   }
 }

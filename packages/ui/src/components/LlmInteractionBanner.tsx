@@ -13,7 +13,7 @@ export function LlmInteractionBanner({
   const providerLabel = interaction.provider.replace(/-/g, " ")
 
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-t border-accent/20 bg-accent/5 px-3 py-2 text-xs text-text">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1.5 border-t border-accent/20 bg-accent/5 px-3 py-2.5 text-sm text-text">
       <span className="text-text-muted">
         {interaction.title}
         <span className="text-text-muted/60"> · {providerLabel}</span>
@@ -29,14 +29,14 @@ export function LlmInteractionBanner({
           className="inline-flex items-center gap-1 font-medium text-accent hover:underline"
         >
           {interaction.kind === "device_auth" ? "Open authorization" : "Open link"}
-          <ExternalLink size={12} />
+          <ExternalLink size={14} />
         </a>
       )}
       {interaction.code && (
-        <span className="font-mono tracking-wider text-text">{interaction.code}</span>
+        <span className="font-mono text-base tracking-wider text-text">{interaction.code}</span>
       )}
       {onDismiss && (
-        <button type="button" onClick={onDismiss} className="ml-auto text-text-muted hover:text-text">
+        <button type="button" onClick={onDismiss} className="ml-auto text-sm text-text-muted hover:text-text">
           Hide
         </button>
       )}

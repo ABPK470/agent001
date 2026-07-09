@@ -5,7 +5,7 @@
 import { EventType } from "@mia/shared-enums"
 import { Clock, Loader2, Play, ShieldCheck, X } from "lucide-react"
 import type { JSX } from "react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../api"
 import { LlmInteractionBanner } from "../../components/LlmInteractionBanner"
 import { useLlmInteraction } from "../../hooks/useLlmInteraction"
@@ -15,6 +15,7 @@ import { timeAgo } from "../../util"
 import { DetailField, DetailGrid } from "../entity-registry/DetailField"
 import { DetailActionBtn, PromptModal } from "./chrome"
 import { useConsole } from "./console-context"
+import { approvalRequired, normalizeApprovalPolicyRow, resolveApprovalPolicy, type ApprovalPolicyRow } from "./approval-policy"
 import { TAB_PILL } from "./design"
 import { RunProposerModal } from "./RunProposerModal"
 import {
@@ -58,6 +59,7 @@ export function ProposalsPanel(): JSX.Element {
   const [scanOpen, setScanOpen] = useState(false)
   const [prompt, setPrompt] = useState<{ kind: "dismiss" | "snooze"; proposal: Proposal } | null>(null)
   const [promptBusy, setPromptBusy] = useState(false)
+  const [approvalPolicies, setApprovalPolicies] = useState<ApprovalPolicyRow[]>([])
 
   const chosen = useMemo(() => items.find((p) => p.id === selected) ?? null, [items, selected])
 
@@ -77,6 +79,8 @@ export function ProposalsPanel(): JSX.Element {
     }
   }, [statusFilter, notifyError])
 
+  const dismissLlmRef = useRef<() => void>(() => {})
+
   const {
     scanning,
     noteScanStarted,
@@ -88,7 +92,9 @@ export function ProposalsPanel(): JSX.Element {
       void refresh()
     },
     onFailed: (message) => notifyError(message),
-    onCancelled: (message) => notify(message),
+    onCancelled: () => {
+      dismissLlmRef.current()
+    },
   })
 
   const llmInteractionFilter = useMemo(
@@ -96,6 +102,13 @@ export function ProposalsPanel(): JSX.Element {
     [scanning?.runId],
   )
   const { interaction: llmInteraction, dismiss: dismissLlmInteraction } = useLlmInteraction(llmInteractionFilter)
+  dismissLlmRef.current = dismissLlmInteraction
+
+  const handleCancelScan = useCallback(async (): Promise<void> => {
+    dismissLlmInteraction()
+    const cancelled = await cancelScan()
+    if (cancelled) notify("Scan cancelled")
+  }, [cancelScan, dismissLlmInteraction, notify])
 
   useLiveReload(
     refresh,
@@ -110,6 +123,21 @@ export function ProposalsPanel(): JSX.Element {
   useEffect(() => {
     void api.listSyncEnvironments().then(setConnections).catch(() => setConnections([]))
   }, [])
+
+  const refreshPolicies = useCallback(async (): Promise<void> => {
+    try {
+      const rows = await api.listApprovalPolicies()
+      setApprovalPolicies((rows as Array<Record<string, unknown>>).map(normalizeApprovalPolicyRow))
+    } catch {
+      setApprovalPolicies([])
+    }
+  }, [])
+
+  useEffect(() => { void refreshPolicies() }, [refreshPolicies])
+
+  useLiveReload(refreshPolicies, (t) =>
+    t === EventType.SyncPolicySaved || t === EventType.SyncPolicyDeleted,
+  )
 
   async function transition(p: Proposal, to: string, reason?: string): Promise<void> {
     try {
@@ -134,13 +162,11 @@ export function ProposalsPanel(): JSX.Element {
   return (
     <>
       <ConsolePanel>
-        {(scanning || llmInteraction) && (
+        {scanning && (
           <ActiveOperationBanner
             label="Scanning "
-            detail={scanning ? (
-              <span className="font-mono"> {scanning.source} → {scanning.target}</span>
-            ) : undefined}
-            onCancel={isAdmin ? () => void cancelScan() : undefined}
+            detail={<span className="font-mono"> {scanning.source} → {scanning.target}</span>}
+            onCancel={isAdmin ? () => void handleCancelScan() : undefined}
             cancelBusy={cancelBusy}
           >
             {llmInteraction && (
@@ -210,6 +236,7 @@ export function ProposalsPanel(): JSX.Element {
               <ProposalDetail
                 proposal={chosen}
                 isAdmin={isAdmin}
+                approvalPolicies={approvalPolicies}
                 onTransition={transition}
                 onRequestApproval={async (p) => {
                   try {
@@ -262,15 +289,20 @@ export function ProposalsPanel(): JSX.Element {
   )
 }
 
-function ProposalDetail({ proposal, isAdmin, onTransition, onRequestApproval, onDismiss, onSnooze }: {
+function ProposalDetail({ proposal, isAdmin, approvalPolicies, onTransition, onRequestApproval, onDismiss, onSnooze }: {
   proposal: Proposal
   isAdmin: boolean
+  approvalPolicies: ApprovalPolicyRow[]
   onTransition: (p: Proposal, to: string, reason?: string) => Promise<void>
   onRequestApproval: (p: Proposal) => Promise<void>
   onDismiss: () => void
   onSnooze: () => void
 }): JSX.Element {
   const counts = proposal.counts ?? { insert: 0, update: 0, delete: 0 }
+  const isPreviewed = proposal.status === "previewed"
+  const isAwaitingApproval = proposal.status === "awaiting_approval"
+  const policyKind = resolveApprovalPolicy(approvalPolicies, proposal.target, proposal.risk_tier)
+  const needsApproval = approvalRequired(policyKind)
 
   return (
     <DetailBody>
@@ -293,12 +325,23 @@ function ProposalDetail({ proposal, isAdmin, onTransition, onRequestApproval, on
       )}
       {isAdmin && (
         <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-border-subtle pt-3">
-          <DetailActionBtn onClick={() => void onTransition(proposal, "previewed", "previewed")}>
+          <DetailActionBtn
+            disabled={isPreviewed}
+            title={isPreviewed ? "Already marked as previewed" : "Mark as reviewed"}
+            onClick={() => void onTransition(proposal, "previewed", "previewed")}
+          >
             Previewed
           </DetailActionBtn>
-          <DetailActionBtn variant="info" onClick={() => void onRequestApproval(proposal)}>
-            <ShieldCheck size={14} /> Request approval
-          </DetailActionBtn>
+          {needsApproval && !isAwaitingApproval && (
+            <DetailActionBtn variant="info" onClick={() => void onRequestApproval(proposal)}>
+              <ShieldCheck size={14} /> Request approval
+            </DetailActionBtn>
+          )}
+          {isAwaitingApproval && (
+            <DetailActionBtn variant="info" disabled title="Approval already requested">
+              <ShieldCheck size={14} /> Awaiting approval
+            </DetailActionBtn>
+          )}
           <DetailActionBtn onClick={onSnooze}>
             <Clock size={14} /> Snooze
           </DetailActionBtn>

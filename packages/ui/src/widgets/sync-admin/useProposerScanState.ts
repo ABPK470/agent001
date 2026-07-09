@@ -10,6 +10,25 @@ export interface ActiveScan {
   target: string
 }
 
+function pairKey(source: string, target: string): string {
+  return `${source}\0${target}`
+}
+
+async function resolveActiveRunId(scan: ActiveScan): Promise<string | null> {
+  if (scan.runId) return scan.runId
+  const rows = await api.listProposerRuns({ limit: 20 })
+  const match = rows.find((row) => {
+    const status = String(row.status ?? "")
+    const source = String(row.source ?? "")
+    const target = String(row.target ?? "")
+    return (status === "running" || status === "pending")
+      && source === scan.source
+      && target === scan.target
+  })
+  const id = match ? String(match.id ?? "") : ""
+  return id || null
+}
+
 export function useProposerScanState({
   onCompleted,
   onFailed,
@@ -20,14 +39,16 @@ export function useProposerScanState({
   onCancelled?: (message: string) => void
 } = {}): {
   scanning: ActiveScan | null
-  noteScanStarted: (source: string, target: string) => void
-  cancelScan: () => Promise<void>
+  noteScanStarted: (source: string, target: string, runId?: string) => void
+  cancelScan: () => Promise<ActiveScan | null>
   cancelBusy: boolean
 } {
   const [scanning, setScanning] = useState<ActiveScan | null>(null)
   const [cancelBusy, setCancelBusy] = useState(false)
   const logLen = useStore((s) => s.sseEventLog.length)
   const lastIdx = useRef(0)
+  const suppressedPairsRef = useRef<Set<string>>(new Set())
+  const suppressedRunIdsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
     void api.listProposerRuns({ limit: 10 }).then((rows) => {
@@ -36,9 +57,10 @@ export function useProposerScanState({
       const id = String(active.id ?? "")
       const source = String(active.source ?? "")
       const target = String(active.target ?? "")
-      if (id && source && target) {
-        setScanning({ runId: id, source, target })
-      }
+      if (!id || !source || !target) return
+      if (suppressedRunIdsRef.current.has(id)) return
+      if (suppressedPairsRef.current.has(pairKey(source, target))) return
+      setScanning({ runId: id, source, target })
     }).catch(() => {})
   }, [])
 
@@ -54,22 +76,33 @@ export function useProposerScanState({
       if (type === EventType.SyncProposerRunStarted) {
         const envPair = data.envPair as { source?: string; target?: string } | undefined
         const runId = String(data.runId ?? "")
-        if (runId && envPair?.source && envPair?.target) {
-          setScanning({ runId, source: envPair.source, target: envPair.target })
-        }
+        if (!runId || !envPair?.source || !envPair?.target) continue
+        if (suppressedRunIdsRef.current.has(runId)) continue
+        if (suppressedPairsRef.current.has(pairKey(envPair.source, envPair.target))) continue
+        setScanning({ runId, source: envPair.source, target: envPair.target })
       }
 
       if (type === EventType.SyncProposerRunCompleted) {
+        const runId = String(data.runId ?? "")
+        suppressedRunIdsRef.current.delete(runId)
         setScanning(null)
         onCompleted?.(Number(data.inserted ?? 0))
       }
 
       if (type === EventType.SyncProposerRunFailed) {
+        const runId = String(data.runId ?? "")
+        suppressedRunIdsRef.current.delete(runId)
         setScanning(null)
         onFailed?.(String(data.error ?? "Scan failed"))
       }
 
       if (type === EventType.SyncProposerRunCancelled) {
+        const runId = String(data.runId ?? "")
+        const envPair = data.envPair as { source?: string; target?: string } | undefined
+        if (runId) suppressedRunIdsRef.current.add(runId)
+        if (envPair?.source && envPair?.target) {
+          suppressedPairsRef.current.add(pairKey(envPair.source, envPair.target))
+        }
         setScanning(null)
         onCancelled?.(String(data.reason ?? "Scan cancelled"))
       }
@@ -77,22 +110,37 @@ export function useProposerScanState({
     lastIdx.current = log.length
   }, [logLen, onCompleted, onFailed, onCancelled])
 
-  const noteScanStarted = useCallback((source: string, target: string) => {
-    setScanning((prev) => prev ?? { runId: "", source, target })
+  const noteScanStarted = useCallback((source: string, target: string, runId = "") => {
+    suppressedPairsRef.current.delete(pairKey(source, target))
+    if (runId) suppressedRunIdsRef.current.delete(runId)
+    setScanning((prev) => {
+      if (prev?.source === source && prev.target === target) {
+        return runId ? { ...prev, runId } : prev
+      }
+      return { runId, source, target }
+    })
   }, [])
 
-  const cancelScan = useCallback(async (): Promise<void> => {
-    if (!scanning?.runId) {
-      setScanning(null)
-      return
-    }
+  const cancelScan = useCallback(async (): Promise<ActiveScan | null> => {
+    if (!scanning) return null
+
+    const snapshot = scanning
+    const key = pairKey(snapshot.source, snapshot.target)
+    suppressedPairsRef.current.add(key)
+    setScanning(null)
+
     setCancelBusy(true)
     try {
-      await api.cancelProposerRun(scanning.runId)
+      const runId = await resolveActiveRunId(snapshot)
+      if (runId) {
+        suppressedRunIdsRef.current.add(runId)
+        await api.cancelProposerRun(runId)
+      }
     } finally {
       setCancelBusy(false)
     }
-  }, [scanning?.runId])
+    return snapshot
+  }, [scanning])
 
   return {
     scanning,

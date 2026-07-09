@@ -53,6 +53,10 @@ export function useLlmInteraction(filter?: LlmInteractionFilter): {
   const lastIdx = useRef(0)
 
   useEffect(() => {
+    if (!filter?.operationId) setInteraction(null)
+  }, [filter?.operationId])
+
+  useEffect(() => {
     const log = useStore.getState().sseEventLog
     if (logLen < lastIdx.current) lastIdx.current = 0
     for (let i = lastIdx.current; i < log.length; i++) {

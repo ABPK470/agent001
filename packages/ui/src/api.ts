@@ -811,7 +811,7 @@ export const api = {
   },
   triggerProposerRun: (source: string, target: string, tenant?: string) => {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
-    return json<{ accepted: boolean; source: string; target: string }>(`/api/proposer/run${qs}`, {
+    return json<{ accepted: boolean; source: string; target: string; runId: string }>(`/api/proposer/run${qs}`, {
       method: "POST", body: JSON.stringify({ source, target }),
     })
   },

@@ -712,6 +712,34 @@ body {
   font-weight: 400;
 }
 
+/* Section nav — slightly larger labels, inline count badges, no menu gutter */
+.sync-admin .entity-rail-item-wrap:hover .entity-rail-item,
+.sync-admin .entity-rail-item-wrap--active .entity-rail-item {
+  padding-right: 0.15rem;
+}
+
+.sync-admin .entity-rail-item-title.sync-admin-nav-title {
+  font-size: 0.9375rem;
+  color: inherit;
+}
+
+.sync-admin-nav-badge {
+  flex-shrink: 0;
+  align-self: center;
+  margin-right: 0.35rem;
+  min-width: 1.375rem;
+  padding: 0.125rem 0.4375rem;
+  border-radius: 9999px;
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  font-size: 0.75rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  line-height: 1.2;
+  text-align: center;
+  color: var(--color-accent);
+  pointer-events: none;
+}
+
 .entity-registry [aria-haspopup="listbox"]:focus,
 .entity-registry [aria-haspopup="listbox"]:focus-visible,
 .modal-surface [aria-haspopup="listbox"]:focus,
