@@ -833,6 +833,11 @@ textarea.input {
   font-size: 0.875rem;
 }
 
+/* Sync Definition modal — column header sits above the scrolling row list */
+.env-sync-definition-table-header {
+  box-shadow: 0 1px 0 var(--color-border-subtle);
+}
+
 .env-sync-field {
   display: inline-flex;
   align-items: center;
