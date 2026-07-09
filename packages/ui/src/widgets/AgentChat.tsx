@@ -6,6 +6,7 @@
  * Includes agent picker to select which configured agent to use.
  */
 
+import { toolCallDetailPreview } from "@mia/shared-types"
 import { AlertCircle, Brain, CheckCircle2, ChevronDown, ChevronRight, Clock, FolderOpen, Loader2, MessageSquare, Mic, MicOff, Paperclip, Send, ShieldAlert, Square, User, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
@@ -18,6 +19,12 @@ import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
 import { CHAT_SCROLL_HOST_ATTR, preserveScrollAnchor } from "../lib/chatScroll"
+import { useComposerDraft } from "../chat/useComposerDraft"
+import { useChatSlashActions } from "../chat/useChatSlashActions"
+import { coerceSlashOnlyInput } from "../chat/commands"
+import { useSlashCommandInput } from "../chat/useSlashCommandInput"
+import { ChatComposerShell } from "../chat/ChatComposerShell"
+import { useCommandConsole } from "../chat/useCommandConsole"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
@@ -91,13 +98,14 @@ const TOOL_LABELS: Record<string, string> = {
   list_directory:        "Listing directory",
   search_files:          "Searching files",
   run_command:           "Running command",
-  browse_web:            "Browsing web",
   fetch_url:             "Fetching URL",
   think:                 "Thinking",
   ask_user:              "Asking user",
-  browser_check:         "Checking browser",
   sync_preview:          "Previewing sync",
   sync_execute:          "Executing sync",
+  list_sync_definitions: "Listing sync definitions",
+  resolve_sync_scope:    "Resolving sync scope",
+  sync_diff_scan:        "Scanning diffs",
   list_environments:     "Listing environments",
   compare_catalogs:      "Comparing catalogs",
 }
@@ -135,52 +143,8 @@ function formatToolOutput(output: Record<string, unknown>, error: string | null)
   catch { return String(result ?? "") }
 }
 
-// Brief detail extractor — pulls the most human-readable arg from tool inputs
 function getToolDetail(tool: string, input: Record<string, unknown>): string | null {
-  switch (tool) {
-    case "query_mssql":
-    case "export_query_to_file": {
-      const q = String(input["query"] ?? "").trim()
-      if (!q) return null
-      // First meaningful line, stripped of leading whitespace, max 120 chars
-      const firstLine = q.replace(/\s+/g, " ").slice(0, 120)
-      return firstLine + (q.length > 120 ? "…" : "")
-    }
-    case "search_catalog":
-      return String(input["query"] ?? input["q"] ?? "")  || null
-    case "inspect_definition":
-      return String(input["name"] ?? input["objectName"] ?? "") || null
-    case "explore_mssql_schema":
-      return String(input["table"] ?? input["schema"] ?? "") || null
-    case "read_file":
-    case "write_file":
-    case "append_file":
-    case "replace_in_file":
-    case "list_directory":
-      return String(input["path"] ?? input["filePath"] ?? "") || null
-    case "search_files":
-      return String(input["pattern"] ?? input["query"] ?? "") || null
-    case "run_command":
-      return String(input["command"] ?? "").slice(0, 120) || null
-    case "fetch_url":
-    case "browse_web":
-      return String(input["url"] ?? "") || null
-    case "sync_preview":
-    case "sync_execute": {
-      const parts: string[] = []
-      if (input["planId"]) parts.push(`planId=${input["planId"]}`)
-      if (input["confirm"] !== undefined) parts.push(`confirm=${input["confirm"]}`)
-      if (input["entityType"]) parts.push(`${input["entityType"]}`)
-      if (input["entityId"]) parts.push(`#${input["entityId"]}`)
-      return parts.join(" ") || null
-    }
-    default:
-      // Fallback: first string-valued arg
-      for (const v of Object.values(input)) {
-        if (typeof v === "string" && v.trim()) return v.slice(0, 100)
-      }
-      return null
-  }
+  return toolCallDetailPreview(tool, input)
 }
 
 // ── Workspace changes card ─────────────────────────────────────────
@@ -305,12 +269,12 @@ function WorkspaceChangesCard({
 }
 
 export function AgentChat() {
-  const [input, setInput] = useState("")
   const [sending, setSending] = useState(false)
   const [listening, setListening] = useState(false)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [pickerOpen, setPickerOpen] = useState(false)
   const [attachments, setAttachments] = useState<{ id: string; name: string; sizeBytes: number }[]>([])
+  const cmdConsole = useCommandConsole()
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
@@ -347,11 +311,52 @@ export function AgentChat() {
   const activeRun = runs.find((r) => r.id === activeRunId)
   const trace = activeRun?.trace ?? []
   const streamingAnswer = activeRun?.streamingAnswer ?? ""
-  const coherentStream = activeRun?.coherentStream ?? ""
   const isRunning = activeRun?.status === "pending" || activeRun?.status === "running" || activeRun?.status === "planning"
-  const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
-
   const [scrollToRunId, setScrollToRunId] = useState<string | null>(null)
+
+  const activeThreadId = useStore((s) => s.activeThreadId)
+  const { draft: input, setDraft, clearDraft } = useComposerDraft(activeThreadId)
+  const scopedRuns = useMemo(
+    () => runs.filter((r) => r.threadId === activeThreadId),
+    [runs, activeThreadId],
+  )
+
+  const { tryDispatchSlash, slashCommands, slashOnlyMode } = useChatSlashActions({
+    activeThreadId,
+    runs: scopedRuns,
+    runStatus: activeRun?.status,
+    hasPendingInput: Boolean(pendingInput),
+    onRunStarted: (runId) => {
+      setActiveRun(runId)
+      setScrollToRunId(runId)
+    },
+    console: cmdConsole.api,
+    openFilePicker: () => fileInputRef.current?.click(),
+  })
+
+  useEffect(() => {
+    if (!slashOnlyMode) return
+    if (input && !input.startsWith("/")) clearDraft()
+    if (attachments.length > 0) setAttachments([])
+  }, [slashOnlyMode, input, attachments.length, clearDraft])
+
+  const collapseComposer = useCallback(() => {
+    cmdConsole.clear()
+    clearDraft()
+  }, [cmdConsole, clearDraft])
+
+  const hasResult = cmdConsole.pinnedOpen && cmdConsole.lines.length > 0
+  const { palette: slashPalette, handleKeyDown: handleSlashKeyDown } = useSlashCommandInput({
+    value: input,
+    onChange: setDraft,
+    commands: slashCommands,
+    disabled: sending || !!pendingInput,
+    variant: "term",
+    onCollapse: collapseComposer,
+    hasResult,
+  })
+
+  const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
 
   const {
     scrollHostRef: scrollContainerRef,
@@ -422,13 +427,6 @@ export function AgentChat() {
       if (e.kind === "planner-escalation") return "Escalating"
       if (e.kind === "planner-sql-quality") return e.phase === "blocked" ? "Blocking SQL query" : "Reviewing SQL query"
 
-      // Coherent generation phases
-      if (e.kind === "coherent-generation-repair-needed") return `Repairing — ${e.issueCount} issue${e.issueCount !== 1 ? "s" : ""}`
-      if (e.kind === "coherent-generation-verified") return "Verifying"
-      if (e.kind === "coherent-generation-materialized") return "Writing files"
-      if (e.kind === "coherent-generation-bundle") return `Bundling ${e.artifactCount} file${e.artifactCount !== 1 ? "s" : ""}`
-      if (e.kind === "coherent-generation-start") return "Generating"
-
       // Planner pipeline phases
       if (e.kind === "planner-pipeline-start") return "Pipeline"
       if (e.kind === "planner-plan-generated") return `Plan — ${e.stepCount} step${e.stepCount !== 1 ? "s" : ""}`
@@ -485,18 +483,31 @@ export function AgentChat() {
     if (!goal && attachments.length === 0) return
     if (sending) return
 
-    // Goal text is sent verbatim. Attachments travel as durable
+    if (slashOnlyMode && !goal.startsWith("/")) return
+
+    if (goal.startsWith("/")) {
+      const handled = await tryDispatchSlash(goal)
+      if (handled) {
+        clearDraft()
+        return
+      }
+    }
+
+    if (isRunning && !slashOnlyMode) return
+
     // attachmentIds; the agent uses list_attachments / read_attachment /
     // import_attachment to inspect or pull them into the sandbox.
     const attachmentIds = attachments.map((a) => a.id)
 
     setSending(true)
-    setInput("")
+    clearDraft()
     setAttachments([])
     if (textareaRef.current) textareaRef.current.style.height = "auto"
     try {
       const agentId = selectedAgent?.id
-      const { runId } = await api.startRun(goal, agentId, attachmentIds)
+      const threadId = useStore.getState().activeThreadId
+      if (!threadId) throw new Error("No thread selected")
+      const { runId } = await api.startRun(goal, agentId, attachmentIds, threadId)
       setActiveRun(runId)
       setScrollToRunId(runId)
       requestAnimationFrame(() => scrollToBottom("instant"))
@@ -508,7 +519,7 @@ export function AgentChat() {
       console.error("Failed to start run:", err)
       setError(`Failed to start run: ${msg}`)
       setActiveRun(null)
-      setInput(goal)
+      setDraft(goal)
       setAttachments(attachments)
     } finally {
       setSending(false)
@@ -527,7 +538,7 @@ export function AgentChat() {
         continue
       }
       try {
-        const meta = await api.uploadAttachment(file, { scope: "session" })
+        const meta = await api.uploadAttachment(file, { scope: "user_draft" })
         setAttachments((prev) => [...prev, { id: meta.id, name: meta.normalizedName, sizeBytes: meta.sizeBytes }])
       } catch (err) {
         console.error(`Upload failed for "${file.name}":`, err)
@@ -569,7 +580,7 @@ export function AgentChat() {
           }
         }
       }
-      setInput(finalTranscript + interim)
+      setDraft(finalTranscript + interim)
     }
 
     recognition.onend = () => {
@@ -586,8 +597,14 @@ export function AgentChat() {
     setListening(true)
   }, [listening])
 
-  // Show recent runs as "conversation"
-  const recentRuns = runs.slice(0, 20)
+  // Show recent runs as "conversation" (newest first regardless of store order).
+  const recentRuns = useMemo(
+    () =>
+      [...runs]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 20),
+    [runs],
+  )
 
   useEffect(() => {
     if (recentRuns.length === 0) return
@@ -1218,15 +1235,6 @@ export function AgentChat() {
                                                                           : "Thinking")}
                                                               </span>
                                                           </div>
-                                                          {coherentStream && (
-                                                              <div className="ml-6 max-w-xs overflow-hidden">
-                                                                  <span className="text-xs text-text-muted/60 font-mono whitespace-pre-wrap break-all leading-tight">
-                                                                      {coherentStream.slice(
-                                                                          -120,
-                                                                      )}
-                                                                  </span>
-                                                              </div>
-                                                          )}
                                                       </div>
                                                   )}
 
@@ -1247,15 +1255,6 @@ export function AgentChat() {
                                                                       }
                                                                   </span>
                                                               </div>
-                                                              {coherentStream && (
-                                                                  <div className="ml-3 max-w-xs overflow-hidden">
-                                                                      <span className="text-xs text-text-muted/50 font-mono whitespace-pre-wrap break-all leading-tight">
-                                                                          {coherentStream.slice(
-                                                                              -120,
-                                                                          )}
-                                                                      </span>
-                                                                  </div>
-                                                              )}
                                                           </div>
                                                       )}
 
@@ -1374,7 +1373,7 @@ export function AgentChat() {
               )}
 
               {/* Attachment chips */}
-              {attachments.length > 0 && (
+              {!slashOnlyMode && attachments.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
                       {attachments.map((att, i) => (
                           <span
@@ -1400,30 +1399,36 @@ export function AgentChat() {
                   </div>
               )}
 
+              <div className="composer-input-shell overflow-hidden rounded-lg border border-border bg-elevated focus-within:border-border-strong">
+              <ChatComposerShell console={cmdConsole} slashPalette={slashPalette} variant="term">
               {/* Input */}
-              <div className="flex items-end gap-2">
+              <div className="flex items-end gap-2 p-2">
                   <textarea
                       ref={textareaRef}
                       rows={1}
-                      className="flex-1 bg-base rounded-lg px-3 py-2 text-sm text-text placeholder:text-text-muted outline-none focus:ring-1 focus:ring-accent transition-all resize-none overflow-hidden"
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="flex-1 min-w-0 bg-transparent px-1 py-1.5 text-sm text-text placeholder:text-text-muted outline-none transition-all resize-none overflow-hidden"
                       style={{ maxHeight: "9rem" }}
                       placeholder={
                           pendingInput
                               ? "Respond in the prompt above ↑"
                               : listening
                                 ? "Listening..."
-                                : isRunning
-                                  ? "Agent is working..."
-                                  : "Enter a goal..."
+                                : slashOnlyMode
+                                  ? "Type /cancel, /trace, /status…"
+                                  : "Enter a goal or press / for commands"
                       }
                       value={input}
                       onChange={(e) => {
-                          setInput(e.target.value);
+                          const next = coerceSlashOnlyInput(e.target.value, input, slashOnlyMode)
+                          setDraft(next);
                           const el = e.target;
                           el.style.height = "auto";
                           el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
                       }}
                       onKeyDown={(e) => {
+                          if (handleSlashKeyDown(e)) return
                           if (e.key === "Enter" && !e.shiftKey) {
                               e.preventDefault();
                               handleSend();
@@ -1439,6 +1444,7 @@ export function AgentChat() {
                       className="hidden"
                       onChange={handleFileChange}
                   />
+                  {!slashOnlyMode && (
                   <button
                       className={`shrink-0 flex items-center justify-center ${compact ? "w-8 h-8" : "w-11 h-11"} bg-elevated text-text-muted hover:text-text hover:bg-elevated/80 rounded-lg transition-colors`}
                       onClick={() => fileInputRef.current?.click()}
@@ -1446,7 +1452,8 @@ export function AgentChat() {
                   >
                       <Paperclip size={16} />
                   </button>
-                  {SpeechRecognition && (
+                  )}
+                  {SpeechRecognition && !slashOnlyMode && (
                       <button
                           className={`shrink-0 flex items-center justify-center ${compact ? "w-8 h-8" : "w-11 h-11"} rounded-lg transition-colors ${
                               listening
@@ -1459,8 +1466,8 @@ export function AgentChat() {
                           {listening ? <MicOff size={16} /> : <Mic size={16} />}
                       </button>
                   )}
-                  {/* Cancel (while running) / Send (idle) */}
-                  {isRunning ? (
+                  {/* Cancel (while running, no slash typed) / Send */}
+                  {isRunning && !input.trimStart().startsWith("/") ? (
                       <button
                           className={`shrink-0 flex items-center justify-center ${compact ? "w-8 h-8" : "w-11 h-11"} bg-error/15 hover:bg-error/25 text-error rounded-lg transition-colors`}
                           onClick={handleCancel}
@@ -1473,13 +1480,17 @@ export function AgentChat() {
                           className={`shrink-0 flex items-center justify-center ${compact ? "w-8 h-8" : "w-11 h-11"} bg-accent hover:bg-accent-hover text-text rounded-lg transition-colors disabled:opacity-40`}
                           onClick={handleSend}
                           disabled={
-                              sending ||
-                              (!input.trim() && attachments.length === 0)
+                              slashOnlyMode
+                                ? !input.trimStart().startsWith("/") || input.trim().length < 2 || sending
+                                : (!input.trim() && attachments.length === 0) || sending || !!pendingInput
                           }
+                          title="Send"
                       >
                           <Send size={16} />
                       </button>
                   )}
+              </div>
+              </ChatComposerShell>
               </div>
           </div>
       </div>

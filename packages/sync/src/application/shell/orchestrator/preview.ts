@@ -6,20 +6,18 @@
  * @module
  */
 
+import { computePlanTotals, movementFromChangeSet } from "@mia/shared-types"
 import { randomUUID } from "node:crypto"
+import { resolvePreviewTableConcurrency } from "../../../adapters/mssql/pool-concurrency.js"
+import { requirePublishedFlowCatalog } from "../../../domain/flow-catalog.js"
 import { detectCatalogDrift } from "../../../domain/catalog-drift.js"
+import { selectDefinitionTables, type SyncEntityId } from "../../../domain/definition-selection.js"
+import { coerceSyncEntityId } from "../../../domain/entity-instance-ref.js"
 import { buildDependencyGraph, diffTable } from "../../../domain/diff-engine/index.js"
 import { assertSupportedSyncDirection, getEnvironment } from "../../../domain/environments.js"
 import { evaluateFreezeWindows } from "../../../domain/governance/freeze-windows.js"
-import { definitionToSyncRecipe, getPublishedSyncDefinition } from "../../../domain/published-definitions.js"
-import {
-  instantiatePredicate,
-  instantiatePredicateWithTree,
-  selectRecipeTables,
-  type EntityType,
-  type SyncRecipe,
-  type SyncRecipeTable
-} from "../../../domain/recipes.js"
+import { getPublishedSyncDefinition } from "../../../domain/published-definitions.js"
+import { instantiatePredicate, instantiatePredicateWithTree } from "../../../domain/predicate.js"
 import { EventType, SyncOperationType, type SyncRuntimeHost } from "../../../ports/index.js"
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
 import {
@@ -29,13 +27,15 @@ import {
   type SyncPlanTable,
   type SyncPlanTotals
 } from "../plan-store.js"
+import { emptyChangeSet } from "../../../domain/diff-engine/change-set.js"
 import { fetchPkColumns } from "./apply.js"
-import { mapWithConcurrency, PREVIEW_TABLE_CONCURRENCY, projectRoot } from "./db-helpers.js"
+import { mapWithConcurrency, projectRoot } from "./db-helpers.js"
+import { evaluateRootParentPreflight } from "./root-parent-preflight.js"
 import { expandTreeIds, fetchEntityDisplayName } from "./search.js"
 
 export interface PreviewInput {
   host: SyncRuntimeHost
-  entityType: EntityType
+  entityType: SyncEntityId
   entityId: string | number
   source: string
   target: string
@@ -48,26 +48,30 @@ export interface PreviewInput {
 }
 
 export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
+  const normalized: PreviewInput = {
+    ...input,
+    entityId: coerceSyncEntityId(input.entityId)
+  }
   const previewId = randomUUID()
   const planId = allocPlanId()
   const t0 = Date.now()
-  emit(input.host, EventType.SyncPreviewStarted, {
+  emit(normalized.host, EventType.SyncPreviewStarted, {
     previewId,
     planId,
-    entityType: input.entityType,
-    entityId: input.entityId,
-    source: input.source,
-    target: input.target,
-    force: Boolean(input.force)
+    entityType: normalized.entityType,
+    entityId: normalized.entityId,
+    source: normalized.source,
+    target: normalized.target,
+    force: Boolean(normalized.force)
   })
 
   const telemetryContext: SyncTelemetryContext = {
     kind: SyncOperationType.Preview,
     opId: previewId,
-    source: input.source,
-    target: input.target
+    source: normalized.source,
+    target: normalized.target
   }
-  return previewSyncInner(input, previewId, planId, t0, telemetryContext)
+  return previewSyncInner(normalized, previewId, planId, t0, telemetryContext)
 }
 
 async function previewSyncInner(
@@ -77,22 +81,13 @@ async function previewSyncInner(
   t0: number,
   telemetryContext: SyncTelemetryContext
 ): Promise<SyncPlan> {
+  const entityId = input.entityId
   try {
     const createdAt = new Date().toISOString()
     const createdAtMs = Date.now()
     const definition = getPublishedSyncDefinition(input.host, projectRoot(input.host), input.entityType)
-    const fullRecipe = definitionToSyncRecipe(definition)
-    const selection = selectRecipeTables(fullRecipe, input.enabledOptionalTables)
-    const selectedTableNames = new Set(selection.tables.map((table) => table.name))
-    const recipe: SyncRecipe = {
-      ...fullRecipe,
-      tables: selection.tables,
-      executionOrder: selection.executionOrder,
-      reverseOrder: selection.reverseOrder,
-      archiveTables: fullRecipe.archiveTables.filter((_, index) =>
-        selectedTableNames.has(fullRecipe.tables[index]?.name ?? "")
-      )
-    }
+    const selection = selectDefinitionTables(definition, input.enabledOptionalTables)
+    const activeTables = selection.tables
 
     // Validate environments
     const sourceEnv = getEnvironment(input.host, input.source)
@@ -132,7 +127,6 @@ async function previewSyncInner(
       evaluatedAt: createdAt,
       governance: {
         freezeWindowIds: [...definition.governance.freezeWindowIds],
-        riskMultiplier: definition.governance.riskMultiplier
       },
       freezeWindows: {
         active: freezeEvaluation.active,
@@ -156,23 +150,15 @@ async function previewSyncInner(
     }
 
     // Resolve entity display name
-    const displayName = await fetchEntityDisplayName(input.host, recipe, input.entityId, input.source)
+    const displayName = await fetchEntityDisplayName(input.host, definition, entityId, input.source)
 
-    // Tree expansion: when the recipe root table has a self-referencing FK
-    // (e.g. core.Rule.parentRuleId → core.Rule.ruleId), expand the single
-    // entity ID to the full descendant tree. Predicates using {ids} will
-    // receive the complete set; {id} still binds to the root entity only.
-    const expandedIds = recipe.selfJoinColumn
-      ? await expandTreeIds(input.host, recipe, input.entityId, input.source)
+    const expandedIds = definition.selfJoinColumn
+      ? await expandTreeIds(input.host, definition, entityId, input.source)
       : null
 
-    //// Allowed schemas come from the recipe itself — every table is
-    // schema-qualified, so we union the prefixes and feed them to the
-    // drift check. This removes the historical hardcoded Mymi-only
-    // allowlist and lets registry-defined entities span any schemas.
     const allowedSchemas = Array.from(
       new Set(
-        recipe.tables
+        activeTables
           .map((t) => {
             const ix = t.name.indexOf(".")
             return ix > 0 ? t.name.slice(0, ix) : ""
@@ -180,17 +166,17 @@ async function previewSyncInner(
           .filter((s) => s.length > 0)
       )
     )
-    let preflight: { catalogCompatible: boolean; issues: string[] }
+    let catalogPreflight: { catalogCompatible: boolean; issues: string[] }
     try {
-      preflight = await detectCatalogDrift(
+      catalogPreflight = await detectCatalogDrift(
         input.host,
         input.source,
         input.target,
-        recipe.tables.map((t) => t.name),
+        activeTables.map((t) => t.name),
         allowedSchemas
       )
     } catch (e) {
-      preflight = {
+      catalogPreflight = {
         catalogCompatible: false,
         issues: [`Catalog drift check failed: ${e instanceof Error ? e.message : String(e)}`]
       }
@@ -203,49 +189,69 @@ async function previewSyncInner(
     const pkColumnsByTable = await fetchPkColumns(
       input.host,
       input.source,
-      recipe.tables.map((t) => t.name)
+      activeTables.map((t) => t.name)
     )
+    const tableConcurrency = resolvePreviewTableConcurrency(
+      input.host,
+      input.source,
+      input.target
+    )
+    const tableTotal = activeTables.length
     const tableResults: SyncPlanTable[] = await mapWithConcurrency(
-      recipe.tables,
-      PREVIEW_TABLE_CONCURRENCY,
-      async (t: SyncRecipeTable) => {
+      activeTables.map((t, tableIndex) => ({ t, tableIndex })),
+      tableConcurrency,
+      async ({ t, tableIndex }) => {
         const tableT0 = Date.now()
         const predicate = expandedIds
-          ? instantiatePredicateWithTree(t.predicate, input.entityId, expandedIds)
-          : instantiatePredicate(t.predicate, input.entityId)
-        emit(input.host, EventType.SyncPreviewTableStart, { previewId, planId, table: t.name, predicate })
+          ? instantiatePredicateWithTree(t.predicate, entityId, expandedIds)
+          : instantiatePredicate(t.predicate, entityId)
+        emit(input.host, EventType.SyncPreviewTableStart, {
+          previewId,
+          planId,
+          table: t.name,
+          predicate,
+          tableIndex: tableIndex + 1,
+          tableTotal
+        })
         try {
           const r = await diffTable(
             input.host,
-            recipe,
             t,
-            input.entityId,
+            entityId,
             input.source,
             input.target,
             pkColumnsByTable.get(t.name) ?? [],
             { rowCap: input.force ? Number.MAX_SAFE_INTEGER : undefined, expandedIds, telemetryContext }
           )
+          const m = movementFromChangeSet(r.changeSet)
           emit(input.host, EventType.SyncPreviewTableDone, {
             previewId,
             planId,
             table: t.name,
-            insert: r.counts.insert,
-            update: r.counts.update,
-            delete: r.counts.delete,
-            counts: r.counts,
+            tableIndex: tableIndex + 1,
+            tableTotal,
+            insert: m.insert,
+            update: m.update,
+            delete: m.delete,
             durationMs: r.diffDurationMs
           })
           return r
         } catch (e: unknown) {
-          // Log the full error (with stack) to server logs — the .catch
-          // would otherwise swallow it into a single-line warning string.
           const errMsg = e instanceof Error ? e.message : String(e)
           console.error(`[sync.preview] diffTable(${t.name}) failed after retries:`, e)
-          emit(input.host, EventType.SyncPreviewTableFailed, { previewId, planId, table: t.name, error: errMsg })
+          emit(input.host, EventType.SyncPreviewTableFailed, {
+            previewId,
+            planId,
+            table: t.name,
+            tableIndex: tableIndex + 1,
+            tableTotal,
+            error: errMsg
+          })
           return {
             table: t.name,
             scopePredicate: predicate,
-            counts: { insert: 0, update: 0, delete: 0, unchanged: 0, lowConfidence: 0, conflicts: 0 },
+            stats: { unchanged: 0, lowConfidence: 0 },
+            changeSet: emptyChangeSet(),
             samples: { insert: [], update: [], delete: [] },
             conflicts: [],
             warnings: [`Diff failed: ${errMsg}`],
@@ -255,29 +261,17 @@ async function previewSyncInner(
       }
     )
 
-    const totals: SyncPlanTotals = tableResults.reduce(
-      (acc: SyncPlanTotals, t: SyncPlanTable) => ({
-        insert: acc.insert + t.counts.insert,
-        update: acc.update + t.counts.update,
-        delete: acc.delete + t.counts.delete,
-        unchanged: acc.unchanged + t.counts.unchanged,
-        lowConfidence: acc.lowConfidence + t.counts.lowConfidence,
-        conflicts: acc.conflicts + t.counts.conflicts,
-        tablesCount:
-          acc.tablesCount +
-          (t.counts.insert + t.counts.update + t.counts.delete + t.counts.conflicts > 0 ? 1 : 0)
-      }),
-      { insert: 0, update: 0, delete: 0, unchanged: 0, lowConfidence: 0, conflicts: 0, tablesCount: 0 }
-    )
+    const totals: SyncPlanTotals = computePlanTotals(tableResults)
 
     const warnings: string[] = [...governanceWarnings.map((warning) => `[governance] ${warning}`)]
-    for (const d of recipe.discrepancies) warnings.push(`[${d.kind}] ${d.table}: ${d.note}`)
-    for (const issue of preflight.issues) warnings.push(`[drift] ${issue}`)
-    const disabledOptionalTables = fullRecipe.tables
-      .filter((table) => table.userControllable && !selectedTableNames.has(table.name))
+    for (const d of definition.metadata.discrepancies) warnings.push(`[${d.kind}] ${d.table}: ${d.note}`)
+    for (const issue of catalogPreflight.issues) warnings.push(`[drift] ${issue}`)
+    const activeNames = new Set(activeTables.map((table) => table.name))
+    const disabledOptionalTables = definition.metadata.tables
+      .filter((table) => table.userControllable && !activeNames.has(table.name))
       .map((table) => table.name)
-    const enabledOptionalTables = fullRecipe.tables
-      .filter((table) => table.userControllable && selectedTableNames.has(table.name))
+    const enabledOptionalTables = definition.metadata.tables
+      .filter((table) => table.userControllable && activeNames.has(table.name))
       .map((table) => table.name)
     if (disabledOptionalTables.length > 0) {
       warnings.unshift(
@@ -342,10 +336,10 @@ async function previewSyncInner(
         title: "Table scope selected",
         summary:
           disabledOptionalTables.length > 0
-            ? `${recipe.tables.length} table(s) included; optional FK-only tables excluded: ${disabledOptionalTables.join(", ")}.`
-            : `${recipe.tables.length} table(s) included with no optional-table exclusions.`,
+            ? `${activeTables.length} table(s) included; optional FK-only tables excluded: ${disabledOptionalTables.join(", ")}.`
+            : `${activeTables.length} table(s) included with no optional-table exclusions.`,
         details: {
-          selectedTables: recipe.tables.map((table) => table.name),
+          selectedTables: activeTables.map((table) => table.name),
           enabledOptionalTables,
           disabledOptionalTables
         }
@@ -355,15 +349,15 @@ async function previewSyncInner(
         recordedAt: createdAt,
         stage: "preview" as const,
         category: "preflight" as const,
-        severity: preflight.catalogCompatible ? ("info" as const) : ("warning" as const),
+        severity: catalogPreflight.catalogCompatible ? ("info" as const) : ("warning" as const),
         title: "Catalog preflight evaluated",
-        summary: preflight.catalogCompatible
+        summary: catalogPreflight.catalogCompatible
           ? `Catalog compatible across ${allowedSchemas.length} allowed schema(s).`
-          : `Catalog drift surfaced ${preflight.issues.length} issue(s) before execute.`,
+          : `Catalog drift surfaced ${catalogPreflight.issues.length} issue(s) before execute.`,
         details: {
-          catalogCompatible: preflight.catalogCompatible,
+          catalogCompatible: catalogPreflight.catalogCompatible,
           allowedSchemas,
-          issues: preflight.issues
+          issues: catalogPreflight.issues
         }
       },
       {
@@ -381,42 +375,31 @@ async function previewSyncInner(
       }
     ]
 
+    const flowCatalogSnapshot = requirePublishedFlowCatalog(definition)
+
     const plan: SyncPlan = {
       planId,
       createdAt,
       createdAtMs,
-      entity: { type: input.entityType, id: input.entityId, displayName },
+      entity: { type: input.entityType, id: entityId, displayName },
       source: input.source,
       target: input.target,
-      preflight, // computed above from detectCatalogDrift restricted to recipe.tables
+      preflight: {
+        ...catalogPreflight,
+        rootParentReady: true,
+        rootParentIssue: null
+      },
       tables: tableResults,
       totals,
-      dependencyGraph: buildDependencyGraph(recipe, tableResults),
+      dependencyGraph: buildDependencyGraph(definition.rootTable, activeTables, tableResults),
       warnings,
       estimatedDurationSec: Math.max(2, Math.ceil((totals.insert + totals.update + totals.delete) / 500)),
-      recipeSnapshot: {
-        entityType: recipe.entityType,
-        rootTable: recipe.rootTable,
-        rootKeyColumn: recipe.rootKeyColumn,
-        legacyPipelineId: recipe.legacyPipelineId ?? undefined,
-        tables: recipe.tables.map((t: SyncRecipeTable) => ({
-          name: t.name,
-          scopeColumn: t.scopeColumn,
-          predicate: t.predicate
-        })),
-        executionOrder: recipe.executionOrder,
-        reverseOrder: recipe.reverseOrder,
-        enabledOptionalTables: recipe.tables
-          .filter((table) => table.userControllable)
-          .map((table) => table.name)
-      },
       executionContract: {
         definitionId: definition.id,
         definitionPublishedVersion: definition.publishedVersion,
         definitionPublishedAt: definition.publishedAt,
         governance: {
           freezeWindowIds: [...definition.governance.freezeWindowIds],
-          riskMultiplier: definition.governance.riskMultiplier
         },
         bindings: {
           serviceProfileRef: definition.bindings.serviceProfileRef,
@@ -424,15 +407,17 @@ async function previewSyncInner(
         },
         allowedSchemas,
         metadata: {
-          rootTable: recipe.rootTable,
-          rootKeyColumn: recipe.rootKeyColumn,
-          tables: recipe.tables.map((t: SyncRecipeTable) => ({
+          rootTable: definition.rootTable,
+          rootKeyColumn: definition.idColumn,
+          selfJoinColumn: definition.selfJoinColumn,
+          tables: activeTables.map((t) => ({
             name: t.name,
             scopeColumn: t.scopeColumn,
             predicate: t.predicate
           })),
-          executionOrder: recipe.executionOrder,
-          reverseOrder: recipe.reverseOrder
+          executionOrder: selection.executionOrder,
+          reverseOrder: selection.reverseOrder,
+          enabledOptionalTables
         },
         flow: {
           steps: definition.executionFlow.steps.map((step) => ({
@@ -441,11 +426,12 @@ async function previewSyncInner(
             kind: step.kind,
             title: step.title,
             description: step.description,
-            subjectRef: step.subjectRef ?? null,
+            bindings: step.bindings ?? {},
             objectName: step.objectName ?? null,
             auditObjectType: step.auditObjectType ?? null,
             pipelineName: step.pipelineName ?? null
-          }))
+          })),
+          catalog: flowCatalogSnapshot
         },
         provenance: {
           kind: definition.provenance.kind,
@@ -457,10 +443,45 @@ async function previewSyncInner(
       governanceDecision,
       entityPolicies: {
         freezeWindowIds: [...definition.governance.freezeWindowIds],
-        riskMultiplier: definition.governance.riskMultiplier,
         sourceEntityVersion: null
       }
     }
+
+    try {
+      const rootParent = await evaluateRootParentPreflight(input.host, input.target, plan)
+      plan.preflight = {
+        ...plan.preflight,
+        rootParentReady: rootParent.ready,
+        rootParentIssue: rootParent.issue
+      }
+      if (!rootParent.ready && rootParent.issue) {
+        plan.warnings.push(`[preflight] ${rootParent.issue}`)
+      }
+      plan.decisionLog = [
+        ...(plan.decisionLog ?? []),
+        {
+          id: "root-parent-preflight",
+          recordedAt: createdAt,
+          stage: "preview" as const,
+          category: "preflight" as const,
+          severity: rootParent.ready ? ("info" as const) : ("error" as const),
+          title: "Root parent on target",
+          summary: rootParent.ready
+            ? `Root row ready on target or planned as insert (${rootParent.details.rootTable}).`
+            : rootParent.issue ?? "Root parent missing on target.",
+          details: rootParent.details
+        }
+      ]
+    } catch (error) {
+      const errMsg = error instanceof Error ? error.message : String(error)
+      plan.preflight = {
+        ...plan.preflight,
+        rootParentReady: false,
+        rootParentIssue: `Root parent preflight failed: ${errMsg}`
+      }
+      plan.warnings.push(`[preflight] Root parent check failed: ${errMsg}`)
+    }
+
     savePlan(input.host, plan)
 
     emit(input.host, EventType.SyncPreviewCompleted, {

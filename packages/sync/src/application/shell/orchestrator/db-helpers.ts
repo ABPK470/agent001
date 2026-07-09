@@ -10,23 +10,19 @@
  */
 
 import type sql from "mssql"
-import type { SyncEventHost, SyncProjectRootHost } from "../../../ports/index.js"
+import { getPool } from "../../../adapters/mssql/connection.js"
+import { withPoolSlot } from "../../../adapters/mssql/pool-gate.js"
+import type { MssqlAccessHost, SyncEventHost, SyncProjectRootHost } from "../../../ports/host.js"
 import type { SyncTelemetryContext } from "../events.js"
 import { emitSyncSqlEvent } from "../events.js"
 
 /**
- * Hard ceiling on how many tables diff in parallel. The mssql pool defaults
- * to max=10 connections per pool; with src+tgt+samples queries each table
- * burns 3-5 conns. Going wider than this exhausts the pool, queues requests,
- * and triggers `Connection is closed` cascades. Override via env if needed.
+ * @deprecated Use {@link resolvePreviewTableConcurrency} — kept for tests that import the constant.
  */
 export const PREVIEW_TABLE_CONCURRENCY = Math.max(
   1,
   parseInt(process.env["SYNC_PREVIEW_CONCURRENCY"] ?? "4", 10) || 4
 )
-
-/** Maximum tolerated drift between preview and current source row counts. */
-export const DRIFT_ABORT_PCT = 0.05
 
 /** Configure the project root used to load published sync definitions. */
 export function configureSyncOrchestrator(host: SyncProjectRootHost, projectRoot: string): void {
@@ -84,87 +80,108 @@ export async function mapWithConcurrency<T, R>(
  * Wraps a `.query()` call with timing + emits a `sync.<kind>.sql` event so
  * per-query duration is observable for the execute path (the preview path
  * already has equivalent telemetry inside diff-engine.ts via runQueryWithRetry).
+ *
+ * When `request` is omitted, acquires a pool gate slot and runs on a fresh
+ * pool request. Pass `request` for transaction-bound or pre-parameterized queries.
  */
 export async function trackedQuery<T = unknown>(
-  host: SyncEventHost,
-  req: { query: (sql: string) => Promise<sql.IResult<T>> },
+  host: SyncEventHost & MssqlAccessHost,
+  connection: string,
   sqlText: string,
   label: string,
-  connection: string,
-  telemetryContext?: SyncTelemetryContext
+  telemetryContext?: SyncTelemetryContext,
+  request?: { query: (sql: string) => Promise<sql.IResult<T>> }
 ): Promise<sql.IResult<T>> {
-  const t0 = Date.now()
-  try {
-    const result = await req.query(sqlText)
-    emitSyncSqlEvent(
-      host,
-      {
-        label,
-        connection,
-        sql: sqlText,
-        durationMs: Date.now() - t0,
-        rowCount:
-          result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
-        attempts: 1
-      },
-      telemetryContext
-    )
-    return result
-  } catch (e) {
-    emitSyncSqlEvent(
-      host,
-      {
-        label,
-        connection,
-        sql: sqlText,
-        durationMs: Date.now() - t0,
-        attempts: 1,
-        error: e instanceof Error ? e.message : String(e)
-      },
-      telemetryContext
-    )
-    throw e
+  const run = async (req: { query: (sql: string) => Promise<sql.IResult<T>> }): Promise<sql.IResult<T>> => {
+    const t0 = Date.now()
+    try {
+      const result = await req.query(sqlText)
+      emitSyncSqlEvent(
+        host,
+        {
+          label,
+          connection,
+          sql: sqlText,
+          durationMs: Date.now() - t0,
+          rowCount:
+            result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
+          attempts: 1
+        },
+        telemetryContext
+      )
+      return result
+    } catch (e) {
+      emitSyncSqlEvent(
+        host,
+        {
+          label,
+          connection,
+          sql: sqlText,
+          durationMs: Date.now() - t0,
+          attempts: 1,
+          error: e instanceof Error ? e.message : String(e)
+        },
+        telemetryContext
+      )
+      throw e
+    }
   }
+
+  if (request) return run(request)
+  return withPoolSlot(host, connection, async () => {
+    const { pool } = await getPool(host, connection)
+    return run(pool.request())
+  })
 }
 
 /** Same as trackedQuery but for `.execute(sproc)` calls. */
 export async function trackedExecute(
-  host: SyncEventHost,
-  req: { execute: (sproc: string) => Promise<sql.IProcedureResult<unknown>> },
+  host: SyncEventHost & MssqlAccessHost,
+  connection: string,
   sprocName: string,
   label: string,
-  connection: string,
-  telemetryContext?: SyncTelemetryContext
+  telemetryContext?: SyncTelemetryContext,
+  request?: { execute: (sproc: string) => Promise<sql.IProcedureResult<unknown>> }
 ): Promise<sql.IProcedureResult<unknown>> {
-  const t0 = Date.now()
-  try {
-    const result = await req.execute(sprocName)
-    emitSyncSqlEvent(
-      host,
-      {
-        label,
-        connection,
-        sql: `EXEC ${sprocName}`,
-        durationMs: Date.now() - t0,
-        rowCount: result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
-        attempts: 1
-      },
-      telemetryContext
-    )
-    return result
-  } catch (e) {
-    emitSyncSqlEvent(
-      host,
-      {
-        label,
-        connection,
-        sql: `EXEC ${sprocName}`,
-        durationMs: Date.now() - t0,
-        attempts: 1,
-        error: e instanceof Error ? e.message : String(e)
-      },
-      telemetryContext
-    )
-    throw e
+  const run = async (req: {
+    execute: (sproc: string) => Promise<sql.IProcedureResult<unknown>>
+  }): Promise<sql.IProcedureResult<unknown>> => {
+    const t0 = Date.now()
+    try {
+      const result = await req.execute(sprocName)
+      emitSyncSqlEvent(
+        host,
+        {
+          label,
+          connection,
+          sql: `EXEC ${sprocName}`,
+          durationMs: Date.now() - t0,
+          rowCount: result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
+          attempts: 1
+        },
+        telemetryContext
+      )
+      return result
+    } catch (e) {
+      emitSyncSqlEvent(
+        host,
+        {
+          label,
+          connection,
+          sql: `EXEC ${sprocName}`,
+          durationMs: Date.now() - t0,
+          attempts: 1,
+          error: e instanceof Error ? e.message : String(e)
+        },
+        telemetryContext
+      )
+      throw e
+    }
   }
+
+  if (request) return run(request)
+  return withPoolSlot(host, connection, async () => {
+    const { pool } = await getPool(host, connection)
+    return run(pool.request())
+  })
 }

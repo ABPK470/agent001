@@ -14,5 +14,4 @@ export { isRunStatus, RUN_STATUSES, RunStatus } from "@mia/shared-enums"
 export * from "./app-phase.js"
 export * from "./chat-mode.js"
 export * from "./ioe-tabs.js"
-export * from "./viz-mode.js"
 

@@ -2,7 +2,6 @@ import { VerifierMode, VerifierOutcome } from "../../domain/index.js"
 import {
   buildEvidenceId,
   deriveOwnershipAttribution,
-  getArchitectureRepairContext,
   getSubagentStep,
   inferAffectedArtifacts,
   inferIssueCode,
@@ -137,7 +136,6 @@ export function buildRepairPlan(
   decision: VerifierDecision
 ): RepairPlan {
   const runtime = compilePlannerRuntime(plan)
-  const architectureContext = getArchitectureRepairContext(plan)
   const defaultAcceptedArtifactsByStep = new Map<string, string[]>()
   for (const assessment of decision.steps) {
     const step = getSubagentStep(plan, assessment.stepName)
@@ -160,11 +158,7 @@ export function buildRepairPlan(
       mode: VerifierMode.Reverify,
       ownedIssues: [],
       dependencyContext: [],
-      requiredAcceptedArtifacts: [],
-      preserveArchitecture: architectureContext?.preserveArchitecture,
-      architectureSummary: architectureContext?.architectureSummary,
-      sharedContracts: architectureContext?.sharedContracts,
-      invariants: architectureContext?.invariants
+      requiredAcceptedArtifacts: []
     }
     taskMap.set(stepName, created)
     return created
@@ -254,12 +248,6 @@ export function buildRepairPlan(
   }
 }
 
-// ============================================================================
-// Legacy retry plan + compat comparison live in verification-model/legacy-compat.ts
-// ============================================================================
-
-export { buildLegacyRetryPlan, compareRepairPlanCompatibility } from "./legacy-compat.js"
-
 export function deriveAcceptanceState(
   assessment: VerifierStepAssessment | undefined,
   prior: StepAcceptanceState | undefined
@@ -295,11 +283,7 @@ export function buildChildRepairPayload(task: RepairTask): ChildRepairPayload {
     goals: task.ownedIssues.map(buildRepairGoal),
     dependencyGoals: task.dependencyContext.map(buildRepairGoal),
     requiredAcceptedArtifacts: [...task.requiredAcceptedArtifacts],
-    unresolvedDependencyBlockers,
-    preserveArchitecture: task.preserveArchitecture,
-    architectureSummary: task.architectureSummary,
-    sharedContracts: task.sharedContracts,
-    invariants: task.invariants
+    unresolvedDependencyBlockers
   }
 }
 

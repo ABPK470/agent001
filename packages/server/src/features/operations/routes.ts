@@ -5,7 +5,7 @@
 import type { FastifyInstance } from "fastify"
 import { subscribeToEvents } from "../../platform/events/broadcaster.js"
 import { searchEvents } from "../../platform/persistence/events.js"
-import { listOperations } from "./application/query.js"
+import { listOperations } from "./application/query/index.js"
 
 export function registerOperationRoutes(app: FastifyInstance): void {
   app.get<{

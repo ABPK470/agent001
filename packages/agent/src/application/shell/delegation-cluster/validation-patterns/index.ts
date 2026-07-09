@@ -154,26 +154,8 @@ export function isWorkspaceInspectionToolCall(record: ToolCallRecord): boolean {
   return FILE_READ_TOOLS.has(record.name)
 }
 
-/** Check if a tool call is a low-signal browser action. */
-export function isLowSignalBrowserToolCall(record: ToolCallRecord): boolean {
-  if (LOW_SIGNAL_BROWSER_TOOLS.has(record.name)) return true
-  if (MEANINGFUL_BROWSER_TOOLS.has(record.name)) {
-    const url = typeof record.args.url === "string" ? record.args.url : ""
-    const path = typeof record.args.path === "string" ? record.args.path : ""
-    if (LOW_SIGNAL_BROWSER_TARGETS.has(url) && !path) return true
-  }
-  return false
-}
-
-/** Check if a tool call is a meaningful browser action. */
-export function isMeaningfulBrowserToolCall(record: ToolCallRecord): boolean {
-  if (!MEANINGFUL_BROWSER_TOOLS.has(record.name)) return false
-  return !isLowSignalBrowserToolCall(record)
-}
-
 /** Check if a tool call provides executable verification evidence. */
 export function isExecutableVerificationToolCall(record: ToolCallRecord): boolean {
-  if (isMeaningfulBrowserToolCall(record)) return true
   if (record.name === "run_command" && typeof record.args.command === "string") {
     return EXECUTABLE_VERIFICATION_CMD_RE.test(record.args.command)
   }
@@ -232,7 +214,4 @@ export function specRequiresWorkspaceInspection(spec: DelegationContractSpec): b
   return false
 }
 
-/** Determine if the contract requires meaningful browser evidence. */
-export function specRequiresBrowserEvidence(spec: DelegationContractSpec): boolean {
-  return spec.verificationMode === VerificationMode.BrowserCheck
-}
+/** Determine if the contract requires workspace inspection evidence. */

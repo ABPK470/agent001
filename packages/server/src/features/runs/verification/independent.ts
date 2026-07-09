@@ -20,7 +20,7 @@
  */
 
 import { getPool, type AgentHost } from "@mia/agent"
-import { canonicalJsonStringify, getPublishedSyncRecipe } from "@mia/sync"
+import { canonicalJsonStringify, getPublishedSyncDefinitionForHost } from "@mia/sync"
 import { createHash } from "node:crypto"
 
 export interface IndependentVerifyInput {
@@ -68,11 +68,11 @@ export async function runIndependentVerification(i: IndependentVerifyInput): Pro
   const t0 = Date.now()
   const startedAt = new Date(t0).toISOString()
   void i.tenantId
-  let recipe
+  let definition
   try {
-    recipe = getPublishedSyncRecipe(i.host, i.entityType)
+    definition = getPublishedSyncDefinitionForHost(i.host, i.entityType)
   } catch {
-    return baseReport(startedAt, t0, "fail", [`no recipe for entity "${i.entityType}"`])
+    return baseReport(startedAt, t0, "fail", [`no published definition for entity "${i.entityType}"`])
   }
   const sampleSize = i.sampleSize ?? DEFAULT_SAMPLE
   const tolerance = i.rowCountToleranceAbs ?? DEFAULT_TOLERANCE
@@ -80,7 +80,7 @@ export async function runIndependentVerification(i: IndependentVerifyInput): Pro
 
   const tableResults: TableVerification[] = []
   const issues: string[] = []
-  for (const t of recipe.tables) {
+  for (const t of definition.metadata.tables) {
     try {
       const r = await verifyTable({
         host: i.host,

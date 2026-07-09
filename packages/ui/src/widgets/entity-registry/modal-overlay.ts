@@ -1,0 +1,73 @@
+/**
+ * Shared modal overlay chrome — scrim tiers and padding by intent.
+ *
+ * detail   — compact confirms / destructive actions (strong scrim)
+ * default  — medium forms and read-only viewers
+ * focus    — workspace / configuration (near full-viewport panel, light edge scrim)
+ */
+
+export type ModalOverlayIntent = "detail" | "default" | "focus"
+
+const OVERLAY_BASE = "fixed inset-0 flex items-center justify-center"
+
+const OVERLAY_SCRIM: Record<ModalOverlayIntent, string> = {
+  detail: "bg-scrim-strong",
+  default: "bg-scrim",
+  focus: "bg-scrim-focus",
+}
+
+const OVERLAY_PADDING: Record<ModalOverlayIntent, string> = {
+  detail: "p-2 sm:p-4",
+  default: "p-2 sm:p-4",
+  focus: "p-0.5 sm:p-1",
+}
+
+export type ModalOverlayOptions = {
+  /** Extra utility classes (e.g. overflow-y-auto). */
+  className?: string
+  /** Tailwind z-index class — defaults to z-50. */
+  zIndexClass?: string
+}
+
+/** Full overlay class string for bespoke modals (AgentEditor, ExecModal, …). */
+export function modalOverlayClass(
+  intent: ModalOverlayIntent,
+  options?: ModalOverlayOptions,
+): string {
+  return [
+    OVERLAY_BASE,
+    options?.zIndexClass ?? "z-50",
+    OVERLAY_SCRIM[intent],
+    OVERLAY_PADDING[intent],
+    options?.className,
+  ]
+    .filter(Boolean)
+    .join(" ")
+}
+
+/** Panel surface shared by ModalShell and legacy shells. */
+export const MODAL_SURFACE_CLASS =
+  "modal-surface bg-surface shadow-2xl rounded-xl sm:rounded-2xl"
+
+/** Near full-viewport workspace panel (split-pane config, entity editors, …). */
+export const MODAL_ENTITY_FOCUS_PANEL =
+  "modal-entity-focus w-[min(98vw,calc(100vw-0.5rem))] max-w-none h-[min(96vh,calc(100dvh-0.5rem))]"
+
+/** @deprecated Prefer MODAL_ENTITY_FOCUS_PANEL — alias kept for transitional imports. */
+export const MODAL_ENTITY_WORKSPACE_PANEL = MODAL_ENTITY_FOCUS_PANEL
+
+/** Compact read-only / confirm dialogs (retire, simple prompts). */
+export const MODAL_DETAIL_PANEL =
+  "w-[min(40rem,92vw)] h-auto max-h-[min(72vh,36rem)]"
+
+/** Standard list/catalog viewers — Usage, Audit, Widget picker. */
+export const MODAL_VIEWER_PANEL =
+  "w-[min(92vw,52rem)] h-[min(88vh,calc(100dvh-2rem))] min-h-[28rem]"
+
+/** Full-bleed viewer on narrow viewports. */
+export const MODAL_VIEWER_PANEL_MOBILE =
+  "w-full max-w-none h-[min(96vh,calc(100dvh-0.5rem))]"
+
+export function modalViewerPanelClass(mobile = false): string {
+  return `${mobile ? MODAL_VIEWER_PANEL_MOBILE : MODAL_VIEWER_PANEL} flex flex-col overflow-hidden`
+}

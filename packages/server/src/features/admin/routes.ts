@@ -4,6 +4,7 @@
 
 import type { FastifyInstance } from "fastify"
 import { listSessions, listUserHistory, listUsersWithStats } from "../../platform/persistence/sessions.js"
+import { setUserAdmin } from "../../platform/persistence/db/users.js"
 import { getDb } from "../../platform/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 
@@ -42,7 +43,7 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     const rows = getDb()
       .prepare(
         `
-				SELECT id, goal, status, step_count, created_at, session_id, upn, display_name
+				SELECT id, goal, status, step_count, created_at, upn, display_name
 				FROM runs
 				WHERE id IN (${placeholders})
 				ORDER BY created_at DESC
@@ -54,7 +55,6 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
       status: string
       step_count: number
       created_at: string
-      session_id: string
       upn: string
       display_name: string
     }>
@@ -65,7 +65,6 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
         status: row.status,
         stepCount: row.step_count,
         createdAt: row.created_at,
-        sessionId: row.session_id,
         upn: row.upn,
         displayName: row.display_name
       }))
@@ -121,4 +120,35 @@ export function registerAdminRoutes(app: FastifyInstance, orchestrator: AgentOrc
     const { runs, total } = listUserHistory(identifier, limit, offset)
     return { runs, total, limit, offset }
   })
+
+  app.patch<{ Params: { identifier: string }; Body: { isAdmin?: boolean } }>(
+    "/api/admin/users/:identifier/admin",
+    async (req, reply) => {
+      if (!req.session.isAdmin) {
+        reply.code(403)
+        return { error: "admin only" }
+      }
+      if (typeof req.body?.isAdmin !== "boolean") {
+        reply.code(400)
+        return { error: "'isAdmin' boolean required" }
+      }
+      const identifier = decodeURIComponent(req.params.identifier)
+      try {
+        const updated = setUserAdmin(identifier, req.body.isAdmin)
+        return {
+          upn: updated.upn,
+          displayName: updated.display_name,
+          isAdmin: updated.is_admin === 1,
+        }
+      } catch (error) {
+        const message = error instanceof Error ? error.message : "update failed"
+        if (message.includes("not found")) {
+          reply.code(404)
+        } else {
+          reply.code(400)
+        }
+        return { error: message }
+      }
+    },
+  )
 }

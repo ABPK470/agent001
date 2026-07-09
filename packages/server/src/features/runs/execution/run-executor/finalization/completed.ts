@@ -1,21 +1,14 @@
-import { completeRunPure, EventType, isUserSafeFailureAnswer, runCompleted, type Agent } from "@mia/agent"
+import { completeRunPure, EventType, runCompleted, type Agent } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
 import { broadcast } from "../../../../../platform/events/broadcaster.js"
-import { consolidate, extractProcedural, ingestRunTurns } from "../../../../../platform/persistence/memory.js"
+import { consolidate, ingestRunTurns } from "../../../../../platform/persistence/memory.js"
+import { isInternalFailureAnswer } from "../../../../../platform/persistence/memory/episodic-quality.js"
 import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../../shared/enums/trajectory.js"
 import { persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { buildPersistedToolTrace } from "../support.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
-
-function hasInternalTaskFailure(answer: string): boolean {
-  return (
-    answer.startsWith("Task FAILED") ||
-    answer.startsWith("Task verification FAILED") ||
-    isUserSafeFailureAnswer(answer)
-  )
-}
 
 export async function finalizeCompletedRun(
   command: ExecuteRunCommand,
@@ -56,29 +49,24 @@ export async function finalizeCompletedRun(
     ? pendingDiff.added.length + pendingDiff.modified.length + pendingDiff.deleted.length
     : 0
   const persistedToolTrace = buildPersistedToolTrace(env.state.run.steps)
-  const taskInternallyFailed = hasInternalTaskFailure(answer)
+  const taskInternallyFailed = isInternalFailureAnswer(answer)
 
-  ingestRunTurns({
-    id: request.runId,
-    goal: request.goal,
-    answer: taskInternallyFailed ? null : answer,
-    status: taskInternallyFailed ? RunStatus.Failed : RunStatus.Completed,
-    agentId: request.agentId,
-    sessionId: env.activeRun?.sessionId ?? null,
-    tools: [...new Set(env.state.run.steps.map((step) => step.action))],
-    stepCount: env.state.run.steps.length,
-    error: taskInternallyFailed ? answer.slice(0, 200) : undefined,
-    trace: persistedToolTrace,
-    upn: env.activeRun?.ownerUpn ?? null
-  })
-  extractProcedural({
-    id: request.runId,
-    goal: request.goal,
-    trace: persistedToolTrace,
-    upn: env.activeRun?.ownerUpn ?? null,
-    sessionId: env.activeRun?.sessionId ?? null
-  })
-  consolidate({ minAgeHours: 24, upn: env.activeRun?.ownerUpn ?? null })
+  const ownerUpn = env.activeRun?.ownerUpn
+  if (ownerUpn) {
+    ingestRunTurns({
+      id: request.runId,
+      goal: request.goal,
+      answer: taskInternallyFailed ? null : answer,
+      status: taskInternallyFailed ? RunStatus.Failed : RunStatus.Completed,
+      agentId: request.agentId,
+      tools: [...new Set(env.state.run.steps.map((step) => step.action))],
+      stepCount: env.state.run.steps.length,
+      error: taskInternallyFailed ? answer.slice(0, 200) : undefined,
+      trace: persistedToolTrace,
+      upn: ownerUpn
+    })
+    consolidate({ minAgeHours: 24, upn: ownerUpn })
+  }
 
   broadcast({
     type: EventType.RunCompleted,

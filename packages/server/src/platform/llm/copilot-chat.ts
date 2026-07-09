@@ -15,9 +15,15 @@
  */
 
 import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "@mia/agent"
+import { LlmInteractionKind } from "@mia/shared-enums"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { homedir } from "node:os"
 import { join } from "node:path"
+import {
+  checkLlmOperationCancelled,
+  emitLlmInteractionCleared,
+  emitLlmInteractionRequired,
+} from "./operation-context.js"
 
 function safeParseArgs(raw: string): Record<string, unknown> {
   try {
@@ -104,12 +110,23 @@ export class CopilotChatClient implements LLMClient {
     console.log(`  3. Authorize the GitHub Copilot plugin\n`)
     console.log("  Waiting for authorization...")
 
+    emitLlmInteractionRequired({
+      provider: "copilot-chat",
+      kind: LlmInteractionKind.DeviceAuth,
+      title: "Authorize GitHub Copilot",
+      message: "Open the link and enter the code to enable LLM features.",
+      url: device.verification_uri,
+      code: device.user_code,
+    })
+
     // Poll for completion
     const interval = Math.max(device.interval, 5) * 1000
     const deadline = Date.now() + device.expires_in * 1000
 
     while (Date.now() < deadline) {
+      checkLlmOperationCancelled()
       await sleep(interval)
+      checkLlmOperationCancelled()
 
       const pollRes = await fetch("https://github.com/login/oauth/access_token", {
         method: "POST",
@@ -135,6 +152,7 @@ export class CopilotChatClient implements LLMClient {
 
       if (poll.access_token) {
         console.log("  ✓ Authorized! Token cached to ~/.agent001/copilot-token.json\n")
+        emitLlmInteractionCleared()
         saveCachedToken({
           access_token: poll.access_token,
           token_type: poll.token_type ?? "bearer",

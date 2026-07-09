@@ -5,7 +5,7 @@
 
 import { AlertCircle, Brain, HelpCircle, MessageSquare, Paperclip, Send, Square, User, Wrench, X } from "lucide-react"
 import type React from "react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../api"
 import { ChatScrollProvider } from "../../components/ChatScrollContext"
 import { CodeBlock, extractToolCode } from "../../components/CodeBlock"
@@ -16,6 +16,10 @@ import { TypewriterAnswer } from "../../components/TypewriterAnswer"
 import { ChatMode } from "../../enums"
 import { useStickToBottomScroll } from "../../hooks/useStickToBottomScroll"
 import { CHAT_SCROLL_HOST_ATTR } from "../../lib/chatScroll"
+import { ChatComposerShell } from "../../chat/ChatComposerShell"
+import { useSlashCommandInput } from "../../chat/useSlashCommandInput"
+import type { ChatSlashCatalogEntry } from "../../chat/commands"
+import type { CommandConsoleState } from "../../chat/useCommandConsole"
 import { C, type ChatMessage } from "./constants"
 
 export { ChatMode } from "../../enums"
@@ -43,6 +47,7 @@ export function ChatPanel({
   onGoalChange,
   onSubmit,
   isRunning,
+  slashOnlyMode = false,
   submitting,
   pendingInput,
   onRespond,
@@ -55,12 +60,16 @@ export function ChatPanel({
   onRemoveAttachment,
   currentActivity,
   streamingAnswer,
+  fileInputRef: fileInputRefProp,
+  commandConsole,
+  slashCommands = [],
 }: {
   messages: ChatMessage[]
   goalInput: string
   onGoalChange: (v: string) => void
   onSubmit: () => void
   isRunning: boolean
+  slashOnlyMode?: boolean
   submitting: boolean
   pendingInput?: { question: string; options?: string[]; sensitive?: boolean } | null
   onRespond?: (response: string) => void
@@ -73,9 +82,38 @@ export function ChatPanel({
   onRemoveAttachment?: (index: number) => void
   currentActivity?: string
   streamingAnswer?: string
+  fileInputRef?: React.RefObject<HTMLInputElement | null>
+  commandConsole: CommandConsoleState
+  slashCommands?: ChatSlashCatalogEntry[]
 }) {
   const fileInputRef = useRef<HTMLInputElement>(null)
   const goalTextareaRef = useRef<HTMLTextAreaElement>(null)
+  const slashInput = goalInput.trimStart().startsWith("/")
+  const canSend = slashOnlyMode
+    ? slashInput && goalInput.trim().length > 1 && !submitting
+    : (Boolean(goalInput.trim()) || attachments.length > 0) && !submitting
+  const showStop = isRunning && !slashInput && !pendingInput
+
+  const collapseComposer = useCallback(() => {
+    commandConsole.clear()
+    onGoalChange("")
+  }, [commandConsole, onGoalChange])
+
+  const hasResult = commandConsole.pinnedOpen && commandConsole.lines.length > 0
+  const { palette: slashPalette, handleKeyDown: handleSlashKeyDown } = useSlashCommandInput({
+    value: goalInput,
+    onChange: onGoalChange,
+    commands: slashCommands,
+    disabled: !!pendingInput || submitting,
+    variant: "ioe",
+    onCollapse: collapseComposer,
+    hasResult,
+  })
+
+  const bindFileInputRef = (el: HTMLInputElement | null) => {
+    fileInputRef.current = el
+    if (fileInputRefProp) fileInputRefProp.current = el
+  }
   const [responseInput, setResponseInput] = useState("")
   const [killMessageInput, setKillMessageInput] = useState("")
   const [chatMode, setChatMode] = useState<ChatMode>(ChatMode.Simple)
@@ -125,7 +163,7 @@ export function ChatPanel({
         continue
       }
       try {
-        const meta = await api.uploadAttachment(file, { scope: "session" })
+        const meta = await api.uploadAttachment(file, { scope: "user_draft" })
         results.push({ id: meta.id, name: meta.normalizedName, sizeBytes: meta.sizeBytes })
       } catch (err) {
         console.error(`Upload failed for "${file.name}":`, err)
@@ -364,7 +402,7 @@ export function ChatPanel({
         ) : (
           <div className="space-y-1.5">
             {/* Attachment chips */}
-            {attachments.length > 0 && (
+            {!slashOnlyMode && attachments.length > 0 && (
               <div className="flex flex-wrap gap-1">
                 {attachments.map((att, i) => (
                   <span
@@ -389,30 +427,41 @@ export function ChatPanel({
               </div>
             )}
             <div
-              className="flex items-end gap-2 rounded-lg px-3 py-2"
+              className="composer-input-shell overflow-hidden rounded-lg"
               style={{ background: C.elevated, border: `1px solid ${C.border}` }}
             >
+            <ChatComposerShell console={commandConsole} slashPalette={slashPalette} variant="ioe" density="compact">
+            <div className="flex items-end gap-2 px-3 py-2">
               <textarea
                 ref={goalTextareaRef}
                 rows={1}
-                className="flex-1 bg-transparent outline-none text-[13px] resize-none overflow-hidden"
-                style={{ color: C.text, caretColor: C.accent, maxHeight: "9rem" }}
-                placeholder={isRunning ? "Agent is running..." : "Enter a goal..."}
-                value={goalInput}
-                onChange={(e) => {
-                  onGoalChange(e.target.value)
-                  const el = e.target
-                  el.style.height = "auto"
-                  el.style.height = `${Math.min(el.scrollHeight, 144)}px`
-                }}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSubmit() }
-                }}
-                disabled={isRunning || submitting}
-              />
+                autoComplete="off"
+                spellCheck={false}
+                className="flex-1 min-w-0 bg-transparent outline-none text-[13px] resize-none overflow-hidden"
+                  style={{ color: C.text, caretColor: C.accent, maxHeight: "9rem" }}
+                  placeholder={
+                    pendingInput
+                      ? "Respond in the prompt above ↑"
+                      : slashOnlyMode
+                        ? "Type /cancel, /trace, /status…"
+                        : "Enter a goal or press / for commands"
+                  }
+                  value={goalInput}
+                  onChange={(e) => {
+                    onGoalChange(e.target.value)
+                    const el = e.target
+                    el.style.height = "auto"
+                    el.style.height = `${Math.min(el.scrollHeight, 144)}px`
+                  }}
+                  onKeyDown={(e) => {
+                    if (handleSlashKeyDown(e)) return
+                    if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); onSubmit() }
+                  }}
+                  disabled={!!pendingInput || submitting}
+                />
               {/* Hidden file input */}
-              <input ref={fileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
-              {onAttach && (
+              <input ref={bindFileInputRef} type="file" multiple className="hidden" onChange={handleFileChange} />
+              {onAttach && !slashOnlyMode && (
                 <button
                   className="p-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                   style={{ color: C.dim }}
@@ -424,12 +473,14 @@ export function ChatPanel({
               )}
               <button
                 className="p-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
-                style={{ color: (goalInput.trim() || attachments.length > 0) ? C.accent : C.dim }}
+                style={{ color: canSend ? C.accent : C.dim }}
                 onClick={onSubmit}
-                disabled={isRunning || submitting || (!goalInput.trim() && attachments.length === 0)}
+                disabled={!canSend && !showStop}
               >
                 <Send size={16} />
               </button>
+            </div>
+            </ChatComposerShell>
             </div>
           </div>
         )}

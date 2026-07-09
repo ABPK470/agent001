@@ -34,6 +34,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../api"
 import type { PolicyRule, ToolInfo } from "../types"
 import { SelectorRulesTab } from "./policy/SelectorRulesTab"
+import { modalOverlayClass, MODAL_SURFACE_CLASS } from "../widgets/entity-registry/modal-overlay"
 
 interface Props {
   onClose: () => void
@@ -57,8 +58,6 @@ const TOOL_ICONS: Record<string, typeof Shield> = {
   list_directory: FolderOpen,
   search_files: Search,
   fetch_url: Globe,
-  browse_web: Globe,
-  browser_check: Globe,
   ask_user: MessageSquare,
   think: Brain,
   query_mssql: Database,
@@ -88,7 +87,7 @@ const SSRF_BLOCKED = [
   "*.local", "*.internal",
 ]
 
-type Tab = "tools" | "rules" | "model" | "security"
+type Tab = "tools" | "rules" | "model" | "security" | "platform"
 
 export function PolicyEditor({ onClose }: Props) {
   const [rules, setRules] = useState<PolicyRule[]>([])
@@ -113,8 +112,21 @@ export function PolicyEditor({ onClose }: Props) {
   const [confirmReset, setConfirmReset] = useState(false)
   const [resetting, setResetting] = useState(false)
 
+  // Factory reset platform (entity defs + published bundle)
+  const [confirmFactoryReset, setConfirmFactoryReset] = useState(false)
+  const [factoryResetPhrase, setFactoryResetPhrase] = useState("")
+  const [factoryResetting, setFactoryResetting] = useState(false)
+
+  // Platform health (sync readiness)
+  const [platformHealth, setPlatformHealth] = useState<Awaited<ReturnType<typeof api.getPlatformHealth>> | null>(null)
+  const [catalogRebuilding, setCatalogRebuilding] = useState(false)
+  const [catalogRebuildMessage, setCatalogRebuildMessage] = useState<string | null>(null)
+  const [artifactsRefreshing, setArtifactsRefreshing] = useState<"shipped" | "mssql" | null>(null)
+  const [artifactsMessage, setArtifactsMessage] = useState<string | null>(null)
+  const [mssqlConnection, setMssqlConnection] = useState("")
+
   // LLM config
-  const [llmProvider, setLlmProvider] = useState("copilot-chat")
+  const [llmProvider, setLlmProvider] = useState("databricks")
   const [llmModel, setLlmModel] = useState("")
   const [llmApiKey, setLlmApiKey] = useState("")
   const [llmBaseUrl, setLlmBaseUrl] = useState("")
@@ -139,6 +151,17 @@ export function PolicyEditor({ onClose }: Props) {
   }, [])
 
   useEffect(() => { loadRules() }, [loadRules])
+
+  useEffect(() => {
+    api.getPlatformHealth()
+      .then((health) => {
+        setPlatformHealth(health)
+        if (health.mssql.connections[0]) {
+          setMssqlConnection(health.mssql.connections[0])
+        }
+      })
+      .catch(() => setPlatformHealth(null))
+  }, [])
 
   // Load workspace path
   useEffect(() => {
@@ -253,16 +276,17 @@ export function PolicyEditor({ onClose }: Props) {
     { id: "tools", label: "Tool Permissions" },
     { id: "rules", label: `Selector Rules (${rules.length})` },
     { id: "model", label: "Model" },
+    { id: "platform", label: "Platform" },
     { id: "security", label: "Security" },
   ]
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-2 sm:p-4"
+      className={modalOverlayClass("detail")}
       onClick={onClose}
     >
       <div
-        className="bg-surface rounded-xl sm:rounded-2xl w-full max-w-[960px] h-full sm:h-[85vh] sm:max-h-[820px] flex flex-col shadow-2xl"
+        className={`${MODAL_SURFACE_CLASS} w-full max-w-[960px] h-full sm:h-[85vh] sm:max-h-[820px] flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -299,6 +323,7 @@ export function PolicyEditor({ onClose }: Props) {
             {tab === "tools"    && <><strong className="text-text">Tool Permissions</strong> — coarse-grained on/off for every tool, regardless of arguments. Sets simple <code className="font-mono">action:&lt;tool&gt;</code> rules. For nuanced control (per-environment, per-command, per-path) use <em>Selector Rules</em>.</>}
             {tab === "rules"    && <><strong className="text-text">Selector Rules</strong> — the full policy engine. Each rule matches on selectors (tool, path, command regex, dbEnvironment, scope, etc.) and resolves by priority. Includes baseline hosted defaults and per-env-derived rules; you can override or augment any of them.</>}
             {tab === "model"    && <><strong className="text-text">Model</strong> — LLM provider, model, credentials. Active on the next run.</>}
+            {tab === "platform" && <><strong className="text-text">Platform</strong> — MSSQL schema catalog (core agent infrastructure) and deploy/sync artifact import. Schema catalog is separate from Entity Registry publish.</>}
             {tab === "security" && <><strong className="text-text">Security</strong> — built-in protections (shell blocklist, SSRF guards, SQL engine invariants). The Workspace path here is the <em>developer-mode</em> root used when <code className="font-mono">AGENT_HOSTED_MODE</code> is off; in hosted mode each run gets its own isolated sandbox and this field is ignored.</>}
           </p>
         </div>
@@ -415,7 +440,9 @@ export function PolicyEditor({ onClose }: Props) {
                 <div className="space-y-3 mb-4">
                   {/* Model */}
                   <div>
-                    <label className="text-[13px] text-text-muted block mb-1.5">Model</label>
+                    <label className="text-[13px] text-text-muted block mb-1.5">
+                      {llmProvider === "databricks" ? "Serving endpoint" : "Model"}
+                    </label>
                     <input
                       type="text"
                       value={llmModel}
@@ -468,7 +495,7 @@ export function PolicyEditor({ onClose }: Props) {
                 </div>
               </div>
             </div>
-          ) : (
+          ) : tab === "security" ? (
             /* ── Security tab ─────────────────────────────── */
             <div className="space-y-4">
               <p className="text-sm text-text-muted">
@@ -661,8 +688,209 @@ export function PolicyEditor({ onClose }: Props) {
                   </div>
                 )}
               </div>
+
             </div>
-          )}
+          ) : tab === "platform" ? (
+            /* ── Platform tab (schema catalog + sync artifacts) ── */
+            <div className="space-y-4">
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Database size={15} className="text-accent" />
+                  <span className="text-sm font-semibold text-text">MSSQL schema catalog</span>
+                </div>
+                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                  Introspected table/FK metadata cached on disk for <code className="font-mono text-text">search_catalog</code>,
+                  schema exploration tools, and Entity Registry “Suggest from schema”. Built from live MSSQL — not from shipped
+                  sync artifacts or Entity Registry publish.
+                </p>
+                {platformHealth && (
+                  <div className="text-[12.5px] text-text-secondary space-y-1 mb-3">
+                    <p>
+                      MSSQL: {platformHealth.mssql.configured ? platformHealth.mssql.summary : "not configured"}
+                      {platformHealth.catalog.available && platformHealth.catalog.detail
+                        ? ` · Catalog: ${platformHealth.catalog.detail}`
+                        : platformHealth.mssql.configured
+                          ? " · Catalog: missing"
+                          : ""}
+                    </p>
+                    <p>
+                      Sync entities: {platformHealth.entities.count}
+                      {platformHealth.publish.definitionCount > 0
+                        ? ` · Published: ${platformHealth.publish.definitionCount}`
+                        : " · Not published"}
+                    </p>
+                    {!platformHealth.catalog.available && platformHealth.mssql.configured && (
+                      <p className="text-warning/90 pt-1">
+                        Rebuild the schema catalog while MSSQL is reachable (button below).
+                      </p>
+                    )}
+                  </div>
+                )}
+                <button
+                  type="button"
+                  className="px-4 py-2 text-[13px] text-accent border border-accent/30 rounded-lg hover:bg-accent/10 disabled:opacity-40"
+                  disabled={catalogRebuilding || !platformHealth?.mssql.configured}
+                  onClick={async () => {
+                    setCatalogRebuilding(true)
+                    setCatalogRebuildMessage(null)
+                    try {
+                      const result = await api.rebuildPlatformCatalog()
+                      setCatalogRebuildMessage(result.message)
+                      const next = await api.getPlatformHealth()
+                      setPlatformHealth(next)
+                    } catch (err) {
+                      setCatalogRebuildMessage(err instanceof Error ? err.message : "Catalog rebuild failed")
+                    } finally {
+                      setCatalogRebuilding(false)
+                    }
+                  }}
+                >
+                  {catalogRebuilding ? "Rebuilding catalog…" : "Rebuild schema catalog"}
+                </button>
+                {catalogRebuildMessage && (
+                  <p className="text-[12px] text-text-muted mt-2">{catalogRebuildMessage}</p>
+                )}
+              </div>
+
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-border-subtle">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Database size={15} className="text-text-muted" />
+                  <span className="text-sm font-semibold text-text">Deploy sync artifacts</span>
+                </div>
+                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                  Import entity definitions and sync step catalog into SQLite from bundled release files or by
+                  regenerating from live MyMI/MSSQL. After import, <strong>publish from Entity Registry</strong> before
+                  running sync — this does not build the schema catalog above.
+                </p>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-[13px] text-text-secondary border border-border rounded-lg hover:bg-overlay-2 disabled:opacity-40"
+                    disabled={artifactsRefreshing !== null}
+                    onClick={async () => {
+                      setArtifactsRefreshing("shipped")
+                      setArtifactsMessage(null)
+                      try {
+                        const result = await api.refreshPlatformArtifacts({ source: "shipped" })
+                        setArtifactsMessage(result.message)
+                        const next = await api.getPlatformHealth()
+                        setPlatformHealth(next)
+                      } catch (err) {
+                        setArtifactsMessage(err instanceof Error ? err.message : "Failed to load shipped artifacts")
+                      } finally {
+                        setArtifactsRefreshing(null)
+                      }
+                    }}
+                  >
+                    {artifactsRefreshing === "shipped" ? "Loading…" : "Use shipped artifacts"}
+                  </button>
+                  {platformHealth?.mssql.configured && platformHealth.mssql.connections.length > 1 && (
+                    <select
+                      value={mssqlConnection}
+                      onChange={(e) => setMssqlConnection(e.target.value)}
+                      className="rounded-lg border border-border bg-surface px-2 py-2 text-[13px] text-text"
+                    >
+                      {platformHealth.mssql.connections.map((c) => (
+                        <option key={c} value={c}>{c}</option>
+                      ))}
+                    </select>
+                  )}
+                  <button
+                    type="button"
+                    className="px-4 py-2 text-[13px] text-accent border border-accent/30 rounded-lg hover:bg-accent/10 disabled:opacity-40"
+                    disabled={artifactsRefreshing !== null || !platformHealth?.mssql.configured}
+                    onClick={async () => {
+                      setArtifactsRefreshing("mssql")
+                      setArtifactsMessage(null)
+                      try {
+                        const result = await api.refreshPlatformArtifacts({
+                          source: "mssql",
+                          connection: mssqlConnection || platformHealth?.mssql.connections[0],
+                          reseedSqlite: true,
+                        })
+                        setArtifactsMessage(result.message)
+                        const next = await api.getPlatformHealth()
+                        setPlatformHealth(next)
+                      } catch (err) {
+                        setArtifactsMessage(err instanceof Error ? err.message : "Failed to refresh from database")
+                      } finally {
+                        setArtifactsRefreshing(null)
+                      }
+                    }}
+                  >
+                    {artifactsRefreshing === "mssql" ? "Refreshing from MSSQL…" : "Refresh from database"}
+                  </button>
+                </div>
+                {artifactsMessage && (
+                  <p className="text-[12px] text-text-muted mt-2">{artifactsMessage}</p>
+                )}
+              </div>
+
+              <div className="h-px bg-overlay-3 my-1" />
+
+              <div className="px-4 py-3.5 rounded-xl bg-overlay-2 border border-error/20">
+                <div className="flex items-center gap-2.5 mb-1.5">
+                  <Trash2 size={15} className="text-error" />
+                  <span className="text-sm font-semibold text-text">Factory Reset Platform</span>
+                </div>
+                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                  Wipe entity definitions, sync configs, and the published bundle, then re-seed from deploy artifacts.
+                  <strong> Publish again from Entity Registry before sync is operational.</strong>
+                  Policies, dashboard layout, and run history are preserved.
+                </p>
+                {!confirmFactoryReset ? (
+                  <button
+                    className="px-4 py-2 text-[13px] text-error hover:bg-error/10 border border-error/20 rounded-lg"
+                    onClick={() => setConfirmFactoryReset(true)}
+                  >
+                    Factory Reset Platform
+                  </button>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-[13px] text-text-secondary">
+                      Type <code className="font-mono text-text">FACTORY RESET</code> to confirm.
+                    </p>
+                    <input
+                      type="text"
+                      value={factoryResetPhrase}
+                      onChange={(e) => setFactoryResetPhrase(e.target.value)}
+                      placeholder="FACTORY RESET"
+                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-text focus:outline-none focus:ring-1 focus:ring-border-strong"
+                    />
+                    <div className="flex items-center gap-3">
+                      <button
+                        className="px-4 py-2 text-[13px] bg-error text-text rounded-lg disabled:opacity-40"
+                        disabled={factoryResetting || factoryResetPhrase !== "FACTORY RESET"}
+                        onClick={async () => {
+                          setFactoryResetting(true)
+                          try {
+                            await api.factoryResetPlatform("FACTORY RESET")
+                            window.location.reload()
+                          } catch {
+                            setError("Failed to factory reset platform")
+                            setFactoryResetting(false)
+                            setConfirmFactoryReset(false)
+                            setFactoryResetPhrase("")
+                          }
+                        }}
+                      >
+                        {factoryResetting ? "Resetting..." : "Reset Platform"}
+                      </button>
+                      <button
+                        className="px-3 py-2 text-[13px] text-text-muted hover:text-text rounded-lg"
+                        onClick={() => {
+                          setConfirmFactoryReset(false)
+                          setFactoryResetPhrase("")
+                        }}
+                      >
+                        Cancel
+                      </button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

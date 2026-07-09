@@ -4,7 +4,7 @@
 
 import type { FastifyInstance } from "fastify"
 import { getOwnerUsage, getRetentionPolicy } from "../../platform/persistence/attachments.js"
-import { getRunProfile } from "../../bootstrap/workspace.js"
+import { getRunProfile } from "../runs/workspace/index.js"
 
 export function registerProfileRoutes(app: FastifyInstance): void {
   app.get("/api/runtime/profile", async () => {
@@ -24,7 +24,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
       ...usage,
       retention: {
         runDays: retention.runDays,
-        sessionDays: retention.sessionDays,
+        userDraftDays: retention.userDraftDays,
         workspaceAssetDays: retention.workspaceAssetDays
       }
     }

@@ -19,6 +19,7 @@ export interface ToolCallsBranchInput {
   state: AgentLoopState
   tools: Map<string, Tool>
   toolList: Tool[]
+  userGoal: string
   config: ToolExecContext["config"] &
     PostRoundContext["config"] & {
       verbose: boolean

@@ -92,7 +92,7 @@ export function StrategySelect(p: StrategySelectProps): JSX.Element {
   return (
     <div className={p.compact ? "flex flex-col gap-2" : "grid grid-cols-1 gap-2 sm:grid-cols-2"}>
       <label className="flex flex-col gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-text-muted">
+        <span className="text-xs uppercase tracking-wider text-text-muted">
           scd2.strategyId <span className="text-rose-400">*</span>
         </span>
         <Listbox
@@ -106,12 +106,12 @@ export function StrategySelect(p: StrategySelectProps): JSX.Element {
           ariaLabel="SCD2 strategy"
         />
         {chosen && (
-          <span className="text-[10px] text-text-faint">{chosen.description}</span>
+          <span className="text-xs text-text-faint">{chosen.description}</span>
         )}
       </label>
 
       <label className="flex flex-col gap-1">
-        <span className="text-[10px] uppercase tracking-wider text-text-muted">
+        <span className="text-xs uppercase tracking-wider text-text-muted">
           scd2.strategyVersion
         </span>
         <Listbox

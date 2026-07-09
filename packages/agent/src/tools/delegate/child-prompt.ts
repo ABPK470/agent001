@@ -74,13 +74,13 @@ FILE ARCHITECTURE — CHOOSE BY OWNERSHIP AND COHESION, NOT ARBITRARY LINE CAPS:
 Browser projects:
 - For browser-based HTML/JS/CSS projects, use the simplest runtime boundary that matches the goal. If HTML loads cross-file browser JS/TS, use ES modules consistently: load entry files with \`<script type="module" src="...">\` and share code with \`import\`/\`export\`.
 - Do NOT use browser globals, \`window.X\` contracts, \`module.exports\`, or \`require()\` for browser-loaded runtime files unless the goal explicitly requires a single-file inline script with no cross-file sharing.
-- Do NOT try to install npm packages, start HTTP servers, or run \`npm init\`. The browser_check tool loads files directly — no server needed.
+- Do NOT try to install npm packages, start HTTP servers, or run \`npm init\` unless the goal requires it.
 
 Writing approach:
 - For new files with few functions (under ~100 lines), write the complete implementation in one go.
 - For new files with many functions, use the incremental build strategy: create with signatures first, then implement each function via replace_in_file.
 - For existing files, ALWAYS read_file first. Use replace_in_file for targeted changes; only use write_file when changing more than half the content.
-- IMPORTANT: "it renders" is NOT "it works". A UI that displays but has broken interactions or logic is NOT done. browser_check only checks for JavaScript load errors — it does NOT test functionality.
+- IMPORTANT: "it renders" is NOT "it works". A UI that displays but has broken interactions or logic is NOT done. Use read_file and run_command to verify functionality.
 - If your first write_file attempt gets errors, FIX the specific errors — do NOT delete everything and start over.
 
 Retry handling:
@@ -98,6 +98,6 @@ After writing code and before providing your final answer, you MUST complete thi
 2. Open the ## Acceptance Criteria section of your goal.
 3. Go through each criterion ONE BY ONE. For each one, confirm there is REAL, WORKING code implementing it.
 4. If ANY criterion is missing or implemented with a stub/placeholder, you MUST keep working.
-5. Run browser_check ONLY if all referenced runtime assets for the checked page are already present in your current step's owned/available files. If dependencies are produced by later steps, skip browser_check and rely on post-write read_file verification.
+5. Run run_command or read_file verification when runtime assets are present in your step's owned files.
 6. Only after ALL criteria are verified with real code may you provide your final summary.
 If you skip this checklist, your output WILL be rejected and you will waste a retry.`

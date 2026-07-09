@@ -27,6 +27,7 @@ import {
   getTenantConfig,
   listLargeObjects,
   persistedMirrorOf,
+  resolveGoalDataAnchors,
   type LargeObjectFact
 } from "@mia/agent"
 import { listTableVerdicts } from "../../../../platform/persistence/memory.js"
@@ -77,9 +78,11 @@ export function buildResolvedFactsBlock(input: {
   const goalTokens = extractObjectTokens(goal)
   const candidates = new Set<string>()
   if (catalog) {
-    // listLargeObjects() returns lowercased qualifiedNames already.
     const top = [...listLargeObjects({ accessor: () => catalog })].slice(0, ALWAYS_TRACKED_TOPN)
     for (const name of top) candidates.add(name)
+    for (const anchor of resolveGoalDataAnchors(goal, catalog)) {
+      candidates.add(anchor.qualifiedName.toLowerCase())
+    }
   }
   for (const tok of goalTokens) candidates.add(tok)
 
@@ -87,7 +90,7 @@ export function buildResolvedFactsBlock(input: {
   const inCatalogNames: string[] = []
   for (const name of candidates) {
     const isGoalMentioned = goalTokens.includes(name)
-    const inCatalog = catalog?.tables.has(name) ?? false
+    const inCatalog = catalog?.getTable(name) !== null
     // Don't surface ALWAYS_TRACKED entries that aren't actually present
     // anywhere — that just adds noise for environments where the object
     // doesn't exist.
@@ -137,7 +140,7 @@ export function buildResolvedFactsBlock(input: {
  * Returns undefined when the catalog has no siblings to compare.
  */
 function structuralRankIn(catalog: CatalogGraph, lowerName: string): number | undefined {
-  const target = catalog.tables.get(lowerName)
+  const target = catalog.getTable(lowerName)
   if (!target) return undefined
   const targetSchema = target.schema.toLowerCase()
   const targetBase = target.name.toLowerCase()

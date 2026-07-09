@@ -4,8 +4,6 @@ import { WorkspaceMountMode } from "../../shared/enums/sandbox.js"
 // ── Constants ────────────────────────────────────────────────────
 
 export const DEFAULT_IMAGE = "node:20-slim"
-export const BROWSER_IMAGE = "mia-browser:playwright"
-export const BROWSER_DOCKERFILE = resolve(import.meta.dirname, "../../docker/Dockerfile.browser")
 export const DEFAULT_MAX_MEMORY = "4g"
 export const DEFAULT_MAX_CPU = "2.0"
 export const DEFAULT_MAX_CONCURRENT = 4

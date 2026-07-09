@@ -10,19 +10,14 @@
  * `<prior_results>` (and the `recall_prior_result` tool) can ground later
  * turns on actual rows.
  *
- * Truncation contract enforced by the writer (NOT the schema):
- *   - row_count = original row count (NOT post-truncation length)
- *   - bytes     = size of the stored result_json string
- *   - truncated = 1 if the writer dropped rows / clipped fields
- * See packages/agent/src/application/shell/agent-cluster/iteration-tool-round.ts for the cap policy.
+ * Continuity scope: thread_id + upn via JOIN on runs (not cookie session).
  */
 
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface DbToolResult {
   id?: number
   run_id: string
-  session_id: string | null
   tool_call_id: string
   tool_name: string
   args_json: string
@@ -42,11 +37,6 @@ const NON_RECALLABLE_RESULT_PATTERNS = [
 
 /** Write one tool-call result. Idempotent on (run_id, tool_call_id). */
 export function saveToolResult(record: Omit<DbToolResult, "id">): void {
-  // tool_call_id is provider-issued and unique per call within a run, so
-  // (run_id, tool_call_id) is the natural idempotency key. We don't make
-  // it a UNIQUE constraint (would require schema migration); instead the
-  // INSERT-OR-IGNORE-then-UPDATE pattern keeps writes idempotent at the
-  // app layer while a future schema bump can promote it.
   const db = getDb()
   const existing = db
     .prepare("SELECT id FROM tool_results WHERE run_id = ? AND tool_call_id = ? LIMIT 1")
@@ -57,7 +47,7 @@ export function saveToolResult(record: Omit<DbToolResult, "id">): void {
       UPDATE tool_results
       SET tool_name=@tool_name, args_json=@args_json, result_json=@result_json,
           row_count=@row_count, bytes=@bytes, truncated=@truncated,
-          goal_excerpt=@goal_excerpt, session_id=@session_id, created_at=@created_at
+          goal_excerpt=@goal_excerpt, created_at=@created_at
       WHERE id=@id
     `
     ).run({ ...record, id: existing.id })
@@ -66,66 +56,56 @@ export function saveToolResult(record: Omit<DbToolResult, "id">): void {
   db.prepare(
     `
     INSERT INTO tool_results
-      (run_id, session_id, tool_call_id, tool_name, args_json, result_json,
+      (run_id, tool_call_id, tool_name, args_json, result_json,
        row_count, bytes, truncated, goal_excerpt, created_at)
     VALUES
-      (@run_id, @session_id, @tool_call_id, @tool_name, @args_json, @result_json,
+      (@run_id, @tool_call_id, @tool_name, @args_json, @result_json,
        @row_count, @bytes, @truncated, @goal_excerpt, @created_at)
   `
   ).run(record)
 }
 
 /**
- * Load the most recent N tool results for a session, optionally filtered to
- * specific tool names. Ordered newest-first within (run_id desc, id asc) so
- * callers see per-turn locality.
+ * Load the most recent N tool results for a thread, optionally filtered to
+ * specific tool names. Joins runs so continuity is always thread-scoped.
  */
-export function loadRecentToolResults(opts: {
-  sessionId: string
+export function loadRecentToolResultsForThread(opts: {
+  threadId: string
+  upn: string
   limit?: number
   toolNames?: readonly string[]
 }): DbToolResult[] {
   const limit = Math.max(1, Math.min(opts.limit ?? 25, 200))
   const db = getDb()
-  if (opts.toolNames && opts.toolNames.length > 0) {
-    const placeholders = opts.toolNames.map(() => "?").join(",")
-    return db
-      .prepare(
-        `
-      SELECT * FROM tool_results
-      WHERE session_id = ? AND tool_name IN (${placeholders})
-      ORDER BY id DESC
-      LIMIT ?
-    `
-      )
-      .all(opts.sessionId, ...opts.toolNames, limit) as DbToolResult[]
-  }
+  const toolFilter =
+    opts.toolNames && opts.toolNames.length > 0
+      ? ` AND tr.tool_name IN (${opts.toolNames.map(() => "?").join(",")})`
+      : ""
+  const params: Array<string | number> = [opts.threadId, opts.upn]
+  if (opts.toolNames && opts.toolNames.length > 0) params.push(...opts.toolNames)
+  params.push(limit)
   return db
     .prepare(
       `
-    SELECT * FROM tool_results
-    WHERE session_id = ?
-    ORDER BY id DESC
-    LIMIT ?
-  `
+      SELECT tr.*
+      FROM tool_results tr
+      INNER JOIN runs r ON r.id = tr.run_id
+      WHERE r.thread_id = ?
+        AND r.upn = ?
+        ${toolFilter}
+      ORDER BY tr.id DESC
+      LIMIT ?
+    `
     )
-    .all(opts.sessionId, limit) as DbToolResult[]
+    .all(...params) as DbToolResult[]
 }
 
-/**
- * Load tool results for a specific run (typically a prior turn). Ordered
- * by insertion order so the agent sees them in the original sequence.
- */
 export function loadToolResultsForRun(runId: string): DbToolResult[] {
   return getDb()
     .prepare("SELECT * FROM tool_results WHERE run_id = ? ORDER BY id ASC")
     .all(runId) as DbToolResult[]
 }
 
-/**
- * Lookup a single tool result by (run_id, tool_call_id). Used by the
- * recall_prior_result tool when the model passes an explicit reference.
- */
 export function getToolResult(runId: string, toolCallId: string): DbToolResult | null {
   return (
     (getDb()

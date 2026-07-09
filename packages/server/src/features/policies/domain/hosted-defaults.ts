@@ -255,6 +255,44 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       }
     },
     {
+      name: "hosted_deny_sync_shell_execute",
+      effect: PolicyEffect.Deny,
+      condition: "selectors",
+      parameters: {
+        priority: DEFAULT_PRIORITY + 75,
+        reason: "shell commands during sync are denied in hosted mode unless a higher-priority allow rule is added",
+        selectors: { role: PolicyRole.HostedUser, dbOperation: PolicyDbOperation.SyncShellExecute }
+      }
+    },
+    {
+      name: "hosted_deny_sync_custom_sql_prod_uat",
+      effect: PolicyEffect.Deny,
+      condition: "selectors",
+      parameters: {
+        priority: DEFAULT_PRIORITY + 60,
+        reason: "ad-hoc SQL during sync is denied on UAT/PROD unless explicitly allowed",
+        selectors: {
+          role: PolicyRole.HostedUser,
+          dbOperation: PolicyDbOperation.SyncCustomSql,
+          dbEnvironment: PolicyDbEnvironment.Uat
+        }
+      }
+    },
+    {
+      name: "hosted_deny_sync_custom_sql_prod",
+      effect: PolicyEffect.Deny,
+      condition: "selectors",
+      parameters: {
+        priority: DEFAULT_PRIORITY + 60,
+        reason: "ad-hoc SQL during sync is denied on UAT/PROD unless explicitly allowed",
+        selectors: {
+          role: PolicyRole.HostedUser,
+          dbOperation: PolicyDbOperation.SyncCustomSql,
+          dbEnvironment: PolicyDbEnvironment.Prod
+        }
+      }
+    },
+    {
       name: "hosted_require_approval_outbound_fetch",
       effect: PolicyEffect.RequireApproval,
       condition: "selectors",
@@ -291,6 +329,33 @@ export function hostedDefaultPolicyRules(): PolicyRule[] {
       parameters: {
         priority: DEFAULT_PRIORITY,
         selectors: { role: PolicyRole.HostedUser, tool: "list_environments" }
+      }
+    },
+    {
+      name: "hosted_allow_list_sync_definitions",
+      effect: PolicyEffect.Allow,
+      condition: "selectors",
+      parameters: {
+        priority: DEFAULT_PRIORITY,
+        selectors: { role: PolicyRole.HostedUser, tool: "list_sync_definitions" }
+      }
+    },
+    {
+      name: "hosted_allow_resolve_sync_scope",
+      effect: PolicyEffect.Allow,
+      condition: "selectors",
+      parameters: {
+        priority: DEFAULT_PRIORITY,
+        selectors: { role: PolicyRole.HostedUser, tool: "resolve_sync_scope" }
+      }
+    },
+    {
+      name: "hosted_allow_sync_diff_scan",
+      effect: PolicyEffect.Allow,
+      condition: "selectors",
+      parameters: {
+        priority: DEFAULT_PRIORITY,
+        selectors: { role: PolicyRole.HostedUser, tool: "sync_diff_scan" }
       }
     },
     {
@@ -426,7 +491,9 @@ export function policyRulesFromEnvironments(envs: ReadonlyArray<EnvLike>): Polic
       if (
         op !== PolicyDbOperation.Dml &&
         op !== PolicyDbOperation.Ddl &&
-        op !== PolicyDbOperation.SyncExecute
+        op !== PolicyDbOperation.SyncExecute &&
+        op !== PolicyDbOperation.SyncCustomSql &&
+        op !== PolicyDbOperation.SyncShellExecute
       )
         continue
       // Don't emit an allow that contradicts an explicit deny on the same env.

@@ -1,8 +1,7 @@
 /**
  * Post-round processing — logic that runs after each tool execution round.
  *
- * Includes: stuck detection, coherent repair stall detection, budget
- * extension, recovery hint injection, and post-delegation verification.
+ * Includes: stuck detection, budget extension, recovery hint injection, and post-delegation verification.
  */
 
 import { buildRecoveryHints } from "../../../core/recovery.js"
@@ -13,6 +12,7 @@ import {
   evaluateToolRoundBudgetExtension,
   summarizeToolRoundProgress
 } from "../../../../tools/index.js"
+import { MessageRole } from "../../../../domain/enums/message.js"
 import type { AgentConfig, Message } from "../../../../domain/agent-types.js"
 import type { AgentLoopState } from "../state.js"
 
@@ -55,7 +55,7 @@ export interface PostRoundContext {
  * Run all post-round processing. Returns instructions for the loop controller.
  */
 export function processPostRound(ctx: PostRoundContext): PostRoundResult {
-  const { roundToolCalls, state, messages, config, iteration } = ctx
+  const { roundToolCalls, state, messages, config, iteration, allToolCalls } = ctx
 
   // Accumulate tool calls
   ctx.allToolCalls.push(...roundToolCalls)
@@ -100,9 +100,6 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
     return { needsSynthesis: true }
   }
 
-  // ── Coherent repair stall detection ──
-  processCoherentRepairStall(ctx)
-
   // ── Excessive read_file detection ──
   processExcessiveReadFiles(ctx)
 
@@ -112,7 +109,6 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
   // ── Checkpoint ──
   state.lastRoundHadDelegation = ctx.delegationThisRound
   state.lastDelegationWasReadOnly = ctx.delegationThisRound && ctx.delegationThisRoundWasReadOnly
-  state.lastRoundToolCallsSnapshot = roundToolCalls.map((c) => ({ name: c.name, isError: c.isError }))
 
   // ── Recovery hints ──
   injectRecoveryHints(ctx)
@@ -126,10 +122,7 @@ export function processPostRound(ctx: PostRoundContext): PostRoundResult {
 
 // ── Internal helpers ────────────────────────────────────────────
 
-// ── Internal helpers ────────────────────────────────────────────
-
-import { MessageRole } from "../../../../domain/enums/message.js"
-import { processCoherentRepairStall, processExcessiveReadFiles } from "./file-stalls.js"
+import { processExcessiveReadFiles } from "./file-stalls.js"
 
 function processRoundBudgetExtension(ctx: PostRoundContext): void {
   const { roundToolCalls, state, config } = ctx
@@ -192,14 +185,14 @@ function processPostDelegationVerification(ctx: PostRoundContext): void {
   const toolNamesUsed = response.toolCalls.map((c) => c.name)
   const didCodeReview = toolNamesUsed.includes("read_file")
   const didOnlySurfaceCheck =
-    !didCodeReview && (toolNamesUsed.includes("browser_check") || toolNamesUsed.includes("list_directory"))
+    !didCodeReview && toolNamesUsed.includes("list_directory")
 
   if (hasErrors || failuresThisRound > 0) {
     state.verificationFoundIssues = true
   } else if (didOnlySurfaceCheck) {
     state.inPostDelegationVerification = true
     const incompleteMsg =
-      "INCOMPLETE VERIFICATION: You ran browser_check or list_directory but did NOT review " +
+      "INCOMPLETE VERIFICATION: You ran list_directory but did NOT review " +
       "the actual code with read_file. A page loading without JS errors does NOT mean the logic is correct. " +
       "You MUST now use read_file on the main code files (JS/TS) to verify that:\n" +
       "- All functions contain REAL logic (not stubs like `return true`)\n" +

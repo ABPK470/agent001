@@ -1,6 +1,5 @@
 /**
- * File-stall nudges (coherent repair stall, excessive reads).
- * Extracted from post-round.ts.
+ * File-stall nudges (excessive reads).
  *
  * @module
  */
@@ -9,65 +8,16 @@ import { MessageRole } from "../../../../domain/enums/message.js"
 import * as log from "../../../../internal/index.js"
 import type { PostRoundContext } from "../post-round/index.js"
 
-const COHERENT_READ_ONLY_ROUND_LIMIT = 1
-
-export function processCoherentRepairStall(ctx: PostRoundContext): void {
-  const { state, roundToolCalls, messages, config, iteration } = ctx
-  const ce = state.coherentExecution
-  if (!ce) return
-
-  const roundHadWrite = roundToolCalls.some(
-    (tc) => !tc.isError && (tc.name === "write_file" || tc.name === "replace_in_file")
-  )
-  if (roundHadWrite) {
-    state.coherentRepairReadOnlyRounds = 0
-    return
-  }
-
-  const roundHadRead = roundToolCalls.some((tc) => tc.name === "read_file")
-  if (!roundHadRead) return
-
-  state.coherentRepairReadOnlyRounds++
-  if (state.coherentRepairReadOnlyRounds < COHERENT_READ_ONLY_ROUND_LIMIT) return
-
-  state.coherentRepairReadOnlyRounds = 0
-  const repairFiles = ce.bundle.artifacts.map((a) => a.path).join(", ")
-  const spinMsg =
-    `REPAIR STALL DETECTED: You read files without writing anything in the previous iteration. ` +
-    `Stop reading and write the fix NOW.\n` +
-    `Files in scope: ${repairFiles}\n` +
-    `REQUIRED NEXT ACTION: call write_file (or replace_in_file) to apply the fix. ` +
-    `If the write guard is blocking you because a function is missing, include ALL existing functions PLUS the fix in your write. ` +
-    `If the issue requires restructuring (e.g. removing an ES module import), restructure now — rewrite the entire affected file.`
-  messages.push({ role: MessageRole.System, content: spinMsg, section: "history", hint: true })
-  config.onNudge?.({ tag: "coherent-repair-stall", message: spinMsg, iteration })
-  if (config.verbose) log.logError(`Coherent repair stall at iteration ${iteration}`)
-}
-
-/**
- * Fires a nudge when the agent reads files excessively — either within a
- * single round (>4 reads) OR cumulatively across rounds without writing
- * (sandwich-read pattern: same file re-read via both relative and absolute
- * sandbox path many times while no writes happen).
- *
- * Two thresholds:
- *  - Per-round: > 4 reads in one round → immediate nudge
- *  - Cumulative: any single file (by basename) read > 5 times total → nudge
- *    (resets on any successful write_file / replace_in_file)
- */
 export function processExcessiveReadFiles(ctx: PostRoundContext): void {
   const { roundToolCalls, state, messages, config, iteration } = ctx
 
   const reads = roundToolCalls.filter((tc) => tc.name === "read_file" && !tc.isError)
   if (reads.length === 0) return
 
-  // Accumulate cumulative read counts per basename.
-  // Reset on write so the counter tracks reads *without writes*.
   const roundHadWrite = roundToolCalls.some(
     (tc) => !tc.isError && (tc.name === "write_file" || tc.name === "replace_in_file")
   )
   if (roundHadWrite) {
-    // Writing is progress — clear the slate
     state.cumulativeReadFileHistory.clear()
   }
 
@@ -80,7 +30,6 @@ export function processExcessiveReadFiles(ctx: PostRoundContext): void {
     state.cumulativeReadFileHistory.set(basename, (state.cumulativeReadFileHistory.get(basename) ?? 0) + 1)
   }
 
-  // Per-round threshold: > 4 reads in this single round
   if (reads.length > 4) {
     const uniqueFiles = new Set(pathsRead)
     const msg =
@@ -100,7 +49,6 @@ export function processExcessiveReadFiles(ctx: PostRoundContext): void {
     return
   }
 
-  // Cumulative threshold: any file read > 5 times without a write in between
   const overReadFiles = [...state.cumulativeReadFileHistory.entries()]
     .filter(([, count]) => count > 5)
     .map(([basename]) => basename)
@@ -116,7 +64,6 @@ export function processExcessiveReadFiles(ctx: PostRoundContext): void {
     config.onNudge?.({ tag: "excessive-reads-cumulative", message: msg, iteration })
     if (config.verbose)
       log.logError(`Cumulative excessive reads: ${overReadFiles.join(", ")} at iteration ${iteration}`)
-    // Reset so the nudge doesn't fire every iteration after this
     for (const f of overReadFiles) state.cumulativeReadFileHistory.delete(f)
   }
 }

@@ -1,15 +1,9 @@
 /**
- * Test helpers that seed parent rows required by FK constraints (v19).
+ * Test helpers that seed parent rows required by FK constraints.
  *
- * v19 schema:
  *   - users(upn) is the canonical identity row, NOT NULL FK target everywhere
- *   - sessions(sid) → users(upn) NOT NULL CASCADE; no display_name on sessions
- *   - runs(upn, session_id) → users + sessions, both NOT NULL
- *   - attachments(owner_upn, session_id) → users + sessions
- *
- * Tests that pre-date v19 inserted runs/sessions without seeding the user
- * row first; with FK enforcement those inserts now fail. Use the helpers
- * below from `beforeEach` to seed the parent chain.
+ *   - sessions(sid) → users(upn) for auth cookie tests only
+ *   - runs(upn) → users
  */
 import type Database from "better-sqlite3"
 
@@ -23,7 +17,7 @@ export function seedUser(
      VALUES (?, ?, ?, ?, 'local', datetime('now'))`
   ).run(
     upn,
-    upn, // username = upn for tests
+    upn,
     opts.displayName ?? upn,
     opts.isAdmin ? 1 : 0
   )
@@ -40,32 +34,24 @@ export function seedSession(db: Database.Database, sid: string, upn: string = "t
 export function seedRun(
   db: Database.Database,
   runId: string,
-  opts: { sessionSid?: string; upn?: string; displayName?: string; goal?: string; status?: string } = {}
+  opts: { upn?: string; displayName?: string; goal?: string; status?: string } = {}
 ): void {
   const upn = opts.upn ?? "test-user@local"
-  const sid = opts.sessionSid ?? "sid-test"
-  seedSession(db, sid, upn)
+  seedUser(db, upn)
   db.prepare(
-    `INSERT OR IGNORE INTO runs (id, goal, status, session_id, upn, display_name, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, datetime('now'))`
-  ).run(runId, opts.goal ?? "test", opts.status ?? "completed", sid, upn, opts.displayName ?? upn)
+    `INSERT OR IGNORE INTO runs (id, goal, status, upn, display_name, created_at)
+     VALUES (?, ?, ?, ?, ?, datetime('now'))`
+  ).run(runId, opts.goal ?? "test", opts.status ?? "completed", upn, opts.displayName ?? upn)
 }
 
 export function seedRuns(
   db: Database.Database,
   runIds: readonly string[],
-  opts: { sessionSid?: string; upn?: string } = {}
+  opts: { upn?: string } = {}
 ): void {
   for (const id of runIds) seedRun(db, id, opts)
 }
 
-/**
- * Seed the standard test-fixture user pool so tests using arbitrary
- * `*@example.com` upns can exercise FK-bound services (attachments,
- * browser credentials/proxy/policy/context, notifications, runs).
- *
- * Add new upns here when a test needs one — the helper is idempotent.
- */
 export const TEST_USERS = [
   "alice@example.com",
   "bob@example.com",

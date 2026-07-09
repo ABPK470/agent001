@@ -1,16 +1,19 @@
 /**
  * Tenant config — load, override, reset.
  */
-import { writeFileSync } from "node:fs"
+import { mkdirSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   DEFAULT_TENANT_CONFIG,
+  formatTenantConfigBootSummary,
   getTenantConfig,
   isDefaultTenantConfig,
   loadTenantConfigFromEnv,
+  loadTenantConfigFromFile,
   resetTenantConfig,
+  resolveTenantConfigPath,
   setTenantConfig
 } from "../src/application/shell/tenant-config.js"
 
@@ -32,8 +35,7 @@ describe("tenant config defaults", () => {
     expect(c.catalogBootstrap.largeObjects).toEqual([])
     expect(c.catalogBootstrap.canonicalQualifiedNames).toEqual({})
     expect(c.schemaRanking).toEqual([])
-    expect(c.routingKeywords.schemas).toEqual([])
-    expect(c.routingKeywords.domain).toEqual([])
+    expect(c.domainKeywords).toEqual([])
   })
 
   it("default thresholds match the universal heuristics", () => {
@@ -96,6 +98,38 @@ describe("loadTenantConfigFromEnv", () => {
     const path = join(tmpdir(), `tenant-bad-${Date.now()}.json`)
     writeFileSync(path, "{ not json")
     expect(() => loadTenantConfigFromEnv({ MIA_TENANT_CONFIG: path } as NodeJS.ProcessEnv)).toThrow()
+  })
+
+  it("throws when the config file does not exist", () => {
+    expect(() =>
+      loadTenantConfigFromEnv({ MIA_TENANT_CONFIG: "/no/such/tenant.json" } as NodeJS.ProcessEnv)
+    ).toThrow(/not found/)
+  })
+
+  it("resolves relative paths against baseDir", () => {
+    const dir = join(tmpdir(), `tenant-base-${Date.now()}`)
+    mkdirSync(dir, { recursive: true })
+    const path = join(dir, "tenant.json")
+    writeFileSync(path, JSON.stringify({ mirrorSchema: "relativeMirror" }), { flag: "wx" })
+    const c = loadTenantConfigFromEnv(
+      { MIA_TENANT_CONFIG: "tenant.json" } as NodeJS.ProcessEnv,
+      { baseDir: dir }
+    )
+    expect(c.mirrorSchema).toBe("relativeMirror")
+    expect(resolveTenantConfigPath("tenant.json", dir)).toBe(path)
+  })
+})
+
+describe("formatTenantConfigBootSummary", () => {
+  it("includes mirror and keyword counts", () => {
+    setTenantConfig({
+      mirrorSchema: "persistedview",
+      domainKeywords: ["revenue", "risk", "mymi"]
+    })
+    const summary = formatTenantConfigBootSummary()
+    expect(summary).toContain("mirror=persistedview")
+    expect(summary).toContain("domainKeywords=3")
+    expect(summary).not.toContain("syncEntities=")
   })
 })
 

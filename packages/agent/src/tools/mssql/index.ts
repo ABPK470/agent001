@@ -22,3 +22,4 @@ export {
   validateQuery,
   validateTempTableBatch
 } from "./validation.js"
+export { markMssqlTableProfiled, markMssqlTableVerified, seedMssqlVerifiedTables } from "./schema-verified.js"

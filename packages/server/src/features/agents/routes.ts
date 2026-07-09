@@ -5,6 +5,7 @@
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
 import * as db from "../../platform/persistence/sqlite.js"
+import { requireSessionUpn } from "../auth/application/access.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 import { listAvailableTools } from "../runs/tooling/registry.js"
 
@@ -100,26 +101,37 @@ export function registerAgentRoutes(app: FastifyInstance, orchestrator: AgentOrc
     return { ok: true }
   })
 
-  app.post<{ Params: { id: string }; Body: { goal: string } }>("/api/agents/:id/runs", async (req, reply) => {
+  app.post<{ Params: { id: string }; Body: { goal: string; threadId: string } }>("/api/agents/:id/runs", async (req, reply) => {
+    try {
+      requireSessionUpn(req.session)
+    } catch {
+      reply.code(401)
+      return { error: "Authentication required" }
+    }
     const agent = db.getAgentDefinition(req.params.id)
     if (!agent) {
       reply.code(404)
       return { error: "Agent not found" }
     }
 
-    const { goal } = req.body
+    const { goal, threadId } = req.body
     if (!goal || typeof goal !== "string") {
       reply.code(400)
       return { error: "goal is required" }
+    }
+    if (!threadId || typeof threadId !== "string") {
+      reply.code(400)
+      return { error: "threadId is required" }
     }
 
     const runId = orchestrator.startRun(
       goal,
       {
         agentId: agent.id,
-        systemPrompt: db.resolveAgentSystemPrompt(agent)
+        systemPrompt: db.resolveAgentSystemPrompt(agent),
+        threadId
       },
-      req.session ?? null
+      req.session!
     )
 
     reply.code(201)

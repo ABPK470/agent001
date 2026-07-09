@@ -16,13 +16,27 @@ function main(): void {
   const tenantId = options.tenantId ?? DEFAULT_TENANT_ID
   const outputPath = resolve(ROOT, options.output)
   const definitions = db.listEntityDefinitions(tenantId, { includeRetired: options.includeRetired })
+  const runs = new Map(
+    definitions
+      .map((def) => {
+        const config = db.getSyncDefinitionConfig(tenantId, def.id)
+        return config
+          ? ([def.id, {
+              template: config.flow_preset,
+              service: config.service_profile_ref,
+              environment: config.environment_policy_ref
+            }] as const)
+          : null
+      })
+      .filter((entry): entry is readonly [string, { template: string; service: string; environment: string }] => entry !== null)
+  )
 
   if (definitions.length === 0) {
     fail(`No entity definitions found for tenant ${tenantId}.`)
   }
 
   mkdirSync(dirname(outputPath), { recursive: true })
-  writeFileSync(outputPath, formatEntitiesYaml(definitions), "utf-8")
+  writeFileSync(outputPath, formatEntitiesYaml(definitions, runs), "utf-8")
   console.log(`Exported ${definitions.length} entity definition(s) to ${relative(ROOT, outputPath)}`)
 }
 

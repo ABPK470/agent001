@@ -1,8 +1,9 @@
 import { EventType, governTool, type DelegateContext, type EngineServices, type Tool } from "@mia/agent"
-import { SyncRunStatus } from "@mia/sync"
+import { readToolEntityId } from "@mia/shared-types"
 import { resetEffectSeq } from "../../../../platform/effects/index.js"
 import { broadcast, broadcastTrace, broadcastTraceLoose } from "../../../../platform/events/broadcaster.js"
 import { retrieveContext } from "../../../../platform/persistence/memory.js"
+import { EMPTY_MEMORY_PER_TIER } from "../../../../platform/persistence/memory/tier-context.js"
 import * as db from "../../../../platform/persistence/sqlite.js"
 import { RunPriority } from "../../../../platform/queue/run-queue.js"
 import { AuditActor } from "../../../../shared/enums/audit.js"
@@ -10,7 +11,7 @@ import { BusProtocol } from "../../../../shared/enums/bus.js"
 import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 import { decideSections, filterToolsByGoal } from "../../core/decide-sections.js"
 import { composePerRunTools, getAllTools } from "../../tooling/registry.js"
-import { enforceClarificationUiOptions } from "../ask-user-options.js"
+import { resolveAskUserPresentation } from "../ask-user-options.js"
 import { wrapWithEffects } from "../workspace-effects.js"
 import { buildClassificationContext } from "./support.js"
 import type {
@@ -21,6 +22,23 @@ import type {
 } from "./types.js"
 
 const MSSQL_TOOL_TIMEOUT_MS = 120_000
+const SYNC_TOOL_TIMEOUT_MS = 240_000
+const SYNC_BULK_NO_RETRY = {
+  maxRetries: 0,
+  baseDelayMs: 0,
+  maxDelayMs: 0,
+  backoffMultiplier: 1,
+  jitterFactor: 0
+} as const
+
+const SYNC_LONG_RUNNING_TOOLS = new Set([
+  "sync_preview",
+  "sync_diff_scan",
+  "sync_execute",
+  "compare_catalogs"
+])
+
+const SYNC_NO_RETRY_TOOLS = new Set(["sync_preview", "sync_diff_scan"])
 
 function createGovernanceServices(services: ToolResolutionContext["services"]): EngineServices {
   return {
@@ -42,22 +60,23 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
       policyContext: policyCtx,
       ...(tool.name === "query_mssql" || tool.name === "explore_mssql_schema"
         ? { timeoutMs: MSSQL_TOOL_TIMEOUT_MS }
-        : {})
+        : SYNC_LONG_RUNNING_TOOLS.has(tool.name)
+          ? {
+              timeoutMs: SYNC_TOOL_TIMEOUT_MS,
+              ...(SYNC_NO_RETRY_TOOLS.has(tool.name) ? { retryPolicy: SYNC_BULK_NO_RETRY } : {})
+            }
+          : {})
     })
 
   const shouldUseMemory = !(runWorkspace.taskType === "code_generation" && !request.resume)
-  let perTier: ToolResolution["perTier"] = {
-    working: "",
-    episodic: "",
-    semantic: ""
-  }
+  let perTier: ToolResolution["perTier"] = { ...EMPTY_MEMORY_PER_TIER }
 
   if (shouldUseMemory) {
     try {
       const result = await retrieveContext(request.goal, {
-        sessionId: activeRun?.sessionId ?? undefined,
+        threadId: activeRun?.threadId ?? undefined,
         runId: request.runId,
-        upn: activeRun?.ownerUpn ?? null
+        upn: activeRun?.ownerUpn ?? undefined
       })
       perTier = result.perTier
     } catch (error) {
@@ -90,8 +109,8 @@ export async function resolveExecutionTools(ctx: ToolResolutionContext): Promise
       dropped: toolFilter.dropped,
       kept: toolFilter.tools.length,
       dbScore: toolDecision.dbScore ?? 0,
-      syncTrigger: !!toolDecision.triggers?.sync,
-      reason: `goal classified non-DB (dbScore=${toolDecision.dbScore ?? 0}, sync=${!!toolDecision.triggers?.sync})`
+      syncTrigger: !!toolDecision.syncIntent,
+      reason: `goal classified non-data (dbScore=${toolDecision.dbScore ?? 0}, syncIntent=${!!toolDecision.syncIntent})`
     } as const
     tracing.boundSaveTrace(request.runId, filteredEntry)
     broadcastTrace(request.runId, tracing.debugSeqRef.value++, filteredEntry)
@@ -243,23 +262,28 @@ function composeExecutionTools(
       }),
     askUserResolve: (question, options, sensitive) => {
       const match = interaction.clarifications.matchQuestion(request.runId, question)
-      const effectiveOptions = enforceClarificationUiOptions(options, match)
+      const presentation = resolveAskUserPresentation(question, options, match)
       tracing.boundSaveTrace(request.runId, {
         kind: TrajectoryEventKind.UserInputRequest,
-        question,
-        options: effectiveOptions,
+        question: presentation.question,
+        options: presentation.options,
         sensitive
       })
       broadcast({
         type: EventType.UserInputRequired,
-        data: { runId: request.runId, question, options: effectiveOptions ?? [], sensitive }
+        data: {
+          runId: request.runId,
+          question: presentation.question,
+          options: presentation.options ?? [],
+          sensitive
+        }
       })
-      if (match) interaction.clarifications.setPending(request.runId, match, question)
+      if (match) interaction.clarifications.setPending(request.runId, match, presentation.question)
       return new Promise<string>((resolve) => {
         interaction.registerPendingInput(request.runId, { resolve })
       })
     },
-    sessionId: activeRun?.sessionId ?? null,
+    threadId: activeRun?.threadId ?? null,
     upn: activeRun?.ownerUpn ?? null
   })
 
@@ -289,7 +313,7 @@ function composeExecutionTools(
                 db.recordSyncRunStart({
                   planId,
                   entityType: String(args["entityType"] ?? ""),
-                  entityId: String(args["entityId"] ?? ""),
+                  entityId: readToolEntityId(args),
                   entityDisplayName: null,
                   source: String(args["source"] ?? ""),
                   target: String(args["target"] ?? ""),
@@ -308,7 +332,7 @@ function composeExecutionTools(
                   runId: request.runId,
                   planId,
                   entityType: String(args["entityType"] ?? ""),
-                  entityId: String(args["entityId"] ?? ""),
+                  entityId: readToolEntityId(args),
                   source: String(args["source"] ?? ""),
                   target: String(args["target"] ?? "")
                 }
@@ -329,22 +353,9 @@ function composeExecutionTools(
             type: EventType.SyncAgentExecuteStarted,
             data: { runId: request.runId, planId }
           })
-          const startedAt = Date.now()
           const result = await tool.execute(args)
           const success = typeof result === "string" && result.toLowerCase().includes("successfully")
-          try {
-            db.recordSyncRunFinish({
-              planId,
-              status: success ? SyncRunStatus.Success : SyncRunStatus.Failed,
-              error: success ? null : typeof result === "string" ? result : null,
-              durationMs: Date.now() - startedAt
-            })
-          } catch (error) {
-            console.warn(
-              "[sync-history] recordSyncRunFinish failed:",
-              error instanceof Error ? error.message : error
-            )
-          }
+          // executeSync records finish (with execute totals) via the run sink.
           broadcast({
             type: EventType.SyncAgentExecuteCompleted,
             data: {

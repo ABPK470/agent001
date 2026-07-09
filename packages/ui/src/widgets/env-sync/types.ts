@@ -2,8 +2,8 @@ import type { SyncExecuteProgress } from "../../types"
 
 export type ExecState =
   | { kind: "idle" }
-  | { kind: "running"; events: SyncExecuteProgress[] }
-  | { kind: "done"; success: boolean; events: SyncExecuteProgress[]; error?: string }
+  | { kind: "running"; events: SyncExecuteProgress[]; startedAt: number; lastEventAt: number }
+  | { kind: "done"; success: boolean; skipped?: boolean; events: SyncExecuteProgress[]; error?: string; message?: string }
 
 export type ModalKind = null | "definition" | "history"
 

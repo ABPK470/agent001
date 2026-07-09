@@ -162,7 +162,7 @@ export function extractToolFacts(step: Step, ctx?: HostedPolicyContext): ToolFac
   }
 
   // Network-capable tools.
-  if (step.action === "fetch_url" || step.action === "browse_web" || step.action === "browser_check") {
+  if (step.action === "fetch_url") {
     facts.network = PolicyNetwork.Allow
   }
 
@@ -186,6 +186,7 @@ function classifyPath(raw: string, sandboxRoot: string | null): PolicyScope {
 
 function classifyDbOperation(toolName: string, sql: string): PolicyDbOperation {
   if (toolName === "sync_preview" || toolName.endsWith("_sync_preview")) return PolicyDbOperation.SyncPreview
+  if (toolName === "sync_diff_scan" || toolName === "resolve_sync_scope") return PolicyDbOperation.SyncPreview
   if (toolName === "sync_execute" || toolName.endsWith("_sync_execute")) return PolicyDbOperation.SyncExecute
   if (MSSQL_DDL_RE.test(sql)) return PolicyDbOperation.Ddl
   if (MSSQL_DML_RE.test(sql)) return PolicyDbOperation.Dml

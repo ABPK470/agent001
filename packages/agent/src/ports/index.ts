@@ -5,13 +5,6 @@
 export type {
   AttachmentMetadata,
   AttachmentStore,
-  BrowserCheckRunResult,
-  BrowserClient,
-  BrowserContextHandle,
-  BrowserContextReader,
-  BrowserGuard,
-  CredentialReader,
-  HandoffStore,
   MssqlEntry,
   RecipeReader,
   ShellClient,

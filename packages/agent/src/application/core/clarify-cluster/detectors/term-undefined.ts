@@ -2,13 +2,15 @@
 //
 // Fires (block-severity) when the user goal contains a capitalised
 // noun-phrase that does NOT match any catalog identifier (table, column,
-// schema) AND is not listed in tenant.routingKeywords.domain. Without
+// schema) AND is not listed in tenant.domainKeywords or the published sync /
+// live catalog vocabulary. Without that context the agent is liable to invent
 // that context the agent is liable to invent a meaning ("Corporate" =
 // some plausible-sounding column it has never seen). Ask instead.
 //
 // Pure function of (goal, catalog, tenant). No I/O, no LLM.
 
 import type { TenantConfig } from "../../../shell/tenant-config.js"
+import { buildKnownVocabulary } from "../../../shell/known-vocabulary.js"
 import type { CatalogGraph } from "../../../../tools/index.js"
 import type { Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
@@ -98,7 +100,7 @@ export const termUndefinedDetector: Detector = {
       // skip if any of its tokens is a stopword AND the phrase is single-word
       if (!phrase.includes(" ") && isStopword(phrase)) continue
       if (isKnownInCatalog(lc, ctx.catalog)) continue
-      if (isKnownToTenant(lc, ctx.tenant)) continue
+      if (isKnownVocabulary(lc, ctx.tenant, ctx.catalog)) continue
       if (reserved?.has(lc)) continue
       const phraseTokens = lc.split(/\s+/).filter((t) => t.length > 0)
       if (phraseTokens.some((t) => reserved?.has(t))) continue
@@ -143,17 +145,15 @@ function isKnownInCatalog(lcPhrase: string, catalog: CatalogGraph): boolean {
 }
 
 /**
- * Does the tenant config declare this phrase (or any token) as a known
- * domain term, sync keyword, or schema routing keyword? Tenants can
- * register tenant-specific vocabulary here to suppress false positives
- * without rebuilding the catalog.
+ * Declared in tenant config, published sync bundle, or live catalog schemas.
  */
-function isKnownToTenant(lcPhrase: string, tenant: TenantConfig): boolean {
+function isKnownVocabulary(
+  lcPhrase: string,
+  tenant: TenantConfig,
+  catalog: CatalogGraph
+): boolean {
   const tokens = lcPhrase.split(/\s+/).filter((t) => t.length > 0)
-  const known = new Set<string>()
-  for (const w of tenant.routingKeywords.domain) known.add(w.toLowerCase())
-  for (const w of tenant.routingKeywords.schemas) known.add(w.toLowerCase())
-  for (const w of tenant.routingKeywords.sync ?? []) known.add(w.toLowerCase())
+  const known = buildKnownVocabulary(tenant, catalog)
   if (known.has(lcPhrase)) return true
   for (const t of tokens) if (known.has(t)) return true
   return false

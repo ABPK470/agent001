@@ -3,7 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { cleanupExpiredCache, clearSessionCache, getCacheStats } from "../../platform/persistence/tool-cache.js"
+import { cleanupExpiredCache, clearUserCache, getCacheStats } from "../../platform/persistence/tool-cache.js"
 
 export function registerToolCacheRoutes(app: FastifyInstance): void {
   app.get("/api/tool-cache/stats", async () => {
@@ -18,16 +18,16 @@ export function registerToolCacheRoutes(app: FastifyInstance): void {
     return cleanupExpiredCache()
   })
 
-  app.delete<{ Querystring: { session?: string } }>("/api/tool-cache", async (req, reply) => {
-    const target = req.query.session ?? req.session?.sid ?? null
+  app.delete<{ Querystring: { upn?: string } }>("/api/tool-cache", async (req, reply) => {
+    const target = req.query.upn ?? req.session?.upn ?? null
     if (!target) {
       reply.code(400)
-      return { error: "no session id resolvable" }
+      return { error: "no upn resolvable" }
     }
-    if (target !== req.session?.sid && !req.session?.isAdmin) {
+    if (target.toLowerCase() !== req.session?.upn?.toLowerCase() && !req.session?.isAdmin) {
       reply.code(403)
-      return { error: "admin required to clear other sessions" }
+      return { error: "admin required to clear other users' cache" }
     }
-    return clearSessionCache(target)
+    return clearUserCache(target)
   })
 }

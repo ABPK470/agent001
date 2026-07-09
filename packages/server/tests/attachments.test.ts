@@ -53,14 +53,14 @@ describe("attachments DB layer", () => {
 
     const bytesA = new TextEncoder().encode("hello world")
     const a1 = await uploadAttachment({
-      scope: "session",
+      scope: "user_draft",
       ownerUpn: "u@x",
       originalName: "a.txt",
       mediaType: "text/plain",
       bytes: bytesA
     })
     const a2 = await uploadAttachment({
-      scope: "session",
+      scope: "user_draft",
       ownerUpn: "u@x",
       originalName: "b.txt",
       mediaType: "text/plain",
@@ -81,7 +81,7 @@ describe("attachments DB layer", () => {
     // Distinct content gets a new blob.
     const bytesB = new TextEncoder().encode("different")
     const b = await uploadAttachment({
-      scope: "session",
+      scope: "user_draft",
       ownerUpn: "u@x",
       originalName: "c.bin",
       mediaType: "application/octet-stream",
@@ -91,7 +91,7 @@ describe("attachments DB layer", () => {
     expect(b.ingestion_mode).toBe("binary_reference")
 
     // Listing returns newest first.
-    const list = listAttachments({ scope: "session" })
+    const list = listAttachments({ scope: "user_draft" })
     expect(list.map((r) => r.id)).toEqual([b.id, a2.id, a1.id])
 
     // Get returns the same row.

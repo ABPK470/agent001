@@ -4,4 +4,4 @@
 
 export * from "./clarification-block.js"
 export * from "./decide-sections.js"
-export * from "./system-messages.js"
+export * from "./system-messages/index.js"

@@ -10,7 +10,7 @@ export function DefinitionContent({ definition }: { definition: PublishedSyncDef
 
   if (!definition) {
     return (
-      <div className="flex flex-col items-center justify-center py-16 gap-3 text-text-muted">
+      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 py-16 text-text-muted">
         <BookOpen size={24} className="opacity-30" />
         <p className="text-sm">No published definition loaded.</p>
         <p className="text-xs">Compile and publish the repo definitions to make this entity available for sync.</p>
@@ -33,7 +33,7 @@ export function DefinitionContent({ definition }: { definition: PublishedSyncDef
   }
 
   return (
-    <div className="pb-4">
+    <div className="min-h-0 flex-1 overflow-y-auto show-scrollbar pb-4">
       <div className="px-5 pt-4">
         <div className="rounded-lg border border-border-subtle bg-overlay-1/40 px-3 py-2.5 text-[11px] text-text-muted">
           This is the published runtime definition used to compile preview plans. Pre-preview controls in EnvSync are now sourced from this published definition rather than the old recipe bundle.

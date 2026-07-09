@@ -6,7 +6,7 @@
  * a single DELETE FROM sync_runs and audit rows go with it.
  */
 
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface SyncAuditRow {
   id: number

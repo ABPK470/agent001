@@ -56,8 +56,8 @@ function Section({
         onClick={() => setOpen(!open)}
       >
         {open ? <ChevronDown size={14} className="text-text-muted shrink-0" /> : <ChevronRight size={14} className="text-text-muted shrink-0" />}
-        <span className="text-[13px] font-medium text-text">{label}</span>
-        {badge && <span className={`text-[13px] font-mono ml-auto ${badgeColor}`}>{badge}</span>}
+        <span className="text-sm font-medium text-text">{label}</span>
+        {badge && <span className={`text-sm font-mono ml-auto ${badgeColor}`}>{badge}</span>}
       </button>
       {open && (
         <div className="px-3 py-2 border-t border-border/30 relative">
@@ -90,21 +90,21 @@ function MessageBubble({ msg, index }: {
   return (
     <div className="border-l-2 pl-2 py-1" style={{ borderColor: msg.role === "system" ? "var(--color-accent)" : msg.role === "user" ? "var(--color-success)" : msg.role === "assistant" ? "var(--color-warning)" : "var(--color-info)" }}>
       <div className="flex items-center gap-2 mb-0.5">
-        <span className={`text-[13px] font-mono font-bold uppercase ${ROLE_COLORS[msg.role] ?? "text-text-muted"}`}>
+        <span className={`text-sm font-mono font-bold uppercase ${ROLE_COLORS[msg.role] ?? "text-text-muted"}`}>
           {msg.role}
         </span>
-        <span className="text-[12px] text-text-muted/30">#{index}</span>
+        <span className="text-xs text-text-muted/30">#{index}</span>
         {msg.toolCallId && (
-          <span className="text-[12px] text-text-muted/40 font-mono">← {msg.toolCallId.slice(0, 12)}</span>
+          <span className="text-xs text-text-muted/40 font-mono">← {msg.toolCallId.slice(0, 12)}</span>
         )}
         {msg.content && (
-          <span className="text-[12px] text-text-muted/30">{msg.content.length} chars</span>
+          <span className="text-xs text-text-muted/30">{msg.content.length} chars</span>
         )}
       </div>
 
       {displayContent && (
         <pre
-          className="text-[13px] font-mono text-text-secondary whitespace-pre-wrap break-words leading-relaxed cursor-pointer"
+          className="text-sm font-mono text-text-secondary whitespace-pre-wrap break-words leading-relaxed cursor-pointer"
           onClick={() => setExpanded(!expanded)}
         >
           {displayContent}
@@ -112,13 +112,13 @@ function MessageBubble({ msg, index }: {
       )}
 
       {isLong && !expanded && (
-        <button className="text-[12px] text-accent/60 hover:text-accent mt-0.5" onClick={() => setExpanded(true)}>
+        <button className="text-xs text-accent/60 hover:text-accent mt-0.5" onClick={() => setExpanded(true)}>
           show full ({msg.content!.length} chars)
         </button>
       )}
 
       {!msg.content && msg.toolCalls.length === 0 && (
-        <span className="text-[13px] text-text-muted/30 italic">null</span>
+        <span className="text-sm text-text-muted/30 italic">null</span>
       )}
 
       {msg.toolCalls.length > 0 && (
@@ -126,10 +126,10 @@ function MessageBubble({ msg, index }: {
           {msg.toolCalls.map((tc) => (
             <div key={tc.id} className="bg-warning/5 border border-warning/10 rounded px-2 py-1">
               <div className="flex items-center gap-2">
-                <span className="text-[13px] font-mono font-semibold text-warning">{tc.name}</span>
-                <span className="text-[12px] text-text-muted/30 font-mono">{tc.id.slice(0, 12)}</span>
+                <span className="text-sm font-mono font-semibold text-warning">{tc.name}</span>
+                <span className="text-xs text-text-muted/30 font-mono">{tc.id.slice(0, 12)}</span>
               </div>
-              <pre className="text-[13px] font-mono text-text-muted whitespace-pre-wrap break-words mt-0.5">
+              <pre className="code-pre mt-0.5">
                 {JSON.stringify(tc.arguments, null, 2)}
               </pre>
             </div>
@@ -149,19 +149,19 @@ function ToolDefinition({ tool }: {
   return (
     <div className="border border-border/30 rounded px-2 py-1.5">
       <div className="flex items-start gap-2">
-        <span className="text-[13px] font-mono font-semibold text-warning shrink-0">{tool.name}</span>
-        <span className="text-[13px] text-text-muted flex-1">{tool.description}</span>
+        <span className="text-sm font-mono font-semibold text-warning shrink-0">{tool.name}</span>
+        <span className="text-sm text-text-muted flex-1">{tool.description}</span>
       </div>
       {tool.parameters && (
         <>
           <button
-            className="text-[12px] text-accent/50 hover:text-accent mt-1"
+            className="text-xs text-accent/50 hover:text-accent mt-1"
             onClick={() => setShowSchema(!showSchema)}
           >
             {showSchema ? "hide schema" : "show parameter schema"}
           </button>
           {showSchema && (
-            <pre className="text-[13px] font-mono text-text-muted/60 whitespace-pre-wrap mt-1 max-h-[200px] overflow-y-auto">
+            <pre className="code-pre mt-1 max-h-[200px] overflow-y-auto">
               {JSON.stringify(tool.parameters, null, 2)}
             </pre>
           )}
@@ -235,16 +235,16 @@ export function DebugInspector() {
     <div className="flex flex-col h-full gap-2">
       {/* Stats bar */}
       <div className="flex items-center gap-3 shrink-0 flex-wrap">
-        <div className="flex items-center gap-1.5 text-[13px] font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
+        <div className="flex items-center gap-1.5 text-sm font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
           <span className="text-accent">prompt</span> {stats.promptLen > 0 ? `${(stats.promptLen / 1000).toFixed(1)}k` : "—"}
         </div>
-        <div className="flex items-center gap-1.5 text-[13px] font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
+        <div className="flex items-center gap-1.5 text-sm font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
           <span className="text-warning">tools</span> {stats.toolCount}
         </div>
-        <div className="flex items-center gap-1.5 text-[13px] font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
+        <div className="flex items-center gap-1.5 text-sm font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
           <span className="text-info">llm</span> {stats.callCount} calls · {stats.avgDuration}ms avg
         </div>
-        <div className="flex items-center gap-1.5 text-[13px] font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
+        <div className="flex items-center gap-1.5 text-sm font-mono text-text-muted bg-elevated/50 px-2 py-1 rounded">
           <Clock size={12} /> {stats.totalDuration}ms total
         </div>
       </div>
@@ -260,7 +260,7 @@ export function DebugInspector() {
           ] as [FilterKind, string][]).map(([key, label]) => (
             <button
               key={key}
-              className={`px-2.5 py-1 text-[13px] font-medium rounded-md transition-colors ${
+              className={`px-2.5 py-1 text-sm font-medium rounded-md transition-colors ${
                 filter === key ? "bg-accent/20 text-accent" : "text-text-muted hover:text-text"
               }`}
               onClick={() => setFilter(key)}
@@ -276,7 +276,7 @@ export function DebugInspector() {
             placeholder="Search..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="bg-transparent text-[13px] text-text w-full outline-none placeholder:text-text-muted/30"
+            className="bg-transparent text-sm text-text w-full outline-none placeholder:text-text-muted/30"
           />
         </div>
       </div>
@@ -303,7 +303,7 @@ export function DebugInspector() {
             badgeColor="text-accent/70"
             copyable={systemPrompt.text}
           >
-            <pre className="text-[13px] font-mono text-text-secondary whitespace-pre-wrap leading-relaxed max-h-[500px] overflow-y-auto">
+            <pre className="code-pre max-h-[500px] overflow-y-auto">
               {systemPrompt.text}
             </pre>
           </Section>
@@ -363,16 +363,16 @@ export function DebugInspector() {
                   return (
                     <div key={`${entry.toolCallId}-${index}`} className="border border-border/30 rounded px-2 py-1.5">
                       <div className="flex items-center gap-2">
-                        <span className={`text-[13px] font-mono font-semibold ${entry.phase === "blocked" ? "text-error" : entry.validationOk ? "text-success" : "text-warning"}`}>
+                        <span className={`text-sm font-mono font-semibold ${entry.phase === "blocked" ? "text-error" : entry.validationOk ? "text-success" : "text-warning"}`}>
                           {entry.phase}
                         </span>
-                        <span className="text-[13px] font-mono text-text-muted">{entry.toolName}</span>
-                        <span className="text-[12px] text-text-muted/40">iter {entry.iteration + 1}</span>
+                        <span className="text-sm font-mono text-text-muted">{entry.toolName}</span>
+                        <span className="text-xs text-text-muted/40">iter {entry.iteration + 1}</span>
                       </div>
-                      <div className="text-[13px] text-text-secondary mt-1">
+                      <div className="text-sm text-text-secondary mt-1">
                         {notes.join(" · ") || "ok"}
                       </div>
-                      <pre className="text-[12px] font-mono text-text-muted whitespace-pre-wrap break-words mt-1">
+                      <pre className="code-pre mt-1">
                         {entry.sqlPreview}
                       </pre>
                     </div>
@@ -403,15 +403,15 @@ function LlmCallEntry({ call, index }: {
         onClick={() => setOpen(!open)}
       >
         {open ? <ChevronDown size={14} className="text-text-muted shrink-0" /> : <ChevronRight size={14} className="text-text-muted shrink-0" />}
-        <span className="text-[14px] font-semibold text-info">LLM Call #{index + 1}</span>
-        <span className="text-[13px] font-mono text-text-muted">
+        <span className="text-sm font-semibold text-info">LLM Call #{index + 1}</span>
+        <span className="text-sm font-mono text-text-muted">
           iteration {req.iteration + 1}
         </span>
-        <span className="text-[13px] font-mono text-text-muted">
+        <span className="text-sm font-mono text-text-muted">
           {req.messageCount} msgs → LLM → {res ? (res.toolCalls.length > 0 ? `${res.toolCalls.length} tool calls` : "text response") : "pending..."}
         </span>
         {res && (
-          <span className={`text-[13px] font-mono ml-auto ${res.durationMs > 5000 ? "text-error" : res.durationMs > 2000 ? "text-warning" : "text-success"}`}>
+          <span className={`text-sm font-mono ml-auto ${res.durationMs > 5000 ? "text-error" : res.durationMs > 2000 ? "text-warning" : "text-success"}`}>
             {res.durationMs}ms
           </span>
         )}
@@ -422,7 +422,7 @@ function LlmCallEntry({ call, index }: {
         <>
           {/* Request: full message array */}
           <div className="px-3 py-2 border-t border-border/20">
-            <div className="text-[12px] font-medium text-text-muted/50 uppercase tracking-wider mb-1.5">
+            <div className="text-xs font-medium text-text-muted/50 uppercase tracking-wider mb-1.5">
               Request — {req.messageCount} messages, {req.toolCount} tool definitions
             </div>
             <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
@@ -436,9 +436,9 @@ function LlmCallEntry({ call, index }: {
           {res && (
             <div className="px-3 py-2 border-t border-border/20 bg-elevated/10">
               <div className="flex items-center gap-3 mb-1.5">
-                <span className="text-[12px] font-medium text-text-muted/50 uppercase tracking-wider">Response</span>
+                <span className="text-xs font-medium text-text-muted/50 uppercase tracking-wider">Response</span>
                 {res.usage && (
-                  <span className="text-[13px] font-mono text-text-muted/40">
+                  <span className="text-sm font-mono text-text-muted/40">
                     {fmtTokens(res.usage.promptTokens)} prompt + {fmtTokens(res.usage.completionTokens)} completion = {fmtTokens(res.usage.totalTokens)} total
                   </span>
                 )}
@@ -447,8 +447,8 @@ function LlmCallEntry({ call, index }: {
               {/* Response content */}
               {res.content && (
                 <div className="mb-2">
-                  <div className="text-[12px] text-text-muted/40 mb-0.5">content:</div>
-                  <pre className="text-[13px] font-mono text-text-secondary whitespace-pre-wrap break-words leading-relaxed">
+                  <div className="text-xs text-text-muted/40 mb-0.5">content:</div>
+                  <pre className="code-pre">
                     {res.content}
                   </pre>
                 </div>
@@ -457,15 +457,15 @@ function LlmCallEntry({ call, index }: {
               {/* Response tool calls */}
               {res.toolCalls.length > 0 && (
                 <div>
-                  <div className="text-[12px] text-text-muted/40 mb-0.5">tool calls:</div>
+                  <div className="text-xs text-text-muted/40 mb-0.5">tool calls:</div>
                   <div className="space-y-1">
                     {res.toolCalls.map((tc) => (
                       <div key={tc.id} className="bg-warning/5 border border-warning/10 rounded px-2 py-1">
                         <div className="flex items-center gap-2">
-                          <span className="text-[13px] font-mono font-semibold text-warning">{tc.name}</span>
-                          <span className="text-[12px] text-text-muted/30 font-mono">{tc.id}</span>
+                          <span className="text-sm font-mono font-semibold text-warning">{tc.name}</span>
+                          <span className="text-xs text-text-muted/30 font-mono">{tc.id}</span>
                         </div>
-                        <pre className="text-[13px] font-mono text-text-muted whitespace-pre-wrap break-words mt-0.5">
+                        <pre className="code-pre mt-0.5">
                           {JSON.stringify(tc.arguments, null, 2)}
                         </pre>
                       </div>
@@ -476,12 +476,12 @@ function LlmCallEntry({ call, index }: {
 
               {/* No tool calls and no content = weird */}
               {res.toolCalls.length === 0 && !res.content && (
-                <div className="text-[13px] text-error/50 italic">Empty response — no content and no tool calls</div>
+                <div className="text-sm text-error/50 italic">Empty response — no content and no tool calls</div>
               )}
 
               {/* Final answer indicator */}
               {res.toolCalls.length === 0 && res.content && (
-                <div className="text-[13px] text-success/60 mt-1">↳ No tool calls — this became the final answer</div>
+                <div className="text-sm text-success/60 mt-1">↳ No tool calls — this became the final answer</div>
               )}
             </div>
           )}

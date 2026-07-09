@@ -1,0 +1,127 @@
+{
+  "_comment": "Offline fixture for sync-metadata generators. Activity names match legacy core.Activity rows for the known ABI sync pipeline ids.",
+  "pipelines": [
+    {
+      "pipelineId": 692,
+      "name": "Content sync",
+      "activities": [
+        {
+          "sequence": 1,
+          "activityName": "Synchronize content objects Tran",
+          "storedProcedure": "core.uspSyncContentObjectsTran"
+        },
+        {
+          "sequence": 2,
+          "activityName": "Handle dependencies",
+          "storedProcedure": null
+        }
+      ]
+    },
+    {
+      "pipelineId": 780,
+      "name": "Gate metadata sync",
+      "activities": [
+        {
+          "sequence": 1,
+          "activityName": "Synchronize data list objects Tran",
+          "storedProcedure": "core.uspSyncDataListObjectsTran"
+        },
+        {
+          "sequence": 2,
+          "activityName": "Metadata refresh",
+          "storedProcedure": null
+        },
+        {
+          "sequence": 3,
+          "activityName": "Remote content population",
+          "storedProcedure": null
+        }
+      ]
+    },
+    {
+      "pipelineId": 788,
+      "name": "Contract sync",
+      "activities": [
+        { "sequence": 1, "activityName": "To sync or not", "storedProcedure": null },
+        { "sequence": 2, "activityName": "Lock contract for undeployment", "storedProcedure": null },
+        {
+          "sequence": 3,
+          "activityName": "Synchronize core objects Tran",
+          "storedProcedure": "core.uspSyncCoreObjectsTran"
+        },
+        { "sequence": 4, "activityName": "Register remote pipeline", "storedProcedure": null },
+        { "sequence": 5, "activityName": "Undeploy contract on target instance", "storedProcedure": null },
+        { "sequence": 6, "activityName": "Unlock contract after undeployment", "storedProcedure": null },
+        { "sequence": 7, "activityName": "To sync or not after undeployment", "storedProcedure": null },
+        { "sequence": 8, "activityName": "Lock contract for deployment", "storedProcedure": null },
+        { "sequence": 9, "activityName": "Synchronize deploy pre script", "storedProcedure": null },
+        { "sequence": 10, "activityName": "Create stage dataset", "storedProcedure": null },
+        { "sequence": 11, "activityName": "Create archive dataset", "storedProcedure": null },
+        { "sequence": 12, "activityName": "Create list dataset", "storedProcedure": null },
+        { "sequence": 13, "activityName": "Create dim dataset", "storedProcedure": null },
+        { "sequence": 14, "activityName": "Create fact dataset", "storedProcedure": null },
+        { "sequence": 15, "activityName": "Create foreign keys", "storedProcedure": null },
+        {
+          "sequence": 16,
+          "activityName": "Synchronize deploy ETL2 custom transformation",
+          "storedProcedure": null
+        },
+        { "sequence": 17, "activityName": "Synchronize deploy routine", "storedProcedure": null },
+        { "sequence": 18, "activityName": "Synchronize deploy post script", "storedProcedure": null },
+        { "sequence": 19, "activityName": "Unlock contract after deployment", "storedProcedure": null },
+        { "sequence": 20, "activityName": "Set sync date at source", "storedProcedure": null },
+        { "sequence": 21, "activityName": "Update deploydate on sync target", "storedProcedure": null }
+      ]
+    },
+    {
+      "pipelineId": 791,
+      "name": "Rule sync",
+      "activities": [
+        {
+          "sequence": 1,
+          "activityName": "Synchronize rule objects Tran",
+          "storedProcedure": "core.uspSyncRuleObjectsTran"
+        },
+        { "sequence": 2, "activityName": "Create input dataset", "storedProcedure": null },
+        { "sequence": 3, "activityName": "Deploy rules", "storedProcedure": null },
+        {
+          "sequence": 4,
+          "activityName": "Handle dependencies",
+          "action": "_handleObjectDependencies",
+          "storedProcedure": "core.uspObjectDependencies"
+        },
+        { "sequence": 5, "activityName": "Update syncdate", "storedProcedure": null },
+        { "sequence": 6, "activityName": "Update deploydate on sync target", "storedProcedure": null }
+      ]
+    },
+    {
+      "pipelineId": 792,
+      "name": "Dataset sync",
+      "activities": [
+        {
+          "sequence": 1,
+          "activityName": "Synchronize dataset objects Tran",
+          "storedProcedure": "core.uspSyncDatasetObjectsTran"
+        },
+        {
+          "sequence": 2,
+          "activityName": "Synchronize / create dataset objects",
+          "storedProcedure": null
+        },
+        { "sequence": 3, "activityName": "Update sync date", "storedProcedure": null }
+      ]
+    },
+    {
+      "pipelineId": 798,
+      "name": "Pipeline sync",
+      "activities": [
+        {
+          "sequence": 1,
+          "activityName": "Synchronize pipeline objects Tran",
+          "storedProcedure": "core.uspSyncPipelineObjectsTran"
+        },
+        { "sequence": 2, "activityName": "Register remote pipeline", "storedProcedure": null }
+      ]
+    }
+  ]
+}

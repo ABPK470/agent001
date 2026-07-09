@@ -1,32 +1,16 @@
 /**
  * prior-results-block.ts — load and render the `<prior_results>` system
  * anchor that gives the agent loop access to actual structured tool
- * payloads from earlier turns in the same session.
+ * payloads from earlier turns in the same thread.
  *
- * Why this exists (no-amnesia, Phase 9):
- * `<prior_turns>` only carries the model's own prose paraphrase, which the
- * model then treats as evidence and confabulates exact numbers from. This
- * block injects the actual stored tool result (sample rows, evidence tags)
- * so a follow-up like "plot it" can ground on real data.
- *
- * Each rendered entry carries an `[evidence: run=<runId>, tool_call=<tcId>]`
- * tag. The agent doctrine (mia-data-persona.md) instructs the model to
- * either ground on those tags, call `recall_prior_result(...)` for the
- * full payload, or re-run the tool fresh. Paraphrase-as-evidence is a
- * doctrine violation.
- *
- * Budget discipline:
- *   - Cap to the most recent MAX_RESULTS results across the last few runs.
- *   - Per-result text is clipped to PER_RESULT_CHARS — enough rows to
- *     ground on, not a full mirror. Full payload is retrievable via the
- *     recall tool.
+ * Continuity is scoped exclusively by `thread_id` (see continuity.ts).
  */
 
 import type { DbToolResult } from "../../../../platform/persistence/tool-results.js"
 import {
   extractToolResultText,
   isRecallableToolResult,
-  loadRecentToolResults
+  loadRecentToolResultsForThread
 } from "../../../../platform/persistence/tool-results.js"
 
 /** Tools whose results we surface in <prior_results>. Mirrors the writer. */
@@ -39,20 +23,19 @@ const MAX_RESULTS = 6
 const PER_RESULT_CHARS = 1500
 
 export interface LoadPriorResultsOptions {
-  readonly sessionId: string
+  readonly threadId: string
+  readonly upn: string
   /** Exclude tool results from the current run. */
   readonly excludeRunId?: string | null
 }
 
-/**
- * Load recent structured tool results for the session, newest first.
- * Returns `[]` when no session is set (CLI / first call).
- */
+/** Load recent structured tool results for the thread, newest first. */
 export function loadPriorResults(opts: LoadPriorResultsOptions): DbToolResult[] {
-  if (!opts.sessionId) return []
-  const rows = loadRecentToolResults({
-    sessionId: opts.sessionId,
-    limit: MAX_RESULTS * 4, // pull a window, then filter
+  if (!opts.threadId || !opts.upn) return []
+  const rows = loadRecentToolResultsForThread({
+    threadId: opts.threadId,
+    upn: opts.upn,
+    limit: MAX_RESULTS * 4,
     toolNames: SURFACED_TOOLS
   })
   const excludeRunId = opts.excludeRunId ?? null
@@ -61,14 +44,13 @@ export function loadPriorResults(opts: LoadPriorResultsOptions): DbToolResult[] 
 
 /**
  * Render the `<prior_results>` system anchor block. Returns empty string
- * when there are no results to surface — caller can use the empty-string
- * sentinel to decide whether to inject the anchor at all.
+ * when there are no results to surface.
  */
 export function renderPriorResultsBlock(results: readonly DbToolResult[]): string {
   if (results.length === 0) return ""
   const lines: string[] = [
     "<prior_results>",
-    "Structured tool-call payloads from earlier turns in THIS session. These",
+    "Structured tool-call payloads from earlier turns in THIS thread. These",
     "are the ACTUAL outputs the warehouse returned — not the assistant's prose",
     "paraphrase. When you reference earlier data ('it', 'that result', 'the",
     "chart from before'), you MUST ground on these payloads via the evidence",

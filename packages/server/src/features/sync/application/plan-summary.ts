@@ -40,7 +40,6 @@ export function summarizeSyncPlan(plan: unknown): SyncPlanSummary | null {
     planId: asString(record["planId"]),
     entityType:
       asString(executionContract?.["definitionId"]) ??
-      asString(asRecord(record["recipeSnapshot"])?.["entityType"]) ??
       asString(entity?.["type"]),
     entityId: asStringOrNumber(entity?.["id"]),
     entityName: asString(entity?.["displayName"]),

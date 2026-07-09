@@ -2,8 +2,11 @@ import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, Loader2,
 import { useMemo, useState } from "react"
 
 import type { SyncPlan, SyncPlanTable } from "../../types"
+import { movementOfTable, tableMovementTotal } from "../../types"
 import { timeAgo } from "../../util"
 import { DIFF } from "./constants"
+import { formatPlanEntityLabel } from "./workflow"
+import { buildExecTableStatus } from "./exec-status"
 import type { ExecState } from "./types"
 
 export function PlanView({ plan, expanded, setExpanded, exec }: {
@@ -17,22 +20,7 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
   const expired = (Date.now() - plan.createdAtMs) > 3600_000
   const sorted = useMemo(() => [...plan.tables].sort((a, b) => net(b) - net(a)), [plan])
 
-  const execStatus = useMemo(() => {
-    const statuses = new Map<string, "running" | "done" | "failed">()
-    if (exec.kind === "idle") return statuses
-    for (const event of exec.events) {
-      if (event.table) {
-        if (event.type === "table-started") statuses.set(event.table, "running")
-        if (event.type === "table-done") statuses.set(event.table, "done")
-      }
-      if (event.type === "failed") {
-        for (const [tableName, state] of statuses) {
-          if (state === "running") statuses.set(tableName, "failed")
-        }
-      }
-    }
-    return statuses
-  }, [exec])
+  const execStatus = useMemo(() => buildExecTableStatus(exec), [exec])
 
   const warnings = [...plan.preflight.issues, ...plan.warnings]
 
@@ -97,11 +85,12 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
                   {status === "running" && <Loader2 size={13} className="animate-spin text-accent shrink-0" />}
                   {status === "done" && <CheckCircle2 size={13} className="shrink-0" style={{ color: DIFF.ins }} />}
                   {status === "failed" && <XCircle size={13} className="shrink-0" style={{ color: DIFF.del }} />}
-                  <Ct n={row.counts.insert} color={DIFF.ins} label="ins" />
-                  <Ct n={row.counts.update} color={DIFF.upd} label="upd" />
-                  <Ct n={row.counts.delete} color={DIFF.del} label="del" />
-                  {(row.counts.conflicts ?? 0) > 0 && <Ct n={row.counts.conflicts} color="var(--color-warning)" label="conflict" />}
-                  <Ct n={row.counts.unchanged} color={DIFF.eqDim} label="eq" dim />
+                  {status === "cancelled" && <XCircle size={13} className="shrink-0 text-text-muted/50" title="Cancelled" />}
+                  <Ct n={movementOfTable(row).insert} color={DIFF.ins} label="ins" />
+                  <Ct n={movementOfTable(row).update} color={DIFF.upd} label="upd" />
+                  <Ct n={movementOfTable(row).delete} color={DIFF.del} label="del" />
+                  {row.conflicts.length > 0 && <Ct n={row.conflicts.length} color="var(--color-warning)" label="conflict" />}
+                  <Ct n={row.stats.unchanged} color={DIFF.eqDim} label="eq" dim />
                 </button>
                 {isOpen && <Detail row={row} />}
               </div>
@@ -122,11 +111,11 @@ export function HistoryPlanTables({ plan }: { plan: SyncPlan }) {
         <div key={row.table} className="px-4 py-3 bg-base/20 space-y-2">
           <div className="flex items-center gap-3 text-sm">
             <span className="font-mono text-text flex-1 truncate">{row.table}</span>
-            <Ct n={row.counts.insert} color={DIFF.ins} label="ins" />
-            <Ct n={row.counts.update} color={DIFF.upd} label="upd" />
-            <Ct n={row.counts.delete} color={DIFF.del} label="del" />
-            {(row.counts.conflicts ?? 0) > 0 && <Ct n={row.counts.conflicts} color="var(--color-warning)" label="conflict" />}
-            <Ct n={row.counts.unchanged} color={DIFF.eqDim} label="eq" dim />
+            <Ct n={movementOfTable(row).insert} color={DIFF.ins} label="ins" />
+            <Ct n={movementOfTable(row).update} color={DIFF.upd} label="upd" />
+            <Ct n={movementOfTable(row).delete} color={DIFF.del} label="del" />
+            {row.conflicts.length > 0 && <Ct n={row.conflicts.length} color="var(--color-warning)" label="conflict" />}
+            <Ct n={row.stats.unchanged} color={DIFF.eqDim} label="eq" dim />
           </div>
           <Detail row={row} />
         </div>
@@ -136,7 +125,7 @@ export function HistoryPlanTables({ plan }: { plan: SyncPlan }) {
 }
 
 export function net(table: SyncPlanTable): number {
-  return table.counts.insert + table.counts.update + table.counts.delete + table.counts.conflicts
+  return tableMovementTotal(table)
 }
 
 function Ct({ n, color, label, dim }: { n: number; color: string; label: string; dim?: boolean }) {
@@ -164,7 +153,7 @@ function Detail({ row }: { row: SyncPlanTable }) {
         <div className="border border-warning/40 rounded overflow-hidden">
           <div className="px-3 py-1.5 bg-warning/5 border-b border-warning/20 flex justify-between items-center">
             <span className="text-warning font-medium">scope misattribution — blocks execute</span>
-            <span className="font-mono tabular-nums text-text-muted">{row.conflicts.length}/{(row.counts.conflicts ?? 0).toLocaleString()}</span>
+            <span className="font-mono tabular-nums text-text-muted">{row.conflicts.length.toLocaleString()} conflict(s)</span>
           </div>
           <div className="px-3 py-2 space-y-1.5 font-mono leading-relaxed text-text">
             {row.conflicts.slice(0, 10).map((conflict, index) => (
@@ -183,7 +172,7 @@ function Detail({ row }: { row: SyncPlanTable }) {
         const samples = row.samples[kind]
         if (!samples.length) return null
         const color = kind === "insert" ? DIFF.ins : kind === "update" ? DIFF.upd : DIFF.del
-        const total = row.counts[kind]
+        const total = movementOfTable(row)[kind]
         return (
           <SampleSection key={kind} kind={kind} samples={samples} total={total} color={color} />
         )
@@ -292,12 +281,6 @@ function SampleTbl({ kind, samples }: { kind: "insert" | "update" | "delete"; sa
     </table>
   )
 }
-
-function formatPlanEntityLabel(plan: SyncPlan): string {
-  const entityRef = `${plan.entity.type ?? plan.recipeSnapshot.entityType}#${plan.entity.id}`
-  return plan.entity.displayName ? `${plan.entity.displayName} (${entityRef})` : entityRef
-}
-
 function formatValue(value: unknown): string {
   if (value == null) return "null"
   if (typeof value === "object") return JSON.stringify(value)

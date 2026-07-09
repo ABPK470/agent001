@@ -13,17 +13,8 @@ export { DiagnosticCategory, DiagnosticSeverity }
 
 // Re-export decision and execution envelope types from extracted modules.
 export type {
-  ArchitecturePreservationStatus,
-  CoherentArchitectureArtifact,
-  CoherentSharedContract,
-  CoherentSolutionArtifact,
-  CoherentSolutionBundle,
-  CoherentSystemInvariant,
-  PlannerCoherentBootstrap,
   PlannerDecision,
-  PlannerNeedLevel,
-  PlannerRoute,
-  RoutingConfidence
+  PlannerRoute
 } from "./internal/types-decision.js"
 export type {
   ArtifactRelation,
@@ -41,7 +32,7 @@ export type {
 // Plan steps
 // ============================================================================
 
-import type { PlannerCoherentBootstrap, PlannerRoute } from "./internal/types-decision.js"
+import type { PlannerRoute } from "./internal/types-decision.js"
 import type { ArtifactRelation, ExecutionEnvelope, WorkflowStepContract } from "./internal/types-execution.js"
 
 /**
@@ -124,8 +115,6 @@ export interface Plan {
   readonly edges: readonly PlanEdge[]
   /** Route that produced this plan. */
   readonly route?: PlannerRoute
-  /** Planner bootstrap that froze architecture before decomposition. */
-  readonly coherentBootstrap?: PlannerCoherentBootstrap
 }
 
 export interface ExecutionGraphNode {

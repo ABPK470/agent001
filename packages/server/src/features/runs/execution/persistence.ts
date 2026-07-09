@@ -85,13 +85,9 @@ export function createNotification(opts: NotificationOpts): void {
   // (background task firing a notification without a run + without an
   // ALS-bound session) and we want it to surface loudly.
   let ownerUpn: string | null = null
-  let sessionId: string | null = null
   if (opts.runId) {
     const r = db.getRun(opts.runId)
-    if (r) {
-      ownerUpn = r.upn ?? null
-      sessionId = r.session_id ?? null
-    }
+    if (r) ownerUpn = r.upn ?? null
   }
   if (!ownerUpn) {
     throw new Error("createNotification: no owner upn (no runId match and no current session)")
@@ -105,7 +101,6 @@ export function createNotification(opts: NotificationOpts): void {
     run_id: opts.runId ?? null,
     step_id: opts.stepId ?? null,
     owner_upn: ownerUpn,
-    session_id: sessionId,
     actions: JSON.stringify(opts.actions ?? []),
     read: 0,
     created_at: new Date().toISOString()

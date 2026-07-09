@@ -202,7 +202,7 @@ export function deduplicateWriteOwnership(steps: PlanStep[]): void {
 // ============================================================================
 
 export function stripRedundantVerificationSteps(steps: PlanStep[], edges: PlanEdge[]): void {
-  const verifyToolNames = new Set(["browser_check"])
+  const verifyToolNames = new Set<string>()
   const toRemove = new Set<string>()
 
   for (const step of steps) {
@@ -255,9 +255,7 @@ export function ensureVerificationCoverage(steps: PlanStep[]): void {
       if (s.executionContext && s.executionContext.effectClass !== "readonly") {
         const tools = s.requiredToolCapabilities ?? []
         const ctx = s.executionContext as { verificationMode: string }
-        if (tools.includes("browser_check")) {
-          ctx.verificationMode = VerificationMode.BrowserCheck
-        } else if (tools.includes("run_command")) {
+        if (tools.includes("run_command")) {
           ctx.verificationMode = VerificationMode.RunTests
         } else {
           ctx.verificationMode = VerificationMode.DeterministicFollowup

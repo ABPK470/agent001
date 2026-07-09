@@ -1,0 +1,141 @@
+/**
+ * Searchable pick — filterable dropdown that also accepts custom typed values.
+ */
+
+import { Check, ChevronDown } from "lucide-react"
+import { useEffect, useMemo, useRef, useState, type JSX } from "react"
+
+export interface SearchablePickOption {
+  value: string
+  label: string
+  hint?: string
+}
+
+export function SearchablePick({
+  value,
+  options,
+  onChange,
+  placeholder = "Type or pick…",
+  ariaLabel,
+  disabled,
+  className = "",
+}: {
+  value: string
+  options: readonly SearchablePickOption[]
+  onChange: (value: string) => void
+  placeholder?: string
+  ariaLabel?: string
+  disabled?: boolean
+  className?: string
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState(value)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const inputRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    setQuery(value)
+  }, [value])
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase()
+    if (!q) return [...options]
+    return options.filter(
+      (option) =>
+        option.value.toLowerCase().includes(q) ||
+        option.label.toLowerCase().includes(q) ||
+        option.hint?.toLowerCase().includes(q),
+    )
+  }, [options, query])
+
+  useEffect(() => {
+    if (!open) return
+    function onDocClick(event: MouseEvent): void {
+      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+    }
+    document.addEventListener("mousedown", onDocClick)
+    return () => document.removeEventListener("mousedown", onDocClick)
+  }, [open])
+
+  function commit(next: string): void {
+    const trimmed = next.trim()
+    setQuery(trimmed)
+    onChange(trimmed)
+    setOpen(false)
+  }
+
+  return (
+    <div ref={rootRef} className={`relative w-full ${className}`}>
+      <div
+        className={[
+          "group flex w-full min-w-0 items-center gap-2 rounded-md border border-border bg-base px-3 py-2 text-sm transition-colors",
+          "hover:bg-elevated hover:border-border-focus focus-within:border-accent",
+          disabled ? "cursor-not-allowed opacity-40" : "",
+        ].join(" ")}
+      >
+        <input
+          ref={inputRef}
+          value={query}
+          disabled={disabled}
+          aria-label={ariaLabel}
+          placeholder={placeholder}
+          className="min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-sm text-text outline-none placeholder:text-text-faint disabled:cursor-not-allowed"
+          onChange={(e) => {
+            setQuery(e.target.value)
+            setOpen(true)
+          }}
+          onFocus={() => setOpen(true)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault()
+              commit(query)
+            }
+            if (e.key === "Escape") setOpen(false)
+          }}
+        />
+        <button
+          type="button"
+          disabled={disabled}
+          className="flex shrink-0 items-center text-text-muted transition-colors hover:text-text disabled:cursor-not-allowed"
+          aria-label="Show options"
+          onClick={() => {
+            setOpen((v) => !v)
+            inputRef.current?.focus()
+          }}
+        >
+          <ChevronDown className={`h-3.5 w-3.5 transition-transform ${open ? "rotate-180" : ""}`} />
+        </button>
+      </div>
+      {open && !disabled && (
+        <div className="listbox-popover absolute left-0 right-0 top-[calc(100%+4px)] z-50 max-h-56 overflow-auto rounded-md">
+          {filtered.length === 0 ? (
+            <button
+              type="button"
+              className="block w-full px-3 py-2 text-left text-sm text-text-muted hover:bg-elevated"
+              onMouseDown={(e) => e.preventDefault()}
+              onClick={() => commit(query)}
+            >
+              Use: <span className="font-mono text-text">{query.trim() || "…"}</span>
+            </button>
+          ) : (
+            filtered.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                className="listbox-popover__option flex w-full items-start gap-2 px-3 py-2 text-left hover:bg-elevated"
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => commit(option.value)}
+              >
+                <span className="min-w-0 flex-1">
+                  <span className="block font-mono text-sm text-text">{option.label}</span>
+                  {option.hint && <span className="mt-0.5 block text-xs text-text-muted">{option.hint}</span>}
+                </span>
+                {option.value === value && <Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent" />}
+              </button>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  )
+}

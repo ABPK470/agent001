@@ -14,9 +14,7 @@ import type {
 } from "../src/application/core/planner.js"
 import {
   assessPlannerDecision,
-  buildLegacyRetryPlan,
   buildRepairPlan,
-  compareRepairPlanCompatibility,
   compilePlannerRuntime,
   enrichVerifierAssessments,
   executePipeline,
@@ -27,10 +25,11 @@ import {
   isLLMGibberish,
   isValidArtifactPath,
   parseBlueprintContractBlock,
-  parseCoherentSolutionBundle,
   runDeterministicProbes,
   synthesizeAnswer,
-  validatePlan
+  validatePlan,
+  type DelegateFn,
+  type PlannerDecision
 } from "../src/application/core/planner.js"
 import { ToolFailureCircuitBreaker } from "../src/application/core/recovery.js"
 import * as delegationDecision from "../src/application/shell/delegation-cluster/decision/index.js"
@@ -51,6 +50,18 @@ function echoTool(name = "echo"): Tool {
       return `echoed: ${String(args.text)}`
     }
   }
+}
+
+function forcePlannerDecision(reason = "test"): PlannerDecision {
+  return { route: "planner", shouldPlan: true, reason, score: 10 }
+}
+
+async function runPlannerPath(
+  goal: string,
+  ctx: Parameters<typeof executePlannerPath>[1],
+  delegateFn: DelegateFn
+) {
+  return executePlannerPath(goal, ctx, delegateFn, { decision: forcePlannerDecision() })
 }
 
 function makePlan(overrides: Partial<Plan> = {}): Plan {
@@ -83,7 +94,7 @@ function makeSubagentStep(name: string, overrides: Partial<SubagentTaskStep> = {
       requiredSourceArtifacts: [],
       targetArtifacts: ["game.js"],
       effectClass: "filesystem_write",
-      verificationMode: "browser_check",
+      verificationMode: "run_tests",
       artifactRelations: []
     },
     ...overrides
@@ -135,62 +146,23 @@ function makeIssue(summary: string, overrides: Partial<VerifierIssue> = {}): Ver
 // ============================================================================
 
 describe("Planner decision: assessPlannerDecision", () => {
-  it("routes 'build a chess game' to bounded_coherent_generation (no coordination need)", async () => {
-    // Plain phrasing — no "playable"/"complete"/"drag and drop" magic words required.
-    // Uses a realistic goal length (> 20 chars) that won't hit the too_short gate.
-    const decision = await assessPlannerDecision("Build a chess game with all pieces and standard rules", [])
+  it("routes bounded builds like chess games to the direct loop", () => {
+    const decision = assessPlannerDecision("Build a chess game with all pieces and standard rules", [])
     expect(decision.shouldPlan).toBe(false)
-    expect(decision.route).toBe("bounded_coherent_generation")
-    expect(decision.reason).toBe("bounded_coherent_generation")
+    expect(decision.route).toBe("direct")
   })
 
-  it("routes 'build a fully playable chess game with drag and drop' to bounded_coherent_generation", async () => {
-    const decision = await assessPlannerDecision("Build a fully playable chess game with drag and drop", [])
-    expect(decision.shouldPlan).toBe(false)
-    expect(decision.route).toBe("bounded_coherent_generation")
-    expect(decision.score).toBeGreaterThanOrEqual(3)
-    expect(decision.reason).toBe("bounded_coherent_generation")
-  })
-
-  it("routes verbose chess game goal (with 'all project files' preamble) to bounded_coherent_generation", async () => {
-    // This exact pattern caused full_planner_decomposition in production:
-    // DELEGATION_RE fires on "all project files ... Build" across sentence boundaries,
-    // inflating coordinationNeed to "medium" and blocking the coherent-generation route.
-    const goal =
-      "Create a temporary working directory named tmp where all project files will be stored and organized. " +
-      "Build a browser-based chess game in JavaScript for two human players on the same device. " +
-      "Render a responsive 8x8 board with alternating colors and clearly distinguishable white and black pieces. " +
-      "Implement full standard chess rules: legal moves for all piece types, turn enforcement, captures, " +
-      "check, checkmate, stalemate, castling with all constraints, en passant, and pawn promotion to " +
-      "queen rook bishop or knight. Illegal moves and selecting opponent pieces must be prevented. " +
-      "Show check status in UI, end game on checkmate with winner display, and support click selection " +
-      "with legal move highlighting and click-to-move."
-    const decision = await assessPlannerDecision(goal, [])
-    expect(decision.shouldPlan).toBe(false)
-    expect(decision.route).toBe("bounded_coherent_generation")
-  })
-
-  it("routes 'create a website with multiple pages' to planner", async () => {
-    const decision = await assessPlannerDecision(
+  it("routes multi-page website goals to planner", () => {
+    const decision = assessPlannerDecision(
       "Create a website with a landing page, about page, and contact form. Build all pages and implement form validation.",
       []
     )
     expect(decision.shouldPlan).toBe(true)
-    expect(decision.route).toBe("full_planner_decomposition")
-    expect(decision.score).toBeGreaterThanOrEqual(3)
+    expect(decision.route).toBe("planner")
   })
 
-  it("routes 'build a todo app' to planner", async () => {
-    const decision = await assessPlannerDecision(
-      "Build a complete todo application with add, delete, and filter functionality",
-      []
-    )
-    expect(decision.shouldPlan).toBe(false)
-    expect(decision.route).toBe("bounded_coherent_generation")
-  })
-
-  it("routes 'first do X, then Y, then Z' to planner (multi-step)", async () => {
-    const decision = await assessPlannerDecision(
+  it("routes multi-step implementation goals to planner", () => {
+    const decision = assessPlannerDecision(
       "First create the database schema, then implement the API endpoints, then write the frontend",
       []
     )
@@ -198,147 +170,21 @@ describe("Planner decision: assessPlannerDecision", () => {
     expect(decision.reason).toContain("multi_step")
   })
 
-  it("routes 'implement multiple components' to planner", async () => {
-    const decision = await assessPlannerDecision(
-      "Create multiple components for the dashboard: a chart widget, a data table, and a settings panel",
-      []
+  it("keeps dialogue and short goals on the direct loop", () => {
+    expect(assessPlannerDecision("hello", []).route).toBe("direct")
+    expect(assessPlannerDecision("fix the bug", []).reason).toBe("too_short")
+    expect(assessPlannerDecision("Edit the login handler in auth.ts to add rate limiting", []).route).toBe(
+      "direct"
     )
-    expect(decision.shouldPlan).toBe(true)
-    expect(decision.score).toBeGreaterThanOrEqual(3)
   })
 
-  it("keeps 'hello' in direct path (simple dialogue)", async () => {
-    const decision = await assessPlannerDecision("hello", [])
-    expect(decision.shouldPlan).toBe(false)
-    expect(decision.route).toBe("direct")
-    expect(decision.reason).toBe("simple_dialogue")
-  })
-
-  it("keeps 'what is TypeScript?' in direct path (simple dialogue)", async () => {
-    const decision = await assessPlannerDecision("what is TypeScript?", [])
-    expect(decision.shouldPlan).toBe(false)
-  })
-
-  it("keeps short messages in direct path", async () => {
-    const decision = await assessPlannerDecision("fix the bug", [])
-    expect(decision.shouldPlan).toBe(false)
-    expect(decision.reason).toBe("too_short")
-  })
-
-  it("keeps 'edit the login handler in auth.ts' in direct path", async () => {
-    const decision = await assessPlannerDecision("Edit the login handler in auth.ts to add rate limiting", [])
-    expect(decision.shouldPlan).toBe(false)
-    expect(decision.route).toBe("direct")
-    expect(decision.reason).toBe("edit_artifact_direct_path")
-  })
-
-  it("keeps 'write a plan for the migration' in direct path", async () => {
-    const decision = await assessPlannerDecision("Write a plan for the database migration", [])
-    expect(decision.shouldPlan).toBe(false)
-    // May match exact_response_turn or plan_generation_direct_path depending on gate order
-    expect(["exact_response_turn", "plan_generation_direct_path"]).toContain(decision.reason)
-  })
-
-  it("keeps 'remember that I prefer TypeScript' in direct path", async () => {
-    const decision = await assessPlannerDecision("Remember that I prefer TypeScript over JavaScript", [])
-    expect(decision.shouldPlan).toBe(false)
-    expect(decision.reason).toBe("dialogue_memory_turn")
-  })
-
-  it("keeps simple run-history questions in direct path", async () => {
-    const decision = await assessPlannerDecision("what was the first failed run in our system (agent001)", [])
-    expect(decision.shouldPlan).toBe(false)
-    expect(decision.route).toBe("direct")
-  })
-
-  it("routes with higher score when prior tool activity is high", async () => {
-    const history = Array.from({ length: 5 }, () => ({
-      role: "tool" as const,
-      content: "result"
-    }))
-    const decision = await assessPlannerDecision(
-      "Now build a game application with these components",
-      history
-    )
-    expect(decision.score).toBeGreaterThanOrEqual(5)
-    expect(decision.reason).toContain("prior_tool_activity")
-  })
-
-  it("keeps explicit single-file full implementation in direct burst path", async () => {
-    const decision = await assessPlannerDecision(
-      "Implement the full auth flow in single file src/auth.ts with complete logic from scratch",
-      []
-    )
-    expect(decision.shouldPlan).toBe(false)
-    expect(decision.route).toBe("single_artifact_direct_burst")
-    expect(decision.reason).toBe("single_artifact_direct_burst")
-  })
-
-  it("routes bounded greenfield builds to coherence-first direct execution", async () => {
-    const decision = await assessPlannerDecision(
-      "Create a complete Kanban app from scratch with drag and drop and persistent state",
-      []
-    )
-    expect(decision.shouldPlan).toBe(false)
-    expect(decision.route).toBe("bounded_coherent_generation")
-    expect(decision.reason).toBe("bounded_coherent_generation")
-  })
-
-  it("keeps planner routing for multi-page builds that already imply coordination-heavy ownership", async () => {
-    const decision = await assessPlannerDecision(
-      "Create a website with a landing page, docs page, and admin page, then wire shared navigation and forms",
-      []
-    )
-    expect(decision.shouldPlan).toBe(true)
-    expect(decision.route).toBe("full_planner_decomposition")
-  })
-
-  it("does not use bounded coherent generation for existing-code integration work", async () => {
-    const decision = await assessPlannerDecision(
+  it("routes integration-heavy greenfield work to planner", () => {
+    const decision = assessPlannerDecision(
       "Build a new dashboard and integrate it into the existing auth and API flow",
       []
     )
     expect(decision.shouldPlan).toBe(true)
-    expect(decision.route).toBe("full_planner_decomposition")
-  })
-
-  it("routes larger greenfield systems to planner bootstrap before decomposition", async () => {
-    const decision = await assessPlannerDecision(
-      "Build a complete SaaS starter from scratch with authentication, billing, admin tooling, and shared contracts across frontend, API, and worker modules.",
-      []
-    )
-    expect(decision.shouldPlan).toBe(true)
-    expect(decision.route).toBe("planner_with_coherent_bootstrap")
-    expect(decision.coherenceNeed).toBe("high")
-    expect(["medium", "high"]).toContain(decision.coordinationNeed)
-  })
-
-  it("does NOT use direct burst when no concrete target file is provided", async () => {
-    const decision = await assessPlannerDecision(
-      "Implement a full auth flow in a single file with complete logic from scratch",
-      []
-    )
-    expect(decision.shouldPlan).toBe(true)
-  })
-
-  it("does NOT use direct burst for ambiguous multi-target requests", async () => {
-    const decision = await assessPlannerDecision(
-      "Implement a full auth flow in single file src/auth.ts and add backend service wiring",
-      []
-    )
-    expect(decision.shouldPlan).toBe(true)
-  })
-
-  it("keeps trace-like multi-artifact game goals with explicit file list in planner path", async () => {
-    // Even under the simplicity-default architecture, a goal that explicitly
-    // enumerates multiple named output files signals file-by-file ownership
-    // coordination that the planner handles better than a single coherent pass.
-    const decision = await assessPlannerDecision(
-      "Build a complete playable chess game and create tmp/game/index.html, tmp/game/styles.css, and tmp/game/game.js with verification.",
-      []
-    )
-    expect(decision.shouldPlan).toBe(true)
-    expect(decision.reason).toContain("implementation_scope")
+    expect(decision.route).toBe("planner")
   })
 })
 
@@ -585,7 +431,7 @@ describe("Planner path execution", () => {
     }
 
     const traces: Array<Record<string, unknown>> = []
-    const result = await executePlannerPath(
+    const result = await runPlannerPath(
       "Build a complete playable chess game in tmp with multiple coordinated files and interactions.",
       {
         llm,
@@ -604,7 +450,7 @@ describe("Planner path execution", () => {
       .filter((step): step is SubagentTaskStep => step.stepType === "subagent_task")
       .filter((step) => step.executionContext.targetArtifacts.includes("tmp/index.html"))
     expect(htmlOwners).toHaveLength(1)
-    expect(htmlOwners?.[0]?.executionContext.verificationMode).not.toBe("browser_check")
+    expect(htmlOwners?.[0]?.executionContext.verificationMode).not.toBe("run_tests")
     expect(traces.some((entry) => entry.kind === "planner-validation-remediated")).toBe(true)
     expect(traces.some((entry) => entry.kind === "planner-fallback-direct-loop")).toBe(false)
   })
@@ -669,7 +515,7 @@ describe("Planner path execution", () => {
     }
 
     const traces: Array<Record<string, unknown>> = []
-    const result = await executePlannerPath(
+    const result = await runPlannerPath(
       "Build a complete playable chess game in tmp with multiple coordinated files and interactions.",
       {
         llm,
@@ -755,11 +601,11 @@ describe("Planner path execution", () => {
                 workspaceRoot: ".",
                 allowedReadRoots: ["."],
                 allowedWriteRoots: ["."],
-                allowedTools: ["write_file", "read_file", "browser_check"],
+                allowedTools: ["write_file", "read_file", "run_command"],
                 requiredSourceArtifacts: ["src/query.js"],
                 targetArtifacts: ["public/index.html"],
                 effectClass: "filesystem_write",
-                verificationMode: "browser_check",
+                verificationMode: "run_tests",
                 artifactRelations: [{ relationType: "write_owner", artifactPath: "public/index.html" }]
               }
             }
@@ -774,11 +620,11 @@ describe("Planner path execution", () => {
     }
 
     const traces: Array<Record<string, unknown>> = []
-    const result = await executePlannerPath(
+    const result = await runPlannerPath(
       "Create a website with a landing page, about page, and contact form. Build all pages and implement form validation.",
       {
         llm,
-        tools: [echoTool("write_file"), echoTool("read_file"), echoTool("browser_check")],
+        tools: [echoTool("write_file"), echoTool("read_file"), echoTool("run_command")],
         workspaceRoot: ".",
         history: [],
         onTrace: (entry) => traces.push(entry)
@@ -876,7 +722,7 @@ describe("Planner path execution", () => {
               objective: "Build tmp/index.html that renders the query data",
               inputContract: "tmp/data.js available",
               acceptanceCriteria: ["tmp/index.html loads without errors"],
-              requiredToolCapabilities: ["write_file", "read_file", "browser_check"],
+              requiredToolCapabilities: ["write_file", "read_file", "run_command"],
               contextRequirements: [],
               maxBudgetHint: "10 iterations",
               canRunParallel: false,
@@ -884,11 +730,11 @@ describe("Planner path execution", () => {
                 workspaceRoot: ".",
                 allowedReadRoots: ["."],
                 allowedWriteRoots: ["tmp"],
-                allowedTools: ["write_file", "read_file", "browser_check"],
+                allowedTools: ["write_file", "read_file", "run_command"],
                 requiredSourceArtifacts: ["tmp/data.js"],
                 targetArtifacts: ["tmp/index.html"],
                 effectClass: "filesystem_write",
-                verificationMode: "browser_check",
+                verificationMode: "run_tests",
                 artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/index.html" }]
               }
             }
@@ -903,14 +749,14 @@ describe("Planner path execution", () => {
     }
 
     const traces: Array<Record<string, unknown>> = []
-    const result = await executePlannerPath(
+    const result = await runPlannerPath(
       "Create a website with a landing page, about page, and contact form. Build all pages and implement form validation.",
       {
         llm,
         tools: [
           echoTool("write_file"),
           echoTool("read_file"),
-          echoTool("browser_check"),
+          echoTool("run_command"),
           echoTool("query_mssql")
         ],
         workspaceRoot: ".",
@@ -1007,7 +853,7 @@ describe("Planner path execution", () => {
 
     const delegatedSteps: string[] = []
     try {
-      const result = await executePlannerPath(
+      const result = await runPlannerPath(
         "Build a game in tmp across multiple separate modules: rules engine, UI renderer, and game controller as independent components.",
         {
           llm,
@@ -1147,7 +993,7 @@ describe("Planner path execution", () => {
 
     let capturedBlueprintObjective = ""
     try {
-      await executePlannerPath(
+      await runPlannerPath(
         "Build a tmp web app with tmp/index.html markup and tmp/game_logic.js logic.",
         {
           llm,
@@ -1253,7 +1099,7 @@ describe("Planner path execution", () => {
     let capturedLogicCriteria: readonly string[] = []
 
     try {
-      await executePlannerPath(
+      await runPlannerPath(
         "Build a tmp browser app with tmp/index.html and tmp/game_logic.js.",
         {
           llm,
@@ -1419,7 +1265,7 @@ describe("Planner path execution", () => {
     const objectives: string[] = []
 
     try {
-      const result = await executePlannerPath(
+      const result = await runPlannerPath(
         "First create tmp/summary.txt, then verify it, then repair it until verification passes and the final integrated summary is complete.",
         {
           llm,
@@ -1467,19 +1313,6 @@ describe("Planner path execution", () => {
         "write_summary:repair"
       ])
 
-      const compatibilityTrace = traces.find((entry) => entry.kind === "planner-repair-compatibility") as
-        | {
-            activePath?: string
-            diverged?: boolean
-            legacy?: { rerunOrder?: string[] }
-            repair?: { rerunOrder?: string[] }
-          }
-        | undefined
-      expect(compatibilityTrace?.activePath).toBe("repair")
-      expect(compatibilityTrace?.diverged).toBe(false)
-      expect(compatibilityTrace?.legacy?.rerunOrder).toEqual(["write_summary"])
-      expect(compatibilityTrace?.repair?.rerunOrder).toEqual(["write_summary"])
-
       const retryTrace = traces.find((entry) => entry.kind === "planner-retry") as
         | { rerunOrder?: string[] }
         | undefined
@@ -1498,231 +1331,6 @@ describe("Planner path execution", () => {
     } finally {
       delegationSpy.mockRestore()
       verifySpy.mockRestore()
-    }
-  })
-
-  it("pins shadow compatibility to legacy retries when divergence exceeds the threshold", async () => {
-    const prevMode = process.env["AGENT_PLANNER_COMPAT_MODE"]
-    const prevThreshold = process.env["AGENT_PLANNER_COMPAT_THRESHOLD"]
-    process.env["AGENT_PLANNER_COMPAT_MODE"] = "shadow"
-    process.env["AGENT_PLANNER_COMPAT_THRESHOLD"] = "1"
-
-    const delegationSpy = vi.spyOn(delegationDecision, "assessDelegationDecision").mockReturnValue({
-      shouldDelegate: true,
-      reason: "approved",
-      threshold: 0.2,
-      utilityScore: 0.9,
-      decompositionBenefit: 0.8,
-      coordinationOverhead: 0.2,
-      latencyCostRisk: 0.2,
-      safetyRisk: 0.1,
-      confidence: 0.9,
-      hardBlockedTaskClass: null,
-      hardBlockedTaskClassSource: null,
-      hardBlockedTaskClassSignal: null,
-      diagnostics: {}
-    })
-    const verifySpy = vi.spyOn(plannerVerifier, "verify")
-    const llm: LLMClient = {
-      chat: vi.fn().mockResolvedValue({
-        content: JSON.stringify({
-          reason: "split producer and consumer for integration repair",
-          confidence: 0.92,
-          requiresSynthesis: false,
-          steps: [
-            {
-              name: "write_api",
-              stepType: "subagent_task",
-              objective: "Create tmp/api.ts with the API contract",
-              inputContract: "Empty workspace",
-              acceptanceCriteria: ["tmp/api.ts exists"],
-              requiredToolCapabilities: ["write_file", "read_file"],
-              contextRequirements: [],
-              maxBudgetHint: "10 iterations",
-              canRunParallel: false,
-              executionContext: {
-                workspaceRoot: ".",
-                allowedReadRoots: ["."],
-                allowedWriteRoots: ["."],
-                allowedTools: ["write_file", "read_file"],
-                requiredSourceArtifacts: [],
-                targetArtifacts: ["tmp/api.ts"],
-                effectClass: "filesystem_write",
-                verificationMode: "none",
-                artifactRelations: [{ relationType: "write_owner", artifactPath: "tmp/api.ts" }]
-              }
-            },
-            {
-              name: "wire_ui",
-              stepType: "subagent_task",
-              objective: "Create tmp/ui.ts that consumes tmp/api.ts",
-              inputContract: "tmp/api.ts exists",
-              acceptanceCriteria: ["tmp/ui.ts exists", "tmp/ui.ts matches the API contract"],
-              requiredToolCapabilities: ["write_file", "read_file"],
-              contextRequirements: [],
-              maxBudgetHint: "10 iterations",
-              canRunParallel: false,
-              executionContext: {
-                workspaceRoot: ".",
-                allowedReadRoots: ["."],
-                allowedWriteRoots: ["."],
-                allowedTools: ["write_file", "read_file"],
-                requiredSourceArtifacts: ["tmp/api.ts"],
-                targetArtifacts: ["tmp/ui.ts"],
-                effectClass: "filesystem_write",
-                verificationMode: "none",
-                artifactRelations: [
-                  { relationType: "read_dependency", artifactPath: "tmp/api.ts" },
-                  { relationType: "write_owner", artifactPath: "tmp/ui.ts" }
-                ]
-              }
-            }
-          ],
-          edges: [{ from: "write_api", to: "wire_ui" }]
-        }),
-        toolCalls: []
-      })
-    }
-
-    verifySpy
-      .mockResolvedValueOnce({
-        overall: "retry",
-        confidence: 0.61,
-        unresolvedItems: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
-        steps: [
-          {
-            stepName: "write_api",
-            outcome: "pass",
-            confidence: 0.9,
-            issues: [],
-            issueDetails: [],
-            evidence: [],
-            retryable: false
-          },
-          {
-            stepName: "wire_ui",
-            outcome: "retry",
-            confidence: 0.61,
-            issues: ["Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts"],
-            issueDetails: [
-              makeIssue("Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts", {
-                code: "cross_file_signature_mismatch",
-                ownerStepName: "write_api",
-                ownershipMode: "shared_owners",
-                suspectedOwners: ["write_api", "wire_ui"],
-                primaryOwner: "write_api",
-                affectedArtifacts: ["tmp/api.ts", "tmp/ui.ts"],
-                sourceArtifacts: ["tmp/api.ts"],
-                repairClass: "integration_wiring",
-                confidence: 0.58
-              })
-            ],
-            evidence: [
-              {
-                id: "wire_ui:llm:1:cross_file_signature_mismatch",
-                stepName: "wire_ui",
-                source: "llm",
-                kind: "cross_file_signature_mismatch",
-                message: "Cross-file signature mismatch between tmp/api.ts and tmp/ui.ts",
-                artifactPaths: ["tmp/api.ts", "tmp/ui.ts"]
-              }
-            ],
-            retryable: true
-          }
-        ]
-      })
-      .mockResolvedValueOnce({
-        overall: "pass",
-        confidence: 0.95,
-        unresolvedItems: [],
-        steps: [
-          {
-            stepName: "write_api",
-            outcome: "pass",
-            confidence: 0.9,
-            issues: [],
-            issueDetails: [],
-            evidence: [],
-            retryable: false
-          },
-          {
-            stepName: "wire_ui",
-            outcome: "pass",
-            confidence: 0.95,
-            issues: [],
-            issueDetails: [],
-            evidence: [],
-            retryable: false
-          }
-        ]
-      })
-
-    const traces: Array<Record<string, unknown>> = []
-    const callOrder: string[] = []
-
-    try {
-      const result = await executePlannerPath(
-        "Build tmp/api.ts and tmp/ui.ts, then repair integration mismatches until verification passes.",
-        {
-          llm,
-          tools: [echoTool("write_file"), echoTool("read_file")],
-          workspaceRoot: ".",
-          history: [],
-          onTrace: (entry) => traces.push(entry)
-        },
-        async (step) => {
-          const target = step.executionContext.targetArtifacts[0] ?? "tmp/file.txt"
-          return {
-            output: `done ${step.name}`,
-            toolCalls: [
-              {
-                name: "write_file",
-                args: { path: target, content: `updated ${step.name}` },
-                result: "ok",
-                isError: false
-              },
-              {
-                name: "read_file",
-                args: { path: target },
-                result: `updated ${step.name}`,
-                isError: false
-              }
-            ],
-            execution: {
-              status: "success",
-              summary: `done ${step.name}`,
-              producedArtifacts: step.executionContext.targetArtifacts,
-              modifiedArtifacts: step.executionContext.targetArtifacts,
-              verificationAttempts: [],
-              unresolvedBlockers: []
-            }
-          }
-        }
-      )
-
-      expect(result.handled).toBe(true)
-
-      const compatibilityTrace = traces.find((entry) => entry.kind === "planner-repair-compatibility") as
-        | {
-            activePath?: string
-            diverged?: boolean
-            divergenceScore?: number
-            divergenceThreshold?: number
-            pinnedToLegacy?: boolean
-          }
-        | undefined
-      expect(compatibilityTrace?.activePath).toBe("legacy")
-      expect(compatibilityTrace?.diverged).toBe(true)
-      expect(compatibilityTrace?.divergenceScore).toBeGreaterThanOrEqual(1)
-      expect(compatibilityTrace?.divergenceThreshold).toBe(1)
-      expect(compatibilityTrace?.pinnedToLegacy).toBe(true)
-    } finally {
-      delegationSpy.mockRestore()
-      verifySpy.mockRestore()
-      if (prevMode === undefined) delete process.env["AGENT_PLANNER_COMPAT_MODE"]
-      else process.env["AGENT_PLANNER_COMPAT_MODE"] = prevMode
-      if (prevThreshold === undefined) delete process.env["AGENT_PLANNER_COMPAT_THRESHOLD"]
-      else process.env["AGENT_PLANNER_COMPAT_THRESHOLD"] = prevThreshold
     }
   })
 })
@@ -1752,7 +1360,7 @@ describe("Planner runtime model", () => {
         requiredSourceArtifacts: ["tmp/game.js"],
         targetArtifacts: ["tmp/index.html"],
         effectClass: "filesystem_write",
-        verificationMode: "browser_check",
+        verificationMode: "run_tests",
         artifactRelations: [
           { relationType: "read_dependency", artifactPath: "tmp/game.js" },
           { relationType: "write_owner", artifactPath: "tmp/index.html" }
@@ -1872,14 +1480,6 @@ describe("Planner runtime model", () => {
 
     expect(repairPlan.tasks.map((task) => task.stepName).sort()).toEqual(["wire_ui", "write_api"])
     expect(repairPlan.tasks.every((task) => task.mode === "repair")).toBe(true)
-
-    const legacyPlan = buildLegacyRetryPlan(plan, pipelineResult, decision)
-    const compatibility = compareRepairPlanCompatibility("shadow", legacyPlan, repairPlan)
-
-    expect(legacyPlan.rerunOrder).toEqual(["wire_ui"])
-    expect(compatibility.activePath).toBe("repair")
-    expect(compatibility.diverged).toBe(true)
-    expect(compatibility.reasons.some((reason) => reason.includes("adds write_api"))).toBe(true)
   })
 })
 
@@ -2395,7 +1995,7 @@ describe("Plan validation: validatePlan", () => {
             requiredSourceArtifacts: [],
             targetArtifacts: ["tmp/css/styles.css"],
             effectClass: "filesystem_write",
-            verificationMode: "browser_check",
+            verificationMode: "run_tests",
             artifactRelations: []
           }
         }),
@@ -2553,7 +2153,7 @@ describe("Plan validation: validatePlan", () => {
     expect(result.diagnostics.some((d) => d.code === "missing_dependency_wiring_criteria")).toBe(false)
   })
 
-  it("blocks browser_check when related JS files are owned by other steps", () => {
+  it("skips premature browser verification diagnostics (feature removed)", () => {
     const plan = makePlan({
       steps: [
         makeSubagentStep("create-html", {
@@ -2563,11 +2163,11 @@ describe("Plan validation: validatePlan", () => {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
-            allowedTools: ["write_file", "browser_check"],
+            allowedTools: ["write_file", "run_command"],
             requiredSourceArtifacts: [],
             targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
             effectClass: "filesystem_write",
-            verificationMode: "browser_check",
+            verificationMode: "run_tests",
             artifactRelations: []
           }
         }),
@@ -2590,13 +2190,10 @@ describe("Plan validation: validatePlan", () => {
     })
 
     const result = validatePlan(plan, [])
-    expect(result.valid).toBe(false)
-    expect(
-      result.diagnostics.some((d) => d.code === "premature_browser_verification" && d.severity === "error")
-    ).toBe(true)
+    expect(result.diagnostics.some((d) => d.code === "premature_browser_verification")).toBe(false)
   })
 
-  it("allows browser_check when HTML step owns related JS files", () => {
+  it("allows run_tests when HTML step owns related JS files", () => {
     const plan = makePlan({
       steps: [
         makeSubagentStep("create-html-and-js", {
@@ -2605,11 +2202,11 @@ describe("Plan validation: validatePlan", () => {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
-            allowedTools: ["write_file", "browser_check"],
+            allowedTools: ["write_file", "run_command"],
             requiredSourceArtifacts: [],
             targetArtifacts: ["tmp/index.html", "tmp/styles.css", "tmp/board.js", "tmp/game.js", "tmp/ui.js"],
             effectClass: "filesystem_write",
-            verificationMode: "browser_check",
+            verificationMode: "run_tests",
             artifactRelations: []
           }
         }),
@@ -2868,8 +2465,8 @@ describe("Plan validation: validatePlan", () => {
 // ============================================================================
 
 describe("Verifier: runDeterministicProbes modality coverage", () => {
-  it("runs runtime verification for HTML artifacts even when verificationMode is none", async () => {
-    let browserChecks = 0
+  it("runs test verification when verificationMode is run_tests", async () => {
+    let testRuns = 0
 
     const plan = makePlan({
       steps: [
@@ -2880,11 +2477,11 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
-            allowedTools: ["write_file", "read_file", "run_command", "browser_check"],
+            allowedTools: ["write_file", "read_file", "run_command"],
             requiredSourceArtifacts: [],
             targetArtifacts: ["tmp/index.html", "tmp/app.js"],
             effectClass: "filesystem_write",
-            verificationMode: "none",
+            verificationMode: "run_tests",
             artifactRelations: []
           }
         })
@@ -2927,16 +2524,8 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         description: "run",
         parameters: { type: "object", properties: { command: { type: "string" } } },
         async execute() {
+          testRuns++
           return "ok"
-        }
-      },
-      {
-        name: "browser_check",
-        description: "browser",
-        parameters: { type: "object", properties: { path: { type: "string" } } },
-        async execute() {
-          browserChecks++
-          return "No errors"
         }
       }
     ]
@@ -2944,7 +2533,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
     const assessments = await runDeterministicProbes(plan, pipelineResult, tools)
     const step = assessments.find((a) => a.stepName === "ui-step")
     expect(step).toBeDefined()
-    expect(browserChecks).toBeGreaterThan(0)
+    expect(testRuns).toBeGreaterThan(0)
     expect(step?.issues.some((i) => i.includes("VERIFICATION MODALITY GAP"))).toBe(false)
   })
 
@@ -3082,7 +2671,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
-            allowedTools: ["write_file", "read_file", "browser_check"],
+            allowedTools: ["write_file", "read_file", "run_command"],
             requiredSourceArtifacts: [],
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
@@ -3148,7 +2737,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         }
       },
       {
-        name: "browser_check",
+        name: "run_command",
         description: "browser",
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute() {
@@ -3172,7 +2761,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
-            allowedTools: ["write_file", "read_file", "browser_check"],
+            allowedTools: ["write_file", "read_file", "run_command"],
             requiredSourceArtifacts: [],
             targetArtifacts: ["tmp/app/index.html"],
             effectClass: "filesystem_write",
@@ -3248,7 +2837,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
         }
       },
       {
-        name: "browser_check",
+        name: "run_command",
         description: "browser",
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute() {
@@ -4826,7 +4415,7 @@ describe("Pipeline: executePipeline", () => {
     expect(step?.error).toContain("integrity violations")
   })
 
-  it("fails subagent step when a child browser_check reports runtime errors", async () => {
+  it("fails subagent step when required target artifacts are missing", async () => {
     const plan = makePlan({
       steps: [
         makeSubagentStep("build-ui", {
@@ -4834,7 +4423,7 @@ describe("Pipeline: executePipeline", () => {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
-            allowedTools: ["write_file", "read_file", "browser_check"],
+            allowedTools: ["write_file", "read_file", "run_command"],
             requiredSourceArtifacts: [],
             targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
             effectClass: "filesystem_write",
@@ -4856,10 +4445,9 @@ describe("Pipeline: executePipeline", () => {
           isError: false
         },
         {
-          name: "browser_check",
-          args: { path: "tmp/index.html" },
-          result:
-            "## Uncaught Exceptions (1)\n  - SyntaxError: Unexpected token ':'\n\nTotal: 1 error(s), 0 warning(s)",
+          name: "run_command",
+          args: { command: "npm test" },
+          result: "1 failed, 0 passed",
           isError: true
         },
         {
@@ -4874,8 +4462,7 @@ describe("Pipeline: executePipeline", () => {
     expect(result.status).toBe("failed")
     const step = result.stepResults.get("build-ui")
     expect(step?.status).toBe("failed")
-    expect(step?.error).toContain("browser_check")
-    expect(step?.error).toContain("verification failed")
+    expect(step?.error).toContain("tmp/styles.css")
   })
 
   it("fails subagent step when delegation contract evidence is missing", async () => {
@@ -4898,7 +4485,21 @@ describe("Pipeline: executePipeline", () => {
 
   it("records execution and acceptance state for successful subagent steps", async () => {
     const plan = makePlan({
-      steps: [makeSubagentStep("build-ui")],
+      steps: [
+        makeSubagentStep("build-ui", {
+          executionContext: {
+            workspaceRoot: ".",
+            allowedReadRoots: ["."],
+            allowedWriteRoots: ["."],
+            allowedTools: ["write_file", "read_file", "run_command"],
+            requiredSourceArtifacts: [],
+            targetArtifacts: ["game.js"],
+            effectClass: "filesystem_write",
+            verificationMode: "none",
+            artifactRelations: []
+          }
+        })
+      ],
       edges: []
     })
 
@@ -4912,9 +4513,9 @@ describe("Pipeline: executePipeline", () => {
           isError: false
         },
         {
-          name: "browser_check",
-          args: { path: "index.html" },
-          result: "No errors",
+          name: "read_file",
+          args: { path: "game.js" },
+          result: "export const ok = true",
           isError: false
         }
       ],
@@ -4924,7 +4525,7 @@ describe("Pipeline: executePipeline", () => {
         producedArtifacts: ["game.js"],
         modifiedArtifacts: ["game.js"],
         verificationAttempts: [
-          { toolName: "browser_check", target: "index.html", success: true, summary: "No errors" }
+          { toolName: "read_file", target: "game.js", success: true, summary: "ok" }
         ],
         unresolvedBlockers: []
       }
@@ -4935,7 +4536,7 @@ describe("Pipeline: executePipeline", () => {
     expect(step?.executionState).toBe("executed")
     expect(step?.acceptanceState).toBe("pending_verification")
     expect(step?.producedArtifacts).toEqual(["game.js"])
-    expect(step?.verificationAttempts?.[0]?.toolName).toBe("browser_check")
+    expect(step?.verificationAttempts?.[0]?.toolName).toBe("read_file")
   })
 
   it("retries once with write-first guidance on missing_file_mutation_evidence", async () => {
@@ -5213,7 +4814,7 @@ describe("Pipeline: executePipeline", () => {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
-            allowedTools: ["read_file", "write_file", "browser_check"],
+            allowedTools: ["read_file", "write_file", "run_command"],
             requiredSourceArtifacts: ["tmp/BLUEPRINT.md"],
             targetArtifacts: ["tmp/index.html", "tmp/styles.css"],
             effectClass: "filesystem_write",
@@ -6833,11 +6434,11 @@ describe("Verifier: spec-driven structural and process evidence", () => {
             workspaceRoot: ".",
             allowedReadRoots: ["."],
             allowedWriteRoots: ["."],
-            allowedTools: ["read_file", "browser_check"],
+            allowedTools: ["read_file", "run_command"],
             requiredSourceArtifacts: ["tmp/game_logic.js", "tmp/index.html"],
             targetArtifacts: ["tmp/index.html"],
             effectClass: "readonly",
-            verificationMode: "browser_check",
+            verificationMode: "run_tests",
             artifactRelations: [],
             role: "validator"
           }
@@ -6890,7 +6491,7 @@ describe("Verifier: spec-driven structural and process evidence", () => {
         }
       },
       {
-        name: "browser_check",
+        name: "run_command",
         description: "browser",
         parameters: { type: "object", properties: { path: { type: "string" } } },
         async execute() {
@@ -7365,59 +6966,5 @@ describe("isValidArtifactPath", () => {
   it("rejects bare words without extension or path separator", () => {
     expect(isValidArtifactPath("chessboard")).toBe(false)
     expect(isValidArtifactPath("game_logic")).toBe(false)
-  })
-})
-
-// ── parseCoherentSolutionBundle — TODO/placeholder rejection ────
-
-describe("parseCoherentSolutionBundle — TODO rejection", () => {
-  function makeBundle(appContent: string) {
-    return JSON.stringify({
-      summary: "Chess game",
-      architecture: "index.html + chess.js",
-      artifacts: [
-        { path: "index.html", purpose: "HTML entry", content: "<html></html>" },
-        { path: "chess.js", purpose: "Game logic", content: appContent }
-      ]
-    })
-  }
-
-  it("accepts a bundle with no TODO comments", () => {
-    const result = parseCoherentSolutionBundle(makeBundle("function movePiece() { return true; }\n"))
-    expect(result.bundle).not.toBeNull()
-    expect(result.diagnostics).toHaveLength(0)
-  })
-
-  it("rejects a bundle whose JS artifact has a // TODO: stub", () => {
-    const result = parseCoherentSolutionBundle(
-      makeBundle("function movePiece() {\n  // TODO: Add logic for other pieces\n  return false;\n}\n")
-    )
-    expect(result.bundle).toBeNull()
-    expect(result.diagnostics.some((d) => /TODO/i.test(d))).toBe(true)
-  })
-
-  it("rejects a bundle with /* TODO block comment in JS", () => {
-    const result = parseCoherentSolutionBundle(
-      makeBundle("/* TODO add castling */\nfunction castling() {}\n")
-    )
-    expect(result.bundle).toBeNull()
-    expect(result.diagnostics.some((d) => /TODO/i.test(d))).toBe(true)
-  })
-
-  it("does not reject TODO in a non-code artifact (e.g. markdown)", () => {
-    const bundle = JSON.stringify({
-      summary: "Chess game",
-      architecture: "index.html + chess.js",
-      artifacts: [
-        { path: "README.md", purpose: "Docs", content: "# Chess\n\n<!-- TODO: improve docs -->\n" },
-        {
-          path: "chess.js",
-          purpose: "Game logic",
-          content: "function movePiece() { return true; }\n"
-        }
-      ]
-    })
-    const result = parseCoherentSolutionBundle(bundle)
-    expect(result.bundle).not.toBeNull()
   })
 })

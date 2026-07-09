@@ -37,7 +37,7 @@ Those artifacts are migration inputs, not the source to edit.
 
 ## Current Runtime Lifecycle
 
-1. `deploy/sync/artifacts/flow-templates.json` provides the initial flow template for a
+1. `deploy/sync/artifacts/sync-metadata.json` (or its `flows` view in `flow-templates.json`) provides the initial flow template for a
 	named template id such as `contract` or `dataset`.
 2. When a sync definition config row is first created, that template seeds the
 	initial `execution_steps_json` in the DB.

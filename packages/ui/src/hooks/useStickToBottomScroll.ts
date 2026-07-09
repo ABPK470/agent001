@@ -45,6 +45,8 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
   const programmaticScrollRef = useRef(false)
   const [showJumpButton, setShowJumpButton] = useState(false)
 
+  const suspendFollowUntilRef = useRef(0)
+
   followWhenRef.current = followWhen
 
   const scrollToBottom = useCallback((behavior: ScrollBehavior = "instant", options?: ScrollToBottomOptions) => {
@@ -70,6 +72,16 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     setShowJumpButton(true)
   }, [])
 
+  /** Block resize-driven follow until expiry or jumpToLatest clears it. */
+  const suspendAutoFollow = useCallback((durationMs = 30_000) => {
+    suspendFollowUntilRef.current = Date.now() + durationMs
+    pauseAutoScroll()
+  }, [pauseAutoScroll])
+
+  const resumeAutoFollow = useCallback(() => {
+    suspendFollowUntilRef.current = 0
+  }, [])
+
   const onScroll = useCallback(() => {
     const host = scrollHostRef.current
     if (!host) return
@@ -88,6 +100,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
   const stickIfFollowing = useCallback(() => {
     const host = scrollHostRef.current
     if (!host) return
+    if (Date.now() < suspendFollowUntilRef.current) return
     if (!shouldStickRef.current || userEngagedRef.current) return
     if (!followWhenRef.current) return
     programmaticScrollRef.current = true
@@ -163,6 +176,8 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     onScroll,
     scrollToBottom,
     pauseAutoScroll,
+    suspendAutoFollow,
+    resumeAutoFollow,
     showJumpButton,
   }
 }

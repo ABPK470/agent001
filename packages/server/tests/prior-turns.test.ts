@@ -1,20 +1,5 @@
 /**
- * Tests for loadPriorTurns — the server-side accessor that surfaces
- * the last N completed runs in the same session so the orchestrator
- * can inject them as a first-class `<prior_turns>` system anchor.
- *
- * What we test:
- *   - returns most-recent runs first, capped by `limit`
- *   - filters by session_id and tenant (upn) exactly
- *   - excludes the current run via `excludeRunId`
- *   - skips delegated child runs (parent_run_id IS NOT NULL)
- *   - skips non-terminal/cancelled/crashed rows
- *   - truncates large answers at line/sentence boundary with suffix
- *   - returns [] when sessionId is empty or limit <= 0
- *
- * Uses the same in-memory SQLite + migrations pattern as
- * orchestrator-continuity.test.ts so the test exercises the production
- * schema (including the (session_id, created_at DESC) index).
+ * Tests for loadPriorTurns — thread-scoped cross-turn grounding.
  */
 
 import Database from "better-sqlite3"
@@ -26,7 +11,7 @@ import {
   loadPriorTurns,
   PRIOR_TURN_ANSWER_MAX_CHARS
 } from "../src/features/runs/core/data-blocks/prior-turns.js"
-import { seedSession, seedUser } from "./_fk-helpers.js"
+import { seedUser } from "./_fk-helpers.js"
 
 let db: Database.Database
 let dataDir: string
@@ -55,34 +40,42 @@ afterEach(() => {
   else process.env["MIA_DATA_DIR"] = originalDataDir
 })
 
-const SID = "anon:0123456789abcdef0123456789abcdef"
 const UPN = "alice@example.com"
+const THREAD_ID = "11111111-1111-4111-8111-111111111111"
+const OTHER_THREAD_ID = "22222222-2222-4222-8222-222222222222"
+
+function seedThread(id: string, upn: string): void {
+  seedUser(db, upn)
+  db.prepare(
+    `
+    INSERT OR IGNORE INTO threads (id, upn, title, created_at, updated_at, archived_at, pinned)
+    VALUES (@id, @upn, 'Test thread', datetime('now'), datetime('now'), NULL, 0)
+  `
+  ).run({ id, upn })
+}
 
 interface InsertRun {
   id: string
   goal: string
   answer?: string | null
   status?: string
-  /** Minutes offset from now (negative = older). */
   completedMinutesAgo?: number
   parentRunId?: string | null
-  sessionId?: string
   upn?: string
+  threadId?: string
 }
 
 function insertRun(r: InsertRun): void {
-  const sid = r.sessionId ?? SID
   const upn = r.upn ?? UPN
-  seedUser(db, upn)
-  // sessions require FK to users — seed a session for any session id used
-  seedSession(db, sid, upn)
+  const threadId = r.threadId ?? THREAD_ID
+  seedThread(threadId, upn)
   const completedAt =
     r.completedMinutesAgo == null ? null : new Date(Date.now() + r.completedMinutesAgo * 60_000).toISOString()
   const createdAt = completedAt ?? new Date(Date.now() + (r.completedMinutesAgo ?? 0) * 60_000).toISOString()
   db.prepare(
     `
-    INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, upn, display_name)
-    VALUES (@id, @goal, @status, @answer, 1, NULL, @parent_run_id, NULL, @created_at, @completed_at, @session_id, @upn, @display_name)
+    INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
+    VALUES (@id, @goal, @status, @answer, 1, NULL, @parent_run_id, NULL, @created_at, @completed_at, @thread_id, @upn, @display_name)
   `
   ).run({
     display_name: upn ?? "anon",
@@ -93,8 +86,8 @@ function insertRun(r: InsertRun): void {
     parent_run_id: r.parentRunId ?? null,
     created_at: createdAt,
     completed_at: completedAt,
-    session_id: sid,
-    upn: upn
+    thread_id: threadId,
+    upn
   })
 }
 
@@ -105,7 +98,7 @@ describe("loadPriorTurns", () => {
     insertRun({ id: "r3", goal: "third", answer: "A3", completedMinutesAgo: -10 })
     insertRun({ id: "r4", goal: "fourth", answer: "A4", completedMinutesAgo: -5 })
 
-    const turns = loadPriorTurns({ sessionId: SID, upn: UPN, limit: 3 })
+    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN, limit: 3 })
 
     expect(turns.map((t) => t.runId)).toEqual(["r4", "r3", "r2"])
     expect(turns[0]?.goal).toBe("fourth")
@@ -116,22 +109,22 @@ describe("loadPriorTurns", () => {
     insertRun({ id: "rPrev", goal: "earlier", answer: "old", completedMinutesAgo: -10 })
     insertRun({ id: "rCur", goal: "current", answer: "new", completedMinutesAgo: -1 })
 
-    const turns = loadPriorTurns({ sessionId: SID, upn: UPN, excludeRunId: "rCur" })
+    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN, excludeRunId: "rCur" })
 
     expect(turns.map((t) => t.runId)).toEqual(["rPrev"])
   })
 
-  it("filters strictly by sessionId", () => {
-    insertRun({ id: "rA", goal: "in-session", answer: "yes", completedMinutesAgo: -5, sessionId: SID })
+  it("filters strictly by threadId", () => {
+    insertRun({ id: "rA", goal: "in-thread", answer: "yes", completedMinutesAgo: -5, threadId: THREAD_ID })
     insertRun({
       id: "rB",
-      goal: "out-session",
+      goal: "other-thread",
       answer: "no",
       completedMinutesAgo: -3,
-      sessionId: "anon:ffffffffffffffffffffffffffffffff"
+      threadId: OTHER_THREAD_ID
     })
 
-    const turns = loadPriorTurns({ sessionId: SID, upn: UPN })
+    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
 
     expect(turns.map((t) => t.runId)).toEqual(["rA"])
   })
@@ -143,17 +136,18 @@ describe("loadPriorTurns", () => {
       goal: "other",
       answer: "ok",
       completedMinutesAgo: -3,
-      upn: "bob@example.com"
+      upn: "bob@example.com",
+      threadId: OTHER_THREAD_ID
     })
 
-    const turns = loadPriorTurns({ sessionId: SID, upn: UPN })
+    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
 
     expect(turns.map((t) => t.runId)).toEqual(["rMine"])
   })
 
   it("returns [] when upn is empty", () => {
     insertRun({ id: "rX", goal: "x", answer: "x", completedMinutesAgo: -1 })
-    expect(loadPriorTurns({ sessionId: SID, upn: "" })).toEqual([])
+    expect(loadPriorTurns({ threadId: THREAD_ID, upn: "" })).toEqual([])
   })
 
   it("skips delegated child runs (parent_run_id IS NOT NULL)", () => {
@@ -166,7 +160,7 @@ describe("loadPriorTurns", () => {
       parentRunId: "rParent"
     })
 
-    const turns = loadPriorTurns({ sessionId: SID, upn: UPN })
+    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
 
     expect(turns.map((t) => t.runId)).toEqual(["rParent"])
   })
@@ -196,7 +190,7 @@ describe("loadPriorTurns", () => {
       status: "crashed"
     })
 
-    const turns = loadPriorTurns({ sessionId: SID, upn: UPN, limit: 10 })
+    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN, limit: 10 })
 
     expect(turns.map((t) => t.runId).sort()).toEqual(["rFail", "rOk"])
   })
@@ -205,7 +199,7 @@ describe("loadPriorTurns", () => {
     const longAnswer = "line\n".repeat(PRIOR_TURN_ANSWER_MAX_CHARS / 5 + 200)
     insertRun({ id: "rBig", goal: "big", answer: longAnswer, completedMinutesAgo: -1 })
 
-    const turns = loadPriorTurns({ sessionId: SID, upn: UPN })
+    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
 
     expect(turns).toHaveLength(1)
     const a = turns[0]!.answer!
@@ -216,24 +210,24 @@ describe("loadPriorTurns", () => {
   it("preserves null answers as null (e.g. failed runs)", () => {
     insertRun({ id: "rNull", goal: "null-ans", answer: null, completedMinutesAgo: -1, status: "failed" })
 
-    const turns = loadPriorTurns({ sessionId: SID, upn: UPN })
+    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
 
     expect(turns[0]?.answer).toBeNull()
   })
 
-  it("returns [] when sessionId is empty", () => {
+  it("returns [] when threadId is empty", () => {
     insertRun({ id: "rX", goal: "x", answer: "x", completedMinutesAgo: -1 })
-    expect(loadPriorTurns({ sessionId: "", upn: UPN })).toEqual([])
+    expect(loadPriorTurns({ threadId: "", upn: UPN })).toEqual([])
   })
 
   it("returns [] when limit <= 0", () => {
     insertRun({ id: "rX", goal: "x", answer: "x", completedMinutesAgo: -1 })
-    expect(loadPriorTurns({ sessionId: SID, upn: UPN, limit: 0 })).toEqual([])
+    expect(loadPriorTurns({ threadId: THREAD_ID, upn: UPN, limit: 0 })).toEqual([])
   })
 
   it("ranAt uses completed_at when present, falls back to created_at", () => {
     insertRun({ id: "rDone", goal: "done", answer: "x", completedMinutesAgo: -1 })
-    const turns = loadPriorTurns({ sessionId: SID, upn: UPN })
+    const turns = loadPriorTurns({ threadId: THREAD_ID, upn: UPN })
     expect(turns[0]?.ranAt).toBeTruthy()
   })
 })

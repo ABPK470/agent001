@@ -10,7 +10,7 @@ function minimalPlan(overrides: Partial<SyncPlan> = {}): SyncPlan {
     entity: { type: "contract", id: 1, displayName: "ACSRawTest" },
     source: "uat",
     target: "dev",
-    preflight: { catalogCompatible: true, issues: [] },
+    preflight: { catalogCompatible: true, issues: [], rootParentReady: true, rootParentIssue: null },
     tables: [],
     totals: {
       insert: 102,
@@ -22,12 +22,35 @@ function minimalPlan(overrides: Partial<SyncPlan> = {}): SyncPlan {
       tablesCount: 8
     },
     dependencyGraph: {
-      nodes: [{ id: "core.Contract", label: "Contract", status: "insert", counts: { insert: 1, update: 0, delete: 0, unchanged: 0, lowConfidence: 0, conflicts: 0 } }],
+      nodes: [{
+        id: "core.Contract",
+        label: "Contract",
+        status: "inserts",
+        stats: { unchanged: 0, lowConfidence: 0 },
+        movement: { insert: 1, update: 0, delete: 0 }
+      }],
       edges: []
     },
     warnings: [],
     estimatedDurationSec: 12,
-    recipeSnapshot: { entityType: "contract", tables: [], executionOrder: [], reverseOrder: [] },
+    executionContract: {
+      definitionId: "contract",
+      definitionPublishedVersion: "v1",
+      definitionPublishedAt: "2026-01-01T00:00:00.000Z",
+      governance: { freezeWindowIds: [] },
+      bindings: { serviceProfileRef: "default", environmentPolicyRef: "default" },
+      allowedSchemas: ["core"],
+      metadata: {
+        rootTable: "core.Contract",
+        rootKeyColumn: "contractId",
+        selfJoinColumn: null,
+        tables: [],
+        executionOrder: [],
+        reverseOrder: []
+      },
+      flow: { steps: [] },
+      provenance: { kind: "manual" }
+    },
     ...overrides
   }
 }

@@ -5,6 +5,7 @@
  * graph even when the model paraphrases or mis-shapes the fenced block.
  */
 
+import { movementOfTable, tableMovementTotal } from "@mia/shared-types"
 import type { SyncPlan } from "./plan-store.js"
 
 export interface ChatDashboardItem {
@@ -50,16 +51,14 @@ export function buildSyncPreviewDashboard(plan: SyncPlan): ChatDashboardPayload 
         nodes: graph.nodes.map((n) => ({
           id: n.id,
           label: n.label,
-          subtitle: `+${n.counts.insert} ~${n.counts.update} -${n.counts.delete}`
+          subtitle: `+${n.movement.insert} ~${n.movement.update} -${n.movement.delete}`
         })),
         edges: graph.edges
       }
     })
   }
 
-  const changedTables = plan.tables.filter(
-    (t) => t.counts.insert + t.counts.update + t.counts.delete + t.counts.conflicts > 0
-  )
+  const changedTables = plan.tables.filter((t) => tableMovementTotal(t) > 0)
   if (changedTables.length >= 3) {
     items.push({
       kind: "bar",
@@ -69,9 +68,9 @@ export function buildSyncPreviewDashboard(plan: SyncPlan): ChatDashboardPayload 
         orientation: "horizontal",
         categories: changedTables.map((t) => t.table),
         series: [
-          { name: "Inserts", values: changedTables.map((t) => t.counts.insert) },
-          { name: "Updates", values: changedTables.map((t) => t.counts.update) },
-          { name: "Deletes", values: changedTables.map((t) => t.counts.delete) }
+          { name: "Inserts", values: changedTables.map((t) => movementOfTable(t).insert) },
+          { name: "Updates", values: changedTables.map((t) => movementOfTable(t).update) },
+          { name: "Deletes", values: changedTables.map((t) => movementOfTable(t).delete) }
         ]
       }
     })

@@ -41,7 +41,6 @@ export async function spawnChildForPlan(
       "append_file",
       "replace_in_file",
       "list_directory",
-      "browser_check",
       "run_command"
     ]) {
       allowedToolNames.add(essential)

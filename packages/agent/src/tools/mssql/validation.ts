@@ -8,6 +8,12 @@ import { getTenantConfig } from "../../application/shell/tenant-config.js"
 import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
 import type { CatalogAccessor } from "../catalog/index.js"
 import {
+  detectBareInventedColumns,
+  detectPostUnionGroupBy,
+  detectUnverifiedTableRefs,
+  splitUnionBranches
+} from "./schema-binding.js"
+import {
   _resetCatalogQueriesCache,
   calendarDimensionTable,
   canonicalQualifiedName,
@@ -684,34 +690,13 @@ export function detectInventedColumns(
   const offenders: InventedColumnOffender[] = []
   const seen = new Set<string>()
 
-  // Statement split — stripForScan already removed string literals/comments.
-  const statements = stripped.split(/;\s*/)
-  for (const stmt of statements) {
-    if (!stmt.trim()) continue
+  const validateFragment = (stmt: string): void => {
+    if (!stmt.trim()) return
+    if (/\bFROM\s*\(\s*SELECT\b/i.test(stmt)) return
+    if (/\bJOIN\s*\(\s*SELECT\b/i.test(stmt)) return
+    if (/\bsys\.|\bINFORMATION_SCHEMA\b/i.test(stmt)) return
+    if (/\bOPENJSON\b|\bOPENROWSET\b|\bSTRING_SPLIT\b/i.test(stmt)) return
 
-    // Skip provenance-ambiguous shapes — safer to under-report than false-block.
-    //
-    // Note (2026-05-23): the CTE skip (`WITH … AS (…)`) was REMOVED here.
-    // It was suppressing the check on every analytical query in the wild
-    // (the model almost always uses CTEs), so hallucinated columns like
-    // `r.VolumeUSDMTD` / `r.RevenueAmountCY` against `publish.Revenue` were
-    // sailing through to SQL Server. The remaining skips below stay because
-    // they materially change alias→table provenance; a CTE introduces a new
-    // *name* but every alias bound to a real `schema.table` in FROM/JOIN
-    // still resolves unambiguously (CTE aliases lack a schema prefix and
-    // therefore never enter `fromJoinRe`). The narrow residual risk is a
-    // CTE that re-uses the same alias letter as the outer query against a
-    // different base table — accepted in exchange for catching the entire
-    // hallucinated-column family at parse time instead of at SQL Server.
-    if (/\bFROM\s*\(\s*SELECT\b/i.test(stmt)) continue // derived FROM
-    if (/\bJOIN\s*\(\s*SELECT\b/i.test(stmt)) continue // derived JOIN
-    if (/\bUNION\b|\bINTERSECT\b|\bEXCEPT\b/i.test(stmt)) continue // set ops
-    if (/\bsys\.|\bINFORMATION_SCHEMA\b/i.test(stmt)) continue // system catalog
-    if (/\bOPENJSON\b|\bOPENROWSET\b|\bSTRING_SPLIT\b/i.test(stmt)) continue // TVFs
-
-    // Build alias map from FROM/JOIN <schema>.<table> [AS] <alias>.
-    // Anchor on schema.table to avoid mis-parsing #temp / @var / single-name
-    // tables — we only validate against catalog-resolvable bases.
     const aliasMap = new Map<string, AliasBinding>()
     const fromJoinRe = /\b(?:FROM|JOIN)\s+\[?(\w+)\]?\.\[?(\w+)\]?(?:\s+(?:AS\s+)?\[?(\w+)\]?)?/gi
     let fm: RegExpExecArray | null
@@ -721,28 +706,20 @@ export function detectInventedColumns(
       const aliasRaw = fm[3]
       const qualified = `${schema}.${table}`
       const catalogTable = catalog.getTable(qualified)
-      if (!catalogTable) continue // Not in catalog → cannot validate; stay silent.
+      if (!catalogTable) continue
 
-      // Effective alias: explicit alias if given AND not a reserved keyword
-      // (otherwise it's our regex eating the next clause: `FROM x.y WHERE` →
-      // `aliasRaw=WHERE`). Fall back to bare table name.
       const candidate = aliasRaw && !reservedAliases.has(aliasRaw.toLowerCase()) ? aliasRaw : table
       aliasMap.set(candidate.toLowerCase(), { alias: candidate, qualifiedTable: qualified })
     }
 
-    if (aliasMap.size === 0) continue
+    if (aliasMap.size === 0) return
 
-    // Validate qualified column references.
-    //  - 2-part: `alias.col` (most common in the wild)
-    //  - 3-part: `schema.table.col`
-    // We require the trailing char NOT to be `(` (else it's a function call).
     const refRe = /\b\[?(\w+)\]?\.\[?(\w+)\]?(?:\.\[?(\w+)\]?)?/g
     let rm: RegExpExecArray | null
     while ((rm = refRe.exec(stmt)) !== null) {
       const a = rm[1]
       const b = rm[2]
       const c = rm[3]
-      // Trailing `(` → function call (e.g. `dbo.fnFoo(...)`, `r.ToString()`).
       const after = stmt.charAt(rm.index + rm[0].length)
       if (after === "(") continue
 
@@ -750,21 +727,18 @@ export function detectInventedColumns(
       let column: string
       let referenceText: string
       if (c) {
-        // 3-part `schema.table.col`
         const qualified = `${a}.${b}`
         const tbl = catalog.getTable(qualified)
-        if (!tbl) continue // Unknown schema.table → can't claim "invented".
+        if (!tbl) continue
         table = qualified
         column = c
         referenceText = `${a}.${b}.${c}`
       } else {
-        // 2-part `alias.col`
         const aliasLower = a.toLowerCase()
         if (reservedAliases.has(aliasLower)) continue
         const binding = aliasMap.get(aliasLower)
-        if (!binding) continue // Unknown alias → silent.
+        if (!binding) continue
         if (NON_COLUMN_TOKEN.has(b.toLowerCase())) continue
-        // `alias.*` is whitespace by now; the regex won't match `*` anyway.
         table = binding.qualifiedTable
         column = b
         referenceText = `${binding.alias}.${b}`
@@ -785,6 +759,28 @@ export function detectInventedColumns(
         column,
         suggestions: nearestColumns(column, catalogTable.columns)
       })
+    }
+
+    for (const bare of detectBareInventedColumns(stmt, aliasMap, (q) => catalog.getTable(q))) {
+      const key = `bare::${bare.column.toLowerCase()}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      offenders.push({
+        reference: bare.column,
+        table: bare.tables.join(", "),
+        column: bare.column,
+        suggestions: bare.suggestions
+      })
+    }
+  }
+
+  const statements = stripped.split(/;\s*/)
+  for (const stmt of statements) {
+    if (!stmt.trim()) continue
+    if (/\bUNION\b/i.test(stmt)) {
+      for (const branch of splitUnionBranches(stmt)) validateFragment(branch)
+    } else {
+      validateFragment(stmt)
     }
   }
   return offenders
@@ -910,6 +906,12 @@ function liveProfiledTables(): ReadonlySet<string> | null {
 export interface QueryValidationOptions {
   accessor?: CatalogAccessor
   profiledTables?: ReadonlySet<string> | null
+  /**
+   * When set (including empty), every catalog-resolvable FROM/JOIN table
+   * must appear in this set — populated by search_catalog / explore /
+   * profile_data / known_objects seeding. Null/undefined disables the gate.
+   */
+  verifiedTables?: ReadonlySet<string> | null
 }
 
 // ── Cross-source reconciliation guard (Phase 5) ──────────────────
@@ -1272,6 +1274,59 @@ export function validateQueryDetailed(
           query,
           detail: avgCoalesceOffenders[0].snippet
         }) ?? null
+    }
+  }
+
+  // Require explicit schema discovery for every catalog table in FROM/JOIN.
+  if (options.verifiedTables != null) {
+    const unverified = detectUnverifiedTableRefs(
+      query,
+      options.verifiedTables,
+      options.accessor ?? EMPTY_CATALOG_ACCESSOR
+    )
+    if (unverified.length > 0) {
+      const list = unverified.slice(0, 8).join(", ")
+      const more = unverified.length > 8 ? ` …and ${unverified.length - 8} more` : ""
+      const head = [
+        `Query blocked — references table(s) not verified this run: ${list}${more}.`,
+        ``,
+        `Before query_mssql, call search_catalog(table='<schema.Table>') or explore_mssql_schema(table='<schema.Table>') for EVERY table you plan to JOIN — not just the fact table.`,
+        `Multi-table CTEs need all dimensions verified first (e.g. dim.Client, dim.Product, dim.Date).`
+      ].join("\n")
+      return {
+        ok: false,
+        error: withFixHint(head, "unverified_table_reference"),
+        code: "unverified_table_reference",
+        analysis,
+        lesson:
+          getDoctrineLessonTemplate("unverified_table_reference")?.({
+            query,
+            detail: list
+          }) ?? null
+      }
+    }
+  }
+
+  const strippedForUnion = stripForScan(query)
+  for (const stmt of strippedForUnion.split(/;\s*/)) {
+    if (detectPostUnionGroupBy(stmt)) {
+      const head = [
+        `Query blocked — GROUP BY appears only after a UNION branch.`,
+        ``,
+        `In T-SQL each SELECT in a UNION must include its own GROUP BY (if aggregating).`,
+        `Do not append GROUP BY after the UNION chain — wrap in a subquery/CTE and group the outer result instead.`
+      ].join("\n")
+      return {
+        ok: false,
+        error: withFixHint(head, "union_group_by_illegal"),
+        code: "union_group_by_illegal",
+        analysis,
+        lesson:
+          getDoctrineLessonTemplate("union_group_by_illegal")?.({
+            query,
+            detail: "GROUP BY after UNION"
+          }) ?? null
+      }
     }
   }
 

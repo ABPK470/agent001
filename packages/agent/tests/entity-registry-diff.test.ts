@@ -35,7 +35,7 @@ function def(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
     labelColumn: null,
     selfJoinColumn: null,
     tables: [table()],
-    policies: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
+    policies: { approvalPolicyId: null, freezeWindowIds: [] },
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
@@ -164,7 +164,7 @@ describe("diffEntityDefinitions", () => {
   it("detects policies change", () => {
     const a = def()
     const b = def({
-      policies: { approvalPolicyId: "dual", freezeWindowIds: ["holidays"], riskMultiplier: 2 }
+      policies: { approvalPolicyId: "dual", freezeWindowIds: ["holidays"] }
     })
     expect(diffEntityDefinitions(a, b).some((c) => c.kind === "policiesChanged")).toBe(true)
   })

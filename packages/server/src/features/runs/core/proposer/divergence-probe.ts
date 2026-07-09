@@ -16,7 +16,8 @@
 import { getPool, type AgentHost } from "@mia/agent"
 import {
   emptyCounts,
-  getPublishedSyncRecipe,
+  getPublishedSyncDefinitionForHost,
+  movementOfTable,
   previewSync,
   type DivergentEntityRow,
   type EnvPair,
@@ -36,19 +37,18 @@ const DEFAULT_SAMPLE_SIZE = 25
 
 export async function probeRowDivergence(i: ProbeRowDivergenceInput): Promise<readonly DivergentEntityRow[]> {
   void i.tenantId
-  let recipe
+  let definition
   try {
-    recipe = getPublishedSyncRecipe(i.host, i.entityId)
+    definition = getPublishedSyncDefinitionForHost(i.host, i.entityId)
   } catch {
     return []
   }
 
-  // Sample candidate IDs from the source root table.
   const candidates = await sampleRootIds(
     i.host,
     i.envPair.source,
-    recipe.rootTable,
-    recipe.rootKeyColumn,
+    definition.rootTable,
+    definition.idColumn,
     i.sampleSize ?? DEFAULT_SAMPLE_SIZE
   )
   if (candidates.length === 0) return []
@@ -58,7 +58,7 @@ export async function probeRowDivergence(i: ProbeRowDivergenceInput): Promise<re
     try {
       const plan = await previewSync({
         host: i.host,
-        entityType: recipe.entityType,
+        entityType: i.entityId,
         entityId: rootId,
         source: i.envPair.source,
         target: i.envPair.target,
@@ -67,16 +67,19 @@ export async function probeRowDivergence(i: ProbeRowDivergenceInput): Promise<re
       const counts = aggregatePlanCounts(plan)
       if (counts.insert + counts.update + counts.delete === 0) continue
       const newOnTarget = isNewOnTarget(plan)
-      const perTable = plan.tables.map((t) => ({
-        name: t.table,
-        counts: {
-          insert: t.counts.insert,
-          update: t.counts.update,
-          delete: t.counts.delete,
-          unchanged: t.counts.unchanged,
-          unknown: t.counts.lowConfidence ?? 0
-        } satisfies ProposalCounts
-      }))
+      const perTable = plan.tables.map((t) => {
+        const m = movementOfTable(t)
+        return {
+          name: t.table,
+          counts: {
+            insert: m.insert,
+            update: m.update,
+            delete: m.delete,
+            unchanged: t.stats.unchanged,
+            unknown: t.stats.lowConfidence ?? 0
+          } satisfies ProposalCounts
+        }
+      })
       findings.push({
         entityId: String(rootId),
         entityLabel: plan.entity.displayName ?? `${i.entityLabel} ${rootId}`,
@@ -122,13 +125,8 @@ interface MaybePlan {
   totals?: { insert?: number; update?: number; delete?: number; unchanged?: number; lowConfidence?: number }
   tables?: ReadonlyArray<{
     table: string
-    counts: {
-      insert: number
-      update: number
-      delete: number
-      unchanged: number
-      lowConfidence?: number
-    }
+    stats: { unchanged: number; lowConfidence?: number }
+    changeSet: { insert: unknown[]; update: unknown[]; delete: unknown[] }
   }>
   entityDisplayName?: string
 }
@@ -149,7 +147,10 @@ function isNewOnTarget(plan: MaybePlan): boolean {
   // the entity is brand-new on the target.
   const tables = plan.tables ?? []
   if (tables.length === 0) return false
-  return tables.every((t) => t.counts.insert > 0 && t.counts.update === 0 && t.counts.delete === 0)
+  return tables.every((t) => {
+    const m = movementOfTable(t)
+    return m.insert > 0 && m.update === 0 && m.delete === 0
+  })
 }
 
 // Local shim — agent doesn't export `emptyCounts` from this module path

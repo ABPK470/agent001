@@ -17,7 +17,7 @@
 
 import { hmacSha256Hex, RiskTier, sha256Hex } from "@mia/sync"
 import { randomBytes, randomUUID } from "node:crypto"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 // ── policies ────────────────────────────────────────────────────
 
@@ -110,6 +110,19 @@ export function listApprovalPolicies(tenantId: string): ApprovalPolicy[] {
     approvers: JSON.parse(row.approvers_json) as string[],
     bypassRole: row.bypass_role
   }))
+}
+
+export function deleteApprovalPolicy(
+  tenantId: string,
+  targetEnv: string,
+  riskTier: RiskTier
+): boolean {
+  const r = getDb()
+    .prepare(
+      `DELETE FROM approval_policies WHERE tenant_id = ? AND target_env = ? AND risk_tier = ?`
+    )
+    .run(tenantId, targetEnv, riskTier)
+  return r.changes > 0
 }
 
 // ── approvals ────────────────────────────────────────────────────

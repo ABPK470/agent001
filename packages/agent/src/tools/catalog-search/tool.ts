@@ -1,5 +1,7 @@
-import type { AgentHost } from "../../application/shell/runtime.js"
+import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
+import { getTenantConfig } from "../../application/shell/tenant-config.js"
 import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/agent-types.js"
+import { markMssqlTableVerified } from "../mssql/schema-verified.js"
 import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"
 import {
   handleColumn,
@@ -11,7 +13,7 @@ import {
   handleTable
 } from "./handlers.js"
 
-function buildSearchCatalogTool(host: AgentHost): Tool {
+function buildSearchCatalogTool(host: AgentHost, run?: RunContext): Tool {
   return {
     name: "search_catalog",
     description:
@@ -100,7 +102,19 @@ function buildSearchCatalogTool(host: AgentHost): Tool {
       if (args.stats) return handleStats(catalog)
       if (args.sys) return handleSys(catalog, String(args.sys).trim())
 
-      if (args.table) return handleTable(catalog, String(args.table).trim())
+      if (args.table) {
+        const tableArg = String(args.table).trim()
+        const result = handleTable(catalog, tableArg)
+        let resolved = catalog.getTable(tableArg)
+        if (!resolved) {
+          const mirrorSchema = getTenantConfig().mirrorSchema
+          if (mirrorSchema && !tableArg.toLowerCase().startsWith(`${mirrorSchema.toLowerCase()}.`)) {
+            resolved = catalog.getTable(`${mirrorSchema}.${tableArg}`)
+          }
+        }
+        if (resolved) markMssqlTableVerified(run, resolved.qualifiedName)
+        return result
+      }
       if (args.joins) return handleJoins(catalog, String(args.joins).trim())
       if (args.column) return handleColumn(catalog, String(args.column).trim())
 
@@ -137,6 +151,6 @@ export const searchCatalogTool = searchCatalogToolMetadata
 
 // ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
 
-export function createSearchCatalogTool(host: AgentHost): ExecutableTool {
-  return buildSearchCatalogTool(host)
+export function createSearchCatalogTool(host: AgentHost, run?: RunContext): ExecutableTool {
+  return buildSearchCatalogTool(host, run)
 }

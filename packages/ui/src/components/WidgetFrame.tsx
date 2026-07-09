@@ -14,14 +14,12 @@ import { useStore } from "../store"
 import type { WidgetType } from "../types"
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
+  "thread-nav": "Threads",
   "agent-chat": "Agent Chat",
   "term-chat": "Chat",
-  "agent-viz": "Agent Viz",
   "run-status": "Run Status",
   "live-logs": "Event Stream",
-  "audit-trail": "Audit Trail",
   "step-timeline": "Step Timeline",
-  "tool-stats": "Tool Stats",
   "run-history": "Run History",
   "operator-env": "IOE",
   "debug-inspector": "Trace",
@@ -81,38 +79,45 @@ export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
     )
   }
 
-  const isTransparent = type === "term-chat"
+  const isTransparent = type === "term-chat" || type === "thread-nav"
+  const isFlush =
+    isTransparent
+    || type === "entity-registry"
+    || type === "sync-admin"
+    || type.startsWith("sync-")
+    || type === "scd2-strategies"
+    || type === "freeze-windows"
 
   return (
-    <div
+      <div
       className={`flex flex-col h-full rounded-xl overflow-hidden ${isTransparent ? "bg-panel" : "bg-panel"}`}
     >
-      {/* Header — drag handle */}
-      <div className="widget-drag-handle flex items-center justify-between px-3 h-8 cursor-move shrink-0 select-none">
+      {/* Header — drag handle; controls on the right, visible on hover */}
+      <div className="widget-drag-handle group flex items-center justify-between px-3 h-8 cursor-move shrink-0 select-none">
         <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
           {WIDGET_LABELS[type]}
         </span>
-        <div className="widget-controls flex items-center gap-1">
+        <div className="widget-controls flex items-center gap-0.5 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
           <button
             className="text-text-muted hover:text-text p-1 rounded transition-colors"
             onClick={(e) => handlePopOut(e)}
             title="Pop out"
           >
-            <ExternalLink size={18} />
+            <ExternalLink size={15} />
           </button>
           <button
             className="text-text-muted hover:text-error p-1 rounded transition-colors"
             onClick={() => removeWidget(viewId, widgetId)}
             title="Remove"
           >
-            <X size={18} />
+            <X size={15} />
           </button>
         </div>
       </div>
 
       {/* Content area — widget-content class used by draggableCancel in Canvas.tsx */}
       <div
-        className={`widget-content flex-1 overflow-hidden ${isTransparent ? "p-0" : "p-3"}`}
+        className={`widget-content flex flex-1 flex-col overflow-hidden ${isFlush ? "p-0" : "p-3"}`}
       >
         {children}
       </div>

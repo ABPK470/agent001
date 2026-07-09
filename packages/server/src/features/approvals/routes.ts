@@ -12,11 +12,26 @@ const DEFAULT_TENANT_ID = "_default"
 const TOKEN_TTL_MS_DEFAULT = 24 * 60 * 60 * 1000
 const APPROVAL_TTL_MS_DEFAULT = 24 * 60 * 60 * 1000
 const POLICY_DEFAULT_TARGET_ENV = "*"
+const VALID_RISK_TIERS: RiskTier[] = ["low", "medium", "high", "critical"]
 
 function resolveTenant(req: FastifyRequest): string {
   const q = (req.query as Record<string, string> | undefined)?.["tenant"]
   if (q && req.session?.isAdmin) return q
   return DEFAULT_TENANT_ID
+}
+
+function normalizeTargetEnv(raw: string | undefined): string | null {
+  const targetEnv = raw?.trim() || POLICY_DEFAULT_TARGET_ENV
+  if (targetEnv === POLICY_DEFAULT_TARGET_ENV) return POLICY_DEFAULT_TARGET_ENV
+  const known = new Set(db.listSyncEnvironments().map((row) => row.name))
+  return known.has(targetEnv) ? targetEnv : null
+}
+
+/** Delete must accept stored policy keys even when a connection was retired. */
+function parseDeleteTargetEnv(raw: string | undefined): string | null {
+  const targetEnv = raw?.trim()
+  if (!targetEnv) return POLICY_DEFAULT_TARGET_ENV
+  return targetEnv
 }
 
 function requireTokenSecret(): string {
@@ -69,7 +84,7 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
     }
     const tenantId = resolveTenant(req)
     const riskTier = req.body?.riskTier?.trim()
-    if (!riskTier || !["low", "medium", "high", "critical"].includes(riskTier)) {
+    if (!riskTier || !VALID_RISK_TIERS.includes(riskTier as RiskTier)) {
       reply.code(400)
       return { error: "riskTier must be one of low, medium, high, critical" }
     }
@@ -78,20 +93,66 @@ export function registerApprovalRoutes(app: FastifyInstance): void {
       reply.code(400)
       return { error: "kind must be one of none, single, dual" }
     }
+    const targetEnv = normalizeTargetEnv(req.body.targetEnv)
+    if (!targetEnv) {
+      reply.code(400)
+      return {
+        error: "targetEnv must be * or a registered connection name from Connections"
+      }
+    }
+    const approvers = Array.isArray(req.body.approvers)
+      ? req.body.approvers.map((entry) => String(entry).trim()).filter(Boolean)
+      : []
+    for (const upn of approvers) {
+      if (!upn.includes("@")) {
+        reply.code(400)
+        return { error: `Invalid approver UPN: ${upn}` }
+      }
+    }
     db.upsertApprovalPolicy(
       {
         tenantId,
-        targetEnv: req.body.targetEnv?.trim() || "*",
+        targetEnv,
         riskTier: riskTier as RiskTier,
         policy: kind,
-        approvers: Array.isArray(req.body.approvers) ? req.body.approvers : [],
+        approvers,
         bypassRole: req.body.bypassRole ?? "admin"
       },
       req.session.upn
     )
     broadcast({
       type: EventType.SyncPolicySaved,
-      data: { tenantId, targetEnv: req.body.targetEnv?.trim() || "*", riskTier, kind, actor: req.session.upn }
+      data: { tenantId, targetEnv, riskTier, kind, actor: req.session.upn }
+    })
+    return { ok: true }
+  })
+
+  app.delete<{
+    Querystring: { tenant?: string; targetEnv: string; riskTier: string }
+  }>("/api/approvals/policies", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
+    const tenantId = resolveTenant(req)
+    const riskTier = req.query.riskTier?.trim()
+    if (!riskTier || !VALID_RISK_TIERS.includes(riskTier as RiskTier)) {
+      reply.code(400)
+      return { error: "riskTier must be one of low, medium, high, critical" }
+    }
+    const targetEnv = parseDeleteTargetEnv(req.query.targetEnv)
+    if (!targetEnv) {
+      reply.code(400)
+      return { error: "targetEnv is required" }
+    }
+    const removed = db.deleteApprovalPolicy(tenantId, targetEnv, riskTier as RiskTier)
+    if (!removed) {
+      reply.code(404)
+      return { error: "policy rule not found" }
+    }
+    broadcast({
+      type: EventType.SyncPolicyDeleted,
+      data: { tenantId, targetEnv, riskTier, actor: req.session.upn }
     })
     return { ok: true }
   })

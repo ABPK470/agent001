@@ -1,9 +1,5 @@
 import type {
   AttachmentService,
-  BrowserClient,
-  BrowserContextProvider,
-  BrowserCredentialProvider,
-  BrowserHandoffProvider,
   CatalogGraph,
   EngineServices,
   LLMClient,
@@ -19,7 +15,7 @@ import type {
   SyncPlan,
   SyncRunSink
 } from "@mia/sync"
-import type { RunWorkspaceContext, WorkspaceDiff } from "../bootstrap/workspace.js"
+import type { RunWorkspaceContext, WorkspaceDiff } from "../features/runs/workspace/index.js"
 import type { AgentBus } from "../platform/queue/agent-bus.js"
 import type { RunQueue } from "../platform/queue/run-queue.js"
 import type { MessageRouterPort } from "./channels.js"
@@ -52,8 +48,8 @@ export interface ActiveRun {
    * originating user can later see them.
    */
   ownerUpn: string | null
-  /** Originating session id (cookie sid). Null for service-internal runs. */
-  sessionId: string | null
+  /** Conversation thread this run belongs to. */
+  threadId: string | null
 }
 
 // ── Public API types ──────────────────────────────────────────────
@@ -69,6 +65,8 @@ export interface AgentRunConfig {
    * knows what it can pull into the sandbox via the attachment tools.
    */
   attachmentIds?: string[]
+  /** Attach run to an existing thread; server creates one when omitted. */
+  threadId?: string
 }
 
 export interface OrchestratorConfig {
@@ -91,19 +89,6 @@ export interface BootShellDeps {
   mode: "host" | "sandbox" | "disabled"
   client?: ShellClient | null
   sandboxStrict?: boolean
-}
-
-export interface BootBrowserCheckDeps {
-  mode: "host" | "sandbox" | "disabled"
-  client?: BrowserClient | null
-}
-
-export interface BootBrowserState {
-  providers: {
-    contextReader: BrowserContextProvider | null
-    credentialReader: BrowserCredentialProvider | null
-    handoffStore: BrowserHandoffProvider | null
-  }
 }
 
 export interface BootMssqlState {
@@ -136,9 +121,7 @@ export interface BootSyncState {
  */
 export interface BootHostDeps {
   attachments?: AttachmentService | null
-  browser?: BootBrowserState
   shell?: BootShellDeps
-  browserCheck?: BootBrowserCheckDeps
   mssql?: BootMssqlState
   catalog?: BootCatalogState
   sync?: BootSyncState

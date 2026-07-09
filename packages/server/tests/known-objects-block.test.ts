@@ -32,8 +32,6 @@ beforeEach(async () => {
   const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  const { migrateMemory } = await import("../src/platform/persistence/memory/index.js")
-  migrateMemory()
 })
 
 afterEach(() => {

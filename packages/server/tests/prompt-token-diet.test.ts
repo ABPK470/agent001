@@ -19,11 +19,12 @@ import {
   _resetDecideSectionsCache,
   decideSections,
   filterToolsByGoal,
-  scoreDbLikelihood
+  scoreDbLikelihood,
+  SYNC_CAPABILITY_TOOL_NAMES
 } from "../src/features/runs/core/decide-sections.js"
 import { buildToolContext } from "../src/features/runs/core/prompt/builder.js"
-import { buildSystemMessages } from "../src/features/runs/core/system-messages.js"
-import type { RunWorkspaceContext } from "../src/bootstrap/workspace.js"
+import { buildSystemMessages } from "../src/features/runs/core/system-messages/index.js"
+import type { RunWorkspaceContext } from "../src/features/runs/workspace/index.js"
 
 const RW: RunWorkspaceContext = {
   runId: "run-x",
@@ -46,7 +47,7 @@ const host: AgentHost = configureAgent({})
 // Hermetic fixture: tenant config, MSSQL configs, and the dynamic gate
 // regex cache are all process-global singletons. Without an explicit
 // reset, any test that calls `setMssqlConfigs([...])` or seeds tenant
-// routingKeywords leaks state into every subsequent test in the file.
+// domainKeywords leaks state into every subsequent test in the file.
 // That cross-contamination is exactly how the May 2026 production gap
 // ("list top 3 products based on revenue for April 2025" → dbScore=0)
 // slipped through — fixture leakage made the classifier *look* like it
@@ -346,7 +347,7 @@ describe("scoreDbLikelihood telemetry", () => {
     })
     expect(d.dbScore).toBeGreaterThanOrEqual(2)
     expect(d.triggers?.operational).toBe(true)
-    // `domain` is per-tenant (built from tenant.routingKeywords.domain) and
+    // `domain` is per-tenant (built from tenant.domainKeywords) and
     // is null under the cold-start fixture this file enforces — so we
     // assert it's false here. The universal BI signal carries the load
     // for business vocabulary in the absence of tenant config.
@@ -355,12 +356,12 @@ describe("scoreDbLikelihood telemetry", () => {
     expect(d.triggers?.nonDb).toBe(false)
   })
 
-  it("when tenant routingKeywords.domain is configured, the domain trigger fires", async () => {
+  it("when tenant domainKeywords is configured, the domain trigger fires", async () => {
     // Locks the per-tenant routing path so we don't *only* test the
     // universal BI fallback. This is the path that was leaking into
     // every other test in this file before the hermetic fixture landed.
     const { setTenantConfig } = await import("@mia/agent")
-    setTenantConfig({ routingKeywords: { schemas: [], domain: ["pkclient"], sync: [] } })
+    setTenantConfig({ domainKeywords: ["pkclient"] })
     _resetDecideSectionsCache()
     const d = decideSections({
       goal: "select top 10 from publish.Revenue grouped by pkClient",
@@ -374,6 +375,97 @@ describe("scoreDbLikelihood telemetry", () => {
     expect(d.triggers?.nonDb).toBe(true)
     expect(d.triggers?.operational).toBe(false)
     expect(d.dbScore).toBeLessThan(2)
+  })
+})
+
+describe("sync intent classification (task model)", () => {
+  const ALL_DATA_TOOLS = [
+    { name: "query_mssql" },
+    { name: "search_catalog" },
+    { name: "sync_preview" },
+    { name: "sync_execute" },
+    { name: "search_sync_entities" },
+    { name: "list_environments" },
+    { name: "compare_catalogs" },
+    { name: "list_sync_definitions" },
+    { name: "resolve_sync_scope" },
+    { name: "sync_diff_scan" }
+  ]
+
+  it("detects cross-env drift without naming a specific entity type", () => {
+    const goal = "what is out of sync between uat and dev?"
+    const d = decideSections({ goal, memory: emptyTier() })
+    expect(d.syncIntent).toBe(true)
+    expect(d.includeAbiSync).toBe(true)
+  })
+
+  it("detects cross-env drift questions phrased in business language", () => {
+    const goal =
+      "what pipelne and activites are out of sync between uat (source) and dev (target)? Just analize"
+    const d = decideSections({ goal, memory: emptyTier() })
+    expect(d.syncIntent, "syncIntent").toBe(true)
+    expect(d.includeAbiSync, "includeAbiSync").toBe(true)
+    expect(d.dbScore, "dbScore").toBeGreaterThanOrEqual(2)
+    const res = filterToolsByGoal(ALL_DATA_TOOLS, d)
+    expect(res.passThrough).toBe(true)
+    expect(res.dropped).toEqual([])
+    for (const name of SYNC_CAPABILITY_TOOL_NAMES) {
+      expect(res.tools.some((t) => t.name === name), `missing ${name}`).toBe(true)
+    }
+  })
+
+  for (const goal of [
+    "which pipelines and activities are drifted between uat and dev",
+    "compare contracts source uat target prod for mismatch",
+    "run sync diff scan from uat to dev",
+    "what metadata is out of sync between source and target"
+  ]) {
+    it(`syncIntent for: ${goal}`, () => {
+      const d = decideSections({ goal, memory: emptyTier() })
+      expect(d.syncIntent, goal).toBe(true)
+      expect(filterToolsByGoal(ALL_DATA_TOOLS, d).dropped).toEqual([])
+    })
+  }
+
+  it("includeAbiSync always keeps every sync capability tool", () => {
+    const d = decideSections({
+      goal: "sync_preview entity=dataset source=uat target=prod",
+      memory: emptyTier()
+    })
+    expect(d.includeAbiSync).toBe(true)
+    const res = filterToolsByGoal(ALL_DATA_TOOLS, d)
+    for (const name of SYNC_CAPABILITY_TOOL_NAMES) {
+      expect(res.tools.some((t) => t.name === name), name).toBe(true)
+    }
+  })
+
+  it("casual goals stay non-sync and drop data tools", () => {
+    const d = decideSections({ goal: "hi", memory: emptyTier() })
+    expect(d.syncIntent).toBe(false)
+    expect(d.includeAbiSync).toBe(false)
+    const res = filterToolsByGoal(ALL_DATA_TOOLS, d)
+    expect(res.dropped.length).toBeGreaterThan(0)
+    expect(res.tools.some((t) => t.name === "sync_preview")).toBe(false)
+  })
+
+  it("count goals stay non-sync even when memory mentions reconciliation", () => {
+    const goal = "how many distinct pipelines are in DE and in UAT"
+    const d = decideSections({
+      goal,
+      memory: {
+        working: "",
+        episodic:
+          "Goal: reconcile pipelineActivity uat vs dev\nTools used: sync_diff_scan → sync_preview",
+        semantic: ""
+      }
+    })
+    expect(d.syncIntent).toBe(false)
+    expect(d.includeAbiSync).toBe(false)
+    expect(d.includeMssqlGuidance).toBe(true)
+    const res = filterToolsByGoal(ALL_DATA_TOOLS, d)
+    expect(res.tools.some((t) => t.name === "query_mssql")).toBe(true)
+    expect(res.tools.some((t) => t.name === "sync_diff_scan")).toBe(false)
+    expect(res.tools.some((t) => t.name === "sync_preview")).toBe(false)
   })
 })
 

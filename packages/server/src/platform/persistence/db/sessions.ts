@@ -16,7 +16,7 @@
  */
 
 import { newSid } from "../../../features/auth/runtime/session.js"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface DbSession {
   sid: string

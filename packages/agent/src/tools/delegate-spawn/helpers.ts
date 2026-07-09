@@ -14,7 +14,7 @@ export function buildVerificationAttempts(
 ): VerificationAttempt[] {
   return toolCalls
     .filter(
-      (call) => call.name === "browser_check" || call.name === "read_file" || call.name === "run_command"
+      (call) => call.name === "read_file" || call.name === "run_command"
     )
     .map((call) => ({
       toolName: call.name,

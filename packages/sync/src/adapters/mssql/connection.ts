@@ -43,6 +43,12 @@ export async function getPool(
     } catch {}
   }
   entry.pool = new sql.ConnectionPool(entry.config)
+  // Absorb late/async pool errors (e.g. tedious emitting `socketError` after
+  // the connection has entered `Final`). Without a listener these would be
+  // rethrown by EventEmitter and crash the process.
+  entry.pool.on("error", (err) => {
+    console.warn(`[mssql] pool "${resolvedName}" error:`, err instanceof Error ? err.message : err)
+  })
   await entry.pool.connect()
   return { pool: entry.pool, entry }
 }

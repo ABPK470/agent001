@@ -67,19 +67,21 @@ export async function finalizeFailedRun(
     env.boundSaveTrace,
     sideEffects.notifications.notify
   )
-  ingestRunTurns({
-    id: request.runId,
-    goal: request.goal,
-    answer: null,
-    status: RunStatus.Failed,
-    agentId: request.agentId,
-    sessionId: env.activeRun?.sessionId ?? null,
-    tools: [...new Set(env.state.run.steps.map((step) => step.action))],
-    stepCount: env.state.run.steps.length,
-    error: errMsg,
-    trace: persistedToolTrace,
-    upn: env.activeRun?.ownerUpn ?? null
-  })
+  const ownerUpn = env.activeRun?.ownerUpn
+  if (ownerUpn) {
+    ingestRunTurns({
+      id: request.runId,
+      goal: request.goal,
+      answer: null,
+      status: RunStatus.Failed,
+      agentId: request.agentId,
+      tools: [...new Set(env.state.run.steps.map((step) => step.action))],
+      stepCount: env.state.run.steps.length,
+      error: errMsg,
+      trace: persistedToolTrace,
+      upn: ownerUpn
+    })
+  }
   broadcast({
     type: EventType.RunFailed,
     data: {

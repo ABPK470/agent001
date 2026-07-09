@@ -31,7 +31,7 @@ export const DEFAULT_OPTS: DiffOptions = {
  * Columns excluded from row-fingerprint comparison and UPDATE SET clauses.
  * Mirrors legacy core.uspSyncObjectTran's exclusion list.
  */
-export const META_EXCLUDED_COLUMNS = new Set(["validFrom", "validTo", "isLocked", "syncDate", "deployDate"])
+export const META_EXCLUDED_COLUMNS = new Set(["validFrom", "validTo", "isLocked", "sync-date", "deploy-date"])
 
 export interface PkHashRow {
   pk: string

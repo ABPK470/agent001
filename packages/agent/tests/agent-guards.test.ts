@@ -68,6 +68,55 @@ describe("Agent loop guards", () => {
     expect(answer).toBe("Done after using tools")
   })
 
+  it("allows text-only completion on iteration 0 for dialogue goals", async () => {
+    const nudges: string[] = []
+    const llm = scriptedLLM([
+      { content: "Hi! We were working on your last question — ask me to continue or start something new.", toolCalls: [] }
+    ])
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      onNudge: (data) => nudges.push(data.tag)
+    })
+    const answer = await agent.run("Hello")
+
+    expect(nudges).not.toContain("early-exit-nudge")
+    expect(answer).toContain("Hi!")
+  })
+
+  it("fires early-exit-nudge when user assents to a prior assistant offer", async () => {
+    const nudges: string[] = []
+    const llm = scriptedLLM([
+      { content: "Sure, I'll split src vs tests LOC now.", toolCalls: [] },
+      { content: null, toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "splitting" } }] },
+      { content: "Done — src and tests LOC are split.", toolCalls: [] }
+    ])
+
+    const priorTurns = {
+      role: "system" as const,
+      section: "system_anchor" as const,
+      content: [
+        "<prior_turns>",
+        "Turn -1",
+        "  Goal: count LOC",
+        "  Answer:",
+        "    Total LOC is 70,617.",
+        "    If you want, I can also split it into src vs tests LOC.",
+        "</prior_turns>"
+      ].join("\n")
+    }
+
+    const agent = new Agent(llm, [echoTool()], {
+      verbose: false,
+      systemMessages: [priorTurns],
+      onNudge: (data) => nudges.push(data.tag)
+    })
+    const answer = await agent.run("ok")
+
+    expect(nudges).toContain("early-exit-nudge")
+    expect(answer).toContain("Done")
+  })
+
   it("fires write-without-verify when child writes files then exits", async () => {
     const nudges: string[] = []
 
@@ -573,328 +622,58 @@ describe("Agent loop guards", () => {
       source: "planner_declined"
     })
   })
+})
 
-  it("materializes a coherent bundle before verification on bounded greenfield routes", async () => {
-    const plannerTrace: Array<Record<string, unknown>> = []
-    const writes: string[] = []
-    const reads: string[] = []
-
-    const writeFileTool: Tool = {
-      name: "write_file",
-      description: "Write a file",
-      parameters: {
-        type: "object",
-        properties: {
-          path: { type: "string" },
-          content: { type: "string" }
-        },
-        required: ["path", "content"]
-      },
-      async execute(args) {
-        writes.push(String(args.path))
-        return `Successfully wrote to ${String(args.path)}`
-      }
-    }
-
-    const readFileTool: Tool = {
-      name: "read_file",
-      description: "Read a file",
-      parameters: {
-        type: "object",
-        properties: { path: { type: "string" } },
-        required: ["path"]
-      },
-      async execute(args) {
-        reads.push(String(args.path))
-        return `content for ${String(args.path)}`
-      }
-    }
-
-    const browserCheckTool: Tool = {
-      name: "browser_check",
-      description: "Check an HTML artifact in a browser",
-      parameters: {
-        type: "object",
-        properties: { path: { type: "string" } },
-        required: ["path"]
-      },
-      async execute() {
-        return "browser_check passed"
-      }
-    }
-
-    const runCommandTool: Tool = {
-      name: "run_command",
-      description: "Run a command",
-      parameters: {
-        type: "object",
-        properties: { command: { type: "string" } },
-        required: ["command"]
-      },
-      async execute() {
-        return "command passed"
-      }
-    }
-
+describe("onThinking trace semantics", () => {
+  it("emits content only for pre-tool narration, not final text-only answers", async () => {
+    const thinkingCalls: Array<{ content: string | null; toolCount: number }> = []
     const llm = scriptedLLM([
       {
-        content: JSON.stringify({
-          summary: "Playable chess game bundle",
-          architecture: "index.html boots app.js which uses game.js for rules and state.",
-          artifacts: [
-            {
-              path: "index.html",
-              purpose: "Entrypoint HTML shell",
-              content:
-                '<!doctype html><html><body><script type="module" src="./app.js"></script></body></html>'
-            },
-            {
-              path: "app.js",
-              purpose: "UI/controller wiring",
-              content: "import { createGame } from './game.js'\ncreateGame()\n"
-            },
-            {
-              path: "game.js",
-              purpose: "Game state and rules",
-              content: "export function createGame() { return { status: 'ready' } }\n"
-            }
-          ],
-          dependencyEdges: [
-            { from: "index.html", to: "app.js" },
-            { from: "app.js", to: "game.js" }
-          ],
-          sharedContracts: [{ name: "game_state", description: "createGame returns an object with status." }],
-          invariants: [{ id: "boots_without_errors", description: "The app boots without missing imports." }]
-        }),
-        toolCalls: []
+        content: "Let me echo that for you.",
+        toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "hello" } }]
       },
-      {
-        content: JSON.stringify({
-          overall: "pass",
-          confidence: 0.9,
-          steps: [
-            {
-              stepName: "coherent_bundle",
-              outcome: "pass",
-              confidence: 0.9,
-              issues: [],
-              retryable: false
-            }
-          ],
-          unresolvedItems: []
-        }),
-        toolCalls: []
-      },
-      {
-        content: null,
-        toolCalls: [{ id: "tc-verify", name: "read_file", arguments: { path: "app.js" } }]
-      },
-      {
-        content: "Verified coherent bundle",
-        toolCalls: []
-      },
-      {
-        content: JSON.stringify({
-          overall: "pass",
-          confidence: 0.92,
-          steps: [
-            {
-              stepName: "coherent_bundle",
-              outcome: "pass",
-              confidence: 0.92,
-              issues: [],
-              retryable: false
-            }
-          ],
-          unresolvedItems: []
-        }),
-        toolCalls: []
-      }
+      { content: "The echo returned hello.", toolCalls: [] }
     ])
 
-    const agent = new Agent(llm, [writeFileTool, readFileTool, browserCheckTool, runCommandTool], {
+    const agent = new Agent(llm, [echoTool()], {
       verbose: false,
-      enablePlanner: true,
-      plannerDelegateFn: async () => "unused",
-      onPlannerTrace: (entry) => plannerTrace.push(entry)
+      onThinking: (content, toolCalls) => {
+        thinkingCalls.push({ content, toolCount: toolCalls.length })
+      }
     })
 
-    await agent.run("Build a complete playable chess game with drag and drop")
+    const answer = await agent.run("echo hello")
 
-    expect(writes).toEqual(["index.html", "app.js", "game.js"])
-    expect(reads).toContain("app.js")
-    const traceKinds = plannerTrace.map((entry) => entry.kind)
-    expect(traceKinds.slice(0, 5)).toEqual([
-      "planner-decision",
-      "coherent-generation-start",
-      "planner-architecture-state",
-      "coherent-generation-bundle",
-      "coherent-generation-materialized"
-    ])
-    expect(traceKinds).toContain("coherent-generation-verified")
-    expect(traceKinds).toContain("coherent-generation-handoff")
+    expect(answer).toBe("The echo returned hello.")
+    expect(thinkingCalls).toHaveLength(2)
+    expect(thinkingCalls[0]).toEqual({ content: "Let me echo that for you.", toolCount: 1 })
+    expect(thinkingCalls[1]).toEqual({ content: null, toolCount: 0 })
   })
+})
 
-  it("forces an architecture-preserving coherent repair before allowing completion", async () => {
-    const plannerTrace: Array<Record<string, unknown>> = []
-    const writes: string[] = []
-    const fileContents = new Map<string, string>()
-
-    const writeFileTool: Tool = {
-      name: "write_file",
-      description: "Write a file",
-      parameters: {
-        type: "object",
-        properties: {
-          path: { type: "string" },
-          content: { type: "string" }
-        },
-        required: ["path", "content"]
-      },
-      async execute(args) {
-        const path = String(args.path)
-        const content = String(args.content)
-        writes.push(path)
-        fileContents.set(path, content)
-        return `Successfully wrote to ${path}`
-      }
-    }
-
-    const readFileTool: Tool = {
-      name: "read_file",
-      description: "Read a file",
-      parameters: {
-        type: "object",
-        properties: { path: { type: "string" } },
-        required: ["path"]
-      },
-      async execute(args) {
-        const path = String(args.path)
-        return fileContents.get(path) ?? `content for ${path}`
-      }
-    }
-
-    const browserCheckTool: Tool = {
-      name: "browser_check",
-      description: "Check an HTML artifact in a browser",
-      parameters: {
-        type: "object",
-        properties: { path: { type: "string" } },
-        required: ["path"]
-      },
-      async execute() {
-        return "browser_check passed"
-      }
-    }
-
-    const runCommandTool: Tool = {
-      name: "run_command",
-      description: "Run a command",
-      parameters: {
-        type: "object",
-        properties: { command: { type: "string" } },
-        required: ["command"]
-      },
-      async execute() {
-        return "command passed"
-      }
-    }
-
+describe("onThinking trace semantics", () => {
+  it("emits content only for pre-tool narration, not final text-only answers", async () => {
+    const thinkingCalls: Array<{ content: string | null; toolCount: number }> = []
     const llm = scriptedLLM([
       {
-        content: JSON.stringify({
-          summary: "Playable chess game bundle",
-          architecture: "index.html boots app.js which uses game.js for rules and state.",
-          artifacts: [
-            {
-              path: "index.html",
-              purpose: "Entrypoint HTML shell",
-              content:
-                '<!doctype html><html><body><script type="module" src="./app.js"></script></body></html>'
-            },
-            {
-              path: "app.js",
-              purpose: "UI/controller wiring",
-              content: "import { createGame } from './game.js'\ncreateGame()\n"
-            },
-            {
-              path: "game.js",
-              purpose: "Game state and rules",
-              content: "export function createGame() { return { status: 'ready' } }\n"
-            }
-          ],
-          sharedContracts: [{ name: "game_state", description: "createGame returns an object with status." }],
-          invariants: [{ id: "boots_without_errors", description: "The app boots without missing imports." }]
-        }),
-        toolCalls: []
+        content: "Let me echo that for you.",
+        toolCalls: [{ id: "tc1", name: "echo", arguments: { text: "hello" } }]
       },
-      {
-        content: JSON.stringify({
-          overall: "retry",
-          confidence: 0.86,
-          steps: [
-            {
-              stepName: "coherent_bundle",
-              outcome: "retry",
-              confidence: 0.86,
-              issues: ["Drag and drop is still placeholder logic in app.js"],
-              retryable: true
-            }
-          ],
-          unresolvedItems: ["Implement real drag and drop behavior in app.js"]
-        }),
-        toolCalls: []
-      },
-      {
-        content: null,
-        toolCalls: [
-          {
-            id: "tc-fix",
-            name: "write_file",
-            arguments: {
-              path: "app.js",
-              content:
-                "import { createGame } from './game.js'\nexport function bootChessUi() { return createGame() }\nbootChessUi()\n"
-            }
-          }
-        ]
-      },
-      {
-        content: "Coherent repair complete",
-        toolCalls: []
-      },
-      {
-        content: JSON.stringify({
-          overall: "pass",
-          confidence: 0.91,
-          steps: [
-            {
-              stepName: "coherent_bundle",
-              outcome: "pass",
-              confidence: 0.91,
-              issues: [],
-              retryable: false
-            }
-          ],
-          unresolvedItems: []
-        }),
-        toolCalls: []
-      }
+      { content: "The echo returned hello.", toolCalls: [] }
     ])
 
-    const agent = new Agent(llm, [writeFileTool, readFileTool, browserCheckTool, runCommandTool], {
+    const agent = new Agent(llm, [echoTool()], {
       verbose: false,
-      enablePlanner: true,
-      plannerDelegateFn: async () => "unused",
-      onPlannerTrace: (entry) => plannerTrace.push(entry)
+      onThinking: (content, toolCalls) => {
+        thinkingCalls.push({ content, toolCount: toolCalls.length })
+      }
     })
 
-    await agent.run("Build a complete playable chess game with drag and drop")
+    const answer = await agent.run("echo hello")
 
-    expect(writes).toContain("app.js")
-    expect(plannerTrace.map((entry) => entry.kind)).toContain("coherent-generation-verified")
-    expect(plannerTrace.map((entry) => entry.kind)).toContain("coherent-generation-repair-needed")
-    expect(plannerTrace.filter((entry) => entry.kind === "coherent-generation-verified")).toHaveLength(2)
-    expect(plannerTrace.map((entry) => entry.kind)).toContain("coherent-generation-escalated")
+    expect(answer).toBe("The echo returned hello.")
+    expect(thinkingCalls).toHaveLength(2)
+    expect(thinkingCalls[0]).toEqual({ content: "Let me echo that for you.", toolCount: 1 })
+    expect(thinkingCalls[1]).toEqual({ content: null, toolCount: 0 })
   })
 })

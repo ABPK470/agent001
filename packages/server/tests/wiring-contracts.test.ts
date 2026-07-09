@@ -176,39 +176,25 @@ function readSrc(absPath: string): string {
   return readFileSync(absPath, "utf8")
 }
 
-// ── B1 — sessionId pair lock (memory write/read) ─────────────────
+// ── B1 — threadId pair lock (memory write/read) ─────────────────
 
-describe("Wiring contracts: memory write↔read pair on sessionId", () => {
-  it("B1: every retrieveContext + ingestRunTurns sessionId expression references activeRun?.sessionId", () => {
+describe("Wiring contracts: memory write↔read pair on threadId", () => {
+  it("B1: retrieveContext threadId expression references activeRun?.threadId", () => {
     const retrieveSrc = readSrc(RUN_EXECUTOR_TOOLS)
-    const ingestSrc = readSrc(RUN_EXECUTOR_FINALIZATION)
     const retrieveCalls = extractObjectArgCalls(retrieveSrc, "retrieveContext")
-    const ingestCalls = extractObjectArgCalls(ingestSrc, "ingestRunTurns")
 
     expect(
       retrieveCalls.length,
       "expected at least one retrieveContext call in run-executor.ts"
     ).toBeGreaterThan(0)
-    expect(
-      ingestCalls.length,
-      "expected at least one ingestRunTurns call in run-executor.ts"
-    ).toBeGreaterThan(0)
 
-    const ANCHOR = "activeRun?.sessionId"
+    const ANCHOR = "activeRun?.threadId"
     for (const c of retrieveCalls) {
-      const expr = c.fields.get("sessionId")
-      expect(expr, `retrieveContext at line ${c.line} must specify sessionId`).toBeDefined()
+      const expr = c.fields.get("threadId")
+      expect(expr, `retrieveContext at line ${c.line} must specify threadId`).toBeDefined()
       expect(
         expr,
-        `retrieveContext at line ${c.line}: sessionId expression must reference ${ANCHOR}`
-      ).toContain(ANCHOR)
-    }
-    for (const c of ingestCalls) {
-      const expr = c.fields.get("sessionId")
-      expect(expr, `ingestRunTurns at line ${c.line} must specify sessionId`).toBeDefined()
-      expect(
-        expr,
-        `ingestRunTurns at line ${c.line}: sessionId expression must reference ${ANCHOR}`
+        `retrieveContext at line ${c.line}: threadId expression must reference ${ANCHOR}`
       ).toContain(ANCHOR)
     }
   })
@@ -234,9 +220,10 @@ describe("Wiring contracts: memory write↔read pair on upn", () => {
     for (const c of ingestCalls) {
       const expr = c.fields.get("upn")
       expect(expr, `ingestRunTurns at line ${c.line} must specify upn`).toBeDefined()
-      expect(expr, `ingestRunTurns at line ${c.line}: upn expression must reference ${ANCHOR}`).toContain(
-        ANCHOR
-      )
+      expect(
+        expr === "ownerUpn" || expr?.includes(ANCHOR),
+        `ingestRunTurns at line ${c.line}: upn must be ownerUpn or ${ANCHOR}, got ${expr}`
+      ).toBe(true)
     }
   })
 })
@@ -264,45 +251,18 @@ describe("Wiring contracts: memory write↔read pair on runId / excludeRunId", (
   })
 })
 
-// ── B4 — extractProcedural + searchProcedures pair on sessionId/upn ──
-
-describe("Wiring contracts: procedural memory pair on sessionId/upn", () => {
-  it("B4: extractProcedural sessionId/upn expressions match the memory write/read anchors", () => {
-    const src = readSrc(RUN_EXECUTOR_FINALIZATION)
-    const calls = extractObjectArgCalls(src, "extractProcedural")
-    expect(calls.length, "expected extractProcedural call(s) in run-executor.ts").toBeGreaterThan(0)
-
-    for (const c of calls) {
-      const sid = c.fields.get("sessionId")
-      const upn = c.fields.get("upn")
-      expect(sid, `extractProcedural at line ${c.line} must specify sessionId`).toBeDefined()
-      expect(upn, `extractProcedural at line ${c.line} must specify upn`).toBeDefined()
-      expect(sid, `extractProcedural sessionId must reference activeRun?.sessionId`).toContain(
-        "activeRun?.sessionId"
-      )
-      expect(upn, `extractProcedural upn must reference activeRun?.ownerUpn`).toContain("activeRun?.ownerUpn")
-    }
-  })
-})
-
 // ── B5 — HostedPolicyContext + memory call alignment ──────────────
 
 describe("Wiring contracts: HostedPolicyContext fields match memory call anchors", () => {
-  it("B5: HostedPolicyContext actorUpn/sessionId references activeRun fields, same as memory calls", () => {
+  it("B5: HostedPolicyContext actorUpn references activeRun owner (no cookie session)", () => {
     const src = readSrc(RUN_EXECUTOR_HOST)
     const m = src.match(/function createPolicyContext\([\s\S]*?return \{([\s\S]*?)\n\s*\}/)
     expect(m, "expected createPolicyContext() to return a HostedPolicyContext object literal").not.toBeNull()
     const fields = parseFields(m![1])
     const actorUpn = fields.get("actorUpn")
-    const sid = fields.get("sessionId")
     expect(actorUpn, "HostedPolicyContext.actorUpn must be present").toBeDefined()
-    expect(sid, "HostedPolicyContext.sessionId must be present").toBeDefined()
-    expect(actorUpn, "policy actorUpn must reference activeRun?.ownerUpn (same anchor as memory)").toContain(
-      "activeRun?.ownerUpn"
-    )
-    expect(sid, "policy sessionId must reference activeRun?.sessionId (same anchor as memory)").toContain(
-      "activeRun?.sessionId"
-    )
+    expect(fields.has("sessionId"), "policy context must not pass cookie sessionId").toBe(false)
+    expect(actorUpn, "policy actorUpn must reference activeRun?.ownerUpn").toContain("activeRun?.ownerUpn")
   })
 })
 
@@ -333,19 +293,6 @@ interface AllowlistEntry {
 }
 
 const AUDIT_ALLOWLIST: AllowlistEntry[] = [
-  // ── Memory keying chain (the C9/D3 open question) ────────────────
-  // The fix shipped in run-executor.ts:303 — sessionId reads now correctly
-  // align with writes via the activeRun?.sessionId anchor; the agentId
-  // fallback exists for service-internal runs where activeRun is absent.
-  // The "default" tail is the legacy global anonymous bucket; flagged for
-  // the C9 invariant — see plan-test-coverage-deepening.md D3.
-  {
-    file: "memory/ingestion.ts",
-    match: 'run.sessionId ?? run.agentId ?? "default"',
-    reason:
-      "Memory write fallback chain — the contract that retrieval mirrors. Tail 'default' bucket is the C9/D3 open question."
-  },
-
   // ── Audit log display strings (display-only, NOT isolation keys) ─
   // These flow into audit log rows as a human-readable "who did this"
   // field. Multiple unauthenticated callers sharing the literal "unknown"
@@ -374,19 +321,6 @@ const AUDIT_ALLOWLIST: AllowlistEntry[] = [
     reason:
       "Audit log actor display string only. Real isolation uses actorUpn (which stays null) on the same call sites."
   },
-
-  // ── False positive: bounded by upn predicate ─────────────────────
-  // The dedup recent-rows query uses `sessionId ?? ""` as a SQL bind
-  // parameter alongside `upn = ?` in the WHERE clause. Empty-string
-  // collisions across anonymous users are bounded by the upn predicate
-  // (each tenant has its own anon bucket), so dedup remains correct
-  // per-tenant. Documented at memory/ingestion.ts:46-52.
-  {
-    file: "memory/ingestion.ts",
-    match: 'opts.sessionId ?? ""',
-    reason:
-      "SQL bind parameter for dedup recency query; bounded by upn predicate so cross-anon collisions don't leak data."
-  }
 
   // ── B-AUDIT history (resolved 2026-05-15) ────────────────────────
   //

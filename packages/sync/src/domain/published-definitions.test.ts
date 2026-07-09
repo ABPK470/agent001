@@ -7,8 +7,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import type { SyncRuntimeHost } from "../ports/host.js"
 import { createPublishedSyncDefinitionRegistry } from "./published-definition-registry.js"
 import {
-  definitionToSyncRecipe,
-  getPublishedSyncRecipe,
+  getPublishedSyncDefinitionForHost,
   loadPublishedSyncDefinitionBundle
 } from "./published-definitions.js"
 
@@ -59,8 +58,8 @@ afterEach(() => {
   }
 })
 
-describe("published sync definition compatibility projection", () => {
-  it("projects a published definition into the runtime recipe shape", () => {
+describe("published sync definitions", () => {
+  it("loads contract definition with root metadata from the bundle", () => {
     const projectRoot = resolve(process.cwd(), "../..")
     const host = createHost(projectRoot)
 
@@ -68,23 +67,24 @@ describe("published sync definition compatibility projection", () => {
     const contractDefinition = definitions.definitions.contract
 
     expect(contractDefinition).toBeTruthy()
-    const recipe = definitionToSyncRecipe(contractDefinition!)
-    expect(recipe.generatedAt).toBe(contractDefinition?.publishedAt)
-    expect(recipe.rootTable).toBe(contractDefinition?.rootTable)
+    expect(contractDefinition?.publishedAt).toBeTruthy()
+    expect(contractDefinition?.rootTable).toBe("core.Contract")
   })
 
   it("resolves optional-table semantics from the published definition authority", () => {
     const projectRoot = resolve(process.cwd(), "../..")
     const host = createHost(projectRoot)
 
-    const contentRecipe = getPublishedSyncRecipe(host, "content")
-    const gateMetadataRecipe = getPublishedSyncRecipe(host, "gateMetadata")
+    const contentDefinition = getPublishedSyncDefinitionForHost(host, "content")
+    const gateMetadataDefinition = getPublishedSyncDefinitionForHost(host, "gateMetadata")
 
-    expect(contentRecipe.tables.filter((table) => table.userControllable).map((table) => table.name)).toEqual(
-      ["gate.UserGroupPermission"]
-    )
     expect(
-      gateMetadataRecipe.tables.filter((table) => table.userControllable).map((table) => table.name)
+      contentDefinition.metadata.tables.filter((table) => table.userControllable).map((table) => table.name)
+    ).toEqual(["gate.UserGroupPermission"])
+    expect(
+      gateMetadataDefinition.metadata.tables
+        .filter((table) => table.userControllable)
+        .map((table) => table.name)
     ).toEqual(["gate.Content", "gate.ContentLink", "gate.UserGroupPermission"])
   })
 
@@ -111,7 +111,7 @@ describe("published sync definition compatibility projection", () => {
             labelColumn: "name",
             selfJoinColumn: null,
             legacy: { pipelineId: null, entrySproc: null },
-            governance: { freezeWindowIds: [], riskMultiplier: 1 },
+            governance: { freezeWindowIds: [] },
             strategy: { strategyId: "mymi-scd2", strategyVersion: 1 },
             bindings: { serviceProfileRef: "default", environmentPolicyRef: "default" },
             ownership: { team: "sync-platform", owner: null, reviewStatus: "reviewed", notes: [] },
@@ -147,7 +147,7 @@ describe("published sync definition compatibility projection", () => {
             labelColumn: "name",
             selfJoinColumn: null,
             legacy: { pipelineId: null, entrySproc: null },
-            governance: { freezeWindowIds: [], riskMultiplier: 1 },
+            governance: { freezeWindowIds: [] },
             strategy: { strategyId: "mymi-scd2", strategyVersion: 1 },
             bindings: { serviceProfileRef: "default", environmentPolicyRef: "default" },
             ownership: { team: "sync-platform", owner: null, reviewStatus: "reviewed", notes: ["runtime"] },

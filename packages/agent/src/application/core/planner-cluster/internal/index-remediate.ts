@@ -44,7 +44,6 @@ function mergeVerificationMode(
   right: SubagentTaskStep["executionContext"]["verificationMode"]
 ): SubagentTaskStep["executionContext"]["verificationMode"] {
   const precedence: readonly SubagentTaskStep["executionContext"]["verificationMode"][] = [
-    "browser_check",
     "run_tests",
     "deterministic_followup",
     "mutation_required",
@@ -269,45 +268,6 @@ export function remediateValidationErrors(plan: Plan, errors: readonly PlanDiagn
 
   if (errors.some((e) => e.code === "shared_target_artifact")) {
     changed = remediateSharedTargetArtifactWriters(plan) || changed
-  }
-
-  const premature = errors.filter(
-    (e) => e.code === "premature_browser_verification" && typeof e.stepName === "string"
-  )
-
-  if (premature.length > 0) {
-    for (const diag of premature) {
-      const step = subagentSteps.find((s) => s.name === diag.stepName)
-      if (!step) continue
-      if (step.executionContext.verificationMode === VerificationMode.BrowserCheck) {
-        ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode =
-          VerificationMode.None
-        changed = true
-      }
-    }
-  }
-
-  for (const step of subagentSteps) {
-    if (step.executionContext.verificationMode !== VerificationMode.BrowserCheck) continue
-    const hasBrowserEntry = step.executionContext.targetArtifacts.some((a) => /\.(?:html?|xhtml)$/i.test(a))
-    if (!hasBrowserEntry) continue
-
-    const ownsRuntime = step.executionContext.targetArtifacts.some((a) =>
-      /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i.test(a)
-    )
-    if (ownsRuntime) continue
-
-    const hasForeignRuntime = subagentSteps.some(
-      (s) =>
-        s.name !== step.name &&
-        s.executionContext.targetArtifacts.some((a) =>
-          /\.(?:js|mjs|cjs|ts|tsx|jsx|py|rb|go|rs|php|java|wasm)$/i.test(a)
-        )
-    )
-    if (!hasForeignRuntime) continue
-    ;(step.executionContext as unknown as { verificationMode: VerificationMode }).verificationMode =
-      VerificationMode.None
-    changed = true
   }
 
   return changed

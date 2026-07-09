@@ -4,19 +4,50 @@
 
 import { EventType } from "@mia/agent"
 import type { AuditEntry, LogEntry, Run, RunDetail } from "@mia/shared-types"
+import { formatTraceExportText, traceExportFilename } from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
 import { getAttachment, type AttachmentRow } from "../../platform/persistence/attachments.js"
 import { flagRunMemory } from "../../platform/persistence/memory.js"
 import * as db from "../../platform/persistence/sqlite.js"
+import { sendUserDownload } from "../../shared/http/attachment-response.js"
 import { MemoryValidationAction } from "../../shared/enums/memory.js"
-import { canAccessRun } from "../auth/application/access.js"
+import { AuthRequiredError, canAccessRun, requireSessionUpn } from "../auth/application/access.js"
+import { ContinuityError } from "../runs/continuity.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
+import { listRunArtifactFiles, openRunArtifactStream } from "./run-artifacts.js"
 
 export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
-  app.get<{ Querystring: { scope?: "session" | "all" } }>("/api/runs", async (req) => {
-    const s = req.session
-    const sessionOnly = req.query.scope === "session"
-    const runs = db.listRunsWithUsageForUser({ upn: s?.upn ?? null, sid: s?.sid ?? null, sessionOnly })
+  app.get<{ Querystring: { threadId?: string } }>("/api/runs", async (req, reply) => {
+    try {
+      requireSessionUpn(req.session)
+    } catch {
+      reply.code(401)
+      return { error: "Authentication required" }
+    }
+    const s = req.session!
+    const threadId = req.query.threadId
+    if (threadId) {
+      const thread = db.getThread(threadId)
+      if (!thread || !s?.upn || thread.upn.toLowerCase() !== s.upn.toLowerCase()) {
+        reply.code(404)
+        return { error: "Thread not found" }
+      }
+      const runs = db.listRunsWithUsageForThread(threadId)
+      return runs.map((run): Run => {
+        const diff = orchestrator.getRunWorkspaceDiff(run.id)
+        const pendingWorkspaceChanges = diff
+          ? diff.added.length + diff.modified.length + diff.deleted.length
+          : 0
+        return db.dbRunToWire(run, {
+          totalTokens: run.total_tokens ?? 0,
+          promptTokens: run.prompt_tokens ?? 0,
+          completionTokens: run.completion_tokens ?? 0,
+          llmCalls: run.llm_calls ?? 0,
+          pendingWorkspaceChanges
+        })
+      })
+    }
+    const runs = db.listRunsWithUsageForUser({ upn: s.upn })
     return runs.map((run): Run => {
       const diff = orchestrator.getRunWorkspaceDiff(run.id)
       const pendingWorkspaceChanges = diff
@@ -123,10 +154,16 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     } satisfies RunDetail
   })
 
-  app.post<{ Body: { goal: string; agentId?: string; attachmentIds?: string[] } }>(
+  app.post<{ Body: { goal: string; agentId?: string; attachmentIds?: string[]; threadId?: string } }>(
     "/api/runs",
     async (req, reply) => {
-      const { goal, agentId, attachmentIds } = req.body
+      try {
+        requireSessionUpn(req.session)
+      } catch {
+        reply.code(401)
+        return { error: "Authentication required" }
+      }
+      const { goal, agentId, attachmentIds, threadId } = req.body
       if (!goal || typeof goal !== "string") {
         reply.code(400)
         return { error: "goal is required" }
@@ -134,7 +171,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
 
       const resolvedAttachmentIds: string[] = []
       if (Array.isArray(attachmentIds) && attachmentIds.length > 0) {
-        const session = req.session
+        const session = req.session!
         const seen = new Set<string>()
         for (const id of attachmentIds) {
           if (typeof id !== "string" || seen.has(id)) continue
@@ -145,10 +182,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
             return { error: `attachment not found: ${id}` }
           }
           const allowed =
-            !session ||
-            session.isAdmin ||
-            (row.owner_upn && row.owner_upn === session.upn) ||
-            (row.session_id && row.session_id === session.sid)
+            session.isAdmin || (row.owner_upn && row.owner_upn === session.upn)
           if (!allowed) {
             reply.code(403)
             return { error: `attachment not accessible: ${id}` }
@@ -157,28 +191,45 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         }
       }
 
-      if (agentId) {
-        const agent = db.getAgentDefinition(agentId)
-        if (!agent) {
-          reply.code(400)
-          return { error: `Agent not found: ${agentId}` }
+      try {
+        if (agentId) {
+          const agent = db.getAgentDefinition(agentId)
+          if (!agent) {
+            reply.code(400)
+            return { error: `Agent not found: ${agentId}` }
+          }
+          const runId = orchestrator.startRun(
+            goal,
+            {
+              agentId: agent.id,
+              systemPrompt: db.resolveAgentSystemPrompt(agent),
+              attachmentIds: resolvedAttachmentIds,
+              threadId
+            },
+            req.session!
+          )
+          reply.code(201)
+          return { runId, agentId: agent.id, attachmentIds: resolvedAttachmentIds }
         }
+
         const runId = orchestrator.startRun(
           goal,
-          {
-            agentId: agent.id,
-            systemPrompt: db.resolveAgentSystemPrompt(agent),
-            attachmentIds: resolvedAttachmentIds
-          },
-          req.session ?? null
+          { attachmentIds: resolvedAttachmentIds, threadId },
+          req.session!
         )
         reply.code(201)
-        return { runId, agentId: agent.id, attachmentIds: resolvedAttachmentIds }
+        return { runId, attachmentIds: resolvedAttachmentIds }
+      } catch (err) {
+        if (err instanceof AuthRequiredError) {
+          reply.code(401)
+          return { error: err.message }
+        }
+        if (err instanceof ContinuityError) {
+          reply.code(400)
+          return { error: err.message }
+        }
+        throw err
       }
-
-      const runId = orchestrator.startRun(goal, { attachmentIds: resolvedAttachmentIds }, req.session ?? null)
-      reply.code(201)
-      return { runId, attachmentIds: resolvedAttachmentIds }
     }
   )
 
@@ -225,13 +276,21 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       }
       const runId = orchestrator.startRun(
         original.goal,
-        { agentId: agent.id, systemPrompt: db.resolveAgentSystemPrompt(agent) },
+        {
+          agentId: agent.id,
+          systemPrompt: db.resolveAgentSystemPrompt(agent),
+          threadId: original.thread_id ?? undefined
+        },
         req.session ?? null
       )
       reply.code(201)
       return { runId, agentId: agent.id }
     }
-    const runId = orchestrator.startRun(original.goal, undefined, req.session ?? null)
+    const runId = orchestrator.startRun(
+      original.goal,
+      { threadId: original.thread_id ?? undefined },
+      req.session ?? null
+    )
     reply.code(201)
     return { runId }
   })
@@ -287,6 +346,83 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       return { error: "Run not found" }
     }
     return db.getTraceEntries(req.params.id).map((entry) => JSON.parse(entry.data))
+  })
+
+  /** User download — trace as .txt (streamed to browser, not saved on server). */
+  app.get<{ Params: { id: string } }>("/api/runs/:id/export/trace", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run || !canAccessRun(req.session, run)) {
+      reply.code(404)
+      return { error: "Run not found" }
+    }
+    const entries = db.getTraceEntries(req.params.id).map((entry) => JSON.parse(entry.data) as Record<string, unknown>)
+    const usage = db.getTokenUsage(req.params.id)
+    const text = formatTraceExportText(entries, {
+      runId: req.params.id,
+      goal: run.goal,
+      status: run.status,
+      totalTokens: usage?.total_tokens ?? null,
+      llmCalls: usage?.llm_calls ?? null,
+    })
+    return sendUserDownload(reply, {
+      filename: traceExportFilename(req.params.id, "txt"),
+      contentType: "text/plain; charset=utf-8",
+      body: text,
+    })
+  })
+
+  /** User download — trace as .json */
+  app.get<{ Params: { id: string } }>("/api/runs/:id/export/trace.json", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run || !canAccessRun(req.session, run)) {
+      reply.code(404)
+      return { error: "Run not found" }
+    }
+    const entries = db.getTraceEntries(req.params.id).map((entry) => JSON.parse(entry.data))
+    return sendUserDownload(reply, {
+      filename: traceExportFilename(req.params.id, "json"),
+      contentType: "application/json; charset=utf-8",
+      body: JSON.stringify({ runId: req.params.id, entries }, null, 2),
+    })
+  })
+
+  /** List files in the run sandbox the user may download. */
+  app.get<{ Params: { id: string } }>("/api/runs/:id/artifacts", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run || !canAccessRun(req.session, run)) {
+      reply.code(404)
+      return { error: "Run not found" }
+    }
+    const executionRoot = orchestrator.getRunWorkspaceExecutionRoot(req.params.id)
+    if (!executionRoot) {
+      return { runId: req.params.id, files: [] }
+    }
+    const files = await listRunArtifactFiles(executionRoot)
+    return { runId: req.params.id, files }
+  })
+
+  /** User download — single sandbox file (path after /artifacts/). */
+  app.get<{ Params: { id: string; "*": string } }>("/api/runs/:id/artifacts/*", async (req, reply) => {
+    const run = db.getRun(req.params.id)
+    if (!run || !canAccessRun(req.session, run)) {
+      reply.code(404)
+      return { error: "Run not found" }
+    }
+    const executionRoot = orchestrator.getRunWorkspaceExecutionRoot(req.params.id)
+    if (!executionRoot) {
+      reply.code(404)
+      return { error: "No run workspace artifacts available" }
+    }
+    const relativePath = req.params["*"] ?? ""
+    const opened = await openRunArtifactStream(executionRoot, relativePath)
+    if (!opened) {
+      reply.code(404)
+      return { error: "Artifact not found" }
+    }
+    reply.header("content-type", "application/octet-stream")
+    reply.header("content-disposition", `attachment; filename="${opened.filename.replace(/[^\w.\-()+ ]/g, "_")}"`)
+    reply.header("content-length", String(opened.sizeBytes))
+    return reply.send(opened.stream)
   })
 
   app.post<{ Params: { id: string }; Body: { useful: boolean; note?: string } }>(

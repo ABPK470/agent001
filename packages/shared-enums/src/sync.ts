@@ -14,6 +14,8 @@ export const SyncRunStatus = {
   Preview: "preview",
   Success: "success",
   Failed:  "failed",
+  /** Audit gate returned stop — sync not required; not an error. */
+  Skipped: "skipped",
 } as const
 
 export type SyncRunStatus = (typeof SyncRunStatus)[keyof typeof SyncRunStatus]
@@ -31,12 +33,26 @@ export const isSyncRunStatus = (value: unknown): value is SyncRunStatus =>
 export const SyncProgressKind = {
   Started:       "started",
   Step:          "step",
+  /** Post-metadata deploy pipeline step (contract createDataset, ETL, etc.). */
+  DeployStep:    "deploy-step",
   TableStarted:  "table-started",
   TableProgress: "table-progress",
   TableDone:     "table-done",
   Completed:     "completed",
+  /** Audit gate returned stop — synchronization not required. */
+  Skipped:       "skipped",
   Failed:        "failed",
 } as const
+
+/** Status for `deploy-step` progress events. */
+export const SyncDeployStepStatus = {
+  Started: "started",
+  Done:    "done",
+  Failed:  "failed",
+  Skipped: "skipped",
+} as const
+
+export type SyncDeployStepStatus = (typeof SyncDeployStepStatus)[keyof typeof SyncDeployStepStatus]
 
 export type SyncProgressKind = (typeof SyncProgressKind)[keyof typeof SyncProgressKind]
 

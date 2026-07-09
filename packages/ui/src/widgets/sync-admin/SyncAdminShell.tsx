@@ -1,28 +1,16 @@
 /**
- * SyncAdminShell — left rail + active section pane.
- *
- * Single fixed-height container holding the entire Sync Operations
- * Console. Sections are panels imported from this folder; each panel
- * brings its own chrome via `PanelChrome`, so the shell only renders
- * navigation and the active panel.
- *
- * Why one widget instead of six? Operators kept losing context when
- * approvals/policies/schedules/freeze-windows/strategies/environments
- * lived as separate widgets. One shell with a unified rail gives them
- * a single mental map.
+ * SyncAdminShell — entity-registry style envelope + section rail.
  */
 
-import {
-    Calendar, Clock, Database, GitBranch, LayoutDashboard, Mail, ShieldAlert, ShieldCheck,
-} from "lucide-react"
 import type { JSX } from "react"
-import { useRef, useState } from "react"
-import { useContainerSize, widgetBreakpoint } from "../../hooks/useContainerSize"
+import { useState } from "react"
 import { ApprovalsPanel } from "./ApprovalsPanel"
+import { ConsoleNotice, ConsoleProvider } from "./console-context"
+import { WIDGET_ENVELOPE } from "./design"
 import { EnvironmentsPanel } from "./EnvironmentsPanel"
 import { FreezeWindowsPanel } from "./FreezeWindowsPanel"
 import { OverviewPanel } from "./OverviewPanel"
-import { PoliciesPanel } from "./PoliciesPanel"
+import { ProposalsPanel } from "./ProposalsPanel"
 import { RoutesPanel } from "./RoutesPanel"
 import { RunsPanel } from "./RunsPanel"
 import { SchedulesPanel } from "./SchedulesPanel"
@@ -30,112 +18,85 @@ import { StrategiesPanel } from "./StrategiesPanel"
 
 export type Section =
   | "overview"
+  | "proposals"
   | "runs"
   | "approvals"
   | "environments"
   | "schedules"
-  | "policies"
   | "routes"
   | "strategies"
   | "freezes"
 
-interface NavItem { id: Section; label: string; icon: typeof Database; hint: string }
-
-const NAV: readonly NavItem[] = [
-  { id: "overview",     label: "Overview",        icon: LayoutDashboard, hint: "everything at a glance" },
-  { id: "runs",         label: "Runs",            icon: Clock,           hint: "plans · gates · evidence" },
-  { id: "approvals",    label: "Approvals",       icon: ShieldAlert,     hint: "grant · reject · bypass" },
-  { id: "environments", label: "Environments",    icon: Database,        hint: "DEV · UAT · PROD" },
-  { id: "schedules",    label: "Schedules",       icon: Clock,           hint: "cron-driven proposers" },
-  { id: "policies",     label: "Approval policies",icon: ShieldCheck,    hint: "who must sign off" },
-  { id: "routes",       label: "Notifications",   icon: Mail,            hint: "where events go" },
-  { id: "strategies",   label: "SCD2 strategies", icon: GitBranch,       hint: "history templates" },
-  { id: "freezes",      label: "Freeze windows",  icon: Calendar,        hint: "scheduled blackouts" },
+const NAV: readonly { id: Section; label: string }[] = [
+  { id: "overview",     label: "Overview" },
+  { id: "proposals",    label: "Proposals" },
+  { id: "runs",         label: "Runs" },
+  { id: "approvals",    label: "Approvals" },
+  { id: "environments", label: "Connections" },
+  { id: "schedules",    label: "Schedules" },
+  { id: "routes",       label: "Notify" },
+  { id: "strategies",   label: "SCD2" },
+  { id: "freezes",      label: "Freezes" },
 ]
 
-export function SyncAdminShell({ initial = "overview" }: { initial?: Section }): JSX.Element {
-  const ref = useRef<HTMLDivElement>(null)
-  const { width } = useContainerSize(ref)
+export function SyncAdminShell({
+  initial = "overview",
+  runsTab = "runs",
+}: {
+  initial?: Section
+  runsTab?: "runs" | "evidence"
+}): JSX.Element {
   const [section, setSection] = useState<Section>(initial)
-  const breakpoint = widgetBreakpoint(width)
-  const compactNav = breakpoint === "xs" || breakpoint === "sm" || breakpoint === "md"
 
   return (
-    <div ref={ref} className={`flex h-full min-w-0 overflow-hidden bg-canvas text-text ${compactNav ? "flex-col" : ""}`}>
-      {compactNav ? (
-        <div className="shrink-0 border-b border-border-subtle bg-panel">
-          <header className="flex min-h-12 items-center px-4 py-2">
-            <h1 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Sync Operations</h1>
-          </header>
-          <div className="overflow-x-auto px-2 pb-2">
-            <div className="flex min-w-max gap-1">
-              {NAV.map((n) => {
-                const Icon = n.icon
-                const active = n.id === section
-                return (
-                  <button
-                    key={n.id}
-                    type="button"
-                    onClick={() => setSection(n.id)}
-                    className={[
-                      "inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] whitespace-nowrap transition-colors",
-                      active
-                        ? "border-accent bg-accent/10 text-accent"
-                        : "border-border-subtle text-text-muted hover:bg-overlay-2 hover:text-text",
-                    ].join(" ")}
-                    title={n.hint}
-                  >
-                    <Icon className="h-3.5 w-3.5 shrink-0" />
-                    <span className="font-medium">{n.label}</span>
-                  </button>
-                )
-              })}
+    <ConsoleProvider>
+      <div className="sync-admin flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel p-3">
+        <ConsoleNotice />
+        <div className={WIDGET_ENVELOPE}>
+          <div className="entity-registry-shell grid min-h-0 flex-1 overflow-hidden">
+            <aside className="entity-rail flex min-h-0 flex-col border-r border-border-subtle" aria-label="Sections">
+              <div className="entity-rail-header">
+                <span className="entity-rail-header__label">Sync</span>
+              </div>
+              <div className="entity-rail-scroll min-h-0 flex-1 overflow-y-auto">
+                <ul className="entity-rail-list">
+                  {NAV.map((n) => {
+                    const active = section === n.id
+                    return (
+                      <li
+                        key={n.id}
+                        className={`entity-rail-item-wrap ${active ? "entity-rail-item-wrap--active" : ""}`}
+                      >
+                        <div className="entity-rail-item-row">
+                          <button
+                            type="button"
+                            onClick={() => setSection(n.id)}
+                            className="entity-rail-item min-w-0 flex-1 text-left"
+                          >
+                            <span className="entity-rail-item-title block min-w-0 truncate">{n.label}</span>
+                          </button>
+                        </div>
+                      </li>
+                    )
+                  })}
+                </ul>
+              </div>
+            </aside>
+
+            <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+              {section === "overview"     && <OverviewPanel onJump={setSection} />}
+              {section === "proposals"    && <ProposalsPanel />}
+              {section === "runs"         && <RunsPanel initialTab={runsTab} />}
+              {section === "approvals"    && <ApprovalsPanel />}
+              {section === "environments" && <EnvironmentsPanel />}
+              {section === "schedules"    && <SchedulesPanel />}
+              {section === "routes"       && <RoutesPanel />}
+              {section === "strategies"   && <StrategiesPanel />}
+              {section === "freezes"      && <FreezeWindowsPanel />}
             </div>
           </div>
         </div>
-      ) : (
-      <nav className="flex w-52 shrink-0 flex-col border-r border-border-subtle bg-panel">
-        <header className="flex h-14 shrink-0 items-center border-b border-border-subtle px-4">
-          <h1 className="text-[11px] font-semibold uppercase tracking-wider text-text-muted">Sync Operations</h1>
-        </header>
-        <ul className="flex-1 overflow-y-auto py-2">
-          {NAV.map((n) => {
-            const Icon = n.icon
-            const active = n.id === section
-            return (
-              <li key={n.id}>
-                <button type="button" onClick={() => setSection(n.id)}
-                  className={[
-                    "flex w-full items-start gap-2.5 border-l-2 px-3 py-2 text-left text-xs",
-                    active
-                      ? "border-accent bg-overlay-2 text-text"
-                      : "border-transparent text-text-muted hover:bg-overlay-2 hover:text-text",
-                  ].join(" ")}
-                >
-                  <Icon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
-                  <span className="flex flex-col">
-                    <span className="font-medium">{n.label}</span>
-                    <span className="text-[10px] text-text-faint">{n.hint}</span>
-                  </span>
-                </button>
-              </li>
-            )
-          })}
-        </ul>
-      </nav>
-      )}
-
-      <div className="flex-1 min-w-0">
-        {section === "overview"     && <OverviewPanel onJump={setSection} />}
-        {section === "runs"         && <RunsPanel />}
-        {section === "approvals"    && <ApprovalsPanel />}
-        {section === "environments" && <EnvironmentsPanel />}
-        {section === "schedules"    && <SchedulesPanel />}
-        {section === "policies"     && <PoliciesPanel />}
-        {section === "routes"       && <RoutesPanel />}
-        {section === "strategies"   && <StrategiesPanel />}
-        {section === "freezes"      && <FreezeWindowsPanel />}
       </div>
-    </div>
+    </ConsoleProvider>
   )
 }

@@ -58,6 +58,18 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
     "Stop. The column does not exist on the table you aliased — confirm column names via `search_catalog mode=column column=<name>` (or `mode=table table=<schema.table>`) BEFORE writing the next SQL.",
     "Common failure mode: the model imagines display-name columns (`<X>Name`, `fullName`, …) on transactional / fact / wide-union views. Those views carry foreign keys to dimension tables; the display name lives on the corresponding dimension — join to the dim.* table to fetch it.",
     "If the catalog is stale (the column was just added), call `refresh_catalog` and retry. Never invent a column to make a query 'feel right' — the validator will block it and the row would have been NULL anyway."
+  ].join(" "),
+
+  unverified_table_reference: [
+    "Discover EVERY table before writing SQL. For each table in your final JOIN list, call `search_catalog(table='schema.Table')` or `explore_mssql_schema(table='schema.Table')` and read the column list.",
+    "Do not explore only the fact table and guess dimension columns — `dim.Client` uses `ClientName`, not `Name`.",
+    "Workflow: (1) list all tables needed, (2) verify each, (3) write one batch query_mssql using only columns you saw."
+  ].join(" "),
+
+  union_group_by_illegal: [
+    "Each SELECT inside UNION / UNION ALL must carry its own GROUP BY when aggregating.",
+    "Bad: `SELECT … FROM t1 UNION ALL SELECT … FROM t2 GROUP BY x`.",
+    "Good: aggregate inside each branch, or wrap the UNION in a CTE and GROUP BY on the outer query."
   ].join(" ")
 }
 

@@ -5,12 +5,14 @@
 export { getMssqlConfig, getPool, type MssqlEntry } from "../adapters/mssql/index.js"
 export type {
   SyncPlan,
+  SyncPlanChangeRow,
+  SyncPlanChangeSet,
   SyncPlanConflict,
   SyncPlanGraph,
   SyncPlanGraphNode,
   SyncPlanRowSample,
   SyncPlanTable,
-  SyncPlanTableCounts,
+  SyncPlanTableStats,
   SyncPlanTotals
 } from "../application/shell/plan-store.js"
 export * from "../domain/enums.js"

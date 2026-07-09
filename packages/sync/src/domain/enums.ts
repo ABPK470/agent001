@@ -1,4 +1,4 @@
-export { EventType, SyncProgressKind, SyncRunStatus } from "@mia/shared-enums"
+export { EventType, SyncDeployStepStatus, SyncProgressKind, SyncRunStatus } from "@mia/shared-enums"
 
 export const EnvRole = {
   Source: "source",
@@ -22,7 +22,8 @@ export const isEnvAccessMode = (value: unknown): value is EnvAccessMode =>
 export const DiscoverySource = {
   FkAndPipeline: "fk+pipeline",
   FkOnly: "fk-only",
-  PipelineOnly: "pipeline-only"
+  PipelineOnly: "pipeline-only",
+  Manual: "manual"
 } as const
 export type DiscoverySource = (typeof DiscoverySource)[keyof typeof DiscoverySource]
 export const DISCOVERY_SOURCES: ReadonlyArray<DiscoverySource> = Object.values(DiscoverySource)

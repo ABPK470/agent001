@@ -2,22 +2,7 @@
  * Unified event log & webhook drain persistence.
  */
 
-import { getDb } from "./connection.js"
-
-// ── Event log ────────────────────────────────────────────────────
-
-export function migrateEventLog(): void {
-  getDb().exec(`
-    CREATE TABLE IF NOT EXISTS event_log (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      type TEXT NOT NULL,
-      data TEXT NOT NULL,
-      created_at TEXT NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_event_log_time ON event_log(created_at DESC);
-    CREATE INDEX IF NOT EXISTS idx_event_log_type ON event_log(type);
-  `)
-}
+import { getDb } from "../connection.js"
 
 export interface DbEvent {
   id: number
@@ -115,22 +100,6 @@ export function searchEvents(
   return getDb()
     .prepare(`SELECT * FROM event_log WHERE ${conditions.join(" AND ")} ORDER BY created_at DESC LIMIT ?`)
     .all(...params) as DbEvent[]
-}
-
-// ── Webhook drains ───────────────────────────────────────────────
-
-export function migrateWebhookDrains(): void {
-  getDb().exec(`
-    CREATE TABLE IF NOT EXISTS webhook_drains (
-      id TEXT PRIMARY KEY,
-      url TEXT NOT NULL,
-      secret TEXT NOT NULL DEFAULT '',
-      event_filters TEXT NOT NULL DEFAULT '[]',
-      enabled INTEGER NOT NULL DEFAULT 1,
-      created_at TEXT NOT NULL,
-      updated_at TEXT NOT NULL
-    );
-  `)
 }
 
 export interface DbWebhookDrain {

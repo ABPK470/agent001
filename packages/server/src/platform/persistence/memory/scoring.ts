@@ -192,3 +192,11 @@ export function sanitizeFtsQuery(query: string): string {
 
   return tokens.map((t) => `"${t}"`).join(" OR ")
 }
+
+/** Single-token queries are usually marker lookups — vector-only hits must include the term literally. */
+export function vectorAugmentationMatchesQuery(query: string, content: string): boolean {
+  const needle = query.trim()
+  if (!needle) return true
+  if (/\s/.test(needle)) return true
+  return content.toLowerCase().includes(needle.toLowerCase())
+}

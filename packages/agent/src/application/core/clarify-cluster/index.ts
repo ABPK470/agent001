@@ -21,6 +21,7 @@ import { schemaMatchDetector } from "./detectors/schema-match.js"
 import { termUndefinedDetector } from "./detectors/term-undefined.js"
 import { timeRangeDetector } from "./detectors/time-range.js"
 import { writeConfirmationDetector } from "./detectors/write-confirmation.js"
+import { isClarificationExemptGoal } from "../goal-intent.js"
 import type { AmbiguityFinding, ClarifyContext, Detector, ResolvedClarification } from "./types.js"
 
 export {
@@ -31,6 +32,12 @@ export {
 } from "./types.js"
 
 export { runDetectors }
+
+export {
+  resolveGoalDataAnchors,
+  resolveTableReference,
+  type GoalDataAnchor
+} from "./goal-data-anchors.js"
 
 export { parsePlannerResponse, runLlmPlanner, shouldInvokePlanner } from "./llm-planner.js"
 export type { LlmPlannerOptions } from "./llm-planner.js"
@@ -79,6 +86,7 @@ export const CLARIFY_DETECTORS: readonly Detector[] = [
  * Used by the system-messages renderer and by tests.
  */
 export function detectAmbiguities(ctx: ClarifyContext): AmbiguityFinding[] {
+  if (isClarificationExemptGoal(ctx.goal, { messages: ctx.messages })) return []
   return runDetectors(ctx, CLARIFY_DETECTORS)
 }
 

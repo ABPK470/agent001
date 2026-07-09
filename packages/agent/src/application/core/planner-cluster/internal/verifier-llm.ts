@@ -76,15 +76,9 @@ export function detectVerificationModalityGaps(
   }
 
   if (requiresRuntime && !executedModalities.has("runtime")) {
-    if (hasHtml && !toolMap.has("browser_check")) {
-      issues.push(
-        "VERIFICATION MODALITY GAP: runtime behavior required for HTML output but browser_check tool is unavailable"
-      )
-    } else {
-      issues.push(
-        "VERIFICATION MODALITY GAP: acceptance criteria imply runtime behavior, but no runtime probe (browser_check/tests/command) ran"
-      )
-    }
+    issues.push(
+      "VERIFICATION MODALITY GAP: acceptance criteria imply runtime behavior, but no runtime probe (tests/command) ran"
+    )
   }
 
   return issues
@@ -129,7 +123,7 @@ Rules:
 - CODE LENGTH IS NOT A QUALITY METRIC: Compact, correct code is FINE
 - IMPORT AND KEYWORD ANALYSIS IS PRE-CHECKED: Trust PRE-CHECKED STRUCTURE blocks in artifact sections
 - TRUNCATION IS NOT INCOMPLETENESS: Files shown with "(truncated — head+tail)" are COMPLETE on disk. The head+tail view lets you verify correct start and end. Do NOT flag a file as incomplete, unverifiable, or suspect solely because it was truncated for context. Truncation is a display constraint, not a quality signal.
-- POSITIVE SIGNAL OVERRIDE (MANDATORY): If a step's deterministicResult includes positiveSignals with "browser_check: ✓" or "syntax: ✓", you MUST NOT raise issues about "cannot verify completeness", "truncated evidence makes verification impossible", or "acceptance criterion cannot be verified from excerpt". Those signals are definitive proof the artifact is loadable/syntactically correct. Only raise real semantic issues (wrong logic, missing gameplay rules, etc.) that you can actually see in the artifact content.
+- POSITIVE SIGNAL OVERRIDE (MANDATORY): If a step's deterministicResult includes positiveSignals with "syntax: ✓" or "tests: ✓", you MUST NOT raise issues about "cannot verify completeness", "truncated evidence makes verification impossible", or "acceptance criterion cannot be verified from excerpt". Those signals are definitive proof the artifact is loadable/syntactically correct. Only raise real semantic issues (wrong logic, missing gameplay rules, etc.) that you can actually see in the artifact content.
 - confidence is 0.0 to 1.0
 - Respond ONLY with the JSON object`
 
@@ -267,7 +261,7 @@ export async function runLLMVerification(
 
     const rawDecision = parseLLMVerification(response.content, deterministicAssessments)
 
-    // Post-process: when deterministic probes gave positive signals (e.g. browser_check ✓),
+    // Post-process: when deterministic probes gave positive signals (e.g. syntax ✓),
     // downgrade any LLM issues that are purely uncertainty-based due to truncation.
     // These are false positives — the file works, the LLM just couldn't see its tail.
     const TRUNCATION_UNCERTAINTY_RE =
@@ -275,7 +269,7 @@ export async function runLLMVerification(
     const downgraded = rawDecision.steps.map((step) => {
       const detAssessment = deterministicAssessments.find((a) => a.stepName === step.stepName)
       if (!detAssessment?.positiveSignals?.length) return step
-      const hasStrongSignal = detAssessment.positiveSignals.some((s) => /browser_check.*✓|syntax.*✓/i.test(s))
+      const hasStrongSignal = detAssessment.positiveSignals.some((s) => /syntax.*✓|tests.*✓/i.test(s))
       if (!hasStrongSignal) return step
       const processedIssues = step.issues.map((issue) =>
         !issue.startsWith("[non-blocking]") && TRUNCATION_UNCERTAINTY_RE.test(issue)

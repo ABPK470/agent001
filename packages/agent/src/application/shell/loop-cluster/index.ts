@@ -1,15 +1,15 @@
 /**
  * Loop cluster — public API.
  *
- * Outside this folder, import from `../loop.js` or `./index.js` only.
+ * Outside this folder, import from `../loop.js` only.
  * Files inside this cluster are private implementation details.
  *
- * Note: `agent.ts` (the public Agent class) is the primary consumer and
- * orchestrates the loop. Other consumers (planner-routing, agent-helpers)
- * should also go through this index.
+ * Loop policy (`loop-policy/`) is the single steering surface:
+ *   prepareTurn      — before each LLM call
+ *   guardCompletion  — when the model returns zero tool calls
  */
 
-export * from "./completion-guards/index.js"
+export * from "./loop-policy/index.js"
 export * from "./post-round/index.js"
 export * from "./prompt-vars.js"
 export * from "./state.js"

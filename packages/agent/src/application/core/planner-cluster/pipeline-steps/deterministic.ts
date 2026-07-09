@@ -33,11 +33,6 @@ export async function executeDeterministicStep(
 
     try {
       let args = step.args
-      if (step.tool === "browser_check" && !args.path && (args.key || args.url)) {
-        args = { ...args, path: String(args.key ?? args.url) }
-        delete (args as Record<string, unknown>).key
-        delete (args as Record<string, unknown>).url
-      }
 
       let output = await toolExecFn(step.tool, args)
 

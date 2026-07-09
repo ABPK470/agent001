@@ -17,6 +17,7 @@ export interface ExecuteProgress {
   rowsTotal?: number
   message?: string
   error?: string
+  deployStatus?: "started" | "done" | "failed" | "skipped"
 }
 
 export interface SyncExecuteFailureContext {
@@ -70,4 +71,25 @@ export interface ExecuteOptions {
    * passes this through. Audited.
    */
   overrideFreezeWindow?: boolean
+  /** When aborted (e.g. client closed the SSE stream), stop before further work. */
+  signal?: AbortSignal
+}
+
+export function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) throw new Error("Sync execution cancelled")
+}
+
+/** `uspAuditRunCheck` returned status=stop — sync not required (legacy "To sync or not"). */
+export class AuditGateSkippedError extends Error {
+  readonly step: string
+
+  constructor(step: string, message: string) {
+    super(message.trim() || "Synchronization not required.")
+    this.name = "AuditGateSkippedError"
+    this.step = step
+  }
+}
+
+export function isAuditGateSkippedError(error: unknown): error is AuditGateSkippedError {
+  return error instanceof AuditGateSkippedError
 }

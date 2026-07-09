@@ -19,25 +19,29 @@
   ],
   "scripts": {
     "dev": "npx concurrently -k -n server,ui,term -c blue,magenta,yellow \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui-term\"",
+    "setup": "npm run setup -w packages/server",
     "dev:classic": "npx concurrently -k -n server,ui -c blue,magenta \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui\"",
     "dev:term": "npx concurrently -k -n server,term -c blue,yellow \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui-term\"",
+    "check:contract-dmc-scope": "node scripts/check-contract-dataset-mapping-column-scope.mjs",
     "test": "npm test --workspaces",
     "build:dev": "npm run build --workspaces",
     "build": "node scripts/build.mjs",
+    "package": "node scripts/package-release.mjs",
     "eval:reliability": "node scripts/reliability-eval.mjs",
     "lint": "npm run lint --workspaces",
     "lint:arch": "node scripts/lint-arch.mjs",
     "pack:test": "npm run build && npm pack",
-    "postinstall": "node scripts/install-playwright.mjs"
+    "rebuild:native": "npm rebuild better-sqlite3 --build-from-source",
+    "postinstall": "node scripts/ensure-native-modules.mjs",
+    "predev": "node scripts/ensure-native-modules.mjs"
   },
   "dependencies": {
     "@fastify/cors": "^10.0.3",
     "@fastify/static": "^8.0.4",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^12.10.0",
     "dotenv": "^17.3.1",
     "fastify": "^5.3.3",
     "mssql": "^12.2.1",
-    "playwright": "^1.49.0",
     "yaml": "^2.9.0"
   },
   "devDependencies": {

@@ -192,9 +192,6 @@ function buildDroppedHistorySummary(dropped: Message[]): string {
         case "delegate_parallel":
           actions.push(`delegated: ${typeof args.goal === "string" ? args.goal.slice(0, 80) : "subtask"}`)
           break
-        case "browser_check":
-          if (path) actions.push(`browser-checked ${path}`)
-          break
         default:
           actions.push(`called ${tc.name}`)
       }
@@ -216,11 +213,6 @@ function buildDroppedHistorySummary(dropped: Message[]): string {
       !/\bno errors\b/i.test(normalized)
     ) {
       notableResults.push(`${meta.name}${pathLabel} failed: ${short}`)
-      continue
-    }
-
-    if (meta.name === "browser_check" && /\bno errors\b|\bpassed\b/i.test(normalized)) {
-      notableResults.push(`browser_check${pathLabel} passed`)
       continue
     }
 

@@ -10,6 +10,12 @@
  *      (worst case: one extra token request, no functional harm).
  */
 
+import { LlmInteractionKind } from "@mia/shared-enums"
+import {
+  emitLlmInteractionRequired,
+  getLlmOperationContext,
+} from "./operation-context.js"
+
 interface CachedToken {
   token: string
   expiresAt: number
@@ -47,7 +53,19 @@ export async function getDatabricksToken(): Promise<string> {
     headers: { Authorization: `Basic ${basic}`, "Content-Type": "application/x-www-form-urlencoded" },
     body: "grant_type=client_credentials&scope=all-apis"
   })
-  if (!res.ok) throw new Error(`Databricks OAuth failed (${res.status}): ${await res.text()}`)
+  if (!res.ok) {
+    const detail = await res.text()
+    const err = new Error(`Databricks OAuth failed (${res.status}): ${detail}`)
+    if (getLlmOperationContext()) {
+      emitLlmInteractionRequired({
+        provider: "databricks",
+        kind: LlmInteractionKind.Configure,
+        title: "Databricks authentication failed",
+        message: err.message,
+      })
+    }
+    throw err
+  }
   const data = (await res.json()) as { access_token: string; expires_in?: number }
   cached = { token: data.access_token, expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000 }
   return cached.token

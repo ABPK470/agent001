@@ -62,7 +62,8 @@ export async function prepareExecutionEnvironment(
     {
       request,
       interaction: runtime.interaction,
-      messaging: runtime.messaging
+      messaging: runtime.messaging,
+      runContext: host.runContext
     },
     {
       activeRun: workspace.activeRun,

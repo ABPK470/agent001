@@ -7,7 +7,8 @@
  */
 export const AttachmentScope = {
   Run:            "run",
-  Session:        "session",
+  /** Pre-run file staging owned by `owner_upn` — not an auth cookie session. */
+  UserDraft:      "user_draft",
   WorkspaceAsset: "workspace_asset",
 } as const
 

@@ -1,12 +1,10 @@
 import {
-  PlannerRepairCompatibilityMode,
   VerifierEvidenceSource,
   VerifierIssueSeverity,
   VerifierMode,
   VerifierOutcome
 } from "../../domain/enums/planner.js"
 export {
-  PlannerRepairCompatibilityMode,
   VerifierEvidenceSource,
   VerifierIssueSeverity,
   VerifierMode,
@@ -19,8 +17,6 @@ export {
  *
  * @module
  */
-
-import type { CoherentSharedContract, CoherentSystemInvariant } from "../types.js"
 
 // ============================================================================
 // Verifier
@@ -85,32 +81,12 @@ export interface RepairTask {
   readonly ownedIssues: readonly VerifierIssue[]
   readonly dependencyContext: readonly VerifierIssue[]
   readonly requiredAcceptedArtifacts: readonly string[]
-  readonly preserveArchitecture?: boolean
-  readonly architectureSummary?: string
-  readonly sharedContracts?: readonly CoherentSharedContract[]
-  readonly invariants?: readonly CoherentSystemInvariant[]
 }
 
 export interface RepairPlan {
   readonly tasks: readonly RepairTask[]
   readonly rerunOrder: readonly string[]
   readonly skippedVerifiedSteps: readonly string[]
-}
-
-export interface LegacyRetryPlan {
-  readonly tasks: readonly RepairTask[]
-  readonly rerunOrder: readonly string[]
-  readonly skippedVerifiedSteps: readonly string[]
-}
-
-export interface RepairPlanCompatibilityReport {
-  readonly mode: PlannerRepairCompatibilityMode
-  readonly activePath: "legacy" | "repair"
-  readonly diverged: boolean
-  readonly divergenceScore: number
-  readonly reasons: readonly string[]
-  readonly legacyPlan: LegacyRetryPlan
-  readonly repairPlan: RepairPlan
 }
 
 export interface VerifierStepAssessment {
@@ -122,7 +98,7 @@ export interface VerifierStepAssessment {
   readonly evidence?: readonly VerificationEvidence[]
   readonly retryable: boolean
   /**
-   * Definitive positive signals from deterministic probes (e.g. "browser_check: ✓",
+   * Definitive positive signals from deterministic probes (e.g. "run_tests: ✓",
    * "syntax: node --check ✓"). When populated the LLM verifier must not raise
    * "cannot verify completeness" or "truncated" blocking issues for these artifacts.
    */

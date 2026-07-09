@@ -8,7 +8,7 @@ function makeEnvelope(overrides: Partial<ExecutionEnvelope> = {}): ExecutionEnve
     workspaceRoot: ".",
     allowedReadRoots: ["."],
     allowedWriteRoots: ["."],
-    allowedTools: ["read_file", "write_file", "replace_in_file", "browser_check"],
+    allowedTools: ["read_file", "write_file", "replace_in_file", "run_command"],
     requiredSourceArtifacts: [],
     targetArtifacts: ["tmp/output.js"],
     effectClass: "filesystem_write",

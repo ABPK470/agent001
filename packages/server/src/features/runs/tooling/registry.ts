@@ -17,16 +17,8 @@ import {
   bindNoteTool,
   bindRecallPriorResultTool,
   bindRecordTableVerdictTool,
-  browserAutoLoginTool,
-  browserCheckTool,
-  browserHumanHandoffTool,
-  browseWebTool,
   createAppendFileTool,
   createAskUserTool,
-  createBrowserAutoLoginTool,
-  createBrowserCheckTool,
-  createBrowserHumanHandoffTool,
-  createBrowseWebTool,
   createDelegateTools,
   createDiscoverRelationshipsTool,
   createExportQueryToFileTool,
@@ -45,7 +37,6 @@ import {
   createSearchCatalogTool,
   createSearchFilesTool,
   createShellTool,
-  createWebSearchTool,
   createWriteFileTool,
   discoverRelationshipsTool,
   exportQueryToFileTool,
@@ -70,7 +61,6 @@ import {
   searchFilesToolMetadata,
   shellTool,
   thinkTool,
-  webSearchTool,
   writeFileToolMetadata,
   type AgentHost,
   type DelegateContext,
@@ -83,11 +73,17 @@ import {
   compareCatalogsTool,
   createCompareCatalogsTool,
   createListEnvironmentsTool,
+  createListSyncDefinitionsTool,
+  createResolveSyncScopeTool,
   createSearchSyncEntitiesTool,
+  createSyncDiffScanTool,
   createSyncExecuteTool,
   createSyncPreviewTool,
   listEnvironmentsTool,
+  listSyncDefinitionsTool,
+  resolveSyncScopeTool,
   searchSyncEntitiesTool,
+  syncDiffScanTool,
   syncExecuteTool,
   syncPreviewTool
 } from "@mia/sync"
@@ -95,7 +91,7 @@ import { ingestAgentNote, recordTableVerdict } from "../../../platform/persisten
 import {
   getToolResult,
   isRecallableToolResult,
-  loadRecentToolResults
+  loadRecentToolResultsForThread
 } from "../../../platform/persistence/tool-results.js"
 
 export { thinkTool }
@@ -115,13 +111,8 @@ const STATIC_TOOL_BINDERS: readonly StaticToolBinder[] = [
   { metadata: replaceInFileToolMetadata, bind: (host) => createReplaceInFileTool(host) },
   { metadata: listDirectoryToolMetadata, bind: (host) => createListDirectoryTool(host) },
   { metadata: searchFilesToolMetadata, bind: (host) => createSearchFilesTool(host) },
-  // ── Shell + browser (host-bound) ──
+  // ── Shell (host-bound) ──
   { metadata: shellTool, bind: (host, run) => createShellTool(host, run) },
-  { metadata: browseWebTool, bind: (host, run) => createBrowseWebTool(host, run) },
-  { metadata: browserCheckTool, bind: (host) => createBrowserCheckTool(host) },
-  { metadata: browserAutoLoginTool, bind: (host) => createBrowserAutoLoginTool(host) },
-  { metadata: browserHumanHandoffTool, bind: (host) => createBrowserHumanHandoffTool(host) },
-  { metadata: webSearchTool, bind: (host) => createWebSearchTool(host) },
   // ── Legacy runtime-backed factories (host arg ignored) ──
   { metadata: fetchUrlTool, bind: (_host, run) => createFetchUrlTool(run) },
   // ── User input (host-bound) ──
@@ -136,13 +127,16 @@ const STATIC_TOOL_BINDERS: readonly StaticToolBinder[] = [
   { metadata: discoverRelationshipsTool, bind: (host) => createDiscoverRelationshipsTool(host) },
   { metadata: profileDataTool, bind: (host, run) => createProfileDataTool(host, run) },
   { metadata: inspectDefinitionTool, bind: (host) => createInspectDefinitionTool(host) },
-  { metadata: searchCatalogTool, bind: (host) => createSearchCatalogTool(host) },
+  { metadata: searchCatalogTool, bind: (host, run) => createSearchCatalogTool(host, run) },
   // ── ABI environment sync ──
   { metadata: compareCatalogsTool, bind: (host) => createCompareCatalogsTool(host) },
+  { metadata: listSyncDefinitionsTool, bind: (host) => createListSyncDefinitionsTool(host) },
+  { metadata: resolveSyncScopeTool, bind: (host) => createResolveSyncScopeTool(host) },
   { metadata: searchSyncEntitiesTool, bind: (host) => createSearchSyncEntitiesTool(host) },
   { metadata: syncPreviewTool, bind: (host) => createSyncPreviewTool(host) },
   { metadata: syncExecuteTool, bind: (host) => createSyncExecuteTool(host) },
   { metadata: listEnvironmentsTool, bind: (host) => createListEnvironmentsTool(host) },
+  { metadata: syncDiffScanTool, bind: (host) => createSyncDiffScanTool(host) },
   // ── Attachments (host-bound) ──
   { metadata: listAttachmentsToolMetadata, bind: (host) => createListAttachmentsTool(host) },
   { metadata: readAttachmentToolMetadata, bind: (host) => createReadAttachmentTool(host) },
@@ -349,16 +343,13 @@ export function listAvailableTools(): ToolInfo[] {
 
 /**
  * Tools available to non-admin "visitor" users. NO `shellTool` (no shell
- * access from chat), NO `browseWebTool` (no headless-browser side effects).
- * Read/write filesystem stays scoped to the run's sandbox by existing
- * filesystem-security checks.
+ * access from chat). Read/write filesystem stays scoped to the run's
+ * sandbox by existing filesystem-security checks.
  *
  * ABI sync tools (list_environments, search_sync_entities, sync_preview,
- * sync_execute, compare_catalogs) ARE included here because the system prompt
- * always injects the ABI sync guidance. A mismatch — system prompt says "use
- * sync_preview" or "search_sync_entities" but the tool is absent from the LLM
- * schema — causes the agent to fall back to asking for clarification instead of
- * executing.
+ * sync_execute, compare_catalogs, sync_diff_scan) ARE included here because
+ * when `includeAbiSync` fires the system prompt injects abi-sync.md — tools
+ * and prompt must stay aligned (see goal-classification.ts).
  * Sync tools are read/preview-safe; sync_execute requires explicit
  * user confirmation via planId, so the safety rail is the plan TTL and
  * the confirmation step, not tool-level exclusion.
@@ -384,10 +375,13 @@ const VISITOR_TOOL_NAMES: ReadonlySet<string> = new Set([
   "inspect_definition",
   // ABI sync — must match what the system prompt advertises
   "list_environments",
+  "list_sync_definitions",
+  "resolve_sync_scope",
   "search_sync_entities",
   "sync_preview",
   "sync_execute",
   "compare_catalogs",
+  "sync_diff_scan",
   // Attachments (hosted-MIA Phase 4)
   "list_attachments",
   "read_attachment",
@@ -431,12 +425,9 @@ export interface PerRunToolContext {
    */
   askUserResolve: (question: string, options: string[] | undefined, sensitive: boolean) => Promise<string>
   /**
-   * Run-scoped identifiers needed by the `note` tool factory so agent-authored
-   * memory writes carry correct tenant + session provenance. May be null when
-   * the run is anonymous or pre-session (rare; the note will still be stored
-   * but won't be retrievable via session-scoped working-memory queries).
+   * Run-scoped identifiers for memory + recall tools. Continuity is thread-scoped.
    */
-  sessionId: string | null
+  threadId: string | null
   upn: string | null
 }
 
@@ -484,7 +475,6 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
           claim: payload.claim,
           evidence: payload.evidence,
           category: payload.category,
-          sessionId: ctx.sessionId,
           runId: ctx.runId,
           upn: ctx.upn
         })
@@ -507,7 +497,6 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
             role: payload.role,
             evidence: payload.evidence,
             observedFromGoal: payload.observedFromGoal,
-            sessionId: ctx.sessionId,
             runId: ctx.runId,
             upn: ctx.upn
           })
@@ -518,9 +507,8 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
       })
     )
   ],
-  // recall_prior_result — no-amnesia Phase 9. Fetches the full payload of a
-  // tool call from an earlier turn in the same session. Backed by the
-  // tool_results table. Read-only, no governance needed beyond defaults.
+  // recall_prior_result — fetches the full payload of a tool call from an
+  // earlier turn in the same thread. Backed by the tool_results table.
   (ctx) => [
     ctx.govern(
       bindRecallPriorResultTool(async (payload) => {
@@ -541,21 +529,22 @@ export const PER_RUN_FACTORIES: PerRunToolFactory[] = [
             }
             return formatRecall(row, payload.full === true)
           }
-          // Path 2: turn-relative lookup. Requires a session.
-          if (!ctx.sessionId) {
+          // Path 2: turn-relative lookup within the current thread.
+          if (!ctx.threadId || !ctx.upn) {
             return {
               ok: false,
-              reason: "no session bound to this run; pass runId + toolCallId from <prior_results> instead"
+              reason: "no thread bound to this run; pass runId + toolCallId from <prior_results> instead"
             }
           }
           const limit = Math.abs(payload.turn ?? -1)
           const toolNames = payload.toolName ? [payload.toolName] : undefined
-          const rows = loadRecentToolResults({
-            sessionId: ctx.sessionId,
+          const rows = loadRecentToolResultsForThread({
+            threadId: ctx.threadId,
+            upn: ctx.upn,
             limit: Math.max(limit, 25),
             ...(toolNames ? { toolNames } : {})
           })
-          // loadRecentToolResults returns newest-first; turn=-1 → rows[0], -2 → rows[1].
+          // Newest-first; turn=-1 → rows[0], -2 → rows[1].
           // Exclude the current run so the model never recalls its own in-flight call.
           const filtered = rows.filter((r) => r.run_id !== ctx.runId && isRecallableToolResult(r))
           const target = filtered[limit - 1]

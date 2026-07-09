@@ -10,6 +10,7 @@
  * - JSON-serializable
  */
 
+import type { CompiledSyncPlanContract, SyncPlanMovement, SyncPlanTableStats } from "@mia/shared-types"
 import { randomUUID } from "node:crypto"
 import {
   existsSync,
@@ -21,56 +22,17 @@ import {
   writeFileSync
 } from "node:fs"
 import { resolve } from "node:path"
-import type { EntityType } from "../../domain/recipes.js"
+import type { SyncEntityId } from "../../domain/definition-selection.js"
 import { SyncPlanChangeType, type SyncPlanStoreHost } from "../../ports/index.js"
+import { validatePlan } from "./orchestrator/plan-table.js"
 
-export interface SyncExecutionContractStep {
-  id: string
-  phase: "pre-transaction" | "metadata" | "post-metadata" | "post-commit"
-  kind: string
-  title: string
-  description: string
-  subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
-  objectName?: string | null
-  auditObjectType?: string | null
-  pipelineName?: string | null
-}
-
-export interface SyncExecutionContract {
-  definitionId: string
-  definitionPublishedVersion: string
-  definitionPublishedAt: string
-  governance: {
-    freezeWindowIds: string[]
-    riskMultiplier: number
-  }
-  bindings: {
-    serviceProfileRef: string
-    environmentPolicyRef: string
-  }
-  allowedSchemas: string[]
-  metadata: {
-    rootTable: string
-    rootKeyColumn: string
-    tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>
-    executionOrder: string[]
-    reverseOrder: string[]
-  }
-  flow: {
-    steps: SyncExecutionContractStep[]
-  }
-  provenance: {
-    kind: "manual" | "legacy-migration"
-    sourceArtifact?: string | null
-    sourceVersion?: string | null
-  }
-}
+export type SyncExecutionContract = CompiledSyncPlanContract
+export type SyncExecutionContractStep = CompiledSyncPlanContract["flow"]["steps"][number]
 
 export interface SyncGovernanceDecision {
   evaluatedAt: string
   governance: {
     freezeWindowIds: string[]
-    riskMultiplier: number
   }
   freezeWindows: {
     active: boolean
@@ -99,21 +61,7 @@ export interface SyncDecisionRecord {
   details: Record<string, unknown>
 }
 
-export interface SyncPlanTableCounts {
-  insert: number
-  update: number
-  delete: number
-  unchanged: number
-  /** Reserved for future use; HASHBYTES-based diff cannot produce NULL hashes. */
-  lowConfidence: number
-  /**
-   * Rows whose PK exists on target but under a DIFFERENT parent/scope than
-   * what source expects (scope misattribution). These would silently fail
-   * with PK violations on execute, so we surface them in preview and
-   * hard-refuse execute when > 0.
-   */
-  conflicts: number
-}
+export type { SyncPlanMovement, SyncPlanTableStats } from "@mia/shared-types"
 
 export interface SyncPlanRowSample {
   /** Raw column values for an INSERT or DELETE row. */
@@ -124,6 +72,24 @@ export interface SyncPlanRowSample {
   oldValues?: Record<string, unknown>
   /** Names of columns whose values differ (UPDATE only). */
   changedColumns?: string[]
+}
+
+/** One row in a table changeSet — PK identity only (execute fetches full rows by PK). */
+export interface SyncPlanChangeRow {
+  /** Composite-aware PK key (matches diff-engine `PkHashRow.pk`). */
+  pk: string
+  /** PK column values used to build targeted SELECT / DELETE predicates. */
+  values: Record<string, unknown>
+}
+
+/**
+ * Per-table insert / update / delete PK lists from preview diff.
+ * Execute applies exactly this — no re-diff, no scope-wide reads.
+ */
+export interface SyncPlanChangeSet {
+  insert: SyncPlanChangeRow[]
+  update: SyncPlanChangeRow[]
+  delete: SyncPlanChangeRow[]
 }
 
 /**
@@ -144,9 +110,16 @@ export interface SyncPlanConflict {
 
 export interface SyncPlanTable {
   table: string
+  /**
+   * Frozen SQL WHERE fragment from preview.
+   * Execute uses this only for drift `COUNT(*)` and FK probes — never for bulk row reads.
+   */
   scopePredicate: string
-  counts: SyncPlanTableCounts
-  /** Up to 3 sample rows per bucket. */
+  /** Preview-only counters not represented in `changeSet`. */
+  stats: SyncPlanTableStats
+  /** Row-level execute instructions (insert / update / delete PK lists). */
+  changeSet: SyncPlanChangeSet
+  /** UI preview decoration only; execute ignores. */
   samples: {
     insert: SyncPlanRowSample[]
     update: SyncPlanRowSample[]
@@ -169,7 +142,8 @@ export interface SyncPlanGraphNode {
   label: string
   /** Net change pill: green/amber/red/grey. */
   status: SyncPlanChangeType
-  counts: SyncPlanTableCounts
+  stats: SyncPlanTableStats
+  movement: SyncPlanMovement
 }
 
 export interface SyncPlanGraph {
@@ -187,34 +161,31 @@ export interface SyncPlanTotals {
   tablesCount: number
 }
 
+export interface SyncPlanPreflight {
+  catalogCompatible: boolean
+  issues: string[]
+  /** False when child upserts need a root row that is neither on target nor inserted by this plan. */
+  rootParentReady: boolean
+  rootParentIssue: string | null
+}
+
 export interface SyncPlan {
   planId: string
   createdAt: string
   /** ms since epoch for fast TTL math. */
   createdAtMs: number
-  entity: { type: EntityType; id: string | number; displayName: string | null }
+  entity: { type: SyncEntityId; id: string | number; displayName: string | null }
   source: string
   target: string
-  /** Pre-flight catalog drift report. */
-  preflight: { catalogCompatible: boolean; issues: string[] }
+  /** Pre-flight catalog drift + root-parent readiness. */
+  preflight: SyncPlanPreflight
   tables: SyncPlanTable[]
   totals: SyncPlanTotals
   dependencyGraph: SyncPlanGraph
   warnings: string[]
   estimatedDurationSec: number
-  /** Recipe snapshot used — included so execute reproduces preview exactly. */
-  recipeSnapshot: {
-    entityType: EntityType
-    rootTable?: string
-    rootKeyColumn?: string
-    legacyPipelineId?: number
-    tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>
-    executionOrder: string[]
-    reverseOrder: string[]
-    enabledOptionalTables?: string[]
-  }
-  /** Explicit compiled execution contract from the published definition. */
-  executionContract?: SyncExecutionContract | null
+  /** Compiled execution contract — reproduces preview at execute time. */
+  executionContract: SyncExecutionContract
   /** First-class explainability record used by history/API/UI surfaces. */
   decisionLog?: SyncDecisionRecord[] | null
   /** Preview-time governance evaluation persisted for audit and operator explainability. */
@@ -227,7 +198,6 @@ export interface SyncPlan {
    */
   entityPolicies?: {
     freezeWindowIds: string[]
-    riskMultiplier: number
     sourceEntityVersion: number | null
   } | null
 }
@@ -240,8 +210,7 @@ const TTL_MS = 24 * 60 * 60 * 1000
 const EXECUTE_MAX_AGE_MS = 60 * 60 * 1000
 
 /**
- * Configure the disk root for plan persistence (e.g.
- * `packages/server/data/sync-plans`). Idempotent.
+ * Configure the disk root for plan persistence (under `MIA_DATA_DIR/sync-plans`, default `~/.mia/sync-plans`). Idempotent.
  */
 export function configurePlanStore(host: SyncPlanStoreHost, diskRoot: string): void {
   host.sync.plans.diskRoot = diskRoot
@@ -256,6 +225,7 @@ export function allocPlanId(): string {
 
 /** Persist a plan (memory + disk + durable sink, if installed). */
 export function savePlan(host: SyncPlanStoreHost, plan: SyncPlan): void {
+  validatePlan(plan)
   const plans = host.sync.plans
   plans.memCache.set(plan.planId, plan)
   if (plans.diskRoot) {

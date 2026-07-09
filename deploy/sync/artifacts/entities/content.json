@@ -13,8 +13,7 @@
   },
   "governance": {
     "approvalPolicyId": null,
-    "freezeWindowIds": [],
-    "riskMultiplier": 1
+    "freezeWindowIds": []
   },
   "strategy": {
     "strategyId": "mymi-scd2",
@@ -58,24 +57,22 @@
       {
         "name": "gate.ContentType",
         "scopeColumn": "contentTypeId",
-        "predicate": "contentTypeId IN (/* review contentTypeIds */)",
+        "predicate": "EXISTS (SELECT 1 FROM (SELECT contentTypeId AS [contentTypeId] FROM gate.Content WHERE contentId = {id}) AS __mia_scope WHERE __mia_scope.[contentTypeId] = [gate].[ContentType].[contentTypeId])",
         "source": "pipeline-only",
-        "verified": false,
+        "verified": true,
         "groundedByPipeline": true,
         "enabledByDefault": true,
-        "userControllable": false,
-        "note": "Predicate unresolved from legacy pipeline variable @contentTypeIds. Verify against core.uspSyncContentObjectsTran body."
+        "userControllable": false
       },
       {
         "name": "gate.ContentLinkType",
         "scopeColumn": "contentLinkTypeId",
-        "predicate": "contentLinkTypeId IN (/* review contentLinkTypeIds */)",
+        "predicate": "EXISTS (SELECT 1 FROM (SELECT contentLinkTypeId AS [contentLinkTypeId] FROM gate.ContentLink WHERE contentId = {id}) AS __mia_scope WHERE __mia_scope.[contentLinkTypeId] = [gate].[ContentLinkType].[contentLinkTypeId])",
         "source": "pipeline-only",
-        "verified": false,
+        "verified": true,
         "groundedByPipeline": true,
         "enabledByDefault": true,
-        "userControllable": false,
-        "note": "Predicate unresolved from legacy pipeline variable @contentLinkTypeIds. Verify against core.uspSyncContentObjectsTran body."
+        "userControllable": false
       },
       {
         "name": "gate.UserGroupPermission",
@@ -110,7 +107,7 @@
   },
   "provenance": {
     "kind": "legacy-migration",
-    "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
-    "sourceVersion": "2026-05-10T11:19:07.694Z"
+    "sourceArtifact": "deploy/sync/generators/refresh-from-legacy.mjs",
+    "sourceVersion": "2026-07-09T13:02:24.967Z"
   }
 }

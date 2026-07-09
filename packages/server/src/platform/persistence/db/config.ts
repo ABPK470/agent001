@@ -4,7 +4,7 @@
 
 import { PolicyEffect } from "@mia/agent"
 import { PolicySource } from "../../../shared/enums/index.js"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export { PolicySource } from "../../../shared/enums/index.js"
 

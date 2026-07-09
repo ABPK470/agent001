@@ -13,77 +13,6 @@ import type { QueueStore } from "./queue.js"
 import type { ConversationStore } from "./router.js"
 import type { ChannelConfig, ChannelType, Conversation, DeliveryStatus, OutboundMessage } from "./types.js"
 
-// ── Migration ────────────────────────────────────────────────────
-
-export function migrateChannels(): void {
-  getDb().exec(`
-    CREATE TABLE IF NOT EXISTS conversations (
-      id            TEXT PRIMARY KEY,
-      channel_type  TEXT NOT NULL
-        CHECK (channel_type IN ('teams')),
-      sender_id     TEXT NOT NULL,
-      sender_name   TEXT,
-      active_run_id TEXT REFERENCES runs(id) ON DELETE SET NULL,
-      created_at    TEXT NOT NULL,
-      updated_at    TEXT NOT NULL,
-      UNIQUE(channel_type, sender_id)
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_conv_channel_sender
-      ON conversations(channel_type, sender_id);
-
-    CREATE INDEX IF NOT EXISTS idx_conv_run
-      ON conversations(active_run_id);
-
-    CREATE TABLE IF NOT EXISTS outbound_messages (
-      id              TEXT PRIMARY KEY,
-      conversation_id TEXT NOT NULL REFERENCES conversations(id) ON DELETE CASCADE,
-      channel_type    TEXT NOT NULL
-        CHECK (channel_type IN ('teams')),
-      recipient_id    TEXT NOT NULL,
-      text            TEXT NOT NULL,
-      status          TEXT NOT NULL DEFAULT 'queued'
-        CHECK (status IN ('queued','sending','delivered','failed','retrying')),
-      attempts        INTEGER NOT NULL DEFAULT 0,
-      next_retry_at   TEXT,
-      last_error      TEXT,
-      created_at      TEXT NOT NULL,
-      delivered_at    TEXT
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_outbound_status
-      ON outbound_messages(status);
-
-    CREATE INDEX IF NOT EXISTS idx_outbound_conv
-      ON outbound_messages(conversation_id);
-
-    CREATE TABLE IF NOT EXISTS delivery_attempts (
-      id             INTEGER PRIMARY KEY AUTOINCREMENT,
-      message_id     TEXT NOT NULL REFERENCES outbound_messages(id) ON DELETE CASCADE,
-      attempt_number INTEGER NOT NULL,
-      status         TEXT NOT NULL
-        CHECK (status IN ('queued','sending','delivered','failed','retrying')),
-      error          TEXT,
-      duration_ms    INTEGER NOT NULL,
-      created_at     TEXT NOT NULL
-    );
-
-    CREATE INDEX IF NOT EXISTS idx_delivery_msg
-      ON delivery_attempts(message_id);
-
-    CREATE TABLE IF NOT EXISTS channel_configs (
-      type         TEXT PRIMARY KEY
-        CHECK (type IN ('teams')),
-      access_token TEXT NOT NULL,
-      verify_token TEXT NOT NULL,
-      app_secret   TEXT NOT NULL,
-      platform_id  TEXT NOT NULL,
-      created_at   TEXT NOT NULL,
-      updated_at   TEXT NOT NULL
-    );
-  `)
-}
-
 // ── Conversation Store ───────────────────────────────────────────
 
 export class SqliteConversationStore implements ConversationStore {
@@ -99,8 +28,8 @@ export class SqliteConversationStore implements ConversationStore {
     getDb()
       .prepare(
         `
-      INSERT OR REPLACE INTO conversations (id, channel_type, sender_id, sender_name, active_run_id, created_at, updated_at)
-      VALUES (@id, @channel_type, @sender_id, @sender_name, @active_run_id, @created_at, @updated_at)
+      INSERT OR REPLACE INTO conversations (id, channel_type, sender_id, sender_name, active_run_id, thread_id, created_at, updated_at)
+      VALUES (@id, @channel_type, @sender_id, @sender_name, @active_run_id, @thread_id, @created_at, @updated_at)
     `
       )
       .run({
@@ -109,9 +38,16 @@ export class SqliteConversationStore implements ConversationStore {
         sender_id: conv.senderId,
         sender_name: conv.senderName,
         active_run_id: conv.activeRunId,
+        thread_id: conv.threadId,
         created_at: conv.createdAt.toISOString(),
         updated_at: conv.updatedAt.toISOString()
       })
+  }
+
+  updateThreadId(id: string, threadId: string): void {
+    getDb()
+      .prepare("UPDATE conversations SET thread_id = ?, updated_at = ? WHERE id = ?")
+      .run(threadId, new Date().toISOString(), id)
   }
 
   updateActiveRun(id: string, runId: string | null): void {
@@ -331,6 +267,7 @@ interface DbConversation {
   sender_id: string
   sender_name: string | null
   active_run_id: string | null
+  thread_id: string | null
   created_at: string
   updated_at: string
 }
@@ -342,6 +279,7 @@ function toConversation(row: DbConversation): Conversation {
     senderId: row.sender_id,
     senderName: row.sender_name,
     activeRunId: row.active_run_id,
+    threadId: row.thread_id ?? null,
     createdAt: new Date(row.created_at),
     updatedAt: new Date(row.updated_at)
   }

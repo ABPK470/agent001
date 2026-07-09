@@ -1,17 +1,17 @@
 /**
  * MERGE / DELETE primitives for the sync orchestrator.
  *
- * Each function operates within an open `Transaction` opened by the
- * caller (the execute pipeline). Source rows are read via direct
- * connection pools — no linked-server dependency.
+ * Rows to apply come exclusively from `SyncPlanTable.changeSet` produced at preview.
  *
  * @module
  */
 
 import { type Transaction } from "mssql"
-import { getPool, type SyncRuntimeHost } from "../../../ports/index.js"
+import { buildBatchWhere } from "../../../domain/diff-engine/sql-helpers.js"
+import type { SyncRuntimeHost } from "../../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
+import { deleteRows, changeRowsAsPkHash, upsertRows } from "./plan-table.js"
 import { qtable, sqlLiteral, trackedQuery } from "./db-helpers.js"
 
 /**
@@ -20,7 +20,38 @@ import { qtable, sqlLiteral, trackedQuery } from "./db-helpers.js"
  * set explicitly (validFrom = GETUTCDATE(), validTo = NULL) rather than
  * blindly copied from the source environment.
  */
-const SYNC_META_COLUMNS = new Set(["validFrom", "validTo", "isLocked", "syncDate", "deployDate"])
+const SYNC_META_COLUMNS = new Set(["validFrom", "validTo", "isLocked", "sync-date", "deploy-date"])
+
+const CHANGE_SET_FETCH_BATCH = 200
+
+async function fetchSourceRowsForUpsert(
+  host: SyncRuntimeHost,
+  plan: SyncPlan,
+  tableName: string,
+  tableResult: SyncPlanTable,
+  pkColumns: string[],
+  telemetryContext?: SyncTelemetryContext
+): Promise<Record<string, unknown>[]> {
+  const upsertKeys = upsertRows(tableResult)
+  if (upsertKeys.length === 0) return []
+
+  const pkRows = changeRowsAsPkHash(upsertKeys)
+  const rows: Record<string, unknown>[] = []
+
+  for (let i = 0; i < pkRows.length; i += CHANGE_SET_FETCH_BATCH) {
+    const batch = pkRows.slice(i, i + CHANGE_SET_FETCH_BATCH)
+    const where = buildBatchWhere(batch, pkColumns)
+    const batchResult = await trackedQuery(
+      host,
+      plan.source,
+      `SELECT * FROM ${qtable(tableName)} WHERE ${where}`,
+      `applyInsertsUpdates.readChangeSet(${tableName})`,
+      telemetryContext
+    )
+    rows.push(...(batchResult.recordset as Record<string, unknown>[]))
+  }
+  return rows
+}
 
 /**
  * Discover PK columns for the supplied target tables (one query per table).
@@ -35,14 +66,13 @@ export async function fetchPkColumns(
 ): Promise<Map<string, string[]>> {
   const result = new Map<string, string[]>()
   if (tables.length === 0) return result
-  const { pool } = await getPool(host, connection)
   for (const qn of tables) {
     const [schema, name] = qn.split(".")
     if (!schema || !name) continue
     try {
       const r = await trackedQuery(
         host,
-        pool.request(),
+        connection,
         `
         SELECT c.name
         FROM sys.indexes i
@@ -53,7 +83,6 @@ export async function fetchPkColumns(
         ORDER BY ic.key_ordinal
       `,
         `fetchPkColumns(${qn})`,
-        connection,
         telemetryContext
       )
       result.set(
@@ -89,26 +118,22 @@ export async function applyInsertsUpdates(
 ): Promise<number> {
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
-  const predicate = tableResult.scopePredicate
   if (pkColumns.length === 0) throw new Error(`No PK for ${tableName} — cannot MERGE.`)
 
-  // 1. Read source rows via source pool (direct connection, no linked server).
-  const { pool: srcPool } = await getPool(host, plan.source)
-  const srcResult = await trackedQuery(
+  const rows = await fetchSourceRowsForUpsert(
     host,
-    srcPool.request(),
-    `SELECT * FROM ${qtable(tableName)} WHERE ${predicate}`,
-    `applyInsertsUpdates.read(${tableName})`,
-    plan.source,
+    plan,
+    tableName,
+    tableResult,
+    pkColumns,
     telemetryContext
   )
-  const rows = srcResult.recordset as Record<string, unknown>[]
   if (rows.length === 0) return 0
 
   // 2. Discover columns from target metadata (not source row keys — schemas may diverge).
   const colResult = await trackedQuery(
     host,
-    tx.request(),
+    plan.target,
     `
     SELECT c.name, c.is_identity, c.is_computed
     FROM sys.columns c
@@ -116,8 +141,8 @@ export async function applyInsertsUpdates(
     ORDER BY c.column_id
   `,
     `applyInsertsUpdates.cols(${tableName})`,
-    plan.target,
-    telemetryContext
+    telemetryContext,
+    tx.request()
   )
   const targetCols = colResult.recordset as Array<{
     name: string
@@ -169,7 +194,9 @@ export async function applyInsertsUpdates(
   const updateParts: string[] = updateCols.map((c) => `T.[${c}] = S.[${c}]`)
   if (hasValidFrom) updateParts.push("T.[validFrom] = GETUTCDATE()")
   if (hasValidTo) updateParts.push("T.[validTo] = NULL")
-  const updateSet = updateParts.length > 0 ? `WHEN MATCHED THEN UPDATE SET ${updateParts.join(", ")}` : ""
+  const allowUpdate = tableResult.changeSet.update.length > 0
+  const updateSet =
+    allowUpdate && updateParts.length > 0 ? `WHEN MATCHED THEN UPDATE SET ${updateParts.join(", ")}` : ""
 
   // Build MERGE INSERT — data cols + SCD2 meta
   const insertTargetCols = [...tempCols]
@@ -201,11 +228,11 @@ export async function applyInsertsUpdates(
 
   const result = await trackedQuery(
     host,
-    tx.request(),
+    plan.target,
     fullSql,
     `applyInsertsUpdates.merge(${tableName})`,
-    plan.target,
-    telemetryContext
+    telemetryContext,
+    tx.request()
   )
   // rowsAffected: last meaningful entry is the MERGE itself
   const raIdx = result.rowsAffected.length - 2
@@ -213,8 +240,7 @@ export async function applyInsertsUpdates(
 }
 
 /**
- * Apply deletes: rows on target within scope that no longer exist on source.
- * Uses direct source pool — no linked server needed.
+ * Apply deletes from changeSet — target rows absent on source.
  */
 export async function applyDeletes(
   host: SyncRuntimeHost,
@@ -226,60 +252,44 @@ export async function applyDeletes(
 ): Promise<number> {
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
-  const predicate = tableResult.scopePredicate
   if (pkColumns.length === 0) throw new Error(`No PK for ${tableName} — cannot delete.`)
 
-  // 1. Read source PKs.
-  const { pool: srcPool } = await getPool(host, plan.source)
-  const pkSelect = pkColumns.map((c) => `[${c}]`).join(", ")
-  const srcResult = await trackedQuery(
-    host,
-    srcPool.request(),
-    `SELECT ${pkSelect} FROM ${qtable(tableName)} WHERE ${predicate}`,
-    `applyDeletes.read(${tableName})`,
-    plan.source,
-    telemetryContext
-  )
-  const srcRows = srcResult.recordset as Record<string, unknown>[]
+  const deleteKeys = deleteRows(tableResult)
+  if (deleteKeys.length === 0) return 0
 
-  // 2. Build full SQL batch: create temp → insert PKs → delete → drop
+  const pkRows = changeRowsAsPkHash(deleteKeys)
+  const pkOn = pkColumns.map((c) => `T.[${c}] = S.[${c}]`).join(" AND ")
+
   const BATCH = 500
   const batches: string[] = []
-  for (let i = 0; i < srcRows.length; i += BATCH) {
-    const batch = srcRows.slice(i, i + BATCH)
+  for (let i = 0; i < pkRows.length; i += BATCH) {
+    const batch = pkRows.slice(i, i + BATCH)
     const valuesList = batch
       .map((row) => {
-        const vals = pkColumns.map((c) => sqlLiteral(row[c]))
+        const vals = pkColumns.map((c) => sqlLiteral(row.pkValues[c]))
         return `(${vals.join(", ")})`
       })
       .join(",\n")
-    batches.push(`INSERT INTO #syncSrcPk (${pkColumns.map((c) => `[${c}]`).join(", ")}) VALUES ${valuesList}`)
+    batches.push(`INSERT INTO #syncDelPk (${pkColumns.map((c) => `[${c}]`).join(", ")}) VALUES ${valuesList}`)
   }
 
-  const pkOn = pkColumns.map((c) => `T.[${c}] = S.[${c}]`).join(" AND ")
-  // Self-join trick strips IDENTITY property so we can INSERT explicit PK values.
-  const tempCreate = `SELECT TOP 0 ${pkColumns.map((c) => `a.[${c}]`).join(", ")} INTO #syncSrcPk FROM ${qtable(tableName)} a LEFT JOIN ${qtable(tableName)} b ON 1 = 0`
-  // Use CTE to scope the DELETE to rows matching the predicate — avoids fragile
-  // regex column-aliasing that breaks on subquery predicates.
+  const tempCreate = `SELECT TOP 0 ${pkColumns.map((c) => `a.[${c}]`).join(", ")} INTO #syncDelPk FROM ${qtable(tableName)} a LEFT JOIN ${qtable(tableName)} b ON 1 = 0`
   const fullSql = [
     tempCreate,
     ...batches,
-    `;WITH Scoped AS (SELECT ${pkSelect} FROM ${qtable(tableName)} WHERE ${predicate})
-     DELETE T FROM Scoped T
-     LEFT JOIN #syncSrcPk S ON ${pkOn}
-     WHERE S.[${pkColumns[0]}] IS NULL`,
-    `DROP TABLE #syncSrcPk`
+    `DELETE T FROM ${qtable(tableName)} T
+     INNER JOIN #syncDelPk S ON ${pkOn}`,
+    `DROP TABLE #syncDelPk`
   ].join(";\n")
 
   const result = await trackedQuery(
     host,
-    tx.request(),
-    fullSql,
-    `applyDeletes.exec(${tableName})`,
     plan.target,
-    telemetryContext
+    fullSql,
+    `applyDeletes.execChangeSet(${tableName})`,
+    telemetryContext,
+    tx.request()
   )
-  // The DELETE is the second-to-last statement (before DROP)
   const raIdx = result.rowsAffected.length - 2
   return (result.rowsAffected[raIdx] as number | undefined) ?? 0
 }

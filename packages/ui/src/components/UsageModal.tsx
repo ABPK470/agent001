@@ -1,14 +1,13 @@
 /**
  * UsageModal — token consumption tracking modal.
- *
- * Shows cumulative token usage, per-run breakdown, and model info.
- * Copilot Chat (Device Flow) is the default backend on intranet
- * deployments — it has no per-token cost but rate limits apply.
  */
 
-import { Activity, Hash, MessageSquare, X, Zap } from "lucide-react"
+import { Activity, Hash, MessageSquare, Zap } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
+import { useIsMobile } from "../hooks/useIsMobile"
+import { ModalShell } from "../widgets/entity-registry/ModalShell"
+import { modalViewerPanelClass } from "../widgets/entity-registry/modal-overlay"
 
 interface UsageData {
   totals: {
@@ -36,6 +35,7 @@ function formatNumber(n: number): string {
 }
 
 export function UsageModal({ onClose }: { onClose: () => void }) {
+  const isMobile = useIsMobile()
   const [data, setData] = useState<UsageData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -44,88 +44,70 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
   }, [])
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-2 sm:p-4"
-      onClick={onClose}
+    <ModalShell
+      title="Token Usage"
+      subtitle="Token consumption across all agent runs. Included with GitHub Copilot Pro — no per-token cost."
+      icon={<Activity size={20} className="text-text-muted" />}
+      onClose={onClose}
+      widthClass={modalViewerPanelClass(isMobile)}
     >
-      <div
-        className="bg-surface rounded-xl sm:rounded-2xl w-full max-w-[720px] h-full sm:h-auto sm:max-h-[85vh] flex flex-col shadow-2xl"
-        onClick={(e) => e.stopPropagation()}
-      >
-        {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-subtle shrink-0">
-          <div className="flex items-center gap-2.5">
-            <Activity size={20} className="text-text-muted" />
-            <h2 className="text-lg font-semibold text-text">Token Usage</h2>
-          </div>
-          <button
-            className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-overlay-3 transition-colors"
-            onClick={onClose}
-          >
-            <X size={18} />
-          </button>
+      {loading ? (
+        <div className="flex flex-1 items-center justify-center py-12 text-sm text-text-muted">
+          Loading…
         </div>
+      ) : !data ? (
+        <div className="flex flex-1 items-center justify-center py-12 text-sm text-text-muted">
+          Failed to load usage data.
+        </div>
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          <div className="grid shrink-0 grid-cols-2 gap-3 px-6 pb-4 pt-2 sm:grid-cols-4">
+            <StatCard icon={<Zap size={15} />} label="Total Tokens" value={formatNumber(data.totals.totalTokens)} />
+            <StatCard icon={<MessageSquare size={15} />} label="Prompt" value={formatNumber(data.totals.promptTokens)} />
+            <StatCard icon={<MessageSquare size={15} />} label="Completion" value={formatNumber(data.totals.completionTokens)} />
+            <StatCard icon={<Hash size={15} />} label="LLM Calls" value={formatNumber(data.totals.llmCalls)} />
+          </div>
 
-        <p className="px-6 pt-4 text-sm text-text-muted leading-relaxed">
-          Token consumption across all agent runs. Included with GitHub Copilot Pro — no per-token cost.
-        </p>
-
-        {loading ? (
-          <div className="text-text-muted text-sm text-center py-8">Loading...</div>
-        ) : !data ? (
-          <div className="text-text-muted text-sm text-center py-8">Failed to load usage data.</div>
-        ) : (
-          <>
-            {/* Stat cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 px-6 pt-4 mb-5">
-              <StatCard icon={<Zap size={15} />} label="Total Tokens" value={formatNumber(data.totals.totalTokens)} />
-              <StatCard icon={<MessageSquare size={15} />} label="Prompt" value={formatNumber(data.totals.promptTokens)} />
-              <StatCard icon={<MessageSquare size={15} />} label="Completion" value={formatNumber(data.totals.completionTokens)} />
-              <StatCard icon={<Hash size={15} />} label="LLM Calls" value={formatNumber(data.totals.llmCalls)} />
+          <div className="min-h-0 flex-1 overflow-y-auto px-6 pb-5 show-scrollbar">
+            <div className="mb-3 text-sm font-medium text-text-secondary">
+              Per-run breakdown ({data.totals.runCount} runs)
             </div>
-
-            {/* Per-run breakdown */}
-            <div className="flex-1 overflow-y-auto px-6 pb-5 min-h-0">
-              <div className="text-sm text-text-secondary mb-3 font-medium">
-                Per-run breakdown ({data.totals.runCount} runs)
+            {data.runs.length === 0 ? (
+              <div className="py-6 text-center text-sm text-text-muted">
+                No usage data yet. Start an agent run to track tokens.
               </div>
-              {data.runs.length === 0 ? (
-                <div className="text-text-muted text-sm text-center py-6">
-                  No usage data yet. Start an agent run to track tokens.
-                </div>
-              ) : (
-                <div className="space-y-1.5">
-                  {data.runs.map((run) => (
-                    <div
-                      key={run.runId}
-                      className="flex items-center gap-3 px-4 py-2.5 rounded-xl bg-overlay-2 text-[13px]"
-                    >
-                      <span className="text-text-muted font-mono text-[12px] w-[6rem] shrink-0">
-                        {new Date(run.createdAt).toLocaleString(undefined, {
-                          month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
-                        })}
-                      </span>
-                      <span className="text-text-muted font-mono text-[12px] shrink-0">
-                        {run.model}
-                      </span>
-                      <div className="flex-1" />
-                      <span className="text-text font-medium tabular-nums">{formatNumber(run.totalTokens)} tok</span>
-                      <span className="text-text-muted tabular-nums text-[12px]">{run.llmCalls} calls</span>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </div>
-          </>
-        )}
-      </div>
-    </div>
+            ) : (
+              <div className="space-y-1.5">
+                {data.runs.map((run) => (
+                  <div
+                    key={run.runId}
+                    className="flex items-center gap-3 rounded-xl bg-overlay-2 px-4 py-2.5 text-[13px]"
+                  >
+                    <span className="w-[6rem] shrink-0 font-mono text-[12px] text-text-muted">
+                      {new Date(run.createdAt).toLocaleString(undefined, {
+                        month: "short", day: "numeric", hour: "2-digit", minute: "2-digit",
+                      })}
+                    </span>
+                    <span className="shrink-0 font-mono text-[12px] text-text-muted">
+                      {run.model}
+                    </span>
+                    <div className="flex-1" />
+                    <span className="font-medium tabular-nums text-text">{formatNumber(run.totalTokens)} tok</span>
+                    <span className="tabular-nums text-[12px] text-text-muted">{run.llmCalls} calls</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </ModalShell>
   )
 }
 
 function StatCard({ icon, label, value, accent }: { icon: React.ReactNode; label: string; value: string; accent?: boolean }) {
   return (
-    <div className={`rounded-xl px-4 py-3 flex flex-col gap-1.5 ${accent ? "bg-accent/10 border border-accent/15" : "bg-overlay-2 border border-border-subtle"}`}>
+    <div className={`flex flex-col gap-1.5 rounded-xl px-4 py-3 ${accent ? "border border-accent/15 bg-accent/10" : "border border-border-subtle bg-overlay-2"}`}>
       <div className={`flex items-center gap-1.5 text-[12px] font-medium ${accent ? "text-accent" : "text-text-muted"}`}>
         {icon}
         {label}

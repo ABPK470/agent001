@@ -4,13 +4,17 @@ import type { SyncRuntimeHost } from "../ports/host.js"
 import { createPublishedSyncDefinitionRegistry } from "./published-definition-registry.js"
 
 const queryMock = vi.fn()
+const capturedSql: string[] = []
 
 vi.mock("../ports/index.js", () => ({
   getPool: vi.fn(async (_host: unknown, connection: string) => ({
     pool: {
       request() {
         return {
-          query: async (_sql: string) => ({ recordset: queryMock(connection) })
+          query: async (sql: string) => {
+            capturedSql.push(sql)
+            return { recordset: queryMock(connection) }
+          }
         }
       }
     }
@@ -74,5 +78,23 @@ describe("detectCatalogDrift", () => {
       catalogCompatible: true,
       issues: []
     })
+  })
+
+  it("queries only restrictTables instead of whole schemas when a recipe is provided", async () => {
+    capturedSql.length = 0
+    queryMock.mockReturnValue([
+      {
+        TABLE_SCHEMA: "core",
+        TABLE_NAME: "Contract",
+        COLUMN_NAME: "contractId",
+        DATA_TYPE: "int",
+        CHARACTER_MAXIMUM_LENGTH: null
+      }
+    ])
+
+    await detectCatalogDrift(createHost(), "source", "target", ["core.Contract"], ["core"])
+
+    expect(capturedSql.some((sql) => sql.includes("LOWER(TABLE_SCHEMA + '.' + TABLE_NAME) IN"))).toBe(true)
+    expect(capturedSql.some((sql) => sql.includes("TABLE_SCHEMA IN"))).toBe(false)
   })
 })

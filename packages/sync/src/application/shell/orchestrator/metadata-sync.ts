@@ -1,12 +1,8 @@
 /**
  * `runMetadataSync` — the in-transaction core of `executeSync`.
  *
- * Toggles FK constraints on affected tables only, runs MERGE for
- * inserts/updates parents → children, then DELETE for children → parents,
- * re-enables FKs, and commits the transaction. Returns applied row totals.
- *
- * Lives inside the transaction supplied by the caller; the caller is
- * responsible for opening it (so failure-path cleanup can rollback).
+ * Toggles FK constraints on `constraintRelaxationTables`, applies changeSet
+ * upserts/deletes via `apply.ts`, re-enables FKs, and commits.
  *
  * @module
  */
@@ -16,9 +12,12 @@ import { EventType, SyncProgressKind, type SyncRuntimeHost } from "../../../port
 import { emitSyncEvent as emit, type SyncTelemetryContext } from "../events.js"
 import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { applyDeletes, applyInsertsUpdates } from "./apply.js"
+import { movementFromChangeSet } from "./plan-table.js"
 import { maybeArchive } from "./archive.js"
 import { qtable, trackedQuery } from "./db-helpers.js"
+import { constraintRelaxationTables, dataMovementTables } from "./metadata-scope.js"
 import { SyncExecuteError, toSyncExecuteError, type ExecuteProgress } from "./types.js"
+import { deleteRows, upsertRows } from "./plan-table.js"
 
 export interface RunMetadataSyncInput {
   host: SyncRuntimeHost
@@ -32,6 +31,9 @@ export interface RunMetadataSyncInput {
   telemetryContext?: SyncTelemetryContext
 }
 
+/** Re-enable constraints without validating existing rows (legacy uspSyncObjectTran parity). */
+const ENABLE_CONSTRAINTS_SQL = (table: string) => `ALTER TABLE ${qtable(table)} CHECK CONSTRAINT ALL`
+
 export async function runMetadataSync(
   input: RunMetadataSyncInput
 ): Promise<{ applied: { insert: number; update: number; delete: number } }> {
@@ -39,23 +41,14 @@ export async function runMetadataSync(
   const host = input.host
 
   const appliedTotals = { insert: 0, update: 0, delete: 0 }
-  const allTables = plan.recipeSnapshot.executionOrder
+  const allTables = plan.executionContract.metadata.executionOrder
+  const constraintTables = constraintRelaxationTables(plan)
+  const movementTables = dataMovementTables(plan)
   const tx = new sqlMod.Transaction(tgtPool)
-
-  // Build the set of tables that actually have changes — only these need
-  // FK constraint toggling. Avoids expensive WITH CHECK CHECK CONSTRAINT
-  // re-validation scans on untouched tables (which can dominate execution
-  // time for small syncs).
-  const affectedTables = new Set<string>()
-  for (const t of plan.tables) {
-    if (t.counts.insert + t.counts.update + t.counts.delete > 0) {
-      affectedTables.add(t.table)
-    }
-  }
 
   const fail = (error: unknown, context: { table?: string; op?: string }) => {
     const failure = toSyncExecuteError(error, {
-      step: "metadata-sync",
+      step: "metadataSync",
       table: context.table,
       op: context.op
     })
@@ -80,29 +73,26 @@ export async function runMetadataSync(
   try {
     await tx.begin()
 
-    // Disable FK constraints only on tables with changes
     for (const t of allTables) {
-      if (!affectedTables.has(t)) continue
+      if (!constraintTables.has(t)) continue
       try {
         await trackedQuery(
           host,
-          tx.request(),
+          target,
           `ALTER TABLE ${qtable(t)} NOCHECK CONSTRAINT ALL`,
           `nocheck-constraint(${t})`,
-          target,
-          telemetryContext
+          telemetryContext,
+          tx.request()
         )
       } catch (error) {
         throw fail(error, { table: t, op: "nocheck-constraint" })
       }
     }
 
-    // Inserts + Updates: parents → children
-    for (const tableName of plan.recipeSnapshot.executionOrder) {
+    for (const tableName of plan.executionContract.metadata.executionOrder) {
       const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
-      if (!tableResult) continue
-      if (tableResult.counts.insert + tableResult.counts.update === 0) continue
-      const rowsTotal = tableResult.counts.insert + tableResult.counts.update
+      if (!tableResult || !movementTables.has(tableName)) continue
+      const rowsTotal = upsertRows(tableResult).length
       onProgress({ type: SyncProgressKind.TableStarted, table: tableName, rowsTotal })
       emit(host, EventType.SyncExecuteTableStart, { planId, table: tableName, op: "upsert", rowsTotal })
       try {
@@ -115,7 +105,14 @@ export async function runMetadataSync(
           pkByTable.get(tableName) ?? [],
           telemetryContext
         )
-        appliedTotals.update += applied
+        const movement = movementFromChangeSet(tableResult.changeSet)
+        appliedTotals.insert += movement.insert
+        appliedTotals.update += movement.update
+        if (applied !== movement.insert + movement.update) {
+          console.warn(
+            `[sync.metadata] ${tableName}: MERGE rowsAffected (${applied}) ≠ changeSet movement (${movement.insert + movement.update})`
+          )
+        }
         onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
         emit(host, EventType.SyncExecuteTableDone, {
           planId,
@@ -128,20 +125,21 @@ export async function runMetadataSync(
       }
     }
 
-    // Deletes: children → parents
-    for (const tableName of plan.recipeSnapshot.reverseOrder) {
+    for (const tableName of plan.executionContract.metadata.reverseOrder) {
       const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
-      if (!tableResult || tableResult.counts.delete === 0) continue
+      if (!tableResult) continue
+      const toDelete = deleteRows(tableResult)
+      if (toDelete.length === 0) continue
       onProgress({
         type: SyncProgressKind.TableStarted,
         table: tableName,
-        rowsTotal: tableResult.counts.delete
+        rowsTotal: toDelete.length
       })
       emit(host, EventType.SyncExecuteTableStart, {
         planId,
         table: tableName,
         op: "delete",
-        rowsTotal: tableResult.counts.delete
+        rowsTotal: toDelete.length
       })
       try {
         const applied = await applyDeletes(
@@ -165,17 +163,16 @@ export async function runMetadataSync(
       }
     }
 
-    // Re-enable FK constraints only on tables we disabled them on
     for (const t of allTables) {
-      if (!affectedTables.has(t)) continue
+      if (!constraintTables.has(t)) continue
       try {
         await trackedQuery(
           host,
-          tx.request(),
-          `ALTER TABLE ${qtable(t)} WITH CHECK CHECK CONSTRAINT ALL`,
-          `check-constraint(${t})`,
           target,
-          telemetryContext
+          ENABLE_CONSTRAINTS_SQL(t),
+          `check-constraint(${t})`,
+          telemetryContext,
+          tx.request()
         )
       } catch (error) {
         throw fail(error, { table: t, op: "check-constraint" })
@@ -189,10 +186,10 @@ export async function runMetadataSync(
     }
     return { applied: appliedTotals }
   } catch (e) {
-    // Re-enable FK constraints even on failure — best-effort
     for (const t of allTables) {
+      if (!constraintTables.has(t)) continue
       try {
-        await tx.request().query(`ALTER TABLE ${qtable(t)} WITH CHECK CHECK CONSTRAINT ALL`)
+        await tx.request().query(ENABLE_CONSTRAINTS_SQL(t))
       } catch {
         /* tx may already be aborted */
       }

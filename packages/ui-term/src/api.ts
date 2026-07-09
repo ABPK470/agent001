@@ -33,11 +33,18 @@ export const api = {
   // runs
   listRuns:     () => json<Run[]>("/api/runs"),
   getRun:       (id: string) => json<RunDetail>(`/api/runs/${id}`),
-  startRun:     (goal: string, agentId?: string, attachmentIds?: string[]) =>
+  listThreads:  () => json<Array<{ id: string; title: string }>>("/api/threads"),
+  createThread: (title?: string) =>
+    json<{ id: string }>("/api/threads", {
+      method: "POST",
+      body: JSON.stringify(title ? { title } : {}),
+    }),
+  startRun:     (goal: string, agentId: string | undefined, attachmentIds: string[] | undefined, threadId: string) =>
     json<{ runId: string; attachmentIds?: string[] }>("/api/runs", {
       method: "POST",
       body: JSON.stringify({
         goal,
+        threadId,
         ...(agentId ? { agentId } : {}),
         ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
       }),
@@ -97,7 +104,7 @@ export const api = {
         name:          file.name,
         mediaType:     file.type || "application/octet-stream",
         contentBase64,
-        scope:         "session",
+        scope:         "user_draft",
       }),
     })
   },
@@ -108,7 +115,7 @@ export const api = {
 
 export interface UploadedAttachment {
   id:             string
-  scope:          "run" | "session" | "workspace_asset"
+  scope:          "run" | "user_draft" | "workspace_asset"
   originalName:   string
   normalizedName: string
   mediaType:      string

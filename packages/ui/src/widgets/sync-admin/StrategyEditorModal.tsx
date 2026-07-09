@@ -1,55 +1,83 @@
 /**
- * StrategyEditorModal — fork-or-edit modal for SCD2 strategies.
- *
- * Two surfaces, like the entity modal:
- *   Form: just the fields a human actually authors — id, display name,
- *         description, and the only two columns the runtime currently
- *         reads (`validFromCol`, `validToCol`).
- *   YAML: the full strategy document for power users / advanced tuning
- *         of the reference-metadata fields.
- *
- * Both paths post via `saveEntityRegistryStrategy`. Forking a bundled
- * strategy auto-prefixes the id with `custom-` so the original stays
- * pristine. A reason is required for the audit trail.
+ * StrategyEditorModal — create, fork, or version a tenant SCD2 strategy.
  */
 
 import { FileCode2, FormInput, Loader2, Save } from "lucide-react"
 import type { JSX } from "react"
 import { useMemo, useState } from "react"
 import { api } from "../../api"
+import { Listbox, type ListboxOption } from "../../components/Listbox"
 import type { EntityRegistryStrategy } from "../../types"
-import { ModalShell } from "../entity-registry/ModalShell"
+import {
+  Err,
+  ModalBtnPrimary,
+  ModalBtnSecondary,
+  ModalShell,
+} from "./chrome"
+import { TAB_PILL } from "./design"
+import {
+  AdminModalCanvas,
+  AdminModalIntro,
+  AdminModalRoot,
+  FormFieldGroup,
+  FormSectionCard,
+} from "./modal-layout"
+import {
+  forkOfBundled,
+  formatColList,
+  IDENTITY_OPTIONS,
+  strategyFromForm,
+} from "./strategy-helpers"
 
 const ID_RE = /^[a-z][a-z0-9_-]{0,63}$/
 
-export function StrategyEditorModal({ seed, onClose, onSaved }: {
+type EditorMode = "create" | "fork" | "edit"
+
+export function StrategyEditorModal({ seed, mode, onClose, onSaved }: {
   seed: EntityRegistryStrategy
+  mode: EditorMode
   onClose: () => void
   onSaved: () => void
 }): JSX.Element {
-  const bundled = seed.provenance.kind === "bundled"
-  const initial = useMemo<EntityRegistryStrategy>(() => (bundled ? forkOf(seed) : seed), [seed, bundled])
+  const initial = useMemo<EntityRegistryStrategy>(() => {
+    if (mode === "fork") return forkOfBundled(seed)
+    if (mode === "create") return seed
+    return seed
+  }, [seed, mode])
 
-  const [tab,           setTab]           = useState<"form" | "yaml">("form")
-  const [id,            setId]            = useState(initial.id)
-  const [displayName,   setDisplayName]   = useState(initial.displayName)
-  const [description,   setDescription]   = useState(initial.description)
-  const [validFromCol,  setValidFromCol]  = useState(initial.validFromCol ?? "")
-  const [validToCol,    setValidToCol]    = useState(initial.validToCol ?? "")
-  const [body,          setBody]          = useState(() => JSON.stringify(initial, null, 2))
-  const [reason,        setReason]        = useState("")
-  const [busy,          setBusy]          = useState(false)
-  const [err,           setErr]           = useState<string | null>(null)
+  const [tab, setTab] = useState<"form" | "json">("form")
+  const [id, setId] = useState(initial.id)
+  const [displayName, setDisplayName] = useState(initial.displayName)
+  const [description, setDescription] = useState(initial.description)
+  const [validFromCol, setValidFromCol] = useState(initial.validFromCol ?? "")
+  const [validToCol, setValidToCol] = useState(initial.validToCol ?? "")
+  const [isLockedCol, setIsLockedCol] = useState(initial.isLockedCol ?? "")
+  const [syncDateCol, setSyncDateCol] = useState(initial.syncDateCol ?? "")
+  const [deployDateCol, setDeployDateCol] = useState(initial.deployDateCol ?? "")
+  const [identityHandling, setIdentityHandling] = useState(initial.identityHandling)
+  const [excludedFromDiffCols, setExcludedFromDiffCols] = useState(formatColList(initial.excludedFromDiffCols))
+  const [onInsertJson, setOnInsertJson] = useState(() => JSON.stringify(initial.onInsert, null, 2))
+  const [onUpdateJson, setOnUpdateJson] = useState(() => JSON.stringify(initial.onUpdate, null, 2))
+  const [body, setBody] = useState(() => JSON.stringify(initial, null, 2))
+  const [reason, setReason] = useState("")
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState<string | null>(null)
+
+  const idLocked = mode === "edit"
+  const title =
+    mode === "fork" ? `Fork ${seed.id} → custom`
+    : mode === "create" ? "New custom strategy"
+    : `Edit ${seed.id}`
 
   const missing: string | null = (() => {
-    if (tab === "yaml") {
-      if (!body.trim())    return "Body is empty"
-      if (!reason.trim())  return "Add a reason"
+    if (tab === "json") {
+      if (!body.trim()) return "Document body is empty"
+      if (!reason.trim()) return "Add a reason"
       return null
     }
-    if (!ID_RE.test(id))    return "Pick a valid id (kebab-case)"
-    if (!displayName.trim())return "Add a display name"
-    if (!reason.trim())     return "Add a reason"
+    if (!ID_RE.test(id)) return "Pick a valid id (kebab-case, starts with a letter)"
+    if (!displayName.trim()) return "Add a display name"
+    if (!reason.trim()) return "Add a reason"
     return null
   })()
 
@@ -57,139 +85,177 @@ export function StrategyEditorModal({ seed, onClose, onSaved }: {
     setErr(null)
     if (missing) return setErr(missing)
     let payload: EntityRegistryStrategy
-    if (tab === "yaml") {
+    if (tab === "json") {
       try { payload = JSON.parse(body) as EntityRegistryStrategy }
       catch (e) { return setErr(`Parse error: ${(e as Error).message}`) }
     } else {
-      payload = {
-        ...initial,
-        id, displayName, description,
-        validFromCol, validToCol,
+      try {
+        payload = strategyFromForm({
+          initial,
+          id,
+          displayName,
+          description,
+          validFromCol,
+          validToCol,
+          isLockedCol,
+          syncDateCol,
+          deployDateCol,
+          identityHandling,
+          excludedFromDiffCols,
+          onInsertJson,
+          onUpdateJson,
+        })
+      } catch (e) {
+        return setErr((e as Error).message)
       }
     }
     setBusy(true)
-    try { await api.saveEntityRegistryStrategy(payload, reason); onSaved() }
-    catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    finally { setBusy(false) }
+    try {
+      await api.saveEntityRegistryStrategy(payload, reason)
+      onSaved()
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
   }
+
+  const identityOptions: ListboxOption<EntityRegistryStrategy["identityHandling"]>[] = IDENTITY_OPTIONS.map((o) => ({
+    value: o.value,
+    label: o.label,
+  }))
 
   return (
     <ModalShell
-      title={bundled ? `Fork ${seed.id} → custom` : `Edit ${seed.id}`}
-      subtitle={bundled ? undefined : `v${seed.version} → v${seed.version + 1}`}
+      title={title}
+      subtitle={mode === "edit" ? `v${seed.version} → v${seed.version + 1}` : undefined}
+      size="focus"
       onClose={onClose}
-      widthClass="max-w-3xl"
       footer={
         <>
-          {err && <span className="text-[11px] text-error">{err}</span>}
-          {missing && !err && !busy && (
-            <span className="text-[11px] text-text-faint">{missing}</span>
-          )}
-          <div className="ml-auto flex items-center gap-2">
-            <button onClick={onClose} disabled={busy}
-              className="rounded border border-border-subtle px-3 py-1.5 text-xs text-text-muted hover:bg-overlay-2 hover:text-text">
-              Cancel
-            </button>
-            <button onClick={() => void save()} disabled={busy || missing !== null}
-              title={missing ?? undefined}
-              className="flex items-center gap-1 rounded bg-accent px-3 py-1.5 text-xs text-text-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40">
-              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <Save className="h-3 w-3" />}
-              {bundled ? "Create custom" : "Save new version"}
-            </button>
+          <ModalBtnSecondary onClick={onClose} disabled={busy}>Cancel</ModalBtnSecondary>
+          <div className="ml-auto flex items-center gap-3">
+            {missing && !err && !busy && (
+              <span className="text-sm text-text-muted">{missing}</span>
+            )}
+            <ModalBtnPrimary disabled={busy || missing !== null} onClick={() => void save()}>
+              {busy ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+              {mode === "edit" ? "Save new version" : "Create custom"}
+            </ModalBtnPrimary>
           </div>
         </>
       }
     >
-      <nav className="flex items-center gap-0.5 border-b border-border-subtle bg-panel px-4">
-        <Tab active={tab === "form"} onClick={() => setTab("form")} icon={<FormInput className="h-3 w-3" />}>Form</Tab>
-        <Tab active={tab === "yaml"} onClick={() => setTab("yaml")} icon={<FileCode2 className="h-3 w-3" />}>YAML body</Tab>
-      </nav>
+      <AdminModalRoot>
+        {err && <Err>{err}</Err>}
 
-      {tab === "form" ? (
-        <div className="space-y-4 p-6 text-xs">
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-            <Field label="id">
-              <input value={id} onChange={(e) => setId(e.target.value)}
-                disabled={!bundled} className="input font-mono py-2 text-sm" />
-            </Field>
-            <Field label="Display name">
-              <input value={displayName} onChange={(e) => setDisplayName(e.target.value)}
-                className="input py-2 text-sm" />
-            </Field>
+        <AdminModalIntro>
+          <div className="inline-flex items-center gap-1" role="tablist">
+            <TabPill active={tab === "form"} onClick={() => setTab("form")} icon={<FormInput size={14} />}>Form</TabPill>
+            <TabPill active={tab === "json"} onClick={() => setTab("json")} icon={<FileCode2 size={14} />}>JSON document</TabPill>
           </div>
+        </AdminModalIntro>
 
-          <Field label="Description">
-            <textarea value={description} onChange={(e) => setDescription(e.target.value)}
-              rows={2} className="input font-sans py-2" />
-          </Field>
+        {tab === "form" ? (
+          <AdminModalCanvas>
+            <FormSectionCard title="Strategy identity" emphasized>
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FormFieldGroup label="Id" hint={idLocked ? "Immutable after first save." : "Kebab-case tenant-private id."}>
+                  <input value={id} onChange={(e) => setId(e.target.value)} disabled={idLocked} className="input w-full font-mono text-sm" />
+                </FormFieldGroup>
+                <FormFieldGroup label="Display name">
+                  <input value={displayName} onChange={(e) => setDisplayName(e.target.value)} className="input w-full text-sm" />
+                </FormFieldGroup>
+              </div>
+              <FormFieldGroup label="Description">
+                <textarea value={description} onChange={(e) => setDescription(e.target.value)} rows={2} className="input w-full text-sm" />
+              </FormFieldGroup>
+            </FormSectionCard>
 
-          <div className="rounded-lg border border-border-subtle bg-panel/60 p-4">
-            <h4 className="mb-1 text-[10px] font-semibold uppercase tracking-wider text-text-muted">Runtime columns</h4>
-            <p className="mb-3 text-[11px] text-text-faint">
-              The only strategy fields the sync engine reads today. Leave blank to disable the corresponding stamp.
-            </p>
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="validFromCol">
-                <input value={validFromCol} onChange={(e) => setValidFromCol(e.target.value)} className="input font-mono" />
-              </Field>
-              <Field label="validToCol">
-                <input value={validToCol} onChange={(e) => setValidToCol(e.target.value)} className="input font-mono" />
-              </Field>
-            </div>
-          </div>
+            <FormSectionCard title="Validity columns">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FormFieldGroup label="validFromCol">
+                  <input value={validFromCol} onChange={(e) => setValidFromCol(e.target.value)} className="input w-full font-mono text-sm" />
+                </FormFieldGroup>
+                <FormFieldGroup label="validToCol">
+                  <input value={validToCol} onChange={(e) => setValidToCol(e.target.value)} className="input w-full font-mono text-sm" />
+                </FormFieldGroup>
+              </div>
+            </FormSectionCard>
 
-          <Field label="Reason for change">
-            <input value={reason} onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. tenant fork to add audit columns" className="input" />
-          </Field>
-        </div>
-      ) : (
-        <div className="flex h-full flex-col gap-3 p-6 text-xs">
-          <textarea value={body} onChange={(e) => setBody(e.target.value)} spellCheck={false}
-            className="input flex-1 min-h-[320px] resize-none font-mono text-[11px]" />
-          <Field label="Reason for change">
-            <input value={reason} onChange={(e) => setReason(e.target.value)}
-              placeholder="e.g. extend onUpdate map" className="input" />
-          </Field>
-        </div>
-      )}
+            <FormSectionCard title="Meta columns">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+                <FormFieldGroup label="isLockedCol">
+                  <input value={isLockedCol} onChange={(e) => setIsLockedCol(e.target.value)} className="input w-full font-mono text-sm" />
+                </FormFieldGroup>
+                <FormFieldGroup label="syncDateCol">
+                  <input value={syncDateCol} onChange={(e) => setSyncDateCol(e.target.value)} className="input w-full font-mono text-sm" />
+                </FormFieldGroup>
+                <FormFieldGroup label="deployDateCol">
+                  <input value={deployDateCol} onChange={(e) => setDeployDateCol(e.target.value)} className="input w-full font-mono text-sm" />
+                </FormFieldGroup>
+              </div>
+            </FormSectionCard>
+
+            <FormSectionCard title="Behavior">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <FormFieldGroup label="identityHandling">
+                  <Listbox value={identityHandling} onChange={setIdentityHandling} options={identityOptions} size="sm" className="w-full" ariaLabel="Identity handling" />
+                </FormFieldGroup>
+                <FormFieldGroup label="excludedFromDiffCols" hint="Comma-separated column names.">
+                  <input value={excludedFromDiffCols} onChange={(e) => setExcludedFromDiffCols(e.target.value)} placeholder="validFrom, validTo, isLocked" className="input w-full font-mono text-sm" />
+                </FormFieldGroup>
+              </div>
+            </FormSectionCard>
+
+            <FormSectionCard title="Stamp expressions">
+              <FormFieldGroup label="onInsert">
+                <textarea value={onInsertJson} onChange={(e) => setOnInsertJson(e.target.value)} spellCheck={false} rows={4} className="input w-full resize-y font-mono text-xs" />
+              </FormFieldGroup>
+              <FormFieldGroup label="onUpdate">
+                <textarea value={onUpdateJson} onChange={(e) => setOnUpdateJson(e.target.value)} spellCheck={false} rows={4} className="input w-full resize-y font-mono text-xs" />
+              </FormFieldGroup>
+            </FormSectionCard>
+
+            <FormSectionCard title="Version note">
+              <FormFieldGroup label="Reason" hint="Stored in version history — required before save.">
+                <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. tenant fork with custom audit columns" className="input w-full text-sm" />
+              </FormFieldGroup>
+            </FormSectionCard>
+          </AdminModalCanvas>
+        ) : (
+          <AdminModalCanvas>
+            <FormSectionCard title="JSON document">
+              <textarea value={body} onChange={(e) => setBody(e.target.value)} spellCheck={false} className="input min-h-[360px] w-full resize-y font-mono text-sm" />
+            </FormSectionCard>
+            <FormSectionCard title="Version note">
+              <FormFieldGroup label="Reason" hint="Stored in version history — required before save.">
+                <input value={reason} onChange={(e) => setReason(e.target.value)} placeholder="e.g. extend onUpdate map" className="input w-full text-sm" />
+              </FormFieldGroup>
+            </FormSectionCard>
+          </AdminModalCanvas>
+        )}
+      </AdminModalRoot>
     </ModalShell>
   )
 }
 
-function Tab({ active, onClick, icon, children }: {
+function TabPill({ active, onClick, icon, children }: {
   active: boolean; onClick: () => void; icon: JSX.Element; children: string
 }): JSX.Element {
   return (
-    <button type="button" onClick={onClick}
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
       className={[
-        "flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-medium transition-colors",
-        active ? "border-accent text-text" : "border-transparent text-text-muted hover:text-text",
+        TAB_PILL,
+        "inline-flex items-center gap-1.5",
+        active ? "bg-accent/15 text-accent" : "text-text-muted hover:bg-elevated hover:text-text",
       ].join(" ")}
     >
       {icon} {children}
     </button>
   )
-}
-
-function Field({ label, children }: { label: string; children: JSX.Element }): JSX.Element {
-  return (
-    <label className="flex flex-col gap-1">
-      <span className="text-[10px] uppercase tracking-wider text-text-muted">{label}</span>
-      {children}
-    </label>
-  )
-}
-
-function forkOf(s: EntityRegistryStrategy): EntityRegistryStrategy {
-  return {
-    ...s,
-    id:           s.id.startsWith("custom-") ? s.id : `custom-${s.id}`,
-    displayName:  `${s.displayName} (custom)`,
-    provenance:   { kind: "manual" },
-    version:      1,
-    versionLabel: "fork",
-    createdBy:    "",
-    createdAt:    new Date().toISOString(),
-  }
 }

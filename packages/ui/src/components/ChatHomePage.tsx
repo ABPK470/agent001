@@ -1,14 +1,18 @@
-import { LayoutGrid, LogOut } from "lucide-react"
 import { useEffect, useState } from "react"
+import type { Me } from "../hooks/useMe"
+import { ChatBrand } from "../shell/ChatBrand"
+import { ChatShellActions } from "../shell/ChatShellActions"
+import type { AppShellMode } from "../shell/types"
 import { TermChat } from "../widgets/TermChat"
 import { IntroAsciiField } from "./IntroAsciiField"
-import { MiaWordmark } from "./IntroConversation"
-import { Logo } from "./Logo"
 
 interface Props {
   connected: boolean
-  onOpenPlatform: () => void
-  onLogout: () => void
+  isAdmin?: boolean
+  me?: Me | null
+  onModeChange: (mode: AppShellMode) => void
+  onSignOut: () => void
+  onSwitchUi?: () => void
   revealed?: boolean
   heroStage?: "hidden" | "pill" | "copy"
   heroRevealProgress?: number
@@ -16,8 +20,11 @@ interface Props {
 
 export function ChatHomePage({
   connected,
-  onOpenPlatform,
-  onLogout,
+  isAdmin = false,
+  me,
+  onModeChange,
+  onSignOut,
+  onSwitchUi,
   revealed = true,
   heroStage,
   heroRevealProgress = 1,
@@ -29,55 +36,29 @@ export function ChatHomePage({
   }, [revealed, materialised])
 
   const resolvedHeroStage = heroStage ?? (revealed ? "copy" : "hidden")
-
   const stateClass = `${materialised ? "chathome--revealed" : "chathome--veiled"}${resolvedHeroStage !== "hidden" ? " chathome--hero-ready" : ""}${resolvedHeroStage === "pill" ? " chathome--hero-pill" : ""}${resolvedHeroStage === "copy" ? " chathome--hero-copy-ready" : ""}`
 
   return (
-      <div
-          className={`chathome ${stateClass} relative flex h-screen flex-col overflow-hidden text-text`}
-      >
-          <div className="chathome-frame pointer-events-none absolute inset-0 overflow-hidden">
-              <IntroAsciiField surface="home" />
-          </div>
-
-          <div className="chathome-content relative z-10 flex h-full min-h-0 flex-col">
-              <header className="flex h-11 shrink-0 items-center justify-between px-3 sm:px-6">
-                  <div className="flex min-w-0 items-center gap-3">
-                      <Logo size={30} online={connected} />
-                      <div className="flex min-w-0 items-center gap-2.5 text-text">
-                          <MiaWordmark />
-                      </div>
-                  </div>
-
-                  <div className="flex items-center gap-2">
-                      <button
-                          type="button"
-                          onClick={onOpenPlatform}
-                          title="Open platform view"
-                          aria-label="Open platform view"
-                          className="flex h-10 w-10 items-center justify-center rounded-lg bg-panel/72 text-text-muted backdrop-blur transition-colors hover:border-border hover:bg-overlay-hover hover:text-text"
-                      >
-                          <LayoutGrid size={17} />
-                      </button>
-                      <button
-                          type="button"
-                          onClick={onLogout}
-                          title="Log out"
-                          aria-label="Log out"
-                          className="flex h-10 w-10 items-center justify-center rounded-lg bg-panel/72 text-text-muted backdrop-blur transition-colors hover:border-border hover:bg-overlay-hover hover:text-text"
-                      >
-                          <LogOut size={16} />
-                      </button>
-                  </div>
-              </header>
-
-              <main className="flex min-h-0 flex-1 flex-col">
-                  <TermChat
-                      mode="home"
-                      heroRevealProgress={heroRevealProgress}
-                  />
-              </main>
-          </div>
+    <div className={`chathome ${stateClass} relative flex h-screen flex-col overflow-hidden text-text`}>
+      <div className="chathome-frame pointer-events-none absolute inset-0 overflow-hidden">
+        <IntroAsciiField surface="home" adminAccentCorner={isAdmin} />
       </div>
-  );
+
+      <div className="chathome-content relative z-10 flex h-full min-h-0 flex-col">
+        <header className="relative flex h-12 shrink-0 items-center justify-between px-4 sm:h-14 sm:px-6">
+          <ChatBrand connected={connected} />
+          <ChatShellActions
+            me={me}
+            onModeChange={onModeChange}
+            onSignOut={onSignOut}
+            onSwitchUi={onSwitchUi}
+          />
+        </header>
+
+        <main className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <TermChat mode="home" heroRevealProgress={heroRevealProgress} />
+        </main>
+      </div>
+    </div>
+  )
 }

@@ -2,6 +2,8 @@ import { forwardRef, type ReactNode } from "react"
 
 /** Sit just below the home transcript top fade (~14px). */
 export const STICKY_GOAL_HOME_TOP = "top-3.5"
+/** Must match `top-3.5` — used by stuck-pin detection in TermChat. */
+export const STICKY_GOAL_HOME_OFFSET_PX = 14
 
 /**
  * Pins a user goal bubble while scrolling through that turn's output.

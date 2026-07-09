@@ -1,15 +1,40 @@
 import { EventType } from "@mia/shared-enums"
-import { Loader2, Pencil, Plus, Trash2 } from "lucide-react"
-import type { JSX, ReactNode } from "react"
-import { useEffect, useMemo, useRef, useState } from "react"
+import {
+  Database, Pencil, Plus, Trash2,
+} from "lucide-react"
+import { Loader2 } from "lucide-react"
+import type { JSX } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { api } from "../../api"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import { useStore } from "../../store"
-import type { EnvOperation, SyncEnvironmentAdmin } from "../../types"
-import { Empty, ListItem, PanelChrome, SplitView } from "./shared"
+import type { SyncEnvironmentAdmin } from "../../types"
+import {
+  ConfirmModal,
+  ModalBtnPrimary,
+  ModalBtnSecondary,
+  ModalShell,
+} from "./chrome"
+import { useConsole } from "./console-context"
+import {
+  AdminModalCanvas,
+  AdminModalRoot,
+  FormFieldGroup,
+  FormSectionCard,
+} from "./modal-layout"
+import {
+  ConsolePanel, DetailBody, DetailToolbar, Empty, FormCheck, IconAction,
+  ItemShell, TOOLBAR_ICON, ToolbarIconBtn, RailEmpty, RailList, RailListItem,
+} from "./shared"
+import { DetailField, DetailGrid } from "../entity-registry/DetailField"
+import { useLiveReload } from "./useLiveReload"
 
-const ALL_OPS: EnvOperation[] = ["query_read", "schema_introspect", "sync_preview", "sync_execute", "ddl", "dml"]
+import {
+  deriveAllowedOperations,
+  denyFlagsForAccessMode,
+  OP_LABELS,
+  suggestAccessForName,
+} from "./env-access"
 const ROLE_OPTIONS: ListboxOption<SyncEnvironmentAdmin["role"]>[] = [
   { value: "source", label: "source" },
   { value: "target", label: "target" },
@@ -20,51 +45,37 @@ const ACCESS_MODE_OPTIONS: ListboxOption<SyncEnvironmentAdmin["defaultAccessMode
   { value: "read_write", label: "read_write" },
 ]
 
+function envSseMatch(type: string): boolean {
+  return type === EventType.SyncEnvUpdate || type === EventType.SyncEnvReset
+}
+
 export function EnvironmentsPanel(): JSX.Element {
+  const { notify, notifyError } = useConsole()
   const [items, setItems] = useState<SyncEnvironmentAdmin[]>([])
   const [busy, setBusy] = useState(true)
   const [saving, setSaving] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [editing, setEditing] = useState<SyncEnvironmentAdmin | null>(null)
   const [creating, setCreating] = useState(false)
-  const [err, setErr] = useState<string | null>(null)
-  const [ok, setOk] = useState<string | null>(null)
+  const [deleting, setDeleting] = useState<string | null>(null)
 
   const loadingRef = useRef(false)
   const queuedRef = useRef(false)
-  const lastLiveTickRef = useRef<number | null>(null)
 
-  const liveRefreshTick = useStore((s) =>
-    s.sseEventLog.filter((e) => e.type === EventType.SyncEnvUpdate || e.type === EventType.SyncEnvReset).length,
-  )
-
-  useEffect(() => { void load() }, [])
-
-  useEffect(() => {
-    if (lastLiveTickRef.current === null) {
-      lastLiveTickRef.current = liveRefreshTick
-      return
-    }
-    if (liveRefreshTick === lastLiveTickRef.current) return
-    lastLiveTickRef.current = liveRefreshTick
-    void load()
-  }, [liveRefreshTick])
-
-  async function load(): Promise<void> {
+  const load = useCallback(async (): Promise<void> => {
     if (loadingRef.current) {
       queuedRef.current = true
       return
     }
     loadingRef.current = true
     setBusy(true)
-    setErr(null)
     try {
       const rows = await api.listSyncEnvironments()
       const sorted = [...rows].sort((a, b) => a.ringOrder - b.ringOrder || a.name.localeCompare(b.name))
       setItems(sorted)
       setSelected((current) => current && sorted.some((item) => item.name === current) ? current : (sorted[0]?.name ?? null))
     } catch (error) {
-      setErr(error instanceof Error ? error.message : String(error))
+      notifyError(error instanceof Error ? error.message : String(error))
     } finally {
       setBusy(false)
       loadingRef.current = false
@@ -73,20 +84,20 @@ export function EnvironmentsPanel(): JSX.Element {
         void load()
       }
     }
-  }
+  }, [notifyError])
+
+  useLiveReload(load, envSseMatch)
 
   async function create(fields: Record<string, unknown>): Promise<void> {
     const name = String(fields.name ?? "")
     setSaving(name || "__new__")
-    setErr(null)
     try {
       await api.createSyncEnvironment(fields)
       await load()
       if (name) setSelected(name)
-      setOk(`Created ${name}`)
-      setTimeout(() => setOk(null), 1800)
+      notify(`Created ${name}`)
     } catch (error) {
-      setErr(error instanceof Error ? error.message : String(error))
+      notifyError(error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(null)
     }
@@ -94,14 +105,12 @@ export function EnvironmentsPanel(): JSX.Element {
 
   async function save(name: string, fields: Record<string, unknown>): Promise<void> {
     setSaving(name)
-    setErr(null)
     try {
       await api.updateSyncEnvironment(name, fields)
       await load()
-      setOk(`Saved ${name}`)
-      setTimeout(() => setOk(null), 1800)
+      notify(`Saved ${name}`)
     } catch (error) {
-      setErr(error instanceof Error ? error.message : String(error))
+      notifyError(error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(null)
     }
@@ -109,14 +118,12 @@ export function EnvironmentsPanel(): JSX.Element {
 
   async function remove(name: string): Promise<void> {
     setSaving(name)
-    setErr(null)
     try {
       await api.deleteSyncEnvironment(name)
       await load()
-      setOk(`Deleted ${name}`)
-      setTimeout(() => setOk(null), 1800)
+      notify(`Deleted ${name}`)
     } catch (error) {
-      setErr(error instanceof Error ? error.message : String(error))
+      notifyError(error instanceof Error ? error.message : String(error))
     } finally {
       setSaving(null)
     }
@@ -125,40 +132,54 @@ export function EnvironmentsPanel(): JSX.Element {
   const selectedItem = useMemo(() => items.find((item) => item.name === selected) ?? null, [items, selected])
 
   return (
-    <PanelChrome
-      title="Environments"
-      subtitle="Persisted sync environments managed in DB. JSON is now only a one-time seed, not the live source of truth."
-      busy={busy}
-      err={err}
-      ok={ok}
-      onClearErr={() => setErr(null)}
-      actions={(
-        <button type="button" onClick={() => setCreating(true)} className="flex items-center gap-1 rounded border border-border-subtle px-2 py-1 text-[11px] text-text-muted hover:bg-overlay-2 hover:text-text">
-          <Plus className="h-3 w-3" /> add environment
-        </button>
-      )}
-    >
-      {items.length === 0 ? (
-        <Empty title="No environments configured">
-          Add an environment here. The name must match a configured MSSQL connection.
-        </Empty>
-      ) : (
-        <SplitView
-          list={items.map((item) => (
-            <ListItem key={item.name} active={item.name === selected} onClick={() => setSelected(item.name)}>
-              <span className="font-mono text-text">{item.name}</span>
-              <span className="text-text-muted">{item.displayName}</span>
-              <span className="text-[10px] text-text-faint">{item.role} · {item.defaultAccessMode === "read_only" ? "read only" : "read / write"} · ring {item.ringOrder}</span>
-            </ListItem>
-          ))}
-          detail={selectedItem ? <EnvironmentDetail item={selectedItem} busy={saving === selectedItem.name} onEdit={() => setEditing(selectedItem)} onDelete={remove} /> : <Empty title="Pick an environment" />}
-        />
-      )}
+    <ConsolePanel>
+      <ItemShell
+        busy={busy}
+        listActions={(
+          <ToolbarIconBtn label="Add connection" onClick={() => setCreating(true)}>
+            <Plus {...TOOLBAR_ICON} />
+          </ToolbarIconBtn>
+        )}
+        detailToolbar={selectedItem ? (
+          <DetailToolbar
+            title={selectedItem.name}
+            subtitle={selectedItem.displayName}
+            actions={(
+              <>
+                <IconAction label="Edit" onClick={() => setEditing(selectedItem)}><Pencil {...TOOLBAR_ICON} /></IconAction>
+                <IconAction label="Delete" disabled={saving === selectedItem.name} onClick={() => setDeleting(selectedItem.name)}>
+                  <Trash2 {...TOOLBAR_ICON} />
+                </IconAction>
+              </>
+            )}
+          />
+        ) : undefined}
+        empty={items.length === 0 ? (
+          <RailEmpty title="No connections">Add a target matching MSSQL in .env</RailEmpty>
+        ) : undefined}
+        list={(
+          <RailList label="Connections">
+            {items.map((item) => (
+              <RailListItem
+                key={item.name}
+                active={item.name === selected}
+                onClick={() => setSelected(item.name)}
+                title={item.name}
+                meta={item.displayName}
+                meta2={`ring ${item.ringOrder} · ${item.role}`}
+              />
+            ))}
+          </RailList>
+        )}
+        detail={selectedItem
+          ? <EnvironmentDetail item={selectedItem} />
+          : <Empty title="Select a connection" />}
+      />
 
       {creating && (
         <EnvironmentModal
-          title="Add environment"
-          submitLabel="Create environment"
+          title="Add connection"
+          submitLabel="Create"
           busy={saving === "__new__"}
           onClose={() => setCreating(false)}
           onSave={async (fields) => {
@@ -170,8 +191,8 @@ export function EnvironmentsPanel(): JSX.Element {
 
       {editing && (
         <EnvironmentModal
-          title="Edit environment"
-          submitLabel="Save changes"
+          title="Edit connection"
+          submitLabel="Save"
           env={editing}
           busy={saving === editing.name}
           onClose={() => setEditing(null)}
@@ -181,54 +202,47 @@ export function EnvironmentsPanel(): JSX.Element {
           }}
         />
       )}
-    </PanelChrome>
+
+      {deleting && (
+        <ConfirmModal
+          title="Delete connection"
+          message={`Delete "${deleting}"?`}
+          confirmLabel="Delete"
+          danger
+          busy={saving === deleting}
+          onCancel={() => setDeleting(null)}
+          onConfirm={() => void remove(deleting).then(() => setDeleting(null))}
+        />
+      )}
+    </ConsolePanel>
   )
 }
 
-function EnvironmentDetail({ item, busy, onEdit, onDelete }: {
+function EnvironmentDetail({ item }: {
   item: SyncEnvironmentAdmin
-  busy: boolean
-  onEdit: () => void
-  onDelete: (name: string) => Promise<void>
 }): JSX.Element {
+  const accessLabel = item.defaultAccessMode === "read_only" ? "read only" : "read / write"
+
   return (
-    <div className="space-y-4 p-5 text-xs">
-      <section className="rounded-lg border border-border-subtle bg-panel px-4 py-3">
-        <div className="grid gap-2 sm:grid-cols-2">
-          <Detail label="Display name" value={item.displayName} />
-          <Detail label="Connection name" value={item.name} />
-          <Detail label="Role" value={item.role} />
-          <Detail label="Access mode" value={item.defaultAccessMode} />
-          <Detail label="Ring order" value={String(item.ringOrder)} />
-          <Detail label="Color token" value={item.color} />
-          <Detail label="Allowed sync targets" value={item.allowedSyncTargets?.join(", ") || "none"} />
-          <Detail label="Allowlist" value={item.syncAllowlist.join(", ") || "none"} />
-          <Detail label="Agent service URL" value={item.agentServiceBaseUrl ?? "not set"} />
-          <Detail label="ETL service URL" value={item.etlServiceBaseUrl ?? "not set"} />
-          <Detail label="Gate service URL" value={item.gateServiceBaseUrl ?? "not set"} />
-          <Detail label="Last updated" value={`${new Date(item.updatedAt).toLocaleString()}${item.updatedBy ? ` · ${item.updatedBy}` : ""}`} />
-        </div>
-      </section>
-
-      <section className="rounded-lg border border-border-subtle bg-panel px-4 py-3 text-sm leading-6 text-text-muted">
-        <div>These rows are the live sync environment records.</div>
-        <div>Editing here changes persisted DB state directly; the old JSON file is no longer the runtime authority.</div>
-      </section>
-
-      <div className="flex flex-wrap gap-2">
-        <button type="button" onClick={onEdit} className="flex items-center gap-1 rounded border border-border-subtle px-3 py-1.5 text-[12px] text-text-muted hover:bg-overlay-2 hover:text-text">
-          <Pencil className="h-3.5 w-3.5" /> edit
-        </button>
-        <button
-          type="button"
-          disabled={busy}
-          onClick={() => void onDelete(item.name)}
-          className="flex items-center gap-1 rounded border border-error/30 px-3 py-1.5 text-[12px] text-error hover:bg-error-soft disabled:opacity-40"
-        >
-          <Trash2 className="h-3.5 w-3.5" /> delete
-        </button>
-      </div>
-    </div>
+    <DetailBody>
+      <DetailGrid>
+        <DetailField label="Role" value={item.role} mono />
+        <DetailField label="Access" value={accessLabel} />
+        <DetailField label="Ring" value={String(item.ringOrder)} mono />
+        <DetailField label="Targets" value={item.allowedSyncTargets?.join(", ") || "none"} mono span={2} />
+        <DetailField label="Allowlist" value={item.syncAllowlist.join(", ") || "none"} mono span={2} />
+        <DetailField
+          label="Write blocks"
+          value={`${item.denyDml ? "DML" : "—"} · ${item.denyDdl ? "DDL" : "—"}`}
+        />
+        <DetailField label="Agent URL" value={item.agentServiceBaseUrl} mono span={2} />
+        <DetailField label="ETL URL" value={item.etlServiceBaseUrl} mono span={2} />
+        <DetailField label="Gate URL" value={item.gateServiceBaseUrl} mono span={2} />
+      </DetailGrid>
+      <p className="mt-4 text-xs text-text-faint">
+        updated {new Date(item.updatedAt).toLocaleString()}{item.updatedBy ? ` · ${item.updatedBy}` : ""}
+      </p>
+    </DetailBody>
   )
 }
 
@@ -258,148 +272,139 @@ function EnvironmentModal({
   const [gateServiceBaseUrl, setGateServiceBaseUrl] = useState(env?.gateServiceBaseUrl ?? "")
   const [denyDml, setDenyDml] = useState(env?.denyDml ?? false)
   const [denyDdl, setDenyDdl] = useState(env?.denyDdl ?? false)
-  const [allowedOperations, setAllowedOperations] = useState<EnvOperation[]>(env?.allowedOperations ?? [])
   const [allowedTargetsText, setAllowedTargetsText] = useState((env?.allowedSyncTargets ?? []).join(", "))
   const [syncAllowlistText, setSyncAllowlistText] = useState((env?.syncAllowlist ?? []).join(", "))
 
+  const effectiveOps = useMemo(
+    () => deriveAllowedOperations(defaultAccessMode, denyDml, denyDdl),
+    [defaultAccessMode, denyDml, denyDdl],
+  )
+
+  useEffect(() => {
+    if (env || !name.trim()) return
+    const suggested = suggestAccessForName(name.trim())
+    setDefaultAccessMode(suggested.defaultAccessMode)
+    setDenyDml(suggested.denyDml)
+    setDenyDdl(suggested.denyDdl)
+  }, [name, env])
+
+  function onAccessModeChange(mode: SyncEnvironmentAdmin["defaultAccessMode"]): void {
+    setDefaultAccessMode(mode)
+    const flags = denyFlagsForAccessMode(mode)
+    setDenyDml(flags.denyDml)
+    setDenyDdl(flags.denyDdl)
+  }
+
   const allowedSyncTargets = parseCsv(allowedTargetsText)
   const syncAllowlist = parseCsv(syncAllowlistText)
+  const readOnly = defaultAccessMode === "read_only"
 
   return (
-    <div className="modal-surface fixed inset-0 z-40 flex items-center justify-center bg-black/72 p-4">
-      <div className="flex max-h-[90vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-border-subtle bg-surface shadow-2xl">
-        <div className="flex items-center justify-between border-b border-border-subtle px-5 py-3.5">
-          <div>
-            <h3 className="text-sm font-semibold text-text">{title}</h3>
-            <p className="text-[11px] text-text-muted">Environment names must match configured MSSQL connection names.</p>
+    <ModalShell
+      title={title}
+      subtitle="Name must match MSSQL_DATABASES"
+      icon={<Database size={20} className="text-text-muted" />}
+      size="focus"
+      onClose={onClose}
+      footer={
+        <>
+          <ModalBtnSecondary onClick={onClose} disabled={busy}>Cancel</ModalBtnSecondary>
+          <div className="ml-auto">
+            <ModalBtnPrimary
+              disabled={busy || !name.trim()}
+              onClick={() => void onSave({
+                name: name.trim(),
+                displayName: displayName.trim() || name.trim(),
+                color: color.trim() || "slate",
+                role,
+                ringOrder: Number(ringOrder || 0),
+                defaultAccessMode,
+                agentServiceBaseUrl: agentServiceBaseUrl.trim() || null,
+                etlServiceBaseUrl: etlServiceBaseUrl.trim() || null,
+                gateServiceBaseUrl: gateServiceBaseUrl.trim() || null,
+                denyDml,
+                denyDdl,
+                allowedOperations: effectiveOps,
+                approvalRequiredOperations: [],
+                allowedSyncTargets,
+                syncAllowlist,
+              })}
+            >
+              {busy ? <Loader2 size={14} className="animate-spin" /> : null}
+              {busy ? "Saving…" : submitLabel}
+            </ModalBtnPrimary>
           </div>
-          <button type="button" onClick={onClose} className="rounded-lg p-1.5 text-text-muted hover:bg-overlay-2 hover:text-text">close</button>
-        </div>
+        </>
+      }
+    >
+      <AdminModalRoot>
+        <AdminModalCanvas>
+          <FormSectionCard title="Identity" description="Name must match MSSQL_DATABASES in .env.">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormFieldGroup label="Name">
+                <input value={name} disabled={Boolean(env)} onChange={(event) => setName(event.target.value)} className="input w-full font-mono text-sm" />
+              </FormFieldGroup>
+              <FormFieldGroup label="Display name">
+                <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="input w-full text-sm" />
+              </FormFieldGroup>
+            </div>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <FormFieldGroup label="Color">
+                <input value={color} onChange={(event) => setColor(event.target.value)} className="input w-full text-sm" />
+              </FormFieldGroup>
+              <FormFieldGroup label="Role">
+                <Listbox value={role} options={ROLE_OPTIONS} onChange={setRole} size="sm" className="w-full" ariaLabel="Role" />
+              </FormFieldGroup>
+              <FormFieldGroup label="Ring">
+                <input value={ringOrder} onChange={(event) => setRingOrder(event.target.value)} className="input w-full font-mono text-sm" />
+              </FormFieldGroup>
+            </div>
+          </FormSectionCard>
 
-        <div className="space-y-5 overflow-auto px-5 py-5 text-xs">
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 xl:grid-cols-2">
-            <Field label="Connection name" hint="Required. Must match a configured MSSQL connection.">
-              <input value={name} disabled={Boolean(env)} onChange={(event) => setName(event.target.value)} className="modal-control" />
-            </Field>
-            <Field label="Display name" hint="Human-friendly label shown in UI.">
-              <input value={displayName} onChange={(event) => setDisplayName(event.target.value)} className="modal-control" />
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 xl:grid-cols-3">
-            <Field label="Color token" hint="Free-form accent token for UI rendering.">
-              <input value={color} onChange={(event) => setColor(event.target.value)} className="modal-control" />
-            </Field>
-            <Field label="Role" hint="Whether this environment can be source, target, or both.">
-              <Listbox value={role} options={ROLE_OPTIONS} onChange={setRole} className="w-full" ariaLabel="Environment role" />
-            </Field>
-            <Field label="Ring order" hint="Lower numbers are earlier in the promotion path.">
-              <input value={ringOrder} onChange={(event) => setRingOrder(event.target.value)} className="modal-control" />
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 xl:grid-cols-2">
-            <Field label="Default access mode" hint="Read-only blocks write tools unless explicitly allowed.">
-              <Listbox value={defaultAccessMode} options={ACCESS_MODE_OPTIONS} onChange={setDefaultAccessMode} className="w-full" ariaLabel="Default access mode" />
-            </Field>
-            <Field label="Allowed operations" hint="Operations permitted after access mode and deny flags are applied.">
-              <div className="modal-control-group flex flex-wrap gap-1.5 px-2.5 py-2">
-                {ALL_OPS.map((op) => {
-                  const selected = allowedOperations.includes(op)
-                  return (
-                    <button
-                      key={op}
-                      type="button"
-                      onClick={() => setAllowedOperations((current) => selected ? current.filter((item) => item !== op) : [...current, op])}
-                      className={`rounded-full border px-2.5 py-1 text-[10.5px] ${selected ? "border-accent bg-accent/10 text-accent" : "border-border-subtle/80 text-text-muted hover:text-text"}`}
-                    >
-                      {op}
-                    </button>
-                  )
-                })}
-              </div>
-            </Field>
-          </div>
-          <div className="flex flex-wrap gap-2">
-            <Toggle label="Block DML" checked={denyDml} onChange={setDenyDml} />
-            <Toggle label="Block DDL" checked={denyDdl} onChange={setDenyDdl} />
-          </div>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 xl:grid-cols-3">
-            <Field label="Agent service URL" hint="Optional direct base URL used for post-sync callbacks.">
-              <input value={agentServiceBaseUrl} onChange={(event) => setAgentServiceBaseUrl(event.target.value)} className="modal-control" />
-            </Field>
-            <Field label="ETL service URL" hint="Optional direct base URL used for dataset/rule deployment callbacks.">
-              <input value={etlServiceBaseUrl} onChange={(event) => setEtlServiceBaseUrl(event.target.value)} className="modal-control" />
-            </Field>
-            <Field label="Gate service URL" hint="Optional direct base URL used for gate refresh callbacks.">
-              <input value={gateServiceBaseUrl} onChange={(event) => setGateServiceBaseUrl(event.target.value)} className="modal-control" />
-            </Field>
-          </div>
-          <div className="grid grid-cols-1 gap-x-4 gap-y-3 xl:grid-cols-2">
-            <Field label="Allowed sync targets" hint="Comma-separated environment names.">
-              <textarea value={allowedTargetsText} onChange={(event) => setAllowedTargetsText(event.target.value)} rows={3} className="modal-control min-h-[88px]" />
-            </Field>
-            <Field label="Sync allowlist" hint="Comma-separated entity ids allowed in this environment.">
-              <textarea value={syncAllowlistText} onChange={(event) => setSyncAllowlistText(event.target.value)} rows={3} className="modal-control min-h-[88px]" />
-            </Field>
-          </div>
-        </div>
+          <FormSectionCard title="Access" description="Default access mode and write blocks for this connection.">
+            <FormFieldGroup label="Access mode">
+              <Listbox value={defaultAccessMode} options={ACCESS_MODE_OPTIONS} onChange={onAccessModeChange} size="sm" className="w-full" ariaLabel="Access" />
+            </FormFieldGroup>
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormCheck label="Block DML" checked={denyDml} disabled={readOnly} onChange={setDenyDml} />
+              <FormCheck label="Block DDL" checked={denyDdl} disabled={readOnly} onChange={setDenyDdl} />
+            </div>
+            <div className="flex flex-wrap gap-1.5 pt-1">
+              {effectiveOps.map((op) => (
+                <span key={op} className="rounded-full border border-accent/30 bg-accent/10 px-2 py-0.5 text-xs font-mono text-accent" title={OP_LABELS[op]}>
+                  {op}
+                </span>
+              ))}
+            </div>
+          </FormSectionCard>
 
-        <div className="flex items-center gap-2 border-t border-border-subtle px-5 py-3.5">
-          <button
-            type="button"
-            disabled={busy || !name.trim()}
-            onClick={() => void onSave({
-              name: name.trim(),
-              displayName: displayName.trim() || name.trim(),
-              color: color.trim() || "slate",
-              role,
-              ringOrder: Number(ringOrder || 0),
-              defaultAccessMode,
-              agentServiceBaseUrl: agentServiceBaseUrl.trim() || null,
-              etlServiceBaseUrl: etlServiceBaseUrl.trim() || null,
-              gateServiceBaseUrl: gateServiceBaseUrl.trim() || null,
-              denyDml,
-              denyDdl,
-              allowedOperations,
-              approvalRequiredOperations: [],
-              allowedSyncTargets,
-              syncAllowlist,
-            })}
-            className="flex items-center gap-1.5 rounded-lg bg-accent/20 px-3 py-1.5 text-[12px] font-medium text-accent hover:bg-accent/30 disabled:opacity-40"
-          >
-            {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null}
-            {busy ? "Saving…" : submitLabel}
-          </button>
-          <button type="button" onClick={onClose} className="rounded-lg border border-border-subtle px-3 py-1.5 text-[12px] text-text-muted hover:bg-overlay-2 hover:text-text">Cancel</button>
-        </div>
-      </div>
-    </div>
-  )
-}
+          <FormSectionCard title="Service URLs" description="Optional endpoints for agent, ETL, and gate services.">
+            <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
+              <FormFieldGroup label="Agent URL">
+                <input value={agentServiceBaseUrl} onChange={(event) => setAgentServiceBaseUrl(event.target.value)} className="input w-full font-mono text-sm" />
+              </FormFieldGroup>
+              <FormFieldGroup label="ETL URL">
+                <input value={etlServiceBaseUrl} onChange={(event) => setEtlServiceBaseUrl(event.target.value)} className="input w-full font-mono text-sm" />
+              </FormFieldGroup>
+              <FormFieldGroup label="Gate URL">
+                <input value={gateServiceBaseUrl} onChange={(event) => setGateServiceBaseUrl(event.target.value)} className="input w-full font-mono text-sm" />
+              </FormFieldGroup>
+            </div>
+          </FormSectionCard>
 
-function Field({ label, hint, children }: { label: string; hint: string; children: ReactNode }): JSX.Element {
-  return (
-    <div>
-      <div className="mb-1 text-[11px] font-medium text-text">{label}</div>
-      {children}
-      <div className="mt-1 text-[10px] leading-4 text-text-faint">{hint}</div>
-    </div>
-  )
-}
-
-function Toggle({ label, checked, onChange }: { label: string; checked: boolean; onChange: (next: boolean) => void }): JSX.Element {
-  return (
-    <button type="button" onClick={() => onChange(!checked)} className={`rounded-full border px-3 py-1.5 text-[11px] ${checked ? "border-accent bg-accent/10 text-accent" : "border-border-subtle text-text-muted hover:text-text"}`}>
-      {label}
-    </button>
-  )
-}
-
-function Detail({ label, value }: { label: string; value: string }): JSX.Element {
-  return (
-    <div>
-      <div className="text-[10px] uppercase tracking-[0.18em] text-text-muted">{label}</div>
-      <div className="mt-1 break-all text-text">{value}</div>
-    </div>
+          <FormSectionCard title="Sync scope">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <FormFieldGroup label="Sync targets" hint="Comma-separated connection names">
+                <textarea value={allowedTargetsText} onChange={(event) => setAllowedTargetsText(event.target.value)} rows={3} className="input w-full font-mono text-sm" />
+              </FormFieldGroup>
+              <FormFieldGroup label="Entity allowlist" hint="Comma-separated entity ids">
+                <textarea value={syncAllowlistText} onChange={(event) => setSyncAllowlistText(event.target.value)} rows={3} className="input w-full font-mono text-sm" />
+              </FormFieldGroup>
+            </div>
+          </FormSectionCard>
+        </AdminModalCanvas>
+      </AdminModalRoot>
+    </ModalShell>
   )
 }
 

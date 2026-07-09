@@ -74,7 +74,7 @@ function baseDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
         userControllable: null
       }
     ],
-    policies: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
+    policies: { approvalPolicyId: null, freezeWindowIds: [] },
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
@@ -117,7 +117,7 @@ describe("saveEntityDefinition — cross-reference validation", () => {
     try {
       m.defs.saveEntityDefinition({
         def: baseDef({
-          policies: { approvalPolicyId: null, freezeWindowIds: ["bogus-window"], riskMultiplier: 1 }
+          policies: { approvalPolicyId: null, freezeWindowIds: ["bogus-window"] }
         }),
         actor: "alice@example.com",
         reason: "create"
@@ -144,7 +144,7 @@ describe("saveEntityDefinition — cross-reference validation", () => {
     })
     const r = m.defs.saveEntityDefinition({
       def: baseDef({
-        policies: { approvalPolicyId: null, freezeWindowIds: ["month-end-close"], riskMultiplier: 1 }
+        policies: { approvalPolicyId: null, freezeWindowIds: ["month-end-close"] }
       }),
       actor: "alice@example.com",
       reason: "create"

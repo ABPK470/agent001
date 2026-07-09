@@ -36,8 +36,7 @@ const EAGER_COMPACT_TOOLS = new Set<string>([
   "read_file",
   "run_command",
   "shell",
-  "fetch_url",
-  "browse_web"
+  "fetch_url"
 ])
 
 export function compactAtWriteTime(toolName: string, content: string): string {
@@ -58,7 +57,7 @@ export function compactAtWriteTime(toolName: string, content: string): string {
           ? `re-call read_file with startLine/endLine to fetch a specific range`
           : toolName === "run_command" || toolName === "shell"
             ? `re-run with a more specific filter (head/tail/grep) to narrow the output`
-            : toolName === "fetch_url" || toolName === "browse_web"
+            : toolName === "fetch_url"
               ? `re-fetch with a narrower selector or path`
               : `re-call with narrower parameters to fetch the omitted region`
 

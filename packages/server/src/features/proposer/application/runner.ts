@@ -17,7 +17,7 @@ import {
   annotateProposal,
   detectCatalogDrift,
   emptyCounts,
-  getPublishedSyncRecipe,
+  getPublishedSyncDefinitionForHost,
   listPublishedSyncDefinitionsForHost,
   rankProposals,
   runProposerPass,
@@ -43,6 +43,12 @@ import {
   type ProposalRow
 } from "../../../platform/persistence/proposals.js"
 import { probeRowDivergence } from "../../runs/core/proposer/divergence-probe.js"
+import { bindLlmOperationContext, emitLlmInteractionCleared } from "../../../platform/llm/operation-context.js"
+import {
+  registerOperation,
+  throwIfCancelled,
+  unregisterOperation,
+} from "../../../platform/operations/cancel-registry.js"
 
 export interface ProposerRunnerOptions extends ProposerPassOptions {
   tenantId: string
@@ -77,6 +83,11 @@ export async function runProposer(
     triggeredBy: options.triggeredBy,
     trigger: options.trigger
   })
+  const signal = registerOperation(
+    "proposer.run",
+    runId,
+    `Scan ${envPair.source} → ${envPair.target}`,
+  )
   markProposerRunRunning(runId)
   broadcast({
     type: EventType.SyncProposerRunStarted,
@@ -86,9 +97,71 @@ export async function runProposer(
   const deps = buildPassDeps(host, options.tenantId)
   let passResult: ProposerPassResult
   try {
-    passResult = await runProposerPass(envPair, options, deps)
+    passResult = await runProposerPass(envPair, { ...options, signal }, deps)
+    throwIfCancelled(signal)
+
+    const insertedIds = ingestFindings(options.tenantId, runId, passResult.findings)
+    for (const id of insertedIds) {
+      broadcast({
+        type: EventType.SyncProposalCreated,
+        data: { id, tenantId: options.tenantId, runId }
+      })
+    }
+
+    let annotatedCount = 0
+    if (options.llm && insertedIds.length > 0) {
+      bindLlmOperationContext({
+        signal,
+        operationKind: "proposer.run",
+        operationId: runId,
+      })
+      try {
+        annotatedCount = await annotateInserted(options.tenantId, insertedIds, options.llm, signal)
+      } finally {
+        bindLlmOperationContext(null)
+        emitLlmInteractionCleared()
+      }
+      throwIfCancelled(signal)
+    }
+
+    const rankedCount = rerankOpenQueue(options.tenantId)
+
+    finishProposerRun({
+      id: runId,
+      status: "completed",
+      counts: passResult.counts,
+      durationMs: passResult.durationMs,
+      error: null
+    })
+    broadcast({
+      type: EventType.SyncProposerRunCompleted,
+      data: {
+        runId,
+        envPair,
+        counts: passResult.counts,
+        inserted: insertedIds.length,
+        annotated: annotatedCount
+      }
+    })
+
+    return { runId, passResult, insertedIds, annotatedCount, rankedCount }
   } catch (e) {
+    const cancelled = signal.aborted
     const msg = e instanceof Error ? e.message : String(e)
+    if (cancelled) {
+      finishProposerRun({
+        id: runId,
+        status: "cancelled",
+        counts: { scanned: 0, produced: 0, errors: 0 },
+        durationMs: 0,
+        error: msg
+      })
+      broadcast({
+        type: EventType.SyncProposerRunCancelled,
+        data: { runId, envPair, reason: msg }
+      })
+      throw e
+    }
     finishProposerRun({
       id: runId,
       status: "failed",
@@ -98,36 +171,11 @@ export async function runProposer(
     })
     broadcast({ type: EventType.SyncProposerRunFailed, data: { runId, error: msg } })
     throw e
+  } finally {
+    bindLlmOperationContext(null)
+    emitLlmInteractionCleared()
+    unregisterOperation("proposer.run", runId)
   }
-
-  const insertedIds = ingestFindings(options.tenantId, runId, passResult.findings)
-
-  let annotatedCount = 0
-  if (options.llm && insertedIds.length > 0) {
-    annotatedCount = await annotateInserted(options.tenantId, insertedIds, options.llm)
-  }
-
-  const rankedCount = rerankOpenQueue(options.tenantId)
-
-  finishProposerRun({
-    id: runId,
-    status: "completed",
-    counts: passResult.counts,
-    durationMs: passResult.durationMs,
-    error: null
-  })
-  broadcast({
-    type: EventType.SyncProposerRunCompleted,
-    data: {
-      runId,
-      envPair,
-      counts: passResult.counts,
-      inserted: insertedIds.length,
-      annotated: annotatedCount
-    }
-  })
-
-  return { runId, passResult, insertedIds, annotatedCount, rankedCount }
 }
 
 // ── DI wiring ────────────────────────────────────────────────────
@@ -145,14 +193,14 @@ function buildPassDeps(host: AgentHost, tenantId: string): ProposerPassDeps {
     },
     probeCatalogDrift: async (envPair, ent) => {
       void tenantId
-      const recipe = getPublishedSyncRecipe(host, ent.id)
-      const allowedSchemas = uniqueSchemasFromRecipe(recipe.tables.map((t) => t.name))
+      const definition = getPublishedSyncDefinitionForHost(host, ent.id)
+      const allowedSchemas = uniqueSchemasFromDefinition(definition.metadata.tables.map((t) => t.name))
       try {
         const r = await detectCatalogDrift(
           host,
           envPair.source,
           envPair.target,
-          recipe.tables.map((t) => t.name),
+          definition.metadata.tables.map((t) => t.name),
           allowedSchemas
         )
         return { issues: r.issues }
@@ -166,7 +214,7 @@ function buildPassDeps(host: AgentHost, tenantId: string): ProposerPassDeps {
   }
 }
 
-function uniqueSchemasFromRecipe(tables: readonly string[]): readonly string[] {
+function uniqueSchemasFromDefinition(tables: readonly string[]): readonly string[] {
   const set = new Set<string>()
   for (const t of tables) {
     const i = t.indexOf(".")
@@ -180,12 +228,14 @@ function uniqueSchemasFromRecipe(tables: readonly string[]): readonly string[] {
 async function annotateInserted(
   tenantId: string,
   ids: readonly string[],
-  llm: LlmCompletionPort
+  llm: LlmCompletionPort,
+  signal?: AbortSignal,
 ): Promise<number> {
   const rows = listProposals({ tenantId, status: ["open"], limit: 1000 })
   const subset = rows.filter((r) => ids.includes(r.id))
   let n = 0
   for (const r of subset) {
+    throwIfCancelled(signal)
     const finding = rowToFinding(r)
     try {
       const ann = await annotateProposal(finding, {}, llm)

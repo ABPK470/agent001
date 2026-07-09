@@ -49,7 +49,7 @@ describe("sync definition scaffold", () => {
     const yamlPath = join(tempRoot, "contract.yaml")
     writeFileSync(
       yamlPath,
-      `id: contract\ntenantId: _default\ndisplayName: Contract\ndescription: Contract entity test fixture\nrootTable: core.Contract\nidColumn: contractId\nlabelColumn: name\nscd2:\n  strategyId: mymi-scd2\n  strategyVersion: latest\ntables:\n  - name: core.ContractColumn\n    scope:\n      kind: rootPk\n      column: contractId\n    executionOrder: 0\n    verified: true\n    scopeColumn: contractId\n    source: fk+pipeline\n    groundedByPipeline: true\n    enabledByDefault: true\n    userControllable: false\n    provenance:\n      kind: legacy-migration\n      legacyPipelineId: 788\n  - name: core.Contract\n    scope:\n      kind: rootPk\n      column: contractId\n    executionOrder: 1\n    verified: true\n    scopeColumn: contractId\n    source: fk+pipeline\n    groundedByPipeline: true\n    enabledByDefault: true\n    userControllable: false\n    provenance:\n      kind: legacy-migration\n      legacyPipelineId: 788\n  - name: core.Pipeline\n    scope:\n      kind: rootPk\n      column: contractId\n    executionOrder: 2\n    verified: true\n    scopeColumn: contractId\n    source: fk+pipeline\n    groundedByPipeline: true\n    enabledByDefault: true\n    userControllable: false\n    provenance:\n      kind: legacy-migration\n      legacyPipelineId: 788\n  - name: core.Step\n    scope:\n      kind: sql\n      predicate: EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Step].pipelineId AND p.contractId = {id})\n    executionOrder: 3\n    verified: false\n    source: fk-only\n    groundedByPipeline: false\n    enabledByDefault: false\n    userControllable: true\n    note: Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.\n    provenance:\n      kind: legacy-migration\n      legacyPipelineId: 788\npolicies:\n  freezeWindowIds: []\n  riskMultiplier: 1\nprovenance:\n  kind: legacy-migration\n  legacyPipelineId: 788\nlegacyEntrySproc: core.uspSyncCoreObjectsTran\nreverseOrder:\n  - core.Step\n  - core.Pipeline\n  - core.Contract\n  - core.ContractColumn\n`
+      `id: contract\ntenantId: _default\ndisplayName: Contract\ndescription: Contract entity test fixture\nrootTable: core.Contract\nidColumn: contractId\nlabelColumn: name\nscd2:\n  strategyId: mymi-scd2\n  strategyVersion: latest\ntables:\n  - name: core.ContractColumn\n    scope:\n      kind: rootPk\n      column: contractId\n    executionOrder: 0\n    verified: true\n    scopeColumn: contractId\n    source: fk+pipeline\n    groundedByPipeline: true\n    enabledByDefault: true\n    userControllable: false\n    provenance:\n      kind: legacy-migration\n      legacyPipelineId: 788\n  - name: core.Contract\n    scope:\n      kind: rootPk\n      column: contractId\n    executionOrder: 1\n    verified: true\n    scopeColumn: contractId\n    source: fk+pipeline\n    groundedByPipeline: true\n    enabledByDefault: true\n    userControllable: false\n    provenance:\n      kind: legacy-migration\n      legacyPipelineId: 788\n  - name: core.Pipeline\n    scope:\n      kind: rootPk\n      column: contractId\n    executionOrder: 2\n    verified: true\n    scopeColumn: contractId\n    source: fk+pipeline\n    groundedByPipeline: true\n    enabledByDefault: true\n    userControllable: false\n    provenance:\n      kind: legacy-migration\n      legacyPipelineId: 788\n  - name: core.Step\n    scope:\n      kind: sql\n      predicate: EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Step].pipelineId AND p.contractId = {id})\n    executionOrder: 3\n    verified: false\n    source: fk-only\n    groundedByPipeline: false\n    enabledByDefault: false\n    userControllable: true\n    note: Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.\n    provenance:\n      kind: legacy-migration\n      legacyPipelineId: 788\npolicies:\n  freezeWindowIds: []\n\nprovenance:\n  kind: legacy-migration\n  legacyPipelineId: 788\nlegacyEntrySproc: core.uspSyncCoreObjectsTran\nreverseOrder:\n  - core.Step\n  - core.Pipeline\n  - core.Contract\n  - core.ContractColumn\n`
     )
     const definition = scaffoldSyncDefinition(
       selectEntityDefinition(loadEntityDefinitionsFromDocument(yamlPath), "contract"),
@@ -97,14 +97,14 @@ describe("sync definition scaffold", () => {
     expect(definition.provenance.sourceVersion).toBeNull()
   })
 
-  it("writes a scaffold file with the metadata-only template for new entities", () => {
+  it("writes a scaffold file with the metadataOnly template for new entities", () => {
     const tempRoot = mkdtempSync(join(tmpdir(), "sync-definition-scaffold-"))
     const yamlPath = join(tempRoot, "entity.yaml")
     const outputPath = join(tempRoot, "generated.json")
 
     writeFileSync(
       yamlPath,
-      `id: customThing\ntenantId: _default\ndisplayName: Custom Thing\ndescription: Custom test entity\nrootTable: core.CustomThing\nidColumn: customThingId\nscd2:\n  strategyId: mymi-scd2\n  strategyVersion: latest\ntables:\n  - name: core.CustomThing\n    scope:\n      kind: rootPk\n      column: customThingId\n    executionOrder: 0\n    verified: true\npolicies:\n  freezeWindowIds: []\n  riskMultiplier: 1\nprovenance:\n  kind: manual\n`
+      `id: customThing\ntenantId: _default\ndisplayName: Custom Thing\ndescription: Custom test entity\nrootTable: core.CustomThing\nidColumn: customThingId\nscd2:\n  strategyId: mymi-scd2\n  strategyVersion: latest\ntables:\n  - name: core.CustomThing\n    scope:\n      kind: rootPk\n      column: customThingId\n    executionOrder: 0\n    verified: true\npolicies:\n  freezeWindowIds: []\n\nprovenance:\n  kind: manual\n`
     )
 
     const definition = scaffoldSyncDefinition(
@@ -112,7 +112,7 @@ describe("sync definition scaffold", () => {
       {
         projectRoot: tempRoot,
         sourceArtifact: yamlPath,
-        flowTemplateId: "metadata-only",
+        flowTemplateId: "metadataOnly",
         flowTemplateCatalog
       }
     )

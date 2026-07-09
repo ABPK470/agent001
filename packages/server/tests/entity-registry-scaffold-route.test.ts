@@ -1,16 +1,24 @@
 import Database from "better-sqlite3"
 import Fastify, { type FastifyInstance } from "fastify"
-import { mkdtempSync, rmSync } from "node:fs"
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
 import { tmpdir } from "node:os"
-import { resolve } from "node:path"
+import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { CurrentSession } from "../src/features/auth/index.js"
 
 let testDb: Database.Database
 let dataDir: string
+let projectRoot: string
 const ORIGINAL_DATA_DIR = process.env["MIA_DATA_DIR"]
-const repoRoot = resolve(import.meta.dirname, "../../..")
+
+function writeTestSyncMetadataArtifact(targetRoot: string): void {
+  mkdirSync(join(targetRoot, "deploy", "sync", "artifacts"), { recursive: true })
+  writeFileSync(
+    join(targetRoot, "deploy", "sync", "artifacts", "sync-metadata.json"),
+    readFileSync(new URL("../../../deploy/sync/artifacts/sync-metadata.json", import.meta.url), "utf-8"),
+  )
+}
 
 function adminSession(): CurrentSession {
   return {
@@ -62,7 +70,7 @@ async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
           userControllable: false
         }
       ],
-      policies: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
+      policies: { approvalPolicyId: null, freezeWindowIds: [] },
       scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
       lineageRefs: [],
       provenance: { kind: "manual" },
@@ -87,13 +95,15 @@ async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
     })
     seedSession(testDb, session.sid, session.upn)
   })
-  registerEntityRegistryRoutes(app, repoRoot)
+  registerEntityRegistryRoutes(app, projectRoot)
   await app.ready()
   return app
 }
 
 beforeEach(() => {
-  dataDir = mkdtempSync(resolve(tmpdir(), "mia-entity-registry-scaffold-data-"))
+  dataDir = mkdtempSync(join(tmpdir(), "mia-entity-registry-scaffold-data-"))
+  projectRoot = mkdtempSync(join(tmpdir(), "mia-entity-registry-scaffold-root-"))
+  writeTestSyncMetadataArtifact(projectRoot)
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
@@ -103,6 +113,7 @@ beforeEach(() => {
 afterEach(() => {
   testDb.close()
   rmSync(dataDir, { recursive: true, force: true })
+  rmSync(projectRoot, { recursive: true, force: true })
   if (ORIGINAL_DATA_DIR === undefined) delete process.env["MIA_DATA_DIR"]
   else process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
 })
@@ -153,7 +164,7 @@ describe("entity registry scaffold route", () => {
       "contractPostScript",
       "targetUnlock",
       "syncDate",
-      "deployDate"
+      "deployDate",
     ])
     expect(body.stderr).toEqual([])
 

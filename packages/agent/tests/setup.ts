@@ -47,7 +47,15 @@ beforeAll(() => {
         "persistedview.publish.balances": ["pkClient", "pkBranch", "pkAccount"]
       }
     },
-    schemaRanking: { publish: 50, persistedview: 45, fact: 20, dim: 20, list: 5, archive: -20, etl: -20 }
+    schemaRanking: [
+      { schema: "publish", weight: 50 },
+      { schema: "persistedview", weight: 45 },
+      { schema: "fact", weight: 20 },
+      { schema: "dim", weight: 20 },
+      { schema: "list", weight: 5 },
+      { schema: "archive", weight: -20 },
+      { schema: "etl", weight: -20 }
+    ]
   })
 })
 

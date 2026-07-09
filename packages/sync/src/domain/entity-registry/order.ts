@@ -15,6 +15,21 @@ export function orderEntityTables(def: Pick<EntityDefinition, "rootTable" | "tab
   return orderEntityTablesDetailed(def).tables
 }
 
+/** Assign contiguous 1-based executionOrder values in current sort order. */
+export function renumberEntityTablesExecutionOrder(tables: readonly EntityTable[]): EntityTable[] {
+  return [...tables]
+    .map((table, idx) => ({ table, idx }))
+    .sort(
+      (left, right) =>
+        Number(left.table.executionOrder ?? 0) - Number(right.table.executionOrder ?? 0) ||
+        left.idx - right.idx,
+    )
+    .map(({ table }, index) => ({
+      ...table,
+      executionOrder: index + 1,
+    }))
+}
+
 export function orderEntityTablesDetailed(def: Pick<EntityDefinition, "rootTable" | "tables">): {
   tables: EntityTable[]
   cycleDetected: boolean
@@ -81,27 +96,8 @@ export function orderEntityTablesDetailed(def: Pick<EntityDefinition, "rootTable
 export function listEntityTableOrderEdges(
   def: Pick<EntityDefinition, "rootTable" | "tables">
 ): EntityTableOrderEdge[] {
-  const lowerNames = new Set(def.tables.map((table) => table.name.toLowerCase()))
-  const edges: EntityTableOrderEdge[] = []
-
-  for (const table of def.tables) {
-    if (table.scope.kind === "fkPath") {
-      const parent = table.scope.through[0]?.table
-      if (
-        typeof parent === "string" &&
-        lowerNames.has(parent.toLowerCase()) &&
-        parent.toLowerCase() !== table.name.toLowerCase()
-      ) {
-        edges.push({
-          parent,
-          child: table.name,
-          reason: `fkPath scope starts from ${parent}`
-        })
-      }
-    }
-  }
-
-  return dedupeEdges(edges)
+  void def
+  return []
 }
 
 export function findEntityTableOrderViolations(

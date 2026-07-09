@@ -11,9 +11,10 @@ import {
   type Tool,
   type Unsubscribe
 } from "@mia/agent"
-import { type WorkspaceDiff, type prepareRunWorkspace } from "../../../../bootstrap/workspace.js"
+import { type WorkspaceDiff, type prepareRunWorkspace } from "../../workspace/index.js"
 import type { AgentBus } from "../../../../platform/queue/agent-bus.js"
 import { type RunPriority } from "../../../../platform/queue/run-queue.js"
+import type { MemoryPerTier } from "../../../../platform/persistence/memory/tier-context.js"
 import type { ClarificationsRegistryPort } from "../../../../ports/clarifications.js"
 import type { ActiveRun, BootHostDeps, NotificationOpts } from "../../../../ports/orchestration.js"
 
@@ -150,7 +151,7 @@ export type PerRunHostBundle = {
 
 export type ToolResolution = {
   governedTools: Tool[]
-  perTier: { working: string; episodic: string; semantic: string }
+  perTier: MemoryPerTier
   toolDecision: ReturnType<typeof import("../../core/decide-sections.js").decideSections>
 }
 
@@ -190,7 +191,7 @@ export type DelegateToolsBundle = {
 
 export type ExecutionSystemMessagesBundle = {
   effectivePrompt: string
-  systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages.js").buildSystemMessages>>
+  systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages/index.js").buildSystemMessages>>
 }
 
 export type ExecutionEnvironment = {
@@ -208,5 +209,5 @@ export type ExecutionEnvironment = {
   toolDecision: ReturnType<typeof import("../../core/decide-sections.js").decideSections>
   delegateCtx: DelegateContext
   allTools: ExecutableTool[]
-  systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages.js").buildSystemMessages>>
+  systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages/index.js").buildSystemMessages>>
 }

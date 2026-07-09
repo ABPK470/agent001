@@ -1,6 +1,6 @@
 import { createRun, PolicyRole, runStarted, startRunningPure, type RunState } from "@mia/agent"
 import { RunStatus } from "@mia/shared-enums"
-import { prepareRunWorkspace } from "../../../../bootstrap/workspace.js"
+import { prepareRunWorkspace } from "../../workspace/index.js"
 import { wireEventBroadcasting } from "../../core/coordination/event-wiring.js"
 import { persistRun } from "../persistence.js"
 import type {

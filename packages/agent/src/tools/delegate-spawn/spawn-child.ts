@@ -134,7 +134,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
     systemPrompt: effectivePrompt,
     verbose: false,
     signal: ctx.signal,
-    onThinking: (content, _toolCalls, iteration) => {
+    onThinking: (content, toolCalls, iteration) => {
       ctx.onChildTrace?.({
         kind: DelegationTraceKind.Iteration,
         depth: ctx.depth + 1,
@@ -160,7 +160,7 @@ export async function spawnChild(ctx: DelegateContext, spec: ChildSpec): Promise
         iteration: iteration + 1,
         maxIterations: maxIter,
         content: content ? content.slice(0, 200) : null,
-        toolNames: _toolCalls.map((c) => c.name)
+        toolNames: toolCalls.map((c) => c.name)
       })
     },
     onStep: (_messages, _iteration) => {

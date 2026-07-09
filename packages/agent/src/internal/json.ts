@@ -2,7 +2,7 @@
  * JSON / shape-narrowing primitives shared across the agent package.
  *
  * `isRecord` and `asNonEmptyString` are duplicated verbatim in
- * planner/coherent-parse.ts, planner/generate-prompts.ts, and several
+ * planner/generate-prompts.ts and several verifier helpers.
  * verifier helpers. Centralizing them eliminates drift.
  *
  * NOTE: We intentionally do NOT unify the two `parseJsonObject`

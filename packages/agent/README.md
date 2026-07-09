@@ -34,6 +34,14 @@ Headline exports:
 | `llm/`               | Model adapters implementing the `LLMClient` contract.                               |
 | `internal/`          | Package-private utilities.                                                          |
 
+## Tenant config
+
+Per–mia-install JSON (`MIA_TENANT_CONFIG` → `tenant.json`): mirror schema, routing
+keywords, SQL validator thresholds. Separate from `mymi-knowledge.md` (LLM prose).
+Copy [`config/tenant.example.json`](config/tenant.example.json) like `.env.example`.
+See [`config/TENANT-CONFIG.md`](config/TENANT-CONFIG.md). Shipped MyMI file:
+[`../../deploy/tenant.json`](../../deploy/tenant.json).
+
 ## Where things go
 
 - **A new enum that crosses the wire** → `@mia/shared-enums`, then

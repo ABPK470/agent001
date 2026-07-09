@@ -9,6 +9,7 @@ import type { FastifyInstance, FastifyRequest } from "fastify"
 import { broadcast } from "../../platform/events/broadcaster.js"
 import * as db from "../../platform/persistence/sqlite.js"
 import { runProposer } from "./application/runner.js"
+import { cancelOperation } from "../../platform/operations/cancel-registry.js"
 import { deleteSchedule, listSchedules, upsertSchedule } from "./runtime/scheduler.js"
 
 const DEFAULT_TENANT_ID = "_default"
@@ -41,17 +42,38 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
       reply.code(400)
       return { error: "source and target are required" }
     }
-    try {
-      const tenantId = resolveTenant(req)
-      return await runProposer(
-        deps.host,
-        { source, target },
-        { tenantId, triggeredBy: req.session.upn, trigger: "manual", llm: deps.getLlm?.() ?? null }
-      )
-    } catch (error) {
-      reply.code(400)
-      return { error: error instanceof Error ? error.message : String(error) }
+    const tenantId = resolveTenant(req)
+    const envPair = { source, target }
+    const options = {
+      tenantId,
+      triggeredBy: req.session.upn,
+      trigger: "manual" as const,
+      llm: deps.getLlm?.() ?? null,
     }
+
+    void runProposer(deps.host, envPair, options).catch((error) => {
+      const msg = error instanceof Error ? error.message : String(error)
+      console.error(`[proposer] manual run failed (${source} → ${target}):`, msg)
+    })
+
+    reply.code(202)
+    return { accepted: true, source, target }
+  })
+
+  app.post<{ Params: { id: string } }>("/api/proposer/runs/:id/cancel", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
+    const cancelled = cancelOperation("proposer.run", req.params.id)
+    if (!cancelled) {
+      const row = db.getProposerRun(req.params.id)
+      if (!row || (row.status !== "running" && row.status !== "pending")) {
+        reply.code(404)
+        return { error: "No active run to cancel" }
+      }
+    }
+    return { cancelled: true, runId: req.params.id }
   })
 
   app.get<{
@@ -96,6 +118,11 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
     }
   }>("/api/proposer/proposals/:id/status", async (req, reply) => {
     try {
+      const before = db.getProposal(req.params.id)
+      if (!before) {
+        reply.code(404)
+        return { error: "proposal not found" }
+      }
       const row = db.updateProposalStatus({
         id: req.params.id,
         to: req.body.to,
@@ -104,6 +131,10 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
         planId: req.body.planId,
         snoozeUntil: req.body.snoozeUntil,
         supersededBy: req.body.supersededBy
+      })
+      broadcast({
+        type: EventType.SyncProposalStatusChanged,
+        data: { id: row.id, from: before.status, to: row.status, actor: req.session.upn }
       })
       return materialiseProposal(row)
     } catch (error) {
@@ -171,5 +202,11 @@ export function registerProposerRoutes(app: FastifyInstance, deps: ProposerRoute
 }
 
 function materialiseProposal(row: db.ProposalRow): Record<string, unknown> {
-  return { ...row, counts: db.parseCounts(row), annotation: db.parseAnnotation(row) }
+  return {
+    ...row,
+    created_at: row.enqueued_at,
+    finding_kind: row.kind,
+    counts: db.parseCounts(row),
+    annotation: db.parseAnnotation(row),
+  }
 }

@@ -3,6 +3,13 @@ import { getTenantConfig } from "../../application/shell/tenant-config.js"
 import { tokenize } from "./helpers.js"
 import type { CatalogSearchHit, CatalogTable, ImplicitEdge } from "./types.js"
 
+export interface SearchCatalogOptions {
+  viewSourceRows?: Map<string, number>
+  tableVerdicts?: TableVerdictsReader | null
+  /** Scope ranking to one schema — applied during scoring, not after top-N. */
+  schemaFilter?: string
+}
+
 /**
  * Keyword search across table names and column names. Returns ranked results.
  *
@@ -32,9 +39,16 @@ export function searchCatalog(
   implicitJoinIndex: Map<string, ImplicitEdge[]>,
   query: string,
   limit: number,
-  viewSourceRows?: Map<string, number>,
-  tableVerdicts?: TableVerdictsReader | null
+  options: SearchCatalogOptions = {}
 ): CatalogSearchHit[] {
+  const { viewSourceRows, tableVerdicts, schemaFilter } = options
+  const schemaLc = schemaFilter?.toLowerCase()
+  const tableInScope = (key: string): boolean => {
+    if (!schemaLc) return true
+    const table = tables.get(key)
+    return table ? table.schema.toLowerCase() === schemaLc : false
+  }
+
   const tokens = tokenize(query)
   if (tokens.length === 0) return []
 
@@ -46,6 +60,7 @@ export function searchCatalog(
     const nameHits = nameIndex.get(token)
     if (nameHits) {
       for (const key of nameHits) {
+        if (!tableInScope(key)) continue
         if (!scores.has(key)) scores.set(key, { nameScore: 0, colMatches: [] })
         const entry = scores.get(key)!
 
@@ -65,6 +80,7 @@ export function searchCatalog(
     for (const [colName, tableKeys] of columnIndex) {
       if (colName.includes(token) || tokenize(colName).includes(token)) {
         for (const key of tableKeys) {
+          if (!tableInScope(key)) continue
           if (!scores.has(key)) scores.set(key, { nameScore: 0, colMatches: [] })
           const entry = scores.get(key)!
           if (!entry.colMatches.includes(colName)) {

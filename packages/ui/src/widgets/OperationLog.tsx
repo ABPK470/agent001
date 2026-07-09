@@ -6,11 +6,23 @@
  * Layout: operations grouped by day.
  */
 
-import { Brain, ChevronRight, Database, Loader2, Search, Settings, X, XCircle } from "lucide-react"
+import { Brain, ChevronRight, Database, Filter, GitCompareArrows, Loader2, Settings, Square, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline, OperationsResponse } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
 import { useContainerSize } from "../hooks/useContainerSize"
+import {
+  LOG_TOOLBAR_CHIP,
+  LOG_TOOLBAR_CHIP_ACTIVE,
+  LOG_TOOLBAR_CHIP_IDLE,
+  LOG_TOOLBAR_DIVIDER,
+  LOG_TOOLBAR_ICON_BTN,
+  LogWidgetToolbar,
+  LogWidgetToolbarCount,
+  LogWidgetToolbarFilters,
+  LogWidgetToolbarSearch,
+  LogWidgetToolbarTail,
+} from "./widget-toolbar"
 
 // ── Visuals ──────────────────────────────────────────────────────
 
@@ -28,6 +40,11 @@ const KIND_META: Record<
         label: "execute",
         Icon: Database,
         color: "var(--color-success)",
+    },
+    "proposer-run": {
+        label: "scan",
+        Icon: GitCompareArrows,
+        color: "var(--color-warning)",
     },
     system: {
         label: "system",
@@ -106,32 +123,34 @@ function humanizeToken(value: string): string {
 }
 
 const EXEC_STEP_DESCRIPTIONS: Record<string, string> = {
-  "audit-check": "Run pre-deploy validation on the target metadata.",
-  lock: "Lock the contract while deployment is in progress.",
-  "sync-metadata": "Apply metadata row changes on the target environment.",
-  "sync-metadata-done": "Metadata transaction committed successfully.",
-  "pipeline-register": "Register or refresh the pipeline in the Agent service.",
-  undeploy: "Remove previously deployed artifacts marked for replacement.",
-  "unlock-after-undeploy": "Release the contract lock after undeploy completes.",
-  "audit-check-2": "Re-run validation after undeploy before redeploying.",
-  "lock-for-deploy": "Acquire the deployment lock for the build phase.",
-  "deploy-pre-script": "Run pre-deployment SQL scripts.",
-  "create-dataset-stage": "Create or alter stage datasets.",
-  "create-dataset-archive": "Create or alter archive datasets.",
-  "create-dataset-list": "Create or alter list datasets.",
-  "create-dataset-dim": "Create or alter dimension datasets.",
-  "create-dataset-fact": "Create or alter fact datasets.",
-  "create-fks": "Reconcile foreign keys for deployed datasets.",
-  "deploy-etl": "Create or update ETL procedures, views, and functions.",
-  "deploy-routine": "Create or update routines and triggers.",
-  "handle-dependencies": "Refresh dependent objects after metadata changes.",
-  "meta-refresh": "Refresh gate metadata on the target service.",
-  "pipeline-start": "Trigger the registered pipeline on the target service.",
-  "sync-date": "Stamp the target row sync date.",
-  "deploy-date": "Stamp the target row deploy date.",
-  "contract-deploy": "Run the full contract deployment sequence.",
-  "dataset-deploy": "Trigger dataset deployment in ETL.",
-  "rules-deploy": "Trigger rule deployment in ETL.",
+  auditCheck: "Source audit gate before metadata sync (uspAuditRunCheck).",
+  targetLock: "Lock the contract while deployment is in progress.",
+  metadataSync: "Apply metadata row changes on the target environment.",
+  metadataSyncDone: "Metadata transaction committed successfully.",
+  pipelineRegister: "Register or refresh the pipeline in the Agent service.",
+  contractUndeploy: "Remove previously deployed artifacts marked for replacement.",
+  contractUnlockAfterUndeploy: "Release the contract lock after undeploy completes.",
+  auditCheckPreDeploy: "Re-run source audit after undeploy, before physical deploy.",
+  contractLockForDeploy: "Acquire the deployment lock for the build phase.",
+  contractPreScript: "Run pre-deployment SQL scripts.",
+  contractCreateDatasetStage: "Create or alter stage datasets.",
+  contractCreateDatasetArchive: "Create or alter archive datasets.",
+  contractCreateDatasetList: "Create or alter list datasets.",
+  contractCreateDatasetDim: "Create or alter dimension datasets.",
+  contractCreateDatasetFact: "Create or alter fact datasets.",
+  contractCreateFks: "Reconcile foreign keys for deployed datasets.",
+  contractDeployEtl: "Create or update ETL procedures, views, and functions.",
+  contractDeployRoutine: "Create or update routines and triggers.",
+  handleDependencies: "Refresh dependent objects after metadata changes.",
+  metaRefresh: "Refresh gate metadata on the target service.",
+  pipelineStart: "Trigger the registered pipeline on the target service.",
+  setSyncDate: "Stamp the target row sync date.",
+  setDeployDate: "Stamp the target row deploy date.",
+  syncDate: "Stamp the target row sync date.",
+  deployDate: "Stamp the target row deploy date.",
+  contractDeploy: "Run the full contract deployment sequence.",
+  datasetDeploy: "Trigger dataset deployment in ETL.",
+  rulesDeploy: "Trigger rule deployment in ETL.",
 }
 
 function formatActivityName(pipelineKind: OperationKind, activity: OperationActivity): string {
@@ -164,9 +183,13 @@ function formatEventLabel(ev: OperationEvent): string {
     case "sync.execute.archive.probe": return "Archive probe"
     case "sync.execute.archive.probe.batch": return "Archive probe batch"
     case "sync.execute.archive.skipped": return "Archive skipped"
-    case "sync.execute.drift.revalidated": return "Drift check"
     case "sync.execute.completed": return "Execute complete"
     case "sync.execute.failed": return "Execute failed"
+    case "sync.proposer.run.started": return "Scan started"
+    case "sync.proposer.run.completed": return "Scan completed"
+    case "sync.proposer.run.failed": return "Scan failed"
+    case "sync.proposer.run.cancelled": return "Scan cancelled"
+    case "sync.proposal.created": return "Proposal created"
     default: return ev.type
   }
 }
@@ -187,9 +210,26 @@ export function OperationLog() {
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
   const rootRef = useRef<HTMLDivElement>(null)
   const { width } = useContainerSize(rootRef)
-  const compact = width > 0 && width < 640
+  const compact = width > 0 && width < 860
+  const tiny = width > 0 && width < 480
+  const [statusesOpen, setStatusesOpen] = useState(false)
+  const [cancellingId, setCancellingId] = useState<string | null>(null)
 
-  // ── SSE ──────────────────────────────────────────────────────
+  const cancelPipeline = useCallback(async (pipeline: OperationPipeline): Promise<void> => {
+    if (pipeline.status !== "running") return
+    setCancellingId(pipeline.id)
+    try {
+      if (pipeline.kind === OperationKind.AgentRun) {
+        await api.cancelRun(pipeline.id)
+      } else if (pipeline.kind === OperationKind.ProposerRun) {
+        await api.cancelProposerRun(pipeline.id)
+      }
+    } catch {
+      /* SSE refresh will reflect final state */
+    } finally {
+      setCancellingId(null)
+    }
+  }, [])
   useEffect(() => {
     const es = new EventSource("/api/operations/stream", { withCredentials: true })
     es.onopen    = () => { /* connected */ }
@@ -246,7 +286,7 @@ export function OperationLog() {
 
   const filtered = useMemo(() => nonSystem.filter(p => {
     if (kindView === "agent" && p.kind !== "agent-run") return false
-    if (kindView === "sync" && p.kind !== "sync-preview" && p.kind !== "sync-execute") return false
+    if (kindView === "sync" && p.kind !== "sync-preview" && p.kind !== "sync-execute" && p.kind !== "proposer-run") return false
     if (statuses.size > 0 && !statuses.has(p.status)) return false
     // When histResults are active, BE already applied the search; local needle is redundant
     if (needle && !histResults && !matchesPipeline(p, needle)) return false
@@ -256,78 +296,96 @@ export function OperationLog() {
   return (
     <div ref={rootRef} className="h-full flex flex-col gap-2.5 overflow-hidden text-text">
 
-      {/* ── Toolbar ─────────────────────────────────────── */}
-      <div className="rounded-lg border border-border-subtle bg-overlay-1 shrink-0">
-        <div className={`px-3 py-2 ${compact ? "space-y-2.5" : "flex items-center gap-1.5"}`}>
+      <LogWidgetToolbar compact={compact}>
+        <LogWidgetToolbarFilters>
+          {(["all", "agent", "sync"] as const).map(v => {
+            const active = v === kindView
+            const label = v === "sync" ? (compact || tiny ? "sync" : "synchronization") : v
+            return (
+              <button key={v} onClick={() => setKindView(v)}
+                className={`${LOG_TOOLBAR_CHIP} ${active ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE}`}
+              >{label}</button>
+            )
+          })}
 
-          <div className={`min-w-0 ${compact ? "flex flex-wrap items-center gap-1.5" : "flex items-center gap-1.5 flex-1 min-w-0"}`}>
-            {/* Kind: all | agent | synchronization */}
-            {(["all", "agent", "sync"] as const).map(v => {
-              const active = v === kindView
-              const label  = v === "sync" ? "synchronization" : v
-              return (
-                <button key={v} onClick={() => setKindView(v)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap ${
-                    active ? "bg-accent/15 text-accent font-medium" : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
-                  }`}
-                >{label}</button>
-              )
-            })}
+          {!compact && <div className={LOG_TOOLBAR_DIVIDER} aria-hidden />}
 
-            <div className={`bg-overlay-3 shrink-0 ${compact ? "hidden" : "h-4 w-px mx-1"}`} />
-
-            {/* Status chips */}
-            {ALL_STATUSES.map(s => {
-              const on = statuses.has(s)
-              const m  = STATUS_META[s]
-              return (
-                <button key={s} onClick={() => toggleStatus(s)}
-                  className={`flex items-center gap-1.5 px-3 py-1.5 text-[13px] rounded-md transition-colors whitespace-nowrap ${
-                    on ? `${m.tone} font-medium` : "text-text-muted hover:text-text-secondary hover:bg-elevated/40"
-                  }`}
-                >{s}</button>
-              )
-            })}
-
-            {statuses.size > 0 && (
-              <button onClick={() => setStatuses(new Set())}
-                className="p-1.5 rounded-md transition-colors text-text-muted/60 hover:text-text hover:bg-elevated/40 shrink-0"
-                title="Clear status filters"
-              ><X size={14} /></button>
-            )}
-          </div>
-
-          <div className={`min-w-0 ${compact ? "flex items-center gap-2" : "ml-auto flex items-center gap-2 flex-[0_1_32rem] min-w-[18rem]"}`}>
-
-            {/* Search — big, fills remaining space */}
-            <div className={`relative flex items-center min-w-0 ${compact ? "flex-1" : "flex-1 min-w-[16rem]"}`}>
-              <Search size={13} className="absolute left-2.5 text-text-muted/50 pointer-events-none" />
-              <input
-                type="text"
-                placeholder="Filter operations…"
-                value={search}
-                onChange={e => { setSearch(e.target.value); if (!e.target.value) setHistResults(null) }}
-                className="pl-8 pr-7 py-1.5 h-[40px] w-full text-[13px] bg-base border border-border rounded-md text-text placeholder:text-text-muted/50 outline-none focus:border-accent transition-colors"
-              />
-              {histLoading && <Loader2 size={12} className="absolute right-2.5 animate-spin text-text-muted/40" />}
-              {search && !histLoading && (
-                <button className="absolute right-2 text-text-muted hover:text-text"
-                  onClick={() => { setSearch(""); setHistResults(null) }}>
-                  <X size={13} />
-                </button>
+          {!compact ? (
+            <>
+              {ALL_STATUSES.map(s => {
+                const on = statuses.has(s)
+                const m  = STATUS_META[s]
+                return (
+                  <button key={s} onClick={() => toggleStatus(s)}
+                    className={`${LOG_TOOLBAR_CHIP} ${on ? `${m.tone} font-medium` : LOG_TOOLBAR_CHIP_IDLE}`}
+                  >{s}</button>
+                )
+              })}
+              {statuses.size > 0 && (
+                <button onClick={() => setStatuses(new Set())}
+                  className={`${LOG_TOOLBAR_ICON_BTN} text-text-muted/60 hover:text-text hover:bg-elevated/40`}
+                  title="Clear status filters"
+                ><X size={14} /></button>
+              )}
+            </>
+          ) : (
+            <div className="relative shrink-0">
+              <button
+                onClick={() => setStatusesOpen(v => !v)}
+                className={`${LOG_TOOLBAR_CHIP} ${
+                  statuses.size > 0 ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE
+                }`}
+              >
+                <Filter size={13} />
+                {statuses.size === 0 ? "status" : `${statuses.size} status`}
+              </button>
+              {statusesOpen && (
+                <>
+                  <div className="fixed inset-0 z-40" onClick={() => setStatusesOpen(false)} />
+                  <div className="absolute left-0 top-full mt-1 z-50 bg-elevated border border-border rounded-md shadow-2xl py-1 min-w-[160px]">
+                    {ALL_STATUSES.map(s => {
+                      const on = statuses.has(s)
+                      const m = STATUS_META[s]
+                      return (
+                        <button
+                          key={s}
+                          onClick={() => toggleStatus(s)}
+                          className={`flex items-center justify-between gap-3 w-full text-left px-3 py-2 text-[13px] transition-colors ${
+                            on ? `${m.tone} font-medium` : "text-text-muted hover:text-text hover:bg-overlay-2"
+                          }`}
+                        >
+                          <span>{s}</span>
+                        </button>
+                      )
+                    })}
+                    {statuses.size > 0 && (
+                      <button
+                        onClick={() => setStatuses(new Set())}
+                        className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-[12px] text-text-muted hover:text-text hover:bg-overlay-2"
+                      >
+                        <X size={12} />
+                        Clear filters
+                      </button>
+                    )}
+                  </div>
+                </>
               )}
             </div>
+          )}
+        </LogWidgetToolbarFilters>
 
-            {/* Count: filtered / total-non-system */}
-            <span className="text-[12px] text-text-muted tabular-nums shrink-0 px-1.5">
-              {filtered.length !== nonSystem.length
-                ? <>{filtered.length}<span className="text-text-muted/40">/{nonSystem.length}</span></>
-                : nonSystem.length}
-            </span>
-          </div>
+        <LogWidgetToolbarSearch
+          value={search}
+          onChange={(value) => { setSearch(value); if (!value) setHistResults(null) }}
+          placeholder="Filter operations…"
+          loading={histLoading}
+          onClear={() => { setSearch(""); setHistResults(null) }}
+        />
 
-        </div>
-      </div>
+        <LogWidgetToolbarTail>
+          <LogWidgetToolbarCount filtered={filtered.length} total={nonSystem.length} hidden={tiny} />
+        </LogWidgetToolbarTail>
+      </LogWidgetToolbar>
 
       {/* ── Body ────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto pr-1">
@@ -353,6 +411,8 @@ export function OperationLog() {
             toggleEvent={toggleEvent}
             collapsedDays={collapsedDays}
             toggleDay={toggleDay}
+            onCancelPipeline={cancelPipeline}
+            cancellingId={cancellingId}
           />
         )}
       </div>
@@ -372,6 +432,8 @@ export function OperationPipelineList({
   collapsedDays,
   toggleDay,
   onOpenSyncPlan,
+  onCancelPipeline,
+  cancellingId,
 }: {
   pipelines: OperationPipeline[]
   compact: boolean
@@ -384,6 +446,8 @@ export function OperationPipelineList({
   collapsedDays: Set<string>
   toggleDay: (label: string) => void
   onOpenSyncPlan?: (planId: string) => void
+  onCancelPipeline?: (pipeline: OperationPipeline) => void
+  cancellingId?: string | null
 }) {
   const byDay = useMemo(() => {
     const groups: Array<{ label: string; items: OperationPipeline[] }> = []
@@ -423,6 +487,8 @@ export function OperationPipelineList({
                   toggleEvent={toggleEvent}
                   compact={compact}
                   onOpenSyncPlan={onOpenSyncPlan}
+                  onCancel={onCancelPipeline}
+                  cancelling={cancellingId === p.id}
                 />
               ))}
             </div>
@@ -435,7 +501,7 @@ export function OperationPipelineList({
 
 // ── Pipeline row ─────────────────────────────────────────────────
 
-function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, compact, onOpenSyncPlan }: {
+function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, compact, onOpenSyncPlan, onCancel, cancelling }: {
   pipeline: OperationPipeline
   expanded: boolean
   onToggle: () => void
@@ -445,15 +511,22 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
   toggleEvent: (key: string) => void
   compact: boolean
   onOpenSyncPlan?: (planId: string) => void
+  onCancel?: (pipeline: OperationPipeline) => void
+  cancelling?: boolean
 }) {
   const km = KIND_META[pipeline.kind]
   const sm = STATUS_META[pipeline.status]
   const Icon = km.Icon
+  const canCancel =
+    pipeline.status === "running" &&
+    onCancel &&
+    (pipeline.kind === OperationKind.AgentRun || pipeline.kind === OperationKind.ProposerRun)
 
   return (
     <div className="rounded-md border border-border-subtle bg-overlay-1 overflow-hidden">
+      <div className="flex items-center gap-1 pr-1">
       <button
-        className="w-full flex items-center gap-2 px-3 py-2 hover:bg-overlay-2 transition-colors text-left"
+        className="min-w-0 flex-1 flex items-center gap-2 px-3 py-2 hover:bg-overlay-2 transition-colors text-left"
         onClick={onToggle}
       >
         <ChevronRight size={14} className={`shrink-0 text-text-muted/60 transition-transform ${expanded ? "rotate-90" : ""}`} />
@@ -474,6 +547,18 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
         <span className="shrink-0 text-[11px] text-text-muted tabular-nums w-16 text-right">{fmtDuration(pipeline.durationMs)}</span>
         <span className="shrink-0 text-[11px] text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(pipeline.startedAt)}</span>
       </button>
+      {canCancel && (
+        <button
+          type="button"
+          title="Stop"
+          disabled={cancelling}
+          onClick={() => onCancel(pipeline)}
+          className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md border border-border-subtle text-text-muted transition-colors hover:bg-error/10 hover:text-error hover:border-error/30 disabled:opacity-40"
+        >
+          {cancelling ? <Loader2 size={13} className="animate-spin" /> : <Square size={12} />}
+        </button>
+      )}
+      </div>
 
       {expanded && (
         <div className="border-t border-border-subtle bg-base/40 px-2 py-1.5 space-y-0.5">

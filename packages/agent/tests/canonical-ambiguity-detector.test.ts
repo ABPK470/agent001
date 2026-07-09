@@ -6,7 +6,7 @@
  * on qualified names and pronominal follow-ups.
  *
  * No catalog fixtures or names hard-coded into the agent — the test
- * supplies its own minimal `CatalogGraph` and tenant `routingKeywords`.
+ * supplies its own minimal `CatalogGraph` and tenant `domainKeywords`.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { canonicalAmbiguityDetector } from "../src/application/core/clarify-cluster/detectors/canonical-ambiguity.js"
@@ -82,7 +82,7 @@ function makeCtx(opts: {
 
 beforeEach(() => {
   resetTenantConfig()
-  setTenantConfig({ routingKeywords: { schemas: [], domain: ["revenue", "exposure"], sync: [] } })
+  setTenantConfig({ domainKeywords: ["revenue", "exposure"] })
 })
 afterEach(() => resetTenantConfig())
 

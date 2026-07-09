@@ -1,10 +1,11 @@
-import { getCatalog, PolicyRole, type AgentHost, type Tool } from "@mia/agent"
+import { getCatalog, PolicyRole, resolveGoalDataAnchors, seedMssqlVerifiedTables, type AgentHost, type RunContext, type Tool } from "@mia/agent"
 import { broadcastTrace } from "../../../../platform/events/broadcaster.js"
 import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 import { loadCandidateVerdicts, loadKnownObjects } from "../../core/data-blocks/known-objects.js"
 import { loadPriorResults } from "../../core/data-blocks/prior-results-block.js"
 import { loadPriorTurns } from "../../core/data-blocks/prior-turns.js"
-import { buildSystemMessages } from "../../core/system-messages.js"
+import { buildSystemMessages } from "../../core/system-messages/index.js"
+import type { MemoryPerTier } from "../../../../platform/persistence/memory/tier-context.js"
 import type {
   ActiveRunRecord,
   ExecuteRunRequestDto,
@@ -19,6 +20,7 @@ export async function buildExecutionSystemMessages(
     request: ExecuteRunRequestDto
     interaction: RunInteractionPort
     messaging: RunMessagingPort
+    runContext?: RunContext
   },
   envBase: {
     activeRun: ActiveRunRecord | undefined
@@ -28,15 +30,15 @@ export async function buildExecutionSystemMessages(
     boundSaveTrace: (runId: string, entry: Record<string, unknown>) => void
     debugSeqRef: { value: number }
   },
-  perTier: { working: string; episodic: string; semantic: string }
+  perTier: MemoryPerTier
 ): Promise<ExecutionSystemMessagesBundle> {
   const { request, interaction, messaging } = input
   const priorTurns =
-    envBase.activeRun?.sessionId &&
     envBase.activeRun?.ownerUpn &&
+    envBase.activeRun.threadId &&
     envBase.runWorkspace.taskType !== "code_generation"
       ? loadPriorTurns({
-          sessionId: envBase.activeRun.sessionId,
+          threadId: envBase.activeRun.threadId,
           excludeRunId: request.runId,
           upn: envBase.activeRun.ownerUpn,
           limit: 3
@@ -44,9 +46,41 @@ export async function buildExecutionSystemMessages(
       : []
 
   const priorResults =
-    envBase.activeRun?.sessionId && envBase.runWorkspace.taskType !== "code_generation"
-      ? loadPriorResults({ sessionId: envBase.activeRun.sessionId, excludeRunId: request.runId })
+    envBase.activeRun?.threadId &&
+    envBase.activeRun.ownerUpn &&
+    envBase.runWorkspace.taskType !== "code_generation"
+      ? loadPriorResults({
+          threadId: envBase.activeRun.threadId,
+          upn: envBase.activeRun.ownerUpn,
+          excludeRunId: request.runId
+        })
       : []
+
+  const knownObjects = (() => {
+    try {
+      return loadKnownObjects({ goal: request.goal, priorTurns })
+    } catch (error) {
+      console.warn(`[run ${request.runId}] knownObjects load failed:`, (error as Error).message)
+      return []
+    }
+  })()
+
+  if (input.runContext) {
+    seedMssqlVerifiedTables(
+      input.runContext,
+      knownObjects.map((o) => o.qname)
+    )
+    try {
+      const catalog = getCatalog(envBase.perRunHost)
+      if (catalog) {
+        for (const anchor of resolveGoalDataAnchors(request.goal, catalog)) {
+          seedMssqlVerifiedTables(input.runContext, [anchor.qualifiedName])
+        }
+      }
+    } catch {
+      // catalog unavailable — skip goal-anchor seeding
+    }
+  }
 
   const systemMessages = await buildSystemMessages({
     goal: request.goal,
@@ -59,14 +93,7 @@ export async function buildExecutionSystemMessages(
     attachmentIds: envBase.activeRun?.attachmentIds ?? [],
     priorTurns,
     priorResults,
-    knownObjects: (() => {
-      try {
-        return loadKnownObjects({ goal: request.goal, priorTurns })
-      } catch (error) {
-        console.warn(`[run ${request.runId}] knownObjects load failed:`, (error as Error).message)
-        return []
-      }
-    })(),
+    knownObjects,
     knownVerdicts: (() => {
       try {
         return loadCandidateVerdicts({

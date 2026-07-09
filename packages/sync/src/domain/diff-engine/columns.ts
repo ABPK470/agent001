@@ -4,8 +4,7 @@
  * @module
  */
 
-import type sql from "mssql"
-import type { SyncEventHost } from "../../ports/index.js"
+import type { SyncRuntimeHost } from "../../ports/index.js"
 import { hashExpr, qtable, runQueryWithRetry } from "./sql-helpers.js"
 import {
   DETERMINISTIC_SESSION_PREFIX,
@@ -22,15 +21,15 @@ import {
  * skip the identity column (it's the PK and used for matching).
  */
 export async function fetchTableColumns(
-  host: SyncEventHost,
-  pool: sql.ConnectionPool,
+  host: SyncRuntimeHost,
+  connectionName: string,
   qualifiedTable: string,
   telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<TableColumnInfo> {
   const [schema, name] = qualifiedTable.split(".")
   const result = await runQueryWithRetry(
     host,
-    pool,
+    connectionName,
     `
     SELECT
       c.name             AS columnName,
@@ -79,8 +78,8 @@ export async function fetchTableColumns(
  * in scope are stable, and nullables compare consistently across source/target.
  */
 export async function fetchPkHash(
-  host: SyncEventHost,
-  pool: sql.ConnectionPool,
+  host: SyncRuntimeHost,
+  connectionName: string,
   qualifiedTable: string,
   predicate: string,
   pkColumns: string[],
@@ -99,7 +98,7 @@ export async function fetchPkHash(
     `FROM ${qtable(qualifiedTable)} WHERE ${predicate}`
   const result = await runQueryWithRetry(
     host,
-    pool,
+    connectionName,
     query,
     `fetchPkHash(${qualifiedTable})`,
     2,

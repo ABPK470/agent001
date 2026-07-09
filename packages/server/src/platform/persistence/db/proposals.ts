@@ -25,7 +25,7 @@ import {
   type RiskTier
 } from "@mia/sync"
 import { randomUUID } from "node:crypto"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 // ── proposer_runs ────────────────────────────────────────────────
 
@@ -104,6 +104,13 @@ export function listProposerRuns(tenantId: string, limit = 50): ProposerRunRow[]
   return getDb()
     .prepare(`SELECT * FROM proposer_runs WHERE tenant_id = ? ORDER BY started_at DESC LIMIT ?`)
     .all(tenantId, limit) as ProposerRunRow[]
+}
+
+/** Runs left in pending/running after a crash or restart. */
+export function findStaleProposerRuns(): ProposerRunRow[] {
+  return getDb()
+    .prepare(`SELECT * FROM proposer_runs WHERE status IN ('pending', 'running') ORDER BY started_at ASC`)
+    .all() as ProposerRunRow[]
 }
 
 // ── sync_proposals ───────────────────────────────────────────────

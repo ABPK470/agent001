@@ -81,6 +81,8 @@ export const PolicyDbOperation = {
   QueryRead: "query_read",
   SyncPreview: "sync_preview",
   SyncExecute: "sync_execute",
+  SyncCustomSql: "sync_custom_sql",
+  SyncShellExecute: "sync_shell_execute",
   Ddl: "ddl",
   Dml: "dml"
 } as const

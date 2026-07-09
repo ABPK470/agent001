@@ -4,15 +4,7 @@
 
 import { isRunStatus, RUN_STATUSES, RunStatus } from "@mia/agent"
 import type { Run } from "@mia/shared-types"
-import { getDb } from "./connection.js"
-
-function resolveExistingSessionId(sessionId: string | null | undefined): string | null {
-  if (!sessionId) return null
-  const row = getDb().prepare("SELECT sid FROM sessions WHERE sid = ?").get(sessionId) as
-    | { sid: string }
-    | undefined
-  return row?.sid ?? null
-}
+import { getDb } from "../connection.js"
 
 // ── Run queries ──────────────────────────────────────────────────
 
@@ -31,7 +23,7 @@ export interface DbRun {
   agent_id: string | null
   created_at: string
   completed_at: string | null
-  session_id?: string | null
+  thread_id?: string | null
   upn?: string | null
   display_name?: string | null
 }
@@ -46,8 +38,8 @@ export interface DbRun {
 // updates the row in place and does not fire cascade deletes.
 const upsertRun = () =>
   getDb().prepare(`
-  INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, session_id, upn, display_name)
-  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @created_at, @completed_at, @session_id, @upn, @display_name)
+  INSERT INTO runs (id, goal, status, answer, step_count, error, parent_run_id, agent_id, created_at, completed_at, thread_id, upn, display_name)
+  VALUES (@id, @goal, @status, @answer, @step_count, @error, @parent_run_id, @agent_id, @created_at, @completed_at, @thread_id, @upn, @display_name)
   ON CONFLICT(id) DO UPDATE SET
     goal          = excluded.goal,
     status        = excluded.status,
@@ -58,7 +50,7 @@ const upsertRun = () =>
     agent_id      = excluded.agent_id,
     created_at    = excluded.created_at,
     completed_at  = excluded.completed_at,
-    session_id    = excluded.session_id,
+    thread_id     = excluded.thread_id,
     upn           = excluded.upn,
     display_name  = excluded.display_name
 `)
@@ -73,15 +65,16 @@ export function saveRun(run: DbRun): void {
       `runs.status must be one of [${RUN_STATUSES.join(", ")}]; got "${String(run.status)}" for run ${run.id}`
     )
   }
-  // Stamp session/upn from AsyncLocalStorage if the caller didn't provide them.
-  // Existing rows keep their stamp on update (we read first via getRun and merge).
   const existing = getDb()
-    .prepare("SELECT session_id, upn, display_name FROM runs WHERE id = ?")
-    .get(run.id) as { session_id: string | null; upn: string | null; display_name: string | null } | undefined
-  const resolvedSessionId = resolveExistingSessionId(run.session_id ?? existing?.session_id ?? null)
+    .prepare("SELECT thread_id, upn, display_name FROM runs WHERE id = ?")
+    .get(run.id) as {
+    thread_id: string | null
+    upn: string | null
+    display_name: string | null
+  } | undefined
   upsertRun().run({
     ...run,
-    session_id: resolvedSessionId,
+    thread_id: run.thread_id ?? existing?.thread_id ?? null,
     upn: run.upn ?? existing?.upn ?? null,
     display_name: run.display_name ?? existing?.display_name ?? null
   })
@@ -140,8 +133,28 @@ export function dbRunToWire(row: DbRun, extras: RunWireExtras): Run {
     llmCalls: extras.llmCalls,
     pendingWorkspaceChanges: extras.pendingWorkspaceChanges,
     upn: row.upn ?? null,
-    displayName: row.display_name ?? null
+    displayName: row.display_name ?? null,
+    threadId: row.thread_id ?? null
   }
+}
+
+export function listRunsWithUsageForThread(
+  threadId: string,
+  limit = 200,
+  offset = 0
+): DbRunWithUsage[] {
+  return getDb()
+    .prepare(
+      `
+      SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
+      FROM runs r
+      LEFT JOIN token_usage t ON t.run_id = r.id
+      WHERE r.thread_id = @threadId
+      ORDER BY r.created_at ASC
+      LIMIT @limit OFFSET @offset
+    `
+    )
+    .all({ threadId, limit, offset }) as DbRunWithUsage[]
 }
 
 export function listRunsWithUsage(limit = 100, offset = 0): DbRunWithUsage[] {
@@ -157,47 +170,25 @@ export function listRunsWithUsage(limit = 100, offset = 0): DbRunWithUsage[] {
     .all(limit, offset) as DbRunWithUsage[]
 }
 
-/**
- * Scoped listing for non-admin visitors. Matches by upn when set, otherwise
- * by session_id (so anonymous-cookie users only see runs they themselves
- * started in this browser session).
- */
+/** Scoped listing for authenticated visitors — upn only (no session_id fallback). */
 export function listRunsWithUsageForUser(
-  opts: { upn?: string | null; sid?: string | null; sessionOnly?: boolean },
+  opts: { upn?: string | null },
   limit = 100,
   offset = 0
 ): DbRunWithUsage[] {
-  const { upn, sid, sessionOnly } = opts
-  if (!upn && !sid) return []
-  // sessionOnly=true narrows to "this chat thread" \u2014 the runs that share the
-  // current cookie sid. Default behaviour (sessionOnly=false) shows every run
-  // for this UPN across all login sessions, with the sid fallback for users
-  // without a stable identity.
-  if (sessionOnly && sid) {
-    return getDb()
-      .prepare(
-        `
-        SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
-        FROM runs r
-        LEFT JOIN token_usage t ON t.run_id = r.id
-        WHERE r.session_id = @sid
-        ORDER BY r.created_at DESC LIMIT @limit OFFSET @offset
-      `
-      )
-      .all({ sid, limit, offset }) as DbRunWithUsage[]
-  }
+  const { upn } = opts
+  if (!upn) return []
   return getDb()
     .prepare(
       `
       SELECT r.*, t.total_tokens, t.prompt_tokens, t.completion_tokens, t.llm_calls
       FROM runs r
       LEFT JOIN token_usage t ON t.run_id = r.id
-      WHERE (@upn IS NOT NULL AND r.upn = @upn)
-         OR (@upn IS NULL AND @sid IS NOT NULL AND r.session_id = @sid)
+      WHERE r.upn = @upn
       ORDER BY r.created_at DESC LIMIT @limit OFFSET @offset
     `
     )
-    .all({ upn: upn ?? null, sid: sid ?? null, limit, offset }) as DbRunWithUsage[]
+    .all({ upn, limit, offset }) as DbRunWithUsage[]
 }
 
 /** Every non-terminal RunStatus — anything still in this set after a

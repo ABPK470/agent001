@@ -10,9 +10,7 @@ import {
   extractAcceptanceTokens,
   getCorrectionGuidance,
   isFileMutationToolCall,
-  isLowSignalBrowserToolCall,
   isWorkspaceInspectionToolCall,
-  specRequiresBrowserEvidence,
   specRequiresFileMutationEvidence,
   specRequiresSuccessfulToolEvidence,
   specRequiresWorkspaceInspection,
@@ -33,7 +31,7 @@ function makeSpec(overrides: Partial<DelegationContractSpec> = {}): DelegationCo
     requiredSourceArtifacts: [],
     tools: ["write_file", "read_file", "run_command"],
     effectClass: "filesystem_write",
-    verificationMode: "browser_check",
+    verificationMode: "run_tests",
     role: "writer",
     ...overrides
   }
@@ -371,7 +369,7 @@ describe("validateDelegatedOutputContract", () => {
       const result = validateDelegatedOutputContract({
         spec: makeSpec({
           targetArtifacts: ["tmp/chess/index.html"],
-          verificationMode: "browser_check"
+          verificationMode: "run_tests"
         }),
         output: "Created tmp/chess/index.html with full app shell.",
         toolCalls: [
@@ -476,53 +474,28 @@ describe("validateDelegatedOutputContract", () => {
     })
   })
 
-  describe("browser evidence quality", () => {
-    it("detects low-signal browser evidence", () => {
+  describe("executable verification via run_tests mode", () => {
+    it("rejects narrative completion without npm test evidence", () => {
       const result = validateDelegatedOutputContract({
-        spec: makeSpec({ verificationMode: "browser_check" }),
-        output: "Tested in browser. Board renders 8x8 grid. Pieces dragged. tmp/chess/game.js",
-        toolCalls: [
-          makeToolCall(),
-          makeToolCall({
-            name: "browser_check",
-            args: { url: "about:blank" },
-            result: "[about:blank]"
-          })
-        ]
-      })
-      expect(result.ok).toBe(false)
-      expect(result.code).toBe("low_signal_browser_evidence")
-    })
-
-    it("rejects browser_check evidence when runtime/load errors are present", () => {
-      const result = validateDelegatedOutputContract({
-        spec: makeSpec({ verificationMode: "browser_check" }),
+        spec: makeSpec({ verificationMode: "run_tests" }),
         output: "Implemented chess UI and verified in browser. tmp/chess/index.html",
-        toolCalls: [
-          makeToolCall(),
-          makeToolCall({
-            name: "browser_check",
-            args: { path: "tmp/chess/index.html" },
-            result:
-              "Found 2 JavaScript error(s): Failed to load resource: the server responded with a status of 404"
-          })
-        ]
+        toolCalls: [makeToolCall()]
       })
       expect(result.ok).toBe(false)
       expect(result.code).toBe("missing_executable_verification_evidence")
     })
 
-    it("passes with meaningful browser evidence", () => {
+    it("passes with successful npm test output", () => {
       const result = validateDelegatedOutputContract({
-        spec: makeSpec({ verificationMode: "browser_check" }),
+        spec: makeSpec({ verificationMode: "run_tests" }),
         output:
           "Created and tested chess game. Board renders 8x8 grid. Pieces can be dragged. tmp/chess/game.js",
         toolCalls: [
           makeToolCall(),
           makeToolCall({
-            name: "browser_check",
-            args: { path: "tmp/chess/index.html" },
-            result: "Page loaded, no JS errors"
+            name: "run_command",
+            args: { command: "npm test" },
+            result: "Tests: 12 passed, 12 total"
           })
         ]
       })
@@ -797,9 +770,9 @@ describe("validateDelegatedOutputContract", () => {
             result: "Success"
           }),
           makeToolCall({
-            name: "browser_check",
-            args: { path: "tmp/chess/index.html" },
-            result: "No JS errors"
+            name: "run_command",
+            args: { command: "npm test" },
+            result: "Tests: 12 passed, 12 total"
           })
         ]
       })
@@ -943,30 +916,6 @@ describe("isWorkspaceInspectionToolCall", () => {
   })
 })
 
-describe("isLowSignalBrowserToolCall", () => {
-  it("identifies about:blank navigation as low signal", () => {
-    expect(
-      isLowSignalBrowserToolCall(
-        makeToolCall({
-          name: "browser_check",
-          args: { url: "about:blank" }
-        })
-      )
-    ).toBe(true)
-  })
-
-  it("does not flag real browser check", () => {
-    expect(
-      isLowSignalBrowserToolCall(
-        makeToolCall({
-          name: "browser_check",
-          args: { path: "tmp/index.html" }
-        })
-      )
-    ).toBe(false)
-  })
-})
-
 // ============================================================================
 // Spec requirements classification
 // ============================================================================
@@ -1011,16 +960,6 @@ describe("specRequiresWorkspaceInspection", () => {
   })
 })
 
-describe("specRequiresBrowserEvidence", () => {
-  it("requires browser for browser_check mode", () => {
-    expect(specRequiresBrowserEvidence(makeSpec({ verificationMode: "browser_check" }))).toBe(true)
-  })
-
-  it("does not require browser for test mode", () => {
-    expect(specRequiresBrowserEvidence(makeSpec({ verificationMode: "test" }))).toBe(false)
-  })
-})
-
 // ============================================================================
 // Correction guidance
 // ============================================================================
@@ -1046,14 +985,14 @@ describe("buildContractSpec", () => {
       {
         objective: "Build chess game",
         acceptanceCriteria: ["Board renders"],
-        requiredToolCapabilities: ["browser_check"]
+        requiredToolCapabilities: ["run_command"]
       },
       {
         targetArtifacts: ["game.js"],
         requiredSourceArtifacts: ["src/engine.ts"],
         allowedTools: ["write_file"],
         effectClass: "filesystem_write",
-        verificationMode: "browser_check",
+        verificationMode: "run_tests",
         role: "writer"
       }
     )
@@ -1063,7 +1002,7 @@ describe("buildContractSpec", () => {
     expect(spec.targetArtifacts).toEqual(["game.js"])
     expect(spec.requiredSourceArtifacts).toEqual(["src/engine.ts"])
     expect(spec.tools).toContain("write_file")
-    expect(spec.tools).toContain("browser_check")
+    expect(spec.tools).toContain("run_command")
     expect(spec.effectClass).toBe("filesystem_write")
     expect(spec.role).toBe("writer")
   })

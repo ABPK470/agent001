@@ -45,7 +45,7 @@ shapes, named by their communication pattern:
 | `*Sink` | Fire-and-forget event push, no return | `SyncEventSink`, `SseSink` |
 | `*Store` | Read **and** write the same entity | `AttachmentStore`, `HandoffStore`, `ToolKnowledgeStore` |
 | `*Reader` | Read-only lookup (including asking a human) | `CredentialReader`, `UserInputReader`, `TableVerdictsReader` |
-| `*Client` | Wraps an external system we consume | `ShellClient`, `BrowserClient` |
+| `*Client` | Wraps an external system we consume | `ShellClient` |
 
 The **agent** package _declares_ these ports. The **server** package _provides_
 the concrete implementations (adapters). The agent never imports the server.
@@ -110,8 +110,7 @@ packages/agent/src/
 1. Build the initial messages (goal + system blocks + recalled memory).
 2. **Routing first.** `attemptPlannerRouting()` (in
    `application/core/planner-routing-cluster/`) scores the goal and chooses
-   _direct_, _coherent generation_, or _full planner_. If a structured lane
-   succeeds, it returns immediately.
+   _direct_ or _planner_. If the planner path succeeds, it returns immediately.
 3. Otherwise enter the **tool loop**: call the LLM → run completion guards → if
    the model asked for tools, execute each one (governed, traced), feed results
    back, repeat → if the model produced text, run post-round checks (stuck
@@ -124,25 +123,33 @@ run context. Tool lookup is a plain `Map<name, tool>` built at construction.
 
 ### Boot host vs. per-run context — the two state objects
 
-Everything stateful lives on exactly two objects, both passed by parameter:
+Most stateful runtime data lives on exactly two objects, passed by parameter:
 
 - **`AgentHost`** — built once per process by `configureAgent({...})`. Holds
   process-lifetime capabilities: MSSQL connection registry, filesystem sandbox
   root, shell mode + client, browser sessions, attachment/credential/handoff
-  ports, catalog caches, sync host, tenant config. A `null` field means "this
-  capability is not wired" (e.g. a CLI with no browser).
+  ports, catalog caches, sync host, and a small **`tenant` identity slot**
+  (`id`, `displayName`, `featureFlags`). A `null` field means "this capability
+  is not wired" (e.g. a CLI with no browser).
 - **`RunContext`** — built once per run by `makeRunContext({...})`. Holds
   per-run facts: the abort signal, the memory writer, the active tool-trace, the
   policy context, the current sync-op context. Threaded into every tool handler.
 
-Tool handlers receive both as arguments. Nothing is read from a global.
+**`TenantConfig`** (business knobs: `mirrorSchema`, routing keywords, SQL
+validator thresholds) is separate from `AgentHost.tenant`. It is loaded once at
+server boot from `MIA_TENANT_CONFIG` → `tenant.json` and read via
+`getTenantConfig()` across agent and server code. See
+`packages/agent/config/TENANT-CONFIG.md`.
+
+Tool handlers receive `AgentHost` + `RunContext` by argument. `TenantConfig` is
+the main intentional process-wide singleton besides the boot host itself.
 
 ### What lives in `application/core/` (pure)
 
 | Cluster | Responsibility |
 |---|---|
 | `planner-cluster` | Decompose a goal into a verifiable artifact graph; generate, execute, and verify plans |
-| `planner-routing-cluster` | Decide _direct vs. coherent-generation vs. planner_; escalate on failure |
+| `planner-routing-cluster` | Decide _direct vs. planner_; escalate on failure |
 | `governance-cluster` | Tool-quality and execution-policy checks run before each call |
 | `recovery-cluster` | Retry policy, budget extension, circuit-breaker on repeated tool failure |
 | `clarify-cluster` | Detect unresolved ambiguity in the goal and emit a clarification request |
@@ -160,7 +167,6 @@ Tool handlers receive both as arguments. Nothing is read from a global.
 ### Supporting subsystems
 
 - **`tools/`** — filesystem, shell, MSSQL (query/profile/inspect/relationships),
-  browser automation (`browse_web`, auto-login, human handoff, `browser_check`),
   web/catalog search, delegation, sync wrappers, attachments, and
   human-in-the-loop (`ask_user`, `note`, `recall`).
 - **`memory/`** — multi-turn compaction (summarize older turns), working /
@@ -197,8 +203,7 @@ packages/server/src/
 ### The boot sequence (`index.ts`)
 
 Startup is deterministic and observable — each step logs. In order: load `.env`
-→ open SQLite and run migrations (healing legacy data, seeding the bootstrap
-admin) → resolve the agent workspace → configure the Docker sandbox (falling
+→ open SQLite, run pending migrations, and seed defaults → resolve the agent workspace → configure the Docker sandbox (falling
 back to host execution if Docker is absent) → set up MSSQL connections → load
 sync environments → **build the boot `AgentHost` via `configureAgent(...)`**
 (wiring sync sinks, catalog registry, shell/browser adapters) → seed default
@@ -251,7 +256,7 @@ This is the core of the server. `AgentOrchestrator`
 
 | Subsystem | Responsibility |
 |---|---|
-| `persistence/` | The SQLite layer (better-sqlite3, WAL): all tables, queries, migrations, attachments, memory, evidence. `SCHEMA_VERSION = 23`. |
+| `persistence/` | The SQLite layer (better-sqlite3, WAL): all tables, queries, numbered migrations (`persistence/migrations/`), attachments, memory, evidence. |
 | `events/` | The `EventBroadcaster` — the single SSE transport. Per-client identity, run-ownership filtering, event-log persistence, webhook drains, heartbeats. |
 | `queue/` | The `RunQueue` (priority, slot-limited parallelism) and the `AgentBus` (persistence-backed inter-run message buffer). |
 | `sandbox/` | Docker-based isolated shell and browser execution, with a host fallback when Docker is unavailable. |
@@ -263,15 +268,16 @@ This is the core of the server. `AgentOrchestrator`
 
 The server implements every port the agent declares and injects the
 implementations through `configureAgent()` and `createPerRunHost()`. For
-example: `ShellClient`/`BrowserClient` delegate to the sandbox; the browser
-context/credential/handoff ports are backed by SQLite stores; `AttachmentStore`
+example: `ShellClient` delegates to the sandbox; `AttachmentStore`
 wraps the attachment repository; the sync sinks broadcast over SSE and persist
 plan previews.
 
 ### Identity & persistence model
 
 Persistence is a single SQLite database (default `~/.mia/mia.db`, override with
-`MIA_DATA_DIR`), migrated automatically on boot. Identity is two tables —
+`MIA_DATA_DIR`), migrated automatically on boot. All other server-local runtime
+data (catalog cache, sync plans, evidence, attachments) lives under the same
+directory. Identity is two tables —
 `users` (keyed by `upn`) and `sessions` (keyed by `sid`). Identity is resolved
 at the HTTP boundary, decorated onto `req.session`, and **passed explicitly**
 downstream — never read from an ambient store. Admin is the `users.is_admin`

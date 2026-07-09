@@ -17,7 +17,6 @@ export interface MemoryEntry {
   confidence: number
   salience: number
   accessCount: number
-  sessionId: string | null
   runId: string | null
   parentId: string | null
   /**
@@ -33,20 +32,6 @@ export interface MemoryEntry {
    * knowledge). False by default. There is no UI/tool to set this yet —
    * leave dormant to avoid recreating the leak we just closed.
    */
-  shared: boolean
-  createdAt: string
-  updatedAt: string
-}
-
-export interface ProceduralMemory {
-  id: string
-  trigger: string
-  toolSequence: Array<{ tool: string; argsPattern: Record<string, unknown> }>
-  successCount: number
-  failureCount: number
-  runId: string
-  upn: string | null
-  sessionId: string | null
   shared: boolean
   createdAt: string
   updatedAt: string
@@ -69,7 +54,7 @@ export interface MemoryBudget {
 /** @deprecated Use MemoryEntry */
 export interface Memory {
   id: string
-  tier: MemoryTier | "procedural"
+  tier: MemoryTier
   content: string
   metadata: Record<string, unknown>
   source: MemorySource

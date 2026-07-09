@@ -1,4 +1,5 @@
 import type { Message } from "@mia/agent"
+import { presentToolCall, serializeToolCallArgs } from "@mia/shared-types"
 import { type ExecuteRunCommand } from "./types.js"
 
 const CLASSIFICATION_RECENT_MSGS = 6
@@ -37,19 +38,14 @@ export function buildPersistedToolTrace(
 }> {
   return steps.map((step) => {
     const input = step.input ?? {}
-    const keys = Object.keys(input)
-    const argsSummary =
-      keys.length > 0
-        ? keys.length === 1
-          ? `${keys[0]}=${JSON.stringify(input[keys[0]])}`
-          : `${keys.length} args`
-        : ""
+    const { summary: argsSummary } = presentToolCall(step.action, input)
+    const argsFormatted = serializeToolCallArgs(input)
     return {
       kind: "tool-call",
       tool: step.action,
       text: `${step.action}(${argsSummary || "..."})`,
       argsSummary,
-      argsFormatted: JSON.stringify(input, null, 2)
+      argsFormatted
     }
   })
 }

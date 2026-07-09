@@ -1,25 +1,53 @@
-import { AlertTriangle, History, Loader2, Ship, X, XCircle } from "lucide-react"
+import { AlertTriangle, History, Loader2, Ship, XCircle } from "lucide-react"
 import type { ReactNode } from "react"
-import { createPortal } from "react-dom"
 
 import type { SyncEnvironment } from "../../types"
+import {
+  ModalShell as RegistryModalShell,
+  type ModalShellScrim,
+  type ModalShellSize,
+} from "../entity-registry/ModalShell"
 
-export function ModalShell({ title, subtitle, icon, onClose, children }: { title: string; subtitle?: string; icon?: ReactNode; onClose: () => void; children: ReactNode }) {
-  return createPortal(
-    <div className="fixed inset-0 z-[200] bg-scrim flex items-center justify-center p-2 sm:p-4" onClick={onClose}>
-      <div className="w-full h-full max-w-5xl sm:max-h-[85vh] bg-surface flex flex-col shadow-2xl overflow-hidden rounded-xl sm:rounded-2xl" onClick={(e) => e.stopPropagation()}>
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-subtle shrink-0">
-          <div className="flex items-center gap-2.5">
-            {icon}
-            <h2 className="text-lg font-semibold text-text">{title}</h2>
-            {subtitle && <span className="text-sm text-text-muted font-mono">{subtitle}</span>}
-          </div>
-          <button onClick={onClose} className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-overlay-3 transition-colors"><X size={18} /></button>
-        </div>
-        <div className="flex-1 overflow-y-auto">{children}</div>
-      </div>
-    </div>,
-    document.body,
+export type { ModalShellSize, ModalShellScrim }
+
+export function ModalShell({
+  title,
+  subtitle,
+  icon,
+  onClose,
+  children,
+  footer,
+  size = "default",
+  scrim,
+  stackLevel = 0,
+  panelClassName,
+}: {
+  title: string
+  subtitle?: string
+  icon?: ReactNode
+  onClose: () => void
+  children: ReactNode
+  footer?: ReactNode
+  size?: ModalShellSize
+  scrim?: ModalShellScrim
+  stackLevel?: number
+  /** @deprecated Prefer size="default" | "focus" — overrides panel width when set. */
+  panelClassName?: string
+}) {
+  return (
+    <RegistryModalShell
+      title={title}
+      subtitle={subtitle}
+      icon={icon}
+      onClose={onClose}
+      size={size}
+      scrim={scrim}
+      stackLevel={stackLevel}
+      widthClass={panelClassName}
+      footer={footer}
+    >
+      {children}
+    </RegistryModalShell>
   )
 }
 

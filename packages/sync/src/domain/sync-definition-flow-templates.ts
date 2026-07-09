@@ -7,6 +7,12 @@ import type {
   SyncDefinitionRuntimeOptions
 } from "@mia/shared-types"
 
+import {
+  DEFAULT_SYNC_METADATA_PATH,
+  loadSyncMetadataArtifact,
+  syncMetadataFlowTemplateCatalog
+} from "./load-sync-metadata-artifact.js"
+
 export interface SyncDefinitionFlowTemplate {
   label: string
   description: string
@@ -19,6 +25,7 @@ export interface SyncDefinitionFlowTemplateCatalog {
 }
 
 export const DEFAULT_SYNC_DEFINITION_FLOW_TEMPLATES_PATH = "deploy/sync/artifacts/flow-templates.json"
+/** Prefer {@link DEFAULT_SYNC_METADATA_PATH} — flow-templates.json is a derived view of sync-metadata.flows. */
 
 const KNOWN_FLOW_TEMPLATE_IDS: EntityRegistrySyncFlowTemplateId[] = [
   "contract",
@@ -27,34 +34,55 @@ const KNOWN_FLOW_TEMPLATE_IDS: EntityRegistrySyncFlowTemplateId[] = [
   "pipelineActivity",
   "gateMetadata",
   "content",
-  "metadata-only"
+  "metadataOnly"
 ]
 
 export function loadSyncDefinitionFlowTemplateCatalog(
   projectRoot: string,
   relPath = DEFAULT_SYNC_DEFINITION_FLOW_TEMPLATES_PATH
 ): SyncDefinitionFlowTemplateCatalog {
+  const metadataPath = resolve(projectRoot, DEFAULT_SYNC_METADATA_PATH)
+  if (existsSync(metadataPath)) {
+    return loadFlowTemplateCatalogFromMetadata(projectRoot)
+  }
+
   const path = resolve(projectRoot, relPath)
   if (!existsSync(path)) {
-    throw new Error(`Sync definition flow template catalog not found at ${relPath}.`)
+    throw new Error(
+      `Sync definition flow template catalog not found at ${relPath} or ${DEFAULT_SYNC_METADATA_PATH}.`
+    )
   }
   const parsed = JSON.parse(readFileSync(path, "utf-8")) as Partial<SyncDefinitionFlowTemplateCatalog> & {
     flowTemplates?: Record<string, unknown>
   }
+  return parseFlowTemplateCatalog(parsed, relPath)
+}
+
+function loadFlowTemplateCatalogFromMetadata(projectRoot: string): SyncDefinitionFlowTemplateCatalog {
+  const metadata = loadSyncMetadataArtifact(projectRoot)
+  const raw = syncMetadataFlowTemplateCatalog(metadata)
+  return parseFlowTemplateCatalog(
+    raw as Partial<SyncDefinitionFlowTemplateCatalog> & { flowTemplates?: Record<string, unknown> },
+    DEFAULT_SYNC_METADATA_PATH,
+  )
+}
+
+function parseFlowTemplateCatalog(
+  parsed: Partial<SyncDefinitionFlowTemplateCatalog> & { flowTemplates?: Record<string, unknown> },
+  sourceLabel: string
+): SyncDefinitionFlowTemplateCatalog {
   if (parsed.version !== 1) {
     throw new Error(`Unsupported sync definition flow template catalog version: ${String(parsed.version)}`)
   }
   if (!parsed.flowTemplates || typeof parsed.flowTemplates !== "object") {
-    throw new Error(`Sync definition flow template catalog at ${relPath} is missing flowTemplates.`)
+    throw new Error(`Sync definition flow template catalog at ${sourceLabel} is missing flowTemplates.`)
   }
 
   const flowTemplates = Object.fromEntries(
     KNOWN_FLOW_TEMPLATE_IDS.map((templateId) => {
       const raw = parsed.flowTemplates?.[templateId]
       if (!raw || typeof raw !== "object")
-        throw new Error(
-          `Sync definition flow template catalog at ${relPath} is missing template ${templateId}.`
-        )
+        throw new Error(`Sync definition flow template catalog at ${sourceLabel} is missing template ${templateId}.`)
       const template = raw as Partial<SyncDefinitionFlowTemplate>
       if (typeof template.label !== "string" || template.label.trim() === "")
         throw new Error(`Template ${templateId} is missing label.`)
@@ -89,7 +117,7 @@ export function defaultSyncDefinitionFlowTemplateId(
   entityId: string,
   catalog: SyncDefinitionFlowTemplateCatalog
 ): EntityRegistrySyncFlowTemplateId {
-  return hasSyncDefinitionFlowTemplate(catalog, entityId) ? entityId : "metadata-only"
+  return hasSyncDefinitionFlowTemplate(catalog, entityId) ? entityId : "metadataOnly"
 }
 
 export function buildSyncDefinitionRuntimeFlowOptions(

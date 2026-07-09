@@ -13,7 +13,7 @@
  */
 
 import { UserSource } from "../../../shared/enums/auth.js"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface DbUser {
   upn: string // canonical, lowercased
@@ -74,4 +74,24 @@ export function countUsers(): number {
 
 export function listUsers(): DbUser[] {
   return getDb().prepare("SELECT * FROM users ORDER BY created_at DESC").all() as DbUser[]
+}
+
+export function countAdmins(): number {
+  const row = getDb().prepare("SELECT COUNT(*) AS n FROM users WHERE is_admin = 1").get() as { n: number }
+  return row.n
+}
+
+export function setUserAdmin(upn: string, isAdmin: boolean): DbUser {
+  const normalized = upn.toLowerCase()
+  const existing = findUserByUpn(normalized)
+  if (!existing) {
+    throw new Error(`user not found: ${upn}`)
+  }
+  if (!isAdmin && existing.is_admin === 1 && countAdmins() <= 1) {
+    throw new Error("cannot demote the last admin")
+  }
+  getDb().prepare("UPDATE users SET is_admin = ? WHERE upn = ?").run(isAdmin ? 1 : 0, normalized)
+  const updated = findUserByUpn(normalized)
+  if (!updated) throw new Error("user update failed")
+  return updated
 }

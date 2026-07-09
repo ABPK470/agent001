@@ -283,7 +283,10 @@ export interface AgentConfig {
   systemMessages?: Message[]
   /** Print the agent's reasoning to the console. Default: true */
   verbose?: boolean
-  /** Called right after the LLM responds, before tools execute. Use for trace/UI updates. */
+  /** Called after each LLM response, before tools execute or completion guards run.
+   *  `content` is set only when the response includes tool calls — that prose is
+   *  pre-tool narration. Text-only responses are final answers (streamed via
+   *  `onToken`, persisted as `answer`); they must not be recorded as thinking. */
   onThinking?: (content: string | null, toolCalls: ToolCall[], iteration: number) => void
   /** Called with each streamed text token from the LLM as it arrives. */
   onToken?: (token: string) => void

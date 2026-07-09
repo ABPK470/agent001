@@ -29,6 +29,8 @@ export type EnvOperation =
   | "schema_introspect"
   | "sync_preview"
   | "sync_execute"
+  | "sync_custom_sql"
+  | "sync_shell_execute"
   | "ddl"
   | "dml"
 
@@ -174,7 +176,7 @@ export function withPermissionDefaults(
     e.allowedOperations ??
     (lockedDown
       ? (["query_read", "schema_introspect", "sync_preview"] as EnvOperation[])
-      : (["query_read", "schema_introspect", "sync_preview", "sync_execute", "dml"] as EnvOperation[]))
+      : (["query_read", "schema_introspect", "sync_preview", "sync_execute", "dml", "sync_custom_sql", "sync_shell_execute"] as EnvOperation[]))
   const approvalRequiredOperations = e.approvalRequiredOperations ?? ([] as EnvOperation[])
 
   return {

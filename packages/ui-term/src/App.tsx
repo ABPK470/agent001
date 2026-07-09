@@ -16,6 +16,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { downloadAuthenticated, traceExportFilename } from "./userDownload"
 import { api, createEventStream } from "./api"
 import { buildCommands, matchSlash, slashSuggestions, type Command } from "./commands"
 import { AdminLogin } from "./components/AdminLogin"
@@ -125,6 +126,13 @@ export function App() {
   const logRef    = useRef<LogPaneHandle>(null)
   const streamRef = useRef<StreamPaneHandle>(null)
 
+  const bootstrapThreads = useStore((s) => s.bootstrapThreads)
+
+  useEffect(() => {
+    if (!me || needsWelcome) return
+    void bootstrapThreads().catch(() => {})
+  }, [me, needsWelcome, bootstrapThreads])
+
   // ── Identity-bound SSE subscription ──
   useEffect(() => {
     const stream = createEventStream(pushEvent, setConnected)
@@ -196,7 +204,9 @@ export function App() {
 
     try {
       const attachmentIds = pendingAttachments.map((a) => a.id)
-      const { runId } = await api.startRun(text, undefined, attachmentIds)
+      const threadId = useStore.getState().activeThreadId
+      if (!threadId) throw new Error("No thread selected")
+      const { runId } = await api.startRun(text, undefined, attachmentIds, threadId)
       resetTranscript(runId); setActiveRun(runId)
       // Bind-once semantics: attachments are consumed by the run that
       // started, the chip strip clears so the next prompt is "fresh".
@@ -268,68 +278,24 @@ export function App() {
 
   const exportTrace = useCallback(async () => {
     if (!activeRunId) return
-    const run = runs.find((r) => r.id === activeRunId)
     try {
-      const entries = await api.getRunTrace(activeRunId)
-      const lines: string[] = []
-      const ts = new Date().toISOString().slice(0, 19).replace("T", " ")
-      lines.push(`agent-loop trace  run=${activeRunId}  exported=${ts}`)
-      if (run?.goal) lines.push(`goal: ${run.goal}`)
-      lines.push(`status: ${run?.status ?? "unknown"}  tokens: ${run?.totalTokens ?? "?"}  llm_calls: ${run?.llmCalls ?? "?"}`)
-      lines.push("=" .repeat(72))
-      lines.push("")
-      for (const e of entries) {
-        const kind = String(e.kind ?? "?")
-        const p = "  "
-        switch (kind) {
-          case "goal":           lines.push(`GOAL  ${e.text ?? ""}`); break
-          case "system-prompt":  lines.push(`SYSTEM PROMPT\n${p}${String(e.text ?? "").replace(/\n/g, `\n${p}`)}`); break
-          case "tools-resolved": {
-            const tools = (e.tools as Array<{ name?: string }> | undefined) ?? []
-            lines.push(`TOOLS  ${tools.length}: ${tools.map((t) => t.name).join(", ")}`)
-            break
-          }
-          case "iteration":      lines.push(`ITERATION ${e.current}/${e.max}`); break
-          case "thinking":       lines.push(`THINKING\n${p}${String(e.text ?? "").replace(/\n/g, `\n${p}`)}`); break
-          case "tool-call":      lines.push(`TOOL CALL  ${e.tool}  ${e.argsSummary ?? ""}\n${p}${String(e.argsFormatted ?? "").replace(/\n/g, `\n${p}`)}`); break
-          case "tool-result":    lines.push(`TOOL RESULT\n${p}${String(e.text ?? "").replace(/\n/g, `\n${p}`)}`); break
-          case "tool-error":     lines.push(`TOOL ERROR\n${p}${String(e.text ?? "").replace(/\n/g, `\n${p}`)}`); break
-          case "answer":         lines.push(`ANSWER\n${p}${String(e.text ?? "").replace(/\n/g, `\n${p}`)}`); break
-          case "error":          lines.push(`ERROR\n${p}${String(e.text ?? "").replace(/\n/g, `\n${p}`)}`); break
-          case "usage":          lines.push(`USAGE  +${e.iterationTokens ?? 0} tk · total ${e.totalTokens ?? 0} · ${e.llmCalls ?? 0} calls`); break
-          case "llm-request":    lines.push(`LLM REQUEST  ${e.messageCount ?? "?"} msgs · ${e.toolCount ?? 0} tools  (iter ${e.iteration ?? "?"})`); break
-          case "llm-response":   lines.push(`LLM RESPONSE  ${e.durationMs ?? "?"}ms  ${(e.usage as { totalTokens?: number } | undefined)?.totalTokens ?? "?"} tok  ${(e.toolCalls as unknown[])?.length ?? 0} calls`); break
-          case "planner-decision": lines.push(`PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${Number(e.score).toFixed(2)}  route=${e.route ?? "-"}  coherence=${e.coherenceNeed ?? "-"}  coordination=${e.coordinationNeed ?? "-"}`); break
-          case "planner-step-start": lines.push(`STEP  ${e.stepName}  ${e.stepType}`); break
-          case "planner-step-end":   lines.push(`STEP END  ${e.stepName}  ${e.status}${e.durationMs != null ? `  ${e.durationMs}ms` : ""}`); break
-          case "planner-sql-quality": lines.push(`SQL QUALITY  ${e.phase}  ${e.toolMode}  ${(e.largeObjectRefs as Array<{ name: string; count: number }> | undefined)?.map((ref) => `${ref.name}×${ref.count}`).join(" · ") ?? "no-large-refs"}${(e.missingPersistedMirrorCandidates as string[] | undefined)?.length ? `  mirror=${(e.missingPersistedMirrorCandidates as string[]).join(",")}` : ""}${(e.tempScalarSubqueryCount as number | undefined) ? `  temp-subq=${e.tempScalarSubqueryCount}` : ""}`); break
-          case "planner-prompt-budget": lines.push(`PROMPT BUDGET  ${Number(e.totalBeforeChars ?? 0).toLocaleString()} → ${Number(e.totalAfterChars ?? 0).toLocaleString()} chars${(e.droppedSections as string[] | undefined)?.length ? `  dropped=${(e.droppedSections as string[]).join(",")}` : ""}`); break
-          case "planner-pipeline-start": lines.push(`PIPELINE START  attempt ${e.attempt}/${e.maxRetries}`); break
-          case "planner-pipeline-end":   lines.push(`PIPELINE END  ${e.status}  ${e.completedSteps}/${e.totalSteps} steps`); break
-          case "delegation-start": lines.push(`DELEGATE${e.agentName ? ` [${e.agentName}]` : ""}\n${p}${e.goal ?? ""}`); break
-          case "delegation-iteration": lines.push(`DELEGATE ITER ${e.iteration}/${e.maxIterations}`); break
-          case "delegation-end":  lines.push(`DELEGATE END  ${e.status}\n${p}${String(e.answer ?? e.error ?? "").slice(0, 400)}`); break
-          case "user-input-request": lines.push(`ASK USER  ${e.question ?? ""}`); break
-          case "user-input-response": lines.push(`USER REPLY  ${e.text ?? ""}`); break
-          case "nudge":          lines.push(`NUDGE [${e.tag ?? ""}]  ${e.message ?? ""}`); break
-          default:               lines.push(`${kind}  ${JSON.stringify(e).slice(0, 120)}`); break
-        }
-      }
-      if (entries.length === 0) lines.push("(no trace entries recorded for this run)")
-      const text = lines.join("\n")
-      const slug = activeRunId.slice(0, 8)
-      const dateTag = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)
-      const filename = `agent-loop-${dateTag}-${slug}.txt`
-      const blob = new Blob([text], { type: "text/plain;charset=utf-8" })
-      const url = URL.createObjectURL(blob)
-      const a = document.createElement("a")
-      a.href = url; a.download = filename; a.click()
-      URL.revokeObjectURL(url)
-      pushEvent({ type: "ui.notice", timestamp: new Date().toISOString(), data: { runId: activeRunId, message: `downloaded ${filename}  (${entries.length} trace entries)` } })
+      const { filename, bytes } = await downloadAuthenticated(
+        `/api/runs/${encodeURIComponent(activeRunId)}/export/trace`,
+        traceExportFilename(activeRunId, "txt"),
+      )
+      pushEvent({
+        type: "ui.notice",
+        timestamp: new Date().toISOString(),
+        data: { runId: activeRunId, message: `downloaded ${filename} (${bytes.toLocaleString()} bytes)` },
+      })
     } catch (e) {
-      pushEvent({ type: "ui.error", timestamp: new Date().toISOString(), data: { runId: activeRunId, message: `trace export failed: ${e instanceof Error ? e.message : String(e)}` } })
+      pushEvent({
+        type: "ui.error",
+        timestamp: new Date().toISOString(),
+        data: { runId: activeRunId, message: `trace export failed: ${e instanceof Error ? e.message : String(e)}` },
+      })
     }
-  }, [activeRunId, runs, pushEvent])
+  }, [activeRunId, pushEvent])
 
   const flagAnswer = useCallback(async () => {
     if (!activeRunId) return

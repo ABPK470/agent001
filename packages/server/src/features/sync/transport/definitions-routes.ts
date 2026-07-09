@@ -7,15 +7,21 @@ import { resolve } from "node:path"
 import { EventType } from "@mia/shared-enums"
 import type {
   EntityRegistryDocumentImportRequest,
+  EntityRegistryDraftSuggestion,
+  EntityRegistryTableSuggestion,
   EntityRegistrySyncDefinitionScaffoldResponse,
   EntityRegistrySyncFlowTemplateId,
-  EntityRegistryYamlImportResponse
+  EntityRegistryYamlImportResponse,
+  type EntityRegistryDefinition,
+  type EntityRegistryPreviewYamlRequest,
 } from "@mia/shared-types"
 import {
   BUNDLED_SCD2_STRATEGIES,
   hasSyncDefinitionFlowTemplate,
   loadSyncDefinitionFlowTemplateCatalog,
   scaffoldSyncDefinition,
+  suggestEntityDraft,
+  suggestEntityTable,
   type EntityDefinition,
   type Scd2Strategy
 } from "@mia/sync"
@@ -25,9 +31,12 @@ import * as db from "../../../platform/persistence/sqlite.js"
 import {
   formatEntitiesYaml,
   formatEntityYaml,
+  entityRunYamlFromConfig,
   parseEntitiesJson,
   parseEntitiesYaml
 } from "../domain/entity-yaml.js"
+import { applyEntityRunYaml, validateEntityRunYaml } from "../application/apply-entity-run-yaml.js"
+import { loadCatalogSnapshotForSuggest } from "../application/load-catalog-for-suggest.js"
 
 const DEFAULT_TENANT_ID = "_default"
 function resolveTenant(req: FastifyRequest): string {
@@ -67,21 +76,40 @@ function importEntitiesFromText(args: {
   content: string
   format: "yaml" | "json"
   dryRun: boolean
+  projectRoot?: string
 }): EntityRegistryYamlImportResponse {
   const parsed = args.format === "json" ? parseEntitiesJson(args.content) : parseEntitiesYaml(args.content)
   const saved: EntityRegistryYamlImportResponse["saved"] = []
   const skipped: EntityRegistryYamlImportResponse["skipped"] = []
   const errors: EntityRegistryYamlImportResponse["errors"] = []
+  const preview: EntityRegistryYamlImportResponse["preview"] = []
 
   for (const item of parsed) {
     if (!item.ok || !item.def) {
       errors.push({ id: null, error: item.error ?? "unknown parse error" })
       continue
     }
+    if (item.run) {
+      if (!args.projectRoot) {
+        errors.push({ id: item.def.id, error: "run block requires server projectRoot" })
+        continue
+      }
+      const runError = validateEntityRunYaml(args.projectRoot, item.run)
+      if (runError) {
+        errors.push({ id: item.def.id, error: runError })
+        continue
+      }
+    }
     const existing = db.getEntityDefinition(args.tenantId, item.def.id, { includeRetired: true })
     const created = existing === null
     if (args.dryRun) {
       saved.push({ id: item.def.id, version: existing ? existing.version + 1 : 1, created })
+      preview.push({
+        def: item.def as EntityRegistryDefinition,
+        run: item.run
+          ? { template: item.run.template, service: item.run.service, environment: item.run.environment }
+          : null,
+      })
       continue
     }
     try {
@@ -92,6 +120,9 @@ function importEntitiesFromText(args: {
         reason: args.reason
       })
       saved.push({ id: result.id, version: result.version, created })
+      if (item.run && args.projectRoot) {
+        applyEntityRunYaml(args.projectRoot, args.tenantId, result.id, item.run, args.actor)
+      }
       broadcast({
         type: EventType.EntityRegistryImported,
         data: {
@@ -111,7 +142,7 @@ function importEntitiesFromText(args: {
     }
   }
 
-  return { ok: errors.length === 0, saved, skipped, errors, dryRun: args.dryRun }
+  return { ok: errors.length === 0, saved, skipped, errors, dryRun: args.dryRun, preview: preview.length > 0 ? preview : undefined }
 }
 
 export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?: string): void {
@@ -145,14 +176,24 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       return { error: `entity not found: ${req.params.id}` }
     }
     reply.header("content-type", "application/yaml; charset=utf-8")
-    return formatEntityYaml(def)
+    const config = db.getSyncDefinitionConfig(tenantId, req.params.id)
+    const run = config ? entityRunYamlFromConfig(config) : null
+    return formatEntityYaml(def, run)
   })
 
   app.get("/api/entity-registry/entities.yaml", async (req, reply) => {
     const tenantId = resolveTenant(req)
     const defs = db.listEntityDefinitions(tenantId, { includeRetired: true })
+    const runs = new Map(
+      defs
+        .map((def) => {
+          const config = db.getSyncDefinitionConfig(tenantId, def.id)
+          return config ? ([def.id, entityRunYamlFromConfig(config)] as const) : null
+        })
+        .filter((entry): entry is readonly [string, ReturnType<typeof entityRunYamlFromConfig>] => entry !== null)
+    )
     reply.header("content-type", "application/yaml; charset=utf-8")
-    return formatEntitiesYaml(defs)
+    return formatEntitiesYaml(defs, runs)
   })
 
   app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id/history", async (req) =>
@@ -210,7 +251,81 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     }
   )
 
-  app.post<{ Body: { def: EntityDefinition; reason: string; versionLabel?: string | null } }>(
+  app.get<{ Querystring: { rootTable?: string } }>(
+    "/api/entity-registry/suggest-draft",
+    async (req, reply): Promise<EntityRegistryDraftSuggestion | { error: string }> => {
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { error: "admin only" }
+      }
+      const rootTable = req.query.rootTable?.trim()
+      if (!rootTable) {
+        reply.code(400)
+        return { error: "rootTable query parameter is required" }
+      }
+
+      const catalog = loadCatalogSnapshotForSuggest()
+      const flowTemplateIds = projectRoot
+        ? Object.keys(loadSyncDefinitionFlowTemplateCatalog(projectRoot).flowTemplates)
+        : []
+      const suggestion = suggestEntityDraft(rootTable, { catalog, flowTemplateIds })
+      if (!suggestion) {
+        reply.code(400)
+        return { error: `unable to suggest draft for root table: ${rootTable}` }
+      }
+
+      return {
+        identity: {
+          ...suggestion.identity,
+          labelColumn: suggestion.identity.labelColumn,
+          selfJoinColumn: suggestion.identity.selfJoinColumn,
+        },
+        tables: suggestion.tables,
+        flowTemplateId: resolveFlowTemplateId(suggestion.flowTemplateId ?? undefined, projectRoot ?? ""),
+        source: suggestion.source,
+        notes: suggestion.notes,
+      }
+    },
+  )
+
+  app.get<{
+    Querystring: { rootTable?: string; idColumn?: string; tableName?: string; executionOrder?: string }
+  }>(
+    "/api/entity-registry/suggest-table",
+    async (req, reply): Promise<EntityRegistryTableSuggestion | { error: string }> => {
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { error: "admin only" }
+      }
+      const rootTable = req.query.rootTable?.trim()
+      const idColumn = req.query.idColumn?.trim()
+      const tableName = req.query.tableName?.trim()
+      if (!rootTable || !idColumn || !tableName) {
+        reply.code(400)
+        return { error: "rootTable, idColumn, and tableName query parameters are required" }
+      }
+
+      const catalog = loadCatalogSnapshotForSuggest()
+      const executionOrder = req.query.executionOrder ? Number(req.query.executionOrder) : undefined
+      const suggestion = suggestEntityTable(
+        tableName,
+        { rootTable, idColumn },
+        { catalog, executionOrder: Number.isFinite(executionOrder) ? executionOrder : undefined },
+      )
+      if (!suggestion) {
+        reply.code(400)
+        return { error: `unable to suggest table for ${tableName}` }
+      }
+
+      return {
+        table: suggestion.table,
+        source: suggestion.source,
+        note: suggestion.note,
+      }
+    },
+  )
+
+  app.post<{ Body: { def: EntityDefinition; reason: string; versionLabel?: string | null; createOnly?: boolean } }>(
     "/api/entity-registry/entities",
     async (req, reply) => {
       if (!req.session?.isAdmin) {
@@ -232,7 +347,8 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           def: req.body.def,
           actor: req.session.upn,
           reason: req.body.reason,
-          versionLabel: req.body.versionLabel ?? null
+          versionLabel: req.body.versionLabel ?? null,
+          createOnly: req.body.createOnly === true,
         })
         audit(req, "entity_registry.saved", {
           tenantId,
@@ -252,6 +368,10 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         })
         return result
       } catch (error) {
+        if (error instanceof db.EntityRegistryConflictError) {
+          reply.code(409)
+          return { error: "entity_exists", id: error.id, message: error.message }
+        }
         if (error instanceof db.EntityRegistryValidationError) {
           reply.code(422)
           return { error: "validation_failed", result: error.result }
@@ -308,7 +428,8 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         reason: req.body.reason,
         content: req.body.content,
         format: req.body.format,
-        dryRun
+        dryRun,
+        projectRoot
       })
 
       if (!dryRun) {
@@ -347,7 +468,8 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         reason: req.body.reason,
         content: req.body.yaml,
         format: "yaml",
-        dryRun
+        dryRun,
+        projectRoot
       })
       if (!dryRun) {
         audit(req, "entity_registry.imported", {
@@ -361,6 +483,28 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     }
   )
 
+  app.post<{ Body: EntityRegistryPreviewYamlRequest }>(
+    "/api/entity-registry/entities/preview-yaml",
+    async (req, reply): Promise<{ yaml: string } | { error: string }> => {
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { error: "admin only" }
+      }
+      if (!req.body?.def || typeof req.body.def !== "object") {
+        reply.code(400)
+        return { error: "'def' body is required" }
+      }
+      const run = req.body.run
+        ? {
+            template: req.body.run.flowTemplateId,
+            service: req.body.run.serviceProfileRef,
+            environment: req.body.run.environmentPolicyRef,
+          }
+        : null
+      return { yaml: formatEntityYaml(req.body.def as EntityDefinition, run) }
+    },
+  )
+
   app.get("/api/entity-registry/strategies", async (req) => {
     const tenantId = resolveTenant(req)
     const stored = db.listAvailableStrategies(tenantId)
@@ -368,6 +512,18 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     const bundled = BUNDLED_SCD2_STRATEGIES.filter((strategy) => !seen.has(strategy.id))
     return { tenantId, items: [...stored, ...bundled] }
   })
+
+  app.get<{ Params: { id: string } }>(
+    "/api/entity-registry/strategies/:id/history",
+    async (req) => {
+      const tenantId = resolveTenant(req)
+      const id = req.params.id
+      if (!id) {
+        return { tenantId, id: "", items: [] }
+      }
+      return { tenantId, id, items: db.listScd2StrategyHistory(tenantId, id) }
+    }
+  )
 
   app.post<{ Body: { strategy: Scd2Strategy; reason: string } }>(
     "/api/entity-registry/strategies",

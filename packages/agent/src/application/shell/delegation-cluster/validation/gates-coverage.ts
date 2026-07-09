@@ -1,27 +1,23 @@
 import { DelegationRole, VerificationMode } from "../../../../domain/index.js"
 /**
  * Gates 8 + 8b: file-artifact evidence + target-artifact coverage
- * + reference integrity, and gate 9: browser-evidence quality.
+ * + reference integrity.
  *
  * @module
  */
 
 import { DelegationOutputValidationCode } from "../../../../domain/enums/delegation.js"
 import {
-  BROWSER_RUNTIME_FAILURE_RE,
   classifyTaskIntent,
   extractLocalArtifactReferences,
   FILE_ARTIFACT_RE,
   getToolCallPathArg,
   hasMutationPathEvidence,
   isFileMutationToolCall,
-  isLowSignalBrowserToolCall,
-  MEANINGFUL_BROWSER_TOOLS,
   normalizeArtifactPath,
-  specRequiresBrowserEvidence,
   specRequiresFileMutationEvidence
 } from "../validation-patterns/index.js"
-import { LOW_SIGNAL_BROWSER_TOOLS, type DelegationOutputValidationResult, type GateParams } from "./types.js"
+import { type DelegationOutputValidationResult, type GateParams } from "./types.js"
 
 export function gateFileArtifactEvidence(p: GateParams): DelegationOutputValidationResult | null {
   const { spec, trimmed, toolCalls } = p
@@ -110,40 +106,6 @@ export function gateTargetCoverage(p: GateParams): DelegationOutputValidationRes
       ok: false,
       code: DelegationOutputValidationCode.UnresolvedArtifactReferences,
       message: `Created/edited content references local artifacts without evidence they exist: ${sample}`
-    }
-  }
-  return null
-}
-
-export function gateBrowserEvidence(p: GateParams): DelegationOutputValidationResult | null {
-  const { spec, toolCalls } = p
-  if (!specRequiresBrowserEvidence(spec) || toolCalls.length === 0) return null
-
-  const browserCalls = toolCalls.filter(
-    (tc) => MEANINGFUL_BROWSER_TOOLS.has(tc.name) || LOW_SIGNAL_BROWSER_TOOLS.has(tc.name)
-  )
-  if (browserCalls.length === 0) return null
-
-  const hasFailedMeaningfulBrowserEvidence = browserCalls.some(
-    (tc) =>
-      MEANINGFUL_BROWSER_TOOLS.has(tc.name) && (tc.isError || BROWSER_RUNTIME_FAILURE_RE.test(tc.result))
-  )
-  if (hasFailedMeaningfulBrowserEvidence) {
-    return {
-      ok: false,
-      code: DelegationOutputValidationCode.MissingExecutableVerificationEvidence,
-      message:
-        "browser_check evidence contains runtime/load errors — fix those errors before claiming completion"
-    }
-  }
-
-  const allLowSignal = browserCalls.every((tc) => isLowSignalBrowserToolCall(tc))
-  if (allLowSignal) {
-    return {
-      ok: false,
-      code: DelegationOutputValidationCode.LowSignalBrowserEvidence,
-      message:
-        "Browser tools were used but only low-signal actions (about:blank, tab listing) — no meaningful browser evidence"
     }
   }
   return null

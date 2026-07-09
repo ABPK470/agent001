@@ -1,4 +1,4 @@
-export { _migrate, _setDb, getDb, getDbPath, migrateSessionFkSetNull } from "./connection.js"
+export { _migrate, _setDb, getDb, getDbPath, openDatabase } from "../connection.js"
 
 export {
   findReplyTo,
@@ -7,6 +7,20 @@ export {
   type AgentMessageRow,
   type InsertMessageInput
 } from "./agent-messages.js"
+
+export {
+  autoTitleThreadFromGoal,
+  createThread,
+  dbThreadToWire,
+  deleteThreadAndRuns,
+  getThread,
+  listRunIdsForThread,
+  listThreadsForUser,
+  touchThread,
+  updateThread,
+  type DbThread,
+  type DbThreadWithRunCount
+} from "./threads.js"
 
 export {
   dbRunToWire,
@@ -20,6 +34,7 @@ export {
   getUsageTotals,
   listRuns,
   listRunsWithUsage,
+  listRunsWithUsageForThread,
   listRunsWithUsageForUser,
   listTokenUsage,
   markRunCancelled,
@@ -49,7 +64,7 @@ export {
   getToolResult,
   isRecallableToolResult,
   isRecallableToolText,
-  loadRecentToolResults,
+  loadRecentToolResultsForThread,
   loadToolResultsForRun,
   saveToolResult,
   type DbToolResult
@@ -107,20 +122,17 @@ export {
   listNotificationsForUser,
   markAllNotificationsRead,
   markNotificationRead,
-  migrateNotifications,
   saveNotification,
   type DbNotification
 } from "./notifications.js"
 
-export { listApiRequests, migrateApiRequests, saveApiRequest, type DbApiRequest } from "./api-requests.js"
+export { listApiRequests, saveApiRequest, type DbApiRequest } from "./api-requests.js"
 
 export {
   deleteWebhookDrain,
   getWebhookDrain,
   listEvents,
   listWebhookDrains,
-  migrateEventLog,
-  migrateWebhookDrains,
   saveEvent,
   saveWebhookDrain,
   searchEvents,
@@ -131,12 +143,15 @@ export {
 export { clearTransactionalData, getDbStats, pruneOldData } from "./lifecycle.js"
 
 export {
+  countSyncRuns,
   getSyncRun,
   getSyncRunPlanJson,
   listSyncRuns,
+  listSyncRunsPaginated,
   recordSyncRunFinish,
   recordSyncRunPreview,
   recordSyncRunStart,
+  type ListSyncRunsPaginatedInput,
   type SyncRunRow
 } from "./sync-runs.js"
 
@@ -148,9 +163,11 @@ export {
 } from "./sync-audit.js"
 
 export {
+  EntityRegistryConflictError,
   EntityRegistryValidationError,
   getEntityDefinition,
   listAvailableStrategies,
+  listScd2StrategyHistory,
   listEntityDefinitionHistory,
   listEntityDefinitions,
   readEntityVersionBody,
@@ -158,11 +175,13 @@ export {
   retireEntityDefinition,
   saveEntityDefinition,
   saveScd2Strategy,
+  wipeEntityRegistry,
   type EntityDefinitionHistoryEntry,
   type EntityDefinitionRecord,
   type EntityDefinitionVersionRow,
   type SaveEntityResult,
-  type SaveStrategyResult
+  type SaveStrategyResult,
+  type Scd2StrategyHistoryEntry
 } from "./entity-defs.js"
 
 export {
@@ -200,6 +219,7 @@ export {
   grantApproval,
   issueApprovalToken,
   listApprovalPolicies,
+  deleteApprovalPolicy,
   rejectApproval,
   upsertApprovalPolicy,
   type ApprovalPolicy,
@@ -235,11 +255,42 @@ export {
 } from "./sessions.js"
 
 export {
+  deleteSyncRunKind,
+  deleteSyncRunPhase,
+  deleteSyncRunPreset,
+  getSyncRunPreset,
+  listSyncRunKinds,
+  listSyncRunPhases,
+  listSyncRunPresets,
+  mapKindDefinition,
+  mapPhaseDefinition,
+  parsePresetSteps,
+  saveSyncRunKind,
+  saveSyncRunPhase,
+  saveSyncRunPreset,
+  syncRunCatalogEmpty,
+  syncDeploySyncMetadataFromArtifact,
+  type DbSyncRunKind,
+  type DbSyncRunPhase,
+  type DbSyncRunPreset
+} from "./sync-run-catalog.js"
+
+export {
+  deleteSyncRunBindingSource,
+  listSyncRunBindingSources,
+  mapCustomValueSourceDefinition,
+  saveSyncRunBindingSource,
+  type DbSyncRunBindingSource,
+} from "./sync-run-binding-sources.js"
+
+export {
+  countAdmins,
   countUsers,
   findUserByUpn,
   findUserByUsername,
   insertUser,
   listUsers,
+  setUserAdmin,
   updateLastLoginAt,
   type DbUser,
   type InsertUserInput

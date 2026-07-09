@@ -39,7 +39,7 @@ describe("BUNDLED_SCD2_STRATEGIES", () => {
 
   it("mymi-scd2 mirrors the legacy core.uspSyncObjectTran exclusions", () => {
     const s = bundledStrategyById("mymi-scd2")!
-    expect(s.excludedFromDiffCols).toEqual(["validFrom", "validTo", "isLocked", "syncDate", "deployDate"])
+    expect(s.excludedFromDiffCols).toEqual(["validFrom", "validTo", "isLocked", "sync-date", "deploy-date"])
     expect(s.identityHandling).toBe("setIdentityInsertOn")
     expect(s.onInsert).toEqual({ validFrom: "GETUTCDATE()", validTo: "NULL" })
   })
@@ -113,7 +113,7 @@ describe("resolveEffectiveScd2 — entity-level overrides", () => {
       entityOverride: { isLockedCol: null }, // unrelated override
       table: table()
     })
-    expect(eff.syncDateCol).toBe("syncDate") // came from strategy
+    expect(eff.syncDateCol).toBe("sync-date") // came from strategy
   })
 })
 

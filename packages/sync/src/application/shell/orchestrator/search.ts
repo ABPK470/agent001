@@ -1,18 +1,13 @@
 /**
  * Entity-search and related helpers for the sync orchestrator.
- *
- * Houses:
- *  - `searchEntities`: name-based lookup against a recipe's root table
- *  - `fetchEntityDisplayName`: resolves an entity ID to its display name
- *  - `expandTreeIds`: recursive CTE walk for self-referencing FK trees
- *
- * @module
  */
 
 import sqlMod from "mssql"
-import { parseEntityInstanceRef } from "../../../domain/entity-instance-ref.js"
-import { definitionToSyncRecipe, getPublishedSyncDefinition } from "../../../domain/published-definitions.js"
-import { type EntityType, type SyncRecipe } from "../../../domain/recipes.js"
+import type { PublishedSyncDefinition } from "@mia/shared-types"
+
+import { parseEntityInstanceRef, coerceSyncEntityId } from "../../../domain/entity-instance-ref.js"
+import type { SyncEntityId } from "../../../domain/definition-selection.js"
+import { getPublishedSyncDefinition } from "../../../domain/published-definitions.js"
 import { getPool, type SyncRuntimeHost } from "../../../ports/index.js"
 import { projectRoot, qtable } from "./db-helpers.js"
 
@@ -23,7 +18,6 @@ export interface EntitySearchResult {
 
 export type EntitySearchMode = "name" | "id"
 
-/** Normalize agent/user search text and pick id vs name lookup. */
 export function resolveSyncEntitySearch(
   rawQuery: string,
   explicitMode?: EntitySearchMode | "auto"
@@ -36,14 +30,14 @@ export function resolveSyncEntitySearch(
   return { q: parsed.entityQuery ?? rawQuery.trim(), mode: "name" }
 }
 
-function invalidRootNameColumnError(recipe: SyncRecipe, columns: string[]): Error {
+function invalidRootNameColumnError(definition: PublishedSyncDefinition, columns: string[]): Error {
   const detail =
     columns.length > 0
-      ? ` Available columns on ${recipe.rootTable}: ${columns.join(", ")}.`
-      : ` No readable columns were returned for ${recipe.rootTable}.`
+      ? ` Available columns on ${definition.rootTable}: ${columns.join(", ")}.`
+      : ` No readable columns were returned for ${definition.rootTable}.`
   return new Error(
-    `Sync recipe configuration error for ${recipe.entityType}: ` +
-      `rootNameColumn "${recipe.rootNameColumn ?? "<null>"}" does not exist on ${recipe.rootTable}.` +
+    `Sync definition configuration error for ${definition.id}: ` +
+      `labelColumn "${definition.labelColumn ?? "<null>"}" does not exist on ${definition.rootTable}.` +
       detail
   )
 }
@@ -51,17 +45,17 @@ function invalidRootNameColumnError(recipe: SyncRecipe, columns: string[]): Erro
 async function resolveDisplayColumn(
   host: SyncRuntimeHost,
   source: string,
-  recipe: SyncRecipe
+  definition: PublishedSyncDefinition
 ): Promise<string> {
-  if (!recipe.rootNameColumn) {
+  if (!definition.labelColumn) {
     throw new Error(
-      `Sync recipe configuration error for ${recipe.entityType}: rootNameColumn is required for ${recipe.rootTable}.`
+      `Sync definition configuration error for ${definition.id}: labelColumn is required for ${definition.rootTable}.`
     )
   }
-  const [schema, table] = recipe.rootTable.split(".")
+  const [schema, table] = definition.rootTable.split(".")
   if (!schema || !table) {
     throw new Error(
-      `Sync recipe configuration error for ${recipe.entityType}: rootTable "${recipe.rootTable}" must be schema-qualified.`
+      `Sync definition configuration error for ${definition.id}: rootTable "${definition.rootTable}" must be schema-qualified.`
     )
   }
   const { pool } = await getPool(host, source)
@@ -83,27 +77,21 @@ async function resolveDisplayColumn(
     .map((row: Record<string, unknown>) => String(row.name ?? ""))
     .filter((name) => name.length > 0)
   const lowerToActual = new Map(columns.map((name) => [name.toLowerCase(), name]))
-  const requested = lowerToActual.get(recipe.rootNameColumn.toLowerCase())
+  const requested = lowerToActual.get(definition.labelColumn.toLowerCase())
   if (requested) return requested
-  throw invalidRootNameColumnError(recipe, columns)
+  throw invalidRootNameColumnError(definition, columns)
 }
 
-/**
- * Search for entities in the root table of a recipe.
- * `name` mode — case-insensitive substring on the display column.
- * `id` mode — prefix match on the primary key (as the user types digits).
- * Returns up to `limit` matches from the source environment.
- */
 export async function searchEntities(
   host: SyncRuntimeHost,
-  entityType: EntityType,
+  entityType: SyncEntityId,
   source: string,
   query: string,
   limit = 200,
   mode: EntitySearchMode = "name"
 ): Promise<EntitySearchResult[]> {
-  const recipe = definitionToSyncRecipe(getPublishedSyncDefinition(host, projectRoot(host), entityType))
-  const displayColumn = await resolveDisplayColumn(host, source, recipe)
+  const definition = getPublishedSyncDefinition(host, projectRoot(host), entityType)
+  const displayColumn = await resolveDisplayColumn(host, source, definition)
   const { pool } = await getPool(host, source)
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")
   const capped = Math.min(limit, 500)
@@ -114,11 +102,11 @@ export async function searchEntities(
       .input("q", sqlMod.NVarChar(100), `${safeLike}%`)
       .input("limit", sqlMod.Int, capped).query(`
         SELECT TOP (@limit)
-          [${recipe.rootKeyColumn}] AS id,
+          [${definition.idColumn}] AS id,
           [${displayColumn}] AS name
-        FROM ${qtable(recipe.rootTable)} WITH (NOLOCK)
-        WHERE CAST([${recipe.rootKeyColumn}] AS NVARCHAR(100)) LIKE @q
-        ORDER BY [${recipe.rootKeyColumn}]
+        FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
+        WHERE CAST([${definition.idColumn}] AS NVARCHAR(100)) LIKE @q
+        ORDER BY [${definition.idColumn}]
       `)
     return r.recordset.map((row: Record<string, unknown>) => ({
       id: row.id as string | number,
@@ -131,9 +119,9 @@ export async function searchEntities(
     .input("q", sqlMod.NVarChar(400), `%${safeLike}%`)
     .input("limit", sqlMod.Int, capped).query(`
       SELECT TOP (@limit)
-        [${recipe.rootKeyColumn}] AS id,
+        [${definition.idColumn}] AS id,
         [${displayColumn}] AS name
-      FROM ${qtable(recipe.rootTable)} WITH (NOLOCK)
+      FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
       WHERE [${displayColumn}] LIKE @q
       ORDER BY [${displayColumn}]
     `)
@@ -145,44 +133,35 @@ export async function searchEntities(
 
 export async function fetchEntityDisplayName(
   host: SyncRuntimeHost,
-  recipe: SyncRecipe,
+  definition: PublishedSyncDefinition,
   entityId: string | number,
   source: string
 ): Promise<string | null> {
-  const displayColumn = await resolveDisplayColumn(host, source, recipe)
+  const id = coerceSyncEntityId(entityId)
+  const displayColumn = await resolveDisplayColumn(host, source, definition)
   const { pool } = await getPool(host, source)
   const r = await pool.request().query(`
     SELECT TOP 1 [${displayColumn}] AS displayName
-    FROM ${qtable(recipe.rootTable)} WITH (NOLOCK)
-    WHERE [${recipe.rootKeyColumn}] = ${typeof entityId === "number" ? entityId : `'${String(entityId).replace(/'/g, "''")}'`}
+    FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
+    WHERE [${definition.idColumn}] = ${typeof id === "number" ? id : `'${String(id).replace(/'/g, "''")}'`}
   `)
   return (r.recordset[0]?.displayName as string | undefined) ?? null
 }
 
-/**
- * Expand a single entity ID to the full descendant tree via recursive CTE.
- *
- * Used when `recipe.selfJoinColumn` is set (e.g. `parentRuleId` on `core.Rule`).
- * Returns all IDs in the tree (root + all descendants). The result is substituted
- * into `{ids}` placeholders in recipe predicates so the diff captures the full
- * hierarchy — matching the behavior of legacy stored procedures that walk the
- * self-referencing FK with a recursive CTE.
- *
- * Runs against the SOURCE environment (the tree structure we want to replicate).
- */
 export async function expandTreeIds(
   host: SyncRuntimeHost,
-  recipe: SyncRecipe,
+  definition: PublishedSyncDefinition,
   entityId: string | number,
   source: string
 ): Promise<Array<string | number>> {
-  if (!recipe.selfJoinColumn) return [entityId]
+  const id = coerceSyncEntityId(entityId)
+  if (!definition.selfJoinColumn) return [id]
   const { pool } = await getPool(host, source)
-  const pk = recipe.rootKeyColumn
-  const fk = recipe.selfJoinColumn
-  const table = qtable(recipe.rootTable)
-  const idParam = typeof entityId === "number" ? sqlMod.Int : sqlMod.NVarChar(400)
-  const r = await pool.request().input("rootId", idParam, entityId).query(`
+  const pk = definition.idColumn
+  const fk = definition.selfJoinColumn
+  const table = qtable(definition.rootTable)
+  const idParam = typeof id === "number" ? sqlMod.Int : sqlMod.NVarChar(400)
+  const r = await pool.request().input("rootId", idParam, id).query(`
       ;WITH tree AS (
         SELECT [${pk}] FROM ${table} WHERE [${pk}] = @rootId
         UNION ALL
@@ -192,7 +171,5 @@ export async function expandTreeIds(
       SELECT [${pk}] AS id FROM tree
       OPTION (MAXRECURSION 100)
     `)
-  const ids = r.recordset.map((row: Record<string, unknown>) => row.id as string | number)
-  if (ids.length === 0) return [entityId] // root not found — fall back to single id
-  return ids
+  return r.recordset.map((row: Record<string, unknown>) => row.id as string | number)
 }

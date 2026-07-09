@@ -18,7 +18,6 @@
 
 export * from "./agent-runtime.js"
 export * from "./attachment.js"
-export * from "./browse-web.js"
 export * from "./context.js"
 export * from "./delegation.js"
 export * from "./event.js"

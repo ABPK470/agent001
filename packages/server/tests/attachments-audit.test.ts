@@ -47,7 +47,7 @@ describe("attachment audit events", () => {
 
     try {
       const a = await uploadAttachment({
-        scope: "session",
+        scope: "user_draft",
         ownerUpn: "u@x",
         originalName: "x.txt",
         mediaType: "text/plain",

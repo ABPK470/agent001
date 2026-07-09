@@ -10,7 +10,8 @@ import {
   isEnvAccessMode,
   isEnvRole,
   type EnvOperation,
-  type SyncEnvironment
+  type SyncEnvironment,
+  withPermissionDefaults,
 } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import { broadcast } from "../../../platform/events/broadcaster.js"
@@ -194,7 +195,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         reply.code(400)
         return { error: sanitised }
       }
-      const env: SyncEnvironment = {
+      const env = withPermissionDefaults({
         name,
         displayName: sanitised.displayName ?? name,
         color: sanitised.color ?? "slate",
@@ -204,13 +205,15 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         etlServiceBaseUrl: sanitised.etlServiceBaseUrl ?? null,
         gateServiceBaseUrl: sanitised.gateServiceBaseUrl ?? null,
         defaultAccessMode: sanitised.defaultAccessMode ?? defaultAccessModeForName(name),
-        allowedOperations: sanitised.allowedOperations ?? [],
-        denyDml: sanitised.denyDml ?? false,
-        denyDdl: sanitised.denyDdl ?? false,
+        ...(Array.isArray(sanitised.allowedOperations) && sanitised.allowedOperations.length > 0
+          ? { allowedOperations: sanitised.allowedOperations }
+          : {}),
+        ...(sanitised.denyDml !== undefined ? { denyDml: sanitised.denyDml } : {}),
+        ...(sanitised.denyDdl !== undefined ? { denyDdl: sanitised.denyDdl } : {}),
         approvalRequiredOperations: sanitised.approvalRequiredOperations ?? [],
         syncAllowlist: sanitised.syncAllowlist ?? [],
-        allowedSyncTargets: sanitised.allowedSyncTargets ?? []
-      }
+        allowedSyncTargets: sanitised.allowedSyncTargets ?? [],
+      })
       db.saveSyncEnvironment(serialiseEnvironment(env, req.session.upn))
       rebuildLiveSyncEnvironments(host)
       refreshEnvDerivedPolicies(host, name)

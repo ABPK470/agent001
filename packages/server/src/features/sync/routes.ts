@@ -21,6 +21,7 @@ import * as db from "../../platform/persistence/sqlite.js"
 import {
   listSyncDefinitionAdminItems,
   listSyncDefinitionRuntimeOptions,
+  defaultEntityFlowId,
   publishSyncDefinitionsFromDb,
   resetSyncDefinitionConfig,
   upsertSyncDefinitionConfig
@@ -31,6 +32,7 @@ import {
   summarizeSyncPlan
 } from "./application/plan-summary.js"
 import { rebuildLiveSyncEnvironments } from "./runtime/live-environments.js"
+import { registerSyncMetadataRoutes } from "./transport/sync-metadata-routes.js"
 
 interface PublishSyncDefinitionsResponse {
   publishedAt: string
@@ -55,18 +57,19 @@ function sanitiseDefinitionConfig(body: Record<string, unknown>):
       flowTemplateId?: string
       serviceProfileRef?: string
       environmentPolicyRef?: string
-      executionSteps?: AuthoredSyncFlowStep[]
       ownershipTeam?: string
       ownershipOwner?: string | null
       reviewStatus?: "legacy-review-required" | "reviewed"
       ownershipNotes?: string[]
     }
   | string {
+  if (body["executionSteps"] !== undefined) {
+    return "executionSteps are defined on flows in Sync metadata — set flowTemplateId only"
+  }
   const out: {
     flowTemplateId?: string
     serviceProfileRef?: string
     environmentPolicyRef?: string
-    executionSteps?: AuthoredSyncFlowStep[]
     ownershipTeam?: string
     ownershipOwner?: string | null
     reviewStatus?: "legacy-review-required" | "reviewed"
@@ -84,43 +87,7 @@ function sanitiseDefinitionConfig(body: Record<string, unknown>):
       out[field] = body[field].trim()
     }
   }
-  if (body["executionSteps"] !== undefined) {
-    if (!Array.isArray(body["executionSteps"])) return "executionSteps must be an array"
-    out.executionSteps = (body["executionSteps"] as unknown[]).map((raw, index) => {
-      if (!raw || typeof raw !== "object") throw new Error(`executionSteps[${index}] must be an object`)
-      const step = raw as Record<string, unknown>
-      const id = asRequiredString(step.id, `executionSteps[${index}].id`)
-      const phase = asRequiredString(
-        step.phase,
-        `executionSteps[${index}].phase`
-      ) as AuthoredSyncFlowStep["phase"]
-      const kind = asRequiredString(
-        step.kind,
-        `executionSteps[${index}].kind`
-      ) as AuthoredSyncFlowStep["kind"]
-      const title = asRequiredString(step.title, `executionSteps[${index}].title`)
-      const description = asRequiredString(step.description, `executionSteps[${index}].description`)
-      return {
-        id,
-        phase,
-        kind,
-        title,
-        description,
-        ...(typeof step.subjectRef === "string" && step.subjectRef.trim()
-          ? { subjectRef: step.subjectRef.trim() as AuthoredSyncFlowStep["subjectRef"] }
-          : {}),
-        ...(typeof step.objectName === "string" && step.objectName.trim()
-          ? { objectName: step.objectName.trim() }
-          : {}),
-        ...(typeof step.auditObjectType === "string" && step.auditObjectType.trim()
-          ? { auditObjectType: step.auditObjectType.trim() }
-          : {}),
-        ...(typeof step.pipelineName === "string" && step.pipelineName.trim()
-          ? { pipelineName: step.pipelineName.trim() }
-          : {})
-      } satisfies AuthoredSyncFlowStep
-    })
-  }
+
   if (body["ownershipOwner"] !== undefined) {
     if (body["ownershipOwner"] !== null && typeof body["ownershipOwner"] !== "string")
       return "ownershipOwner must be null or a string"
@@ -154,6 +121,39 @@ function auditSync(
     db.recordSyncAudit({ planId, actor, actorUpn, action, detail })
   } catch (error) {
     console.error("auditSync failed:", error instanceof Error ? error.message : error)
+  }
+}
+
+function mapSyncRunRow(row: db.SyncRunRow) {
+  const previewTotals = {
+    insert: row.preview_inserts,
+    update: row.preview_updates,
+    delete: row.preview_deletes
+  }
+  const executeTotals =
+    row.executed_inserts === null
+      ? null
+      : {
+          insert: row.executed_inserts,
+          update: row.executed_updates,
+          delete: row.executed_deletes
+        }
+  return {
+    planId: row.plan_id,
+    entityType: row.entity_type,
+    entityId: row.entity_id,
+    entityDisplayName: row.entity_display_name,
+    source: row.source,
+    target: row.target,
+    actorUpn: row.actor_upn,
+    status: row.status,
+    error: row.error,
+    previewTotals,
+    executeTotals,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    durationMs: row.duration_ms,
+    planAvailable: Boolean(db.getSyncRunPlanJson(row.plan_id))
   }
 }
 
@@ -217,14 +217,17 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         return { error: `unknown environmentPolicyRef "${sanitised.environmentPolicyRef}"` }
       }
       const existing = db.getSyncDefinitionConfig("_default", req.params.entityId)
+      const flowId =
+        sanitised.flowTemplateId ?? existing?.flow_preset ?? defaultEntityFlowId(projectRoot, req.params.entityId)
+      if (!flowId) {
+        reply.code(400)
+        return { error: "flowTemplateId is required" }
+      }
       upsertSyncDefinitionConfig(projectRoot, {
         tenant_id: "_default",
         entity_id: req.params.entityId,
-        flow_preset: sanitised.flowTemplateId ?? existing?.flow_preset ?? req.params.entityId,
-        execution_steps_json: JSON.stringify(
-          sanitised.executionSteps ??
-            (existing ? (JSON.parse(existing.execution_steps_json) as AuthoredSyncFlowStep[]) : [])
-        ),
+        flow_preset: flowId,
+        execution_steps_json: "[]",
         service_profile_ref: sanitised.serviceProfileRef ?? existing?.service_profile_ref ?? "default",
         environment_policy_ref:
           sanitised.environmentPolicyRef ?? existing?.environment_policy_ref ?? "default",
@@ -350,7 +353,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         enabledOptionalTables: Array.isArray(req.body.enabledOptionalTables)
           ? req.body.enabledOptionalTables
           : undefined,
-        userUpn: actorUpn
+        userUpn: actorUpn,
       })
       const planSummary = summarizeSyncPlan(plan)
       auditSync(
@@ -410,10 +413,14 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         req.params.planId,
         actor,
         actorUpn,
-        result.success ? "sync.execute.completed" : "sync.execute.failed",
-        { ...planDetail, error: result.error ?? null }
+        result.skipped
+          ? "sync.execute.skipped"
+          : result.success
+            ? "sync.execute.completed"
+            : "sync.execute.failed",
+        { ...planDetail, error: result.error ?? result.message ?? null, skipped: result.skipped ?? false }
       )
-      if (!result.success) reply.code(500)
+      if (!result.success && !result.skipped) reply.code(500)
       return result
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
@@ -437,120 +444,103 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     setupSse(reply)
     const send = (event: ExecuteProgress) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     const heartbeat = setInterval(() => reply.raw.write(`: hb\n\n`), 25_000)
-    req.raw.on("close", () => clearInterval(heartbeat))
+    const abort = new AbortController()
+    let clientClosed = false
+    req.raw.on("close", () => {
+      clientClosed = true
+      clearInterval(heartbeat)
+      abort.abort()
+    })
     try {
       const result = await executeSync(req.params.planId, {
         host,
         confirm: true,
         onProgress: send,
-        userUpn: actor
+        userUpn: actor,
+        signal: abort.signal
       })
-      auditSync(
-        req.params.planId,
-        actor,
-        actorUpn,
-        result.success ? "sync.execute.completed" : "sync.execute.failed",
-        { ...planDetail, error: result.error ?? null }
-      )
+      if (!clientClosed) {
+        auditSync(
+          req.params.planId,
+          actor,
+          actorUpn,
+          result.skipped
+            ? "sync.execute.skipped"
+            : result.success
+              ? "sync.execute.completed"
+              : "sync.execute.failed",
+          { ...planDetail, error: result.error ?? result.message ?? null, skipped: result.skipped ?? false }
+        )
+      }
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
-      send({ type: "failed", error: msg })
-      auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
-        ...planDetail,
-        error: msg
-      })
+      if (!clientClosed) {
+        send({ type: "failed", error: msg })
+        auditSync(req.params.planId, actor, actorUpn, "sync.execute.failed", {
+          ...planDetail,
+          error: msg
+        })
+      }
     } finally {
       clearInterval(heartbeat)
       reply.raw.end()
     }
   })
 
-  app.get<{ Querystring: { limit?: string } }>("/api/sync/history", async (req) => {
+  app.get<{ Querystring: { page?: string; pageSize?: string } }>("/api/sync/history", async (req) => {
     const isAdmin = !!req.session.isAdmin
     const viewerUpn = req.session.upn
-    const limit = Math.min(500, Math.max(1, Number(req.query.limit) || 100))
-    const auditRowsRaw = db.listRecentSyncAudit(limit, isAdmin ? undefined : { actorUpn: viewerUpn })
-    const auditRows = auditRowsRaw.map((row) => ({
-      planId: `sync:${row.plan_id}`,
-      actor: row.actor,
-      action: row.action,
-      detail: row.detail,
-      timestamp: row.timestamp
-    }))
-    const auditPlanIds = new Set(auditRowsRaw.map((row) => row.plan_id))
-    const agentRows = db
-      .listSyncRuns(limit)
-      .filter((row) => !auditPlanIds.has(row.plan_id))
-      .filter((row) => isAdmin || (viewerUpn != null && row.actor_upn === viewerUpn))
-      .flatMap((row) => {
-        const previewTotals = {
-          insert: row.preview_inserts,
-          update: row.preview_updates,
-          delete: row.preview_deletes
-        }
-        const executeTotals =
-          row.executed_inserts === null
-            ? null
-            : {
-                insert: row.executed_inserts,
-                update: row.executed_updates,
-                delete: row.executed_deletes
-              }
-        const actor = row.actor_upn
-        const summary = loadPersistedSyncPlanSummary(row.plan_id)
-        const previewDetail = summary
-          ? buildSyncAuditDetail(summary, previewTotals)
-          : {
-              entityType: row.entity_type,
-              entityId: row.entity_id,
-              entityName: row.entity_display_name,
-              source: row.source,
-              target: row.target,
-              totals: previewTotals
-            }
-        const previewRow = {
-          planId: `sync:${row.plan_id}`,
-          actor,
-          action: "sync.preview",
-          detail: JSON.stringify(previewDetail),
-          timestamp: row.started_at
-        }
-        if (row.status === "started" || row.status === "preview") return [previewRow]
-        const execAction = row.status === "success" ? "sync.execute.completed" : "sync.execute.failed"
-        const execDetail = summary
-          ? buildSyncAuditDetail(summary, executeTotals, row.error ?? null)
-          : {
-              entityType: row.entity_type,
-              entityId: row.entity_id,
-              entityName: row.entity_display_name,
-              source: row.source,
-              target: row.target,
-              totals: executeTotals,
-              error: row.error ?? null
-            }
-        const execRow = {
-          planId: `sync:${row.plan_id}`,
-          actor,
-          action: execAction,
-          detail: JSON.stringify(execDetail),
-          timestamp: row.finished_at ?? row.started_at
-        }
-        return [previewRow, execRow]
-      })
-    return [...auditRows, ...agentRows]
-      .sort((a, b) => b.timestamp.localeCompare(a.timestamp))
-      .slice(0, limit)
-      .map((row) => {
-        let parsed: unknown = null
-        try {
-          parsed = JSON.parse(row.detail)
-        } catch {}
-        const ts =
-          row.timestamp.includes("T") || row.timestamp.endsWith("Z")
-            ? row.timestamp
-            : row.timestamp.replace(" ", "T") + "Z"
-        return { ...row, timestamp: ts, detail: parsed }
-      })
+    const page = Math.max(1, Number(req.query.page) || 1)
+    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25))
+    const actorFilter = isAdmin ? undefined : viewerUpn
+    const total = db.countSyncRuns(actorFilter ? { actorUpn: actorFilter } : undefined)
+    const rows = db.listSyncRunsPaginated({
+      page,
+      pageSize,
+      actorUpn: actorFilter
+    })
+    const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize)
+    return {
+      items: rows.map(mapSyncRunRow),
+      total,
+      page,
+      pageSize,
+      totalPages
+    }
+  })
+
+  app.get<{ Params: { planId: string } }>("/api/sync/history/:planId", async (req, reply) => {
+    const isAdmin = !!req.session.isAdmin
+    const viewerUpn = req.session.upn
+    const row = db.getSyncRun(req.params.planId)
+    if (!row) {
+      reply.code(404)
+      return { error: `Sync run ${req.params.planId} not found` }
+    }
+    if (!isAdmin && viewerUpn && row.actor_upn !== viewerUpn) {
+      reply.code(403)
+      return { error: "forbidden" }
+    }
+    const audit = db.listSyncAuditForPlan(req.params.planId).map((entry) => {
+      let detail: unknown = null
+      try {
+        detail = JSON.parse(entry.detail)
+      } catch {
+        detail = entry.detail
+      }
+      const ts =
+        entry.timestamp.includes("T") || entry.timestamp.endsWith("Z")
+          ? entry.timestamp
+          : entry.timestamp.replace(" ", "T") + "Z"
+      return {
+        action: entry.action,
+        actor: entry.actor,
+        actorUpn: entry.actor_upn,
+        timestamp: ts,
+        detail
+      }
+    })
+    return { run: mapSyncRunRow(row), audit }
   })
 
   app.get<{ Querystring: { limit?: string } }>("/api/sync/runs", async (req) => {
@@ -560,21 +550,10 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     return db
       .listSyncRuns(limit)
       .filter((row) => isAdmin || (viewerUpn && row.actor_upn === viewerUpn))
-      .map((row) => ({
-        planId: row.plan_id,
-        entityType: row.entity_type,
-        entityId: row.entity_id,
-        entityDisplayName: row.entity_display_name,
-        source: row.source,
-        target: row.target,
-        actorUpn: row.actor_upn,
-        status: row.status,
-        error: row.error,
-        startedAt: row.started_at,
-        finishedAt: row.finished_at,
-        durationMs: row.duration_ms
-      }))
+      .map(mapSyncRunRow)
   })
+
+  registerSyncMetadataRoutes(app)
 }
 
 function setupSse(reply: FastifyReply): void {

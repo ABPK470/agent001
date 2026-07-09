@@ -1,5 +1,5 @@
-import { Activity, MoreVertical, Shield, X } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Activity, LayoutGrid, MessageSquare, MoreVertical, Shield, X } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import { api, createEventStream, createPopoutEventRelay } from "./api"
 import { Canvas, type CanvasHandle } from "./components/Canvas"
 import { ChatHomePage } from "./components/ChatHomePage"
@@ -7,26 +7,37 @@ import { MobileNav } from "./components/MobileNav"
 import { PolicyEditor } from "./components/PolicyEditor"
 import { Toolbar } from "./components/Toolbar"
 import { UsageModal } from "./components/UsageModal"
+import { PlatformHealthBanner } from "./components/PlatformHealthBanner"
 import { WelcomeFlow } from "./components/WelcomeFlow"
 import { WidgetCatalog } from "./components/WidgetCatalog"
 import { WidgetModal } from "./components/WidgetModal"
 import { flushDashboardSave, restoreDashboardState, startDashboardSync } from "./dashboardSync"
 import { AppPhase } from "./enums"
+import { ThreadHomePage } from "./features/threads/ThreadHomePage"
 import { useIsMobile } from "./hooks/useIsMobile"
 import { useMe } from "./hooks/useMe"
+import { usePlatformHealth } from "./hooks/usePlatformHealth"
+import { useServerReachable } from "./hooks/useServerReachable"
+import type { AppShellMode } from "./shell/types"
+import { resolveChatVariant } from "./shell/types"
 import { useStore } from "./store"
 import type { AuditEntry, LogEntry, Step, WidgetType } from "./types"
 import { widgetRegistry } from "./widgets"
 
+const SHELL_TRANSITION_MS = 280
+
+function shellTransitionDelay(): number {
+  if (typeof window === "undefined") return SHELL_TRANSITION_MS
+  return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : SHELL_TRANSITION_MS
+}
+
 const WIDGET_LABELS: Record<WidgetType, string> = {
+  "thread-nav": "Threads",
   "agent-chat": "Agent Chat",
   "term-chat": "MI:A Chat",
-  "agent-viz": "Agent Viz",
   "run-status": "Run Status",
   "live-logs": "Event Stream",
-  "audit-trail": "Audit Trail",
   "step-timeline": "Step Timeline",
-  "tool-stats": "Tool Stats",
   "run-history": "Run History",
   "operator-env": "IOE",
   "debug-inspector": "Trace",
@@ -73,13 +84,18 @@ export function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [policyOpen, setPolicyOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
-  const [shellMode, setShellMode] = useState<"chat" | "platform">("chat")
-  // Becomes true when the login overlay starts its final fade so ChatHomePage
-  // crossfades with it instead of waiting for it to fully disappear.
+  const [shellMode, setShellMode] = useState<AppShellMode>("chat")
+  const [shellVisible, setShellVisible] = useState(true)
+  const shellTimerRef = useRef<number | null>(null)
+  // Becomes true when the login overlay starts its final fade so the home
+  // shell crossfades with it instead of waiting for it to fully disappear.
   const [shellRevealing, setShellRevealing] = useState(false)
   const [chatHomeHeroStage, setChatHomeHeroStage] = useState<"hidden" | "pill" | "copy">("hidden")
   const [chatHomeHeroRevealProgress, setChatHomeHeroRevealProgress] = useState(0)
   const { me, loading: meLoading, refresh: refreshMe, logout } = useMe()
+  const { health: platformHealth, refresh: refreshPlatformHealth } = usePlatformHealth(!!me)
+  const { reachable: serverReachable } = useServerReachable(true)
+  const bootstrapThreads = useStore((s) => s.bootstrapThreads)
 
   const popOut = getPopOutWidget()
   const currentView = useMemo(
@@ -93,10 +109,8 @@ export function App() {
   const shouldHydrateSelectedRun = visibleWidgetTypes.has("run-status")
     || visibleWidgetTypes.has("operator-env")
     || visibleWidgetTypes.has("run-history")
-    || visibleWidgetTypes.has("audit-trail")
     || visibleWidgetTypes.has("step-timeline")
     || visibleWidgetTypes.has("debug-inspector")
-    || visibleWidgetTypes.has("tool-stats")
     || visibleWidgetTypes.has("term-chat")
     || visibleWidgetTypes.has("agent-chat")
   const shouldRestoreSyncState = visibleWidgetTypes.has("env-sync")
@@ -112,7 +126,7 @@ export function App() {
   //   Reveal    — arrived from ui-term; mosaic dissolves outward over shell
   const [phase, setPhase] = useState<AppPhase>(AppPhase.Loading)
 
-  // Decide phase from auth state. v19: identity is binary — either we have
+  // Decide phase from auth state.
   // a verified user (shell) or we don't (login). No welcome modal, no
   // anon fallback, no "reveal" path because there's no longer a separate
   // identity-collection step that runs after the page mounts.
@@ -162,8 +176,27 @@ export function App() {
 
   useEffect(() => {
     if (!me?.upn) return
+    setShellVisible(true)
     setShellMode("chat")
   }, [me?.upn])
+
+  useEffect(() => () => {
+    if (shellTimerRef.current) window.clearTimeout(shellTimerRef.current)
+  }, [])
+
+  const transitionShellMode = useCallback((next: AppShellMode) => {
+    setShellMode((current) => {
+      if (current === next) return current
+      setShellVisible(false)
+      if (shellTimerRef.current) window.clearTimeout(shellTimerRef.current)
+      const delay = shellTransitionDelay()
+      shellTimerRef.current = window.setTimeout(() => {
+        setShellMode(next)
+        requestAnimationFrame(() => setShellVisible(true))
+      }, delay)
+      return current
+    })
+  }, [])
 
   // Reset reveal flag each time we return to login so the next login
   // starts with the chat content hidden. Also clear the shared ASCII
@@ -193,29 +226,36 @@ export function App() {
     return () => stream.close()
   }, [handleEvent, setConnected, popOut, me?.upn])
 
-  // Load initial runs + auto-select the most recent. Re-runs on identity
-  // change so each user only sees runs the server scopes to them.
+  // Load threads + active thread runs on login. Thread-scoped — not global listRuns.
   useEffect(() => {
     if (!me) return
-    api.listRuns().then(async (runs) => {
+    void bootstrapThreads().catch(() => {})
+  }, [me?.upn, bootstrapThreads])
+
+  // Auto-select latest run only when a run-scoped widget is visible and
+  // nothing is selected yet.
+  useEffect(() => {
+    if (!me || !shouldHydrateSelectedRun) return
+    if (useStore.getState().activeRunId) return
+    const pickLatest = (rows: Array<{ id: string; createdAt: string }>) => {
+      if (rows.length === 0) return
+      const latest = [...rows].sort(
+        (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+      )[0]
+      if (latest) setActiveRun(latest.id)
+    }
+    const cached = useStore.getState().runs
+    if (cached.length > 0) {
+      pickLatest(cached)
+      return
+    }
+    const threadId = useStore.getState().activeThreadId
+    if (!threadId) return
+    api.listRuns({ threadId }).then((runs) => {
       setRuns(runs)
-      // Reset run-specific UI state on identity change. NOTE: we deliberately
-      // don't reset `logs` — LiveLogs is a platform-wide event stream backed
-      // by `event_log` (sync, system, audit, all runs) and is hydrated by
-      // a separate effect below. Resetting it here would also wipe other
-      // users' visibility into pending sync events on a single workstation.
-      const currentActive = useStore.getState().activeRunId
-      const stillVisible = currentActive && runs.some((r) => r.id === currentActive)
-      if (!stillVisible) {
-        setActiveRun(null)
-        setSteps([]); setAudit([]); setTrace([])
-      }
-      if (shouldHydrateSelectedRun && runs.length > 0 && !useStore.getState().activeRunId) {
-        const latest = runs[0]
-        setActiveRun(latest.id)
-      }
+      if (!useStore.getState().activeRunId) pickLatest(runs)
     }).catch(() => {})
-  }, [me?.upn, setRuns, setActiveRun, setSteps, setAudit, setTrace, shouldHydrateSelectedRun])
+  }, [me?.upn, shouldHydrateSelectedRun, setRuns, setActiveRun])
 
   // Reload notifications on identity change so each user only sees their own.
   useEffect(() => {
@@ -223,27 +263,22 @@ export function App() {
     api.listNotifications(50).then(setNotifications).catch(() => {})
   }, [me?.upn, setNotifications])
 
-  // Restore the EnvSync widget to the user's most recent manual sync run.
-  // Mirrors the agent loop's auto-select-latest-run behaviour but for
-  // operator-driven syncs (which live in `sync_runs`, not `runs`). Only
-  // runs when the persisted form has no planId of its own — never clobbers
-  // an in-progress preview the user was working on.
+  // Restore the EnvSync widget operator context from the user's most recent
+  // manual sync run (env pair + entity type). Plans are hydrated only by
+  // explicit preview/history/agent actions — not on widget visibility.
   useEffect(() => {
     if (!me) return
     if (!shouldRestoreSyncState) return
     const current = useStore.getState().envSyncForm
-    if (current.planId) return // already have a plan in flight — leave it alone
+    if (current.source && current.target) return
     api.syncRuns(1).then((rows) => {
       const latest = rows[0]
       if (!latest) return
-      // Only restore if it belongs to this user (or is unowned, e.g. legacy rows).
       if (latest.actorUpn !== me.upn) return
       useStore.getState().setEnvSyncForm({
-        planId: latest.planId,
         source: latest.source,
         target: latest.target,
         entityType: latest.entityType,
-        entityId: latest.entityId,
       })
     }).catch(() => {})
   }, [me?.upn, shouldRestoreSyncState])
@@ -291,8 +326,10 @@ export function App() {
     // No API fallback — popout receives live events via BroadcastChannel relay.
     // If no stashed state, the popout starts empty and accumulates from the stream.
 
-    // Load runs list for widgets that need it
-    api.listRuns().then((runs) => setRuns(runs)).catch(() => {})
+    const threadId = useStore.getState().activeThreadId
+    if (threadId) {
+      api.listRuns({ threadId }).then((runs) => setRuns(runs)).catch(() => {})
+    }
 
     // Sync from main window — receive full live state on activeRunId change
     const sync = new BroadcastChannel(SYNC_CHANNEL)
@@ -380,7 +417,6 @@ export function App() {
         onSubmit={loginOrRegister}
         onDone={() => {
           setChatHomeHeroRevealProgress(1)
-          setChatHomeHeroStage("copy")
           setPhase(AppPhase.Shell)
         }}
         onFading={() => setShellRevealing(true)}
@@ -388,6 +424,7 @@ export function App() {
           setChatHomeHeroStage("pill")
           setChatHomeHeroRevealProgress(0)
         }}
+        onEntered={() => setChatHomeHeroStage("copy")}
         onPillRevealProgress={setChatHomeHeroRevealProgress}
       />
     ) : phase === AppPhase.Outro ? (
@@ -435,10 +472,6 @@ export function App() {
       </>
     )
   }
-  // Login with no `me` yet: just blank background under the overlay.
-  // The moment login succeeds, refreshMe populates `me` and we fall
-  // through to the real shell — which paints behind the still-covering
-  // mosaic and is then revealed by its dissolve.
   if (phase === AppPhase.Login && !me) {
     return (
       <>
@@ -448,33 +481,35 @@ export function App() {
     )
   }
   const widgets = currentView?.widgets ?? []
-
-  if (shellMode === "chat") {
-    return (
-      <>
-        {welcomeOverlay}
-        <ChatHomePage
-          revealed={shellRevealing || phase === AppPhase.Shell}
-          heroStage={phase === AppPhase.Shell ? "copy" : chatHomeHeroStage}
-          heroRevealProgress={phase === AppPhase.Shell ? 1 : chatHomeHeroRevealProgress}
-          connected={connected}
-          onOpenPlatform={() => setShellMode("platform")}
-          onLogout={handleSwitchUser}
-        />
-      </>
-    )
-  }
-
-  // Clamp mobile index if widgets were removed
   const clampedIdx = Math.min(mobileWidgetIdx, Math.max(0, widgets.length - 1))
   const currentWidget = widgets[clampedIdx]
   const WidgetComponent = currentWidget ? widgetRegistry[currentWidget.type] : null
 
-  // ── Mobile layout ──
-  if (isMobile) {
-    return (
-      <>
-      {welcomeOverlay}
+  let shellBody: ReactNode
+
+  if (shellMode === "chat") {
+    const chatVariant = resolveChatVariant()
+    const chatProps = {
+      connected: connected && serverReachable,
+      isAdmin: me?.isAdmin ?? false,
+      me,
+      onModeChange: transitionShellMode,
+      onSignOut: handleSwitchUser,
+      onSwitchUi: handleSwitchUi,
+      revealed: shellRevealing || phase === AppPhase.Shell,
+      heroStage: (phase === AppPhase.Shell ? "copy" : chatHomeHeroStage) as "hidden" | "pill" | "copy",
+      heroRevealProgress: phase === AppPhase.Shell ? 1 : chatHomeHeroRevealProgress,
+    }
+    shellBody = chatVariant === "thread" ? (
+      <ThreadHomePage
+        {...chatProps}
+        morphLanding={phase === AppPhase.Login && !!me}
+      />
+    ) : (
+      <ChatHomePage {...chatProps} />
+    )
+  } else if (isMobile) {
+    shellBody = (
       <div className="flex flex-col h-[100dvh] bg-base">
         {/* Compact header */}
         <header className="flex items-center gap-3 px-4 h-12 bg-surface shrink-0 select-none">
@@ -492,7 +527,7 @@ export function App() {
           </div>
           <div className="shrink-0 flex items-center gap-3">
             <div
-              className={`w-2 h-2 rounded-full shrink-0 ${connected ? "bg-success" : "bg-error"}`}
+              className={`w-2 h-2 rounded-full shrink-0 ${connected && serverReachable ? "bg-success" : "bg-error"}`}
             />
             <div className="relative">
               <button
@@ -513,6 +548,18 @@ export function App() {
                       <Activity size={15} /> Usage
                     </button>
                     )}
+                    <button
+                      className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-text-secondary active:bg-overlay-2"
+                      onClick={() => { transitionShellMode("chat"); setMobileMenuOpen(false) }}
+                    >
+                      <MessageSquare size={15} /> Chat
+                    </button>
+                    <button
+                      className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-text-secondary active:bg-overlay-2"
+                      onClick={() => { transitionShellMode("workspace"); setMobileMenuOpen(false) }}
+                    >
+                      <LayoutGrid size={15} /> Workspace
+                    </button>
                     <button
                       className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-text-secondary active:bg-overlay-2"
                       onClick={() => { setPolicyOpen(true); setMobileMenuOpen(false) }}
@@ -583,25 +630,38 @@ export function App() {
         {policyOpen && <PolicyEditor onClose={() => setPolicyOpen(false)} />}
         {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       </div>
-      </>
+    )
+  } else {
+    shellBody = (
+      <div className="flex flex-col h-screen bg-base">
+        <Toolbar
+          onAddWidget={() => canvasRef.current?.openCatalog()}
+          onSignOut={handleSwitchUser}
+          onSwitchUi={handleSwitchUi}
+          onModeChange={transitionShellMode}
+          me={me}
+        />
+        <Canvas ref={canvasRef} />
+        <WidgetModal />
+      </div>
     )
   }
 
-  // ── Desktop layout ─────────────────────────────────────────────
   return (
     <>
-    {welcomeOverlay}
-    <div className="flex flex-col h-screen bg-base">
-      <Toolbar
-        onAddWidget={() => canvasRef.current?.openCatalog()}
-        onSwitchUser={handleSwitchUser}
-        onSwitchUi={handleSwitchUi}
-        onShowChatHome={() => setShellMode("chat")}
-        me={me}
-      />
-      <Canvas ref={canvasRef} />
-      <WidgetModal />
-    </div>
+      {welcomeOverlay}
+      <div
+        className={`app-shell-view flex flex-col h-screen min-h-[100dvh] ${shellVisible ? "" : "app-shell-view--fading"}`}
+      >
+        {me && (
+          <PlatformHealthBanner
+            health={platformHealth}
+            isAdmin={me.isAdmin}
+            onRefresh={refreshPlatformHealth}
+          />
+        )}
+        <div className="flex-1 min-h-0">{shellBody}</div>
+      </div>
     </>
   )
 }

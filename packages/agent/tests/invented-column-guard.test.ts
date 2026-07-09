@@ -103,6 +103,28 @@ describe("detectInventedColumns — positive blocks", () => {
     expect(offenders).toHaveLength(1)
     expect(offenders[0].reference).toBe("r.ClientName")
   })
+
+  it("flags bare invented column names in WHERE predicates", () => {
+    const query = [
+      "SELECT c.ClientName, r.RevenueZARMTD",
+      "FROM publish.Revenue r",
+      "JOIN dim.Client c ON c.pkClient = r.pkClient",
+      "WHERE Name = 'Acme'"
+    ].join("\n")
+    const offenders = detectInventedColumns(query, accessor)
+    expect(offenders.some((o) => o.column === "Name")).toBe(true)
+  })
+
+  it("flags invented columns inside UNION branches", () => {
+    const query = [
+      "SELECT r.ClientName FROM publish.Revenue r",
+      "UNION ALL",
+      "SELECT b.ClientName FROM publish.Balances b"
+    ].join("\n")
+    const offenders = detectInventedColumns(query, accessor)
+    expect(offenders.length).toBeGreaterThanOrEqual(2)
+    expect(offenders.some((o) => o.column === "ClientName")).toBe(true)
+  })
 })
 
 describe("detectInventedColumns — negatives (must not false-positive)", () => {
@@ -152,15 +174,6 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
 
   it("skips statements with a derived table in FROM", () => {
     const query = ["SELECT x.ClientName FROM (SELECT pkClient FROM publish.Revenue) x"].join("\n")
-    expect(detectInventedColumns(query, accessor)).toEqual([])
-  })
-
-  it("skips statements with UNION", () => {
-    const query = [
-      "SELECT r.ClientName FROM publish.Revenue r",
-      "UNION ALL",
-      "SELECT b.ClientName FROM publish.Balances b"
-    ].join("\n")
     expect(detectInventedColumns(query, accessor)).toEqual([])
   })
 

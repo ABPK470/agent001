@@ -19,7 +19,7 @@ import type { TenantConfig } from "../src/application/shell/tenant-config.js"
 import { MessageRole } from "../src/domain/enums/message.js"
 
 const TENANT: TenantConfig = {
-  routingKeywords: { schemas: [], domain: [], sync: [] }
+  domainKeywords: []
 } as unknown as TenantConfig
 
 function ctx(over: Partial<ClarifyContext> & Pick<ClarifyContext, "goal">): ClarifyContext {

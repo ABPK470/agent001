@@ -29,10 +29,6 @@ export function compactToolResult(toolName: string, filePath: string | null, con
       return `[compacted] list_directory${pathLabel}: ${lineCount} entries`
     case "search_files":
       return `[compacted] search_files: ${lineCount} result lines`
-    case "browser_check": {
-      if (charCount < 1000) return content
-      return content.slice(0, 800) + `\n... (${charCount - 800} chars omitted)`
-    }
     default:
       if (charCount < 500) return content
       return `[compacted] ${toolName}${pathLabel} (${charCount} chars)${semanticSuffix || `: ${extractCompactExcerpt(content)}`}`

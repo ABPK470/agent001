@@ -71,8 +71,14 @@ function Bot({ size = 42 }: { size?: number }) {
       <rect x="17" y="3" width="3" height="8" fill="#7b6fc7b8" />
       <path fill="#7B6FC7" fillRule="evenodd"
         d="M3 0 H17 V14 H3 Z M3 5 H7 V9 H3 Z M13 5 H17 V9 H13 Z" />
-      <rect className="wf-eye" x="3" y="5" width="4" height="4" fill="#34d399" />
-      <rect className="wf-eye" x="13" y="5" width="4" height="4" fill="#34d399" />
+      <g className="mia-logo-eye">
+        <rect className="logo-eye-open" x="3" y="5" width="4" height="4" />
+        <rect className="logo-eye-lid" x="3" y="5" width="4" height="4" />
+      </g>
+      <g className="mia-logo-eye mia-logo-eye--r">
+        <rect className="logo-eye-open" x="13" y="5" width="4" height="4" />
+        <rect className="logo-eye-lid" x="13" y="5" width="4" height="4" />
+      </g>
     </svg>
   )
 }
@@ -633,14 +639,6 @@ export function WelcomeFlowLegacy({ onSubmit, onDone, mode = "intro" }: WelcomeF
           color: ${DIM}; font-size: 11px;
           letter-spacing: 0.18em; text-transform: uppercase;
           opacity: 0; animation: wf-in 600ms ease-out 800ms forwards;
-        }
-
-        .wf-eye { transform-box: fill-box; transform-origin: center; animation: wf-blink 2.5s ease-in-out infinite; }
-        .wf-eye:nth-child(4) { animation-delay: 0.05s; }
-        @keyframes wf-blink {
-          0%,85%,100% { transform: scaleY(1) }
-          90% { transform: scaleY(0.08) }
-          95% { transform: scaleY(1) }
         }
 
         @media (prefers-reduced-motion: reduce) {

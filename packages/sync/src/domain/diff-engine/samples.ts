@@ -9,15 +9,14 @@
  * @module
  */
 
-import type sql from "mssql"
 import type { SyncPlanRowSample } from "../../application/shell/plan-store.js"
-import type { SyncEventHost } from "../../ports/index.js"
+import type { SyncRuntimeHost } from "../../ports/index.js"
 import { buildBatchWhere, qtable, runQueryWithRetry } from "./sql-helpers.js"
 import { META_EXCLUDED_COLUMNS, type PkHashRow } from "./types.js"
 
 export async function fetchSamples(
-  host: SyncEventHost,
-  pool: sql.ConnectionPool,
+  host: SyncRuntimeHost,
+  connectionName: string,
   qualifiedTable: string,
   rows: PkHashRow[],
   pkColumns: string[],
@@ -28,7 +27,7 @@ export async function fetchSamples(
     const where = buildBatchWhere(rows, pkColumns)
     const result = await runQueryWithRetry(
       host,
-      pool,
+      connectionName,
       `SELECT * FROM ${qtable(qualifiedTable)} WHERE ${where}`,
       `fetchSamples(${qualifiedTable})`,
       2,
@@ -52,9 +51,9 @@ export async function fetchSamples(
 }
 
 export async function fetchUpdateSamples(
-  host: SyncEventHost,
-  srcPool: sql.ConnectionPool,
-  tgtPool: sql.ConnectionPool,
+  host: SyncRuntimeHost,
+  sourceConn: string,
+  targetConn: string,
   qualifiedTable: string,
   rows: PkHashRow[],
   pkColumns: string[],
@@ -67,7 +66,7 @@ export async function fetchUpdateSamples(
     const [srcResult, tgtResult] = await Promise.all([
       runQueryWithRetry(
         host,
-        srcPool,
+        sourceConn,
         `SELECT * FROM ${qt} WHERE ${where}`,
         `fetchUpdateSamples.src(${qualifiedTable})`,
         2,
@@ -75,7 +74,7 @@ export async function fetchUpdateSamples(
       ),
       runQueryWithRetry(
         host,
-        tgtPool,
+        targetConn,
         `SELECT * FROM ${qt} WHERE ${where}`,
         `fetchUpdateSamples.tgt(${qualifiedTable})`,
         2,

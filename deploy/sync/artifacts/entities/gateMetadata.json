@@ -13,8 +13,7 @@
   },
   "governance": {
     "approvalPolicyId": null,
-    "freezeWindowIds": [],
-    "riskMultiplier": 1
+    "freezeWindowIds": []
   },
   "strategy": {
     "strategyId": "mymi-scd2",
@@ -38,18 +37,17 @@
       {
         "name": "gate.jsonSchema",
         "scopeColumn": "jsonSchemaId",
-        "predicate": "jsonSchemaId IN (/* review jsonSchemaIds */)",
+        "predicate": "EXISTS (SELECT 1 FROM [gate].[MetaColumn] mc INNER JOIN [gate].[MetaView] mv ON mv.[viewId] = mc.[viewId] WHERE mv.[tableId] = {id} AND mc.[jsonSchemaId] = [gate].[jsonSchema].[jsonSchemaId])",
         "source": "pipeline-only",
-        "verified": false,
+        "verified": true,
         "groundedByPipeline": true,
         "enabledByDefault": true,
-        "userControllable": false,
-        "note": "Predicate unresolved from legacy pipeline variable @jsonSchemaIds. Verify against core.uspSyncDataListObjectsTran body."
+        "userControllable": false
       },
       {
         "name": "gate.MetaColumn",
-        "scopeColumn": "refTableId",
-        "predicate": "refTableId = {id}",
+        "scopeColumn": "viewId",
+        "predicate": "EXISTS (SELECT 1 FROM [gate].[MetaView] mv WHERE mv.[viewId] = [gate].[metaColumn].[viewId] AND mv.[tableId] = {id})",
         "source": "fk+pipeline",
         "verified": true,
         "groundedByPipeline": true,
@@ -58,7 +56,7 @@
       },
       {
         "name": "gate.MetaView",
-        "scopeColumn": "tableId",
+        "scopeColumn": "viewId",
         "predicate": "tableId = {id}",
         "source": "fk+pipeline",
         "verified": true,
@@ -135,7 +133,7 @@
   },
   "provenance": {
     "kind": "legacy-migration",
-    "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
-    "sourceVersion": "2026-05-10T11:19:07.694Z"
+    "sourceArtifact": "deploy/sync/generators/refresh-from-legacy.mjs",
+    "sourceVersion": "2026-07-09T13:02:24.967Z"
   }
 }

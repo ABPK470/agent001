@@ -41,10 +41,6 @@ export const FILE_READ_TOOLS = new Set(["read_file", "list_directory", "search_f
 export const EXECUTABLE_VERIFICATION_CMD_RE =
   /\b(?:npm\s+test|npm\s+run\s+(?:test|lint|build|check)|pnpm\s+(?:test|lint|build|check)|yarn\s+(?:test|lint|build|check)|vitest|jest|pytest|go\s+test|cargo\s+test|cargo\s+check|mvn\s+test|gradle\s+test|ruff\s+check|eslint|tsc\b|phpunit|dotnet\s+test)\b/i
 
-/** Browser runtime/load failures that invalidate browser_check evidence. */
-export const BROWSER_RUNTIME_FAILURE_RE =
-  /(Failed to load resource|net::ERR_|status of 404|\b404\b|ReferenceError|TypeError|SyntaxError|Total:\s*[1-9]\d*\s+error\(s\))/i
-
 /** Shell commands that create/modify files. */
 export const SHELL_FILE_WRITE_RE =
   /\b(?:tee|touch|cp|mv|install)\b|\bcat\b[^\n]*\s(?:>|>>|<<)\s*\S|(?:^|[^>])>{1,2}\s*\S/i
@@ -82,17 +78,6 @@ export const UNRESOLVED_HANDOFF_RE =
 
 /** Narrative file claims without tool evidence. */
 export const NARRATIVE_FILE_CLAIM_RE = /\b(?:created|wrote|saved|updated|implemented|scaffolded|generated)\b/i
-
-/** Low-signal browser targets that don't count as meaningful evidence. */
-export const LOW_SIGNAL_BROWSER_TARGETS = new Set(["about:blank"])
-
-/** Browser tools that are meaningful (navigate, snapshot, run_code). */
-export const MEANINGFUL_BROWSER_TOOLS = new Set(["browser_check"])
-
-/** Browser tools that are low-signal (tab list, console only). */
-export const LOW_SIGNAL_BROWSER_TOOLS = new Set<string>([
-  // Reserved for future browser sub-tools
-])
 
 // ── Task-intent classification regexes ──────────────────────────
 

@@ -2,9 +2,14 @@ import Database from "better-sqlite3"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { SyncRunStatus } from "@mia/shared-enums"
 import {
+  countSyncRuns,
   getSyncRun,
   getSyncRunPlanJson,
-  recordSyncRunPreview
+  listSyncRuns,
+  listSyncRunsPaginated,
+  recordSyncRunFinish,
+  recordSyncRunPreview,
+  recordSyncRunStart
 } from "../src/platform/persistence/db/sync-runs.js"
 import { seedUser } from "./_fk-helpers.js"
 
@@ -64,5 +69,94 @@ describe("sync run persistence", () => {
         planJson: "{}"
       })
     ).toThrow(/actor UPN is required/)
+  })
+
+  it("recordSyncRunStart preserves plan_json from preview", () => {
+    seedUser(testDb, "pka")
+    const plan = {
+      planId: "plan-exec",
+      entity: { displayName: "Exec Contract" },
+      totals: { insert: 2, update: 0, delete: 0 },
+      governanceDecision: { targetEnvironment: { actorUpn: "pka" } }
+    }
+
+    recordSyncRunPreview({
+      planId: plan.planId,
+      entityType: "contract",
+      entityId: 99,
+      entityDisplayName: "Exec Contract",
+      source: "dev",
+      target: "uat",
+      actorUpn: "pka",
+      previewTotals: plan.totals,
+      planJson: JSON.stringify(plan)
+    })
+
+    recordSyncRunStart({
+      planId: plan.planId,
+      entityType: "contract",
+      entityId: 99,
+      entityDisplayName: "Exec Contract",
+      source: "dev",
+      target: "uat",
+      actorUpn: "pka",
+      previewTotals: plan.totals
+    })
+
+    expect(getSyncRunPlanJson("plan-exec")).toContain("Exec Contract")
+    expect(getSyncRun("plan-exec")?.status).toBe(SyncRunStatus.Started)
+  })
+
+  it("recordSyncRunFinish without executeTotals preserves executed counts", () => {
+    seedUser(testDb, "pka")
+    recordSyncRunPreview({
+      planId: "plan-finish",
+      entityType: "contract",
+      entityId: 1,
+      entityDisplayName: null,
+      source: "dev",
+      target: "uat",
+      actorUpn: "pka",
+      previewTotals: { insert: 0, update: 2, delete: 0 },
+      planJson: "{}"
+    })
+    recordSyncRunFinish({
+      planId: "plan-finish",
+      status: SyncRunStatus.Success,
+      executeTotals: { insert: 2, update: 0, delete: 0 },
+      durationMs: 1200
+    })
+    recordSyncRunFinish({
+      planId: "plan-finish",
+      status: SyncRunStatus.Success,
+      durationMs: 1300
+    })
+
+    const row = getSyncRun("plan-finish")
+    expect(row?.executed_inserts).toBe(2)
+    expect(row?.executed_updates).toBe(0)
+    expect(row?.duration_ms).toBe(1300)
+  })
+
+  it("lists sync runs with pagination", () => {
+    seedUser(testDb, "pka")
+    for (let i = 0; i < 5; i++) {
+      recordSyncRunPreview({
+        planId: `plan-${i}`,
+        entityType: "Contract",
+        entityId: i,
+        entityDisplayName: null,
+        source: "dev",
+        target: "uat",
+        actorUpn: "pka",
+        previewTotals: { insert: 0, update: 0, delete: 0 },
+        planJson: "{}"
+      })
+    }
+    expect(countSyncRuns({ actorUpn: "pka" })).toBe(5)
+    const page1 = listSyncRunsPaginated({ page: 1, pageSize: 2, actorUpn: "pka" })
+    expect(page1).toHaveLength(2)
+    const page3 = listSyncRunsPaginated({ page: 3, pageSize: 2, actorUpn: "pka" })
+    expect(page3).toHaveLength(1)
   })
 })

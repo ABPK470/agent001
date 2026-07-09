@@ -30,13 +30,14 @@
 import {
   bundledStrategyById,
   diffEntityDefinitions,
+  normalizeEntityDefinition as normalizeEntityCanonical,
   validateEntityDefinition,
   validateScd2Strategy,
   type EntityDefinition,
   type Scd2Strategy,
   type ValidationResult
 } from "@mia/sync"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 import { listFreezeWindowsForTenant } from "./freeze-windows.js"
 
 const DEFAULT_TENANT_ID = "_default"
@@ -58,13 +59,13 @@ const DEFAULT_TENANT_ID = "_default"
  */
 function normalizeEntityDefinition(raw: EntityDefinition): EntityDefinition {
   const r = raw as Partial<EntityDefinition> & EntityDefinition
-  return {
+  return normalizeEntityCanonical({
     ...r,
     tables: (r.tables ?? []).map(normalizeEntityTable),
     legacyEntrySproc: r.legacyEntrySproc ?? null,
     reverseOrder: r.reverseOrder ?? [],
-    discrepancies: r.discrepancies ?? []
-  }
+    discrepancies: r.discrepancies ?? [],
+  })
 }
 
 function normalizeEntityTable(t: EntityDefinition["tables"][number]): EntityDefinition["tables"][number] {
@@ -163,6 +164,15 @@ export class EntityRegistryValidationError extends Error {
   }
 }
 
+export class EntityRegistryConflictError extends Error {
+  readonly id: string
+  constructor(id: string, message?: string) {
+    super(message ?? `entity already exists: ${id}`)
+    this.name = "EntityRegistryConflictError"
+    this.id = id
+  }
+}
+
 export interface SaveEntityResult {
   tenantId: string
   id: string
@@ -185,15 +195,18 @@ export function saveEntityDefinition(args: {
   actor: string
   reason: string
   versionLabel?: string | null
+  /** When true, reject if any row exists for this id (including retired). */
+  createOnly?: boolean
 }): SaveEntityResult {
   const tenantId = args.tenantId ?? args.def.tenantId ?? DEFAULT_TENANT_ID
-  const validation = validateEntityDefinition({ ...args.def, tenantId, version: 1 })
+  const def = normalizeEntityDefinition({ ...args.def, tenantId, version: 1 })
+  const validation = validateEntityDefinition(def)
   if (!validation.ok) throw new EntityRegistryValidationError(validation)
 
   // Cross-reference validation: every id the entity points at must
   // actually resolve. Structural validators above can't do this — they
   // don't have access to the strategy / freeze-window stores.
-  const xref = validateEntityReferences(tenantId, args.def)
+  const xref = validateEntityReferences(tenantId, def)
   if (!xref.ok) throw new EntityRegistryValidationError(xref)
 
   const db = getDb()
@@ -203,15 +216,24 @@ export function saveEntityDefinition(args: {
       .prepare(`SELECT current_version, retired_at FROM entity_defs WHERE tenant_id = ? AND id = ?`)
       .get(tenantId, args.def.id) as { current_version: number; retired_at: string | null } | undefined
 
+    if (args.createOnly && pointer) {
+      throw new EntityRegistryConflictError(
+        args.def.id,
+        pointer.retired_at
+          ? `entity id "${args.def.id}" already exists (retired). Choose a different id.`
+          : `entity id "${args.def.id}" already exists`,
+      )
+    }
+
     const prev: EntityDefinition | null = pointer
-      ? readEntityVersionBody(tenantId, args.def.id, pointer.current_version)
+      ? readEntityVersionBody(tenantId, def.id, pointer.current_version)
       : null
 
     const nextVersion = (pointer?.current_version ?? 0) + 1
-    const createdAt = args.def.createdAt || new Date().toISOString()
+    const createdAt = def.createdAt || new Date().toISOString()
 
     const persisted: EntityDefinition = {
-      ...args.def,
+      ...def,
       tenantId,
       version: nextVersion,
       versionLabel: args.versionLabel ?? args.def.versionLabel ?? null,
@@ -418,6 +440,28 @@ export function retireEntityDefinition(
   })()
 }
 
+/**
+ * Factory reset only — drops append-only triggers, wipes all entity rows,
+ * then restores triggers. Normal API paths must never call this.
+ */
+export function wipeEntityRegistry(): void {
+  const db = getDb()
+  db.exec(`
+    DROP TRIGGER IF EXISTS entity_def_versions_no_update;
+    DROP TRIGGER IF EXISTS entity_def_versions_no_delete;
+  `)
+  db.exec(`DELETE FROM entity_def_versions`)
+  db.exec(`DELETE FROM entity_defs`)
+  db.exec(`
+    CREATE TRIGGER IF NOT EXISTS entity_def_versions_no_update
+      BEFORE UPDATE ON entity_def_versions
+      BEGIN SELECT RAISE(ABORT, 'entity_def_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS entity_def_versions_no_delete
+      BEFORE DELETE ON entity_def_versions
+      BEGIN SELECT RAISE(ABORT, 'entity_def_versions is append-only'); END;
+  `)
+}
+
 // ── SCD2 strategies ─────────────────────────────────────────────────
 
 export interface SaveStrategyResult {
@@ -543,6 +587,81 @@ export function resolveScd2Strategy(
  * strategies and the inherited default-tenant (bundled) strategies that
  * the tenant hasn't shadowed.
  */
+export interface Scd2StrategyHistoryEntry {
+  tenantId: string
+  id: string
+  version: number
+  versionLabel: string | null
+  createdBy: string
+  createdAt: string
+  reason: string
+}
+
+function readStrategyHistoryRows(
+  db: ReturnType<typeof getDb>,
+  tenantId: string,
+  id: string
+): Scd2StrategyHistoryEntry[] {
+  const rows = db
+    .prepare(
+      `SELECT version, body_json, created_by, created_at, reason
+       FROM scd2_strategy_versions
+       WHERE tenant_id = ? AND id = ?
+       ORDER BY version DESC`
+    )
+    .all(tenantId, id) as {
+    version: number
+    body_json: string
+    created_by: string
+    created_at: string
+    reason: string
+  }[]
+
+  return rows.map((r) => {
+    const body = JSON.parse(r.body_json) as Scd2Strategy
+    return {
+      tenantId,
+      id,
+      version: r.version,
+      versionLabel: body.versionLabel ?? null,
+      createdBy: r.created_by,
+      createdAt: r.created_at,
+      reason: r.reason
+    }
+  })
+}
+
+/**
+ * Append-only version history for a strategy. Falls back to the default
+ * tenant when the requesting tenant has no rows, then to the bundled
+ * constant when the id is a shipped default with no DB rows yet.
+ */
+export function listScd2StrategyHistory(tenantId: string, id: string): Scd2StrategyHistoryEntry[] {
+  const db = getDb()
+  const tenantRows = readStrategyHistoryRows(db, tenantId, id)
+  if (tenantRows.length > 0) return tenantRows
+
+  if (tenantId !== DEFAULT_TENANT_ID) {
+    const defaultRows = readStrategyHistoryRows(db, DEFAULT_TENANT_ID, id)
+    if (defaultRows.length > 0) return defaultRows
+  }
+
+  const bundled = bundledStrategyById(id)
+  if (!bundled) return []
+
+  return [
+    {
+      tenantId: DEFAULT_TENANT_ID,
+      id,
+      version: bundled.version,
+      versionLabel: bundled.versionLabel,
+      createdBy: bundled.createdBy,
+      createdAt: bundled.createdAt,
+      reason: "bundled default"
+    }
+  ]
+}
+
 export function listAvailableStrategies(tenantId: string): Scd2Strategy[] {
   const db = getDb()
   const tenantStrategies = readTenantStrategies(db, tenantId)

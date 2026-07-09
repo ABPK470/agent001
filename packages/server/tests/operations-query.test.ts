@@ -86,7 +86,7 @@ describe("listOperations sync bucketing", () => {
       error: null
     })
 
-    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
 
     expect(result.operations).toHaveLength(3)
@@ -118,7 +118,7 @@ describe("listOperations sync bucketing", () => {
       {
         type: EventType.SyncExecuteStep,
         created_at: "2026-05-27T14:52:26.000Z",
-        data: JSON.stringify({ planId: "plan-2", step: "sync-date" })
+        data: JSON.stringify({ planId: "plan-2", step: "syncDate" })
       },
       {
         type: EventType.SyncExecuteStarted,
@@ -140,7 +140,7 @@ describe("listOperations sync bucketing", () => {
       error: null
     })
 
-    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
 
@@ -149,7 +149,7 @@ describe("listOperations sync bucketing", () => {
     expect(execute.activities[0]?.name).toBe("started")
     expect(execute.activities[0]?.status).toBe(OperationStatus.Success)
     expect(execute.activities[0]?.summary).toBe("dev → uat")
-    expect(execute.activities[1]?.name).toBe("sync-date")
+    expect(execute.activities[1]?.name).toBe("syncDate")
     expect(execute.activities[1]?.events.map((event) => event.type)).toEqual([EventType.SyncExecuteStep])
     expect(execute.activities[2]?.name).toBe("completed")
     expect(execute.activities[2]?.summary).toBe("0 ins · 0 upd · 0 del")
@@ -165,7 +165,7 @@ describe("listOperations sync bucketing", () => {
       {
         type: EventType.SyncExecuteStep,
         created_at: "2026-05-28T10:00:03.000Z",
-        data: JSON.stringify({ planId: "plan-3", step: "metadata-sync" })
+        data: JSON.stringify({ planId: "plan-3", step: "metadataSync" })
       },
       {
         type: EventType.SyncExecuteStarted,
@@ -211,7 +211,7 @@ describe("listOperations sync bucketing", () => {
       })
     )
 
-    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
 
@@ -221,7 +221,7 @@ describe("listOperations sync bucketing", () => {
     expect(execute.activities[0]?.summary).toBe(
       "Using published definition contract@2026-05-28T09:59:59.000Z."
     )
-    expect(execute.activities.some((activity) => activity.name === "metadata-sync")).toBe(true)
+    expect(execute.activities.some((activity) => activity.name === "metadataSync")).toBe(true)
   })
 
   it("correlates legacy preview events by previewId when planId is only on completed", async () => {
@@ -273,7 +273,7 @@ describe("listOperations sync bucketing", () => {
     })
     getSyncRunPlanJson.mockReturnValue(null)
 
-    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const preview = result.operations.find((op) => op.kind === OperationKind.SyncPreview)
 
@@ -331,7 +331,7 @@ describe("listOperations sync bucketing", () => {
       })
     )
 
-    const { listOperations } = await import("../src/features/operations/application/query.ts")
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const preview = result.operations[0]
     const scope = preview.activities.find((a) => a.name === "Table scope selected")

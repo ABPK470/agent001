@@ -1,5 +1,5 @@
 /**
- * Helpers for fetch-url: SSRF guards + Playwright fallback. Extracted from fetch-url.ts.
+ * Helpers for fetch-url: SSRF guards. Extracted from fetch-url.ts.
  *
  * @module
  */
@@ -57,56 +57,4 @@ export function checkResolvedIp(ip: string): string | null {
   }
 
   return null
-}
-
-/**
- * Fallback: use headless Chromium via Playwright to fetch a page that blocks plain HTTP.
- * Lazy-imports playwright so it's only loaded when actually needed.
- */
-export async function fetchWithBrowser(url: string, maxLength: number): Promise<string | null> {
-  let chromium: typeof import("playwright").chromium
-  try {
-    const mod = await import("playwright")
-    chromium = mod.chromium
-  } catch {
-    return null // playwright not available
-  }
-
-  let browser: import("playwright").Browser | null = null
-  try {
-    browser = await chromium.launch({
-      headless: true,
-      args: [
-        "--no-sandbox",
-        "--disable-setuid-sandbox",
-        "--disable-dev-shm-usage",
-        "--disable-gpu",
-        "--disable-extensions"
-      ]
-    })
-
-    const context = await browser.newContext({
-      userAgent:
-        "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
-    })
-    const page = await context.newPage()
-
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 30_000 })
-
-    // Wait a short time for JS-rendered content
-    await new Promise((r) => setTimeout(r, 2000))
-
-    let text = String(await page.evaluate('document.body?.innerText ?? ""'))
-    text = text.replace(/\s+/g, " ").trim()
-
-    if (text.length > maxLength) {
-      text = text.slice(0, maxLength) + "\n... (truncated)"
-    }
-
-    return text || null
-  } catch {
-    return null
-  } finally {
-    if (browser) await browser.close().catch(() => {})
-  }
 }

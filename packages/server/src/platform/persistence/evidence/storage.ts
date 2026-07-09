@@ -34,7 +34,7 @@ export interface SealedEvidence {
 
 export interface SealEvidenceInput extends BuildEnvelopeInput {
   tenantId: string
-  /** Absolute path to the evidence storage root e.g. <projectRoot>/packages/server/data/evidence. */
+  /** Absolute path to the evidence storage root e.g. `<MIA_DATA_DIR>/evidence`. */
   storageRoot: string
   signer: Signer
 }

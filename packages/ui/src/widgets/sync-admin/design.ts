@@ -1,0 +1,20 @@
+/** Visual tokens — aligned with entity-registry/chrome.ts */
+export {
+  ACTION_BTN,
+  FIELD_LABEL,
+  FORM_HEADING,
+  HELP_TEXT,
+  ICON_BTN,
+  ICON_BTN_PRIMARY,
+  META_TEXT,
+  PANEL,
+  SECTION_TITLE,
+  TAB_BODY,
+  TAB_BODY_INNER,
+  TAB_PILL,
+  TEXT_BTN,
+  TOOLBAR,
+  TOOLBAR_DIVIDER,
+  TOOLBAR_ROW,
+  WIDGET_ENVELOPE,
+} from "../entity-registry/chrome"

@@ -24,7 +24,7 @@ import {
   outputIntersectsArtifacts,
   safeParseJson
 } from "../verifier-helpers/index.js"
-import { runBrowserCheckProbe, runTestsProbe } from "./runtime-probes.js"
+import { runTestsProbe } from "./runtime-probes.js"
 import { detectPathMismatchIssues, detectScopeViolationIssues } from "./scope-checks.js"
 
 const DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE = 0.65
@@ -38,7 +38,6 @@ const STRUCTURAL_KEYWORDS = [
   "Syntax error",
   "Corrupted",
   "Missing method",
-  "Browser check",
   "catch-all",
   "empty function",
   "deferred-work",
@@ -118,17 +117,6 @@ export async function assessSubagentStep(
   issues.push(...detectPathMismatchIssues(probeCache, wsRoot))
   issues.push(...detectScopeViolationIssues(sa, plan, outputText, wsRoot))
 
-  // Runtime probes: browser_check + run_tests
-  const browserOutcome = await runBrowserCheckProbe(
-    sa,
-    toolMap,
-    probeCache,
-    wsRoot,
-    issues,
-    executedModalities
-  )
-  const browserCheckPassed = browserOutcome.passed
-  const htmlArtifacts = browserOutcome.htmlArtifacts
   await runTestsProbe(sa, toolMap, issues, executedModalities)
 
   // Content completeness probe
@@ -232,12 +220,7 @@ export async function assessSubagentStep(
     (i) => !STRUCTURAL_KEYWORDS.some((kw) => i.toLowerCase().includes(kw.toLowerCase()))
   )
 
-  let effectiveIssueCount = issues.length
-  if (browserCheckPassed && structuralIssues.length === 0) {
-    effectiveIssueCount = 0
-  } else if (browserCheckPassed && structuralIssues.length < issues.length) {
-    effectiveIssueCount = structuralIssues.length
-  }
+  const effectiveIssueCount = issues.length
 
   const hasBlockingGap = issues.some(isBlockingCriteriaProofGap)
   const confidence = Math.max(0, 1 - Math.min(0.9, effectiveIssueCount * 0.18))
@@ -249,12 +232,6 @@ export async function assessSubagentStep(
         : VerifierOutcome.Retry
       : VerifierOutcome.Pass
 
-  const positiveSignals: string[] = []
-  if (browserCheckPassed) {
-    const htmlNames = htmlArtifacts.map((a) => a.split("/").pop()).join(", ")
-    positiveSignals.push(`browser_check: ✓ all HTML artifacts load without errors (${htmlNames})`)
-  }
-
   return {
     stepName: step.name,
     outcome,
@@ -264,6 +241,6 @@ export async function assessSubagentStep(
         ? [...structuralIssues, ...nonStructuralIssues.map((i) => `[non-blocking] ${i}`)]
         : issues,
     retryable: !hasBlockingGap,
-    positiveSignals: positiveSignals.length > 0 ? positiveSignals : undefined
+    positiveSignals: undefined
   }
 }

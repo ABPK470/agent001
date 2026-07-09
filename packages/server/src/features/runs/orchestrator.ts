@@ -11,12 +11,11 @@ import {
   type Tool
 } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { bootHostDepsToConfigureAgentOptions } from "../../bootstrap/config.js"
-import type { RunWorkspaceContext, WorkspaceDiff } from "../../bootstrap/workspace.js"
-import { cleanupStaleRunWorkspaces } from "../../bootstrap/workspace.js"
-import { migrateEffects } from "../../platform/effects/index.js"
+import { bootHostDepsToConfigureAgentOptions } from "../../bootstrap/boot-host-adapter.js"
+import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace/index.js"
+import { cleanupRunWorkspace, cleanupStaleRunWorkspaces } from "./workspace/index.js"
 import { broadcast } from "../../platform/events/broadcaster.js"
-import { cleanupExpiredCache, migrateMemory } from "../../platform/persistence/index.js"
+import { cleanupExpiredCache } from "../../platform/persistence/index.js"
 import * as db from "../../platform/persistence/sqlite.js"
 import { AgentBus, createBusTools } from "../../platform/queue/agent-bus.js"
 import { RunPriority, RunQueue } from "../../platform/queue/run-queue.js"
@@ -36,6 +35,8 @@ import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
 import type { ExecuteRunCommand } from "./execution/run-executor/types.js"
 import { applyRunWorkspaceDiff, captureRunWorkspaceDiff } from "./execution/workspace-effects.js"
+import { requireSessionUpn } from "../auth/application/access.js"
+import { requireOwnedThreadId } from "./continuity.js"
 import { filterToolsForVisitor, getAllTools } from "./tooling/registry.js"
 
 export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestration.js"
@@ -44,6 +45,7 @@ export type { AgentRunConfig, OrchestratorConfig } from "../../ports/orchestrati
 
 export class AgentOrchestrator {
   private llm: LLMClient
+  private acceptingRuns = true
   private readonly activeRuns = new Map<string, ActiveRun>()
   private readonly pendingInputs = new Map<string, { resolve: (answer: string) => void }>()
   private readonly pendingKills = new Map<
@@ -64,8 +66,6 @@ export class AgentOrchestrator {
     this.workspace = config.workspace ?? null
     this.bootHostDeps = config.bootHostDeps
     this.queue = new RunQueue()
-    migrateMemory()
-    migrateEffects()
     const ttlMs = Number(process.env["AGENT_RUN_WORKSPACE_TTL_MS"] ?? 6 * 60 * 60 * 1000)
     if (Number.isFinite(ttlMs) && ttlMs >= 0) {
       void cleanupStaleRunWorkspaces(ttlMs)
@@ -88,9 +88,49 @@ export class AgentOrchestrator {
     this.messageRouter = router
   }
 
+  /** Reject new runs; in-flight work drains via {@link drainRuns}. */
+  beginShutdown(): void {
+    this.acceptingRuns = false
+  }
+
+  isAcceptingRuns(): boolean {
+    return this.acceptingRuns
+  }
+
+  /** Wait for active and queued runs to finish (best-effort, then abort stragglers). */
+  async drainRuns(timeoutMs = 60_000): Promise<void> {
+    const deadline = Date.now() + timeoutMs
+    while (Date.now() < deadline) {
+      const stats = this.queue.stats()
+      if (this.activeRuns.size === 0 && stats.active === 0 && stats.queued === 0) return
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+    for (const run of this.activeRuns.values()) {
+      run.controller.abort()
+    }
+    const graceDeadline = Date.now() + 5_000
+    while (Date.now() < graceDeadline) {
+      const stats = this.queue.stats()
+      if (this.activeRuns.size === 0 && stats.active === 0 && stats.queued === 0) return
+      await new Promise((resolve) => setTimeout(resolve, 250))
+    }
+  }
+
+  private assertAcceptingRuns(): void {
+    if (!this.acceptingRuns) {
+      throw new Error("Server is shutting down; new runs are not accepted")
+    }
+  }
+
   // ── Run lifecycle ─────────────────────────────────────────────
 
+  private resolveThreadId(requestedThreadId: string | undefined, upn: string): string {
+    return requireOwnedThreadId(requestedThreadId, upn)
+  }
+
   startRun(goal: string, config?: AgentRunConfig, session: CurrentSession | null = null): string {
+    this.assertAcceptingRuns()
+    const upn = requireSessionUpn(session)
     const runId = randomUUID()
     const controller = new AbortController()
     const services = createEngineServices()
@@ -104,12 +144,8 @@ export class AgentOrchestrator {
     // headless browser). Captured here at run-start time when AsyncLocalStorage
     // still holds the originating request's session. Admin sessions get the
     // full toolset unchanged.
-    const role: PolicyRole = !session
-      ? PolicyRole.Admin
-      : session.isAdmin
-        ? PolicyRole.Admin
-        : PolicyRole.HostedUser
-    if (session && !session.isAdmin) {
+    const role: PolicyRole = session!.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
+    if (!session!.isAdmin) {
       tools = filterToolsForVisitor(tools)
     }
     const bus = new AgentBus(runId)
@@ -127,6 +163,8 @@ export class AgentOrchestrator {
     // at server boot via policy-seeder.ts). Operators edit/delete them
     // through the admin UI; this loop already loaded them above.
 
+    const threadId = this.resolveThreadId(config?.threadId, upn)
+
     this.activeRuns.set(runId, {
       id: runId,
       goal,
@@ -138,8 +176,8 @@ export class AgentOrchestrator {
       workspace: null,
       role,
       attachmentIds: config?.attachmentIds ?? [],
-      ownerUpn: session?.upn ?? null,
-      sessionId: session?.sid ?? null
+      ownerUpn: upn,
+      threadId
     })
 
     // Persist the run row BEFORE broadcasting or writing trace entries.
@@ -159,10 +197,15 @@ export class AgentOrchestrator {
       agent_id: agentId,
       created_at: new Date().toISOString(),
       completed_at: null,
-      session_id: session?.sid ?? null,
-      upn: session?.upn ?? null,
-      display_name: session?.displayName ?? null
+      thread_id: threadId,
+      upn,
+      display_name: session!.displayName
     })
+
+    if (threadId) {
+      db.touchThread(threadId)
+      db.autoTitleThreadFromGoal(threadId, goal)
+    }
 
     broadcast({
       type: EventType.RunQueued,
@@ -204,7 +247,7 @@ export class AgentOrchestrator {
           agent_id: agentId,
           created_at: existing?.created_at ?? new Date().toISOString(),
           completed_at: new Date().toISOString(),
-          session_id: existing?.session_id ?? session?.sid ?? null,
+          thread_id: existing?.thread_id ?? threadId,
           upn: existing?.upn ?? session?.upn ?? null,
           display_name: existing?.display_name ?? session?.displayName ?? null
         })
@@ -240,9 +283,17 @@ export class AgentOrchestrator {
   }
 
   resumeRun(runId: string, resumeSession: CurrentSession | null = null): string | null {
+    if (!this.acceptingRuns) return null
+    let upn: string
+    try {
+      upn = requireSessionUpn(resumeSession)
+    } catch {
+      return null
+    }
     const checkpoint = db.getCheckpoint(runId)
     const originalRun = db.getRun(runId)
     if (!checkpoint || !originalRun) return null
+    if (originalRun.upn?.toLowerCase() !== upn.toLowerCase()) return null
     if (this.activeRuns.has(runId)) return null
     if (originalRun.status === RunStatus.Completed) return null
 
@@ -276,11 +327,7 @@ export class AgentOrchestrator {
     // policy_rules at server boot via policy-seeder.ts, so loading dbRules
     // above already covers them.)
 
-    const resumeRole: PolicyRole = !resumeSession
-      ? PolicyRole.Admin
-      : resumeSession.isAdmin
-        ? PolicyRole.Admin
-        : PolicyRole.HostedUser
+    const resumeRole: PolicyRole = resumeSession!.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser
     this.activeRuns.set(newRunId, {
       id: newRunId,
       goal: originalRun.goal,
@@ -292,8 +339,8 @@ export class AgentOrchestrator {
       workspace: null,
       role: resumeRole,
       attachmentIds: [],
-      ownerUpn: resumeSession?.upn ?? null,
-      sessionId: resumeSession?.sid ?? null
+      ownerUpn: upn,
+      threadId: originalRun.thread_id ?? null
     })
 
     // Persist the resumed-run row BEFORE broadcasting or writing trace
@@ -311,10 +358,14 @@ export class AgentOrchestrator {
       agent_id: originalRun.agent_id ?? null,
       created_at: new Date().toISOString(),
       completed_at: null,
-      session_id: resumeSession?.sid ?? null,
-      upn: resumeSession?.upn ?? null,
-      display_name: resumeSession?.displayName ?? null
+      thread_id: originalRun.thread_id ?? null,
+      upn,
+      display_name: resumeSession!.displayName
     })
+
+    if (originalRun.thread_id) {
+      db.touchThread(originalRun.thread_id)
+    }
 
     broadcast({
       type: EventType.RunQueued,
@@ -436,6 +487,22 @@ export class AgentOrchestrator {
     )
   }
 
+  /** Cancel in-flight runs, drop workspace caches, then purge DB rows. */
+  purgeThread(threadId: string, upn: string): { deletedRuns: number } | null {
+    const runIds = db.listRunIdsForThread(threadId, upn)
+    for (const runId of runIds) {
+      this.cancelRun(runId)
+      this.queue.remove(runId)
+      this.completedRunDiffs.delete(runId)
+      const workspace =
+        this.completedRunWorkspaces.get(runId) ?? this.activeRuns.get(runId)?.workspace
+      this.completedRunWorkspaces.delete(runId)
+      this.activeRuns.delete(runId)
+      if (workspace) void cleanupRunWorkspace(workspace).catch(() => {})
+    }
+    return db.deleteThreadAndRuns(threadId, upn)
+  }
+
   // ── Private: delegate to run-executor ────────────────────────
 
   /**
@@ -454,8 +521,7 @@ export class AgentOrchestrator {
       filesystemBasePath: root,
       searchFilesBasePath: root,
       searchFilesExcludeDirs: new Set(computeAutoDetectedExcludeDirs(root)),
-      shellCwd: root,
-      browserCheckCwd: root
+      shellCwd: root
     })
     return getAllTools(host)
   }

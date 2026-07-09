@@ -7,12 +7,6 @@
  */
 
 import { asNonEmptyString as _asNonEmptyString, isRecord } from "../../internal/index.js"
-import type {
-  CoherentArchitectureArtifact,
-  CoherentSharedContract,
-  CoherentSystemInvariant,
-  PlanEdge
-} from "../types.js"
 
 // Re-exported to preserve the public surface; canonical definition lives in internal/json.
 export const asNonEmptyString = _asNonEmptyString
@@ -27,58 +21,6 @@ export function parseJsonObject(raw: string): Record<string, unknown> | null {
   } catch {
     return null
   }
-}
-
-export function parseBootstrapArtifacts(value: unknown): CoherentArchitectureArtifact[] {
-  if (!Array.isArray(value)) return []
-  const artifacts: CoherentArchitectureArtifact[] = []
-  for (const entry of value) {
-    if (!isRecord(entry)) continue
-    const path = asNonEmptyString(entry.path)
-    const purpose = asNonEmptyString(entry.purpose)
-    if (!path || !purpose) continue
-    artifacts.push({ path, purpose })
-  }
-  return artifacts
-}
-
-export function parseBootstrapEdges(value: unknown): PlanEdge[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  const edges: PlanEdge[] = []
-  for (const entry of value) {
-    if (!isRecord(entry)) continue
-    const from = asNonEmptyString(entry.from)
-    const to = asNonEmptyString(entry.to)
-    if (!from || !to) continue
-    edges.push({ from, to })
-  }
-  return edges.length > 0 ? edges : undefined
-}
-
-export function parseBootstrapContracts(value: unknown): CoherentSharedContract[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  const contracts: CoherentSharedContract[] = []
-  for (const entry of value) {
-    if (!isRecord(entry)) continue
-    const name = asNonEmptyString(entry.name)
-    const description = asNonEmptyString(entry.description)
-    if (!name || !description) continue
-    contracts.push({ name, description })
-  }
-  return contracts.length > 0 ? contracts : undefined
-}
-
-export function parseBootstrapInvariants(value: unknown): CoherentSystemInvariant[] | undefined {
-  if (!Array.isArray(value)) return undefined
-  const invariants: CoherentSystemInvariant[] = []
-  for (const entry of value) {
-    if (!isRecord(entry)) continue
-    const id = asNonEmptyString(entry.id)
-    const description = asNonEmptyString(entry.description)
-    if (!id || !description) continue
-    invariants.push({ id, description })
-  }
-  return invariants.length > 0 ? invariants : undefined
 }
 
 export const PLANNER_SYSTEM_PROMPT = `You are a task decomposition planner. Your job is to break a complex task into a structured execution plan.
@@ -123,11 +65,11 @@ You MUST respond with valid JSON matching this schema:
     "workspaceRoot": "/path/to/workspace",
     "allowedReadRoots": ["/path/to/workspace"],
     "allowedWriteRoots": ["/path/to/workspace"],
-    "allowedTools": ["write_file", "read_file", "run_command", "browser_check"],
+    "allowedTools": ["write_file", "read_file", "run_command"],
     "requiredSourceArtifacts": [],
     "targetArtifacts": ["index.html", "styles.css"],
     "effectClass": "filesystem_write",
-    "verificationMode": "browser_check",
+    "verificationMode": "run_tests",
     "artifactRelations": [
       { "relationType": "write_owner", "artifactPath": "styles.css" }
     ]
@@ -154,7 +96,7 @@ You MUST respond with valid JSON matching this schema:
 3. Exactly ONE step may be "write_owner" for a given artifact — no shared writes. If step B writes to a file that step A created, only step B should be write_owner and step A should either not list that artifact or use "read_dependency"
 4. Steps that can run independently SHOULD have canRunParallel: true
 5. SCOPE EACH STEP TO BE COMPLETABLE IN ITS BUDGET. Child budgets are adaptive and can be large for hard implementation steps, but plans should still split work when ownership is genuinely separate. Prefer decomposition when tasks involve many independently owned artifacts, cross-step dependencies, or high overwrite risk. However, if the user asks for a cohesive single-artifact implementation and ownership is unambiguous, a single subagent step is allowed and should use a realistic maxBudgetHint (often 60-140 iterations for deep logic).
-6. DO NOT add a separate "final_verification" or "verify" deterministic_tool step that calls browser_check. Verification is handled AUTOMATICALLY by the system after the pipeline finishes. Default verificationMode to "none" during build steps unless a step fully owns a runnable artifact set and can verify without depending on later steps.
+6. DO NOT add a separate "final_verification" or "verify" deterministic_tool step for runtime checks. Verification is handled AUTOMATICALLY by the system after the pipeline finishes. Default verificationMode to "none" during build steps unless a step fully owns a runnable artifact set and can verify without depending on later steps.
 7. workspaceRoot should match the actual working directory
 8. DO NOT produce plans with only read/analysis steps — if the task asks to BUILD something, include write steps
 9. Each step name must be unique across the plan
@@ -167,7 +109,7 @@ You MUST respond with valid JSON matching this schema:
 15. EACH FILE WRITTEN COMPLETELY IN ONE PASS: A step's objective MUST instruct the child to write each target file's COMPLETE implementation in a single write_file call — not incrementally. The child should plan (using the think tool) what ALL functions in each file will be, then write the entire file at once. Incremental rewrites (write skeleton → add feature → add feature) cause function loss and degeneration. One-shot writes do not.
 16. USE replace_in_file FOR FIXES: If a retry step needs to fix specific functions in an existing file, the objective MUST say to use replace_in_file (surgical section replacement) rather than rewriting the entire file with write_file. This prevents function loss during corrections.
 17. NO "FINALIZE/INTEGRATE" STEPS THAT MODIFY OTHER STEPS' FILES: NEVER create a "finalize_and_test" or "integration" step that REWRITES files created by earlier steps. Each step is a separate process with no memory — a "finalize" step WILL overwrite earlier steps' work and lose their implementations. If you need cross-file wiring (e.g., adding script tags to HTML), the HTML-creating step should already include ALL script tags, OR the last code-writing step should own the HTML file too.
-19. ENTRYPOINT DEPENDENCY WIRING + VERIFICATION ORDER MUST BE CONSISTENT: If a step uses runtime verification (e.g. browser_check) on an entry artifact, that step MUST NOT depend on runtime assets created only by later steps. Verification should run only when required dependencies are already owned/produced by that step. The entrypoint-owning step must name the exact runtime files it loads, and its acceptanceCriteria must explicitly mention script/module wiring for those files.
+19. ENTRYPOINT DEPENDENCY WIRING + VERIFICATION ORDER MUST BE CONSISTENT: If a step uses runtime verification on an entry artifact, that step MUST NOT depend on runtime assets created only by later steps. Verification should run only when required dependencies are already owned/produced by that step. The entrypoint-owning step must name the exact runtime files it loads, and its acceptanceCriteria must explicitly mention script/module wiring for those files.
 19b. BROWSER MODULE BOUNDARY MUST BE EXPLICIT: This rule applies ONLY when the plan includes browser-loaded JS/TS runtime code referenced by HTML. In that case, use ES modules consistently everywhere. HTML must load runtime entry files with \`<script type="module" src="...">\`. Cross-file browser code must use \`import\`/\`export\` for all shared functions and state. Do NOT use classic non-module scripts, \`window.X\` globals, \`module.exports\`, or \`require()\`. This rule does NOT mean Python, shell, awk/sed, PowerShell, or other non-browser implementation options are disallowed when they are a better fit for the goal.
 19c. HELPER/CALL DEPENDENCY CLOSURE MUST BE EXPLICIT: For every code file a step writes, any non-builtin function, method, class, or constant it calls or references MUST either be defined in that same file or imported from an explicitly declared dependency artifact. Do NOT leave dangling references like calling helper functions that are never defined anywhere. If code is split across files, the objective and acceptanceCriteria must name the dependency wiring explicitly.
 19d. VISUAL STATE/STYLING CONTRACT MUST BE EXPLICIT: If browser HTML/JS references CSS classes for interaction state or visual feedback, the related stylesheet artifacts MUST define those classes. For 2D boards/grids with alternating cell visuals, use row/column parity or equivalent coordinate-aware logic rather than flat \`:nth-child(odd/even)\` striping unless the layout is truly one-dimensional.
@@ -255,24 +197,3 @@ If requested, the last step writes a clean HTML or Markdown report summarizing f
 - NEVER use absolute paths in targetArtifacts or requiredSourceArtifacts. Always use workspace-relative paths.
 
 Respond ONLY with the JSON plan object. No markdown, no explanation outside the JSON.`
-
-export const COHERENT_BOOTSTRAP_SYSTEM_PROMPT = `You are freezing architecture before decomposition.
-
-Respond ONLY with valid JSON matching this schema:
-{
-  "summary": "what is being built",
-  "architecture": "the frozen high-level architecture",
-  "artifacts": [{ "path": "relative/path.ext", "purpose": "what this artifact owns" }],
-  "dependencyEdges": [{ "from": "artifactA", "to": "artifactB" }],
-  "sharedContracts": [{ "name": "contract_name", "description": "exact shared contract" }],
-  "invariants": [{ "id": "invariant_id", "description": "system invariant to preserve" }],
-  "decompositionStrategy": "preserve_coherence" | "decompose_by_ownership",
-  "decompositionReasons": ["why later decomposition is or is not justified"]
-}
-
-Rules:
-1. Freeze the architecture, shared contracts, and invariants first.
-2. Prefer preserve_coherence unless ownership separation is real and explicit.
-3. Multi-file greenfield work is NOT automatically decomposed.
-4. Artifact paths must be workspace-relative file paths.
-5. Do not include file contents here; this is an architecture bootstrap, not a code bundle.`

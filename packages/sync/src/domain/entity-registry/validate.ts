@@ -24,6 +24,7 @@
  */
 
 import { findEntityTableOrderViolations, orderEntityTablesDetailed } from "./order.js"
+import { looksIncompleteScopePredicate } from "./resolve-scope-predicate.js"
 import {
   type EntityDefinition,
   type EntityTable,
@@ -200,10 +201,10 @@ function validateTables(
       errors.push({ code: "table_duplicate", message: `Duplicate table "${t.name}"`, path: `${path}/name` })
     }
     seenNames.add(lc)
-    if (!Number.isInteger(t.executionOrder) || t.executionOrder < 0) {
+    if (!Number.isInteger(t.executionOrder) || t.executionOrder < 1) {
       errors.push({
         code: "execution_order_duplicate",
-        message: `executionOrder must be a non-negative integer; got ${t.executionOrder}`,
+        message: `executionOrder must be a positive integer starting at 1; got ${t.executionOrder}`,
         path: `${path}/executionOrder`
       })
     } else {
@@ -217,6 +218,20 @@ function validateTables(
       seenOrders.add(t.executionOrder)
     }
     validateScope(t.scope, errors, `${path}/scope`)
+    if (t.enabledByDefault !== false && t.scope.kind === "sql" && looksIncompleteScopePredicate(t.scope.predicate)) {
+      errors.push({
+        code: "scope_incomplete_enabled",
+        message: `Table "${t.name}" is enabled by default but has an incomplete scope predicate.`,
+        path: `${path}/scope/predicate`,
+      })
+    }
+    if (t.enabledByDefault !== false && !t.verified) {
+      warnings.push({
+        code: "table_unverified_enabled",
+        message: `Table "${t.name}" is enabled by default but not verified — confirm scope against ground truth before publish.`,
+        path,
+      })
+    }
     validateTableScd2Override(t, errors, `${path}/scd2Override`)
   }
   if (def.tables.length === 0) {
@@ -259,39 +274,12 @@ function validateScope(scope: EntityTableScope, errors: ValidationError[], path:
       }
       break
     case "fkPath":
-      if (!Array.isArray(scope.through) || scope.through.length === 0) {
-        errors.push({
-          code: "scope_invalid",
-          message: "fkPath.through must be a non-empty array",
-          path: `${path}/through`
-        })
-        break
-      }
-      for (let i = 0; i < scope.through.length; i++) {
-        const hop = scope.through[i]!
-        const hopPath = `${path}/through/${i}`
-        if (!isSchemaQualifiedTable(hop.table)) {
-          errors.push({
-            code: "scope_invalid",
-            message: `fkPath hop ${i}: table must be schema-qualified; got "${hop.table}"`,
-            path: `${hopPath}/table`
-          })
-        }
-        if (!isIdentifier(hop.fromColumn)) {
-          errors.push({
-            code: "scope_invalid",
-            message: `fkPath hop ${i}: fromColumn must be a valid SQL identifier`,
-            path: `${hopPath}/fromColumn`
-          })
-        }
-        if (!isIdentifier(hop.toColumn)) {
-          errors.push({
-            code: "scope_invalid",
-            message: `fkPath hop ${i}: toColumn must be a valid SQL identifier`,
-            path: `${hopPath}/toColumn`
-          })
-        }
-      }
+      errors.push({
+        code: "scope_deprecated",
+        message:
+          "fkPath scope is no longer supported — use sql predicate (legacy fkPath is normalized on import/save)",
+        path: `${path}/kind`,
+      })
       break
     case "sql":
       if (typeof scope.predicate !== "string" || scope.predicate.trim().length === 0) {
@@ -315,6 +303,14 @@ function validateScope(scope: EntityTableScope, errors: ValidationError[], path:
           code: "scope_sql_unsafe",
           message:
             "sql.predicate contains suspicious tokens (semicolon, comment, multi-statement). Predicates must be a single boolean expression.",
+          path: `${path}/predicate`
+        })
+      }
+      if (looksIncompleteScopePredicate(scope.predicate)) {
+        errors.push({
+          code: "scope_incomplete",
+          message:
+            "sql.predicate is incomplete (empty IN list or unresolved review placeholder). Resolve scope against the entry sproc or disable the table.",
           path: `${path}/predicate`
         })
       }
@@ -475,7 +471,7 @@ export function isSchemaQualifiedTable(value: unknown): value is string {
  *
  * Conservative: false-positives are preferred to false-negatives. Users
  * needing semicolons inside a sub-expression can split into multiple tables
- * each with its own scope, or use fkPath instead of raw sql.
+ * each with its own scope, or use a sql predicate for multi-hop joins.
  */
 export function looksUnsafeSqlFragment(fragment: string): boolean {
   if (typeof fragment !== "string") return true

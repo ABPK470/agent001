@@ -9,10 +9,12 @@
  *  - orchestrator/preview.ts         — previewSync, PreviewInput
  *  - orchestrator/execute.ts         — executeSync, ExecuteOptions, ExecuteProgress
  *  - orchestrator/post-metadata-pipeline.ts — post-metadata step dispatcher
- *  - orchestrator/metadata-sync.ts   — in-tx FK toggle + MERGE/DELETE loop
- *  - orchestrator/apply.ts           — applyInsertsUpdates / applyDeletes / fetchPkColumns
+ *  - orchestrator/metadata-sync.ts   — in-tx FK toggle + changeSet MERGE/DELETE
+ *  - orchestrator/metadata-scope.ts  — constraintRelaxationTables / dataMovementTables
+ *  - orchestrator/plan-table.ts        — changeSet helpers + validatePlan
+ *  - orchestrator/apply.ts           — changeSet-driven MERGE / DELETE
  *  - orchestrator/archive.ts         — trigger probing + archive emission
- *  - orchestrator/drift.ts           — revalidatePlanDrift
+ *  - orchestrator/root-parent-preflight.ts — universal root parent check (preview + execute)
  *  - orchestrator/search.ts          — searchEntities, fetchEntityDisplayName, expandTreeIds
  *  - orchestrator/db-helpers.ts      — qtable, sqlLiteral, trackedQuery/Execute, projectRoot state
  *
@@ -34,3 +36,16 @@ export {
   type EntitySearchResult
 } from "./search.js"
 export type { ExecuteOptions, ExecuteProgress } from "./types.js"
+export {
+  changeRowsAsPkHash,
+  computePlanTotals,
+  deleteRows,
+  hasChangeSetWork,
+  hasUpsertWork,
+  movementFromChangeSet,
+  movementOfTable,
+  tableHasMovement,
+  tableMovementTotal,
+  upsertRows,
+  validatePlan
+} from "./plan-table.js"

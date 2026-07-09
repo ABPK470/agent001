@@ -10,18 +10,25 @@
 import type { LLMClient, Message } from "@mia/agent"
 import { MessageRole } from "@mia/agent"
 import type { LlmCompletionPort, LlmCompletionRequest } from "@mia/sync"
+import {
+  checkLlmOperationCancelled,
+  getLlmOperationSignal,
+} from "./operation-context.js"
 
 export function createLlmCompletionAdapter(client: LLMClient): LlmCompletionPort {
   return {
     async complete(req: LlmCompletionRequest): Promise<string> {
+      checkLlmOperationCancelled()
       const messages: Message[] = [
         { role: MessageRole.System, content: req.system },
         { role: MessageRole.User, content: req.user }
       ]
       const response = await client.chat(messages, [], {
         maxTokens: req.maxTokens,
-        temperature: req.temperature
+        temperature: req.temperature,
+        signal: getLlmOperationSignal(),
       })
+      checkLlmOperationCancelled()
       return response.content ?? ""
     }
   }

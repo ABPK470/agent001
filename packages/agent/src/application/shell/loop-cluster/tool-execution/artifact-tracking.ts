@@ -160,7 +160,7 @@ export function trackWriteVerification(
     state.writtenButNotReread.delete(readPath)
     state.artifactsRequiringReadBeforeMutation.delete(normalizeArtifactPath(readPath))
   }
-  if (call.name === "run_command" || call.name === "browser_check") {
+  if (call.name === "run_command") {
     state.wroteUnverifiedFiles = false
   }
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { parseEntityInstanceRef } from "./entity-instance-ref.js"
+import { coerceSyncEntityId, parseEntityInstanceRef } from "./entity-instance-ref.js"
 import { parseSyncOperationIntent } from "./sync-operation-intent.js"
 import type { PublishedSyncDefinition } from "./published-definitions.js"
 import { withPermissionDefaults } from "./environments.js"
@@ -16,7 +16,7 @@ function stubDefinition(id: string, displayName: string): PublishedSyncDefinitio
     labelColumn: "name",
     selfJoinColumn: null,
     legacy: { pipelineId: null, entrySproc: null },
-    governance: { freezeWindowIds: [], riskMultiplier: 1 },
+    governance: { freezeWindowIds: [] },
     strategy: { strategyId: "x", strategyVersion: "latest" },
     bindings: { serviceProfileRef: "default", environmentPolicyRef: "default" },
     ownership: { team: "t", owner: null, reviewStatus: "reviewed", notes: [] },
@@ -49,6 +49,21 @@ describe("parseEntityInstanceRef", () => {
       entityId: null,
       entityQuery: "ACSRawTest"
     })
+  })
+
+  it("parses display label with parenthesized numeric id", () => {
+    expect(parseEntityInstanceRef("acrstest (#12334)")).toEqual({
+      entityId: "12334",
+      entityQuery: null
+    })
+  })
+})
+
+describe("coerceSyncEntityId", () => {
+  it("coerces display labels and numeric strings", () => {
+    expect(coerceSyncEntityId(12334)).toBe(12334)
+    expect(coerceSyncEntityId("12334")).toBe(12334)
+    expect(coerceSyncEntityId("acrstest (#12334)")).toBe(12334)
   })
 })
 

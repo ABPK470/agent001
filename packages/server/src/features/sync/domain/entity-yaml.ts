@@ -11,6 +11,8 @@
  *  - A YAML file MAY contain a single `EntityDefinition` document or
  *    a multi-document file (`---` separated) for bulk import. Both
  *    flow through {@link parseEntitiesYaml}.
+ *  - Optional `run:` block (template, service, environment) references a flow;
+ *    steps are resolved from that flow at save/publish — never inline in YAML.
  *  - `version`, `versionLabel`, `createdAt`, `createdBy`, `retiredAt`
  *    are NEVER read from the YAML — the server stamps those at save
  *    time. They ARE emitted when exporting (informational only).
@@ -18,7 +20,18 @@
 
 import { parseAllDocuments, parseDocument, stringify } from "yaml"
 
+import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import type { EntityDefinition, EntityFkHop, EntityTable, EntityTableScope, Scd2Override } from "@mia/sync"
+import { normalizeEntityDefinition as normalizeEntityScopes } from "@mia/sync"
+
+/** EnvSync run bindings stored alongside the entity in YAML (`run:` block). */
+export interface EntityRunYaml {
+  template: string
+  service: string
+  environment: string
+  /** @deprecated Rejected on import — steps belong on the flow definition. */
+  steps?: AuthoredSyncFlowStep[]
+}
 
 // ── Export ──────────────────────────────────────────────────────────
 
@@ -26,20 +39,42 @@ import type { EntityDefinition, EntityFkHop, EntityTable, EntityTableScope, Scd2
  * Serialise a single EntityDefinition to YAML. Stable key ordering so
  * `git diff` is meaningful across edits.
  */
-export function formatEntityYaml(def: EntityDefinition): string {
-  const doc = orderEntity(def)
-  return stringify(doc, { lineWidth: 0, sortMapEntries: false })
+export function formatEntityYaml(def: EntityDefinition, run?: EntityRunYaml | null): string {
+  return stringify(orderEntity(def, run), { lineWidth: 0, sortMapEntries: false })
 }
 
 /**
  * Serialise many EntityDefinitions as a multi-doc YAML stream (one
  * `---` separator per entity). Order is preserved.
  */
-export function formatEntitiesYaml(defs: EntityDefinition[]): string {
-  return defs.map((d) => "---\n" + formatEntityYaml(d)).join("")
+export function formatEntitiesYaml(
+  defs: EntityDefinition[],
+  runs?: ReadonlyMap<string, EntityRunYaml>
+): string {
+  return defs.map((d) => "---\n" + formatEntityYaml(d, runs?.get(d.id) ?? null)).join("")
 }
 
-function orderEntity(def: EntityDefinition): Record<string, unknown> {
+export function entityRunYamlFromConfig(config: {
+  flow_preset: string
+  service_profile_ref: string
+  environment_policy_ref: string
+}): EntityRunYaml {
+  return {
+    template: config.flow_preset,
+    service: config.service_profile_ref,
+    environment: config.environment_policy_ref
+  }
+}
+
+function orderRun(run: EntityRunYaml): Record<string, unknown> {
+  return {
+    template: run.template,
+    service: run.service,
+    environment: run.environment,
+  }
+}
+
+function orderEntity(def: EntityDefinition, run?: EntityRunYaml | null): Record<string, unknown> {
   // Explicit key ordering for stable diffs.
   const out: Record<string, unknown> = {
     id: def.id,
@@ -62,7 +97,6 @@ function orderEntity(def: EntityDefinition): Record<string, unknown> {
 
   out["policies"] = {
     freezeWindowIds: def.policies.freezeWindowIds,
-    riskMultiplier: def.policies.riskMultiplier
   }
 
   if (def.lineageRefs.length > 0) out["lineageRefs"] = def.lineageRefs
@@ -71,6 +105,7 @@ function orderEntity(def: EntityDefinition): Record<string, unknown> {
   if (def.legacyEntrySproc) out["legacyEntrySproc"] = def.legacyEntrySproc
   if (def.reverseOrder.length > 0) out["reverseOrder"] = def.reverseOrder
   if (def.discrepancies.length > 0) out["discrepancies"] = def.discrepancies
+  if (run) out["run"] = orderRun(run)
 
   // Informational (NOT consumed by the importer):
   out["__meta"] = {
@@ -140,6 +175,7 @@ function cleanOverride(o: Scd2Override): Scd2Override {
 export interface ParseEntityResult {
   ok: boolean
   def: EntityDefinition | null
+  run: EntityRunYaml | null
   error: string | null
 }
 
@@ -154,7 +190,7 @@ export function parseEntityYaml(text: string): ParseEntityResult {
   try {
     raw = parseDocument(text, { strict: true }).toJSON()
   } catch (e) {
-    return { ok: false, def: null, error: `yaml-parse-error: ${(e as Error).message}` }
+    return { ok: false, def: null, run: null, error: `yaml-parse-error: ${(e as Error).message}` }
   }
   return shapeAsEntity(raw)
 }
@@ -170,7 +206,7 @@ export function parseEntitiesYaml(text: string): ParseEntityResult[] {
       .filter((d) => d.contents !== null) // skip empty `---\n---` segments
       .map((d) => d.toJSON())
   } catch (e) {
-    return [{ ok: false, def: null, error: `yaml-parse-error: ${(e as Error).message}` }]
+    return [{ ok: false, def: null, run: null, error: `yaml-parse-error: ${(e as Error).message}` }]
   }
   return docs.map((r) => shapeAsEntity(r))
 }
@@ -180,21 +216,27 @@ export function parseEntitiesJson(text: string): ParseEntityResult[] {
   try {
     raw = JSON.parse(text)
   } catch (e) {
-    return [{ ok: false, def: null, error: `json-parse-error: ${(e as Error).message}` }]
+    return [{ ok: false, def: null, run: null, error: `json-parse-error: ${(e as Error).message}` }]
   }
 
   const docs = Array.isArray(raw) ? raw : [raw]
   if (docs.length === 0) {
-    return [{ ok: false, def: null, error: "json document contains no entities" }]
+    return [{ ok: false, def: null, run: null, error: "json document contains no entities" }]
   }
   return docs.map((entry) => shapeAsEntity(entry))
 }
 
 function shapeAsEntity(raw: unknown): ParseEntityResult {
   if (raw === null || typeof raw !== "object") {
-    return { ok: false, def: null, error: "document is not a mapping" }
+    return { ok: false, def: null, run: null, error: "document is not a mapping" }
   }
-  const r = raw as Record<string, unknown>
+  const source = raw as Record<string, unknown>
+  const run = shapeRun(source["run"])
+  if (run && "error" in run) {
+    return { ok: false, def: null, run: null, error: run.error }
+  }
+  const r = { ...source }
+  delete r["run"]
 
   const required = [
     "id",
@@ -208,14 +250,14 @@ function shapeAsEntity(raw: unknown): ParseEntityResult {
     "provenance"
   ]
   for (const key of required) {
-    if (!(key in r)) return { ok: false, def: null, error: `missing required field "${key}"` }
+    if (!(key in r)) return { ok: false, def: null, run, error: `missing required field "${key}"` }
   }
 
   let tables: EntityTable[]
   try {
     tables = (r["tables"] as unknown[]).map((t, i) => shapeTable(t, i))
   } catch (e) {
-    return { ok: false, def: null, error: (e as Error).message }
+    return { ok: false, def: null, run, error: (e as Error).message }
   }
 
   const scd2Raw = r["scd2"] as Record<string, unknown>
@@ -235,8 +277,6 @@ function shapeAsEntity(raw: unknown): ParseEntityResult {
       freezeWindowIds: Array.isArray(policiesRaw["freezeWindowIds"])
         ? (policiesRaw["freezeWindowIds"] as unknown[]).map(String)
         : [],
-      riskMultiplier:
-        typeof policiesRaw["riskMultiplier"] === "number" ? (policiesRaw["riskMultiplier"] as number) : 1.0
     },
     scd2: {
       strategyId: String(scd2Raw["strategyId"]),
@@ -260,7 +300,24 @@ function shapeAsEntity(raw: unknown): ParseEntityResult {
     createdAt: "",
     retiredAt: null
   }
-  return { ok: true, def, error: null }
+  return { ok: true, def: normalizeEntityScopes(def), run, error: null }
+}
+
+function shapeRun(raw: unknown): EntityRunYaml | null | { error: string } {
+  if (raw === null || typeof raw !== "object") return null
+  const r = raw as Record<string, unknown>
+  if (typeof r["template"] !== "string" || r["template"].trim() === "") return null
+  if (Array.isArray(r["steps"]) && r["steps"].length > 0) {
+    return {
+      error:
+        'run.steps is not supported — define steps on the flow in Sync metadata → Flows (use run.template only)',
+    }
+  }
+  return {
+    template: r["template"] as string,
+    service: typeof r["service"] === "string" ? r["service"] : "default",
+    environment: typeof r["environment"] === "string" ? r["environment"] : "default",
+  }
 }
 
 function shapeTable(raw: unknown, idx: number): EntityTable {
@@ -309,7 +366,7 @@ function shapeScope(raw: unknown, idx: number): EntityTableScope {
         throw new Error(`tables[${idx}].scope.predicate required for sql`)
       return { kind: "sql", predicate: s["predicate"] as string }
     default:
-      throw new Error(`tables[${idx}].scope.kind must be rootPk|fkPath|sql`)
+      throw new Error(`tables[${idx}].scope.kind must be rootPk|sql (legacy fkPath is accepted on import and normalized)`)
   }
 }
 

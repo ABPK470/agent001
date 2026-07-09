@@ -15,7 +15,9 @@
 import { EventType } from "@mia/agent"
 import { createHash, randomUUID } from "node:crypto"
 import type { CurrentSession } from "../../../features/auth/runtime/context.js"
+import { UserSource } from "../../../shared/enums/auth.js"
 import { broadcast } from "../../events/broadcaster.js"
+import * as db from "../../persistence/sqlite.js"
 import type { MessageQueue } from "./queue.js"
 import type { Channel, ChannelType, Conversation, InboundMessage } from "./types.js"
 
@@ -25,6 +27,7 @@ export interface ConversationStore {
   findByChannelAndSender(channelType: ChannelType, senderId: string): Conversation | undefined
   save(conv: Conversation): void
   updateActiveRun(id: string, runId: string | null): void
+  updateThreadId(id: string, threadId: string): void
   get(id: string): Conversation | undefined
   getByRunId(runId: string): Conversation | undefined
   list(): Conversation[]
@@ -34,7 +37,7 @@ export interface ConversationStore {
 
 export interface RunTrigger {
   /** Start a new agent run with the given goal. Returns the run ID. */
-  startRun(goal: string, session?: CurrentSession | null): string
+  startRun(goal: string, session?: CurrentSession | null, threadId?: string): string
 }
 
 // ── Message Router ───────────────────────────────────────────────
@@ -89,14 +92,25 @@ export class MessageRouter {
         senderId: message.senderId,
         senderName: message.senderName ?? null,
         activeRunId: null,
+        threadId: null,
         createdAt: new Date(),
         updatedAt: new Date()
       }
       this.store.save(conv)
     }
 
-    // Start a new agent run with the user's message
-    const runId = this.runTrigger.startRun(message.text, buildChannelSession(message))
+    const channelSession = buildChannelSession(message)
+    let threadId = conv.threadId ?? undefined
+    if (!threadId && channelSession?.upn) {
+      ensureChannelUser(channelSession)
+      threadId = db.createThread(
+        channelSession.upn,
+        `${message.channelType}: ${message.senderName ?? message.senderId}`
+      ).id
+      conv.threadId = threadId
+      this.store.updateThreadId(conv.id, threadId)
+    }
+    const runId = this.runTrigger.startRun(message.text, channelSession, threadId)
 
     // Track run → conversation so sendReply works even if active_run_id
     // is later overwritten by a subsequent inbound message.
@@ -171,6 +185,19 @@ export class MessageRouter {
       connected: true
     }))
   }
+}
+
+/** Channel senders are synthetic users — threads FK requires a users row. */
+function ensureChannelUser(session: CurrentSession): void {
+  if (!session.upn || db.findUserByUpn(session.upn)) return
+  db.insertUser({
+    upn: session.upn,
+    username: null,
+    displayName: session.displayName,
+    isAdmin: session.isAdmin,
+    passwordHash: null,
+    source: UserSource.Sso
+  })
 }
 
 function buildChannelSession(message: InboundMessage): CurrentSession {

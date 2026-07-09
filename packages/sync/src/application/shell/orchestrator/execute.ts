@@ -1,7 +1,7 @@
 /**
  * `executeSync` — top-level orchestration of a saved SyncPlan.
  *
- * Wires together drift re-validation, the in-tx metadata sync
+ * Wires together the in-tx metadata sync
  * (`runMetadataSync`), and the post-metadata action dispatcher
  * (`runPostMetadataPipeline`). Owns: pre-flight safety rails, run-sink
  * lifecycle, explicit SQL telemetry attribution, and the
@@ -11,6 +11,7 @@
  * @module
  */
 
+import { flowCatalogFromSnapshot } from "../../../domain/flow-catalog.js"
 import { detectCatalogDrift } from "../../../domain/catalog-drift.js"
 import { assertSupportedSyncDirection, getEnvironment } from "../../../domain/environments.js"
 import { evaluateFreezeWindows } from "../../../domain/governance/freeze-windows.js"
@@ -26,29 +27,36 @@ import { loadPlan, planTooOldToExecute, type SyncPlan } from "../plan-store.js"
 import { getSyncRunSink } from "../run-sink.js"
 import { fetchPkColumns } from "./apply.js"
 import { probeTriggers } from "./archive.js"
-import { runAuditCheckDirect, setContractLockDirect } from "./contract-deploy.js"
-import { DRIFT_ABORT_PCT } from "./db-helpers.js"
-import { revalidatePlanDrift } from "./drift.js"
+import { scheduleFlowSteps } from "./flow-scheduler.js"
 import { runMetadataSync } from "./metadata-sync.js"
+import { constraintRelaxationTables, dataMovementTables } from "./metadata-scope.js"
+import { validatePlan } from "./plan-table.js"
+import {
+  evaluateRootParentPreflight,
+  formatRootParentExecuteRefusal
+} from "./root-parent-preflight.js"
 import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
-import { toSyncExecuteError, type ExecuteOptions, type ExecuteProgress } from "./types.js"
+import { toSyncExecuteError, throwIfAborted, isAuditGateSkippedError, type ExecuteOptions, type ExecuteProgress } from "./types.js"
 export type { ExecuteOptions, ExecuteProgress } from "./types.js"
-
-function requireAuditObjectType(step: { id: string; auditObjectType?: string | null }): string {
-  if (typeof step.auditObjectType === "string" && step.auditObjectType.trim().length > 0)
-    return step.auditObjectType
-  throw new Error(`Execution contract step ${step.id} is missing auditObjectType.`)
-}
 
 export async function executeSync(
   planId: string,
   opts: ExecuteOptions
-): Promise<{ planId: string; success: boolean; error?: string }> {
+): Promise<{ planId: string; success: boolean; skipped?: boolean; message?: string; error?: string }> {
   if (!opts.confirm) throw new Error("executeSync requires explicit confirm=true.")
+  const onProgress = opts.onProgress ?? (() => {})
+  const signal = opts.signal
+
+  throwIfAborted(signal)
+  onProgress({ type: SyncProgressKind.Started, message: `Loading plan ${planId.slice(0, 8)}…` })
+
   const plan = loadPlan(opts.host, planId)
   if (!plan) throw new Error(`Plan ${planId} not found or expired.`)
   if (planTooOldToExecute(plan))
     throw new Error(`Plan ${planId} is older than 1 hour — re-preview before executing.`)
+
+  throwIfAborted(signal)
+  onProgress({ type: SyncProgressKind.Step, step: "preflight", message: "Validating environments and permissions…" })
 
   // Safety: target writeEnabled
   const sourceEnv = getEnvironment(opts.host, plan.source)
@@ -68,6 +76,13 @@ export async function executeSync(
     throw new Error(`Plan ${planId} predates the unified execution contract — re-preview before executing.`)
   }
 
+  throwIfAborted(signal)
+  onProgress({
+    type: SyncProgressKind.Step,
+    step: "catalog-drift",
+    message: `Checking catalog compatibility (${plan.source} → ${plan.target})…`
+  })
+
   // Hard refusal on catalog drift (preview surfaces it as warning; execute treats it as fatal).
   // Allowed schemas are now snapshotted into the compiled execution contract.
   const allowedSchemas = plan.executionContract.allowedSchemas
@@ -78,6 +93,7 @@ export async function executeSync(
     plan.executionContract.metadata.tables.map((t) => t.name),
     allowedSchemas
   )
+  throwIfAborted(signal)
   if (!drift.catalogCompatible) {
     throw new Error(
       `Catalog drift detected — refusing to execute. ${drift.issues.length} issue(s):\n` +
@@ -113,9 +129,11 @@ export async function executeSync(
   // already exists on target (under a different parent) would PK-violate and
   // roll back the whole transaction. Refusing here gives the operator an
   // actionable error pointing at the offending rows.
-  const conflictedTables = plan.tables.filter((t) => t.counts.conflicts > 0)
+  throwIfAborted(signal)
+  onProgress({ type: SyncProgressKind.Step, step: "scope-check", message: "Checking scope conflicts…" })
+  const conflictedTables = plan.tables.filter((t) => t.conflicts.length > 0)
   if (conflictedTables.length > 0) {
-    const total = conflictedTables.reduce((a, t) => a + t.counts.conflicts, 0)
+    const total = conflictedTables.reduce((a, t) => a + t.conflicts.length, 0)
     const sampleLines = conflictedTables
       .flatMap((t) => t.conflicts.slice(0, 3).map((c) => `  • ${t.table}: ${c.summary}`))
       .slice(0, 10)
@@ -126,6 +144,22 @@ export async function executeSync(
         `\nFix the target metadata (re-attach these rows to the correct parent) and re-preview.`
     )
   }
+
+  throwIfAborted(signal)
+  onProgress({
+    type: SyncProgressKind.Step,
+    step: "root-parent-check",
+    message: "Checking root parent on target…"
+  })
+  const rootParent = await evaluateRootParentPreflight(opts.host, plan.target, plan)
+  throwIfAborted(signal)
+  if (!rootParent.ready) {
+    throw new Error(formatRootParentExecuteRefusal(rootParent.issue ?? "Root parent is not ready."))
+  }
+
+  throwIfAborted(signal)
+  onProgress({ type: SyncProgressKind.Step, step: "plan-validation", message: "Validating plan changeSets…" })
+  validatePlan(plan)
 
   // Persist run start (best-effort — sink no-ops in tests).
   try {
@@ -143,7 +177,6 @@ export async function executeSync(
     console.warn(`[sync.execute] sink.start failed:`, e)
   }
 
-  const onProgress = opts.onProgress ?? (() => {})
   const execT0 = Date.now()
   onProgress({ type: SyncProgressKind.Started, message: `Executing plan ${planId} → ${plan.target}` })
   emit(opts.host, EventType.SyncExecuteStarted, {
@@ -164,7 +197,7 @@ export async function executeSync(
     source: plan.source,
     target: plan.target
   }
-  return executeSyncInner(plan, planId, opts, onProgress, execT0, telemetryContext)
+  return executeSyncInner(plan, planId, opts, onProgress, execT0, telemetryContext, signal)
 }
 
 async function executeSyncInner(
@@ -173,56 +206,57 @@ async function executeSyncInner(
   opts: ExecuteOptions,
   onProgress: (p: ExecuteProgress) => void,
   execT0: number,
-  telemetryContext: SyncTelemetryContext
-): Promise<{ planId: string; success: boolean; error?: string }> {
+  telemetryContext: SyncTelemetryContext,
+  signal?: AbortSignal
+): Promise<{ planId: string; success: boolean; skipped?: boolean; message?: string; error?: string }> {
   const executionContract = plan.executionContract
   if (!executionContract) {
     throw new Error(`Plan ${planId} predates the unified execution contract — re-preview before executing.`)
   }
 
   // Load PK columns once
+  throwIfAborted(signal)
+  onProgress({ type: SyncProgressKind.Step, step: "pk-discovery", message: "Loading primary keys…" })
   const pkByTable = await fetchPkColumns(
     opts.host,
     plan.source,
     executionContract.metadata.tables.map((t) => t.name),
     telemetryContext
   )
-
-  // Drift re-validation
-  const driftPct = await revalidatePlanDrift(opts.host, plan)
-  if (driftPct !== null && driftPct > DRIFT_ABORT_PCT) {
-    const msg = `Plan drift ${(driftPct * 100).toFixed(1)}% exceeds ${(DRIFT_ABORT_PCT * 100).toFixed(0)}% threshold — re-preview before executing.`
-    onProgress({ type: SyncProgressKind.Failed, error: msg })
-    emit(opts.host, EventType.SyncExecuteFailed, {
-      planId,
-      error: msg,
-      durationMs: Date.now() - execT0,
-      driftPct
-    })
-    try {
-      getSyncRunSink(opts.host).finish({
-        planId,
-        status: SyncRunStatus.Failed,
-        error: msg,
-        driftDetectedPct: driftPct,
-        durationMs: Date.now() - execT0
-      })
-    } catch {
-      /* ignore */
-    }
-    return { planId, success: false, error: msg }
-  }
-  void opts
+  throwIfAborted(signal)
 
   const { pool: tgtPool } = await getPool(opts.host, plan.target)
   const { pool: srcPool } = await getPool(opts.host, plan.source)
   if (!tgtPool) throw new Error(`Target pool unavailable.`)
+  if (!srcPool) throw new Error(`Source pool unavailable.`)
 
   const entityId = plan.entity.id
   const entityType = executionContract.definitionId
   const flowSteps = executionContract.flow.steps
-  const lockStepPresent = flowSteps.some((step) => step.kind === "targetLock")
+  if (!executionContract.flow.catalog) {
+    throw new Error(`Plan ${planId} predates the flow catalog snapshot — re-preview before executing.`)
+  }
+  const flowCatalog = flowCatalogFromSnapshot(executionContract.flow.catalog)
+  const scheduled = scheduleFlowSteps(flowSteps)
+  const lockStepPresent = flowSteps.some((step) => step.kind === "target-lock")
   const stepWarnings: { step: string; sproc: string; error: string }[] = []
+
+  async function ensureContractUnlockedOnSource(): Promise<void> {
+    if (entityType !== "contract" || !lockStepPresent) return
+    try {
+      await setContractLockOnSource(
+        opts.host,
+        srcPool,
+        plan.source,
+        Number(entityId),
+        false,
+        undefined,
+        telemetryContext
+      )
+    } catch (unlockError) {
+      console.warn(`[sync.execute] contract unlock on source (${plan.source}) failed:`, unlockError)
+    }
+  }
 
   // Helper: emit a step progress event
   const stepEmit = (name: string, message?: string) => {
@@ -230,128 +264,71 @@ async function executeSyncInner(
     emit(opts.host, EventType.SyncExecuteStep, { planId, step: name })
   }
 
-  // Pre-tx contract setup helper (audit-check / lock).
-  // These sprocs run before tx.begin() so a sproc-level failure
-  // doesn't poison the metadata-sync transaction.
-  async function preTxStep(stepName: string, fn: () => Promise<void>): Promise<boolean> {
-    try {
-      await fn()
-      return true
-    } catch (e) {
-      const errMsg = e instanceof Error ? e.message : String(e)
-      console.warn(`[sync.execute] ${stepName} failed:`, e)
-      stepWarnings.push({ step: stepName, sproc: "direct", error: errMsg })
-      onProgress({
-        type: SyncProgressKind.Step,
-        step: stepName,
-        message: `${stepName} failed`,
-        error: errMsg
-      })
-      emit(opts.host, EventType.SyncExecuteStepFailed, {
-        planId,
-        step: stepName,
-        sproc: "direct",
-        error: errMsg
-      })
-      return false
-    }
-  }
-
   try {
-    const postMetadataSteps = []
     let metadataApplied = { insert: 0, update: 0, delete: 0 }
-    let metadataStepSeen = false
 
-    for (const stepDef of flowSteps) {
-      if (metadataStepSeen) {
-        postMetadataSteps.push(stepDef)
-        continue
-      }
-
-      switch (stepDef.kind) {
-        case "auditCheck": {
-          stepEmit(stepDef.id, stepDef.description)
-          await preTxStep(stepDef.id, async () => {
-            await runAuditCheckDirect(
-              opts.host,
-              tgtPool,
-              {
-                action: "syncOrNot",
-                objType: requireAuditObjectType(stepDef),
-                id: entityId
-              },
-              plan.target,
-              undefined,
-              telemetryContext
-            )
-          })
-          break
-        }
-        case "targetLock": {
-          stepEmit(stepDef.id, stepDef.description)
-          await preTxStep(stepDef.id, async () => {
-            await setContractLockDirect(
-              opts.host,
-              tgtPool,
-              Number(entityId),
-              true,
-              plan.target,
-              undefined,
-              telemetryContext
-            )
-          })
-          break
-        }
-        case "metadataSync": {
-          const upsertTables = executionContract.metadata.executionOrder.filter((tn) => {
-            const tr = plan.tables.find((t) => t.table === tn)
-            return tr && tr.counts.insert + tr.counts.update > 0
-          })
-          const triggerCache = await probeTriggers(
-            opts.host,
-            tgtPool,
-            planId,
-            plan.target,
-            upsertTables,
-            telemetryContext
-          )
-          stepEmit(stepDef.id, stepDef.description)
-          const { applied } = await runMetadataSync({
-            host: opts.host,
-            plan,
-            planId,
-            pkByTable,
-            triggerCache,
-            onProgress,
-            target: plan.target,
-            tgtPool,
-            telemetryContext
-          })
-          metadataApplied = applied
-          metadataStepSeen = true
-          stepEmit(`${stepDef.id}-done`, "Metadata sync committed")
-          break
-        }
-        default:
-          postMetadataSteps.push(stepDef)
-          break
-      }
+    if (scheduled.beforeMetadata.length > 0) {
+      const { stepWarnings: preWarnings } = await runPostMetadataPipeline({
+        host: opts.host,
+        tgtPool,
+        srcPool,
+        plan,
+        planId,
+        entityId,
+        entityType,
+        onProgress,
+        telemetryContext,
+        userUpn: opts.userUpn,
+        steps: scheduled.beforeMetadata,
+        flowCatalog,
+        asDeploySteps: false,
+      })
+      stepWarnings.push(...preWarnings)
     }
 
-    const { stepWarnings: pipelineWarnings } = await runPostMetadataPipeline({
-      host: opts.host,
+    const metadataStep = scheduled.metadata
+    const movementTables = dataMovementTables(plan)
+    const triggerCache = await probeTriggers(
+      opts.host,
       tgtPool,
-      srcPool,
+      planId,
+      plan.target,
+      [...movementTables],
+      telemetryContext
+    )
+    stepEmit(metadataStep.id, metadataStep.description)
+    const { applied } = await runMetadataSync({
+      host: opts.host,
       plan,
       planId,
-      entityId,
-      entityType,
+      pkByTable,
+      triggerCache,
       onProgress,
+      target: plan.target,
+      tgtPool,
       telemetryContext,
-      userUpn: opts.userUpn,
-      steps: postMetadataSteps
     })
-    stepWarnings.push(...pipelineWarnings)
+    metadataApplied = applied
+    stepEmit(`${metadataStep.id}-done`, "Metadata sync committed")
+
+    if (scheduled.afterMetadata.length > 0) {
+      const { stepWarnings: pipelineWarnings } = await runPostMetadataPipeline({
+        host: opts.host,
+        tgtPool,
+        srcPool,
+        plan,
+        planId,
+        entityId,
+        entityType,
+        onProgress,
+        telemetryContext,
+        userUpn: opts.userUpn,
+        steps: scheduled.afterMetadata,
+        flowCatalog,
+        asDeploySteps: true,
+      })
+      stepWarnings.push(...pipelineWarnings)
+    }
 
     // ═══════════════════════════════════════════════════════════
     // Success (possibly with warnings)
@@ -380,7 +357,6 @@ async function executeSyncInner(
         status: hasStepFailures ? SyncRunStatus.Failed : SyncRunStatus.Success,
         error: stepErrorSummary,
         executeTotals: metadataApplied,
-        driftDetectedPct: driftPct,
         durationMs: Date.now() - execT0
       })
     } catch (e) {
@@ -388,22 +364,30 @@ async function executeSyncInner(
     }
     return { planId, success: !hasStepFailures, error: stepErrorSummary }
   } catch (e) {
-    // Unlock the entity on failure to avoid leaving it locked. The metadata-sync
-    // helper already rolled back the tx and re-enabled FKs on failure.
-    if (lockStepPresent) {
+    if (isAuditGateSkippedError(e)) {
+      const skipMsg = e.message
+      onProgress({ type: SyncProgressKind.Step, step: e.step, message: skipMsg })
+      onProgress({ type: SyncProgressKind.Skipped, step: e.step, message: skipMsg })
+      emit(opts.host, EventType.SyncExecuteSkipped, {
+        planId,
+        definitionId: executionContract.definitionId,
+        definitionPublishedVersion: executionContract.definitionPublishedVersion,
+        step: e.step,
+        message: skipMsg,
+        durationMs: Date.now() - execT0
+      })
       try {
-        await setContractLockDirect(
-          opts.host,
-          tgtPool,
-          Number(entityId),
-          false,
-          plan.target,
-          undefined,
-          telemetryContext
-        )
-      } catch {
-        /* best-effort */
+        getSyncRunSink(opts.host).finish({
+          planId,
+          status: SyncRunStatus.Skipped,
+          error: skipMsg,
+          executeTotals: { insert: 0, update: 0, delete: 0 },
+          durationMs: Date.now() - execT0
+        })
+      } catch (finishError) {
+        console.warn(`[sync.execute] sink.finish failed:`, finishError)
       }
+      return { planId, success: true, skipped: true, message: skipMsg }
     }
 
     const failure = toSyncExecuteError(e, { step: "execute" })
@@ -432,12 +416,13 @@ async function executeSyncInner(
         planId,
         status: SyncRunStatus.Failed,
         error: msg,
-        driftDetectedPct: driftPct,
         durationMs: Date.now() - execT0
       })
     } catch {
       /* ignore */
     }
     return { planId, success: false, error: msg }
+  } finally {
+    await ensureContractUnlockedOnSource()
   }
 }

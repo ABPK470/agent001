@@ -1,134 +1,534 @@
 /**
- * Shared chrome for Sync Operations Console panels.
- *
- * Every panel renders inside the same shell, so layout, spacing,
- * headers, and feedback regions are guaranteed identical across
- * Environments / Schedules / Policies / Routes / Strategies /
- * Freeze Windows. Eliminates the "every section looks slightly
- * different" feel of the old SyncAdmin.
+ * Shared chrome for Sync Operations — reuses entity-registry layout tokens.
  */
 
-import { AlertTriangle, CheckCircle2, Loader2, RefreshCw, X } from "lucide-react"
-import type { JSX, ReactNode } from "react"
-import { useRef } from "react"
-import { useContainerSize } from "../../hooks/useContainerSize"
+import { AlertTriangle, Check, CheckCircle2, ChevronRight, Loader2, X, XCircle } from "lucide-react"
+import type { ComponentType, JSX, ReactNode } from "react"
+import {
+  ICON_BTN,
+  ICON_BTN_PRIMARY,
+  META_TEXT,
+  PANEL,
+  TAB_BODY,
+  TAB_BODY_INNER,
+  TAB_PILL,
+  TOOLBAR_ROW,
+} from "./design"
+import { IconButton } from "../entity-registry/IconButton"
+
+export { TAB_PILL } from "./design"
 
 export interface PanelChromeProps {
   title:    string
-  subtitle?: string
-  /** Right-aligned actions (buttons). */
+  hint?:    string
   actions?: ReactNode
   busy?:    boolean
-  onRefresh?: () => void
   err?:     string | null
   ok?:      string | null
   onClearErr?: () => void
-  /** Main content. Receives full vertical scroll inside the panel body. */
   children: ReactNode
 }
 
-export function PanelChrome({
-  title, subtitle, actions, busy, onRefresh, err, ok, onClearErr, children,
-}: PanelChromeProps): JSX.Element {
-  const ref = useRef<HTMLElement>(null)
-  const { width } = useContainerSize(ref)
-  const compact = width > 0 && width < 640
+/** @deprecated use ConsolePanel */
+export function PanelChrome(props: PanelChromeProps): JSX.Element {
+  return <ConsolePanel {...props} />
+}
 
+/** Optional toolbar row + scrollable body for table/overview panels. */
+export function ConsolePanel({
+  title,
+  hint,
+  actions,
+  busy,
+  err,
+  ok,
+  onClearErr,
+  toolbar,
+  children,
+}: {
+  title?: string
+  hint?: string
+  actions?: ReactNode
+  busy?: boolean
+  err?: string | null
+  ok?: string | null
+  onClearErr?: () => void
+  toolbar?: ReactNode
+  children: ReactNode
+}): JSX.Element {
+  const showHeader = title || actions
   return (
-    <section ref={ref} className="flex h-full min-w-0 flex-col bg-canvas text-text">
-      <header className="flex min-h-14 shrink-0 flex-wrap items-start justify-between gap-3 border-b border-border-subtle bg-panel px-5 py-3">
-        <div className={`min-w-0 ${compact ? "w-full" : "flex-1"}`}>
-          <h2 className="truncate text-sm font-semibold leading-tight">{title}</h2>
-          {subtitle && <p className={`${compact ? "mt-1 whitespace-normal" : "truncate"} text-[11px] leading-tight text-text-muted`}>{subtitle}</p>}
+    <section className="flex h-full min-h-0 flex-col overflow-hidden text-text">
+      {showHeader && (
+        <div className={TOOLBAR_ROW}>
+          <div className="min-w-0 flex-1">
+            {title && <span className="text-sm font-medium text-text">{title}</span>}
+            {hint && <span className="ml-2 text-xs text-text-muted">{hint}</span>}
+          </div>
+          <div className="flex shrink-0 items-center gap-1">
+            {busy && <Loader2 size={14} className="animate-spin text-text-muted" aria-label="Loading" />}
+            {actions}
+          </div>
         </div>
-        <div className={`flex min-w-0 items-center gap-1.5 ${compact ? "w-full flex-wrap" : "justify-end"}`}>
-          {actions}
-          {onRefresh && (
-            <button
-              type="button"
-              onClick={onRefresh}
-              disabled={busy}
-              className="flex items-center gap-1 rounded border border-border-subtle px-2 py-1 text-[11px] text-text-muted hover:bg-overlay-2 hover:text-text disabled:opacity-50"
-            >
-              {busy ? <Loader2 className="h-3 w-3 animate-spin" /> : <RefreshCw className="h-3 w-3" />}
-              refresh
-            </button>
-          )}
-        </div>
-      </header>
-
+      )}
+      {toolbar}
       {err && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-error/30 bg-error-soft px-5 py-2 text-xs text-error">
-          <AlertTriangle className="h-3 w-3" />
-          <span className="flex-1 truncate">{err}</span>
-          {onClearErr && <button onClick={onClearErr} className="text-error/70 hover:text-error"><X className="h-3 w-3" /></button>}
+        <div className="flex shrink-0 items-start gap-2 px-3 pb-2 text-xs text-error">
+          <XCircle size={14} className="mt-0.5 shrink-0" />
+          <span className="min-w-0 flex-1 font-mono break-all">{err}</span>
+          {onClearErr && (
+            <button type="button" onClick={onClearErr} className="shrink-0"><X size={14} /></button>
+          )}
         </div>
       )}
       {ok && (
-        <div className="flex shrink-0 items-center gap-2 border-b border-success/30 bg-success-soft px-5 py-2 text-xs text-success">
-          <CheckCircle2 className="h-3 w-3" /> {ok}
+        <div className="flex shrink-0 items-center gap-2 px-3 pb-2 text-xs text-success">
+          <CheckCircle2 size={14} /> {ok}
         </div>
       )}
-
-      <div className="flex-1 min-h-0 overflow-auto">{children}</div>
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden">{children}</div>
     </section>
   )
 }
 
-// ── Layout primitives shared across panels ────────────────────────
-
-export function Empty({ title, children }: { title: string; children?: ReactNode }): JSX.Element {
+/** Full-width toolbar inside a section — tabs/filters left, actions right. Matches entity-rail-header height. */
+export function PanelToolbar({
+  children,
+  actions,
+  busy,
+}: {
+  children: ReactNode
+  actions?: ReactNode
+  busy?: boolean
+}): JSX.Element {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-1 px-6 text-center text-xs text-text-muted">
-      <p className="font-medium text-text">{title}</p>
-      {children && <p className="max-w-md text-[11px] text-text-faint">{children}</p>}
+    <div className={`${TOOLBAR_ROW} shrink-0`}>
+      <div className="flex min-w-0 flex-1 items-center gap-2">{children}</div>
+      <div className="flex shrink-0 items-center gap-1">
+        {busy && <Loader2 size={14} className="animate-spin text-text-muted" aria-label="Loading" />}
+        {actions}
+      </div>
     </div>
   )
 }
 
-export function HelpBanner({ children }: { children: ReactNode }): JSX.Element {
+/**
+ * List + detail inside the main pane — mirrors entity-registry shell (rail + detail).
+ * List header aligns with detail toolbar on the same row (ENTITIES | Overview pattern).
+ */
+export function ItemShell({
+  listLabel,
+  listActions,
+  busy,
+  detailToolbar,
+  list,
+  detail,
+  empty,
+}: {
+  listLabel?: string
+  listActions?: ReactNode
+  busy?: boolean
+  /** Tabs/filters/title row in the right column — same height as entity-rail-header. */
+  detailToolbar?: ReactNode
+  list: ReactNode
+  detail: ReactNode
+  /** Rendered in the list column when there are no rows — header actions stay visible. */
+  empty?: ReactNode
+}): JSX.Element {
+  const showListHeader = Boolean(listLabel || listActions || busy)
+  const listContent = empty != null ? empty : list
+
   return (
-    <div className="mx-5 mt-4 rounded-lg border border-border-subtle bg-overlay-2/40 px-3 py-2.5 text-[11px] leading-relaxed text-text-muted">
+    <div className="entity-registry-shell grid min-h-0 flex-1 overflow-hidden">
+      <aside className="entity-rail flex min-h-0 flex-col border-r border-border-subtle">
+        {showListHeader && (
+          <div className="entity-rail-header">
+            {listLabel ? (
+              <span className="entity-rail-header__label">{listLabel}</span>
+            ) : null}
+            <div className={`entity-rail-header__actions ${listLabel ? "" : "ml-auto"}`}>
+              {busy && <Loader2 size={14} className="animate-spin text-text-muted" aria-label="Loading" />}
+              {listActions}
+            </div>
+          </div>
+        )}
+        <div className="entity-rail-scroll min-h-0 flex-1 overflow-y-auto">
+          {listContent}
+        </div>
+      </aside>
+
+      <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
+        {detailToolbar}
+        <div className={TAB_BODY}>
+          <div className={TAB_BODY_INNER}>
+            <div className={`${PANEL} flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-elevated/20`}>
+              <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-y-auto p-3">
+                {detail}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+/** @deprecated use ItemShell */
+export function SplitView({ list, detail }: { list: ReactNode; detail: ReactNode }): JSX.Element {
+  return <ItemShell listLabel="" list={list} detail={detail} />
+}
+
+/** Detail pane body — same horizontal inset as entity-registry TAB_BODY. */
+export function DetailPane({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <div className={`${TAB_BODY} min-h-0 flex-1 overflow-y-auto`}>
+      <div className="min-w-0">{children}</div>
+    </div>
+  )
+}
+
+/** Scrollable body for table-only panels. */
+export function PanelBody({ children, className = "" }: { children: ReactNode; className?: string }): JSX.Element {
+  return (
+    <div className={`${TAB_BODY} min-h-0 flex-1 overflow-y-auto ${className}`}>
       {children}
     </div>
   )
 }
 
-export function SplitView({ list, detail }: { list: ReactNode; detail: ReactNode }): JSX.Element {
-  const ref = useRef<HTMLDivElement>(null)
-  const { width } = useContainerSize(ref)
-  const stacked = width > 0 && width < 860
-
+export function DetailHeader({
+  title,
+  subtitle,
+  actions,
+}: {
+  title: string
+  subtitle?: string
+  actions?: ReactNode
+}): JSX.Element {
   return (
-    <div ref={ref} className={stacked ? "flex h-full min-w-0 flex-col overflow-hidden" : "grid h-full min-w-0 grid-cols-[minmax(260px,320px)_minmax(0,1fr)] overflow-hidden"}>
-      <div className={stacked ? "max-h-[34%] min-h-[160px] overflow-y-auto border-b border-border-subtle bg-panel" : "min-w-0 overflow-y-auto border-r border-border-subtle bg-panel"}>{list}</div>
-      <div className="min-w-0 overflow-y-auto">{detail}</div>
+    <div className="mb-4 flex items-start justify-between gap-3">
+      <div className="min-w-0">
+        <h2 className="text-sm font-semibold text-text">{title}</h2>
+        {subtitle && <p className={`${META_TEXT} mt-0.5 font-mono`}>{subtitle}</p>}
+      </div>
+      {actions ? <div className="flex shrink-0 items-center gap-0.5">{actions}</div> : null}
     </div>
   )
 }
 
+/** Right-column toolbar row — aligns with entity-rail-header (use instead of DetailHeader above the card). */
+export function DetailToolbar({
+  title,
+  subtitle,
+  actions,
+  children,
+  busy,
+}: {
+  title?: string
+  subtitle?: string
+  actions?: ReactNode
+  children?: ReactNode
+  busy?: boolean
+}): JSX.Element {
+  return (
+    <div className={`${TOOLBAR_ROW} shrink-0`}>
+      <div className="flex min-w-0 flex-1 items-center gap-2">
+        {children ?? (
+          <>
+            {title && <span className="text-sm font-medium text-text">{title}</span>}
+            {subtitle && <span className="truncate text-xs font-mono text-text-muted">{subtitle}</span>}
+          </>
+        )}
+      </div>
+      <div className="flex shrink-0 items-center gap-1">
+        {busy && <Loader2 size={14} className="animate-spin text-text-muted" aria-label="Loading" />}
+        {actions}
+      </div>
+    </div>
+  )
+}
+
+/** Grid container for KvRow children — labels and values stay adjacent, not stretched. */
+export function DetailFields({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <dl className="grid grid-cols-[minmax(4.5rem,6.5rem)_minmax(0,1fr)] items-baseline gap-x-3 gap-y-2.5 text-sm">
+      {children}
+    </dl>
+  )
+}
+
+/** Chevron row — matches entity-registry DefinitionOverview section list. */
+export function SectionRow({
+  title,
+  subtitle,
+  badge,
+  onClick,
+}: {
+  title: string
+  subtitle?: string
+  badge?: string
+  onClick: () => void
+}): JSX.Element {
+  return (
+    <li className="border-b border-border-subtle last:border-b-0">
+      <button
+        type="button"
+        onClick={onClick}
+        className="flex w-full items-center gap-3 px-3 py-2.5 text-left transition-colors hover:bg-elevated/50"
+      >
+        <span className="min-w-0 flex-1">
+          <span className="block truncate text-xs font-medium text-text">{title}</span>
+          {subtitle && (
+            <span className="mt-0.5 block truncate text-sm text-text-muted">{subtitle}</span>
+          )}
+        </span>
+        {badge && (
+          <span className="shrink-0 rounded border border-border-subtle bg-panel px-1.5 py-0.5 text-xs font-medium text-text-muted">
+            {badge}
+          </span>
+        )}
+        <ChevronRight className="h-3.5 w-3.5 shrink-0 text-text-faint" />
+      </button>
+    </li>
+  )
+}
+
+export function Empty({ title, children }: { title: string; children?: ReactNode }): JSX.Element {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-12 text-center text-text-muted">
+      <AlertTriangle size={20} className="opacity-40" />
+      <p className="text-sm font-medium text-text">{title}</p>
+      {children && <p className="max-w-md text-sm text-text-muted">{children}</p>}
+    </div>
+  )
+}
+
+/** In-flight operation banner with optional cancel — used for scans, auth waits, etc. */
+export function ActiveOperationBanner({
+  label,
+  detail,
+  onCancel,
+  cancelBusy,
+  cancelLabel = "Cancel",
+  children,
+}: {
+  label: string
+  detail?: ReactNode
+  onCancel?: () => void
+  cancelBusy?: boolean
+  cancelLabel?: string
+  children?: ReactNode
+}): JSX.Element {
+  return (
+    <div className="flex shrink-0 flex-col gap-0 border-b border-border-subtle">
+      <div className="flex items-center gap-2 px-3 py-2 text-xs text-text-muted">
+        <Loader2 size={14} className="shrink-0 animate-spin text-accent" aria-hidden />
+        <span className="min-w-0 flex-1">
+          {label}
+          {detail ? <span className="text-text">{detail}</span> : null}
+        </span>
+        {onCancel ? (
+          <button
+            type="button"
+            onClick={onCancel}
+            disabled={cancelBusy}
+            className="shrink-0 rounded-md border border-border-subtle px-2 py-0.5 text-text-muted transition-colors hover:bg-overlay-2 hover:text-text disabled:opacity-40"
+          >
+            {cancelBusy ? <Loader2 size={12} className="animate-spin" /> : cancelLabel}
+          </button>
+        ) : null}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+/** Detail content — fills the panel card width (no max-width constraint). */
+export function DetailBody({ children, className = "" }: { children: ReactNode; className?: string }): JSX.Element {
+  return (
+    <div className={`min-w-0 w-full ${className}`}>
+      {children}
+    </div>
+  )
+}
+
+/** @deprecated */
+export function InfoStrip({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <div className="mb-3 rounded-lg border border-border-subtle bg-overlay-1/40 px-3 py-2 text-xs leading-relaxed text-text-muted">
+      {children}
+    </div>
+  )
+}
+
+/** @deprecated use InfoStrip */
+export function HelpBanner({ children }: { children: ReactNode }): JSX.Element {
+  return <InfoStrip>{children}</InfoStrip>
+}
+
+export { RailEmpty, RailHeaderBtn, RailList, RailListGroup, RailListItem, TOOLBAR_ICON, ToolbarIconBtn } from "./rail"
+
+/** @deprecated use RailList + RailListItem */
+export function ItemList({ children }: { children: ReactNode }): JSX.Element {
+  return <ul className="entity-rail-list">{children}</ul>
+}
+
+/** @deprecated use RailListItem */
 export function ListItem({
   active, onClick, children,
 }: { active: boolean; onClick: () => void; children: ReactNode }): JSX.Element {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={[
-        "flex w-full flex-col items-start gap-0.5 border-l-2 px-3 py-2 text-left text-xs",
-        active ? "border-accent bg-overlay-2" : "border-transparent hover:bg-overlay-2",
-      ].join(" ")}
-    >
-      {children}
-    </button>
+    <li className={`entity-rail-item-wrap ${active ? "entity-rail-item-wrap--active" : ""}`}>
+      <div className="entity-rail-item-row">
+        <button type="button" onClick={onClick} className="entity-rail-item min-w-0 flex-1 text-left">
+          {children}
+        </button>
+      </div>
+    </li>
+  )
+}
+
+/** Label/value pair — use inside DetailFields. */
+export function KvRow({
+  icon: Icon,
+  label,
+  value,
+  mono = true,
+}: {
+  icon?: ComponentType<{ size?: number; className?: string }>
+  label: string
+  value: ReactNode
+  mono?: boolean
+}): JSX.Element {
+  const display = value === null || value === undefined || value === "" ? "—" : value
+  return (
+    <>
+      <dt className="flex items-center gap-1.5 text-text-muted">
+        {Icon && <Icon size={12} className="shrink-0 opacity-50" />}
+        {label}
+      </dt>
+      <dd className={`min-w-0 break-words ${mono ? "font-mono text-text" : "text-text"}`}>
+        {display}
+      </dd>
+    </>
   )
 }
 
 export function DetailRow({ label, value }: { label: string; value: ReactNode }): JSX.Element {
   return (
     <>
-      <dt className="text-text-muted">{label}</dt>
-      <dd className="text-text break-all">{value === null || value === undefined || value === "" ? "—" : value}</dd>
+      <dt className="text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted/80">{label}</dt>
+      <dd className="text-sm text-text break-all">{value === null || value === undefined || value === "" ? "—" : value}</dd>
     </>
+  )
+}
+
+export function IconAction({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <IconButton label={label} onClick={onClick} disabled={disabled}>
+      {children}
+    </IconButton>
+  )
+}
+
+export function AdminInlineForm({ children, className = "" }: { children: ReactNode; className?: string }): JSX.Element {
+  return (
+    <div className={`flex flex-wrap items-end gap-3 rounded-lg border border-border-subtle bg-overlay-1/40 p-4 text-sm ${className}`}>
+      {children}
+    </div>
+  )
+}
+
+export function AdminTable({ children, className = "" }: { children: ReactNode; className?: string }): JSX.Element {
+  return (
+    <table className={`w-full min-w-[640px] border-collapse text-sm ${className}`}>
+      {children}
+    </table>
+  )
+}
+
+export function AdminTh({ children, className = "" }: { children: ReactNode; className?: string }): JSX.Element {
+  return (
+    <th className={`px-3 py-2 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-text-muted/80 whitespace-nowrap ${className}`}>
+      {children}
+    </th>
+  )
+}
+
+export function AdminTd({ children, className = "", colSpan }: { children: ReactNode; className?: string; colSpan?: number }): JSX.Element {
+  return (
+    <td colSpan={colSpan} className={`border-t border-border-subtle px-3 py-2 align-middle ${className}`}>
+      {children}
+    </td>
+  )
+}
+
+export function SectionTitle({ children }: { children: ReactNode }): JSX.Element {
+  return <h3 className="field-label mb-1">{children}</h3>
+}
+
+export function FormCheck({
+  label,
+  checked,
+  onChange,
+  disabled,
+  hint,
+}: {
+  label: string
+  checked: boolean
+  onChange: (next: boolean) => void
+  disabled?: boolean
+  hint?: string
+}): JSX.Element {
+  return (
+    <label
+      className={[
+        "form-check flex min-h-9 cursor-pointer items-start gap-2.5 rounded-lg border border-border-subtle bg-base/30 px-3 py-2 text-sm text-text",
+        disabled ? "pointer-events-none opacity-50" : "hover:bg-elevated/50",
+      ].join(" ")}
+    >
+      <span className={`form-check__box mt-0.5 shrink-0 ${checked ? "form-check__box--on" : ""}`} aria-hidden>
+        <input
+          type="checkbox"
+          className="sr-only"
+          checked={checked}
+          disabled={disabled}
+          onChange={(e) => onChange(e.target.checked)}
+        />
+        {checked ? <Check className="h-3 w-3 text-text" strokeWidth={3} /> : null}
+      </span>
+      <span className="min-w-0 flex-1">
+        <span className="font-medium text-text">{label}</span>
+        {hint ? <span className="mt-0.5 block text-xs leading-snug text-text-muted">{hint}</span> : null}
+      </span>
+    </label>
+  )
+}
+
+export function ToolbarPrimary({
+  label,
+  onClick,
+  disabled,
+  children,
+}: {
+  label: string
+  onClick: () => void
+  disabled?: boolean
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <IconButton label={label} variant="primary" onClick={onClick} disabled={disabled}>
+      {children}
+    </IconButton>
   )
 }

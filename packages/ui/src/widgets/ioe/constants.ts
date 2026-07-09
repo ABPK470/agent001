@@ -386,7 +386,6 @@ export function buildFeedItems(trace: TraceEntry[]): FeedItem[] {
     else if (e.kind === "planner-sql-quality") items.push({ text: `SQL ${e.phase} ${e.validationCode ?? "ok"}${e.missingPersistedMirrorCandidates.length ? ` · mirror ${e.missingPersistedMirrorCandidates.join(",")}` : ""}${e.tempScalarSubqueryCount > 0 ? ` · temp-subq ${e.tempScalarSubqueryCount}` : ""}`, color: e.phase === "blocked" ? C.coral : e.validationOk ? C.success : C.warning })
     else if (e.kind === "planner-verification") items.push({ text: `VRFY ${e.overall} (${(e.confidence * 100).toFixed(0)}%)`, color: e.overall === "pass" ? C.success : C.warning })
     else if (e.kind === "planner-repair-plan") items.push({ text: `REPAIR ${e.rerunOrder.join(" → ") || "none"}`, color: C.plum })
-    else if (e.kind === "planner-repair-compatibility") items.push({ text: `COMPAT ${e.activePath} ${e.diverged ? "Δ" : "="}`, color: e.diverged ? C.warning : C.success })
     else if (e.kind === "workspace_diff") items.push({ text: `DIFF pending +${e.diff.added.length} ~${e.diff.modified.length} -${e.diff.deleted.length}`, color: C.cyan })
     else if (e.kind === "workspace_diff_applied") items.push({ text: `APPLY +${e.summary.added} ~${e.summary.modified} -${e.summary.deleted}`, color: C.success })
   }
@@ -530,11 +529,25 @@ function formatUiStatusOnlyMessage(text: string): string {
   return text
 }
 
+/** True when a `thinking` trace entry is pre-tool narration (not a final answer). */
+export function thinkingPrecedesToolCall(trace: TraceEntry[], index: number): boolean {
+  for (let j = index + 1; j < trace.length; j++) {
+    const next = trace[j].kind
+    if (next === "tool-call") return true
+    if (next === "thinking" || next === "answer") return false
+  }
+  return false
+}
+
 export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
   const msgs: ChatMessage[] = []
-  for (const e of trace) {
+  for (let index = 0; index < trace.length; index++) {
+    const e = trace[index]
     if (e.kind === "goal") msgs.push({ role: "user", content: e.text ?? "" })
-    else if (e.kind === "thinking") msgs.push({ role: "thinking", content: e.text })
+    else if (e.kind === "thinking") {
+      if (!thinkingPrecedesToolCall(trace, index)) continue
+      msgs.push({ role: "thinking", content: e.text })
+    }
     else if (e.kind === "tool-call")
       msgs.push({ role: "tool", content: `${e.tool}(${e.argsSummary || "..."})`, toolName: e.tool, argsFormatted: e.argsFormatted })
     else if (e.kind === "tool-result") msgs.push({ role: "tool", content: e.text })
@@ -566,3 +579,4 @@ export function buildChatMessages(trace: TraceEntry[]): ChatMessage[] {
   }
   return msgs
 }
+

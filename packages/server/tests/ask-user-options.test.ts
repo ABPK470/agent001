@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest"
-import { enforceClarificationUiOptions } from "../src/features/runs/execution/ask-user-options.js"
+import {
+  compactAskUserQuestion,
+  enforceClarificationUiOptions,
+  resolveAskUserPresentation
+} from "../src/features/runs/execution/ask-user-options.js"
 
 describe("enforceClarificationUiOptions", () => {
   it("leaves options untouched when ask_user is not tied to a clarification finding", () => {
@@ -29,5 +33,48 @@ describe("enforceClarificationUiOptions", () => {
         round: 0
       })
     ).toEqual(["short narrative", "data table", "chart"])
+  })
+})
+
+describe("resolveAskUserPresentation", () => {
+  it("compacts multi-line clarification questions to the first line", () => {
+    const result = resolveAskUserPresentation(
+      'When you say "revenue", which of these did you mean?\n  • publish.Revenue\n  • mart.Revenue',
+      ["publish.Revenue", "mart.Revenue"],
+      {
+        findingId: "schema-match:revenue",
+        kind: "schema-match",
+        subject: "revenue",
+        suggestedQuestion: 'When you say "revenue", which did you mean?',
+        uiOptions: ["publish.Revenue", "mart.Revenue"],
+        round: 0
+      }
+    )
+    expect(result.question).toBe('When you say "revenue", which did you mean?')
+    expect(result.options).toEqual(["publish.Revenue", "mart.Revenue"])
+  })
+
+  it("keeps sync-style model options when there is no clarification match", () => {
+    expect(
+      resolveAskUserPresentation("Which entity type?", ["pipelineActivity", "contract"], null)
+    ).toEqual({
+      question: "Which entity type?",
+      options: ["pipelineActivity", "contract"]
+    })
+  })
+
+  it("dedupes and trims option labels", () => {
+    expect(
+      resolveAskUserPresentation("Pick one", ["  a  ", "a", "", "b"], null)
+    ).toEqual({
+      question: "Pick one",
+      options: ["a", "b"]
+    })
+  })
+})
+
+describe("compactAskUserQuestion", () => {
+  it("returns the first non-empty line", () => {
+    expect(compactAskUserQuestion("Pick one:\n  • A\n  • B")).toBe("Pick one:")
   })
 })

@@ -1,7 +1,16 @@
 {
-  "_comment": "Example tenant config. Copy to deploy/tenant.json and set MIA_TENANT_CONFIG=deploy/tenant.json. Every key is optional; omitted keys fall back to DEFAULT_TENANT_CONFIG in src/tenant/config.ts.",
+  "_comment": "Example tenant config (like .env.example). Copy → deploy/tenant.json. Guide: packages/agent/config/TENANT-CONFIG.md",
+
+  "_comment_largeObjectRows": "Rows above this = large object for SQL validator (default 10M)",
   "largeObjectRows": 10000000,
+
+  "_comment_unionBranchThreshold": "UNION branches before branch-aggregation doctrine (default 8)",
   "unionBranchThreshold": 8,
+
+  "_comment_mirrorSchema": "Materialised-view mirror schema prefix. null = no mirror convention.",
+  "mirrorSchema": "persistedview",
+
+  "_comment_schemaRanking": "search_catalog ranking boost per schema",
   "schemaRanking": [
     { "schema": "publish", "weight": 50 },
     { "schema": "persistedview", "weight": 45 },
@@ -11,12 +20,72 @@
     { "schema": "archive", "weight": -20 },
     { "schema": "etl", "weight": -20 }
   ],
-  "mirrorSchema": "persistedview",
-  "routingKeywords": {
-    "schemas": ["publish", "persistedview", "fact", "dim"],
-    "domain": ["revenue", "balance", "transaction"]
-  },
-  "preAggregationTokens": ["MTD", "YTD", "QTD", "WTD"],
+
+  "_comment_domainKeywords": "Words users type in goals — business vocabulary only. NOT sync entity ids (loaded from definitions.bundle.json at boot). NOT schema names (from live catalog).",
+  "domainKeywords": [
+    "client",
+    "clients",
+    "customer",
+    "customers",
+    "banker",
+    "bankers",
+    "revenue",
+    "balance",
+    "balances",
+    "transaction",
+    "transactions",
+    "merchant",
+    "merchants",
+    "risk",
+    "rwa",
+    "impairment",
+    "trading",
+    "market",
+    "markets",
+    "sales credit",
+    "sales credits",
+    "africaflex",
+    "africabrains",
+    "FrontArena",
+    "UnoTranspose",
+    "IMEX",
+    "country",
+    "countries",
+    "branch",
+    "branches",
+    "cost centre",
+    "cost center",
+    "counterparty",
+    "facility",
+    "book group",
+    "segment",
+    "breakdown",
+    "exposure",
+    "mymi",
+    "uspSync"
+  ],
+
+  "_comment_preAggregationTokens": "Column suffixes where SUM is wrong for your warehouse model",
+  "preAggregationTokens": [
+    "Average",
+    "Avg",
+    "Mean",
+    "Median",
+    "Spot",
+    "EOM",
+    "Eod",
+    "Latest",
+    "Snapshot",
+    "EndOf",
+    "AsOf",
+    "StartOf",
+    "MTD",
+    "YTD",
+    "QTD",
+    "WTD"
+  ],
+
+  "_comment_aliasFamilies": "SQL alias prefix → aggregate function",
   "aliasFamilies": [
     { "prefix": "Sum", "aggregate": "SUM" },
     { "prefix": "Total", "aggregate": "SUM" },
@@ -24,6 +93,26 @@
     { "prefix": "Mean", "aggregate": "AVG" },
     { "prefix": "Min", "aggregate": "MIN" },
     { "prefix": "Max", "aggregate": "MAX" },
-    { "prefix": "Count", "aggregate": "COUNT" }
-  ]
+    { "prefix": "Count", "aggregate": "COUNT" },
+    { "prefix": "NetRev", "aggregate": "SUM" },
+    { "prefix": "GrossRev", "aggregate": "SUM" }
+  ],
+
+  "_comment_reservedAliases": "Disallowed SQL column aliases",
+  "reservedAliases": ["publish", "fact", "dim", "core", "gate", "archive", "persistedview"],
+
+  "_comment_catalogBootstrap": "OPTIONAL — tests/offline only. Omit in production when MSSQL catalog is available.",
+  "catalogBootstrap": {
+    "largeObjects": ["publish.revenue", "persistedview.publish.revenue"],
+    "canonicalQualifiedNames": {
+      "publish.revenue": "publish.Revenue",
+      "persistedview.publish.revenue": "persistedView.publish.Revenue"
+    },
+    "unionBranchCounts": {
+      "publish.revenue": 59
+    },
+    "highCardinalityKeys": {
+      "publish.revenue": ["pkClient", "pkBranch", "pkAccount"]
+    }
+  }
 }

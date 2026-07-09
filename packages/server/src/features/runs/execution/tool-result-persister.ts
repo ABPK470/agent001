@@ -37,8 +37,7 @@ const GOAL_EXCERPT_CAP = 240
 
 export interface PersistToolResultInput {
   runId: string
-  sessionId: string | null
-  upn: string | null
+  upn: string
   goal: string
   iteration: number
   toolCallId: string
@@ -55,6 +54,7 @@ export interface PersistToolResultInput {
  */
 export function persistToolResult(input: PersistToolResultInput): boolean {
   try {
+    if (!input.upn.trim()) return false
     if (!CAPTURED_TOOLS.has(input.toolName)) return false
 
     const rawText = input.result ?? ""
@@ -72,7 +72,6 @@ export function persistToolResult(input: PersistToolResultInput): boolean {
 
     saveToolResult({
       run_id: input.runId,
-      session_id: input.sessionId,
       tool_call_id: input.toolCallId,
       tool_name: input.toolName,
       args_json: safeStringify(input.args),
@@ -88,7 +87,6 @@ export function persistToolResult(input: PersistToolResultInput): boolean {
     })
     maybePersistReferableArtifact({
       runId: input.runId,
-      sessionId: input.sessionId,
       upn: input.upn,
       goal: input.goal,
       toolCallId: input.toolCallId,
@@ -108,8 +106,7 @@ export function persistToolResult(input: PersistToolResultInput): boolean {
 
 interface ReferableArtifactInput {
   runId: string
-  sessionId: string | null
-  upn: string | null
+  upn: string
   goal: string
   toolCallId: string
   toolName: string
@@ -136,7 +133,6 @@ function maybePersistReferableArtifact(input: ReferableArtifactInput): void {
     },
     source: MemorySource.Tool,
     confidence: 0.82,
-    sessionId: input.sessionId,
     runId: input.runId,
     upn: input.upn,
     minSalience: 0.05

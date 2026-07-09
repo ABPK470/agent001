@@ -9,13 +9,14 @@
     },
     "scripts": {
         "build": "tsc",
-        "test": "echo no-tests",
+        "test": "vitest run",
         "lint": "tsc --noEmit"
     },
     "dependencies": {
         "@mia/shared-enums": "*"
     },
     "devDependencies": {
-        "typescript": "^5.8.3"
+        "typescript": "^5.8.3",
+        "vitest": "^3.2.4"
     }
 }

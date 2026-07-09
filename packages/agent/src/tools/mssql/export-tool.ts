@@ -157,7 +157,8 @@ async function executeExportQueryToFile(
   // connection allows writes we don't want this tool used for them.
   const validation = validateQueryDetailed(query, /* writeEnabled */ false && writeEnabled, {
     accessor,
-    profiledTables: opts.run?.mssqlProfileCalls ?? null
+    profiledTables: opts.run?.mssqlProfileCalls ?? null,
+    verifiedTables: opts.run?.mssqlVerifiedTables ?? null
   })
   if (!validation.ok) {
     emitMssqlQualityTrace(

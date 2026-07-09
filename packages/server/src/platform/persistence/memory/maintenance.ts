@@ -82,7 +82,6 @@ export function getMemoryStats(opts?: { upn?: string | null }): {
   working: number
   episodic: number
   semantic: number
-  procedural: number
   total: number
   vectors: number
   oldestMemory: string | null
@@ -101,10 +100,6 @@ export function getMemoryStats(opts?: { upn?: string | null }): {
   const counts = db
     .prepare(`SELECT tier, COUNT(*) as count FROM memory_entries${tenantClause} GROUP BY tier`)
     .all(...tenantParams) as Array<{ tier: string; count: number }>
-
-  const procCount = db
-    .prepare(`SELECT COUNT(*) as count FROM procedural_memories${tenantClause}`)
-    .get(...tenantParams) as { count: number }
 
   const vecCount = db
     .prepare(
@@ -127,8 +122,7 @@ export function getMemoryStats(opts?: { upn?: string | null }): {
     working: byTier["working"] ?? 0,
     episodic: byTier["episodic"] ?? 0,
     semantic: byTier["semantic"] ?? 0,
-    procedural: procCount.count,
-    total: (byTier["working"] ?? 0) + (byTier["episodic"] ?? 0) + (byTier["semantic"] ?? 0) + procCount.count,
+    total: (byTier["working"] ?? 0) + (byTier["episodic"] ?? 0) + (byTier["semantic"] ?? 0),
     vectors: vecCount.count,
     oldestMemory: oldest.oldest
   }
@@ -173,7 +167,6 @@ export function clearAllMemories(): void {
   const db = getDb()
   db.exec(`
     DELETE FROM memory_entries;
-    DELETE FROM procedural_memories;
     DELETE FROM memory_vectors;
   `)
 }

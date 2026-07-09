@@ -70,6 +70,8 @@ export interface ProposerPassOptions {
   scanConcurrency?: number
   /** Cap on total findings returned by one pass (DoS guard). */
   maxFindings?: number
+  /** When aborted, the pass stops between entities and throws. */
+  signal?: AbortSignal
 }
 
 export interface ProposerPassResult {
@@ -110,6 +112,9 @@ export async function runProposerPass(
   // Per-entity-type scan is sequential at the entity-type level (so a slow
   // one doesn't drown a fast one), but uses `concurrency` for the rows.
   for (const ent of scoped) {
+    if (opts.signal?.aborted) {
+      throw opts.signal.reason instanceof Error ? opts.signal.reason : new Error("Scan cancelled")
+    }
     if (findings.length >= maxFindings) break
     scanned++
     try {

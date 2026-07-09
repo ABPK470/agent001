@@ -25,7 +25,14 @@ import { api } from "../api"
 import { RunStatus } from "../enums"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useMe } from "../hooks/useMe"
+import { ThreadRunsPanel } from "../features/threads/ThreadRunsPanel"
 import { useStore } from "../store"
+import { useComposerDraft } from "../chat/useComposerDraft"
+import { useChatSlashActions } from "../chat/useChatSlashActions"
+import { coerceSlashOnlyInput } from "../chat/commands"
+import { useSlashCommandInput } from "../chat/useSlashCommandInput"
+import { useCommandConsole } from "../chat/useCommandConsole"
+import { ChatComposerShell } from "../chat/ChatComposerShell"
 import type { AgentDefinition, PolicyRule, ToolInfo, TraceEntry } from "../types"
 import { fmtTokens } from "../util"
 import { AuditPanel, OutputPanel, ProblemsPanel } from "./ioe/bottom"
@@ -49,7 +56,6 @@ import { ActionBtn, TipProvider, useResizable } from "./ioe/primitives"
 import {
     ComparePanel,
     DetailsPanel,
-    RunsPanel,
     SearchResultsList,
 } from "./ioe/sidebar"
 
@@ -71,11 +77,9 @@ const TOOL_LABELS: Record<string, string> = {
   list_directory:        "Listing directory",
   search_files:          "Searching files",
   run_command:           "Running command",
-  browse_web:            "Browsing web",
   fetch_url:             "Fetching URL",
   think:                 "Thinking",
   ask_user:              "Asking user",
-  browser_check:         "Checking browser",
 }
 
 export function OperatorEnvironment() {
@@ -87,6 +91,8 @@ export function OperatorEnvironment() {
   const connected = useStore((s) => s.connected)
   const runs = useStore((s) => s.runs) ?? []
   const activeRunId = useStore((s) => s.activeRunId)
+  const activeThreadId = useStore((s) => s.activeThreadId)
+  const { draft: goalInput, setDraft: setGoalInput, clearDraft: clearGoalInput } = useComposerDraft(activeThreadId)
   const setActiveRun = useStore((s) => s.setActiveRun)
   const upsertRun = useStore((s) => s.upsertRun)
   const steps = useStore((s) => s.steps)
@@ -157,9 +163,9 @@ export function OperatorEnvironment() {
   useEffect(() => { setIoeLayout({ chatWidth: chatR.size }) }, [chatR.size, setIoeLayout])
 
   // ── Operational state ─────────────────────────────────────────
-  const [goalInput, setGoalInput] = useState("")
   const [goalAttachments, setGoalAttachments] = useState<FileAttachment[]>([])
   const [submitting, setSubmitting] = useState(false)
+  const cmdConsole = useCommandConsole()
   const [rollbackMsg, setRollbackMsg] = useState<string | null>(null)
   const [workspaceMsg, setWorkspaceMsg] = useState<string | null>(null)
   const [applyingWorkspace, setApplyingWorkspace] = useState(false)
@@ -167,6 +173,7 @@ export function OperatorEnvironment() {
   const [searchQuery, setSearchQuery] = useState("")
 
   const logRef = useRef<HTMLDivElement>(null)
+  const goalFileInputRef = useRef<HTMLInputElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const { width: rootWidth } = useContainerSize(rootRef)
   const compact = rootWidth > 0 && rootWidth < 800
@@ -203,6 +210,47 @@ export function OperatorEnvironment() {
   // user-controlled RESUME (if a checkpoint exists) or RE-RUN.
   const isCrashed = activeRun?.status === RunStatus.Crashed
   const pendingWorkspaceChanges = activeRun?.pendingWorkspaceChanges ?? 0
+  const runBusy =
+    activeRun?.status === RunStatus.Running ||
+    activeRun?.status === RunStatus.Pending ||
+    activeRun?.status === RunStatus.Planning
+
+  const scopedRuns = useMemo(
+    () => runs.filter((r) => r.threadId === activeThreadId),
+    [runs, activeThreadId],
+  )
+
+  const { tryDispatchSlash, slashCommands, slashOnlyMode } = useChatSlashActions({
+    activeThreadId,
+    runs: scopedRuns,
+    runStatus: activeRun?.status,
+    hasPendingInput: Boolean(pendingInput),
+    onRunStarted: (runId) => setActiveRun(runId),
+    console: cmdConsole.api,
+    openFilePicker: () => goalFileInputRef.current?.click(),
+  })
+
+  useEffect(() => {
+    if (!slashOnlyMode) return
+    if (goalInput && !goalInput.startsWith("/")) clearGoalInput()
+    if (goalAttachments.length > 0) setGoalAttachments([])
+  }, [slashOnlyMode, goalInput, goalAttachments.length, clearGoalInput])
+
+  const collapseComposer = useCallback(() => {
+    cmdConsole.clear()
+    clearGoalInput()
+  }, [cmdConsole, clearGoalInput])
+
+  const hasResult = cmdConsole.pinnedOpen && cmdConsole.lines.length > 0
+  const { palette: compactSlashPalette, handleKeyDown: handleCompactSlashKeyDown } = useSlashCommandInput({
+    value: goalInput,
+    onChange: setGoalInput,
+    commands: slashCommands,
+    disabled: submitting || !!pendingInput,
+    variant: "ioe",
+    onCollapse: collapseComposer,
+    hasResult,
+  })
 
   const currentIteration = useMemo(() => {
     for (let i = trace.length - 1; i >= 0; i--) {
@@ -238,6 +286,18 @@ export function OperatorEnvironment() {
     const goal = goalInput.trim()
     if (!goal && goalAttachments.length === 0) return
     if (submitting) return
+
+    if (slashOnlyMode && !goal.startsWith("/")) return
+
+    if (goal.startsWith("/")) {
+      const handled = await tryDispatchSlash(goal)
+      if (handled) {
+        clearGoalInput()
+        return
+      }
+    }
+
+    if (runBusy) return
     setSubmitting(true)
     try {
       // Goal text is sent verbatim. Attachments travel as durable
@@ -245,15 +305,17 @@ export function OperatorEnvironment() {
       // import_attachment to inspect or pull them into the sandbox.
       const attachmentIds = goalAttachments.map((a) => a.id)
       const agentId = selectedAgentId ?? agents[0]?.id
-      const { runId } = await api.startRun(goal, agentId || undefined, attachmentIds)
+      const threadId = useStore.getState().activeThreadId
+      if (!threadId) return
+      const { runId } = await api.startRun(goal, agentId || undefined, attachmentIds, threadId)
       setActiveRun(runId)
-      setGoalInput("")
+      clearGoalInput()
       setGoalAttachments([])
     } catch {
       /* swallow */
     }
     setSubmitting(false)
-  }, [goalInput, goalAttachments, submitting, selectedAgentId, agents, setActiveRun])
+  }, [goalInput, goalAttachments, submitting, selectedAgentId, agents, setActiveRun, tryDispatchSlash, runBusy, clearGoalInput])
 
   const handleRespondToInput = useCallback(async (response: string) => {
     if (!pendingInput) return
@@ -445,7 +507,7 @@ export function OperatorEnvironment() {
 
   const renderSidebarSection = (section: SidebarSection) => {
     if (section === SidebarSection.Runs)
-      return <RunsPanel runs={runs} activeRunId={activeRunId} onSelect={setActiveRun} />
+      return <ThreadRunsPanel variant="ioe" />
     if (section === SidebarSection.Compare)
       return <ComparePanel runs={runs} onCompare={handleCompare}
         result={compareResult} loading={compareLoading} error={compareError} />
@@ -756,7 +818,7 @@ export function OperatorEnvironment() {
                   <button
                     className="px-2 py-1 mr-0.5 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                     style={{ color: C.dim }}
-                    onClick={() => exportAgentLoop(trace)}
+                    onClick={() => activeRunId && void exportAgentLoop(activeRunId)}
                     title="Export Agent Loop"
                   >
                     <Download size={14} />
@@ -798,7 +860,7 @@ export function OperatorEnvironment() {
                       <button
                         className="px-2 py-1 mr-1 rounded transition-colors cursor-pointer hover:bg-overlay-3"
                         style={{ color: C.dim }}
-                        onClick={() => exportAgentLoop(trace)}
+                        onClick={() => activeRunId && void exportAgentLoop(activeRunId)}
                         title="Export Agent Loop"
                       >
                         <Download size={14} />
@@ -900,9 +962,15 @@ export function OperatorEnvironment() {
           {/* Operator prompt (only when chat is hidden) */}
           {!chatVisible && (
             <div
-              className="shrink-0 flex items-center gap-2 px-3 py-1.5"
+              className="shrink-0 flex flex-col px-3 pt-2 pb-1.5"
               style={{ borderTop: `1px solid ${C.borderSolid}`, background: C.surface }}
             >
+              <div
+                className="composer-input-shell overflow-hidden rounded-lg"
+                style={{ border: `1px solid ${C.border}`, background: C.elevated }}
+              >
+              <ChatComposerShell console={cmdConsole} slashPalette={compactSlashPalette} variant="ioe" density="compact">
+              <div className="flex items-center gap-2 px-2 py-1.5">
               {agents.length > 0 && (
                 <select
                   className="text-[13px] rounded px-1.5 py-1 outline-none cursor-pointer"
@@ -918,21 +986,29 @@ export function OperatorEnvironment() {
               <Terminal size={14} style={{ color: C.dim }} />
               <input
                 type="text"
-                className="flex-1 bg-transparent outline-none text-[13px]"
+                className="flex-1 min-w-0 bg-transparent outline-none text-[13px]"
                 style={{ color: C.text, caretColor: C.accent }}
-                placeholder={isRunning ? "agent running..." : "enter goal and press Enter"}
-                value={goalInput}
-                onChange={(e) => setGoalInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === "Enter") handleSubmitGoal()
-                }}
-                disabled={isRunning || submitting}
-              />
+                  placeholder={slashOnlyMode ? "Type /cancel, /trace, /status…" : "Enter goal or press / for commands"}
+                  value={goalInput}
+                  onChange={(e) =>
+                    setGoalInput((prev) => coerceSlashOnlyInput(e.target.value, prev, slashOnlyMode))
+                  }
+                  onKeyDown={(e) => {
+                    if (handleCompactSlashKeyDown(e)) return
+                    if (e.key === "Enter") handleSubmitGoal()
+                  }}
+                  autoComplete="off"
+                  spellCheck={false}
+                  disabled={submitting || !!pendingInput}
+                />
               {liveUsage.totalTokens > 0 && (
                 <span className="text-[13px] shrink-0" style={{ color: C.dim }}>
                   {fmtK(liveUsage.totalTokens)} tk
                 </span>
               )}
+              </div>
+              </ChatComposerShell>
+              </div>
             </div>
           )}
         </div>
@@ -949,9 +1025,10 @@ export function OperatorEnvironment() {
             <ChatPanel
               messages={chatMessages}
               goalInput={goalInput}
-              onGoalChange={setGoalInput}
+              onGoalChange={(v) => setGoalInput((prev) => coerceSlashOnlyInput(v, prev, slashOnlyMode))}
               onSubmit={handleSubmitGoal}
-              isRunning={isRunning ?? false}
+              isRunning={runBusy}
+              slashOnlyMode={slashOnlyMode}
               submitting={submitting}
               pendingInput={pendingInput}
               onRespond={handleRespondToInput}
@@ -964,6 +1041,9 @@ export function OperatorEnvironment() {
               onRemoveAttachment={(i) => setGoalAttachments((prev) => prev.filter((_, idx) => idx !== i))}
               currentActivity={currentActivity ?? undefined}
               streamingAnswer={streamingAnswer || undefined}
+              fileInputRef={goalFileInputRef}
+              commandConsole={cmdConsole}
+              slashCommands={slashCommands}
             />
           </div>
         )}

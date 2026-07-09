@@ -13,11 +13,9 @@ import { DiagnosticCategory, DiagnosticSeverity } from "../../domain/index.js"
 import type { LLMClient, Message, Tool } from "../../types.js"
 import { parsePlanFromResponse } from "../internal/generate-parse.js"
 import { PLANNER_SYSTEM_PROMPT } from "../internal/generate-prompts.js"
-import type { Plan, PlanDiagnostic, PlannerCoherentBootstrap, PlannerRoute } from "../types.js"
+import type { Plan, PlanDiagnostic } from "../types.js"
 
 export { isValidArtifactPath } from "../internal/generate-parse.js"
-export { generateCoherentBootstrap } from "./bootstrap.js"
-export type { CoherentBootstrapGenerationResult } from "./bootstrap.js"
 
 /**
  * Per-tool-array cache for the planner's `toolDescriptions` text block
@@ -50,10 +48,6 @@ export interface PlanGenerationContext {
   readonly workspaceRoot: string
   /** Conversation history for context. */
   readonly history: readonly Message[]
-  /** The planner route selected by the router. */
-  readonly route?: PlannerRoute
-  /** Frozen architecture contract for bootstrap-guided planner runs. */
-  readonly coherentBootstrap?: PlannerCoherentBootstrap
 }
 
 export interface PlanGenerationResult {
@@ -62,8 +56,6 @@ export interface PlanGenerationResult {
   /** Raw LLM response for debugging. */
   readonly rawResponse: string | null
 }
-
-// generateCoherentBootstrap moved to ./generate/bootstrap.ts
 
 /**
  * Ask the LLM to generate a structured execution plan for a complex task.
@@ -83,11 +75,8 @@ export async function generatePlan(
   const toolDescriptions = buildToolDescriptions(ctx.availableTools)
 
   // Hoist the per-call invariant prefix out of the retry loop. Previously
-  // the planner system prompt, tool descriptions, recent-history context,
-  // and the coherent-bootstrap block (often >2 KB) were rebuilt on every
-  // attempt — paying the construction cost AND defeating any provider-side
-  // prefix cache. Tag the bootstrap as `ephemeral` so Anthropic-compatible
-  // endpoints can cache it across retries.
+  // the planner system prompt, tool descriptions, and recent-history context
+  // were rebuilt on every attempt.
   const messagesPrefix: Message[] = [
     { role: MessageRole.System, content: PLANNER_SYSTEM_PROMPT, cacheHint: "ephemeral" },
     {
@@ -104,30 +93,6 @@ export async function generatePlan(
     messagesPrefix.push({
       role: MessageRole.System,
       content: `Recent conversation context:\n${recentHistory.map((m) => `[${m.role}]: ${(m.content ?? "").slice(0, 500)}`).join("\n")}`
-    })
-  }
-
-  if (ctx.coherentBootstrap) {
-    messagesPrefix.push({
-      role: MessageRole.System,
-      content:
-        `Frozen architecture bootstrap:\n` +
-        `Summary: ${ctx.coherentBootstrap.summary}\n` +
-        `Architecture: ${ctx.coherentBootstrap.architecture}\n` +
-        `Decomposition strategy: ${ctx.coherentBootstrap.decompositionStrategy}\n` +
-        `Artifacts:\n${ctx.coherentBootstrap.artifacts.map((artifact) => `- ${artifact.path}: ${artifact.purpose}`).join("\n")}\n` +
-        `Shared contracts:\n${ctx.coherentBootstrap.sharedContracts?.map((contract) => `- ${contract.name}: ${contract.description}`).join("\n") || "- none"}\n` +
-        `Invariants:\n${ctx.coherentBootstrap.invariants?.map((invariant) => `- ${invariant.id}: ${invariant.description}`).join("\n") || "- none"}\n` +
-        `Rules: preserve this architecture unless ownership separation is real. Do not decompose multi-file greenfield work automatically.`,
-      cacheHint: "ephemeral"
-    })
-  }
-
-  if (ctx.route === "planner_with_coherent_bootstrap") {
-    messagesPrefix.push({
-      role: MessageRole.System,
-      content:
-        "This is a planner_with_coherent_bootstrap run. First honor the frozen architecture, then decompose only when there are real ownership boundaries and overwrite-risk reductions."
     })
   }
 
@@ -191,11 +156,7 @@ export async function generatePlan(
       const normalizedPlan = normalizeWorkspaceRoots(parsed.plan, ctx.workspaceRoot)
 
       return {
-        plan: {
-          ...normalizedPlan,
-          route: ctx.route,
-          coherentBootstrap: ctx.coherentBootstrap
-        },
+        plan: normalizedPlan,
         diagnostics,
         rawResponse
       }

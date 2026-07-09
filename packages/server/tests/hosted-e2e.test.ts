@@ -59,8 +59,7 @@ function ctx(over: Partial<HostedPolicyContext> = {}): HostedPolicyContext {
     runMode: "hosted",
     role: "hosted_user",
     sandboxRoot: over.sandboxRoot ?? sandboxRoot,
-    actorUpn: over.actorUpn ?? "alice@example.com",
-    sessionId: over.sessionId ?? "sid-alice"
+    actorUpn: over.actorUpn ?? "alice@example.com"
   }
 }
 
@@ -80,15 +79,13 @@ describe("hosted-mode end-to-end happy path", () => {
     const importAttachmentTool = createImportAttachmentTool(host)
     const promoteAttachmentTool = createPromoteAttachmentTool(host)
     // Seed FK parents required by the attachments table.
-    const { seedSession, seedRun } = await import("./_fk-helpers.js")
-    seedSession(testDb, "sid-alice", "alice@example.com")
-    seedRun(testDb, "run-e2e", { sessionSid: "sid-alice" })
+    const { seedRun } = await import("./_fk-helpers.js")
+    seedRun(testDb, "run-e2e", { upn: "alice@example.com" })
 
     // 1. user upload (mimics POST /api/attachments)
     const uploaded = await uploadAttachment({
-      scope: "session",
+      scope: "user_draft",
       ownerUpn: "alice@example.com",
-      sessionId: "sid-alice",
       originalName: "input.csv",
       mediaType: "text/csv",
       bytes: new TextEncoder().encode("a,b\n1,2\n3,4\n")

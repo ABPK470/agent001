@@ -20,10 +20,6 @@ export interface ConfigureMssqlConnection extends sql.config {
   knowledge?: string | null
 }
 
-export interface ConfigureAgentBrowserOptions {
-  providers?: Partial<AgentHost["browser"]["providers"]>
-}
-
 export interface ConfigureAgentSyncOptions {
   events?: Partial<AgentHost["sync"]["events"]>
   runs?: Partial<AgentHost["sync"]["runs"]>
@@ -53,14 +49,11 @@ export interface ConfigureAgentOptions {
   searchFilesBasePath?: string
   searchFilesExcludeDirs?: ReadonlySet<string>
 
-  // Shell + browser-check
+  // Shell
   shellCwd?: string
   shellMode?: AgentHost["shell"]["mode"]
   shellSandboxStrict?: boolean
   shellClient?: AgentHost["shell"]["client"]
-  browserCheckCwd?: string
-  browserCheckMode?: AgentHost["browserCheck"]["mode"]
-  browserCheckClient?: AgentHost["browserCheck"]["client"]
 
   // MSSQL connection registry (shared across all per-run hosts at boot)
   mssqlConfigs?: ReadonlyArray<ConfigureMssqlConnection>
@@ -71,9 +64,6 @@ export interface ConfigureAgentOptions {
   // Catalog registry (shared across all per-run hosts at boot)
   catalogInstances?: AgentHost["catalog"]["instances"]
   catalogDefaultCachePath?: AgentHost["catalog"]["defaultCachePath"]
-
-  // Browser stack (any/all may be null in CLI / tests)
-  browser?: ConfigureAgentBrowserOptions
 
   // Capability ports (null means "not configured here")
   userInput?: AgentHost["userInput"]
@@ -100,7 +90,6 @@ export interface ConfigureAgentOptions {
 export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const workspaceRoot = options.workspaceRoot ?? process.cwd()
   const shellMode = options.shellMode ?? (options.shellClient ? "sandbox" : "host")
-  const browserCheckMode = options.browserCheckMode ?? (options.browserCheckClient ? "sandbox" : "host")
   const mssqlDatabases = options.mssqlDatabases ?? buildMssqlDatabases(options.mssqlConfigs)
   const mssqlDefaultConnection = options.mssqlDefaultConnection ?? {
     value: options.mssqlDefaultConnectionName ?? null
@@ -145,23 +134,6 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       cwd: options.shellCwd ?? workspaceRoot,
       sandboxStrict: options.shellSandboxStrict ?? false,
       client: shellMode === "sandbox" ? (options.shellClient ?? NOOP_SHELL_CLIENT) : null
-    }),
-    browserCheck: Object.freeze({
-      mode: browserCheckMode,
-      cwd: options.browserCheckCwd ?? workspaceRoot,
-      client: browserCheckMode === "sandbox" ? (options.browserCheckClient ?? null) : null
-    }),
-    browser: Object.freeze({
-      runtime: Object.freeze({
-        activeSessions: new Map(),
-        idCounter: { value: 0 },
-        cleanupTimer: { value: null }
-      }),
-      providers: Object.freeze({
-        contextReader: options.browser?.providers?.contextReader ?? null,
-        credentialReader: options.browser?.providers?.credentialReader ?? null,
-        handoffStore: options.browser?.providers?.handoffStore ?? null
-      })
     }),
     userInput: options.userInput ?? null,
     attachments: options.attachments ?? null,

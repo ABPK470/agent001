@@ -7,6 +7,11 @@
  * contents in a readable block rather than raw escaped JSON.
  */
 
+import {
+  presentToolCallFromFormatted,
+  stripRuntimeToolArgs,
+  type ToolCallArtifact,
+} from "@mia/shared-types"
 import { Check, Copy } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { C } from "../widgets/ioe/constants"
@@ -119,31 +124,26 @@ export function CodeBlock({
         style={{ borderBottom: `1px solid ${C.border}` }}
       >
         <span
-          className="text-[11px] font-mono uppercase tracking-widest"
+          className="text-xs font-mono uppercase tracking-widest"
           style={{ color: C.dim }}
         >
           {label || "code"}
         </span>
         <button
-          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] cursor-pointer transition-colors hover:bg-overlay-2"
+          className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs cursor-pointer transition-colors hover:bg-overlay-2"
           style={{ color: copied ? C.success : C.dim }}
           onClick={copy}
           title="Copy to clipboard"
         >
-          {copied ? <Check size={11} /> : <Copy size={11} />}
+          {copied ? <Check size={12} /> : <Copy size={12} />}
           <span>{copied ? "Copied" : "Copy"}</span>
         </button>
       </div>
 
       {/* Code body */}
       <pre
-        className="text-[12.5px] font-mono leading-relaxed px-3 py-2.5 overflow-auto"
-        style={{
-          color: C.textSecondary,
-          maxHeight,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-        }}
+        className="code-pre px-3 py-2.5 overflow-auto"
+        style={{ maxHeight }}
       >
         {lang === "sql" ? <SqlHighlight code={code} /> : code}
       </pre>
@@ -151,63 +151,37 @@ export function CodeBlock({
   )
 }
 
-// ── Tool arg extraction ──────────────────────────────────────────
+// ── Tool arg extraction (delegates to @mia/shared-types) ─────────
 
-/** Which field in each tool's input holds the "main code" artifact. */
-const TOOL_CODE_FIELDS: Record<string, { field: string; lang: string }> = {
-  query_mssql:     { field: "query",       lang: "sql" },
-  run_command:     { field: "command",     lang: "sh"  },
-  write_file:      { field: "content",     lang: "auto" },
-  append_file:     { field: "content",     lang: "auto" },
-  replace_in_file: { field: "new_content", lang: "auto" },
-  // fetch_url has url but that's not code, skip intentionally
+export { stripRuntimeToolArgs as sanitizeToolArgs }
+
+export function parseToolArgsFormatted(argsFormatted: string): Record<string, unknown> | null {
+  try {
+    const parsed = JSON.parse(argsFormatted) as unknown
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return null
+    return stripRuntimeToolArgs(parsed as Record<string, unknown>)
+  } catch {
+    return null
+  }
 }
 
-function guessLangFromPath(path: string): string {
-  const ext = (path ?? "").split(".").pop()?.toLowerCase() ?? ""
-  const MAP: Record<string, string> = {
-    ts: "ts", tsx: "ts", js: "js", jsx: "js", mjs: "js",
-    sql: "sql", py: "python", sh: "sh", bash: "sh", zsh: "sh",
-    json: "json", html: "html", css: "css", scss: "scss", md: "markdown",
-  }
-  return MAP[ext] ?? "text"
+/** Human-readable tool input for the trace expand panel. */
+export function formatToolInputDisplay(toolName: string, argsFormatted: string): string {
+  return presentToolCallFromFormatted(toolName, argsFormatted).display
 }
 
 /**
  * Extract the primary code artifact from tool call arguments.
- * Accepts either a parsed args object (as used in StepTimeline step.input)
- * or a JSON string (as used in TraceEntry.argsFormatted from the IOE trace).
- *
- * Returns null when the tool doesn't produce displayable code, or when there
- * is no non-empty string value in the expected field.
+ * Accepts either a parsed args object or persisted argsFormatted JSON.
  */
 export function extractToolCode(
   toolName: string,
   args: Record<string, unknown> | string,
-): { code: string; lang: string; field: string } | null {
-  const parsed: Record<string, unknown> | null =
-    typeof args === "string"
-      ? (() => { try { return JSON.parse(args) as Record<string, unknown> } catch { return null } })()
-      : args
-
-  if (!parsed) return null
-
-  const spec = TOOL_CODE_FIELDS[toolName]
-  if (!spec) return null
-
-  const code = parsed[spec.field]
-  if (typeof code !== "string" || !code.trim()) return null
-
-  const lang =
-    spec.lang === "auto"
-      ? guessLangFromPath(
-          (parsed.path as string | undefined) ??
-          (parsed.file_path as string | undefined) ??
-          "",
-        )
-      : spec.lang
-
-  return { code, lang, field: spec.field }
+): ToolCallArtifact | null {
+  if (typeof args === "string") {
+    return presentToolCallFromFormatted(toolName, args).artifact
+  }
+  return presentToolCallFromFormatted(toolName, JSON.stringify(args)).artifact
 }
 
 // ── Pipe-delimited table parser ──────────────────────────────────
@@ -296,13 +270,10 @@ export function ToolResultTable({
     const display = text.replace(/\\n/g, "\n")
     return (
       <pre
-        className="text-[12.5px] font-mono leading-relaxed px-3 py-2.5 overflow-auto rounded-lg"
+        className="code-pre px-3 py-2.5 overflow-auto rounded-lg"
         style={{
           background: C.base,
-          color: C.textSecondary,
           maxHeight,
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
           border: `1px solid ${C.border}`,
         }}
       >
@@ -343,8 +314,8 @@ export function ToolStepInput({
       <div className="space-y-1.5">
         {Object.keys(otherArgs).length > 0 && (
           <pre
-            className="text-[12px] font-mono rounded px-2 py-1"
-            style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}` }}
+            className="code-pre rounded px-2 py-1"
+            style={{ background: C.elevated, border: `1px solid ${C.border}` }}
           >
             {JSON.stringify(otherArgs, null, 2)}
           </pre>
@@ -355,13 +326,10 @@ export function ToolStepInput({
   }
   return (
     <pre
-      className="text-[12.5px] font-mono rounded-lg px-3 py-2 overflow-auto"
+      className="code-pre rounded-lg px-3 py-2 overflow-auto"
       style={{
         background: C.base,
-        color: C.textSecondary,
         maxHeight,
-        whiteSpace: "pre-wrap",
-        wordBreak: "break-word",
         border: `1px solid ${C.border}`,
       }}
     >
@@ -394,7 +362,7 @@ export function ToolStepOutput({
         <div className="flex items-center gap-2 flex-wrap">
           {durationMs !== null && (
             <span
-              className="text-[11px] font-mono px-1.5 py-0.5 rounded"
+              className="text-xs font-mono px-1.5 py-0.5 rounded"
               style={{ background: C.elevated, color: C.dim }}
             >
               {durationMs >= 1000 ? `${(durationMs / 1000).toFixed(1)}s` : `${durationMs}ms`}
@@ -402,7 +370,7 @@ export function ToolStepOutput({
           )}
           {attempts !== null && attempts > 1 && (
             <span
-              className="text-[11px] px-1.5 py-0.5 rounded"
+              className="text-xs px-1.5 py-0.5 rounded"
               style={{ background: `${C.warning}19`, color: C.warning }}
             >
               {attempts} attempts
@@ -416,13 +384,10 @@ export function ToolStepOutput({
         <ToolResultTable text={resultStr} maxHeight={maxHeight} />
       ) : otherFields.length > 0 ? (
         <pre
-          className="text-[12.5px] font-mono rounded-lg px-3 py-2 overflow-auto"
+          className="code-pre rounded-lg px-3 py-2 overflow-auto"
           style={{
             background: C.base,
-            color: C.textSecondary,
             maxHeight,
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
             border: `1px solid ${C.border}`,
           }}
         >

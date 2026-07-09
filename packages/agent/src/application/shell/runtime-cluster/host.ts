@@ -26,17 +26,13 @@ import type {
 } from "@mia/sync"
 import type {
   AttachmentStore,
-  BrowserClient,
-  BrowserContextReader,
-  CredentialReader,
-  HandoffStore,
   MssqlEntry,
   ShellClient,
   TableVerdictsReader,
   ToolKnowledgeStore,
   UserInputReader
 } from "../../../ports/ports.js"
-import type { BrowserSession, CatalogGraph } from "../../../tools/index.js"
+import type { CatalogGraph } from "../../../tools/index.js"
 
 // ── AgentHost — wired once at boot ───────────────────────────────
 
@@ -62,32 +58,6 @@ export interface ShellHost {
   readonly cwd: string
   readonly sandboxStrict: boolean
   readonly client: ShellClient | null
-}
-
-export interface BrowserCheckHost {
-  readonly mode: "host" | "sandbox" | "disabled"
-  readonly cwd: string
-  readonly client: BrowserClient | null
-}
-
-export interface BrowserRuntimeHost {
-  /** Live browser sessions for this host. Tools mutate this map. */
-  readonly activeSessions: Map<string, BrowserSession>
-  /** Monotonic session-id counter — mutable ref so tools can `++.value`. */
-  readonly idCounter: { value: number }
-  /** Per-host idle-session cleanup timer — mutable ref started lazily. */
-  readonly cleanupTimer: { value: NodeJS.Timeout | null }
-}
-
-export interface BrowserProvidersHost {
-  readonly contextReader: BrowserContextReader | null
-  readonly credentialReader: CredentialReader | null
-  readonly handoffStore: HandoffStore | null
-}
-
-export interface BrowserHost {
-  readonly runtime: BrowserRuntimeHost
-  readonly providers: BrowserProvidersHost
 }
 
 export interface CatalogHost {
@@ -150,8 +120,8 @@ export interface TenantHost {
  * in a module global, never accessed through a thread-local lookup.
  *
  * A field being `null` is a deliberate signal: that capability is not
- * wired in this deployment (CLI / tests / a server without browser
- * support). Tools that depend on it must surface a friendly error.
+ * wired in this deployment (CLI / tests). Tools that depend on it must
+ * surface a friendly error.
  */
 export interface AgentHost {
   readonly workspaceRoot: string
@@ -159,8 +129,6 @@ export interface AgentHost {
   readonly filesystem: FilesystemHost
   readonly searchFiles: SearchFilesHost
   readonly shell: ShellHost
-  readonly browserCheck: BrowserCheckHost
-  readonly browser: BrowserHost
   readonly userInput: UserInputReader | null
   readonly attachments: AttachmentStore | null
   readonly toolKnowledge: ToolKnowledgeStore | null
@@ -232,4 +200,11 @@ export interface RunContext {
    * queries with no preceding profile. Mutated by `profile_data`.
    */
   readonly mssqlProfileCalls: Set<string>
+  /**
+   * Tables whose columns are verified for this run — populated by
+   * search_catalog(table=), explore_mssql_schema(table=), profile_data,
+   * and seeded from known_objects / goal anchors at run start.
+   * query_mssql blocks SQL referencing catalog tables not in this set.
+   */
+  readonly mssqlVerifiedTables: Set<string>
 }

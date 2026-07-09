@@ -6,24 +6,67 @@
  * happens. Complexity is hidden by default; every detail is one click away.
  */
 
-import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, Dot, Plus, Send, Square } from "lucide-react"
+import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, Dot, Plus, Square } from "lucide-react"
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { ThreadRunRail } from "../features/threads/ThreadRunRail"
 import { AskUserPrompt } from "../components/AskUserPrompt"
 import { AttachmentChips, type PendingAttachment } from "../components/AttachmentChips"
 import { ChatScrollProvider, useChatScroll } from "../components/ChatScrollContext"
-import { CodeBlock, extractToolCode } from "../components/CodeBlock"
+import { presentToolCallFromFormatted, toolCallPreview } from "@mia/shared-types"
+import {
+  CodeBlock,
+  extractToolCode,
+  formatToolInputDisplay,
+  parseToolArgsFormatted,
+} from "../components/CodeBlock"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
 import { SmartAnswer } from "../components/SmartAnswer"
-import { STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
+import { STICKY_GOAL_HOME_OFFSET_PX, STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
 import { useMe } from "../hooks/useMe"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
-import { CHAT_SCROLL_HOST_ATTR } from "../lib/chatScroll"
+import { CHAT_SCROLL_HOST_ATTR, isNearBottom } from "../lib/chatScroll"
+import {
+  HOME_CHAT_COLUMN_CLASS,
+  HOME_CHAT_GUTTER_X_CLASS,
+  HOME_CHAT_INPUT_DOCK_CLASS,
+  USER_GOAL_COLUMN_CLASS,
+  USER_GOAL_PIN_SLOT_CLASS,
+  USER_GOAL_TEXT_MAX_CLASS,
+} from "../shell/chatLayout.js"
+import { useComposerDraft } from "../chat/useComposerDraft"
+import { useChatSlashActions } from "../chat/useChatSlashActions"
+import { coerceSlashOnlyInput } from "../chat/commands"
+import type { ChatSlashCatalogEntry } from "../chat/commands"
+import { useSlashCommandInput } from "../chat/useSlashCommandInput"
+import { ChatComposerShell } from "../chat/ChatComposerShell"
+import { useCommandConsole } from "../chat/useCommandConsole"
+import type { CommandConsoleState } from "../chat/useCommandConsole"
 import { useStore } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
+import { thinkingPrecedesToolCall } from "./ioe/constants"
+
+/** Pin/unpin dot layout — home + thread share one profile; widget has its own. */
+type GoalPinProfile = "home" | "widget"
+
+function goalPinLayout(profile: GoalPinProfile): {
+  stickyOffsetPx: number
+  topClass: string
+  stuckScrollThreshold: number
+} {
+  if (profile === "widget") {
+    // Widget scroll host uses py-5; align sticky + stuck detection with that inset.
+    return { stickyOffsetPx: 20, topClass: "top-5", stuckScrollThreshold: 6 }
+  }
+  return {
+    stickyOffsetPx: STICKY_GOAL_HOME_OFFSET_PX,
+    topClass: STICKY_GOAL_HOME_TOP,
+    stuckScrollThreshold: 20,
+  }
+}
 
 // Local cap mirrors the Fastify route limit. Larger files get a friendly
 // inline error instead of round-tripping for a 413.
@@ -122,31 +165,36 @@ function UserGoalBubble({
   onUnpin?: () => void
 }): React.ReactElement {
   const shellClass =
-    "max-w-full rounded-2xl border border-border-subtle bg-panel-2 text-[15px] leading-relaxed text-text dark:bg-bubble-user"
+    "overflow-hidden rounded-2xl border border-border-subtle bg-panel-2 text-[15px] leading-relaxed text-text dark:bg-bubble-user"
   const shellStyle = { boxShadow: "var(--shadow-bubble)" }
+  const bodyClass = "min-w-0 px-5 py-3"
+  const appendageClass =
+    `flex shrink-0 items-center justify-center self-stretch ${USER_GOAL_PIN_SLOT_CLASS} border-r border-border-subtle/70 bg-panel text-text-muted transition-colors hover:bg-panel-2 hover:text-text dark:border-white/8 dark:bg-black/10 dark:hover:bg-bubble-user dark:hover:text-text`
 
   if (!showUnpin || !onUnpin) {
     return (
-      <div className={`${shellClass} px-4 py-2.5`} style={shellStyle}>
-        <UserGoalText text={goal} />
+      <div className={`ml-auto ${shellClass} ${USER_GOAL_TEXT_MAX_CLASS}`} style={shellStyle}>
+        <div className={bodyClass}>
+          <UserGoalText text={goal} />
+        </div>
       </div>
     )
   }
 
   return (
-    <div className={`flex items-stretch gap-1 p-1 ${shellClass}`} style={shellStyle}>
-      <div className="min-w-0 flex-1 rounded-xl px-3 py-1.5">
-        <UserGoalText text={goal} />
-      </div>
+    <div className={`ml-auto flex w-full max-w-full items-stretch ${shellClass}`} style={shellStyle}>
       <button
         type="button"
         onClick={onUnpin}
-        className="flex shrink-0 items-center rounded-xl bg-panel px-2.5 text-text-muted transition-colors hover:bg-panel-2 hover:text-text-muted dark:bg-black/10 dark:hover:bg-bubble-user"
+        className={appendageClass}
         title="Unpin message"
         aria-label="Unpin message"
       >
         <Dot size={15} strokeWidth={2} />
       </button>
+      <div className={`${bodyClass} min-w-0 flex-1`}>
+        <UserGoalText text={goal} />
+      </div>
     </div>
   )
 }
@@ -155,6 +203,7 @@ function ChatTurn({
   run,
   isActive,
   isHomeMode,
+  pinProfile,
   me,
   unpinned,
   onUnpin,
@@ -176,6 +225,7 @@ function ChatTurn({
   }
   isActive: boolean
   isHomeMode: boolean
+  pinProfile: GoalPinProfile
   me: { upn?: string | null } | null
   unpinned: boolean
   onUnpin: (runId: string) => void
@@ -188,6 +238,7 @@ function ChatTurn({
   const stickyRef = useRef<HTMLDivElement>(null)
   const [isStuck, setIsStuck] = useState(false)
   const { pauseAutoScroll, scrollHostRef } = useChatScroll()
+  const { stickyOffsetPx, topClass: pinTopClass, stuckScrollThreshold } = goalPinLayout(pinProfile)
 
   const pinned = !unpinned
   const showUnpin = pinned && isStuck
@@ -203,18 +254,27 @@ function ChatTurn({
     const sticky = stickyRef.current
     if (!host || !sentinel || !sticky) return
 
-    const stickyOffsetPx = isHomeMode ? 14 : 0
-
     const updateStuck = () => {
       const hostRect = host.getBoundingClientRect()
       const sentinelRect = sentinel.getBoundingClientRect()
-      const stickyRect = sticky.getBoundingClientRect()
       const stickLine = hostRect.top + stickyOffsetPx
-      const sentinelPast = sentinelRect.bottom <= stickLine + 1
+      const scrolled = host.scrollTop > stuckScrollThreshold
+
+      // Widget: sticky CSS already pins the goal — show the dot when the
+      // sentinel has scrolled past the stick line (no rect equality check;
+      // that was never true in the nested widget scrollport).
+      if (pinProfile === "widget") {
+        setIsStuck(scrolled && sentinelRect.bottom <= stickLine)
+        return
+      }
+
+      const sentinelPast = sentinelRect.bottom < stickLine - 4
+
+      const stickyRect = sticky.getBoundingClientRect()
       const stickyVisible =
         stickyRect.bottom > hostRect.top && stickyRect.top < hostRect.bottom
-      const atStickLine = Math.abs(stickyRect.top - stickLine) <= 2
-      setIsStuck(sentinelPast && stickyVisible && atStickLine)
+      const atStickLine = stickyRect.top <= stickLine + 1
+      setIsStuck(scrolled && sentinelPast && stickyVisible && atStickLine)
     }
 
     updateStuck()
@@ -230,7 +290,7 @@ function ChatTurn({
       resizeObserver?.disconnect()
       window.removeEventListener("resize", updateStuck)
     }
-  }, [pinned, scrollHostRef, isHomeMode])
+  }, [pinned, scrollHostRef, pinProfile, stickyOffsetPx, stuckScrollThreshold])
 
   useEffect(() => {
     if (!unpinned) return
@@ -238,7 +298,6 @@ function ChatTurn({
     const turn = turnRef.current
     if (!host || !turn) return
 
-    const stickyOffsetPx = isHomeMode ? 14 : 0
     let ignoreNextScroll = true
 
     const maybeRepin = () => {
@@ -266,7 +325,9 @@ function ChatTurn({
           onClearUnpin(run.id)
         }
       },
-      { root: host, threshold: 0 },
+      pinProfile === "widget"
+        ? { root: host, threshold: 0, rootMargin: `-${stickyOffsetPx}px 0px 0px 0px` }
+        : { root: host, threshold: 0 },
     )
     observer.observe(turn)
     host.addEventListener("scroll", maybeRepin, { passive: true })
@@ -275,7 +336,7 @@ function ChatTurn({
       observer.disconnect()
       host.removeEventListener("scroll", maybeRepin)
     }
-  }, [unpinned, onClearUnpin, run.id, scrollHostRef, isHomeMode])
+  }, [unpinned, onClearUnpin, run.id, scrollHostRef, pinProfile, stickyOffsetPx])
 
   const handleUnpin = () => {
     pauseAutoScroll()
@@ -285,16 +346,16 @@ function ChatTurn({
   const isOwnGoal = !run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()
 
   return (
-    <div ref={turnRef} className={`relative ${isHomeMode ? "mb-6" : "mb-10"}`}>
-      <div ref={sentinelRef} className="h-px w-full shrink-0" aria-hidden />
+    <div ref={turnRef} data-run-id={run.id} className={`relative ${isHomeMode ? "mb-6" : "mb-10"}`}>
+      <div ref={sentinelRef} data-run-goal-anchor className="h-px w-full shrink-0" aria-hidden />
       <StickyUserGoal
         ref={stickyRef}
         align="end"
-        topClass={isHomeMode ? STICKY_GOAL_HOME_TOP : "top-0"}
+        topClass={pinProfile === "home" ? STICKY_GOAL_HOME_TOP : pinTopClass}
         className={isHomeMode ? "mb-1 pt-0" : "mb-4"}
         pinned={pinned}
       >
-        <div className="max-w-[82%] min-w-0">
+        <div className={USER_GOAL_COLUMN_CLASS}>
           {!isOwnGoal && (
             <div className="flex flex-col items-end gap-1.5">
               <span className="px-1.5 text-[11px] font-medium uppercase tracking-wide text-text-muted">
@@ -309,7 +370,7 @@ function ChatTurn({
         </div>
       </StickyUserGoal>
 
-      <div className={isHomeMode ? "" : "pr-6"}>
+      <div className="mt-2">
         <RunMessage
           run={run}
           isActive={isActive}
@@ -402,7 +463,35 @@ interface ResponseErrorPart {
   text: string
 }
 
-type ResponsePart = ResponseProgressPart | ResponseToolPart | ResponseIterationPart | ResponseMarkdownPart | ResponseNarrativePart | ResponseInputPart | ResponseErrorPart
+/** Coalesced sync tool progress — lives in trace above the live shimmer. */
+interface ResponseSyncProgressPart {
+  kind: "sync-progress"
+  id: string
+  invocationId: string
+  tool: string
+  status: "running" | "done" | "error"
+  headline: string
+  detail?: string
+  level?: "info" | "warn" | "error"
+  sql?: {
+    label: string
+    connection: string
+    preview: string
+    rowCount?: number | null
+    durationMs?: number | null
+  }
+  result?: string
+}
+
+type ResponsePart =
+  | ResponseProgressPart
+  | ResponseToolPart
+  | ResponseIterationPart
+  | ResponseMarkdownPart
+  | ResponseNarrativePart
+  | ResponseInputPart
+  | ResponseErrorPart
+  | ResponseSyncProgressPart
 
 // Invisible marker the backend prepends to LLM-polished failure replies.
 // Mirrors POLISHED_FAILURE_MARKER in packages/agent/src/application/core/planner-cluster/platform-errors.ts.
@@ -451,7 +540,6 @@ const TOOL_LABELS: Record<string, string> = {
   query_mssql: "query database",
   run_command: "run",
   fetch_url: "fetch",
-  browser_check: "check",
   delegate: "delegate",
   ask_user: "ask user",
 }
@@ -468,7 +556,6 @@ const TOOL_PAST_TENSE: Record<string, string> = {
   "query database": "queried database",
   run: "ran command",
   fetch: "fetched URL",
-  check: "checked browser",
   delegate: "delegated work",
   "ask user": "asked user",
 }
@@ -497,13 +584,8 @@ const TOOL_VERB: Record<string, string> = {
   search_files: "searched",
   // Shell / commands
   run_command: "ran",
-  // Web / browser
+  // Web
   fetch_url: "fetched",
-  browse_web: "browsed",
-  web_search: "searched the web for",
-  browser_check: "checked",
-  browser_auto_login: "auto-logged into",
-  browser_human_handoff: "handed off to user in",
   // Delegation / planning
   delegate: "delegated to",
   delegate_parallel: "delegated in parallel to",
@@ -525,6 +607,9 @@ const TOOL_VERB: Record<string, string> = {
   // Sync / environments
   sync_preview: "previewed sync for",
   sync_execute: "ran sync for",
+  list_sync_definitions: "listed sync definitions",
+  resolve_sync_scope:    "resolved sync scope for",
+  sync_diff_scan: "scanned diffs for",
   list_environments: "listed environments",
   // Attachments
   list_attachments: "listed attachments",
@@ -555,11 +640,6 @@ const VERB_DEFAULT_NOUN: Record<string, string> = {
   searched: "the codebase",
   ran: "a command",
   fetched: "a URL",
-  browsed: "the web",
-  "searched the web for": "something",
-  checked: "the browser",
-  "auto-logged into": "the browser",
-  "handed off to user in": "the browser",
   "delegated to": "a subagent",
   "delegated in parallel to": "subagents",
   asked: "a question",
@@ -613,31 +693,33 @@ function extractToolTarget(tool: string, argsFormatted: string, argsSummary: str
 
   // Args JSON path — preferred, exposes the real field names.
   if (args) {
+    const displayArgs = parseToolArgsFormatted(argsFormatted) ?? args
+    const preview = toolCallPreview(tool, displayArgs)
+    if (preview) return preview
     for (const k of ["path", "filePath", "file", "filename", "filepath", "target"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (typeof v === "string" && v) return basename(v)
     }
     for (const k of ["paths", "files"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (Array.isArray(v) && v.length > 0 && typeof v[0] === "string") return basename(v[0])
     }
     for (const k of ["command", "cmd"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (typeof v === "string" && v) return shortCommand(v)
     }
     for (const k of ["url", "href"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (typeof v === "string" && v) return urlHost(v)
     }
     for (const k of ["query", "pattern", "q", "search"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (typeof v === "string" && v) return shortQuery(v)
     }
     for (const k of ["agent", "agentId", "delegateTo", "to"]) {
-      const v = args[k]
+      const v = displayArgs[k]
       if (typeof v === "string" && v) return v
     }
-    void tool
   }
 
   // Fallback — argsSummary has the form `key="value"` for single-arg tools.
@@ -725,11 +807,6 @@ const TOOL_PRESENT_TENSE: Record<string, string> = {
   search_files:        "Searching",
   run_command:         "Running",
   fetch_url:           "Fetching",
-  browse_web:          "Browsing",
-  web_search:          "Searching web for",
-  browser_check:       "Checking browser",
-  browser_auto_login:  "Logging into",
-  browser_human_handoff: "Handing off to user in",
   delegate:            "Delegating to",
   delegate_parallel:   "Delegating in parallel to",
   ask_user:            "Asking",
@@ -746,6 +823,9 @@ const TOOL_PRESENT_TENSE: Record<string, string> = {
   get_chart_specs:     "Loading chart specs for",
   sync_preview:        "Previewing sync for",
   sync_execute:        "Running sync for",
+  list_sync_definitions: "Listing sync definitions",
+  resolve_sync_scope:    "Resolving scope for",
+  sync_diff_scan:      "Scanning diffs for",
   list_environments:   "Listing environments",
   list_attachments:    "Listing attachments",
   read_attachment:     "Reading attachment",
@@ -779,7 +859,6 @@ const LIVE_ACTIVITY_VERB: Record<string, string> = {
   list_directory:          "Listing",
   search_files:            "Searching",
   search_catalog:          "Searching",
-  web_search:              "Searching",
   run_command:             "Executing",
   query_mssql:             "Executing",
   export_query_to_file:    "Exporting",
@@ -789,10 +868,6 @@ const LIVE_ACTIVITY_VERB: Record<string, string> = {
   profile_data:            "Analyzing",
   compare_catalogs:        "Analyzing",
   fetch_url:               "Fetching",
-  browse_web:              "Browsing",
-  browser_check:           "Checking",
-  browser_auto_login:      "Logging in",
-  browser_human_handoff:   "Waiting for user",
   delegate:                "Delegating",
   delegate_parallel:       "Delegating",
   ask_user:                "Asking",
@@ -801,6 +876,9 @@ const LIVE_ACTIVITY_VERB: Record<string, string> = {
   get_chart_specs:         "Loading chart specs",
   sync_preview:            "Synchronizing",
   sync_execute:            "Synchronizing",
+  list_sync_definitions:   "Discovering",
+  resolve_sync_scope:        "Resolving",
+  sync_diff_scan:          "Comparing",
   list_environments:       "Synchronizing",
   list_attachments:        "Reading attachments",
   read_attachment:         "Reading attachments",
@@ -958,20 +1036,8 @@ function compactToolPreview(text: string): string {
 // the raw argsFormatted JSON. Always preferred over the persisted
 // `argsSummary`, which historically was sliced to 60 chars server-side.
 // Single-arg → `key="value"`. Multi-arg → `N args`.
-function buildArgsSummary(argsFormatted: string): string {
-  try {
-    const parsed = JSON.parse(argsFormatted) as unknown
-    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return ""
-    const entries = Object.entries(parsed as Record<string, unknown>)
-    if (entries.length === 0) return ""
-    if (entries.length === 1) {
-      const [k, v] = entries[0]
-      return `${k}=${JSON.stringify(v)}`
-    }
-    return `${entries.length} args`
-  } catch {
-    return ""
-  }
+function buildArgsSummary(tool: string, argsFormatted: string): string {
+  return presentToolCallFromFormatted(tool, argsFormatted).summary
 }
 
 function humanizeStepName(stepName: string): string {
@@ -1241,16 +1307,8 @@ function buildResponseParts(
         break
       }
       case "thinking": {
-        // Copilot-style: render the agent's actual reasoning as a paragraph
-        // in the thread. We keep the leadsToTool gate so we don't double-up
-        // pre-answer thinking with the streamed answer that follows it.
-        let leadsToTool = false
-        for (let j = index + 1; j < trace.length; j++) {
-          const next = trace[j].kind
-          if (next === "tool-call") { leadsToTool = true; break }
-          if (next === "thinking" || next === "answer") break
-        }
-        if (leadsToTool && entry.text.trim() && looksLikeCompleteThought(entry.text)) {
+        if (!thinkingPrecedesToolCall(trace, index)) break
+        if (entry.text.trim() && looksLikeCompleteThought(entry.text)) {
           parts = pushNarrativePart(parts, `narrative-thinking-${index}`, entry.text.trim())
         }
         break
@@ -1260,16 +1318,8 @@ function buildResponseParts(
         parts = setActivityPart(parts, "plan", "Plan", "running", undefined, true)
         break
       case "planner-decision": {
-        const label = !entry.shouldPlan || entry.route === "direct" || entry.route === "single_artifact_direct_burst"
-          ? "Direct"
-          : entry.route === "bounded_coherent_generation"
-            ? "Generating"
-            : "Plan"
-        const activityId = label === "Direct"
-          ? "direct"
-          : label === "Generating"
-            ? "generation"
-            : "plan"
+        const label = !entry.shouldPlan || entry.route === "direct" ? "Direct" : "Plan"
+        const activityId = label === "Direct" ? "direct" : "plan"
         parts = settlePrimaryActivities(parts, activityId)
         parts = setActivityPart(parts, activityId, label, "running", undefined, true)
         break
@@ -1281,22 +1331,6 @@ function buildResponseParts(
       case "planner-plan-generated":
         parts = setActivityPart(parts, "plan", "Plan", "done", `${entry.stepCount} step${entry.stepCount !== 1 ? "s" : ""}`)
         parts = pushNarrativePart(parts, `narrative-plan-${index}`, `I mapped out a ${entry.stepCount}-step approach.`)
-        break
-      case "coherent-generation-start":
-        parts = settlePrimaryActivities(parts, "generation")
-        parts = setActivityPart(parts, "generation", "Generating", "running", undefined, true)
-        break
-      case "coherent-generation-bundle":
-        parts = settlePrimaryActivities(parts, "generation")
-        parts = setActivityPart(parts, "generation", "Generating", "running", `${entry.artifactCount} file${entry.artifactCount !== 1 ? "s" : ""}`, true)
-        break
-      case "coherent-generation-materialized":
-        parts = setActivityPart(parts, "generation", "Generating", "done", `${entry.artifactCount} file${entry.artifactCount !== 1 ? "s" : ""} written`)
-        parts = pushNarrativePart(parts, `narrative-materialized-${index}`, `I generated ${entry.artifactCount} file${entry.artifactCount !== 1 ? "s" : ""}.`)
-        break
-      case "coherent-generation-failed":
-        parts = setActivityPart(parts, "generation", "Generating", "error", entry.stage)
-        parts = pushNarrativePart(parts, `narrative-generation-failed-${index}`, "I hit a problem while generating the result.", "error")
         break
       case "planner-pipeline-start":
         currentPipelineAttempt = entry.attempt
@@ -1402,6 +1436,20 @@ function buildResponseParts(
         parts = settlePrimaryActivities(parts, "direct")
         parts = setActivityPart(parts, "direct", "Direct", "running", undefined, true)
         break
+      case "sync-progress":
+        parts = parts.concat({
+          kind: "sync-progress",
+          id: `sync-progress-${entry.invocationId}`,
+          invocationId: entry.invocationId,
+          tool: entry.tool,
+          status: entry.status,
+          headline: entry.headline,
+          detail: entry.detail,
+          level: entry.level,
+          sql: entry.sql,
+          result: entry.result
+        })
+        break
       case "tool-call": {
         // Hide orchestrator-internal / meta tools from the visible thread.
         // They don't help the user follow what's happening and produce
@@ -1426,7 +1474,7 @@ function buildResponseParts(
             // traces (which had argsSummary sliced to 60 chars) also
             // render the full single-arg value. Fall back to the
             // persisted argsSummary only if JSON parsing fails.
-            summary: buildArgsSummary(entry.argsFormatted) || entry.argsSummary || compactToolPreview(entry.argsFormatted),
+            summary: buildArgsSummary(entry.tool, entry.argsFormatted) || entry.argsSummary || compactToolPreview(entry.argsFormatted),
             argsFormatted: entry.argsFormatted,
             // details holds the OUTPUT only — populated on tool-result /
             // tool-error. argsFormatted holds the INPUT separately.
@@ -1627,7 +1675,7 @@ function ScrollMaskedDetails({ text, maxHeight }: { text: string; maxHeight: num
   return (
     <div
       ref={ref}
-      className="overflow-auto px-3 py-2.5 text-[12px] leading-6 font-mono text-text-secondary whitespace-pre-wrap break-words"
+      className="code-pre overflow-auto px-3 py-2.5"
       style={{ maxHeight, ...maskStyle }}
     >
       {text}
@@ -1635,7 +1683,47 @@ function ScrollMaskedDetails({ text, maxHeight }: { text: string; maxHeight: num
   )
 }
 
-function ToolPill({ row, isLast, isLiveRun = false }: { row: ToolRow; isLast: boolean; isLiveRun?: boolean }) {
+function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
+  const isRunning = part.status === "running"
+  const tone = part.level === "error" || part.status === "error" ? "error" : "neutral"
+  const lineClass = ["text-[12px] leading-5 font-mono", tone === "error" ? "text-error" : "text-text-faint"].join(" ")
+
+  return (
+    <div className="ml-[14px] mt-0.5 pl-3 border-l border-border-subtle space-y-1">
+      <p className={["text-[12px] leading-5 font-mono", isRunning ? "activity-shimmer-tight text-text-muted" : "text-text-secondary"].join(" ")}>
+        {part.headline}
+      </p>
+      {part.detail && <p className={lineClass}>{part.detail}</p>}
+      {part.sql?.preview && (
+        <div className="rounded-md border border-border-subtle overflow-hidden">
+          <div className={`px-2.5 py-1 border-b border-border-subtle ${lineClass}`}>
+            {part.sql.label} · {part.sql.connection}
+            {part.sql.rowCount != null ? ` · ${part.sql.rowCount} rows` : ""}
+            {part.sql.durationMs != null ? ` · ${part.sql.durationMs}ms` : ""}
+          </div>
+          <CodeBlock code={part.sql.preview} lang="sql" maxHeight={120} />
+        </div>
+      )}
+      {part.result && (
+        <p className={["text-[12px] leading-5 font-mono", part.status === "error" ? "text-error" : "text-text-secondary"].join(" ")}>
+          {part.result}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function ToolPill({
+  row,
+  syncProgress,
+  isLast,
+  isLiveRun = false,
+}: {
+  row: ToolRow
+  syncProgress?: ResponseSyncProgressPart
+  isLast: boolean
+  isLiveRun?: boolean
+}) {
   const { preserveToggle } = useChatScroll()
   const label = TOOL_LABELS[row.tool] ?? row.tool
   const isRunning = row.status === "running" && isLiveRun
@@ -1652,6 +1740,7 @@ function ToolPill({ row, isLast, isLiveRun = false }: { row: ToolRow; isLast: bo
   const hasOutput = Boolean(row.details && row.details.trim().length > 0)
   const canExpand = hasInput || hasOutput
   const extractedInput = row.argsFormatted ? extractToolCode(row.tool, row.argsFormatted) : null
+  const displayInput = row.argsFormatted ? formatToolInputDisplay(row.tool, row.argsFormatted) : ""
   const extractedOutput = row.details ? extractToolCode(row.tool, row.details) : null
   const isError = row.status === "error"
   const buttonRef = useRef<HTMLButtonElement>(null)
@@ -1694,6 +1783,7 @@ function ToolPill({ row, isLast, isLiveRun = false }: { row: ToolRow; isLast: bo
           )}
         </div>
       </div>
+      {syncProgress && <ToolSyncProgressBody part={syncProgress} />}
       {expanded && (hasInput || hasOutput) && (
         <div className="ml-[14px] mt-1 pl-3 space-y-2">
           {hasInput && row.argsFormatted && (
@@ -1701,7 +1791,7 @@ function ToolPill({ row, isLast, isLiveRun = false }: { row: ToolRow; isLast: bo
               {extractedInput ? (
                 <CodeBlock code={extractedInput.code} lang={extractedInput.lang} maxHeight={176} />
               ) : (
-                <ScrollMaskedDetails text={row.argsFormatted} maxHeight={176} />
+                <ScrollMaskedDetails text={displayInput} maxHeight={176} />
               )}
             </div>
           )}
@@ -1726,11 +1816,13 @@ function ToolPill({ row, isLast, isLiveRun = false }: { row: ToolRow; isLast: bo
 // iteration is still running so the user sees live activity.
 function IterationBlock({
   part,
+  syncByInvocation,
   isLiveRun = false,
   isLastIteration = false,
   hasNarrativeAfter = false,
 }: {
   part: ResponseIterationPart
+  syncByInvocation: Map<string, ResponseSyncProgressPart>
   isLiveRun?: boolean
   isLastIteration?: boolean
   hasNarrativeAfter?: boolean
@@ -1776,7 +1868,7 @@ function IterationBlock({
       </button>
       {open && (
         <div className="mt-0.5 pl-4 border-l border-border-subtle ml-[5px]">
-          <IterationToolList tools={part.tools} stickToBottom={part.hasRunning && isLiveRun} />
+          <IterationToolList tools={part.tools} syncByInvocation={syncByInvocation} stickToBottom={part.hasRunning && isLiveRun} />
         </div>
       )}
     </div>
@@ -1791,7 +1883,15 @@ function IterationBlock({
 // appended tool rows stay in view.
 const ITERATION_BODY_MAX_HEIGHT = 300
 
-function IterationToolList({ tools, stickToBottom = false }: { tools: ResponseToolPart[]; stickToBottom?: boolean }) {
+function IterationToolList({
+  tools,
+  syncByInvocation,
+  stickToBottom = false,
+}: {
+  tools: ResponseToolPart[]
+  syncByInvocation: Map<string, ResponseSyncProgressPart>
+  stickToBottom?: boolean
+}) {
   const ref = useRef<HTMLDivElement>(null)
   const stickBottomRef = useRef(stickToBottom)
   const [edges, setEdges] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false })
@@ -1853,6 +1953,7 @@ function IterationToolList({ tools, stickToBottom = false }: { tools: ResponseTo
         <ToolPill
           key={toolPart.id}
           row={toolPart.row}
+          syncProgress={syncByInvocation.get(toolPart.id)}
           isLast={i === tools.length - 1}
         />
       ))}
@@ -2078,6 +2179,57 @@ function HistoryDisclosure({
 }
 void HistoryDisclosure
 
+// ── Run error ─────────────────────────────────────────────────────
+
+function summarizeRunError(error: string): { summary: string; details: string | null } {
+  const lower = error.toLowerCase()
+  if (
+    lower.startsWith("device flow")
+    || lower.startsWith("copilot oauth token expired")
+    || lower.includes("copilot token exchange failed")
+  ) {
+    return {
+      summary: "Authentication with Copilot failed. Please re-authorize and try again.",
+      details: error,
+    }
+  }
+  const firstLine = (error.split("\n")[0] ?? error).trim()
+  if (error.length > 220 || error.includes("{")) {
+    const short = firstLine.length > 180 ? `${firstLine.slice(0, 180)}…` : firstLine
+    return { summary: short, details: error }
+  }
+  return { summary: error, details: null }
+}
+
+function RunErrorBanner({ error }: { error: string }) {
+  const [expanded, setExpanded] = useState(false)
+  const { summary, details } = summarizeRunError(error)
+  const showDetails = details != null && details !== summary
+
+  return (
+    <div className="mt-3 max-w-full rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">
+      <div className="text-[13px] font-medium text-error">Run failed</div>
+      <p className="mt-1 text-[13px] leading-5 text-error/85 break-words">{summary}</p>
+      {showDetails && (
+        <>
+          <button
+            type="button"
+            onClick={() => setExpanded((value) => !value)}
+            className="mt-2 text-[12px] font-medium text-error/75 hover:text-error"
+          >
+            {expanded ? "Hide details" : "Show details"}
+          </button>
+          {expanded && (
+            <pre className="code-pre mt-2 max-h-40 overflow-auto rounded-md border border-error/20 bg-error/5 px-2.5 py-2 text-error/80">
+              {details}
+            </pre>
+          )}
+        </>
+      )}
+    </div>
+  )
+}
+
 // ── Workspace diff pill ───────────────────────────────────────────
 
 function WorkspaceDiffCard({ runId }: { runId: string }) {
@@ -2233,6 +2385,11 @@ function RunMessageImpl({
   }, [responseParts])
 
   const renderedParts = useMemo(() => {
+    const syncByInvocation = new Map<string, ResponseSyncProgressPart>()
+    for (const part of responseParts) {
+      if (part.kind === "sync-progress") syncByInvocation.set(part.invocationId, part)
+    }
+
     // Copilot-style flat thread: every responsePart renders as a single
     // row in chronological order. No DetailViewport buffering, no
     // HistoryDisclosure aggregation, no ActiveMilestone footer. The
@@ -2254,13 +2411,21 @@ function RunMessageImpl({
       }
 
       if (part.kind === "tool") {
-        // A trailing tool that hasn't been folded into an iteration block
-        // yet (lives at the head of the in-flight iteration). Render it
-        // as its own line; once the next iteration boundary fires it
-        // will be replaced by an iteration-block.
-        items.push(<ToolPill key={part.id} row={part.row} isLast={false} isLiveRun={isLiveRun} />)
+        items.push(
+          <ToolPill
+            key={part.id}
+            row={part.row}
+            syncProgress={syncByInvocation.get(part.id)}
+            isLast={false}
+            isLiveRun={isLiveRun}
+          />,
+        )
         if (part.row.status === "running") lastToolHasRunning = true
         else lastToolHasRunning = false
+        return
+      }
+
+      if (part.kind === "sync-progress") {
         return
       }
 
@@ -2270,6 +2435,7 @@ function RunMessageImpl({
           <IterationBlock
             key={part.id}
             part={part}
+            syncByInvocation={syncByInvocation}
             isLiveRun={isLiveRun}
             isLastIteration={meta?.isLastIteration ?? false}
             hasNarrativeAfter={meta?.hasNarrativeAfter ?? false}
@@ -2367,14 +2533,7 @@ function RunMessageImpl({
         </div>
       )}
       {run.error && run.status !== "cancelled" && (
-        <div className="rounded-lg border border-error/30 bg-error/5 px-3 py-2 space-y-1">
-          <div className="text-[13px] font-medium text-error">Run failed</div>
-          <div className="text-[13px] text-error/80 whitespace-pre-wrap break-words">
-            {run.error.toLowerCase().startsWith("device flow") || run.error.toLowerCase().startsWith("copilot oauth token expired")
-              ? "Authentication with Copilot expired. Please re-authorize and try again."
-              : run.error}
-          </div>
-        </div>
+        <RunErrorBanner error={run.error} />
       )}
 
       {/* Workspace diff */}
@@ -2399,12 +2558,19 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
 })
 
 const FORCE_EMPTY_STATE_PREVIEW = false
-/** Shared home-chat column — transcript, goals, and input bar stay aligned. */
-const HOME_CHAT_COLUMN_CLASS = "w-[94%] max-w-[960px] mx-auto"
+/** Widget / pop-out chat column — transcript and input share the same width. */
+const WIDGET_CHAT_COLUMN_CLASS = "w-[90%] max-w-[1400px] mx-auto"
 /** Newest runs shown on open; active run pinned at bottom of this window. */
 const INITIAL_VISIBLE_RUNS = 10
 /** Older runs revealed + hydrated when the user scrolls into history. */
 const HISTORY_PAGE_SIZE = 5
+
+function homeColumnScrollFadeClass(fadeTop: boolean, fadeBottom: boolean): string {
+  if (!fadeTop && !fadeBottom) return ""
+  if (fadeTop && fadeBottom) return " chathome-column-scroll--fade-y"
+  if (fadeTop) return " chathome-column-scroll--fade-top"
+  return " chathome-column-scroll--fade-bottom"
+}
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
@@ -2423,6 +2589,9 @@ function lerp(start: number, end: number, t: number): number {
 function TermChatInputBar({
   input,
   isRunning,
+  slashOnlyMode,
+  slashCommands,
+  commandConsole,
   pendingInput,
   sending,
   textareaRef,
@@ -2439,6 +2608,9 @@ function TermChatInputBar({
 }: {
   input: string
   isRunning: boolean
+  slashOnlyMode: boolean
+  slashCommands: ChatSlashCatalogEntry[]
+  commandConsole: CommandConsoleState
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   sending: boolean
   textareaRef: React.Ref<HTMLTextAreaElement>
@@ -2453,7 +2625,36 @@ function TermChatInputBar({
   variant?: "default" | "hero"
   heroRevealProgress?: number
 }) {
-  const attachDisabled = isRunning || !!pendingInput
+  const slashInput = input.trimStart().startsWith("/")
+  const attachDisabled = slashOnlyMode || !!pendingInput
+  const goalPlaceholder = pendingInput
+    ? "Respond in the prompt above ↑"
+    : slashOnlyMode
+      ? "Type /cancel, /trace, /status…"
+      : "Enter your goal or press / for commands"
+  const canSend = slashOnlyMode
+    ? slashInput && input.trim().length > 1 && !sending
+    : (Boolean(input.trim()) || attachments.length > 0) && !sending
+  const showStop = isRunning && !slashInput && !pendingInput
+  const collapseComposer = useCallback(() => {
+    commandConsole.clear()
+    onChange("")
+  }, [commandConsole, onChange])
+
+  const hasResult = commandConsole.pinnedOpen && commandConsole.lines.length > 0
+  const { palette, handleKeyDown: handleSlashKeyDown } = useSlashCommandInput({
+    value: input,
+    onChange,
+    commands: slashCommands,
+    disabled: !!pendingInput,
+    variant: "term",
+    onCollapse: collapseComposer,
+    hasResult,
+  })
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (handleSlashKeyDown(e)) return
+    onKeyDown(e)
+  }
   const isHero = variant === "hero"
   const reveal = Math.pow(smoothstep(0.46, 1, clamp01(heroRevealProgress)), 1.35)
   const heroStyle: React.CSSProperties | undefined = isHero
@@ -2466,29 +2667,34 @@ function TermChatInputBar({
   return (
       <div
           data-intro-target="termchat-input"
-          className={`${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
+          className={`chathome-chrome-pill ${palette || hasResult ? "chathome-chrome-pill--composer-open" : "overflow-hidden"} ${className} mx-auto bg-elevated dark:bg-overlay-2 border border-border ring-1 ring-overlay-1 focus-within:border-border-strong focus-within:ring-overlay-2 transition-colors ${isHero ? "rounded-[24px] px-5 py-4" : "rounded-2xl px-4 py-3"}`}
           style={heroStyle}
       >
-          <AttachmentChips items={attachments} onRemove={onRemoveAttachment} />
+          <ChatComposerShell
+            console={commandConsole}
+            slashPalette={palette}
+            variant="term"
+            density={isHero ? "hero" : "default"}
+          >
+          <AttachmentChips items={slashOnlyMode ? [] : attachments} onRemove={onRemoveAttachment} />
           {isHero ? (
               <div className="flex flex-col gap-3">
                   <textarea
                       ref={textareaRef}
                       value={input}
                       onChange={(e) => onChange(e.target.value)}
-                      onKeyDown={onKeyDown}
+                      onKeyDown={handleKeyDown}
                       autoFocus
-                      placeholder={
-                          pendingInput
-                              ? "Respond in the prompt above ↑"
-                              : "Enter your goal or question here..."
-                      }
+                      placeholder={goalPlaceholder}
                       rows={1}
-                      disabled={isRunning || !!pendingInput}
-                      className="min-w-0 bg-transparent resize-none text-[15px] leading-6 text-text placeholder:text-text-faint focus:outline-none max-h-36 overflow-y-auto disabled:opacity-30"
+                      disabled={!!pendingInput}
+                      autoComplete="off"
+                      spellCheck={false}
+                      className="w-full min-w-0 bg-transparent resize-none text-[15px] leading-6 text-text placeholder:text-text-faint focus:outline-none max-h-36 overflow-y-auto disabled:opacity-30"
                   />
                   <div className="flex items-center justify-between gap-3 pt-1.5">
                       <div className="flex items-center gap-1.5">
+                          {!slashOnlyMode && (
                           <button
                               type="button"
                               onClick={onAttach}
@@ -2499,13 +2705,15 @@ function TermChatInputBar({
                           >
                               <Plus size={18} />
                           </button>
+                          )}
                       </div>
-                      {isRunning ? (
+                      {showStop ? (
                           <button
                               type="button"
                               onClick={onCancel}
-                              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-error/12 text-error transition-colors"
-                              title="Cancel"
+                              className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-error/12 text-error transition-colors cursor-pointer"
+                              title="Stop run"
+                              aria-label="Stop run"
                           >
                               <Square size={16} fill="currentColor" />
                           </button>
@@ -2513,10 +2721,7 @@ function TermChatInputBar({
                           <button
                               type="button"
                               onClick={onSend}
-                              disabled={
-                                  (!input.trim() && attachments.length === 0) ||
-                                  sending
-                              }
+                              disabled={!canSend}
                               className="shrink-0 flex items-center justify-center w-10 h-10 rounded-xl bg-overlay-2 hover:bg-overlay-hover text-text-muted hover:text-text transition-colors disabled:opacity-30"
                               title="Send"
                           >
@@ -2527,6 +2732,7 @@ function TermChatInputBar({
               </div>
           ) : (
               <div className="flex items-center gap-2">
+                  {!slashOnlyMode && (
                   <button
                       type="button"
                       onClick={onAttach}
@@ -2537,27 +2743,27 @@ function TermChatInputBar({
                   >
                       <Plus size={18} />
                   </button>
+                  )}
                   <textarea
                       ref={textareaRef}
                       value={input}
                       onChange={(e) => onChange(e.target.value)}
-                      onKeyDown={onKeyDown}
+                      onKeyDown={handleKeyDown}
                       autoFocus
-                      placeholder={
-                          pendingInput
-                              ? "Respond in the prompt above ↑"
-                              : "Enter your goal or question here..."
-                      }
+                      placeholder={goalPlaceholder}
                       rows={1}
-                      disabled={isRunning || !!pendingInput}
+                      disabled={!!pendingInput}
+                      autoComplete="off"
+                      spellCheck={false}
                       className="flex-1 min-w-0 bg-transparent resize-none text-[15px] leading-relaxed text-text placeholder:text-text-faint focus:outline-none max-h-36 overflow-y-auto disabled:opacity-30"
                   />
-                  {isRunning ? (
+                  {showStop ? (
                       <button
                           type="button"
                           onClick={onCancel}
-                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-error-soft hover:bg-error/25 text-error transition-colors"
-                          title="Cancel"
+                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-error-soft hover:bg-error/25 text-error transition-colors cursor-pointer"
+                          title="Stop run"
+                          aria-label="Stop run"
                       >
                           <Square size={16} fill="currentColor" />
                       </button>
@@ -2565,31 +2771,37 @@ function TermChatInputBar({
                       <button
                           type="button"
                           onClick={onSend}
-                          disabled={
-                              (!input.trim() && attachments.length === 0) ||
-                              sending
-                          }
-                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-accent hover:bg-accent-hover text-text-on-accent transition-colors disabled:opacity-40"
+                          disabled={!canSend}
+                          className="shrink-0 flex items-center justify-center w-9 h-9 rounded-lg bg-overlay-2 hover:bg-overlay-hover text-text-muted hover:text-text transition-colors disabled:opacity-30"
                           title="Send"
                       >
-                          <Send size={16} />
+                          <ArrowUp size={18} />
                       </button>
                   )}
               </div>
           )}
+          </ChatComposerShell>
       </div>
   );
 }
 
 // ── Main widget ───────────────────────────────────────────────────
 
-export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "widget" | "home"; heroRevealProgress?: number } = {}) {
-  const [input, setInput] = useState("")
+export function TermChat({
+  mode = "widget",
+  threadId: threadIdProp,
+  heroRevealProgress = 1,
+}: {
+  mode?: "widget" | "home" | "thread"
+  threadId?: string
+  heroRevealProgress?: number
+} = {}) {
   const [sending, setSending] = useState(false)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
   const [dragOver, setDragOver] = useState(false)
   const [attachError, setAttachError] = useState<string | null>(null)
+  const cmdConsole = useCommandConsole()
 
   const { me } = useMe()
 
@@ -2601,17 +2813,54 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   const pendingInput = useStore((s) => s.pendingInput)
   const clearPendingInput = useStore((s) => s.clearPendingInput)
 
-  const activeRun = runs.find((r) => r.id === activeRunId)
-  const isRunning = isRunActiveStatus(activeRun?.status)
-
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const fileInputRef = useRef<HTMLInputElement>(null)
+  const runRailScrollSyncRef = useRef<(() => void) | null>(null)
   const [scrollToRunId, setScrollToRunId] = useState<string | null>(null)
   const [visibleRunCount, setVisibleRunCount] = useState(INITIAL_VISIBLE_RUNS)
   const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
+  const [transcriptFadeBottom, setTranscriptFadeBottom] = useState(false)
   const [unpinnedGoalRunIds, setUnpinnedGoalRunIds] = useState<Set<string>>(() => new Set())
-  const isHomeMode = mode === "home"
-  const streamingAnswer = activeRun?.streamingAnswer ?? ""
+  const isThreadMode = mode === "thread"
+  const isHomeMode = mode === "home" || isThreadMode
+  const pinProfile: GoalPinProfile = mode === "widget" ? "widget" : "home"
+  const activeThreadId = threadIdProp ?? useStore((s) => s.activeThreadId)
+  const continuityThreadId = activeThreadId
+  const { draft: input, setDraft, clearDraft } = useComposerDraft(continuityThreadId)
+  const scopedActiveRunId =
+    activeRunId &&
+    runs.some((r) => r.id === activeRunId && r.threadId === continuityThreadId)
+      ? activeRunId
+      : null
+  const scopedActiveRun = scopedActiveRunId
+    ? runs.find((r) => r.id === scopedActiveRunId)
+    : undefined
+  const isRunning = isRunActiveStatus(scopedActiveRun?.status)
+  const streamingAnswer = scopedActiveRun?.streamingAnswer ?? ""
+
+  const scopedRuns = useMemo(
+    () => runs.filter((r) => r.threadId === continuityThreadId),
+    [runs, continuityThreadId],
+  )
+
+  const { tryDispatchSlash, slashCommands, slashOnlyMode } = useChatSlashActions({
+    activeThreadId: continuityThreadId,
+    runs: scopedRuns,
+    runStatus: scopedActiveRun?.status,
+    hasPendingInput: Boolean(pendingInput),
+    onRunStarted: (runId) => {
+      setActiveRun(runId)
+      setScrollToRunId(runId)
+    },
+    console: cmdConsole.api,
+    openFilePicker: () => fileInputRef.current?.click(),
+  })
+
+  useEffect(() => {
+    if (!slashOnlyMode) return
+    if (input && !input.startsWith("/")) clearDraft()
+    if (pendingAttachments.length > 0) setPendingAttachments([])
+  }, [slashOnlyMode, input, pendingAttachments.length, clearDraft])
 
   const {
     scrollHostRef,
@@ -2619,15 +2868,25 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     onScroll: onTranscriptScroll,
     scrollToBottom,
     pauseAutoScroll,
+    suspendAutoFollow,
+    resumeAutoFollow,
     showJumpButton,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
     initialScroll: "none",
-    followWhen: isRunning || Boolean(activeRun?.streamingAnswer),
-    onScrollPosition: (scrollTop) => {
-      if (isHomeMode) setTranscriptFadeTop(scrollTop > 6)
+    followWhen: isRunning || Boolean(scopedActiveRun?.streamingAnswer),
+    onScrollPosition: (scrollTop, host) => {
+      if (!isHomeMode) return
+      const overflows = host.scrollHeight > host.clientHeight + 1
+      setTranscriptFadeTop(overflows && scrollTop > 24)
+      setTranscriptFadeBottom(overflows && !isNearBottom(host, 120))
     },
   })
+
+  const onTranscriptScrollWithRail = useCallback(() => {
+    onTranscriptScroll()
+    runRailScrollSyncRef.current?.()
+  }, [onTranscriptScroll])
 
   // Reset the textarea to its intrinsic 1-row height when empty and to
   // its content's scrollHeight when not. Called both from the callback
@@ -2663,21 +2922,45 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     autosizeTextarea(textareaRef.current)
   }, [input, autosizeTextarea])
 
+  const handleInputChange = useCallback(
+    (value: string) => {
+      setDraft((prev) => coerceSlashOnlyInput(value, prev, slashOnlyMode))
+    },
+    [setDraft, slashOnlyMode],
+  )
+
   const selectedAgent = agents.find((a) => a.id === selectedAgentId) ?? agents.find((a) => a.id === "default") ?? agents[0]
 
   const send = useCallback(async () => {
     const goal = input.trim()
-    // Allow attachments-only sends (e.g. "summarise this file"). The
-    // server requires a non-empty goal string, so synthesise a minimal
-    // one in that case rather than refusing.
     if (!goal && pendingAttachments.length === 0) return
-    if (sending || isRunning) return
+    if (sending) return
+    if (slashOnlyMode && !goal.startsWith("/")) return
+
+    if (goal.startsWith("/")) {
+      const handled = await tryDispatchSlash(goal)
+      if (handled) {
+        clearDraft()
+        return
+      }
+    }
+
     const effectiveGoal = goal || `Review the attached file${pendingAttachments.length === 1 ? "" : "s"}.`
     const attachmentIds = pendingAttachments.map((a) => a.id)
-    setInput("")
+    clearDraft()
     setSending(true)
     try {
-      const { runId } = await api.startRun(effectiveGoal, selectedAgent?.id, attachmentIds.length > 0 ? attachmentIds : undefined)
+      const threadId = continuityThreadId
+      if (!threadId) {
+        throw new Error("No thread selected")
+      }
+      const { runId } = await api.startRun(
+        effectiveGoal,
+        selectedAgent?.id,
+        attachmentIds.length > 0 ? attachmentIds : undefined,
+        threadId
+      )
+      useStore.getState().revealThreadTitleFromGoal(threadId, effectiveGoal)
       setActiveRun(runId)
       setScrollToRunId(runId)
       requestAnimationFrame(() => scrollToBottom("instant"))
@@ -2693,16 +2976,16 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       const msg = e instanceof Error ? e.message : String(e)
       setAttachError(`Failed to start run: ${msg}`)
       setActiveRun(null)
-      setInput(goal)
+      setDraft(effectiveGoal)
     } finally {
       setSending(false)
     }
-  }, [input, sending, isRunning, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom])
+  }, [input, sending, slashOnlyMode, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, mode, tryDispatchSlash, clearDraft, setDraft])
 
   const cancel = useCallback(async () => {
-    if (!activeRunId) return
-    try { await api.cancelRun(activeRunId) } catch { /* ignore */ }
-  }, [activeRunId])
+    if (!scopedActiveRunId) return
+    try { await api.cancelRun(scopedActiveRunId) } catch { /* ignore */ }
+  }, [scopedActiveRunId])
 
   const uploadFiles = useCallback(async (files: File[]) => {
     if (files.length === 0) return
@@ -2785,26 +3068,55 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   }, [])
 
   // Build message list: each "run" is a (user msg, assistant response) pair.
-  // Show every non-active run (terminal OR in-flight) as history, oldest
-  // first, with the active run pinned at the bottom so the input bar
-  // anchors to the most recent activity. Including in-flight runs here
-  // matters: if `activeRunId` ever drifts to a different run (another
-  // widget calling setActiveRun, an unrelated background SSE event, etc.)
-  // the run the user just started would otherwise vanish from view.
-  const visibleRuns = useMemo(() => runs.slice(0, visibleRunCount), [runs, visibleRunCount])
+  // History is oldest-first; the active run is pinned at the bottom so the
+  // input bar anchors to the most recent activity.
+  // Always paginate the most recent N runs in chronological order.
+  // Thread home loads ASC, global listRuns loads DESC — normalize here so
+  // widget mode after chat/thread home does not slice the wrong end.
+  const visibleRuns = useMemo(() => {
+    const scoped = continuityThreadId
+      ? runs.filter((r) => r.threadId === continuityThreadId)
+      : runs
+    const chronological = [...scoped].sort(
+      (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
+    )
+    return chronological.slice(Math.max(0, chronological.length - visibleRunCount))
+  }, [runs, visibleRunCount, continuityThreadId])
 
   const displayRuns = useMemo(() => {
-    const history = visibleRuns
-      .filter((r) => r.id !== activeRunId)
-      .slice()
-      .reverse()
-    if (activeRun) return [...history, activeRun]
+    const history = visibleRuns.filter((r) => r.id !== scopedActiveRunId)
+    if (scopedActiveRun) return [...history, scopedActiveRun]
     return history
-  }, [visibleRuns, activeRunId, activeRun])
+  }, [visibleRuns, scopedActiveRunId, scopedActiveRun])
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
-  const canLoadMoreHistory = visibleRunCount < runs.length
+
+  useLayoutEffect(() => {
+    const host = scrollHostRef.current
+    if (!host || !isHomeMode || showEmptyState) {
+      setTranscriptFadeTop(false)
+      setTranscriptFadeBottom(false)
+      return
+    }
+    const overflows = host.scrollHeight > host.clientHeight + 1
+    setTranscriptFadeTop(overflows && host.scrollTop > 24)
+    setTranscriptFadeBottom(overflows && !isNearBottom(host, 120))
+  }, [
+    isHomeMode,
+    showEmptyState,
+    displayRuns,
+    scopedActiveRun?.streamingAnswer,
+    scopedActiveRun?.answer,
+    scrollHostRef,
+  ])
+
+  const scopedRunCount = useMemo(() => {
+    if (!continuityThreadId) return runs.length
+    return runs.filter((r) => r.threadId === continuityThreadId).length
+  }, [runs, continuityThreadId])
+
+  const canLoadMoreHistory = visibleRunCount < scopedRunCount
 
   const didSelectLatestRef = useRef(false)
   const didInitialAnchorRef = useRef(false)
@@ -2815,7 +3127,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
   const traceHydratingRef = useRef(new Set<string>())
 
   const hydrateRunTrace = useCallback(async (runId: string) => {
-    if (runId === activeRunId) return
+    if (runId === scopedActiveRunId) return
     const run = runs.find((r) => r.id === runId)
     if (!run || isRunActiveStatus(run.status)) return
     if ((run.trace?.length ?? 0) > 0) return
@@ -2828,29 +3140,28 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
         id: runId,
         trace: rawTrace as TraceEntry[],
         streamingAnswer: "",
-        coherentStream: "",
       })
     } finally {
       traceHydratingRef.current.delete(runId)
     }
-  }, [activeRunId, runs, upsertRun])
+  }, [scopedActiveRunId, runs, upsertRun])
 
   // Full trace for every visible completed run (active/latest uses setActiveRun).
   useEffect(() => {
     for (const run of visibleRuns) {
-      if (run.id === activeRunId) continue
+      if (run.id === scopedActiveRunId) continue
       if (isRunActiveStatus(run.status)) continue
       if ((run.trace?.length ?? 0) > 0) continue
       void hydrateRunTrace(run.id)
     }
-  }, [visibleRuns, activeRunId, hydrateRunTrace])
+  }, [visibleRuns, scopedActiveRunId, hydrateRunTrace])
 
   useEffect(() => {
     setVisibleRunCount(INITIAL_VISIBLE_RUNS)
     didSelectLatestRef.current = false
     didInitialAnchorRef.current = false
     hadActiveTraceRef.current = false
-  }, [me?.upn])
+  }, [me?.upn, mode, activeThreadId])
 
   // Scroll-up pagination: reveal + hydrate the next HISTORY_PAGE_SIZE older runs.
   useEffect(() => {
@@ -2863,7 +3174,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
         if (!entry?.isIntersecting || historyLoadLockRef.current) return
         historyLoadLockRef.current = true
         pendingScrollPreserveRef.current = host.scrollHeight
-        setVisibleRunCount((prev) => Math.min(prev + HISTORY_PAGE_SIZE, runs.length))
+        setVisibleRunCount((prev) => Math.min(prev + HISTORY_PAGE_SIZE, scopedRunCount))
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
             historyLoadLockRef.current = false
@@ -2874,7 +3185,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
     )
     observer.observe(sentinel)
     return () => observer.disconnect()
-  }, [canLoadMoreHistory, runs.length])
+  }, [canLoadMoreHistory, scopedRunCount])
 
   useLayoutEffect(() => {
     const host = scrollHostRef.current
@@ -2906,11 +3217,11 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
   // Re-settle once when the active run's trace first arrives from setActiveRun.
   useEffect(() => {
-    if (!activeRunId || activeRunId !== latestDisplayRunId) {
+    if (!scopedActiveRunId || scopedActiveRunId !== latestDisplayRunId) {
       hadActiveTraceRef.current = false
       return
     }
-    const traceLen = activeRun?.trace?.length ?? 0
+    const traceLen = scopedActiveRun?.trace?.length ?? 0
     if (traceLen === 0) return
     if (hadActiveTraceRef.current) return
     hadActiveTraceRef.current = true
@@ -2919,20 +3230,44 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
         scrollToBottom("instant", { stick: isRunning || Boolean(streamingAnswer) })
       })
     })
-  }, [activeRunId, latestDisplayRunId, activeRun?.trace?.length, isRunning, streamingAnswer, scrollToBottom])
+  }, [scopedActiveRunId, latestDisplayRunId, scopedActiveRun?.trace?.length, isRunning, streamingAnswer, scrollToBottom])
 
   const jumpToLatest = useCallback(() => {
+    resumeAutoFollow()
     if (latestDisplayRunId) setActiveRun(latestDisplayRunId)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         scrollToBottom("instant", { stick: isRunning || Boolean(streamingAnswer) })
       })
     })
-  }, [latestDisplayRunId, setActiveRun, scrollToBottom, isRunning, streamingAnswer])
+  }, [latestDisplayRunId, setActiveRun, scrollToBottom, isRunning, streamingAnswer, resumeAutoFollow])
+
+  const jumpToRun = useCallback((runId: string) => {
+    suspendAutoFollow()
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        const host = scrollHostRef.current
+        const el =
+          host?.querySelector<HTMLElement>(`[data-run-id="${runId}"] [data-run-goal-anchor]`)
+          ?? host?.querySelector<HTMLElement>(`[data-run-id="${runId}"]`)
+        el?.scrollIntoView({ behavior: "auto", block: "start" })
+      })
+    })
+  }, [suspendAutoFollow, scrollHostRef])
+
+  // Top-to-bottom transcript order (oldest → newest, active run last).
+  const threadNavRuns = useMemo(
+    () => displayRuns.map((run) => ({
+      id: run.id,
+      goal: run.goal,
+      createdAt: run.createdAt,
+    })),
+    [displayRuns],
+  )
 
   return (
     <div
-      className="relative flex flex-col h-full bg-transparent text-text font-sans"
+      className={`termchat-home-shell relative bg-transparent text-text font-sans${mode === "widget" ? " termchat-widget" : ""}${isHomeMode ? " termchat-home-mode" : ""}`}
       onDragEnter={(e) => {
         if (e.dataTransfer?.types.includes("Files")) {
           e.preventDefault()
@@ -2984,19 +3319,48 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
       {/* Message list */}
       <ChatScrollProvider pauseAutoScroll={pauseAutoScroll} scrollHostRef={scrollHostRef}>
-      <div className="relative flex-1 min-h-0 flex flex-col">
+      <div className="termchat-transcript-shell relative">
+      {isThreadMode && !showEmptyState && (
+        <ThreadRunRail
+          runs={threadNavRuns}
+          onSelectRun={jumpToRun}
+          scrollHostRef={scrollHostRef}
+          contentRef={transcriptInnerRef}
+          scrollSyncRef={runRailScrollSyncRef}
+        />
+      )}
+      <div
+        className={
+          isHomeMode
+            ? `flex min-h-0 flex-1 flex-col ${
+                showEmptyState ? `${HOME_CHAT_GUTTER_X_CLASS} pt-8 pb-10` : `${HOME_CHAT_GUTTER_X_CLASS} pt-0`
+              }`
+            : "flex min-h-0 flex-1 flex-col px-6 py-5"
+        }
+      >
       <div
         ref={scrollHostRef}
         {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
-        onScroll={onTranscriptScroll}
-        className={`relative flex-1 overflow-y-auto min-h-0 ${isHomeMode && showEmptyState ? "px-6 pt-8 pb-10" : isHomeMode ? "px-6 pt-0 pb-4 space-y-6" : "px-6 py-5 space-y-10"}`}
+        onScroll={onTranscriptScrollWithRail}
+        className={
+          isHomeMode
+            ? `relative min-h-0 flex-1 overflow-y-auto ${HOME_CHAT_COLUMN_CLASS}${
+                showEmptyState ? "" : " pb-6"
+              }${homeColumnScrollFadeClass(transcriptFadeTop, transcriptFadeBottom)}`
+            : `relative min-h-0 flex-1 overflow-y-auto ${WIDGET_CHAT_COLUMN_CLASS} space-y-10`
+        }
         style={{ overflowAnchor: "none" }}
       >
         <div
           ref={transcriptInnerRef}
-          className={showEmptyState
-            ? `${isHomeMode ? `${HOME_CHAT_COLUMN_CLASS} pb-[10vh]` : "w-[90%] max-w-[1400px] mx-auto"} min-h-full flex flex-col justify-center`
-            : `relative z-10 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : "w-[90%] max-w-[1400px] mx-auto"}`
+          className={
+            showEmptyState
+              ? isHomeMode
+                ? "min-h-full flex flex-col justify-center pb-[10vh]"
+                : `${WIDGET_CHAT_COLUMN_CLASS} pb-[10vh] min-h-full flex flex-col justify-center`
+              : isHomeMode
+                ? "relative space-y-6"
+                : `relative ${WIDGET_CHAT_COLUMN_CLASS}`
           }
           style={{ overflowAnchor: "none" }}
         >
@@ -3011,10 +3375,10 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
               <div className={`relative z-10 w-full ${isHomeMode ? "space-y-8" : "max-w-[860px] space-y-8"}`}>
                 <div className={`chathome-empty-copy ${isHomeMode ? "space-y-3" : "space-y-2"}`}>
                   <p className={isHomeMode ? "text-[clamp(1.8rem,3.8vw,3.1rem)] leading-[1.02] tracking-[-0.04em] text-text font-medium" : "text-[24px] leading-tight tracking-[-0.02em] text-text font-medium"}>
-                    {isHomeMode ? "How can I help?" : "What are you working on?"}
+                    {isThreadMode ? "Start a new thread" : isHomeMode ? "How can I help?" : "What are you working on?"}
                   </p>
                   <p className={isHomeMode ? "text-[14px] leading-6 text-text-muted max-w-[580px] mx-auto" : "text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto"}>
-                    {isHomeMode
+                    {isHomeMode || isThreadMode
                       ? "Start with a goal, question, or task."
                       : "Query business data, inspect metadata or run environment synchronization."}
                   </p>
@@ -3023,11 +3387,14 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
                   <TermChatInputBar
                     input={input}
                     isRunning={isRunning}
+                    slashOnlyMode={slashOnlyMode}
+                    slashCommands={slashCommands}
+                    commandConsole={cmdConsole}
                     pendingInput={pendingInput}
                     sending={sending}
                     textareaRef={setTextareaRef}
                     attachments={pendingAttachments}
-                    onChange={setInput}
+                    onChange={handleInputChange}
                     onKeyDown={onKey}
                     onCancel={cancel}
                     onSend={send}
@@ -3053,8 +3420,9 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
             <ChatTurn
               key={run.id}
               run={run}
-              isActive={run.id === activeRunId}
+              isActive={run.id === scopedActiveRunId}
               isHomeMode={isHomeMode}
+              pinProfile={pinProfile}
               me={me}
               unpinned={unpinnedGoalRunIds.has(run.id)}
               onUnpin={unpinGoal}
@@ -3066,13 +3434,7 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
 
         </div>
       </div>
-
-      {isHomeMode && transcriptFadeTop && !showEmptyState && (
-        <div
-          aria-hidden
-          className="chathome-transcript-top-fade absolute inset-x-0 top-0 z-10"
-        />
-      )}
+      </div>
 
       {showJumpButton && !showEmptyState && (
         <div className="absolute bottom-3 left-1/2 -translate-x-1/2 z-30 pointer-events-none">
@@ -3085,29 +3447,26 @@ export function TermChat({ mode = "widget", heroRevealProgress = 1 }: { mode?: "
       </ChatScrollProvider>
 
       {!showEmptyState && (
-        <div className={`relative shrink-0 pb-4 ${isHomeMode ? "px-6 pt-2" : "px-5"}`}>
-          {isHomeMode && (
-            <div
-              aria-hidden
-              className="chathome-input-edge-fade pointer-events-none absolute inset-x-0 -top-4 z-10"
-            />
-          )}
-          <div className={`relative z-20 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : "w-[90%] mx-auto"}`}>
+        <div className={`termchat-input-dock termchat-input-dock--composer ${HOME_CHAT_INPUT_DOCK_CLASS}`}>
+          <div className={`relative z-20 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : WIDGET_CHAT_COLUMN_CLASS}`}>
             <TermChatInputBar
               input={input}
               isRunning={isRunning}
+              slashOnlyMode={slashOnlyMode}
+              slashCommands={slashCommands}
+              commandConsole={cmdConsole}
               pendingInput={pendingInput}
               sending={sending}
               textareaRef={setTextareaRef}
               attachments={pendingAttachments}
-              onChange={setInput}
+              onChange={handleInputChange}
               onKeyDown={onKey}
               onCancel={cancel}
               onSend={send}
               onAttach={openFilePicker}
               onRemoveAttachment={removeAttachment}
               className="w-full"
-              variant={isHomeMode ? "hero" : "default"}
+              variant={isHomeMode && showEmptyState ? "hero" : "default"}
               heroRevealProgress={heroRevealProgress}
             />
             {attachError && (

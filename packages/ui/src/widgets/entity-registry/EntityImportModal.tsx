@@ -44,7 +44,9 @@ export function EntityImportModal({ onClose, onImported }: EntityImportModalProp
       title="Import entities from YAML or JSON"
       icon={<Upload className="h-4 w-4 text-accent" />}
       onClose={onClose}
-      widthClass="max-w-3xl"
+      size="default"
+      scrim="strong"
+      widthClass="w-full max-w-3xl h-[min(88vh,900px)] min-h-[32rem]"
       footer={
         <>
           {err && (
@@ -76,7 +78,7 @@ export function EntityImportModal({ onClose, onImported }: EntityImportModalProp
     >
       <div className="space-y-3 p-5 text-xs">
         <div className="space-y-1">
-          <span className="text-[10px] uppercase tracking-wider text-text-muted">Format</span>
+          <span className="text-xs uppercase tracking-wider text-text-muted">Format</span>
           <div className="inline-flex rounded-lg border border-border-subtle bg-panel p-0.5">
             {(["yaml", "json"] as const).map((next) => (
               <button
@@ -91,11 +93,11 @@ export function EntityImportModal({ onClose, onImported }: EntityImportModalProp
           </div>
         </div>
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-wider text-text-muted">Reason <span className="text-rose-400">*</span></span>
+          <span className="text-xs uppercase tracking-wider text-text-muted">Reason <span className="text-rose-400">*</span></span>
           <input value={reason} onChange={(e) => setReason(e.target.value)} className="input" placeholder="why this import" />
         </label>
         <label className="flex flex-col gap-1">
-          <span className="text-[10px] uppercase tracking-wider text-text-muted">{format === "yaml" ? "YAML" : "JSON"} body</span>
+          <span className="text-xs uppercase tracking-wider text-text-muted">{format === "yaml" ? "YAML" : "JSON"} body</span>
           <textarea
             value={content}
             onChange={(e) => setContent(e.target.value)}
@@ -104,9 +106,9 @@ export function EntityImportModal({ onClose, onImported }: EntityImportModalProp
             placeholder={format === "yaml"
               ? "id: my-entity\ntenantId: _default\n..."
               : '{\n  "id": "my-entity",\n  "tenantId": "_default"\n}'}
-            className="input font-mono text-[11px]"
+            className="input font-mono text-sm"
           />
-          <p className="text-[11px] text-text-muted">
+          <p className="text-sm text-text-muted">
             {format === "yaml"
               ? "Accepts a single entity document or a multi-document YAML stream."
               : "Accepts either one entity object or an array of entity objects."}
@@ -130,7 +132,7 @@ function ResultPanel({ result }: { result: EntityRegistryYamlImportResponse }) {
         </span>
       </div>
       {result.saved.length > 0 && (
-        <ul className="mt-2 space-y-0.5 text-[11px] text-text">
+        <ul className="mt-2 space-y-0.5 text-sm text-text">
           {result.saved.map((s, i) => (
             <li key={i}>
               <span className="font-mono">{s.id}</span> → v{s.version} {s.created ? "(created)" : "(updated)"}
@@ -139,7 +141,7 @@ function ResultPanel({ result }: { result: EntityRegistryYamlImportResponse }) {
         </ul>
       )}
       {result.errors.length > 0 && (
-        <ul className="mt-2 space-y-0.5 text-[11px] text-rose-300">
+        <ul className="mt-2 space-y-0.5 text-sm text-rose-300">
           {result.errors.map((e, i) => (
             <li key={i}>
               <span className="font-mono">{e.id ?? "<parse>"}</span>:{" "}

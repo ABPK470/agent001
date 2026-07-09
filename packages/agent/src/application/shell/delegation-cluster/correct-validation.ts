@@ -49,11 +49,11 @@ export function getCorrectionGuidance(code: DelegationOutputValidationCode): str
     case DelegationOutputValidationCode.AllToolsFailed:
       return "All your tool calls failed in the previous attempt. Check your tool arguments (file paths, command syntax) and try again with correct arguments."
 
-    case DelegationOutputValidationCode.LowSignalBrowserEvidence:
-      return "Your browser testing was insufficient — you only checked about:blank or listed tabs. Use browser_check with an actual file path to verify your HTML/JS works."
-
     case DelegationOutputValidationCode.MissingExecutableVerificationEvidence:
       return "Your previous attempt relied on narrative completion without executable proof. Run deterministic verification (tests/build/runtime checks) or inspect mutated artifacts with read_file before claiming completion."
+
+    case DelegationOutputValidationCode.LowSignalBrowserEvidence:
+      return "Your verification was insufficient — run read_file on the artifacts or run_command with tests/build before claiming completion."
 
     case DelegationOutputValidationCode.UnresolvedHandoffOutput:
       return "Your previous output ended in a handoff/partial state. Do NOT ask whether to continue. Complete the implementation end-to-end, verify behavior, and return finished artifacts with evidence."

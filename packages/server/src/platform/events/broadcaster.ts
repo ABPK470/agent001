@@ -54,7 +54,7 @@ export class EventBroadcaster {
   /** Internal subscribers — notified after every broadcast() call. */
   private readonly subscribers = new Set<(event: SseEvent) => void>()
   /** Tiny LRU of runId → owner. Cleared after this many entries. */
-  private readonly ownerCache = new Map<string, { upn: string | null; sid: string | null }>()
+  private readonly ownerCache = new Map<string, { upn: string | null }>()
 
   /**
    * Register an SSE client. Returns a disposer that the route handler must
@@ -95,17 +95,8 @@ export class EventBroadcaster {
 
     const allowed = (identity: WsClientIdentity): boolean => {
       if (!owner) return true
-      const matchesUpn =
-        !!identity.upn && !!owner.upn && identity.upn.toLowerCase() === owner.upn.toLowerCase()
-      // Sid match was previously gated on `!identity.upn`. That gate caused
-      // the chat-stuck-on-Thinking bug: a client whose SSE socket was opened
-      // pre-welcome (identity.upn=null) and later got a new cookie (new sid
-      // + upn) could never receive run events again — matchesUpn was false
-      // (server-side identity still had upn=null) AND matchesSid was false
-      // (sid mismatch). Sids are per-cookie unique, so matching by sid is
-      // safe regardless of whether the client also carries a UPN.
-      const matchesSid = !!owner.sid && !!identity.sid && owner.sid === identity.sid
-      return matchesUpn || matchesSid
+      if (!owner.upn || !identity.upn) return false
+      return identity.upn.toLowerCase() === owner.upn.toLowerCase()
     }
 
     for (const [, { sink, identity }] of this.sseClients) {
@@ -155,12 +146,12 @@ export class EventBroadcaster {
   }
 
   /** Look up which session/upn owns a runId. Cached for perf. */
-  private resolveOwner(runId: string): { upn: string | null; sid: string | null } | null {
+  private resolveOwner(runId: string): { upn: string | null } | null {
     const hit = this.ownerCache.get(runId)
     if (hit) return hit
     const run = getRun(runId)
     if (!run) return null
-    const owner = { upn: run.upn ?? null, sid: run.session_id ?? null }
+    const owner = { upn: run.upn ?? null }
     if (this.ownerCache.size > 1024) this.ownerCache.clear()
     this.ownerCache.set(runId, owner)
     return owner

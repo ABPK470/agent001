@@ -17,7 +17,7 @@ function stubDefinition(id: string, displayName: string): PublishedSyncDefinitio
     labelColumn: "name",
     selfJoinColumn: null,
     legacy: { pipelineId: null, entrySproc: null },
-    governance: { freezeWindowIds: [], riskMultiplier: 1 },
+    governance: { freezeWindowIds: [] },
     strategy: { strategyId: "x", strategyVersion: "latest" },
     bindings: { serviceProfileRef: "default", environmentPolicyRef: "default" },
     ownership: { team: "t", owner: null, reviewStatus: "reviewed", notes: [] },

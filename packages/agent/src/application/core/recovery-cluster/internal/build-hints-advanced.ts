@@ -57,7 +57,6 @@ export function inferAdvancedRecoveryHint(call: ToolCallRecord): RecoveryHint | 
     tryCompilerDiagnosticHint(call, failureText) ??
     tryShellSyntaxHint(call, failureTextLower) ??
     tryShellBuiltinHint(failureText) ??
-    tryBrowserCheckHint(call, result) ??
     tryDelegationHint(call, resultLower)
   )
 }
@@ -172,22 +171,6 @@ function tryShellBuiltinHint(failureText: string): RecoveryHint | undefined {
       `Executable \`${missingCommand}\` was not found on PATH. ` +
       "If it's a project-local tool, try `npx ${missingCommand}` or `npm exec -- ${missingCommand}`. " +
       "Otherwise install it first."
-  }
-}
-
-function tryBrowserCheckHint(call: ToolCallRecord, result: string): RecoveryHint | undefined {
-  if (call.name !== "browser_check") return undefined
-  if (!/404|ERR_ABORTED|Failed to load resource|net::/i.test(result)) return undefined
-  return {
-    key: "browser-check-404",
-    message:
-      "browser_check found 404 (Not Found) errors for CSS, JS, or other assets. " +
-      "The static server is rooted at the HTML file's parent directory. " +
-      "All <script src>, <link href>, and image paths in the HTML must exist relative to that directory. " +
-      "Steps to fix: (1) Use list_directory to check what files actually exist in the HTML file's directory. " +
-      "(2) Either move the missing files to the expected paths, or update the HTML references to match. " +
-      "(3) If you used subdirectories like css/ or js/, make sure those directories and files exist. " +
-      "Do NOT just re-run browser_check — fix the file structure or HTML first."
   }
 }
 

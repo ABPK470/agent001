@@ -20,8 +20,10 @@
  *     a routing hint that a tenant overrode explicitly.
  */
 
-import { readFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
+import { isAbsolute, resolve } from "node:path"
 import { isDeepStrictEqual } from "node:util"
+
 
 export interface CatalogBootstrapMetadata {
   largeObjects: ReadonlyArray<string>
@@ -65,32 +67,17 @@ export interface TenantConfig {
   mirrorSchema: string | null
 
   /**
+   * User-facing business vocabulary for this warehouse — words people actually
+   * type in goals ("revenue", "rwa", "africaflex"). Used for goal gating and
+   * clarify. NOT internal entity IDs (those come from the published sync bundle).
+   */
+  domainKeywords: ReadonlyArray<string>
+
+  /**
    * Optional pre-catalog metadata for deployments/tests that need known
    * object hints before a live catalog is loaded.
    */
   catalogBootstrap: CatalogBootstrapMetadata
-
-  /**
-   * Routing keywords for prompt section selection. Used by
-   * decide-sections.ts to decide which doctrine sections to inject.
-   * `schemas` triggers schema-specific guidance; `domain` triggers
-   * domain-doctrine sections (e.g. "revenue", "balance" for a finance
-   * tenant; "stock", "order" for retail).
-   * Default: empty — prompt builder skips conditional sections.
-   */
-  routingKeywords: {
-    schemas: ReadonlyArray<string>
-    domain: ReadonlyArray<string>
-    /**
-     * Sync-pipeline / ETL feature keywords. Used by the section gate
-     * to detect when the user is asking about an environment-sync /
-     * pipeline-execution workflow (e.g. tenant-specific procedure
-     * names like `uspSync*`, codenames like `mymi`). Empty default
-     * keeps the gate driven by the universal `\bsync\b.*\benviron`
-     * shape patterns only.
-     */
-    sync?: ReadonlyArray<string>
-  }
 
   /**
    * Regex token alternatives matching pre-aggregation column tokens,
@@ -129,7 +116,7 @@ export const DEFAULT_TENANT_CONFIG: TenantConfig = Object.freeze({
   schemaRanking: [],
   mirrorSchema: null,
   catalogBootstrap: DEFAULT_CATALOG_BOOTSTRAP,
-  routingKeywords: { schemas: [], domain: [], sync: [] },
+  domainKeywords: [],
   preAggregationTokens: [
     // Snapshot / point-in-time / pre-averaged columns whose row values
     // CANNOT be SUMmed without double-counting. Tenant-overridable.
@@ -193,17 +180,56 @@ export function resetTenantConfig(): void {
   tenantConfigState.active = DEFAULT_TENANT_CONFIG
 }
 
+/** Resolve `MIA_TENANT_CONFIG` paths relative to `baseDir` (repo root at server boot). */
+export function resolveTenantConfigPath(filePath: string, baseDir: string = process.cwd()): string {
+  return isAbsolute(filePath) ? filePath : resolve(baseDir, filePath)
+}
+
 /**
- * Load tenant config from the file path in `MIA_TENANT_CONFIG`. Returns
- * the loaded config (or defaults when the env var is unset). Throws on
- * parse error so a misconfigured deployment fails loudly at startup.
+ * Load tenant config from a JSON file. Throws when the file is missing or
+ * invalid so a misconfigured deployment fails loudly at startup.
  */
-export function loadTenantConfigFromEnv(env: NodeJS.ProcessEnv = process.env): TenantConfig {
-  const path = env.MIA_TENANT_CONFIG
-  if (!path) return DEFAULT_TENANT_CONFIG
-  const raw = readFileSync(path, "utf8")
+export function loadTenantConfigFromFile(
+  filePath: string,
+  options: { baseDir?: string } = {}
+): TenantConfig {
+  const resolved = resolveTenantConfigPath(filePath, options.baseDir ?? process.cwd())
+  if (!existsSync(resolved)) {
+    throw new Error(`Tenant config file not found: ${resolved}`)
+  }
+  const raw = readFileSync(resolved, "utf8")
   const parsed = JSON.parse(raw) as Partial<TenantConfig>
   return setTenantConfig(parsed)
+}
+
+/**
+ * Load tenant config from the file path in `MIA_TENANT_CONFIG`. Returns
+ * defaults when the env var is unset. Throws on parse / missing-file error.
+ */
+export function loadTenantConfigFromEnv(
+  env: NodeJS.ProcessEnv = process.env,
+  options: { baseDir?: string } = {}
+): TenantConfig {
+  const path = env.MIA_TENANT_CONFIG
+  if (!path) return DEFAULT_TENANT_CONFIG
+  return loadTenantConfigFromFile(path, options)
+}
+
+/** One-line boot summary for server startup logs. */
+export function formatTenantConfigBootSummary(c: TenantConfig = getTenantConfig()): string {
+  const mirror = c.mirrorSchema ?? "none"
+  const bootstrap = c.catalogBootstrap.largeObjects.length
+  return [
+    `mirror=${mirror}`,
+    `domainKeywords=${c.domainKeywords.length}`,
+    `schemaRanking=${c.schemaRanking.length}`,
+    `largeObjectRows=${c.largeObjectRows}`,
+    `unionBranchThreshold=${c.unionBranchThreshold}`,
+    `preAggTokens=${c.preAggregationTokens.length}`,
+    `aliasFamilies=${c.aliasFamilies.length}`,
+    `reservedAliases=${c.reservedAliases.length}`,
+    `catalogBootstrapObjects=${bootstrap}`
+  ].join(", ")
 }
 
 // ── Internals ──────────────────────────────────────────────────
@@ -215,7 +241,7 @@ function mergeWithDefaults(o: Partial<TenantConfig>): TenantConfig {
     schemaRanking: o.schemaRanking ?? DEFAULT_TENANT_CONFIG.schemaRanking,
     mirrorSchema: o.mirrorSchema ?? DEFAULT_TENANT_CONFIG.mirrorSchema,
     catalogBootstrap: o.catalogBootstrap ?? DEFAULT_TENANT_CONFIG.catalogBootstrap,
-    routingKeywords: o.routingKeywords ?? DEFAULT_TENANT_CONFIG.routingKeywords,
+    domainKeywords: o.domainKeywords ?? DEFAULT_TENANT_CONFIG.domainKeywords,
     preAggregationTokens: o.preAggregationTokens ?? DEFAULT_TENANT_CONFIG.preAggregationTokens,
     aliasFamilies: o.aliasFamilies ?? DEFAULT_TENANT_CONFIG.aliasFamilies,
     reservedAliases: o.reservedAliases ?? DEFAULT_TENANT_CONFIG.reservedAliases

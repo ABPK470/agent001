@@ -1,210 +1,235 @@
 /**
- * StrategiesPanel — SCD2 strategy catalogue (bundled + custom).
+ * StrategiesPanel — SCD2 strategy catalogue (bundled defaults + tenant customs).
  *
- * What a strategy actually is, in plain language:
- *   When the sync engine writes rows into a target table, it needs to
- *   know which columns are "system meta" (timestamps, lock flags, etc.)
- *   so it can (a) ignore them when comparing rows for diffs and
- *   (b) stamp them automatically on insert/update. A strategy is the
- *   little manifest that names those columns.
+ * Where strategies live:
+ *   - Shipped defaults are defined in @mia/sync (`bundled-strategies.ts`) and
+ *     seeded into SQLite (`scd2_strategy_versions`) on first boot.
+ *   - Tenant customs are append-only version rows in the same tables.
+ *   - Entity definitions only store `{ strategyId, strategyVersion }` refs.
  *
- * What the runtime actually consumes today (audited):
- *   - The diff engine ignores a HARDCODED set of meta columns
- *     {validFrom, validTo, isLocked, syncDate, deployDate}. The
- *     strategy's `excludedFromDiffCols` is not yet read.
- *   - The executor checks if the target table has columns literally
- *     named `validFrom` / `validTo`; if so it stamps GETUTCDATE() /
- *     NULL on insert and update. Other strategy fields
- *     (`onInsert`, `onUpdate`, `identityHandling`, `isLockedCol`,
- *     `syncDateCol`, `deployDateCol`) are stored and surfaced for
- *     future expansion but are not consumed by the engine today.
- *
- * This panel reflects that honestly: a one-screen summary of what
- * the strategy will *actually* do at runtime, plus a YAML editor for
- * the full document (which is what you'd hand-tune anyway).
+ * Bundled defaults are read-only here — fork to create a tenant copy, then
+ * edit versions of the custom id. Version history is immutable.
  */
 
-import { GitFork } from "lucide-react"
+import { GitFork, Pencil, Plus } from "lucide-react"
 import type { JSX } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../../api"
 import { useMe } from "../../hooks/useMe"
-import { useStore } from "../../store"
-import type { EntityRegistryStrategy } from "../../types"
-import { Empty, ListItem, PanelChrome, SplitView } from "./shared"
+import type {
+  EntityRegistryDefinition,
+  EntityRegistryStrategy,
+  EntityRegistryStrategyHistoryEntry,
+} from "../../types"
+import { PANEL } from "./design"
+import {
+  ConsolePanel, DetailBody, DetailToolbar, Empty, IconAction, ItemShell, RailEmpty,
+  TOOLBAR_ICON, ToolbarIconBtn, RailList, RailListItem, SectionRow,
+} from "./shared"
 import { StrategyEditorModal } from "./StrategyEditorModal"
+import { StrategyColumnsModal, StrategyEntitiesModal, StrategyHistoryModal } from "./StrategyDetailModals"
+import { blankCustomStrategy, describeStrategyEffects, provenanceLabel } from "./strategy-helpers"
+import { useLiveReload } from "./useLiveReload"
+
+type EditorState =
+  | { mode: "create"; seed: EntityRegistryStrategy }
+  | { mode: "fork"; seed: EntityRegistryStrategy }
+  | { mode: "edit"; seed: EntityRegistryStrategy }
+  | null
+
+const KIND_ORDER = ["bundled", "manual", "imported", "agent"] as const
 
 export function StrategiesPanel(): JSX.Element {
   const { me } = useMe()
   const isAdmin = me?.isAdmin ?? false
 
-  const [items,    setItems]    = useState<EntityRegistryStrategy[]>([])
-  const [busy,     setBusy]     = useState(true)
-  const [err,      setErr]      = useState<string | null>(null)
+  const [items, setItems] = useState<EntityRegistryStrategy[]>([])
+  const [busy, setBusy] = useState(true)
+  const [err, setErr] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
-  const [editing,  setEditing]  = useState<EntityRegistryStrategy | null>(null)
+  const [editor, setEditor] = useState<EditorState>(null)
 
-  const sseNonce = useStore((s) =>
-    s.sseEventLog.filter((e) => typeof e.type === "string" && e.type.startsWith("entity_registry.")).length,
-  )
-  useEffect(() => { void load() }, [sseNonce])
-
-  async function load(): Promise<void> {
-    setBusy(true); setErr(null)
+  const load = useCallback(async (): Promise<void> => {
+    setBusy(true)
+    setErr(null)
     try {
       const r = await api.listEntityRegistryStrategies()
       setItems(r.items)
-    } catch (e) { setErr(e instanceof Error ? e.message : String(e)) }
-    finally { setBusy(false) }
-  }
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(false)
+    }
+  }, [])
+
+  useLiveReload(load, (type) => type.startsWith("entity_registry."))
 
   const chosen = useMemo(() => items.find((s) => s.id === selected) ?? null, [items, selected])
+
+  useEffect(() => {
+    if (items.length === 0) return
+    setSelected((current) => (current && items.some((s) => s.id === current) ? current : items[0]!.id))
+  }, [items])
+
   const groups = useMemo(() => {
-    const by: Record<string, EntityRegistryStrategy[]> = {}
-    for (const s of items) (by[s.provenance.kind] ??= []).push(s)
-    return by
+    const by = new Map<string, EntityRegistryStrategy[]>()
+    for (const s of items) {
+      const kind = s.provenance.kind
+      const list = by.get(kind) ?? []
+      list.push(s)
+      by.set(kind, list)
+    }
+    const ordered: [string, EntityRegistryStrategy[]][] = []
+    for (const kind of KIND_ORDER) {
+      const list = by.get(kind)
+      if (list?.length) ordered.push([kind, list])
+    }
+    for (const [kind, list] of by) {
+      if (!KIND_ORDER.includes(kind as (typeof KIND_ORDER)[number])) ordered.push([kind, list])
+    }
+    return ordered
   }, [items])
 
   return (
-    <PanelChrome
-      title="SCD2 strategies"
-      subtitle="Which columns the sync engine treats as system meta — ignored when comparing rows, stamped automatically on insert/update."
-      busy={busy} onRefresh={() => void load()} err={err} onClearErr={() => setErr(null)}
-    >
-      <SplitView
-        list={
-          items.length === 0
-            ? <Empty title="No strategies loaded" />
-            : <>{Object.entries(groups).map(([kind, list]) => (
-                <section key={kind}>
-                  <h3 className="px-3 pt-3 pb-1 text-[10px] font-semibold uppercase tracking-wider text-text-faint">{kind}</h3>
-                  {list.map((s) => (
-                    <ListItem key={s.id + ":" + s.version} active={s.id === selected}
-                      onClick={() => setSelected(s.id)}>
-                      <span className="font-mono">{s.id}</span>
-                      <span className="text-text-muted">{s.displayName}</span>
-                      <span className="text-[10px] text-text-faint">v{s.version}</span>
-                    </ListItem>
-                  ))}
-                </section>
-              ))}</>
-        }
-        detail={chosen
-          ? <StrategyDetail s={chosen} isAdmin={isAdmin} onEdit={() => setEditing(chosen)} />
-          : <Empty title="Pick a strategy" />
+    <ConsolePanel err={err} onClearErr={() => setErr(null)}>
+      <ItemShell
+        busy={busy}
+        listActions={isAdmin ? (
+          <ToolbarIconBtn label="New custom" onClick={() => setEditor({ mode: "create", seed: blankCustomStrategy() })}>
+            <Plus {...TOOLBAR_ICON} />
+          </ToolbarIconBtn>
+        ) : undefined}
+        detailToolbar={chosen ? (
+          <DetailToolbar
+            title={chosen.displayName}
+            subtitle={`${chosen.id} · v${chosen.version}${chosen.versionLabel ? ` (${chosen.versionLabel})` : ""}`}
+            actions={isAdmin ? (
+              chosen.provenance.kind === "bundled" ? (
+                <IconAction label="Fork" onClick={() => setEditor({ mode: "fork", seed: chosen })}>
+                  <GitFork {...TOOLBAR_ICON} />
+                </IconAction>
+              ) : (
+                <>
+                  <IconAction label="Edit" onClick={() => setEditor({ mode: "edit", seed: chosen })}>
+                    <Pencil {...TOOLBAR_ICON} />
+                  </IconAction>
+                  <IconAction label="Fork" onClick={() => setEditor({ mode: "fork", seed: chosen })}>
+                    <GitFork {...TOOLBAR_ICON} />
+                  </IconAction>
+                </>
+              )
+            ) : undefined}
+          />
+        ) : undefined}
+        empty={items.length === 0 ? <RailEmpty title="No strategies" /> : undefined}
+        list={(
+          <RailList label="Strategies">
+            {groups.flatMap(([kind, list]) => list.map((s) => (
+              <RailListItem
+                key={s.id}
+                active={s.id === selected}
+                onClick={() => setSelected(s.id)}
+                title={s.id}
+                meta={s.displayName}
+                meta2={`${provenanceLabel(kind as EntityRegistryStrategy["provenance"]["kind"])} · v${s.version}`}
+              />
+            )))}
+          </RailList>
+        )}
+        detail={
+          chosen ? (
+            <StrategyDetail s={chosen} />
+          ) : (
+            <Empty title="Select a strategy" />
+          )
         }
       />
 
-      {editing && (
+      {editor && (
         <StrategyEditorModal
-          seed={editing}
-          onClose={() => setEditing(null)}
-          onSaved={() => { setEditing(null); void load() }}
+          seed={editor.seed}
+          mode={editor.mode}
+          onClose={() => setEditor(null)}
+          onSaved={() => {
+            setEditor(null)
+            void load()
+          }}
         />
       )}
-    </PanelChrome>
+    </ConsolePanel>
   )
 }
 
 // ── Detail ────────────────────────────────────────────────────────
 
-function StrategyDetail({ s, isAdmin, onEdit }: {
-  s: EntityRegistryStrategy; isAdmin: boolean; onEdit: () => void
+function StrategyDetail({ s }: {
+  s: EntityRegistryStrategy
 }): JSX.Element {
-  const bundled = s.provenance.kind === "bundled"
-  const stampsValidFrom = !!s.validFromCol
-  const stampsValidTo   = !!s.validToCol
+  const effects = useMemo(() => describeStrategyEffects(s), [s])
+
+  const [history, setHistory] = useState<EntityRegistryStrategyHistoryEntry[]>([])
+  const [historyBusy, setHistoryBusy] = useState(true)
+  const [entities, setEntities] = useState<EntityRegistryDefinition[]>([])
+  const [entitiesBusy, setEntitiesBusy] = useState(true)
+  const [modal, setModal] = useState<"columns" | "history" | "entities" | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    setHistoryBusy(true)
+    void api.listEntityRegistryStrategyHistory(s.id)
+      .then((r) => { if (!cancelled) setHistory(r.items) })
+      .catch(() => { if (!cancelled) setHistory([]) })
+      .finally(() => { if (!cancelled) setHistoryBusy(false) })
+    return () => { cancelled = true }
+  }, [s.id])
+
+  useEffect(() => {
+    let cancelled = false
+    setEntitiesBusy(true)
+    void api.listEntityRegistry()
+      .then((r) => {
+        if (cancelled) return
+        setEntities(r.items.filter((d) => d.scd2.strategyId === s.id))
+      })
+      .catch(() => { if (!cancelled) setEntities([]) })
+      .finally(() => { if (!cancelled) setEntitiesBusy(false) })
+    return () => { cancelled = true }
+  }, [s.id])
 
   return (
-    <div className="space-y-5 p-5 text-xs">
-      <header className="flex items-start justify-between gap-3">
-        <div>
-          <h3 className="text-sm font-semibold">{s.displayName}</h3>
-          <p className="font-mono text-[11px] text-text-faint">{s.id} · v{s.version} · {s.provenance.kind}</p>
-        </div>
-        {isAdmin && (
-          <button
-            onClick={onEdit}
-            className="flex items-center gap-1 rounded border border-border-subtle bg-canvas px-2.5 py-1 text-[11px] hover:bg-overlay-2"
-          >
-            <GitFork className="h-3 w-3" /> {bundled ? "fork to custom" : "edit → new version"}
-          </button>
-        )}
-      </header>
+    <DetailBody>
+      {s.description && <p className="mb-3 text-sm text-text-muted leading-relaxed">{s.description}</p>}
 
-      {s.description && <p className="text-text-muted">{s.description}</p>}
+      <ul className={`${PANEL} mb-3 space-y-1 px-3 py-2`}>
+        {effects.map((b, i) => (
+          <li key={i} className="flex items-start gap-2 text-sm">
+            <span className={`mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full ${b.active ? "bg-success" : "bg-text-faint/40"}`} />
+            <span className={b.active ? "text-text" : "text-text-muted"}>{b.text}</span>
+          </li>
+        ))}
+      </ul>
 
-      {/* ── What this strategy does at runtime ─────────────────── */}
-      <section className="rounded-lg border border-border-subtle bg-panel p-4">
-        <h4 className="mb-2.5 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          What this does
-        </h4>
-        <ul className="space-y-1.5 leading-relaxed">
-          <Bullet active={stampsValidFrom}>
-            On insert/update, stamps <Code>{s.validFromCol || "validFrom"}</Code> = <Code>GETUTCDATE()</Code>
-            {!stampsValidFrom && <span className="text-text-faint"> (disabled — no validFromCol set)</span>}
-          </Bullet>
-          <Bullet active={stampsValidTo}>
-            On insert/update, sets <Code>{s.validToCol || "validTo"}</Code> = <Code>NULL</Code>
-            {!stampsValidTo && <span className="text-text-faint"> (disabled — no validToCol set)</span>}
-          </Bullet>
-          <Bullet active>
-            Diff engine ignores meta columns: <Code>validFrom</Code>, <Code>validTo</Code>, <Code>isLocked</Code>,{" "}
-            <Code>syncDate</Code>, <Code>deployDate</Code>
-          </Bullet>
-        </ul>
-      </section>
+      <ol className={`${PANEL} overflow-hidden`}>
+        <SectionRow title="Column map" subtitle="SCD2 column bindings" onClick={() => setModal("columns")} />
+        <SectionRow
+          title="Version history"
+          badge={historyBusy ? "…" : String(history.length)}
+          onClick={() => setModal("history")}
+        />
+        <SectionRow
+          title="Entities"
+          badge={entitiesBusy ? "…" : String(entities.length)}
+          onClick={() => setModal("entities")}
+        />
+      </ol>
 
-      {/* ── Reference metadata (documented but not yet consumed) ─ */}
-      <section className="rounded-lg border border-border-subtle bg-panel/60 p-4">
-        <h4 className="mb-2.5 flex items-baseline gap-2 text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Reference metadata
-          <span className="text-[10px] font-normal normal-case tracking-normal text-text-faint">
-            stored on the strategy but not consumed by the engine today
-          </span>
-        </h4>
-        <div className="overflow-x-auto">
-          <dl className="grid min-w-[340px] grid-cols-[160px_1fr] gap-x-4 gap-y-1.5 font-mono text-text-faint">
-            <Ref label="isLockedCol"          value={s.isLockedCol} />
-            <Ref label="syncDateCol"          value={s.syncDateCol} />
-            <Ref label="deployDateCol"        value={s.deployDateCol} />
-            <Ref label="identityHandling"     value={s.identityHandling === "none" ? null : s.identityHandling} />
-            <Ref label="excludedFromDiffCols" value={s.excludedFromDiffCols.length === 0 ? null : s.excludedFromDiffCols.join(", ")} />
-            <Ref label="onInsert"             value={objCount(s.onInsert)} />
-            <Ref label="onUpdate"             value={objCount(s.onUpdate)} />
-          </dl>
-        </div>
-      </section>
-    </div>
+      {modal === "columns" && <StrategyColumnsModal strategy={s} onClose={() => setModal(null)} />}
+      {modal === "history" && !historyBusy && (
+        <StrategyHistoryModal strategy={s} history={history} onClose={() => setModal(null)} />
+      )}
+      {modal === "entities" && !entitiesBusy && (
+        <StrategyEntitiesModal strategyId={s.id} entities={entities} onClose={() => setModal(null)} />
+      )}
+    </DetailBody>
   )
-}
-
-// ── Small display helpers ─────────────────────────────────────────
-
-function Bullet({ active, children }: { active: boolean; children: JSX.Element | (JSX.Element | string | false)[] | string }): JSX.Element {
-  return (
-    <li className="flex items-start gap-2">
-      <span className={`mt-1 h-1.5 w-1.5 shrink-0 rounded-full ${active ? "bg-success" : "bg-text-faint/40"}`} />
-      <span className={active ? "text-text" : "text-text-muted"}>{children}</span>
-    </li>
-  )
-}
-
-function Code({ children }: { children: string }): JSX.Element {
-  return <code className="rounded bg-overlay-2 px-1 py-0.5 font-mono text-[10.5px]">{children}</code>
-}
-
-function Ref({ label, value }: { label: string; value: string | null }): JSX.Element {
-  return (
-    <>
-      <dt>{label}</dt>
-      <dd className="text-text-faint">{value ?? "—"}</dd>
-    </>
-  )
-}
-
-function objCount(o: Record<string, string> | null | undefined): string | null {
-  if (!o) return null
-  const n = Object.keys(o).length
-  return n === 0 ? null : `${n} column${n === 1 ? "" : "s"}`
 }

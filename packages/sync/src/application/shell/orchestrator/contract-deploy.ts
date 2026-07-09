@@ -23,6 +23,7 @@ import sqlMod, { type ConnectionPool, type IProcedureResult, type IRecordSet } f
 import type { SyncRuntimeHost } from "../../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
+import { AuditGateSkippedError } from "./types.js"
 
 // ────────────────────────────────────────────────────────────
 // Configuration
@@ -93,8 +94,8 @@ function parseWorkerResult(result: IProcedureResult<unknown>, procLabel: string)
       if (rowStatus === "error") {
         status = "error"
         errors.push({
-          objectName: row["objectName"]
-            ? String(row["objectName"])
+          objectName: row["object-name"]
+            ? String(row["object-name"])
             : row["datasetName"]
               ? String(row["datasetName"])
               : undefined,
@@ -154,11 +155,11 @@ export async function resolveContractName(
   req.input("contractId", sqlMod.Int, contractId)
   const result = await trackedQuery<{ contractName: string }>(
     host,
-    req,
+    connection,
     "SELECT [name] AS contractName FROM core.Contract WHERE contractId = @contractId",
     `contractDeploy.resolveContractName(${contractId})`,
-    connection,
-    telemetryContext
+    telemetryContext,
+    req
   )
   const row = result.recordset?.[0]
   if (!row?.contractName) {
@@ -190,11 +191,11 @@ export async function undeployMarkedContract(
 
   const result = await trackedExecute(
     host,
-    req,
+    connection,
     procs.undeployMarkedContract,
     `contractDeploy.undeploy(${contractId})`,
-    connection,
-    telemetryContext
+    telemetryContext,
+    req
   )
 
   const parsed = parseWorkerResult(result, "undeploy")
@@ -227,11 +228,11 @@ export async function createDataset(
 
   const result = await trackedExecute(
     host,
-    req,
+    connection,
     procs.createDataset,
     `contractDeploy.createDataset(${contractName},${type})`,
-    connection,
-    telemetryContext
+    telemetryContext,
+    req
   )
 
   const parsed = parseWorkerResult(result, `createDataset(${type})`)
@@ -256,7 +257,7 @@ export async function createDatasetFKs(
   telemetryContext?: SyncTelemetryContext
 ): Promise<DeployStepResult> {
   const req = pool.request()
-  req.input("contractName", sqlMod.VarChar(100), contractName)
+  req.input("contract-name", sqlMod.VarChar(100), contractName)
   req.input("isDebug", sqlMod.Bit, false)
   // NULL = reconcile all FKs for this contract (not scoped to a specific referenced table)
   req.input("referencedSchemaName", sqlMod.VarChar(100), null)
@@ -265,11 +266,11 @@ export async function createDatasetFKs(
 
   const result = await trackedExecute(
     host,
-    req,
+    connection,
     procs.createDatasetFKs,
     `contractDeploy.createDatasetFKs(${contractName})`,
-    connection,
-    telemetryContext
+    telemetryContext,
+    req
   )
 
   const parsed = parseWorkerResult(result, "createDatasetFKs")
@@ -295,16 +296,16 @@ export async function deployETL(
   telemetryContext?: SyncTelemetryContext
 ): Promise<DeployStepResult> {
   const req = pool.request()
-  req.input("contractName", sqlMod.VarChar(500), contractName)
+  req.input("contract-name", sqlMod.VarChar(500), contractName)
   req.input("isDebug", sqlMod.Bit, false)
 
   const result = await trackedExecute(
     host,
-    req,
+    connection,
     procs.deployETL,
     `contractDeploy.deployETL(${contractName})`,
-    connection,
-    telemetryContext
+    telemetryContext,
+    req
   )
 
   const parsed = parseWorkerResult(result, "deployETL")
@@ -328,17 +329,17 @@ export async function deployRoutine(
   telemetryContext?: SyncTelemetryContext
 ): Promise<DeployStepResult> {
   const req = pool.request()
-  req.input("contractName", sqlMod.VarChar(500), contractName)
+  req.input("contract-name", sqlMod.VarChar(500), contractName)
   req.input("isExtraLogged", sqlMod.Bit, false)
   req.input("isDebug", sqlMod.Bit, false)
 
   const result = await trackedExecute(
     host,
-    req,
+    connection,
     procs.deployRoutine,
     `contractDeploy.deployRoutine(${contractName})`,
-    connection,
-    telemetryContext
+    telemetryContext,
+    req
   )
 
   const parsed = parseWorkerResult(result, "deployRoutine")
@@ -350,15 +351,42 @@ export async function deployRoutine(
 // Audit check
 // ────────────────────────────────────────────────────────────
 
-type AuditAction = "deployDate" | "syncDate" | "runOrNot" | "syncOrNot"
+type AuditAction = "deploy-date" | "sync-date" | "runOrNot" | "syncOrNot"
+
+/**
+ * Enforce legacy `uspAuditRunCheck` gate semantics for syncOrNot/runOrNot.
+ * `status=stop` throws {@link AuditGateSkippedError} (not a failure).
+ */
+export function assertAuditGateAllowsProceed(
+  result: { status: string; message: string } | null,
+  stepId: string,
+  context: string
+): void {
+  if (!result) {
+    throw new Error(`${context}: uspAuditRunCheck returned no status row.`)
+  }
+  const status = String(result.status ?? "").trim().toLowerCase()
+  if (status === "stop") {
+    const detail = result.message?.trim()
+    throw new AuditGateSkippedError(stepId, detail ?? "Synchronization not required.")
+  }
+  if (status !== "success") {
+    const detail = result.message?.trim()
+    throw new Error(
+      detail
+        ? `${context}: unexpected audit status "${result.status}" — ${detail}`
+        : `${context}: unexpected audit status "${result.status}".`
+    )
+  }
+}
 
 /**
  * Run an audit gate check or stamp a date on a contract/entity.
  *
  * Calls `core.uspAuditRunCheck` on the given pool (source or target).
  * The proc handles all four actions internally:
- *   - `syncOrNot` / `runOrNot` — returns status=success|stop
- *   - `deployDate` / `syncDate` — stamps the date, returns success
+ *   - `syncOrNot` / `runOrNot` — returns status=success|stop (stop → {@link AuditGateSkippedError})
+ *   - `deploy-date` / `sync-date` — stamps the date, returns success
  */
 export async function runAuditCheckDirect(
   host: SyncRuntimeHost,
@@ -376,15 +404,71 @@ export async function runAuditCheckDirect(
 
   const result = await trackedExecute(
     host,
-    req,
+    connection,
     procs.auditRunCheck,
     `contractDeploy.auditRunCheck(${params.action}/${params.objType}/${params.id})`,
-    connection,
-    telemetryContext
+    telemetryContext,
+    req
   )
 
   const row = (result.recordsets?.[0] as IRecordSet<{ status: string; message: string }> | undefined)?.[0]
-  return row ? { status: row.status, message: row.message } : null
+  const parsed = row ? { status: row.status, message: row.message } : null
+  return parsed
+}
+
+type AuditGateAction = "syncOrNot" | "runOrNot"
+
+/**
+ * Legacy Mymi: `uspAuditRunCheck` gate actions (`syncOrNot` / `runOrNot`) run on the
+ * sync **source** environment (system-of-record). Date stamps use source (`sync-date`)
+ * or target (`deploy-date`) explicitly at call sites.
+ */
+export async function runContractAuditGateOnSource(
+  host: SyncRuntimeHost,
+  srcPool: ConnectionPool,
+  sourceConnection: string,
+  stepId: string,
+  params: { schema?: string; objType: string; id: string | number; action: AuditGateAction },
+  procs?: ContractProcConfig,
+  telemetryContext?: SyncTelemetryContext
+): Promise<{ status: string; message: string } | null> {
+  const parsed = await runAuditCheckDirect(
+    host,
+    srcPool,
+    params,
+    sourceConnection,
+    procs,
+    telemetryContext
+  )
+  assertAuditGateAllowsProceed(
+    parsed,
+    stepId,
+    `uspAuditRunCheck(${params.action}/${params.objType}/${params.id})`
+  )
+  return parsed
+}
+
+/**
+ * Legacy Mymi: `uspSetContractLock` runs on the sync **source** environment.
+ */
+export async function setContractLockOnSource(
+  host: SyncRuntimeHost,
+  srcPool: ConnectionPool,
+  sourceConnection: string,
+  contractId: number,
+  isLocked: boolean,
+  procs?: ContractProcConfig,
+  telemetryContext?: SyncTelemetryContext
+): Promise<void> {
+  return setContractLockDirect(
+    host,
+    srcPool,
+    contractId,
+    isLocked,
+    sourceConnection,
+    procs,
+    telemetryContext
+  )
 }
 
 // ────────────────────────────────────────────────────────────
@@ -392,10 +476,8 @@ export async function runAuditCheckDirect(
 // ────────────────────────────────────────────────────────────
 
 /**
- * Lock or unlock a contract.
- *
- * Calls `core.uspSetContractLock` on target. The proc updates
- * `core.Contract.isLocked` and returns status/message.
+ * Lock or unlock a contract via `core.uspSetContractLock`.
+ * Callers pass the connection pool + name for source or target as required by the step.
  */
 export async function setContractLockDirect(
   host: SyncRuntimeHost,
@@ -412,11 +494,11 @@ export async function setContractLockDirect(
 
   await trackedExecute(
     host,
-    req,
+    connection,
     procs.setContractLock,
     `contractDeploy.setContractLock(${contractId},${isLocked ? 1 : 0})`,
-    connection,
-    telemetryContext
+    telemetryContext,
+    req
   )
 }
 
@@ -441,16 +523,16 @@ export async function runContractDeploymentScriptsDirect(
   telemetryContext?: SyncTelemetryContext
 ): Promise<void> {
   const req = pool.request()
-  req.input("contractName", sqlMod.VarChar(100), contractName)
+  req.input("contract-name", sqlMod.VarChar(100), contractName)
   req.input("action", sqlMod.VarChar(100), action)
   req.input("isDebug", sqlMod.Bit, false)
 
   await trackedExecute(
     host,
-    req,
+    connection,
     procs.runContractDeploymentScripts,
     `contractDeploy.runDeploymentScripts(${contractName}/${action})`,
-    connection,
-    telemetryContext
+    telemetryContext,
+    req
   )
 }

@@ -1,5 +1,5 @@
 /**
- * Per-iteration LLM-prep helper. Compaction → truncation → tool-contract guidance.
+ * Per-iteration LLM-prep helper. Compaction → truncation → loop policy turn-start.
  * Extracted from agent.ts.
  *
  * @module
@@ -14,10 +14,9 @@ import {
   truncateMessages
 } from "../../../memory/index.js"
 import {
-  applyToolContractGuidance,
-  resolveToolContractGuidance,
-  type ToolContractContext
-} from "../../../tools/index.js"
+  prepareTurn,
+  turnStartContext
+} from "../loop-cluster/loop-policy/index.js"
 import type { AgentConfig, Message, Tool } from "../../../domain/agent-types.js"
 import type { AgentLoopState } from "../loop.js"
 
@@ -66,6 +65,7 @@ export interface IterationPrepInput {
   iteration: number
   state: AgentLoopState
   toolList: Tool[]
+  userGoal: string
   /** Optional model identifier for token-estimate calibration (Gap 7). */
   modelHint?: string
   config: {
@@ -76,7 +76,7 @@ export interface IterationPrepInput {
 }
 
 export function prepareIterationContext(input: IterationPrepInput): IterationPrepResult {
-  const { messages, iteration: i, state, toolList, modelHint, config } = input
+  const { messages, iteration: i, state, toolList, userGoal, modelHint, config } = input
 
   // ── Full history compaction ──
   if (shouldApplyFullCompaction(messages, i, state.lastFullCompactionIteration)) {
@@ -151,41 +151,31 @@ export function prepareIterationContext(input: IterationPrepInput): IterationPre
     }
   }
 
-  // ── Tool contract guidance ──
-  const contractCtx: ToolContractContext = {
-    iteration: i,
-    availableToolNames: toolList.map((t) => t.name),
-    lastRoundHadDelegation: state.lastRoundHadDelegation,
-    lastDelegationWasReadOnly: state.lastDelegationWasReadOnly,
-    inPostDelegationVerification: state.inPostDelegationVerification,
-    artifactsRequiringReadBeforeMutation: state.artifactsRequiringReadBeforeMutation,
-    wroteUnverifiedFiles: state.wroteUnverifiedFiles,
-    writtenButNotReread: state.writtenButNotReread,
-    lastRoundToolCalls: state.lastRoundToolCallsSnapshot,
-    isKeyBlocked: (key) => state.circuitBreaker.isKeyBlocked(key) !== null
-  }
-  const contractGuidance = resolveToolContractGuidance(contractCtx)
-  let chatToolsForLLM = toolList
+  // ── Loop policy: turn-start ──
+  const turnPrep = prepareTurn(
+    turnStartContext({
+      iteration: i,
+      userGoal,
+      messages: chatMessages,
+      state,
+      toolList
+    })
+  )
+  const allowed = new Set(turnPrep.allowedToolNames)
+  const chatToolsForLLM = toolList.filter((t) => allowed.has(t.name))
   const contractMessages = [...chatMessages]
-  if (contractGuidance) {
-    const applied = applyToolContractGuidance(
-      contractGuidance,
-      toolList.map((t) => t.name)
+  if (turnPrep.hint) {
+    contractMessages.push({
+      role: MessageRole.System,
+      content: turnPrep.hint,
+      section: "history",
+      hint: true
+    })
+  }
+  if (config.verbose && turnPrep.rule) {
+    log.logError(
+      `[loop-policy:turn-start:${turnPrep.rule}] tools=${turnPrep.allowedToolNames.join(",")}`
     )
-    const nameSet = new Set(applied.filteredToolNames)
-    chatToolsForLLM = toolList.filter((t) => nameSet.has(t.name))
-    if (applied.injectedInstruction && contractMessages.length > 0) {
-      contractMessages.push({
-        role: MessageRole.System,
-        content: applied.injectedInstruction,
-        section: "history"
-      })
-    }
-    if (config.verbose) {
-      log.logError(
-        `[contract:${contractGuidance.resolverName}] enforcement=${contractGuidance.enforcement}, tools=${applied.filteredToolNames.join(",")}`
-      )
-    }
   }
 
   return { contractMessages, chatToolsForLLM }

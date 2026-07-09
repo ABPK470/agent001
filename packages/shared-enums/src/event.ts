@@ -81,7 +81,7 @@ export const EventType = {
   DelegationParallelStarted: "delegation.parallel-started",
   DelegationParallelEnded: "delegation.parallel-ended",
 
-  // Planner — coherent path
+  // Planner — execution path
   PlannerStarted: "planner.started",
   PlannerCompleted: "planner.completed",
   PlannerFailed: "planner.failed",
@@ -89,26 +89,15 @@ export const EventType = {
   PlannerVerification: "planner.verification",
   PlannerVerificationFollowup: "planner.verification.followup",
   PlannerPipelineStarted: "planner.pipeline.started",
-  PlannerArchitectureState: "planner.architecture.state",
   PlannerPlatformUnconfigured: "planner.platform.unconfigured",
   PlannerRuntimeCompiled: "planner.runtime.compiled",
   PlannerValidationFailed: "planner.validation.failed",
   PlannerValidationRemediated: "planner.validation.remediated",
   PlannerIssueTimeline: "planner.issue.timeline",
   PlannerRepairPlan: "planner.repair.plan",
-  PlannerRepairCompatibility: "planner.repair.compatibility",
   PlannerStepStarted: "planner.step.started",
   PlannerStepCompleted: "planner.step.completed",
   PlannerStepTransition: "planner.step.transition",
-  PlannerCoherentBootstrap: "planner.coherent.bootstrap",
-  PlannerCoherentStarted: "planner.coherent.started",
-  PlannerCoherentBundle: "planner.coherent.bundle",
-  PlannerCoherentMaterialized: "planner.coherent.materialized",
-  PlannerCoherentVerified: "planner.coherent.verified",
-  PlannerCoherentRepairRequired: "planner.coherent.repair.required",
-  PlannerCoherentRepairEscalated: "planner.coherent.repair.escalated",
-  PlannerCoherentHandoff: "planner.coherent.handoff",
-  PlannerCoherentFailed: "planner.coherent.failed",
   PlannerDelegationStarted: "planner.delegation.started",
   PlannerDelegationIteration: "planner.delegation.iteration",
   PlannerDelegationEnded: "planner.delegation.ended",
@@ -121,12 +110,19 @@ export const EventType = {
   SyncPreviewTableStart: "sync.preview.table.start",
   SyncPreviewTableDone: "sync.preview.table.done",
   SyncPreviewTableFailed: "sync.preview.table.failed",
+  /** Transient DB connection retry during catalog drift / schema fetch. */
+  SyncRetry: "sync.retry",
+  /** Bulk diff scan: discovered root instances on source before previews. */
+  SyncScanDiscovered: "sync.scan.discovered",
+  /** Bulk diff scan: starting preview for one root entity instance. */
+  SyncScanEntityStart: "sync.scan.entity.start",
 
   // Sync — execute
   SyncExecute: "sync.execute",
   SyncExecuteStart: "sync.execute.start",
   SyncExecuteStarted: "sync.execute.started",
   SyncExecuteCompleted: "sync.execute.completed",
+  SyncExecuteSkipped: "sync.execute.skipped",
   SyncExecuteFailed: "sync.execute.failed",
   SyncExecuteStep: "sync.execute.step",
   SyncExecuteStepFailed: "sync.execute.step.failed",
@@ -135,7 +131,6 @@ export const EventType = {
   SyncExecuteArchiveProbe: "sync.execute.archive.probe",
   SyncExecuteArchiveProbeBatch: "sync.execute.archive.probe.batch",
   SyncExecuteArchiveSkipped: "sync.execute.archive.skipped",
-  SyncExecuteDriftRevalidated: "sync.execute.drift.revalidated",
 
   // Sync — agent-bridge
   SyncAgentPreview: "sync.agent.preview",
@@ -167,6 +162,7 @@ export const EventType = {
   SyncProposerRunStarted:    "sync.proposer.run.started",
   SyncProposerRunCompleted:  "sync.proposer.run.completed",
   SyncProposerRunFailed:     "sync.proposer.run.failed",
+  SyncProposerRunCancelled:  "sync.proposer.run.cancelled",
   SyncProposalCreated:       "sync.proposal.created",
   SyncProposalAnnotated:     "sync.proposal.annotated",
   SyncProposalStatusChanged: "sync.proposal.status.changed",
@@ -181,15 +177,15 @@ export const EventType = {
   SyncNotificationDelivered: "sync.notification.delivered",
   SyncNotificationFailed:    "sync.notification.failed",
 
+  // LLM — provider-agnostic user interaction (auth, config, etc.)
+  LlmInteractionRequired: "llm.interaction.required",
+  LlmInteractionCleared:  "llm.interaction.cleared",
+
   // Memory
   MemoryIngested: "memory.ingested",
   MemoryFiltered: "memory.filtered",
   MemoryRetrieved: "memory.retrieved",
   MemoryConsolidated: "memory.consolidated",
-
-  // Procedural memory
-  ProceduralStored: "procedural.stored",
-  ProceduralFailed: "procedural.failed",
 
   // Attachments
   AttachmentUploaded: "attachment.uploaded",
@@ -249,7 +245,6 @@ export const EventNamespace = {
   SyncEnv: "sync_env",
   FreezeWindow: "freeze_window",
   Memory: "memory",
-  Procedural: "procedural",
   Attachment: "attachment",
   Effect: "effect",
   Rollback: "rollback",
@@ -274,7 +269,6 @@ const NAMESPACE_PREFIX: ReadonlyArray<readonly [string, EventNamespace]> = [
   ["freeze_window.",      EventNamespace.FreezeWindow],
   ["sync.",               EventNamespace.Sync],
   ["memory.",             EventNamespace.Memory],
-  ["procedural.",         EventNamespace.Procedural],
   ["attachment.",         EventNamespace.Attachment],
   ["effect.",             EventNamespace.Effect],
   ["snapshot.",           EventNamespace.Effect],
@@ -304,6 +298,7 @@ const COMPLETION_EVENTS: ReadonlySet<EventType> = new Set([
   EventType.SyncPreviewCompleted,
   EventType.SyncExecuteCompleted,
   EventType.SyncAgentExecuteCompleted,
+  EventType.SyncProposerRunCompleted,
   EventType.RollbackCompleted,
 ])
 
@@ -316,19 +311,19 @@ const FAILURE_EVENTS: ReadonlySet<EventType> = new Set([
   EventType.ToolFailed,
   EventType.DelegationFailed,
   EventType.PlannerFailed,
-  EventType.PlannerCoherentFailed,
   EventType.PlannerValidationFailed,
   EventType.SyncPreviewFailed,
   EventType.SyncPreviewTableFailed,
   EventType.SyncExecuteFailed,
   EventType.SyncExecuteStepFailed,
+  EventType.SyncProposerRunFailed,
   EventType.MessageFailed,
-  EventType.ProceduralFailed,
 ])
 
 const CANCELLATION_EVENTS: ReadonlySet<EventType> = new Set([
   EventType.RunCancelled,
   EventType.AgentCancelled,
+  EventType.SyncProposerRunCancelled,
 ])
 
 const SUB_STEP_FAILURE_EVENTS: ReadonlySet<EventType> = new Set([

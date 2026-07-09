@@ -14,10 +14,9 @@ export interface SyncRunStartInput {
 
 export interface SyncRunFinishInput {
   planId: string
-  status: typeof SyncRunStatus.Success | typeof SyncRunStatus.Failed
+  status: typeof SyncRunStatus.Success | typeof SyncRunStatus.Failed | typeof SyncRunStatus.Skipped
   error?: string | null
   executeTotals?: unknown
-  driftDetectedPct?: number | null
   durationMs: number
 }
 

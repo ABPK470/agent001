@@ -23,10 +23,14 @@ const NOISE_TOKEN_RE = /^(?:table|row|record|entity|meta|gate|the|a|an|id|#)$/i
  *   "table 2545"               → entityId
  *   "tableId=2545" / "table=2545" → entityId
  *   "ACSRawTest" / "abcd"      → entityQuery
+ *   "acrstest (#12334)"        → entityId (UI display label suffix)
  */
 export function parseEntityInstanceRef(raw: string): ParsedEntityInstanceRef {
   const trimmed = raw.trim()
   if (!trimmed) return { entityId: null, entityQuery: null }
+
+  const parenId = trimmed.match(/\(#\s*(\d+)\s*\)\s*$/)
+  if (parenId?.[1]) return { entityId: parenId[1], entityQuery: null }
 
   const kv = trimmed.match(ID_KEY_RE)
   if (kv?.[1]) {
@@ -48,4 +52,15 @@ export function parseEntityInstanceRef(raw: string): ParsedEntityInstanceRef {
   }
 
   return { entityId: null, entityQuery: trimmed }
+}
+
+/** Normalize API/UI entity ids — strips display labels like `acrstest (#12334)`. */
+export function coerceSyncEntityId(raw: string | number): string | number {
+  if (typeof raw === "number") return raw
+  const parsed = parseEntityInstanceRef(raw)
+  if (parsed.entityId) {
+    return /^\d+$/.test(parsed.entityId) ? Number(parsed.entityId) : parsed.entityId
+  }
+  const bare = raw.trim()
+  return /^\d+$/.test(bare) ? Number(bare) : bare
 }

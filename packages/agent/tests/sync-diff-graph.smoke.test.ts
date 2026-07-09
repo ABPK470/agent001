@@ -1,50 +1,55 @@
 /**
  * Smoke tests for sync `buildDependencyGraph`.
  *
- * Pure transform: locks the node/edge layout produced for a recipe + per-table
- * results before the `sync/diff-engine` split (Phase 2). Avoids hitting any
- * real database — feeds in synthesized `SyncPlanTable[]` directly.
+ * Pure transform: locks the node/edge layout produced for a definition's
+ * tables + per-table results. Avoids hitting any real database.
  */
 
-import type { SyncPlanTable, SyncRecipe } from "@mia/sync"
+import type { AuthoredSyncDefinitionTable } from "@mia/shared-types"
+import type { SyncPlanTable } from "@mia/sync"
 import { buildDependencyGraph } from "@mia/sync"
 import { describe, expect, it } from "vitest"
 
 describe("buildDependencyGraph smoke", () => {
-  const recipe: SyncRecipe = {
-    entityType: "client" as never,
-    rootTable: "dim.Client",
-    tables: [
-      { name: "dim.Client", role: "root", primaryKey: "ClientId" } as never,
-      { name: "fact.Account", role: "child", primaryKey: "AccountId" } as never,
-      { name: "fact.Transaction", role: "child", primaryKey: "TxnId" } as never
-    ]
-  } as SyncRecipe
+  const rootTable = "dim.Client"
+  const tables: AuthoredSyncDefinitionTable[] = [
+    { name: "dim.Client", scopeColumn: "ClientId", predicate: "ClientId = {id}" } as AuthoredSyncDefinitionTable,
+    { name: "fact.Account", scopeColumn: "AccountId", predicate: "ClientId = {id}" } as AuthoredSyncDefinitionTable,
+    { name: "fact.Transaction", scopeColumn: "TxnId", predicate: "ClientId = {id}" } as AuthoredSyncDefinitionTable
+  ]
 
-  function tbl(name: string, counts: Partial<SyncPlanTable["counts"]>): SyncPlanTable {
+  function tbl(
+    name: string,
+    movement: { insert?: number; update?: number; delete?: number },
+    unchanged = 0
+  ): SyncPlanTable {
+    const insert = movement.insert ?? 0
+    const update = movement.update ?? 0
+    const del = movement.delete ?? 0
     return {
       table: name,
-      counts: {
-        insert: 0,
-        update: 0,
-        delete: 0,
-        unchanged: 0,
-        lowConfidence: 0,
-        conflicts: 0,
-        ...counts
-      }
+      scopePredicate: "x",
+      stats: { unchanged, lowConfidence: 0 },
+      changeSet: {
+        insert: Array.from({ length: insert }, (_, i) => ({ pk: `${i}`, values: { id: i } })),
+        update: Array.from({ length: update }, (_, i) => ({ pk: `u${i}`, values: { id: i } })),
+        delete: Array.from({ length: del }, (_, i) => ({ pk: `d${i}`, values: { id: i } }))
+      },
+      samples: { insert: [], update: [], delete: [] },
+      conflicts: [],
+      warnings: [],
+      diffDurationMs: 0
     } as SyncPlanTable
   }
 
   it("marks the root green when nothing changes", () => {
-    const graph = buildDependencyGraph(recipe, [
-      tbl("dim.Client", { unchanged: 1 }),
-      tbl("fact.Account", { unchanged: 5 }),
-      tbl("fact.Transaction", { unchanged: 12 })
+    const graph = buildDependencyGraph(rootTable, tables, [
+      tbl("dim.Client", {}, 1),
+      tbl("fact.Account", {}, 5),
+      tbl("fact.Transaction", {}, 12)
     ])
     expect(graph.nodes).toHaveLength(3)
     expect(graph.nodes.every((n) => n.status === "unchanged")).toBe(true)
-    // Edges fan from root to every other table.
     expect(graph.edges).toEqual([
       { from: "dim.Client", to: "fact.Account" },
       { from: "dim.Client", to: "fact.Transaction" }
@@ -52,7 +57,7 @@ describe("buildDependencyGraph smoke", () => {
   })
 
   it("uses the most-destructive status (deletes wins over updates and inserts)", () => {
-    const graph = buildDependencyGraph(recipe, [
+    const graph = buildDependencyGraph(rootTable, tables, [
       tbl("dim.Client", { update: 1 }),
       tbl("fact.Account", { insert: 3, delete: 2 }),
       tbl("fact.Transaction", { insert: 1 })
@@ -64,7 +69,7 @@ describe("buildDependencyGraph smoke", () => {
   })
 
   it("uses the trailing schema-qualified label as node label", () => {
-    const graph = buildDependencyGraph(recipe, [
+    const graph = buildDependencyGraph(rootTable, tables, [
       tbl("dim.Client", {}),
       tbl("fact.Account", {}),
       tbl("fact.Transaction", {})

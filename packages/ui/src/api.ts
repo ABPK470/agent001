@@ -4,6 +4,8 @@
 
 import type {
     AgentDefinition,
+    EntityRegistryDraftSuggestion,
+    EntityRegistryTableSuggestion,
     EntityRegistrySyncDefinitionScaffoldRequest,
     EntityRegistrySyncDefinitionScaffoldResponse,
     Notification,
@@ -25,6 +27,7 @@ import type {
     WorkspaceDiffApplyResult,
 } from "./types"
 import { OperationKind, OperationStatus } from "@mia/shared-enums"
+import { sseStepDedupeToken } from "@mia/shared-types"
 
 export { OperationKind, OperationStatus }
 
@@ -39,7 +42,14 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
   const res = await fetch(`${BASE}${path}`, { ...opts, headers, credentials: "include" })
   if (!res.ok) {
     const body = await res.json().catch(() => null)
-    const msg = body && typeof body === "object" && "error" in body ? (body as { error: string }).error : `HTTP ${res.status}`
+    let msg = `HTTP ${res.status}`
+    if (body && typeof body === "object") {
+      if ("message" in body && typeof (body as { message: unknown }).message === "string") {
+        msg = (body as { message: string }).message
+      } else if ("error" in body && typeof (body as { error: unknown }).error === "string") {
+        msg = (body as { error: string }).error
+      }
+    }
     throw new Error(msg)
   }
   return res.json() as Promise<T>
@@ -47,14 +57,47 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
 
 export const api = {
   // Runs
-  listRuns: (opts?: { scope?: "session" | "all" }) =>
-    json<Run[]>(`/api/runs${opts?.scope ? `?scope=${opts.scope}` : ""}`),
+  listRuns: (opts?: { threadId?: string }) => {
+    const params = new URLSearchParams()
+    if (opts?.threadId) params.set("threadId", opts.threadId)
+    const qs = params.toString()
+    return json<Run[]>(`/api/runs${qs ? `?${qs}` : ""}`)
+  },
+  listThreads: (opts?: { includeArchived?: boolean }) =>
+    json<import("@mia/shared-types").Thread[]>(
+      `/api/threads${opts?.includeArchived ? "?includeArchived=1" : ""}`
+    ),
+  createThread: (title?: string) =>
+    json<import("@mia/shared-types").Thread>("/api/threads", {
+      method: "POST",
+      body: JSON.stringify(title ? { title } : {}),
+    }),
+  updateThread: (
+    id: string,
+    patch: { title?: string; pinned?: boolean; archived?: boolean }
+  ) =>
+    json<import("@mia/shared-types").Thread>(`/api/threads/${id}`, {
+      method: "PATCH",
+      body: JSON.stringify(patch),
+    }),
+  deleteThread: (id: string) =>
+    json<{ ok: boolean; deletedRuns: number }>(`/api/threads/${id}`, {
+      method: "DELETE",
+    }),
+  listThreadRuns: (threadId: string) =>
+    json<Run[]>(`/api/threads/${threadId}/runs`),
   getRun: (id: string) => json<RunDetail>(`/api/runs/${id}`),
-  startRun: (goal: string, agentId?: string, attachmentIds?: string[]) =>
+  startRun: (
+    goal: string,
+    agentId: string | undefined,
+    attachmentIds: string[] | undefined,
+    threadId: string
+  ) =>
     json<{ runId: string; attachmentIds?: string[] }>("/api/runs", {
       method: "POST",
       body: JSON.stringify({
         goal,
+        threadId,
         ...(agentId ? { agentId } : {}),
         ...(attachmentIds && attachmentIds.length > 0 ? { attachmentIds } : {}),
       }),
@@ -78,6 +121,15 @@ export const api = {
   }),
   getActiveRuns: () => json<{ runIds: string[] }>("/api/runs/active"),
   getRunTrace: (id: string) => json<Record<string, unknown>[]>(`/api/runs/${id}/trace`),
+  listRunArtifacts: (id: string) =>
+    json<{ runId: string; files: Array<{ path: string; sizeBytes: number }> }>(
+      `/api/runs/${encodeURIComponent(id)}/artifacts`,
+    ),
+  flagRunFeedback: (id: string, useful: boolean, note?: string) =>
+    json<{ ok: boolean }>(`/api/runs/${encodeURIComponent(id)}/feedback`, {
+      method: "POST",
+      body: JSON.stringify({ useful, note }),
+    }),
   getRunWorkspaceDiff: (id: string) => json<WorkspaceDiff>(`/api/runs/${id}/workspace-diff`),
   applyRunWorkspaceDiff: (id: string) => json<WorkspaceDiffApplyResult>(`/api/runs/${id}/workspace-diff/apply`, {
     method: "POST",
@@ -161,8 +213,84 @@ export const api = {
       method: "DELETE",
     }),
 
+  getSyncMetadataCatalog: () =>
+    json<import("./types").SyncMetadataCatalogResponse>("/api/sync-metadata"),
+  saveSyncMetadataStepType: (body: import("./types").SyncMetadataCatalogStepTypeSaveBody) =>
+    json<import("./types").SyncMetadataCatalogResponse>("/api/sync-metadata/step-types", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteSyncMetadataStepType: (id: string) =>
+    json<import("./types").SyncMetadataCatalogResponse>(
+      `/api/sync-metadata/step-types/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+  saveSyncMetadataCustomValueSource: (body: import("./types").SyncMetadataCatalogCustomValueSourceSaveBody) =>
+    json<import("./types").SyncMetadataCatalogResponse>("/api/sync-metadata/binding-sources", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteSyncMetadataCustomValueSource: (id: string) =>
+    json<import("./types").SyncMetadataCatalogResponse>(
+      `/api/sync-metadata/binding-sources/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+  /** @deprecated Use saveSyncMetadataCustomValueSource */
+  saveSyncMetadataBindingSource: (body: import("./types").SyncMetadataCatalogCustomValueSourceSaveBody) =>
+    json<import("./types").SyncMetadataCatalogResponse>("/api/sync-metadata/binding-sources", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  /** @deprecated Use deleteSyncMetadataCustomValueSource */
+  deleteSyncMetadataBindingSource: (id: string) =>
+    json<import("./types").SyncMetadataCatalogResponse>(
+      `/api/sync-metadata/binding-sources/${encodeURIComponent(id)}`,
+      { method: "DELETE" },
+    ),
+  saveSyncMetadataFlow: (body: {
+    id: string
+    label: string
+    description?: string
+    steps?: import("./types").AuthoredSyncFlowStep[]
+  }) =>
+    json<import("./types").SyncMetadataCatalogResponse>("/api/sync-metadata/flows", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  deleteSyncMetadataFlow: (id: string) =>
+    json<import("./types").SyncMetadataCatalogResponse>(`/api/sync-metadata/flows/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+
   // Data management
   resetData: () => json<{ ok: boolean }>("/api/data", { method: "DELETE" }),
+
+  // Platform health (read-only readiness + admin actions)
+  getPlatformHealth: () => json<PlatformHealth>("/api/platform/health"),
+  rebuildPlatformCatalog: () =>
+    json<{ ok: boolean; message: string }>("/api/platform/catalog/rebuild", { method: "POST" }),
+  refreshPlatformArtifacts: (body: {
+    source: "shipped" | "mssql"
+    connection?: string
+    reseedSqlite?: boolean
+  }) =>
+    json<PlatformArtifactRefreshResult>("/api/platform/artifacts/refresh", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  factoryResetPlatform: (confirm: string) =>
+    json<{ ok: boolean; message: string; seeded?: number; entityIds?: string[] }>(
+      "/api/platform/factory-reset",
+      {
+        method: "POST",
+        body: JSON.stringify({ confirm }),
+      },
+    ),
+  setUserAdmin: (identifier: string, isAdmin: boolean) =>
+    json<{ upn: string; displayName: string; isAdmin: boolean }>(
+      `/api/admin/users/${encodeURIComponent(identifier)}/admin`,
+      { method: "PATCH", body: JSON.stringify({ isAdmin }) },
+    ),
 
   // Workspace
   getWorkspace: () => json<{ path: string }>("/api/workspace"),
@@ -325,10 +453,57 @@ export const api = {
       `/api/sync/execute/${encodeURIComponent(planId)}`,
       { method: "POST" },
     ),
-  syncHistory: (limit = 100) =>
-    json<Array<{ planId: string; actor: string; action: string; detail: unknown; timestamp: string }>>(
-      `/api/sync/history?limit=${limit}`,
-    ),
+  syncHistory: (page = 1, pageSize = 25) =>
+    json<{
+      items: Array<{
+        planId: string
+        entityType: string
+        entityId: string
+        entityDisplayName: string | null
+        source: string
+        target: string
+        actorUpn: string | null
+        status: "started" | "preview" | "success" | "failed"
+        error: string | null
+        previewTotals: { insert: number; update: number; delete: number }
+        executeTotals: { insert: number; update: number; delete: number } | null
+        startedAt: string
+        finishedAt: string | null
+        durationMs: number | null
+        planAvailable: boolean
+      }>
+      total: number
+      page: number
+      pageSize: number
+      totalPages: number
+    }>(`/api/sync/history?page=${page}&pageSize=${pageSize}`),
+  syncHistoryDetail: (planId: string) =>
+    json<{
+      run: {
+        planId: string
+        entityType: string
+        entityId: string
+        entityDisplayName: string | null
+        source: string
+        target: string
+        actorUpn: string | null
+        status: "started" | "preview" | "success" | "failed"
+        error: string | null
+        previewTotals: { insert: number; update: number; delete: number }
+        executeTotals: { insert: number; update: number; delete: number } | null
+        startedAt: string
+        finishedAt: string | null
+        durationMs: number | null
+        planAvailable: boolean
+      }
+      audit: Array<{
+        action: string
+        actor: string
+        actorUpn: string | null
+        timestamp: string
+        detail: unknown
+      }>
+    }>(`/api/sync/history/${encodeURIComponent(planId)}`),
   /** Recent sync execution runs — used to restore the EnvSync widget on cold start. */
   syncRuns: (limit = 25) =>
     json<Array<{
@@ -341,9 +516,12 @@ export const api = {
       actorUpn: string | null
       status: "started" | "preview" | "success" | "failed"
       error: string | null
+      previewTotals: { insert: number; update: number; delete: number }
+      executeTotals: { insert: number; update: number; delete: number } | null
       startedAt: string
       finishedAt: string | null
       durationMs: number | null
+      planAvailable?: boolean
     }>>(`/api/sync/runs?limit=${limit}`),
 
   /**
@@ -396,7 +574,7 @@ export const api = {
    * here so callers never touch raw bytes.
    */
   uploadAttachment: async (file: File, opts?: {
-    scope?: "session" | "run" | "workspace_asset"
+    scope?: "user_draft" | "run" | "workspace_asset"
     runId?: string
     purposeTag?: string
   }): Promise<UploadedAttachment> => {
@@ -407,7 +585,7 @@ export const api = {
         name:          file.name,
         mediaType:     file.type || "application/octet-stream",
         contentBase64,
-        scope:         opts?.scope ?? "session",
+        scope:         opts?.scope ?? "user_draft",
         ...(opts?.runId      ? { runId:      opts.runId }      : {}),
         ...(opts?.purposeTag ? { purposeTag: opts.purposeTag } : {}),
       }),
@@ -472,7 +650,28 @@ export const api = {
       `/api/entity-registry/entities/${encodeURIComponent(id)}/scaffold-sync-definition${qs ? `?${qs}` : ""}`,
     )
   },
-  saveEntityRegistry: (def: import("./types").EntityRegistryDefinition, reason: string, opts?: { tenant?: string; versionLabel?: string }) => {
+  suggestEntityRegistryDraft: (rootTable: string, opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    p.set("rootTable", rootTable)
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<EntityRegistryDraftSuggestion>(
+      `/api/entity-registry/suggest-draft?${qs}`,
+    )
+  },
+  suggestEntityRegistryTable: (
+    args: { rootTable: string; idColumn: string; tableName: string; executionOrder?: number },
+    opts?: { tenant?: string },
+  ) => {
+    const p = new URLSearchParams()
+    p.set("rootTable", args.rootTable)
+    p.set("idColumn", args.idColumn)
+    p.set("tableName", args.tableName)
+    if (args.executionOrder !== undefined) p.set("executionOrder", String(args.executionOrder))
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    return json<EntityRegistryTableSuggestion>(`/api/entity-registry/suggest-table?${p.toString()}`)
+  },
+  saveEntityRegistry: (def: import("./types").EntityRegistryDefinition, reason: string, opts?: { tenant?: string; versionLabel?: string; createOnly?: boolean }) => {
     const p = new URLSearchParams()
     if (opts?.tenant) p.set("tenant", opts.tenant)
     const qs = p.toString()
@@ -480,7 +679,12 @@ export const api = {
       `/api/entity-registry/entities${qs ? `?${qs}` : ""}`,
       {
         method: "POST",
-        body:   JSON.stringify({ def, reason, versionLabel: opts?.versionLabel ?? null }),
+        body:   JSON.stringify({
+          def,
+          reason,
+          versionLabel: opts?.versionLabel ?? null,
+          createOnly: opts?.createOnly === true,
+        }),
       },
     )
   },
@@ -489,6 +693,26 @@ export const api = {
     if (opts?.tenant) p.set("tenant", opts.tenant)
     const qs = p.toString()
     return json<{ retiredAt: string }>(`/api/entity-registry/entities/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`, { method: "DELETE" })
+  },
+  previewEntityRegistryYaml: (
+    def: import("./types").EntityRegistryDefinition,
+    run?: {
+      flowTemplateId: string
+      serviceProfileRef: string
+      environmentPolicyRef: string
+    },
+    opts?: { tenant?: string },
+  ) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryPreviewYamlResponse>(
+      `/api/entity-registry/entities/preview-yaml${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ def, run }),
+      },
+    )
   },
   importEntityRegistryYaml: (yaml: string, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
     const p = new URLSearchParams()
@@ -535,6 +759,16 @@ export const api = {
       { method: "POST", body: JSON.stringify({ strategy, reason }) },
     )
   },
+  listEntityRegistryStrategyHistory: (id: string, opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<{
+      tenantId: string
+      id: string
+      items: import("./types").EntityRegistryStrategyHistoryEntry[]
+    }>(`/api/entity-registry/strategies/${encodeURIComponent(id)}/history${qs ? `?${qs}` : ""}`)
+  },
 
   // ── Freeze windows (governance) ──────────────────────────────
   listFreezeWindows: (opts?: { tenant?: string }) => {
@@ -577,10 +811,15 @@ export const api = {
   },
   triggerProposerRun: (source: string, target: string, tenant?: string) => {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
-    return json<Record<string, unknown>>(`/api/proposer/run${qs}`, {
+    return json<{ accepted: boolean; source: string; target: string }>(`/api/proposer/run${qs}`, {
       method: "POST", body: JSON.stringify({ source, target }),
     })
   },
+  cancelProposerRun: (runId: string) =>
+    json<{ cancelled: boolean; runId: string }>(
+      `/api/proposer/runs/${encodeURIComponent(runId)}/cancel`,
+      { method: "POST" },
+    ),
   listProposals: (opts: {
     tenant?: string; status?: string; riskTier?: string;
     source?: string; target?: string; limit?: number;
@@ -649,6 +888,11 @@ export const api = {
     const qs = tenant ? `?tenant=${encodeURIComponent(tenant)}` : ""
     return json<{ ok: boolean }>(`/api/approvals/policies${qs}`, { method: "PUT", body: JSON.stringify(body) })
   },
+  deleteApprovalPolicy: (targetEnv: string, riskTier: string, tenant?: string) => {
+    const p = new URLSearchParams({ targetEnv, riskTier })
+    if (tenant) p.set("tenant", tenant)
+    return json<{ ok: boolean }>(`/api/approvals/policies?${p.toString()}`, { method: "DELETE" })
+  },
 
   // ── F1 — Evidence ───────────────────────────────────────────
   listEvidence: (opts: { tenant?: string; limit?: number } = {}) => {
@@ -687,7 +931,7 @@ export const api = {
 
 export interface UploadedAttachment {
   id:             string
-  scope:          "run" | "session" | "workspace_asset"
+  scope:          "run" | "user_draft" | "workspace_asset"
   originalName:   string
   normalizedName: string
   mediaType:      string
@@ -803,7 +1047,7 @@ export function createEventStream(
     // multiple entries can share the same timestamp + runId
     const seq = e.data["seq"] ?? ""
     const kind = e.type === "debug.trace" ? ((e.data["entry"] as Record<string, unknown>)?.["kind"] ?? "") : ""
-    return `${e.type}:${e.timestamp}:${e.data["runId"] ?? ""}:${e.data["stepId"] ?? ""}:${kind}:${seq}`
+    return `${e.type}:${e.timestamp}:${e.data["runId"] ?? ""}:${sseStepDedupeToken(e.data)}:${kind}:${seq}`
   }
   function dedupe(event: { type: string; data: Record<string, unknown>; timestamp: string }): boolean {
     const key = eventKey(event)
@@ -873,4 +1117,30 @@ export function createPopoutEventRelay(
     try { onEvent(e.data) } catch { /* ignore */ }
   }
   return { close: () => bc.close() }
+}
+
+export interface PlatformHealth {
+  ready: boolean
+  hints: string[]
+  mssql: { configured: boolean; connections: string[]; summary: string }
+  catalog: { available: boolean; detail: string | null }
+  entities: { count: number; valid: boolean; errors: string[] }
+  publish: {
+    ready: boolean
+    publishedAt: string | null
+    publishedVersion: string | null
+    definitionCount: number
+  }
+}
+
+export interface PlatformArtifactRefreshResult {
+  ok: boolean
+  message: string
+  source: "shipped" | "mssql"
+  connection?: string
+  entities?: string[]
+  stepTypes?: number
+  flows?: number
+  activitySpecs?: number
+  reseeded?: { seeded: number; entityIds: string[] }
 }

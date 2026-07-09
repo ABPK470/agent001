@@ -7,7 +7,7 @@
 // Tenant-agnostic. Domain-specific stopwords (e.g. "revenue" for a finance
 // tenant) MUST NOT live here — those words ARE the subjects the agent is
 // asked to clarify. Instead, tenants suppress noise by populating
-// `routingKeywords.domain` which the term-undefined detector consults.
+// `domainKeywords` which the term-undefined detector consults.
 
 /** Common English function words + agent-conversation framing words. */
 export const STOPWORDS: ReadonlySet<string> = new Set([

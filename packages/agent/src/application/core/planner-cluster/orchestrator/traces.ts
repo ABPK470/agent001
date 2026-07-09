@@ -1,4 +1,4 @@
-import { PlannerRepairCompatibilityMode, PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
+import { PlannerTraceKind } from "../../domain/index.js"
 /**
  * Trace-emission helpers for the planner orchestrator.
  *
@@ -9,13 +9,7 @@ import { PlannerRepairCompatibilityMode, PlannerTraceKind, VerifierOutcome } fro
  * @module
  */
 
-import type {
-  PipelineResult,
-  Plan,
-  RepairPlan,
-  RepairPlanCompatibilityReport,
-  VerifierDecision
-} from "../types.js"
+import type { PipelineResult, Plan, RepairPlan, VerifierDecision } from "../types.js"
 import type { PlannerContext } from "./types.js"
 
 /** Result of the regression/retry-prep helper. Subset used by trace helpers. */
@@ -77,10 +71,10 @@ export function buildPipelineCallbacks(ctx: PlannerContext, attempt: number): Pi
 /** Emit the cluster of verification-result traces. */
 export function emitVerificationTraces(
   ctx: PlannerContext,
-  plan: Plan,
+  _plan: Plan,
   pipelineResult: PipelineResult,
   verifierDecision: VerifierDecision,
-  routeDecisionRoute: string,
+  _routeDecisionRoute: string,
   attempt: number,
   verifierRoundIndex: number
 ): void {
@@ -105,18 +99,6 @@ export function emitVerificationTraces(
       acceptanceState: pipelineResult?.stepResults.get(s.stepName)?.acceptanceState
     }))
   })
-  if (plan.coherentBootstrap) {
-    ctx.onTrace?.({
-      kind: PlannerTraceKind.ArchitectureState,
-      lane: plan.route ?? routeDecisionRoute,
-      status: verifierDecision.overall === VerifierOutcome.Pass ? "preserved" : "repairing_in_place",
-      reason:
-        verifierDecision.overall === VerifierOutcome.Pass
-          ? "verification_passed"
-          : "architecture_preserving_repair",
-      architecture: plan.coherentBootstrap.architecture
-    })
-  }
   ctx.onTrace?.({
     kind: PlannerTraceKind.IssueTimeline,
     attempt: attempt + 1,
@@ -142,70 +124,6 @@ export function emitVerificationTraces(
       timestamp: Date.now()
     })
   }
-}
-
-export interface RepairPlanTraceInput {
-  readonly attempt: number
-  readonly verifierDecision: VerifierDecision
-  readonly repairCompatibility: RepairPlanCompatibilityReport
-  readonly activeCompatibilityPath: "legacy" | "repair"
-  readonly compatibilityMode: "legacy" | "shadow" | "repair"
-  readonly legacyPinnedForRun: boolean
-  readonly compatibilityThreshold: number
-}
-
-/** Emit the cluster of repair-plan / compatibility traces. */
-export function emitRepairPlanTraces(ctx: PlannerContext, input: RepairPlanTraceInput): void {
-  const {
-    attempt,
-    verifierDecision,
-    repairCompatibility,
-    activeCompatibilityPath,
-    compatibilityMode,
-    legacyPinnedForRun,
-    compatibilityThreshold
-  } = input
-  ctx.onTrace?.({
-    kind: PlannerTraceKind.RepairPlan,
-    attempt: attempt + 1,
-    epoch: attempt + 1,
-    rerunOrder: verifierDecision.repairPlan?.rerunOrder ?? [],
-    tasks:
-      (verifierDecision.repairPlan as RepairPlan | undefined)?.tasks.map((task) => ({
-        stepName: task.stepName,
-        mode: task.mode,
-        ownedIssueCodes: task.ownedIssues.map((issue) => issue.code),
-        dependencyIssueCodes: task.dependencyContext.map((issue) => issue.code)
-      })) ?? []
-  })
-  ctx.onTrace?.({
-    kind: PlannerTraceKind.RepairCompatibility,
-    attempt: attempt + 1,
-    mode: repairCompatibility.mode,
-    activePath: activeCompatibilityPath,
-    diverged: repairCompatibility.diverged,
-    divergenceScore: repairCompatibility.divergenceScore,
-    divergenceThreshold: compatibilityThreshold,
-    pinnedToLegacy: compatibilityMode === PlannerRepairCompatibilityMode.Shadow && legacyPinnedForRun,
-    reasons: [...repairCompatibility.reasons],
-    legacy: {
-      rerunOrder: repairCompatibility.legacyPlan.rerunOrder,
-      tasks: repairCompatibility.legacyPlan.tasks.map((task) => ({
-        stepName: task.stepName,
-        mode: task.mode,
-        ownedIssueCodes: task.ownedIssues.map((issue) => issue.code)
-      }))
-    },
-    repair: {
-      rerunOrder: repairCompatibility.repairPlan.rerunOrder,
-      tasks: repairCompatibility.repairPlan.tasks.map((task) => ({
-        stepName: task.stepName,
-        mode: task.mode,
-        ownedIssueCodes: task.ownedIssues.map((issue) => issue.code),
-        dependencyIssueCodes: task.dependencyContext.map((issue) => issue.code)
-      }))
-    }
-  })
 }
 
 /** Emit the retry intent trace + per-task transition traces. */

@@ -132,8 +132,7 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
     onToolResult: (data) => {
       persistToolResult({
         runId: request.runId,
-        sessionId: env.activeRun?.sessionId ?? null,
-        upn: env.activeRun?.ownerUpn ?? null,
+        upn: env.activeRun?.ownerUpn ?? "",
         goal: request.goal,
         iteration: data.iteration,
         toolCallId: data.toolCallId,

@@ -1,6 +1,5 @@
 export * from "./approvals/routes.js"
 export * from "./auth/index.js"
-export * from "./browser/index.js"
 export * from "./notifications/index.js"
 export * from "./proposer/index.js"
 export * from "./runs/orchestrator.js"

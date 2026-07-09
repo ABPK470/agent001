@@ -7,7 +7,7 @@
  */
 
 import { api } from "./api"
-import { useStore, WIDGET_DEFAULTS } from "./store"
+import { makeDefaultView, pruneUnknownWidgets, useStore, WIDGET_DEFAULTS } from "./store"
 import type { ViewConfig } from "./types"
 
 let timer: ReturnType<typeof setTimeout> | null = null
@@ -45,7 +45,7 @@ export function flushDashboardSave(): void {
  *  versions may still contain undersized items — this clamps them on load
  *  so a one-time refresh fixes any stale state without manual cleanup. */
 function normalizeViewLayouts(views: ViewConfig[]): ViewConfig[] {
-  return views.map((view) => ({
+  return pruneUnknownWidgets(views).map((view) => ({
     ...view,
     layouts: {
       ...view.layouts,
@@ -95,17 +95,8 @@ export async function restoreDashboardState(): Promise<void> {
       // Fresh user: wipe whatever the previous browser user left behind.
       try { localStorage.removeItem("mia-dashboard") } catch { /* ignore */ }
       _suppressSave = true
-      // Seed a default view containing the term-chat widget so the
-      // first paint matches the login screen's chat surface. Revert: replace
-      // widgets/layouts with [] / {} for the original empty canvas.
-      const widgetId = "default-term-chat"
       useStore.setState({
-        views: [{
-          id: "default",
-          name: "Main",
-          widgets: [{ id: widgetId, type: "term-chat" }],
-          layouts: { lg: [{ i: widgetId, x: 0, y: 0, w: 12, h: 12, minW: 2, minH: 2 }] },
-        }],
+        views: [makeDefaultView()],
         activeViewId: "default",
       })
       _suppressSave = false

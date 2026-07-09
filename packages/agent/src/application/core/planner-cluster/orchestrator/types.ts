@@ -8,7 +8,6 @@ import type {
   PipelineResult,
   Plan,
   PlannerDecision,
-  PlannerRepairCompatibilityMode,
   PlannerRuntimeModel,
   VerifierDecision
 } from "../types.js"
@@ -55,6 +54,4 @@ export interface PlannerSetupContext {
   readonly runtimeModel: PlannerRuntimeModel
   readonly decision: PlannerDecision
   readonly banditTrajectory: import("../../../shell/delegation.js").DelegationTrajectoryRecord | undefined
-  readonly compatibilityMode: PlannerRepairCompatibilityMode
-  readonly compatibilityThreshold: number
 }

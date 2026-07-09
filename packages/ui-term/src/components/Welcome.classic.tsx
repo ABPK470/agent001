@@ -51,22 +51,14 @@ const Logo = () => (
       fillRule="evenodd"
       d="M3 0 H17 V14 H3 Z M3 5 H7 V9 H3 Z M13 5 H17 V9 H13 Z"
     />
-    <rect
-      className="logo-eye"
-      x="3"
-      y="5"
-      width="4"
-      height="4"
-      fill="#34d399"
-    />
-    <rect
-      className="logo-eye"
-      x="13"
-      y="5"
-      width="4"
-      height="4"
-      fill="#34d399"
-    />
+    <g className="mia-logo-eye">
+      <rect className="logo-eye-open" x="3" y="5" width="4" height="4" />
+      <rect className="logo-eye-lid" x="3" y="5" width="4" height="4" />
+    </g>
+    <g className="mia-logo-eye mia-logo-eye--r">
+      <rect className="logo-eye-open" x="13" y="5" width="4" height="4" />
+      <rect className="logo-eye-lid" x="13" y="5" width="4" height="4" />
+    </g>
   </svg>
 );
 
@@ -203,18 +195,6 @@ export function Welcome({ onSubmit, onReady }: WelcomeProps) {
           82%  { transform: scaleY(0.02); opacity: 1; filter: brightness(2.8); }
           90%  { transform: scaleY(0.02); opacity: 1; filter: brightness(4);   }
           100% { transform: scaleY(0.02); opacity: 0; filter: brightness(0);   }
-        }
-        .logo-eye {
-          transform-box: fill-box;
-          transform-origin: center;
-          animation: logo-blink 2s ease-in-out infinite;
-        }
-        .logo-eye:nth-child(3) { animation-delay: 0s; }
-        .logo-eye:nth-child(4) { animation-delay: 0.05s; }
-        @keyframes logo-blink {
-          0%, 80%, 100% { transform: scaleY(1); }
-          87%            { transform: scaleY(0.08); }
-          93%            { transform: scaleY(1); }
         }
       `}</style>
     </div>

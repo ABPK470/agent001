@@ -54,8 +54,8 @@ export function TransitionTestPage() {
         heroStage={heroStage}
         heroRevealProgress={phase === "done" ? 1 : heroRevealProgress}
         connected={true}
-        onOpenPlatform={() => {}}
-        onLogout={() => reset()}
+        onModeChange={() => {}}
+        onSignOut={() => reset()}
       />
 
       {phase !== "done" ? (

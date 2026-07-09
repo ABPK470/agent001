@@ -13,10 +13,11 @@ import type { ExecutableTool, Tool, ToolMetadata } from "../domain/agent-types.j
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "./_tool-cache.js"
 import { getCatalog } from "./catalog/store.js"
 import { getPool } from "./mssql/index.js"
+import { markMssqlTableProfiled } from "./mssql/schema-verified.js"
 import { isLargeObject } from "./mssql/validation.js"
 
 function markProfileDataCalled(qname: string, run?: RunContext): void {
-  run?.mssqlProfileCalls.add(qname.toLowerCase())
+  markMssqlTableProfiled(run, qname)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────

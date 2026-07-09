@@ -1,9 +1,8 @@
 import type sql from "mssql"
-import type { HumanHandoffReason, UserInputStatus } from "../domain/enums/agent-runtime.js"
 import type { AttachmentScope } from "../domain/enums/attachment.js"
 import type { IngestionMode } from "../domain/enums/runtime.js"
 
-// ── Generic shell / browser-check execution clients ──────────────
+// ── Generic shell execution client ────────────────────────────────
 
 export interface ShellExecResult {
   stdout: string
@@ -14,60 +13,6 @@ export interface ShellExecResult {
 }
 
 export type ShellClient = (command: string, cwd: string, signal?: AbortSignal) => Promise<ShellExecResult>
-
-export interface BrowserCheckRunResult {
-  report: string
-  sandboxed: boolean
-}
-
-export type BrowserClient = (
-  htmlPath: string,
-  clicks: string[],
-  waitMs: number,
-  cwd: string
-) => Promise<BrowserCheckRunResult>
-
-// ── Browser context / credential / handoff ───────────────────────
-
-export interface BrowserGuard {
-  checkUrl(url: string): Promise<{ allow: boolean; reason: string; retryAfterMs?: number }>
-  recordAction(input: { action: string; url?: string; detail?: string }): Promise<void>
-}
-
-export interface BrowserContextHandle {
-  fingerprintSeed: string
-  storageState: unknown | null
-  proxy?: { server: string; bypass?: string; username?: string; password?: string } | null
-  guard?: BrowserGuard | null
-  save(state: unknown): Promise<void>
-}
-
-export interface BrowserContextReader {
-  acquire(): Promise<BrowserContextHandle | null>
-}
-
-export interface CredentialReader {
-  resolvePassword(id: string): Promise<{
-    label: string
-    targetOrigin: string
-    username: string
-    password: string
-  } | null>
-  resolveTotp(id: string): Promise<{
-    label: string
-    targetOrigin: string
-    code: string
-  } | null>
-}
-
-export interface HandoffStore {
-  request(input: {
-    browserSessionId: string
-    reason: HumanHandoffReason
-    ttlMs?: number
-  }): Promise<{ id: string; url: string; expiresAt: number } | null>
-  await(id: string): Promise<{ status: UserInputStatus }>
-}
 
 // ── Ask-user (UI prompt channel) ─────────────────────────────────
 

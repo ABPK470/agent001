@@ -2,7 +2,8 @@ import { EventType, getCatalogSchemaFingerprint } from "@mia/agent"
 import { getDb } from "../sqlite.js"
 import { MemoryRole, MemoryTier } from "../../../shared/enums/memory.js"
 import { broadcast } from "../../events/broadcaster.js"
-import { searchProcedures } from "./procedural.js"
+import { pickEpisodicChoreographyHint } from "./episodic-choreography.js"
+import { augmentGoalQueryForFts, episodicShortcutMatchesGoal } from "./goal-class.js"
 import { currentPolicyVersion, provenanceMultiplier } from "./provenance.js"
 import { rowToEntry } from "./schema.js"
 import {
@@ -18,9 +19,12 @@ import {
   SOURCE_WEIGHT,
   TIER_BUDGET,
   tokenize,
+  vectorAugmentationMatchesQuery,
   WORKING_SESSION_WINDOW_H
 } from "./scoring.js"
-import type { MemoryBudget, MemoryEntry, ProceduralMemory, UnifiedSearchResult } from "./types.js"
+import type { MemoryBudget, MemoryEntry, UnifiedSearchResult } from "./types.js"
+import { EMPTY_MEMORY_PER_TIER, type MemoryPerTier } from "./tier-context.js"
+import { readEpisodicShortcutEligible } from "./episodic-quality.js"
 import { vectorSearch } from "./vectors.js"
 
 // ── Unified Retrieval Pipeline ───────────────────────────────────
@@ -37,23 +41,29 @@ import { vectorSearch } from "./vectors.js"
 export async function retrieveContext(
   goal: string,
   opts?: {
-    sessionId?: string
+    /** Working-tier scope — must match the run's thread (see continuity.ts). */
+    threadId?: string
     runId?: string
     budget?: MemoryBudget
-    /**
-     * Owner UPN — scopes ALL tiers (working/episodic/semantic) to this user
-     * plus any rows explicitly marked shared=true. Pass null/undefined for
-     * unauthenticated callers; those see only legacy/global rows.
-     */
-    upn?: string | null
+    /** Owner UPN — required for agent runs; scopes all tiers to this user (+ shared rows). */
+    upn?: string
     /** Optional host — used to read the live catalog schema fingerprint. */
     host?: import("@mia/agent").AgentHost
   }
 ): Promise<{
   context: string
   results: UnifiedSearchResult[]
-  perTier: { working: string; episodic: string; semantic: string }
+  perTier: MemoryPerTier
 }> {
+  const ownerUpn = opts?.upn?.trim()
+  if (!ownerUpn) {
+    return {
+      context: "",
+      results: [],
+      perTier: { ...EMPTY_MEMORY_PER_TIER }
+    }
+  }
+
   const budget = opts?.budget ?? DEFAULT_BUDGET
   const now = new Date()
   const allResults: UnifiedSearchResult[] = []
@@ -65,18 +75,16 @@ export async function retrieveContext(
       maxItems: Math.floor(budget.maxItems * TIER_BUDGET[tier])
     }
 
-    const results = await searchEntries(goal, {
+    const searchQuery = tier === "episodic" ? augmentGoalQueryForFts(goal) : goal
+    const results = await searchEntries(searchQuery, {
       tier,
       budget: tierBudget,
-      sessionId: tier === MemoryTier.Working ? opts?.sessionId : undefined,
+      threadId: tier === MemoryTier.Working ? opts?.threadId : undefined,
       excludeRunId: opts?.runId,
-      upn: opts?.upn ?? null
+      upn: ownerUpn
     })
     allResults.push(...results)
   }
-
-  // Also search procedural memories (kept for activation tracking, not injected into prompt)
-  const procedures = searchProcedures(goal, 3, opts?.upn ?? null, opts?.sessionId)
 
   // Phase 5: demote (don't delete) entries whose provenance no longer
   // matches the current environment. A row stamped with a stale
@@ -165,16 +173,27 @@ export async function retrieveContext(
       .run(now.toISOString(), ...ids)
   }
 
-  const context = formatMemoryContext(packed, procedures)
+  const context = formatMemoryContext(packed)
 
   const workingItems = packed.filter((r) => r.entry.tier === MemoryTier.Working)
   const episodicItems = packed.filter((r) => r.entry.tier === "episodic")
   const semanticItems = packed.filter((r) => r.entry.tier === "semantic")
 
-  const perTier = {
+  const episodicShortcutEligible =
+    episodicItems.some((r) => readEpisodicShortcutEligible(r.entry.metadata)) &&
+    episodicShortcutMatchesGoal(
+      goal,
+      episodicItems.map((r) => ({ content: r.entry.content, metadata: r.entry.metadata }))
+    )
+
+  const perTier: MemoryPerTier = {
     working: workingItems.length > 0 ? workingItems.map((r) => r.entry.content).join("\n") : "",
     episodic: episodicItems.length > 0 ? episodicItems.map((r) => r.entry.content).join("\n") : "",
-    semantic: semanticItems.length > 0 ? semanticItems.map((r) => r.entry.content).join("\n") : ""
+    semantic: semanticItems.length > 0 ? semanticItems.map((r) => r.entry.content).join("\n") : "",
+    episodicShortcutEligible,
+    episodicChoreography: episodicShortcutEligible
+      ? pickEpisodicChoreographyHint(episodicItems)
+      : undefined
   }
 
   broadcast({
@@ -184,7 +203,6 @@ export async function retrieveContext(
       working: workingItems.length,
       episodic: episodicItems.length,
       semantic: semanticItems.length,
-      procedural: procedures.length,
       runId: opts?.runId ?? null
     }
   })
@@ -202,7 +220,7 @@ export async function searchEntries(
   opts: {
     tier?: MemoryTier
     budget: MemoryBudget
-    sessionId?: string
+    threadId?: string
     excludeRunId?: string
     /**
      * Owner UPN. Filters ALL tiers (not just working) so user A's distilled
@@ -214,10 +232,14 @@ export async function searchEntries(
 ): Promise<UnifiedSearchResult[]> {
   const now = new Date()
 
+  if (opts.tier === MemoryTier.Working && (!opts.threadId || !opts.upn)) {
+    return []
+  }
+
   const ftsQuery = sanitizeFtsQuery(query)
   if (!ftsQuery) {
     if (opts.tier === MemoryTier.Working) {
-      return getRecentEntries(opts.tier, opts.budget.maxItems, opts.sessionId, opts.upn, opts.excludeRunId)
+      return getRecentEntries(opts.tier, opts.budget.maxItems, opts.threadId, opts.upn, opts.excludeRunId)
     }
     return []
   }
@@ -238,49 +260,16 @@ export async function searchEntries(
     sql += " AND (e.run_id IS NULL OR e.run_id != ?)"
     params.push(opts.excludeRunId)
   }
-  if (opts.sessionId && opts.tier === MemoryTier.Working) {
-    sql += " AND e.session_id = ?"
-    params.push(opts.sessionId)
+  if (opts.tier === MemoryTier.Working && opts.threadId && opts.upn) {
+    sql += " AND e.run_id IN (SELECT id FROM runs WHERE thread_id = ? AND upn = ?)"
+    params.push(opts.threadId, opts.upn)
   }
-  // Tenant isolation: every tier must be scoped to the calling user, with
-  // shared=1 rows visible to everyone (admin-curated knowledge). The legacy
-  // pool (upn IS NULL on both sides) stays self-contained for back-compat.
   if (opts.upn !== undefined) {
     if (opts.upn === null) {
       sql += " AND (e.upn IS NULL OR e.shared = 1)"
-      // Temporary anonymous isolation: episodic memory is private per sid
-      // until the proxy rollout guarantees a real UPN for every session.
-      if (opts.tier === "episodic") {
-        if (opts.sessionId) {
-          sql += " AND (e.shared = 1 OR e.session_id = ?)"
-          params.push(opts.sessionId)
-        } else {
-          sql += " AND e.shared = 1"
-        }
-      } else if (!opts.tier) {
-        if (opts.sessionId) {
-          sql += " AND (e.tier != 'episodic' OR e.shared = 1 OR e.session_id = ?)"
-          params.push(opts.sessionId)
-        } else {
-          sql += " AND (e.tier != 'episodic' OR e.shared = 1)"
-        }
-      }
     } else {
-      // Sid-scope bridge for the welcome-modal promotion flow: when an anon
-      // browser submits the welcome modal, identity.ts:223 reuses the SAME sid
-      // and only upgrades upn (null → "alice@corp"). Without this clause the
-      // pre-modal turns (ingested as upn=null) become invisible the moment a
-      // real upn is supplied — silently amnesia-bombing the conversation.
-      // Treat sid as the conversation-continuity boundary (matching the
-      // identity.ts contract), while keeping cross-sid isolation intact.
-      // See Layer C — C4 finding (orchestrator-invariants.test.ts).
-      if (opts.sessionId) {
-        sql += " AND (e.upn = ? OR e.shared = 1 OR (e.upn IS NULL AND e.session_id = ?))"
-        params.push(opts.upn, opts.sessionId)
-      } else {
-        sql += " AND (e.upn = ? OR e.shared = 1)"
-        params.push(opts.upn)
-      }
+      sql += " AND (e.upn = ? OR e.shared = 1)"
+      params.push(opts.upn)
     }
   }
   if (opts.tier === MemoryTier.Working) {
@@ -303,7 +292,7 @@ export async function searchEntries(
   // For working tier, also get recent entries that may not match FTS
   let recentEntries: UnifiedSearchResult[] = []
   if (opts.tier === MemoryTier.Working) {
-    recentEntries = getRecentEntries(MemoryTier.Working, 12, opts.sessionId, opts.upn, opts.excludeRunId)
+    recentEntries = getRecentEntries(MemoryTier.Working, 12, opts.threadId, opts.upn, opts.excludeRunId)
   }
 
   const ftsResults: UnifiedSearchResult[] = rows.map((row) => {
@@ -333,7 +322,7 @@ export async function searchEntries(
   // cannot dominate the cosine top-K and starve other tenants of recall. The
   // post-filter below remains as defence-in-depth in case a vector row's
   // mirrored upn drifted from its memory_entries source of truth.
-  const vecResults = await vectorSearch(query, opts.budget.maxItems * 2, opts.tier, opts.upn, opts.sessionId)
+  const vecResults = await vectorSearch(query, opts.budget.maxItems * 2, opts.tier, opts.upn, opts.threadId)
   if (vecResults.length > 0) {
     const ftsIds = new Set(ftsResults.map((r) => r.entry.id))
     for (const vr of vecResults) {
@@ -345,32 +334,28 @@ export async function searchEntries(
         | undefined
       if (!row) continue
       if (opts.excludeRunId && row.run_id === opts.excludeRunId) continue
-      if (opts.sessionId && opts.tier === MemoryTier.Working && row.session_id !== opts.sessionId) continue
-      // Tenant guard — vector hits must obey the same upn filter as FTS hits.
-      // The vector index does not store upn (defence-in-depth: rely on the
-      // memory_entries join as the single source of truth). The sid-scope
-      // bridge below mirrors the SQL clause in searchEntries() so the
-      // welcome-modal promotion flow stays consistent across FTS + vector.
+      if (
+        opts.tier === MemoryTier.Working &&
+        opts.threadId &&
+        opts.upn &&
+        row.run_id
+      ) {
+        const inThread = getDb()
+          .prepare("SELECT 1 FROM runs WHERE id = ? AND thread_id = ? AND upn = ? LIMIT 1")
+          .get(row.run_id, opts.threadId, opts.upn)
+        if (!inThread) continue
+      }
       if (opts.upn !== undefined) {
         const rowUpn = (row.upn as string | null) ?? null
         const rowShared = (row.shared as number | null) === 1
-        const rowSid = (row.session_id as string | null) ?? null
         if (!rowShared) {
           if (opts.upn === null && rowUpn !== null) continue
-          if (opts.upn !== null && rowUpn !== opts.upn) {
-            // Bridge: allow legacy anon rows on the SAME sid through.
-            const sidBridge = rowUpn === null && opts.sessionId !== undefined && rowSid === opts.sessionId
-            if (!sidBridge) continue
-          }
+          if (opts.upn !== null && rowUpn !== opts.upn) continue
         }
-      }
-      if (opts.upn === null && (row.tier as string | null) === "episodic") {
-        if (!opts.sessionId && (row.shared as number | null) !== 1) continue
-        if (opts.sessionId && (row.shared as number | null) !== 1 && row.session_id !== opts.sessionId)
-          continue
       }
 
       const entry = rowToEntry(row)
+      if (!vectorAugmentationMatchesQuery(query, entry.content)) continue
       const rec = recencyScore(entry.createdAt, now)
       const decay = confidenceDecay(entry.createdAt, now)
       const activation = activationBonus(entry.accessCount, entry.updatedAt, now)
@@ -409,17 +394,19 @@ export async function searchEntries(
 function getRecentEntries(
   tier: MemoryTier,
   limit: number,
-  sessionId?: string,
+  threadId?: string,
   upn?: string | null,
   excludeRunId?: string
 ): UnifiedSearchResult[] {
   const now = new Date()
+  if (tier === MemoryTier.Working && (!threadId || !upn)) return []
+
   let sql = "SELECT * FROM memory_entries WHERE tier = ?"
   const params: unknown[] = [tier]
 
-  if (sessionId) {
-    sql += " AND session_id = ?"
-    params.push(sessionId)
+  if (tier === MemoryTier.Working && threadId && upn) {
+    sql += " AND run_id IN (SELECT id FROM runs WHERE thread_id = ? AND upn = ?)"
+    params.push(threadId, upn)
   }
   // Exclude the in-flight run's own rows so an agent cannot echo its own
   // mid-run state back at itself. Mirrors the FTS path predicate at
@@ -435,12 +422,6 @@ function getRecentEntries(
   if (upn !== undefined) {
     if (upn === null) {
       sql += " AND (upn IS NULL OR shared = 1)"
-    } else if (sessionId) {
-      // Sid-scope bridge — same rationale as searchEntries() above. Without
-      // this, getRecentEntries (used by the recency fallback + working-tier
-      // merge) would drop pre-welcome-modal anon rows for a named caller.
-      sql += " AND (upn = ? OR shared = 1 OR (upn IS NULL AND session_id = ?))"
-      params.push(upn, sessionId)
     } else {
       sql += " AND (upn = ? OR shared = 1)"
       params.push(upn)
@@ -473,7 +454,7 @@ function getRecentEntries(
 
 // ── Output formatting ────────────────────────────────────────────
 
-function formatMemoryContext(results: UnifiedSearchResult[], _procedures: ProceduralMemory[]): string {
+function formatMemoryContext(results: UnifiedSearchResult[]): string {
   if (results.length === 0) return ""
 
   // Dedup identical or near-identical entry content across tiers (Gap 4).
@@ -515,9 +496,6 @@ function formatMemoryContext(results: UnifiedSearchResult[], _procedures: Proced
     for (const r of semantic) blocks.push(r.entry.content)
     blocks.push("</semantic_memory>")
   }
-
-  // Note: procedural memories (tool sequences) are intentionally excluded.
-  // They consume tokens without improving LLM tool selection.
 
   return ["", "<memory_context>", ...blocks, "</memory_context>", ""].join("\n")
 }

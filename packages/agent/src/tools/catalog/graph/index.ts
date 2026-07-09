@@ -156,7 +156,12 @@ export class CatalogGraph {
   // ── Search & traversal ────────────────────────────────────────
 
   /** Keyword search across table names and column names. Returns ranked results. */
-  search(query: string, limit = 15, tableVerdicts?: TableVerdictsReader | null): CatalogSearchHit[] {
+  search(
+    query: string,
+    limit = 15,
+    tableVerdicts?: TableVerdictsReader | null,
+    schemaFilter?: string
+  ): CatalogSearchHit[] {
     return searchCatalog(
       this.tables,
       this.nameIndex,
@@ -164,8 +169,11 @@ export class CatalogGraph {
       this.implicitJoinIndex,
       query,
       limit,
-      this.viewSourceRows,
-      tableVerdicts
+      {
+        viewSourceRows: this.viewSourceRows,
+        tableVerdicts,
+        schemaFilter
+      }
     )
   }
 

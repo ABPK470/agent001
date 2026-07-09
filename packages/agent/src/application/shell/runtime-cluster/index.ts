@@ -10,7 +10,6 @@
 
 export { configureAgent } from "./configure.js"
 export type {
-  ConfigureAgentBrowserOptions,
   ConfigureAgentOptions,
   ConfigureAgentSyncOptions,
   ConfigureMssqlConnection
@@ -20,10 +19,6 @@ export type { MakeRunContextOptions } from "./run-context.js"
 
 export type {
   AgentHost,
-  BrowserCheckHost,
-  BrowserHost,
-  BrowserProvidersHost,
-  BrowserRuntimeHost,
   CatalogHost,
   FilesystemHost,
   MssqlHost,
@@ -41,13 +36,6 @@ export type {
 export type {
   AttachmentMetadata,
   AttachmentStore,
-  BrowserCheckRunResult,
-  BrowserClient,
-  BrowserContextHandle,
-  BrowserContextReader,
-  BrowserGuard,
-  CredentialReader,
-  HandoffStore,
   MssqlEntry,
   RecipeReader,
   ShellClient,

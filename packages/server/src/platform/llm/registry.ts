@@ -4,6 +4,7 @@
  * Supported providers (intranet-only deployment, no third-party SaaS):
  *   copilot-chat — Copilot Chat API (Device Flow, full context window)
  *   databricks   — Foundation Model APIs over corporate Databricks workspace
+ *                  (POST /serving-endpoints/{name}/invocations)
  *
  * Removed (do not re-add — see commit history):
  *   copilot      — GitHub Models. Token-capped, redundant with copilot-chat.
@@ -18,18 +19,24 @@ import type { DbLlmConfig } from "../persistence/sqlite.js"
 import { CopilotChatClient } from "./copilot-chat.js"
 import { getDatabricksHost, getDatabricksToken, isDatabricksConfigured } from "./databricks-broker.js"
 
-/** Default model used when no override is set. */
-export const DEFAULT_MODEL = "gpt-5.4"
+/** Default provider for new installs (persisted in llm_config). */
+export const DEFAULT_PROVIDER = "databricks"
+
+/** Default model when no override is set (Copilot Chat). */
+export const DEFAULT_COPILOT_MODEL = "gpt-5.4"
+
+/** Default Databricks serving endpoint name. */
+export const DEFAULT_DATABRICKS_MODEL = "databricks-gpt-5-4"
 
 /** Default models per provider shown in the UI picker. */
 export const PROVIDER_DEFAULTS: Record<string, { model: string; baseUrl: string; placeholder: string }> = {
   "copilot-chat": {
-    model: DEFAULT_MODEL,
+    model: DEFAULT_COPILOT_MODEL,
     baseUrl: "",
     placeholder: "Automatic (Device Flow — authorize once)"
   },
   databricks: {
-    model: "databricks-gpt-5-4",
+    model: DEFAULT_DATABRICKS_MODEL,
     baseUrl: "",
     placeholder: "Automatic (M2M OAuth from .env)"
   }
@@ -46,7 +53,7 @@ export function buildLlmClient(cfg: DbLlmConfig): LLMClient {
     case "copilot-chat":
       return new CopilotChatClient({
         token: api_key || undefined,
-        model: model || DEFAULT_MODEL
+        model: model || DEFAULT_COPILOT_MODEL
       })
 
     case "databricks":
@@ -57,7 +64,7 @@ export function buildLlmClient(cfg: DbLlmConfig): LLMClient {
       }
       return new DatabricksClient({
         host: base_url || getDatabricksHost(),
-        endpoint: model || process.env["DATABRICKS_DEFAULT_ENDPOINT"] || "databricks-gpt-5-4-mini",
+        endpoint: model || DEFAULT_DATABRICKS_MODEL,
         getToken: getDatabricksToken
       })
 

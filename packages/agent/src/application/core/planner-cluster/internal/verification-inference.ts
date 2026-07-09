@@ -44,8 +44,7 @@ export function inferIssueCode(summary: string): string {
   if (/SPEC MAPPING MISSING/i.test(summary)) return "spec_mapping_missing"
   if (/PATH MISMATCH/i.test(summary)) return "path_mismatch"
   if (/SCOPE VIOLATION/i.test(summary)) return "scope_violation"
-  if (/Browser check/i.test(summary)) return "browser_check_failure"
-  if (/Syntax error|Syntax validation failed/i.test(summary)) return "syntax_failure"
+  if (/Test run|Syntax error|Syntax validation failed/i.test(summary)) return "syntax_failure"
   if (/Placeholder|stub/i.test(summary)) return "placeholder_logic"
   if (/VERIFICATION MODALITY GAP|CRITERIA PROOF MISSING/i.test(summary)) return "verification_gap"
   if (/FUNCTION LOSS/i.test(summary)) return "function_loss"
@@ -135,21 +134,6 @@ export function isBlueprintLikeStep(step: SubagentTaskStep | undefined): boolean
     /blueprint/i.test(step.name) ||
     step.executionContext.targetArtifacts.some((artifact) => /(?:^|\/)BLUEPRINT\.md$/i.test(artifact))
   )
-}
-
-export function getArchitectureRepairContext(plan: Plan): {
-  preserveArchitecture: true
-  architectureSummary: string
-  sharedContracts: NonNullable<Plan["coherentBootstrap"]>["sharedContracts"]
-  invariants: NonNullable<Plan["coherentBootstrap"]>["invariants"]
-} | null {
-  if (!plan.coherentBootstrap) return null
-  return {
-    preserveArchitecture: true,
-    architectureSummary: plan.coherentBootstrap.architecture,
-    sharedContracts: plan.coherentBootstrap.sharedContracts,
-    invariants: plan.coherentBootstrap.invariants
-  }
 }
 
 export function inferAffectedArtifacts(step: SubagentTaskStep | undefined, summary: string): string[] {

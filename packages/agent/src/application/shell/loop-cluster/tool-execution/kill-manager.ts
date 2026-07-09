@@ -6,8 +6,8 @@
  * @module
  */
 
-import { executeToolWithTimeout } from "../../../../tools/index.js"
 import type { AgentConfig, Tool, ToolResultEnvelope } from "../../../../domain/agent-types.js"
+import { executeToolWithTimeout } from "../../../../tools/index.js"
 import { withToolTraceArgs } from "./trace-context.js"
 
 export async function executeWithKillManager(
@@ -27,9 +27,6 @@ export async function executeWithKillManager(
   const killManager = config.toolKillManager
   const killPromise = killManager?.register(call.id, call.name)
 
-  // If the killManager exposes wrap(), use it so the orchestrator can install
-  // per-tool-call AsyncLocalStorage scopes (e.g. mssql kill signal) that work
-  // correctly under concurrent runs. Falls back to a direct call otherwise.
   const runExecute = (a: Record<string, unknown>): Promise<string | ToolResultEnvelope> => {
     const tracedArgs = withToolTraceArgs(a, {
       toolCallId: call.id,

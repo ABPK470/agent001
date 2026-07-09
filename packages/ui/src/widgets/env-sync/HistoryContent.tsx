@@ -1,51 +1,87 @@
-import { ArrowRight, ChevronDown, ChevronRight, Clock, RefreshCw, View } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, Clock, RefreshCw, View } from "lucide-react"
+import { useCallback, useEffect, useRef, useState } from "react"
 
-import { api, OperationKind, OperationStatus, type OperationPipeline } from "../../api"
+import { api } from "../../api"
 import { useStore } from "../../store"
 import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../util"
 import { EmptyHistory, Err, Loading } from "./chrome"
 import { DIFF } from "./constants"
+import { formatPlanEntityLabel } from "./workflow"
 import { HistoryPlanTables } from "./PlanTables"
 
-type SyncHistoryEventRow = {
-  id: string
-  phase: "preview" | "execute"
-  label: string
-  timestamp: string
-  status: OperationStatus
-  summary?: string
-  error?: string
-  raw: unknown
+const PAGE_SIZE = 25
+
+type SyncRunItem = Awaited<ReturnType<typeof api.syncHistory>>["items"][number]
+
+type SyncAuditEvent = Awaited<ReturnType<typeof api.syncHistoryDetail>>["audit"][number]
+
+type RunStatus = SyncRunItem["status"]
+
+function entityLabel(run: SyncRunItem): string {
+  const ref = `${run.entityType}#${run.entityId}`
+  return run.entityDisplayName ? `${run.entityDisplayName} (${ref})` : ref
 }
 
-type SyncHistoryGroup = {
-  planId: string
-  firstAt: string
-  lastAt: string
-  entityLabel: string
-  route: string | null
-  status: "preview" | "executing" | "completed" | "failed"
-  preview?: OperationPipeline
-  execute?: OperationPipeline
-  totals?: { insert: number; update: number; delete: number } | null
-  isAgent: boolean
-  events: SyncHistoryEventRow[]
+function runStatusTone(status: RunStatus): string {
+  switch (status) {
+    case "success":
+      return DIFF.ins
+    case "failed":
+      return DIFF.del
+    case "started":
+      return "var(--color-accent)"
+    default:
+      return "var(--color-text-muted)"
+  }
+}
+
+function runStatusLabel(status: RunStatus): string {
+  switch (status) {
+    case "success":
+      return "completed"
+    case "failed":
+      return "failed"
+    case "started":
+      return "executing"
+    default:
+      return "preview"
+  }
+}
+
+function formatAuditAction(action: string): string {
+  const map: Record<string, string> = {
+    "sync.preview": "Preview",
+    "sync.execute.start": "Execute started",
+    "sync.execute.completed": "Execute completed",
+    "sync.execute.skipped": "Execute skipped (audit gate)",
+    "sync.execute.failed": "Execute failed"
+  }
+  return map[action] ?? action
 }
 
 export function HistoryContent({ onOpen }: { onOpen?: (planId: string) => void }) {
-  const [pipelines, setPipelines] = useState<OperationPipeline[] | null>(null)
+  const [page, setPage] = useState(1)
+  const [data, setData] = useState<Awaited<ReturnType<typeof api.syncHistory>> | null>(null)
   const [err, setErr] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
 
-  function reload() {
+  const reload = useCallback((nextPage = page) => {
     setErr(null)
-    api.operations({ limit: 500 }).then((result) => {
-      setPipelines(result.operations.filter((operation) => operation.kind === "sync-preview" || operation.kind === "sync-execute"))
-    }).catch((error) => setErr(error instanceof Error ? error.message : String(error)))
-  }
+    setLoading(true)
+    api
+      .syncHistory(nextPage, PAGE_SIZE)
+      .then((result) => {
+        setData(result)
+        setPage(result.page)
+      })
+      .catch((error) => setErr(error instanceof Error ? error.message : String(error)))
+      .finally(() => setLoading(false))
+  }, [page])
 
-  useEffect(reload, [])
+  useEffect(() => {
+    reload(1)
+  }, [])
 
   const agentSyncExec = useStore((s) => s.agentSyncExec)
   const agentSyncExecStarted = useStore((s) => s.agentSyncExecStarted)
@@ -55,210 +91,190 @@ export function HistoryContent({ onOpen }: { onOpen?: (planId: string) => void }
   useEffect(() => {
     if (syncFormPlanId && syncFormPlanId !== prevPlanIdRef.current) {
       prevPlanIdRef.current = syncFormPlanId
-      reload()
+      reload(1)
     }
-  }, [syncFormPlanId])
+  }, [syncFormPlanId, reload])
 
   useEffect(() => {
-    if (agentSyncExecStarted) reload()
-  }, [agentSyncExecStarted])
+    if (agentSyncExecStarted) reload(1)
+  }, [agentSyncExecStarted, reload])
 
   useEffect(() => {
-    if (agentSyncExec) reload()
-  }, [agentSyncExec])
+    if (agentSyncExec) reload(page)
+  }, [agentSyncExec, page, reload])
 
   if (err) return <Err>{err}</Err>
-  if (!pipelines) return <Loading>Loading history…</Loading>
-  if (!pipelines.length) return <EmptyHistory />
+  if (loading && !data) return <Loading>Loading history…</Loading>
+  if (!data || data.items.length === 0) return <EmptyHistory />
 
-  const groups = groupSyncHistory(pipelines)
+  const { items, total, totalPages } = data
+  const rangeStart = total === 0 ? 0 : (page - 1) * PAGE_SIZE + 1
+  const rangeEnd = Math.min(page * PAGE_SIZE, total)
 
   return (
-    <div>
-      <div className="flex items-center justify-between text-sm text-text-muted px-4 py-2 border-b border-border/40">
-        <span>{groups.length} sync run{groups.length === 1 ? "" : "s"}</span>
-        <button onClick={reload} className="hover:text-text" title="Refresh"><RefreshCw size={16} /></button>
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+      <div className="flex shrink-0 items-center justify-between text-sm text-text-muted px-4 py-2 border-b border-border/40 gap-3">
+        <span>
+          {total === 0 ? "No runs" : `${rangeStart}–${rangeEnd} of ${total}`}
+        </span>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            disabled={page <= 1 || loading}
+            onClick={() => reload(page - 1)}
+            className="p-1 rounded hover:text-text disabled:opacity-30"
+            title="Previous page"
+          >
+            <ChevronLeft size={16} />
+          </button>
+          <span className="font-mono text-xs tabular-nums">
+            {page}{totalPages > 0 ? ` / ${totalPages}` : ""}
+          </span>
+          <button
+            type="button"
+            disabled={page >= totalPages || loading}
+            onClick={() => reload(page + 1)}
+            className="p-1 rounded hover:text-text disabled:opacity-30"
+            title="Next page"
+          >
+            <ChevronRight size={16} />
+          </button>
+          <button
+            type="button"
+            onClick={() => reload(page)}
+            className="p-1 rounded hover:text-text"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={loading ? "animate-spin" : undefined} />
+          </button>
+        </div>
       </div>
-      {groups.map((group) => <HistoryPlanRow key={group.planId} group={group} onOpen={onOpen} />)}
+      {items.map((run) => (
+        <HistoryRunRow key={run.planId} run={run} onOpen={onOpen} />
+      ))}
     </div>
   )
 }
 
-function groupSyncHistory(pipelines: OperationPipeline[]): SyncHistoryGroup[] {
-  const groups = new Map<string, SyncHistoryGroup>()
-  for (const pipeline of pipelines) {
-    const planId = pipeline.id
-    const existing = groups.get(planId)
-    const titleParts = pipeline.title.split(" — ")
-    const entityLabel = titleParts[1] ?? pipeline.title
-    const route = pipeline.subtitle && pipeline.subtitle !== planId.slice(0, 8) ? pipeline.subtitle : null
-    const pipelineEvents = flattenPipelineEvents(pipeline)
-    const isAgent = pipelineEvents.some((event) => {
-      const raw = event.raw as { data?: Record<string, unknown> } | undefined
-      const data = raw && typeof raw === "object" && "data" in raw ? raw.data : null
-      return !!data && typeof data === "object" && data["runId"] != null
-    })
-
-    if (!existing) {
-      groups.set(planId, {
-        planId,
-        firstAt: pipeline.startedAt,
-        lastAt: pipeline.endedAt ?? pipeline.startedAt,
-        entityLabel,
-        route,
-        status: deriveHistoryStatus(undefined, pipeline),
-        preview: pipeline.kind === OperationKind.SyncPreview ? pipeline : undefined,
-        execute: pipeline.kind === OperationKind.SyncExecute ? pipeline : undefined,
-        totals: extractPipelineTotals(pipeline),
-        isAgent,
-        events: pipelineEvents,
-      })
-      continue
-    }
-
-    existing.firstAt = existing.firstAt < pipeline.startedAt ? existing.firstAt : pipeline.startedAt
-    const pipelineLastAt = pipeline.endedAt ?? pipeline.startedAt
-    existing.lastAt = existing.lastAt > pipelineLastAt ? existing.lastAt : pipelineLastAt
-    existing.route = existing.route ?? route
-    existing.isAgent = existing.isAgent || isAgent
-    if (pipeline.kind === OperationKind.SyncPreview) existing.preview = pipeline
-    if (pipeline.kind === OperationKind.SyncExecute) existing.execute = pipeline
-    existing.totals = extractPipelineTotals(pipeline) ?? existing.totals
-    existing.events.push(...pipelineEvents)
-    existing.events.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
-    existing.status = deriveHistoryStatus(existing, pipeline)
-  }
-
-  return [...groups.values()].sort((a, b) => b.lastAt.localeCompare(a.lastAt))
-}
-
-function deriveHistoryStatus(existing: SyncHistoryGroup | undefined, pipeline: OperationPipeline): SyncHistoryGroup["status"] {
-  const statuses = [existing?.preview?.status, existing?.execute?.status, pipeline.status]
-  if (statuses.includes(OperationStatus.Failed)) return "failed"
-  if (statuses.includes(OperationStatus.Running)) return pipeline.kind === OperationKind.SyncExecute ? "executing" : "preview"
-  if (pipeline.kind === OperationKind.SyncExecute || existing?.execute) return "completed"
-  return "preview"
-}
-
-function flattenPipelineEvents(pipeline: OperationPipeline): SyncHistoryEventRow[] {
-  return pipeline.activities.map((activity, index) => ({
-    id: `${pipeline.id}:${activity.id}:${index}`,
-    phase: pipeline.kind === OperationKind.SyncPreview ? "preview" : "execute",
-    label: formatHistoryActivityName(activity.name, pipeline.kind),
-    timestamp: activity.startedAt,
-    status: activity.status,
-    summary: activity.summary,
-    error: activity.error,
-    raw: activity.events.length === 1 ? activity.events[0] : activity.events,
-  }))
-}
-
-function extractPipelineTotals(pipeline: OperationPipeline): { insert: number; update: number; delete: number } | null {
-  for (const activity of pipeline.activities) {
-    for (const event of activity.events) {
-      const data = event.data
-      const totals = data["totals"] as Record<string, unknown> | undefined
-      const applied = data["applied"] as Record<string, unknown> | undefined
-      const source = totals ?? applied
-      if (!source) continue
-      const insert = Number(source["insert"] ?? 0)
-      const update = Number(source["update"] ?? 0)
-      const del = Number(source["delete"] ?? 0)
-      return { insert, update, delete: del }
-    }
-  }
-  return null
-}
-
-function splitHistoryEvents(group: SyncHistoryGroup): { preview: SyncHistoryEventRow[]; execute: SyncHistoryEventRow[] } {
-  return {
-    preview: group.events.filter((event) => event.phase === "preview"),
-    execute: group.events.filter((event) => event.phase === "execute"),
-  }
-}
-
-function HistoryPlanRow({ group, onOpen }: { group: SyncHistoryGroup; onOpen?: (planId: string) => void }) {
+function HistoryRunRow({ run, onOpen }: { run: SyncRunItem; onOpen?: (planId: string) => void }) {
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<SyncPlan | null>(null)
   const [planErr, setPlanErr] = useState<string | null>(null)
-  const statusTone = historyGroupTone(group.status)
-  const sections = splitHistoryEvents(group)
-  const entityLabel = plan ? formatPlanEntityLabel(plan) : group.entityLabel
-  const routeLabel = plan ? `${plan.source} → ${plan.target}` : group.route
+  const [audit, setAudit] = useState<SyncAuditEvent[] | null>(null)
+  const [auditErr, setAuditErr] = useState<string | null>(null)
+
+  const totals = run.executeTotals ?? run.previewTotals
+  const label = plan ? formatPlanEntityLabel(plan) : entityLabel(run)
 
   useEffect(() => {
-    if (!open || plan || planErr) return
+    if (!open) return
     let cancelled = false
-    api.syncPlan(group.planId)
-      .then((next) => {
-        if (cancelled || next.error) return
-        setPlan(next)
-      })
-      .catch((error) => {
-        if (cancelled) return
-        setPlanErr(error instanceof Error ? error.message : String(error))
-      })
-    return () => { cancelled = true }
-  }, [group.planId, open, plan, planErr])
+
+    if (!audit && !auditErr) {
+      api
+        .syncHistoryDetail(run.planId)
+        .then((detail) => {
+          if (!cancelled) setAudit(detail.audit)
+        })
+        .catch((error) => {
+          if (!cancelled) setAuditErr(error instanceof Error ? error.message : String(error))
+        })
+    }
+
+    if (run.planAvailable && !plan && !planErr) {
+      api
+        .syncPlan(run.planId)
+        .then((next) => {
+          if (cancelled || next.error) return
+          setPlan(next)
+        })
+        .catch((error) => {
+          if (!cancelled) setPlanErr(error instanceof Error ? error.message : String(error))
+        })
+    }
+
+    return () => {
+      cancelled = true
+    }
+  }, [open, run.planId, run.planAvailable, plan, planErr, audit, auditErr])
 
   return (
     <div className="border-b border-border/40">
-      <button onClick={() => setOpen((value) => !value)} className="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-elevated/30 transition-colors text-sm">
-        {open ? <ChevronDown size={13} className="text-text-muted" /> : <ChevronRight size={13} className="text-text-muted" />}
-        <span className={`w-2 h-2 shrink-0${group.isAgent ? "" : " rounded-full"}`} style={{ background: statusTone }} title={group.isAgent ? "agent" : "manual"} />
-        <span className="text-text font-mono truncate flex-1">
-          {entityLabel}
-          {group.isAgent && <span className="ml-1 text-[10px] text-accent/70 font-sans">(agent)</span>}
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-elevated/30 transition-colors text-sm"
+      >
+        {open ? (
+          <ChevronDown size={13} className="text-text-muted shrink-0" />
+        ) : (
+          <ChevronRight size={13} className="text-text-muted shrink-0" />
+        )}
+        <span
+          className="w-2 h-2 shrink-0 rounded-full"
+          style={{ background: runStatusTone(run.status) }}
+          title={run.status}
+        />
+        <span className="text-text font-mono truncate flex-1">{label}</span>
+        <span className="text-text-muted font-mono flex items-center gap-1 shrink-0">
+          {run.source}
+          <ArrowRight size={10} className="opacity-60" />
+          {run.target}
         </span>
-        <span className="hidden md:flex items-center gap-1.5 shrink-0">
-          {group.preview && <span className="px-2 py-0.5 rounded border border-border-subtle text-[11px] text-text-muted bg-overlay-1">Preview</span>}
-          {group.execute && <span className="px-2 py-0.5 rounded border border-border-subtle text-[11px] text-text-muted bg-overlay-1">Execute</span>}
+        <span className="font-mono tabular-nums flex gap-2 shrink-0">
+          {totals.insert > 0 && <span style={{ color: DIFF.ins }}>{totals.insert} ins</span>}
+          {totals.update > 0 && <span style={{ color: DIFF.upd }}>{totals.update} upd</span>}
+          {totals.delete > 0 && <span style={{ color: DIFF.del }}>{totals.delete} del</span>}
         </span>
-        {routeLabel && <span className="text-text-muted font-mono flex items-center gap-1">{routeLabel.split(" → ")[0]}<ArrowRight size={10} className="opacity-60" />{routeLabel.split(" → ")[1]}</span>}
-        {group.totals && <span className="font-mono tabular-nums flex gap-2">
-          {group.totals.insert > 0 && <span style={{ color: DIFF.ins }}>{group.totals.insert} ins</span>}
-          {group.totals.update > 0 && <span style={{ color: DIFF.upd }}>{group.totals.update} upd</span>}
-          {group.totals.delete > 0 && <span style={{ color: DIFF.del }}>{group.totals.delete} del</span>}
-        </span>}
-        <span className="text-text-muted capitalize">{group.status}</span>
-        <span className="text-text-muted flex items-center gap-1"><Clock size={11} />{timeAgo(group.lastAt)}</span>
+        <span className="text-text-muted capitalize shrink-0">{runStatusLabel(run.status)}</span>
+        <span className="text-text-muted flex items-center gap-1 shrink-0">
+          <Clock size={11} />
+          {timeAgo(run.finishedAt ?? run.startedAt)}
+        </span>
       </button>
+
       {open && (
         <div className="px-4 py-3 bg-base/30 border-t border-border/30 text-sm space-y-3">
           <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs text-text-muted/50 font-mono">
-              <span>plan</span>
-              <span className="text-text-muted">{group.planId}</span>
+            <div className="flex items-center gap-2 text-xs text-text-muted/50 font-mono min-w-0">
+              <span className="shrink-0">plan</span>
+              <span className="text-text-muted truncate">{run.planId}</span>
             </div>
-            <div className="flex items-center gap-2">
-              {group.preview && <span className="px-2 py-0.5 rounded border border-border-subtle text-[11px] text-text-muted">Preview</span>}
-              {group.execute && <span className="px-2 py-0.5 rounded border border-border-subtle text-[11px] text-text-muted">Execute</span>}
-              {onOpen && (
-                <button
-                  type="button"
-                  className="text-text-muted hover:text-accent/80 transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onOpen(group.planId)
-                  }}
-                  title="View plan"
-                >
-                  <View size={16} />
-                </button>
-              )}
-            </div>
+            {onOpen && run.planAvailable && (
+              <button
+                type="button"
+                className="text-text-muted hover:text-accent/80 transition-colors shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation()
+                  onOpen(run.planId)
+                }}
+                title="View plan"
+              >
+                <View size={16} />
+              </button>
+            )}
           </div>
 
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <HistoryKv label="Entity" value={entityLabel} />
-            <HistoryKv label="Route" value={routeLabel ?? "—"} />
-            <HistoryKv label="Started" value={formatHistoryDateTime(group.firstAt)} />
-            <HistoryKv label="Updated" value={formatHistoryDateTime(group.lastAt)} />
+            <HistoryKv label="Entity" value={label} />
+            <HistoryKv label="Route" value={`${run.source} → ${run.target}`} />
+            <HistoryKv label="Actor" value={run.actorUpn ?? "—"} />
+            <HistoryKv label="Started" value={formatHistoryDateTime(run.startedAt)} />
+            {run.finishedAt && <HistoryKv label="Finished" value={formatHistoryDateTime(run.finishedAt)} />}
+            {run.durationMs != null && (
+              <HistoryKv label="Duration" value={`${(run.durationMs / 1000).toFixed(1)}s`} />
+            )}
           </div>
+
+          {run.error && (
+            <div className="rounded-lg border border-error/20 bg-error/5 px-3 py-2 text-xs font-mono break-all text-error">
+              {run.error}
+            </div>
+          )}
 
           {planErr && (
             <div className="rounded-lg border border-warning/20 bg-warning/5 px-3 py-2 text-xs text-warning">
-              Could not load persisted plan details: {planErr}
+              Could not load persisted plan: {planErr}
             </div>
           )}
 
@@ -270,48 +286,46 @@ function HistoryPlanRow({ group, onOpen }: { group: SyncHistoryGroup; onOpen?: (
             </div>
           )}
 
-          <div className="space-y-3">
-            {sections.preview.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted/50">Preview</div>
-                {sections.preview.map((event) => (
-                  <HistoryEventRow key={event.id} event={event} />
-                ))}
-              </div>
-            )}
-            {sections.execute.length > 0 && (
-              <div className="space-y-1.5">
-                <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted/50">Execute</div>
-                {sections.execute.map((event) => (
-                  <HistoryEventRow key={event.id} event={event} />
-                ))}
-              </div>
-            )}
-          </div>
+          {auditErr && (
+            <div className="rounded-lg border border-warning/20 bg-warning/5 px-3 py-2 text-xs text-warning">
+              Could not load audit trail: {auditErr}
+            </div>
+          )}
+
+          {audit && audit.length > 0 && (
+            <div className="space-y-1.5">
+              <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted/50">Audit</div>
+              {audit.map((event, index) => (
+                <HistoryAuditRow key={`${event.action}:${event.timestamp}:${index}`} event={event} />
+              ))}
+            </div>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-function HistoryEventRow({ event }: { event: SyncHistoryEventRow }) {
+function HistoryAuditRow({ event }: { event: SyncAuditEvent }) {
   const [jsonOpen, setJsonOpen] = useState(false)
-  const hasJson = event.raw != null
-  const actionColor = event.status === OperationStatus.Failed ? DIFF.del
-    : event.status === OperationStatus.Success ? DIFF.ins
-      : event.status === OperationStatus.Running ? "var(--color-accent)"
-        : undefined
+  const failed = event.action.endsWith(".failed")
+  const completed = event.action.endsWith(".completed")
+  const actionColor = failed ? DIFF.del : completed ? DIFF.ins : undefined
 
   return (
     <div className="rounded border border-border-subtle bg-overlay-1">
       <div className="flex items-center gap-2 px-3 py-1.5">
-        <span className="text-[10px] uppercase tracking-wide text-text-muted/45 shrink-0">{event.phase}</span>
-        <span className="text-xs font-medium shrink-0" style={actionColor ? { color: actionColor } : undefined}>{event.label}</span>
-        {event.summary && <span className="text-xs text-text-muted truncate">{event.summary}</span>}
+        <span className="text-xs font-medium shrink-0" style={actionColor ? { color: actionColor } : undefined}>
+          {formatAuditAction(event.action)}
+        </span>
+        <span className="text-xs text-text-muted truncate">{event.actor}</span>
         <span className="flex-1" />
-        <span className="text-xs text-text-muted/40 font-mono tabular-nums">{new Date(event.timestamp).toLocaleTimeString()}</span>
-        {hasJson && (
+        <span className="text-xs text-text-muted/40 font-mono tabular-nums">
+          {new Date(event.timestamp).toLocaleTimeString()}
+        </span>
+        {event.detail != null && (
           <button
+            type="button"
             onClick={() => setJsonOpen((value) => !value)}
             className="text-xs text-text-muted/40 hover:text-text-muted px-1 py-0.5 rounded hover:bg-elevated transition-colors"
           >
@@ -319,15 +333,10 @@ function HistoryEventRow({ event }: { event: SyncHistoryEventRow }) {
           </button>
         )}
       </div>
-      {event.error && (
-        <div className="px-3 pb-2 text-xs font-mono break-all" style={{ color: DIFF.del }}>
-          {event.error}
-        </div>
-      )}
-      {hasJson && jsonOpen && (
+      {jsonOpen && event.detail != null && (
         <div className="px-3 pb-2 border-t border-border-subtle">
           <pre className="text-xs text-text-muted/60 font-mono whitespace-pre-wrap break-all leading-relaxed pt-1.5 max-h-48 overflow-y-auto show-scrollbar">
-            {JSON.stringify(event.raw, null, 2)}
+            {JSON.stringify(event.detail, null, 2)}
           </pre>
         </div>
       )}
@@ -344,46 +353,11 @@ function HistoryKv({ label, value }: { label: string; value: string }) {
   )
 }
 
-function historyGroupTone(status: SyncHistoryGroup["status"]): string {
-  switch (status) {
-    case "completed": return DIFF.ins
-    case "failed": return DIFF.del
-    case "executing": return "var(--color-accent)"
-    default: return "var(--color-text-muted)"
-  }
-}
-
-function formatHistoryActivityName(name: string, kind: OperationKind): string {
-  const map: Record<string, string> = {
-    started: kind === OperationKind.SyncPreview ? "Preview started" : "Execute started",
-    completed: kind === OperationKind.SyncPreview ? "Preview complete" : "Execute complete",
-    failed: kind === OperationKind.SyncPreview ? "Preview failed" : "Execute failed",
-    "sync-metadata": "Sync Metadata",
-    "sync-date": "Set Sync Date",
-    "deploy-etl": "Deploy ETL",
-    "publish-views": "Publish Views",
-    "apply-contract": "Apply Contract",
-    "apply-rules": "Apply Rules",
-    phases: kind === OperationKind.SyncPreview ? "Preview phases" : "Execution phases",
-  }
-  if (map[name]) return map[name]
-  return name
-    .split("-")
-    .filter(Boolean)
-    .map((part) => part.charAt(0).toUpperCase() + part.slice(1))
-    .join(" ")
-}
-
 function formatHistoryDateTime(value: string): string {
   return new Date(value).toLocaleString([], {
     month: "short",
     day: "numeric",
     hour: "2-digit",
-    minute: "2-digit",
+    minute: "2-digit"
   })
-}
-
-function formatPlanEntityLabel(plan: SyncPlan): string {
-  const entityRef = `${plan.entity.type}#${plan.entity.id}`
-  return plan.entity.displayName ? `${plan.entity.displayName} (${entityRef})` : entityRef
 }

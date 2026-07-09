@@ -4,10 +4,9 @@
  * @module
  */
 
-import type sql from "mssql"
+import type { AuthoredSyncDefinitionTable } from "@mia/shared-types"
 import type { SyncPlanConflict } from "../../application/shell/plan-store.js"
-import type { SyncEventHost } from "../../ports/index.js"
-import type { SyncRecipeTable } from "../recipes.js"
+import type { SyncRuntimeHost } from "../../ports/index.js"
 import { formatScalar, qtable, quoteValue, runQueryWithRetry } from "./sql-helpers.js"
 import type { PkHashRow } from "./types.js"
 
@@ -27,9 +26,9 @@ import type { PkHashRow } from "./types.js"
  *  - Capped at 5_000 PKs per query to keep the IN list reasonable.
  */
 export async function detectScopeMisattribution(
-  host: SyncEventHost,
-  tgtPool: sql.ConnectionPool,
-  table: SyncRecipeTable,
+  host: SyncRuntimeHost,
+  targetConn: string,
+  table: AuthoredSyncDefinitionTable,
   entityId: string | number,
   pkColumns: string[],
   insertCandidates: PkHashRow[],
@@ -49,11 +48,11 @@ export async function detectScopeMisattribution(
   const candidates = insertCandidates.slice(0, 5_000)
   const pkLiterals = candidates.map((r) => quoteValue(r.pkValues[pkCol])).join(", ")
 
-  let result: sql.IResult<unknown>
+  let result: Awaited<ReturnType<typeof runQueryWithRetry>>
   try {
     result = await runQueryWithRetry(
       host,
-      tgtPool,
+      targetConn,
       // No NOLOCK (consistent with the rest of diff). Plain READ COMMITTED.
       `SELECT [${pkCol}] AS pk, [${scopeCol}] AS scope ` +
         `FROM ${qtable(table.name)} WHERE [${pkCol}] IN (${pkLiterals})`,

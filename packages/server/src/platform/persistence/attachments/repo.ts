@@ -24,7 +24,6 @@ export interface AttachmentRow {
   id: string
   scope: AttachmentScope
   run_id: string | null
-  session_id: string | null
   owner_upn: string | null
   original_name: string
   normalized_name: string
@@ -62,7 +61,6 @@ export interface AttachmentImportRow {
 export interface CreateAttachmentInput {
   scope: AttachmentScope
   runId?: string | null
-  sessionId?: string | null
   ownerUpn?: string | null
   originalName: string
   normalizedName: string
@@ -89,12 +87,12 @@ export function insertAttachment(input: CreateAttachmentInput): AttachmentRow {
     .prepare(
       `
     INSERT INTO attachments (
-      id, scope, run_id, session_id, owner_upn,
+      id, scope, run_id, owner_upn,
       original_name, normalized_name, media_type, size_bytes, content_hash,
       storage_uri, text_extract_uri, ingestion_mode, status, source,
       purpose_tag, goal_snapshot, uploaded_at, retention_until
     ) VALUES (
-      @id, @scope, @runId, @sessionId, @ownerUpn,
+      @id, @scope, @runId, @ownerUpn,
       @originalName, @normalizedName, @mediaType, @sizeBytes, @contentHash,
       @storageUri, @textExtractUri, @ingestionMode, 'uploaded', @source,
       @purposeTag, @goalSnapshot, @uploadedAt, @retentionUntil
@@ -105,7 +103,6 @@ export function insertAttachment(input: CreateAttachmentInput): AttachmentRow {
       id,
       scope: input.scope,
       runId: input.runId ?? null,
-      sessionId: input.sessionId ?? null,
       ownerUpn: input.ownerUpn ?? null,
       originalName: input.originalName,
       normalizedName: input.normalizedName,
@@ -134,7 +131,6 @@ export function getAttachment(id: string): AttachmentRow | undefined {
 export interface ListAttachmentsFilter {
   scope?: AttachmentScope
   runId?: string
-  sessionId?: string
   ownerUpn?: string
   /** Substring search over original_name / normalized_name / purpose_tag. */
   q?: string
@@ -150,10 +146,6 @@ export function listAttachments(filter: ListAttachmentsFilter = {}): AttachmentR
   if (filter.runId) {
     where.push("run_id = @runId")
     params["runId"] = filter.runId
-  }
-  if (filter.sessionId) {
-    where.push("session_id = @sessionId")
-    params["sessionId"] = filter.sessionId
   }
   if (filter.ownerUpn) {
     where.push("owner_upn = @ownerUpn")

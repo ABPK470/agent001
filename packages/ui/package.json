@@ -22,12 +22,13 @@
     "@types/react-dom": "^19.2.3",
     "@vitejs/plugin-react": "^5.0.4",
     "tailwindcss": "^4.1.14",
-    "vite": "^7.3.1"
+    "vite": "^7.3.1",
+    "vitest": "^3.2.4"
   },
   "scripts": {
     "dev": "vite",
     "start": "vite",
     "build": "vite build",
-    "test": "echo no-tests"
+    "test": "vitest run"
   }
 }

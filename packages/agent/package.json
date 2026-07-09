@@ -34,12 +34,10 @@
     "lint": "tsc --noEmit"
   },
   "dependencies": {
+    "@mia/shared-types": "*",
     "@mia/sync": "*",
     "@mia/shared-enums": "*",
-    "mssql": "^12.2.1",
-    "playwright": "^1.49.0",
-    "playwright-extra": "^4.3.6",
-    "puppeteer-extra-plugin-stealth": "^2.11.2"
+    "mssql": "^12.2.1"
   },
   "devDependencies": {
     "@types/mssql": "^9.1.11",

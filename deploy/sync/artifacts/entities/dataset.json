@@ -13,8 +13,7 @@
   },
   "governance": {
     "approvalPolicyId": null,
-    "freezeWindowIds": [],
-    "riskMultiplier": 1
+    "freezeWindowIds": []
   },
   "strategy": {
     "strategyId": "mymi-scd2",
@@ -38,7 +37,7 @@
       {
         "name": "core.Activity",
         "scopeColumn": "pipelineId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Activity].pipelineId AND p.datasetId = {id})",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.[pipelineId] = [core].[Activity].[pipelineId] AND p.[datasetId] = {id})",
         "source": "fk+pipeline",
         "verified": true,
         "groundedByPipeline": true,
@@ -47,7 +46,7 @@
       },
       {
         "name": "core.Pipeline",
-        "scopeColumn": "datasetId",
+        "scopeColumn": "pipelineId",
         "predicate": "datasetId = {id}",
         "source": "fk+pipeline",
         "verified": true,
@@ -58,7 +57,7 @@
       {
         "name": "core.DatasetMappingColumn",
         "scopeColumn": "datasetMappingId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[DatasetMappingColumn].datasetColumnId_Left AND p.datasetId = {id})",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetMapping] dm WHERE dm.[datasetMappingId] = [core].[DatasetMappingColumn].[datasetMappingId] AND dm.[datasetId_Left] = {id})",
         "source": "fk+pipeline",
         "verified": true,
         "groundedByPipeline": true,
@@ -67,7 +66,7 @@
       },
       {
         "name": "core.DatasetMapping",
-        "scopeColumn": "datasetId_Left",
+        "scopeColumn": "datasetMappingId",
         "predicate": "datasetId_Left = {id}",
         "source": "fk+pipeline",
         "verified": true,
@@ -197,7 +196,7 @@
   },
   "provenance": {
     "kind": "legacy-migration",
-    "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
-    "sourceVersion": "2026-05-10T11:19:07.694Z"
+    "sourceArtifact": "deploy/sync/generators/refresh-from-legacy.mjs",
+    "sourceVersion": "2026-07-09T13:02:24.967Z"
   }
 }

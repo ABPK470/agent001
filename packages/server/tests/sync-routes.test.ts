@@ -48,10 +48,12 @@ function createHost(root: string): AgentHost {
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
   const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
   const { registerSyncRoutes } = await import("../src/features/sync/routes.js")
+  const { seedSyncMetadataIfEmpty } = await import("../src/features/sync/application/seed-sync-metadata.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
 
   _setDb(testDb)
   _migrate(testDb)
+  seedSyncMetadataIfEmpty(projectRoot)
 
   const host = createHost(projectRoot)
   const app = Fastify({ logger: false })
@@ -91,7 +93,7 @@ beforeEach(() => {
         labelColumn: null,
         selfJoinColumn: null,
         legacy: { pipelineId: null, entrySproc: null },
-        governance: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
+        governance: { approvalPolicyId: null, freezeWindowIds: [] },
         strategy: { strategyId: "mymi-scd2", strategyVersion: "latest" },
         bindings: { serviceProfileRef: "default", environmentPolicyRef: "default" },
         ownership: { team: "sync-platform", owner: null, reviewStatus: "reviewed", notes: ["test"] },
@@ -115,15 +117,15 @@ beforeEach(() => {
         executionFlow: {
           steps: [
             {
-              id: "metadata-sync",
+              id: "metadataSync",
               phase: "metadata",
               kind: "metadataSync",
               title: "Metadata sync",
               description: "Apply metadata."
             },
             {
-              id: "pipeline-register",
-              phase: "post-metadata",
+              id: "pipelineRegister",
+              phase: "postMetadata",
               kind: "pipelineRegister",
               title: "Pipeline register",
               description: "Register pipeline."
@@ -135,6 +137,10 @@ beforeEach(() => {
       null,
       2
     )
+  )
+  writeFileSync(
+    join(projectRoot, "deploy", "sync", "artifacts", "sync-metadata.json"),
+    readFileSync(new URL("../../../deploy/sync/artifacts/sync-metadata.json", import.meta.url), "utf-8"),
   )
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
@@ -157,7 +163,7 @@ describe("sync routes", () => {
 
     const entityDefinition: EntityDefinition = {
       tenantId: "_default",
-      id: "pipeline_activity",
+      id: "pipelineActivity",
       displayName: "Pipeline Activity",
       description: "Test definition",
       rootTable: "core.PipelineActivity",
@@ -181,7 +187,7 @@ describe("sync routes", () => {
           provenance: { kind: "manual" }
         }
       ],
-      policies: { freezeWindowIds: [], riskMultiplier: 1 },
+      policies: { freezeWindowIds: [] },
       scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
       lineageRefs: [],
       provenance: { kind: "manual" },
@@ -220,8 +226,8 @@ describe("sync routes", () => {
     ) as {
       definitions: Record<string, { id: string; publishedVersion: string }>
     }
-    expect(publishedBundle.definitions.pipeline_activity?.id).toBe("pipeline_activity")
-    expect(typeof publishedBundle.definitions.pipeline_activity?.publishedVersion).toBe("string")
+    expect(publishedBundle.definitions.pipelineActivity?.id).toBe("pipelineActivity")
+    expect(typeof publishedBundle.definitions.pipelineActivity?.publishedVersion).toBe("string")
 
     const definitions = await app.inject({
       method: "GET",
@@ -230,7 +236,7 @@ describe("sync routes", () => {
     expect(definitions.statusCode).toBe(200)
     const body = definitions.json() as Array<{ id: string; publishedVersion: string }>
     expect(body).toHaveLength(1)
-    expect(body[0]).toMatchObject({ id: "pipeline_activity" })
+    expect(body[0]).toMatchObject({ id: "pipelineActivity" })
     expect(typeof body[0]?.publishedVersion).toBe("string")
 
     await app.close()

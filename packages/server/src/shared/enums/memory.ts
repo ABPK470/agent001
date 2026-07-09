@@ -86,3 +86,23 @@ export const MEMORY_VALIDATION_ACTIONS: ReadonlyArray<MemoryValidationAction> =
 
 export const isMemoryValidationAction = (value: unknown): value is MemoryValidationAction =>
   typeof value === "string" && (MEMORY_VALIDATION_ACTIONS as readonly string[]).includes(value)
+
+/**
+ * How a run's final answer should be treated when stored in episodic memory.
+ */
+export const EpisodicAnswerKind = {
+  Substantive: "substantive",
+  /** User must disambiguate or supply context — no reusable discovery yet. */
+  Clarification: "clarification",
+  /** Discovery ran but the answer reports no confirmed catalog outcome. */
+  Inconclusive: "inconclusive",
+  Failure: "failure",
+  Empty: "empty"
+} as const
+
+export type EpisodicAnswerKind = (typeof EpisodicAnswerKind)[keyof typeof EpisodicAnswerKind]
+
+export const EPISODIC_ANSWER_KINDS: ReadonlyArray<EpisodicAnswerKind> = Object.values(EpisodicAnswerKind)
+
+export const isEpisodicAnswerKind = (value: unknown): value is EpisodicAnswerKind =>
+  typeof value === "string" && (EPISODIC_ANSWER_KINDS as readonly string[]).includes(value)

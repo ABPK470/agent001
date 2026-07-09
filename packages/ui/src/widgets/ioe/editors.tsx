@@ -8,11 +8,9 @@ import { CodeBlock, extractToolCode, ToolResultTable, ToolStepInput, ToolStepOut
 import { EditorTab, RunStatus } from "../../enums"
 import type { AgentDefinition, BusMessage, Run, Step, TraceEntry } from "../../types"
 import { fmtTokens, formatMs, remediationHintForValidationCode, truncate } from "../../util"
-import {
-    C,
-    fmtK,
-    statusDot,
-} from "./constants"
+import { traceExportFilename } from "@mia/shared-types"
+import { downloadAuthenticated } from "../../lib/userDownload"
+import { C } from "./constants"
 
 // ═══════════════════════════════════════════════════════════════════
 //  Export: format Agent Loop trace as plain text
@@ -39,16 +37,18 @@ export function formatTraceAsText(trace: TraceEntry[]): string {
   return lines.join("\n")
 }
 
-/** Trigger a file download in the browser. */
-export function exportAgentLoop(trace: TraceEntry[]): void {
-  const text = formatTraceAsText(trace)
-  const blob = new Blob([text], { type: "text/plain;charset=utf-8" })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement("a")
-  a.href = url
-  a.download = `agent-loop-${new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19)}.txt`
-  a.click()
-  URL.revokeObjectURL(url)
+/** Trigger browser download of run trace — always saves on the user's machine. */
+export function exportAgentLoop(runId: string): Promise<{ filename: string; bytes: number }> {
+  return downloadAuthenticated(
+    `/api/runs/${encodeURIComponent(runId)}/export/trace`,
+    traceExportFilename(runId, "txt"),
+  )
+}
+
+/** @deprecated Use exportAgentLoop(runId) — trace is downloaded via API, not built client-side. */
+export function exportAgentLoopFromTrace(_trace: TraceEntry[], runId?: string): void {
+  if (!runId) return
+  void exportAgentLoop(runId)
 }
 
 /* ── Text formatting helpers ─────────────────────────────────────── */
@@ -74,21 +74,7 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "usage": return `${p}USAGE  +${fmtK(e.iterationTokens)} tk · total ${fmtK(e.totalTokens)} · ${e.llmCalls} calls`
 
     case "planning_preflight": return `${p}PLANNER PREFLIGHT  ${e.mode}`
-    case "planner-decision": return `${p}PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${e.score.toFixed(2)}${e.route ? `  route=${e.route}` : ""}${e.coherenceNeed ? `  coherence=${e.coherenceNeed}` : ""}${e.coordinationNeed ? `  coordination=${e.coordinationNeed}` : ""}`
-    case "planner-coherent-bootstrap": return `${p}PLANNER BOOTSTRAP  ${e.decompositionStrategy}  artifacts=${e.artifactCount}`
-    case "planner-architecture-state": return `${p}ARCHITECTURE  ${e.status}  lane=${e.lane}${e.architecture ? `  ${e.architecture}` : ""}`
-    case "coherent-generation-start": return `${p}COHERENT GENERATION START  route=${e.route}`
-    case "coherent-generation-bundle": return `${p}COHERENT BUNDLE  ${e.artifactCount} artifacts
-  ${p}  ${e.artifacts.map((artifact) => artifact.path).join(", ")}`
-    case "coherent-generation-materialized": return `${p}COHERENT MATERIALIZED  ${e.artifactCount} artifacts  read-back ${e.readBackArtifacts.length}
-  ${p}  ${e.artifacts.join(", ")}`
-    case "coherent-generation-verified": return `${p}COHERENT VERIFIED  ${e.overall}  conf=${e.confidence.toFixed(2)}  issues=${e.issueCount}  systemChecks=${e.systemCheckCount}`
-    case "coherent-generation-repair-needed": return `${p}COHERENT REPAIR REQUIRED  attempt=${e.repairAttempt}  issues=${e.issueCount}
-  ${p}  ${e.affectedArtifacts.join(", ")}`
-    case "coherent-generation-escalated": return `${p}COHERENT ESCALATED  ${e.target}  issues=${e.issueCount}  ${e.reason}`
-    case "coherent-generation-handoff": return `${p}COHERENT HANDOFF  ${e.verificationRoute}  artifacts=${e.artifactCount}`
-    case "coherent-generation-failed": return `${p}COHERENT FAILED  ${e.stage}
-  ${e.diagnostics.map((diag) => `${p}  ${diag}`).join("\n")}`
+    case "planner-decision": return `${p}PLANNER  ${e.shouldPlan ? "activated" : "skipped"}  score ${e.score.toFixed(2)}${e.route ? `  route=${e.route}` : ""}`
     case "planner-generating": return `${p}GENERATING PLAN...`
     case "planner-plan-generated":
       return `${p}PLAN  ${e.stepCount} steps\n${p}  ${e.reason}\n` +
@@ -133,11 +119,6 @@ function fmtEvent(e: TraceEntry, depth: number): string {
     case "planner-repair-plan":
       return `${p}REPAIR PLAN  attempt ${e.attempt}${e.rerunOrder.length ? `  rerun ${e.rerunOrder.join(" -> ")}` : ""}\n` +
         e.tasks.map(task => `${p}  ${task.stepName}: ${task.mode}${task.ownedIssueCodes.length ? ` · own ${task.ownedIssueCodes.join(",")}` : ""}${task.dependencyIssueCodes.length ? ` · deps ${task.dependencyIssueCodes.join(",")}` : ""}`).join("\n")
-    case "planner-repair-compatibility":
-      return `${p}COMPAT  attempt ${e.attempt}  mode=${e.mode}  active=${e.activePath}  ${e.diverged ? "diverged" : "aligned"}${e.divergenceScore != null || e.divergenceThreshold != null ? `  score=${e.divergenceScore ?? e.reasons.length}/${e.divergenceThreshold ?? "?"}` : ""}${e.pinnedToLegacy ? "  pinned=legacy" : ""}\n` +
-        `${p}  legacy: ${e.legacy.rerunOrder.join(" -> ") || "none"}\n` +
-        `${p}  repair: ${e.repair.rerunOrder.join(" -> ") || "none"}` +
-        (e.reasons.length ? `\n${e.reasons.map(reason => `${p}  reason: ${reason}`).join("\n")}` : "")
     case "planner-retry": return `${p}RETRY  attempt ${e.attempt}  ${e.reason}`
     case "planner-retry-skipped": return `${p}RETRY SKIPPED  ${e.reason}`
     case "planner-budget-extended": return `${p}BUDGET EXTENDED  completed ${e.completedSteps}  budget ${e.effectiveBudget}  ext ${e.extensions}`
@@ -1194,25 +1175,6 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
       </div>
     )
   }
-  if (e.kind === "planner-repair-compatibility") {
-    return (
-      <div className="py-1 pl-2" style={{ borderLeft: `2px solid #F9731640` }}>
-        <div className="flex items-center gap-1.5">
-          <span className="text-[13px] font-mono font-semibold" style={{ color: "var(--color-warning)" }}>COMPAT</span>
-          <span className="text-[13px] font-mono" style={{ color: C.textSecondary }}>attempt {e.attempt}</span>
-          <span className="text-[13px] font-mono" style={{ color: C.dim }}>mode {e.mode}</span>
-          <span className="text-[13px] font-mono" style={{ color: C.dim }}>active {e.activePath}</span>
-          <span className="text-[13px] font-mono" style={{ color: e.diverged ? C.warning : C.success }}>{e.diverged ? "diverged" : "aligned"}</span>
-        </div>
-        <div className="text-[13px] mt-0.5 pl-2" style={{ color: C.dim }}>
-          legacy {e.legacy.rerunOrder.join(" → ") || "none"} · repair {e.repair.rerunOrder.join(" → ") || "none"}
-        </div>
-        {e.reasons.map((reason, index) => (
-          <div key={index} className="text-[13px] mt-0.5 pl-2" style={{ color: C.muted }}>{reason}</div>
-        ))}
-      </div>
-    )
-  }
   if (e.kind === "planner-retry") {
     return (
       <div className="py-0.5 pl-4 text-[13px] font-mono" style={{ color: C.warning }}>
@@ -1417,7 +1379,7 @@ interface PipelineGroup {
 
 /** Verification probes + result, grouped together */
 interface VerificationGroup {
-  /** Tool calls run by the verifier (read_file, browser_check, etc.) */
+  /** Tool calls run by the verifier (read_file, run_command, etc.) */
   probes: TraceEntry[]
   /** The verification decision event */
   result: Extract<TraceEntry, { kind: "planner-verification" }> | null
@@ -1769,93 +1731,10 @@ function PreambleRow({ entry: e }: { entry: TraceEntry }) {
           <div className="ml-5 py-0.5" style={{ color: C.muted }}>
             {e.reason}
             {e.route ? ` · route ${e.route}` : ""}
-            {e.coherenceNeed ? ` · coherence ${e.coherenceNeed}` : ""}
-            {e.coordinationNeed ? ` · coordination ${e.coordinationNeed}` : ""}
           </div>
         )}
       </div>
     )
-  }
-
-  if (e.kind === "planner-coherent-bootstrap") {
-    return (
-      <div>
-        <TreeRow onClick={() => setOpen(!open)} open={open}
-          label={`BOOTSTRAP · ${e.decompositionStrategy}`}
-          labelColor={"var(--color-accent-hover)"}
-          detail={`${e.artifactCount} artifacts`}
-        />
-        {open && (
-          <div className="ml-5 space-y-0.5 py-0.5">
-            <div style={{ color: C.muted }}>{e.decompositionReasons.join(" · ") || "architecture frozen before decomposition"}</div>
-            {e.sharedContracts.length > 0 && <div style={{ color: C.dim }}>contracts: {e.sharedContracts.join(" · ")}</div>}
-            {e.invariants.length > 0 && <div style={{ color: C.dim }}>invariants: {e.invariants.join(" · ")}</div>}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  if (e.kind === "planner-architecture-state") {
-    return (
-      <div>
-        <TreeRow onClick={() => setOpen(!open)} open={open}
-          label={`ARCHITECTURE · ${e.status}`}
-          labelColor={e.status === "abandoned" ? C.coral : e.status === "repairing_in_place" ? C.warning : C.success}
-          detail={`lane ${e.lane}`}
-        />
-        {open && <div className="ml-5 py-0.5" style={{ color: C.muted }}>{e.reason}{e.architecture ? ` · ${e.architecture}` : ""}</div>}
-      </div>
-    )
-  }
-
-  if (e.kind === "coherent-generation-start") {
-    return <FlatRow label="COHERENT START" labelColor={C.success} detail={`route ${e.route}`} />
-  }
-
-  if (e.kind === "coherent-generation-bundle") {
-    return (
-      <div>
-        <TreeRow onClick={() => setOpen(!open)} open={open}
-          label={`COHERENT BUNDLE · ${e.artifactCount} artifacts`}
-          labelColor={C.success}
-          detail={!open ? e.artifacts.map((artifact) => artifact.path).join(", ") : undefined}
-        />
-        {open && (
-          <div className="ml-5 space-y-0.5 py-0.5">
-            {e.artifacts.map((artifact, index) => (
-              <div key={index} style={{ color: C.dim }}>{artifact.path} · {artifact.purpose}</div>
-            ))}
-            {e.sharedContracts.length > 0 && <div style={{ color: C.muted }}>contracts: {e.sharedContracts.join(" · ")}</div>}
-            {e.invariants.length > 0 && <div style={{ color: C.muted }}>invariants: {e.invariants.join(" · ")}</div>}
-          </div>
-        )}
-      </div>
-    )
-  }
-
-  if (e.kind === "coherent-generation-materialized") {
-    return <FlatRow label={`COHERENT MATERIALIZED · ${e.artifactCount} files`} labelColor={C.success} detail={`read-back ${e.readBackArtifacts.length}`} />
-  }
-
-  if (e.kind === "coherent-generation-verified") {
-    return <FlatRow label={`COHERENT VERIFY · ${e.overall}`} labelColor={e.overall === "pass" ? C.success : e.overall === "retry" ? C.warning : C.coral} detail={`conf ${(e.confidence * 100).toFixed(0)}% · issues ${e.issueCount} · system ${e.systemCheckCount}`} />
-  }
-
-  if (e.kind === "coherent-generation-repair-needed") {
-    return <FlatRow label={`COHERENT REPAIR · attempt ${e.repairAttempt}`} labelColor={C.warning} detail={`${e.issueCount} issues${e.affectedArtifacts.length ? ` · ${e.affectedArtifacts.join(", ")}` : ""}`} />
-  }
-
-  if (e.kind === "coherent-generation-escalated") {
-    return <FlatRow label={`COHERENT ESCALATED · ${e.target}`} labelColor={C.coral} detail={e.reason} />
-  }
-
-  if (e.kind === "coherent-generation-handoff") {
-    return <FlatRow label={`COHERENT HANDOFF · ${e.verificationRoute}`} labelColor={C.success} detail={`${e.artifactCount} artifacts`} />
-  }
-
-  if (e.kind === "coherent-generation-failed") {
-    return <FlatRow label={`COHERENT FAILED · ${e.stage}`} labelColor={C.coral} detail={`${e.diagnostics.length} diagnostics`} />
   }
 
   if (e.kind === "planner-plan-generated") {
@@ -3117,8 +2996,6 @@ const MAP_TOOL_LABELS: Record<string, string> = {
   run_command: "Shell",
   fetch_url: "Fetch",
   delegate: "Delegate",
-  browse_web: "Browse",
-  browser_check: "BrChk",
   ask_user: "Ask",
 }
 function mapToolLabel(id: string): string {

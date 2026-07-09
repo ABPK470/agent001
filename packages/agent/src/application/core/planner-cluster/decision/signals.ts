@@ -1,6 +1,5 @@
-import { PlannerNeedLevel } from "../../domain/index.js"
 /**
- * Signal collection and routing confidence scoring for the planner decision system.
+ * Request signal collection for planner routing.
  *
  * @module
  */
@@ -8,25 +7,16 @@ import { PlannerNeedLevel } from "../../domain/index.js"
 import { MessageRole } from "../../domain/enums/message.js"
 import type { Message } from "../../types.js"
 import {
-  BOUNDED_COHERENT_SCOPE_RE,
-  COHERENCE_FIRST_RE,
-  COHESIVE_IMPLEMENTATION_RE,
   COORDINATION_HEAVY_RE,
   DELEGATION_RE,
   EXISTING_CODE_COUPLING_RE,
   IMPLEMENTATION_SCOPE_RE,
   MULTI_STEP_RE,
-  MULTI_TARGET_CUE_RE,
   RECOVERY_HINT_RE,
   TARGET_FILE_RE,
   TOOL_DIVERSITY_RE,
   VERIFICATION_RE
 } from "../internal/decision-patterns.js"
-import type { RoutingConfidence } from "../types.js"
-
-// ============================================================================
-// Structured signal collection
-// ============================================================================
 
 export interface RequestSignals {
   readonly normalized: string
@@ -39,15 +29,7 @@ export interface RequestSignals {
   readonly structuredBulletCount: number
   readonly priorToolMessages: number
   readonly targetFilePaths: readonly string[]
-  /** True when recent history contains a no-progress / recovery marker → favour planner */
   readonly hasPriorNoProgressSignal: boolean
-}
-
-export interface RoutingAxes {
-  readonly coherenceScore: number
-  readonly coordinationScore: number
-  readonly coherenceNeed: PlannerNeedLevel
-  readonly coordinationNeed: PlannerNeedLevel
 }
 
 export function collectSignals(messageText: string, history: readonly Message[]): RequestSignals {
@@ -59,13 +41,7 @@ export function collectSignals(messageText: string, history: readonly Message[])
   const targetFilePaths = [
     ...new Set((normalized.match(TARGET_FILE_RE) ?? []).map((p) => p.replace(/^\.\//, "")))
   ]
-  // Exclude system messages: the episodic memory in the system prompt often contains
-  // "stuck" from a prior run in the session, which would poison routing for all
-  // subsequent unrelated queries. Only assistant / user / tool messages can legitimately
-  // indicate that the CURRENT goal is a retry of a failed direct-loop attempt.
-  // Limit to the last 4 non-system messages (≈ 2 exchanges) so a stuck event
-  // from several turns ago does not affect today's semantically different queries.
-  const historyTail = history.filter((m) => m.role !== "system").slice(-4)
+  const historyTail = history.filter((m) => m.role !== MessageRole.System).slice(-4)
   const hasPriorNoProgressSignal = historyTail.some(
     (m) => typeof m.content === "string" && RECOVERY_HINT_RE.test(m.content)
   )
@@ -85,109 +61,51 @@ export function collectSignals(messageText: string, history: readonly Message[])
   }
 }
 
-export function isHighConfidenceSingleArtifactBurst(signals: RequestSignals): boolean {
-  const explicitSingleArtifact = /\b(?:single|one|only)\s+(?:file|module|component|page|script)\b/i.test(
-    signals.normalized
-  )
-  if (!explicitSingleArtifact) return false
-  if (signals.targetFilePaths.length !== 1) return false
-  if (signals.hasDelegationCue || signals.hasMultiStepCue) return false
-  if (signals.structuredBulletCount > 0) return false
-  if (MULTI_TARGET_CUE_RE.test(signals.normalized)) return false
-  return signals.hasImplementationScopeCue || COHESIVE_IMPLEMENTATION_RE.test(signals.normalized)
-}
+/** Complexity score — planner when score >= 4 or explicit planner triggers fire. */
+export function computePlannerScore(signals: RequestSignals): { score: number; reasons: string[] } {
+  let score = 0
+  const reasons: string[] = []
 
-export function toNeedLevel(score: number): PlannerNeedLevel {
-  if (score >= 5) return PlannerNeedLevel.High
-  if (score >= 3) return PlannerNeedLevel.Medium
-  return PlannerNeedLevel.Low
-}
-
-export function hasRealOwnershipSeparation(signals: RequestSignals): boolean {
-  return (
-    signals.hasMultiStepCue ||
-    signals.hasDelegationCue ||
-    signals.structuredBulletCount > 0 ||
-    MULTI_TARGET_CUE_RE.test(signals.normalized) ||
-    COORDINATION_HEAVY_RE.test(signals.normalized)
-  )
-}
-
-export function evaluateRoutingAxes(signals: RequestSignals): RoutingAxes {
-  let coherenceScore = 0
-  let coordinationScore = 0
-
-  if (signals.hasImplementationScopeCue) coherenceScore += 3
-  if (COHESIVE_IMPLEMENTATION_RE.test(signals.normalized)) coherenceScore += 2
-  if (COHERENCE_FIRST_RE.test(signals.normalized)) coherenceScore += 2
-  if (BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) coherenceScore += 1
-  if (signals.longTask) coherenceScore += 1
-  if (signals.targetFilePaths.length >= 2) coherenceScore += 1
-
-  if (signals.hasMultiStepCue) coordinationScore += 3
-  if (signals.hasDelegationCue) coordinationScore += 4
-  if (signals.structuredBulletCount > 0) coordinationScore += 2
-  if (signals.targetFilePaths.length >= 2) coordinationScore += 2
-  if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) coordinationScore += 3
-  if (COORDINATION_HEAVY_RE.test(signals.normalized)) coordinationScore += 3
-  if (signals.priorToolMessages >= 4) coordinationScore += 1
-  if (MULTI_TARGET_CUE_RE.test(signals.normalized)) coordinationScore += 1
-
+  if (signals.hasMultiStepCue) {
+    score += 3
+    reasons.push("multi_step")
+  }
+  if (signals.hasToolDiversityCue) {
+    score += 1
+    reasons.push("tool_diversity")
+  }
+  if (signals.hasDelegationCue) {
+    score += 4
+    reasons.push("delegation")
+  }
+  if (signals.hasImplementationScopeCue) {
+    score += 3
+    reasons.push("implementation_scope")
+  }
+  if (signals.hasVerificationCue && signals.hasImplementationScopeCue) {
+    score += 1
+    reasons.push("verification_on_impl")
+  }
+  if (signals.longTask) {
+    score += 1
+    reasons.push("long_or_structured")
+  }
+  if (signals.priorToolMessages >= 4) {
+    score += 2
+    reasons.push("prior_tool_activity")
+  }
+  if (signals.hasPriorNoProgressSignal) {
+    score += 2
+    reasons.push("prior_no_progress")
+  }
   if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) {
-    coherenceScore = Math.max(0, coherenceScore - 1)
+    score += 2
+    reasons.push("existing_code_coupling")
+  }
+  if (COORDINATION_HEAVY_RE.test(signals.normalized)) {
+    score += 2
+    reasons.push("coordination_heavy")
   }
 
-  return {
-    coherenceScore,
-    coordinationScore,
-    coherenceNeed: toNeedLevel(coherenceScore),
-    coordinationNeed: toNeedLevel(coordinationScore)
-  }
-}
-
-// ============================================================================
-// Layer 3: Routing confidence scoring
-// ============================================================================
-
-/**
- * Score how confident the heuristic layer is about its routing recommendation.
- *
- * The confidence level controls whether Layer 4 (LLM routing) is invoked:
- * - "ambiguous" → escalate to LLM (signals are contradictory or weak)
- * - anything else → skip LLM router, heuristic is reliable enough
- *
- * Criteria:
- *   decisive_planner  — multi-step + delegation/bullets, OR coordinationNeed=high
- *   lean_planner      — medium coordination with at least one non-delegation
- *                       hard signal (multi-step, bullets, coupling, or
- *                       coordination_heavy pattern)
- *   ambiguous         — medium coordination came predominantly from DELEGATION_RE
- *                       alone with no supporting multi-step or structural signals;
- *                       regex fired but its semantic accuracy is uncertain
- *   lean_coherent     — low coordination + bounded implementation scope
- *   decisive_coherent — low coordination + strong coherence markers
- */
-export function computeRoutingConfidence(signals: RequestSignals, axes: RoutingAxes): RoutingConfidence {
-  if (axes.coordinationNeed === PlannerNeedLevel.High) return "decisive_planner"
-  if (signals.hasMultiStepCue && (signals.hasDelegationCue || signals.structuredBulletCount > 0))
-    return "decisive_planner"
-
-  if (axes.coordinationNeed === PlannerNeedLevel.Medium) {
-    // At least one hard non-delegation coordination signal → lean planner
-    if (signals.hasMultiStepCue) return "lean_planner"
-    if (signals.structuredBulletCount > 0) return "lean_planner"
-    if (EXISTING_CODE_COUPLING_RE.test(signals.normalized)) return "lean_planner"
-    if (COORDINATION_HEAVY_RE.test(signals.normalized)) return "lean_planner"
-    // Coordination score is medium but only from DELEGATION_RE: ambiguous
-    return "ambiguous"
-  }
-
-  // coordinationNeed === "low"
-  if (COHESIVE_IMPLEMENTATION_RE.test(signals.normalized) || COHERENCE_FIRST_RE.test(signals.normalized)) {
-    return "decisive_coherent"
-  }
-  if (signals.hasImplementationScopeCue && BOUNDED_COHERENT_SCOPE_RE.test(signals.normalized)) {
-    return "lean_coherent"
-  }
-  return "ambiguous"
+  return { score, reasons }
 }

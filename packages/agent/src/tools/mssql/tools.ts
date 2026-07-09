@@ -9,6 +9,7 @@ import { detectDimJoinNullRot, renderDimJoinNullBanner } from "./dim-join-qualit
 import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
 import { formatResults } from "./formatter.js"
 import { emitMssqlQualityTrace } from "./trace.js"
+import { markMssqlTableVerified } from "./schema-verified.js"
 import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
 
 function catalogAccessorFor(host: AgentHost, connectionName: string): () => CatalogGraph | null {
@@ -104,7 +105,8 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool {
       // Validate before executing
       const validation = validateQueryDetailed(query, writeEnabled, {
         accessor,
-        profiledTables: run?.mssqlProfileCalls ?? null
+        profiledTables: run?.mssqlProfileCalls ?? null,
+        verifiedTables: run?.mssqlVerifiedTables ?? null
       })
       if (!validation.ok) {
         emitMssqlQualityTrace(
@@ -302,6 +304,7 @@ function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool {
             // fall through to the live path unchanged.
             if (schema) {
               const qn = `${schema}.${table}`
+              markMssqlTableVerified(run, qn)
               const fp = fingerprintForQname(host, qn, connectionName)
               const own = tryServeFromCache(host, "explore_mssql_schema", qn, "columns", connectionName, fp)
               if (own !== null) return own
@@ -436,6 +439,7 @@ function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool {
               const qn = `${schema}.${table}`
               const fp = fingerprintForQname(host, qn, connectionName)
               if (fp) persistToCache(host, "explore_mssql_schema", qn, "columns", connectionName, payload, fp)
+              markMssqlTableVerified(run, qn)
             }
             return payload
           }

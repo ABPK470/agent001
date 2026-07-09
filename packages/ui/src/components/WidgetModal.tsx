@@ -9,17 +9,20 @@
 import { Maximize2, Plus, X } from "lucide-react"
 import { useStore } from "../store"
 import type { WidgetType } from "../types"
+import {
+  MODAL_ENTITY_FOCUS_PANEL,
+  MODAL_SURFACE_CLASS,
+  modalOverlayClass,
+} from "../widgets/entity-registry/modal-overlay"
 import { widgetRegistry } from "../widgets"
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
+  "thread-nav": "Threads",
   "agent-chat": "Agent Chat",
   "term-chat": "Chat",
-  "agent-viz": "Agent Viz",
   "run-status": "Run Status",
   "live-logs": "Event Stream",
-  "audit-trail": "Audit Trail",
   "step-timeline": "Step Timeline",
-  "tool-stats": "Tool Stats",
   "run-history": "Run History",
   "operator-env": "IOE",
   "debug-inspector": "Trace",
@@ -59,15 +62,14 @@ export function WidgetModal() {
   }
 
   return (
-    <div className="fixed inset-0 z-[200] flex items-center justify-center p-2 sm:p-4">
-      {/* Backdrop */}
+    <div
+      className={modalOverlayClass("focus", { zIndexClass: "z-[200]" })}
+      onClick={closeModalWidget}
+    >
       <div
-        className="absolute inset-0 bg-scrim backdrop-blur-sm"
-        onClick={closeModalWidget}
-      />
-
-      {/* Modal */}
-      <div className="relative w-full h-full max-w-5xl sm:max-h-[85vh] bg-surface border border-border rounded-xl sm:rounded-2xl shadow-2xl flex flex-col overflow-hidden">
+        className={`${MODAL_SURFACE_CLASS} ${MODAL_ENTITY_FOCUS_PANEL} flex flex-col overflow-hidden`}
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
@@ -98,7 +100,17 @@ export function WidgetModal() {
         </div>
 
         {/* Widget content */}
-        <div className="flex-1 overflow-hidden p-3">
+        <div
+          className={`flex-1 overflow-hidden ${
+            modalWidget.type === "entity-registry"
+            || modalWidget.type === "sync-admin"
+            || modalWidget.type.startsWith("sync-")
+            || modalWidget.type === "scd2-strategies"
+            || modalWidget.type === "freeze-windows"
+              ? "p-0"
+              : "p-3"
+          }`}
+        >
           <WidgetComponent />
         </div>
       </div>

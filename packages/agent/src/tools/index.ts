@@ -5,17 +5,13 @@
  * Each file here exports one or more `Tool` objects plus per-tool
  * host/run-bound factory helpers.
  *
- * Note: per-tool subdirectories (browse-web/, catalog/, mssql/, etc.)
- * are private implementation details — do not import them directly.
+ * Note: per-tool subdirectories (catalog/, mssql/, etc.) are private
+ * implementation details — do not import them directly.
  */
 
 export * from "./_helpers/index.js"
 export * from "./ask-user.js"
 export * from "./attachments.js"
-export * from "./browse-web/index.js"
-export * from "./browser-auto-login.js"
-export * from "./browser-check/index.js"
-export * from "./browser-human-handoff.js"
 export * from "./catalog-search/index.js"
 export * from "./catalog/index.js"
 export * from "./delegate-paths.js"
@@ -36,4 +32,3 @@ export * from "./record-table-verdict.js"
 export * from "./search-files.js"
 export * from "./shell/index.js"
 export * from "./think.js"
-export * from "./web-search/index.js"

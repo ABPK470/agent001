@@ -10,7 +10,7 @@
  *
  * The loop orchestration lives here. Heavy lifting is delegated to:
  *   - planner-routing.ts — structured planner-first execution path
- *   - completion-guards.ts — checks when LLM wants to finish
+ *   - loop-policy — per-turn steering (turn-start + completion)
  *   - tool-execution.ts — per-tool-call execution with guards
  *   - post-round.ts — stuck detection, budget extension, recovery hints
  *   - agent-loop-state.ts — mutable state for the tool loop
@@ -22,9 +22,8 @@ import * as log from "../../../internal/index.js"
 import type { ToolCallRecord } from "../../../tools/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../domain/agent-types.js"
 import { attemptPlannerRouting } from "../../core/planner-routing.js"
-import type { PlannerContext, VerifierDecision } from "../../core/planner.js"
-import { createAgentLoopState, DEFAULT_SYSTEM_PROMPT, runCompletionGuards } from "../loop.js"
-import { buildInitialMessages, runCoherentVerification, synthesizeFinalAnswer } from "./agent-helpers.js"
+import { createAgentLoopState, DEFAULT_SYSTEM_PROMPT, completionContext, guardCompletion } from "../loop.js"
+import { buildInitialMessages, synthesizeFinalAnswer } from "./agent-helpers.js"
 import { prepareIterationContext } from "./iteration-prepare.js"
 import { executeToolCallsBranch } from "./iteration-tool-round.js"
 
@@ -116,31 +115,8 @@ export class Agent {
     if (this.config.verbose) log.logGoal(goal)
 
     const messages: Message[] = resume?.messages ?? this.buildInitialMessages(goal)
-    const createPlannerContext = (): PlannerContext => ({
-      llm: this.llm,
-      tools: this.toolList,
-      workspaceRoot: this.config.workspaceRoot,
-      history: messages,
-      signal: this.config.signal,
-      onTrace: this.config.onPlannerTrace
-    })
-
     const state = createAgentLoopState(this.config.maxIterations)
 
-    const verifyCoherent = (force = false): Promise<VerifierDecision | null> =>
-      runCoherentVerification(
-        {
-          llm: this.llm,
-          toolList: this.toolList,
-          state,
-          allToolCalls: this.allToolCalls,
-          signal: this.config.signal,
-          onPlannerTrace: this.config.onPlannerTrace
-        },
-        force
-      )
-
-    // ── Planner-first routing ──
     if (!resume) {
       const plannerResult = await attemptPlannerRouting({
         goal,
@@ -155,8 +131,14 @@ export class Agent {
         incrementLlmCalls: () => {
           this.llmCalls++
         },
-        createPlannerContext,
-        runCoherentVerification: verifyCoherent
+        createPlannerContext: () => ({
+          llm: this.llm,
+          tools: this.toolList,
+          workspaceRoot: this.config.workspaceRoot,
+          history: messages,
+          signal: this.config.signal,
+          onTrace: this.config.onPlannerTrace
+        })
       })
       if (plannerResult.finalAnswer) {
         if (this.config.verbose) log.logFinalAnswer(plannerResult.finalAnswer)
@@ -193,6 +175,7 @@ export class Agent {
         iteration: i,
         state,
         toolList: this.toolList,
+        userGoal: goal,
         modelHint: this.llm.modelHint,
         config: {
           verbose: this.config.verbose,
@@ -251,23 +234,28 @@ export class Agent {
       }
 
       if (this.config.verbose) log.logThinking(response.content)
-      this.config.onThinking?.(response.content, response.toolCalls, i)
+      // Pre-tool narration only. Text-only turns are final answers — streamed
+      // via onToken and persisted as `answer`, not duplicated as `thinking`.
+      const preToolNarration =
+        response.toolCalls.length > 0 ? (response.content ?? null) : null
+      this.config.onThinking?.(preToolNarration, response.toolCalls, i)
 
       // ── No tool calls → completion guards ──
       if (response.toolCalls.length === 0) {
         state.completionAttempted = true
 
-        const guardResult = await runCompletionGuards({
-          response,
-          messages,
-          iteration: i,
-          state,
-          toolList: this.toolList,
-          config: this.config,
-          runCoherentVerification: verifyCoherent,
-          createPlannerContext,
-          onPlannerTrace: this.config.onPlannerTrace
-        })
+        const guardResult = await guardCompletion(
+          completionContext({
+            response,
+            messages,
+            iteration: i,
+            userGoal: goal,
+            state,
+            toolList: this.toolList,
+            config: this.config,
+            onPlannerTrace: this.config.onPlannerTrace
+          })
+        )
 
         if (guardResult) {
           if (guardResult.finalAnswer) {
@@ -312,6 +300,7 @@ export class Agent {
         state,
         tools: this.tools,
         toolList: this.toolList,
+        userGoal: goal,
         config: this.config,
         allToolCalls: this.allToolCalls
       })

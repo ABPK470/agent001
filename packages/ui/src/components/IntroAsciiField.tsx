@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useRef } from "react"
+import { ASCII_PALETTE, readCssColorInk } from "../shell/asciiNoise"
 
 declare global {
   interface Window {
@@ -23,11 +24,8 @@ declare global {
   }
 }
 
-// Discrete ASCII palette ordered sparse → dense. Cell glyph is picked
-// by noise bucket; the same noise value always maps to the same glyph
-// so motion comes from the noise field drifting, not from re-randomising
-// per cell.
-const PALETTE = [" ", " ", " ", "·", ".", "-", ":", ";", "=", "+", "*", "#"]
+// Discrete ASCII palette ordered sparse → dense — shared with asciiNoise.
+const PALETTE = ASCII_PALETTE
 
 const CHAR_W = 9
 const LINE_H = 14
@@ -165,6 +163,27 @@ function vnoise(x: number, y: number, t: number): number {
   return Math.max(0, Math.min(0.999, base + band))
 }
 
+const ADMIN_CORNER_REACH_X = 380
+const ADMIN_CORNER_REACH_Y = 220
+const ADMIN_CORNER_INK_OPACITY = 0.92
+
+/** Soft organic purple wash from the top-right — not a hard rectangle. */
+function adminCornerAccentMix(
+  c: number,
+  r: number,
+  width: number,
+  t: number,
+): number {
+  const px = c * CHAR_W + CHAR_W * 0.5
+  const py = r * LINE_H + LINE_H * 0.5
+  const dx = Math.max(0, width - px) / ADMIN_CORNER_REACH_X
+  const dy = Math.max(0, py) / ADMIN_CORNER_REACH_Y
+  const dist = Math.hypot(dx, dy)
+  const edge = vnoise(c * 0.78 + 21, r * 0.71 + 9, t * 0.14)
+  const warp = (edge - 0.48) * 0.26
+  const warped = dist + warp
+  return 1 - smoothstep(0.42, 1.02, warped)
+}
 function glyphFor(v: number): string {
   // Map noise → palette index. Bias toward the sparse end so most of
   // the canvas reads as breathing space, dense glyphs concentrate in
@@ -178,12 +197,21 @@ export function IntroAsciiField({
   boost = false,
   renderTarget,
   surface = "default",
-}: { onReady?: () => void; boost?: boolean; renderTarget?: IntroAsciiRenderTarget; surface?: IntroAsciiSurface } = {}): JSX.Element {
+  adminAccentCorner = false,
+}: {
+  onReady?: () => void
+  boost?: boolean
+  renderTarget?: IntroAsciiRenderTarget
+  surface?: IntroAsciiSurface
+  adminAccentCorner?: boolean
+} = {}): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const onReadyRef = useRef(onReady)
   const renderTargetRef = useRef(renderTarget)
+  const adminAccentCornerRef = useRef(adminAccentCorner)
   onReadyRef.current = onReady
   renderTargetRef.current = renderTarget
+  adminAccentCornerRef.current = adminAccentCorner
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -213,6 +241,13 @@ export function IntroAsciiField({
     const revealSoftEdgeMs = isLoginSurface ? 180 : REVEAL_SOFT_EDGE_MS
 
     let ink = readInk(boost ? BOOST_INK_OPACITY : INK_OPACITY)
+    let accentInk = readCssColorInk(
+      "--accent",
+      ADMIN_CORNER_INK_OPACITY,
+      `rgba(123, 111, 199, ${ADMIN_CORNER_INK_OPACITY})`,
+    )
+    let surfaceW = 0
+    let currentT = 0
     let cols = 0
     let rows = 0
     let cells = new Uint8Array(0)   // last-painted palette index per cell
@@ -240,9 +275,21 @@ export function IntroAsciiField({
       const y = r * LINE_H
       ctx!.clearRect(x, y, CHAR_W, LINE_H)
       if (ch !== " " && alpha > 0.001) {
-        if (alpha < 0.999) ctx!.globalAlpha = alpha
-        ctx!.fillText(ch, x, y)
-        if (alpha < 0.999) ctx!.globalAlpha = 1
+        const accentMix =
+          adminAccentCornerRef.current && surface === "home"
+            ? adminCornerAccentMix(c, r, surfaceW, currentT)
+            : 0
+        if (accentMix > 0.001) {
+          ctx!.globalAlpha = alpha * accentMix
+          ctx!.fillStyle = accentInk
+          ctx!.fillText(ch, x, y)
+        }
+        if (accentMix < 0.999) {
+          ctx!.globalAlpha = alpha * (1 - accentMix)
+          ctx!.fillStyle = ink
+          ctx!.fillText(ch, x, y)
+        }
+        ctx!.globalAlpha = 1
       }
     }
 
@@ -314,6 +361,7 @@ export function IntroAsciiField({
 
 
     function repaintAll(t: number) {
+      currentT = t
       ctx!.clearRect(0, 0, canvas!.width / dpr, canvas!.height / dpr)
       ctx!.fillStyle = ink
       for (let r = 0; r < rows; r++) {
@@ -356,6 +404,7 @@ export function IntroAsciiField({
       const w = surface.width
       const h = surface.height
       if (w <= 0 || h <= 0) return
+      surfaceW = w
       canvas!.width = Math.floor(w * dpr)
       canvas!.height = Math.floor(h * dpr)
       canvas!.style.width = w + "px"
@@ -395,6 +444,7 @@ export function IntroAsciiField({
       lastFrame = now
 
       const t = (now - startTs) / 1000 * NOISE_T_PER_SEC
+      currentT = t
       if (forceFullRepaint) {
         forceFullRepaint = false
         repaintAll(t)
@@ -487,7 +537,12 @@ export function IntroAsciiField({
     }
 
     function onThemeChange() {
-      ink = readInk()
+      ink = readInk(boost ? BOOST_INK_OPACITY : INK_OPACITY)
+      accentInk = readCssColorInk(
+        "--accent",
+        ADMIN_CORNER_INK_OPACITY,
+        accentInk,
+      )
       const t = (performance.now() - startTs) / 1000 * NOISE_T_PER_SEC
       // Re-ink only cells that have already been revealed so the wave
       // stays intact even if the user toggles theme mid-roll.
@@ -537,11 +592,11 @@ export function IntroAsciiField({
       sysMql?.removeEventListener?.("change", onThemeChange)
       if (rafId) cancelAnimationFrame(rafId)
     }
-  }, [])
+  }, [adminAccentCorner, boost, surface])
 
   return <canvas ref={canvasRef} className="intro3-ascii-field" aria-hidden="true" />
 }
 
 // Exported so other components can scramble through the same alphabet
 // and feel like they're coalescing out of the field.
-export const ASCII_SCRAMBLE_GLYPHS = "·.-:;=+*#/\\|"
+export { ASCII_FIELD_SCRAMBLE_GLYPHS as ASCII_SCRAMBLE_GLYPHS } from "../shell/asciiNoise"

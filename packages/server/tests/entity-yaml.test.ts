@@ -8,6 +8,7 @@
  */
 
 import type { EntityDefinition } from "@mia/sync"
+import { compileFkPathPredicate } from "@mia/sync"
 import { describe, expect, it } from "vitest"
 import {
   formatEntitiesYaml,
@@ -45,14 +46,18 @@ const FULL_DEF: EntityDefinition = {
       name: "dbo.ContractLineItem",
       executionOrder: 2,
       scope: {
-        kind: "fkPath",
-        through: [
-          {
-            table: "dbo.ContractLineItem",
-            fromColumn: "ContractId",
-            toColumn: "ContractLineItemId"
-          }
-        ]
+        kind: "sql",
+        predicate: compileFkPathPredicate(
+          { selfJoinColumn: null },
+          "dbo.ContractLineItem",
+          [
+            {
+              table: "dbo.ContractLineItem",
+              fromColumn: "ContractId",
+              toColumn: "ContractLineItemId",
+            },
+          ],
+        ),
       },
       scd2Override: null,
       verified: true,
@@ -67,9 +72,7 @@ const FULL_DEF: EntityDefinition = {
     }
   ],
   policies: {
-    approvalPolicyId: null,
     freezeWindowIds: ["month-end"],
-    riskMultiplier: 1.5
   },
   scd2: {
     strategyId: "mymi-scd2",
@@ -102,12 +105,36 @@ function stripServerStamped(
   void retiredAt
   rest.policies = {
     freezeWindowIds: rest.policies.freezeWindowIds,
-    riskMultiplier: rest.policies.riskMultiplier
   }
   return rest
 }
 
 describe("entity-yaml round-trip", () => {
+  it("normalizes legacy fkPath yaml on import", () => {
+    const yaml = formatEntityYaml({
+      ...FULL_DEF,
+      tables: [
+        FULL_DEF.tables[0]!,
+        {
+          ...FULL_DEF.tables[1]!,
+          scope: {
+            kind: "fkPath",
+            through: [
+              {
+                table: "dbo.ContractLineItem",
+                fromColumn: "ContractId",
+                toColumn: "ContractLineItemId",
+              },
+            ],
+          },
+        },
+      ],
+    })
+    const parsed = parseEntityYaml(yaml)
+    expect(parsed.ok).toBe(true)
+    expect(parsed.def?.tables[1]?.scope.kind).toBe("sql")
+  })
+
   it("preserves all structural fields through format → parse", () => {
     const yaml = formatEntityYaml(FULL_DEF)
     const parsed = parseEntityYaml(yaml)
@@ -116,10 +143,10 @@ describe("entity-yaml round-trip", () => {
     expect(stripServerStamped(parsed.def!)).toEqual(stripServerStamped(FULL_DEF))
   })
 
-  it("does not round-trip approvalPolicyId because runtime ignores it", () => {
+  it("ignores legacy approvalPolicyId on import", () => {
     const yaml = formatEntityYaml({
       ...FULL_DEF,
-      policies: { ...FULL_DEF.policies, approvalPolicyId: "high-risk" }
+      policies: { freezeWindowIds: [], approvalPolicyId: "high-risk" } as EntityDefinition["policies"],
     })
     const parsed = parseEntityYaml(yaml)
     expect(parsed.ok).toBe(true)
@@ -155,5 +182,28 @@ describe("entity-yaml round-trip", () => {
     expect(parsed.ok).toBe(true)
     // Import returns a default version (caller will stamp it).
     expect(parsed.def!.id).toBe(FULL_DEF.id)
+  })
+
+  it("preserves run block separately from entity fields", () => {
+    const yaml = formatEntityYaml(FULL_DEF, {
+      template: "metadataOnly",
+      service: "default",
+      environment: "default"
+    })
+    const parsed = parseEntityYaml(yaml)
+    expect(parsed.ok).toBe(true)
+    expect(parsed.run).toEqual({
+      template: "metadataOnly",
+      service: "default",
+      environment: "default"
+    })
+    expect(stripServerStamped(parsed.def!)).toEqual(stripServerStamped(FULL_DEF))
+  })
+
+  it("ignores run block when absent", () => {
+    const yaml = formatEntityYaml(FULL_DEF)
+    const parsed = parseEntityYaml(yaml)
+    expect(parsed.ok).toBe(true)
+    expect(parsed.run).toBeNull()
   })
 })

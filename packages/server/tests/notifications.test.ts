@@ -13,7 +13,6 @@ import {
   markAllNotificationsRead,
   markNotificationRead,
   markRunCrashed,
-  migrateNotifications,
   saveNotification,
   type DbNotification
 } from "../src/platform/persistence/db/index.js"
@@ -31,7 +30,6 @@ beforeEach(() => {
   testDb.pragma("foreign_keys = ON")
   _setDb(testDb)
   _migrate(testDb)
-  migrateNotifications()
   seedUser(testDb, TEST_UPN)
 })
 
@@ -43,9 +41,9 @@ function insertRun(id: string, status: string, goal = "test goal") {
   seedSession(testDb, "test-session", TEST_UPN)
   testDb
     .prepare(
-      "INSERT INTO runs (id, goal, status, session_id, upn, display_name, created_at) VALUES (?, ?, ?, ?, ?, ?, datetime('now'))"
+      "INSERT INTO runs (id, goal, status, upn, display_name, created_at) VALUES (?, ?, ?, ?, ?, datetime('now'))"
     )
-    .run(id, goal, status, "test-session", TEST_UPN, TEST_UPN)
+    .run(id, goal, status, TEST_UPN, TEST_UPN)
 }
 
 function makeNotification(overrides: Partial<DbNotification> = {}): DbNotification {
@@ -60,7 +58,6 @@ function makeNotification(overrides: Partial<DbNotification> = {}): DbNotificati
     read: 0,
     created_at: new Date().toISOString(),
     owner_upn: TEST_UPN,
-    session_id: null,
     ...overrides
   }
 }

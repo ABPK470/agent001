@@ -14,15 +14,12 @@
 
 import { createHash } from "node:crypto"
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
-import { homedir } from "node:os"
 import { join } from "node:path"
 
-function dataDir(): string {
-  return process.env["MIA_DATA_DIR"] || join(homedir(), ".mia")
-}
+import { resolveServerDataDir } from "../server-data-dir.js"
 
 export function getAttachmentRoot(): string {
-  return join(dataDir(), "attachments")
+  return join(resolveServerDataDir(), "attachments")
 }
 
 /** Compute the SHA-256 of the given bytes as a lowercase hex string. */

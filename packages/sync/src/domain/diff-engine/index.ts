@@ -35,11 +35,13 @@
  * live UAT mymi DB). All earlier hash-column logic was based on a false assumption.
  */
 
-import type { SyncPlanGraph, SyncPlanTable, SyncPlanTableCounts } from "../../application/shell/plan-store.js"
-import { getPool, type SyncRuntimeHost } from "../../ports/index.js"
+import type { AuthoredSyncDefinitionTable } from "@mia/shared-types"
+import { buildChangeSet } from "./change-set.js"
+import { movementFromChangeSet } from "@mia/shared-types"
+import type { SyncPlanGraph, SyncPlanTable, SyncPlanTableStats } from "../../application/shell/plan-store.js"
+import type { SyncRuntimeHost } from "../../ports/index.js"
 import { SyncPlanChangeType } from "../enums.js"
-import type { SyncRecipe, SyncRecipeTable } from "../recipes.js"
-import { instantiatePredicate, instantiatePredicateWithTree } from "../recipes.js"
+import { instantiatePredicate, instantiatePredicateWithTree } from "../predicate.js"
 import { fetchPkHash, fetchTableColumns } from "./columns.js"
 import { detectScopeMisattribution } from "./conflicts.js"
 import { fetchSamples, fetchUpdateSamples } from "./samples.js"
@@ -49,8 +51,7 @@ export type { DiffOptions } from "./types.js"
 
 export async function diffTable(
   host: SyncRuntimeHost,
-  _recipe: SyncRecipe,
-  table: SyncRecipeTable,
+  table: AuthoredSyncDefinitionTable,
   entityId: string | number,
   sourceConn: string,
   targetConn: string,
@@ -75,8 +76,7 @@ export async function diffTable(
   }
 
   // 1. Discover the column list to hash (from source — assumes target is compatible).
-  const { pool: srcPool } = await getPool(host, sourceConn)
-  const colInfo = await fetchTableColumns(host, srcPool, table.name, o.telemetryContext)
+  const colInfo = await fetchTableColumns(host, sourceConn, table.name, o.telemetryContext)
   if (colInfo.hashColumns.length === 0) {
     return emptyResult(
       table,
@@ -87,10 +87,9 @@ export async function diffTable(
   }
 
   // 2–3. Pull pk + rowHash from BOTH environments in parallel.
-  const { pool: tgtPool } = await getPool(host, targetConn)
   const [srcRows, tgtRows] = await Promise.all([
-    fetchPkHash(host, srcPool, table.name, predicate, pkColumns, colInfo, o.telemetryContext),
-    fetchPkHash(host, tgtPool, table.name, predicate, pkColumns, colInfo, o.telemetryContext)
+    fetchPkHash(host, sourceConn, table.name, predicate, pkColumns, colInfo, o.telemetryContext),
+    fetchPkHash(host, targetConn, table.name, predicate, pkColumns, colInfo, o.telemetryContext)
   ])
   if (srcRows.length > o.rowCap) {
     return emptyResult(
@@ -138,7 +137,7 @@ export async function diffTable(
   // scopeColumn that is a real column on the table (not a sub-query alias).
   const conflicts = await detectScopeMisattribution(
     host,
-    tgtPool,
+    targetConn,
     table,
     entityId,
     pkColumns,
@@ -161,33 +160,30 @@ export async function diffTable(
 
   // 5. Sample rows — batched queries + parallelized across pools.
   const [insertSamples, updateSamples, deleteSamples] = await Promise.all([
-    fetchSamples(host, srcPool, table.name, inserts.slice(0, o.sampleSize), pkColumns, o.telemetryContext),
+    fetchSamples(host, sourceConn, table.name, inserts.slice(0, o.sampleSize), pkColumns, o.telemetryContext),
     fetchUpdateSamples(
       host,
-      srcPool,
-      tgtPool,
+      sourceConn,
+      targetConn,
       table.name,
       updates.slice(0, o.sampleSize),
       pkColumns,
       o.telemetryContext
     ),
-    fetchSamples(host, tgtPool, table.name, deletes.slice(0, o.sampleSize), pkColumns, o.telemetryContext)
+    fetchSamples(host, targetConn, table.name, deletes.slice(0, o.sampleSize), pkColumns, o.telemetryContext)
   ])
   const samples = { insert: insertSamples, update: updateSamples, delete: deleteSamples }
 
-  const counts: SyncPlanTableCounts = {
-    insert: inserts.length,
-    update: updates.length,
-    delete: deletes.length,
+  const stats: SyncPlanTableStats = {
     unchanged,
-    lowConfidence: 0, // No longer applicable with HASHBYTES (never NULL).
-    conflicts: conflicts.length
+    lowConfidence: 0
   }
 
   return {
     table: table.name,
     scopePredicate: predicate,
-    counts,
+    stats,
+    changeSet: buildChangeSet(inserts, updates, deletes),
     samples,
     conflicts,
     warnings,
@@ -196,7 +192,7 @@ export async function diffTable(
 }
 
 function emptyResult(
-  table: SyncRecipeTable,
+  table: AuthoredSyncDefinitionTable,
   predicate: string,
   warnings: string[],
   ms: number
@@ -204,7 +200,8 @@ function emptyResult(
   return {
     table: table.name,
     scopePredicate: predicate,
-    counts: { insert: 0, update: 0, delete: 0, unchanged: 0, lowConfidence: 0, conflicts: 0 },
+    stats: { unchanged: 0, lowConfidence: 0 },
+    changeSet: buildChangeSet([], [], []),
     samples: { insert: [], update: [], delete: [] },
     conflicts: [],
     warnings,
@@ -214,28 +211,26 @@ function emptyResult(
 
 // ── Build a dependency graph from per-table results ──────────────
 
-export function buildDependencyGraph(recipe: SyncRecipe, tableResults: SyncPlanTable[]): SyncPlanGraph {
+export function buildDependencyGraph(
+  rootTable: string,
+  tables: readonly AuthoredSyncDefinitionTable[],
+  tableResults: SyncPlanTable[]
+): SyncPlanGraph {
   const byName = new Map(tableResults.map((t) => [t.table, t]))
-  const nodes: SyncPlanGraph["nodes"] = recipe.tables.map((t: SyncRecipeTable) => {
+  const nodes: SyncPlanGraph["nodes"] = tables.map((t) => {
     const r = byName.get(t.name)
-    const counts = r?.counts ?? {
-      insert: 0,
-      update: 0,
-      delete: 0,
-      unchanged: 0,
-      lowConfidence: 0,
-      conflicts: 0
-    }
+    const stats = r?.stats ?? { unchanged: 0, lowConfidence: 0 }
+    const movement = r ? movementFromChangeSet(r.changeSet) : { insert: 0, update: 0, delete: 0 }
     let status: SyncPlanGraph["nodes"][number]["status"] = SyncPlanChangeType.Unchanged
-    if (counts.delete > 0) status = SyncPlanChangeType.Deletes
-    else if (counts.insert > 0) status = SyncPlanChangeType.Inserts
-    else if (counts.update > 0) status = SyncPlanChangeType.Updates
-    return { id: t.name, label: t.name.split(".").pop() ?? t.name, status, counts }
+    if (movement.delete > 0) status = SyncPlanChangeType.Deletes
+    else if (movement.insert > 0) status = SyncPlanChangeType.Inserts
+    else if (movement.update > 0) status = SyncPlanChangeType.Updates
+    return { id: t.name, label: t.name.split(".").pop() ?? t.name, status, stats, movement }
   })
   // Edges: parent table → child tables (rough — root → all others as a fan).
   const edges: SyncPlanGraph["edges"] = []
-  for (const t of recipe.tables) {
-    if (t.name !== recipe.rootTable) edges.push({ from: recipe.rootTable, to: t.name })
+  for (const t of tables) {
+    if (t.name !== rootTable) edges.push({ from: rootTable, to: t.name })
   }
   return { nodes, edges }
 }

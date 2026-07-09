@@ -6,8 +6,12 @@ export function randomId(): string {
   return Math.random().toString(36).slice(2, 10)
 }
 
-export function timeAgo(date: string): string {
-  const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
+export function timeAgo(date: string | null | undefined): string {
+  if (!date) return "—"
+  const ms = new Date(date).getTime()
+  if (!Number.isFinite(ms)) return "—"
+  const seconds = Math.floor((Date.now() - ms) / 1000)
+  if (seconds < 0) return "just now"
   if (seconds < 60) return `${seconds}s ago`
   const minutes = Math.floor(seconds / 60)
   if (minutes < 60) return `${minutes}m ago`
@@ -68,8 +72,6 @@ export function remediationHintForValidationCode(code?: string): string {
       return "Resolve placeholder/incomplete logic and satisfy acceptance requirements with concrete evidence."
     case "contradictory_completion_claim":
       return "Do not claim completion while unresolved TODO/FIXME/placeholder work remains."
-    case "low_signal_browser_evidence":
-      return "Use meaningful browser checks against real artifacts, not low-signal actions."
     case "all_tools_failed":
       return "Fix tool arguments and recover from failing tool calls before proceeding."
     case "unresolved_handoff_output":

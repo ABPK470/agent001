@@ -11,6 +11,7 @@ export const OperationKind = {
   AgentRun:    "agent-run",
   SyncPreview: "sync-preview",
   SyncExecute: "sync-execute",
+  ProposerRun: "proposer-run",
   System:      "system",
 } as const
 

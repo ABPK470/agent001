@@ -74,7 +74,7 @@ function validDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
         userControllable: null
       }
     ],
-    policies: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1 },
+    policies: { approvalPolicyId: null, freezeWindowIds: [] },
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
@@ -132,6 +132,24 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
     expect(fetched!.createdBy).toBe("alice@example.com")
   })
 
+  it("renumbers duplicate execution orders on save and read", async () => {
+    const m = await setup()
+    const base = validDef().tables[0]!
+    m.saveEntityDefinition({
+      def: validDef({
+        tables: [
+          { ...base, name: "core.A", executionOrder: 0 },
+          { ...base, name: "core.B", executionOrder: 0 },
+          { ...base, name: "core.C", executionOrder: 2 },
+        ],
+      }),
+      actor: "alice@example.com",
+      reason: "create",
+    })
+    const fetched = m.getEntityDefinition("_default", "contract")
+    expect(fetched?.tables.map((table) => table.executionOrder).sort((a, b) => a - b)).toEqual([1, 2, 3])
+  })
+
   it("bumps version on each subsequent save", async () => {
     const m = await setup()
     m.saveEntityDefinition({ def: validDef(), actor: "alice@example.com", reason: "create" })
@@ -171,6 +189,34 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
         reason: "create"
       })
     ).toThrow(m.EntityRegistryValidationError)
+  })
+
+  it("rejects createOnly when entity id already exists", async () => {
+    const m = await setup()
+    m.saveEntityDefinition({ def: validDef({ id: "content" }), actor: "u", reason: "create" })
+    expect(() =>
+      m.saveEntityDefinition({
+        def: validDef({ id: "content", displayName: "Duplicate" }),
+        actor: "u",
+        reason: "create",
+        createOnly: true,
+      }),
+    ).toThrow(m.EntityRegistryConflictError)
+  })
+
+  it("rejects createOnly for retired entity ids", async () => {
+    const m = await setup()
+    m.saveEntityDefinition({ def: validDef({ id: "content" }), actor: "u", reason: "create" })
+    m.retireEntityDefinition("_default", "content", "u")
+    expect(() =>
+      m.saveEntityDefinition({
+        def: validDef({ id: "content", displayName: "Revived" }),
+        actor: "u",
+        reason: "create",
+        createOnly: true,
+      }),
+    ).toThrow(m.EntityRegistryConflictError)
+    expect(m.listEntityDefinitions("_default")).toEqual([])
   })
 
   it("stores the diff alongside the version row", async () => {
@@ -284,6 +330,20 @@ describe("immutability triggers", () => {
     expect(() => testDb.prepare(`DELETE FROM scd2_strategy_versions WHERE id = 'mymi-scd2'`).run()).toThrow(
       /append-only/
     )
+  })
+
+  it("wipeEntityRegistry clears rows and restores append-only triggers", async () => {
+    const m = await setup()
+    m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
+    expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_defs`).get()).toEqual({ c: 1 })
+
+    m.wipeEntityRegistry()
+
+    expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_defs`).get()).toEqual({ c: 0 })
+    expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_def_versions`).get()).toEqual({ c: 0 })
+
+    m.saveEntityDefinition({ def: validDef({ id: "after-wipe" }), actor: "u", reason: "" })
+    expect(() => testDb.prepare(`DELETE FROM entity_def_versions`).run()).toThrow(/append-only/)
   })
 })
 
@@ -416,6 +476,36 @@ describe("listAvailableStrategies", () => {
     const matches = m.listAvailableStrategies("acme").filter((s) => s.id === "mymi-scd2")
     expect(matches).toHaveLength(1)
     expect(matches[0]!.displayName).toBe("ACME override")
+  })
+})
+
+describe("listScd2StrategyHistory", () => {
+  it("returns seeded bundled versions for _default tenant", async () => {
+    const m = await setup()
+    const history = m.listScd2StrategyHistory("_default", "mymi-scd2")
+    expect(history).toHaveLength(1)
+    expect(history[0]!.version).toBe(1)
+    expect(history[0]!.reason).toBeTruthy()
+  })
+
+  it("returns append-only versions newest-first after edits", async () => {
+    const m = await setup()
+    const base = m.resolveScd2Strategy("acme", "generic-scd2")!
+    m.saveScd2Strategy({
+      tenantId: "acme",
+      strategy: { ...base, id: "acme-generic", displayName: "ACME generic v1", provenance: { kind: "manual" } },
+      actor: "u",
+      reason: "create"
+    })
+    m.saveScd2Strategy({
+      tenantId: "acme",
+      strategy: { ...base, id: "acme-generic", displayName: "ACME generic v2", provenance: { kind: "manual" } },
+      actor: "u",
+      reason: "tweak exclusions"
+    })
+    const history = m.listScd2StrategyHistory("acme", "acme-generic")
+    expect(history.map((h) => h.version)).toEqual([2, 1])
+    expect(history[0]!.reason).toBe("tweak exclusions")
   })
 })
 

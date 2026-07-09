@@ -13,8 +13,7 @@
   },
   "governance": {
     "approvalPolicyId": null,
-    "freezeWindowIds": [],
-    "riskMultiplier": 1
+    "freezeWindowIds": []
   },
   "strategy": {
     "strategyId": "mymi-scd2",
@@ -84,7 +83,7 @@
   },
   "provenance": {
     "kind": "legacy-migration",
-    "sourceArtifact": "deploy/sync/generators/generate-entities-from-legacy-pipelines.mjs",
-    "sourceVersion": "2026-05-10T11:19:07.694Z"
+    "sourceArtifact": "deploy/sync/generators/refresh-from-legacy.mjs",
+    "sourceVersion": "2026-07-09T13:02:24.967Z"
   }
 }

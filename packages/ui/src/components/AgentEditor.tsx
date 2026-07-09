@@ -9,6 +9,7 @@ import { Brain, Check, ChevronLeft, Plus, Trash2, X } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { api } from "../api"
 import type { AgentDefinition, ToolInfo } from "../types"
+import { modalOverlayClass, MODAL_SURFACE_CLASS } from "../widgets/entity-registry/modal-overlay"
 
 interface Props {
   onClose: () => void
@@ -118,11 +119,11 @@ export function AgentEditor({ onClose }: Props) {
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-scrim p-2 sm:p-4"
+      className={modalOverlayClass("detail")}
       onClick={onClose}
     >
       <div
-        className="bg-surface rounded-xl sm:rounded-2xl w-full max-w-[720px] h-full sm:h-auto sm:max-h-[85vh] flex flex-col shadow-2xl"
+        className={`${MODAL_SURFACE_CLASS} w-full max-w-[720px] h-full sm:h-auto sm:max-h-[85vh] flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

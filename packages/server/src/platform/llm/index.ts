@@ -3,4 +3,5 @@
  */
 
 export * from "./completion-adapter.js"
+export * from "./operation-context.js"
 export * from "./registry.js"

@@ -1,7 +1,7 @@
 // canonical-ambiguity detector — "two candidate tables are too close to call".
 //
 // Fires WARN-severity when a goal contains a metric-shaped noun
-// (`routingKeywords.domain` from tenant config) AND the live
+// (`domainKeywords` from tenant config) AND the live
 // search_catalog pass returns a top-1 candidate whose score is within
 // 15% of the top-2 candidate. The intent is to flag situations like
 // the 22-May-2026 incident where `publish.RevenueESGRules` outscored
@@ -18,9 +18,9 @@
 // Pure function of (goal, catalog, tenant). No I/O, no LLM.
 
 import { MessageRole } from "../../../../domain/enums/message.js"
-import type { CatalogGraph } from "../../../../tools/index.js"
 import type { ClarifyContext, Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
+import { resolveGoalDataAnchors } from "../goal-data-anchors.js"
 
 /**
  * 1.0.0: initial release. Top-1 within 15% of top-2 → WARN; goal must
@@ -41,9 +41,6 @@ const SCORE_GAP = 0.15
 /** Top-K candidates to consider. 2 is enough for top-1 vs top-2 gap. */
 const CATALOG_TOP_K = 5
 
-/** Same qualified-name pattern used by schema-match detector. */
-const QUALIFIED_NAME_RE = /\b([a-zA-Z][a-zA-Z0-9_]*)\.([a-zA-Z][a-zA-Z0-9_]*)\b/g
-
 /** Same co-reference heuristic as schema-match — keeps behaviours aligned. */
 function looksCoreferential(goal: string): boolean {
   return /\b(it|this|that|these|those|the\s+(data|result|results|report|chart|output|table|rows|answer|response))\b/i.test(
@@ -56,15 +53,6 @@ function hasRecentAssistantTurn(messages: readonly ClarifyContext["messages"][nu
     if (m.role === MessageRole.Assistant && typeof m.content === "string" && m.content.trim().length > 0) {
       return true
     }
-  }
-  return false
-}
-
-/** True when goal contains a `schema.object` literal that resolves against
- *  the catalog. Same contract as schema-match's qualified-name guard. */
-function goalNamesQualifiedTable(goal: string, catalog: CatalogGraph): boolean {
-  for (const m of goal.matchAll(QUALIFIED_NAME_RE)) {
-    if (catalog.getTable(m[0])) return true
   }
   return false
 }
@@ -92,11 +80,9 @@ export const canonicalAmbiguityDetector: Detector = {
     if (!ctx.catalog) return []
     // Co-reference: defer to prior turn.
     if (looksCoreferential(ctx.goal) && hasRecentAssistantTurn(ctx.messages)) return []
-    // User already named a fully-qualified table → no ambiguity to flag.
-    if (goalNamesQualifiedTable(ctx.goal, ctx.catalog)) return []
-
-    const domain = ctx.tenant.routingKeywords?.domain ?? []
-    const matchedKeyword = goalHasDomainKeyword(ctx.goal, domain)
+    // User already named a data source → no ambiguity to flag.
+    if (resolveGoalDataAnchors(ctx.goal, ctx.catalog).length > 0) return []
+    const matchedKeyword = goalHasDomainKeyword(ctx.goal, ctx.tenant.domainKeywords)
     if (!matchedKeyword) return []
 
     const hits = ctx.catalog.search(ctx.goal, CATALOG_TOP_K)

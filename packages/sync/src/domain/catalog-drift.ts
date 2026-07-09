@@ -11,7 +11,11 @@
  * {@link DEFAULT_MYMI_SCHEMA_ALLOWLIST} for the historical Mymi set.
  */
 
-import { getPool, type MssqlAccessHost } from "../ports/index.js"
+import type sql from "mssql"
+import { withPoolSlot } from "../adapters/mssql/pool-gate.js"
+import { emitSyncEvent } from "../application/shell/events.js"
+import { EventType } from "./enums.js"
+import { getPool, type MssqlAccessHost, type SyncEventHost } from "../ports/index.js"
 
 export interface CatalogDriftResult {
   catalogCompatible: boolean
@@ -60,25 +64,45 @@ async function queryWithRetry<T>(
   host: MssqlAccessHost,
   connection: string,
   query: string,
-  maxRetries = 2
+  maxRetries = 2,
+  eventHost?: SyncEventHost
 ): Promise<T[]> {
-  const { pool } = await getPool(host, connection)
-  let lastErr: unknown
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    try {
-      const result = await pool.request().query<T>(query)
-      return result.recordset
-    } catch (e) {
-      lastErr = e
-      if (attempt === maxRetries || !isTransientCatalogDriftError(e)) throw e
-      const delay = 100 * Math.pow(4, attempt) + Math.floor(Math.random() * 50)
-      console.warn(
-        `[sync.catalog] transient schema fetch failure for ${connection} (attempt ${attempt + 1}/${maxRetries + 1}): ${e instanceof Error ? e.message : String(e)}; retrying in ${delay}ms`
-      )
-      await new Promise((resolve) => setTimeout(resolve, delay))
+  return withPoolSlot(host, connection, async () => {
+    const { pool } = await getPool(host, connection)
+    let lastErr: unknown
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      try {
+        const result = await pool.request().query<T>(query)
+        return result.recordset
+      } catch (e) {
+        lastErr = e
+        if (attempt === maxRetries || !isTransientCatalogDriftError(e)) throw e
+        const delay = 100 * Math.pow(4, attempt) + Math.floor(Math.random() * 50)
+        const errMsg = e instanceof Error ? e.message : String(e)
+        console.warn(
+          `[sync.catalog] transient schema fetch failure for ${connection} (attempt ${attempt + 1}/${maxRetries + 1}): ${errMsg}; retrying in ${delay}ms`
+        )
+        if (eventHost) {
+          emitSyncEvent(eventHost, EventType.SyncRetry, {
+            phase: "catalog",
+            connection,
+            attempt: attempt + 1,
+            maxAttempts: maxRetries + 1,
+            error: errMsg,
+            delayMs: delay
+          })
+        }
+        await new Promise((resolve) => setTimeout(resolve, delay))
+      }
     }
-  }
-  throw lastErr
+    throw lastErr
+  })
+}
+
+function eventHostFromAccess(host: MssqlAccessHost): SyncEventHost | undefined {
+  const candidate = host as unknown as Partial<SyncEventHost>
+  if (candidate.sync?.events) return host as unknown as SyncEventHost
+  return undefined
 }
 
 async function fetchSchema(
@@ -107,8 +131,59 @@ async function fetchSchema(
     SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
     FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA IN (${list})
-  `
+  `,
+    2,
+    eventHostFromAccess(host)
   )
+  return rowsToSnapshot(rows)
+}
+
+/**
+ * Fetch column metadata only for the recipe tables being synced.
+ * Avoids scanning every table in core/gate/master — the schema-wide
+ * INFORMATION_SCHEMA query can exceed the 2-minute pool requestTimeout.
+ */
+async function fetchSchemaForTables(
+  host: MssqlAccessHost,
+  connection: string,
+  tables: readonly string[]
+): Promise<SchemaSnapshot> {
+  if (tables.length === 0) return { tables: new Set(), cols: new Map() }
+  const literals = tables
+    .map((qn) => {
+      const normalized = normalizeCatalogName(qn)
+      return `N'${normalized.replace(/'/g, "''")}'`
+    })
+    .join(", ")
+  const rows = await queryWithRetry<{
+    TABLE_SCHEMA: string
+    TABLE_NAME: string
+    COLUMN_NAME: string
+    DATA_TYPE: string
+    CHARACTER_MAXIMUM_LENGTH: number | null
+  }>(
+    host,
+    connection,
+    `
+    SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE LOWER(TABLE_SCHEMA + '.' + TABLE_NAME) IN (${literals})
+  `,
+    2,
+    eventHostFromAccess(host)
+  )
+  return rowsToSnapshot(rows)
+}
+
+function rowsToSnapshot(
+  rows: Array<{
+    TABLE_SCHEMA: string
+    TABLE_NAME: string
+    COLUMN_NAME: string
+    DATA_TYPE: string
+    CHARACTER_MAXIMUM_LENGTH: number | null
+  }>
+): SchemaSnapshot {
   const tables = new Set<string>()
   const cols = new Map<string, Map<string, string>>()
   for (const row of rows) {
@@ -152,10 +227,12 @@ export async function detectCatalogDrift(
     }
   }
   const schemaList = [...schemaSet]
-  const [src, tgt] = await Promise.all([
-    fetchSchema(host, source, schemaList),
-    fetchSchema(host, target, schemaList)
-  ])
+  const restrictList = restrict ? [...restrict] : null
+  const loadSnapshot = (connection: string) =>
+    restrictList && restrictList.length > 0
+      ? fetchSchemaForTables(host, connection, restrictList)
+      : fetchSchema(host, connection, schemaList)
+  const [src, tgt] = await Promise.all([loadSnapshot(source), loadSnapshot(target)])
   const issues: string[] = []
   const tablesToCheck = restrict ?? src.tables
   for (const t of tablesToCheck) {
@@ -201,7 +278,9 @@ export async function tableHasTriggers(
       JOIN sys.objects o ON o.object_id = t.parent_id
       JOIN sys.schemas s ON s.schema_id = o.schema_id
       WHERE s.name = '${schema}' AND o.name = '${name}' AND t.is_disabled = 0
-    `
+    `,
+      2,
+      eventHostFromAccess(host)
     )
     return (rows[0]?.cnt ?? 0) > 0
   } catch {

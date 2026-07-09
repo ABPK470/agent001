@@ -73,14 +73,14 @@ export function FreezeWindowsSelect({ selected, onSelected }: FreezeWindowsSelec
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-1.5">
                 <CalendarClock className="h-3 w-3 text-text-faint" />
-                <span className="font-mono text-[11px] text-text">{w.id}</span>
+                <span className="font-mono text-sm text-text">{w.id}</span>
                 <span className="text-text-muted">— {w.displayName}</span>
               </div>
-              <div className="text-[10px] text-text-faint">
+              <div className="text-xs text-text-faint">
                 {fmt(w.startsAt)} → {fmt(w.endsAt)}
               </div>
               {w.description && (
-                <div className="text-[10px] text-text-muted">{w.description}</div>
+                <div className="text-xs text-text-muted">{w.description}</div>
               )}
             </div>
           </label>
@@ -95,8 +95,8 @@ export function FreezeWindowsSelect({ selected, onSelected }: FreezeWindowsSelec
             className="mt-0.5 accent-rose-500"
           />
           <div className="flex-1">
-            <span className="font-mono text-[11px] text-rose-300">{id}</span>
-            <span className="ml-2 text-[10px] text-rose-300">
+            <span className="font-mono text-sm text-rose-300">{id}</span>
+            <span className="ml-2 text-xs text-rose-300">
               unknown id — save will fail until removed or defined
             </span>
           </div>

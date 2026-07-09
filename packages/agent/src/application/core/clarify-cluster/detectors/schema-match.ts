@@ -7,11 +7,15 @@
 //
 // Pure function of (goal, catalog, messages). No I/O, no LLM.
 
-import { getTenantConfig } from "../../../shell/tenant-config.js"
 import { MessageRole } from "../../../../domain/enums/message.js"
-import { tokenize, type CatalogGraph } from "../../../../tools/index.js"
 import type { ClarifyContext, Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
+import {
+  anchorConsumedTokens,
+  isPrimaryTableNameToken,
+  resolveGoalDataAnchors,
+  shouldSuppressAmbiguousTokenGivenAnchors
+} from "../goal-data-anchors.js"
 import { mergeReservedTokens } from "./reserved-tokens.js"
 import { goalTokens } from "./stopwords.js"
 
@@ -40,19 +44,11 @@ import { goalTokens } from "./stopwords.js"
  * resolve the path itself. The detector still blocks on ambiguous schema/table
  * names, and skips metric-position tokens like "by revenue".
  *
- * 1.4.0: primary-identifier matching — a goal token matches a table only
- * when it names that object (exact name, or camelCase prefix word like
- * Revenue→RevenueRaw), not when it is an incidental substring inside a
- * compound name (sync inside BookSyncFromPlReporting). Also honours
- * `ctx.domainVocabulary` for operational workflow parameters loaded from
- * runtime registries (sync definitions, environments).
+ * 1.5.0: goal data anchors — when the goal pins a data source
+ * (`schema.table`, fuzzy typo, or unique bare name), suppress table-picker
+ * ambiguity on descriptive domain words ("financial analysis on ai.X").
  */
-const VERSION = "1.4.0"
-
-/** Catches `schema.object` references in goal text. Case-insensitive on
- *  the catalog side via `CatalogGraph.getTable`. Underscores and digits
- *  allowed in either half (matches SQL Server identifier rules). */
-const QUALIFIED_NAME_RE = /\b([a-zA-Z][a-zA-Z0-9_]*)\.([a-zA-Z][a-zA-Z0-9_]*)\b/g
+const VERSION = "1.5.0"
 
 /**
  * Tokens already disambiguated by a qualified reference the user wrote
@@ -61,30 +57,8 @@ const QUALIFIED_NAME_RE = /\b([a-zA-Z][a-zA-Z0-9_]*)\.([a-zA-Z][a-zA-Z0-9_]*)\b/
  * the object half because the catalog confirms it pairs with that schema.
  */
 function disambiguatedTokens(goal: string, catalog: CatalogGraph): Set<string> {
-  const out = new Set<string>()
-  const mirrorSchema = getTenantConfig().mirrorSchema
-  for (const m of goal.matchAll(QUALIFIED_NAME_RE)) {
-    const qname = m[0]
-    const schema = m[1]!.toLowerCase()
-    const object = m[2]!.toLowerCase()
-    const resolved =
-      catalog.getTable(qname) ??
-      (mirrorSchema && !schema.startsWith(`${mirrorSchema.toLowerCase()}.`)
-        ? catalog.getTable(`${mirrorSchema}.${qname}`)
-        : null)
-    if (resolved) {
-      out.add(schema)
-      out.add(object)
-      for (const variant of simplePluralVariants(object)) out.add(variant)
-    }
-  }
-  return out
-}
-
-function simplePluralVariants(token: string): string[] {
-  if (token.endsWith("s")) return [token]
-  if (token.endsWith("y") && token.length > 1) return [`${token.slice(0, -1)}ies`, `${token}s`]
-  return [`${token}s`]
+  const anchors = resolveGoalDataAnchors(goal, catalog)
+  return anchorConsumedTokens(anchors)
 }
 
 /**
@@ -128,18 +102,6 @@ function hasRecentAssistantTurn(messages: readonly ClarifyContext["messages"][nu
  * name or its leading camelCase word (Revenue, RevenueRaw) — not an
  * incidental token buried inside a compound name (sync inside BookSync…).
  */
-function isPrimaryTableNameToken(tableName: string, token: string): boolean {
-  const lower = tableName.toLowerCase()
-  const singular = token.endsWith("s") && token.length > 3 ? token.slice(0, -1) : token
-  if (lower === token || lower === singular || lower === `${singular}s`) return true
-  const nameTokens = tokenize(tableName)
-  if (nameTokens.length === 0) return false
-  const head = nameTokens[0]!
-  if (head === token || head === singular) return true
-  if (nameTokens.length === 1 && nameTokens[0] === token) return true
-  return false
-}
-
 function objectNameMatches(catalog: CatalogGraph, token: string): Set<string> {
   const out = new Set<string>()
   for (const [key, table] of catalog.tables) {
@@ -181,6 +143,8 @@ export const schemaMatchDetector: Detector = {
     // and that resolves against the live catalog (with mirrorSchema
     // fallback) consumes BOTH halves — the user disambiguated themselves.
     const consumed = disambiguatedTokens(ctx.goal, ctx.catalog)
+    const anchors = resolveGoalDataAnchors(ctx.goal, ctx.catalog)
+    const domainKeywords = ctx.tenant.domainKeywords
     const out = []
     const seenTokens = new Set<string>()
     for (const token of goalTokens(ctx.goal)) {
@@ -191,11 +155,15 @@ export const schemaMatchDetector: Detector = {
       if (isMetricContext(ctx.goal, token)) continue
       if (isTemporalContext(ctx.goal, token)) continue
       seenTokens.add(token)
+      if (
+        shouldSuppressAmbiguousTokenGivenAnchors(token, ctx.goal, anchors, domainKeywords)
+      ) {
+        continue
+      }
       const matches = objectNameMatches(ctx.catalog, token)
       if (matches.size < 2) continue
       const candidates = [...matches].sort().slice(0, MAX_CANDIDATES)
       const totalCount = matches.size
-      const more = totalCount > candidates.length ? ` (and ${totalCount - candidates.length} more)` : ""
       out.push({
         id: makeFindingId("schema-match", token),
         kind: "schema-match" as const,
@@ -203,7 +171,8 @@ export const schemaMatchDetector: Detector = {
         subject: token,
         reasoning: `"${token}" matches ${totalCount} catalog objects — the agent cannot pick one without input.`,
         candidates,
-        suggestedQuestion: `When you say "${token}", which of these did you mean?\n${candidates.map((c) => `  • ${c}`).join("\n")}${more}`,
+        uiOptions: candidates,
+        suggestedQuestion: `When you say "${token}", which did you mean?`,
         source: "detector" as const
       })
     }

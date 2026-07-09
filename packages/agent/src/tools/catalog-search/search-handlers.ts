@@ -14,13 +14,8 @@ export function handleSearch(
   schemaFilter?: string,
   tableVerdicts?: TableVerdictsReader | null
 ): string {
-  let hits = catalog.search(query, 15, tableVerdicts)
+  const hits = catalog.search(query, 15, tableVerdicts, schemaFilter)
   const sysHits = catalog.searchSys(query)
-
-  if (schemaFilter) {
-    const sf = schemaFilter.toLowerCase()
-    hits = hits.filter((h) => h.table.schema.toLowerCase() === sf)
-  }
 
   if (hits.length === 0 && sysHits.length === 0) {
     const extra = schemaFilter ? ` (filtered to schema '${schemaFilter}')` : ""

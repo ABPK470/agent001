@@ -10,7 +10,7 @@ import { isSyncRunStatus, SYNC_RUN_STATUSES, SyncRunStatus } from "@mia/shared-e
 import {
   requireSyncRunActorUpn
 } from "../../../features/sync/application/plan-actor.js"
-import { getDb } from "./connection.js"
+import { getDb } from "../connection.js"
 
 export interface SyncRunRow {
   plan_id: string
@@ -70,11 +70,24 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
   const c = asCounts(i.previewTotals)
   getDb()
     .prepare(
-      `INSERT OR REPLACE INTO sync_runs
-       (plan_id, entity_type, entity_id, entity_display_name, source, target,
-        actor_upn, preview_inserts, preview_updates, preview_deletes,
-        preview_totals_json, status, started_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))`
+      `INSERT INTO sync_runs
+         (plan_id, entity_type, entity_id, entity_display_name, source, target,
+          actor_upn, preview_inserts, preview_updates, preview_deletes,
+          preview_totals_json, status, started_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+       ON CONFLICT(plan_id) DO UPDATE SET
+         entity_type = excluded.entity_type,
+         entity_id = excluded.entity_id,
+         entity_display_name = COALESCE(excluded.entity_display_name, sync_runs.entity_display_name),
+         source = excluded.source,
+         target = excluded.target,
+         actor_upn = excluded.actor_upn,
+         preview_inserts = excluded.preview_inserts,
+         preview_updates = excluded.preview_updates,
+         preview_deletes = excluded.preview_deletes,
+         preview_totals_json = excluded.preview_totals_json,
+         status = excluded.status,
+         started_at = datetime('now')`
     )
     .run(
       i.planId,
@@ -94,48 +107,93 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
 
 export interface RecordSyncRunFinishInput {
   planId: string
-  status: typeof SyncRunStatus.Success | typeof SyncRunStatus.Failed
+  status: typeof SyncRunStatus.Success | typeof SyncRunStatus.Failed | typeof SyncRunStatus.Skipped
   error?: string | null
   executeTotals?: unknown
-  driftDetectedPct?: number | null
   durationMs: number
 }
 
 export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
   if (
     !isSyncRunStatus(i.status) ||
-    (i.status !== SyncRunStatus.Success && i.status !== SyncRunStatus.Failed)
+    (i.status !== SyncRunStatus.Success &&
+      i.status !== SyncRunStatus.Failed &&
+      i.status !== SyncRunStatus.Skipped)
   ) {
     throw new Error(
-      `recordSyncRunFinish.status must be 'success' or 'failed' (one of [${SYNC_RUN_STATUSES.join(", ")}]); got "${String(i.status)}" for plan ${i.planId}`
+      `recordSyncRunFinish.status must be 'success', 'failed', or 'skipped' (one of [${SYNC_RUN_STATUSES.join(", ")}]); got "${String(i.status)}" for plan ${i.planId}`
     )
   }
   const c = i.executeTotals ? asCounts(i.executeTotals) : null
+  if (i.executeTotals) {
+    getDb()
+      .prepare(
+        `UPDATE sync_runs
+         SET status = ?, error = ?, execute_totals_json = ?,
+             executed_inserts = ?, executed_updates = ?, executed_deletes = ?,
+             finished_at = datetime('now'), duration_ms = ?
+         WHERE plan_id = ?`
+      )
+      .run(
+        i.status,
+        i.error ?? null,
+        JSON.stringify(i.executeTotals),
+        c?.insert ?? 0,
+        c?.update ?? 0,
+        c?.delete ?? 0,
+        i.durationMs,
+        i.planId
+      )
+    return
+  }
+
   getDb()
     .prepare(
       `UPDATE sync_runs
-       SET status = ?, error = ?, execute_totals_json = ?,
-           executed_inserts = ?, executed_updates = ?, executed_deletes = ?,
-           drift_detected_pct = ?, finished_at = datetime('now'), duration_ms = ?
+       SET status = ?, error = ?,
+           finished_at = datetime('now'), duration_ms = ?
        WHERE plan_id = ?`
     )
-    .run(
-      i.status,
-      i.error ?? null,
-      i.executeTotals ? JSON.stringify(i.executeTotals) : null,
-      c?.insert ?? null,
-      c?.update ?? null,
-      c?.delete ?? null,
-      i.driftDetectedPct ?? null,
-      i.durationMs,
-      i.planId
-    )
+    .run(i.status, i.error ?? null, i.durationMs, i.planId)
 }
 
 export function listSyncRuns(limit = 50): SyncRunRow[] {
   return getDb()
     .prepare(`SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT ?`)
     .all(limit) as SyncRunRow[]
+}
+
+export interface ListSyncRunsPaginatedInput {
+  page: number
+  pageSize: number
+  actorUpn?: string | null
+}
+
+export function countSyncRuns(opts?: { actorUpn?: string | null }): number {
+  if (opts?.actorUpn) {
+    const row = getDb()
+      .prepare(`SELECT COUNT(1) AS c FROM sync_runs WHERE actor_upn = ?`)
+      .get(opts.actorUpn) as { c: number }
+    return row.c
+  }
+  const row = getDb().prepare(`SELECT COUNT(1) AS c FROM sync_runs`).get() as { c: number }
+  return row.c
+}
+
+export function listSyncRunsPaginated(input: ListSyncRunsPaginatedInput): SyncRunRow[] {
+  const page = Math.max(1, input.page)
+  const pageSize = Math.max(1, input.pageSize)
+  const offset = (page - 1) * pageSize
+  if (input.actorUpn) {
+    return getDb()
+      .prepare(
+        `SELECT * FROM sync_runs WHERE actor_upn = ? ORDER BY started_at DESC LIMIT ? OFFSET ?`
+      )
+      .all(input.actorUpn, pageSize, offset) as SyncRunRow[]
+  }
+  return getDb()
+    .prepare(`SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT ? OFFSET ?`)
+    .all(pageSize, offset) as SyncRunRow[]
 }
 
 export function getSyncRun(planId: string): SyncRunRow | undefined {

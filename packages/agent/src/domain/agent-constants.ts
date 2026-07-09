@@ -144,9 +144,7 @@ export const SAFE_RETRY_TOOLS = new Set([
   "read_file",
   "list_directory",
   "search_files",
-  "browse_web",
   "fetch_url",
-  "browser_check",
   "think",
   "query_mssql",
   "explore_mssql_schema",
@@ -157,7 +155,7 @@ export const SAFE_RETRY_TOOLS = new Set([
 ])
 
 /** Tools that indicate verification activity. */
-export const VERIFICATION_TOOLS = new Set(["read_file", "list_directory", "search_files", "browser_check"])
+export const VERIFICATION_TOOLS = new Set(["read_file", "list_directory", "search_files"])
 
 /** Tools that indicate workspace mutation. */
 export const MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "append_file", "run_command"])

@@ -63,7 +63,7 @@ function isVerificationRunCommand(call: ToolCallRecord): boolean {
 
 function findFailedVerificationToolCall(calls: readonly ToolCallRecord[]): ToolCallRecord | null {
   for (const call of calls) {
-    const isVerificationCall = call.name === "browser_check" || isVerificationRunCommand(call)
+    const isVerificationCall = isVerificationRunCommand(call)
     if (!isVerificationCall) continue
 
     if (call.isError) return call

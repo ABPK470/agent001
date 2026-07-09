@@ -7,7 +7,22 @@
 
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import {
+  createSyncProgressState,
+  finalizeSyncProgress,
+  reduceSyncSseEvent,
+  SYNC_TRACE_TOOLS,
+  syncProgressToTraceEntry,
+  type SyncProgressState
+} from "./sync-trace-progress.js"
 import { api } from "./api"
+import { readSseEntityId, readSseRunId, readSseStepId } from "@mia/shared-types"
+import {
+  traceEntryFromStepCompleted,
+  traceEntryFromStepFailed,
+  traceEntryFromStepStarted,
+} from "./lib/sse-run-trace.js"
+import { isDefaultThreadTitle, threadTitleFromGoal } from "./features/threads/threadTitle.js"
 import { BottomTab, EditorTab, RunStatus, SidebarSection } from "./enums"
 import type {
   AuditEntry,
@@ -19,12 +34,81 @@ import type {
   RunDetail,
   SseEvent,
   Step,
+  SyncPlan,
+  Thread,
   TraceEntry,
   ViewConfig,
   Widget,
   WidgetType,
 } from "./types"
 import { randomId } from "./util"
+
+function truncateSyncToolResult(text: string, max = 1200): string {
+  const t = text.trim()
+  if (t.length <= max) return t
+  return t.slice(0, max - 1) + "…"
+}
+
+function normalizePendingInputOptions(options: string[] | undefined): string[] | undefined {
+  if (!options?.length) return undefined
+  const seen = new Set<string>()
+  const out: string[] = []
+  for (const raw of options) {
+    const option = raw.trim()
+    if (!option || seen.has(option)) continue
+    seen.add(option)
+    out.push(option)
+  }
+  return out.length > 0 ? out : undefined
+}
+
+function upsertSyncProgressTrace(runs: Run[], runId: string, entry: TraceEntry): Run[] {
+  if (entry.kind !== "sync-progress") return runs
+  return mapRunTrace(runs, runId, (trace) => {
+    const idx = trace.findIndex((t) => t.kind === "sync-progress" && t.invocationId === entry.invocationId)
+    if (idx >= 0) {
+      const next = [...trace]
+      next[idx] = entry
+      return next
+    }
+    return trace.concat(entry)
+  })
+}
+
+function upsertGlobalSyncProgressTrace(trace: TraceEntry[], entry: TraceEntry): TraceEntry[] {
+  if (entry.kind !== "sync-progress") return trace
+  const idx = trace.findIndex((t) => t.kind === "sync-progress" && t.invocationId === entry.invocationId)
+  if (idx >= 0) {
+    const next = [...trace]
+    next[idx] = entry
+    return next
+  }
+  return trace.concat(entry)
+}
+
+function applySyncSseToStore(
+  get: () => AppState,
+  set: (partial: Partial<AppState> | ((s: AppState) => Partial<AppState>)) => void,
+  type: string,
+  data: Record<string, unknown>
+): void {
+  if (!type.startsWith("sync.")) return
+  const active = get().activeSyncInvocation
+  const activeRunId = get().activeRunId
+  if (!active || !activeRunId || active.runId !== activeRunId) return
+
+  const prev = get().syncProgressStates.get(active.invocationId) ?? createSyncProgressState(active.invocationId, active.tool)
+  const nextState = reduceSyncSseEvent(prev, type, data)
+  const entry = syncProgressToTraceEntry(nextState)
+  const states = new Map(get().syncProgressStates)
+  states.set(active.invocationId, nextState)
+
+  set({
+    syncProgressStates: states,
+    trace: upsertGlobalSyncProgressTrace(get().trace, entry),
+    runs: upsertSyncProgressTrace(get().runs, activeRunId, entry)
+  })
+}
 
 function patchRunFields(runs: Run[], runId: string, patch: Partial<Run>): Run[] {
   const index = runs.findIndex((run) => run.id === runId)
@@ -115,6 +199,9 @@ function tracesToSteps(trace: TraceEntry[]): Step[] {
   return steps
 }
 
+/** Coalesce concurrent bootstrapThreads() calls (App + chat shell both trigger on login). */
+let threadsBootstrapInflight: Promise<void> | null = null
+
 // ── Store shape ──────────────────────────────────────────────────
 
 interface AppState {
@@ -145,6 +232,27 @@ interface AppState {
   setRuns: (runs: Run[]) => void
   setActiveRun: (id: string | null) => void
   upsertRun: (run: Partial<Run> & { id: string }) => void
+
+  // Threads (home chat workspaces)
+  threads: Thread[]
+  activeThreadId: string | null
+  threadSidebarCollapsed: boolean
+  threadsPanelOpenNonce: number
+  threadTitleShellId: string | null
+  threadTitleReveal: { threadId: string; text: string } | null
+  setThreads: (threads: Thread[]) => void
+  upsertThread: (thread: Thread) => void
+  setActiveThreadId: (id: string | null) => void
+  setThreadSidebarCollapsed: (collapsed: boolean) => void
+  openThreadsPanel: () => void
+  selectThread: (id: string | null) => Promise<void>
+  selectRun: (runId: string, threadId: string) => Promise<void>
+  bootstrapThreads: () => Promise<void>
+  deleteThread: (threadId: string) => Promise<void>
+  createNewThread: () => Promise<string>
+  beginThreadTitleShell: (threadId: string) => void
+  revealThreadTitleFromGoal: (threadId: string, goal: string) => void
+  clearThreadTitleAnimation: (threadId: string, finalTitle: string) => void
 
   // Steps (for active run)
   steps: Step[]
@@ -216,6 +324,10 @@ interface AppState {
   pendingKill: { runId: string; toolCallId: string; toolName: string } | null
   setPendingKill: (info: { runId: string; toolCallId: string; toolName: string } | null) => void
 
+  /** Active sync tool invocation for coalesced trace progress (session-only). */
+  activeSyncInvocation: { runId: string; invocationId: string; tool: string } | null
+  syncProgressStates: Map<string, SyncProgressState>
+
   // Raw SSE event log (platform dev)
   sseEventLog: SseEvent[]
   clearSseEventLog: () => void
@@ -225,10 +337,6 @@ interface AppState {
   appendStreamingChunk: (chunk: string) => void
   clearStreamingAnswer: () => void
 
-  // Coherent generation live token stream (shown while LLM writes the bundle)
-  coherentStream: string
-  clearCoherentStream: () => void
-
   // IOE layout persistence (survives view switches + page reload)
   ioeLayout: IoeLayout
   setIoeLayout: (patch: Partial<IoeLayout>) => void
@@ -236,6 +344,9 @@ interface AppState {
   // EnvSync widget form state (survives view switches + page reload)
   envSyncForm: EnvSyncFormState
   setEnvSyncForm: (patch: Partial<EnvSyncFormState>) => void
+  /** In-memory plan body for the sync widget — survives widget remounts within a session. */
+  envSyncPlan: SyncPlan | null
+  setEnvSyncPlan: (plan: SyncPlan | null) => void
 
   // Last sync execute result from agent (chat-triggered). Cleared when widget resets.
   agentSyncExec: { planId: string; success: boolean; result: string } | null
@@ -296,7 +407,7 @@ export interface EnvSyncFormState {
   enabledOptionalTables: string[] | null
   /** Whether to search by 'id' or 'name'. */
   searchMode: "id" | "name"
-  /** Last successfully-built plan id; widget re-hydrates plan via /api/sync/plan/:id on mount. */
+  /** Last successfully-built plan id; re-hydrated only when set by preview/agent (not on cold start). */
   planId: string | null
 }
 
@@ -316,39 +427,27 @@ const DEFAULT_ENV_SYNC_FORM: EnvSyncFormState = {
 const DEFAULT_VIEW_ID = "default"
 
 /**
- * Default view seed.
- *
- * Surgical change for login-flow → app continuity: a single full-canvas
- * term-chat widget is pre-seeded so the app's first paint after login
- * shows the same chat surface the login screen morphed into.
- *
- * Revert: replace `widgets`/`layouts` with `[]`/`{}` to restore the
- * original empty-canvas default. Existing users with saved layouts
- * are unaffected — only fresh users hit this seed.
+ * Default workspace view — empty canvas. Chat lives in shell chat mode
+ * (ThreadHomePage); workspace is opt-in via the grid layout.
  */
-function makeDefaultView(): ViewConfig {
-  const widgetId = "default-term-chat"
+export function makeDefaultView(): ViewConfig {
   return {
     id: DEFAULT_VIEW_ID,
     name: "Main",
-    widgets: [{ id: widgetId, type: "term-chat" }],
-    layouts: {
-      lg: [{ i: widgetId, x: 0, y: 0, w: 12, h: 12, minW: 2, minH: 2 }],
-    },
+    widgets: [],
+    layouts: {},
   }
 }
 
 // ── Widget default sizes ─────────────────────────────────────────
 
 export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, minH: number }> = {
+  "thread-nav":    { w: 3, h: 10, minW: 2, minH: 4 },
   "agent-chat":    { w: 4, h: 8,  minW: 2, minH: 2 },
   "term-chat":     { w: 4, h: 8,  minW: 2, minH: 2 },
   "run-status":    { w: 4, h: 4,  minW: 2, minH: 2 },
-  "agent-viz":     { w: 6, h: 8,  minW: 2, minH: 2 },
   "live-logs":     { w: 6, h: 8,  minW: 4, minH: 2 },
-  "audit-trail":   { w: 6, h: 8,  minW: 2, minH: 2 },
   "step-timeline": { w: 4, h: 10, minW: 2, minH: 2 },
-  "tool-stats":    { w: 4, h: 6,  minW: 2, minH: 2 },
   "run-history":   { w: 4, h: 8,  minW: 2, minH: 2 },
   "operator-env": { w: 12, h: 10, minW: 2, minH: 2 },
   "debug-inspector": { w: 6, h: 10, minW: 2, minH: 2 },
@@ -366,6 +465,22 @@ export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: n
 }
 
 const GRID_COLS = 12
+
+/** Drop widgets removed from the catalogue so saved layouts stay valid. */
+export function pruneUnknownWidgets(views: ViewConfig[]): ViewConfig[] {
+  return views.map((view) => {
+    const widgets = view.widgets.filter((widget) => widget.type in WIDGET_DEFAULTS)
+    const widgetIds = new Set(widgets.map((widget) => widget.id))
+    return {
+      ...view,
+      widgets,
+      layouts: {
+        ...view.layouts,
+        lg: (view.layouts["lg"] ?? []).filter((item) => widgetIds.has(item.i)),
+      },
+    }
+  })
+}
 
 /**
  * Find the best position for a new widget by locating the largest empty
@@ -428,7 +543,6 @@ let traceFlushScheduled = false
 // into a single store update so React rerenders once per tick instead of
 // once per event. Critical when many tools/delegations run concurrently.
 const runTraceBuf: Array<{ runId: string; entry: TraceEntry }> = []
-const runCoherentBuf = new Map<string, string>()
 const runAnswerBuf = new Map<string, string>()
 let runFlushScheduled = false
 // Answer chunks flush on requestAnimationFrame instead of microtask so the
@@ -454,31 +568,17 @@ function scheduleRunFlush(set: (fn: (s: AppState) => Partial<AppState>) => void)
   queueMicrotask(() => {
     runFlushScheduled = false
     const traceBatch = runTraceBuf.splice(0)
-    const tokenBatch = new Map(runCoherentBuf)
-    runCoherentBuf.clear()
-    if (traceBatch.length === 0 && tokenBatch.size === 0) return
+    if (traceBatch.length === 0) return
     set((s) => {
       let runs = s.runs
-      if (traceBatch.length > 0) {
-        const grouped = new Map<string, TraceEntry[]>()
-        for (const { runId, entry } of traceBatch) {
-          const arr = grouped.get(runId) ?? []
-          arr.push(entry)
-          grouped.set(runId, arr)
-        }
-        for (const [runId, entries] of grouped) {
-          runs = appendRunTraceMany(runs, runId, entries)
-        }
+      const grouped = new Map<string, TraceEntry[]>()
+      for (const { runId, entry } of traceBatch) {
+        const arr = grouped.get(runId) ?? []
+        arr.push(entry)
+        grouped.set(runId, arr)
       }
-      if (tokenBatch.size > 0) {
-        for (const [runId, addition] of tokenBatch) {
-          const idx = runs.findIndex((r) => r.id === runId)
-          if (idx < 0) continue
-          const cur = runs[idx].coherentStream ?? ""
-          const merged = cur + addition
-          if (runs === s.runs) runs = [...runs]
-          runs[idx] = { ...runs[idx], coherentStream: merged }
-        }
+      for (const [runId, entries] of grouped) {
+        runs = appendRunTraceMany(runs, runId, entries)
       }
       return { runs }
     })
@@ -604,7 +704,11 @@ function formatLogEntryInner(
     const planId = (data["planId"] as string | undefined)?.slice(0, 8) ?? ""
     switch (type) {
       case "sync.preview.started":
-        return { type: t, message: `Preview started — ${data["entityType"]}#${data["entityId"]} (${data["source"]} → ${data["target"]})`, timestamp }
+        return {
+          type: t,
+          message: `Preview started — ${data["entityType"]}#${readSseEntityId(data) ?? "?"} (${data["source"]} → ${data["target"]})`,
+          timestamp
+        }
       case "sync.preview.completed":
         return { type: t, message: `Preview complete — plan ${planId}`, timestamp }
       case "sync.preview.failed":
@@ -620,6 +724,17 @@ function formatLogEntryInner(
         return { type: t, message: `${data["table"]} — ${data["insert"] ?? 0} ins, ${data["update"] ?? 0} upd, ${data["delete"] ?? 0} del`, timestamp }
       case "sync.preview.table.failed":
         return { type: t, error: true, message: `${data["table"]} — failed: ${data["error"] ?? "unknown"}`, timestamp }
+      case "sync.retry": {
+        const conn = String(data["connection"] ?? "?")
+        const attempt = Number(data["attempt"] ?? 1)
+        const max = Number(data["maxAttempts"] ?? 3)
+        return {
+          type: t,
+          error: false,
+          message: `Connection retry ${conn} (${attempt}/${max}): ${data["error"] ?? "transient error"}`,
+          timestamp
+        }
+      }
       case "sync.execute.started":
         return { type: t, message: `Execute started — plan ${planId} (${data["source"]} → ${data["target"]})`, timestamp }
       case "sync.execute.step":
@@ -657,10 +772,6 @@ function formatLogEntryInner(
           ].filter(Boolean).join(" · ") || "execute"} — ${data["cause"] ?? data["error"] ?? "unknown"}`,
           timestamp,
         }
-      case "sync.execute.drift.revalidated": {
-        const pct = data["maxDriftPct"] as number | undefined
-        return { type: t, message: `Drift re-validated — max ${((pct ?? 0) * 100).toFixed(1)}%`, timestamp }
-      }
       case "sync.execute.archive.skipped":
         return { type: t, message: `Archive skipped — ${data["reason"] ?? ""}`, timestamp }
       case "sync.execute.sql": {
@@ -726,10 +837,6 @@ function formatLogEntryInner(
       return { type: t, message: `Validation remediated`, timestamp }
     case "planner.pipeline.started":
       return { type: t, message: `Pipeline attempt ${data["attempt"]}/${data["maxRetries"]}`, timestamp }
-    case "planner.coherent.bootstrap":
-      return { type: t, message: `Coherent bootstrap — ${data["artifactCount"]} artifacts`, timestamp }
-    case "planner.architecture.state":
-      return { type: t, message: `Architecture ${data["lane"]} — ${data["status"]}`, timestamp }
 
     // Thinking
     case "agent.thinking":
@@ -770,8 +877,6 @@ function formatLogEntryInner(
       return { type: t, message: `Input received`, timestamp }
     case "usage.updated":
       return { type: t, message: `${data["totalTokens"]} tokens, ${data["llmCalls"]} calls`, timestamp }
-    case "procedural.stored":
-      return { type: t, message: `Procedural memory stored — ${data["trigger"]}`, timestamp }
     case "message.queued":
       return { type: t, message: `Message queued — ${data["channelType"]}`, timestamp }
     case "message.failed":
@@ -908,30 +1013,45 @@ export const useStore = create<AppState>()(
       // Merge incoming run rows into the store WITHOUT clobbering live,
       // SSE-accumulated per-run fields. `api.listRuns()` returns the row
       // metadata only (id/goal/status/counts) — it never carries the live
-      // `trace`, `streamingAnswer`, `coherentStream`, `stepData`, or
+      // `trace`, `streamingAnswer`, `stepData`, or
       // `auditTrail` that we accumulate from the event stream. A plain
       // `set({ runs })` would wipe all of that, which is exactly what
       // happened when widgets like RunHistory re-fetched the run list on
       // mount: switching to a view containing RunHistory and then back
       // to TermChat would erase the active run's narrative + tool calls.
+      //
+      // Also keep in-memory-only rows (in-flight runs, thread-scoped rows
+      // not yet visible in the latest listRuns response) so switching from
+      // chat home → platform widgets does not blank the conversation.
       setRuns: (runs) => set((s) => {
         const prevById = new Map(s.runs.map((r) => [r.id, r]))
+        const incomingIds = new Set(runs.map((r) => r.id))
         const merged = runs.map((incoming) => {
           const existing = prevById.get(incoming.id)
           if (!existing) return incoming
           return {
             ...incoming,
-            // Preserve fields the listRuns endpoint does not ship.
-            trace: existing.trace ?? incoming.trace,
+            trace: existing.trace?.length ? existing.trace : (incoming.trace ?? existing.trace),
             streamingAnswer: existing.streamingAnswer ?? incoming.streamingAnswer,
-            coherentStream: existing.coherentStream ?? incoming.coherentStream,
             stepData: existing.stepData?.length ? existing.stepData : incoming.stepData,
             auditTrail: existing.auditTrail?.length ? existing.auditTrail : incoming.auditTrail,
           }
         })
-        return { runs: merged }
+        const orphans = s.runs.filter((r) => !incomingIds.has(r.id))
+        return { runs: orphans.length > 0 ? [...merged, ...orphans] : merged }
       }),
       setActiveRun: (activeRunId) => {
+        if (activeRunId) {
+          const state = get()
+          const run = state.runs.find((r) => r.id === activeRunId)
+          if (
+            state.activeThreadId &&
+            run?.threadId &&
+            run.threadId !== state.activeThreadId
+          ) {
+            return
+          }
+        }
         set({ activeRunId })
         if (!activeRunId) return
         // Load historical run data into the store so all widgets reflect
@@ -962,7 +1082,6 @@ export const useStore = create<AppState>()(
               auditTrail: d.audit ?? [],
               trace,
               streamingAnswer: "",
-              coherentStream: "",
             }),
           }))
         }).catch(() => {})
@@ -990,11 +1109,144 @@ export const useStore = create<AppState>()(
         // selection. This used to be the root cause of "I started a run in
         // termchat, switched to IOE, came back, and my run is gone" — a
         // sync.run started by IOE silently became the new active run.
+        const appendToThread =
+          s.activeThreadId && run.threadId === s.activeThreadId
         return {
-          runs: [run as Run, ...s.runs],
-          activeRunId: s.activeRunId ?? run.id,
+          runs: appendToThread ? [...s.runs, run as Run] : s.runs,
+          activeRunId: s.activeRunId ?? (appendToThread ? run.id : s.activeRunId),
         }
       }),
+
+      threads: [],
+      activeThreadId: null,
+      threadSidebarCollapsed: false,
+      threadsPanelOpenNonce: 0,
+      threadTitleShellId: null as string | null,
+      threadTitleReveal: null as { threadId: string; text: string } | null,
+      setThreads: (threads) => set({ threads }),
+      upsertThread: (thread) =>
+        set((s) => {
+          const index = s.threads.findIndex((t) => t.id === thread.id)
+          if (index < 0) return { threads: [thread, ...s.threads] }
+          const next = [...s.threads]
+          next[index] = { ...next[index], ...thread }
+          next.sort((a, b) => {
+            if (Boolean(a.pinned) !== Boolean(b.pinned)) return a.pinned ? -1 : 1
+            return b.updatedAt.localeCompare(a.updatedAt)
+          })
+          return { threads: next }
+        }),
+      setActiveThreadId: (activeThreadId) => set({ activeThreadId }),
+      setThreadSidebarCollapsed: (threadSidebarCollapsed) => set({ threadSidebarCollapsed }),
+      openThreadsPanel: () =>
+        set((s) => ({
+          threadsPanelOpenNonce: s.threadsPanelOpenNonce + 1,
+          threadSidebarCollapsed: false,
+        })),
+      selectThread: async (threadId) => {
+        set({
+          activeThreadId: threadId,
+          activeRunId: null,
+          steps: [],
+          trace: [],
+          audit: [],
+          pendingInput: null,
+        })
+        if (!threadId) {
+          set({ runs: [] })
+          return
+        }
+        try {
+          const runs = await api.listThreadRuns(threadId)
+          set({ runs })
+          if (runs.length > 0) {
+            get().setActiveRun(runs[runs.length - 1]!.id)
+          }
+        } catch {
+          set({ runs: [] })
+        }
+      },
+      createNewThread: async () => {
+        const thread = await api.createThread()
+        set((s) => ({ threads: [thread, ...s.threads] }))
+        await get().selectThread(thread.id)
+        return thread.id
+      },
+      beginThreadTitleShell: (threadId) => {
+        set({ threadTitleShellId: threadId, threadTitleReveal: null })
+      },
+      revealThreadTitleFromGoal: (threadId, goal) => {
+        const text = threadTitleFromGoal(goal)
+        if (isDefaultThreadTitle(text)) return
+        const shellId = get().threadTitleShellId
+        if (shellId === threadId) {
+          set({ threadTitleReveal: { threadId, text } })
+          return
+        }
+        const existing = get().threads.find((t) => t.id === threadId)
+        if (existing && isDefaultThreadTitle(existing.title)) {
+          get().upsertThread({ ...existing, title: text })
+        }
+      },
+      clearThreadTitleAnimation: (threadId, finalTitle) => {
+        set((s) => {
+          const touches =
+            s.threadTitleShellId === threadId || s.threadTitleReveal?.threadId === threadId
+          if (!touches) return {}
+          const index = s.threads.findIndex((t) => t.id === threadId)
+          const threads = [...s.threads]
+          if (index >= 0) {
+            threads[index] = { ...threads[index]!, title: finalTitle }
+          }
+          return {
+            threads,
+            threadTitleShellId: null,
+            threadTitleReveal: null,
+          }
+        })
+      },
+      bootstrapThreads: async () => {
+        if (!threadsBootstrapInflight) {
+          threadsBootstrapInflight = (async () => {
+            const listed = await api.listThreads()
+            set({ threads: listed })
+            const persistedId = get().activeThreadId
+            const target =
+              (persistedId && listed.some((t) => t.id === persistedId) && persistedId) ||
+              listed[0]?.id ||
+              null
+            if (target) {
+              await get().selectThread(target)
+              return
+            }
+            await get().createNewThread()
+          })().finally(() => {
+            threadsBootstrapInflight = null
+          })
+        }
+        await threadsBootstrapInflight
+      },
+      selectRun: async (runId, threadId) => {
+        if (get().activeThreadId !== threadId) {
+          await get().selectThread(threadId)
+        }
+        const run = get().runs.find((r) => r.id === runId)
+        if (!run || run.threadId !== threadId) return
+        get().setActiveRun(runId)
+      },
+      deleteThread: async (threadId) => {
+        await api.deleteThread(threadId)
+        const remaining = get().threads.filter((t) => t.id !== threadId)
+        const wasActive = get().activeThreadId === threadId
+        if (!wasActive) {
+          set({ threads: remaining })
+          return
+        }
+        set({ threads: remaining, activeThreadId: null, activeRunId: null, runs: [] })
+        const nextId = remaining[0]?.id
+        if (nextId) await get().selectThread(nextId)
+        else await get().createNewThread()
+      },
 
       // Steps
       steps: [],
@@ -1064,18 +1316,6 @@ export const useStore = create<AppState>()(
       // Trace — batched via microtask to avoid per-entry re-renders
       trace: [],
       addTrace: (entry) => {
-        const kind = (entry as Record<string, unknown>).kind as string | undefined
-        // coherent-generation-token events are high-frequency (one per streamed token).
-        // Accumulate them in coherentStream instead of flooding the trace array.
-        if (kind === "coherent-generation-token") {
-          const token = (entry as Record<string, unknown>).token as string ?? ""
-          set((s) => ({ coherentStream: s.coherentStream + token }))
-          return
-        }
-        // Clear coherent stream when generation completes or fails
-        if (kind === "coherent-generation-bundle" || kind === "coherent-generation-failed") {
-          set({ coherentStream: "" })
-        }
         traceBuf.push(entry)
         if (!traceFlushScheduled) {
           traceFlushScheduled = true
@@ -1137,6 +1377,8 @@ export const useStore = create<AppState>()(
       // Executing tool calls + kill
       executingToolCalls: new Map(),
       pendingKill: null,
+      activeSyncInvocation: null,
+      syncProgressStates: new Map(),
       setPendingKill: (info) => set({ pendingKill: info }),
 
       // Raw WS event log
@@ -1147,15 +1389,14 @@ export const useStore = create<AppState>()(
       appendStreamingChunk: (chunk) => set((s) => ({ streamingAnswer: s.streamingAnswer + chunk })),
       clearStreamingAnswer: () => set({ streamingAnswer: "" }),
 
-      coherentStream: "",
-      clearCoherentStream: () => set({ coherentStream: "" }),
-
       // IOE layout
       ioeLayout: { ...DEFAULT_IOE_LAYOUT },
       setIoeLayout: (patch) => set((s) => ({ ioeLayout: { ...s.ioeLayout, ...patch } })),
 
       envSyncForm: { ...DEFAULT_ENV_SYNC_FORM },
       setEnvSyncForm: (patch) => set((s) => ({ envSyncForm: { ...s.envSyncForm, ...patch } })),
+      envSyncPlan: null,
+      setEnvSyncPlan: (plan) => set({ envSyncPlan: plan }),
 
       agentSyncExec: null,
       clearAgentSyncExec: () => set({ agentSyncExec: null }),
@@ -1173,6 +1414,10 @@ export const useStore = create<AppState>()(
         const logEntry = formatLogEntry(type, data, timestamp)
         if (logEntry) store.addLog(logEntry)
 
+        if (type.startsWith("sync.")) {
+          applySyncSseToStore(get, set, type, data as Record<string, unknown>)
+        }
+
         switch (type) {
           case "run.queued":
             // Clear previous run's live state so Live tab starts fresh
@@ -1183,6 +1428,7 @@ export const useStore = create<AppState>()(
             set({ helpUnread: 0 })
             store.resetLiveUsage()
             store.clearStreamingAnswer()
+            set({ activeSyncInvocation: null, syncProgressStates: new Map() })
             store.addTrace({ kind: "goal", text: data["goal"] as string })
             store.upsertRun({
               id: data["runId"] as string,
@@ -1202,10 +1448,21 @@ export const useStore = create<AppState>()(
               llmCalls: 0,
               trace: [],
               streamingAnswer: "",
-              coherentStream: "",
               auditTrail: [],
               stepData: [],
+              threadId: get().activeThreadId,
             })
+            if (get().activeThreadId) {
+              const threadId = get().activeThreadId!
+              const existing = get().threads.find((t) => t.id === threadId)
+              if (existing) {
+                store.upsertThread({
+                  ...existing,
+                  updatedAt: timestamp,
+                  runCount: (existing.runCount ?? 0) + 1,
+                })
+              }
+            }
             break
 
           case "run.started":
@@ -1218,21 +1475,35 @@ export const useStore = create<AppState>()(
           case "run.completed":
             store.clearStreamingAnswer()
             store.addTrace({ kind: "answer", text: data["answer"] as string })
-            store.upsertRun({
-              id: data["runId"] as string,
-              status: RunStatus.Completed,
-              answer: data["answer"] as string,
-              stepCount: data["stepCount"] as number,
-              pendingWorkspaceChanges: (data["pendingWorkspaceChanges"] as number) ?? 0,
-              completedAt: timestamp,
-              totalTokens: (data["totalTokens"] as number) ?? 0,
-              promptTokens: (data["promptTokens"] as number) ?? 0,
-              completionTokens: (data["completionTokens"] as number) ?? 0,
-              llmCalls: (data["llmCalls"] as number) ?? 0,
-              streamingAnswer: "",
-            })
-            set((s) => ({ runs: appendRunTrace(s.runs, data["runId"] as string, { kind: "answer", text: data["answer"] as string }) }))
-            set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null })
+            {
+              const completedRunId = readSseRunId(data) ?? get().activeRunId
+              if (completedRunId) {
+                store.upsertRun({
+                  id: completedRunId,
+                  status: RunStatus.Completed,
+                  answer: data["answer"] as string,
+                  stepCount: data["stepCount"] as number,
+                  pendingWorkspaceChanges: (data["pendingWorkspaceChanges"] as number) ?? 0,
+                  completedAt: timestamp,
+                  totalTokens: (data["totalTokens"] as number) ?? 0,
+                  promptTokens: (data["promptTokens"] as number) ?? 0,
+                  completionTokens: (data["completionTokens"] as number) ?? 0,
+                  llmCalls: (data["llmCalls"] as number) ?? 0,
+                  streamingAnswer: "",
+                })
+                set((s) => ({
+                  runs: appendRunTrace(s.runs, completedRunId, { kind: "answer", text: data["answer"] as string }),
+                }))
+                void api.getRunTrace(completedRunId).then((rawTrace) => {
+                  const trace = rawTrace as TraceEntry[]
+                  set((s) => ({
+                    runs: patchRunFields(s.runs, completedRunId, { trace }),
+                    trace: s.activeRunId === completedRunId ? trace : s.trace,
+                  }))
+                }).catch(() => {})
+              }
+            }
+            set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null, activeSyncInvocation: null, syncProgressStates: new Map() })
             break
 
           case "run.failed":
@@ -1255,7 +1526,7 @@ export const useStore = create<AppState>()(
             if (!isTerminalInfrastructureError(data["error"] as string)) {
               set((s) => ({ runs: appendRunTrace(s.runs, data["runId"] as string, { kind: "error", text: data["error"] as string }) }))
             }
-            set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null })
+            set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null, activeSyncInvocation: null, syncProgressStates: new Map() })
             break
 
           case "run.cancelled":
@@ -1266,7 +1537,7 @@ export const useStore = create<AppState>()(
               completedAt: timestamp,
               streamingAnswer: "",
             })
-            set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null })
+            set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null, activeSyncInvocation: null, syncProgressStates: new Map() })
             break
 
           case "answer.chunk": {
@@ -1303,36 +1574,44 @@ export const useStore = create<AppState>()(
 
           case "step.started": {
             const toolName = (data["action"] as string) ?? "unknown"
-            const stepId = data["stepId"] as string
+            const stepId = readSseStepId(data)
             const input = (data["input"] as Record<string, unknown>) ?? {}
-            const argsFormatted = JSON.stringify(input, null, 2)
-            const keys = Object.keys(input)
-            // Don't pre-truncate here — the pill row uses CSS
-            // text-ellipsis to clip with "..." when it overflows the
-            // available width. Slicing in JS would lop the path mid-word
-            // with no ellipsis, hiding from the user that there's more.
-            const argsSummary = keys.length > 0
-              ? keys.length === 1 ? `${keys[0]}=${JSON.stringify(input[keys[0]])}` : `${keys.length} args`
-              : ""
-            const traceEntry: TraceEntry = { kind: "tool-call", invocationId: stepId, toolCallId: null, tool: toolName, argsSummary, argsFormatted }
-            store.addTrace(traceEntry)
-            const runId = (data["runId"] as string) ?? get().activeRunId
-            if (runId) set((s) => ({ runs: appendRunTrace(s.runs, runId, traceEntry) }))
-            store.upsertStep({
-              id: data["stepId"] as string,
-              name: data["name"] as string ?? "Step",
-              action: data["action"] as string ?? "",
-              input,
-              output: {},
-              error: null,
-              status: RunStatus.Running,
-              startedAt: timestamp,
-            } as Step)
-            if (runId) {
+            const traceEntry = traceEntryFromStepStarted(data)
+            if (traceEntry) {
+              store.addTrace(traceEntry)
+              const runId = readSseRunId(data) ?? get().activeRunId
+              if (runId) set((s) => ({ runs: appendRunTrace(s.runs, runId, traceEntry) }))
+            }
+            const runId = readSseRunId(data) ?? get().activeRunId
+            if (runId && stepId && SYNC_TRACE_TOOLS.has(toolName)) {
+              const progress = createSyncProgressState(stepId, toolName)
+              const progressEntry = syncProgressToTraceEntry(progress)
+              const states = new Map(get().syncProgressStates)
+              states.set(stepId, progress)
+              set({
+                activeSyncInvocation: { runId, invocationId: stepId, tool: toolName },
+                syncProgressStates: states,
+                trace: upsertGlobalSyncProgressTrace(get().trace, progressEntry),
+                runs: upsertSyncProgressTrace(get().runs, runId, progressEntry)
+              })
+            }
+            if (stepId) {
+              store.upsertStep({
+                id: stepId,
+                name: data["name"] as string ?? "Step",
+                action: data["action"] as string ?? "",
+                input,
+                output: {},
+                error: null,
+                status: RunStatus.Running,
+                startedAt: timestamp,
+              } as Step)
+            }
+            if (runId && stepId) {
               set((s) => ({
                 runs: patchRunFields(s.runs, runId, {
                   stepData: [...(s.runs.find((run) => run.id === runId)?.stepData ?? []), {
-                    id: data["stepId"] as string,
+                    id: stepId,
                     name: data["name"] as string ?? "Step",
                     action: data["action"] as string ?? "",
                     input,
@@ -1351,32 +1630,49 @@ export const useStore = create<AppState>()(
 
           case "step.completed": {
             const output = (data["output"] as Record<string, unknown>) ?? {}
-            const result = (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done")
-            const runId = (data["runId"] as string) ?? get().activeRunId
-            const traceEntry: TraceEntry = { kind: "tool-result", invocationId: data["stepId"] as string | undefined, text: result }
-            store.addTrace(traceEntry)
-            if (runId) set((s) => ({ runs: appendRunTrace(s.runs, runId, traceEntry) }))
-            store.upsertStep({
-              id: data["stepId"] as string,
-              name: data["name"] as string ?? "Step",
-              action: data["action"] as string ?? "",
-              input: (data["input"] as Record<string, unknown>) ?? {},
-              output,
-              error: null,
-              status: RunStatus.Completed,
-              completedAt: timestamp,
-            } as Step)
-            if (runId) {
+            const runId = readSseRunId(data) ?? get().activeRunId
+            const stepId = readSseStepId(data)
+            const active = get().activeSyncInvocation
+            if (runId && stepId && active?.invocationId === stepId) {
+              const prev = get().syncProgressStates.get(stepId) ?? createSyncProgressState(stepId, active.tool)
+              const finalized = finalizeSyncProgress(prev, truncateSyncToolResult(
+                (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done"),
+              ), false)
+              const progressEntry = syncProgressToTraceEntry(finalized)
+              set({
+                trace: upsertGlobalSyncProgressTrace(get().trace, progressEntry),
+                runs: upsertSyncProgressTrace(get().runs, runId, progressEntry)
+              })
+            }
+            const traceEntry = traceEntryFromStepCompleted(data)
+            if (traceEntry) {
+              store.addTrace(traceEntry)
+              if (runId) set((s) => ({ runs: appendRunTrace(s.runs, runId, traceEntry) }))
+            }
+            if (stepId) {
+              store.upsertStep({
+                id: stepId,
+                name: data["name"] as string ?? "Step",
+                action: data["action"] as string ?? "",
+                input: (data["input"] as Record<string, unknown>) ?? {},
+                output,
+                error: null,
+                status: RunStatus.Completed,
+                completedAt: timestamp,
+              } as Step)
+            }
+            if (runId && stepId) {
               set((s) => ({
                 runs: patchRunFields(s.runs, runId, {
                   stepData: (s.runs.find((run) => run.id === runId)?.stepData ?? []).map((step) =>
-                    step.id === data["stepId"]
+                    step.id === stepId
                       ? { ...step, output, error: null, status: RunStatus.Completed, completedAt: timestamp }
                       : step,
                   ),
                 }),
               }))
             }
+            set({ activeSyncInvocation: null, syncProgressStates: new Map() })
             break
           }
 
@@ -1415,31 +1711,47 @@ export const useStore = create<AppState>()(
 
           case "step.failed": {
             const errText = (data["error"] as string) ?? "unknown error"
-            const runId = (data["runId"] as string) ?? get().activeRunId
-            const traceEntry: TraceEntry = { kind: "tool-error", invocationId: data["stepId"] as string | undefined, text: errText }
-            store.addTrace(traceEntry)
-            if (runId) set((s) => ({ runs: appendRunTrace(s.runs, runId, traceEntry) }))
-            store.upsertStep({
-              id: data["stepId"] as string,
-              name: data["name"] as string ?? "Step",
-              action: data["action"] as string ?? "",
-              input: (data["input"] as Record<string, unknown>) ?? {},
-              output: (data["output"] as Record<string, unknown>) ?? {},
-              status: RunStatus.Failed,
-              error: errText,
-              completedAt: timestamp,
-            } as Step)
-            if (runId) {
+            const runId = readSseRunId(data) ?? get().activeRunId
+            const stepId = readSseStepId(data)
+            const active = get().activeSyncInvocation
+            if (runId && stepId && active?.invocationId === stepId) {
+              const prev = get().syncProgressStates.get(stepId) ?? createSyncProgressState(stepId, active.tool)
+              const finalized = finalizeSyncProgress(prev, errText, true)
+              const progressEntry = syncProgressToTraceEntry(finalized)
+              set({
+                trace: upsertGlobalSyncProgressTrace(get().trace, progressEntry),
+                runs: upsertSyncProgressTrace(get().runs, runId, progressEntry)
+              })
+            }
+            const traceEntry = traceEntryFromStepFailed(data)
+            if (traceEntry) {
+              store.addTrace(traceEntry)
+              if (runId) set((s) => ({ runs: appendRunTrace(s.runs, runId, traceEntry) }))
+            }
+            if (stepId) {
+              store.upsertStep({
+                id: stepId,
+                name: data["name"] as string ?? "Step",
+                action: data["action"] as string ?? "",
+                input: (data["input"] as Record<string, unknown>) ?? {},
+                output: (data["output"] as Record<string, unknown>) ?? {},
+                error: errText,
+                status: RunStatus.Failed,
+                completedAt: timestamp,
+              } as Step)
+            }
+            if (runId && stepId) {
               set((s) => ({
                 runs: patchRunFields(s.runs, runId, {
                   stepData: (s.runs.find((run) => run.id === runId)?.stepData ?? []).map((step) =>
-                    step.id === data["stepId"]
+                    step.id === stepId
                       ? { ...step, output: (data["output"] as Record<string, unknown>) ?? {}, status: RunStatus.Failed, error: errText, completedAt: timestamp }
                       : step,
                   ),
                 }),
               }))
             }
+            set({ activeSyncInvocation: null, syncProgressStates: new Map() })
             break
           }
 
@@ -1550,7 +1862,7 @@ export const useStore = create<AppState>()(
               title: data["title"] as string,
               message: data["message"] as string,
               runId: (data["runId"] as string) ?? null,
-              stepId: (data["stepId"] as string) ?? null,
+              stepId: readSseStepId(data) ?? null,
               actions: (data["actions"] as Notification["actions"]) ?? [],
               read: false,
               createdAt: timestamp,
@@ -1682,7 +1994,7 @@ export const useStore = create<AppState>()(
               pendingInput: {
                 runId: data["runId"] as string,
                 question: data["question"] as string,
-                options: (data["options"] as string[]) ?? undefined,
+                options: normalizePendingInputOptions(data["options"] as string[] | undefined),
                 sensitive: data["sensitive"] as boolean | undefined,
               },
             })
@@ -1707,22 +2019,11 @@ export const useStore = create<AppState>()(
           case "debug.trace": {
             const entry = data["entry"] as import("./types").TraceEntry
             if (entry) {
-              const isCoherentToken = (entry as { kind?: string }).kind === "coherent-generation-token"
-              if (!isCoherentToken) {
-                store.addTrace(entry)
-              }
+              store.addTrace(entry)
               const runId = data["runId"] as string | undefined
               if (runId) {
-                if (isCoherentToken) {
-                  const token = (entry as { token?: string }).token ?? ""
-                  if (token) {
-                    runCoherentBuf.set(runId, (runCoherentBuf.get(runId) ?? "") + token)
-                    scheduleRunFlush(set)
-                  }
-                } else {
-                  runTraceBuf.push({ runId, entry })
-                  scheduleRunFlush(set)
-                }
+                runTraceBuf.push({ runId, entry })
+                scheduleRunFlush(set)
               }
               if (runId && entry.kind === "workspace_diff") {
                 const pendingCount =
@@ -1742,9 +2043,14 @@ export const useStore = create<AppState>()(
       name: "mia-dashboard",
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<AppState>
+        const views = persisted.views?.length
+          ? pruneUnknownWidgets(persisted.views)
+          : currentState.views
         return {
           ...currentState,
           ...persisted,
+          views,
+          envSyncPlan: null,
           envSyncForm: {
             ...DEFAULT_ENV_SYNC_FORM,
             ...(persisted.envSyncForm ?? {}),
@@ -1757,6 +2063,8 @@ export const useStore = create<AppState>()(
         views: state.views,
         activeViewId: state.activeViewId,
         selectedAgentId: state.selectedAgentId,
+        activeThreadId: state.activeThreadId,
+        threadSidebarCollapsed: state.threadSidebarCollapsed,
         ioeLayout: state.ioeLayout,
         envSyncForm: { ...state.envSyncForm, entityId: "", planId: null },
       }),

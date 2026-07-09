@@ -1,13 +1,13 @@
 {
   "version": 1,
-  "publishedAt": "2026-05-28T16:30:17.168Z",
-  "publishedVersion": "2026-05-28T16:30:17.168Z",
+  "publishedAt": "2026-07-09T13:03:34.920Z",
+  "publishedVersion": "2026-07-09T13:03:34.920Z",
   "definitions": {
     "content": {
       "schemaVersion": 1,
       "id": "content",
       "displayName": "Content",
-      "description": "Content sync definition migrated from legacy recipe bundle.",
+      "description": "Content sync definition bootstrapped from legacy pipeline ground truth.",
       "rootTable": "gate.Content",
       "idColumn": "contentId",
       "labelColumn": "title",
@@ -17,9 +17,7 @@
         "entrySproc": "core.uspSyncContentObjectsTran"
       },
       "governance": {
-        "approvalPolicyId": null,
-        "freezeWindowIds": [],
-        "riskMultiplier": 1
+        "freezeWindowIds": []
       },
       "strategy": {
         "strategyId": "mymi-scd2",
@@ -34,17 +32,37 @@
         "owner": null,
         "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy sync-recipes.json.",
-          "Review optional FK-only content scope before treating this definition as curated."
+          "Bootstrapped from legacy pipeline ground truth.",
+          "Contains FK-inferred optional scope that still needs deliberate review."
         ]
       },
       "metadata": {
         "tables": [
           {
+            "name": "gate.ContentType",
+            "scopeColumn": "contentTypeId",
+            "predicate": "EXISTS (SELECT 1 FROM (SELECT contentTypeId AS [contentTypeId] FROM gate.Content WHERE contentId = {id}) AS __mia_scope WHERE __mia_scope.[contentTypeId] = [gate].[ContentType].[contentTypeId])",
+            "source": "pipeline-only",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
             "name": "gate.Content",
             "scopeColumn": "contentId",
-            "predicate": "contentId = {id}",
+            "predicate": "contentId IN ({ids})",
             "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "gate.ContentLinkType",
+            "scopeColumn": "contentLinkTypeId",
+            "predicate": "EXISTS (SELECT 1 FROM (SELECT contentLinkTypeId AS [contentLinkTypeId] FROM gate.ContentLink WHERE contentId = {id}) AS __mia_scope WHERE __mia_scope.[contentLinkTypeId] = [gate].[ContentLinkType].[contentLinkTypeId])",
+            "source": "pipeline-only",
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
@@ -53,7 +71,7 @@
           {
             "name": "gate.ContentLink",
             "scopeColumn": "contentId",
-            "predicate": "contentId = {id}",
+            "predicate": "contentId IN ({ids})",
             "source": "fk+pipeline",
             "verified": true,
             "groundedByPipeline": true,
@@ -63,33 +81,13 @@
           {
             "name": "gate.UserGroupPermission",
             "scopeColumn": "contentId",
-            "predicate": "contentId = {id}",
+            "predicate": "contentId IN ({ids})",
             "source": "fk-only",
             "verified": false,
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
             "note": "Predicate inferred from FK graph. Verify against core.uspSyncContentObjectsTran body."
-          },
-          {
-            "name": "gate.ContentType",
-            "scopeColumn": "contentTypeId",
-            "predicate": "contentTypeId IN (SELECT contentTypeId FROM [gate].[Content] WHERE contentId = {id})",
-            "source": "pipeline-only",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
-          },
-          {
-            "name": "gate.ContentLinkType",
-            "scopeColumn": "contentLinkTypeId",
-            "predicate": "contentLinkTypeId IN (SELECT contentLinkTypeId FROM [gate].[ContentLink] WHERE contentId = {id})",
-            "source": "pipeline-only",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
           }
         ],
         "executionOrder": [
@@ -111,35 +109,107 @@
       "executionFlow": {
         "steps": [
           {
-            "id": "metadata-sync",
+            "id": "metadataSync",
             "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
-            "description": "Apply transactional metadata changes for the selected content scope."
+            "description": "Apply transactional metadata changes for the selected content scope.",
+            "bindings": {}
           },
           {
-            "id": "handle-dependencies",
-            "phase": "post-metadata",
+            "id": "handleDependencies",
+            "phase": "postMetadata",
             "kind": "handleDependencies",
             "title": "Handle dependencies",
             "description": "Refresh downstream content dependency state.",
-            "objectName": "content"
+            "objectName": "content",
+            "bindings": {}
           }
-        ]
+        ],
+        "catalog": {
+          "phases": {
+            "metadata": {
+              "summary": "Core metadata transaction",
+              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
+              "boundary": "metadata_transaction",
+              "connection": "target",
+              "defaultFailureMode": "fatal",
+              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
+            },
+            "postMetadata": {
+              "summary": "After metadata commit",
+              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
+              "boundary": "post_metadata",
+              "connection": "mixed",
+              "defaultFailureMode": "warning",
+              "orderingHint": "All steps after the first metadataSync step."
+            }
+          },
+          "kinds": {
+            "metadataSync": {
+              "summary": "Apply metadata change set",
+              "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+              "handler": {
+                "type": "metadata_sync",
+                "connection": "target"
+              },
+              "failureMode": "fatal",
+              "entityTypes": [
+                "any"
+              ],
+              "stepFields": {}
+            },
+            "handleDependencies": {
+              "summary": "Refresh object dependencies",
+              "description": "Runs core.uspObjectDependencies on target (@id, @objectName).",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspObjectDependencies",
+                "parameters": [
+                  {
+                    "name": "id",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  },
+                  {
+                    "name": "objectName",
+                    "source": {
+                      "type": "stepField",
+                      "field": "objectName"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "content",
+                "rule"
+              ],
+              "publishedOutputs": [
+                "id",
+                "objectName"
+              ],
+              "stepFields": {}
+            }
+          },
+          "customValueSources": {}
+        }
       },
       "provenance": {
         "kind": "legacy-migration",
-        "sourceArtifact": "deploy/mssql/sync-recipes.json",
-        "sourceVersion": "2026-05-10T11:19:07.694Z"
+        "sourceArtifact": "entity-registry:_default/content",
+        "sourceVersion": "1"
       },
-      "publishedAt": "2026-05-28T16:30:17.168Z",
-      "publishedVersion": "2026-05-28T16:30:17.168Z"
+      "publishedAt": "2026-07-09T13:03:34.920Z",
+      "publishedVersion": "2026-07-09T13:03:34.920Z"
     },
     "contract": {
       "schemaVersion": 1,
       "id": "contract",
       "displayName": "Contract",
-      "description": "Contract sync definition migrated from legacy recipe bundle.",
+      "description": "Contract sync definition bootstrapped from legacy pipeline ground truth.",
       "rootTable": "core.Contract",
       "idColumn": "contractId",
       "labelColumn": "name",
@@ -149,9 +219,7 @@
         "entrySproc": "core.uspSyncCoreObjectsTran"
       },
       "governance": {
-        "approvalPolicyId": null,
-        "freezeWindowIds": [],
-        "riskMultiplier": 1
+        "freezeWindowIds": []
       },
       "strategy": {
         "strategyId": "mymi-scd2",
@@ -166,24 +234,14 @@
         "owner": null,
         "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy sync-recipes.json.",
-          "Contract still contains inferred rule and step scope that require deliberate review."
+          "Bootstrapped from legacy pipeline ground truth.",
+          "Contains FK-inferred optional scope that still needs deliberate review."
         ]
       },
       "metadata": {
         "tables": [
           {
             "name": "core.Contract",
-            "scopeColumn": "contractId",
-            "predicate": "contractId = {id}",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
-          },
-          {
-            "name": "core.Pipeline",
             "scopeColumn": "contractId",
             "predicate": "contractId = {id}",
             "source": "fk+pipeline",
@@ -213,20 +271,9 @@
             "userControllable": false
           },
           {
-            "name": "core.Step",
-            "scopeColumn": null,
-            "predicate": "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Step].pipelineId AND p.contractId = {id})",
-            "source": "fk-only",
-            "verified": false,
-            "groundedByPipeline": false,
-            "enabledByDefault": false,
-            "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
-          },
-          {
-            "name": "core.Activity",
-            "scopeColumn": "pipelineId",
-            "predicate": "pipelineId IN (SELECT pipelineId FROM [core].[Pipeline] WHERE contractId = {id})",
+            "name": "core.DatasetMapping",
+            "scopeColumn": "datasetId_Left",
+            "predicate": "EXISTS (SELECT 1 FROM (SELECT datasetId AS [datasetId] FROM core.Dataset WHERE contractId = {id}) AS __mia_scope WHERE __mia_scope.[datasetId] = [core].[DatasetMapping].[datasetId_Left])",
             "source": "fk+pipeline",
             "verified": true,
             "groundedByPipeline": true,
@@ -236,7 +283,7 @@
           {
             "name": "core.DatasetColumn",
             "scopeColumn": "datasetId",
-            "predicate": "datasetId IN (SELECT datasetId FROM [core].[Dataset] WHERE contractId = {id})",
+            "predicate": "EXISTS (SELECT 1 FROM (SELECT datasetId AS [datasetId] FROM core.Dataset WHERE contractId = {id}) AS __mia_scope WHERE __mia_scope.[datasetId] = [core].[DatasetColumn].[datasetId])",
             "source": "fk+pipeline",
             "verified": true,
             "groundedByPipeline": true,
@@ -244,9 +291,29 @@
             "userControllable": false
           },
           {
-            "name": "core.DatasetMapping",
-            "scopeColumn": "datasetId_Left",
-            "predicate": "datasetId_Left IN (SELECT datasetId FROM [core].[Dataset] WHERE contractId = {id})",
+            "name": "core.DatasetMappingColumn",
+            "scopeColumn": "datasetMappingId",
+            "predicate": "EXISTS (SELECT 1 FROM (SELECT datasetMappingId FROM core.DatasetMapping WHERE datasetId_Left IN (SELECT datasetId FROM core.Dataset WHERE contractId = {id})) AS __mia_scope WHERE __mia_scope.[datasetMappingId] = [core].[DatasetMappingColumn].[datasetMappingId])",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.Pipeline",
+            "scopeColumn": "contractId",
+            "predicate": "contractId = {id}",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.Activity",
+            "scopeColumn": "pipelineId",
+            "predicate": "EXISTS (SELECT 1 FROM (SELECT pipelineId AS [pipelineId] FROM core.Pipeline WHERE contractId = {id}) AS __mia_scope WHERE __mia_scope.[pipelineId] = [core].[Activity].[pipelineId])",
             "source": "fk+pipeline",
             "verified": true,
             "groundedByPipeline": true,
@@ -265,19 +332,20 @@
             "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
           },
           {
-            "name": "core.DatasetMappingColumn",
-            "scopeColumn": "datasetMappingId",
-            "predicate": "datasetMappingId IN (SELECT datasetMappingId FROM [core].[DatasetMapping] WHERE datasetId_Left IN (SELECT datasetId FROM core.Dataset WHERE contractId = {id}) )",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
+            "name": "core.Step",
+            "scopeColumn": null,
+            "predicate": "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Step].pipelineId AND p.contractId = {id})",
+            "source": "fk-only",
+            "verified": false,
+            "groundedByPipeline": false,
+            "enabledByDefault": false,
+            "userControllable": true,
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
           },
           {
             "name": "core.RuleColumn",
             "scopeColumn": null,
-            "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p INNER JOIN [core].[Dataset] _p1 ON _p1.datasetId = p.lookupDatasetId WHERE p.datasetColumnId = [core].[RuleColumn].inputDatasetColumnId AND _p1.contractId = {id})",
+            "predicate": "(EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleColumn].inputDatasetColumnId)) AND EXISTS (SELECT 1 FROM [core].[Contract] AS __mia_root WHERE __mia_root.[contractId] = {id})",
             "source": "fk-only",
             "verified": false,
             "groundedByPipeline": false,
@@ -288,7 +356,7 @@
           {
             "name": "core.RuleCondition",
             "scopeColumn": null,
-            "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p INNER JOIN [core].[Dataset] _p1 ON _p1.datasetId = p.lookupDatasetId WHERE p.datasetColumnId = [core].[RuleCondition].inputDatasetColumnId AND _p1.contractId = {id})",
+            "predicate": "(EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleCondition].inputDatasetColumnId)) AND EXISTS (SELECT 1 FROM [core].[Contract] AS __mia_root WHERE __mia_root.[contractId] = {id})",
             "source": "fk-only",
             "verified": false,
             "groundedByPipeline": false,
@@ -299,7 +367,7 @@
           {
             "name": "core.RuleLink",
             "scopeColumn": null,
-            "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p INNER JOIN [core].[Dataset] _p1 ON _p1.datasetId = p.lookupDatasetId WHERE p.datasetColumnId = [core].[RuleLink].outputDatasetColumnId AND _p1.contractId = {id})",
+            "predicate": "(EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleLink].outputDatasetColumnId)) AND EXISTS (SELECT 1 FROM [core].[Contract] AS __mia_root WHERE __mia_root.[contractId] = {id})",
             "source": "fk-only",
             "verified": false,
             "groundedByPipeline": false,
@@ -310,7 +378,7 @@
           {
             "name": "core.RuleConditionValue",
             "scopeColumn": null,
-            "predicate": "EXISTS (SELECT 1 FROM [core].[RuleCondition] p INNER JOIN [core].[DatasetColumn] _p1 ON _p1.datasetColumnId = p.inputDatasetColumnId INNER JOIN [core].[Dataset] _p2 ON _p2.datasetId = _p1.lookupDatasetId WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId AND _p2.contractId = {id})",
+            "predicate": "(EXISTS (SELECT 1 FROM [core].[RuleCondition] p WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId)) AND EXISTS (SELECT 1 FROM [core].[Contract] AS __mia_root WHERE __mia_root.[contractId] = {id})",
             "source": "fk-only",
             "verified": false,
             "groundedByPipeline": false,
@@ -328,8 +396,8 @@
           "core.DatasetMappingColumn",
           "core.Pipeline",
           "core.Activity",
-          "core.Step",
           "core.Rule",
+          "core.Step",
           "core.RuleColumn",
           "core.RuleCondition",
           "core.RuleLink",
@@ -340,8 +408,8 @@
           "core.RuleLink",
           "core.RuleCondition",
           "core.RuleColumn",
-          "core.Rule",
           "core.Step",
+          "core.Rule",
           "core.Activity",
           "core.Pipeline",
           "core.DatasetMappingColumn",
@@ -356,172 +424,980 @@
       "executionFlow": {
         "steps": [
           {
-            "id": "audit-check",
-            "phase": "pre-transaction",
+            "id": "auditCheck",
+            "phase": "preTransaction",
             "kind": "auditCheck",
-            "title": "Audit check",
-            "description": "Validate target state before contract sync.",
-            "auditObjectType": "Contract"
+            "title": "Audit check (before sync)",
+            "description": "Source uspAuditRunCheck — decide whether metadata sync should run.",
+            "auditObjectType": "Contract",
+            "bindings": {}
           },
           {
-            "id": "target-lock",
-            "phase": "pre-transaction",
+            "id": "targetLock",
+            "phase": "preTransaction",
             "kind": "targetLock",
             "title": "Target lock",
-            "description": "Lock the target contract deployment window."
+            "description": "Lock the target contract deployment window.",
+            "bindings": {}
           },
           {
-            "id": "metadata-sync",
+            "id": "metadataSync",
             "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
-            "description": "Apply transactional metadata changes for the selected contract scope."
+            "description": "Apply transactional metadata changes for the selected contract scope.",
+            "bindings": {}
           },
           {
-            "id": "pipeline-register",
-            "phase": "post-metadata",
+            "id": "pipelineRegister",
+            "phase": "postMetadata",
             "kind": "pipelineRegister",
             "title": "Pipeline register",
             "description": "Register affected pipelines with the target agent service.",
-            "subjectRef": "contractPipelineId"
+            "bindings": {
+              "pipelineId": {
+                "type": "contractPipelineId"
+              }
+            }
           },
           {
-            "id": "contract-undeploy",
-            "phase": "post-metadata",
+            "id": "contractUndeploy",
+            "phase": "postMetadata",
             "kind": "contractUndeploy",
             "title": "Contract undeploy",
-            "description": "Undeploy the target contract before redeployment."
+            "description": "Undeploy the target contract before redeployment.",
+            "bindings": {}
           },
           {
-            "id": "contract-unlock-after-undeploy",
-            "phase": "post-metadata",
+            "id": "contractUnlockAfterUndeploy",
+            "phase": "postMetadata",
             "kind": "targetUnlock",
             "title": "Unlock after undeploy",
-            "description": "Unlock the contract after undeploy."
+            "description": "Unlock the contract after undeploy.",
+            "bindings": {}
           },
           {
-            "id": "audit-check-2",
-            "phase": "post-metadata",
+            "id": "auditCheckPreDeploy",
+            "phase": "postMetadata",
             "kind": "auditCheck",
-            "title": "Pre-deploy audit check",
-            "description": "Run a second contract audit check before deployment.",
-            "auditObjectType": "Contract"
+            "title": "Audit check (before deploy)",
+            "description": "Re-run source audit after undeploy, before physical dataset creation.",
+            "auditObjectType": "Contract",
+            "bindings": {}
           },
           {
-            "id": "contract-lock-for-deploy",
-            "phase": "post-metadata",
+            "id": "contractLockForDeploy",
+            "phase": "postMetadata",
             "kind": "targetLock",
             "title": "Lock for deploy",
-            "description": "Lock the contract for deployment."
+            "description": "Lock the contract for deployment.",
+            "bindings": {}
           },
           {
-            "id": "contract-pre-script",
-            "phase": "post-metadata",
+            "id": "contractPreScript",
+            "phase": "postMetadata",
             "kind": "contractPreScript",
             "title": "Pre-deploy script",
-            "description": "Run contract pre-deployment scripts."
+            "description": "Run contract pre-deployment scripts.",
+            "bindings": {}
           },
           {
-            "id": "contract-create-dataset-stage",
-            "phase": "post-metadata",
+            "id": "contractCreateDatasetStage",
+            "phase": "postMetadata",
             "kind": "contractCreateStageDataset",
             "title": "Create stage dataset",
-            "description": "Create the stage dataset."
+            "description": "Create the stage dataset.",
+            "bindings": {}
           },
           {
-            "id": "contract-create-dataset-archive",
-            "phase": "post-metadata",
+            "id": "contractCreateDatasetArchive",
+            "phase": "postMetadata",
             "kind": "contractCreateArchiveDataset",
             "title": "Create archive dataset",
-            "description": "Create the archive dataset."
+            "description": "Create the archive dataset.",
+            "bindings": {}
           },
           {
-            "id": "contract-create-dataset-list",
-            "phase": "post-metadata",
+            "id": "contractCreateDatasetList",
+            "phase": "postMetadata",
             "kind": "contractCreateListDataset",
             "title": "Create list dataset",
-            "description": "Create the list dataset."
+            "description": "Create the list dataset.",
+            "bindings": {}
           },
           {
-            "id": "contract-create-dataset-dim",
-            "phase": "post-metadata",
+            "id": "contractCreateDatasetDim",
+            "phase": "postMetadata",
             "kind": "contractCreateDimDataset",
             "title": "Create dim dataset",
-            "description": "Create the dimension dataset."
+            "description": "Create the dimension dataset.",
+            "bindings": {}
           },
           {
-            "id": "contract-create-dataset-fact",
-            "phase": "post-metadata",
+            "id": "contractCreateDatasetFact",
+            "phase": "postMetadata",
             "kind": "contractCreateFactDataset",
             "title": "Create fact dataset",
-            "description": "Create the fact dataset."
+            "description": "Create the fact dataset.",
+            "bindings": {}
           },
           {
-            "id": "contract-create-fks",
-            "phase": "post-metadata",
+            "id": "contractCreateFks",
+            "phase": "postMetadata",
             "kind": "contractCreateDatasetFks",
             "title": "Create dataset FKs",
-            "description": "Reconcile contract dataset foreign keys."
+            "description": "Reconcile contract dataset foreign keys.",
+            "bindings": {}
           },
           {
-            "id": "contract-deploy-etl",
-            "phase": "post-metadata",
+            "id": "contractDeployEtl",
+            "phase": "postMetadata",
             "kind": "contractDeployEtl",
             "title": "Deploy ETL",
-            "description": "Deploy ETL custom transformations."
+            "description": "Deploy ETL custom transformations.",
+            "bindings": {}
           },
           {
-            "id": "contract-deploy-routine",
-            "phase": "post-metadata",
+            "id": "contractDeployRoutine",
+            "phase": "postMetadata",
             "kind": "contractDeployRoutine",
             "title": "Deploy routines",
-            "description": "Deploy contract routines."
+            "description": "Deploy contract routines.",
+            "bindings": {}
           },
           {
-            "id": "contract-post-script",
-            "phase": "post-metadata",
+            "id": "contractPostScript",
+            "phase": "postMetadata",
             "kind": "contractPostScript",
             "title": "Post-deploy script",
-            "description": "Run contract post-deployment scripts."
+            "description": "Run contract post-deployment scripts.",
+            "bindings": {}
           },
           {
-            "id": "contract-unlock-after-deploy",
-            "phase": "post-metadata",
+            "id": "contractUnlockAfterDeploy",
+            "phase": "postMetadata",
             "kind": "targetUnlock",
             "title": "Unlock after deploy",
-            "description": "Unlock the contract after deployment."
+            "description": "Unlock the contract after deployment.",
+            "bindings": {}
           },
           {
-            "id": "set-sync-date",
-            "phase": "post-metadata",
+            "id": "setSyncDate",
+            "phase": "postMetadata",
             "kind": "syncDate",
             "title": "Sync date",
             "description": "Stamp the contract sync date.",
-            "auditObjectType": "Contract"
+            "auditObjectType": "Contract",
+            "bindings": {}
           },
           {
-            "id": "set-deploy-date",
-            "phase": "post-metadata",
+            "id": "setDeployDate",
+            "phase": "postMetadata",
             "kind": "deployDate",
             "title": "Deploy date",
             "description": "Stamp the contract deploy date.",
-            "auditObjectType": "Contract"
+            "auditObjectType": "Contract",
+            "bindings": {}
           }
-        ]
+        ],
+        "catalog": {
+          "phases": {
+            "preTransaction": {
+              "summary": "Before metadata merge on target",
+              "description": "Steps run on the source database before the metadata sync transaction opens on the target. Typical uses: audit gates (syncOrNot), contract locks. Failures here stop the entire run.",
+              "boundary": "pre_metadata",
+              "connection": "source",
+              "defaultFailureMode": "fatal",
+              "orderingHint": "Must appear before the first metadataSync step in the flow array."
+            },
+            "metadata": {
+              "summary": "Core metadata transaction",
+              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
+              "boundary": "metadata_transaction",
+              "connection": "target",
+              "defaultFailureMode": "fatal",
+              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
+            },
+            "postMetadata": {
+              "summary": "After metadata commit",
+              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
+              "boundary": "post_metadata",
+              "connection": "mixed",
+              "defaultFailureMode": "warning",
+              "orderingHint": "All steps after the first metadataSync step."
+            }
+          },
+          "kinds": {
+            "auditCheck": {
+              "summary": "Audit gate (sync or not)",
+              "description": "Calls core.uspAuditRunCheck on source with action syncOrNot.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "source",
+                "procedure": "core.uspAuditRunCheck",
+                "parameters": [
+                  {
+                    "name": "id",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  },
+                  {
+                    "name": "objType",
+                    "source": {
+                      "type": "stepField",
+                      "field": "auditObjectType"
+                    }
+                  },
+                  {
+                    "name": "action",
+                    "source": {
+                      "type": "literal",
+                      "value": "syncOrNot"
+                    }
+                  },
+                  {
+                    "name": "schema",
+                    "source": {
+                      "type": "literal",
+                      "value": "core"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "fatal",
+              "entityTypes": [
+                "content",
+                "contract",
+                "dataset",
+                "rule"
+              ],
+              "publishedOutputs": [
+                "action",
+                "id",
+                "objType",
+                "schema"
+              ],
+              "stepFields": {}
+            },
+            "targetLock": {
+              "summary": "Lock contract on source",
+              "description": "Sets contract lock on source via core.uspSetContractLock (isLocked=true).",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "source",
+                "procedure": "core.uspSetContractLock",
+                "parameters": [
+                  {
+                    "name": "contractId",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  },
+                  {
+                    "name": "isLocked",
+                    "source": {
+                      "type": "literal",
+                      "value": true
+                    }
+                  }
+                ]
+              },
+              "failureMode": "fatal",
+              "entityTypes": [
+                "contract"
+              ],
+              "publishedOutputs": [
+                "contractId",
+                "isLocked"
+              ],
+              "stepFields": {}
+            },
+            "metadataSync": {
+              "summary": "Apply metadata change set",
+              "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+              "handler": {
+                "type": "metadata_sync",
+                "connection": "target"
+              },
+              "failureMode": "fatal",
+              "entityTypes": [
+                "any"
+              ],
+              "stepFields": {}
+            },
+            "pipelineRegister": {
+              "summary": "Register pipeline with agent",
+              "description": "POST to agent /pipeline/register for contract pipeline subject.",
+              "handler": {
+                "type": "http_request",
+                "connection": "target",
+                "httpService": "agent",
+                "httpMethod": "POST",
+                "httpPath": "/pipeline/register",
+                "httpBody": [
+                  {
+                    "name": "pipelineId"
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "contract",
+                "pipelineActivity"
+              ],
+              "publishedOutputs": [
+                "pipelineId"
+              ],
+              "stepFields": {}
+            },
+            "contractUndeploy": {
+              "summary": "Undeploy marked contract",
+              "description": "Runs core.uspUndeployMarkedContract on target for the contract entity.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspUndeployMarkedContract",
+                "parameters": [
+                  {
+                    "name": "contractId",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "contract"
+              ],
+              "publishedOutputs": [
+                "contractId"
+              ],
+              "stepFields": {}
+            },
+            "targetUnlock": {
+              "summary": "Unlock contract on source",
+              "description": "Clears contract lock on source via core.uspSetContractLock (isLocked=false).",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "source",
+                "procedure": "core.uspSetContractLock",
+                "parameters": [
+                  {
+                    "name": "contractId",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  },
+                  {
+                    "name": "isLocked",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "contract"
+              ],
+              "publishedOutputs": [
+                "contractId",
+                "isLocked"
+              ],
+              "stepFields": {}
+            },
+            "contractPreScript": {
+              "summary": "Contract pre-deployment script",
+              "description": "Runs core.uspRunContractDeploymentScripts with action Run preScript.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspRunContractDeploymentScripts",
+                "parameters": [
+                  {
+                    "name": "contractName",
+                    "source": {
+                      "type": "contractName"
+                    }
+                  },
+                  {
+                    "name": "action",
+                    "source": {
+                      "type": "literal",
+                      "value": "Run preScript"
+                    }
+                  },
+                  {
+                    "name": "isDebug",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "contract"
+              ],
+              "publishedOutputs": [
+                "action",
+                "contractName",
+                "isDebug"
+              ],
+              "stepFields": {}
+            },
+            "contractCreateStageDataset": {
+              "summary": "Create stage dataset",
+              "description": "Creates the contract stage dataset layer on the target via core.uspCreateDataset (@type=stage).",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspCreateDataset",
+                "parameters": [
+                  {
+                    "name": "ContractName",
+                    "source": {
+                      "type": "contractName"
+                    }
+                  },
+                  {
+                    "name": "type",
+                    "source": {
+                      "type": "literal",
+                      "value": "stage"
+                    }
+                  },
+                  {
+                    "name": "isDebug",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  },
+                  {
+                    "name": "isExtraLogged",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "contract"
+              ],
+              "createsDatasetLayer": true,
+              "publishedOutputs": [
+                "ContractName",
+                "isDebug",
+                "isExtraLogged",
+                "type"
+              ],
+              "stepFields": {}
+            },
+            "contractCreateArchiveDataset": {
+              "summary": "Create archive dataset",
+              "description": "Creates the contract archive dataset layer on the target via core.uspCreateDataset (@type=archive).",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspCreateDataset",
+                "parameters": [
+                  {
+                    "name": "ContractName",
+                    "source": {
+                      "type": "contractName"
+                    }
+                  },
+                  {
+                    "name": "type",
+                    "source": {
+                      "type": "literal",
+                      "value": "archive"
+                    }
+                  },
+                  {
+                    "name": "isDebug",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  },
+                  {
+                    "name": "isExtraLogged",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "contract"
+              ],
+              "createsDatasetLayer": true,
+              "publishedOutputs": [
+                "ContractName",
+                "isDebug",
+                "isExtraLogged",
+                "type"
+              ],
+              "stepFields": {}
+            },
+            "contractCreateListDataset": {
+              "summary": "Create list dataset",
+              "description": "Creates the contract list dataset layer on the target via core.uspCreateDataset (@type=list).",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspCreateDataset",
+                "parameters": [
+                  {
+                    "name": "ContractName",
+                    "source": {
+                      "type": "contractName"
+                    }
+                  },
+                  {
+                    "name": "type",
+                    "source": {
+                      "type": "literal",
+                      "value": "list"
+                    }
+                  },
+                  {
+                    "name": "isDebug",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  },
+                  {
+                    "name": "isExtraLogged",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "contract"
+              ],
+              "createsDatasetLayer": true,
+              "publishedOutputs": [
+                "ContractName",
+                "isDebug",
+                "isExtraLogged",
+                "type"
+              ],
+              "stepFields": {}
+            },
+            "contractCreateDimDataset": {
+              "summary": "Create dim dataset",
+              "description": "Creates the contract dim dataset layer on the target via core.uspCreateDataset (@type=dim).",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspCreateDataset",
+                "parameters": [
+                  {
+                    "name": "ContractName",
+                    "source": {
+                      "type": "contractName"
+                    }
+                  },
+                  {
+                    "name": "type",
+                    "source": {
+                      "type": "literal",
+                      "value": "dim"
+                    }
+                  },
+                  {
+                    "name": "isDebug",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  },
+                  {
+                    "name": "isExtraLogged",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "contract"
+              ],
+              "createsDatasetLayer": true,
+              "publishedOutputs": [
+                "ContractName",
+                "isDebug",
+                "isExtraLogged",
+                "type"
+              ],
+              "stepFields": {}
+            },
+            "contractCreateFactDataset": {
+              "summary": "Create fact dataset",
+              "description": "Creates the contract fact dataset layer on the target via core.uspCreateDataset (@type=fact).",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspCreateDataset",
+                "parameters": [
+                  {
+                    "name": "ContractName",
+                    "source": {
+                      "type": "contractName"
+                    }
+                  },
+                  {
+                    "name": "type",
+                    "source": {
+                      "type": "literal",
+                      "value": "fact"
+                    }
+                  },
+                  {
+                    "name": "isDebug",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  },
+                  {
+                    "name": "isExtraLogged",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "contract"
+              ],
+              "createsDatasetLayer": true,
+              "publishedOutputs": [
+                "ContractName",
+                "isDebug",
+                "isExtraLogged",
+                "type"
+              ],
+              "stepFields": {}
+            },
+            "contractCreateDatasetFks": {
+              "summary": "Create dataset foreign keys",
+              "description": "Runs core.uspCreateDatasetFKs after dataset layers exist.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspCreateDatasetFKs",
+                "parameters": [
+                  {
+                    "name": "contractName",
+                    "source": {
+                      "type": "contractName"
+                    }
+                  },
+                  {
+                    "name": "isDebug",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  },
+                  {
+                    "name": "referencedSchemaName",
+                    "source": {
+                      "type": "literal",
+                      "value": null
+                    }
+                  },
+                  {
+                    "name": "referencedTableName",
+                    "source": {
+                      "type": "literal",
+                      "value": null
+                    }
+                  },
+                  {
+                    "name": "isExtraLogged",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "skipWhenDatasetLayerFailed": true,
+              "entityTypes": [
+                "contract"
+              ],
+              "publishedOutputs": [
+                "contractName",
+                "isDebug",
+                "isExtraLogged",
+                "referencedSchemaName",
+                "referencedTableName"
+              ],
+              "stepFields": {}
+            },
+            "contractDeployEtl": {
+              "summary": "Deploy ETL transformation",
+              "description": "Runs core.uspDeployETL2CustomTransformation for the contract on target.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspDeployETL2CustomTransformation",
+                "parameters": [
+                  {
+                    "name": "contractName",
+                    "source": {
+                      "type": "contractName"
+                    }
+                  },
+                  {
+                    "name": "isDebug",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "skipWhenDatasetLayerFailed": true,
+              "entityTypes": [
+                "contract"
+              ],
+              "publishedOutputs": [
+                "contractName",
+                "isDebug"
+              ],
+              "stepFields": {}
+            },
+            "contractDeployRoutine": {
+              "summary": "Deploy routine",
+              "description": "Runs core.uspDeployRoutine for the contract on target.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspDeployRoutine",
+                "parameters": [
+                  {
+                    "name": "contractName",
+                    "source": {
+                      "type": "contractName"
+                    }
+                  },
+                  {
+                    "name": "isExtraLogged",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  },
+                  {
+                    "name": "isDebug",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "skipWhenDatasetLayerFailed": true,
+              "entityTypes": [
+                "contract"
+              ],
+              "publishedOutputs": [
+                "contractName",
+                "isDebug",
+                "isExtraLogged"
+              ],
+              "stepFields": {}
+            },
+            "contractPostScript": {
+              "summary": "Contract post-deployment script",
+              "description": "Runs core.uspRunContractDeploymentScripts with action Run postScript.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspRunContractDeploymentScripts",
+                "parameters": [
+                  {
+                    "name": "contractName",
+                    "source": {
+                      "type": "contractName"
+                    }
+                  },
+                  {
+                    "name": "action",
+                    "source": {
+                      "type": "literal",
+                      "value": "Run postScript"
+                    }
+                  },
+                  {
+                    "name": "isDebug",
+                    "source": {
+                      "type": "literal",
+                      "value": false
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "skipWhenDatasetLayerFailed": true,
+              "entityTypes": [
+                "contract"
+              ],
+              "publishedOutputs": [
+                "action",
+                "contractName",
+                "isDebug"
+              ],
+              "stepFields": {}
+            },
+            "syncDate": {
+              "summary": "Record sync date (source audit)",
+              "description": "core.uspAuditRunCheck on source with action syncDate.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "source",
+                "procedure": "core.uspAuditRunCheck",
+                "parameters": [
+                  {
+                    "name": "id",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  },
+                  {
+                    "name": "objType",
+                    "source": {
+                      "type": "stepField",
+                      "field": "auditObjectType"
+                    }
+                  },
+                  {
+                    "name": "action",
+                    "source": {
+                      "type": "literal",
+                      "value": "syncDate"
+                    }
+                  },
+                  {
+                    "name": "schema",
+                    "source": {
+                      "type": "literal",
+                      "value": "core"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "content",
+                "contract",
+                "dataset",
+                "rule"
+              ],
+              "publishedOutputs": [
+                "action",
+                "id",
+                "objType",
+                "schema"
+              ],
+              "stepFields": {}
+            },
+            "deployDate": {
+              "summary": "Record deploy date (target audit)",
+              "description": "core.uspAuditRunCheck on target with action deployDate.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspAuditRunCheck",
+                "parameters": [
+                  {
+                    "name": "id",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  },
+                  {
+                    "name": "objType",
+                    "source": {
+                      "type": "stepField",
+                      "field": "auditObjectType"
+                    }
+                  },
+                  {
+                    "name": "action",
+                    "source": {
+                      "type": "literal",
+                      "value": "deployDate"
+                    }
+                  },
+                  {
+                    "name": "schema",
+                    "source": {
+                      "type": "literal",
+                      "value": "core"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "skipWhenDatasetLayerFailed": true,
+              "entityTypes": [
+                "content",
+                "contract",
+                "dataset",
+                "rule"
+              ],
+              "publishedOutputs": [
+                "action",
+                "id",
+                "objType",
+                "schema"
+              ],
+              "stepFields": {}
+            }
+          },
+          "customValueSources": {}
+        }
       },
       "provenance": {
         "kind": "legacy-migration",
-        "sourceArtifact": "deploy/mssql/sync-recipes.json",
-        "sourceVersion": "2026-05-10T11:19:07.694Z"
+        "sourceArtifact": "entity-registry:_default/contract",
+        "sourceVersion": "1"
       },
-      "publishedAt": "2026-05-28T16:30:17.168Z",
-      "publishedVersion": "2026-05-28T16:30:17.168Z"
+      "publishedAt": "2026-07-09T13:03:34.920Z",
+      "publishedVersion": "2026-07-09T13:03:34.920Z"
     },
     "dataset": {
       "schemaVersion": 1,
       "id": "dataset",
       "displayName": "Dataset",
-      "description": "Dataset sync definition migrated from legacy recipe bundle.",
+      "description": "Dataset sync definition bootstrapped from legacy pipeline ground truth.",
       "rootTable": "core.Dataset",
       "idColumn": "datasetId",
       "labelColumn": "name",
@@ -531,9 +1407,7 @@
         "entrySproc": "core.uspSyncDatasetObjectsTran"
       },
       "governance": {
-        "approvalPolicyId": null,
-        "freezeWindowIds": [],
-        "riskMultiplier": 1
+        "freezeWindowIds": []
       },
       "strategy": {
         "strategyId": "mymi-scd2",
@@ -548,8 +1422,8 @@
         "owner": null,
         "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy sync-recipes.json.",
-          "Dataset still contains inferred downstream rule scope that requires review."
+          "Bootstrapped from legacy pipeline ground truth.",
+          "Contains FK-inferred optional scope that still needs deliberate review."
         ]
       },
       "metadata": {
@@ -557,7 +1431,37 @@
           {
             "name": "core.Dataset",
             "scopeColumn": "datasetId",
-            "predicate": "datasetId = {id}",
+            "predicate": "datasetId IN ({ids})",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.Pipeline",
+            "scopeColumn": "datasetId",
+            "predicate": "datasetId IN ({ids})",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.Activity",
+            "scopeColumn": "pipelineId",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.[pipelineId] = [core].[Activity].[pipelineId] AND p.[datasetId] = {id})",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.DatasetMapping",
+            "scopeColumn": "datasetId_Left",
+            "predicate": "datasetId_Left IN ({ids})",
             "source": "fk+pipeline",
             "verified": true,
             "groundedByPipeline": true,
@@ -567,38 +1471,7 @@
           {
             "name": "core.DatasetColumn",
             "scopeColumn": "datasetId",
-            "predicate": "datasetId = {id}",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
-          },
-          {
-            "name": "core.DatasetMapping",
-            "scopeColumn": "datasetMappingId",
-            "predicate": "datasetMappingId IN (SELECT datasetMappingId FROM [core].[DatasetMapping] WHERE datasetId_Left IN ( {id}))",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
-          },
-          {
-            "name": "core.Rule",
-            "scopeColumn": "inputDatasetId",
-            "predicate": "inputDatasetId = {id}",
-            "source": "fk-only",
-            "verified": false,
-            "groundedByPipeline": false,
-            "enabledByDefault": false,
-            "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
-          },
-          {
-            "name": "core.Pipeline",
-            "scopeColumn": "pipelineId",
-            "predicate": "pipelineId IN (SELECT pipelineId FROM [core].[Pipeline] WHERE datasetId IN ( {id} ) )",
+            "predicate": "datasetId IN ({ids})",
             "source": "fk+pipeline",
             "verified": true,
             "groundedByPipeline": true,
@@ -608,12 +1481,23 @@
           {
             "name": "core.DatasetMappingColumn",
             "scopeColumn": "datasetMappingId",
-            "predicate": "datasetMappingId IN (SELECT datasetMappingId FROM [core].[DatasetMapping] WHERE datasetId_Left IN ( {id}))",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetMapping] dm WHERE dm.[datasetMappingId] = [core].[DatasetMappingColumn].[datasetMappingId] AND dm.[datasetId_Left] = {id})",
             "source": "fk+pipeline",
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
             "userControllable": false
+          },
+          {
+            "name": "core.Rule",
+            "scopeColumn": "inputDatasetId",
+            "predicate": "inputDatasetId IN ({ids})",
+            "source": "fk-only",
+            "verified": false,
+            "groundedByPipeline": false,
+            "enabledByDefault": false,
+            "userControllable": true,
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
           },
           {
             "name": "core.RuleColumn",
@@ -660,19 +1544,9 @@
             "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
           },
           {
-            "name": "core.Activity",
-            "scopeColumn": "pipelineId",
-            "predicate": "pipelineId IN (SELECT pipelineId FROM [core].[Pipeline] WHERE datasetId IN ( {id} ) )",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
-          },
-          {
             "name": "core.RuleConditionValue",
             "scopeColumn": null,
-            "predicate": "EXISTS (SELECT 1 FROM [core].[RuleCondition] p INNER JOIN [core].[DatasetColumn] _p1 ON _p1.datasetColumnId = p.inputDatasetColumnId WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId AND _p1.datasetId = {id})",
+            "predicate": "(EXISTS (SELECT 1 FROM [core].[RuleCondition] p WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId)) AND EXISTS (SELECT 1 FROM [core].[Dataset] AS __mia_root WHERE __mia_root.[datasetId] = {id})",
             "source": "fk-only",
             "verified": false,
             "groundedByPipeline": false,
@@ -714,42 +1588,169 @@
       "executionFlow": {
         "steps": [
           {
-            "id": "metadata-sync",
+            "id": "metadataSync",
             "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
-            "description": "Apply transactional metadata changes for the selected dataset scope."
+            "description": "Apply transactional metadata changes for the selected dataset scope.",
+            "bindings": {}
           },
           {
-            "id": "dataset-deploy",
-            "phase": "post-metadata",
+            "id": "datasetDeploy",
+            "phase": "postMetadata",
             "kind": "datasetDeploy",
             "title": "Dataset deploy",
-            "description": "Deploy the dataset using the target ETL service."
+            "description": "Deploy the dataset using the target ETL service.",
+            "bindings": {
+              "datasetId": {
+                "type": "planEntityId"
+              }
+            }
           },
           {
-            "id": "sync-date",
-            "phase": "post-metadata",
+            "id": "syncDate",
+            "phase": "postMetadata",
             "kind": "syncDate",
             "title": "Sync date",
             "description": "Stamp the dataset sync date after deployment.",
-            "auditObjectType": "Dataset"
+            "auditObjectType": "Dataset",
+            "bindings": {}
           }
-        ]
+        ],
+        "catalog": {
+          "phases": {
+            "metadata": {
+              "summary": "Core metadata transaction",
+              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
+              "boundary": "metadata_transaction",
+              "connection": "target",
+              "defaultFailureMode": "fatal",
+              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
+            },
+            "postMetadata": {
+              "summary": "After metadata commit",
+              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
+              "boundary": "post_metadata",
+              "connection": "mixed",
+              "defaultFailureMode": "warning",
+              "orderingHint": "All steps after the first metadataSync step."
+            }
+          },
+          "kinds": {
+            "metadataSync": {
+              "summary": "Apply metadata change set",
+              "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+              "handler": {
+                "type": "metadata_sync",
+                "connection": "target"
+              },
+              "failureMode": "fatal",
+              "entityTypes": [
+                "any"
+              ],
+              "stepFields": {}
+            },
+            "datasetDeploy": {
+              "summary": "Deploy dataset via ETL service",
+              "description": "POST to ETL service /dataset/deploy for the resolved subject.",
+              "handler": {
+                "type": "http_request",
+                "connection": "target",
+                "httpService": "etl",
+                "httpMethod": "POST",
+                "httpPath": "/dataset/deploy",
+                "httpBody": [
+                  {
+                    "name": "datasetId"
+                  },
+                  {
+                    "name": "userFullName",
+                    "source": {
+                      "type": "planActor"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "dataset",
+                "rule"
+              ],
+              "publishedOutputs": [
+                "datasetId",
+                "userFullName"
+              ],
+              "stepFields": {}
+            },
+            "syncDate": {
+              "summary": "Record sync date (source audit)",
+              "description": "core.uspAuditRunCheck on source with action syncDate.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "source",
+                "procedure": "core.uspAuditRunCheck",
+                "parameters": [
+                  {
+                    "name": "id",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  },
+                  {
+                    "name": "objType",
+                    "source": {
+                      "type": "stepField",
+                      "field": "auditObjectType"
+                    }
+                  },
+                  {
+                    "name": "action",
+                    "source": {
+                      "type": "literal",
+                      "value": "syncDate"
+                    }
+                  },
+                  {
+                    "name": "schema",
+                    "source": {
+                      "type": "literal",
+                      "value": "core"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "content",
+                "contract",
+                "dataset",
+                "rule"
+              ],
+              "publishedOutputs": [
+                "action",
+                "id",
+                "objType",
+                "schema"
+              ],
+              "stepFields": {}
+            }
+          },
+          "customValueSources": {}
+        }
       },
       "provenance": {
         "kind": "legacy-migration",
-        "sourceArtifact": "deploy/mssql/sync-recipes.json",
-        "sourceVersion": "2026-05-10T11:19:07.694Z"
+        "sourceArtifact": "entity-registry:_default/dataset",
+        "sourceVersion": "1"
       },
-      "publishedAt": "2026-05-28T16:30:17.168Z",
-      "publishedVersion": "2026-05-28T16:30:17.168Z"
+      "publishedAt": "2026-07-09T13:03:34.920Z",
+      "publishedVersion": "2026-07-09T13:03:34.920Z"
     },
     "gateMetadata": {
       "schemaVersion": 1,
       "id": "gateMetadata",
       "displayName": "Gate Metadata",
-      "description": "Gate Metadata sync definition migrated from legacy recipe bundle.",
+      "description": "Gate Metadata sync definition bootstrapped from legacy pipeline ground truth.",
       "rootTable": "gate.MetaTable",
       "idColumn": "tableId",
       "labelColumn": "name",
@@ -759,9 +1760,7 @@
         "entrySproc": "core.uspSyncDataListObjectsTran"
       },
       "governance": {
-        "approvalPolicyId": null,
-        "freezeWindowIds": [],
-        "riskMultiplier": 1
+        "freezeWindowIds": []
       },
       "strategy": {
         "strategyId": "mymi-scd2",
@@ -776,8 +1775,8 @@
         "owner": null,
         "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy sync-recipes.json.",
-          "Gate metadata still has optional content tables that need deliberate verification."
+          "Bootstrapped from legacy pipeline ground truth.",
+          "Contains FK-inferred optional scope that still needs deliberate review."
         ]
       },
       "metadata": {
@@ -793,10 +1792,10 @@
             "userControllable": false
           },
           {
-            "name": "gate.MetaColumn",
-            "scopeColumn": "viewId",
-            "predicate": "viewId IN (SELECT viewId FROM [gate].[MetaView] WHERE tableId IN ( {id} ))",
-            "source": "fk+pipeline",
+            "name": "gate.jsonSchema",
+            "scopeColumn": "jsonSchemaId",
+            "predicate": "EXISTS (SELECT 1 FROM [gate].[MetaColumn] mc INNER JOIN [gate].[MetaView] mv ON mv.[viewId] = mc.[viewId] WHERE mv.[tableId] = {id} AND mc.[jsonSchemaId] = [gate].[jsonSchema].[jsonSchemaId])",
+            "source": "pipeline-only",
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
@@ -804,8 +1803,18 @@
           },
           {
             "name": "gate.MetaView",
+            "scopeColumn": "tableId",
+            "predicate": "tableId = {id}",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "gate.MetaColumn",
             "scopeColumn": "viewId",
-            "predicate": "viewId IN (SELECT viewId FROM [gate].[MetaView] WHERE tableId IN ( {id} ))",
+            "predicate": "EXISTS (SELECT 1 FROM [gate].[MetaView] mv WHERE mv.[viewId] = [gate].[metaColumn].[viewId] AND mv.[tableId] = {id})",
             "source": "fk+pipeline",
             "verified": true,
             "groundedByPipeline": true,
@@ -826,7 +1835,7 @@
           {
             "name": "gate.ContentLink",
             "scopeColumn": null,
-            "predicate": "EXISTS (SELECT 1 FROM [gate].[Content] p INNER JOIN [gate].[MetaView] _p1 ON _p1.viewId = p.viewId WHERE p.contentId = [gate].[ContentLink].contentId AND _p1.tableId = {id})",
+            "predicate": "(EXISTS (SELECT 1 FROM [gate].[Content] p WHERE p.contentId = [gate].[ContentLink].contentId)) AND EXISTS (SELECT 1 FROM [gate].[MetaTable] AS __mia_root WHERE __mia_root.[tableId] = {id})",
             "source": "fk-only",
             "verified": false,
             "groundedByPipeline": false,
@@ -837,28 +1846,18 @@
           {
             "name": "gate.UserGroupPermission",
             "scopeColumn": null,
-            "predicate": "EXISTS (SELECT 1 FROM [gate].[Content] p INNER JOIN [gate].[MetaView] _p1 ON _p1.viewId = p.viewId WHERE p.contentId = [gate].[UserGroupPermission].contentId AND _p1.tableId = {id})",
+            "predicate": "(EXISTS (SELECT 1 FROM [gate].[Content] p WHERE p.contentId = [gate].[UserGroupPermission].contentId)) AND EXISTS (SELECT 1 FROM [gate].[MetaTable] AS __mia_root WHERE __mia_root.[tableId] = {id})",
             "source": "fk-only",
             "verified": false,
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
             "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body."
-          },
-          {
-            "name": "gate.jsonSchema",
-            "scopeColumn": "jsonSchemaId",
-            "predicate": "jsonSchemaId IN (SELECT jsonSchemaId FROM [gate].[MetaColumn] WHERE columnId IN ( (SELECT columnId FROM [gate].[MetaColumn] WHERE viewId IN ( (SELECT viewId FROM [gate].[MetaView] WHERE tableId IN ( {id} )) )) ))",
-            "source": "pipeline-only",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
           }
         ],
         "executionOrder": [
-          "gate.jsonSchema",
           "gate.MetaTable",
+          "gate.jsonSchema",
           "gate.MetaView",
           "gate.MetaColumn",
           "gate.Content",
@@ -871,50 +1870,134 @@
           "gate.Content",
           "gate.MetaColumn",
           "gate.MetaView",
-          "gate.MetaTable",
-          "gate.jsonSchema"
+          "gate.JsonSchema",
+          "gate.MetaTable"
         ],
         "discrepancies": []
       },
       "executionFlow": {
         "steps": [
           {
-            "id": "metadata-sync",
+            "id": "metadataSync",
             "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
-            "description": "Apply transactional metadata changes for the selected gate metadata scope."
+            "description": "Apply transactional metadata changes for the selected gate metadata scope.",
+            "bindings": {}
           },
           {
-            "id": "meta-refresh",
-            "phase": "post-metadata",
+            "id": "metaRefresh",
+            "phase": "postMetadata",
             "kind": "metaRefresh",
             "title": "Meta refresh",
-            "description": "Refresh target gate metadata."
+            "description": "Refresh target gate metadata.",
+            "bindings": {}
           },
           {
-            "id": "pipeline-start",
-            "phase": "post-metadata",
+            "id": "pipelineStart",
+            "phase": "postMetadata",
             "kind": "pipelineStart",
             "title": "Pipeline start",
             "description": "Start the downstream gate refresh pipeline.",
-            "pipelineName": "All Lists content item population"
+            "pipelineName": "All Lists content item population",
+            "bindings": {}
           }
-        ]
+        ],
+        "catalog": {
+          "phases": {
+            "metadata": {
+              "summary": "Core metadata transaction",
+              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
+              "boundary": "metadata_transaction",
+              "connection": "target",
+              "defaultFailureMode": "fatal",
+              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
+            },
+            "postMetadata": {
+              "summary": "After metadata commit",
+              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
+              "boundary": "post_metadata",
+              "connection": "mixed",
+              "defaultFailureMode": "warning",
+              "orderingHint": "All steps after the first metadataSync step."
+            }
+          },
+          "kinds": {
+            "metadataSync": {
+              "summary": "Apply metadata change set",
+              "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+              "handler": {
+                "type": "metadata_sync",
+                "connection": "target"
+              },
+              "failureMode": "fatal",
+              "entityTypes": [
+                "any"
+              ],
+              "stepFields": {}
+            },
+            "metaRefresh": {
+              "summary": "Refresh gate metadata",
+              "description": "GET gate service /api/meta/refresh.",
+              "handler": {
+                "type": "http_request",
+                "connection": "target",
+                "httpService": "gate",
+                "httpMethod": "GET",
+                "httpPath": "/api/meta/refresh"
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "gateMetadata"
+              ],
+              "stepFields": {}
+            },
+            "pipelineStart": {
+              "summary": "Start pipeline run",
+              "description": "POST to agent /pipeline/start with pipeline name from step.",
+              "handler": {
+                "type": "http_request",
+                "connection": "target",
+                "httpService": "agent",
+                "httpMethod": "POST",
+                "httpPath": "/pipeline/start",
+                "httpBody": [
+                  {
+                    "name": "name",
+                    "source": {
+                      "type": "stepField",
+                      "field": "pipelineName"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "gateMetadata",
+                "pipelineActivity"
+              ],
+              "publishedOutputs": [
+                "name"
+              ],
+              "stepFields": {}
+            }
+          },
+          "customValueSources": {}
+        }
       },
       "provenance": {
         "kind": "legacy-migration",
-        "sourceArtifact": "deploy/mssql/sync-recipes.json",
-        "sourceVersion": "2026-05-10T11:19:07.694Z"
+        "sourceArtifact": "entity-registry:_default/gateMetadata",
+        "sourceVersion": "1"
       },
-      "publishedAt": "2026-05-28T16:30:17.168Z",
-      "publishedVersion": "2026-05-28T16:30:17.168Z"
+      "publishedAt": "2026-07-09T13:03:34.920Z",
+      "publishedVersion": "2026-07-09T13:03:34.920Z"
     },
     "pipelineActivity": {
       "schemaVersion": 1,
       "id": "pipelineActivity",
       "displayName": "Pipeline & Activities",
-      "description": "Pipeline & Activities sync definition migrated from legacy recipe bundle.",
+      "description": "Pipeline & Activities sync definition bootstrapped from legacy pipeline ground truth.",
       "rootTable": "core.Pipeline",
       "idColumn": "pipelineId",
       "labelColumn": "name",
@@ -924,9 +2007,7 @@
         "entrySproc": "core.uspSyncPipelineObjectsTran"
       },
       "governance": {
-        "approvalPolicyId": null,
-        "freezeWindowIds": [],
-        "riskMultiplier": 1
+        "freezeWindowIds": []
       },
       "strategy": {
         "strategyId": "mymi-scd2",
@@ -941,14 +2022,24 @@
         "owner": null,
         "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy sync-recipes.json.",
-          "Pipeline activity still contains inferred step scope that needs review."
+          "Bootstrapped from legacy pipeline ground truth.",
+          "Contains FK-inferred optional scope that still needs deliberate review."
         ]
       },
       "metadata": {
         "tables": [
           {
             "name": "core.Pipeline",
+            "scopeColumn": "pipelineId",
+            "predicate": "pipelineId = {id}",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.Activity",
             "scopeColumn": "pipelineId",
             "predicate": "pipelineId = {id}",
             "source": "fk+pipeline",
@@ -967,16 +2058,6 @@
             "enabledByDefault": false,
             "userControllable": true,
             "note": "Predicate inferred from FK graph. Verify against core.uspSyncPipelineObjectsTran body."
-          },
-          {
-            "name": "core.Activity",
-            "scopeColumn": "pipelineId",
-            "predicate": "pipelineId = {id}",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
           }
         ],
         "executionOrder": [
@@ -994,34 +2075,101 @@
       "executionFlow": {
         "steps": [
           {
-            "id": "metadata-sync",
+            "id": "metadataSync",
             "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
-            "description": "Apply transactional metadata changes for the selected pipeline activity scope."
+            "description": "Apply transactional metadata changes for the selected pipeline activity scope.",
+            "bindings": {}
           },
           {
-            "id": "pipeline-register",
-            "phase": "post-metadata",
+            "id": "pipelineRegister",
+            "phase": "postMetadata",
             "kind": "pipelineRegister",
             "title": "Pipeline register",
-            "description": "Register the target pipeline with the agent service."
+            "description": "Register the target pipeline with the agent service.",
+            "bindings": {
+              "pipelineId": {
+                "type": "planEntityId"
+              }
+            }
           }
-        ]
+        ],
+        "catalog": {
+          "phases": {
+            "metadata": {
+              "summary": "Core metadata transaction",
+              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
+              "boundary": "metadata_transaction",
+              "connection": "target",
+              "defaultFailureMode": "fatal",
+              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
+            },
+            "postMetadata": {
+              "summary": "After metadata commit",
+              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
+              "boundary": "post_metadata",
+              "connection": "mixed",
+              "defaultFailureMode": "warning",
+              "orderingHint": "All steps after the first metadataSync step."
+            }
+          },
+          "kinds": {
+            "metadataSync": {
+              "summary": "Apply metadata change set",
+              "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+              "handler": {
+                "type": "metadata_sync",
+                "connection": "target"
+              },
+              "failureMode": "fatal",
+              "entityTypes": [
+                "any"
+              ],
+              "stepFields": {}
+            },
+            "pipelineRegister": {
+              "summary": "Register pipeline with agent",
+              "description": "POST to agent /pipeline/register for contract pipeline subject.",
+              "handler": {
+                "type": "http_request",
+                "connection": "target",
+                "httpService": "agent",
+                "httpMethod": "POST",
+                "httpPath": "/pipeline/register",
+                "httpBody": [
+                  {
+                    "name": "pipelineId"
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "contract",
+                "pipelineActivity"
+              ],
+              "publishedOutputs": [
+                "pipelineId"
+              ],
+              "stepFields": {}
+            }
+          },
+          "customValueSources": {}
+        }
       },
       "provenance": {
         "kind": "legacy-migration",
-        "sourceArtifact": "deploy/mssql/sync-recipes.json",
-        "sourceVersion": "2026-05-10T11:19:07.694Z"
+        "sourceArtifact": "entity-registry:_default/pipelineActivity",
+        "sourceVersion": "1"
       },
-      "publishedAt": "2026-05-28T16:30:17.168Z",
-      "publishedVersion": "2026-05-28T16:30:17.168Z"
+      "publishedAt": "2026-07-09T13:03:34.920Z",
+      "publishedVersion": "2026-07-09T13:03:34.920Z"
     },
     "rule": {
       "schemaVersion": 1,
       "id": "rule",
       "displayName": "Rule",
-      "description": "Rule sync definition migrated from legacy recipe bundle.",
+      "description": "Rule sync definition bootstrapped from legacy pipeline ground truth.",
       "rootTable": "core.Rule",
       "idColumn": "ruleId",
       "labelColumn": "name",
@@ -1031,9 +2179,7 @@
         "entrySproc": "core.uspSyncRuleObjectsTran"
       },
       "governance": {
-        "approvalPolicyId": null,
-        "freezeWindowIds": [],
-        "riskMultiplier": 1
+        "freezeWindowIds": []
       },
       "strategy": {
         "strategyId": "mymi-scd2",
@@ -1048,66 +2194,16 @@
         "owner": null,
         "reviewStatus": "reviewed",
         "notes": [
-          "Bootstrapped from legacy sync-recipes.json.",
-          "All current rule tables are verified; assign a named owner when the operating team is finalized."
+          "Bootstrapped from legacy pipeline ground truth.",
+          "All current legacy sync tables were derived directly from pipeline evidence."
         ]
       },
       "metadata": {
         "tables": [
           {
-            "name": "core.Rule",
-            "scopeColumn": "ruleId",
-            "predicate": "ruleId IN (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
-          },
-          {
-            "name": "core.RuleColumn",
-            "scopeColumn": "ruleId",
-            "predicate": "ruleId IN (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
-          },
-          {
-            "name": "core.RuleCondition",
-            "scopeColumn": "ruleId",
-            "predicate": "ruleId IN (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
-          },
-          {
-            "name": "core.RuleLink",
-            "scopeColumn": "ruleId",
-            "predicate": "ruleId IN (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
-          },
-          {
-            "name": "core.RuleConditionValue",
-            "scopeColumn": "ruleConditionId",
-            "predicate": "ruleConditionId IN (SELECT ruleConditionId FROM [core].[RuleCondition] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})))",
-            "source": "fk+pipeline",
-            "verified": true,
-            "groundedByPipeline": true,
-            "enabledByDefault": true,
-            "userControllable": false
-          },
-          {
-            "name": "core.DatasetMappingColumn",
-            "scopeColumn": "datasetMappingId",
-            "predicate": "datasetMappingId IN (SELECT datasetMappingId FROM [core].[DatasetMapping] WHERE datasetId_Left IN ( (SELECT outputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}) UNION SELECT inputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})) ) )))",
+            "name": "core.Dataset",
+            "scopeColumn": "datasetId",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[inputDatasetId] = [core].[Dataset].[datasetId] OR __mia_scope.[outputDatasetId] = [core].[Dataset].[datasetId])",
             "source": "pipeline-only",
             "verified": true,
             "groundedByPipeline": true,
@@ -1117,7 +2213,7 @@
           {
             "name": "core.DatasetMapping",
             "scopeColumn": "datasetMappingId",
-            "predicate": "datasetMappingId IN (SELECT datasetMappingId FROM [core].[DatasetMapping] WHERE datasetId_Left IN ( (SELECT outputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}) UNION SELECT inputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})) ) )))",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetMapping] dm INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[inputDatasetId] = dm.[datasetId_Left] OR __mia_scope.[outputDatasetId] = dm.[datasetId_Left] WHERE dm.[datasetMappingId] = [core].[DatasetMapping].[datasetMappingId])",
             "source": "pipeline-only",
             "verified": true,
             "groundedByPipeline": true,
@@ -1127,7 +2223,7 @@
           {
             "name": "core.DatasetColumn",
             "scopeColumn": "datasetId",
-            "predicate": "datasetId IN (SELECT outputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}) UNION SELECT inputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}))))",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[inputDatasetId] = [core].[DatasetColumn].[datasetId] OR __mia_scope.[outputDatasetId] = [core].[DatasetColumn].[datasetId])",
             "source": "pipeline-only",
             "verified": true,
             "groundedByPipeline": true,
@@ -1135,9 +2231,9 @@
             "userControllable": false
           },
           {
-            "name": "core.Dataset",
-            "scopeColumn": "datasetId",
-            "predicate": "datasetId IN (SELECT outputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}) UNION SELECT inputDatasetId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id}))))",
+            "name": "core.DatasetMappingColumn",
+            "scopeColumn": "datasetMappingId",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetMapping] dm INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[inputDatasetId] = dm.[datasetId_Left] OR __mia_scope.[outputDatasetId] = dm.[datasetId_Left] WHERE dm.[datasetMappingId] = [core].[DatasetMappingColumn].[datasetMappingId])",
             "source": "pipeline-only",
             "verified": true,
             "groundedByPipeline": true,
@@ -1147,7 +2243,7 @@
           {
             "name": "core.RuleLinkType",
             "scopeColumn": "ruleLinkTypeId",
-            "predicate": "ruleLinkTypeId IN (SELECT ruleLinkTypeId FROM [core].[RuleLink] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})))",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[RuleLink] rl INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[ruleId] = rl.[ruleId] WHERE rl.[ruleLinkTypeId] = [core].[RuleLinkType].[ruleLinkTypeId])",
             "source": "pipeline-only",
             "verified": true,
             "groundedByPipeline": true,
@@ -1157,8 +2253,58 @@
           {
             "name": "core.RuleType",
             "scopeColumn": "ruleTypeId",
-            "predicate": "ruleTypeId IN (SELECT ruleTypeId FROM [core].[Rule] WHERE ruleId IN ( (SELECT ruleId FROM [core].[Rule] WHERE ruleId = {id})))",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleTypeId] = [core].[RuleType].[ruleTypeId])",
             "source": "pipeline-only",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.Rule",
+            "scopeColumn": "ruleId",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[Rule].[ruleId])",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.RuleLink",
+            "scopeColumn": "ruleId",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[RuleLink].[ruleId])",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.RuleCondition",
+            "scopeColumn": "ruleId",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[RuleCondition].[ruleId])",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.RuleConditionValue",
+            "scopeColumn": "ruleConditionId",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[RuleCondition] rc INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[ruleId] = rc.[ruleId] WHERE rc.[ruleConditionId] = [core].[RuleConditionValue].[ruleConditionId])",
+            "source": "fk+pipeline",
+            "verified": true,
+            "groundedByPipeline": true,
+            "enabledByDefault": true,
+            "userControllable": false
+          },
+          {
+            "name": "core.RuleColumn",
+            "scopeColumn": "ruleId",
+            "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[RuleColumn].[ruleId])",
+            "source": "fk+pipeline",
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
@@ -1196,60 +2342,267 @@
       "executionFlow": {
         "steps": [
           {
-            "id": "metadata-sync",
+            "id": "metadataSync",
             "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
-            "description": "Apply transactional metadata changes for the selected rule scope."
+            "description": "Apply transactional metadata changes for the selected rule scope.",
+            "bindings": {}
           },
           {
-            "id": "dataset-deploy",
-            "phase": "post-metadata",
+            "id": "datasetDeploy",
+            "phase": "postMetadata",
             "kind": "datasetDeploy",
             "title": "Dataset deploy",
             "description": "Deploy datasets required by the rule on the target ETL service.",
-            "subjectRef": "ruleInputDatasetId"
+            "bindings": {
+              "datasetId": {
+                "type": "ruleInputDatasetId"
+              }
+            }
           },
           {
-            "id": "rules-deploy",
-            "phase": "post-metadata",
+            "id": "rulesDeploy",
+            "phase": "postMetadata",
             "kind": "rulesDeploy",
             "title": "Rules deploy",
-            "description": "Deploy the rule package on the target ETL service."
+            "description": "Deploy the rule package on the target ETL service.",
+            "bindings": {}
           },
           {
-            "id": "handle-dependencies",
-            "phase": "post-metadata",
-            "kind": "handleDependencies",
-            "title": "Handle dependencies",
-            "description": "Refresh direct dependency state after rule deployment.",
-            "objectName": "rule"
-          },
-          {
-            "id": "sync-date",
-            "phase": "post-metadata",
+            "id": "syncDate",
+            "phase": "postMetadata",
             "kind": "syncDate",
             "title": "Sync date",
             "description": "Stamp the rule sync date.",
-            "auditObjectType": "Rule"
+            "auditObjectType": "Rule",
+            "bindings": {}
           },
           {
-            "id": "deploy-date",
-            "phase": "post-metadata",
+            "id": "deployDate",
+            "phase": "postMetadata",
             "kind": "deployDate",
             "title": "Deploy date",
             "description": "Stamp the rule deploy date.",
-            "auditObjectType": "Rule"
+            "auditObjectType": "Rule",
+            "bindings": {}
           }
-        ]
+        ],
+        "catalog": {
+          "phases": {
+            "metadata": {
+              "summary": "Core metadata transaction",
+              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
+              "boundary": "metadata_transaction",
+              "connection": "target",
+              "defaultFailureMode": "fatal",
+              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
+            },
+            "postMetadata": {
+              "summary": "After metadata commit",
+              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
+              "boundary": "post_metadata",
+              "connection": "mixed",
+              "defaultFailureMode": "warning",
+              "orderingHint": "All steps after the first metadataSync step."
+            }
+          },
+          "kinds": {
+            "metadataSync": {
+              "summary": "Apply metadata change set",
+              "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+              "handler": {
+                "type": "metadata_sync",
+                "connection": "target"
+              },
+              "failureMode": "fatal",
+              "entityTypes": [
+                "any"
+              ],
+              "stepFields": {}
+            },
+            "datasetDeploy": {
+              "summary": "Deploy dataset via ETL service",
+              "description": "POST to ETL service /dataset/deploy for the resolved subject.",
+              "handler": {
+                "type": "http_request",
+                "connection": "target",
+                "httpService": "etl",
+                "httpMethod": "POST",
+                "httpPath": "/dataset/deploy",
+                "httpBody": [
+                  {
+                    "name": "datasetId"
+                  },
+                  {
+                    "name": "userFullName",
+                    "source": {
+                      "type": "planActor"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "dataset",
+                "rule"
+              ],
+              "publishedOutputs": [
+                "datasetId",
+                "userFullName"
+              ],
+              "stepFields": {}
+            },
+            "rulesDeploy": {
+              "summary": "Deploy rules via ETL service",
+              "description": "POST to ETL service /rules/deploy with ruleId.",
+              "handler": {
+                "type": "http_request",
+                "connection": "target",
+                "httpService": "etl",
+                "httpMethod": "POST",
+                "httpPath": "/rules/deploy",
+                "httpBody": [
+                  {
+                    "name": "ruleId",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  },
+                  {
+                    "name": "userFullName",
+                    "source": {
+                      "type": "planActor"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "rule"
+              ],
+              "publishedOutputs": [
+                "ruleId",
+                "userFullName"
+              ],
+              "stepFields": {}
+            },
+            "syncDate": {
+              "summary": "Record sync date (source audit)",
+              "description": "core.uspAuditRunCheck on source with action syncDate.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "source",
+                "procedure": "core.uspAuditRunCheck",
+                "parameters": [
+                  {
+                    "name": "id",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  },
+                  {
+                    "name": "objType",
+                    "source": {
+                      "type": "stepField",
+                      "field": "auditObjectType"
+                    }
+                  },
+                  {
+                    "name": "action",
+                    "source": {
+                      "type": "literal",
+                      "value": "syncDate"
+                    }
+                  },
+                  {
+                    "name": "schema",
+                    "source": {
+                      "type": "literal",
+                      "value": "core"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "entityTypes": [
+                "content",
+                "contract",
+                "dataset",
+                "rule"
+              ],
+              "publishedOutputs": [
+                "action",
+                "id",
+                "objType",
+                "schema"
+              ],
+              "stepFields": {}
+            },
+            "deployDate": {
+              "summary": "Record deploy date (target audit)",
+              "description": "core.uspAuditRunCheck on target with action deployDate.",
+              "handler": {
+                "type": "mssql_procedure",
+                "connection": "target",
+                "procedure": "core.uspAuditRunCheck",
+                "parameters": [
+                  {
+                    "name": "id",
+                    "source": {
+                      "type": "planEntityId"
+                    }
+                  },
+                  {
+                    "name": "objType",
+                    "source": {
+                      "type": "stepField",
+                      "field": "auditObjectType"
+                    }
+                  },
+                  {
+                    "name": "action",
+                    "source": {
+                      "type": "literal",
+                      "value": "deployDate"
+                    }
+                  },
+                  {
+                    "name": "schema",
+                    "source": {
+                      "type": "literal",
+                      "value": "core"
+                    }
+                  }
+                ]
+              },
+              "failureMode": "warning",
+              "skipWhenDatasetLayerFailed": true,
+              "entityTypes": [
+                "content",
+                "contract",
+                "dataset",
+                "rule"
+              ],
+              "publishedOutputs": [
+                "action",
+                "id",
+                "objType",
+                "schema"
+              ],
+              "stepFields": {}
+            }
+          },
+          "customValueSources": {}
+        }
       },
       "provenance": {
         "kind": "legacy-migration",
-        "sourceArtifact": "deploy/mssql/sync-recipes.json",
-        "sourceVersion": "2026-05-10T11:19:07.694Z"
+        "sourceArtifact": "entity-registry:_default/rule",
+        "sourceVersion": "1"
       },
-      "publishedAt": "2026-05-28T16:30:17.168Z",
-      "publishedVersion": "2026-05-28T16:30:17.168Z"
+      "publishedAt": "2026-07-09T13:03:34.920Z",
+      "publishedVersion": "2026-07-09T13:03:34.920Z"
     }
   }
 }

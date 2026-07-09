@@ -101,7 +101,7 @@ describe("attachment lifecycle", () => {
     seedTestUsers(testDb)
 
     await uploadAttachment({
-      scope: "session",
+      scope: "user_draft",
       ownerUpn: "u@x",
       originalName: "a.bin",
       mediaType: "application/octet-stream",
@@ -113,7 +113,7 @@ describe("attachment lifecycle", () => {
 
     await expect(
       uploadAttachment({
-        scope: "session",
+        scope: "user_draft",
         ownerUpn: "u@x",
         originalName: "b.bin",
         mediaType: "application/octet-stream",
@@ -131,7 +131,7 @@ describe("attachment lifecycle", () => {
 
     await expect(
       uploadAttachment({
-        scope: "session",
+        scope: "user_draft",
         ownerUpn: null,
         originalName: "big.bin",
         mediaType: "application/octet-stream",

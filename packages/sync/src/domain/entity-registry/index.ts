@@ -1,14 +1,9 @@
 /**
  * Entity registry — public surface.
- *
- * Phase 0 (config uplift) entry point. Types + pure functions live here.
- * The persistence layer (versioned storage, multi-tenant scoping) lives in
- * `packages/server/src/db/entity-defs.ts`. The recipe projector that turns
- * a stored EntityDefinition into the runtime SyncRecipe shape lives in
- * `./projector.ts` (forthcoming in this phase).
  */
 
 export { BUNDLED_SCD2_STRATEGIES, bundledStrategyById } from "./bundled-strategies.js"
+export { entityDefinitionFromAuthoredSync, ensureEntityScopePlaceholder, scopeFromAuthoredPredicate } from "./from-authored-sync.js"
 export { diffEntityDefinitions } from "./diff.js"
 export {
   findEntityTableOrderViolations,
@@ -16,9 +11,29 @@ export {
   orderEntityTables,
   orderEntityTablesDetailed
 } from "./order.js"
-export { projectRecipe, type ProjectedSyncRecipe } from "./projector.js"
+export { normalizeEntityDefinition, normalizeTableScope, compileFkPathPredicate } from "./normalize-table-scope.js"
+export { projectTablePredicate } from "./project-predicate.js"
+export {
+  entityIdFromTableName,
+  humanizeTableName,
+  normalizeQualifiedTableName,
+  suggestEntityDraft,
+  suggestEntityTable,
+  suggestFlowTemplateId,
+  suggestIdentityHeuristic,
+  type CatalogSnapshotForSuggest,
+  type CatalogTableForSuggest,
+  type EntityDraftIdentitySuggestion,
+  type EntityDraftSuggestion,
+  type EntityTableSuggestion,
+  catalogSnapshotFromAgentJson,
+} from "./suggest-draft.js"
 export { resolveEffectiveScd2 } from "./strategy-resolver.js"
 export * from "./types.js"
+export {
+  looksIncompleteScopePredicate,
+  resolveReviewPlaceholderPredicate,
+} from "./resolve-scope-predicate.js"
 export {
   isIdentifier,
   isSchemaQualifiedTable,

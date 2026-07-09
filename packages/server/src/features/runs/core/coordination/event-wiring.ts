@@ -1,5 +1,6 @@
 import type { DomainEvent, Unsubscribe } from "@mia/agent"
 import { EventType } from "@mia/agent"
+import { presentToolCall, serializeToolCallArgs } from "@mia/shared-types"
 import { broadcast, toBroadcastData } from "../../../../platform/events/broadcaster.js"
 import * as db from "../../../../platform/persistence/sqlite.js"
 import type { NotificationOpts } from "../../../../ports/orchestration.js"
@@ -32,6 +33,27 @@ type RunStateLike = {
   run: RunLike
 }
 
+type RunScopedEvent = DomainEvent & { runId?: unknown }
+type StepScopedEvent = DomainEvent & { stepId?: unknown }
+
+function getEventRunId(event: DomainEvent): string | null {
+  const runId = (event as RunScopedEvent).runId
+  if (typeof runId === "string" && runId.length > 0) return runId
+  return null
+}
+
+function getStepId(event: DomainEvent): string | null {
+  const stepId = (event as StepScopedEvent).stepId
+  if (typeof stepId === "string" && stepId.length > 0) return stepId
+  return null
+}
+
+function resolveToolName(data: Record<string, unknown>): string {
+  if (typeof data["action"] === "string" && data["action"].trim().length > 0) return data["action"]
+  if (typeof data["name"] === "string" && data["name"].trim().length > 0) return data["name"]
+  return "unknown"
+}
+
 // ── Event wiring ──────────────────────────────────────────────────
 
 /**
@@ -58,10 +80,12 @@ export function wireEventBroadcasting(
   for (const eventType of events) {
     const unsubscribe = services.eventBus.subscribe(eventType, async (event: DomainEvent) => {
       const data = toBroadcastData(event)
+      const eventRunId = getEventRunId(event)
+      if (eventRunId && eventRunId !== runId) return
 
       // Enrich step events with details from the run
       if (eventType.startsWith("step.")) {
-        const stepId = data["stepId"] as string
+        const stepId = getStepId(event)
         const step = state.run.steps.find((s) => s.id === stepId)
         if (step) {
           data["name"] = step.name
@@ -75,19 +99,11 @@ export function wireEventBroadcasting(
       broadcast({ type: eventType, data })
 
       if (eventType === EventType.StepStarted) {
-        const toolName = (data["action"] as string) ?? "unknown"
-        const stepId = data["stepId"] as string
+        const toolName = resolveToolName(data)
+        const stepId = getStepId(event)
         const input = (data["input"] as Record<string, unknown>) ?? {}
-        const argsFormatted = JSON.stringify(input, null, 2)
-        const keys = Object.keys(input)
-        // Keep the full single-arg value; the UI clips with CSS ellipsis
-        // so users see "…" when the available width runs out.
-        const argsSummary =
-          keys.length > 0
-            ? keys.length === 1
-              ? `${keys[0]}=${JSON.stringify(input[keys[0]])}`
-              : `${keys.length} args`
-            : ""
+        const { summary: argsSummary } = presentToolCall(toolName, input)
+        const argsFormatted = serializeToolCallArgs(input)
         // invocationId MUST be present so the UI can pair tool-call with
         // its later tool-result/tool-error entry. Without it, historical
         // trace replay (TermChat / AgentChat / IOE chat) drops the result
@@ -101,13 +117,13 @@ export function wireEventBroadcasting(
           argsFormatted
         })
       } else if (eventType === EventType.StepCompleted) {
-        const stepId = data["stepId"] as string
+        const stepId = getStepId(event)
         const output = (data["output"] as Record<string, unknown>) ?? {}
         const result =
           (output["result"] as string) ?? (Object.keys(output).length > 0 ? JSON.stringify(output) : "done")
         saveTrace(runId, { kind: TrajectoryEventKind.ToolResult, invocationId: stepId, text: result })
       } else if (eventType === EventType.StepFailed) {
-        const stepId = data["stepId"] as string
+        const stepId = getStepId(event)
         saveTrace(runId, {
           kind: TrajectoryEventKind.ToolError,
           invocationId: stepId,
@@ -125,13 +141,13 @@ export function wireEventBroadcasting(
           logMsg = `Started — run ${(data["runId"] as string)?.slice(0, 8) ?? "?"}`
           break
         case EventType.StepStarted:
-          logMsg = `${(data["action"] as string) ?? "unknown"} started`
+          logMsg = `${resolveToolName(data)} started`
           break
         case EventType.StepCompleted:
-          logMsg = `${(data["action"] as string) ?? "unknown"} completed`
+          logMsg = `${resolveToolName(data)} completed`
           break
         case EventType.StepFailed:
-          logMsg = `${(data["action"] as string) ?? "unknown"} failed — ${((data["error"] as string) ?? "unknown").slice(0, 200)}`
+          logMsg = `${resolveToolName(data)} failed — ${((data["error"] as string) ?? "unknown").slice(0, 200)}`
           break
         default:
           logMsg = eventType.replace(/^[^.]+\./, "")
@@ -157,9 +173,11 @@ export function wireEventBroadcasting(
   // Approval requests → notifications
   const unsubscribeApproval = services.eventBus.subscribe("approval.required", async (event: DomainEvent) => {
     const data = toBroadcastData(event)
+    const eventRunId = getEventRunId(event)
+    if (eventRunId && eventRunId !== runId) return
     const toolName = data["toolName"] as string
     const reason = data["reason"] as string
-    const stepId = data["stepId"] as string
+    const stepId = getStepId(event)
     createNotification({
       type: EventType.ApprovalRequired,
       title: "Approval required",

@@ -26,17 +26,15 @@
  *
  * `rootPk`  — the table has a direct FK column whose value equals the root's
  *             id (the most common case).
- * `fkPath`  — multi-hop FK path from the root through intermediate tables.
- *             The projector walks this path to synthesise the predicate.
- * `sql`     — raw SQL predicate template using `{id}` (single id) or `{ids}`
- *             (recursive-CTE expanded id set when the root has a self-join
- *             column). Escape hatch for closures that cannot be expressed
- *             structurally.
+ * `sql`     — SQL predicate using `{id}` (single id) or `{ids}` (recursive-CTE
+ *             expanded id set when the root has a self-join column). Covers
+ *             multi-hop EXISTS joins and any scope not expressible as rootPk.
  */
 export type EntityTableScope =
   | { kind: "rootPk"; column: string }
-  | { kind: "fkPath"; through: EntityFkHop[] }
   | { kind: "sql"; predicate: string }
+  /** @deprecated Legacy import only — normalized to `sql` on read/save. */
+  | { kind: "fkPath"; through: EntityFkHop[] }
 
 export interface EntityFkHop {
   /** Schema-qualified table name traversed. */
@@ -196,13 +194,8 @@ export interface EntityTable {
 }
 
 export interface EntityPolicies {
-  /** Freeze windows that apply on top of env-level windows. */
+  /** When active, block sync execute unless operator overrides (see freeze-windows evaluator). */
   freezeWindowIds: string[]
-  /**
-   * Risk multiplier applied to annotator output. 1.0 = no change; values >1
-   * inflate risk (e.g. for entities feeding regulated reports); <1 deflates.
-   */
-  riskMultiplier: number
 }
 
 export interface EntityLineageRef {
@@ -381,7 +374,7 @@ export const DEFAULT_TENANT_ID = "_default"
  * — they are intentionally constructed to be invalid for user input so the
  * regex acts as a second line of defence.
  */
-export const ID_PATTERN = /^[a-z][a-z0-9_-]{0,63}$/
+export const ID_PATTERN = /^[a-z][a-zA-Z0-9_-]{0,63}$/
 
 export function isValidId(value: unknown): value is string {
   return typeof value === "string" && ID_PATTERN.test(value)

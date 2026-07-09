@@ -2,6 +2,7 @@ import type { ConfigureMssqlConnection } from "@mia/agent"
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
+
 // ── MSSQL setup helper ────────────────────────────────────────────
 
 function readKnowledgeFile(projectRoot: string, filePath: string): string | null {
@@ -116,6 +117,8 @@ export function setupMssql(projectRoot: string): {
     console.log(`MSSQL: ${summary}`)
     return { configs, defaultConnectionName: null, summary }
   }
+
+  console.log("MSSQL: not configured — set MSSQL_HOST or MSSQL_DATABASES in .env for SQL Server tools and sync")
 
   return { configs: [], defaultConnectionName: null, summary: "not configured" }
 }

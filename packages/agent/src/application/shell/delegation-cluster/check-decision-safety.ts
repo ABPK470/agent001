@@ -25,7 +25,7 @@ const HIGH_RISK_CAPABILITY_PATTERNS: readonly RegExp[] = [
 
 const MODERATE_RISK_CAPABILITY_PATTERNS: readonly RegExp[] = [
   /^(?:run_command|write_file)$/i,
-  /^(?:browse_web|fetch_url)$/i
+  /^(?:fetch_url)$/i
 ]
 
 const WALLET_SIGNING_TEXT_RE = /\b(sign|authorize|approve)\b[\s\S]{0,48}\b(wallet|transaction|tx)\b/i
@@ -55,7 +55,7 @@ const CREDENTIAL_EXFIL_INTENT_PATTERNS: readonly RegExp[] = [
   /\b(?:secret|api(?:[_-]?key|\s+key)|token|password|private[_\s-]?key|seed\s+phrase|mnemonic|credentials?|\.env)\b[\s\S]{0,72}\b(?:exfiltrat(?:e|ion)|leak|steal|dump|export|extract|copy|print|echo|reveal|expose|show|send|upload|post|curl|transmit|forward)\b/i
 ]
 
-const NETWORK_EGRESS_CAPABILITY_RE = /^(?:run_command|browse_web|fetch_url)$/i
+const NETWORK_EGRESS_CAPABILITY_RE = /^(?:run_command|fetch_url)$/i
 
 // ============================================================================
 // Safety risk

@@ -1,17 +1,38 @@
 import type { AgentHost } from "@mia/agent"
-import { ensureSyncDefinitionConfigs, loadPersistedSyncEnvironments } from "../features/sync/index.js"
+import {
+  ensureSyncDefinitionConfigs,
+  ensureCustomValueSourcesSeeded,
+  ensureDeploySyncMetadataSeeds,
+  ensureFlowPresetsSeeded,
+  loadPersistedSyncEnvironments,
+  seedEntityRegistryIfEmpty,
+  seedSyncMetadataIfEmpty,
+} from "../features/sync/index.js"
 import { syncPlanActorUpn } from "../features/sync/application/plan-actor.js"
 import { broadcast } from "../platform/events/broadcaster.js"
 import {
   getSyncRunPlanJson,
-  listFreezeWindowDefinitionsForTenant,
   recordSyncRunFinish,
   recordSyncRunPreview,
   recordSyncRunStart
 } from "../platform/persistence/index.js"
 
 export function loadBootSyncEnvironments(projectRoot: string, connections: ReadonlyArray<{ name: string }>) {
+  const entitySeed = seedEntityRegistryIfEmpty(projectRoot)
+  if (entitySeed.seeded > 0) {
+    const label =
+      entitySeed.source === "yaml"
+        ? "deploy/sync/entity-registry.seed.yaml"
+        : "deploy/sync/artifacts/entities/*.json"
+    console.log(
+      `[entity-registry] seeded ${entitySeed.seeded} definition(s) from ${label}: ${entitySeed.entityIds.join(", ")}`,
+    )
+  }
   ensureSyncDefinitionConfigs(projectRoot)
+  seedSyncMetadataIfEmpty(projectRoot)
+  ensureFlowPresetsSeeded(projectRoot)
+  ensureDeploySyncMetadataSeeds(projectRoot)
+  ensureCustomValueSourcesSeeded(projectRoot)
   return loadPersistedSyncEnvironments(projectRoot, connections)
 }
 
@@ -42,7 +63,7 @@ export function createSyncRunSink(): AgentHost["sync"]["runs"]["sink"] {
         const resolvedActorUpn = syncPlanActorUpn(plan) ?? actorUpn ?? null
         recordSyncRunPreview({
           planId: plan.planId,
-          entityType: plan.executionContract?.definitionId ?? plan.recipeSnapshot.entityType,
+          entityType: plan.executionContract.definitionId,
           entityId: plan.entity.id,
           entityDisplayName: plan.entity.displayName,
           source: plan.source,
@@ -65,8 +86,4 @@ export function createSyncRunSink(): AgentHost["sync"]["runs"]["sink"] {
       }
     }
   }
-}
-
-export function readFreezeWindows() {
-  return listFreezeWindowDefinitionsForTenant()
 }

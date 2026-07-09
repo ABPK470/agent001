@@ -47,8 +47,6 @@ export const grainUndefinedDetector: Detector = {
       }
       if (matchingCols.size < 2) continue
       const candidates = [...matchingCols].sort().slice(0, MAX_CANDIDATES)
-      const more =
-        matchingCols.size > candidates.length ? ` (and ${matchingCols.size - candidates.length} more)` : ""
       out.push({
         id: makeFindingId("grain-undefined", group.label),
         kind: "grain-undefined" as const,
@@ -56,7 +54,8 @@ export const grainUndefinedDetector: Detector = {
         subject: group.label,
         reasoning: `"${group.label}" grain is ambiguous: ${matchingCols.size} columns match that period in the catalog.`,
         candidates,
-        suggestedQuestion: `For "${group.label}" grouping, which column should I use?\n${candidates.map((c) => `  • ${c}`).join("\n")}${more}`,
+        uiOptions: candidates,
+        suggestedQuestion: `For "${group.label}" grouping, which column should I use?`,
         source: "detector" as const
       })
     }

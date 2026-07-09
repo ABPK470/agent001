@@ -198,7 +198,7 @@ export function formatSyncOperationIntentBlock(intent: SyncOperationIntent): str
     `route: ${intent.source} → ${intent.target}`
   ]
   if (intent.entityId) {
-    lines.push(`entityId: ${intent.entityId} (primary key on the recipe root table — e.g. metaTable.id for gateMetadata)`)
+    lines.push(`entityId: ${intent.entityId} (primary key on the recipe root table — e.g. tableId for gateMetadata)`)
     lines.push(
       "Call sync_preview directly with this entityId. Do NOT call search_sync_entities — the id is already known."
     )

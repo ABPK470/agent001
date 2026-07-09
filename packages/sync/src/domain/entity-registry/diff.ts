@@ -141,7 +141,7 @@ export function diffEntityDefinitions(
     changes.push({
       kind: "policiesChanged",
       tableName: null,
-      description: "Policies changed (approval / freeze windows / risk multiplier).",
+      description: "Policies changed (freeze windows).",
       before: prev.policies,
       after: next.policies
     })

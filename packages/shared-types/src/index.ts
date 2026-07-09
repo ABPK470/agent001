@@ -7,17 +7,14 @@
  * the type instead so renames flow automatically.
  */
 
+import type { CustomValueSourceDefinition } from "./custom-value-source.js"
 import type {
-    DecompositionStrategy,
     DelegationEndStatus,
     DirectLoopFallbackSource,
     EffectClass,
     EscalationAction,
     EscalationReason,
     EventType,
-    PlannerNeedLevel,
-    PlannerRepairActivePath,
-    PlannerRepairCompatibilityMode,
     PlannerRoute,
     PlannerStepPhase,
     PolicySource,
@@ -25,18 +22,15 @@ import type {
     VerifierMode,
     VerifierOutcome,
 } from "@mia/shared-enums"
+import type { SyncPlanMovement, SyncPlanTableStats } from "./sync-plan.js"
 
 export type {
-    DecompositionStrategy,
     DelegationEndStatus,
     DirectLoopFallbackSource,
     EffectClass,
     EscalationAction,
     EscalationReason,
     EventType,
-    PlannerNeedLevel,
-    PlannerRepairActivePath,
-    PlannerRepairCompatibilityMode,
     PlannerRoute,
     PlannerStepPhase,
     VerificationMode,
@@ -47,6 +41,16 @@ export type {
 
 // ── Run ──────────────────────────────────────────────────────────
 
+export interface Thread {
+  id: string
+  title: string
+  createdAt: string
+  updatedAt: string
+  archivedAt?: string | null
+  pinned?: boolean
+  runCount?: number
+}
+
 export interface Run {
   id: string
   goal: string
@@ -56,6 +60,7 @@ export interface Run {
   error: string | null
   parentRunId: string | null
   agentId: string | null
+  threadId?: string | null
   createdAt: string
   completedAt: string | null
   totalTokens: number
@@ -69,7 +74,6 @@ export interface Run {
   displayName?: string | null
   trace?: TraceEntry[]
   streamingAnswer?: string
-  coherentStream?: string
   auditTrail?: AuditEntry[]
   stepData?: Step[]
 }
@@ -202,17 +206,7 @@ export type TraceEntry =
   | { kind: "user-input-response"; text: string }
   // Planner entries (agenc-core planner-first routing)
   | { kind: "planning_preflight"; mode: "planner-first" }
-  | { kind: "planner-decision"; score: number; shouldPlan: boolean; route?: PlannerRoute; reason: string; coherenceNeed?: PlannerNeedLevel; coordinationNeed?: PlannerNeedLevel }
-  | { kind: "coherent-generation-start"; route: "bounded_coherent_generation" }
-  | { kind: "coherent-generation-bundle"; artifactCount: number; artifacts: Array<{ path: string; purpose: string }>; sharedContracts: string[]; invariants: string[] }
-  | { kind: "coherent-generation-materialized"; artifactCount: number; artifacts: string[]; readBackArtifacts: string[] }
-  | { kind: "coherent-generation-verified"; overall: VerifierOutcome; confidence: number; issueCount: number; systemCheckCount: number; affectedArtifacts: string[] }
-  | { kind: "coherent-generation-repair-needed"; repairAttempt: number; issueCount: number; issues: string[]; affectedArtifacts: string[] }
-  | { kind: "coherent-generation-escalated"; target: string; issueCount: number; reason: string }
-  | { kind: "coherent-generation-handoff"; artifactCount: number; verificationRoute: string }
-  | { kind: "coherent-generation-failed"; stage: string; diagnostics: string[] }
-  | { kind: "planner-coherent-bootstrap"; artifactCount: number; decompositionStrategy: DecompositionStrategy; decompositionReasons: string[]; sharedContracts: string[]; invariants: string[] }
-  | { kind: "planner-architecture-state"; lane: PlannerRoute; status: "frozen" | "preserved" | "repairing_in_place" | "abandoned"; reason: string; architecture?: string }
+  | { kind: "planner-decision"; score: number; shouldPlan: boolean; route?: PlannerRoute; reason: string }
   | { kind: "planner-generating" }
   | { kind: "planner-plan-generated"; reason: string; stepCount: number; steps: Array<{ name: string; type: string; dependsOn?: string[] }>; edges?: Array<{ from: string; to: string }> }
   | {
@@ -285,6 +279,36 @@ export type TraceEntry =
     /** Per-section messages truncated (content-only truncation, not drop). */
     sectionTruncatedMessages: Record<string, number>
   }
+  | {
+    /**
+     * Coalesced live sync progress for chat trace (preview / bulk scan / execute).
+     * One entry per sync tool invocation — updated in place as SSE events arrive.
+     */
+    kind: "sync-progress"
+    invocationId: string
+    tool: string
+    status: "running" | "done" | "error"
+    headline: string
+    detail?: string
+    level?: "info" | "warn" | "error"
+    sql?: {
+      label: string
+      connection: string
+      preview: string
+      rowCount?: number | null
+      durationMs?: number | null
+    }
+    lastTable?: {
+      name: string
+      index?: number
+      total?: number
+      insert?: number
+      update?: number
+      delete?: number
+      status?: "running" | "done" | "error"
+    }
+    result?: string
+  }
   | { kind: "direct_loop_fallback"; source: DirectLoopFallbackSource; reason: string }
   | { kind: "planner-pipeline-start"; attempt: number; verifierRound?: number; maxRetries: number }
   | { kind: "planner-pipeline-end"; status: string; completedSteps: number; totalSteps: number }
@@ -328,19 +352,6 @@ export type TraceEntry =
     epoch?: number
     rerunOrder: string[]
     tasks: Array<{ stepName: string; mode: VerifierMode; ownedIssueCodes: string[]; dependencyIssueCodes: string[] }>
-  }
-  | {
-    kind: "planner-repair-compatibility"
-    attempt: number
-    mode: PlannerRepairCompatibilityMode
-    activePath: PlannerRepairActivePath
-    diverged: boolean
-    divergenceScore?: number
-    divergenceThreshold?: number
-    pinnedToLegacy?: boolean
-    reasons: string[]
-    legacy: { rerunOrder: string[]; tasks: Array<{ stepName: string; mode: VerifierMode; ownedIssueCodes: string[] }> }
-    repair: { rerunOrder: string[]; tasks: Array<{ stepName: string; mode: VerifierMode; ownedIssueCodes: string[]; dependencyIssueCodes: string[] }> }
   }
   | { kind: "planner-retry"; attempt: number; reason: string; skippedSteps?: number; retrySteps?: number; rerunOrder?: string[] }
   | { kind: "planner-retry-skipped"; reason: string }
@@ -407,14 +418,12 @@ export interface Widget {
 }
 
 export type WidgetType =
+  | "thread-nav"
   | "agent-chat"
   | "term-chat"
   | "run-status"
-  | "agent-viz"
   | "live-logs"
-  | "audit-trail"
   | "step-timeline"
-  | "tool-stats"
   | "run-history"
   | "operator-env"
   | "debug-inspector"
@@ -436,6 +445,7 @@ export type WidgetType =
  * exists) but are rendered as disabled cards. Admins get the full set.
  */
 export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
+  "thread-nav",
   "term-chat",
   "env-sync",
   "live-logs",
@@ -476,6 +486,16 @@ export interface SseEvent {
   timestamp: string
 }
 
+export {
+  readSseEntityId,
+  readSseRunId,
+  readSseStepId,
+  readSseToolCallId,
+  readSseToolName,
+  readToolEntityId,
+  sseStepDedupeToken
+} from "./sse-payload.js"
+
 // ── ABI Environment Sync ─────────────────────────────────────────
 
 /**
@@ -504,7 +524,7 @@ export interface SyncRecipeTable {
   name: string
   scopeColumn: string | null
   predicate: string
-  source: "fk+pipeline" | "fk-only" | "pipeline-only"
+  source: "fk+pipeline" | "fk-only" | "pipeline-only" | "manual"
   verified: boolean
   groundedByPipeline?: boolean
   enabledByDefault?: boolean
@@ -512,36 +532,17 @@ export interface SyncRecipeTable {
   note?: string
 }
 
-export interface SyncRecipe {
-  entityType: SyncEntityType
-  displayName: string
-  rootTable: string
-  rootKeyColumn: string
-  rootNameColumn: string | null
-  legacyPipelineId: number | null
-  legacyEntrySproc?: string
-  tables: SyncRecipeTable[]
-  executionOrder: string[]
-  reverseOrder: string[]
-  discrepancies: Array<{ table: string; kind: "leak" | "implicit" | "drift"; note: string }>
-  generatedAt: string
-}
+/** @deprecated Use PublishedSyncDefinition at runtime. */
+export type SyncRecipeTableLegacy = SyncRecipeTable
 
-export interface SyncRecipeBundle {
-  version: 1
-  generatedAt: string
-  introspectedFrom: string | null
-  recipes: Record<SyncEntityType, SyncRecipe | null>
-}
-
-export interface SyncPlanTableCounts {
-  insert: number
-  update: number
-  delete: number
-  unchanged: number
-  lowConfidence: number
-  conflicts: number
-}
+export type { SyncPlanMovement, SyncPlanTableStats } from "./sync-plan.js"
+export {
+  computePlanTotals,
+  movementFromChangeSet,
+  movementOfTable,
+  tableHasMovement,
+  tableMovementTotal
+} from "./sync-plan.js"
 
 export interface SyncPlanConflict {
   pk: unknown
@@ -557,22 +558,51 @@ export interface SyncPlanRowSample {
   changedColumns?: string[]
 }
 
+export interface SyncPlanChangeRow {
+  pk: string
+  values: Record<string, unknown>
+}
+
+/** Row-level work manifest from preview — execute applies exactly this set. */
+export interface SyncPlanChangeSet {
+  insert: SyncPlanChangeRow[]
+  update: SyncPlanChangeRow[]
+  delete: SyncPlanChangeRow[]
+}
+
 export interface SyncPlanTable {
   table: string
+  /**
+   * Frozen SQL WHERE fragment from preview.
+   * Execute uses this only for drift `COUNT(*)` and FK probes — never for bulk row reads.
+   */
   scopePredicate: string
-  counts: SyncPlanTableCounts
+  /** Preview-only counters not represented in `changeSet`. */
+  stats: SyncPlanTableStats
+  /** Execute authority — insert / update / delete PK lists. */
+  changeSet: SyncPlanChangeSet
+  /** UI preview decoration only; execute ignores. */
   samples: {
     insert: SyncPlanRowSample[]
     update: SyncPlanRowSample[]
     delete: SyncPlanRowSample[]
   }
+  /** Scope-misattribution rows; length is the conflict count. Blocks execute when non-empty. */
   conflicts: SyncPlanConflict[]
   warnings: string[]
   diffDurationMs: number
 }
 
+export interface SyncPlanGraphNode {
+  id: string
+  label: string
+  status: "unchanged" | "updates" | "deletes" | "inserts"
+  stats: SyncPlanTableStats
+  movement: SyncPlanMovement
+}
+
 export interface SyncPlanGraph {
-  nodes: Array<{ id: string; label: string; status: "unchanged" | "updates" | "deletes" | "inserts"; counts: SyncPlanTableCounts }>
+  nodes: SyncPlanGraphNode[]
   edges: Array<{ from: string; to: string; label?: string }>
 }
 
@@ -586,6 +616,13 @@ export interface SyncPlanTotals {
   tablesCount: number
 }
 
+export interface SyncPlanPreflight {
+  catalogCompatible: boolean
+  issues: string[]
+  rootParentReady: boolean
+  rootParentIssue: string | null
+}
+
 export interface SyncPlan {
   planId: string
   createdAt: string
@@ -593,23 +630,22 @@ export interface SyncPlan {
   entity: { type: SyncEntityType; id: string | number; displayName: string | null }
   source: string
   target: string
-  preflight: { catalogCompatible: boolean; issues: string[] }
+  preflight: SyncPlanPreflight
   tables: SyncPlanTable[]
   totals: SyncPlanTotals
   dependencyGraph: SyncPlanGraph
   warnings: string[]
   estimatedDurationSec: number
-  recipeSnapshot: { entityType: SyncEntityType; rootTable?: string; rootKeyColumn?: string; legacyPipelineId?: number; tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>; executionOrder: string[]; reverseOrder: string[]; enabledOptionalTables?: string[] }
-  executionContract?: CompiledSyncPlanContract | null
+  executionContract: CompiledSyncPlanContract
   decisionLog?: CompiledSyncDecisionRecord[] | null
   governanceDecision?: CompiledSyncGovernanceDecision | null
 }
 
 export type AuthoredSyncFlowPhase =
-  | "pre-transaction"
+  | "preTransaction"
   | "metadata"
-  | "post-metadata"
-  | "post-commit"
+  | "postMetadata"
+  | "postCommit"
 
 export type AuthoredSyncFlowKind =
   | "metadataSync"
@@ -638,7 +674,6 @@ export type AuthoredSyncFlowKind =
 
 export interface AuthoredSyncDefinitionGovernance {
   freezeWindowIds: string[]
-  riskMultiplier: number
 }
 
 export interface AuthoredSyncDefinitionStrategyRef {
@@ -660,11 +695,13 @@ export interface AuthoredSyncDefinitionOwnership {
 
 export interface AuthoredSyncFlowStep {
   id: string
-  phase: AuthoredSyncFlowPhase
+  /** @deprecated Ignored at runtime — execution regions are derived from order around metadataSync. */
+  phase?: AuthoredSyncFlowPhase
   kind: AuthoredSyncFlowKind
   title: string
   description: string
-  subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
+  /** Per-step value source wiring for handler slots without kind-fixed `source`. */
+  bindings?: Record<string, import("./value-source.js").ValueSource>
   objectName?: string | null
   auditObjectType?: string | null
   pipelineName?: string | null
@@ -713,6 +750,8 @@ export interface AuthoredSyncDefinition {
   }
   executionFlow: {
     steps: AuthoredSyncFlowStep[]
+    /** Phase + step-type defs for `steps` — frozen at publish; sole source at preview/execute. */
+    catalog?: SyncFlowCatalogSnapshot
   }
   provenance: {
     kind: "manual" | "legacy-migration"
@@ -724,6 +763,13 @@ export interface AuthoredSyncDefinition {
 export interface PublishedSyncDefinition extends AuthoredSyncDefinition {
   publishedAt: string
   publishedVersion: string
+}
+
+export interface PublishedSyncDefinitionBundle {
+  version: 1
+  publishedAt: string
+  publishedVersion: string
+  definitions: Record<string, PublishedSyncDefinition | null>
 }
 
 export interface PublishSyncDefinitionsResponse {
@@ -742,7 +788,7 @@ export type SyncDefinitionFlowTemplateId =
   | "pipelineActivity"
   | "gateMetadata"
   | "content"
-  | "metadata-only"
+  | "metadataOnly"
 
 export interface EntityRegistrySyncDefinitionScaffoldRequest {
   flowTemplateId?: SyncDefinitionFlowTemplateId
@@ -756,13 +802,37 @@ export interface EntityRegistrySyncDefinitionScaffoldResponse {
   stderr: string[]
 }
 
+export interface EntityRegistryDraftIdentitySuggestion {
+  id: string
+  displayName: string
+  description: string
+  rootTable: string
+  idColumn: string
+  labelColumn: string | null
+  selfJoinColumn: string | null
+}
+
+export interface EntityRegistryDraftSuggestion {
+  identity: EntityRegistryDraftIdentitySuggestion
+  tables: EntityRegistryTable[]
+  flowTemplateId: EntityRegistrySyncFlowTemplateId | null
+  source: "heuristic" | "catalog"
+  notes: string[]
+}
+
+export interface EntityRegistryTableSuggestion {
+  table: EntityRegistryTable
+  source: "heuristic" | "catalog" | "unreachable"
+  note: string | null
+}
+
 export interface CompiledSyncPlanStep {
   id: string
   phase: AuthoredSyncFlowPhase
   kind: AuthoredSyncFlowKind
   title: string
   description: string
-  subjectRef?: "entityId" | "ruleInputDatasetId" | "contractPipelineId" | null
+  bindings?: Record<string, string>
   objectName?: string | null
   auditObjectType?: string | null
   pipelineName?: string | null
@@ -770,11 +840,30 @@ export interface CompiledSyncPlanStep {
 
 export interface CompiledSyncPlanContract {
   definitionId: string
-  definitionVersion: string
-  steps: CompiledSyncPlanStep[]
+  definitionPublishedVersion: string
+  definitionPublishedAt: string
   governance: AuthoredSyncDefinitionGovernance
   bindings: AuthoredSyncDefinitionBindingRefs
   allowedSchemas: string[]
+  metadata: {
+    rootTable: string
+    rootKeyColumn: string
+    selfJoinColumn: string | null
+    tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>
+    executionOrder: string[]
+    reverseOrder: string[]
+    enabledOptionalTables?: string[]
+  }
+  flow: {
+    steps: CompiledSyncPlanStep[]
+    /** Kind + phase definitions snapshotted at preview for self-contained execution. */
+    catalog?: SyncFlowCatalogSnapshot
+  }
+  provenance: {
+    kind: "manual" | "legacy-migration"
+    sourceArtifact?: string | null
+    sourceVersion?: string | null
+  }
 }
 
 export interface CompiledSyncGovernanceDecision {
@@ -808,13 +897,24 @@ export interface CompiledSyncDecisionRecord {
 }
 
 export interface SyncExecuteProgress {
-  type: "started" | "step" | "table-started" | "table-progress" | "table-done" | "completed" | "failed"
+  type:
+    | "started"
+    | "step"
+    | "deploy-step"
+    | "table-started"
+    | "table-progress"
+    | "table-done"
+    | "completed"
+    | "skipped"
+    | "failed"
   table?: string
   step?: string
   rowsApplied?: number
   rowsTotal?: number
   message?: string
   error?: string
+  /** Present on `deploy-step` events. `started` is in-flight telemetry; terminal states are audit-log rows. */
+  deployStatus?: "started" | "done" | "failed" | "skipped"
 }
 
 // ── Entity registry (Phase 0 config uplift) ──────────────────────
@@ -828,7 +928,6 @@ export type EntityRegistryProvenanceKind = "bundled" | "imported" | "manual" | "
 
 export type EntityRegistryTableScope =
   | { kind: "rootPk"; column: string }
-  | { kind: "fkPath"; through: Array<{ table: string; fromColumn: string; toColumn: string }> }
   | { kind: "sql"; predicate: string }
 
 export type EntityRegistryProvenance =
@@ -855,9 +954,10 @@ export interface EntityRegistryTable {
   userControllable: boolean | null
 }
 
+export { renumberEntityRegistryTables } from "./entity-registry-table-order.js"
+
 export interface EntityRegistryPolicies {
   freezeWindowIds: string[]
-  riskMultiplier: number
 }
 
 export interface EntityRegistryLineageRef {
@@ -994,6 +1094,16 @@ export interface EntityRegistryStrategySaveRequest {
   reason: string
 }
 
+export interface EntityRegistryStrategyHistoryEntry {
+  tenantId: string
+  id: string
+  version: number
+  versionLabel: string | null
+  createdBy: string
+  createdAt: string
+  reason: string
+}
+
 export interface EntityRegistryYamlImportRequest {
   yaml: string
   reason: string
@@ -1011,12 +1121,32 @@ export interface EntityRegistryDocumentImportRequest {
   dryRun?: boolean
 }
 
+export interface EntityRegistryYamlImportPreview {
+  def: EntityRegistryDefinition
+  run: { template: string; service: string; environment: string } | null
+}
+
 export interface EntityRegistryYamlImportResponse {
   ok: boolean
   saved: Array<{ id: string; version: number; created: boolean }>
   skipped: Array<{ id: string; reason: string }>
   errors: Array<{ id: string | null; error: EntityRegistryValidationResult | string }>
   dryRun: boolean
+  /** Populated on dry-run when parse succeeds — use to hydrate structured editor fields. */
+  preview?: EntityRegistryYamlImportPreview[]
+}
+
+export interface EntityRegistryPreviewYamlRequest {
+  def: EntityRegistryDefinition
+  run?: {
+    flowTemplateId: string
+    serviceProfileRef: string
+    environmentPolicyRef: string
+  }
+}
+
+export interface EntityRegistryPreviewYamlResponse {
+  yaml: string
 }
 
 export type EntityRegistrySyncFlowTemplateId =
@@ -1026,7 +1156,7 @@ export type EntityRegistrySyncFlowTemplateId =
   | "pipelineActivity"
   | "gateMetadata"
   | "content"
-  | "metadata-only"
+  | "metadataOnly"
 
 export interface SyncDefinitionRuntimeOption<T extends string = string> {
   id: T
@@ -1040,6 +1170,247 @@ export interface SyncDefinitionRuntimeOptions {
   serviceProfiles: SyncDefinitionRuntimeOption[]
   environmentPolicies: SyncDefinitionRuntimeOption[]
 }
+
+/** When in the sync run a phase's steps execute (execution contract). */
+export type SyncFlowPhaseBoundary =
+  | "pre_metadata"
+  | "metadata_transaction"
+  | "post_metadata"
+  | "post_commit"
+
+export interface SyncFlowPhaseDefinition {
+  /** One-line summary for lists. */
+  summary: string
+  /** Operator-facing explanation of what this phase means. */
+  description: string
+  /** Runtime execution boundary (see SYNC-PREVIEW-EXECUTE.md). */
+  boundary: SyncFlowPhaseBoundary
+  /** Primary database connection for steps in this phase. */
+  connection: "source" | "target" | "mixed"
+  defaultFailureMode: "fatal" | "warning"
+  /** How step order relates to this phase today. */
+  orderingHint: string
+}
+
+export type SyncFlowKindHandlerType =
+  | "metadata_sync"
+  | "mssql_procedure"
+  | "http_request"
+  | "custom_sql"
+  | "custom_shell_script"
+
+export {
+  CATALOG_ID_PATTERN,
+  idToCatalogDescription,
+  idToCatalogLabel,
+  isCatalogId,
+  METADATA_SYNC_KIND_ID,
+  validateCatalogId,
+} from "./catalog-id.js"
+export {
+  customValueSourceCatalogFromRows,
+  effectiveTargetSqlResultType,
+  formatCustomValueSourcePreview,
+  inferTargetSqlResultType,
+  lookupCustomValueSource,
+  normalizeCustomValueSourceDefinition,
+  parseCustomValueSourceDefinition,
+  validateCustomValueSourceId,
+  validateTargetSqlQuery,
+  type CustomValueSourceCatalog,
+  type CustomValueSourceDefinition,
+} from "./custom-value-source.js"
+export {
+  lookupHttpServiceSlot,
+  SYNC_CUSTOM_HANDLER_TOKENS,
+  SYNC_HTTP_SERVICE_SLOTS,
+  type SyncHttpServiceSlot,
+  type SyncHttpServiceSlotDefinition,
+} from "./handler-vocabulary.js"
+export {
+  formatHandlerInputPreviewHint,
+  formatPlanBindingSourceDisplayLabel,
+  formatStepFieldDisplayLabel,
+  planBindingKindDisplayPrefix,
+  type BindingSourceLabelCatalog,
+  type CustomValueSourceLabelCatalog,
+} from "./binding-display.js"
+export {
+  BUILTIN_TARGET_SQL,
+  collectCatalogIdsFromValueSource,
+  collectCatalogIdsFromValueSources,
+  formatValueSourcePreview,
+  isLiteralValueSource,
+  isSyncStepFieldKey,
+  isValueSource,
+  readStepFieldValue,
+  stepFieldKeysFromValueSource,
+  SYNC_STEP_FIELD_KEYS,
+  validateValueSource,
+  type BuiltinValueSource,
+  type SyncStepFieldKey,
+  type ValueSource,
+} from "./value-source.js"
+export {
+  catalogStepFieldIds,
+  collectKnownFlowStepIds,
+  flowStepPickerOptions,
+  publishedOutputKeysForKind,
+  publishedOutputKeysForStep,
+  suggestPriorStepOutputKeys,
+  type FlowStepPickerOption,
+} from "./flow-catalog-ui.js"
+export {
+  assertPublishedOutputsPresent,
+  derivePublishedOutputsFromHandler,
+  formatStepOutputPreviewJson,
+  guaranteedHandlerInputOutputKeys,
+  normalizePublishedOutputKeys,
+  procedureParameterOutputKeys,
+  stepOutputPreview,
+  type StepOutputPreview,
+} from "./step-published-outputs.js"
+export {
+  collectCatalogIdsFromFlowSteps,
+  collectBindingSourceIdsFromFlowSteps,
+  isKindFixedBindingSlot,
+  isLiteralHandlerSlot,
+  isStepBoundHandlerSlot,
+  requiredStepBoundSlotNames,
+  resolveSlotValueSource,
+  stepFieldIdsForStep,
+  stepFieldIdsFromHandler,
+  stepFieldKeysForStep,
+  stepFieldKeysFromHandler,
+} from "./flow-step-bindings.js"
+export {
+  collectBindingSourceIdsFromKindDefinitions,
+  collectBindingSourceIdsFromSteps,
+  collectCustomValueSourceIdsFromKindDefinitions,
+  collectCustomValueSourceIdsFromSteps,
+  DEFAULT_CUSTOM_HANDLER_INPUTS,
+  DEFAULT_PROCEDURE_INPUTS,
+  formatHandlerInputLiteral,
+  handlerInputSlots,
+  substituteInputTokens,
+  type SyncHandlerInput,
+} from "./handler-input.js"
+export type { SyncProcedureParameter } from "./handler-input.js"
+
+export interface SyncFlowKindHandler {
+  type: SyncFlowKindHandlerType
+  connection: "source" | "target"
+  procedure?: string
+  /** Stored procedure parameters — same slots as {@link SyncHandlerInput}. */
+  parameters?: SyncHandlerInput[]
+  httpService?: "etl" | "agent" | "gate"
+  httpMethod?: "GET" | "POST"
+  httpPath?: string
+  /** JSON body fields for HTTP handlers. */
+  httpBody?: SyncHandlerInput[]
+  sqlBatch?: string
+  shellCommand?: string
+  shellPlatform?: "linux" | "windows" | "any"
+  /** Input slots for @token substitution in SQL batches and shell commands. */
+  inputs?: SyncHandlerInput[]
+}
+
+export interface SyncFlowKindDefinition {
+  summary: string
+  description: string
+  handler: SyncFlowKindHandler
+  /** @deprecated Always {} — step fields are driven by flow step bindings. */
+  stepFields: Record<string, boolean>
+  failureMode: "fatal" | "warning"
+  /** Marks dataset-layer create steps (contract deploy sequencing). */
+  createsDatasetLayer?: boolean
+  /**
+   * Keys this action publishes for earlier-step bindings.
+   * Must match runtime StepOutputRegistry entries after the step succeeds.
+   */
+  publishedOutputs?: readonly string[]
+  /** Skip when contract dataset layer failed (from kind definition in run catalog). */
+  skipWhenDatasetLayerFailed?: boolean
+  entityTypes?: Array<
+    "contract" | "dataset" | "rule" | "pipelineActivity" | "gateMetadata" | "content" | "any"
+  >
+}
+
+/** Phase + kind definitions referenced by a compiled execution contract. */
+export interface SyncFlowCatalogSnapshot {
+  phases: Record<string, SyncFlowPhaseDefinition>
+  kinds: Record<string, SyncFlowKindDefinition>
+  customValueSources: Record<string, import("./custom-value-source.js").CustomValueSourceDefinition>
+}
+
+export interface SyncMetadataCatalogPhase {
+  id: string
+  label: string
+  sortOrder: number
+  builtIn: boolean
+  definition: SyncFlowPhaseDefinition
+}
+
+export interface SyncMetadataCatalogStepType {
+  id: string
+  label: string
+  builtIn: boolean
+  definition: SyncFlowKindDefinition
+}
+
+export interface SyncMetadataCatalogFlow {
+  id: string
+  label: string
+  description: string
+  steps: AuthoredSyncFlowStep[]
+  builtIn: boolean
+}
+
+export interface SyncMetadataCatalogCustomValueSource {
+  id: string
+  label: string
+  builtIn: boolean
+  definition: import("./custom-value-source.js").CustomValueSourceDefinition
+}
+
+/** DB-backed sync vocabulary for the Entity Registry UI (kinds, flows, custom value sources). */
+export interface SyncMetadataCatalogResponse {
+  stepTypes: SyncMetadataCatalogStepType[]
+  flows: SyncMetadataCatalogFlow[]
+  customValueSources: SyncMetadataCatalogCustomValueSource[]
+}
+
+export interface SyncMetadataCatalogCustomValueSourceSaveBody {
+  id: string
+  label: string
+  definition?: import("./custom-value-source.js").CustomValueSourceDefinition
+}
+
+export interface SyncMetadataCatalogPhaseSaveBody {
+  id: string
+  label: string
+  sortOrder?: number
+  definition?: SyncFlowPhaseDefinition
+}
+
+export interface SyncMetadataCatalogStepTypeSaveBody {
+  id: string
+  label: string
+  definition?: SyncFlowKindDefinition
+}
+
+/** @deprecated Use SyncMetadataCatalogPhase */
+export type SyncRunCatalogPhase = SyncMetadataCatalogPhase
+/** @deprecated Use SyncMetadataCatalogStepType */
+export type SyncRunCatalogKind = SyncMetadataCatalogStepType
+/** @deprecated Use SyncMetadataCatalogFlow */
+export type SyncRunCatalogPreset = SyncMetadataCatalogFlow
+/** @deprecated Use SyncMetadataCatalogResponse */
+export type SyncRunCatalogResponse = SyncMetadataCatalogResponse
+/** @deprecated Use SyncMetadataCatalogPhaseSaveBody */
+export type SyncRunCatalogPhaseSaveBody = SyncMetadataCatalogPhaseSaveBody
+/** @deprecated Use SyncMetadataCatalogStepTypeSaveBody */
+export type SyncRunCatalogKindSaveBody = SyncMetadataCatalogStepTypeSaveBody
 
 export interface EntityRegistrySyncDefinitionExportRequest {
   flowTemplateId?: EntityRegistrySyncFlowTemplateId
@@ -1242,3 +1613,43 @@ export interface RollbackPreview {
   wouldSkip: Array<{ effectId: string; target: string; reason: string }>
   wouldFail: Array<{ effectId: string; target: string; reason: string }>
 }
+
+export {
+  TOOL_PRESENTATION,
+  TOOL_TRACE_ARG,
+  presentToolCall,
+  presentToolCallFromFormatted,
+  serializeToolCallArgs,
+  stripRuntimeToolArgs,
+  toolCallDetailPreview,
+  toolCallPreview
+} from "./tool-call-presentation.js"
+export type {
+  ToolCallArtifact,
+  ToolCallPresentation,
+  ToolPresentationSpec
+} from "./tool-call-presentation.js"
+export {
+  deriveStepFields,
+  deriveStepFieldsFromHandler,
+  normalizeKindDefinition,
+  requiredFlowStepFieldKeys,
+} from "./derive-step-fields.js"
+export {
+  defaultAuditObjectType,
+  defaultObjectName,
+  defaultStepBindings,
+  defaultStepFieldValue,
+  derivePipelineName,
+  normalizeAuthoredSyncFlowStep,
+  normalizeAuthoredSyncFlowSteps,
+  type FlowStepKindLookup,
+  type NormalizeFlowStepContext,
+} from "./normalize-flow-step.js"
+export {
+  formatTraceExportText,
+  formatThreadExportText,
+  threadExportFilename,
+  traceExportFilename,
+} from "./trace-export.js"
+export type { TraceExportRunMeta, TraceExportThreadMeta } from "./trace-export.js"

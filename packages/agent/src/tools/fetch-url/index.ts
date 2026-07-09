@@ -15,7 +15,7 @@
 import { lookup } from "node:dns/promises"
 import type { RunContext } from "../../application/shell/runtime.js"
 import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
-import { checkHostname, checkResolvedIp, fetchWithBrowser } from "./helpers.js"
+import { checkHostname, checkResolvedIp } from "./helpers.js"
 
 /** Max response body size (1 MB). */
 const MAX_BODY = 1_048_576
@@ -145,12 +145,6 @@ async function executeFetchUrl(args: Record<string, unknown>, run?: RunContext):
   }
 
   if (!response) return "Error: No response received"
-
-  if (response.status === 403 || response.status === 503) {
-    const browserText = await fetchWithBrowser(currentUrl, maxLength)
-    if (browserText) return browserText
-    return `Error: HTTP ${response.status} ${response.statusText} (browser fallback also failed)`
-  }
 
   if (!response.ok) {
     if (response.status >= 400 && response.status < 500) {

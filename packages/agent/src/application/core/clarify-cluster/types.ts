@@ -113,7 +113,7 @@ export interface ClarifyContext {
   readonly goal: string
   /** Live catalog graph, or null when the agent is in a non-DB context. */
   readonly catalog: CatalogGraph | null
-  /** Active tenant config — supplies routingKeywords.domain etc. */
+  /** Active tenant config — supplies domainKeywords etc. */
   readonly tenant: TenantConfig
   /** Conversation history (assistant + user + tool messages). */
   readonly messages: readonly Message[]

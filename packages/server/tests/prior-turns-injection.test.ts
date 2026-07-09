@@ -14,9 +14,9 @@ import type { Tool } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { PriorTurn } from "../src/features/runs/core/data-blocks/prior-turns.js"
-import { buildSystemMessages } from "../src/features/runs/core/system-messages.js"
+import { buildSystemMessages } from "../src/features/runs/core/system-messages/index.js"
 import { ClarificationsRegistry } from "../src/features/runs/execution/clarifications-registry.js"
-import type { RunWorkspaceContext } from "../src/bootstrap/workspace.js"
+import type { RunWorkspaceContext } from "../src/features/runs/workspace/index.js"
 
 const RW: RunWorkspaceContext = {
   runId: "run-x",
@@ -187,7 +187,6 @@ describe("buildSystemMessages — clarification ctx is fed prior-turns transcrip
         {
           id: 1,
           run_id: "r1",
-          session_id: "s1",
           tool_call_id: "tc-1",
           tool_name: "query_mssql",
           args_json: "{}",

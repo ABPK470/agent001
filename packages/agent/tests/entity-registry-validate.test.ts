@@ -11,9 +11,11 @@ import {
   type EntityTable,
   type EntityTableScope,
   type Scd2Strategy,
+  compileFkPathPredicate,
   isIdentifier,
   isSchemaQualifiedTable,
   looksUnsafeSqlFragment,
+  normalizeEntityDefinition,
   validateEntityDefinition,
   validateScd2Strategy
 } from "@mia/sync"
@@ -51,7 +53,7 @@ function validDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
     labelColumn: "name",
     selfJoinColumn: null,
     tables: [validTable()],
-    policies: { approvalPolicyId: null, freezeWindowIds: [], riskMultiplier: 1.0 },
+    policies: { approvalPolicyId: null, freezeWindowIds: [] },
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
@@ -256,21 +258,31 @@ describe("validateEntityDefinition — tables", () => {
     expect(r.errors.some((e) => e.code === "scope_invalid")).toBe(true)
   })
 
-  it("rejects empty fkPath", () => {
+  it("rejects legacy fkPath scope", () => {
     const scope: EntityTableScope = { kind: "fkPath", through: [] }
     const r = validateEntityDefinition(validDef({ tables: [validTable({ scope })] }))
-    expect(r.errors.some((e) => e.code === "scope_invalid")).toBe(true)
+    expect(r.errors.some((e) => e.code === "scope_deprecated")).toBe(true)
   })
 
-  it("accepts a valid multi-hop fkPath", () => {
+  it("normalizes valid multi-hop fkPath to sql", () => {
     const scope: EntityTableScope = {
       kind: "fkPath",
       through: [
         { table: "core.Dataset", fromColumn: "contractId", toColumn: "contractId" },
-        { table: "core.DatasetColumn", fromColumn: "datasetId", toColumn: "datasetId" }
-      ]
+        { table: "core.DatasetColumn", fromColumn: "datasetId", toColumn: "datasetId" },
+      ],
     }
-    const r = validateEntityDefinition(validDef({ tables: [validTable({ scope })] }))
+    const def = validDef({
+      tables: [
+        validTable({
+          name: "core.DatasetColumn",
+          scope,
+        }),
+      ],
+    })
+    const normalized = normalizeEntityDefinition(def)
+    expect(normalized.tables[0]?.scope.kind).toBe("sql")
+    const r = validateEntityDefinition(normalized)
     expect(r.ok).toBe(true)
   })
 

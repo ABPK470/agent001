@@ -4,8 +4,6 @@ import { resolve } from "node:path"
 import { promisify } from "node:util"
 import { WorkspaceMountMode } from "../../shared/enums/sandbox.js"
 import {
-  BROWSER_DOCKERFILE,
-  BROWSER_IMAGE,
   DEFAULT_IDLE_TIMEOUT,
   DEFAULT_IMAGE,
   DEFAULT_MAX_CONCURRENT,
@@ -25,7 +23,6 @@ const exec = promisify(execFile)
 
 export class DockerSandbox {
   private dockerAvailable: boolean | null = null
-  private browserImageReady: boolean | null = null
   private readonly config: Required<SandboxConfig>
   private activeContainers = new Set<string>()
   private trackedContainers = new Map<string, TrackedContainer>()
@@ -289,115 +286,6 @@ export class DockerSandbox {
       for (const [k, v] of Object.entries(extra)) args.push("-e", `${k}=${v}`)
     }
     return args
-  }
-
-  // ── Browser sandbox ───────────────────────────────────────────
-
-  async ensureBrowserImage(): Promise<boolean> {
-    if (this.browserImageReady !== null) return this.browserImageReady
-    if (!(await this.isDockerAvailable())) {
-      this.browserImageReady = false
-      return false
-    }
-    try {
-      await exec("docker", ["image", "inspect", BROWSER_IMAGE], { timeout: 5000 })
-      this.browserImageReady = true
-      return true
-    } catch {
-      /* Image doesn't exist — build it */
-    }
-
-    try {
-      const dockerfileDir = resolve(BROWSER_DOCKERFILE, "..")
-      await exec("docker", ["build", "-t", BROWSER_IMAGE, "-f", BROWSER_DOCKERFILE, dockerfileDir], {
-        timeout: 300_000
-      })
-      this.browserImageReady = true
-      return true
-    } catch (err) {
-      console.error("Failed to build browser image:", (err as Error).message)
-      this.browserImageReady = false
-      return false
-    }
-  }
-
-  async browserExec(
-    scriptContent: string,
-    workspacePath: string,
-    options?: { timeout?: number }
-  ): Promise<SandboxResult> {
-    const useDocker = await this.ensureBrowserImage()
-    if (!useDocker) {
-      return { stdout: "", stderr: "FALLBACK_TO_HOST", exitCode: 1, timedOut: false, sandboxed: false }
-    }
-
-    const timeout = options?.timeout ?? 30_000
-    const containerId = `mia-browser-${randomBytes(6).toString("hex")}`
-
-    const args: string[] = [
-      "run",
-      "--rm",
-      "--name",
-      containerId,
-      `--memory=${this.config.maxMemory}`,
-      `--cpus=${this.config.maxCpu}`,
-      "--oom-kill-disable=false",
-      "--network=none",
-      "--cap-drop=ALL",
-      "--cap-add=SYS_ADMIN",
-      "--security-opt=no-new-privileges",
-      "--read-only",
-      "--tmpfs",
-      "/tmp:rw,exec,nosuid,size=128m",
-      ...this.buildWorkspaceMount(workspacePath, WorkspaceMountMode.Readonly),
-      "-w",
-      "/workspace",
-      "-e",
-      "PLAYWRIGHT_BROWSERS_PATH=/ms-playwright",
-      "-e",
-      "NO_COLOR=1",
-      BROWSER_IMAGE,
-      "node",
-      "-e",
-      scriptContent
-    ]
-
-    await this.semaphore.acquire(timeout)
-
-    const now = Date.now()
-    this.activeContainers.add(containerId)
-    this.trackedContainers.set(containerId, { startedAt: now, lastActivityAt: now })
-
-    try {
-      const { stdout, stderr } = await exec("docker", args, {
-        timeout: timeout + 10_000,
-        maxBuffer: 2 * 1024 * 1024
-      })
-      return {
-        stdout: truncateOutput(stdout),
-        stderr: truncateOutput(stderr),
-        exitCode: 0,
-        timedOut: false,
-        sandboxed: true
-      }
-    } catch (err: unknown) {
-      const error = err as { killed?: boolean; code?: number; stdout?: string; stderr?: string }
-      const timedOut = error.killed === true
-      if (timedOut) {
-        await exec("docker", ["kill", containerId], { timeout: 5000 }).catch(() => {})
-      }
-      return {
-        stdout: truncateOutput(error.stdout ?? ""),
-        stderr: truncateOutput(error.stderr ?? ""),
-        exitCode: error.code ?? 1,
-        timedOut,
-        sandboxed: true
-      }
-    } finally {
-      this.trackedContainers.delete(containerId)
-      this.activeContainers.delete(containerId)
-      this.semaphore.release()
-    }
   }
 
   // ── Cleanup ───────────────────────────────────────────────────

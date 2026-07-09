@@ -1,0 +1,1797 @@
+{
+  "_comment": "Offline MyMI activity sync snapshot keyed by pipelineId:sequence. Live generators read properties.sync from core.Activity instead. Rows with action starting with '_' are excluded.",
+  "specs": {
+    "692:1": {
+      "stepTypeId": "metadataSync",
+      "stepType": {
+        "id": "metadataSync",
+        "label": "Apply metadata change set",
+        "definition": {
+          "summary": "Apply metadata change set",
+          "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+          "handler": {
+            "type": "metadata_sync",
+            "connection": "target"
+          },
+          "failureMode": "fatal",
+          "entityTypes": [
+            "any"
+          ]
+        }
+      },
+      "step": {
+        "id": "metadataSync",
+        "phase": "metadata",
+        "kind": "metadataSync",
+        "title": "Metadata sync",
+        "description": "Apply transactional metadata changes for the selected content scope."
+      }
+    },
+    "692:2": {
+      "stepTypeId": "handleDependencies",
+      "stepType": {
+        "id": "handleDependencies",
+        "label": "handleDependencies",
+        "definition": {
+          "summary": "Refresh object dependencies",
+          "description": "Runs core.uspObjectDependencies on target (@id, @objectName).",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspObjectDependencies",
+            "parameters": [
+              {
+                "name": "id",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "objectName",
+                "source": {
+                  "type": "stepField",
+                  "field": "objectName"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "content",
+            "rule"
+          ],
+          "publishedOutputs": [
+            "id",
+            "objectName"
+          ]
+        }
+      },
+      "step": {
+        "id": "handleDependencies",
+        "phase": "postMetadata",
+        "kind": "handleDependencies",
+        "title": "Handle dependencies",
+        "description": "Refresh downstream content dependency state.",
+        "objectName": "content"
+      }
+    },
+    "780:1": {
+      "stepTypeId": "metadataSync",
+      "stepType": {
+        "id": "metadataSync",
+        "label": "Apply metadata change set",
+        "definition": {
+          "summary": "Apply metadata change set",
+          "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+          "handler": {
+            "type": "metadata_sync",
+            "connection": "target"
+          },
+          "failureMode": "fatal",
+          "entityTypes": [
+            "any"
+          ]
+        }
+      },
+      "step": {
+        "id": "metadataSync",
+        "phase": "metadata",
+        "kind": "metadataSync",
+        "title": "Metadata sync",
+        "description": "Apply transactional metadata changes for the selected gate metadata scope."
+      }
+    },
+    "780:2": {
+      "stepTypeId": "metaRefresh",
+      "stepType": {
+        "id": "metaRefresh",
+        "label": "metaRefresh",
+        "definition": {
+          "summary": "Refresh gate metadata",
+          "description": "GET gate service /api/meta/refresh.",
+          "handler": {
+            "type": "http_request",
+            "connection": "target",
+            "httpService": "gate",
+            "httpMethod": "GET",
+            "httpPath": "/api/meta/refresh"
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "gateMetadata"
+          ]
+        }
+      },
+      "step": {
+        "id": "metaRefresh",
+        "phase": "postMetadata",
+        "kind": "metaRefresh",
+        "title": "Meta refresh",
+        "description": "Refresh target gate metadata."
+      }
+    },
+    "780:3": {
+      "stepTypeId": "pipelineStart",
+      "stepType": {
+        "id": "pipelineStart",
+        "label": "pipelineStart",
+        "definition": {
+          "summary": "Start pipeline run",
+          "description": "POST to agent /pipeline/start with pipeline name from step.",
+          "handler": {
+            "type": "http_request",
+            "connection": "target",
+            "httpService": "agent",
+            "httpMethod": "POST",
+            "httpPath": "/pipeline/start",
+            "httpBody": [
+              {
+                "name": "name",
+                "source": {
+                  "type": "stepField",
+                  "field": "pipelineName"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "gateMetadata",
+            "pipelineActivity"
+          ],
+          "publishedOutputs": [
+            "name"
+          ]
+        }
+      },
+      "step": {
+        "id": "pipelineStart",
+        "phase": "postMetadata",
+        "kind": "pipelineStart",
+        "title": "Pipeline start",
+        "description": "Start the downstream gate refresh pipeline.",
+        "pipelineName": "All Lists content item population"
+      }
+    },
+    "788:1": {
+      "stepTypeId": "auditCheck",
+      "stepType": {
+        "id": "auditCheck",
+        "label": "auditCheck",
+        "definition": {
+          "summary": "Audit gate (sync or not)",
+          "description": "Calls core.uspAuditRunCheck on source with action syncOrNot.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "source",
+            "procedure": "core.uspAuditRunCheck",
+            "parameters": [
+              {
+                "name": "id",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "objType",
+                "source": {
+                  "type": "stepField",
+                  "field": "auditObjectType"
+                }
+              },
+              {
+                "name": "action",
+                "source": {
+                  "type": "literal",
+                  "value": "syncOrNot"
+                }
+              },
+              {
+                "name": "schema",
+                "source": {
+                  "type": "literal",
+                  "value": "core"
+                }
+              }
+            ]
+          },
+          "failureMode": "fatal",
+          "entityTypes": [
+            "content",
+            "contract",
+            "dataset",
+            "rule"
+          ],
+          "publishedOutputs": [
+            "action",
+            "id",
+            "objType",
+            "schema"
+          ]
+        }
+      },
+      "step": {
+        "id": "auditCheck",
+        "phase": "preTransaction",
+        "kind": "auditCheck",
+        "title": "Audit check (before sync)",
+        "description": "Source uspAuditRunCheck — decide whether metadata sync should run.",
+        "auditObjectType": "Contract"
+      }
+    },
+    "788:2": {
+      "stepTypeId": "targetLock",
+      "stepType": {
+        "id": "targetLock",
+        "label": "targetLock",
+        "definition": {
+          "summary": "Lock contract on source",
+          "description": "Sets contract lock on source via core.uspSetContractLock (isLocked=true).",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "source",
+            "procedure": "core.uspSetContractLock",
+            "parameters": [
+              {
+                "name": "contractId",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "isLocked",
+                "source": {
+                  "type": "literal",
+                  "value": true
+                }
+              }
+            ]
+          },
+          "failureMode": "fatal",
+          "entityTypes": [
+            "contract"
+          ],
+          "publishedOutputs": [
+            "contractId",
+            "isLocked"
+          ]
+        }
+      },
+      "step": {
+        "id": "targetLock",
+        "phase": "preTransaction",
+        "kind": "targetLock",
+        "title": "Target lock",
+        "description": "Lock the target contract deployment window."
+      }
+    },
+    "788:3": {
+      "stepTypeId": "metadataSync",
+      "stepType": {
+        "id": "metadataSync",
+        "label": "Apply metadata change set",
+        "definition": {
+          "summary": "Apply metadata change set",
+          "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+          "handler": {
+            "type": "metadata_sync",
+            "connection": "target"
+          },
+          "failureMode": "fatal",
+          "entityTypes": [
+            "any"
+          ]
+        }
+      },
+      "step": {
+        "id": "metadataSync",
+        "phase": "metadata",
+        "kind": "metadataSync",
+        "title": "Metadata sync",
+        "description": "Apply transactional metadata changes for the selected contract scope."
+      }
+    },
+    "788:4": {
+      "stepTypeId": "pipelineRegister",
+      "stepType": {
+        "id": "pipelineRegister",
+        "label": "pipelineRegister",
+        "definition": {
+          "summary": "Register pipeline with agent",
+          "description": "POST to agent /pipeline/register for contract pipeline subject.",
+          "handler": {
+            "type": "http_request",
+            "connection": "target",
+            "httpService": "agent",
+            "httpMethod": "POST",
+            "httpPath": "/pipeline/register",
+            "httpBody": [
+              {
+                "name": "pipelineId"
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract",
+            "pipelineActivity"
+          ],
+          "publishedOutputs": [
+            "pipelineId"
+          ]
+        }
+      },
+      "step": {
+        "id": "pipelineRegister",
+        "phase": "postMetadata",
+        "kind": "pipelineRegister",
+        "title": "Pipeline register",
+        "description": "Register affected pipelines with the target agent service.",
+        "bindings": {
+          "pipelineId": {
+            "type": "contractPipelineId"
+          }
+        }
+      }
+    },
+    "788:5": {
+      "stepTypeId": "contractUndeploy",
+      "stepType": {
+        "id": "contractUndeploy",
+        "label": "contractUndeploy",
+        "definition": {
+          "summary": "Undeploy marked contract",
+          "description": "Runs core.uspUndeployMarkedContract on target for the contract entity.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspUndeployMarkedContract",
+            "parameters": [
+              {
+                "name": "contractId",
+                "source": {
+                  "type": "planEntityId"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract"
+          ],
+          "publishedOutputs": [
+            "contractId"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractUndeploy",
+        "phase": "postMetadata",
+        "kind": "contractUndeploy",
+        "title": "Contract undeploy",
+        "description": "Undeploy the target contract before redeployment."
+      }
+    },
+    "788:6": {
+      "stepTypeId": "targetUnlock",
+      "stepType": {
+        "id": "targetUnlock",
+        "label": "targetUnlock",
+        "definition": {
+          "summary": "Unlock contract on source",
+          "description": "Clears contract lock on source via core.uspSetContractLock (isLocked=false).",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "source",
+            "procedure": "core.uspSetContractLock",
+            "parameters": [
+              {
+                "name": "contractId",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "isLocked",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract"
+          ],
+          "publishedOutputs": [
+            "contractId",
+            "isLocked"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractUnlockAfterUndeploy",
+        "phase": "postMetadata",
+        "kind": "targetUnlock",
+        "title": "Unlock after undeploy",
+        "description": "Unlock the contract after undeploy."
+      }
+    },
+    "788:7": {
+      "stepTypeId": "auditCheck",
+      "stepType": {
+        "id": "auditCheck",
+        "label": "auditCheck",
+        "definition": {
+          "summary": "Audit gate (sync or not)",
+          "description": "Calls core.uspAuditRunCheck on source with action syncOrNot.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "source",
+            "procedure": "core.uspAuditRunCheck",
+            "parameters": [
+              {
+                "name": "id",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "objType",
+                "source": {
+                  "type": "stepField",
+                  "field": "auditObjectType"
+                }
+              },
+              {
+                "name": "action",
+                "source": {
+                  "type": "literal",
+                  "value": "syncOrNot"
+                }
+              },
+              {
+                "name": "schema",
+                "source": {
+                  "type": "literal",
+                  "value": "core"
+                }
+              }
+            ]
+          },
+          "failureMode": "fatal",
+          "entityTypes": [
+            "content",
+            "contract",
+            "dataset",
+            "rule"
+          ],
+          "publishedOutputs": [
+            "action",
+            "id",
+            "objType",
+            "schema"
+          ]
+        }
+      },
+      "step": {
+        "id": "auditCheckPreDeploy",
+        "phase": "postMetadata",
+        "kind": "auditCheck",
+        "title": "Audit check (before deploy)",
+        "description": "Re-run source audit after undeploy, before physical dataset creation.",
+        "auditObjectType": "Contract"
+      }
+    },
+    "788:8": {
+      "stepTypeId": "targetLock",
+      "stepType": {
+        "id": "targetLock",
+        "label": "targetLock",
+        "definition": {
+          "summary": "Lock contract on source",
+          "description": "Sets contract lock on source via core.uspSetContractLock (isLocked=true).",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "source",
+            "procedure": "core.uspSetContractLock",
+            "parameters": [
+              {
+                "name": "contractId",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "isLocked",
+                "source": {
+                  "type": "literal",
+                  "value": true
+                }
+              }
+            ]
+          },
+          "failureMode": "fatal",
+          "entityTypes": [
+            "contract"
+          ],
+          "publishedOutputs": [
+            "contractId",
+            "isLocked"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractLockForDeploy",
+        "phase": "postMetadata",
+        "kind": "targetLock",
+        "title": "Lock for deploy",
+        "description": "Lock the contract for deployment."
+      }
+    },
+    "788:9": {
+      "stepTypeId": "contractPreScript",
+      "stepType": {
+        "id": "contractPreScript",
+        "label": "contractPreScript",
+        "definition": {
+          "summary": "Contract pre-deployment script",
+          "description": "Runs core.uspRunContractDeploymentScripts with action Run preScript.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspRunContractDeploymentScripts",
+            "parameters": [
+              {
+                "name": "contractName",
+                "source": {
+                  "type": "contractName"
+                }
+              },
+              {
+                "name": "action",
+                "source": {
+                  "type": "literal",
+                  "value": "Run preScript"
+                }
+              },
+              {
+                "name": "isDebug",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract"
+          ],
+          "publishedOutputs": [
+            "action",
+            "contractName",
+            "isDebug"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractPreScript",
+        "phase": "postMetadata",
+        "kind": "contractPreScript",
+        "title": "Pre-deploy script",
+        "description": "Run contract pre-deployment scripts."
+      }
+    },
+    "788:10": {
+      "stepTypeId": "contractCreateStageDataset",
+      "stepType": {
+        "id": "contractCreateStageDataset",
+        "label": "contractCreateStageDataset",
+        "definition": {
+          "summary": "Create stage dataset",
+          "description": "Creates the contract stage dataset layer on the target via core.uspCreateDataset (@type=stage).",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspCreateDataset",
+            "parameters": [
+              {
+                "name": "ContractName",
+                "source": {
+                  "type": "contractName"
+                }
+              },
+              {
+                "name": "type",
+                "source": {
+                  "type": "literal",
+                  "value": "stage"
+                }
+              },
+              {
+                "name": "isDebug",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              },
+              {
+                "name": "isExtraLogged",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract"
+          ],
+          "createsDatasetLayer": true,
+          "publishedOutputs": [
+            "ContractName",
+            "isDebug",
+            "isExtraLogged",
+            "type"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractCreateDatasetStage",
+        "phase": "postMetadata",
+        "kind": "contractCreateStageDataset",
+        "title": "Create stage dataset",
+        "description": "Create the stage dataset."
+      }
+    },
+    "788:11": {
+      "stepTypeId": "contractCreateArchiveDataset",
+      "stepType": {
+        "id": "contractCreateArchiveDataset",
+        "label": "contractCreateArchiveDataset",
+        "definition": {
+          "summary": "Create archive dataset",
+          "description": "Creates the contract archive dataset layer on the target via core.uspCreateDataset (@type=archive).",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspCreateDataset",
+            "parameters": [
+              {
+                "name": "ContractName",
+                "source": {
+                  "type": "contractName"
+                }
+              },
+              {
+                "name": "type",
+                "source": {
+                  "type": "literal",
+                  "value": "archive"
+                }
+              },
+              {
+                "name": "isDebug",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              },
+              {
+                "name": "isExtraLogged",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract"
+          ],
+          "createsDatasetLayer": true,
+          "publishedOutputs": [
+            "ContractName",
+            "isDebug",
+            "isExtraLogged",
+            "type"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractCreateDatasetArchive",
+        "phase": "postMetadata",
+        "kind": "contractCreateArchiveDataset",
+        "title": "Create archive dataset",
+        "description": "Create the archive dataset."
+      }
+    },
+    "788:12": {
+      "stepTypeId": "contractCreateListDataset",
+      "stepType": {
+        "id": "contractCreateListDataset",
+        "label": "contractCreateListDataset",
+        "definition": {
+          "summary": "Create list dataset",
+          "description": "Creates the contract list dataset layer on the target via core.uspCreateDataset (@type=list).",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspCreateDataset",
+            "parameters": [
+              {
+                "name": "ContractName",
+                "source": {
+                  "type": "contractName"
+                }
+              },
+              {
+                "name": "type",
+                "source": {
+                  "type": "literal",
+                  "value": "list"
+                }
+              },
+              {
+                "name": "isDebug",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              },
+              {
+                "name": "isExtraLogged",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract"
+          ],
+          "createsDatasetLayer": true,
+          "publishedOutputs": [
+            "ContractName",
+            "isDebug",
+            "isExtraLogged",
+            "type"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractCreateDatasetList",
+        "phase": "postMetadata",
+        "kind": "contractCreateListDataset",
+        "title": "Create list dataset",
+        "description": "Create the list dataset."
+      }
+    },
+    "788:13": {
+      "stepTypeId": "contractCreateDimDataset",
+      "stepType": {
+        "id": "contractCreateDimDataset",
+        "label": "contractCreateDimDataset",
+        "definition": {
+          "summary": "Create dim dataset",
+          "description": "Creates the contract dim dataset layer on the target via core.uspCreateDataset (@type=dim).",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspCreateDataset",
+            "parameters": [
+              {
+                "name": "ContractName",
+                "source": {
+                  "type": "contractName"
+                }
+              },
+              {
+                "name": "type",
+                "source": {
+                  "type": "literal",
+                  "value": "dim"
+                }
+              },
+              {
+                "name": "isDebug",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              },
+              {
+                "name": "isExtraLogged",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract"
+          ],
+          "createsDatasetLayer": true,
+          "publishedOutputs": [
+            "ContractName",
+            "isDebug",
+            "isExtraLogged",
+            "type"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractCreateDatasetDim",
+        "phase": "postMetadata",
+        "kind": "contractCreateDimDataset",
+        "title": "Create dim dataset",
+        "description": "Create the dimension dataset."
+      }
+    },
+    "788:14": {
+      "stepTypeId": "contractCreateFactDataset",
+      "stepType": {
+        "id": "contractCreateFactDataset",
+        "label": "contractCreateFactDataset",
+        "definition": {
+          "summary": "Create fact dataset",
+          "description": "Creates the contract fact dataset layer on the target via core.uspCreateDataset (@type=fact).",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspCreateDataset",
+            "parameters": [
+              {
+                "name": "ContractName",
+                "source": {
+                  "type": "contractName"
+                }
+              },
+              {
+                "name": "type",
+                "source": {
+                  "type": "literal",
+                  "value": "fact"
+                }
+              },
+              {
+                "name": "isDebug",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              },
+              {
+                "name": "isExtraLogged",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract"
+          ],
+          "createsDatasetLayer": true,
+          "publishedOutputs": [
+            "ContractName",
+            "isDebug",
+            "isExtraLogged",
+            "type"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractCreateDatasetFact",
+        "phase": "postMetadata",
+        "kind": "contractCreateFactDataset",
+        "title": "Create fact dataset",
+        "description": "Create the fact dataset."
+      }
+    },
+    "788:15": {
+      "stepTypeId": "contractCreateDatasetFks",
+      "stepType": {
+        "id": "contractCreateDatasetFks",
+        "label": "contractCreateDatasetFks",
+        "definition": {
+          "summary": "Create dataset foreign keys",
+          "description": "Runs core.uspCreateDatasetFKs after dataset layers exist.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspCreateDatasetFKs",
+            "parameters": [
+              {
+                "name": "contractName",
+                "source": {
+                  "type": "contractName"
+                }
+              },
+              {
+                "name": "isDebug",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              },
+              {
+                "name": "referencedSchemaName",
+                "source": {
+                  "type": "literal",
+                  "value": null
+                }
+              },
+              {
+                "name": "referencedTableName",
+                "source": {
+                  "type": "literal",
+                  "value": null
+                }
+              },
+              {
+                "name": "isExtraLogged",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "skipWhenDatasetLayerFailed": true,
+          "entityTypes": [
+            "contract"
+          ],
+          "publishedOutputs": [
+            "contractName",
+            "isDebug",
+            "isExtraLogged",
+            "referencedSchemaName",
+            "referencedTableName"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractCreateFks",
+        "phase": "postMetadata",
+        "kind": "contractCreateDatasetFks",
+        "title": "Create dataset FKs",
+        "description": "Reconcile contract dataset foreign keys."
+      }
+    },
+    "788:16": {
+      "stepTypeId": "contractDeployEtl",
+      "stepType": {
+        "id": "contractDeployEtl",
+        "label": "contractDeployEtl",
+        "definition": {
+          "summary": "Deploy ETL transformation",
+          "description": "Runs core.uspDeployETL2CustomTransformation for the contract on target.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspDeployETL2CustomTransformation",
+            "parameters": [
+              {
+                "name": "contractName",
+                "source": {
+                  "type": "contractName"
+                }
+              },
+              {
+                "name": "isDebug",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "skipWhenDatasetLayerFailed": true,
+          "entityTypes": [
+            "contract"
+          ],
+          "publishedOutputs": [
+            "contractName",
+            "isDebug"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractDeployEtl",
+        "phase": "postMetadata",
+        "kind": "contractDeployEtl",
+        "title": "Deploy ETL",
+        "description": "Deploy ETL custom transformations."
+      }
+    },
+    "788:17": {
+      "stepTypeId": "contractDeployRoutine",
+      "stepType": {
+        "id": "contractDeployRoutine",
+        "label": "contractDeployRoutine",
+        "definition": {
+          "summary": "Deploy routine",
+          "description": "Runs core.uspDeployRoutine for the contract on target.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspDeployRoutine",
+            "parameters": [
+              {
+                "name": "contractName",
+                "source": {
+                  "type": "contractName"
+                }
+              },
+              {
+                "name": "isExtraLogged",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              },
+              {
+                "name": "isDebug",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "skipWhenDatasetLayerFailed": true,
+          "entityTypes": [
+            "contract"
+          ],
+          "publishedOutputs": [
+            "contractName",
+            "isDebug",
+            "isExtraLogged"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractDeployRoutine",
+        "phase": "postMetadata",
+        "kind": "contractDeployRoutine",
+        "title": "Deploy routines",
+        "description": "Deploy contract routines."
+      }
+    },
+    "788:18": {
+      "stepTypeId": "contractPostScript",
+      "stepType": {
+        "id": "contractPostScript",
+        "label": "contractPostScript",
+        "definition": {
+          "summary": "Contract post-deployment script",
+          "description": "Runs core.uspRunContractDeploymentScripts with action Run postScript.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspRunContractDeploymentScripts",
+            "parameters": [
+              {
+                "name": "contractName",
+                "source": {
+                  "type": "contractName"
+                }
+              },
+              {
+                "name": "action",
+                "source": {
+                  "type": "literal",
+                  "value": "Run postScript"
+                }
+              },
+              {
+                "name": "isDebug",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "skipWhenDatasetLayerFailed": true,
+          "entityTypes": [
+            "contract"
+          ],
+          "publishedOutputs": [
+            "action",
+            "contractName",
+            "isDebug"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractPostScript",
+        "phase": "postMetadata",
+        "kind": "contractPostScript",
+        "title": "Post-deploy script",
+        "description": "Run contract post-deployment scripts."
+      }
+    },
+    "788:19": {
+      "stepTypeId": "targetUnlock",
+      "stepType": {
+        "id": "targetUnlock",
+        "label": "targetUnlock",
+        "definition": {
+          "summary": "Unlock contract on source",
+          "description": "Clears contract lock on source via core.uspSetContractLock (isLocked=false).",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "source",
+            "procedure": "core.uspSetContractLock",
+            "parameters": [
+              {
+                "name": "contractId",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "isLocked",
+                "source": {
+                  "type": "literal",
+                  "value": false
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract"
+          ],
+          "publishedOutputs": [
+            "contractId",
+            "isLocked"
+          ]
+        }
+      },
+      "step": {
+        "id": "contractUnlockAfterDeploy",
+        "phase": "postMetadata",
+        "kind": "targetUnlock",
+        "title": "Unlock after deploy",
+        "description": "Unlock the contract after deployment."
+      }
+    },
+    "788:20": {
+      "stepTypeId": "syncDate",
+      "stepType": {
+        "id": "syncDate",
+        "label": "syncDate",
+        "definition": {
+          "summary": "Record sync date (source audit)",
+          "description": "core.uspAuditRunCheck on source with action syncDate.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "source",
+            "procedure": "core.uspAuditRunCheck",
+            "parameters": [
+              {
+                "name": "id",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "objType",
+                "source": {
+                  "type": "stepField",
+                  "field": "auditObjectType"
+                }
+              },
+              {
+                "name": "action",
+                "source": {
+                  "type": "literal",
+                  "value": "syncDate"
+                }
+              },
+              {
+                "name": "schema",
+                "source": {
+                  "type": "literal",
+                  "value": "core"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "content",
+            "contract",
+            "dataset",
+            "rule"
+          ],
+          "publishedOutputs": [
+            "action",
+            "id",
+            "objType",
+            "schema"
+          ]
+        }
+      },
+      "step": {
+        "id": "setSyncDate",
+        "phase": "postMetadata",
+        "kind": "syncDate",
+        "title": "Sync date",
+        "description": "Stamp the contract sync date.",
+        "auditObjectType": "Contract"
+      }
+    },
+    "788:21": {
+      "stepTypeId": "deployDate",
+      "stepType": {
+        "id": "deployDate",
+        "label": "deployDate",
+        "definition": {
+          "summary": "Record deploy date (target audit)",
+          "description": "core.uspAuditRunCheck on target with action deployDate.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspAuditRunCheck",
+            "parameters": [
+              {
+                "name": "id",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "objType",
+                "source": {
+                  "type": "stepField",
+                  "field": "auditObjectType"
+                }
+              },
+              {
+                "name": "action",
+                "source": {
+                  "type": "literal",
+                  "value": "deployDate"
+                }
+              },
+              {
+                "name": "schema",
+                "source": {
+                  "type": "literal",
+                  "value": "core"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "skipWhenDatasetLayerFailed": true,
+          "entityTypes": [
+            "content",
+            "contract",
+            "dataset",
+            "rule"
+          ],
+          "publishedOutputs": [
+            "action",
+            "id",
+            "objType",
+            "schema"
+          ]
+        }
+      },
+      "step": {
+        "id": "setDeployDate",
+        "phase": "postMetadata",
+        "kind": "deployDate",
+        "title": "Deploy date",
+        "description": "Stamp the contract deploy date.",
+        "auditObjectType": "Contract"
+      }
+    },
+    "791:1": {
+      "stepTypeId": "metadataSync",
+      "stepType": {
+        "id": "metadataSync",
+        "label": "Apply metadata change set",
+        "definition": {
+          "summary": "Apply metadata change set",
+          "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+          "handler": {
+            "type": "metadata_sync",
+            "connection": "target"
+          },
+          "failureMode": "fatal",
+          "entityTypes": [
+            "any"
+          ]
+        }
+      },
+      "step": {
+        "id": "metadataSync",
+        "phase": "metadata",
+        "kind": "metadataSync",
+        "title": "Metadata sync",
+        "description": "Apply transactional metadata changes for the selected rule scope."
+      }
+    },
+    "791:2": {
+      "stepTypeId": "datasetDeploy",
+      "stepType": {
+        "id": "datasetDeploy",
+        "label": "datasetDeploy",
+        "definition": {
+          "summary": "Deploy dataset via ETL service",
+          "description": "POST to ETL service /dataset/deploy for the resolved subject.",
+          "handler": {
+            "type": "http_request",
+            "connection": "target",
+            "httpService": "etl",
+            "httpMethod": "POST",
+            "httpPath": "/dataset/deploy",
+            "httpBody": [
+              {
+                "name": "datasetId"
+              },
+              {
+                "name": "userFullName",
+                "source": {
+                  "type": "planActor"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "dataset",
+            "rule"
+          ],
+          "publishedOutputs": [
+            "datasetId",
+            "userFullName"
+          ]
+        }
+      },
+      "step": {
+        "id": "datasetDeploy",
+        "phase": "postMetadata",
+        "kind": "datasetDeploy",
+        "title": "Dataset deploy",
+        "description": "Deploy datasets required by the rule on the target ETL service.",
+        "bindings": {
+          "datasetId": {
+            "type": "ruleInputDatasetId"
+          }
+        }
+      }
+    },
+    "791:3": {
+      "stepTypeId": "rulesDeploy",
+      "stepType": {
+        "id": "rulesDeploy",
+        "label": "rulesDeploy",
+        "definition": {
+          "summary": "Deploy rules via ETL service",
+          "description": "POST to ETL service /rules/deploy with ruleId.",
+          "handler": {
+            "type": "http_request",
+            "connection": "target",
+            "httpService": "etl",
+            "httpMethod": "POST",
+            "httpPath": "/rules/deploy",
+            "httpBody": [
+              {
+                "name": "ruleId",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "userFullName",
+                "source": {
+                  "type": "planActor"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "rule"
+          ],
+          "publishedOutputs": [
+            "ruleId",
+            "userFullName"
+          ]
+        }
+      },
+      "step": {
+        "id": "rulesDeploy",
+        "phase": "postMetadata",
+        "kind": "rulesDeploy",
+        "title": "Rules deploy",
+        "description": "Deploy the rule package on the target ETL service."
+      }
+    },
+    "791:4": {
+      "stepTypeId": "syncDate",
+      "stepType": {
+        "id": "syncDate",
+        "label": "syncDate",
+        "definition": {
+          "summary": "Record sync date (source audit)",
+          "description": "core.uspAuditRunCheck on source with action syncDate.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "source",
+            "procedure": "core.uspAuditRunCheck",
+            "parameters": [
+              {
+                "name": "id",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "objType",
+                "source": {
+                  "type": "stepField",
+                  "field": "auditObjectType"
+                }
+              },
+              {
+                "name": "action",
+                "source": {
+                  "type": "literal",
+                  "value": "syncDate"
+                }
+              },
+              {
+                "name": "schema",
+                "source": {
+                  "type": "literal",
+                  "value": "core"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "content",
+            "contract",
+            "dataset",
+            "rule"
+          ],
+          "publishedOutputs": [
+            "action",
+            "id",
+            "objType",
+            "schema"
+          ]
+        }
+      },
+      "step": {
+        "id": "syncDate",
+        "phase": "postMetadata",
+        "kind": "syncDate",
+        "title": "Sync date",
+        "description": "Stamp the rule sync date.",
+        "auditObjectType": "Rule"
+      }
+    },
+    "791:5": {
+      "stepTypeId": "deployDate",
+      "stepType": {
+        "id": "deployDate",
+        "label": "deployDate",
+        "definition": {
+          "summary": "Record deploy date (target audit)",
+          "description": "core.uspAuditRunCheck on target with action deployDate.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "target",
+            "procedure": "core.uspAuditRunCheck",
+            "parameters": [
+              {
+                "name": "id",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "objType",
+                "source": {
+                  "type": "stepField",
+                  "field": "auditObjectType"
+                }
+              },
+              {
+                "name": "action",
+                "source": {
+                  "type": "literal",
+                  "value": "deployDate"
+                }
+              },
+              {
+                "name": "schema",
+                "source": {
+                  "type": "literal",
+                  "value": "core"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "skipWhenDatasetLayerFailed": true,
+          "entityTypes": [
+            "content",
+            "contract",
+            "dataset",
+            "rule"
+          ],
+          "publishedOutputs": [
+            "action",
+            "id",
+            "objType",
+            "schema"
+          ]
+        }
+      },
+      "step": {
+        "id": "deployDate",
+        "phase": "postMetadata",
+        "kind": "deployDate",
+        "title": "Deploy date",
+        "description": "Stamp the rule deploy date.",
+        "auditObjectType": "Rule"
+      }
+    },
+    "792:1": {
+      "stepTypeId": "metadataSync",
+      "stepType": {
+        "id": "metadataSync",
+        "label": "Apply metadata change set",
+        "definition": {
+          "summary": "Apply metadata change set",
+          "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+          "handler": {
+            "type": "metadata_sync",
+            "connection": "target"
+          },
+          "failureMode": "fatal",
+          "entityTypes": [
+            "any"
+          ]
+        }
+      },
+      "step": {
+        "id": "metadataSync",
+        "phase": "metadata",
+        "kind": "metadataSync",
+        "title": "Metadata sync",
+        "description": "Apply transactional metadata changes for the selected dataset scope."
+      }
+    },
+    "792:2": {
+      "stepTypeId": "datasetDeploy",
+      "stepType": {
+        "id": "datasetDeploy",
+        "label": "datasetDeploy",
+        "definition": {
+          "summary": "Deploy dataset via ETL service",
+          "description": "POST to ETL service /dataset/deploy for the resolved subject.",
+          "handler": {
+            "type": "http_request",
+            "connection": "target",
+            "httpService": "etl",
+            "httpMethod": "POST",
+            "httpPath": "/dataset/deploy",
+            "httpBody": [
+              {
+                "name": "datasetId"
+              },
+              {
+                "name": "userFullName",
+                "source": {
+                  "type": "planActor"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "dataset",
+            "rule"
+          ],
+          "publishedOutputs": [
+            "datasetId",
+            "userFullName"
+          ]
+        }
+      },
+      "step": {
+        "id": "datasetDeploy",
+        "phase": "postMetadata",
+        "kind": "datasetDeploy",
+        "title": "Dataset deploy",
+        "description": "Deploy the dataset using the target ETL service.",
+        "bindings": {
+          "datasetId": {
+            "type": "planEntityId"
+          }
+        }
+      }
+    },
+    "792:3": {
+      "stepTypeId": "syncDate",
+      "stepType": {
+        "id": "syncDate",
+        "label": "syncDate",
+        "definition": {
+          "summary": "Record sync date (source audit)",
+          "description": "core.uspAuditRunCheck on source with action syncDate.",
+          "handler": {
+            "type": "mssql_procedure",
+            "connection": "source",
+            "procedure": "core.uspAuditRunCheck",
+            "parameters": [
+              {
+                "name": "id",
+                "source": {
+                  "type": "planEntityId"
+                }
+              },
+              {
+                "name": "objType",
+                "source": {
+                  "type": "stepField",
+                  "field": "auditObjectType"
+                }
+              },
+              {
+                "name": "action",
+                "source": {
+                  "type": "literal",
+                  "value": "syncDate"
+                }
+              },
+              {
+                "name": "schema",
+                "source": {
+                  "type": "literal",
+                  "value": "core"
+                }
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "content",
+            "contract",
+            "dataset",
+            "rule"
+          ],
+          "publishedOutputs": [
+            "action",
+            "id",
+            "objType",
+            "schema"
+          ]
+        }
+      },
+      "step": {
+        "id": "syncDate",
+        "phase": "postMetadata",
+        "kind": "syncDate",
+        "title": "Sync date",
+        "description": "Stamp the dataset sync date after deployment.",
+        "auditObjectType": "Dataset"
+      }
+    },
+    "798:1": {
+      "stepTypeId": "metadataSync",
+      "stepType": {
+        "id": "metadataSync",
+        "label": "Apply metadata change set",
+        "definition": {
+          "summary": "Apply metadata change set",
+          "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
+          "handler": {
+            "type": "metadata_sync",
+            "connection": "target"
+          },
+          "failureMode": "fatal",
+          "entityTypes": [
+            "any"
+          ]
+        }
+      },
+      "step": {
+        "id": "metadataSync",
+        "phase": "metadata",
+        "kind": "metadataSync",
+        "title": "Metadata sync",
+        "description": "Apply transactional metadata changes for the selected pipeline activity scope."
+      }
+    },
+    "798:2": {
+      "stepTypeId": "pipelineRegister",
+      "stepType": {
+        "id": "pipelineRegister",
+        "label": "pipelineRegister",
+        "definition": {
+          "summary": "Register pipeline with agent",
+          "description": "POST to agent /pipeline/register for contract pipeline subject.",
+          "handler": {
+            "type": "http_request",
+            "connection": "target",
+            "httpService": "agent",
+            "httpMethod": "POST",
+            "httpPath": "/pipeline/register",
+            "httpBody": [
+              {
+                "name": "pipelineId"
+              }
+            ]
+          },
+          "failureMode": "warning",
+          "entityTypes": [
+            "contract",
+            "pipelineActivity"
+          ],
+          "publishedOutputs": [
+            "pipelineId"
+          ]
+        }
+      },
+      "step": {
+        "id": "pipelineRegister",
+        "phase": "postMetadata",
+        "kind": "pipelineRegister",
+        "title": "Pipeline register",
+        "description": "Register the target pipeline with the agent service.",
+        "bindings": {
+          "pipelineId": {
+            "type": "planEntityId"
+          }
+        }
+      }
+    }
+  }
+}

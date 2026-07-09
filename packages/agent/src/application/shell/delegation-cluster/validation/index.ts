@@ -22,7 +22,7 @@ import {
   gateContradictoryCompletion,
   gateExecutableVerification
 } from "./gates-completion.js"
-import { gateBrowserEvidence, gateFileArtifactEvidence, gateTargetCoverage } from "./gates-coverage.js"
+import { gateFileArtifactEvidence, gateTargetCoverage } from "./gates-coverage.js"
 import { gateBlockedPhase, gatePresence, gateUnresolvedHandoff } from "./gates-presence.js"
 import {
   gateFileMutation,
@@ -51,9 +51,7 @@ export {
   classifyTaskIntent,
   extractAcceptanceTokens,
   isFileMutationToolCall,
-  isLowSignalBrowserToolCall,
   isWorkspaceInspectionToolCall,
-  specRequiresBrowserEvidence,
   specRequiresFileMutationEvidence,
   specRequiresSuccessfulToolEvidence,
   specRequiresWorkspaceInspection,
@@ -102,7 +100,6 @@ export function validateDelegatedOutputContract(params: {
     gateRequiredSourceEvidence, // 7: required-source-artifact reads
     gateFileArtifactEvidence, // 8:   file artifact mentioned
     gateTargetCoverage, // 8b:  target coverage + reference integrity
-    gateBrowserEvidence, // 9:   browser evidence quality
     gateContradictoryCompletion, // 11: claim vs unresolved work
     gateExecutableVerification, // 12: executable verification evidence
     gateAcceptanceCriteria // 13: acceptance-criteria token coverage

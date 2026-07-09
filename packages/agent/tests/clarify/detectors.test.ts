@@ -319,11 +319,11 @@ describe("termUndefinedDetector", () => {
     expect(findings[0]!.severity).toBe("block")
   })
 
-  it("stays silent when the phrase is in tenant routingKeywords.domain", () => {
+  it("stays silent when the phrase is in tenant domainKeywords", () => {
     const cat = catalogFrom([table("publish", "Sales", [col("amount", "decimal")])])
     const tenant: TenantConfig = {
       ...DEFAULT_TENANT_CONFIG,
-      routingKeywords: { schemas: [], domain: ["corporate"], sync: [] }
+      domainKeywords: ["corporate"]
     }
     expect(
       termUndefinedDetector.detect(ctx({ goal: "Give me Corporate results", catalog: cat, tenant }))

@@ -13,13 +13,6 @@ export type {
   AgentHost,
   AttachmentMetadata,
   AttachmentStore as AttachmentService,
-  BrowserClient,
-  BrowserContextHandle,
-  BrowserContextReader as BrowserContextProvider,
-  CredentialReader as BrowserCredentialProvider,
-  BrowserGuard,
-  HandoffStore as BrowserHandoffProvider,
-  ConfigureAgentBrowserOptions,
   ConfigureAgentOptions,
   ConfigureAgentSyncOptions,
   ConfigureMssqlConnection,
@@ -89,13 +82,28 @@ export * from "./tools/index.js"
 export {
   DEFAULT_CATALOG_BOOTSTRAP,
   DEFAULT_TENANT_CONFIG,
+  formatTenantConfigBootSummary,
   getTenantConfig,
   isDefaultTenantConfig,
   loadTenantConfigFromEnv,
+  loadTenantConfigFromFile,
   resetTenantConfig,
+  resolveTenantConfigPath,
   setTenantConfig
 } from "./application/shell/tenant-config.js"
 export type { CatalogBootstrapMetadata, TenantConfig } from "./application/shell/tenant-config.js"
+export {
+  getPublishedSyncEntityIds,
+  loadPublishedSyncEntityIdsFromBundle,
+  resetPublishedSyncEntityIds,
+  setPublishedSyncEntityIds
+} from "./application/shell/published-sync-vocabulary.js"
+export {
+  buildKnownVocabulary,
+  catalogSchemaTokens,
+  goalContainsDomainKeyword,
+  goalContainsSyncEntityId
+} from "./application/shell/known-vocabulary.js"
 
 // ── Planner public surface (curated subset; planner has its own index) ─
 export {

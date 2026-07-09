@@ -1,4 +1,6 @@
 export * from "./application/definitions.js"
+export * from "./application/seed-sync-metadata.js"
+export * from "./application/seed-entity-registry.js"
 export * from "./application/plan-summary.js"
 export * from "./routes.js"
 export * from "./runtime/live-environments.js"

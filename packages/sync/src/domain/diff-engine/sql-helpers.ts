@@ -9,9 +9,12 @@
  */
 
 import type sql from "mssql"
-import { emitSyncSqlEvent } from "../../application/shell/events.js"
+import { getPool } from "../../adapters/mssql/connection.js"
+import { withPoolSlot } from "../../adapters/mssql/pool-gate.js"
+import { emitSyncEvent, emitSyncSqlEvent } from "../../application/shell/events.js"
+import { EventType } from "../enums.js"
 import type { SyncTelemetryContext } from "../../ports/events.js"
-import type { SyncEventHost } from "../../ports/index.js"
+import type { MssqlAccessHost, SyncEventHost } from "../../ports/host.js"
 import type { HashColumn, PkHashRow } from "./types.js"
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */
@@ -46,63 +49,76 @@ export function isTransientMssqlError(e: unknown): boolean {
 
 /**
  * Run a query with bounded retries on transient connection failures.
+ * Holds a pool gate slot for the full attempt (including retries).
  * Backoff: 100ms, 400ms (jittered).
  */
 export async function runQueryWithRetry<T = unknown>(
-  host: SyncEventHost,
-  pool: sql.ConnectionPool,
+  host: SyncEventHost & MssqlAccessHost,
+  connectionName: string,
   query: string,
   label: string,
   maxRetries = 2,
   telemetryContext?: SyncTelemetryContext
 ): Promise<sql.IResult<T>> {
-  const t0 = Date.now()
-  const connection = (pool as unknown as { config?: { database?: string } }).config?.database ?? "<unknown>"
-  let lastErr: unknown
-  let attempts = 0
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    attempts = attempt + 1
-    try {
-      const result = await pool.request().query<T>(query)
-      emitSyncSqlEvent(
-        host,
-        {
-          label,
-          connection,
-          sql: query,
-          durationMs: Date.now() - t0,
-          rowCount:
-            result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
-          attempts
-        },
-        telemetryContext
-      )
-      return result
-    } catch (e) {
-      lastErr = e
-      if (attempt === maxRetries || !isTransientMssqlError(e)) {
+  return withPoolSlot(host, connectionName, async () => {
+    const { pool } = await getPool(host, connectionName)
+    const t0 = Date.now()
+    let lastErr: unknown
+    let attempts = 0
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      attempts = attempt + 1
+      try {
+        const result = await pool.request().query<T>(query)
         emitSyncSqlEvent(
           host,
           {
             label,
-            connection,
+            connection: connectionName,
             sql: query,
             durationMs: Date.now() - t0,
-            attempts,
-            error: e instanceof Error ? e.message : String(e)
+            rowCount:
+              result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
+            attempts
           },
           telemetryContext
         )
-        throw e
+        return result
+      } catch (e) {
+        lastErr = e
+        if (attempt === maxRetries || !isTransientMssqlError(e)) {
+          emitSyncSqlEvent(
+            host,
+            {
+              label,
+              connection: connectionName,
+              sql: query,
+              durationMs: Date.now() - t0,
+              attempts,
+              error: e instanceof Error ? e.message : String(e)
+            },
+            telemetryContext
+          )
+          throw e
+        }
+        const delay = 100 * Math.pow(4, attempt) + Math.floor(Math.random() * 50)
+        const errMsg = e instanceof Error ? e.message : String(e)
+        console.warn(
+          `[sync.diff] transient error on ${label} (attempt ${attempt + 1}/${maxRetries + 1}): ${errMsg} — retrying in ${delay}ms`
+        )
+        emitSyncEvent(host, EventType.SyncRetry, {
+          phase: "diff",
+          connection: connectionName,
+          label,
+          attempt: attempt + 1,
+          maxAttempts: maxRetries + 1,
+          error: errMsg,
+          delayMs: delay
+        })
+        await new Promise((r) => setTimeout(r, delay))
       }
-      const delay = 100 * Math.pow(4, attempt) + Math.floor(Math.random() * 50)
-      console.warn(
-        `[sync.diff] transient error on ${label} (attempt ${attempt + 1}/${maxRetries + 1}): ${e instanceof Error ? e.message : String(e)} — retrying in ${delay}ms`
-      )
-      await new Promise((r) => setTimeout(r, delay))
     }
-  }
-  throw lastErr
+    throw lastErr
+  })
 }
 
 /**

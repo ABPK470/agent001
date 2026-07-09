@@ -35,7 +35,6 @@ export {
   getDeliveryStats,
   getOutboundMessages,
   listChannelConfigs,
-  migrateChannels,
   saveChannelConfig,
   SqliteConversationStore,
   SqliteQueueStore

@@ -79,7 +79,7 @@ function toMetadata(row: AttachmentRow): AttachmentMetadata {
   }
 }
 
-type AttachmentServiceContext = Pick<HostedPolicyContext, "runId" | "sandboxRoot" | "actorUpn" | "sessionId">
+type AttachmentServiceContext = Pick<HostedPolicyContext, "runId" | "sandboxRoot" | "actorUpn">
 
 function resolveContext(
   getContext: () => AttachmentServiceContext | null | undefined
@@ -125,17 +125,13 @@ export function createServerAttachmentService(
       const { runId } = ctx
       // Visibility model: the agent should see anything the user could
       // reasonably have attached to this run — items explicitly bound to
-      // the active runId, items in the active session, and items owned by
-      // the actor. Union the three; the optional q/scope filters apply to
-      // every branch so results stay consistent regardless of how a row
-      // was originally bound.
+      // Items bound to this run plus any user_draft uploads the owner staged pre-run.
       const baseFilter: { scope?: AttachmentRow["scope"]; q?: string } = {
         ...(filter?.scope ? { scope: filter.scope } : {}),
         ...(filter?.q ? { q: filter.q } : {})
       }
       const explicitRunId = filter?.runId ?? runId
       const branches: Parameters<typeof listAttachments>[0][] = [{ ...baseFilter, runId: explicitRunId }]
-      if (ctx?.sessionId) branches.push({ ...baseFilter, sessionId: ctx.sessionId })
       if (ctx?.actorUpn) branches.push({ ...baseFilter, ownerUpn: ctx.actorUpn })
       const seen = new Set<string>()
       const merged: AttachmentRow[] = []
@@ -207,7 +203,7 @@ export function createServerAttachmentService(
     },
 
     async promoteFromSandbox(sandboxRelPath, opts) {
-      const { runId, sandboxRoot, actorUpn, sessionId } = resolveContext(getContext)
+      const { runId, sandboxRoot, actorUpn } = resolveContext(getContext)
       if (!sandboxRoot) {
         throw new Error("promote_attachment requires an active sandbox; this run has none.")
       }
@@ -224,7 +220,6 @@ export function createServerAttachmentService(
         // finishes.
         scope: AttachmentScope.WorkspaceAsset,
         runId,
-        sessionId,
         ownerUpn: actorUpn ?? null,
         source: AttachmentSource.Generated,
         ...(opts?.purposeTag !== undefined ? { purposeTag: opts.purposeTag } : {})

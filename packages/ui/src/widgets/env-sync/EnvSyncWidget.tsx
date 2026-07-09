@@ -1,36 +1,48 @@
 import {
-    BookOpen,
-    CheckCircle2,
-    Eye,
-    History,
-    Key,
-    Loader2,
-    MoreHorizontal,
-    RefreshCw,
-    Search,
-    Ship,
-    X,
-    XCircle,
+  BookOpen,
+  CheckCircle2,
+  Eye,
+  History,
+  Key,
+  Loader2,
+  MoreHorizontal,
+  RefreshCw,
+  Search,
+  Ship,
+  X,
+  XCircle,
 } from "lucide-react"
-import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
 import { api } from "../../api"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import { useContainerSize } from "../../hooks/useContainerSize"
 import { useStore } from "../../store"
 import type { PublishedSyncDefinition, SyncEntityType, SyncEnvironment, SyncPlan } from "../../types"
+import { IconButton, TOOLBAR_ICON } from "../entity-registry/IconButton"
+import { ToolbarMenu, ToolbarMenuItem } from "../entity-registry/ToolbarMenu"
+import {
+  WidgetToolbar,
+  WidgetToolbarLeading,
+  WidgetToolbarSearchSlot,
+  WidgetToolbarTrailing,
+} from "../widget-toolbar"
 import { Empty, Err, Loading, ModalShell } from "./chrome"
 import { DIFF, dot, ENTITY_TYPES, normalizeOptionalTableSelection } from "./constants"
 import { DefinitionContent } from "./DefinitionContent"
-import { completeExecFromAgent, getExecPlanId, getExecSnapshot, resetExec, startExecStream, subscribeExec } from "./exec-store"
+import { cancelExec, completeExecFromAgent, getExecPlanId, getExecSnapshot, resetExec, startExecStream, subscribeExec } from "./exec-store"
+import { execPreflightBlocked, execPreflightBlockReason } from "./exec-preflight"
 import { ExecModal } from "./ExecModal"
 import { HistoryContent } from "./HistoryContent"
 import { PlanView } from "./PlanTables"
 import type { ModalKind, SearchHit } from "./types"
-
-function formatSearchHitLabel(hit: SearchHit): string {
-  return hit.name ? `${hit.name} (#${hit.id})` : String(hit.id)
-}
+import {
+  formatSearchHitLabel,
+  getPlanEntityType,
+  isPreviewEntityReady,
+  planMatchesSelection,
+  previewEntityRef,
+  type SyncSelection,
+} from "./workflow"
 
 export function EnvSync() {
   const [envs, setEnvs] = useState<SyncEnvironment[]>([])
@@ -42,6 +54,8 @@ export function EnvSync() {
 
   const form = useStore((s) => s.envSyncForm)
   const setForm = useStore((s) => s.setEnvSyncForm)
+  const plan = useStore((s) => s.envSyncPlan)
+  const setPlan = useStore((s) => s.setEnvSyncPlan)
   const agentSyncExec = useStore((s) => s.agentSyncExec)
   const clearAgentSyncExec = useStore((s) => s.clearAgentSyncExec)
   const agentSyncExecStarted = useStore((s) => s.agentSyncExecStarted)
@@ -52,17 +66,15 @@ export function EnvSync() {
   const [previewing, setPreviewing] = useState(false)
   const [planLoading, setPlanLoading] = useState(false)
   const [previewErr, setPreviewErr] = useState<string | null>(null)
-  const [plan, setPlan] = useState<SyncPlan | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [execModalOpen, setExecModalOpen] = useState(false)
   const exec = useSyncExternalStore(subscribeExec, getExecSnapshot)
   const execPlanId = useSyncExternalStore(subscribeExec, getExecPlanId)
 
-  const planSigRef = useRef<string | null>(null)
-
   const [searchResults, setSearchResults] = useState<SearchHit[]>([])
   const [searchOpen, setSearchOpen] = useState(false)
   const [searchLoading, setSearchLoading] = useState(false)
+  const [searchErr, setSearchErr] = useState<string | null>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchBoxRef = useRef<HTMLDivElement>(null)
   const [searchDraft, setSearchDraft] = useState("")
@@ -74,9 +86,44 @@ export function EnvSync() {
     () => normalizeOptionalTableSelection(definition, form.enabledOptionalTables),
     [definition, form.enabledOptionalTables],
   )
-  const resolvedEntityId = entityId.trim() || (plan ? String(plan.entity.id) : "")
-  const formSig = `${source}|${target}|${entityType}|${resolvedEntityId}|${force}|${searchMode}|${[...enabledOptionalTables].sort().join(",")}`
-  const previewEntityId = entityId.trim() || searchDraft.trim()
+
+  const selection = useMemo<SyncSelection>(
+    () => ({
+      source,
+      target,
+      entityType,
+      committedEntityId: entityId.trim(),
+      force,
+      searchMode,
+      enabledOptionalTables,
+    }),
+    [source, target, entityType, entityId, force, searchMode, enabledOptionalTables],
+  )
+
+  const previewInput = previewEntityRef(selection.committedEntityId, searchDraft)
+  const displayPlan = useMemo(
+    () => (plan && planMatchesSelection(plan, selection) ? plan : null),
+    [plan, selection],
+  )
+
+  const loadedPlanIdRef = useRef<string | null>(null)
+  const hydrateRequestRef = useRef(0)
+  const hydrateOptsRef = useRef<{ showNotFoundErr: boolean }>({ showNotFoundErr: false })
+
+  const clearPlanState = useCallback(() => {
+    setPlan(null)
+    setForm({ planId: null })
+    loadedPlanIdRef.current = null
+    setPlanLoading(false)
+  }, [setForm, setPlan])
+
+  const discardStaleWorkflow = useCallback(() => {
+    clearPlanState()
+    setExpanded(new Set())
+    setExecModalOpen(false)
+    setPreviewErr(null)
+    if (getExecSnapshot().kind !== "running") resetExec()
+  }, [clearPlanState])
 
   useEffect(() => {
     if (!definition) return
@@ -90,8 +137,6 @@ export function EnvSync() {
     setForm({ enabledOptionalTables })
   }, [definition, enabledOptionalTables, form.enabledOptionalTables, setForm])
 
-  const [searchErr, setSearchErr] = useState<string | null>(null)
-
   useEffect(() => {
     function handle(event: MouseEvent) {
       if (searchBoxRef.current?.contains(event.target as Node)) return
@@ -101,6 +146,12 @@ export function EnvSync() {
     document.addEventListener("click", handle)
     return () => document.removeEventListener("click", handle)
   }, [])
+
+  useEffect(() => {
+    if (!plan) return
+    if (planMatchesSelection(plan, selection)) return
+    discardStaleWorkflow()
+  }, [plan, selection, discardStaleWorkflow])
 
   function onSearchInput(value: string) {
     setSearchErr(null)
@@ -136,7 +187,9 @@ export function EnvSync() {
   }
 
   function pickSearchHit(hit: SearchHit) {
-    setForm({ entityId: String(hit.id) })
+    const nextId = String(hit.id)
+    if (nextId !== selection.committedEntityId) discardStaleWorkflow()
+    setForm({ entityId: nextId })
     setSearchDraft(formatSearchHitLabel(hit))
     setSearchOpen(false)
     setSearchResults([])
@@ -148,7 +201,38 @@ export function EnvSync() {
     }
   }
 
-  const loadedPlanIdRef = useRef<string | null>(null)
+  function clearStalePlanId(planId: string) {
+    if (useStore.getState().envSyncForm.planId === planId) {
+      setForm({ planId: null })
+    }
+    if (useStore.getState().envSyncPlan?.planId === planId) {
+      setPlan(null)
+    }
+    if (loadedPlanIdRef.current === planId) loadedPlanIdRef.current = null
+  }
+
+  async function fetchPlan(planId: string, opts: { showNotFoundErr: boolean }): Promise<SyncPlan | null> {
+    try {
+      const nextPlan = await api.syncPlan(planId)
+      if (nextPlan.error) {
+        if (opts.showNotFoundErr) {
+          setPreviewErr(`Plan ${planId} not found — it may have been pruned from history.`)
+        }
+        clearStalePlanId(planId)
+        return null
+      }
+      return nextPlan
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : String(error)
+      if (opts.showNotFoundErr) {
+        setPreviewErr(/not found|expired/i.test(msg)
+          ? "Plan not found — it may have been pruned from history."
+          : `Failed to load plan: ${msg}`)
+      }
+      clearStalePlanId(planId)
+      return null
+    }
+  }
 
   function applyLoadedPlan(nextPlan: SyncPlan) {
     const planEntityType = getPlanEntityType(nextPlan) ?? entityType
@@ -161,50 +245,29 @@ export function EnvSync() {
       source: nextPlan.source,
       target: nextPlan.target,
       entityType: planEntityType,
-      entityId: "",
-      enabledOptionalTables: nextPlan.recipeSnapshot?.enabledOptionalTables ?? null,
+      entityId: entityIdStr,
+      enabledOptionalTables: nextPlan.executionContract.metadata.enabledOptionalTables ?? null,
     })
     setSearchDraft(
       nextPlan.entity.displayName
-        ? `${nextPlan.entity.displayName} (#${entityIdStr})`
+        ? formatSearchHitLabel({ id: nextPlan.entity.id, name: nextPlan.entity.displayName })
         : entityIdStr,
     )
-    planSigRef.current = buildPlanFormSig(nextPlan, definitions, force, searchMode)
     loadedPlanIdRef.current = nextPlan.planId
     if (!isFirstMountRef.current) setHasNewAgentSync(true)
   }
 
   async function openPlanFromHistory(planId: string) {
-    loadedPlanIdRef.current = planId
-    planSigRef.current = null
     setModal(null)
     setHasNewAgentSync(false)
     setPreviewErr(null)
-    setPlan(null)
     setExpanded(new Set())
     setExecModalOpen(false)
-    if (exec.kind !== "running") resetExec()
+    if (getExecSnapshot().kind !== "running") resetExec()
+    loadedPlanIdRef.current = null
+    hydrateOptsRef.current = { showNotFoundErr: true }
+    setPlan(null)
     setForm({ planId })
-    setPlanLoading(true)
-    try {
-      const nextPlan = await api.syncPlan(planId)
-      if (nextPlan.error) {
-        setPreviewErr(`Plan ${planId} not found — it may have been pruned from history.`)
-        setForm({ planId: null })
-        loadedPlanIdRef.current = null
-        return
-      }
-      applyLoadedPlan(nextPlan)
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error)
-      setPreviewErr(/not found|expired/i.test(msg)
-        ? "Plan not found — it may have been pruned from history."
-        : `Failed to load plan: ${msg}`)
-      setForm({ planId: null })
-      loadedPlanIdRef.current = null
-    } finally {
-      setPlanLoading(false)
-    }
   }
 
   useEffect(() => {
@@ -221,31 +284,37 @@ export function EnvSync() {
         if (Object.keys(nextForm).length) setForm(nextForm)
       })
       .catch((error) => !dead && setLoadErr(error instanceof Error ? error.message : String(error)))
-    if (form.planId) loadedPlanIdRef.current = form.planId
     return () => { dead = true }
   }, [])
 
   useEffect(() => {
     const newPlanId = form.planId
-    if (!newPlanId || newPlanId === plan?.planId || newPlanId === loadedPlanIdRef.current) return
-    loadedPlanIdRef.current = newPlanId
-    api.syncPlan(newPlanId).then((nextPlan) => {
-      if (nextPlan.error) {
-        setPreviewErr(`Plan ${newPlanId} not found — it may have been pruned from history.`)
-        setForm({ planId: null })
-        loadedPlanIdRef.current = null
-        return
-      }
-      applyLoadedPlan(nextPlan)
-    }).catch((error) => {
-      const msg = error instanceof Error ? error.message : String(error)
-      setPreviewErr(/not found|expired/i.test(msg)
-        ? "Plan not found — it may have been pruned from history."
-        : `Failed to load plan: ${msg}`)
-      setForm({ planId: null })
-      loadedPlanIdRef.current = null
+    if (!newPlanId) {
+      setPlanLoading(false)
+      return
+    }
+    if (plan?.planId === newPlanId) {
+      loadedPlanIdRef.current = newPlanId
+      setPlanLoading(false)
+      return
+    }
+
+    const requestId = ++hydrateRequestRef.current
+    const fetchOpts = { ...hydrateOptsRef.current }
+    hydrateOptsRef.current = { showNotFoundErr: false }
+    setPlanLoading(true)
+    void fetchPlan(newPlanId, fetchOpts).then((nextPlan) => {
+      if (requestId !== hydrateRequestRef.current) return
+      if (nextPlan) applyLoadedPlan(nextPlan)
+      else loadedPlanIdRef.current = null
+    }).finally(() => {
+      if (requestId === hydrateRequestRef.current) setPlanLoading(false)
     })
-  }, [form.planId, plan?.planId, definitions, form.entityType, force, searchMode, setForm])
+
+    return () => {
+      hydrateRequestRef.current += 1
+    }
+  }, [form.planId, plan?.planId])
 
   useEffect(() => { isFirstMountRef.current = false }, [])
 
@@ -264,34 +333,47 @@ export function EnvSync() {
     setHasNewAgentSync(true)
   }, [agentSyncExec, clearAgentSyncExec])
 
+  const entityReady = isPreviewEntityReady(selection, searchDraft, { searchLoading })
   const blocker =
     !source || !target ? "Pick source + target"
       : source === target ? "Source ≠ target"
-        : !previewEntityId ? `Enter ${searchMode === "name" ? (definition?.labelColumn ?? "name") : (definition?.idColumn ?? "id")}`
-          : !definition ? "No published definition" : null
+        : !definition ? "No published definition"
+          : searchLoading ? "Search in progress…"
+            : !entityReady
+              ? selection.searchMode === "name" && !selection.committedEntityId
+                ? "Pick an entity from search"
+                : `Enter ${searchMode === "name" ? (definition?.labelColumn ?? "name") : (definition?.idColumn ?? "id")}`
+              : null
   const canPreview = !blocker && !previewing
 
   async function onPreview() {
     if (!canPreview) return
     setPreviewing(true)
     setPreviewErr(null)
-    setPlan(null)
-    resetExec()
-    setExpanded(new Set())
-    planSigRef.current = null
+    discardStaleWorkflow()
     try {
-      const id: string | number = /^\d+$/.test(previewEntityId) ? Number(previewEntityId) : previewEntityId
       const requestEnabledOptionalTables = Array.isArray(form.enabledOptionalTables) ? enabledOptionalTables : undefined
-      const result = await api.syncPreview({ entityType, entityId: id, source, target, force, enabledOptionalTables: requestEnabledOptionalTables })
+      const result = await api.syncPreview({
+        entityType,
+        entityId: previewInput,
+        source,
+        target,
+        force,
+        enabledOptionalTables: requestEnabledOptionalTables,
+      })
       if (result.error) {
         setPreviewErr(result.error)
         setForm({ planId: null })
       } else {
         loadedPlanIdRef.current = result.planId
-        planSigRef.current = formSig
         setPlan(result)
-        setForm({ planId: result.planId, entityId: String(result.entity.id) })
-        setSearchDraft("")
+        const entityIdStr = String(result.entity.id)
+        setForm({ planId: result.planId, entityId: entityIdStr })
+        setSearchDraft(
+          result.entity.displayName
+            ? formatSearchHitLabel({ id: result.entity.id, name: result.entity.displayName })
+            : entityIdStr,
+        )
       }
     } catch (error) {
       setPreviewErr(error instanceof Error ? error.message : String(error))
@@ -301,33 +383,9 @@ export function EnvSync() {
     }
   }
 
-  useEffect(() => {
-    if (!plan || !planSigRef.current) return
-    if (planSigRef.current === formSig) return
-    const planEntityType = getPlanEntityType(plan)
-    const planEntityId = String(plan.entity.id)
-    // Definitions / optional-table normalization can update formSig after hydration
-    // without the user changing the loaded plan — re-sync instead of discarding.
-    if (
-      plan.source === source &&
-      plan.target === target &&
-      planEntityType === entityType &&
-      planEntityId === resolvedEntityId
-    ) {
-      planSigRef.current = formSig
-      return
-    }
-    setPlan(null)
-    setForm({ planId: null })
-    setExpanded(new Set())
-    setExecModalOpen(false)
-    if (exec.kind !== "running") resetExec()
-    planSigRef.current = null
-  }, [formSig, plan, source, target, entityType, resolvedEntityId, exec.kind, setForm])
-
   function onExecConfirmed() {
-    if (!plan) return
-    startExecStream(plan.planId)
+    if (!displayPlan) return
+    startExecStream(displayPlan.planId)
   }
 
   if (loadErr) {
@@ -342,65 +400,96 @@ export function EnvSync() {
     disabled: !definitions.find((entry) => entry.id === type),
   }))
 
-  const hasPlan = !!plan
-  const hasChanges = plan ? plan.totals.insert + plan.totals.update + plan.totals.delete > 0 : false
-  const hasConflicts = plan ? (plan.totals.conflicts ?? 0) > 0 : false
-  const expired = plan ? (Date.now() - plan.createdAtMs) > 3600_000 : false
-
-  const rootRef = useRef<HTMLDivElement>(null)
-  const { width: rootWidth } = useContainerSize(rootRef)
-  const compact = rootWidth > 0 && rootWidth < 800
-  const stacked = rootWidth > 0 && rootWidth < 580
-  const tiny = rootWidth > 0 && rootWidth < 420
-  const [moreOpen, setMoreOpen] = useState(false)
+  const hasPlan = !!displayPlan
+  const hasChanges = displayPlan
+    ? displayPlan.totals.insert + displayPlan.totals.update + displayPlan.totals.delete > 0
+    : false
+  const hasConflicts = displayPlan ? (displayPlan.totals.conflicts ?? 0) > 0 : false
+  const preflightBlocked = displayPlan ? execPreflightBlocked(displayPlan) : false
+  const preflightBlockReason = displayPlan ? execPreflightBlockReason(displayPlan) : null
+  const expired = displayPlan ? Date.now() - displayPlan.createdAtMs > 3600_000 : false
+  const execActive = exec.kind !== "idle"
+  const execForDisplayPlan = displayPlan != null && (execPlanId === displayPlan.planId || exec.kind === "running")
 
   return (
-    <div ref={rootRef} className="h-full overflow-hidden flex flex-col gap-3 text-text pb-1">
-      <div className="rounded-lg border border-border-subtle shrink-0 overflow-visible z-20">
-        <div className={`px-3 py-2 overflow-visible ${stacked ? "flex flex-col gap-2" : "flex items-center gap-2"}`}>
-          <div className={`flex items-center gap-2 ${stacked ? "w-full" : "shrink-0"}`}>
-            {!compact && <span className="text-xs font-medium text-text-muted/50 uppercase tracking-wide shrink-0">From</span>}
-            <Listbox value={source} options={srcOpts} onChange={(value) => setForm({ source: value })} size="md" variant="ghost" ariaLabel="Source" className="w-24" />
-            {!compact && <span className="text-xs font-medium text-text-muted/50 uppercase tracking-wide shrink-0">To</span>}
-            {compact && <span className="text-xs text-text-muted/40 shrink-0">→</span>}
-            <Listbox value={target} options={tgtOpts} onChange={(value) => setForm({ target: value })} size="md" variant="ghost" ariaLabel="Target" className="w-24" />
+    <div className="h-full overflow-hidden flex flex-col gap-3 text-text pb-1">
+      <WidgetToolbar className="env-sync-toolbar overflow-visible z-20">
+        <WidgetToolbarLeading>
+          <label className="env-sync-field">
+              <span className="field-label">From</span>
+              <Listbox
+                value={source}
+                options={srcOpts}
+                onChange={(value) => {
+                  if (value !== source) discardStaleWorkflow()
+                  setForm({ source: value })
+                }}
+                size="sm"
+                variant="default"
+                ariaLabel="Source environment"
+                className="env-sync-env-select"
+              />
+            </label>
+            <label className="env-sync-field">
+              <span className="field-label">To</span>
+              <Listbox
+                value={target}
+                options={tgtOpts}
+                onChange={(value) => {
+                  if (value !== target) discardStaleWorkflow()
+                  setForm({ target: value })
+                }}
+                size="sm"
+                variant="default"
+                ariaLabel="Target environment"
+                className="env-sync-env-select"
+              />
+            </label>
 
-            {!stacked && <div className="h-4 w-px bg-overlay-3 shrink-0" />}
+            <div className="env-sync-toolbar-divider" aria-hidden />
 
-            <Listbox
-              value={entityType}
-              options={entOpts}
-              onChange={(value) => {
-                setForm({ entityType: value, entityId: "" })
-                setSearchDraft("")
-                setSearchResults([])
-                setSearchOpen(false)
-              }}
-              size="md"
-              variant="ghost"
-              ariaLabel="Entity type"
-            />
-          </div>
+            <label className="env-sync-field env-sync-field--entity">
+              <span className="field-label">Entity</span>
+              <Listbox
+                value={entityType}
+                options={entOpts}
+                onChange={(value) => {
+                  discardStaleWorkflow()
+                  setForm({ entityType: value, entityId: "" })
+                  setSearchDraft("")
+                  setSearchResults([])
+                  setSearchOpen(false)
+                }}
+                size="sm"
+                variant="default"
+                ariaLabel="Entity type"
+                className="env-sync-entity-select"
+              />
+            </label>
+        </WidgetToolbarLeading>
 
-          <div className={`flex items-center gap-2 ${stacked ? "w-full" : "flex-1 min-w-0"}`}>
+        <WidgetToolbarSearchSlot>
+          <div className="widget-toolbar__search-row">
             <button
+              type="button"
               onClick={() => {
+                discardStaleWorkflow()
                 setForm({ searchMode: searchMode === "id" ? "name" : "id", entityId: "" })
                 setSearchDraft("")
                 setSearchResults([])
                 setSearchOpen(false)
               }}
-              className={`flex items-center justify-center gap-1 text-sm text-text-muted/60 hover:text-text py-1 rounded hover:bg-elevated transition-colors select-none shrink-0 ${tiny ? "w-9" : "w-16"}`}
+              className="env-sync-mode-toggle shrink-0"
               title={searchMode === "id" ? "Switch to name search" : "Switch to ID search"}
             >
-              {searchMode === "id" ? <Key size={13} /> : <Search size={13} />}
-              {!tiny && (searchMode === "id" ? "ID" : "Name")}
+              {searchMode === "id" ? <Key size={14} /> : <Search size={14} />}
+              <span className="env-sync-mode-toggle-label">{searchMode === "id" ? "ID" : "Name"}</span>
             </button>
 
-            <div className="relative flex-1 min-w-0 overflow-visible" ref={searchBoxRef}>
-              <div className={searchLoading ? "search-live-ring rounded-md p-[2px]" : "rounded-md"}>
-                <div className={searchLoading ? "search-live-ring__inner relative rounded-[calc(0.375rem-2px)]" : "relative"}>
-                  <Search size={13} className="absolute left-2 top-1/2 -translate-y-1/2 text-text-muted/40 pointer-events-none z-10" />
+            <div className="env-sync-search-wrap" ref={searchBoxRef}>
+              <div className={`h-full ${searchLoading ? "search-live-ring" : ""}`}>
+                <div className={`h-full ${searchLoading ? "search-live-ring__inner" : ""} relative`}>
+                  <Search size={14} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-text-muted/40 pointer-events-none z-10" />
                   <input
                     value={searchDraft}
                     onChange={(e) => onSearchInput(e.target.value)}
@@ -409,18 +498,11 @@ export function EnvSync() {
                     placeholder={searchMode === "id" ? (definition?.idColumn ?? "id") : (definition?.labelColumn ?? "name")}
                     aria-busy={searchLoading}
                     className={[
-                      "w-full bg-base text-text text-sm pl-7 py-1.5 rounded-md outline-none placeholder:text-text-muted/40",
-                      entityId && !searchLoading ? "pr-7 font-sans" : "pr-7 font-mono",
-                      searchLoading ? "border border-transparent" : entityId ? "border border-accent/50 focus:border-accent" : "border border-border-subtle focus:border-accent",
+                      "env-sync-search-input font-mono",
+                      searchLoading ? "env-sync-search-input--loading" : "",
+                      selection.committedEntityId && !searchLoading ? "env-sync-search-input--committed font-sans" : "",
                     ].join(" ")}
                   />
-                  {searchLoading && (
-                    <Loader2
-                      size={14}
-                      className="absolute right-2 top-1/2 -translate-y-1/2 text-accent animate-spin pointer-events-none z-10"
-                      aria-hidden
-                    />
-                  )}
                   {searchOpen && searchResults.length > 0 && (
                     <div className="absolute top-full left-0 mt-1 w-full max-w-[24rem] max-h-[min(280px,50vh)] overflow-y-auto bg-elevated border border-border rounded shadow-lg z-[100]">
                       {searchResults.map((hit) => (
@@ -447,85 +529,117 @@ export function EnvSync() {
                 </div>
               </div>
             </div>
+          </div>
+        </WidgetToolbarSearchSlot>
 
-            {compact ? (
-              <div className="relative shrink-0">
-                <button onClick={() => setMoreOpen((value) => !value)} className="text-text-muted/60 hover:text-text p-1.5 rounded hover:bg-elevated transition-colors" title="More">
-                  <MoreHorizontal size={16} />
-                </button>
-                {moreOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40" onClick={() => setMoreOpen(false)} />
-                    <div className="absolute right-0 top-full mt-1 z-50 bg-elevated border border-border rounded-md shadow-2xl py-1 min-w-[160px]">
-                      {hasPlan && (
-                        <button onClick={() => { setPlan(null); setForm({ planId: null }); resetExec(); setExecModalOpen(false); setMoreOpen(false) }} className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-text-muted hover:text-text hover:bg-overlay-2 transition-colors">
-                          <X size={14} /> Clear plan
-                        </button>
-                      )}
-                      <button onClick={() => { setModal("definition"); setMoreOpen(false) }} className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-text-muted hover:text-text hover:bg-overlay-2 transition-colors">
-                        <BookOpen size={14} /> Definition
-                      </button>
-                      <button onClick={() => { setModal("history"); setMoreOpen(false); setHasNewAgentSync(false) }} className="flex items-center gap-2.5 w-full px-3 py-2 text-sm text-text-muted hover:text-text hover:bg-overlay-2 transition-colors">
-                        <History size={14} /> History
-                        {hasNewAgentSync && <span className="ml-auto w-2 h-2 rounded-full bg-accent shrink-0" />}
-                      </button>
-                    </div>
-                  </>
+        <WidgetToolbarTrailing>
+          <div className="env-sync-actions-secondary env-sync-actions-secondary--compact">
+            <ToolbarMenu
+              title="More actions"
+              ariaLabel="More actions"
+              trigger={<MoreHorizontal {...TOOLBAR_ICON} />}
+            >
+              {hasPlan && (
+                <ToolbarMenuItem
+                  icon={<X size={14} />}
+                  label="Clear plan"
+                  onClick={() => discardStaleWorkflow()}
+                />
+              )}
+              <ToolbarMenuItem
+                icon={<BookOpen size={14} />}
+                label="Definition"
+                onClick={() => setModal("definition")}
+              />
+              <ToolbarMenuItem
+                icon={<History size={14} />}
+                label="History"
+                onClick={() => { setModal("history"); setHasNewAgentSync(false) }}
+              />
+            </ToolbarMenu>
+          </div>
+
+          <div className="env-sync-actions-secondary env-sync-actions-secondary--inline">
+            {hasPlan ? (
+              <IconButton className="env-sync-control-btn" label="Clear plan" onClick={() => discardStaleWorkflow()}>
+                <X {...TOOLBAR_ICON} />
+              </IconButton>
+            ) : null}
+            <div className="env-sync-toolbar-icon-group">
+              <IconButton
+                className="env-sync-control-btn"
+                label="Definition"
+                variant="group"
+                active={modal === "definition"}
+                onClick={() => setModal("definition")}
+              >
+                <BookOpen {...TOOLBAR_ICON} />
+              </IconButton>
+              <span className="env-sync-toolbar-icon-sep" aria-hidden />
+              <div className="relative h-full shrink-0">
+                <IconButton
+                  className="env-sync-control-btn"
+                  label="History"
+                  variant="group"
+                  active={modal === "history"}
+                  onClick={() => { setModal("history"); setHasNewAgentSync(false) }}
+                >
+                  <History {...TOOLBAR_ICON} />
+                </IconButton>
+                {hasNewAgentSync && (
+                  <span className="pointer-events-none absolute top-1 right-1 h-2 w-2 rounded-full bg-accent" />
                 )}
               </div>
-            ) : (
-              <>
-                {hasPlan && (
-                  <button onClick={() => { setPlan(null); setForm({ planId: null }); resetExec(); setExecModalOpen(false) }} className="text-text-muted/60 hover:text-text p-1.5 rounded hover:bg-elevated transition-colors shrink-0" title="Clear plan">
-                    <X size={16} />
-                  </button>
-                )}
-                <button onClick={() => setModal("definition")} className="text-text-muted/60 hover:text-text p-1.5 rounded hover:bg-elevated transition-colors shrink-0" title="Definition">
-                  <BookOpen size={16} />
-                </button>
-                <button onClick={() => { setModal("history"); setHasNewAgentSync(false) }} className="relative text-text-muted/60 hover:text-text p-1.5 rounded hover:bg-elevated transition-colors shrink-0" title="History">
-                  <History size={16} />
-                  {hasNewAgentSync && <span className="absolute top-0.5 right-0.5 w-2 h-2 rounded-full bg-accent" />}
-                </button>
-              </>
-            )}
+            </div>
+          </div>
 
-            {!stacked && <div className="h-4 w-px bg-overlay-3 shrink-0" />}
+          <div className="env-sync-actions-divider" aria-hidden />
 
-            {exec.kind !== "idle" && (
-              <button
+          <div className="env-sync-toolbar-primary">
+            {execActive && execForDisplayPlan ? (
+              <IconButton
+                className="env-sync-control-btn"
+                label={exec.kind === "running" ? "Execution in progress — click to view" : exec.kind === "done" && exec.success ? "Sync completed" : "Sync failed — click to view"}
+                variant={exec.kind === "running" ? "primary" : "default"}
                 onClick={() => setExecModalOpen(true)}
-                title={exec.kind === "running" ? "Execution in progress — click to view" : exec.kind === "done" && exec.success ? "Sync completed" : "Sync failed — click to view"}
-                className={`flex items-center justify-center shrink-0 transition-colors rounded-lg w-9 h-9 ${exec.kind === "running" ? "bg-accent" : "border border-border-subtle hover:bg-elevated"}`}
               >
-                {exec.kind === "running" && <Loader2 size={16} className="animate-spin text-text" />}
-                {exec.kind === "done" && exec.success && <CheckCircle2 size={16} style={{ color: DIFF.ins }} />}
-                {exec.kind === "done" && !exec.success && <XCircle size={16} style={{ color: DIFF.del }} />}
-              </button>
-            )}
+                {exec.kind === "running" && <Loader2 {...TOOLBAR_ICON} className="animate-spin" />}
+                {exec.kind === "done" && exec.success && <CheckCircle2 {...TOOLBAR_ICON} style={{ color: DIFF.ins }} />}
+                {exec.kind === "done" && !exec.success && <XCircle {...TOOLBAR_ICON} style={{ color: DIFF.del }} />}
+              </IconButton>
+            ) : null}
 
-            <button
+            <IconButton
+              className="env-sync-control-btn"
+              label={blocker ?? (hasPlan && !execActive ? "Re-run preview" : "Preview")}
+              variant={hasPlan && !execActive ? "default" : "primary"}
               onClick={() => void onPreview()}
               disabled={!canPreview}
-              title={blocker ?? (hasPlan && exec.kind === "idle" ? "Re-run preview" : "Preview")}
-              className={`flex items-center justify-center w-9 h-9 rounded-lg shrink-0 transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${hasPlan && exec.kind === "idle" ? "border border-border-subtle text-text-muted hover:text-text hover:bg-elevated disabled:bg-transparent" : "bg-accent hover:bg-accent-hover disabled:bg-elevated text-text"}`}
             >
-              {previewing ? <Loader2 size={16} className="animate-spin" /> : hasPlan && exec.kind === "idle" ? <RefreshCw size={16} /> : <Eye size={16} />}
-            </button>
+              {previewing ? <Loader2 {...TOOLBAR_ICON} className="animate-spin" /> : hasPlan && !execActive ? <RefreshCw {...TOOLBAR_ICON} /> : <Eye {...TOOLBAR_ICON} />}
+            </IconButton>
 
-            {hasPlan && exec.kind === "idle" && (
-              <button
+            {hasPlan && !execActive ? (
+              <IconButton
+                className="env-sync-control-btn shadow-[0_0_0_2px_var(--color-accent)]/20 ring-1 ring-accent/40"
+                label={
+                  searchLoading ? "Search in progress…"
+                    : expired ? "Plan expired — re-preview"
+                    : hasConflicts ? "Resolve conflicts before syncing"
+                      : preflightBlocked ? (preflightBlockReason ?? "Preflight checks failed — open execute modal")
+                        : !hasChanges ? "No changes to sync"
+                          : "Execute sync"
+                }
+                variant="primary"
                 onClick={() => setExecModalOpen(true)}
-                disabled={!plan || expired || hasConflicts || !hasChanges}
-                title={expired ? "Plan expired — re-preview" : hasConflicts ? "Resolve conflicts before syncing" : !hasChanges ? "No changes to sync" : "Execute sync"}
-                className="flex items-center justify-center shrink-0 transition-colors rounded-lg w-9 h-9 bg-accent hover:bg-accent-hover disabled:opacity-40 disabled:cursor-not-allowed shadow-[0_0_0_2px_var(--color-accent)]/20 ring-1 ring-accent/40"
+                disabled={expired || hasConflicts || !hasChanges || preflightBlocked || searchLoading}
               >
-                <Ship size={16} className="text-text" />
-              </button>
-            )}
+                <Ship {...TOOLBAR_ICON} />
+              </IconButton>
+            ) : null}
           </div>
-        </div>
-      </div>
+        </WidgetToolbarTrailing>
+      </WidgetToolbar>
 
       {previewErr ? (
         <div className="flex-1 flex items-center justify-center">
@@ -535,47 +649,47 @@ export function EnvSync() {
         <Loading>Building plan…</Loading>
       ) : planLoading ? (
         <Loading>Loading plan…</Loading>
-      ) : plan ? (
-        <PlanView plan={plan} expanded={expanded} setExpanded={setExpanded} exec={exec} />
+      ) : displayPlan ? (
+        <PlanView plan={displayPlan} expanded={expanded} setExpanded={setExpanded} exec={exec} />
       ) : (
         <Empty envs={envs} blocker={blocker} srcEnv={srcEnv} tgtEnv={tgtEnv} hasDefinitions={definitions.length > 0} />
       )}
 
       {modal === "definition" && (
-        <ModalShell title="Sync Definition" subtitle={definition?.displayName ?? entityType} icon={<BookOpen size={20} className="text-text-muted" />} onClose={() => setModal(null)}>
+        <ModalShell
+          title="Sync Definition"
+          subtitle={definition?.displayName ?? entityType}
+          icon={<BookOpen size={20} className="text-text-muted" />}
+          size="focus"
+          onClose={() => setModal(null)}
+        >
           <DefinitionContent definition={definition} />
         </ModalShell>
       )}
       {modal === "history" && (
-        <ModalShell title="Sync History" icon={<History size={20} className="text-text-muted" />} onClose={() => { setModal(null); setHasNewAgentSync(false) }}>
+        <ModalShell
+          title="Sync History"
+          icon={<History size={20} className="text-text-muted" />}
+          size="focus"
+          onClose={() => { setModal(null); setHasNewAgentSync(false) }}
+        >
           <HistoryContent onOpen={(planId) => { void openPlanFromHistory(planId) }} />
         </ModalShell>
       )}
-      {execModalOpen && (plan || execPlanId) && (
-        <ExecModal exec={exec} plan={plan} execPlanId={execPlanId} tgtEnv={tgtEnv} onConfirm={onExecConfirmed} onClose={() => setExecModalOpen(false)} />
+      {execModalOpen && (displayPlan || execPlanId) && (
+        <ExecModal
+          exec={exec}
+          plan={displayPlan}
+          execPlanId={execPlanId}
+          tgtEnv={tgtEnv}
+          onConfirm={onExecConfirmed}
+          onCancel={() => cancelExec()}
+          onClose={() => {
+            if (exec.kind === "running") cancelExec()
+            setExecModalOpen(false)
+          }}
+        />
       )}
     </div>
   )
-}
-
-function getPlanEntityType(plan: SyncPlan): SyncEntityType | null {
-  const raw = plan.executionContract?.definitionId ?? plan.recipeSnapshot?.entityType ?? plan.entity.type
-  return isSyncEntityType(raw) ? raw : null
-}
-
-function buildPlanFormSig(
-  plan: SyncPlan,
-  definitions: PublishedSyncDefinition[],
-  force: boolean,
-  searchMode: "id" | "name",
-): string {
-  const planEntityType = getPlanEntityType(plan) ?? "contract"
-  const entityIdStr = String(plan.entity.id)
-  const hydratedDefinition = definitions.find((entry) => entry.id === planEntityType) ?? null
-  const tables = [...normalizeOptionalTableSelection(hydratedDefinition, plan.recipeSnapshot?.enabledOptionalTables ?? null)].sort().join(",")
-  return `${plan.source}|${plan.target}|${planEntityType}|${entityIdStr}|${force}|${searchMode}|${tables}`
-}
-
-function isSyncEntityType(value: string): value is SyncEntityType {
-  return ENTITY_TYPES.includes(value as SyncEntityType)
 }

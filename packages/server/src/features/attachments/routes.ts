@@ -15,7 +15,13 @@ import {
   uploadAttachment,
   type AttachmentRow
 } from "../../platform/persistence/attachments.js"
-import { AttachmentScope } from "../../shared/enums/attachments.js"
+import { AttachmentScope, isAttachmentScope } from "../../shared/enums/attachments.js"
+
+/** Accept legacy `session` uploads during API transition. */
+function normalizeAttachmentScope(scope: unknown): AttachmentScope | null {
+  if (scope === "session") return AttachmentScope.UserDraft
+  return isAttachmentScope(scope) ? scope : null
+}
 
 const MAX_UPLOAD_BYTES = 32 * 1024 * 1024
 
@@ -35,7 +41,6 @@ function publicView(row: AttachmentRow): Record<string, unknown> {
     id: row.id,
     scope: row.scope,
     runId: row.run_id,
-    sessionId: row.session_id,
     ownerUpn: row.owner_upn,
     originalName: row.original_name,
     normalizedName: row.normalized_name,
@@ -64,9 +69,7 @@ function requireSession(req: FastifyRequest, reply: FastifyReply): boolean {
 function canViewAttachment(req: FastifyRequest, row: AttachmentRow): boolean {
   if (!req.session) return false
   if (req.session.isAdmin) return true
-  if (row.owner_upn && row.owner_upn === req.session.upn) return true
-  if (row.session_id && row.session_id === req.session.sid) return true
-  return false
+  return !!(row.owner_upn && row.owner_upn === req.session.upn)
 }
 
 export function registerAttachmentRoutes(app: FastifyInstance): void {
@@ -95,7 +98,7 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
         reply.code(413)
         return { error: `payload exceeds ${MAX_UPLOAD_BYTES} bytes` }
       }
-      const scope: AttachmentScope = body.scope ?? AttachmentScope.Session
+      const scope: AttachmentScope = normalizeAttachmentScope(body.scope) ?? AttachmentScope.UserDraft
       if (scope === "run" && !body.runId) {
         reply.code(400)
         return { error: "runId is required when scope === 'run'" }
@@ -107,8 +110,7 @@ export function registerAttachmentRoutes(app: FastifyInstance): void {
           mediaType: body.mediaType || "application/octet-stream",
           scope,
           runId: body.runId ?? null,
-          sessionId: req.session!.sid,
-          ownerUpn: req.session!.upn ?? null,
+          ownerUpn: req.session!.upn,
           purposeTag: body.purposeTag ?? null,
           goalSnapshot: body.goalSnapshot ?? null,
           tags: body.tags

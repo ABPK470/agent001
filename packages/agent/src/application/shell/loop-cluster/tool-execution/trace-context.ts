@@ -1,11 +1,13 @@
+import { TOOL_TRACE_ARG } from "@mia/shared-types"
+
+export { TOOL_TRACE_ARG }
+
 export interface ToolTraceContext {
   readonly toolCallId: string
   readonly toolName: string
   readonly iteration: number
   readonly emit?: (entry: Record<string, unknown>) => void
 }
-
-export const TOOL_TRACE_ARG = "__plannerTrace"
 
 export function withToolTraceArgs(
   args: Record<string, unknown>,

@@ -171,7 +171,12 @@ export const SELECTOR_KEYS: ReadonlyArray<SelectorKeyMeta> = Object.freeze([
     enumValues:  [
       { value: "query_read",   description: "Read-only SELECT / introspection." },
       { value: "sync_preview", description: "Sync diff preview — no writes performed." },
+      { value: "list_sync_definitions", description: "List published sync definitions from the bundle." },
+      { value: "resolve_sync_scope", description: "Map business language to sync definition ids." },
+      { value: "sync_diff_scan", description: "Bulk env-pair hash diff scan — read-only, real previews." },
       { value: "sync_execute", description: "Sync execution — writes rows on the target." },
+      { value: "sync_custom_sql", description: "Ad-hoc SQL batch during sync (not a stored procedure) — policy-gated." },
+      { value: "sync_shell_execute", description: "Shell command on the sync host during sync — policy-gated." },
       { value: "ddl",          description: "Schema-modifying DDL (CREATE / ALTER / DROP)." },
       { value: "dml",          description: "Data-modifying DML (INSERT / UPDATE / DELETE)." },
     ],
