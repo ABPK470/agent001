@@ -4,6 +4,7 @@ import type { ConnectionPool } from "mssql"
 
 import { runHttpFlowStep } from "./http-flow-step.js"
 import { StepOutputRegistry } from "./step-output-registry.js"
+import { TEST_VALUE_SOURCE_CATALOG } from "../../../test-support/value-source-catalog.js"
 
 describe("runHttpFlowStep", () => {
   it("resolves httpBody via value sources — same path as any HTTP step type", async () => {
@@ -38,7 +39,7 @@ describe("runHttpFlowStep", () => {
       tgtPool: { request: () => ({ input: vi.fn() }) } as unknown as ConnectionPool,
       userUpn: "user@example.com",
       resolveContractName: async () => "C",
-      customValueSources: {},
+      customValueSources: TEST_VALUE_SOURCE_CATALOG,
       stepOutputs: new StepOutputRegistry(),
     }
 

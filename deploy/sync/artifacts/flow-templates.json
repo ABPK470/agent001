@@ -85,7 +85,8 @@
           "description": "Register affected pipelines with the target agent service.",
           "bindings": {
             "pipelineId": {
-              "type": "contractPipelineId"
+              "type": "catalog",
+              "id": "contractPipelineId"
             }
           }
         },
@@ -232,7 +233,8 @@
           "description": "Deploy datasets required by the rule on the target ETL service.",
           "bindings": {
             "datasetId": {
-              "type": "ruleInputDatasetId"
+              "type": "catalog",
+              "id": "ruleInputDatasetId"
             }
           }
         },
@@ -280,7 +282,8 @@
           "description": "Deploy the dataset using the target ETL service.",
           "bindings": {
             "datasetId": {
-              "type": "planEntityId"
+              "type": "catalog",
+              "id": "planEntityId"
             }
           }
         },
@@ -313,7 +316,8 @@
           "description": "Register the target pipeline with the agent service.",
           "bindings": {
             "pipelineId": {
-              "type": "planEntityId"
+              "type": "catalog",
+              "id": "planEntityId"
             }
           }
         }

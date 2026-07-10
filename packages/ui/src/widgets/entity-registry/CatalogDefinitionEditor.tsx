@@ -6,12 +6,18 @@ import type { JSX, ReactNode } from "react"
 import { Listbox } from "../../components/Listbox"
 import type {
   AuthoredSyncFlowStep,
+  CatalogResolver,
   CustomValueSourceDefinition,
   SyncFlowKindDefinition,
   SyncFlowPhaseDefinition,
 } from "../../types"
 import {
+  CATALOG_RESOLVER_KIND_OPTIONS,
+  catalogResolverFamilyLabel,
+  defaultCatalogResolver,
+  formatCatalogResolverRuntimePreview,
   inferTargetSqlResultType,
+  SYNC_STEP_FIELD_KEYS,
   validateTargetSqlQuery,
 } from "../../types"
 import { FIELD_LABEL, HELP_TEXT, SUBSECTION_HEADING } from "./chrome"
@@ -167,7 +173,7 @@ export const DEFAULT_STEP_TYPE_DEFINITION: SyncFlowKindDefinition = {
     type: "mssql_procedure",
     connection: "target",
     procedure: "core.uspCustomStep",
-    parameters: [{ name: "id", source: { type: "planEntityId" } }],
+    parameters: [{ name: "id", source: { type: "catalog", id: "planEntityId" } }],
   },
   stepFields: {},
   failureMode: "warning",
@@ -177,55 +183,102 @@ export const DEFAULT_STEP_TYPE_DEFINITION: SyncFlowKindDefinition = {
 export function CustomValueSourceDefinitionEditor({
   value,
   onChange,
-  readOnlyQuery,
+  readOnlyResolver,
+  entryId,
 }: {
   value: CustomValueSourceDefinition
   onChange: (value: CustomValueSourceDefinition) => void
-  readOnlyQuery?: boolean
+  readOnlyResolver?: boolean
+  entryId?: string
 }): JSX.Element {
-  const queryError = validateTargetSqlQuery(value.query)
+  const resolver = value.resolver
+  const queryError =
+    resolver.kind === "targetSql" ? validateTargetSqlQuery(resolver.query) : null
+
+  function patchResolver(next: CatalogResolver): void {
+    onChange({ ...value, resolver: next })
+  }
 
   return (
     <div className="space-y-3">
       <Field label="Description">
-        <textarea value={value.description} onChange={(e) => onChange({ ...value, description: e.target.value })} rows={3} className="input text-sm" />
-      </Field>
-      <Field label="SQL query (target)">
         <textarea
-          value={value.query}
-          onChange={(e) => onChange({ ...value, query: e.target.value })}
-          rows={4}
-          className="input font-mono text-sm"
-          placeholder="SELECT inputDatasetId FROM core.[Rule] WHERE ruleId = @entityId"
-          disabled={readOnlyQuery}
+          value={value.description}
+          onChange={(e) => onChange({ ...value, description: e.target.value })}
+          rows={3}
+          className="input text-sm"
         />
-        {queryError && <p className="mt-1 text-xs text-error">{queryError}</p>}
       </Field>
-      <Field label="Result column">
-        <input
-          value={value.resultColumn}
-          onChange={(e) => {
-            const resultColumn = e.target.value
-            onChange({
-              ...value,
-              resultColumn,
-              resultType: inferTargetSqlResultType(resultColumn),
-            })
-          }}
-          className="input font-mono text-sm"
-          placeholder="name, inputDatasetId, pipelineId, …"
-          disabled={readOnlyQuery}
+      <Field label="Resolution">
+        <Listbox
+          value={resolver.kind}
+          options={CATALOG_RESOLVER_KIND_OPTIONS.map((entry) => ({
+            value: entry.kind,
+            label: entry.label,
+            hint: entry.description,
+          }))}
+          onChange={(kind) => patchResolver(defaultCatalogResolver(kind))}
+          className="w-full"
+          ariaLabel="Resolution"
+          disabled={readOnlyResolver}
         />
-        <p className={`mt-1 ${HELP_TEXT}`}>
-          Column type is inferred automatically (*Id → number, otherwise text).
-        </p>
       </Field>
+      {resolver.kind === "stepField" && (
+        <Field label="Step property">
+          <Listbox
+            value={resolver.field}
+            options={SYNC_STEP_FIELD_KEYS.map((field) => ({
+              value: field,
+              label: field,
+              hint: `step.${field}`,
+            }))}
+            onChange={(field) => patchResolver({ kind: "stepField", field })}
+            className="w-full"
+            ariaLabel="Step property"
+            disabled={readOnlyResolver}
+          />
+        </Field>
+      )}
+      {resolver.kind === "targetSql" && (
+        <div className="space-y-3">
+          <Field label="SQL query (target)">
+            <textarea
+              value={resolver.query}
+              onChange={(e) => patchResolver({ ...resolver, query: e.target.value })}
+              rows={4}
+              className="input font-mono text-sm"
+              placeholder="SELECT inputDatasetId FROM core.[Rule] WHERE ruleId = @entityId"
+              disabled={readOnlyResolver}
+            />
+            {queryError && <p className="mt-1 text-xs text-error">{queryError}</p>}
+          </Field>
+          <Field label="Result column">
+            <input
+              value={resolver.resultColumn}
+              onChange={(e) => {
+                const resultColumn = e.target.value
+                patchResolver({
+                  ...resolver,
+                  resultColumn,
+                  resultType: inferTargetSqlResultType(resultColumn),
+                })
+              }}
+              className="input font-mono text-sm"
+              placeholder="name, inputDatasetId, pipelineId, …"
+              disabled={readOnlyResolver}
+            />
+            <p className={`mt-1 ${HELP_TEXT}`}>
+              Column type is inferred automatically (*Id → number, otherwise text).
+            </p>
+          </Field>
+        </div>
+      )}
       <div className="rounded-lg border border-border-subtle bg-base/60 px-3 py-2.5">
         <p className={`mb-2 ${SUBSECTION_HEADING}`}>Execute preview</p>
         <p className="text-sm leading-relaxed text-text">
-          Target SQL lookup using <span className="font-mono">@entityId</span>
-          {value.resultColumn.trim() ? ` → ${value.resultColumn.trim()}` : ""}
+          {formatCatalogResolverRuntimePreview(value, entryId ?? "valueSource")}
         </p>
+        <p className={`mt-2 ${HELP_TEXT}`}>{catalogResolverFamilyLabel(resolver)}</p>
       </div>
     </div>
   )
@@ -233,8 +286,7 @@ export function CustomValueSourceDefinitionEditor({
 
 export const DEFAULT_CUSTOM_VALUE_SOURCE_DEFINITION: CustomValueSourceDefinition = {
   description: "",
-  query: "",
-  resultColumn: "",
+  resolver: { kind: "targetSql", query: "", resultColumn: "" },
 }
 
 /** @deprecated Use CustomValueSourceDefinitionEditor */

@@ -1,8 +1,8 @@
 /**
  * ValueSource — where a handler input value comes from at execute time.
  *
- * One discriminated union replaces legacy prefixed string refs on handler bindings.
- * Builtins are enum variants; only operator-defined target-sql lookups live in the custom catalog.
+ * Catalog-backed resolvers use `{ type: "catalog", id }` (canonical).
+ * Legacy shorthand types (planEntityId, stepField, …) normalize to catalog ids at load/resolve.
  */
 
 import { validateCatalogId } from "./catalog-id.js"
@@ -122,10 +122,27 @@ export function isLiteralValueSource(source: ValueSource | undefined): source is
   return source?.type === "literal"
 }
 
+export function valueSourceCatalogId(source: ValueSource | undefined): string | null {
+  if (!source) return null
+  if (source.type === "catalog") return source.id.trim() || null
+  if (source.type === "stepField") return source.field
+  if ((BUILTIN_VALUE_SOURCE_TYPES as readonly string[]).includes(source.type)) return source.type
+  return null
+}
+
+/** Canonical form for catalog-backed value sources. */
+export function normalizeValueSourceToCatalog(source: ValueSource): ValueSource {
+  if (source.type === "catalog" || source.type === "literal" || source.type === "priorOutput") {
+    return source
+  }
+  const id = valueSourceCatalogId(source)
+  if (!id) return source
+  return { type: "catalog", id }
+}
+
 export function collectCatalogIdsFromValueSource(source: ValueSource | undefined): string[] {
-  if (!source) return []
-  if (source.type === "catalog") return [source.id.trim()]
-  return []
+  const id = valueSourceCatalogId(source)
+  return id ? [id] : []
 }
 
 export function collectCatalogIdsFromValueSources(sources: Iterable<ValueSource | undefined>): string[] {
@@ -195,8 +212,15 @@ export function formatValueSourcePreview(
       const label = options?.customLabels?.[source.id]?.trim() || source.id
       return formatCustomValueSourcePreview(def, label, source.id)
     }
-    default:
+    default: {
+      const catalogId = valueSourceCatalogId(source)
+      const def = catalogId ? options?.customCatalog?.[catalogId] : undefined
+      if (def && catalogId) {
+        const label = options?.customLabels?.[catalogId]?.trim() || catalogId
+        return formatCustomValueSourcePreview(def, label, catalogId)
+      }
       return BUILTIN_PREVIEW[source.type]
+    }
   }
 }
 

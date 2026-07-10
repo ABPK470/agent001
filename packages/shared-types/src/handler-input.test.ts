@@ -14,7 +14,7 @@ describe("handler-input", () => {
         connection: "target",
         procedure: "core.uspX",
       }),
-    ).toEqual([{ name: "id", source: { type: "planEntityId" } }])
+    ).toEqual([{ name: "id", source: { type: "catalog", id: "planEntityId" } }])
   })
 
   it("accepts stored procedures with no parameters", () => {

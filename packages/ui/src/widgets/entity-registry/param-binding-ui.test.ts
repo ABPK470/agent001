@@ -11,7 +11,7 @@ describe("param-binding-ui", () => {
     const param = { name: "id", source: { type: "planEntityId" as const } }
     const next = applyHandlerParamBindingMode(param, "set-on-flow-step", {
       resolverOptions: [{ value: "planEntityId" }],
-      textFieldOptions: [{ value: "stepField:auditObjectType" }],
+      textFieldOptions: [{ value: "catalog:auditObjectType" }],
       flowStepOptions: [],
     })
     expect(next).toEqual({ name: "id" })
@@ -22,10 +22,10 @@ describe("param-binding-ui", () => {
     const param = { name: "id", source: { type: "planEntityId" as const } }
     const next = applyHandlerParamBindingMode(param, "text-field", {
       resolverOptions: [{ value: "planEntityId" }],
-      textFieldOptions: [{ value: "stepField:auditObjectType" }],
+      textFieldOptions: [{ value: "catalog:auditObjectType" }],
       flowStepOptions: [],
     })
-    expect(next.source).toEqual({ type: "stepField", field: "auditObjectType" })
+    expect(next.source).toEqual({ type: "catalog", id: "auditObjectType" })
     expect(inferHandlerParamBindingMode(next)).toBe("text-field")
   })
 
@@ -33,7 +33,7 @@ describe("param-binding-ui", () => {
     const param = { name: "id", source: { type: "stepField" as const, field: "auditObjectType" as const } }
     const next = applyHandlerParamBindingMode(param, "earlier-step", {
       resolverOptions: [{ value: "planEntityId" }],
-      textFieldOptions: [{ value: "stepField:auditObjectType" }],
+      textFieldOptions: [{ value: "catalog:auditObjectType" }],
       flowStepOptions: [{ value: "metadataSync", label: "metadataSync" }],
     })
     expect(next.source).toEqual({ type: "priorOutput", stepId: "metadataSync", output: "" })

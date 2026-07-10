@@ -17,13 +17,13 @@ export interface SyncHandlerInput {
 export type SyncProcedureParameter = SyncHandlerInput
 
 export const DEFAULT_CUSTOM_HANDLER_INPUTS: readonly SyncHandlerInput[] = [
-  { name: "entityId", source: { type: "planEntityId" } },
-  { name: "id", source: { type: "planEntityId" } },
-  { name: "stepId", source: { type: "currentStepId" } },
+  { name: "entityId", source: { type: "catalog", id: "planEntityId" } },
+  { name: "id", source: { type: "catalog", id: "planEntityId" } },
+  { name: "stepId", source: { type: "catalog", id: "currentStepId" } },
 ]
 
 export const DEFAULT_PROCEDURE_INPUTS: readonly SyncHandlerInput[] = [
-  { name: "id", source: { type: "planEntityId" } },
+  { name: "id", source: { type: "catalog", id: "planEntityId" } },
 ]
 
 /** Input slots for a handler after applying type-specific defaults. */

@@ -83,4 +83,4 @@ Three execution regions  — before metadataSync | metadataSync (SQL tx) | after
 - **Step-bound** — slot has `name` only; value comes from `step.bindings[name]`
 - **Literal** — `source: { type: "literal", value }`
 
-The **custom value source catalog** (`sync_run_binding_sources` in SQLite) holds operator-defined target-sql lookups only. Builtins are `ValueSource` enum variants, not catalog rows. There is no separate step-field catalog — step fields are properties on `AuthoredSyncFlowStep`.
+The **value source catalog** (`sync_run_binding_sources` in SQLite) holds every resolver — plan context, target SQL, and step text fields. Built-ins are seeded from `deploy/sync/artifacts/sync-metadata.json` (`built_in = 1`); operators may add entries or edit labels/descriptions. Handler slots reference catalog ids via `{ type: "catalog", id }`. Literals and prior-step outputs stay inline on the handler slot.

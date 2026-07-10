@@ -67,6 +67,7 @@ Live MSSQL (optional)  →  refresh-from-legacy  →  deploy/sync/artifacts/*
 | `catalog-index.mjs` | MSSQL schema snapshot for entity FK closure |
 | `sync-metadata-phases.mjs` | Fixed platform phase vocabulary |
 | `sync-metadata-normalize.mjs` | ValueSource normalization on derived metadata |
+| `value-source-seeds.mjs` | Shipped value source catalog (plan context, SQL, step fields) |
 
 No one-shot migration scripts — artifacts in git are already on the current model.
 

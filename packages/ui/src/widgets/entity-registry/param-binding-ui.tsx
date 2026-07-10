@@ -11,7 +11,9 @@ import {
   formatValueSourcePreview,
   isLiteralValueSource,
   isStepBoundHandlerSlot,
+  isSyncStepFieldKey,
   publishedOutputKeysForStep,
+  valueSourceCatalogId,
 } from "../../types"
 import { FIELD_LABEL } from "./chrome"
 import type { CustomValueSourceUiCatalog } from "./handler-editor"
@@ -62,7 +64,8 @@ export function inferHandlerParamBindingMode(param: SyncProcedureParameter): Han
   if (!source) return "literal"
   if (isLiteralValueSource(source)) return "literal"
   if (source.type === "priorOutput") return "earlier-step"
-  if (source.type === "stepField") return "text-field"
+  const catalogId = valueSourceCatalogId(source)
+  if (catalogId && isSyncStepFieldKey(catalogId)) return "text-field"
   return "fixed-resolver"
 }
 
@@ -101,17 +104,23 @@ export function applyHandlerParamBindingMode(
           ? param.source
           : undefined
       const fallback =
-        parseValueSourceListboxValue(ctx.resolverOptions[0]?.value ?? "planEntityId") ?? {
-          type: "planEntityId",
+        parseValueSourceListboxValue(ctx.resolverOptions[0]?.value ?? "catalog:planEntityId") ?? {
+          type: "catalog",
+          id: "planEntityId",
         }
       return { name, source: existing ?? fallback }
     }
     case "text-field": {
-      const existing = param.source?.type === "stepField" ? param.source : undefined
+      const existing =
+        param.source?.type === "stepField"
+          ? { type: "catalog" as const, id: param.source.field }
+          : param.source?.type === "catalog" && isSyncStepFieldKey(param.source.id)
+            ? param.source
+            : undefined
       const fallback =
-        parseValueSourceListboxValue(ctx.textFieldOptions[0]?.value ?? "stepField:auditObjectType") ?? {
-          type: "stepField",
-          field: "auditObjectType",
+        parseValueSourceListboxValue(ctx.textFieldOptions[0]?.value ?? "catalog:auditObjectType") ?? {
+          type: "catalog",
+          id: "auditObjectType",
         }
       return { name, source: existing ?? fallback }
     }
@@ -251,7 +260,7 @@ export function ParamBindingEditorCard({
   const resolverOptions = bindingSourceListboxOptions(customValueSourceCatalog).filter(
     (option) => option.value !== PRIOR_STEP_OUTPUT_LISTBOX_VALUE,
   )
-  const textFieldOptions = stepFieldListboxOptions()
+  const textFieldOptions = stepFieldListboxOptions(customValueSourceCatalog)
 
   const priorStep = prior?.stepId
     ? flowStepsForOutputHints.find((entry) => entry.id.trim() === prior.stepId.trim())

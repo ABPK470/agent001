@@ -194,7 +194,21 @@
               "stepFields": {}
             }
           },
-          "customValueSources": {}
+          "customValueSources": {
+            "objectName": {
+              "description": "Dependency object name string (e.g. content, rule). Typed on each flow step.",
+              "resolver": {
+                "kind": "stepField",
+                "field": "objectName"
+              }
+            },
+            "planEntityId": {
+              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+              "resolver": {
+                "kind": "planEntityId"
+              }
+            }
+          }
         }
       },
       "provenance": {
@@ -1382,7 +1396,39 @@
               "stepFields": {}
             }
           },
-          "customValueSources": {}
+          "customValueSources": {
+            "auditObjectType": {
+              "description": "Contract / Dataset / Rule label for audit gate procedures (@objType). Typed on each flow step.",
+              "resolver": {
+                "kind": "stepField",
+                "field": "auditObjectType"
+              }
+            },
+            "contractName": {
+              "description": "Contract name on target after metadata sync (core.Contract.name for plan entity id).",
+              "resolver": {
+                "kind": "targetSql",
+                "query": "SELECT [name] AS name FROM core.Contract WHERE contractId = @entityId",
+                "resultColumn": "name",
+                "resultType": "string"
+              }
+            },
+            "contractPipelineId": {
+              "description": "Target SQL: pipelineId from core.Pipeline for the synced contract.",
+              "resolver": {
+                "kind": "targetSql",
+                "query": "SELECT pipelineId FROM core.Pipeline WHERE contractId = @entityId",
+                "resultColumn": "pipelineId",
+                "resultType": "number"
+              }
+            },
+            "planEntityId": {
+              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+              "resolver": {
+                "kind": "planEntityId"
+              }
+            }
+          }
         }
       },
       "provenance": {
@@ -1735,7 +1781,27 @@
               "stepFields": {}
             }
           },
-          "customValueSources": {}
+          "customValueSources": {
+            "auditObjectType": {
+              "description": "Contract / Dataset / Rule label for audit gate procedures (@objType). Typed on each flow step.",
+              "resolver": {
+                "kind": "stepField",
+                "field": "auditObjectType"
+              }
+            },
+            "planActor": {
+              "description": "UPN of the user who started the sync run.",
+              "resolver": {
+                "kind": "planActor"
+              }
+            },
+            "planEntityId": {
+              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+              "resolver": {
+                "kind": "planEntityId"
+              }
+            }
+          }
         }
       },
       "provenance": {
@@ -1982,7 +2048,15 @@
               "stepFields": {}
             }
           },
-          "customValueSources": {}
+          "customValueSources": {
+            "pipelineName": {
+              "description": "Agent pipeline display name (not pipeline id). Typed on each flow step.",
+              "resolver": {
+                "kind": "stepField",
+                "field": "pipelineName"
+              }
+            }
+          }
         }
       },
       "provenance": {
@@ -2154,7 +2228,14 @@
               "stepFields": {}
             }
           },
-          "customValueSources": {}
+          "customValueSources": {
+            "planEntityId": {
+              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+              "resolver": {
+                "kind": "planEntityId"
+              }
+            }
+          }
         }
       },
       "provenance": {
@@ -2593,7 +2674,36 @@
               "stepFields": {}
             }
           },
-          "customValueSources": {}
+          "customValueSources": {
+            "auditObjectType": {
+              "description": "Contract / Dataset / Rule label for audit gate procedures (@objType). Typed on each flow step.",
+              "resolver": {
+                "kind": "stepField",
+                "field": "auditObjectType"
+              }
+            },
+            "planActor": {
+              "description": "UPN of the user who started the sync run.",
+              "resolver": {
+                "kind": "planActor"
+              }
+            },
+            "planEntityId": {
+              "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+              "resolver": {
+                "kind": "planEntityId"
+              }
+            },
+            "ruleInputDatasetId": {
+              "description": "Target SQL: inputDatasetId from core.Rule for the synced rule.",
+              "resolver": {
+                "kind": "targetSql",
+                "query": "SELECT inputDatasetId FROM core.[Rule] WHERE ruleId = @entityId",
+                "resultColumn": "inputDatasetId",
+                "resultType": "number"
+              }
+            }
+          }
         }
       },
       "provenance": {

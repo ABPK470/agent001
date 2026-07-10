@@ -9,17 +9,15 @@ import type {
   ValueSource,
 } from "../../types"
 import {
-  BUILTIN_TARGET_SQL,
-  BUILTIN_VALUE_SOURCE_DESCRIPTIONS,
-  BUILTIN_VALUE_SOURCE_TYPES,
+  catalogResolverFamilyLabel,
+  formatCatalogResolverRuntimePreview,
   formatHandlerInputPreviewHint,
   formatValueSourcePreview,
   isLiteralHandlerSlot,
   isStepBoundHandlerSlot,
   normalizeKindDefinition,
-  STEP_FIELD_DESCRIPTIONS,
   stepFieldKeysFromHandler,
-  SYNC_STEP_FIELD_KEYS,
+  valueSourceCatalogId,
 } from "../../types"
 
 export const HANDLER_TYPE_OPTIONS: Array<{ value: SyncFlowKindHandlerType; label: string; description: string }> = [
@@ -87,83 +85,28 @@ export type SyncPlanBindingSourceUiCatalog = CustomValueSourceUiCatalog
 /** @deprecated Use CustomValueSourceUiEntry */
 export type SyncPlanBindingSourceUiEntry = CustomValueSourceUiEntry
 
-const BUILTIN_LISTBOX_TYPES = BUILTIN_VALUE_SOURCE_TYPES satisfies ReadonlyArray<ValueSource["type"]>
-
-export type WiringCatalogListItem = {
-  id: string
-  label: string
-  hint?: string
-  builtIn: boolean
-  wiringKind: "builtinValueSource" | "builtinStepField" | "custom"
-}
-
-export function builtinValueSourceDefinition(
-  type: (typeof BUILTIN_VALUE_SOURCE_TYPES)[number],
-): CustomValueSourceDefinition {
-  const sql = BUILTIN_TARGET_SQL[type as keyof typeof BUILTIN_TARGET_SQL]
-  if (sql) {
-    return {
-      description: BUILTIN_VALUE_SOURCE_DESCRIPTIONS[type],
-      query: sql.query,
-      resultColumn: sql.resultColumn,
-      resultType: sql.resultType,
-    }
-  }
-  return {
-    description: BUILTIN_VALUE_SOURCE_DESCRIPTIONS[type],
-    query: "",
-    resultColumn: "",
-  }
-}
-
-export function buildWiringCatalogListItems(
-  customSources: ReadonlyArray<{
+export function wiringCatalogListItems(
+  sources: ReadonlyArray<{
     id: string
     label: string
     definition: CustomValueSourceDefinition
     builtIn: boolean
   }>,
-): WiringCatalogListItem[] {
-  const builtins: WiringCatalogListItem[] = [
-    ...BUILTIN_VALUE_SOURCE_TYPES.map((type) => ({
-      id: type,
-      label: formatValueSourcePreview({ type }),
-      hint: type in BUILTIN_TARGET_SQL ? "Query · built-in SQL" : "Auto · plan context",
-      builtIn: true,
-      wiringKind: "builtinValueSource" as const,
-    })),
-    ...SYNC_STEP_FIELD_KEYS.map((field) => ({
-      id: field,
-      label: formatValueSourcePreview({ type: "stepField", field }),
-      hint: `Text · step.${field}`,
-      builtIn: true,
-      wiringKind: "builtinStepField" as const,
-    })),
-  ]
-  const custom = customSources.map((entry) => ({
-    id: entry.id,
-    label: formatValueSourcePreview(
-      { type: "catalog", id: entry.id },
-      {
-        customCatalog: { [entry.id]: entry.definition },
-        customLabels: { [entry.id]: entry.label },
-      },
-    ),
-    hint: "Query · custom SQL",
-    builtIn: entry.builtIn,
-    wiringKind: "custom" as const,
-  }))
-  return [...builtins, ...custom].sort((a, b) => a.label.localeCompare(b.label))
-}
-
-export function wiringBuiltinDescription(item: WiringCatalogListItem): string {
-  if (item.wiringKind === "builtinValueSource") {
-    return BUILTIN_VALUE_SOURCE_DESCRIPTIONS[item.id as (typeof BUILTIN_VALUE_SOURCE_TYPES)[number]]
-  }
-  if (item.wiringKind === "builtinStepField") {
-    return STEP_FIELD_DESCRIPTIONS[item.id as SyncStepFieldKey]
-  }
-  return ""
+): Array<{ id: string; label: string; hint?: string; builtIn: boolean }> {
+  return sources
+    .map((entry) => ({
+      id: entry.id,
+      label: formatValueSourcePreview(
+        { type: "catalog", id: entry.id },
+        {
+          customCatalog: { [entry.id]: entry.definition },
+          customLabels: { [entry.id]: entry.label },
+        },
+      ),
+      hint: catalogResolverFamilyLabel(entry.definition.resolver),
+      builtIn: entry.builtIn,
+    }))
+    .sort((a, b) => a.label.localeCompare(b.label))
 }
 
 export const PRIOR_STEP_OUTPUT_LISTBOX_VALUE = "__prior_step_output__"
@@ -197,8 +140,8 @@ export const builtinBindingSourceUiCatalog = builtinCustomValueSourceUiCatalog
 
 export function valueSourceListboxValue(source: ValueSource | undefined): string {
   if (!source) return ""
-  if (source.type === "catalog") return `catalog:${source.id}`
-  if (source.type === "stepField") return `stepField:${source.field}`
+  const catalogId = valueSourceCatalogId(source)
+  if (catalogId) return `catalog:${catalogId}`
   if (source.type === "priorOutput") return JSON.stringify(source)
   return source.type
 }
@@ -211,7 +154,7 @@ export function parseValueSourceListboxValue(value: string): ValueSource | undef
     return { type: "catalog", id: value.slice("catalog:".length) }
   }
   if (value.startsWith("stepField:")) {
-    return { type: "stepField", field: value.slice("stepField:".length) as SyncStepFieldKey }
+    return { type: "catalog", id: value.slice("stepField:".length) as SyncStepFieldKey }
   }
   if (value.startsWith("{")) {
     try {
@@ -221,8 +164,15 @@ export function parseValueSourceListboxValue(value: string): ValueSource | undef
       return undefined
     }
   }
-  if ((BUILTIN_LISTBOX_TYPES as readonly string[]).includes(value)) {
-    return { type: value as (typeof BUILTIN_LISTBOX_TYPES)[number] }
+  if (
+    value === "planEntityId"
+    || value === "planActor"
+    || value === "currentStepId"
+    || value === "contractName"
+    || value === "ruleInputDatasetId"
+    || value === "contractPipelineId"
+  ) {
+    return { type: "catalog", id: value }
   }
   return undefined
 }
@@ -239,43 +189,32 @@ function previewOptions(catalog: CustomValueSourceUiCatalog) {
   return { customCatalog: runtime, customLabels: labels }
 }
 
-function builtinValueSourceListboxOptions(catalog: CustomValueSourceUiCatalog = {}) {
-  const options = previewOptions(catalog)
-  return BUILTIN_LISTBOX_TYPES.map((type) => ({
-    value: type,
-    label: formatValueSourcePreview({ type }, options),
-    hint:
-      type in BUILTIN_TARGET_SQL
-        ? BUILTIN_TARGET_SQL[type as keyof typeof BUILTIN_TARGET_SQL].query
-        : "Built-in plan or step context value.",
-  }))
-}
-
-function customValueSourceListboxOptions(catalog: CustomValueSourceUiCatalog) {
+function catalogValueSourceListboxOptions(catalog: CustomValueSourceUiCatalog) {
   const options = previewOptions(catalog)
   return Object.entries(catalog).map(([id, entry]) => ({
     value: `catalog:${id}`,
     label: formatValueSourcePreview({ type: "catalog", id }, options),
-    hint: entry.definition.description.trim() || entry.definition.query.trim() || id,
+    hint: catalogResolverFamilyLabel(entry.definition.resolver),
   }))
 }
 
 export function bindingSourceListboxOptions(catalog: CustomValueSourceUiCatalog = {}) {
-  return [...builtinValueSourceListboxOptions(catalog), ...customValueSourceListboxOptions(catalog)].sort((a, b) =>
-    a.label.localeCompare(b.label),
-  )
+  return [...catalogValueSourceListboxOptions(catalog)].sort((a, b) => a.label.localeCompare(b.label))
 }
 
-export function stepFieldListboxOptions() {
-  return SYNC_STEP_FIELD_KEYS.map((field) => ({
-    value: `stepField:${field}`,
-    label: formatValueSourcePreview({ type: "stepField", field }),
-    hint: `Operator types this on each flow step (step.${field})`,
-  }))
+export function stepFieldListboxOptions(catalog: CustomValueSourceUiCatalog = {}) {
+  const options = previewOptions(catalog)
+  return Object.entries(catalog)
+    .filter(([, entry]) => entry.definition.resolver.kind === "stepField")
+    .map(([id, entry]) => ({
+      value: `catalog:${id}`,
+      label: formatValueSourcePreview({ type: "catalog", id }, options),
+      hint: catalogResolverFamilyLabel(entry.definition.resolver),
+    }))
 }
 
 export function handlerInputSourceListboxOptions(catalog: CustomValueSourceUiCatalog = {}) {
-  return [...bindingSourceListboxOptions(catalog), ...stepFieldListboxOptions()]
+  return bindingSourceListboxOptions(catalog)
 }
 
 export function bindingSourceOptions(catalog: CustomValueSourceUiCatalog) {
@@ -291,11 +230,14 @@ export function bindingRuntimeHint(
   source: ValueSource,
 ): string {
   const options = previewOptions(catalog)
-  if (source.type === "catalog") {
-    const entry = catalog[source.id]
-    if (!entry) return `Unknown custom value source "${source.id}".`
-    const column = entry.definition.resultColumn.trim() || "?"
-    return `Target SQL → ${column}`
+  const catalogId = valueSourceCatalogId(source)
+  if (catalogId) {
+    const entry = catalog[catalogId]
+    if (!entry) return `Unknown value source "${catalogId}".`
+    if (entry.definition.resolver.kind === "targetSql") {
+      return `Target SQL → ${entry.definition.resolver.resultColumn.trim() || "?"}`
+    }
+    return formatValueSourcePreview({ type: "catalog", id: catalogId }, options)
   }
   return formatValueSourcePreview(source, options)
 }
@@ -327,13 +269,13 @@ export function defaultHandlerForType(type: SyncFlowKindHandlerType): SyncFlowKi
         type: "mssql_procedure",
         connection: "target",
         procedure: "core.uspCustomStep",
-        parameters: [{ name: "id", source: { type: "planEntityId" } }],
+        parameters: [{ name: "id", source: { type: "catalog", id: "planEntityId" } }],
       }
   }
 }
 
 export function defaultProcedureParameters(): SyncProcedureParameter[] {
-  return [{ name: "id", source: { type: "planEntityId" } }]
+  return [{ name: "id", source: { type: "catalog", id: "planEntityId" } }]
 }
 
 export function withNormalizedKindDefinition(
@@ -398,8 +340,8 @@ export function formatProcedureParamBinding(
         sourceKey: param.source.id,
         sourceLabel: param.source.id,
         runtimeHint: custom
-          ? `Target SQL → ${custom.resultColumn}`
-          : `Unknown custom value source "${param.source.id}".`,
+          ? formatCatalogResolverRuntimePreview(custom, param.source.id)
+          : `Unknown value source "${param.source.id}".`,
       }
     }
     return {
@@ -572,8 +514,12 @@ export function bindingSourceDescription(
     return `Unknown custom value source "${id}". Create it under Configuration → Wiring, then pick it here.`
   }
   const detail = entry.definition.description.trim()
-  const query = entry.definition.query.trim()
-  return detail ? `${query}\n\n${detail}` : query || id
+  const resolver = entry.definition.resolver
+  if (resolver.kind === "targetSql") {
+    const query = resolver.query.trim()
+    return detail ? `${query}\n\n${detail}` : query || id
+  }
+  return detail || id
 }
 
 export function customValueSourceCatalogFromMetadata(

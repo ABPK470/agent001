@@ -84,9 +84,15 @@ export function loadSyncMetadataArtifact(
   }
 
   for (const source of parsed.customValueSources ?? []) {
-    if (!source?.id || !source.label || !source.definition?.query) {
+    if (!source?.id || !source.label || !source.definition) {
       throw new Error(
-        `Invalid custom value source "${source?.id ?? "?"}" in sync metadata artifact at ${relPath}.`,
+        `Invalid value source "${source?.id ?? "?"}" in sync metadata artifact at ${relPath}.`,
+      )
+    }
+    const resolver = (source.definition as { resolver?: unknown }).resolver
+    if (!resolver || typeof resolver !== "object" || !("kind" in resolver)) {
+      throw new Error(
+        `Invalid value source "${source.id}" in sync metadata artifact at ${relPath}: missing resolver.`,
       )
     }
   }

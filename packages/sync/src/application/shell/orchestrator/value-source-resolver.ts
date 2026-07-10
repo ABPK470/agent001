@@ -1,17 +1,17 @@
 /**
- * Resolve ValueSource at execute time — single resolver for all handler inputs.
+ * Resolve ValueSource at execute time — catalog is the single authority for resolvers.
  */
 
 import sqlMod, { type ConnectionPool } from "mssql"
 
-import type { CustomValueSourceCatalog, ValueSource } from "@mia/shared-types"
+import type { CustomValueSourceCatalog, CustomValueSourceDefinition, ValueSource } from "@mia/shared-types"
 import {
-  BUILTIN_TARGET_SQL,
   effectiveTargetSqlResultType,
   isLiteralValueSource,
   lookupCustomValueSource,
   readStepFieldValue,
   validateTargetSqlQuery,
+  valueSourceCatalogId,
 } from "@mia/shared-types"
 
 import type { SyncRuntimeHost } from "../../../ports/index.js"
@@ -43,7 +43,26 @@ export async function resolveValueSource(
     return source.value
   }
 
-  switch (source.type) {
+  if (source.type === "priorOutput") {
+    return ctx.stepOutputs.get(source.stepId, source.output)
+  }
+
+  const catalogId = valueSourceCatalogId(source)
+  if (!catalogId) {
+    throw new Error(`Unsupported value source type "${String((source as { type?: string }).type)}".`)
+  }
+
+  const def = lookupCustomValueSource(ctx.customValueSources, catalogId)
+  return resolveCatalogDefinition(def, ctx, step, catalogId)
+}
+
+export async function resolveCatalogDefinition(
+  def: CustomValueSourceDefinition,
+  ctx: ValueSourceResolveContext,
+  step: Pick<SyncExecutionContractStep, "id"> & Record<string, unknown>,
+  label: string,
+): Promise<unknown> {
+  switch (def.resolver.kind) {
     case "planEntityId":
       return ctx.entityId
     case "planActor": {
@@ -54,46 +73,18 @@ export async function resolveValueSource(
     }
     case "currentStepId":
       return step.id
-    case "contractName":
-      return resolveTargetSqlBinding(
-        BUILTIN_TARGET_SQL.contractName.query,
-        BUILTIN_TARGET_SQL.contractName.resultColumn,
-        ctx,
-        "contractName",
-        BUILTIN_TARGET_SQL.contractName.resultType,
-      )
-    case "ruleInputDatasetId":
-      return resolveTargetSqlBinding(
-        BUILTIN_TARGET_SQL.ruleInputDatasetId.query,
-        BUILTIN_TARGET_SQL.ruleInputDatasetId.resultColumn,
-        ctx,
-        "ruleInputDatasetId",
-        BUILTIN_TARGET_SQL.ruleInputDatasetId.resultType,
-      )
-    case "contractPipelineId":
-      return resolveTargetSqlBinding(
-        BUILTIN_TARGET_SQL.contractPipelineId.query,
-        BUILTIN_TARGET_SQL.contractPipelineId.resultColumn,
-        ctx,
-        "contractPipelineId",
-        BUILTIN_TARGET_SQL.contractPipelineId.resultType,
-      )
     case "stepField":
-      return readStepFieldValue(step, source.field)
-    case "priorOutput":
-      return ctx.stepOutputs.get(source.stepId, source.output)
-    case "catalog": {
-      const def = lookupCustomValueSource(ctx.customValueSources, source.id)
+      return readStepFieldValue(step, def.resolver.field)
+    case "targetSql":
       return resolveTargetSqlBinding(
-        def.query,
-        def.resultColumn,
+        def.resolver.query,
+        def.resolver.resultColumn,
         ctx,
-        `custom value source ${source.id}`,
-        effectiveTargetSqlResultType(def),
+        label,
+        effectiveTargetSqlResultType(def.resolver),
       )
-    }
     default:
-      throw new Error(`Unsupported value source type "${String((source as { type?: string }).type)}".`)
+      throw new Error(`Unsupported catalog resolver kind for "${label}".`)
   }
 }
 

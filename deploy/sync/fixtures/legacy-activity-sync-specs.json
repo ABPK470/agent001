@@ -43,14 +43,15 @@
               {
                 "name": "id",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
                 "name": "objectName",
                 "source": {
-                  "type": "stepField",
-                  "field": "objectName"
+                  "type": "catalog",
+                  "id": "objectName"
                 }
               }
             ]
@@ -148,8 +149,8 @@
               {
                 "name": "name",
                 "source": {
-                  "type": "stepField",
-                  "field": "pipelineName"
+                  "type": "catalog",
+                  "id": "pipelineName"
                 }
               }
             ]
@@ -189,14 +190,15 @@
               {
                 "name": "id",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
                 "name": "objType",
                 "source": {
-                  "type": "stepField",
-                  "field": "auditObjectType"
+                  "type": "catalog",
+                  "id": "auditObjectType"
                 }
               },
               {
@@ -255,7 +257,8 @@
               {
                 "name": "contractId",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
@@ -349,7 +352,8 @@
         "description": "Register affected pipelines with the target agent service.",
         "bindings": {
           "pipelineId": {
-            "type": "contractPipelineId"
+            "type": "catalog",
+            "id": "contractPipelineId"
           }
         }
       }
@@ -370,7 +374,8 @@
               {
                 "name": "contractId",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               }
             ]
@@ -408,7 +413,8 @@
               {
                 "name": "contractId",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
@@ -454,14 +460,15 @@
               {
                 "name": "id",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
                 "name": "objType",
                 "source": {
-                  "type": "stepField",
-                  "field": "auditObjectType"
+                  "type": "catalog",
+                  "id": "auditObjectType"
                 }
               },
               {
@@ -520,7 +527,8 @@
               {
                 "name": "contractId",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
@@ -566,7 +574,8 @@
               {
                 "name": "contractName",
                 "source": {
-                  "type": "contractName"
+                  "type": "catalog",
+                  "id": "contractName"
                 }
               },
               {
@@ -620,7 +629,8 @@
               {
                 "name": "ContractName",
                 "source": {
-                  "type": "contractName"
+                  "type": "catalog",
+                  "id": "contractName"
                 }
               },
               {
@@ -683,7 +693,8 @@
               {
                 "name": "ContractName",
                 "source": {
-                  "type": "contractName"
+                  "type": "catalog",
+                  "id": "contractName"
                 }
               },
               {
@@ -746,7 +757,8 @@
               {
                 "name": "ContractName",
                 "source": {
-                  "type": "contractName"
+                  "type": "catalog",
+                  "id": "contractName"
                 }
               },
               {
@@ -809,7 +821,8 @@
               {
                 "name": "ContractName",
                 "source": {
-                  "type": "contractName"
+                  "type": "catalog",
+                  "id": "contractName"
                 }
               },
               {
@@ -872,7 +885,8 @@
               {
                 "name": "ContractName",
                 "source": {
-                  "type": "contractName"
+                  "type": "catalog",
+                  "id": "contractName"
                 }
               },
               {
@@ -935,7 +949,8 @@
               {
                 "name": "contractName",
                 "source": {
-                  "type": "contractName"
+                  "type": "catalog",
+                  "id": "contractName"
                 }
               },
               {
@@ -1006,7 +1021,8 @@
               {
                 "name": "contractName",
                 "source": {
-                  "type": "contractName"
+                  "type": "catalog",
+                  "id": "contractName"
                 }
               },
               {
@@ -1053,7 +1069,8 @@
               {
                 "name": "contractName",
                 "source": {
-                  "type": "contractName"
+                  "type": "catalog",
+                  "id": "contractName"
                 }
               },
               {
@@ -1108,7 +1125,8 @@
               {
                 "name": "contractName",
                 "source": {
-                  "type": "contractName"
+                  "type": "catalog",
+                  "id": "contractName"
                 }
               },
               {
@@ -1163,7 +1181,8 @@
               {
                 "name": "contractId",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
@@ -1209,14 +1228,15 @@
               {
                 "name": "id",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
                 "name": "objType",
                 "source": {
-                  "type": "stepField",
-                  "field": "auditObjectType"
+                  "type": "catalog",
+                  "id": "auditObjectType"
                 }
               },
               {
@@ -1275,14 +1295,15 @@
               {
                 "name": "id",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
                 "name": "objType",
                 "source": {
-                  "type": "stepField",
-                  "field": "auditObjectType"
+                  "type": "catalog",
+                  "id": "auditObjectType"
                 }
               },
               {
@@ -1373,7 +1394,8 @@
               {
                 "name": "userFullName",
                 "source": {
-                  "type": "planActor"
+                  "type": "catalog",
+                  "id": "planActor"
                 }
               }
             ]
@@ -1397,7 +1419,8 @@
         "description": "Deploy datasets required by the rule on the target ETL service.",
         "bindings": {
           "datasetId": {
-            "type": "ruleInputDatasetId"
+            "type": "catalog",
+            "id": "ruleInputDatasetId"
           }
         }
       }
@@ -1420,13 +1443,15 @@
               {
                 "name": "ruleId",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
                 "name": "userFullName",
                 "source": {
-                  "type": "planActor"
+                  "type": "catalog",
+                  "id": "planActor"
                 }
               }
             ]
@@ -1465,14 +1490,15 @@
               {
                 "name": "id",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
                 "name": "objType",
                 "source": {
-                  "type": "stepField",
-                  "field": "auditObjectType"
+                  "type": "catalog",
+                  "id": "auditObjectType"
                 }
               },
               {
@@ -1531,14 +1557,15 @@
               {
                 "name": "id",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
                 "name": "objType",
                 "source": {
-                  "type": "stepField",
-                  "field": "auditObjectType"
+                  "type": "catalog",
+                  "id": "auditObjectType"
                 }
               },
               {
@@ -1629,7 +1656,8 @@
               {
                 "name": "userFullName",
                 "source": {
-                  "type": "planActor"
+                  "type": "catalog",
+                  "id": "planActor"
                 }
               }
             ]
@@ -1653,7 +1681,8 @@
         "description": "Deploy the dataset using the target ETL service.",
         "bindings": {
           "datasetId": {
-            "type": "planEntityId"
+            "type": "catalog",
+            "id": "planEntityId"
           }
         }
       }
@@ -1674,14 +1703,15 @@
               {
                 "name": "id",
                 "source": {
-                  "type": "planEntityId"
+                  "type": "catalog",
+                  "id": "planEntityId"
                 }
               },
               {
                 "name": "objType",
                 "source": {
-                  "type": "stepField",
-                  "field": "auditObjectType"
+                  "type": "catalog",
+                  "id": "auditObjectType"
                 }
               },
               {
@@ -1788,7 +1818,8 @@
         "description": "Register the target pipeline with the agent service.",
         "bindings": {
           "pipelineId": {
-            "type": "planEntityId"
+            "type": "catalog",
+            "id": "planEntityId"
           }
         }
       }

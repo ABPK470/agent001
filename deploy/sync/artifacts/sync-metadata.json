@@ -86,14 +86,15 @@
             {
               "name": "id",
               "source": {
-                "type": "planEntityId"
+                "type": "catalog",
+                "id": "planEntityId"
               }
             },
             {
               "name": "objType",
               "source": {
-                "type": "stepField",
-                "field": "auditObjectType"
+                "type": "catalog",
+                "id": "auditObjectType"
               }
             },
             {
@@ -141,7 +142,8 @@
             {
               "name": "ContractName",
               "source": {
-                "type": "contractName"
+                "type": "catalog",
+                "id": "contractName"
               }
             },
             {
@@ -194,7 +196,8 @@
             {
               "name": "contractName",
               "source": {
-                "type": "contractName"
+                "type": "catalog",
+                "id": "contractName"
               }
             },
             {
@@ -255,7 +258,8 @@
             {
               "name": "ContractName",
               "source": {
-                "type": "contractName"
+                "type": "catalog",
+                "id": "contractName"
               }
             },
             {
@@ -308,7 +312,8 @@
             {
               "name": "ContractName",
               "source": {
-                "type": "contractName"
+                "type": "catalog",
+                "id": "contractName"
               }
             },
             {
@@ -361,7 +366,8 @@
             {
               "name": "ContractName",
               "source": {
-                "type": "contractName"
+                "type": "catalog",
+                "id": "contractName"
               }
             },
             {
@@ -414,7 +420,8 @@
             {
               "name": "ContractName",
               "source": {
-                "type": "contractName"
+                "type": "catalog",
+                "id": "contractName"
               }
             },
             {
@@ -467,7 +474,8 @@
             {
               "name": "contractName",
               "source": {
-                "type": "contractName"
+                "type": "catalog",
+                "id": "contractName"
               }
             },
             {
@@ -504,7 +512,8 @@
             {
               "name": "contractName",
               "source": {
-                "type": "contractName"
+                "type": "catalog",
+                "id": "contractName"
               }
             },
             {
@@ -549,7 +558,8 @@
             {
               "name": "contractName",
               "source": {
-                "type": "contractName"
+                "type": "catalog",
+                "id": "contractName"
               }
             },
             {
@@ -594,7 +604,8 @@
             {
               "name": "contractName",
               "source": {
-                "type": "contractName"
+                "type": "catalog",
+                "id": "contractName"
               }
             },
             {
@@ -638,7 +649,8 @@
             {
               "name": "contractId",
               "source": {
-                "type": "planEntityId"
+                "type": "catalog",
+                "id": "planEntityId"
               }
             }
           ]
@@ -671,7 +683,8 @@
             {
               "name": "userFullName",
               "source": {
-                "type": "planActor"
+                "type": "catalog",
+                "id": "planActor"
               }
             }
           ]
@@ -701,14 +714,15 @@
             {
               "name": "id",
               "source": {
-                "type": "planEntityId"
+                "type": "catalog",
+                "id": "planEntityId"
               }
             },
             {
               "name": "objType",
               "source": {
-                "type": "stepField",
-                "field": "auditObjectType"
+                "type": "catalog",
+                "id": "auditObjectType"
               }
             },
             {
@@ -757,14 +771,15 @@
             {
               "name": "id",
               "source": {
-                "type": "planEntityId"
+                "type": "catalog",
+                "id": "planEntityId"
               }
             },
             {
               "name": "objectName",
               "source": {
-                "type": "stepField",
-                "field": "objectName"
+                "type": "catalog",
+                "id": "objectName"
               }
             }
           ]
@@ -843,8 +858,8 @@
             {
               "name": "name",
               "source": {
-                "type": "stepField",
-                "field": "pipelineName"
+                "type": "catalog",
+                "id": "pipelineName"
               }
             }
           ]
@@ -875,13 +890,15 @@
             {
               "name": "ruleId",
               "source": {
-                "type": "planEntityId"
+                "type": "catalog",
+                "id": "planEntityId"
               }
             },
             {
               "name": "userFullName",
               "source": {
-                "type": "planActor"
+                "type": "catalog",
+                "id": "planActor"
               }
             }
           ]
@@ -910,14 +927,15 @@
             {
               "name": "id",
               "source": {
-                "type": "planEntityId"
+                "type": "catalog",
+                "id": "planEntityId"
               }
             },
             {
               "name": "objType",
               "source": {
-                "type": "stepField",
-                "field": "auditObjectType"
+                "type": "catalog",
+                "id": "auditObjectType"
               }
             },
             {
@@ -965,7 +983,8 @@
             {
               "name": "contractId",
               "source": {
-                "type": "planEntityId"
+                "type": "catalog",
+                "id": "planEntityId"
               }
             },
             {
@@ -1001,7 +1020,8 @@
             {
               "name": "contractId",
               "source": {
-                "type": "planEntityId"
+                "type": "catalog",
+                "id": "planEntityId"
               }
             },
             {
@@ -1024,7 +1044,110 @@
       }
     }
   ],
-  "customValueSources": [],
+  "customValueSources": [
+    {
+      "id": "planEntityId",
+      "label": "Plan entity id",
+      "definition": {
+        "description": "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+        "resolver": {
+          "kind": "planEntityId"
+        }
+      }
+    },
+    {
+      "id": "planActor",
+      "label": "Plan actor (UPN)",
+      "definition": {
+        "description": "UPN of the user who started the sync run.",
+        "resolver": {
+          "kind": "planActor"
+        }
+      }
+    },
+    {
+      "id": "currentStepId",
+      "label": "Current step id",
+      "definition": {
+        "description": "Flow step id (step.id) of the step currently executing.",
+        "resolver": {
+          "kind": "currentStepId"
+        }
+      }
+    },
+    {
+      "id": "contractName",
+      "label": "Contract name",
+      "definition": {
+        "description": "Contract name on target after metadata sync (core.Contract.name for plan entity id).",
+        "resolver": {
+          "kind": "targetSql",
+          "query": "SELECT [name] AS name FROM core.Contract WHERE contractId = @entityId",
+          "resultColumn": "name",
+          "resultType": "string"
+        }
+      }
+    },
+    {
+      "id": "ruleInputDatasetId",
+      "label": "Rule input dataset id",
+      "definition": {
+        "description": "Target SQL: inputDatasetId from core.Rule for the synced rule.",
+        "resolver": {
+          "kind": "targetSql",
+          "query": "SELECT inputDatasetId FROM core.[Rule] WHERE ruleId = @entityId",
+          "resultColumn": "inputDatasetId",
+          "resultType": "number"
+        }
+      }
+    },
+    {
+      "id": "contractPipelineId",
+      "label": "Contract pipeline id",
+      "definition": {
+        "description": "Target SQL: pipelineId from core.Pipeline for the synced contract.",
+        "resolver": {
+          "kind": "targetSql",
+          "query": "SELECT pipelineId FROM core.Pipeline WHERE contractId = @entityId",
+          "resultColumn": "pipelineId",
+          "resultType": "number"
+        }
+      }
+    },
+    {
+      "id": "objectName",
+      "label": "Object name",
+      "definition": {
+        "description": "Dependency object name string (e.g. content, rule). Typed on each flow step.",
+        "resolver": {
+          "kind": "stepField",
+          "field": "objectName"
+        }
+      }
+    },
+    {
+      "id": "auditObjectType",
+      "label": "Audit object type",
+      "definition": {
+        "description": "Contract / Dataset / Rule label for audit gate procedures (@objType). Typed on each flow step.",
+        "resolver": {
+          "kind": "stepField",
+          "field": "auditObjectType"
+        }
+      }
+    },
+    {
+      "id": "pipelineName",
+      "label": "Pipeline name",
+      "definition": {
+        "description": "Agent pipeline display name (not pipeline id). Typed on each flow step.",
+        "resolver": {
+          "kind": "stepField",
+          "field": "pipelineName"
+        }
+      }
+    }
+  ],
   "flows": {
     "content": {
       "label": "Content dependencies",
@@ -1109,7 +1232,8 @@
           "description": "Register affected pipelines with the target agent service.",
           "bindings": {
             "pipelineId": {
-              "type": "contractPipelineId"
+              "type": "catalog",
+              "id": "contractPipelineId"
             }
           }
         },
@@ -1256,7 +1380,8 @@
           "description": "Deploy datasets required by the rule on the target ETL service.",
           "bindings": {
             "datasetId": {
-              "type": "ruleInputDatasetId"
+              "type": "catalog",
+              "id": "ruleInputDatasetId"
             }
           }
         },
@@ -1304,7 +1429,8 @@
           "description": "Deploy the dataset using the target ETL service.",
           "bindings": {
             "datasetId": {
-              "type": "planEntityId"
+              "type": "catalog",
+              "id": "planEntityId"
             }
           }
         },
@@ -1337,7 +1463,8 @@
           "description": "Register the target pipeline with the agent service.",
           "bindings": {
             "pipelineId": {
-              "type": "planEntityId"
+              "type": "catalog",
+              "id": "planEntityId"
             }
           }
         }

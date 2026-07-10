@@ -27,9 +27,10 @@ describe("ValueSource", () => {
     expect(validateValueSource({ type: "planEntityId" })).toBeNull()
   })
 
-  it("collects catalog ids only from catalog variant", () => {
-    expect(collectCatalogIdsFromValueSource({ type: "planEntityId" })).toEqual([])
+  it("collects catalog ids from catalog refs and legacy shorthand", () => {
+    expect(collectCatalogIdsFromValueSource({ type: "planEntityId" })).toEqual(["planEntityId"])
     expect(collectCatalogIdsFromValueSource({ type: "catalog", id: "myLookup" })).toEqual(["myLookup"])
+    expect(collectCatalogIdsFromValueSource({ type: "stepField", field: "objectName" })).toEqual(["objectName"])
   })
 
   it("formats preview labels", () => {

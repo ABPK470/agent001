@@ -3,33 +3,68 @@
  * step-field routing on handler slots via ValueSource; flow bindings only for per-flow value sources.
  */
 
-/** kind id → slot name → stepField ValueSource on the action */
+/** kind id → slot name → catalog id on the action */
 const TEXT_FIELD_ON_ACTION = {
-  auditCheck: { objType: { type: "stepField", field: "auditObjectType" } },
-  syncDate: { objType: { type: "stepField", field: "auditObjectType" } },
-  deployDate: { objType: { type: "stepField", field: "auditObjectType" } },
-  handleDependencies: { objectName: { type: "stepField", field: "objectName" } },
-  pipelineStart: { name: { type: "stepField", field: "pipelineName" } },
+  auditCheck: { objType: "auditObjectType" },
+  syncDate: { objType: "auditObjectType" },
+  deployDate: { objType: "auditObjectType" },
+  handleDependencies: { objectName: "objectName" },
+  pipelineStart: { name: "pipelineName" },
 }
 
-function isStepFieldSource(value) {
-  return value && typeof value === "object" && value.type === "stepField"
+const CATALOG_SHORTHAND_TYPES = new Set([
+  "planEntityId",
+  "planActor",
+  "currentStepId",
+  "contractName",
+  "ruleInputDatasetId",
+  "contractPipelineId",
+])
+
+function normalizeValueSourceRef(value) {
+  if (!value || typeof value !== "object" || !value.type) return value
+  if (value.type === "catalog" || value.type === "literal" || value.type === "priorOutput") return value
+  if (value.type === "stepField" && typeof value.field === "string") {
+    return { type: "catalog", id: value.field }
+  }
+  if (CATALOG_SHORTHAND_TYPES.has(value.type)) {
+    return { type: "catalog", id: value.type }
+  }
+  return value
+}
+
+function normalizeHandlerSources(handler) {
+  if (!handler || typeof handler !== "object") return handler
+  const next = { ...handler }
+  for (const key of ["parameters", "httpBody", "inputs"]) {
+    const slots = next[key]
+    if (!Array.isArray(slots)) continue
+    next[key] = slots.map((slot) => {
+      if (!slot || typeof slot !== "object" || !slot.source) return slot
+      return { ...slot, source: normalizeValueSourceRef(slot.source) }
+    })
+  }
+  return next
+}
+
+function isCatalogSource(value) {
+  return value && typeof value === "object" && value.type === "catalog"
 }
 
 function applyTextFieldsToHandler(handler, kindId) {
   if (!handler || typeof handler !== "object") return handler
   const textSlots = TEXT_FIELD_ON_ACTION[kindId]
-  if (!textSlots) return handler
-  const next = { ...handler }
+  if (!textSlots) return normalizeHandlerSources(handler)
+  const next = normalizeHandlerSources(handler)
   for (const key of ["parameters", "httpBody", "inputs"]) {
     const slots = next[key]
     if (!Array.isArray(slots)) continue
     next[key] = slots.map((slot) => {
       if (!slot || typeof slot !== "object") return slot
       const name = typeof slot.name === "string" ? slot.name.trim() : ""
-      const textSource = textSlots[name]
-      if (!textSource || slot.source) return slot
-      return { ...slot, source: textSource }
+      const catalogId = textSlots[name]
+      if (!catalogId || slot.source) return slot
+      return { ...slot, source: { type: "catalog", id: catalogId } }
     })
   }
   return next
@@ -50,8 +85,12 @@ export function migrateFlowStep(step) {
   const bindings = {}
   if (typeof step.bindings === "object" && step.bindings !== null) {
     for (const [slot, value] of Object.entries(step.bindings)) {
-      if (isStepFieldSource(value)) continue
-      bindings[slot] = value
+      const normalized = normalizeValueSourceRef(value)
+      if (isCatalogSource(normalized)) {
+        const fieldId = normalized.id
+        if (["objectName", "auditObjectType", "pipelineName"].includes(fieldId)) continue
+      }
+      bindings[slot] = normalized
     }
   }
   const { bindings: _removed, stepFields: _sf, ...rest } = step

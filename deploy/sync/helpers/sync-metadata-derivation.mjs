@@ -13,6 +13,7 @@ import {
 } from "./legacy-pipeline-evidence.mjs"
 import { migrateFlowStep, migrateKindDefinition } from "./sync-metadata-normalize.mjs"
 import { SYNC_METADATA_PHASES, SYNC_METADATA_PHASE_IDS } from "./sync-metadata-phases.mjs"
+import { VALUE_SOURCE_SEEDS } from "./value-source-seeds.mjs"
 
 const METADATA_ONLY_FLOW = {
   label: "Metadata only",
@@ -313,7 +314,11 @@ export function buildSyncMetadataFromPipelines(pipelines, options = {}) {
       "MyMI-derived sync vocabulary: step types (reusable handlers) and flows (ordered step instances). Seeds DB-backed config; operators may edit after bootstrap.",
     phases: SYNC_METADATA_PHASES.map((phase) => ({ ...phase, definition: { ...phase.definition } })),
     stepTypes: sortStepTypes(stepTypes),
-    customValueSources: [],
+    customValueSources: VALUE_SOURCE_SEEDS.map((entry) => ({
+      id: entry.id,
+      label: entry.label,
+      definition: structuredClone(entry.definition),
+    })),
     flows
   }
   enrichStepTypeEntityTypesFromFlows(metadata)
