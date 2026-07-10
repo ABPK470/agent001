@@ -1,5 +1,19 @@
 export const CELL_PREVIEW_MAX_LEN = 80
 
+export type SampleRowShape = {
+  values?: Record<string, unknown>
+  newValues?: Record<string, unknown>
+  oldValues?: Record<string, unknown>
+  changedColumns?: string[]
+}
+
+export type SampleRowDetail = {
+  table: string
+  kind: "insert" | "update" | "delete"
+  rowIndex: number
+  sample: SampleRowShape
+}
+
 /** Compact table preview — matches legacy `formatValue` behavior. */
 export function formatCellPreview(value: unknown): string {
   if (value == null) return "null"
@@ -33,17 +47,28 @@ export function isCellPreviewTruncated(value: unknown): boolean {
   return String(value).length > CELL_PREVIEW_MAX_LEN
 }
 
-export type SampleValueDetail = {
-  table: string
-  column: string
-  kind: "insert" | "update" | "delete"
-  variant: "value" | "old" | "new"
-  value: unknown
+/** All column names present on a sample row, sorted for stable display. */
+export function sampleRowColumns(sample: SampleRowShape): string[] {
+  const seen = new Set<string>()
+  const columns: string[] = []
+  const add = (key: string) => {
+    if (!seen.has(key)) {
+      seen.add(key)
+      columns.push(key)
+    }
+  }
+  for (const key of Object.keys(sample.values ?? {})) add(key)
+  for (const key of Object.keys(sample.newValues ?? {})) add(key)
+  for (const key of Object.keys(sample.oldValues ?? {})) add(key)
+  return columns.sort((a, b) => a.localeCompare(b))
 }
 
-export function sampleValueDetailLabel(detail: SampleValueDetail): string {
-  const kindLabel = detail.kind
-  if (detail.variant === "old") return `${detail.table} · ${kindLabel} · previous value`
-  if (detail.variant === "new") return `${detail.table} · ${kindLabel} · new value`
-  return `${detail.table} · ${kindLabel}`
+export function sampleRowDetailTitle(kind: SampleRowDetail["kind"]): string {
+  if (kind === "insert") return "Insert row"
+  if (kind === "update") return "Update row"
+  return "Delete row"
+}
+
+export function sampleRowDetailSubtitle(detail: SampleRowDetail): string {
+  return `${detail.table} · ${detail.kind} · row ${detail.rowIndex + 1}`
 }

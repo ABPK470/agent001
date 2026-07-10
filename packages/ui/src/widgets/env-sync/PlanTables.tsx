@@ -1,19 +1,14 @@
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, Loader2, XCircle } from "lucide-react"
-import { useMemo, useState, type CSSProperties } from "react"
+import { useMemo, useState } from "react"
 
 import type { SyncPlan, SyncPlanTable } from "../../types"
 import { movementOfTable, tableMovementTotal } from "../../types"
 import { timeAgo } from "../../util"
-import { ModalShell } from "./chrome"
 import { DIFF } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { buildExecTableStatus } from "./exec-status"
-import {
-  formatCellFull,
-  formatCellPreview,
-  sampleValueDetailLabel,
-  type SampleValueDetail,
-} from "./plan-table-values"
+import { PlanSampleRowModal } from "./PlanSampleRowModal"
+import { formatCellPreview, type SampleRowDetail } from "./plan-table-values"
 import type { ExecState } from "./types"
 
 export function PlanView({ plan, expanded, setExpanded, exec }: {
@@ -230,7 +225,7 @@ function SampleTbl({ kind, samples, table }: {
   samples: SyncPlanTable["samples"]["insert"]
   table: string
 }) {
-  const [detail, setDetail] = useState<SampleValueDetail | null>(null)
+  const [detail, setDetail] = useState<SampleRowDetail | null>(null)
   const maxCols = 12
   const cols = useMemo(() => {
     const all: string[] = []
@@ -267,46 +262,33 @@ function SampleTbl({ kind, samples, table }: {
         </thead>
         <tbody>
           {samples.map((sample, index) => {
+            const openRow = () => setDetail({ table, kind, rowIndex: index, sample })
             if (kind === "update") {
               const changed = new Set(sample.changedColumns ?? [])
               return (
-                <tr key={index} className="border-b border-border/20">
+                <tr
+                  key={index}
+                  className="border-b border-border/20 cursor-pointer hover:bg-elevated/20 transition-colors"
+                  onClick={openRow}
+                  title="View full row"
+                >
                   {cols.map((column) => (
                     <td key={column} className="px-2.5 py-1 align-top whitespace-nowrap border-b border-border/20">
                       {changed.has(column)
                         ? (
                           <>
-                            <SampleCell
-                              table={table}
-                              column={column}
-                              kind={kind}
-                              variant="old"
-                              value={sample.oldValues?.[column]}
-                              className="line-through"
-                              style={{ color: DIFF.oldRow }}
-                              onOpen={setDetail}
-                            />
-                            <SampleCell
-                              table={table}
-                              column={column}
-                              kind={kind}
-                              variant="new"
-                              value={sample.newValues?.[column]}
-                              style={{ color: DIFF.upd, fontWeight: 500 }}
-                              onOpen={setDetail}
-                            />
+                            <div className="line-through max-w-xs truncate" style={{ color: DIFF.oldRow }}>
+                              {formatCellPreview(sample.oldValues?.[column])}
+                            </div>
+                            <div className="max-w-xs truncate" style={{ color: DIFF.upd, fontWeight: 500 }}>
+                              {formatCellPreview(sample.newValues?.[column])}
+                            </div>
                           </>
                         )
                         : (
-                          <SampleCell
-                            table={table}
-                            column={column}
-                            kind={kind}
-                            variant="new"
-                            value={sample.newValues?.[column]}
-                            className="text-text"
-                            onOpen={setDetail}
-                          />
+                          <span className="text-text max-w-xs truncate block">
+                            {formatCellPreview(sample.newValues?.[column])}
+                          </span>
                         )}
                     </td>
                   ))}
@@ -314,17 +296,17 @@ function SampleTbl({ kind, samples, table }: {
               )
             }
             return (
-              <tr key={index}>
+              <tr
+                key={index}
+                className="cursor-pointer hover:bg-elevated/20 transition-colors"
+                onClick={openRow}
+                title="View full row"
+              >
                 {cols.map((column) => (
                   <td key={column} className="px-2.5 py-1 text-text whitespace-nowrap border-b border-border/20">
-                    <SampleCell
-                      table={table}
-                      column={column}
-                      kind={kind}
-                      variant="value"
-                      value={sample.values?.[column]}
-                      onOpen={setDetail}
-                    />
+                    <span className="max-w-xs truncate block">
+                      {formatCellPreview(sample.values?.[column])}
+                    </span>
                   </td>
                 ))}
               </tr>
@@ -332,48 +314,7 @@ function SampleTbl({ kind, samples, table }: {
           })}
         </tbody>
       </table>
-      {detail && <SampleValueDetailModal detail={detail} onClose={() => setDetail(null)} />}
+      {detail && <PlanSampleRowModal detail={detail} onClose={() => setDetail(null)} />}
     </>
-  )
-}
-
-function SampleCell({ table, column, kind, variant, value, className, style, onOpen }: {
-  table: string
-  column: string
-  kind: "insert" | "update" | "delete"
-  variant: SampleValueDetail["variant"]
-  value: unknown
-  className?: string
-  style?: CSSProperties
-  onOpen: (detail: SampleValueDetail) => void
-}) {
-  return (
-    <button
-      type="button"
-      className={`block max-w-xs truncate text-left bg-transparent border-0 p-0 font-inherit cursor-pointer hover:underline decoration-dotted underline-offset-2 ${className ?? ""}`}
-      style={style}
-      onClick={() => onOpen({ table, column, kind, variant, value })}
-      title="View full value"
-    >
-      {formatCellPreview(value)}
-    </button>
-  )
-}
-
-function SampleValueDetailModal({ detail, onClose }: {
-  detail: SampleValueDetail
-  onClose: () => void
-}) {
-  return (
-    <ModalShell
-      title={detail.column}
-      subtitle={sampleValueDetailLabel(detail)}
-      size="default"
-      onClose={onClose}
-    >
-      <pre className="px-6 py-5 text-sm font-mono whitespace-pre-wrap break-all text-text min-w-0">
-        {formatCellFull(detail.value)}
-      </pre>
-    </ModalShell>
   )
 }

@@ -4,7 +4,9 @@ import {
   formatCellFull,
   formatCellPreview,
   isCellPreviewTruncated,
-  sampleValueDetailLabel,
+  sampleRowColumns,
+  sampleRowDetailSubtitle,
+  sampleRowDetailTitle,
 } from "./plan-table-values"
 
 describe("plan-table-values", () => {
@@ -44,20 +46,20 @@ describe("plan-table-values", () => {
     expect(formatCellFull(broken)).toBe(broken)
   })
 
-  it("builds modal subtitles for sample value context", () => {
-    expect(sampleValueDetailLabel({
+  it("lists every column on a sample row in stable order", () => {
+    expect(sampleRowColumns({
+      oldValues: { b: 1, a: 2 },
+      newValues: { c: 3, a: 4 },
+    })).toEqual(["a", "b", "c"])
+  })
+
+  it("builds row modal titles and subtitles", () => {
+    expect(sampleRowDetailTitle("update")).toBe("Update row")
+    expect(sampleRowDetailSubtitle({
       table: "core.Contract",
-      column: "properties",
       kind: "update",
-      variant: "old",
-      value: "{}",
-    })).toBe("core.Contract · update · previous value")
-    expect(sampleValueDetailLabel({
-      table: "core.Contract",
-      column: "properties",
-      kind: "insert",
-      variant: "value",
-      value: "{}",
-    })).toBe("core.Contract · insert")
+      rowIndex: 0,
+      sample: {},
+    })).toBe("core.Contract · update · row 1")
   })
 })
