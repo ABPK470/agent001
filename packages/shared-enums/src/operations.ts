@@ -28,6 +28,7 @@ export const OperationStatus = {
   Success:   "success",
   Failed:    "failed",
   Cancelled: "cancelled",
+  Skipped:   "skipped",
   Unknown:   "unknown",
 } as const
 

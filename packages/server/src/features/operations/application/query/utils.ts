@@ -7,6 +7,7 @@ import {
   isCancellationEvent,
   isCompletionEvent,
   isFailureEvent,
+  isSkippedEvent,
   isSubStepFailureEvent
 } from "@mia/agent"
 import { OperationStatus } from "./types.js"
@@ -58,6 +59,7 @@ export function inferPipelineStatus(events: OperationEvent[]): OperationStatus {
   const hasSubStepFailure = events.some((e) => isSubStepFailureEvent(e.type))
   for (let i = events.length - 1; i >= 0; i--) {
     const t = events[i].type
+    if (isSkippedEvent(t)) return OperationStatus.Skipped
     if (isCompletionEvent(t)) return hasSubStepFailure ? OperationStatus.Failed : OperationStatus.Success
     if (isFailureEvent(t)) return OperationStatus.Failed
     if (isCancellationEvent(t)) return OperationStatus.Cancelled

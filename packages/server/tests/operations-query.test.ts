@@ -339,4 +339,59 @@ describe("listOperations sync bucketing", () => {
     expect(scope?.events).toHaveLength(0)
     expect(scope?.details).toEqual({ tableCount: 8, excludedFkOnly: ["AuditLog"] })
   })
+
+  it("uses distinct pipeline ids and keeps execute skip metadata off preview rows", async () => {
+    listEvents.mockReturnValue([
+      {
+        type: EventType.SyncExecuteSkipped,
+        created_at: "2026-05-27T15:00:02.000Z",
+        data: JSON.stringify({
+          planId: "plan-skip",
+          step: "auditCheck",
+          message: "Source audit gate failed — execute skipped",
+        }),
+      },
+      {
+        type: EventType.SyncExecuteStarted,
+        created_at: "2026-05-27T15:00:01.000Z",
+        data: JSON.stringify({ planId: "plan-skip", source: "dev", target: "uat" }),
+      },
+      {
+        type: EventType.SyncPreviewCompleted,
+        created_at: "2026-05-27T14:59:00.000Z",
+        data: JSON.stringify({
+          planId: "plan-skip",
+          totals: { insert: 0, update: 0, delete: 0 },
+        }),
+      },
+    ])
+
+    getSyncRun.mockReturnValue({
+      status: "skipped",
+      finished_at: "2026-05-27T15:00:02.000Z",
+      duration_ms: 1000,
+      entity_display_name: "Contract",
+      entity_type: "contract",
+      entity_id: "1",
+      source: "dev",
+      target: "uat",
+      error: "Source audit gate failed — execute skipped",
+    })
+
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const result = listOperations({ limit: 50 })
+
+    const preview = result.operations.find((op) => op.kind === OperationKind.SyncPreview)
+    const execute = result.operations.find((op) => op.kind === OperationKind.SyncExecute)
+
+    expect(preview?.id).toBe("plan-skip:preview")
+    expect(execute?.id).toBe("plan-skip:execute")
+    expect(preview?.planId).toBe("plan-skip")
+    expect(execute?.planId).toBe("plan-skip")
+    expect(preview?.status).toBe(OperationStatus.Success)
+    expect(preview?.error).toBeUndefined()
+    expect(execute?.status).toBe(OperationStatus.Skipped)
+    expect(execute?.error).toBe("Source audit gate failed — execute skipped")
+    expect(execute?.activities.some((a) => a.name === "Execute skipped")).toBe(true)
+  })
 })

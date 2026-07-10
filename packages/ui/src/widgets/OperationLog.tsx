@@ -58,11 +58,12 @@ const STATUS_META: Record<OperationStatus, { color: string; tone: string }> = {
   success:   { color: "var(--color-success)", tone: "bg-success-soft text-success" },
   failed:    { color: "var(--color-error)", tone: "bg-error-soft text-error" },
   cancelled: { color: "var(--color-text-muted)", tone: "bg-overlay-2 text-text-muted" },
+  skipped:   { color: "var(--color-warning)", tone: "bg-warning-soft text-warning" },
   unknown:   { color: "var(--color-text-muted)", tone: "bg-overlay-2 text-text-muted" },
 }
 
 // system kind is intentionally excluded from the ops log — those events live in the Event Stream widget
-const ALL_STATUSES: OperationStatus[] = ["running", "success", "failed", "cancelled"]
+const ALL_STATUSES: OperationStatus[] = ["running", "success", "failed", "cancelled", "skipped"]
 
 type KindView = "all" | "agent" | "sync"
 
@@ -157,15 +158,26 @@ function formatActivityName(pipelineKind: OperationKind, activity: OperationActi
   if (pipelineKind !== OperationKind.SyncExecute) return activity.name
   if (activity.name === "phases" || activity.name === "other events" || activity.name.startsWith("tbl:")) return activity.name
   if (activity.name.includes(" (")) return activity.name
+  if (activity.name === "skipped" || activity.name === "Execute skipped") return "Execute skipped"
   return humanizeToken(activity.name)
 }
 
 function defaultActivitySummary(pipelineKind: OperationKind, activity: OperationActivity): string | undefined {
   if (activity.summary) return activity.summary
   if (pipelineKind === OperationKind.SyncExecute) {
+    if (activity.status === "skipped") return activity.summary ?? activity.error
     return EXEC_STEP_DESCRIPTIONS[activity.name] ?? undefined
   }
   return undefined
+}
+
+/** Expansion key for an activity row — scoped to pipeline id (preview vs execute differ). */
+export function pipelineActivityKey(pipelineId: string, activityId: string): string {
+  return `${pipelineId}|${activityId}`
+}
+
+export function syncPlanIdFromPipeline(pipeline: OperationPipeline): string {
+  return pipeline.planId ?? pipeline.id.replace(/:(preview|execute)$/, "")
 }
 
 function formatEventLabel(ev: OperationEvent): string {
@@ -185,6 +197,7 @@ function formatEventLabel(ev: OperationEvent): string {
     case "sync.execute.archive.skipped": return "Archive skipped"
     case "sync.execute.completed": return "Execute complete"
     case "sync.execute.failed": return "Execute failed"
+    case "sync.execute.skipped": return "Execute skipped"
     case "sync.proposer.run.started": return "Scan started"
     case "sync.proposer.run.completed": return "Scan completed"
     case "sync.proposer.run.failed": return "Scan failed"
@@ -566,13 +579,13 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
             <div className="px-2.5 py-1">
               <button
                 className="text-[11px] font-mono text-text-muted hover:text-accent transition-colors"
-                onClick={() => onOpenSyncPlan(pipeline.id)}
+                onClick={() => onOpenSyncPlan(syncPlanIdFromPipeline(pipeline))}
               >
-                view plan {pipeline.id.slice(0, 8)}
+                view plan {syncPlanIdFromPipeline(pipeline).slice(0, 8)}
               </button>
             </div>
           )}
-          {pipeline.error && (
+          {pipeline.error && pipeline.kind === OperationKind.SyncExecute && (
             <div className="px-2.5 py-1.5 mb-1 rounded bg-error-soft border border-error/30 text-[12px] text-error break-all">
               {pipeline.error}
             </div>
@@ -581,10 +594,10 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
             <div className="px-2.5 py-2 text-[12px] text-text-muted/60">No activities recorded.</div>
           )}
           {pipeline.activities.map((a) => {
-            const key = `${pipeline.id}|${a.id}`
+            const key = pipelineActivityKey(pipeline.id, a.id)
             return (
               <ActivityRow
-                key={a.id}
+                key={key}
                 activity={a}
                 pipelineKind={pipeline.kind}
                 pipelineId={pipeline.id}
@@ -731,6 +744,11 @@ function pickEventSummary(ev: OperationEvent): string {
         ? String(ev.data["error"])
         : "unknown error"
     return [humanizeToken(step), op, table, error].filter(Boolean).join(" — ")
+  }
+  if (ev.type === "sync.execute.skipped") {
+    const step = typeof ev.data["step"] === "string" ? humanizeToken(String(ev.data["step"])) : null
+    const message = typeof ev.data["message"] === "string" ? String(ev.data["message"]) : null
+    return [step, message].filter(Boolean).join(" — ") || "Skipped"
   }
   if (ev.type === "sync.execute.failed") {
     const step = typeof ev.data["step"] === "string" ? humanizeToken(String(ev.data["step"])) : null

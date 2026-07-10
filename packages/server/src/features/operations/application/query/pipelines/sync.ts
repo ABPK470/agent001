@@ -29,13 +29,23 @@ export function buildSyncPipeline(
   const eventHints = extractSyncEntityHintsFromEvents(events)
   const startedAt = events[0].timestamp
   const lastEv = events[events.length - 1]
+  const inferred = inferPipelineStatus(events)
   const status: OperationStatus =
-    meta?.status === SyncRunStatus.Success
-      ? OperationStatus.Success
-      : meta?.status === SyncRunStatus.Failed
-        ? OperationStatus.Failed
-        : inferPipelineStatus(events)
-  const endedAt = meta?.finished_at ?? (status !== OperationStatus.Running ? lastEv.timestamp : null)
+    kind === OperationKind.SyncExecute
+      ? meta?.status === SyncRunStatus.Success
+        ? OperationStatus.Success
+        : meta?.status === SyncRunStatus.Failed
+          ? OperationStatus.Failed
+          : meta?.status === SyncRunStatus.Skipped
+            ? OperationStatus.Skipped
+            : inferred
+      : inferred
+  const endedAt =
+    kind === OperationKind.SyncExecute
+      ? meta?.finished_at ?? (status !== OperationStatus.Running ? lastEv.timestamp : null)
+      : status !== OperationStatus.Running
+        ? lastEv.timestamp
+        : null
   const entityType = planSummary?.entityType ?? meta?.entity_type ?? eventHints.entityType ?? null
   const entityTypeLabel = humanizeEntityType(
     planSummary?.definitionId ?? eventHints.definitionId ?? entityType
@@ -64,17 +74,21 @@ export function buildSyncPipeline(
       : [...buildDecisionActivities(planSummary, startedAt), ...groupSyncExecuteActivities(events)]
 
   return {
-    id: planId,
+    id: `${planId}:${kind === OperationKind.SyncExecute ? "execute" : "preview"}`,
+    planId,
     kind,
     title: `${kind === OperationKind.SyncExecute ? "Execute" : "Preview"} ${entityTypeLabel} — ${entityName}`,
     subtitle: subtitleParts.filter(Boolean).join(" · ") || planId.slice(0, 8),
     status,
     startedAt,
     endedAt,
-    durationMs: meta?.duration_ms ?? durationOf(startedAt, endedAt),
+    durationMs:
+      kind === OperationKind.SyncExecute
+        ? meta?.duration_ms ?? durationOf(startedAt, endedAt)
+        : durationOf(startedAt, endedAt),
     activityCount: activities.length,
     eventCount: events.length,
-    error: meta?.error ?? undefined,
+    error: kind === OperationKind.SyncExecute ? meta?.error ?? undefined : undefined,
     activities
   }
 }
@@ -304,6 +318,10 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       status = OperationStatus.Failed
       error = strField(ev.data, "error") ?? undefined
       summary = error
+    } else if (type === EventType.SyncExecuteSkipped) {
+      status = OperationStatus.Skipped
+      name = "Execute skipped"
+      summary = strField(ev.data, "message") ?? strField(ev.data, "step") ?? undefined
     } else if (type === EventType.SyncExecuteArchiveSkipped) {
       summary = strField(ev.data, "reason") ?? undefined
     } else if (type === EventType.SyncExecuteArchiveProbeBatch) {
@@ -334,6 +352,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       t === EventType.SyncExecuteStarted ||
       t === EventType.SyncExecuteCompleted ||
       t === EventType.SyncExecuteFailed ||
+      t === EventType.SyncExecuteSkipped ||
       t === EventType.SyncExecuteArchiveSkipped ||
       t === EventType.SyncExecuteArchiveProbeBatch
     ) {

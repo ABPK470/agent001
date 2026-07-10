@@ -10,6 +10,7 @@ export {
   getEventNamespace,
   isCompletionEvent,
   isFailureEvent,
+  isSkippedEvent,
   isCancellationEvent,
   isSubStepFailureEvent,
   isTerminalRunEvent,

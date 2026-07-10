@@ -321,6 +321,10 @@ const FAILURE_EVENTS: ReadonlySet<EventType> = new Set([
   EventType.MessageFailed,
 ])
 
+const SKIPPED_EVENTS: ReadonlySet<EventType> = new Set([
+  EventType.SyncExecuteSkipped,
+])
+
 const CANCELLATION_EVENTS: ReadonlySet<EventType> = new Set([
   EventType.RunCancelled,
   EventType.AgentCancelled,
@@ -338,6 +342,10 @@ export function isCompletionEvent(t: EventType): boolean {
 
 export function isFailureEvent(t: EventType): boolean {
   return FAILURE_EVENTS.has(t)
+}
+
+export function isSkippedEvent(t: EventType): boolean {
+  return SKIPPED_EVENTS.has(t)
 }
 
 export function isCancellationEvent(t: EventType): boolean {
