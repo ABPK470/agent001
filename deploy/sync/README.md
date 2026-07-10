@@ -102,27 +102,38 @@ Wiring (`customValueSources`) is included automatically via `sync-metadata-deriv
 
 After refresh: restart server → review Entity Registry → **Publish**.
 
-## Export from SQLite (BYO-JSON)
+## Export from SQLite (snapshot — not repo overwrite)
 
-After editing in the UI, export the live catalog for review and git commit:
+After editing in the UI, export the live catalog to a **timestamped folder on your machine** (never overwrites `deploy/sync` seeds in the repo):
 
 ```sh
 npm run export-deploy-catalog --workspace @mia/server
+# default parent: ~/Downloads → ~/Downloads/mia-sync-export-2026-07-10T14-18-30/
+
+npm run export-deploy-catalog --workspace @mia/server -- --output ~/Documents/mia-exports
+npm run export-deploy-catalog --workspace @mia/server -- --zip
+npm run export-deploy-catalog --workspace @mia/server -- --dry-run
 ```
 
-Writes:
+**Folder contents:**
 
-- `deploy/sync/artifacts/sync-metadata.json`
-- `deploy/sync/artifacts/strategies.json` (shipped presets only)
-- `deploy/sync/sync-environments.json`
+| File | Source (SQLite) |
+|------|-----------------|
+| `manifest.json` | export metadata |
+| `sync-metadata.json` | phases, actions, wiring, flows |
+| `strategies.json` | all SCD2 strategies |
+| `sync-environments.json` | environments |
+| `entity-registry.json` | entity definitions + run bindings |
 
-API: `POST /api/platform/artifacts/export` with `{ "write": true }` (admin). Set `"write": false` to return JSON without writing files.
-
-Entity definitions export separately:
+Entities-only subset:
 
 ```sh
-npm run entity-registry:export --workspace @mia/server
+npm run entity-registry:export --workspace @mia/server -- --output ~/Downloads
 ```
+
+API: `POST /api/platform/artifacts/export` returns the snapshot JSON (save client-side). CLI writes the folder locally.
+
+Review the snapshot, then copy pieces into `deploy/sync/` manually if you intend to ship new seeds in git.
 
 ## Offline refresh (tests / CI, no MSSQL)
 

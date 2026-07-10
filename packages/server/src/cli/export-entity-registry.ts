@@ -1,43 +1,31 @@
-import { mkdirSync, writeFileSync } from "node:fs"
-import { dirname, relative, resolve } from "node:path"
-import { fileURLToPath } from "node:url"
+#!/usr/bin/env node
+/**
+ * Export entity definitions only (subset of export-deploy-catalog).
+ *
+ *   npm run entity-registry:export --workspace @mia/server -- --output ~/Downloads
+ */
 
-import { formatEntitiesYaml } from "../features/sync/domain/entity-yaml.js"
-import * as db from "../platform/persistence/sqlite.js"
+import { resolve } from "node:path"
 
-const HERE = dirname(fileURLToPath(import.meta.url))
-const ROOT = resolve(HERE, "../../../../")
-const DEFAULT_TENANT_ID = "_default"
+import { openDatabase } from "../platform/persistence/connection.js"
+import {
+  defaultExportParentDir,
+  writeEntityRegistrySnapshot,
+} from "../features/sync/application/export-entity-registry.js"
 
 main()
 
 function main(): void {
   const options = parseArgs(process.argv.slice(2))
-  const tenantId = options.tenantId ?? DEFAULT_TENANT_ID
-  const outputPath = resolve(ROOT, options.output)
-  const definitions = db.listEntityDefinitions(tenantId, { includeRetired: options.includeRetired })
-  const runs = new Map(
-    definitions
-      .map((def) => {
-        const config = db.getSyncDefinitionConfig(tenantId, def.id)
-        return config
-          ? ([def.id, {
-              template: config.flow_preset,
-              service: config.service_profile_ref,
-              environment: config.environment_policy_ref
-            }] as const)
-          : null
-      })
-      .filter((entry): entry is readonly [string, { template: string; service: string; environment: string }] => entry !== null)
-  )
+  openDatabase()
 
-  if (definitions.length === 0) {
-    fail(`No entity definitions found for tenant ${tenantId}.`)
-  }
+  const result = writeEntityRegistrySnapshot({
+    outputParentDir: resolve(options.output),
+    tenantId: options.tenantId ?? undefined,
+    includeRetiredEntities: options.includeRetired,
+  })
 
-  mkdirSync(dirname(outputPath), { recursive: true })
-  writeFileSync(outputPath, formatEntitiesYaml(definitions, runs), "utf-8")
-  console.log(`Exported ${definitions.length} entity definition(s) to ${relative(ROOT, outputPath)}`)
+  console.log(`Exported ${result.entityIds.length} entity definition(s) to ${result.folderPath}`)
 }
 
 function parseArgs(argv: string[]): {
@@ -46,19 +34,16 @@ function parseArgs(argv: string[]): {
   includeRetired: boolean
 } {
   const options = {
-    output: "deploy/sync/entity-registry.seed.yaml",
+    output: defaultExportParentDir(),
     tenantId: null,
-    includeRetired: false
-  } as {
-    output: string
-    tenantId: string | null
-    includeRetired: boolean
+    includeRetired: false,
   }
 
   for (let index = 0; index < argv.length; index++) {
     const arg = argv[index]
     switch (arg) {
       case "--output":
+      case "-o":
         options.output = argv[++index] ?? options.output
         break
       case "--tenant":

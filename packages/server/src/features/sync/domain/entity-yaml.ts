@@ -54,6 +54,24 @@ export function formatEntitiesYaml(
   return defs.map((d) => "---\n" + formatEntityYaml(d, runs?.get(d.id) ?? null)).join("")
 }
 
+export interface EntityRegistryExportDocument {
+  version: 1
+  _comment: string
+  entities: Record<string, unknown>[]
+}
+
+/** JSON snapshot of entity definitions + optional run bindings (same shape as YAML export). */
+export function buildEntityRegistryExportDocument(
+  defs: EntityDefinition[],
+  runs?: ReadonlyMap<string, EntityRunYaml>,
+): EntityRegistryExportDocument {
+  return {
+    version: 1,
+    _comment: "SQLite snapshot — entity definitions and run bindings.",
+    entities: defs.map((def) => orderEntity(def, runs?.get(def.id) ?? null)),
+  }
+}
+
 export function entityRunYamlFromConfig(config: {
   flow_preset: string
   service_profile_ref: string

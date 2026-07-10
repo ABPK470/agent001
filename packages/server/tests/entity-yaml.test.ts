@@ -11,6 +11,7 @@ import type { EntityDefinition } from "@mia/sync"
 import { compileFkPathPredicate } from "@mia/sync"
 import { describe, expect, it } from "vitest"
 import {
+  buildEntityRegistryExportDocument,
   formatEntitiesYaml,
   formatEntityYaml,
   parseEntitiesYaml,
@@ -151,6 +152,14 @@ describe("entity-yaml round-trip", () => {
     const parsed = parseEntityYaml(yaml)
     expect(parsed.ok).toBe(true)
     expect(parsed.def?.policies).not.toHaveProperty("approvalPolicyId")
+  })
+
+  it("emits valid JSON export document for bulk entities", () => {
+    const doc = buildEntityRegistryExportDocument([FULL_DEF, { ...FULL_DEF, id: "dataset", displayName: "Dataset" }])
+    expect(doc.version).toBe(1)
+    expect(doc.entities).toHaveLength(2)
+    expect(doc.entities[0]?.id).toBe("contract")
+    expect(doc.entities[1]?.id).toBe("dataset")
   })
 
   it("emits valid YAML for multi-doc bulk export", () => {

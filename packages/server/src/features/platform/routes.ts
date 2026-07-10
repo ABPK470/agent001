@@ -85,30 +85,20 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       return { ok: false, message: "Admin only" }
     }
     const body = (req.body ?? {}) as {
-      write?: boolean
-      include?: {
-        syncMetadata?: boolean
-        strategies?: boolean
-        environments?: boolean
-      }
+      includeRetiredEntities?: boolean
     }
     try {
-      const { exportDeployArtifactsFromSqlite } = await import(
+      const { buildDeployCatalogSnapshot } = await import(
         "./application/export-deploy-artifacts.js"
       )
-      const exported = exportDeployArtifactsFromSqlite({
-        projectRoot: body.write === false ? undefined : opts.projectRoot,
-        include: body.include,
+      const snapshot = buildDeployCatalogSnapshot({
+        includeRetiredEntities: body.includeRetiredEntities,
       })
       return {
         ok: true,
-        message: body.write === false
-          ? "Exported catalog documents from SQLite (response body only)."
-          : `Wrote ${Object.keys(exported.paths).join(", ")} from SQLite.`,
-        paths: exported.paths,
-        syncMetadata: exported.syncMetadata,
-        strategies: exported.strategies,
-        environments: exported.environments,
+        message:
+          "Catalog snapshot built from SQLite. Save the response locally or use the CLI to write a timestamped folder on disk.",
+        snapshot,
       }
     } catch (error) {
       reply.code(500)

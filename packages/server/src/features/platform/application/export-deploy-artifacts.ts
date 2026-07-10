@@ -1,39 +1,65 @@
 /**
- * Export SQLite catalog state back to deploy/sync artifacts (BYO-JSON round-trip).
+ * Export SQLite catalog state to a user-chosen snapshot folder (never overwrites repo seeds).
  *
  * Ground truth flow:
- *   artifact (git) → seed SQLite → operator edits in UI → export → review → commit
+ *   artifact (git) → seed SQLite → operator edits in UI → export snapshot → review → commit manually
  */
 
-import type { Scd2Strategy, SyncEnvironment } from "@mia/sync"
-import { buildFlowCatalog } from "@mia/sync"
-import { mkdirSync, writeFileSync } from "node:fs"
-import { dirname, resolve } from "node:path"
+import { spawnSync } from "node:child_process"
+import { mkdirSync, rmSync, writeFileSync } from "node:fs"
+import { homedir } from "node:os"
+import { join, resolve } from "node:path"
 
+import type { EntityDefinition, Scd2Strategy, SyncEnvironment } from "@mia/sync"
+import { buildFlowCatalog } from "@mia/sync"
+
+import type { EntityRegistryExportDocument } from "../../sync/domain/entity-yaml.js"
+import { buildEntityRegistryExportDocument, entityRunYamlFromConfig } from "../../sync/domain/entity-yaml.js"
 import * as db from "../../../platform/persistence/sqlite.js"
 
 const DEFAULT_TENANT = "_default"
 
-export interface ExportDeployArtifactsOptions {
-  tenantId?: string
-  /** When set, write files under this project root. Otherwise return JSON only. */
-  projectRoot?: string
-  include?: {
-    syncMetadata?: boolean
-    strategies?: boolean
-    environments?: boolean
-  }
+export const EXPORT_FOLDER_PREFIX = "mia-sync-export"
+
+export interface DeployCatalogSnapshot {
+  exportedAt: string
+  tenantId: string
+  syncMetadata: Record<string, unknown>
+  strategies: Record<string, unknown>
+  environments: Record<string, unknown>
+  entityRegistry: EntityRegistryExportDocument | null
+  entityIds: string[]
 }
 
-export interface ExportDeployArtifactsResult {
-  paths: Partial<{
-    syncMetadata: string
-    strategies: string
-    environments: string
-  }>
-  syncMetadata?: Record<string, unknown>
-  strategies?: Record<string, unknown>
-  environments?: Record<string, unknown>
+export interface BuildDeployCatalogSnapshotOptions {
+  tenantId?: string
+  includeRetiredEntities?: boolean
+}
+
+export interface WriteDeployCatalogSnapshotOptions extends BuildDeployCatalogSnapshotOptions {
+  /** Parent directory — a timestamped subfolder is created here. */
+  outputParentDir: string
+  /** When true, also create `{folder}.zip` if the `zip` CLI is available. */
+  zip?: boolean
+  /** Remove the folder after a successful zip. */
+  zipOnly?: boolean
+}
+
+export interface DeployCatalogExportResult {
+  folderPath: string
+  folderName: string
+  zipPath: string | null
+  files: string[]
+  snapshot: DeployCatalogSnapshot
+}
+
+export function defaultExportParentDir(): string {
+  return join(homedir(), "Downloads")
+}
+
+export function exportTimestampFolderName(exportedAt = new Date()): string {
+  const stamp = exportedAt.toISOString().replace(/[:.]/g, "-")
+  return `${EXPORT_FOLDER_PREFIX}-${stamp}`
 }
 
 function exportSyncMetadataDocument(tenantId: string) {
@@ -67,7 +93,6 @@ function exportSyncMetadataDocument(tenantId: string) {
     ]),
   )
 
-  // Validate catalog coherence before export.
   buildFlowCatalog(
     db.listSyncRunPhases(tenantId),
     db.listSyncRunKinds(tenantId),
@@ -78,7 +103,7 @@ function exportSyncMetadataDocument(tenantId: string) {
   return {
     version: 1 as const,
     _comment:
-      "Exported from SQLite — phases, step types (actions), wiring (value sources), and flows. Review before commit.",
+      "SQLite snapshot — phases, step types (actions), wiring (value sources), and flows. Not a repo seed overwrite.",
     phases,
     stepTypes,
     customValueSources,
@@ -87,14 +112,11 @@ function exportSyncMetadataDocument(tenantId: string) {
 }
 
 function exportStrategiesDocument(tenantId: string) {
-  const strategies = db.listAvailableStrategies(tenantId).filter(
-    (strategy) => strategy.provenance?.kind === "bundled",
-  ) as Scd2Strategy[]
+  const strategies = db.listAvailableStrategies(tenantId) as Scd2Strategy[]
 
   return {
     version: 1 as const,
-    _comment:
-      "Exported shipped SCD2 strategy presets from SQLite. Custom tenant strategies are omitted — export those via Entity Registry.",
+    _comment: "SQLite snapshot — SCD2 strategies available to the tenant (shipped + custom).",
     strategies,
   }
 }
@@ -123,62 +145,128 @@ function exportEnvironmentsDocument() {
 
   return {
     version: 1 as const,
-    _comment: "Exported sync environments from SQLite. Review before commit.",
+    _comment: "SQLite snapshot — sync environments.",
     environments,
   }
 }
 
-function writeJson(projectRoot: string, relPath: string, doc: unknown): string {
-  const path = resolve(projectRoot, relPath)
-  mkdirSync(dirname(path), { recursive: true })
-  writeFileSync(path, `${JSON.stringify(doc, null, 2)}\n`, "utf-8")
-  return relPath
+function exportEntityRegistryDocument(tenantId: string, includeRetired: boolean): {
+  document: EntityRegistryExportDocument | null
+  entityIds: string[]
+} {
+  const definitions = db.listEntityDefinitions(tenantId, { includeRetired }) as EntityDefinition[]
+  const runs = new Map(
+    definitions
+      .map((def) => {
+        const config = db.getSyncDefinitionConfig(tenantId, def.id)
+        return config ? ([def.id, entityRunYamlFromConfig(config)] as const) : null
+      })
+      .filter((entry): entry is readonly [string, ReturnType<typeof entityRunYamlFromConfig>] => entry !== null),
+  )
+
+  return {
+    document: definitions.length > 0 ? buildEntityRegistryExportDocument(definitions, runs) : null,
+    entityIds: definitions.map((def) => def.id),
+  }
 }
 
-export function exportDeployArtifactsFromSqlite(
-  options: ExportDeployArtifactsOptions = {},
-): ExportDeployArtifactsResult {
+export function buildDeployCatalogSnapshot(
+  options: BuildDeployCatalogSnapshotOptions = {},
+): DeployCatalogSnapshot {
   const tenantId = options.tenantId ?? DEFAULT_TENANT
-  const include = {
-    syncMetadata: true,
-    strategies: true,
-    environments: true,
-    ...options.include,
-  }
-  const result: ExportDeployArtifactsResult = { paths: {} }
+  const exportedAt = new Date().toISOString()
+  const entities = exportEntityRegistryDocument(tenantId, options.includeRetiredEntities ?? false)
 
-  if (include.syncMetadata) {
-    result.syncMetadata = exportSyncMetadataDocument(tenantId)
-    if (options.projectRoot) {
-      result.paths.syncMetadata = writeJson(
-        options.projectRoot,
-        "deploy/sync/artifacts/sync-metadata.json",
-        result.syncMetadata,
-      )
+  return {
+    exportedAt,
+    tenantId,
+    syncMetadata: exportSyncMetadataDocument(tenantId),
+    strategies: exportStrategiesDocument(tenantId),
+    environments: exportEnvironmentsDocument(),
+    entityRegistry: entities.document,
+    entityIds: entities.entityIds,
+  }
+}
+
+function writeJsonFile(dir: string, name: string, doc: unknown): string {
+  const path = join(dir, name)
+  writeFileSync(path, `${JSON.stringify(doc, null, 2)}\n`, "utf-8")
+  return name
+}
+
+function tryZipDirectory(folderPath: string, folderName: string): string | null {
+  const parent = resolve(folderPath, "..")
+  const zipPath = join(parent, `${folderName}.zip`)
+  const result = spawnSync("zip", ["-r", zipPath, folderName], {
+    cwd: parent,
+    encoding: "utf-8",
+  })
+  if (result.status !== 0) return null
+  return zipPath
+}
+
+export function writeDeployCatalogSnapshot(
+  options: WriteDeployCatalogSnapshotOptions,
+): DeployCatalogExportResult {
+  const snapshot = buildDeployCatalogSnapshot(options)
+  const folderName = exportTimestampFolderName(new Date(snapshot.exportedAt))
+  const folderPath = resolve(options.outputParentDir, folderName)
+  mkdirSync(folderPath, { recursive: true })
+
+  const files = [
+    writeJsonFile(folderPath, "manifest.json", {
+      exportedAt: snapshot.exportedAt,
+      tenantId: snapshot.tenantId,
+      entityCount: snapshot.entityIds.length,
+      entityIds: snapshot.entityIds,
+      files: [
+        "sync-metadata.json",
+        "strategies.json",
+        "sync-environments.json",
+        "entity-registry.json",
+      ],
+    }),
+    writeJsonFile(folderPath, "sync-metadata.json", snapshot.syncMetadata),
+    writeJsonFile(folderPath, "strategies.json", snapshot.strategies),
+    writeJsonFile(folderPath, "sync-environments.json", snapshot.environments),
+  ]
+
+  if (snapshot.entityRegistry) {
+    files.push(writeJsonFile(folderPath, "entity-registry.json", snapshot.entityRegistry))
+  }
+
+  let zipPath: string | null = null
+  if (options.zip) {
+    zipPath = tryZipDirectory(folderPath, folderName)
+    if (zipPath && options.zipOnly) {
+      rmSync(folderPath, { recursive: true, force: true })
     }
   }
 
-  if (include.strategies) {
-    result.strategies = exportStrategiesDocument(tenantId)
-    if (options.projectRoot) {
-      result.paths.strategies = writeJson(
-        options.projectRoot,
-        "deploy/sync/artifacts/strategies.json",
-        result.strategies,
-      )
-    }
-  }
+  return { folderPath, folderName, zipPath, files, snapshot }
+}
 
-  if (include.environments) {
-    result.environments = exportEnvironmentsDocument()
-    if (options.projectRoot) {
-      result.paths.environments = writeJson(
-        options.projectRoot,
-        "deploy/sync/sync-environments.json",
-        result.environments,
-      )
+/** @deprecated Use buildDeployCatalogSnapshot + writeDeployCatalogSnapshot */
+export function exportDeployArtifactsFromSqlite(
+  options: {
+    tenantId?: string
+    projectRoot?: string
+    include?: {
+      syncMetadata?: boolean
+      strategies?: boolean
+      environments?: boolean
     }
+  } = {},
+) {
+  void options.projectRoot
+  void options.include
+  const snapshot = buildDeployCatalogSnapshot({ tenantId: options.tenantId })
+  return {
+    paths: {},
+    syncMetadata: snapshot.syncMetadata,
+    strategies: snapshot.strategies,
+    environments: snapshot.environments,
+    entityRegistry: snapshot.entityRegistry,
+    entityIds: snapshot.entityIds,
   }
-
-  return result
 }
