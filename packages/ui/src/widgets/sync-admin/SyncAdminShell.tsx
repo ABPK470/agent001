@@ -7,7 +7,6 @@ import { useState } from "react"
 import { ApprovalsPanel } from "./ApprovalsPanel"
 import { ConsoleProvider } from "./console-context"
 import { WIDGET_ENVELOPE } from "./design"
-import { EnvironmentsPanel } from "./EnvironmentsPanel"
 import { OverviewPanel } from "./OverviewPanel"
 import { ProposalsPanel } from "./ProposalsPanel"
 import { RoutesPanel } from "./RoutesPanel"
@@ -20,13 +19,11 @@ export type Section =
   | "proposals"
   | "runs"
   | "approvals"
-  | "environments"
   | "schedules"
   | "routes"
 
 const NAV: readonly { id: Section; label: string; badge?: "proposals" | "approvals" }[] = [
   { id: "overview",     label: "Overview" },
-  { id: "environments", label: "Connections" },
   { id: "runs",         label: "Runs" },
   { id: "proposals",    label: "Proposals", badge: "proposals" },
   { id: "approvals",    label: "Approvals", badge: "approvals" },
@@ -100,7 +97,6 @@ export function SyncAdminShell({
               {section === "proposals"    && <ProposalsPanel />}
               {section === "runs"         && <RunsPanel initialTab={runsTab} />}
               {section === "approvals"    && <ApprovalsPanel />}
-              {section === "environments" && <EnvironmentsPanel />}
               {section === "schedules"    && <SchedulesPanel />}
               {section === "routes"       && <RoutesPanel />}
             </div>

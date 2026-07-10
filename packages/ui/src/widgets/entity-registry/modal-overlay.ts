@@ -1,20 +1,15 @@
 /**
- * Shared modal overlay chrome — scrim tiers and padding by intent.
+ * Shared modal overlay chrome — single scrim + padding by intent.
  *
- * detail   — compact confirms / destructive actions (strong scrim)
- * default  — medium forms and read-only viewers
- * focus    — workspace / configuration (near full-viewport panel, light edge scrim)
+ * All modals use the same dark backdrop (`bg-scrim-strong`). Intent only affects padding.
  */
 
 export type ModalOverlayIntent = "detail" | "default" | "focus"
 
-const OVERLAY_BASE = "fixed inset-0 flex items-center justify-center"
+/** Canonical modal backdrop — near-opaque black (see `--scrim-strong` in index.css). */
+export const MODAL_OVERLAY_SCRIM_CLASS = "bg-scrim-strong"
 
-const OVERLAY_SCRIM: Record<ModalOverlayIntent, string> = {
-  detail: "bg-scrim-strong",
-  default: "bg-scrim",
-  focus: "bg-scrim-focus",
-}
+const OVERLAY_BASE = "fixed inset-0 flex items-center justify-center"
 
 const OVERLAY_PADDING: Record<ModalOverlayIntent, string> = {
   detail: "p-2 sm:p-4",
@@ -37,7 +32,7 @@ export function modalOverlayClass(
   return [
     OVERLAY_BASE,
     options?.zIndexClass ?? "z-50",
-    OVERLAY_SCRIM[intent],
+    MODAL_OVERLAY_SCRIM_CLASS,
     OVERLAY_PADDING[intent],
     options?.className,
   ]

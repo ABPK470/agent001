@@ -1516,9 +1516,9 @@ textarea.input {
 
 /* ── Sync execute modal — fluid width, fixed footprint per breakpoint band ── */
 
-/* Sync execute / publish — focus-tier overlay (near full-viewport, light edge scrim). */
+/* Sync execute / publish — same dark modal backdrop as all other shells. */
 .exec-modal-overlay {
-  background: var(--scrim-focus);
+  background: var(--scrim-strong);
   padding: max(0.125rem, env(safe-area-inset-top, 0px))
     max(0.125rem, env(safe-area-inset-right, 0px))
     max(0.125rem, env(safe-area-inset-bottom, 0px))

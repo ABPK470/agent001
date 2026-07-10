@@ -857,7 +857,7 @@ export function SyncMetadataModal({
                       setFormCustomValueSourceDefinition(next)
                     }}
                     readOnlyResolver={editingBuiltIn}
-                    entryId={editingId ?? formId.trim() || undefined}
+                    entryId={editingId ?? (formId.trim() || undefined)}
                   />
                 </FormSectionCard>
               )}

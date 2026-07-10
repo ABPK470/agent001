@@ -285,6 +285,14 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  downloadPlatformArtifacts: (body?: { includeRetiredEntities?: boolean }) =>
+    import("./lib/userDownload.js").then(({ downloadAuthenticated }) =>
+      downloadAuthenticated(
+        "/api/platform/artifacts/export/download",
+        "mia-sync-export.zip",
+        { method: "POST", body: JSON.stringify(body ?? {}) },
+      ),
+    ),
   factoryResetPlatform: (confirm: string) =>
     json<{ ok: boolean; message: string; seeded?: number; entityIds?: string[] }>(
       "/api/platform/factory-reset",

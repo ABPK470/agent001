@@ -45,7 +45,6 @@ export function EntityImportModal({ onClose, onImported }: EntityImportModalProp
       icon={<Upload className="h-4 w-4 text-accent" />}
       onClose={onClose}
       size="default"
-      scrim="strong"
       widthClass="w-full max-w-3xl h-[min(88vh,900px)] min-h-[32rem]"
       footer={
         <>

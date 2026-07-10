@@ -31,8 +31,11 @@ function filenameFromContentDisposition(header: string | null): string | null {
 export async function downloadAuthenticated(
   path: string,
   fallbackFilename: string,
+  opts?: RequestInit,
 ): Promise<{ filename: string; bytes: number }> {
-  const res = await fetch(path, { credentials: "include" })
+  const headers: Record<string, string> = { ...(opts?.headers as Record<string, string> | undefined) }
+  if (opts?.body && !headers["Content-Type"]) headers["Content-Type"] = "application/json"
+  const res = await fetch(path, { ...opts, headers, credentials: "include" })
   if (!res.ok) {
     let detail = res.statusText
     try {

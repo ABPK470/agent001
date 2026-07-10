@@ -2,10 +2,11 @@
  * SessionMenu — identity + session actions behind a single burger control.
  */
 
-import { Activity, Brain, LogOut, Scale, Shield, Terminal } from "lucide-react"
+import { Activity, Brain, Database, LogOut, Scale, Shield, Terminal } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { AgentEditor } from "../components/AgentEditor"
 import { AuditModal } from "../components/AuditModal"
+import { ConnectionsModal } from "../components/ConnectionsModal"
 import { PolicyEditor } from "../components/PolicyEditor"
 import { UsageModal } from "../components/UsageModal"
 import type { Me } from "../hooks/useMe"
@@ -38,6 +39,7 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
   const [policyOpen, setPolicyOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
+  const [connectionsOpen, setConnectionsOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const displayName = accountDisplayName(me)
@@ -129,6 +131,18 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
                   role="menuitem"
                   className={menuItemClass()}
                   onClick={() => {
+                    setConnectionsOpen(true)
+                    close()
+                  }}
+                >
+                  <Database size={15} className="shrink-0 text-text-muted" />
+                  Connections
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={menuItemClass()}
+                  onClick={() => {
                     setAgentOpen(true)
                     close()
                   }}
@@ -199,6 +213,7 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
       {policyOpen && <PolicyEditor onClose={() => setPolicyOpen(false)} />}
       {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
+      {connectionsOpen && <ConnectionsModal onClose={() => setConnectionsOpen(false)} />}
     </>
   )
 }

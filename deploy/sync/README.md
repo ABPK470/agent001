@@ -115,15 +115,27 @@ npm run export-deploy-catalog --workspace @mia/server -- --zip
 npm run export-deploy-catalog --workspace @mia/server -- --dry-run
 ```
 
-**Folder contents:**
+**Folder contents** (mirrors `deploy/sync/` layout):
 
-| File | Source (SQLite) |
+```
+mia-sync-export-<timestamp>/
+  manifest.json
+  sync-environments.json
+  artifacts/
+    sync-metadata.json
+    strategies.json
+    flow-templates.json
+    entity-registry.json
+```
+
+| Path | Source (SQLite) |
 |------|-----------------|
 | `manifest.json` | export metadata |
-| `sync-metadata.json` | phases, actions, wiring, flows |
-| `strategies.json` | all SCD2 strategies |
 | `sync-environments.json` | environments |
-| `entity-registry.json` | entity definitions + run bindings |
+| `artifacts/sync-metadata.json` | phases, actions, wiring, flows |
+| `artifacts/strategies.json` | all SCD2 strategies |
+| `artifacts/flow-templates.json` | flow template view |
+| `artifacts/entity-registry.json` | entity definitions + run bindings |
 
 Entities-only subset:
 
@@ -131,7 +143,11 @@ Entities-only subset:
 npm run entity-registry:export --workspace @mia/server -- --output ~/Downloads
 ```
 
-API: `POST /api/platform/artifacts/export` returns the snapshot JSON (save client-side). CLI writes the folder locally.
+API:
+- `POST /api/platform/artifacts/export` — snapshot JSON (save client-side)
+- `POST /api/platform/artifacts/export/download` — zip download (Entity Registry → **Export configuration**)
+
+CLI writes the folder locally.
 
 Review the snapshot, then copy pieces into `deploy/sync/` manually if you intend to ship new seeds in git.
 

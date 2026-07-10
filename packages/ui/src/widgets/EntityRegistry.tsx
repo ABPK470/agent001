@@ -41,6 +41,7 @@ export function EntityRegistry(): JSX.Element {
   const [modal, setModal] = useState<null | { kind: "new" } | { kind: "edit"; def: EntityRegistryDefinition }>(null)
   const [syncMetadataOpen, setSyncMetadataOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
+  const [exportingConfig, setExportingConfig] = useState(false)
   const [retireCandidate, setRetireCandidate] = useState<EntityRegistryDefinition | null>(null)
 
   const selected = useMemo(
@@ -122,6 +123,19 @@ export function EntityRegistry(): JSX.Element {
     setPublishOpen(true)
   }
 
+  async function exportConfiguration(): Promise<void> {
+    if (!isAdmin || exportingConfig) return
+    setExportingConfig(true)
+    try {
+      const { filename, bytes } = await api.downloadPlatformArtifacts()
+      notify(`Exported configuration (${filename}, ${bytes.toLocaleString()} bytes)`)
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setExportingConfig(false)
+    }
+  }
+
   function openHistory(entity: EntityRegistryDefinition): void {
     setSelectedId(entity.id)
     setHistoryOpen(true)
@@ -145,10 +159,11 @@ export function EntityRegistry(): JSX.Element {
             <aside className="entity-rail flex min-h-0 flex-col border-r border-border-subtle">
               <EntityRailHeader
                 isAdmin={isAdmin}
-                busy={busy}
+                busy={busy || exportingConfig}
                 onNew={() => setModal({ kind: "new" })}
                 onSyncMetadata={() => setSyncMetadataOpen(true)}
                 onPublish={openPublish}
+                onExportConfig={() => void exportConfiguration()}
               />
               <div className="entity-rail-scroll min-h-0 flex-1 overflow-y-auto">
                 <EntityList

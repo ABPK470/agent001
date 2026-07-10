@@ -97,9 +97,37 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       return {
         ok: true,
         message:
-          "Catalog snapshot built from SQLite. Save the response locally or use the CLI to write a timestamped folder on disk.",
+          "Catalog snapshot built from SQLite. Use /api/platform/artifacts/export/download for a zip file.",
         snapshot,
       }
+    } catch (error) {
+      reply.code(500)
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : "Artifact export failed",
+      }
+    }
+  })
+
+  app.post("/api/platform/artifacts/export/download", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { ok: false, message: "Admin only" }
+    }
+    const body = (req.body ?? {}) as {
+      includeRetiredEntities?: boolean
+    }
+    try {
+      const { exportDeployCatalogZipBuffer } = await import(
+        "./application/export-deploy-artifacts.js"
+      )
+      const { buffer, filename } = exportDeployCatalogZipBuffer({
+        includeRetiredEntities: body.includeRetiredEntities,
+      })
+      reply
+        .header("Content-Type", "application/zip")
+        .header("Content-Disposition", `attachment; filename="${filename}"`)
+      return reply.send(buffer)
     } catch (error) {
       reply.code(500)
       return {

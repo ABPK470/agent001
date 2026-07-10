@@ -6,8 +6,8 @@
  */
 
 import { spawnSync } from "node:child_process"
-import { mkdirSync, rmSync, writeFileSync } from "node:fs"
-import { homedir } from "node:os"
+import { mkdtempSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { homedir, tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
 import type { EntityDefinition, Scd2Strategy, SyncEnvironment } from "@mia/sync"
@@ -25,6 +25,7 @@ export interface DeployCatalogSnapshot {
   exportedAt: string
   tenantId: string
   syncMetadata: Record<string, unknown>
+  flowTemplates: Record<string, unknown>
   strategies: Record<string, unknown>
   environments: Record<string, unknown>
   entityRegistry: EntityRegistryExportDocument | null
@@ -150,6 +151,17 @@ function exportEnvironmentsDocument() {
   }
 }
 
+function exportFlowTemplatesDocument(syncMetadata: Record<string, unknown>) {
+  return {
+    version: 1 as const,
+    _comment:
+      typeof syncMetadata._comment === "string"
+        ? syncMetadata._comment
+        : "Derived view of sync-metadata.flows",
+    flowTemplates: syncMetadata.flows ?? {},
+  }
+}
+
 function exportEntityRegistryDocument(tenantId: string, includeRetired: boolean): {
   document: EntityRegistryExportDocument | null
   entityIds: string[]
@@ -176,11 +188,13 @@ export function buildDeployCatalogSnapshot(
   const tenantId = options.tenantId ?? DEFAULT_TENANT
   const exportedAt = new Date().toISOString()
   const entities = exportEntityRegistryDocument(tenantId, options.includeRetiredEntities ?? false)
+  const syncMetadata = exportSyncMetadataDocument(tenantId)
 
   return {
     exportedAt,
     tenantId,
-    syncMetadata: exportSyncMetadataDocument(tenantId),
+    syncMetadata,
+    flowTemplates: exportFlowTemplatesDocument(syncMetadata),
     strategies: exportStrategiesDocument(tenantId),
     environments: exportEnvironmentsDocument(),
     entityRegistry: entities.document,
@@ -211,7 +225,15 @@ export function writeDeployCatalogSnapshot(
   const snapshot = buildDeployCatalogSnapshot(options)
   const folderName = exportTimestampFolderName(new Date(snapshot.exportedAt))
   const folderPath = resolve(options.outputParentDir, folderName)
-  mkdirSync(folderPath, { recursive: true })
+  const artifactsDir = join(folderPath, "artifacts")
+  mkdirSync(artifactsDir, { recursive: true })
+
+  const artifactFiles = [
+    "sync-metadata.json",
+    "strategies.json",
+    "flow-templates.json",
+    ...(snapshot.entityRegistry ? ["entity-registry.json"] : []),
+  ]
 
   const files = [
     writeJsonFile(folderPath, "manifest.json", {
@@ -219,20 +241,17 @@ export function writeDeployCatalogSnapshot(
       tenantId: snapshot.tenantId,
       entityCount: snapshot.entityIds.length,
       entityIds: snapshot.entityIds,
-      files: [
-        "sync-metadata.json",
-        "strategies.json",
-        "sync-environments.json",
-        "entity-registry.json",
-      ],
+      layout: "deploy/sync mirror",
+      files: ["sync-environments.json", ...artifactFiles.map((name) => `artifacts/${name}`)],
     }),
-    writeJsonFile(folderPath, "sync-metadata.json", snapshot.syncMetadata),
-    writeJsonFile(folderPath, "strategies.json", snapshot.strategies),
     writeJsonFile(folderPath, "sync-environments.json", snapshot.environments),
+    writeJsonFile(artifactsDir, "sync-metadata.json", snapshot.syncMetadata),
+    writeJsonFile(artifactsDir, "strategies.json", snapshot.strategies),
+    writeJsonFile(artifactsDir, "flow-templates.json", snapshot.flowTemplates),
   ]
 
   if (snapshot.entityRegistry) {
-    files.push(writeJsonFile(folderPath, "entity-registry.json", snapshot.entityRegistry))
+    files.push(writeJsonFile(artifactsDir, "entity-registry.json", snapshot.entityRegistry))
   }
 
   let zipPath: string | null = null
@@ -244,6 +263,27 @@ export function writeDeployCatalogSnapshot(
   }
 
   return { folderPath, folderName, zipPath, files, snapshot }
+}
+
+export function exportDeployCatalogZipBuffer(
+  options: BuildDeployCatalogSnapshotOptions = {},
+): { buffer: Buffer; filename: string; snapshot: DeployCatalogSnapshot } {
+  const parent = mkdtempSync(join(tmpdir(), "mia-export-"))
+  try {
+    const result = writeDeployCatalogSnapshot({
+      ...options,
+      outputParentDir: parent,
+      zip: true,
+      zipOnly: true,
+    })
+    if (!result.zipPath) {
+      throw new Error("Zip export is unavailable on this host (install the `zip` CLI).")
+    }
+    const buffer = readFileSync(result.zipPath)
+    return { buffer, filename: `${result.folderName}.zip`, snapshot: result.snapshot }
+  } finally {
+    rmSync(parent, { recursive: true, force: true })
+  }
 }
 
 /** @deprecated Use buildDeployCatalogSnapshot + writeDeployCatalogSnapshot */
@@ -264,6 +304,7 @@ export function exportDeployArtifactsFromSqlite(
   return {
     paths: {},
     syncMetadata: snapshot.syncMetadata,
+    flowTemplates: snapshot.flowTemplates,
     strategies: snapshot.strategies,
     environments: snapshot.environments,
     entityRegistry: snapshot.entityRegistry,

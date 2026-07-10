@@ -2,7 +2,7 @@
  * Entity sidebar header — label + compact icon actions.
  */
 
-import { Plus, Rocket, Settings2, Workflow } from "lucide-react"
+import { Download, Plus, Rocket, Settings2, Workflow } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
@@ -14,6 +14,7 @@ export interface EntityRailHeaderProps {
   onNew: () => void
   onSyncMetadata: () => void
   onPublish: () => void
+  onExportConfig: () => void
 }
 
 export function EntityRailHeader({
@@ -22,6 +23,7 @@ export function EntityRailHeader({
   onNew,
   onSyncMetadata,
   onPublish,
+  onExportConfig,
 }: EntityRailHeaderProps): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null)
@@ -101,6 +103,15 @@ export function EntityRailHeader({
                 >
                   <Workflow size={13} strokeWidth={1.75} />
                   <span>Configuration</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="thread-rail-item-dropdown-item"
+                  onClick={() => { closeMenu(); onExportConfig() }}
+                >
+                  <Download size={13} strokeWidth={1.75} />
+                  <span>Export configuration</span>
                 </button>
                 <button
                   type="button"

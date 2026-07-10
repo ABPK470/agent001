@@ -25,20 +25,22 @@ export function writeEntityRegistrySnapshot(options: {
   const folderPath = resolve(options.outputParentDir, folderName)
   mkdirSync(folderPath, { recursive: true })
 
+  mkdirSync(join(folderPath, "artifacts"), { recursive: true })
+
   writeJsonFile(folderPath, "manifest.json", {
     exportedAt: snapshot.exportedAt,
     tenantId: snapshot.tenantId,
     kind: "entity-registry-only",
     entityCount: snapshot.entityIds.length,
     entityIds: snapshot.entityIds,
-    files: ["entity-registry.json"],
+    files: ["artifacts/entity-registry.json"],
   })
 
   if (!snapshot.entityRegistry) {
     throw new Error(`No entity definitions found for tenant ${snapshot.tenantId}.`)
   }
 
-  writeJsonFile(folderPath, "entity-registry.json", snapshot.entityRegistry)
+  writeJsonFile(join(folderPath, "artifacts"), "entity-registry.json", snapshot.entityRegistry)
   return { folderPath, entityIds: snapshot.entityIds }
 }
 

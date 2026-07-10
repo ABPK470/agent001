@@ -56,7 +56,7 @@ export interface ModalShellProps {
    */
   size?: ModalShellSize
   /**
-   * Override automatic scrim tier. Defaults: detail → strong, focus/workspace → focus edge, default → normal.
+   * @deprecated Backdrop is always `bg-scrim-strong`; kept for API compatibility.
    */
   scrim?: ModalShellScrim
   /** Nested modals (table editor, confirm dialogs) — higher values stack above parent shells. */
@@ -76,13 +76,11 @@ const SIZE_PANEL: Record<ModalShellSize, string> = {
 
 function resolveOverlayIntent(
   size: ModalShellSize,
-  scrim?: ModalShellScrim,
+  _scrim?: ModalShellScrim,
 ): ModalOverlayIntent {
-  if (scrim === "strong") return "detail"
-  if (scrim === "focus") return "focus"
-  if (scrim === "default") return "default"
-  if (size === "detail") return "detail"
+  void _scrim
   if (size === "focus" || size === "workspace") return "focus"
+  if (size === "detail") return "detail"
   return "default"
 }
 

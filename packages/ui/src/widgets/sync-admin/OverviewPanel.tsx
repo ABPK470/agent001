@@ -152,7 +152,6 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
             title="Connections"
             value={snap.connectionNames.length}
             subtitle={connSubtitle}
-            onClick={() => onJump("environments")}
           />
           <StatusCard
             icon={GitCompareArrows}
@@ -224,7 +223,7 @@ function StatusCard({
   title: string
   value: number
   subtitle: string
-  onClick: () => void
+  onClick?: () => void
   accent?: "info" | "warning" | "danger"
 }): JSX.Element {
   const border =
@@ -233,11 +232,26 @@ function StatusCard({
     : accent === "info" ? "border-info/30 hover:border-info/50"
     : "border-border-subtle hover:border-accent/40"
 
+  const className = `group flex flex-col items-start gap-1 rounded-lg border bg-elevated/20 p-4 text-left transition hover:bg-elevated/50 ${border}`
+
+  if (!onClick) {
+    return (
+      <div className={className}>
+        <div className="flex w-full items-center justify-between text-text-muted">
+          <Icon className="h-4 w-4" />
+        </div>
+        <div className="text-2xl font-semibold tabular-nums text-text">{value}</div>
+        <div className="text-xs font-medium text-text">{title}</div>
+        <div className="line-clamp-2 text-sm text-text-muted">{subtitle}</div>
+      </div>
+    )
+  }
+
   return (
     <button
       type="button"
       onClick={onClick}
-      className={`group flex flex-col items-start gap-1 rounded-lg border bg-elevated/20 p-4 text-left transition hover:bg-elevated/50 ${border}`}
+      className={className}
     >
       <div className="flex w-full items-center justify-between text-text-muted">
         <Icon className="h-4 w-4" />
