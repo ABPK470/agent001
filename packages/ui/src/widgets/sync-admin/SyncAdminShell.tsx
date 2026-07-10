@@ -8,13 +8,11 @@ import { ApprovalsPanel } from "./ApprovalsPanel"
 import { ConsoleProvider } from "./console-context"
 import { WIDGET_ENVELOPE } from "./design"
 import { EnvironmentsPanel } from "./EnvironmentsPanel"
-import { FreezeWindowsPanel } from "./FreezeWindowsPanel"
 import { OverviewPanel } from "./OverviewPanel"
 import { ProposalsPanel } from "./ProposalsPanel"
 import { RoutesPanel } from "./RoutesPanel"
 import { RunsPanel } from "./RunsPanel"
 import { SchedulesPanel } from "./SchedulesPanel"
-import { StrategiesPanel } from "./StrategiesPanel"
 import { useSyncAdminNavCounts } from "./useSyncAdminNavCounts"
 
 export type Section =
@@ -25,19 +23,15 @@ export type Section =
   | "environments"
   | "schedules"
   | "routes"
-  | "strategies"
-  | "freezes"
 
 const NAV: readonly { id: Section; label: string; badge?: "proposals" | "approvals" }[] = [
   { id: "overview",     label: "Overview" },
   { id: "environments", label: "Connections" },
-  { id: "strategies",   label: "SCD2" },
   { id: "runs",         label: "Runs" },
   { id: "proposals",    label: "Proposals", badge: "proposals" },
   { id: "approvals",    label: "Approvals", badge: "approvals" },
   { id: "schedules",    label: "Schedules" },
   { id: "routes",       label: "Notify" },
-  { id: "freezes",      label: "Freezes" },
 ]
 
 function NavCountBadge({ count }: { count: number }): JSX.Element | null {
@@ -109,8 +103,6 @@ export function SyncAdminShell({
               {section === "environments" && <EnvironmentsPanel />}
               {section === "schedules"    && <SchedulesPanel />}
               {section === "routes"       && <RoutesPanel />}
-              {section === "strategies"   && <StrategiesPanel />}
-              {section === "freezes"      && <FreezeWindowsPanel />}
             </div>
           </div>
         </div>

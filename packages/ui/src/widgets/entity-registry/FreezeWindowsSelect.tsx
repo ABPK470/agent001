@@ -5,8 +5,7 @@
  * zero or more windows; the gate blocks a sync when *any* matched
  * window's [startsAt, endsAt) brackets `now`.
  *
- * Empty registry surfaces a helpful link to the FreezeWindowRegistry
- * widget so operators understand why the picker is empty.
+ * Empty registry — use the manage icon in the entity editor to create windows.
  */
 
 import { CalendarClock, Loader2 } from "lucide-react"
@@ -57,7 +56,7 @@ export function FreezeWindowsSelect({ selected, onSelected }: FreezeWindowsSelec
     <div className="flex flex-col gap-1.5">
       {items.length === 0 && orphans.length === 0 && (
         <p className="text-text-faint">
-          No freeze windows defined. Manage them in the <em>Freeze Windows</em> widget.
+          No freeze windows defined. Use the calendar icon in the entity editor to create one.
         </p>
       )}
       {items.map((w) => {

@@ -432,8 +432,6 @@ export type WidgetType =
   | "env-sync"
   | "operation-log"
   | "entity-registry"
-  | "scd2-strategies"
-  | "freeze-windows"
   | "sync-proposals"
   | "sync-approvals"
   | "sync-evidence"

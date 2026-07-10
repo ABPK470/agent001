@@ -1,4 +1,4 @@
-import { AlertTriangle, FilePenLine, Loader2, Save, Workflow } from "lucide-react"
+import { AlertTriangle, CalendarClock, FilePenLine, GitBranch, Loader2, Save, Workflow } from "lucide-react"
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../api"
@@ -27,7 +27,9 @@ import { YamlSurface } from "./EntityEditSurfaces"
 import { EntityTableListEditor } from "./EntityTableListEditor"
 import { FlowStepsPreview } from "./FlowStepsPreview"
 import { FreezeWindowsSelect } from "./FreezeWindowsSelect"
+import { FreezeWindowsModal } from "./freeze-windows/FreezeWindowsModal"
 import { ModalShell } from "./ModalShell"
+import { StrategiesModal } from "./scd2/StrategiesModal"
 import { StrategySelect } from "./StrategySelect"
 import { SyncMetadataModal } from "./SyncMetadataModal"
 
@@ -67,6 +69,9 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
   const [suggestNotes, setSuggestNotes] = useState<string[]>([])
   const [suggestBusy, setSuggestBusy] = useState(false)
   const [syncMetadataOpen, setSyncMetadataOpen] = useState(false)
+  const [freezeWindowsOpen, setFreezeWindowsOpen] = useState(false)
+  const [strategiesOpen, setStrategiesOpen] = useState(false)
+  const [governanceCatalogRev, setGovernanceCatalogRev] = useState(0)
   const [yamlError, setYamlError] = useState<string | null>(null)
   const [yamlSyncBusy, setYamlSyncBusy] = useState(false)
   const skipYamlToFormRef = useRef(false)
@@ -531,6 +536,28 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                     <Workflow size={16} />
                   </button>
                 )}
+                {section === "scd2" && (
+                  <button
+                    type="button"
+                    onClick={() => setStrategiesOpen(true)}
+                    className={ICON_BTN}
+                    title="Manage SCD2 strategies"
+                    aria-label="Manage SCD2 strategies"
+                  >
+                    <GitBranch size={16} />
+                  </button>
+                )}
+                {section === "policies" && (
+                  <button
+                    type="button"
+                    onClick={() => setFreezeWindowsOpen(true)}
+                    className={ICON_BTN}
+                    title="Manage freeze windows"
+                    aria-label="Manage freeze windows"
+                  >
+                    <CalendarClock size={16} />
+                  </button>
+                )}
               </div>
               {section === "yaml" ? (
                 <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
@@ -674,6 +701,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
               {section === "scd2" && (
                 <div>
                   <StrategySelect
+                    key={`strategy-${governanceCatalogRev}`}
                     strategyId={form.strategyId}
                     strategyVersion={form.strategyVersion}
                     onStrategyId={(strategyId) => patch({ strategyId })}
@@ -690,7 +718,9 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                   </p>
                   <div>
                     <span className={`mb-2 block ${FIELD_LABEL}`}>Freeze windows</span>
-                    <FreezeWindowsSelect selected={form.freezeWindowIds} onSelected={(freezeWindowIds) => patch({ freezeWindowIds })} />
+                    <FreezeWindowsSelect
+                      key={`freezes-${governanceCatalogRev}`}
+                      selected={form.freezeWindowIds} onSelected={(freezeWindowIds) => patch({ freezeWindowIds })} />
                   </div>
                 </div>
               )}
@@ -822,6 +852,21 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
         stackLevel={1}
         onClose={() => setSyncMetadataOpen(false)}
         onChanged={() => void refreshRunCatalog()}
+      />
+    )}
+    {freezeWindowsOpen && (
+      <FreezeWindowsModal
+        stackLevel={1}
+        onClose={() => setFreezeWindowsOpen(false)}
+        onChanged={() => setGovernanceCatalogRev((revision) => revision + 1)}
+      />
+    )}
+    {strategiesOpen && (
+      <StrategiesModal
+        stackLevel={1}
+        onClose={() => setStrategiesOpen(false)}
+        onChanged={() => setGovernanceCatalogRev((revision) => revision + 1)}
+        initialStrategyId={form.strategyId || null}
       />
     )}
     </>

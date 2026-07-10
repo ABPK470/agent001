@@ -2,7 +2,7 @@
  * SCD2 strategy display + form helpers for Sync Operations.
  */
 
-import type { EntityRegistryStrategy } from "../../types"
+import type { EntityRegistryStrategy } from "../../../types"
 
 export function isTenantCustomStrategy(strategy: EntityRegistryStrategy): boolean {
   return strategy.provenance.kind !== "bundled"

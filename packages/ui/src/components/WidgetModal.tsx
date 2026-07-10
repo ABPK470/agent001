@@ -31,8 +31,6 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "env-sync": "Sync",
   "operation-log": "Pipelines",
   "entity-registry": "Entity Registry",
-  "scd2-strategies": "SCD2 Strategies",
-  "freeze-windows":  "Freeze Windows",
   "sync-proposals": "Sync Proposals",
   "sync-approvals": "Sync Admin · Approvals",
   "sync-evidence":  "Sync Evidence",
@@ -105,8 +103,6 @@ export function WidgetModal() {
             modalWidget.type === "entity-registry"
             || modalWidget.type === "sync-admin"
             || modalWidget.type.startsWith("sync-")
-            || modalWidget.type === "scd2-strategies"
-            || modalWidget.type === "freeze-windows"
               ? "p-0"
               : "p-3"
           }`}

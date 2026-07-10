@@ -1,21 +1,23 @@
 import type { JSX } from "react"
-import type { EntityRegistryDefinition, EntityRegistryStrategy, EntityRegistryStrategyHistoryEntry } from "../../types"
-import { ModalShell } from "./chrome"
-import { AdminModalCanvas, AdminModalRoot, FormSectionCard } from "./modal-layout"
-import { AdminTable, AdminTd, AdminTh } from "./shared"
+import type { EntityRegistryDefinition, EntityRegistryStrategy, EntityRegistryStrategyHistoryEntry } from "../../../types"
+import { ModalShell } from "../ModalShell"
+import { AdminModalCanvas, AdminModalRoot, FormSectionCard } from "../governance/modal-layout"
+import { AdminTable, AdminTd, AdminTh } from "../../sync-admin/shared"
 import { IDENTITY_OPTIONS } from "./strategy-helpers"
 
 export function StrategyHistoryModal({
   strategy,
   history,
+  stackLevel = 1,
   onClose,
 }: {
   strategy: EntityRegistryStrategy
   history: EntityRegistryStrategyHistoryEntry[]
+  stackLevel?: number
   onClose: () => void
 }): JSX.Element {
   return (
-    <ModalShell title="Version history" subtitle={strategy.id} size="focus" onClose={onClose}>
+    <ModalShell title="Version history" subtitle={strategy.id} size="focus" stackLevel={stackLevel} onClose={onClose}>
       <AdminModalRoot>
         <AdminModalCanvas>
           <FormSectionCard title="Versions">
@@ -29,12 +31,12 @@ export function StrategyHistoryModal({
                 </tr>
               </thead>
               <tbody>
-                {history.map((h) => (
-                  <tr key={h.version} className={h.version === strategy.version ? "bg-accent/5" : undefined}>
-                    <AdminTd className="font-mono">{h.version}</AdminTd>
-                    <AdminTd className="font-mono text-text-muted">{h.createdAt.slice(0, 16)}</AdminTd>
-                    <AdminTd className="font-mono">{h.createdBy}</AdminTd>
-                    <AdminTd>{h.reason}</AdminTd>
+                {history.map((entry) => (
+                  <tr key={entry.version} className={entry.version === strategy.version ? "bg-accent/5" : undefined}>
+                    <AdminTd className="font-mono">{entry.version}</AdminTd>
+                    <AdminTd className="font-mono text-text-muted">{entry.createdAt.slice(0, 16)}</AdminTd>
+                    <AdminTd className="font-mono">{entry.createdBy}</AdminTd>
+                    <AdminTd>{entry.reason}</AdminTd>
                   </tr>
                 ))}
               </tbody>
@@ -49,14 +51,16 @@ export function StrategyHistoryModal({
 export function StrategyEntitiesModal({
   strategyId,
   entities,
+  stackLevel = 1,
   onClose,
 }: {
   strategyId: string
   entities: EntityRegistryDefinition[]
+  stackLevel?: number
   onClose: () => void
 }): JSX.Element {
   return (
-    <ModalShell title="Entities" subtitle={strategyId} size="focus" onClose={onClose}>
+    <ModalShell title="Entities" subtitle={strategyId} size="focus" stackLevel={stackLevel} onClose={onClose}>
       <AdminModalRoot>
         <AdminModalCanvas>
           {entities.length === 0 ? (
@@ -72,11 +76,11 @@ export function StrategyEntitiesModal({
                   </tr>
                 </thead>
                 <tbody>
-                  {entities.map((d) => (
-                    <tr key={d.id}>
-                      <AdminTd className="font-mono">{d.id}</AdminTd>
-                      <AdminTd className="font-mono">{String(d.scd2.strategyVersion)}</AdminTd>
-                      <AdminTd className="font-mono">{d.rootTable}</AdminTd>
+                  {entities.map((definition) => (
+                    <tr key={definition.id}>
+                      <AdminTd className="font-mono">{definition.id}</AdminTd>
+                      <AdminTd className="font-mono">{String(definition.scd2.strategyVersion)}</AdminTd>
+                      <AdminTd className="font-mono">{definition.rootTable}</AdminTd>
                     </tr>
                   ))}
                 </tbody>
@@ -89,11 +93,20 @@ export function StrategyEntitiesModal({
   )
 }
 
-export function StrategyPolicyModal({ strategy, onClose }: { strategy: EntityRegistryStrategy; onClose: () => void }): JSX.Element {
-  const identityLabel = IDENTITY_OPTIONS.find((o) => o.value === strategy.identityHandling)?.label ?? strategy.identityHandling
+export function StrategyPolicyModal({
+  strategy,
+  stackLevel = 1,
+  onClose,
+}: {
+  strategy: EntityRegistryStrategy
+  stackLevel?: number
+  onClose: () => void
+}): JSX.Element {
+  const identityLabel = IDENTITY_OPTIONS.find((option) => option.value === strategy.identityHandling)?.label
+    ?? strategy.identityHandling
 
   return (
-    <ModalShell title="Policy document" subtitle={strategy.id} size="focus" onClose={onClose}>
+    <ModalShell title="Policy document" subtitle={strategy.id} size="focus" stackLevel={stackLevel} onClose={onClose}>
       <AdminModalRoot>
         <AdminModalCanvas>
           <FormSectionCard title="Exclude from diff">
@@ -114,5 +127,4 @@ export function StrategyPolicyModal({ strategy, onClose }: { strategy: EntityReg
   )
 }
 
-/** @deprecated Use StrategyPolicyModal */
 export const StrategyColumnsModal = StrategyPolicyModal

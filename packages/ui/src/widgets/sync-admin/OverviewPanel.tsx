@@ -4,7 +4,7 @@
 
 import { EventType } from "@mia/shared-enums"
 import {
-  Activity, Calendar, ChevronRight, Clock, Database, GitBranch, GitCompareArrows, Mail, Shield,
+  Activity, ChevronRight, Clock, Database, GitCompareArrows, Mail, Shield,
 } from "lucide-react"
 import type { ComponentType, JSX } from "react"
 import { useEffect, useRef, useState } from "react"
@@ -22,8 +22,6 @@ interface Snapshot {
   pendingApprovals: number
   recentRuns: number
   lastRunLabel: string | null
-  strategies: number
-  freezes: { active: number; scheduled: number; past: number; activeNames: string[] }
   schedules: { enabled: number; disabled: number }
   routes: { enabled: number; disabled: number }
 }
@@ -34,8 +32,6 @@ const EMPTY: Snapshot = {
   pendingApprovals: 0,
   recentRuns: 0,
   lastRunLabel: null,
-  strategies: 0,
-  freezes: { active: 0, scheduled: 0, past: 0, activeNames: [] },
   schedules: { enabled: 0, disabled: 0 },
   routes: { enabled: 0, disabled: 0 },
 }
@@ -81,8 +77,6 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
         api.listApprovals({ state: "pending" }),
         api.listApprovals({ state: "partially_granted" }),
         api.syncRuns(20),
-        api.listEntityRegistryStrategies(),
-        api.listFreezeWindows(),
         api.listProposerSchedules(),
         api.listNotificationRoutes(),
       ])
@@ -92,23 +86,8 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
       const pending1 = results[2].status === "fulfilled" ? (results[2].value as unknown[]) : []
       const pending2 = results[3].status === "fulfilled" ? (results[3].value as unknown[]) : []
       const runs = results[4].status === "fulfilled" ? (results[4].value as Array<{ entityDisplayName?: string | null; entityType?: string; entityId?: string; finishedAt?: string | null; startedAt?: string }>) : []
-      const strats = results[5].status === "fulfilled" ? results[5].value : { items: [] }
-      const frz = results[6].status === "fulfilled" ? results[6].value : { items: [] }
-      const sched = results[7].status === "fulfilled" ? results[7].value : []
-      const rts = results[8].status === "fulfilled" ? results[8].value : []
-
-      const now = Date.now()
-      const freezes = { active: 0, scheduled: 0, past: 0, activeNames: [] as string[] }
-      for (const w of frz.items) {
-        const s = Date.parse(w.startsAt)
-        const e = Date.parse(w.endsAt)
-        if (now < s) freezes.scheduled++
-        else if (now > e) freezes.past++
-        else {
-          freezes.active++
-          freezes.activeNames.push(w.displayName)
-        }
-      }
+      const sched = results[5].status === "fulfilled" ? results[5].value : []
+      const rts = results[6].status === "fulfilled" ? results[6].value : []
 
       const schedules = { enabled: 0, disabled: 0 }
       for (const s of sched as Array<{ enabled?: boolean | number }>) {
@@ -135,8 +114,6 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
         pendingApprovals: pending1.length + pending2.length,
         recentRuns: runs.length,
         lastRunLabel,
-        strategies: strats.items.length,
-        freezes,
         schedules,
         routes,
       })
@@ -162,10 +139,6 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
   const connSubtitle = snap.connectionNames.length > 0
     ? snap.connectionNames.join(" · ")
     : "None configured"
-
-  const freezeSubtitle = snap.freezes.active > 0
-    ? `${snap.freezes.active} blocking now`
-    : `${snap.freezes.scheduled} upcoming · ${snap.freezes.past} past`
 
   return (
     <ConsolePanel err={err} onClearErr={() => setErr(null)}>
@@ -203,21 +176,6 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
             value={snap.recentRuns}
             subtitle={snap.lastRunLabel ?? "No persisted runs"}
             onClick={() => onJump("runs")}
-          />
-          <StatusCard
-            icon={GitBranch}
-            title="SCD2 strategies"
-            value={snap.strategies}
-            subtitle="Bundled + custom"
-            onClick={() => onJump("strategies")}
-          />
-          <StatusCard
-            icon={Calendar}
-            title="Freeze windows"
-            value={snap.freezes.active + snap.freezes.scheduled}
-            subtitle={freezeSubtitle}
-            accent={snap.freezes.active > 0 ? "danger" : undefined}
-            onClick={() => onJump("freezes")}
           />
           <StatusCard
             icon={Clock}
@@ -313,9 +271,7 @@ function isOverviewRefreshEvent(type: string): boolean {
 
 function EventRow({ e }: { e: SseEvent }): JSX.Element {
   const Icon =
-    e.type.startsWith("freeze_window.") ? Calendar
-    : e.type.startsWith("sync_env.") ? Database
-    : e.type.startsWith("entity_registry.") ? GitBranch
+    e.type.startsWith("sync_env.") ? Database
     : e.type.startsWith("sync.proposal") ? GitCompareArrows
     : e.type.startsWith("sync.approval") ? Shield
     : Activity

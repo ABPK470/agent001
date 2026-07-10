@@ -45,7 +45,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "debug-inspector", label: "Trace",       desc: "System prompts, tool resolution, LLM requests & responses", Icon: Bug },
   { type: "active-users",  label: "Active Users",  desc: "Who's online, what they're running",          Icon: Activity },
   { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform", Icon: TableProperties },
-  { type: "sync-admin",     label: "Sync Operations", desc: "Proposals, runs, evidence, approvals, connections, schedules, strategies, freezes", Icon: Settings },
+  { type: "sync-admin",     label: "Sync Operations", desc: "Proposals, runs, evidence, approvals, connections, schedules, notify routes", Icon: Settings },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {
