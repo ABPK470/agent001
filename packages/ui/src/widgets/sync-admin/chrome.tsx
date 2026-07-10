@@ -158,7 +158,7 @@ export function ConfirmModal({
   danger = false,
   busy = false,
   error = null,
-  stackLevel = 1,
+  stackLevel = 0,
   onConfirm,
   onCancel,
 }: {
@@ -168,7 +168,7 @@ export function ConfirmModal({
   danger?: boolean
   busy?: boolean
   error?: string | null
-  /** Stack above parent modals — default 1 for nested confirms. */
+  /** Raise when stacking above an open parent modal (parent keeps the scrim). */
   stackLevel?: number
   onConfirm: () => void
   onCancel: () => void
@@ -209,7 +209,7 @@ export function PromptModal({
   placeholder,
   submitLabel = "Submit",
   busy = false,
-  stackLevel = 1,
+  stackLevel = 0,
   onSubmit,
   onCancel,
 }: {

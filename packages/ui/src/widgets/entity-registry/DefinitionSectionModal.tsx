@@ -72,12 +72,18 @@ function Scd2Section({ def }: { def: EntityRegistryDefinition }): JSX.Element {
       {override ? (
         <DetailSection title="Entity override">
           <DetailGrid>
-            <DetailField label="Valid from" value={override.validFromCol} mono />
-            <DetailField label="Valid to" value={override.validToCol} mono />
-            <DetailField label="Is locked" value={override.isLockedCol} mono />
-            <DetailField label="Sync date" value={override.syncDateCol} mono />
-            <DetailField label="Deploy date" value={override.deployDateCol} mono />
+            <DetailField
+              label="Exclude from diff"
+              value={override.excludeFromDiff?.join(", ") ?? "—"}
+              mono
+            />
             <DetailField label="Identity handling" value={override.identityHandling} mono />
+            {override.onInsert && Object.keys(override.onInsert).length > 0 && (
+              <DetailField label="onInsert" value={JSON.stringify(override.onInsert)} mono span={2} />
+            )}
+            {override.onUpdate && Object.keys(override.onUpdate).length > 0 && (
+              <DetailField label="onUpdate" value={JSON.stringify(override.onUpdate)} mono span={2} />
+            )}
           </DetailGrid>
         </DetailSection>
       ) : (

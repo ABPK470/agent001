@@ -158,13 +158,8 @@ function orderScope(s: EntityTableScope): Record<string, unknown> {
 
 function cleanOverride(o: Scd2Override): Scd2Override {
   const out: Scd2Override = {}
-  if (o.validFromCol !== undefined) out.validFromCol = o.validFromCol
-  if (o.validToCol !== undefined) out.validToCol = o.validToCol
-  if (o.isLockedCol !== undefined) out.isLockedCol = o.isLockedCol
-  if (o.syncDateCol !== undefined) out.syncDateCol = o.syncDateCol
-  if (o.deployDateCol !== undefined) out.deployDateCol = o.deployDateCol
+  if (o.excludeFromDiff !== undefined) out.excludeFromDiff = o.excludeFromDiff
   if (o.identityHandling !== undefined) out.identityHandling = o.identityHandling
-  if (o.excludedFromDiffCols) out.excludedFromDiffCols = o.excludedFromDiffCols
   if (o.onInsert) out.onInsert = o.onInsert
   if (o.onUpdate) out.onUpdate = o.onUpdate
   return out

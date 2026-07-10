@@ -23,16 +23,71 @@ export function provenanceLabel(kind: EntityRegistryStrategy["provenance"]["kind
 export const IDENTITY_OPTIONS: {
   value: EntityRegistryStrategy["identityHandling"]
   label: string
+  hint: string
 }[] = [
-  { value: "none", label: "none — no identity special-casing" },
-  { value: "setIdentityInsertOn", label: "setIdentityInsertOn — SET IDENTITY_INSERT ON for MERGE" },
-  { value: "skipIdentityCols", label: "skipIdentityCols — omit identity columns from sync" },
+  {
+    value: "none",
+    label: "Copy from source",
+    hint: "Identity PK values are copied from source when present (SET IDENTITY_INSERT when required).",
+  },
+  {
+    value: "setIdentityInsertOn",
+    label: "Explicit identity insert",
+    hint: "Wrap MERGE with SET IDENTITY_INSERT ON/OFF when the target has an identity PK.",
+  },
+  {
+    value: "omit-identity-column",
+    label: "Omit identity column",
+    hint: "Never write the identity PK column — target generates it.",
+  },
 ]
 
-export function colOrNull(value: string): string | null {
-  const trimmed = value.trim()
-  return trimmed === "" ? null : trimmed
-}
+export const STRATEGY_PRESETS: {
+  id: string
+  label: string
+  description: string
+  strategy: Pick<EntityRegistryStrategy, "excludeFromDiff" | "onInsert" | "onUpdate" | "identityHandling">
+}[] = [
+  {
+    id: "blank",
+    label: "Blank",
+    description: "Diff all non-PK columns; no automatic stamps.",
+    strategy: { excludeFromDiff: [], onInsert: {}, onUpdate: {}, identityHandling: "none" },
+  },
+  {
+    id: "validity-range",
+    label: "Validity range",
+    description: "Classic validFrom/validTo stamping (target-dialect SQL).",
+    strategy: {
+      excludeFromDiff: ["validFrom", "validTo"],
+      onInsert: { validFrom: "GETUTCDATE()", validTo: "NULL" },
+      onUpdate: { validFrom: "GETUTCDATE()", validTo: "NULL" },
+      identityHandling: "none",
+    },
+  },
+  {
+    id: "mymi-abi",
+    label: "Mymi ABI preset",
+    description: "Validity + lock/sync/deploy audit columns excluded from diff.",
+    strategy: {
+      excludeFromDiff: ["validFrom", "validTo", "isLocked", "sync-date", "deploy-date"],
+      onInsert: { validFrom: "GETUTCDATE()", validTo: "NULL" },
+      onUpdate: { validFrom: "GETUTCDATE()", validTo: "NULL" },
+      identityHandling: "setIdentityInsertOn",
+    },
+  },
+  {
+    id: "audit-cols",
+    label: "Audit columns only",
+    description: "Exclude created/modified audit columns; no validity stamping.",
+    strategy: {
+      excludeFromDiff: ["createdAt", "createdBy", "modifiedAt", "modifiedBy"],
+      onInsert: {},
+      onUpdate: {},
+      identityHandling: "none",
+    },
+  },
+]
 
 export function formatColList(cols: string[]): string {
   return cols.join(", ")
@@ -63,13 +118,8 @@ export function blankCustomStrategy(): EntityRegistryStrategy {
     id: "custom-strategy",
     displayName: "Custom strategy",
     description: "",
-    validFromCol: null,
-    validToCol: null,
-    isLockedCol: null,
-    syncDateCol: null,
-    deployDateCol: null,
+    excludeFromDiff: [],
     identityHandling: "none",
-    excludedFromDiffCols: [],
     onInsert: {},
     onUpdate: {},
     provenance: { kind: "manual" },
@@ -89,55 +139,10 @@ export interface StrategyRuntimeBullet {
 export function describeStrategyEffects(s: EntityRegistryStrategy): StrategyRuntimeBullet[] {
   const bullets: StrategyRuntimeBullet[] = []
 
-  const insertCols = Object.entries(s.onInsert)
-  const updateCols = Object.entries(s.onUpdate)
-
-  if (s.validFromCol || s.validToCol || insertCols.length > 0 || updateCols.length > 0) {
-    if (insertCols.length > 0) {
-      for (const [col, expr] of insertCols) {
-        bullets.push({
-          active: true,
-          text: `On insert, set ${col} = ${expr}`,
-        })
-      }
-    } else if (s.validFromCol) {
-      bullets.push({
-        active: true,
-        text: `On insert, stamp ${s.validFromCol} = GETUTCDATE()`,
-      })
-    }
-    if (updateCols.length > 0) {
-      for (const [col, expr] of updateCols) {
-        bullets.push({
-          active: true,
-          text: `On update, set ${col} = ${expr}`,
-        })
-      }
-    } else if (s.validFromCol || s.validToCol) {
-      if (s.validFromCol) {
-        bullets.push({
-          active: true,
-          text: `On update, stamp ${s.validFromCol} = GETUTCDATE()`,
-        })
-      }
-      if (s.validToCol) {
-        bullets.push({
-          active: true,
-          text: `On update, set ${s.validToCol} = NULL`,
-        })
-      }
-    }
-  } else {
-    bullets.push({
-      active: false,
-      text: "No validity-range stamping (row-replace semantics)",
-    })
-  }
-
-  if (s.excludedFromDiffCols.length > 0) {
+  if (s.excludeFromDiff.length > 0) {
     bullets.push({
       active: true,
-      text: `Diff engine excludes: ${s.excludedFromDiffCols.join(", ")}`,
+      text: `Diff excludes: ${s.excludeFromDiff.join(", ")}`,
     })
   } else {
     bullets.push({
@@ -146,19 +151,25 @@ export function describeStrategyEffects(s: EntityRegistryStrategy): StrategyRunt
     })
   }
 
-  if (s.identityHandling !== "none") {
+  const insertCols = Object.entries(s.onInsert)
+  const updateCols = Object.entries(s.onUpdate)
+  if (insertCols.length > 0 || updateCols.length > 0) {
+    for (const [col, expr] of insertCols) {
+      bullets.push({ active: true, text: `On insert: ${col} = ${expr}` })
+    }
+    for (const [col, expr] of updateCols) {
+      bullets.push({ active: true, text: `On update: ${col} = ${expr}` })
+    }
+  } else {
     bullets.push({
-      active: true,
-      text: `Identity handling: ${s.identityHandling}`,
+      active: false,
+      text: "No stamp expressions — values come from source only",
     })
   }
 
-  const metaCols = [s.isLockedCol, s.syncDateCol, s.deployDateCol].filter(Boolean)
-  if (metaCols.length > 0) {
-    bullets.push({
-      active: true,
-      text: `Meta columns tracked: ${metaCols.join(", ")}`,
-    })
+  if (s.identityHandling !== "none") {
+    const label = IDENTITY_OPTIONS.find((o) => o.value === s.identityHandling)?.label ?? s.identityHandling
+    bullets.push({ active: true, text: `Identity: ${label}` })
   }
 
   return bullets
@@ -169,13 +180,8 @@ export function strategyFromForm(args: {
   id: string
   displayName: string
   description: string
-  validFromCol: string
-  validToCol: string
-  isLockedCol: string
-  syncDateCol: string
-  deployDateCol: string
   identityHandling: EntityRegistryStrategy["identityHandling"]
-  excludedFromDiffCols: string
+  excludeFromDiff: string
   onInsertJson: string
   onUpdateJson: string
 }): EntityRegistryStrategy {
@@ -185,13 +191,13 @@ export function strategyFromForm(args: {
     onInsert = JSON.parse(args.onInsertJson) as Record<string, string>
     onUpdate = JSON.parse(args.onUpdateJson) as Record<string, string>
   } catch (e) {
-    throw new Error(`onInsert/onUpdate must be valid JSON: ${(e as Error).message}`)
+    throw new Error(`On insert / on update must be valid JSON: ${(e as Error).message}`)
   }
   if (typeof onInsert !== "object" || onInsert === null || Array.isArray(onInsert)) {
-    throw new Error("onInsert must be a JSON object")
+    throw new Error("On insert must be a JSON object")
   }
   if (typeof onUpdate !== "object" || onUpdate === null || Array.isArray(onUpdate)) {
-    throw new Error("onUpdate must be a JSON object")
+    throw new Error("On update must be a JSON object")
   }
 
   return {
@@ -199,13 +205,8 @@ export function strategyFromForm(args: {
     id: args.id,
     displayName: args.displayName,
     description: args.description,
-    validFromCol: colOrNull(args.validFromCol),
-    validToCol: colOrNull(args.validToCol),
-    isLockedCol: colOrNull(args.isLockedCol),
-    syncDateCol: colOrNull(args.syncDateCol),
-    deployDateCol: colOrNull(args.deployDateCol),
     identityHandling: args.identityHandling,
-    excludedFromDiffCols: parseColList(args.excludedFromDiffCols),
+    excludeFromDiff: parseColList(args.excludeFromDiff),
     onInsert,
     onUpdate,
   }

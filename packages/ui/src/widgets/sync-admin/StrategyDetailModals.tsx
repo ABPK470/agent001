@@ -3,6 +3,7 @@ import type { EntityRegistryDefinition, EntityRegistryStrategy, EntityRegistrySt
 import { ModalShell } from "./chrome"
 import { AdminModalCanvas, AdminModalRoot, FormSectionCard } from "./modal-layout"
 import { AdminTable, AdminTd, AdminTh } from "./shared"
+import { IDENTITY_OPTIONS } from "./strategy-helpers"
 
 export function StrategyHistoryModal({
   strategy,
@@ -88,33 +89,30 @@ export function StrategyEntitiesModal({
   )
 }
 
-export function StrategyColumnsModal({ strategy, onClose }: { strategy: EntityRegistryStrategy; onClose: () => void }): JSX.Element {
-  const rows: [string, string][] = [
-    ["validFrom", strategy.validFromCol ?? "—"],
-    ["validTo", strategy.validToCol ?? "—"],
-    ["isLocked", strategy.isLockedCol ?? "—"],
-    ["syncDate", strategy.syncDateCol ?? "—"],
-    ["deployDate", strategy.deployDateCol ?? "—"],
-    ["identity", strategy.identityHandling],
-    ["excluded", strategy.excludedFromDiffCols.join(", ") || "—"],
-  ]
+export function StrategyPolicyModal({ strategy, onClose }: { strategy: EntityRegistryStrategy; onClose: () => void }): JSX.Element {
+  const identityLabel = IDENTITY_OPTIONS.find((o) => o.value === strategy.identityHandling)?.label ?? strategy.identityHandling
 
   return (
-    <ModalShell title="Column map" subtitle={strategy.id} size="focus" onClose={onClose}>
+    <ModalShell title="Policy document" subtitle={strategy.id} size="focus" onClose={onClose}>
       <AdminModalRoot>
         <AdminModalCanvas>
-          <FormSectionCard title="Column mapping">
-            <dl className="grid grid-cols-[10rem_1fr] gap-x-4 gap-y-2 text-sm font-mono">
-              {rows.map(([k, v]) => (
-                <div key={k} className="contents">
-                  <dt className="text-text-muted">{k}</dt>
-                  <dd>{v}</dd>
-                </div>
-              ))}
-            </dl>
+          <FormSectionCard title="Exclude from diff">
+            <p className="font-mono text-sm">{strategy.excludeFromDiff.join(", ") || "—"}</p>
+          </FormSectionCard>
+          <FormSectionCard title="On insert">
+            <pre className="overflow-x-auto font-mono text-xs">{JSON.stringify(strategy.onInsert, null, 2)}</pre>
+          </FormSectionCard>
+          <FormSectionCard title="On update">
+            <pre className="overflow-x-auto font-mono text-xs">{JSON.stringify(strategy.onUpdate, null, 2)}</pre>
+          </FormSectionCard>
+          <FormSectionCard title="Identity handling">
+            <p className="text-sm">{identityLabel}</p>
           </FormSectionCard>
         </AdminModalCanvas>
       </AdminModalRoot>
     </ModalShell>
   )
 }
+
+/** @deprecated Use StrategyPolicyModal */
+export const StrategyColumnsModal = StrategyPolicyModal

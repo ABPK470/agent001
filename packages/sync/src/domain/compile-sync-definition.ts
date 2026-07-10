@@ -10,7 +10,9 @@ import type { AuthoredSyncDefinition, AuthoredSyncFlowStep, PublishedSyncDefinit
 import { normalizeEntityDefinition } from "./entity-registry/normalize-table-scope.js"
 import { orderEntityTables } from "./entity-registry/order.js"
 import { projectTablePredicate } from "./entity-registry/project-predicate.js"
-import type { EntityDefinition } from "./entity-registry/types.js"
+import { toScd2TablePolicy } from "./entity-registry/scd2-policy.js"
+import { resolveEffectiveScd2 } from "./entity-registry/strategy-resolver.js"
+import type { EntityDefinition, Scd2Strategy } from "./entity-registry/types.js"
 import type { FlowCatalog } from "./flow-catalog.js"
 import { normalizeAuthoredSyncFlowSteps } from "./normalize-flow-step.js"
 import {
@@ -39,6 +41,7 @@ export interface CompileAuthoredOptions {
   environmentPolicyRef?: string
   sourceArtifact?: string | null
   ownershipNotes?: string[]
+  resolveScd2Strategy?: (strategyId: string, strategyVersion: number | "latest") => Scd2Strategy | null
 }
 
 function defaultConfig(entityId: string, catalog: SyncDefinitionFlowTemplateCatalog): SyncDefinitionConfigInput {
@@ -77,6 +80,7 @@ function buildDefinitionCore(
   flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
   provenance: AuthoredSyncDefinition["provenance"],
   flowCatalog?: FlowCatalog,
+  resolveScd2Strategy?: (strategyId: string, strategyVersion: number | "latest") => Scd2Strategy | null,
 ): AuthoredSyncDefinition {
   const normalized = normalizeEntityDefinition(entity)
   const executionSteps = resolveExecutionSteps(config, flowTemplateCatalog, entity, flowCatalog)
@@ -84,6 +88,8 @@ function buildDefinitionCore(
   const executionOrder = orderedTables.map((table) => table.name)
   const reverseOrder =
     (normalized.reverseOrder?.length ?? 0) > 0 ? normalized.reverseOrder! : [...executionOrder].reverse()
+
+  const strategy = resolveScd2Strategy?.(normalized.scd2.strategyId, normalized.scd2.strategyVersion) ?? null
 
   return {
     schemaVersion: 1,
@@ -116,17 +122,29 @@ function buildDefinitionCore(
       notes: JSON.parse(config.ownership_notes_json) as string[]
     },
     metadata: {
-      tables: normalized.tables.map((table) => ({
-        name: table.name,
-        scopeColumn: table.scope?.kind === "rootPk" ? table.scope.column : (table.scopeColumn ?? null),
-        predicate: projectTablePredicate(normalized, table),
-        source: table.source ?? "manual",
-        verified: Boolean(table.verified),
-        groundedByPipeline: Boolean(table.groundedByPipeline),
-        enabledByDefault: table.enabledByDefault ?? true,
-        userControllable: table.userControllable ?? false,
-        ...(table.note ? { note: table.note } : {})
-      })),
+      tables: normalized.tables.map((table) => {
+        const scd2Policy = strategy
+          ? toScd2TablePolicy(
+              resolveEffectiveScd2({
+                strategy,
+                entityOverride: normalized.scd2.entityOverride,
+                table,
+              }),
+            )
+          : undefined
+        return {
+          name: table.name,
+          scopeColumn: table.scope?.kind === "rootPk" ? table.scope.column : (table.scopeColumn ?? null),
+          predicate: projectTablePredicate(normalized, table),
+          source: table.source ?? "manual",
+          verified: Boolean(table.verified),
+          groundedByPipeline: Boolean(table.groundedByPipeline),
+          enabledByDefault: table.enabledByDefault ?? true,
+          userControllable: table.userControllable ?? false,
+          ...(table.note ? { note: table.note } : {}),
+          ...(scd2Policy ? { scd2Policy } : {}),
+        }
+      }),
       executionOrder,
       reverseOrder,
       discrepancies: (normalized.discrepancies ?? []).map((note) => ({
@@ -162,7 +180,7 @@ export function compileAuthoredSyncDefinition(
     kind: entity.provenance.kind === "legacy-migration" ? "legacy-migration" : "manual",
     sourceArtifact: options.sourceArtifact ?? null,
     sourceVersion: entity.version === undefined ? null : String(entity.version)
-  })
+  }, undefined, options.resolveScd2Strategy)
 }
 
 export function compilePublishedSyncDefinition(
@@ -172,12 +190,20 @@ export function compilePublishedSyncDefinition(
   flowCatalog: FlowCatalog,
   publishedAt: string,
   publishedVersion: string,
+  resolveScd2Strategy: (strategyId: string, strategyVersion: number | "latest") => Scd2Strategy | null,
 ): PublishedSyncDefinition {
-  const authored = buildDefinitionCore(entity, config, flowTemplateCatalog, {
-    kind: entity.provenance.kind === "legacy-migration" ? "legacy-migration" : "manual",
-    sourceArtifact: `entity-registry:${entity.tenantId}/${entity.id}`,
-    sourceVersion: String(entity.version),
-  }, flowCatalog)
+  const authored = buildDefinitionCore(
+    entity,
+    config,
+    flowTemplateCatalog,
+    {
+      kind: entity.provenance.kind === "legacy-migration" ? "legacy-migration" : "manual",
+      sourceArtifact: `entity-registry:${entity.tenantId}/${entity.id}`,
+      sourceVersion: String(entity.version),
+    },
+    flowCatalog,
+    resolveScd2Strategy,
+  )
   const catalog = flowCatalog.snapForSteps(authored.executionFlow.steps)
   return {
     ...authored,

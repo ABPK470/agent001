@@ -7,6 +7,7 @@
  */
 
 import { type Transaction } from "mssql"
+import type { Scd2TablePolicy } from "@mia/shared-types"
 import { buildBatchWhere } from "../../../domain/diff-engine/sql-helpers.js"
 import type { SyncRuntimeHost } from "../../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
@@ -14,15 +15,15 @@ import { type SyncPlan, type SyncPlanTable } from "../plan-store.js"
 import { deleteRows, changeRowsAsPkHash, upsertRows } from "./plan-table.js"
 import { qtable, sqlLiteral, trackedQuery } from "./db-helpers.js"
 
-/**
- * Columns excluded from MERGE UPDATE SET / INSERT VALUES — mirrors the legacy
- * core.uspSyncObjectTran exclusion list. These are managed columns that get
- * set explicitly (validFrom = GETUTCDATE(), validTo = NULL) rather than
- * blindly copied from the source environment.
- */
-const SYNC_META_COLUMNS = new Set(["validFrom", "validTo", "isLocked", "sync-date", "deploy-date"])
-
 const CHANGE_SET_FETCH_BATCH = 200
+
+function requireScd2Policy(plan: SyncPlan, tableName: string): Scd2TablePolicy {
+  const row = plan.executionContract.metadata.tables.find((t) => t.name === tableName)
+  if (!row?.scd2Policy) {
+    throw new Error(`Missing scd2Policy for ${tableName} — republish the sync definition.`)
+  }
+  return row.scd2Policy
+}
 
 async function fetchSourceRowsForUpsert(
   host: SyncRuntimeHost,
@@ -99,14 +100,8 @@ export async function fetchPkColumns(
 /**
  * Apply inserts + updates by reading source rows via the source pool and
  * writing them to the target via a temp table + MERGE.
- * No linked-server dependency — uses direct connection pools.
- *
- * Uses MERGE (not DELETE+INSERT) because parent rows may have FK references
- * from child tables that prevent deletion.
- *
- * Meta columns (validFrom, validTo, isLocked, syncDate, deployDate) are NOT
- * copied from source — instead validFrom=GETUTCDATE(), validTo=NULL on both
- * INSERT and UPDATE, matching the legacy core.uspSyncObjectTran behaviour.
+ * Column exclusions and stamp expressions come from the frozen per-table
+ * `scd2Policy` on the published definition.
  */
 export async function applyInsertsUpdates(
   host: SyncRuntimeHost,
@@ -116,6 +111,8 @@ export async function applyInsertsUpdates(
   pkColumns: string[],
   telemetryContext?: SyncTelemetryContext
 ): Promise<number> {
+  const policy = requireScd2Policy(plan, tableName)
+  const excluded = new Set(policy.excludeFromDiff)
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
   if (pkColumns.length === 0) throw new Error(`No PK for ${tableName} — cannot MERGE.`)
@@ -151,22 +148,21 @@ export async function applyInsertsUpdates(
   }>
   const identityCol = targetCols.find((c) => c.is_identity)?.name ?? null
   const allSourceCols = new Set(Object.keys(rows[0]))
+  const omitIdentity = policy.identityHandling === "omit-identity-column"
 
-  // Which target columns actually exist in source?
-  const allSyncCols = targetCols.filter((c) => allSourceCols.has(c.name) && !c.is_computed).map((c) => c.name)
+  const allSyncCols = targetCols
+    .filter((c) => allSourceCols.has(c.name) && !c.is_computed)
+    .map((c) => c.name)
 
-  // Temp table: ALL overlapping columns including identity (for PK joins)
-  // but excluding meta columns (we never copy them from source).
-  const tempCols = allSyncCols.filter((c) => !SYNC_META_COLUMNS.has(c))
+  const tempCols = allSyncCols.filter((c) => {
+    if (excluded.has(c)) return false
+    if (omitIdentity && c === identityCol) return false
+    return true
+  })
   if (tempCols.length === 0) throw new Error(`No overlapping data columns for ${tableName}.`)
 
-  // Columns for the MERGE UPDATE SET — exclude PK (can't update), identity, meta
   const pkSet = new Set(pkColumns)
   const updateCols = tempCols.filter((c) => !pkSet.has(c) && c !== identityCol)
-
-  // Does the target have validFrom / validTo columns?
-  const hasValidFrom = allSyncCols.includes("validFrom")
-  const hasValidTo = allSyncCols.includes("validTo")
 
   const pkOn = pkColumns.map((c) => `T.[${c}] = S.[${c}]`).join(" AND ")
 
@@ -190,36 +186,41 @@ export async function applyInsertsUpdates(
     ? `SELECT TOP 0 ${tempCols.map((c) => `a.[${c}]`).join(", ")} INTO #syncSrc FROM ${qtable(tableName)} a LEFT JOIN ${qtable(tableName)} b ON 1 = 0`
     : `SELECT TOP 0 ${tempColList} INTO #syncSrc FROM ${qtable(tableName)}`
 
-  // Build MERGE UPDATE SET — data cols from source + SCD2 meta reset
+  // Build MERGE UPDATE SET — data cols from source + policy stamp expressions
   const updateParts: string[] = updateCols.map((c) => `T.[${c}] = S.[${c}]`)
-  if (hasValidFrom) updateParts.push("T.[validFrom] = GETUTCDATE()")
-  if (hasValidTo) updateParts.push("T.[validTo] = NULL")
+  for (const [col, expr] of Object.entries(policy.onUpdate)) {
+    if (!updateParts.some((part) => part.startsWith(`T.[${col}]`))) {
+      updateParts.push(`T.[${col}] = ${expr}`)
+    }
+  }
   const allowUpdate = tableResult.changeSet.update.length > 0
   const updateSet =
     allowUpdate && updateParts.length > 0 ? `WHEN MATCHED THEN UPDATE SET ${updateParts.join(", ")}` : ""
 
-  // Build MERGE INSERT — data cols + SCD2 meta
   const insertTargetCols = [...tempCols]
   const insertValueExprs = [...tempCols.map((c) => `S.[${c}]`)]
-  if (hasValidFrom) {
-    insertTargetCols.push("validFrom")
-    insertValueExprs.push("GETUTCDATE()")
-  }
-  if (hasValidTo) {
-    insertTargetCols.push("validTo")
-    insertValueExprs.push("NULL")
+  for (const [col, expr] of Object.entries(policy.onInsert)) {
+    if (!insertTargetCols.includes(col)) {
+      insertTargetCols.push(col)
+      insertValueExprs.push(expr)
+    }
   }
   const insertTarget = insertTargetCols.map((c) => `[${c}]`).join(", ")
   const insertValues = insertValueExprs.join(", ")
 
+  const useIdentityInsert =
+    Boolean(identityCol)
+    && !omitIdentity
+    && (policy.identityHandling === "setIdentityInsertOn" || policy.identityHandling === "none")
+
   const mergeStmt = [
-    identityCol ? `SET IDENTITY_INSERT ${qtable(tableName)} ON` : null,
+    useIdentityInsert ? `SET IDENTITY_INSERT ${qtable(tableName)} ON` : null,
     `MERGE ${qtable(tableName)} AS T`,
     `USING #syncSrc AS S ON ${pkOn}`,
     updateSet,
     `WHEN NOT MATCHED BY TARGET THEN INSERT (${insertTarget}) VALUES (${insertValues})`,
     `;`,
-    identityCol ? `SET IDENTITY_INSERT ${qtable(tableName)} OFF` : null
+    identityCol && useIdentityInsert ? `SET IDENTITY_INSERT ${qtable(tableName)} OFF` : null
   ]
     .filter(Boolean)
     .join("\n")

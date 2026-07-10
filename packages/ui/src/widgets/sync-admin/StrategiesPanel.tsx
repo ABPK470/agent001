@@ -194,6 +194,7 @@ export function StrategiesPanel(): JSX.Element {
           danger
           busy={retireBusy}
           error={retireErr}
+          stackLevel={editor ? 1 : 0}
           onCancel={() => !retireBusy && setRetireTarget(null)}
           onConfirm={() => void confirmRetire()}
         />
@@ -258,7 +259,7 @@ function StrategyDetail({ s }: {
       </ul>
 
       <ol className={`${PANEL} overflow-hidden`}>
-        <SectionRow title="Column map" subtitle="SCD2 column bindings" onClick={() => setModal("columns")} />
+        <SectionRow title="Policy document" subtitle="excludeFromDiff + stamp maps" onClick={() => setModal("columns")} />
         <SectionRow
           title="Version history"
           badge={historyBusy ? "…" : String(history.length)}

@@ -11,6 +11,7 @@ import { join, resolve } from "node:path"
 
 import type { EntityDefinition, EntityTable } from "@mia/sync"
 import {
+  bundledStrategyById,
   compilePublishedSyncDefinition,
   compileFkPathPredicate,
   loadSyncDefinitionFlowTemplateCatalog,
@@ -95,6 +96,10 @@ function predicateMapFromScaffold(entity: EntityDefinition): Map<string, string>
   return new Map(authored.metadata.tables.map((table) => [table.name, table.predicate]))
 }
 
+function resolveBundledStrategy(strategyId: string, _version: number | "latest") {
+  return bundledStrategyById(strategyId) ?? null
+}
+
 function predicateMapFromCompile(entity: EntityDefinition): Map<string, string> {
   const published = compilePublishedSyncDefinition(
     entity,
@@ -103,6 +108,7 @@ function predicateMapFromCompile(entity: EntityDefinition): Map<string, string> 
     deployFlowCatalog,
     "2026-01-01T00:00:00.000Z",
     "v1",
+    resolveBundledStrategy,
   )
   return new Map(published.metadata.tables.map((table) => [table.name, table.predicate]))
 }
@@ -114,6 +120,23 @@ afterEach(() => {
 })
 
 describe("sync compiler parity", () => {
+  it("freezes scd2Policy per table at publish", () => {
+    const entity = makeEntity()
+    const published = compilePublishedSyncDefinition(
+      entity,
+      defaultConfig(entity.id),
+      flowTemplateCatalog,
+      deployFlowCatalog,
+      "2026-01-01T00:00:00.000Z",
+      "v1",
+      resolveBundledStrategy,
+    )
+    const policy = published.metadata.tables[0]?.scd2Policy
+    expect(policy).toBeDefined()
+    expect(policy!.excludeFromDiff).toContain("validFrom")
+    expect(policy!.identityHandling).toBe("setIdentityInsertOn")
+  })
+
   it("embeds frozen flow catalog snapshot at publish", () => {
     const entity = makeEntity()
     const published = compilePublishedSyncDefinition(
@@ -123,6 +146,7 @@ describe("sync compiler parity", () => {
       deployFlowCatalog,
       "2026-01-01T00:00:00.000Z",
       "v1",
+      resolveBundledStrategy,
     )
     expect(published.executionFlow.catalog?.kinds["metadataSync"]?.handler.type).toBe("metadata_sync")
     expect(published.executionFlow.catalog?.phases.metadata).toBeDefined()
@@ -224,6 +248,7 @@ describe("sync compiler parity", () => {
       deployFlowCatalog,
       "2026-01-01T00:00:00.000Z",
       "v1",
+      resolveBundledStrategy,
     )
     expect(published.id).toBe("customPublished")
     expect(published.metadata.tables[0]?.predicate).toBe("customId = {id} AND status <> 'deleted'")
@@ -242,6 +267,7 @@ describe("sync compiler parity", () => {
       deployFlowCatalog,
       "2026-06-01T00:00:00.000Z",
       "disk-v1",
+      resolveBundledStrategy,
     )
     const bundlePath = join(root, "sync-definitions", "published", "definitions.bundle.json")
     writeFileSync(

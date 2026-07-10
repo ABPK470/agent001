@@ -75,8 +75,19 @@ export async function diffTable(
     return emptyResult(table, predicate, ["No PK columns — diff skipped."], Date.now() - t0)
   }
 
+  if (!table.scd2Policy) {
+    return emptyResult(
+      table,
+      predicate,
+      [`Table ${table.name} has no frozen scd2Policy — republish the sync definition.`],
+      Date.now() - t0,
+    )
+  }
+
+  const excludeFromDiff = new Set(table.scd2Policy.excludeFromDiff)
+
   // 1. Discover the column list to hash (from source — assumes target is compatible).
-  const colInfo = await fetchTableColumns(host, sourceConn, table.name, o.telemetryContext)
+  const colInfo = await fetchTableColumns(host, sourceConn, table.name, excludeFromDiff, o.telemetryContext)
   if (colInfo.hashColumns.length === 0) {
     return emptyResult(
       table,
@@ -168,6 +179,7 @@ export async function diffTable(
       table.name,
       updates.slice(0, o.sampleSize),
       pkColumns,
+      excludeFromDiff,
       o.telemetryContext
     ),
     fetchSamples(host, targetConn, table.name, deletes.slice(0, o.sampleSize), pkColumns, o.telemetryContext)

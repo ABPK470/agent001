@@ -8,7 +8,6 @@ import type { SyncRuntimeHost } from "../../ports/index.js"
 import { hashExpr, qtable, runQueryWithRetry } from "./sql-helpers.js"
 import {
   DETERMINISTIC_SESSION_PREFIX,
-  META_EXCLUDED_COLUMNS,
   type HashColumn,
   type PkHashRow,
   type TableColumnInfo
@@ -24,6 +23,7 @@ export async function fetchTableColumns(
   host: SyncRuntimeHost,
   connectionName: string,
   qualifiedTable: string,
+  excludeFromDiff: ReadonlySet<string> = new Set(),
   telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<TableColumnInfo> {
   const [schema, name] = qualifiedTable.split(".")
@@ -61,7 +61,7 @@ export async function fetchTableColumns(
       continue
     }
     if (row.isComputed) continue
-    if (META_EXCLUDED_COLUMNS.has(row.columnName)) continue
+    if (excludeFromDiff.has(row.columnName)) continue
     hashColumns.push({ name: row.columnName, systemType: row.systemType })
   }
   return { hashColumns, identityColumn }

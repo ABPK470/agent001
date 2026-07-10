@@ -31,6 +31,7 @@ import {
   bundledStrategyById,
   diffEntityDefinitions,
   normalizeEntityDefinition as normalizeEntityCanonical,
+  normalizeScd2Strategy,
   validateEntityDefinition,
   validateScd2Strategy,
   type EntityDefinition,
@@ -41,6 +42,10 @@ import { getDb } from "../connection.js"
 import { listFreezeWindowsForTenant } from "./freeze-windows.js"
 
 const DEFAULT_TENANT_ID = "_default"
+
+function parseStoredStrategy(body: string): Scd2Strategy {
+  return normalizeScd2Strategy(JSON.parse(body) as Scd2Strategy)
+}
 
 /**
  * Forward-compatible normalizer.
@@ -484,16 +489,18 @@ export function saveScd2Strategy(args: {
   const validation = validateScd2Strategy(args.strategy)
   if (!validation.ok) throw new EntityRegistryValidationError(validation)
 
+  const normalized = normalizeScd2Strategy(args.strategy)
+
   const db = getDb()
   return db.transaction(() => {
     const pointer = db
       .prepare(`SELECT current_version FROM scd2_strategies WHERE tenant_id = ? AND id = ?`)
-      .get(tenantId, args.strategy.id) as { current_version: number } | undefined
+      .get(tenantId, normalized.id) as { current_version: number } | undefined
 
     const nextVersion = (pointer?.current_version ?? 0) + 1
-    const createdAt = args.strategy.createdAt || new Date().toISOString()
+    const createdAt = normalized.createdAt || new Date().toISOString()
     const persisted: Scd2Strategy = {
-      ...args.strategy,
+      ...normalized,
       version: nextVersion,
       createdBy: args.actor,
       createdAt
@@ -550,7 +557,7 @@ export function resolveScd2Strategy(
          WHERE tenant_id = ? AND id = ? AND version = ?`
       )
       .get(tenantId, id, version) as { body_json: string } | undefined
-    if (row) return JSON.parse(row.body_json) as Scd2Strategy
+    if (row) return parseStoredStrategy(row.body_json)
     if (tenantId !== DEFAULT_TENANT_ID) {
       const def = db
         .prepare(
@@ -558,10 +565,10 @@ export function resolveScd2Strategy(
            WHERE tenant_id = ? AND id = ? AND version = ?`
         )
         .get(DEFAULT_TENANT_ID, id, version) as { body_json: string } | undefined
-      if (def) return JSON.parse(def.body_json) as Scd2Strategy
+      if (def) return parseStoredStrategy(def.body_json)
     }
     const bundled = bundledStrategyById(id)
-    return bundled && bundled.version === version ? bundled : null
+    return bundled && bundled.version === version ? normalizeScd2Strategy(bundled) : null
   }
 
   // "latest" or undefined → current pointer for tenant, then default tenant,
@@ -576,10 +583,11 @@ export function resolveScd2Strategy(
           `SELECT body_json FROM scd2_strategy_versions WHERE tenant_id = ? AND id = ? AND version = ?`
         )
         .get(t, id, pointer.current_version) as { body_json: string } | undefined
-      if (row) return JSON.parse(row.body_json) as Scd2Strategy
+      if (row) return parseStoredStrategy(row.body_json)
     }
   }
-  return bundledStrategyById(id) ?? null
+  const bundled = bundledStrategyById(id)
+  return bundled ? normalizeScd2Strategy(bundled) : null
 }
 
 /**
@@ -687,7 +695,7 @@ function readTenantStrategies(
        ORDER BY s.id`
     )
     .all(tenantId) as { id: string; current_version: number; retired_at: string | null; body_json: string }[]
-  return rows.map((r) => JSON.parse(r.body_json) as Scd2Strategy)
+  return rows.map((r) => parseStoredStrategy(r.body_json))
 }
 
 export function countActiveEntitiesUsingStrategy(tenantId: string, strategyId: string): number {

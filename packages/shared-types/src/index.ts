@@ -707,6 +707,16 @@ export interface AuthoredSyncFlowStep {
   pipelineName?: string | null
 }
 
+export type Scd2IdentityHandling = "none" | "setIdentityInsertOn" | "omit-identity-column"
+
+/** Frozen per-table column policy — resolved at publish from strategy + overrides. */
+export interface Scd2TablePolicy {
+  excludeFromDiff: string[]
+  onInsert: Record<string, string>
+  onUpdate: Record<string, string>
+  identityHandling: Scd2IdentityHandling
+}
+
 export interface AuthoredSyncDefinitionTable {
   name: string
   scopeColumn: string | null
@@ -717,6 +727,8 @@ export interface AuthoredSyncDefinitionTable {
   enabledByDefault: boolean
   userControllable: boolean
   note?: string
+  /** Required on published definitions — drives diff + MERGE stamping at runtime. */
+  scd2Policy?: Scd2TablePolicy
 }
 
 export interface AuthoredSyncDefinitionDiscrepancy {
@@ -849,7 +861,7 @@ export interface CompiledSyncPlanContract {
     rootTable: string
     rootKeyColumn: string
     selfJoinColumn: string | null
-    tables: Array<{ name: string; scopeColumn: string | null; predicate: string }>
+    tables: Array<{ name: string; scopeColumn: string | null; predicate: string; scd2Policy?: Scd2TablePolicy }>
     executionOrder: string[]
     reverseOrder: string[]
     enabledOptionalTables?: string[]
@@ -967,13 +979,8 @@ export interface EntityRegistryLineageRef {
 }
 
 export interface EntityRegistryScd2Override {
-  validFromCol?: string | null
-  validToCol?: string | null
-  isLockedCol?: string | null
-  syncDateCol?: string | null
-  deployDateCol?: string | null
-  identityHandling?: "none" | "setIdentityInsertOn" | "preserveSequence"
-  excludedFromDiffCols?: string[]
+  excludeFromDiff?: string[]
+  identityHandling?: Scd2IdentityHandling
   onInsert?: Record<string, string>
   onUpdate?: Record<string, string>
 }
@@ -1014,13 +1021,8 @@ export interface EntityRegistryStrategy {
   id: string
   displayName: string
   description: string
-  validFromCol: string | null
-  validToCol: string | null
-  isLockedCol: string | null
-  syncDateCol: string | null
-  deployDateCol: string | null
-  identityHandling: "none" | "setIdentityInsertOn" | "skipIdentityCols"
-  excludedFromDiffCols: string[]
+  excludeFromDiff: string[]
+  identityHandling: Scd2IdentityHandling
   onInsert: Record<string, string>
   onUpdate: Record<string, string>
   provenance: EntityRegistryProvenance

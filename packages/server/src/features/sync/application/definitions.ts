@@ -371,6 +371,12 @@ export function publishSyncDefinitionsFromDb(
       flowCatalog,
       publishedAt,
       publishedVersion,
+      (strategyId, strategyVersion) =>
+        db.resolveScd2Strategy(
+          tenantId,
+          strategyId,
+          strategyVersion === "latest" ? "latest" : strategyVersion,
+        ),
     )
   }
 

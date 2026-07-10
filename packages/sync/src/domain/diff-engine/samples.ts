@@ -12,7 +12,7 @@
 import type { SyncPlanRowSample } from "../../application/shell/plan-store.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
 import { buildBatchWhere, qtable, runQueryWithRetry } from "./sql-helpers.js"
-import { META_EXCLUDED_COLUMNS, type PkHashRow } from "./types.js"
+import type { PkHashRow } from "./types.js"
 
 export async function fetchSamples(
   host: SyncRuntimeHost,
@@ -57,6 +57,7 @@ export async function fetchUpdateSamples(
   qualifiedTable: string,
   rows: PkHashRow[],
   pkColumns: string[],
+  excludeFromDiff: ReadonlySet<string> = new Set(),
   telemetryContext?: import("../../ports/events.js").SyncTelemetryContext
 ): Promise<SyncPlanRowSample[]> {
   if (rows.length === 0) return []
@@ -96,7 +97,7 @@ export async function fetchUpdateSamples(
       const changedColumns: string[] = []
       if (newValues && oldValues) {
         for (const k of Object.keys(newValues)) {
-          if (META_EXCLUDED_COLUMNS.has(k)) continue
+          if (excludeFromDiff.has(k)) continue
           if (String(newValues[k]) !== String(oldValues[k])) changedColumns.push(k)
         }
       }

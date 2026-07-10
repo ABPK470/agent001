@@ -413,7 +413,8 @@ async function previewSyncInner(
           tables: activeTables.map((t) => ({
             name: t.name,
             scopeColumn: t.scopeColumn,
-            predicate: t.predicate
+            predicate: t.predicate,
+            ...(t.scd2Policy ? { scd2Policy: t.scd2Policy } : {}),
           })),
           executionOrder: selection.executionOrder,
           reverseOrder: selection.reverseOrder,

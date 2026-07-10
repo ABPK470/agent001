@@ -44,10 +44,17 @@ async function json<T>(path: string, opts?: RequestInit): Promise<T> {
     const body = await res.json().catch(() => null)
     let msg = `HTTP ${res.status}`
     if (body && typeof body === "object") {
-      if ("message" in body && typeof (body as { message: unknown }).message === "string") {
-        msg = (body as { message: string }).message
-      } else if ("error" in body && typeof (body as { error: unknown }).error === "string") {
-        msg = (body as { error: string }).error
+      const record = body as Record<string, unknown>
+      if (record.error === "validation_failed" && record.result && typeof record.result === "object") {
+        const result = record.result as { errors?: Array<{ message?: string }> }
+        const details = (result.errors ?? [])
+          .map((issue) => issue.message)
+          .filter((message): message is string => Boolean(message))
+        msg = details.length > 0 ? details.join("; ") : "Validation failed"
+      } else if (typeof record.message === "string") {
+        msg = record.message
+      } else if (typeof record.error === "string") {
+        msg = record.error
       }
     }
     throw new Error(msg)

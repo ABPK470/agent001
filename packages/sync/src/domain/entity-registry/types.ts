@@ -58,27 +58,25 @@ export interface Scd2Strategy {
   id: string
   displayName: string
   description: string
-  /** Column tracking row validity start (e.g. `validFrom`). NULL = none. */
-  validFromCol: string | null
-  /** Column tracking row validity end (e.g. `validTo`). NULL = none. */
-  validToCol: string | null
-  /** Optional lock column (Mymi convention). NULL = none. */
-  isLockedCol: string | null
-  /** Optional sync-date column (Mymi convention). NULL = none. */
-  syncDateCol: string | null
-  /** Optional deploy-date column (Mymi convention). NULL = none. */
-  deployDateCol: string | null
-  /** How identity columns are handled during INSERT/UPDATE. */
-  identityHandling: "none" | "setIdentityInsertOn" | "preserveSequence"
-  /** Columns excluded from row-hash + UPDATE column list. */
-  excludedFromDiffCols: string[]
   /**
-   * Per-column expressions injected on INSERT (e.g. `validFrom` → `GETUTCDATE()`).
-   * Keys are column names; values are raw SQL expressions evaluated server-side.
+   * Columns excluded from row-hash comparison and not copied from source on update.
+   * Single source of truth — no separate validity/meta role fields.
+   */
+  excludeFromDiff: string[]
+  /**
+   * Per-column expressions evaluated on the target at INSERT.
+   * Keys are column names; values are raw SQL expressions for the target dialect.
    */
   onInsert: Record<string, string>
-  /** Per-column expressions injected on UPDATE. */
+  /** Per-column expressions evaluated on the target at UPDATE (matched rows). */
   onUpdate: Record<string, string>
+  /**
+   * Identity PK handling during MERGE insert branch:
+   *   none — copy identity from source like any other column, no IDENTITY_INSERT wrapper
+   *   setIdentityInsertOn — wrap MERGE with SET IDENTITY_INSERT ON/OFF when target has identity PK
+   *   omit-identity-column — never insert into the identity column
+   */
+  identityHandling: "none" | "setIdentityInsertOn" | "omit-identity-column"
   /** Where this strategy came from. */
   provenance: Scd2StrategyProvenance
   /** Monotonic version (bumped on every save). */
@@ -103,15 +101,10 @@ export type Scd2StrategyProvenance =
  * are reproducible even if the underlying strategy/entity evolves.
  */
 export interface EffectiveScd2 {
-  validFromCol: string | null
-  validToCol: string | null
-  isLockedCol: string | null
-  syncDateCol: string | null
-  deployDateCol: string | null
-  identityHandling: "none" | "setIdentityInsertOn" | "preserveSequence"
-  excludedFromDiffCols: string[]
+  excludeFromDiff: string[]
   onInsert: Record<string, string>
   onUpdate: Record<string, string>
+  identityHandling: Scd2Strategy["identityHandling"]
   /** Resolution trace — which layer contributed each field (for diagnostics). */
   resolution: {
     strategyId: string
@@ -130,13 +123,8 @@ export interface EffectiveScd2 {
  * Use `[]` for an explicit empty list (e.g. clear an excluded-columns list).
  */
 export interface Scd2Override {
-  validFromCol?: string | null
-  validToCol?: string | null
-  isLockedCol?: string | null
-  syncDateCol?: string | null
-  deployDateCol?: string | null
-  identityHandling?: "none" | "setIdentityInsertOn" | "preserveSequence"
-  excludedFromDiffCols?: string[]
+  excludeFromDiff?: string[]
+  identityHandling?: Scd2Strategy["identityHandling"]
   onInsert?: Record<string, string>
   onUpdate?: Record<string, string>
 }

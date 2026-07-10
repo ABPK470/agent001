@@ -75,13 +75,8 @@ function validStrategy(overrides: Partial<Scd2Strategy> = {}): Scd2Strategy {
     id: "test-strategy",
     displayName: "Test",
     description: "",
-    validFromCol: "validFrom",
-    validToCol: "validTo",
-    isLockedCol: null,
-    syncDateCol: null,
-    deployDateCol: null,
+    excludeFromDiff: ["validFrom", "validTo"],
     identityHandling: "none",
-    excludedFromDiffCols: ["validFrom", "validTo"],
     onInsert: { validFrom: "GETUTCDATE()" },
     onUpdate: { validFrom: "GETUTCDATE()" },
     provenance: { kind: "manual" },
@@ -377,19 +372,21 @@ describe("validateScd2Strategy", () => {
     expect(r.ok).toBe(false)
   })
 
-  it("warns when validity range is half-set (from only)", () => {
-    const r = validateScd2Strategy(validStrategy({ validFromCol: "vf", validToCol: null }))
-    expect(r.warnings.some((w) => w.code === "scd2_validity_half")).toBe(true)
-  })
-
-  it("warns when validity range is half-set (to only)", () => {
-    const r = validateScd2Strategy(validStrategy({ validFromCol: null, validToCol: "vt" }))
-    expect(r.warnings.some((w) => w.code === "scd2_validity_half")).toBe(true)
+  it("warns when stamp column is not in excludeFromDiff", () => {
+    const r = validateScd2Strategy(validStrategy({ excludeFromDiff: [], onInsert: { validFrom: "GETUTCDATE()" } }))
+    expect(r.warnings.some((w) => w.code === "scd2_stamp_not_excluded")).toBe(true)
   })
 
   it("rejects unsafe onInsert expression", () => {
     const r = validateScd2Strategy(validStrategy({ onInsert: { x: "GETUTCDATE(); DROP TABLE x" } }))
     expect(r.ok).toBe(false)
     expect(r.errors[0]?.code).toBe("scope_sql_unsafe")
+  })
+
+  it("accepts hyphenated legacy ABI column names", () => {
+    const r = validateScd2Strategy(
+      validStrategy({ excludeFromDiff: ["validFrom", "sync-date", "deploy-date"] }),
+    )
+    expect(r.ok).toBe(true)
   })
 })

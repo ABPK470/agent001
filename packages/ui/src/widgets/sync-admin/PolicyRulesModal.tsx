@@ -360,6 +360,7 @@ export function PolicyRulesModal({ isAdmin, onClose }: { isAdmin: boolean; onClo
           danger
           busy={deleteBusy}
           error={deleteError}
+          stackLevel={1}
           onCancel={() => { if (!deleteBusy) { setDeleting(null); setDeleteError(null) } }}
           onConfirm={() => void remove(deleting)}
         />

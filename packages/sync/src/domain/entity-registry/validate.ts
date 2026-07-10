@@ -23,6 +23,7 @@
  * browser.
  */
 
+import { normalizeScd2Strategy } from "./scd2-policy.js"
 import { findEntityTableOrderViolations, orderEntityTablesDetailed } from "./order.js"
 import { looksIncompleteScopePredicate } from "./resolve-scope-predicate.js"
 import {
@@ -54,7 +55,8 @@ export function validateEntityDefinition(def: EntityDefinition): ValidationResul
   return { ok: errors.length === 0, errors, warnings }
 }
 
-export function validateScd2Strategy(strategy: Scd2Strategy): ValidationResult {
+export function validateScd2Strategy(strategyInput: Scd2Strategy): ValidationResult {
+  const strategy = normalizeScd2Strategy(strategyInput)
   const errors: ValidationError[] = []
   const warnings: ValidationWarning[] = []
 
@@ -71,9 +73,7 @@ export function validateScd2Strategy(strategy: Scd2Strategy): ValidationResult {
       path: "/version"
     })
   }
-  // Identity handling: enforce enum even if the type system already does
-  // (defence in depth for JSON imports).
-  const validIdentity = ["none", "setIdentityInsertOn", "preserveSequence"]
+  const validIdentity = ["none", "setIdentityInsertOn", "omit-identity-column"]
   if (!validIdentity.includes(strategy.identityHandling)) {
     errors.push({
       code: "id_invalid",
@@ -81,37 +81,53 @@ export function validateScd2Strategy(strategy: Scd2Strategy): ValidationResult {
       path: "/identityHandling"
     })
   }
-  // Sanity-warn if validTo is set without validFrom (or vice versa).
-  if (strategy.validFromCol && !strategy.validToCol) {
-    warnings.push({
-      code: "scd2_validity_half",
-      message: "validFromCol is set but validToCol is null — SCD2 close-on-update will not happen",
-      path: "/validToCol"
-    })
+
+  for (let i = 0; i < strategy.excludeFromDiff.length; i++) {
+    if (!isColumnReference(strategy.excludeFromDiff[i]!)) {
+      errors.push({
+        code: "scope_invalid",
+        message: `excludeFromDiff[${i}] must be a valid SQL column name`,
+        path: `/excludeFromDiff/${i}`,
+      })
+    }
   }
-  if (strategy.validToCol && !strategy.validFromCol) {
-    warnings.push({
-      code: "scd2_validity_half",
-      message: "validToCol is set but validFromCol is null — new rows will have unbounded validity",
-      path: "/validFromCol"
-    })
-  }
-  // onInsert / onUpdate values are raw SQL — flag obvious unsafe patterns.
+
+  const exclude = new Set(strategy.excludeFromDiff)
   for (const [col, expr] of Object.entries(strategy.onInsert)) {
+    if (!isColumnReference(col)) {
+      errors.push({ code: "scope_invalid", message: `onInsert key "${col}" must be a valid SQL column name`, path: `/onInsert/${col}` })
+    }
+    if (!exclude.has(col)) {
+      warnings.push({
+        code: "scd2_stamp_not_excluded",
+        message: `onInsert stamps column "${col}" but it is not listed in excludeFromDiff — diff may still compare it`,
+        path: `/onInsert/${col}`,
+      })
+    }
     if (looksUnsafeSqlFragment(expr)) {
       errors.push({
         code: "scope_sql_unsafe",
         message: `onInsert[${col}] expression contains suspicious tokens (semicolon, comment, multi-statement)`,
-        path: `/onInsert/${col}`
+        path: `/onInsert/${col}`,
       })
     }
   }
   for (const [col, expr] of Object.entries(strategy.onUpdate)) {
+    if (!isColumnReference(col)) {
+      errors.push({ code: "scope_invalid", message: `onUpdate key "${col}" must be a valid SQL column name`, path: `/onUpdate/${col}` })
+    }
+    if (!exclude.has(col)) {
+      warnings.push({
+        code: "scd2_stamp_not_excluded",
+        message: `onUpdate stamps column "${col}" but it is not listed in excludeFromDiff — diff may still compare it`,
+        path: `/onUpdate/${col}`,
+      })
+    }
     if (looksUnsafeSqlFragment(expr)) {
       errors.push({
         code: "scope_sql_unsafe",
         message: `onUpdate[${col}] expression contains suspicious tokens (semicolon, comment, multi-statement)`,
-        path: `/onUpdate/${col}`
+        path: `/onUpdate/${col}`,
       })
     }
   }
@@ -327,31 +343,13 @@ function validateScope(scope: EntityTableScope, errors: ValidationError[], path:
 function validateTableScd2Override(t: EntityTable, errors: ValidationError[], path: string): void {
   const o = t.scd2Override
   if (o === null) return
-  // Identifiers must be valid SQL names when set (null is allowed = unset).
-  const idCols: Array<[keyof typeof o, string]> = [
-    ["validFromCol", "validFromCol"],
-    ["validToCol", "validToCol"],
-    ["isLockedCol", "isLockedCol"],
-    ["syncDateCol", "syncDateCol"],
-    ["deployDateCol", "deployDateCol"]
-  ]
-  for (const [key, label] of idCols) {
-    const v = o[key]
-    if (v !== undefined && v !== null && !isIdentifier(v as string)) {
-      errors.push({
-        code: "scope_invalid",
-        message: `${label} override must be a valid SQL identifier or null`,
-        path: `${path}/${label}`
-      })
-    }
-  }
-  if (o.excludedFromDiffCols !== undefined) {
-    for (let i = 0; i < o.excludedFromDiffCols.length; i++) {
-      if (!isIdentifier(o.excludedFromDiffCols[i]!)) {
+  if (o.excludeFromDiff !== undefined) {
+    for (let i = 0; i < o.excludeFromDiff.length; i++) {
+      if (!isColumnReference(o.excludeFromDiff[i]!)) {
         errors.push({
           code: "scope_invalid",
-          message: `excludedFromDiffCols[${i}] must be a valid SQL identifier`,
-          path: `${path}/excludedFromDiffCols/${i}`
+          message: `excludeFromDiff[${i}] must be a valid SQL column name`,
+          path: `${path}/excludeFromDiff/${i}`,
         })
       }
     }
@@ -362,7 +360,7 @@ function validateTableScd2Override(t: EntityTable, errors: ValidationError[], pa
         errors.push({
           code: "scope_sql_unsafe",
           message: `onInsert[${col}] override expression contains suspicious tokens`,
-          path: `${path}/onInsert/${col}`
+          path: `${path}/onInsert/${col}`,
         })
       }
     }
@@ -373,7 +371,7 @@ function validateTableScd2Override(t: EntityTable, errors: ValidationError[], pa
         errors.push({
           code: "scope_sql_unsafe",
           message: `onUpdate[${col}] override expression contains suspicious tokens`,
-          path: `${path}/onUpdate/${col}`
+          path: `${path}/onUpdate/${col}`,
         })
       }
     }
@@ -448,6 +446,14 @@ export function isIdentifier(name: unknown): name is string {
   }
   // Unquoted: starts with letter/underscore, body alphanumeric+underscore.
   return /^[A-Za-z_][A-Za-z0-9_]*$/.test(name)
+}
+
+/** Column name as returned by sys.columns — allows hyphenated legacy ABI names. */
+export function isColumnReference(name: unknown): name is string {
+  if (isIdentifier(name)) return true
+  if (typeof name !== "string") return false
+  if (name.length === 0 || name.length > 128) return false
+  return /^[A-Za-z_][A-Za-z0-9_-]*$/.test(name)
 }
 
 /**

@@ -29,6 +29,13 @@ export {
   catalogSnapshotFromAgentJson,
 } from "./suggest-draft.js"
 export { resolveEffectiveScd2 } from "./strategy-resolver.js"
+export {
+  normalizeScd2Override,
+  normalizeScd2Strategy,
+  SCD2_STRATEGY_PRESETS,
+  toScd2TablePolicy,
+  type Scd2TablePolicy,
+} from "./scd2-policy.js"
 export * from "./types.js"
 export {
   looksIncompleteScopePredicate,
