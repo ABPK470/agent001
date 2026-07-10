@@ -26,10 +26,12 @@ export function EntityTableListEditor({ tables, onTables, entityContext }: Entit
   const sorted = [...tables].sort((a, b) => a.executionOrder - b.executionOrder)
   const [viewIndex, setViewIndex] = useState<number | null>(null)
   const [draftTable, setDraftTable] = useState<EntityRegistryTable | null>(null)
+  const [isCreating, setIsCreating] = useState(false)
 
   function closeView(): void {
     setViewIndex(null)
     setDraftTable(null)
+    setIsCreating(false)
   }
 
   function openView(index: number): void {
@@ -37,16 +39,14 @@ export function EntityTableListEditor({ tables, onTables, entityContext }: Entit
     if (!table) return
     setViewIndex(index)
     setDraftTable(normalizeEntityTable(cloneEntityTable(table)))
+    setIsCreating(false)
   }
 
   function addTable(): void {
     const nextOrder = sorted.length === 0 ? 1 : Math.max(...sorted.map((t) => t.executionOrder)) + 1
-    const created = newEntityTable(nextOrder)
-    const next = renumberEntityRegistryTables([...sorted, created])
-    onTables(next)
-    const createdIndex = next.length - 1
-    setViewIndex(createdIndex)
-    setDraftTable(normalizeEntityTable(cloneEntityTable(next[createdIndex]!)))
+    setDraftTable(normalizeEntityTable(newEntityTable(nextOrder)))
+    setViewIndex(sorted.length)
+    setIsCreating(true)
   }
 
   function removeTable(index: number): void {
@@ -56,15 +56,23 @@ export function EntityTableListEditor({ tables, onTables, entityContext }: Entit
   }
 
   function saveView(): void {
-    if (viewIndex === null || !draftTable) return
-    const next = renumberEntityRegistryTables([
-      ...sorted.slice(0, viewIndex),
-      normalizeEntityTable(draftTable),
-      ...sorted.slice(viewIndex + 1),
-    ])
-    onTables(next)
+    if (!draftTable) return
+    const normalized = normalizeEntityTable(draftTable)
+    if (isCreating) {
+      onTables(renumberEntityRegistryTables([...sorted, normalized]))
+    } else if (viewIndex !== null) {
+      onTables(renumberEntityRegistryTables([
+        ...sorted.slice(0, viewIndex),
+        normalized,
+        ...sorted.slice(viewIndex + 1),
+      ]))
+    }
     closeView()
   }
+
+  const modalTitle = isCreating
+    ? (draftTable?.name?.trim() || "New table")
+    : (draftTable?.name || (viewIndex !== null ? `Table ${viewIndex + 1}` : "Table"))
 
   return (
     <>
@@ -118,8 +126,8 @@ export function EntityTableListEditor({ tables, onTables, entityContext }: Entit
 
       {draftTable && viewIndex !== null && (
         <ModalShell
-          title={draftTable.name || `Table ${viewIndex + 1}`}
-          subtitle={`order ${draftTable.executionOrder} · edit table`}
+          title={modalTitle}
+          subtitle={isCreating ? "New table — save to add to the entity" : `order ${draftTable.executionOrder} · edit table`}
           size="focus"
           stackLevel={1}
           onClose={closeView}

@@ -3,7 +3,12 @@
  */
 
 import { Check, ChevronDown } from "lucide-react"
-import { useEffect, useMemo, useRef, useState, type JSX } from "react"
+import { useCallback, useEffect, useId, useMemo, useRef, useState, type JSX } from "react"
+import {
+  claimPopoverOpen,
+  registerPopoverInstance,
+  releasePopoverOpen,
+} from "../lib/popover-dismiss"
 
 export interface SearchablePickOption {
   value: string
@@ -28,6 +33,7 @@ export function SearchablePick({
   disabled?: boolean
   className?: string
 }): JSX.Element {
+  const instanceId = useId()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState(value)
   const rootRef = useRef<HTMLDivElement>(null)
@@ -48,20 +54,32 @@ export function SearchablePick({
     )
   }, [options, query])
 
+  const closePopover = useCallback((): void => {
+    setOpen(false)
+    releasePopoverOpen(instanceId)
+  }, [instanceId])
+
+  const openPopover = useCallback((): void => {
+    claimPopoverOpen(instanceId)
+    setOpen(true)
+  }, [instanceId])
+
+  useEffect(() => registerPopoverInstance(instanceId, closePopover), [instanceId, closePopover])
+
   useEffect(() => {
     if (!open) return
     function onDocClick(event: MouseEvent): void {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false)
+      if (!rootRef.current?.contains(event.target as Node)) closePopover()
     }
     document.addEventListener("mousedown", onDocClick)
     return () => document.removeEventListener("mousedown", onDocClick)
-  }, [open])
+  }, [open, closePopover])
 
   function commit(next: string): void {
     const trimmed = next.trim()
     setQuery(trimmed)
     onChange(trimmed)
-    setOpen(false)
+    closePopover()
   }
 
   return (
@@ -82,15 +100,18 @@ export function SearchablePick({
           className="min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-sm text-text outline-none placeholder:text-text-faint disabled:cursor-not-allowed"
           onChange={(e) => {
             setQuery(e.target.value)
-            setOpen(true)
+            if (!open) openPopover()
+            else claimPopoverOpen(instanceId)
           }}
-          onFocus={() => setOpen(true)}
+          onFocus={() => {
+            if (!open) openPopover()
+          }}
           onKeyDown={(e) => {
             if (e.key === "Enter") {
               e.preventDefault()
               commit(query)
             }
-            if (e.key === "Escape") setOpen(false)
+            if (e.key === "Escape") closePopover()
           }}
         />
         <button
@@ -99,7 +120,8 @@ export function SearchablePick({
           className="flex shrink-0 items-center text-text-muted transition-colors hover:text-text disabled:cursor-not-allowed"
           aria-label="Show options"
           onClick={() => {
-            setOpen((v) => !v)
+            if (open) closePopover()
+            else openPopover()
             inputRef.current?.focus()
           }}
         >

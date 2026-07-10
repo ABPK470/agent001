@@ -4,8 +4,14 @@
  */
 
 import { Check, ChevronDown, Search } from "lucide-react"
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react"
 import { createPortal } from "react-dom"
+import { popoverZIndex } from "../lib/modal-stack"
+import {
+  claimPopoverOpen,
+  registerPopoverInstance,
+  releasePopoverOpen,
+} from "../lib/popover-dismiss"
 
 export interface ListboxOption<T extends string> {
   value: T
@@ -34,7 +40,6 @@ export interface ListboxProps<T extends string> {
   searchPlaceholder?: string
 }
 
-const POPOVER_Z = 1000
 const SEARCH_ROW_HEIGHT = 40
 const OPTION_ROW_HEIGHT = 44
 
@@ -81,6 +86,7 @@ export function Listbox<T extends string>({
   disabled,
   searchPlaceholder = "Filter…",
 }: ListboxProps<T>): JSX.Element {
+  const instanceId = useId()
   const [open, setOpen] = useState(false)
   const [query, setQuery] = useState("")
   const [activeIdx, setActiveIdx] = useState(-1)
@@ -124,9 +130,23 @@ export function Listbox<T extends string>({
     })
   }, [filteredOptions.length, options])
 
-  function closePopover(): void {
+  const closePopover = useCallback((): void => {
     setOpen(false)
     setQuery("")
+    releasePopoverOpen(instanceId)
+  }, [instanceId])
+
+  const openPopover = useCallback((): void => {
+    claimPopoverOpen(instanceId)
+    setOpen(true)
+  }, [instanceId])
+
+  useEffect(() => registerPopoverInstance(instanceId, closePopover), [instanceId, closePopover])
+
+  function togglePopover(): void {
+    if (disabled) return
+    if (open) closePopover()
+    else openPopover()
   }
 
   function selectOption(option: ListboxOption<T>): void {
@@ -146,7 +166,7 @@ export function Listbox<T extends string>({
     }
     document.addEventListener("click", handle)
     return () => document.removeEventListener("click", handle)
-  }, [open])
+  }, [open, closePopover])
 
   // Position the popup beneath the trigger; keep aligned while scrolling inside modals.
   useLayoutEffect(() => {
@@ -220,7 +240,7 @@ export function Listbox<T extends string>({
         aria-haspopup="listbox"
         aria-expanded={open}
         aria-label={ariaLabel ?? caption}
-        onClick={() => !disabled && setOpen((o) => !o)}
+        onClick={togglePopover}
         className={[
           "group flex w-full min-w-0 items-center gap-2 rounded-md transition-colors text-left text-text overflow-hidden",
           "focus:outline-none focus:ring-2 focus:ring-accent/40",
@@ -252,7 +272,7 @@ export function Listbox<T extends string>({
         <>
           <div
             className="fixed inset-0"
-            style={{ zIndex: POPOVER_Z - 1, pointerEvents: "none" }}
+            style={{ zIndex: popoverZIndex() - 1, pointerEvents: "none" }}
             aria-hidden
           />
           <div
@@ -266,7 +286,7 @@ export function Listbox<T extends string>({
               minWidth: popPos.minWidth,
               maxWidth: popPos.maxWidth,
               width: "max-content",
-              zIndex: POPOVER_Z,
+              zIndex: popoverZIndex(),
             }}
           >
             <div className="flex shrink-0 items-center gap-2 border-b border-border-subtle px-2.5 py-2">

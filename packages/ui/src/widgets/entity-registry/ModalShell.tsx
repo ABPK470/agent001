@@ -9,6 +9,13 @@ import { createPortal } from "react-dom"
 
 import { IconButton, TOOLBAR_ICON } from "./IconButton"
 import {
+  MODAL_BASE_Z,
+  MODAL_Z_STEP,
+  isTopModalStack,
+  popModalStack,
+  pushModalStack,
+} from "../../lib/modal-stack"
+import {
   MODAL_DETAIL_PANEL,
   MODAL_ENTITY_FOCUS_PANEL,
   MODAL_ENTITY_WORKSPACE_PANEL,
@@ -25,11 +32,10 @@ export {
   type ModalOverlayIntent,
 } from "./modal-overlay"
 
-const MODAL_BASE_Z = 50
-const MODAL_Z_STEP = 10
-
-/** Only the topmost modal should react to Escape. */
-const modalStack: string[] = []
+export {
+  MODAL_BASE_Z,
+  MODAL_Z_STEP,
+} from "../../lib/modal-stack"
 
 export type ModalShellSize = "detail" | "default" | "workspace" | "focus"
 
@@ -104,18 +110,17 @@ export function ModalShell({
   const overlayIntent = resolveOverlayIntent(resolvedSize, scrim)
 
   useEffect(() => {
-    modalStack.push(stackId)
+    pushModalStack(stackId)
     const onKey = (e: KeyboardEvent) => {
       if (e.key !== "Escape") return
-      if (modalStack[modalStack.length - 1] !== stackId) return
+      if (!isTopModalStack(stackId)) return
       e.preventDefault()
       e.stopPropagation()
       onClose()
     }
     window.addEventListener("keydown", onKey, true)
     return () => {
-      const idx = modalStack.lastIndexOf(stackId)
-      if (idx >= 0) modalStack.splice(idx, 1)
+      popModalStack(stackId)
       window.removeEventListener("keydown", onKey, true)
     }
   }, [onClose, stackId])
