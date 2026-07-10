@@ -1561,6 +1561,8 @@ export interface SyncEnvironmentAdmin {
   allowedSyncTargets: string[] | null
   updatedAt: string
   updatedBy: string | null
+  /** Shipped sync targets (dev/uat/prod) — require explicit unlock before edit/delete. */
+  builtIn?: boolean
 }
 
 export type SyncDefinitionAdminReviewStatus = "legacy-review-required" | "reviewed"

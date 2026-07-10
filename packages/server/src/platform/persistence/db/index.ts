@@ -285,6 +285,16 @@ export {
 } from "./sync-run-binding-sources.js"
 
 export {
+  appendSyncCatalogVersion,
+  countSyncCatalogVersions,
+  getActiveSyncCatalogVersion,
+  getSyncCatalogVersionRow,
+  listSyncCatalogVersionSummaries,
+  type DbSyncCatalogVersion,
+  type SyncCatalogVersionSummary,
+} from "./sync-catalog-versions.js"
+
+export {
   countAdmins,
   countUsers,
   findUserByUpn,

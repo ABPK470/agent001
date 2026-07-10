@@ -202,10 +202,11 @@ export const api = {
       method: "PUT",
       body: JSON.stringify(fields),
     }),
-  deleteSyncEnvironment: (name: string) =>
-    json<{ ok: boolean }>(`/api/sync-environments/${encodeURIComponent(name)}`, {
-      method: "DELETE",
-    }),
+  deleteSyncEnvironment: (name: string, opts?: { allowBuiltinEdit?: boolean }) =>
+    json<{ ok: boolean }>(
+      `/api/sync-environments/${encodeURIComponent(name)}${opts?.allowBuiltinEdit ? "?allowBuiltinEdit=1" : ""}`,
+      { method: "DELETE" },
+    ),
 
   // Sync definition config (admin)
   listSyncDefinitionConfigs: () => json<import("./types").SyncDefinitionAdminItem[]>("/api/sync-definition-configs"),
@@ -293,6 +294,43 @@ export const api = {
         { method: "POST", body: JSON.stringify(body ?? {}) },
       ),
     ),
+  listSyncCatalogVersions: () =>
+    json<{
+      ok: boolean
+      activeVersion: number | null
+      versions: Array<{
+        tenantId: string
+        version: number
+        reason: string
+        createdBy: string
+        createdAt: string
+        isActive: boolean
+      }>
+    }>("/api/platform/catalog/versions"),
+  importSyncCatalog: (body: { zipBase64?: string; dryRun?: boolean; reason: string }) =>
+    json<{
+      ok: boolean
+      preview: {
+        ok: boolean
+        errors: string[]
+        counts: Record<string, number>
+        dryRun: boolean
+        applied: boolean
+      }
+      version?: { tenantId: string; version: number; reason: string }
+    }>("/api/platform/catalog/import", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  rollbackSyncCatalog: (version: number) =>
+    json<{
+      ok: boolean
+      importResult: { ok: boolean; errors: string[] }
+      version: { tenantId: string; version: number; reason: string }
+    }>("/api/platform/catalog/rollback", {
+      method: "POST",
+      body: JSON.stringify({ version }),
+    }),
   factoryResetPlatform: (confirm: string) =>
     json<{ ok: boolean; message: string; seeded?: number; entityIds?: string[] }>(
       "/api/platform/factory-reset",

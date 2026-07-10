@@ -17,8 +17,13 @@ import { buildFlowCatalog, validateAuthoredSyncFlow } from "@mia/sync"
 import type { FastifyInstance } from "fastify"
 
 import * as db from "../../../platform/persistence/sqlite.js"
+import { recordSyncCatalogChange } from "../../platform/application/sync-catalog-versioning.js"
 
 const TENANT = "_default"
+
+function afterCatalogMutation(reason: string, actor: string): void {
+  recordSyncCatalogChange({ reason, actor })
+}
 
 function sanitizeFlowSteps(steps: AuthoredSyncFlowStep[]): AuthoredSyncFlowStep[] {
   return steps.map(({ phase: _phase, ...step }) => step)
@@ -132,6 +137,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
       built_in: existing?.built_in ?? 0,
       definition_json: definition ? JSON.stringify(definition) : undefined,
     })
+    afterCatalogMutation(`sync-metadata:step-type:${id}`, req.session.upn)
     return mapCatalog()
   })
 
@@ -140,6 +146,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
     if (!db.deleteSyncRunKind(TENANT, req.params.id)) {
       return reply.code(400).send({ error: "cannot delete built-in or missing kind" })
     }
+    afterCatalogMutation(`sync-metadata:step-type:delete:${req.params.id}`, req.session.upn)
     return mapCatalog()
   })
 
@@ -171,6 +178,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
       built_in: existing?.built_in ?? 0,
       definition_json: JSON.stringify(definition),
     })
+    afterCatalogMutation(`sync-metadata:wiring:${id}`, req.session.upn)
     return mapCatalog()
   })
 
@@ -179,6 +187,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
     if (!db.deleteSyncRunBindingSource(TENANT, req.params.id)) {
       return reply.code(400).send({ error: "cannot delete built-in or missing custom value source" })
     }
+    afterCatalogMutation(`sync-metadata:wiring:delete:${req.params.id}`, req.session.upn)
     return mapCatalog()
   })
 
@@ -205,6 +214,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
       updated_at: new Date().toISOString(),
       updated_by: req.session.upn,
     })
+    afterCatalogMutation(`sync-metadata:flow:${id}`, req.session.upn)
     return mapCatalog()
   })
 
@@ -213,6 +223,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
     if (!db.deleteSyncRunPreset(TENANT, req.params.id)) {
       return reply.code(400).send({ error: "cannot delete built-in or missing flow" })
     }
+    afterCatalogMutation(`sync-metadata:flow:delete:${req.params.id}`, req.session.upn)
     return mapCatalog()
   })
 }

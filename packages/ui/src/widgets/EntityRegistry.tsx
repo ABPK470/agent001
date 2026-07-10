@@ -10,6 +10,8 @@ import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
 import { useMe } from "../hooks/useMe"
 import { useStore } from "../store"
 import type { EntityRegistryDefinition, EntityRegistryHistoryEntry } from "../types"
+import { CatalogImportModal } from "../components/CatalogImportModal"
+import { CatalogVersionsModal } from "../components/CatalogVersionsModal"
 import { Empty } from "./sync-admin/shared"
 import {
   EntityDetailContent,
@@ -42,6 +44,8 @@ export function EntityRegistry(): JSX.Element {
   const [syncMetadataOpen, setSyncMetadataOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
   const [exportingConfig, setExportingConfig] = useState(false)
+  const [importOpen, setImportOpen] = useState(false)
+  const [versionsOpen, setVersionsOpen] = useState(false)
   const [retireCandidate, setRetireCandidate] = useState<EntityRegistryDefinition | null>(null)
 
   const selected = useMemo(
@@ -164,6 +168,8 @@ export function EntityRegistry(): JSX.Element {
                 onSyncMetadata={() => setSyncMetadataOpen(true)}
                 onPublish={openPublish}
                 onExportConfig={() => void exportConfiguration()}
+                onImportConfig={() => setImportOpen(true)}
+                onCatalogVersions={() => setVersionsOpen(true)}
               />
               <div className="entity-rail-scroll min-h-0 flex-1 overflow-y-auto">
                 <EntityList
@@ -237,6 +243,24 @@ export function EntityRegistry(): JSX.Element {
           onClose={() => setPublishOpen(false)}
           onPublished={(res) => {
             notify(`Published ${res.definitionCount} definition(s)`)
+            void refreshList({ keepSelection: true })
+          }}
+        />
+      )}
+      {importOpen && (
+        <CatalogImportModal
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            notify("Configuration imported")
+            void refreshList({ keepSelection: true })
+          }}
+        />
+      )}
+      {versionsOpen && (
+        <CatalogVersionsModal
+          onClose={() => setVersionsOpen(false)}
+          onRolledBack={() => {
+            notify("Configuration restored")
             void refreshList({ keepSelection: true })
           }}
         />

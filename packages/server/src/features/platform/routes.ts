@@ -11,6 +11,13 @@ import {
   refreshDeployArtifactsFromDatabase,
   useShippedDeployArtifacts,
 } from "./application/platform-artifacts-service.js"
+import {
+  ensureInitialSyncCatalogVersion,
+  getActiveSyncCatalogVersion,
+  importSyncCatalogBundle,
+  listSyncCatalogVersions,
+  rollbackSyncCatalogVersion,
+} from "./application/sync-catalog-versioning.js"
 
 export interface RegisterPlatformRoutesOptions {
   projectRoot: string
@@ -146,15 +153,19 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       source?: "shipped" | "mssql"
       connection?: string
       reseedSqlite?: boolean
+      writeArtifacts?: boolean
     }
     const source = body.source ?? "mssql"
+    const actor = req.session.upn
     try {
       const result =
         source === "shipped"
-          ? useShippedDeployArtifacts(opts.projectRoot)
+          ? useShippedDeployArtifacts(opts.projectRoot, actor)
           : await refreshDeployArtifactsFromDatabase(opts.projectRoot, opts.bootHost, {
               connection: body.connection,
               reseedSqlite: body.reseedSqlite,
+              writeArtifacts: body.writeArtifacts,
+              actor,
             })
       reply.code(result.ok ? 200 : 400)
       return result
@@ -164,6 +175,74 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
         ok: false,
         message: error instanceof Error ? error.message : "Artifact refresh failed",
         source,
+      }
+    }
+  })
+
+  app.get("/api/platform/catalog/versions", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { ok: false, message: "Admin only" }
+    }
+    const activeVersion = getActiveSyncCatalogVersion()
+    const versions = listSyncCatalogVersions()
+    return { ok: true, activeVersion, versions }
+  })
+
+  app.post("/api/platform/catalog/import", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { ok: false, message: "Admin only" }
+    }
+    const body = (req.body ?? {}) as {
+      zipBase64?: string
+      snapshot?: import("./application/export-deploy-artifacts.js").DeployCatalogSnapshot
+      dryRun?: boolean
+      reason?: string
+    }
+    try {
+      const result = importSyncCatalogBundle({
+        zipBase64: body.zipBase64,
+        snapshot: body.snapshot,
+        dryRun: body.dryRun,
+        reason: body.reason ?? "import",
+        actor: req.session.upn,
+        projectRoot: opts.projectRoot,
+        host: opts.bootHost,
+      })
+      return { ok: result.preview.ok, ...result }
+    } catch (error) {
+      reply.code(400)
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : "Catalog import failed",
+      }
+    }
+  })
+
+  app.post("/api/platform/catalog/rollback", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { ok: false, message: "Admin only" }
+    }
+    const body = (req.body ?? {}) as { version?: number }
+    if (typeof body.version !== "number" || !Number.isFinite(body.version)) {
+      reply.code(400)
+      return { ok: false, message: "version is required" }
+    }
+    try {
+      const result = rollbackSyncCatalogVersion({
+        targetVersion: body.version,
+        actor: req.session.upn,
+        projectRoot: opts.projectRoot,
+        host: opts.bootHost,
+      })
+      return { ok: true, ...result }
+    } catch (error) {
+      reply.code(400)
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : "Catalog rollback failed",
       }
     }
   })

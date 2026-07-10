@@ -103,8 +103,8 @@ export function ModalShell({
     ? `${widthClass} flex flex-col overflow-hidden`
     : `${SIZE_PANEL[resolvedSize]} flex flex-col overflow-hidden`
   const zIndex = MODAL_BASE_Z + stackLevel * MODAL_Z_STEP
-  /** Nested shells share the root scrim — avoid stacking multiple dim layers. */
-  const showScrim = stackLevel === 0
+  /** Root shell dims the page; nested detail/confirm shells add their own scrim when stacked above a focus parent. */
+  const showScrim = stackLevel === 0 || resolvedSize === "detail"
   const overlayIntent = resolveOverlayIntent(resolvedSize, scrim)
 
   useEffect(() => {

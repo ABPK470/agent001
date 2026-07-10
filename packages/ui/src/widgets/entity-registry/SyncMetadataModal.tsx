@@ -2,10 +2,10 @@
  * Manage sync flows and platform setup.
  */
 
-import { Plus, Save, Search, Trash2, Workflow, X } from "lucide-react"
+import { Lock, LockOpen, Plus, Save, Search, Trash2, Workflow, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react"
 import { api } from "../../api"
-import type { AuthoredSyncFlowStep, SyncFlowKindDefinition, SyncMetadataCatalogResponse, CustomValueSourceDefinition } from "../../types"
+import type { AuthoredSyncFlowStep, CustomValueSourceDefinition, SyncEnvironmentAdmin, SyncFlowKindDefinition, SyncMetadataCatalogResponse } from "../../types"
 import {
   flowStepPickerOptions,
   handlerInputSlots,
@@ -18,6 +18,7 @@ import {
   validateValueSource,
   valueSourceCatalogId,
 } from "../../types"
+import { ConfirmModal } from "../sync-admin/chrome"
 import {
   CustomValueSourceDefinitionEditor,
   DEFAULT_CUSTOM_VALUE_SOURCE_DEFINITION,
@@ -35,9 +36,19 @@ import {
 import { ModalShell } from "./ModalShell"
 import { ModalToastStack, useModalToasts } from "./ModalToastStack"
 import { HANDLER_TYPE_TAG } from "./param-binding-ui"
+import { SyncTargetForm } from "./sync-targets/SyncTargetForm"
+import {
+  cloneTargetFormSnapshot,
+  emptyTargetFormSnapshot,
+  targetFormFromEnv,
+  targetFormToPayload,
+  validateTargetForm,
+  type TargetFormSnapshot,
+} from "./sync-targets/target-form-model"
+import { useSyncTargets } from "./sync-targets/useSyncTargets"
 
 type CatalogTab = "flows" | "stepTypes" | "customValueSources"
-type CatalogView = "flows" | "actions" | "wiring"
+type CatalogView = "flows" | "actions" | "wiring" | "targets"
 type FormMode = "create" | "edit"
 
 type FormSnapshot = {
@@ -97,13 +108,15 @@ const TAB_SINGULAR: Record<CatalogTab, string> = {
 const VIEW_DESCRIPTIONS: Record<CatalogView, string> = {
   flows: "Ordered steps each entity runs. Expand a step for Text: values or per-flow resolver overrides.",
   actions: "Wire each parameter to Auto:, Query:, Text:, a literal, earlier-step output, or leave blank for per-flow choice.",
-  wiring: "Value source catalog — plan context, target SQL, and step text fields. Seeded from deploy ground truth; operators may add custom SQL.",
+  wiring: "Value source catalog — plan context, target SQL, and step text fields. Seeded from deploy ground truth.",
+  targets: "MSSQL sync targets (dev / uat / prod) for preview and execute. Stored in SQLite; .env connection names are not modified.",
 }
 
 const NAV_VIEWS: Array<{ view: CatalogView; label: string }> = [
   { view: "flows", label: "Flows" },
   { view: "actions", label: "Actions" },
   { view: "wiring", label: "Wiring" },
+  { view: "targets", label: "Targets" },
 ]
 
 const SETUP_ORDER_HINT = "Compose flows, wire actions once. Manage catalog for paramters wiring and resolvers."
@@ -161,7 +174,21 @@ export function SyncMetadataModal({
   const [listQuery, setListQuery] = useState("")
   const [formBaseline, setFormBaseline] = useState<FormSnapshot>(() => emptyFormSnapshot())
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
+  const [unlockBuiltinConfirmOpen, setUnlockBuiltinConfirmOpen] = useState(false)
+  const [targetFormOpen, setTargetFormOpen] = useState(false)
+  const [targetFormMode, setTargetFormMode] = useState<FormMode>("create")
+  const [targetEditingId, setTargetEditingId] = useState<string | null>(null)
+  const [targetEditingBuiltIn, setTargetEditingBuiltIn] = useState(false)
+  const [targetForm, setTargetForm] = useState<TargetFormSnapshot>(() => emptyTargetFormSnapshot())
+  const [targetFormBaseline, setTargetFormBaseline] = useState<TargetFormSnapshot>(() => emptyTargetFormSnapshot())
+  const [targetConfirmSaveOpen, setTargetConfirmSaveOpen] = useState(false)
   const pendingInitialFlowId = useRef(initialFlowId)
+
+  const targets = useSyncTargets(
+    () => { /* success toasts omitted — list reload is enough */ },
+    (message) => pushToast(message),
+    catalogView === "targets",
+  )
 
   const currentFormSnapshot = useMemo(
     (): FormSnapshot => ({
@@ -187,6 +214,16 @@ export function SyncMetadataModal({
       JSON.stringify(activeFormSlice(currentFormSnapshot, tab)) !==
       JSON.stringify(activeFormSlice(formBaseline, tab)),
     [currentFormSnapshot, formBaseline, tab],
+  )
+
+  const isTargetFormDirty = useMemo(
+    () => JSON.stringify(targetForm) !== JSON.stringify(targetFormBaseline),
+    [targetForm, targetFormBaseline],
+  )
+
+  const targetFormReadOnly = useMemo(
+    () => targetFormMode === "edit" && targetEditingBuiltIn && !targets.builtinEditUnlocked,
+    [targetEditingBuiltIn, targetFormMode, targets.builtinEditUnlocked],
   )
 
   const load = useCallback(async (): Promise<SyncMetadataCatalogResponse | null> => {
@@ -268,6 +305,79 @@ export function SyncMetadataModal({
     setFormBaseline(cloneFormSnapshot(snapshot))
   }
 
+  function closeTargetForm(): void {
+    setTargetFormOpen(false)
+    setTargetConfirmSaveOpen(false)
+    setTargetFormMode("create")
+    setTargetEditingId(null)
+    setTargetEditingBuiltIn(false)
+    const snapshot = emptyTargetFormSnapshot()
+    setTargetForm(snapshot)
+    setTargetFormBaseline(cloneTargetFormSnapshot(snapshot))
+  }
+
+  function startTargetCreate(): void {
+    const snapshot = emptyTargetFormSnapshot()
+    setTargetFormOpen(true)
+    setTargetFormMode("create")
+    setTargetEditingId(null)
+    setTargetEditingBuiltIn(false)
+    setTargetForm(snapshot)
+    setTargetFormBaseline(cloneTargetFormSnapshot(snapshot))
+  }
+
+  function startTargetEdit(item: SyncEnvironmentAdmin): void {
+    const snapshot = targetFormFromEnv(item)
+    setTargetFormOpen(true)
+    setTargetFormMode("edit")
+    setTargetEditingId(item.name)
+    setTargetEditingBuiltIn(Boolean(item.builtIn))
+    setTargetForm(snapshot)
+    setTargetFormBaseline(cloneTargetFormSnapshot(snapshot))
+  }
+
+  function requestTargetSave(): void {
+    if (!targetFormOpen || targetFormReadOnly) return
+    const validationError = validateTargetForm(targetForm)
+    if (validationError) {
+      pushToast(validationError)
+      return
+    }
+    setTargetConfirmSaveOpen(true)
+  }
+
+  function discardTargetFormChanges(): void {
+    setTargetForm(cloneTargetFormSnapshot(targetFormBaseline))
+    setTargetConfirmSaveOpen(false)
+  }
+
+  async function commitTargetSave(): Promise<void> {
+    if (!targetFormOpen || targetFormReadOnly) return
+    const payload = targetFormToPayload(targetForm)
+    const name = String(payload.name ?? "")
+    setTargetConfirmSaveOpen(false)
+    clearToasts()
+    try {
+      if (targetFormMode === "create") {
+        await targets.create(payload)
+        setTargetFormMode("edit")
+        setTargetEditingId(name)
+        setTargetEditingBuiltIn(false)
+        setTargetFormBaseline(cloneTargetFormSnapshot(targetForm))
+      } else if (targetEditingId) {
+        await targets.save(
+          targetEditingId,
+          payload,
+          Boolean(targetEditingBuiltIn && targets.builtinEditUnlocked),
+        )
+        setTargetFormBaseline(cloneTargetFormSnapshot(targetForm))
+      }
+      onChanged?.()
+    } catch {
+      // useSyncTargets already surfaced the error
+    }
+  }
+
   function closeForm(): void {
     setFormOpen(false)
     setConfirmSaveOpen(false)
@@ -344,6 +454,11 @@ export function SyncMetadataModal({
   function switchView(next: CatalogView): void {
     setCatalogView(next)
     setListQuery("")
+    if (next === "targets") {
+      closeForm()
+      return
+    }
+    closeTargetForm()
     if (next === "flows") {
       setTab("flows")
     } else if (next === "actions") {
@@ -546,6 +661,20 @@ export function SyncMetadataModal({
     return `Write changes to ${TAB_SINGULAR[tab]} "${name}"?`
   })()
 
+  const targetSaveConfirmTitle =
+    targetFormMode === "create" ? "Create target?" : "Save target changes?"
+
+  const targetSaveConfirmBody = (() => {
+    const name = targetForm.displayName.trim() || targetForm.name.trim() || "target"
+    if (targetFormMode === "create") {
+      return `Create MSSQL target "${name}"?`
+    }
+    if (!isTargetFormDirty) {
+      return `No edits detected for "${name}". Save anyway?`
+    }
+    return `Write changes to target "${name}"?`
+  })()
+
   return (
     <>
     <ModalShell
@@ -554,7 +683,7 @@ export function SyncMetadataModal({
       icon={<Workflow size={20} className="text-text-muted" />}
       stackLevel={stackLevel}
       onClose={() => {
-        if (confirmSaveOpen) return
+        if (confirmSaveOpen || targetConfirmSaveOpen) return
         onClose()
       }}
       size="focus"
@@ -586,6 +715,54 @@ export function SyncMetadataModal({
               })}
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
+              {catalogView === "targets" && (
+                <>
+                  <button
+                    type="button"
+                    className={[
+                      ICON_BTN,
+                      targets.builtinEditUnlocked ? "text-warning" : "",
+                    ].join(" ")}
+                    title={targets.builtinEditUnlocked ? "Lock built-in targets" : "Unlock built-in targets"}
+                    aria-label={targets.builtinEditUnlocked ? "Lock built-in targets" : "Unlock built-in targets"}
+                    onClick={() => {
+                      if (targets.builtinEditUnlocked) {
+                        targets.setBuiltinEditUnlocked(false)
+                      } else {
+                        setUnlockBuiltinConfirmOpen(true)
+                      }
+                    }}
+                  >
+                    {targets.builtinEditUnlocked ? <LockOpen size={16} /> : <Lock size={16} />}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => startTargetCreate()}
+                    className={ICON_BTN}
+                    title="New target"
+                    aria-label="New target"
+                  >
+                    <Plus size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={requestTargetSave}
+                    disabled={
+                      targets.saving !== null
+                      || !targetFormOpen
+                      || !targetForm.name.trim()
+                      || targetFormReadOnly
+                    }
+                    className={ICON_BTN_PRIMARY}
+                    title={isTargetFormDirty ? "Save unsaved changes" : "Save"}
+                    aria-label="Save"
+                  >
+                    <Save size={16} />
+                  </button>
+                </>
+              )}
+              {catalogView !== "targets" && (
+                <>
               {catalogView === "wiring" ? (
                 <button
                   type="button"
@@ -620,6 +797,8 @@ export function SyncMetadataModal({
               >
                 <Save size={16} />
               </button>
+                </>
+              )}
             </div>
           </div>
           <p className={`${META_TEXT} max-w-3xl leading-relaxed text-text-faint`}>{headerDescription}</p>
@@ -627,7 +806,27 @@ export function SyncMetadataModal({
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <div className="flex min-h-0 flex-col overflow-hidden border-b border-border-subtle p-5 lg:border-b-0 lg:border-r">
-            {!catalog && busy && <p className="shrink-0 text-sm text-text-muted">Loading…</p>}
+            {!catalog && busy && catalogView !== "targets" && <p className="shrink-0 text-sm text-text-muted">Loading…</p>}
+            {catalogView === "targets" && targets.busy && targets.items.length === 0 && (
+              <p className="shrink-0 text-sm text-text-muted">Loading…</p>
+            )}
+            {catalogView === "targets" && (
+              <CatalogList
+                query={listQuery}
+                onQueryChange={setListQuery}
+                searchPlaceholder="Search targets…"
+                items={targets.catalogItems.map((item) => ({
+                  ...item,
+                  deletable: !item.builtIn || targets.builtinEditUnlocked,
+                }))}
+                selectedId={targetFormOpen && targetFormMode === "edit" ? targetEditingId : null}
+                onSelect={(id) => {
+                  const item = targets.items.find((entry) => entry.name === id)
+                  if (item) startTargetEdit(item)
+                }}
+                onDelete={(id) => targets.setDeleting(id)}
+              />
+            )}
             {catalog && catalogView === "flows" && (
               <CatalogList
                 query={listQuery}
@@ -676,7 +875,53 @@ export function SyncMetadataModal({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {formOpen ? (
+            {catalogView === "targets" && targetFormOpen ? (
+              <>
+                <div className="shrink-0 border-b border-border-subtle bg-elevated/40 px-5 py-3">
+                  <p className="text-[11px] font-semibold uppercase tracking-wide text-text-faint">
+                    Targets
+                    {" · "}
+                    {targetFormMode === "create" ? "New" : "Edit"}
+                  </p>
+                  <div className="mt-1 flex flex-wrap items-center gap-2">
+                    <h3 className={FORM_HEADING}>
+                      {targetForm.displayName.trim() || targetForm.name.trim() || "New target"}
+                    </h3>
+                    {isTargetFormDirty && (
+                      <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400/90">
+                        Unsaved
+                      </span>
+                    )}
+                    {targetEditingBuiltIn && (
+                      <span className="rounded-full bg-overlay-2 px-2 py-0.5 text-xs text-text-muted">Built-in</span>
+                    )}
+                    {targets.builtinEditUnlocked && targetEditingBuiltIn && (
+                      <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs text-warning">Editing unlocked</span>
+                    )}
+                  </div>
+                  {targetFormMode === "edit" && targetEditingId && (
+                    <p className={`${META_TEXT} mt-1 font-mono`}>{targetEditingId}</p>
+                  )}
+                </div>
+                <div className="min-h-0 flex-1 overflow-auto bg-base/20 p-5">
+                  <SyncTargetForm
+                    value={targetForm}
+                    onChange={setTargetForm}
+                    mode={targetFormMode}
+                    readOnly={targetFormReadOnly}
+                  />
+                </div>
+              </>
+            ) : catalogView === "targets" ? (
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-base/20 px-6 py-16 text-center">
+                <p className="text-sm font-medium text-text">Nothing selected</p>
+                <p className={`mt-2 max-w-xs ${HELP_TEXT}`}>
+                  Choose a target from the list, or click{" "}
+                  <Plus className="mx-0.5 inline h-3.5 w-3.5 align-text-bottom" aria-hidden />
+                  {" "}to add one matching MSSQL in .env.
+                </p>
+              </div>
+            ) : formOpen ? (
               <>
             <div className="shrink-0 border-b border-border-subtle bg-elevated/40 px-5 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-text-faint">
@@ -883,6 +1128,83 @@ export function SyncMetadataModal({
       </div>
     </ModalShell>
 
+    {unlockBuiltinConfirmOpen && (
+      <ConfirmModal
+        title="Unlock built-in targets?"
+        message="Built-in targets (dev, uat, prod) are protected by default. Unlock only when you intend to edit them. You can lock again anytime from the toolbar."
+        confirmLabel="Unlock editing"
+        stackLevel={stackLevel + 1}
+        onCancel={() => setUnlockBuiltinConfirmOpen(false)}
+        onConfirm={() => {
+          targets.setBuiltinEditUnlocked(true)
+          setUnlockBuiltinConfirmOpen(false)
+        }}
+      />
+    )}
+
+    {targetConfirmSaveOpen && (
+      <ModalShell
+        title={targetSaveConfirmTitle}
+        subtitle={targetForm.displayName.trim() || targetForm.name.trim() || undefined}
+        size="detail"
+        stackLevel={stackLevel + 1}
+        onClose={() => setTargetConfirmSaveOpen(false)}
+        footer={(
+          <div className="flex w-full flex-wrap items-center gap-2">
+            {isTargetFormDirty && (
+              <button
+                type="button"
+                onClick={discardTargetFormChanges}
+                disabled={targets.saving !== null}
+                className={`${TEXT_BTN} text-rose-400 hover:text-rose-300`}
+              >
+                Discard changes
+              </button>
+            )}
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setTargetConfirmSaveOpen(false)}
+                disabled={targets.saving !== null}
+                className={TEXT_BTN}
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                onClick={() => void commitTargetSave()}
+                disabled={targets.saving !== null}
+                className={TEXT_BTN_PRIMARY}
+              >
+                {targetFormMode === "create" ? "Create" : "Save changes"}
+              </button>
+            </div>
+          </div>
+        )}
+      >
+        <p className="p-5 text-sm leading-relaxed text-text-muted">{targetSaveConfirmBody}</p>
+      </ModalShell>
+    )}
+
+    {targets.deleting && (
+      <ConfirmModal
+        title="Delete target"
+        message={`Delete "${targets.deleting}"?`}
+        confirmLabel="Delete"
+        danger
+        busy={targets.saving === targets.deleting}
+        onCancel={() => targets.setDeleting(null)}
+        onConfirm={() => void targets.remove(
+          targets.deleting!,
+          Boolean(targets.items.find((i) => i.name === targets.deleting)?.builtIn && targets.builtinEditUnlocked),
+        ).then(() => {
+          if (targetEditingId === targets.deleting) closeTargetForm()
+          targets.setDeleting(null)
+          onChanged?.()
+        })}
+      />
+    )}
+
     {confirmSaveOpen && (
       <ModalShell
         title={saveConfirmTitle}
@@ -939,7 +1261,7 @@ function CatalogList({
   onQueryChange,
   searchPlaceholder = "Filter…",
 }: {
-  items: Array<{ id: string; label: string; hint?: string; tag?: string; builtIn: boolean }>
+  items: Array<{ id: string; label: string; hint?: string; tag?: string; builtIn: boolean; deletable?: boolean }>
   selectedId: string | null
   onSelect: (id: string) => void
   onDelete?: (id: string) => void
@@ -1011,7 +1333,7 @@ function CatalogList({
                     </span>
                   )}
                   {item.builtIn && <span className={`shrink-0 ${META_TEXT} text-text-faint`}>Built-in</span>}
-                  {!item.builtIn && onDelete && (
+                  {(item.deletable ?? !item.builtIn) && onDelete && (
                     <button type="button" onClick={() => onDelete(item.id)} className={`${ICON_BTN} h-8 w-8 shrink-0`} title="Delete" aria-label="Delete">
                       <Trash2 size={14} />
                     </button>

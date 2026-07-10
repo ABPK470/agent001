@@ -2,7 +2,7 @@
  * Entity sidebar header — label + compact icon actions.
  */
 
-import { Download, Plus, Rocket, Settings2, Workflow } from "lucide-react"
+import { Download, History, Plus, Rocket, Settings2, Upload, Workflow } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
@@ -15,6 +15,8 @@ export interface EntityRailHeaderProps {
   onSyncMetadata: () => void
   onPublish: () => void
   onExportConfig: () => void
+  onImportConfig: () => void
+  onCatalogVersions: () => void
 }
 
 export function EntityRailHeader({
@@ -24,6 +26,8 @@ export function EntityRailHeader({
   onSyncMetadata,
   onPublish,
   onExportConfig,
+  onImportConfig,
+  onCatalogVersions,
 }: EntityRailHeaderProps): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
   const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null)
@@ -108,10 +112,28 @@ export function EntityRailHeader({
                   type="button"
                   role="menuitem"
                   className="thread-rail-item-dropdown-item"
+                  onClick={() => { closeMenu(); onImportConfig() }}
+                >
+                  <Upload size={13} strokeWidth={1.75} />
+                  <span>Import configuration</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="thread-rail-item-dropdown-item"
                   onClick={() => { closeMenu(); onExportConfig() }}
                 >
                   <Download size={13} strokeWidth={1.75} />
                   <span>Export configuration</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="thread-rail-item-dropdown-item"
+                  onClick={() => { closeMenu(); onCatalogVersions() }}
+                >
+                  <History size={13} strokeWidth={1.75} />
+                  <span>Configuration versions</span>
                 </button>
                 <button
                   type="button"

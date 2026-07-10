@@ -16,7 +16,9 @@ import {
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import { broadcast } from "../../../platform/events/broadcaster.js"
 import * as db from "../../../platform/persistence/sqlite.js"
+import { recordSyncCatalogChange } from "../../platform/application/sync-catalog-versioning.js"
 import { refreshEnvDerivedPolicies } from "../../policies/application/policy-seeder.js"
+import { isBuiltinSyncEnvironment } from "../domain/builtin-sync-environments.js"
 import { rebuildLiveSyncEnvironments } from "../runtime/live-environments.js"
 
 const VALID_OPS: EnvOperation[] = [
@@ -143,13 +145,30 @@ function serialiseEnvironment(
 
 function parseEnvironmentRow(
   row: db.DbSyncEnvironment
-): SyncEnvironment & { updatedAt: string; updatedBy: string | null } {
+): SyncEnvironment & { updatedAt: string; updatedBy: string | null; builtIn: boolean } {
   const env = JSON.parse(row.body_json) as SyncEnvironment
   return {
     ...env,
     updatedAt: row.updated_at,
-    updatedBy: row.updated_by
+    updatedBy: row.updated_by,
+    builtIn: isBuiltinSyncEnvironment(env.name),
   }
+}
+
+function requireBuiltinEditUnlock(
+  name: string,
+  opts: { allowBuiltinEdit?: boolean },
+): string | null {
+  if (!isBuiltinSyncEnvironment(name)) return null
+  if (opts.allowBuiltinEdit === true) return null
+  return `Built-in sync environment "${name}" is locked. Confirm allowBuiltinEdit to modify.`
+}
+
+function allowBuiltinFromRequest(req: FastifyRequest): boolean {
+  const query = req.query as { allowBuiltinEdit?: string }
+  if (query.allowBuiltinEdit === "1" || query.allowBuiltinEdit === "true") return true
+  const body = (req.body ?? {}) as Record<string, unknown>
+  return body.allowBuiltinEdit === true
 }
 
 function hasConnection(host: AgentHost, name: string): boolean {
@@ -222,6 +241,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         type: EventType.SyncEnvUpdate,
         data: { name, action: "create", actor: req.session.upn }
       })
+      recordSyncCatalogChange({ reason: `sync-env:create:${name}`, actor: req.session.upn })
       return { ok: true }
     }
   )
@@ -237,6 +257,13 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
       if (!row) {
         reply.code(404)
         return { error: `unknown env "${req.params.name}"` }
+      }
+      const builtinLock = requireBuiltinEditUnlock(req.params.name, {
+        allowBuiltinEdit: allowBuiltinFromRequest(req),
+      })
+      if (builtinLock) {
+        reply.code(403)
+        return { error: builtinLock }
       }
       const sanitised = sanitise(req.body ?? {})
       if (typeof sanitised === "string") {
@@ -256,14 +283,24 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         type: EventType.SyncEnvUpdate,
         data: { name: req.params.name, action: "update", actor: req.session.upn }
       })
+      recordSyncCatalogChange({ reason: `sync-env:update:${req.params.name}`, actor: req.session.upn })
       return { ok: true }
     }
   )
 
-  app.delete<{ Params: { name: string } }>("/api/sync-environments/:name", async (req, reply) => {
+  app.delete<{ Params: { name: string }; Querystring: { allowBuiltinEdit?: string } }>(
+    "/api/sync-environments/:name",
+    async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)
       return { error: "admin only" }
+    }
+    const builtinLock = requireBuiltinEditUnlock(req.params.name, {
+      allowBuiltinEdit: allowBuiltinFromRequest(req),
+    })
+    if (builtinLock) {
+      reply.code(403)
+      return { error: builtinLock }
     }
     db.deleteSyncEnvironment(req.params.name)
     rebuildLiveSyncEnvironments(host)
@@ -272,6 +309,7 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
       type: EventType.SyncEnvUpdate,
       data: { name: req.params.name, action: "delete", actor: req.session.upn }
     })
+    recordSyncCatalogChange({ reason: `sync-env:delete:${req.params.name}`, actor: req.session.upn })
     return { ok: true }
   })
 }

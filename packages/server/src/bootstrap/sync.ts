@@ -9,6 +9,7 @@ import {
   seedSyncMetadataIfEmpty,
 } from "../features/sync/index.js"
 import { syncPlanActorUpn } from "../features/sync/application/plan-actor.js"
+import { ensureInitialSyncCatalogVersion } from "../features/platform/application/sync-catalog-versioning.js"
 import { broadcast } from "../platform/events/broadcaster.js"
 import {
   getSyncRunPlanJson,
@@ -33,7 +34,9 @@ export function loadBootSyncEnvironments(projectRoot: string, connections: Reado
   ensureFlowPresetsSeeded(projectRoot)
   ensureDeploySyncMetadataSeeds(projectRoot)
   ensureCustomValueSourcesSeeded(projectRoot)
-  return loadPersistedSyncEnvironments(projectRoot, connections)
+  const environments = loadPersistedSyncEnvironments(projectRoot, connections)
+  ensureInitialSyncCatalogVersion("system")
+  return environments
 }
 
 export function createSyncEventSink(): AgentHost["sync"]["events"]["sink"] {

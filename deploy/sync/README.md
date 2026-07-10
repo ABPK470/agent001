@@ -146,6 +146,8 @@ npm run entity-registry:export --workspace @mia/server -- --output ~/Downloads
 API:
 - `POST /api/platform/artifacts/export` — snapshot JSON (save client-side)
 - `POST /api/platform/artifacts/export/download` — zip download (Entity Registry → **Export configuration**)
+- `POST /api/platform/catalog/import` — apply export zip to SQLite (Entity Registry → **Import configuration**)
+- `GET /api/platform/catalog/versions` — version history; `POST /api/platform/catalog/rollback` — restore
 
 CLI writes the folder locally.
 

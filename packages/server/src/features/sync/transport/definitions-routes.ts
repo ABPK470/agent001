@@ -36,6 +36,7 @@ import {
 } from "../domain/entity-yaml.js"
 import { applyEntityRunYaml, validateEntityRunYaml } from "../application/apply-entity-run-yaml.js"
 import { loadCatalogSnapshotForSuggest } from "../application/load-catalog-for-suggest.js"
+import { recordSyncCatalogChange } from "../../platform/application/sync-catalog-versioning.js"
 
 const DEFAULT_TENANT_ID = "_default"
 function resolveTenant(req: FastifyRequest): string {
@@ -139,6 +140,14 @@ function importEntitiesFromText(args: {
         errors.push({ id: item.def.id, error: (error as Error).message })
       }
     }
+  }
+
+  if (!args.dryRun && saved.length > 0) {
+    recordSyncCatalogChange({
+      tenantId: args.tenantId,
+      reason: `entity-registry:import:${args.reason}`,
+      actor: args.actor,
+    })
   }
 
   return { ok: errors.length === 0, saved, skipped, errors, dryRun: args.dryRun, preview: preview.length > 0 ? preview : undefined }
@@ -364,6 +373,11 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
             actor: req.session.upn,
             diffSize: result.diff.length
           }
+        })
+        recordSyncCatalogChange({
+          tenantId,
+          reason: `entity-registry:save:${result.id}`,
+          actor: req.session.upn,
         })
         return result
       } catch (error) {
