@@ -1241,9 +1241,6 @@ export {
   type CustomValueSourceLabelCatalog,
 } from "./binding-display.js"
 export {
-  BUILTIN_TARGET_SQL,
-  BUILTIN_VALUE_SOURCE_DESCRIPTIONS,
-  BUILTIN_VALUE_SOURCE_TYPES,
   collectCatalogIdsFromValueSource,
   collectCatalogIdsFromValueSources,
   formatValueSourcePreview,
@@ -1252,12 +1249,10 @@ export {
   isValueSource,
   normalizeValueSourceToCatalog,
   readStepFieldValue,
-  STEP_FIELD_DESCRIPTIONS,
   stepFieldKeysFromValueSource,
   SYNC_STEP_FIELD_KEYS,
   validateValueSource,
   valueSourceCatalogId,
-  type BuiltinValueSource,
   type SyncStepFieldKey,
   type ValueSource,
 } from "./value-source.js"

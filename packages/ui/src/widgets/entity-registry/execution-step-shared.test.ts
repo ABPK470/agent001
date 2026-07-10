@@ -56,7 +56,7 @@ describe("execution-step-shared", () => {
             connection: "target" as const,
             httpMethod: "POST" as const,
             httpPath: "http://example",
-            httpBody: [{ name: "name", source: { type: "stepField", field: "pipelineName" as const } }],
+            httpBody: [{ name: "name", source: { type: "catalog", id: "pipelineName" } }],
           },
           stepFields: {},
           failureMode: "fatal" as const,
@@ -89,7 +89,7 @@ describe("execution-step-shared", () => {
             connection: "target" as const,
             httpMethod: "POST" as const,
             httpPath: "http://example",
-            httpBody: [{ name: "name", source: { type: "stepField", field: "pipelineName" as const } }],
+            httpBody: [{ name: "name", source: { type: "catalog", id: "pipelineName" } }],
           },
           stepFields: {},
           failureMode: "fatal" as const,
@@ -109,6 +109,12 @@ describe("execution-step-shared", () => {
           pipelineName: "test",
         },
         catalog,
+        {
+          pipelineName: {
+            label: "Pipeline name",
+            definition: { description: "Pipeline name", resolver: { kind: "stepField", field: "pipelineName" } },
+          },
+        },
       ),
     ).toBe("Text: Pipeline name: test")
   })

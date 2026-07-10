@@ -23,8 +23,8 @@ const auditCheckKind: SyncFlowKindDefinition = {
     connection: "source",
     procedure: "core.uspAuditRunCheck",
     parameters: [
-      { name: "id", source: { type: "planEntityId" } },
-      { name: "objType", source: { type: "stepField", field: "auditObjectType" } },
+      { name: "id", source: { type: "catalog", id: "planEntityId" } },
+      { name: "objType", source: { type: "catalog", id: "auditObjectType" } },
       { name: "action", source: { type: "literal", value: "syncOrNot" } },
       { name: "schema", source: { type: "literal", value: "core" } },
     ],

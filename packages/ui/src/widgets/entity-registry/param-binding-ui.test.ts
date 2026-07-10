@@ -8,9 +8,9 @@ import {
 
 describe("param-binding-ui", () => {
   it("switches fixed resolver to choose on each flow step", () => {
-    const param = { name: "id", source: { type: "planEntityId" as const } }
+    const param = { name: "id", source: { type: "catalog" as const, id: "planEntityId" } }
     const next = applyHandlerParamBindingMode(param, "set-on-flow-step", {
-      resolverOptions: [{ value: "planEntityId" }],
+      resolverOptions: [{ value: "catalog:planEntityId" }],
       textFieldOptions: [{ value: "catalog:auditObjectType" }],
       flowStepOptions: [],
     })
@@ -19,9 +19,9 @@ describe("param-binding-ui", () => {
   })
 
   it("switches fixed resolver to operator text field", () => {
-    const param = { name: "id", source: { type: "planEntityId" as const } }
+    const param = { name: "id", source: { type: "catalog" as const, id: "planEntityId" } }
     const next = applyHandlerParamBindingMode(param, "text-field", {
-      resolverOptions: [{ value: "planEntityId" }],
+      resolverOptions: [{ value: "catalog:planEntityId" }],
       textFieldOptions: [{ value: "catalog:auditObjectType" }],
       flowStepOptions: [],
     })
@@ -30,9 +30,9 @@ describe("param-binding-ui", () => {
   })
 
   it("switches operator text field to earlier step without throwing", () => {
-    const param = { name: "id", source: { type: "stepField" as const, field: "auditObjectType" as const } }
+    const param = { name: "id", source: { type: "catalog" as const, id: "auditObjectType" } }
     const next = applyHandlerParamBindingMode(param, "earlier-step", {
-      resolverOptions: [{ value: "planEntityId" }],
+      resolverOptions: [{ value: "catalog:planEntityId" }],
       textFieldOptions: [{ value: "catalog:auditObjectType" }],
       flowStepOptions: [{ value: "metadataSync", label: "metadataSync" }],
     })
@@ -41,7 +41,7 @@ describe("param-binding-ui", () => {
   })
 
   it("drops stale source when patching with undefined", () => {
-    const row = { name: "id", source: { type: "planEntityId" as const } }
+    const row = { name: "id", source: { type: "catalog" as const, id: "planEntityId" } }
     const next = mergeHandlerParamPatch(row, { source: undefined })
     expect(next).toEqual({ name: "id" })
   })

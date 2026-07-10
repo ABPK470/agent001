@@ -59,7 +59,7 @@ function DynamicStepField({
 }): JSX.Element {
   const current = step[field]
   const value = typeof current === "string" ? current : ""
-  const label = formatValueSourcePreview({ type: "stepField", field })
+  const label = formatValueSourcePreview({ type: "catalog", id: field })
   const suggested = defaultStepFieldValue(field, step.kind, entityId, rootTable)
   const placeholder = suggested && suggested !== value ? suggested : undefined
 

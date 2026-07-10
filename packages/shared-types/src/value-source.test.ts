@@ -8,34 +8,43 @@ import {
 } from "./value-source.js"
 
 describe("ValueSource", () => {
-  it("recognizes builtin and structured variants", () => {
-    expect(isValueSource({ type: "planEntityId" })).toBe(true)
-    expect(isValueSource({ type: "stepField", field: "objectName" })).toBe(true)
+  it("recognizes catalog, literal, and priorOutput variants", () => {
     expect(isValueSource({ type: "priorOutput", stepId: "metadataSync", output: "datasetId" })).toBe(true)
     expect(isValueSource({ type: "literal", value: 42 })).toBe(true)
-    expect(isValueSource({ type: "catalog", id: "myLookup" })).toBe(true)
+    expect(isValueSource({ type: "catalog", id: "planEntityId" })).toBe(true)
+    expect(isValueSource({ type: "planEntityId" })).toBe(false)
+    expect(isValueSource({ type: "stepField", field: "objectName" })).toBe(false)
   })
 
   it("rejects legacy string grammars", () => {
     expect(isValueSource("entity-id")).toBe(false)
-    expect(isValueSource({ type: "stepField", field: "object-name" })).toBe(false)
+    expect(isValueSource({ type: "catalog", id: "bad id" })).toBe(true)
   })
 
   it("validates priorOutput and catalog ids", () => {
     expect(validateValueSource({ type: "priorOutput", stepId: "", output: "x" })).toMatch(/stepId/)
     expect(validateValueSource({ type: "catalog", id: "bad id" })).toMatch(/camelCase/)
-    expect(validateValueSource({ type: "planEntityId" })).toBeNull()
+    expect(validateValueSource({ type: "catalog", id: "planEntityId" })).toBeNull()
   })
 
-  it("collects catalog ids from catalog refs and legacy shorthand", () => {
-    expect(collectCatalogIdsFromValueSource({ type: "planEntityId" })).toEqual(["planEntityId"])
-    expect(collectCatalogIdsFromValueSource({ type: "catalog", id: "myLookup" })).toEqual(["myLookup"])
-    expect(collectCatalogIdsFromValueSource({ type: "stepField", field: "objectName" })).toEqual(["objectName"])
+  it("collects catalog ids from catalog refs", () => {
+    expect(collectCatalogIdsFromValueSource({ type: "catalog", id: "planEntityId" })).toEqual(["planEntityId"])
+    expect(collectCatalogIdsFromValueSource({ type: "catalog", id: "objectName" })).toEqual(["objectName"])
   })
 
-  it("formats preview labels", () => {
-    expect(formatValueSourcePreview({ type: "planEntityId" })).toContain("Plan entity id")
-    expect(formatValueSourcePreview({ type: "stepField", field: "pipelineName" })).toContain("Pipeline name")
+  it("formats preview labels from catalog context", () => {
+    expect(formatValueSourcePreview({ type: "catalog", id: "planEntityId" })).toBe("planEntityId")
+    expect(
+      formatValueSourcePreview(
+        { type: "catalog", id: "planEntityId" },
+        {
+          customCatalog: {
+            planEntityId: { description: "Entity id", resolver: { kind: "planEntityId" } },
+          },
+          customLabels: { planEntityId: "Plan entity id" },
+        },
+      ),
+    ).toContain("Plan entity id")
     expect(
       formatValueSourcePreview({
         type: "priorOutput",

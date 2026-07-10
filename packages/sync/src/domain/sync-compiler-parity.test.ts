@@ -11,12 +11,12 @@ import { join, resolve } from "node:path"
 
 import type { EntityDefinition, EntityTable } from "@mia/sync"
 import {
-  bundledStrategyById,
   compilePublishedSyncDefinition,
   compileFkPathPredicate,
   loadSyncDefinitionFlowTemplateCatalog,
   projectTablePredicate,
   scaffoldSyncDefinition,
+  shippedStrategyById,
 } from "@mia/sync"
 import { loadDeployFlowCatalogForTests } from "./test-flow-catalog.js"
 import { afterEach, describe, expect, it } from "vitest"
@@ -97,7 +97,7 @@ function predicateMapFromScaffold(entity: EntityDefinition): Map<string, string>
 }
 
 function resolveBundledStrategy(strategyId: string, _version: number | "latest") {
-  return bundledStrategyById(strategyId) ?? null
+  return shippedStrategyById(repoRoot, strategyId) ?? null
 }
 
 function predicateMapFromCompile(entity: EntityDefinition): Map<string, string> {

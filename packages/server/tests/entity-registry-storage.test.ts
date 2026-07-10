@@ -14,12 +14,16 @@
  *   - validation failures throw EntityRegistryValidationError
  */
 
-import { BUNDLED_SCD2_STRATEGIES, type EntityDefinition, type Scd2Strategy } from "@mia/sync"
+import { shippedScd2Strategies, type EntityDefinition, type Scd2Strategy } from "@mia/sync"
 import Database from "better-sqlite3"
 import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
+import { resolve } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
+
+const repoRoot = resolve(import.meta.dirname, "../../..")
+const shippedStrategyIds = shippedScd2Strategies(repoRoot).map((s) => s.id).sort()
 
 let testDb: Database.Database
 let dataDir: string
@@ -98,7 +102,7 @@ describe("entity registry seed", () => {
       .prepare(`SELECT id, current_version FROM scd2_strategies WHERE tenant_id = '_default' ORDER BY id`)
       .all() as { id: string; current_version: number }[]
     const ids = seeded.map((s) => s.id).sort()
-    expect(ids).toEqual(BUNDLED_SCD2_STRATEGIES.map((s) => s.id).sort())
+    expect(ids).toEqual(shippedStrategyIds)
     for (const row of seeded) {
       expect(row.current_version).toBe(1)
     }
@@ -112,7 +116,7 @@ describe("entity registry seed", () => {
     const count = testDb
       .prepare(`SELECT COUNT(*) AS n FROM scd2_strategy_versions WHERE tenant_id = '_default'`)
       .get() as { n: number }
-    expect(count.n).toBe(BUNDLED_SCD2_STRATEGIES.length)
+    expect(count.n).toBe(shippedStrategyIds.length)
   })
 })
 
@@ -410,7 +414,7 @@ describe("listAvailableStrategies", () => {
       .listAvailableStrategies("_default")
       .map((s) => s.id)
       .sort()
-    expect(ids).toEqual(BUNDLED_SCD2_STRATEGIES.map((s) => s.id).sort())
+    expect(ids).toEqual(shippedStrategyIds)
   })
 
   it("for a tenant returns tenant rows + inherited defaults the tenant hasn't shadowed", async () => {

@@ -10,8 +10,8 @@ describe("stepFieldKeysFromHandler", () => {
         connection: "source",
         procedure: "core.uspAuditRunCheck",
         parameters: [
-          { name: "id", source: { type: "planEntityId" } },
-          { name: "objType", source: { type: "stepField", field: "auditObjectType" } },
+          { name: "id", source: { type: "catalog", id: "planEntityId" } },
+          { name: "objType", source: { type: "catalog", id: "auditObjectType" } },
         ],
       }),
     ).toEqual(["auditObjectType"])
@@ -28,7 +28,7 @@ describe("stepFieldKeysForStep", () => {
             type: "mssql_procedure",
             connection: "source",
             procedure: "p",
-            parameters: [{ name: "objType", source: { type: "stepField", field: "auditObjectType" } }],
+            parameters: [{ name: "objType", source: { type: "catalog", id: "auditObjectType" } }],
           },
         },
       ),

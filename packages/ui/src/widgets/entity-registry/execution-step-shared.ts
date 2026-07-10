@@ -216,7 +216,7 @@ export function stepSettingsSummary(
   for (const field of kindDef ? stepFieldKeysFromHandler(kindDef.handler) : []) {
     const raw = step[field]
     if (typeof raw === "string" && raw.trim()) {
-      parts.push(`${formatValueSourcePreview({ type: "stepField", field })}: ${raw.trim()}`)
+      parts.push(`${formatValueSourcePreview({ type: "catalog", id: field }, previewOptions)}: ${raw.trim()}`)
     }
   }
 

@@ -28,7 +28,6 @@
  */
 
 import {
-  bundledStrategyById,
   diffEntityDefinitions,
   normalizeEntityDefinition as normalizeEntityCanonical,
   normalizeScd2Strategy,
@@ -567,8 +566,7 @@ export function resolveScd2Strategy(
         .get(DEFAULT_TENANT_ID, id, version) as { body_json: string } | undefined
       if (def) return parseStoredStrategy(def.body_json)
     }
-    const bundled = bundledStrategyById(id)
-    return bundled && bundled.version === version ? normalizeScd2Strategy(bundled) : null
+    return null
   }
 
   // "latest" or undefined → current pointer for tenant, then default tenant,
@@ -586,8 +584,7 @@ export function resolveScd2Strategy(
       if (row) return parseStoredStrategy(row.body_json)
     }
   }
-  const bundled = bundledStrategyById(id)
-  return bundled ? normalizeScd2Strategy(bundled) : null
+  return null
 }
 
 /**
@@ -654,20 +651,7 @@ export function listScd2StrategyHistory(tenantId: string, id: string): Scd2Strat
     if (defaultRows.length > 0) return defaultRows
   }
 
-  const bundled = bundledStrategyById(id)
-  if (!bundled) return []
-
-  return [
-    {
-      tenantId: DEFAULT_TENANT_ID,
-      id,
-      version: bundled.version,
-      versionLabel: bundled.versionLabel,
-      createdBy: bundled.createdBy,
-      createdAt: bundled.createdAt,
-      reason: "bundled default"
-    }
-  ]
+  return []
 }
 
 export function listAvailableStrategies(tenantId: string): Scd2Strategy[] {

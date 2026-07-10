@@ -72,15 +72,6 @@ describe("resolveValueSource", () => {
     expect(value).toBe("MyContract")
   })
 
-  it("resolves legacy shorthand via catalog id", async () => {
-    const value = await resolveValueSource(
-      { type: "contractName" },
-      ctx(),
-      { id: "step" },
-    )
-    expect(value).toBe("MyContract")
-  })
-
   it("resolves ruleInputDatasetId to numeric id", async () => {
     const value = await resolveValueSource(
       { type: "catalog", id: "ruleInputDatasetId" },

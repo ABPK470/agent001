@@ -79,6 +79,46 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     }
   })
 
+  app.post("/api/platform/artifacts/export", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { ok: false, message: "Admin only" }
+    }
+    const body = (req.body ?? {}) as {
+      write?: boolean
+      include?: {
+        syncMetadata?: boolean
+        strategies?: boolean
+        environments?: boolean
+      }
+    }
+    try {
+      const { exportDeployArtifactsFromSqlite } = await import(
+        "./application/export-deploy-artifacts.js"
+      )
+      const exported = exportDeployArtifactsFromSqlite({
+        projectRoot: body.write === false ? undefined : opts.projectRoot,
+        include: body.include,
+      })
+      return {
+        ok: true,
+        message: body.write === false
+          ? "Exported catalog documents from SQLite (response body only)."
+          : `Wrote ${Object.keys(exported.paths).join(", ")} from SQLite.`,
+        paths: exported.paths,
+        syncMetadata: exported.syncMetadata,
+        strategies: exported.strategies,
+        environments: exported.environments,
+      }
+    } catch (error) {
+      reply.code(500)
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : "Artifact export failed",
+      }
+    }
+  })
+
   app.post("/api/platform/artifacts/refresh", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)

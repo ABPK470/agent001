@@ -97,10 +97,3 @@ export const VALUE_SOURCE_SEEDS = [
     },
   },
 ]
-
-/** @deprecated Use VALUE_SOURCE_SEEDS — SQL literals kept for generator tests only */
-export const BUILTIN_TARGET_SQL = {
-  contractName: VALUE_SOURCE_SEEDS.find((s) => s.id === "contractName").definition.resolver,
-  ruleInputDatasetId: VALUE_SOURCE_SEEDS.find((s) => s.id === "ruleInputDatasetId").definition.resolver,
-  contractPipelineId: VALUE_SOURCE_SEEDS.find((s) => s.id === "contractPipelineId").definition.resolver,
-}

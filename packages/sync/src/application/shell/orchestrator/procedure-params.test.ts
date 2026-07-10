@@ -38,7 +38,7 @@ describe("executeMssqlProcedure", () => {
         connection: "target",
         procedure: "core.uspRunContractDeploymentScripts",
         parameters: [
-          { name: "contract-name", source: { type: "contractName" } },
+          { name: "contract-name", source: { type: "catalog", id: "contractName" } },
           { name: "action", source: { type: "literal", value: "Run preScript" } },
           { name: "isDebug", source: { type: "literal", value: false } },
         ],
@@ -67,7 +67,7 @@ describe("executeMssqlProcedure", () => {
           connection: "target",
           procedure: "core.uspCreateDataset",
           parameters: [
-            { name: "ContractName", source: { type: "contractName" } },
+            { name: "ContractName", source: { type: "catalog", id: "contractName" } },
             { name: "type", source: { type: "literal", value: "stage" } },
           ],
         }),

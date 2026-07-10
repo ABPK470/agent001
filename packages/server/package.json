@@ -28,6 +28,7 @@
     "predev": "node ../../scripts/ensure-native-modules.mjs",
     "dev": "tsx watch src/index.ts",
     "entity-registry:export": "tsx src/cli/export-entity-registry.ts",
+    "export-deploy-catalog": "tsx src/cli/export-deploy-catalog.ts",
     "setup": "tsx src/cli/setup-main.ts",
     "start": "node dist/index.js",
     "test": "vitest run",

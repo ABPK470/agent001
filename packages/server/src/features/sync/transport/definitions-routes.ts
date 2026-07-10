@@ -16,7 +16,6 @@ import type {
   type EntityRegistryPreviewYamlRequest,
 } from "@mia/shared-types"
 import {
-  BUNDLED_SCD2_STRATEGIES,
   hasSyncDefinitionFlowTemplate,
   loadSyncDefinitionFlowTemplateCatalog,
   scaffoldSyncDefinition,
@@ -507,10 +506,8 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
 
   app.get("/api/entity-registry/strategies", async (req) => {
     const tenantId = resolveTenant(req)
-    const stored = db.listAvailableStrategies(tenantId)
-    const seen = new Set(stored.map((strategy) => strategy.id))
-    const bundled = BUNDLED_SCD2_STRATEGIES.filter((strategy) => !seen.has(strategy.id))
-    return { tenantId, items: [...stored, ...bundled] }
+    const items = db.listAvailableStrategies(tenantId)
+    return { tenantId, items }
   })
 
   app.delete<{ Params: { id: string } }>(

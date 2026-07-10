@@ -246,8 +246,9 @@ describe("sync definition pipeline (e2e)", () => {
     ensureSyncDefinitionConfigs(projectRoot)
     const config = listSyncDefinitionConfigs("_default").find((row) => row.entity_id === "compose_parity")!
 
-    const { buildFlowCatalog, bundledStrategyById, compilePublishedSyncDefinition } = await import("@mia/sync")
+    const { buildFlowCatalog, compilePublishedSyncDefinition } = await import("@mia/sync")
     const { loadSyncDefinitionFlowTemplateCatalog } = await import("@mia/sync")
+    const db = await import("../src/platform/persistence/db/index.js")
     const flowTemplateCatalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
     const flowCatalog = buildFlowCatalog(
       (await import("../src/platform/persistence/db/index.js")).listSyncRunPhases("_default"),
@@ -261,7 +262,7 @@ describe("sync definition pipeline (e2e)", () => {
       flowCatalog,
       "2026-06-01T00:00:00.000Z",
       "direct",
-      (strategyId) => bundledStrategyById(strategyId) ?? null,
+      (strategyId) => db.resolveScd2Strategy("_default", strategyId) ?? null,
     )
 
     publishSyncDefinitionsFromDb(projectRoot)

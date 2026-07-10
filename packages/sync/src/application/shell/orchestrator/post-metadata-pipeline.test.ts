@@ -332,7 +332,7 @@ function contractSteps(): SyncExecutionContractStep[] {
       kind: "pipelineRegister",
       title: "Pipeline register",
       description: "Register affected pipelines with the target agent service.",
-      bindings: { pipelineId: { type: "contractPipelineId" } },
+      bindings: { pipelineId: { type: "catalog", id: "contractPipelineId" } },
     },
     {
       id: "contractUndeploy",
@@ -511,15 +511,15 @@ function stepBindings(
   if (kind === PostMetadataActionKind.DatasetDeploy) {
     return {
       datasetId:
-        entityType === "rule" ? { type: "ruleInputDatasetId" } : { type: "planEntityId" },
+        entityType === "rule" ? { type: "catalog", id: "ruleInputDatasetId" } : { type: "catalog", id: "planEntityId" },
     }
   }
   if (kind === PostMetadataActionKind.PipelineRegister) {
     return {
       pipelineId:
         entityType === "pipelineActivity"
-          ? { type: "planEntityId" }
-          : { type: "contractPipelineId" },
+          ? { type: "catalog", id: "planEntityId" }
+          : { type: "catalog", id: "contractPipelineId" },
     }
   }
   return {}

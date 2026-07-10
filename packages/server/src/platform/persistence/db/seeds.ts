@@ -1,35 +1,45 @@
 /**
  * Idempotent data seeds — run on every server boot after schema migrations.
- * Not versioned migrations: these sync bundled defaults from code into the DB.
+ * Shipped defaults load from deploy/sync artifacts, not TypeScript constants.
  */
 
 import { DEFAULT_SYSTEM_PROMPT, PolicyEffect } from "@mia/agent"
-import { BUNDLED_SCD2_STRATEGIES } from "@mia/sync"
+import { loadStrategiesArtifact } from "@mia/sync"
 import { createHash } from "node:crypto"
+import { dirname, resolve } from "node:path"
+import { fileURLToPath } from "node:url"
 import type Database from "better-sqlite3"
 
-export function runSeeds(db: Database.Database): void {
+const DEFAULT_TENANT = "_default"
+const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../../..")
+
+function seedScd2StrategiesFromArtifact(db: Database.Database, projectRoot: string): void {
+  const artifact = loadStrategiesArtifact(resolve(projectRoot))
   const seedStrategyPointer = db.prepare(
     `INSERT OR IGNORE INTO scd2_strategies (tenant_id, id, current_version, retired_at)
-     VALUES (?, ?, ?, NULL)`
+     VALUES (?, ?, ?, NULL)`,
   )
   const seedStrategyVersion = db.prepare(
     `INSERT OR IGNORE INTO scd2_strategy_versions
        (tenant_id, id, version, body_json, created_by, created_at, reason)
-     VALUES (?, ?, ?, ?, ?, ?, ?)`
+     VALUES (?, ?, ?, ?, ?, ?, ?)`,
   )
-  for (const s of BUNDLED_SCD2_STRATEGIES) {
-    seedStrategyPointer.run("_default", s.id, s.version)
+  for (const strategy of artifact.strategies) {
+    seedStrategyPointer.run(DEFAULT_TENANT, strategy.id, strategy.version)
     seedStrategyVersion.run(
-      "_default",
-      s.id,
-      s.version,
-      JSON.stringify(s),
-      s.createdBy,
-      s.createdAt,
-      "bundled"
+      DEFAULT_TENANT,
+      strategy.id,
+      strategy.version,
+      JSON.stringify(strategy),
+      strategy.createdBy,
+      strategy.createdAt,
+      "shipped",
     )
   }
+}
+
+export function runSeeds(db: Database.Database, projectRoot = REPO_ROOT): void {
+  seedScd2StrategiesFromArtifact(db, projectRoot)
 
   const seededDefaultSha = createHash("sha1").update(DEFAULT_SYSTEM_PROMPT).digest("hex").slice(0, 8)
   const previousDefault = db

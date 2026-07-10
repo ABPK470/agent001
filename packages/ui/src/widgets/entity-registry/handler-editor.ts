@@ -15,6 +15,7 @@ import {
   formatValueSourcePreview,
   isLiteralHandlerSlot,
   isStepBoundHandlerSlot,
+  isSyncStepFieldKey,
   normalizeKindDefinition,
   stepFieldKeysFromHandler,
   valueSourceCatalogId,
@@ -153,9 +154,6 @@ export function parseValueSourceListboxValue(value: string): ValueSource | undef
   if (value.startsWith("catalog:")) {
     return { type: "catalog", id: value.slice("catalog:".length) }
   }
-  if (value.startsWith("stepField:")) {
-    return { type: "catalog", id: value.slice("stepField:".length) as SyncStepFieldKey }
-  }
   if (value.startsWith("{")) {
     try {
       const parsed = JSON.parse(value) as ValueSource
@@ -163,16 +161,6 @@ export function parseValueSourceListboxValue(value: string): ValueSource | undef
     } catch {
       return undefined
     }
-  }
-  if (
-    value === "planEntityId"
-    || value === "planActor"
-    || value === "currentStepId"
-    || value === "contractName"
-    || value === "ruleInputDatasetId"
-    || value === "contractPipelineId"
-  ) {
-    return { type: "catalog", id: value }
   }
   return undefined
 }
@@ -324,12 +312,12 @@ export function formatProcedureParamBinding(
         runtimeHint: `output "${param.source.output}" from step "${param.source.stepId}"`,
       }
     }
-    if (param.source.type === "stepField") {
+    if (param.source.type === "catalog" && isSyncStepFieldKey(param.source.id)) {
       return {
         name,
         mode: "flowStep",
         sourceLabel: formatValueSourcePreview(param.source),
-        runtimeHint: `step.${param.source.field}`,
+        runtimeHint: `step.${param.source.id}`,
       }
     }
     if (param.source.type === "catalog") {
@@ -488,7 +476,7 @@ export function describeHandler(def: SyncFlowKindDefinition): string[] {
   if (flowFields.length > 0) {
     lines.push(
       `Flow step fields: ${flowFields
-        .map((field) => formatValueSourcePreview({ type: "stepField", field }))
+        .map((field) => formatValueSourcePreview({ type: "catalog", id: field }))
         .join(", ")}`,
     )
   }

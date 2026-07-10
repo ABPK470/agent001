@@ -26,7 +26,7 @@ describe("handler-editor", () => {
         connection: "target",
         procedure: "core.uspRunContractDeploymentScripts",
         parameters: [
-          { name: "contractName", source: { type: "contractName" } },
+          { name: "contractName", source: { type: "catalog", id: "contractName" } },
           { name: "action", source: { type: "literal", value: "Run preScript" } },
         ],
       }),
@@ -42,7 +42,7 @@ describe("handler-editor", () => {
         connection: "target" as const,
         procedure: "core.uspCreateDataset",
         parameters: [
-          { name: "ContractName", source: { type: "contractName" as const } },
+          { name: "ContractName", source: { type: "catalog", id: "contractName" } },
           { name: "type", source: { type: "literal", value: "stage" } },
         ],
       },
@@ -50,10 +50,21 @@ describe("handler-editor", () => {
       failureMode: "warning" as const,
       createsDatasetLayer: true,
     }
-    expect(handlerConfigHighlight(def)).toContain("EXEC core.uspCreateDataset")
-    expect(handlerConfigHighlight(def)).toContain("@ContractName ← Query: Contract name")
-    expect(handlerConfigHighlight(def)).toContain("@type = 'stage'")
-    expect(handlerConfigHighlight(def)).not.toContain("SQL on target")
+    const catalog = {
+      contractName: {
+        description: "Contract name",
+        resolver: {
+          kind: "targetSql" as const,
+          query: "SELECT [name] FROM core.Contract WHERE contractId = @entityId",
+          resultColumn: "name",
+          resultType: "string" as const,
+        },
+      },
+    }
+    expect(handlerConfigHighlight(def, catalog)).toContain("EXEC core.uspCreateDataset")
+    expect(handlerConfigHighlight(def, catalog)).toContain("@ContractName ← Query: contractName")
+    expect(handlerConfigHighlight(def, catalog)).toContain("@type = 'stage'")
+    expect(handlerConfigHighlight(def, catalog)).not.toContain("SQL on target")
     expect(infersCreatesDatasetLayer(def)).toBe(true)
   })
 

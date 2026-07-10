@@ -80,12 +80,14 @@ export function defaultStepBindings(
   for (const slotName of requiredStepBoundSlotNames(kindDef.handler)) {
     if (step.kind === "datasetDeploy" && slotName === "datasetId") {
       bindings.datasetId =
-        entityId === "rule" ? { type: "ruleInputDatasetId" } : { type: "planEntityId" }
+        entityId === "rule"
+          ? { type: "catalog", id: "ruleInputDatasetId" }
+          : { type: "catalog", id: "planEntityId" }
     } else if (step.kind === "pipelineRegister" && slotName === "pipelineId") {
       bindings.pipelineId =
         entityId === "pipelineActivity"
-          ? { type: "planEntityId" }
-          : { type: "contractPipelineId" }
+          ? { type: "catalog", id: "planEntityId" }
+          : { type: "catalog", id: "contractPipelineId" }
     }
   }
   return bindings

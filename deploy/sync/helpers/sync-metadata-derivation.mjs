@@ -71,21 +71,30 @@ export const ENTITY_HINTS_BY_ENTRY_SPROC = {
 
 const STEP_INSTANCE_KEYS = new Set(["id", "phase", "kind", "title", "description"])
 
+const STEP_FIELD_CATALOG_IDS = new Set(["objectName", "auditObjectType", "pipelineName"])
+
+function isSyncStepFieldCatalogId(id) {
+  return STEP_FIELD_CATALOG_IDS.has(id)
+}
+
 /** Entity-scoped default bindings for generated flows (per-flow value sources only). */
 export function applyDefaultFlowStepBindings(step, entityId) {
   const kind = step.kind
   const bindings = { ...(step.bindings ?? {}) }
 
   if (kind === "datasetDeploy") {
-    bindings.datasetId = entityId === "rule" ? { type: "ruleInputDatasetId" } : { type: "planEntityId" }
+    bindings.datasetId =
+      entityId === "rule" ? { type: "catalog", id: "ruleInputDatasetId" } : { type: "catalog", id: "planEntityId" }
   }
   if (kind === "pipelineRegister") {
     bindings.pipelineId =
-      entityId === "pipelineActivity" ? { type: "planEntityId" } : { type: "contractPipelineId" }
+      entityId === "pipelineActivity" ? { type: "catalog", id: "planEntityId" } : { type: "catalog", id: "contractPipelineId" }
   }
 
   for (const [slot, source] of Object.entries(bindings)) {
-    if (source && typeof source === "object" && source.type === "stepField") delete bindings[slot]
+    if (source && typeof source === "object" && source.type === "catalog" && isSyncStepFieldCatalogId(source.id)) {
+      delete bindings[slot]
+    }
   }
 
   if (Object.keys(bindings).length === 0) return step

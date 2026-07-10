@@ -112,11 +112,7 @@ export function applyHandlerParamBindingMode(
     }
     case "text-field": {
       const existing =
-        param.source?.type === "stepField"
-          ? { type: "catalog" as const, id: param.source.field }
-          : param.source?.type === "catalog" && isSyncStepFieldKey(param.source.id)
-            ? param.source
-            : undefined
+        param.source?.type === "catalog" && isSyncStepFieldKey(param.source.id) ? param.source : undefined
       const fallback =
         parseValueSourceListboxValue(ctx.textFieldOptions[0]?.value ?? "catalog:auditObjectType") ?? {
           type: "catalog",

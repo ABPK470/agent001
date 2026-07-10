@@ -56,8 +56,8 @@ describe("runHttpFlowStep", () => {
           httpMethod: "POST",
           httpPath: "/rules/deploy",
           httpBody: [
-            { name: "ruleId", source: { type: "planEntityId" } },
-            { name: "userFullName", source: { type: "planActor" } },
+            { name: "ruleId", source: { type: "catalog", id: "planEntityId" } },
+            { name: "userFullName", source: { type: "catalog", id: "planActor" } },
           ],
         },
         stepFields: {},

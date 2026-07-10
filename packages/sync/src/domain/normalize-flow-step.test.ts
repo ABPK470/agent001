@@ -23,8 +23,8 @@ describe("normalizeAuthoredSyncFlowStep", () => {
               connection: "source",
               procedure: "core.uspAuditRunCheck",
               parameters: [
-                { name: "id", source: { type: "planEntityId" } },
-                { name: "objType", source: { type: "stepField", field: "auditObjectType" } },
+                { name: "id", source: { type: "catalog", id: "planEntityId" } },
+                { name: "objType", source: { type: "catalog", id: "auditObjectType" } },
                 { name: "action", source: { type: "literal", value: "syncOrNot" } },
               ],
             },
@@ -61,7 +61,7 @@ describe("normalizeAuthoredSyncFlowStep", () => {
               httpMethod: "POST",
               httpService: "etl",
               httpPath: "/pipeline/start",
-              httpBody: [{ name: "name", source: { type: "stepField", field: "pipelineName" } }],
+              httpBody: [{ name: "name", source: { type: "catalog", id: "pipelineName" } }],
             },
             stepFields: {},
             failureMode: "warning",
@@ -94,7 +94,7 @@ describe("normalizeAuthoredSyncFlowStep", () => {
               httpMethod: "POST",
               httpService: "etl",
               httpPath: "/pipeline/start",
-              httpBody: [{ name: "name", source: { type: "stepField", field: "pipelineName" } }],
+              httpBody: [{ name: "name", source: { type: "catalog", id: "pipelineName" } }],
             },
             stepFields: {},
             failureMode: "warning",
@@ -125,6 +125,6 @@ describe("defaultStepBindings", () => {
           failureMode: "warning",
         },
       ),
-    ).toEqual({ datasetId: { type: "ruleInputDatasetId" } })
+    ).toEqual({ datasetId: { type: "catalog", id: "ruleInputDatasetId" } })
   })
 })

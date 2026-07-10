@@ -3,11 +3,24 @@ import { describe, expect, it } from "vitest"
 import { formatHandlerInputPreviewHint } from "./binding-display.js"
 
 describe("formatHandlerInputPreviewHint", () => {
-  it("uses builtin preview labels", () => {
+  it("uses catalog preview labels", () => {
     expect(
       formatHandlerInputPreviewHint(
-        { name: "ContractName", source: { type: "contractName" } },
-        {},
+        { name: "ContractName", source: { type: "catalog", id: "contractName" } },
+        {
+          customCatalog: {
+            contractName: {
+              description: "Contract name on target",
+              resolver: {
+                kind: "targetSql",
+                query: "SELECT [name] FROM core.Contract WHERE contractId = @entityId",
+                resultColumn: "name",
+                resultType: "string",
+              },
+            },
+          },
+          customLabels: { contractName: "Contract name" },
+        },
       ),
     ).toContain("Contract name")
   })

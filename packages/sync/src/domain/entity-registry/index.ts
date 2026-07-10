@@ -2,7 +2,12 @@
  * Entity registry — public surface.
  */
 
-export { BUNDLED_SCD2_STRATEGIES, bundledStrategyById } from "./bundled-strategies.js"
+export {
+  DEFAULT_STRATEGIES_ARTIFACT_PATH,
+  loadStrategiesArtifact,
+  shippedScd2Strategies,
+  shippedStrategyById,
+} from "../load-strategies-artifact.js"
 export { entityDefinitionFromAuthoredSync, ensureEntityScopePlaceholder, scopeFromAuthoredPredicate } from "./from-authored-sync.js"
 export { diffEntityDefinitions } from "./diff.js"
 export {

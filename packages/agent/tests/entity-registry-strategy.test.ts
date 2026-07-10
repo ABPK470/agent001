@@ -2,9 +2,11 @@
  * Entity registry — strategy resolver + bundled strategies tests.
  */
 
+import { resolve } from "node:path"
+
 import {
-  BUNDLED_SCD2_STRATEGIES,
-  bundledStrategyById,
+  shippedScd2Strategies,
+  shippedStrategyById,
   type EntityTable,
   resolveEffectiveScd2,
   type Scd2Override,
@@ -12,6 +14,9 @@ import {
   validateScd2Strategy,
 } from "@mia/sync"
 import { describe, expect, it } from "vitest"
+
+const repoRoot = resolve(import.meta.dirname, "../../..")
+const shippedStrategies = shippedScd2Strategies(repoRoot)
 
 function table(scd2Override: Scd2Override | null = null): EntityTable {
   return {
@@ -31,40 +36,40 @@ function table(scd2Override: Scd2Override | null = null): EntityTable {
   }
 }
 
-describe("BUNDLED_SCD2_STRATEGIES", () => {
+describe("shipped SCD2 strategies artifact", () => {
   it("ships four bundled strategies with unique ids", () => {
-    const ids = BUNDLED_SCD2_STRATEGIES.map((s) => s.id)
+    const ids = shippedStrategies.map((s) => s.id)
     expect(ids).toEqual(["mymi-scd2", "generic-scd2", "none", "audit-cols-only"])
     expect(new Set(ids).size).toBe(ids.length)
   })
 
   it("mymi-scd2 mirrors the legacy core.uspSyncObjectTran exclusions", () => {
-    const s = bundledStrategyById("mymi-scd2")!
+    const s = shippedStrategyById(repoRoot, "mymi-scd2")!
     expect(s.excludeFromDiff).toEqual(["validFrom", "validTo", "isLocked", "sync-date", "deploy-date"])
     expect(s.identityHandling).toBe("setIdentityInsertOn")
     expect(s.onInsert).toEqual({ validFrom: "GETUTCDATE()", validTo: "NULL" })
   })
 
   it("none strategy excludes nothing and has empty expressions", () => {
-    const s = bundledStrategyById("none")!
+    const s = shippedStrategyById(repoRoot, "none")!
     expect(s.excludeFromDiff).toEqual([])
     expect(s.onInsert).toEqual({})
     expect(s.onUpdate).toEqual({})
   })
 
   it("mymi-scd2 passes validation including hyphenated column names", () => {
-    const s = bundledStrategyById("mymi-scd2")!
+    const s = shippedStrategyById(repoRoot, "mymi-scd2")!
     expect(validateScd2Strategy(s).ok).toBe(true)
   })
 
   it("returns undefined for unknown id", () => {
-    expect(bundledStrategyById("nope")).toBeUndefined()
+    expect(shippedStrategyById(repoRoot, "nope")).toBeUndefined()
   })
 })
 
 describe("resolveEffectiveScd2 — no overrides", () => {
   it("returns the strategy verbatim when no overrides", () => {
-    const strategy = bundledStrategyById("mymi-scd2")!
+    const strategy = shippedStrategyById(repoRoot, "mymi-scd2")!
     const eff = resolveEffectiveScd2({ strategy, entityOverride: null, table: table() })
     expect(eff.excludeFromDiff).toEqual(strategy.excludeFromDiff)
     expect(eff.identityHandling).toBe("setIdentityInsertOn")
@@ -80,7 +85,7 @@ describe("resolveEffectiveScd2 — no overrides", () => {
 
 describe("resolveEffectiveScd2 — entity-level overrides", () => {
   it("entity override replaces excludeFromDiff (not merged)", () => {
-    const strategy = bundledStrategyById("mymi-scd2")!
+    const strategy = shippedStrategyById(repoRoot, "mymi-scd2")!
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: { excludeFromDiff: ["only_this"] },
@@ -90,7 +95,7 @@ describe("resolveEffectiveScd2 — entity-level overrides", () => {
   })
 
   it("entity override changes identityHandling", () => {
-    const strategy = bundledStrategyById("mymi-scd2")!
+    const strategy = shippedStrategyById(repoRoot, "mymi-scd2")!
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: { identityHandling: "none" },
@@ -102,7 +107,7 @@ describe("resolveEffectiveScd2 — entity-level overrides", () => {
 
 describe("resolveEffectiveScd2 — table-level overrides win over entity", () => {
   it("table override beats entity override", () => {
-    const strategy = bundledStrategyById("mymi-scd2")!
+    const strategy = shippedStrategyById(repoRoot, "mymi-scd2")!
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: { excludeFromDiff: ["entity_col"] },
@@ -114,7 +119,7 @@ describe("resolveEffectiveScd2 — table-level overrides win over entity", () =>
   })
 
   it("only table override sets the entity flag false", () => {
-    const strategy = bundledStrategyById("mymi-scd2")!
+    const strategy = shippedStrategyById(repoRoot, "mymi-scd2")!
     const eff = resolveEffectiveScd2({
       strategy,
       entityOverride: null,
@@ -128,7 +133,7 @@ describe("resolveEffectiveScd2 — table-level overrides win over entity", () =>
 describe("resolveEffectiveScd2 — dict semantics", () => {
   it("onInsert / onUpdate are REPLACED, not merged", () => {
     const strategy: Scd2Strategy = {
-      ...bundledStrategyById("mymi-scd2")!,
+      ...shippedStrategyById(repoRoot, "mymi-scd2")!,
       onInsert: { validFrom: "GETUTCDATE()", validTo: "NULL" },
     }
     const eff = resolveEffectiveScd2({
@@ -140,7 +145,7 @@ describe("resolveEffectiveScd2 — dict semantics", () => {
   })
 
   it("returned dicts are defensive copies (mutating output does not affect strategy)", () => {
-    const strategy = bundledStrategyById("mymi-scd2")!
+    const strategy = shippedStrategyById(repoRoot, "mymi-scd2")!
     const eff = resolveEffectiveScd2({ strategy, entityOverride: null, table: table() })
     eff.onInsert["new"] = "value"
     eff.excludeFromDiff.push("polluted")
@@ -151,7 +156,7 @@ describe("resolveEffectiveScd2 — dict semantics", () => {
 
 describe("resolveEffectiveScd2 — legacy strategy normalization", () => {
   it("merges legacy role columns into excludeFromDiff", () => {
-    const base = bundledStrategyById("none")!
+    const base = shippedStrategyById(repoRoot, "none")!
     const legacy = {
       ...base,
       excludeFromDiff: undefined as unknown as string[],
