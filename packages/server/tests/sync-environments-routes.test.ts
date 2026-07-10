@@ -98,7 +98,6 @@ beforeEach(() => {
             color: "blue",
             role: "both",
             ringOrder: 0,
-            syncAllowlist: [],
             allowedSyncTargets: []
           },
           {
@@ -107,7 +106,6 @@ beforeEach(() => {
             color: "teal",
             role: "both",
             ringOrder: 1,
-            syncAllowlist: [],
             allowedSyncTargets: ["DEV"]
           }
         ]
@@ -177,7 +175,6 @@ describe("sync-environment routes", () => {
               color: "blue",
               role: "both",
               ringOrder: 0,
-              syncAllowlist: [],
               allowedSyncTargets: ["UAT"]
             },
             {
@@ -186,7 +183,6 @@ describe("sync-environment routes", () => {
               color: "teal",
               role: "source",
               ringOrder: 1,
-              syncAllowlist: [],
               allowedSyncTargets: ["DEV", "PROD"]
             }
           ]

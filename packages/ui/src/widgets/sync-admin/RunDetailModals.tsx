@@ -70,8 +70,6 @@ export function GovernanceDetailModal({ plan, onClose }: { plan: SyncPlan; onClo
             <dl className="grid grid-cols-[7rem_1fr] gap-x-4 gap-y-1.5 text-sm">
               <dt className="text-text-muted">target role</dt>
               <dd>{g.targetEnvironment.role}</dd>
-              <dt className="text-text-muted">actor allowed</dt>
-              <dd>{g.targetEnvironment.actorAllowed === null ? "—" : g.targetEnvironment.actorAllowed ? "yes" : "no"}</dd>
               <dt className="text-text-muted">freeze refs</dt>
               <dd className="font-mono">{freezeIds.join(", ") || "none"}</dd>
             </dl>

@@ -6,6 +6,7 @@ import { History, Loader2, RotateCcw } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
+import { ConfirmModal } from "../widgets/sync-admin/chrome"
 import { ModalShell } from "../widgets/entity-registry/ModalShell"
 import { modalViewerPanelClass } from "../widgets/entity-registry/modal-overlay"
 import { useIsMobile } from "../hooks/useIsMobile"
@@ -23,6 +24,8 @@ export function CatalogVersionsModal({
   const [err, setErr] = useState<string | null>(null)
   const [activeVersion, setActiveVersion] = useState<number | null>(null)
   const [versions, setVersions] = useState<Awaited<ReturnType<typeof api.listSyncCatalogVersions>>["versions"]>([])
+  const [confirmRestoreVersion, setConfirmRestoreVersion] = useState<number | null>(null)
+  const [confirmError, setConfirmError] = useState<string | null>(null)
 
   async function load(): Promise<void> {
     setBusy(true)
@@ -40,22 +43,31 @@ export function CatalogVersionsModal({
 
   useEffect(() => { void load() }, [])
 
-  async function rollback(version: number): Promise<void> {
-    if (!window.confirm(`Restore configuration from version ${version}? This creates a new active version.`)) return
+  async function commitRestore(): Promise<void> {
+    if (confirmRestoreVersion === null) return
+    const version = confirmRestoreVersion
     setRolling(version)
-    setErr(null)
+    setConfirmError(null)
     try {
       await api.rollbackSyncCatalog(version)
+      setConfirmRestoreVersion(null)
       await load()
       onRolledBack()
     } catch (e) {
-      setErr(e instanceof Error ? e.message : String(e))
+      setConfirmError(e instanceof Error ? e.message : String(e))
     } finally {
       setRolling(null)
     }
   }
 
+  function cancelRestore(): void {
+    if (rolling !== null) return
+    setConfirmRestoreVersion(null)
+    setConfirmError(null)
+  }
+
   return (
+    <>
     <ModalShell
       title="Configuration versions"
       subtitle="Full sync catalog snapshots. Export always reflects the active version. Rollback applies a prior snapshot as a new version."
@@ -85,8 +97,8 @@ export function CatalogVersionsModal({
                   <button
                     type="button"
                     className="shrink-0 rounded-lg border border-border-subtle px-2.5 py-1 text-xs hover:bg-elevated/40"
-                    disabled={rolling !== null}
-                    onClick={() => void rollback(entry.version)}
+                    disabled={rolling !== null || confirmRestoreVersion !== null}
+                    onClick={() => setConfirmRestoreVersion(entry.version)}
                   >
                     {rolling === entry.version ? <Loader2 className="h-3 w-3 animate-spin" /> : <RotateCcw className="inline h-3 w-3" />}
                     {" "}Restore
@@ -101,5 +113,19 @@ export function CatalogVersionsModal({
         )}
       </div>
     </ModalShell>
+
+    {confirmRestoreVersion !== null && (
+      <ConfirmModal
+        title="Restore configuration?"
+        message={`Restore configuration from version ${confirmRestoreVersion}? This creates a new active version.`}
+        confirmLabel="Restore"
+        stackLevel={1}
+        busy={rolling !== null}
+        error={confirmError}
+        onCancel={cancelRestore}
+        onConfirm={() => void commitRestore()}
+      />
+    )}
+    </>
   )
 }

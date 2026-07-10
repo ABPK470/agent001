@@ -4,7 +4,7 @@
  *
  * An environment is a named MSSQL connection (from MSSQL_DATABASES) that has
  * been tagged with a role (`source` / `target` / `both`), a display colour,
- * and a per-env sync allowlist.
+ * and a display colour.
  *
  * Loading priority:
  *   1. `deploy/sync/sync-environments.json` if present — explicit config that
@@ -15,6 +15,7 @@
 
 import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
+import { mergeServiceUrlFields, normalizeServiceUrls } from "./env-service-urls.js"
 import { getMssqlConfig, type MssqlAccessHost, type SyncEnvironmentRegistryHost } from "../ports/index.js"
 import { EnvAccessMode, EnvRole } from "./enums.js"
 
@@ -63,10 +64,10 @@ export interface SyncEnvironment {
    */
   gateServiceBaseUrl?: string | null
   /**
-   * UPN allowlist for sync_execute on this environment. Empty = open to all
-   * authenticated users. Cross-checked against `mia_sid` cookie identity.
+   * Named HTTP service base URLs for this environment (e.g. agent, etl, gate, or custom).
+   * When set, takes precedence over the legacy *ServiceBaseUrl fields for matching keys.
    */
-  syncAllowlist: string[]
+  serviceUrls?: Record<string, string | null>
   /**
    * Optional explicit list of allowed sync targets when this environment is
    * used as the source. `null` means unrestricted by direction policy; an
@@ -179,16 +180,23 @@ export function withPermissionDefaults(
       : (["query_read", "schema_introspect", "sync_preview", "sync_execute", "dml", "sync_custom_sql", "sync_shell_execute"] as EnvOperation[]))
   const approvalRequiredOperations = e.approvalRequiredOperations ?? ([] as EnvOperation[])
 
+  const serviceUrls = mergeServiceUrlFields({
+    serviceUrls: normalizeServiceUrls(e.serviceUrls as Record<string, unknown> | undefined),
+    agentServiceBaseUrl: e.agentServiceBaseUrl ?? null,
+    etlServiceBaseUrl: e.etlServiceBaseUrl ?? null,
+    gateServiceBaseUrl: e.gateServiceBaseUrl ?? null,
+  })
+
   return {
     name: e.name,
     displayName: e.displayName ?? e.name,
     color: e.color ?? "slate",
     role: e.role ?? EnvRole.Both,
     ringOrder: typeof e.ringOrder === "number" ? e.ringOrder : 0,
-    agentServiceBaseUrl: e.agentServiceBaseUrl ?? null,
-    etlServiceBaseUrl: e.etlServiceBaseUrl ?? null,
-    gateServiceBaseUrl: e.gateServiceBaseUrl ?? null,
-    syncAllowlist: Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
+    agentServiceBaseUrl: serviceUrls.agent ?? null,
+    etlServiceBaseUrl: serviceUrls.etl ?? null,
+    gateServiceBaseUrl: serviceUrls.gate ?? null,
+    serviceUrls,
     allowedSyncTargets: Array.isArray(e.allowedSyncTargets) ? e.allowedSyncTargets.map(String) : null,
     defaultAccessMode,
     allowedOperations,
@@ -222,7 +230,7 @@ export function loadSyncEnvironments(
           agentServiceBaseUrl: e.agentServiceBaseUrl ?? null,
           etlServiceBaseUrl: e.etlServiceBaseUrl ?? null,
           gateServiceBaseUrl: e.gateServiceBaseUrl ?? null,
-          syncAllowlist: Array.isArray(e.syncAllowlist) ? e.syncAllowlist : [],
+          serviceUrls: normalizeServiceUrls(e.serviceUrls as Record<string, unknown> | undefined),
           allowedSyncTargets: Array.isArray(e.allowedSyncTargets) ? e.allowedSyncTargets.map(String) : null,
           defaultAccessMode: e.defaultAccessMode,
           allowedOperations: e.allowedOperations,
@@ -250,7 +258,6 @@ export function loadSyncEnvironments(
       color: FALLBACK_PALETTE[i % FALLBACK_PALETTE.length] ?? "slate",
       role: EnvRole.Both,
       ringOrder: i,
-      syncAllowlist: []
     })
   )
   return {

@@ -5,6 +5,7 @@
 import type { SyncFlowKindDefinition } from "@mia/shared-types"
 import { handlerInputSlots, lookupHttpServiceSlot } from "@mia/shared-types"
 import { getEnvironment } from "../../../domain/environments.js"
+import { resolveEnvServiceUrl } from "../../../domain/env-service-urls.js"
 import type { SyncExecutionContractStep } from "../plan-store.js"
 import type { FlowStepRunContext, FlowStepRunResult } from "./flow-step-executor.js"
 import { resolveHandlerInputs } from "./handler-inputs.js"
@@ -42,11 +43,18 @@ function resolveHttpBaseUrl(
   environment: ReturnType<typeof getEnvironment>,
   service: "etl" | "agent" | "gate" | undefined,
 ): string {
-  const slot = lookupHttpServiceSlot(service ?? "etl")
-  const trimmed = environment[slot.envField]?.trim()
+  const key = (service ?? "etl").trim().toLowerCase()
+  const trimmed = resolveEnvServiceUrl(environment, key)
   if (!trimmed) {
+    const label = (() => {
+      try {
+        return lookupHttpServiceSlot(service ?? "etl").label
+      } catch {
+        return key
+      }
+    })()
     throw new Error(
-      `Environment "${environment.name}" is missing ${slot.label} base URL (${slot.envField}). Configure it in Sync Admin → Environments.`,
+      `Environment "${environment.name}" is missing ${label} base URL (${key}). Configure it under Configuration → Targets.`,
     )
   }
   return trimmed

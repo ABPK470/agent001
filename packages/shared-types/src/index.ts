@@ -514,7 +514,6 @@ export interface SyncEnvironment {
   color: string
   role: "source" | "target" | "both"
   ringOrder: number
-  syncAllowlist: string[]
   allowedSyncTargets: string[] | null
 }
 
@@ -888,9 +887,7 @@ export interface CompiledSyncGovernanceDecision {
     name: string
     role: string
     prodSyncUnlocked: boolean
-    syncAllowlistEnabled: boolean
     actorUpn: string | null
-    actorAllowed: boolean | null
   }
   warnings: string[]
 }
@@ -1552,12 +1549,13 @@ export interface SyncEnvironmentAdmin {
   agentServiceBaseUrl: string | null
   etlServiceBaseUrl: string | null
   gateServiceBaseUrl: string | null
+  /** Named HTTP service base URLs — supersedes legacy agent/etl/gate fields per key. */
+  serviceUrls?: Record<string, string | null>
   defaultAccessMode: EnvAccessMode
   allowedOperations: EnvOperation[]
   denyDml: boolean
   denyDdl: boolean
   approvalRequiredOperations: EnvOperation[]
-  syncAllowlist: string[]
   allowedSyncTargets: string[] | null
   updatedAt: string
   updatedBy: string | null

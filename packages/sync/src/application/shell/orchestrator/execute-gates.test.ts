@@ -73,7 +73,6 @@ import { executeSync } from "./execute.js"
 function hostWithEnvs(overrides?: {
   sourceRole?: "source" | "target" | "both"
   targetRole?: "source" | "target" | "both"
-  targetAllowlist?: string[]
   targetName?: string
 }): SyncRuntimeHost {
   const root = "/tmp/sync-gates-test"
@@ -92,7 +91,6 @@ function hostWithEnvs(overrides?: {
     color: "amber",
     role: overrides?.targetRole ?? "both",
     ringOrder: 1,
-    syncAllowlist: overrides?.targetAllowlist ?? [],
     allowedSyncTargets: null
   })
   host.sync.environments.items.set("DEV", source)
@@ -186,16 +184,6 @@ describe("executeSync pre-execution gates", () => {
         confirm: true
       })
     ).rejects.toThrow(/PROD is currently disabled/)
-  })
-
-  it("refuses user outside target sync allowlist", async () => {
-    await expect(
-      executeSync("gate-plan", {
-        host: hostWithEnvs({ targetAllowlist: ["allowed@example.com"] }),
-        confirm: true,
-        userUpn: "blocked@example.com"
-      })
-    ).rejects.toThrow(/not in sync allowlist/)
   })
 
   it("refuses catalog drift at execute time", async () => {

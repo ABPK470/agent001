@@ -103,9 +103,6 @@ async function previewSyncInner(
     }
 
     const freezeEvaluation = evaluateFreezeWindows(definition.governance.freezeWindowIds)
-    const actorAllowed = input.userUpn
-      ? targetEnv.syncAllowlist.length === 0 || targetEnv.syncAllowlist.includes(input.userUpn)
-      : null
     const governanceWarnings: string[] = []
     if (freezeEvaluation.active) {
       governanceWarnings.push(
@@ -115,11 +112,6 @@ async function previewSyncInner(
     if (freezeEvaluation.unknownIds.length > 0) {
       governanceWarnings.push(
         `Unknown freeze window id(s) referenced by definition: ${freezeEvaluation.unknownIds.join(", ")}.`
-      )
-    }
-    if (actorAllowed === false && input.userUpn) {
-      governanceWarnings.push(
-        `User ${input.userUpn} is not in the target sync allowlist for ${targetEnv.name}; execute will be blocked.`
       )
     }
 
@@ -142,9 +134,7 @@ async function previewSyncInner(
         name: targetEnv.name,
         role: targetEnv.role,
         prodSyncUnlocked: targetEnv.name.toLowerCase() !== "prod" || Boolean(process.env["SYNC_ALLOW_PROD"]),
-        syncAllowlistEnabled: targetEnv.syncAllowlist.length > 0,
         actorUpn: input.userUpn ?? null,
-        actorAllowed
       },
       warnings: governanceWarnings
     }

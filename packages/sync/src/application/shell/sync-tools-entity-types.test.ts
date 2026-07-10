@@ -33,7 +33,6 @@ function createHost(projectRoot: string): SyncRuntimeHost {
               color: "emerald",
               role: "both",
               ringOrder: 0,
-              syncAllowlist: [],
               allowedSyncTargets: null,
               accessMode: "read_write",
               allowedOperations: null

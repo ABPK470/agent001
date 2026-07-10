@@ -4,7 +4,7 @@
 
 import { X } from "lucide-react"
 import type { JSX, ReactNode } from "react"
-import { useEffect, useId } from "react"
+import { useEffect, useId, useRef } from "react"
 import { createPortal } from "react-dom"
 
 import { IconButton, TOOLBAR_ICON } from "./IconButton"
@@ -103,9 +103,12 @@ export function ModalShell({
     ? `${widthClass} flex flex-col overflow-hidden`
     : `${SIZE_PANEL[resolvedSize]} flex flex-col overflow-hidden`
   const zIndex = MODAL_BASE_Z + stackLevel * MODAL_Z_STEP
-  /** Root shell dims the page; nested detail/confirm shells add their own scrim when stacked above a focus parent. */
-  const showScrim = stackLevel === 0 || resolvedSize === "detail"
+  /** Every shell dims the stack — nested editors need their own scrim above the parent. */
+  const showScrim = true
   const overlayIntent = resolveOverlayIntent(resolvedSize, scrim)
+
+  const onCloseRef = useRef(onClose)
+  onCloseRef.current = onClose
 
   useEffect(() => {
     pushModalStack(stackId)
@@ -114,14 +117,14 @@ export function ModalShell({
       if (!isTopModalStack(stackId)) return
       e.preventDefault()
       e.stopPropagation()
-      onClose()
+      onCloseRef.current()
     }
     window.addEventListener("keydown", onKey, true)
     return () => {
       popModalStack(stackId)
       window.removeEventListener("keydown", onKey, true)
     }
-  }, [onClose, stackId])
+  }, [stackId])
 
   return createPortal(
     <div

@@ -134,7 +134,7 @@ function exportEnvironmentsDocument() {
       agentServiceBaseUrl: body.agentServiceBaseUrl,
       etlServiceBaseUrl: body.etlServiceBaseUrl,
       gateServiceBaseUrl: body.gateServiceBaseUrl,
-      syncAllowlist: body.syncAllowlist ?? [],
+      serviceUrls: body.serviceUrls,
       allowedSyncTargets: body.allowedSyncTargets ?? [],
       defaultAccessMode: body.defaultAccessMode,
       allowedOperations: body.allowedOperations,

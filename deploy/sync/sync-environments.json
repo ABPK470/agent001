@@ -11,7 +11,6 @@
       "etlServiceBaseUrl": "http://zaprnbmapp1171.corp.dsarena.com:5005/etl",
       "gateServiceBaseUrl": "https://zaprnbmapp1171.corp.dsarena.com/gate",
       "ringOrder": 0,
-      "syncAllowlist": [],
       "allowedSyncTargets": []
     },
     {
@@ -23,7 +22,6 @@
       "etlServiceBaseUrl": "http://zaprnbmapp1172.corp.dsarena.com:5005/etl",
       "gateServiceBaseUrl": "https://zaprnbmapp1172.corp.dsarena.com/gate",
       "ringOrder": 1,
-      "syncAllowlist": [],
       "allowedSyncTargets": ["dev"]
     },
     {
@@ -35,7 +33,6 @@
       "etlServiceBaseUrl": "http://firetribe-mymi-app-prod.corp.dsarena.com:5005/etl",
       "gateServiceBaseUrl": "http://firetribe-mymi-app-prod.corp.dsarena.com/gate",
       "ringOrder": 2,
-      "syncAllowlist": [],
       "allowedSyncTargets": []
     }
   ]

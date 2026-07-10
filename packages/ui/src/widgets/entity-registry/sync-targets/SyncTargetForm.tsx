@@ -3,7 +3,7 @@
  */
 
 import type { JSX } from "react"
-import { useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef } from "react"
 
 import { Listbox, type ListboxOption } from "../../../components/Listbox"
 import type { SyncEnvironmentAdmin } from "../../../types"
@@ -16,7 +16,10 @@ import {
   OP_LABELS,
   suggestAccessForName,
 } from "../../sync-admin/env-access"
-import type { TargetFormSnapshot } from "./target-form-model"
+import { EnvColorPicker } from "./EnvColorPicker"
+import { ServiceUrlsField } from "./ServiceUrlsField"
+import { SyncPolicySection } from "./SyncPolicySection"
+import type { ServiceUrlEntry, TargetFormSnapshot } from "./target-form-model"
 
 const ROLE_OPTIONS: ListboxOption<SyncEnvironmentAdmin["role"]>[] = [
   { value: "source", label: "source" },
@@ -34,11 +37,15 @@ export function SyncTargetForm({
   onChange,
   mode,
   readOnly = false,
+  stackLevel = 1,
+  peerTargets = [],
 }: {
   value: TargetFormSnapshot
   onChange: (next: TargetFormSnapshot) => void
   mode: "create" | "edit"
   readOnly?: boolean
+  stackLevel?: number
+  peerTargets?: Array<{ name: string; displayName: string }>
 }): JSX.Element {
   const effectiveOps = useMemo(
     () => deriveAllowedOperations(value.defaultAccessMode, value.denyDml, value.denyDdl),
@@ -46,6 +53,15 @@ export function SyncTargetForm({
   )
 
   const lastSuggestedNameRef = useRef("")
+  const valueRef = useRef(value)
+  valueRef.current = value
+
+  const patch = useCallback(
+    (fields: Partial<TargetFormSnapshot>) => {
+      onChange({ ...valueRef.current, ...fields })
+    },
+    [onChange],
+  )
 
   useEffect(() => {
     if (mode !== "create" || readOnly) return
@@ -54,16 +70,12 @@ export function SyncTargetForm({
     lastSuggestedNameRef.current = trimmed
     const suggested = suggestAccessForName(trimmed)
     onChange({
-      ...value,
+      ...valueRef.current,
       defaultAccessMode: suggested.defaultAccessMode,
       denyDml: suggested.denyDml,
       denyDdl: suggested.denyDdl,
     })
-  }, [mode, onChange, readOnly, value])
-
-  function patch(fields: Partial<TargetFormSnapshot>): void {
-    onChange({ ...value, ...fields })
-  }
+  }, [mode, onChange, readOnly, value.name])
 
   function onAccessModeChange(modeValue: SyncEnvironmentAdmin["defaultAccessMode"]): void {
     const flags = denyFlagsForAccessMode(modeValue)
@@ -76,6 +88,12 @@ export function SyncTargetForm({
   }
 
   const accessReadOnly = readOnly || value.defaultAccessMode === "read_only"
+  const policyPeers = peerTargets.filter((target) => target.name !== value.name)
+
+  const handleServiceUrlsChange = useCallback(
+    (serviceUrls: ServiceUrlEntry[]) => patch({ serviceUrls }),
+    [patch],
+  )
 
   return (
     <div className="space-y-3">
@@ -110,15 +128,14 @@ export function SyncTargetForm({
             />
           </FormFieldGroup>
         </div>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-          <FormFieldGroup label="Color">
-            <input
-              value={value.color}
-              disabled={readOnly}
-              onChange={(event) => patch({ color: event.target.value })}
-              className="input text-sm"
-            />
-          </FormFieldGroup>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <EnvColorPicker
+            value={value.color}
+            disabled={readOnly}
+            onChange={(color) => patch({ color })}
+          />
+        </div>
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormFieldGroup label="Role">
             <Listbox
               value={value.role}
@@ -183,60 +200,19 @@ export function SyncTargetForm({
         </div>
       </FormSectionCard>
 
-      <FormSectionCard
-        title="Service URLs"
-        description="Optional endpoints for agent, ETL, and gate services."
-      >
-        <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-          <FormFieldGroup label="Agent URL">
-            <input
-              value={value.agentServiceBaseUrl}
-              disabled={readOnly}
-              onChange={(event) => patch({ agentServiceBaseUrl: event.target.value })}
-              className="input font-mono text-sm"
-            />
-          </FormFieldGroup>
-          <FormFieldGroup label="ETL URL">
-            <input
-              value={value.etlServiceBaseUrl}
-              disabled={readOnly}
-              onChange={(event) => patch({ etlServiceBaseUrl: event.target.value })}
-              className="input font-mono text-sm"
-            />
-          </FormFieldGroup>
-          <FormFieldGroup label="Gate URL">
-            <input
-              value={value.gateServiceBaseUrl}
-              disabled={readOnly}
-              onChange={(event) => patch({ gateServiceBaseUrl: event.target.value })}
-              className="input font-mono text-sm"
-            />
-          </FormFieldGroup>
-        </div>
-      </FormSectionCard>
+      <ServiceUrlsField
+        entries={value.serviceUrls}
+        readOnly={readOnly}
+        stackLevel={stackLevel}
+        onChange={handleServiceUrlsChange}
+      />
 
-      <FormSectionCard title="Sync scope">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-          <FormFieldGroup label="Sync targets" hint="Comma-separated target names">
-            <textarea
-              value={value.allowedTargetsText}
-              disabled={readOnly}
-              onChange={(event) => patch({ allowedTargetsText: event.target.value })}
-              rows={3}
-              className="input font-mono text-sm"
-            />
-          </FormFieldGroup>
-          <FormFieldGroup label="Entity allowlist" hint="Comma-separated entity ids">
-            <textarea
-              value={value.syncAllowlistText}
-              disabled={readOnly}
-              onChange={(event) => patch({ syncAllowlistText: event.target.value })}
-              rows={3}
-              className="input font-mono text-sm"
-            />
-          </FormFieldGroup>
-        </div>
-      </FormSectionCard>
+      <SyncPolicySection
+        value={value}
+        peerTargets={policyPeers}
+        readOnly={readOnly}
+        onChange={patch}
+      />
     </div>
   )
 }

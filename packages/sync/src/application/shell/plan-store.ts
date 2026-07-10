@@ -43,9 +43,7 @@ export interface SyncGovernanceDecision {
     name: string
     role: string
     prodSyncUnlocked: boolean
-    syncAllowlistEnabled: boolean
     actorUpn: string | null
-    actorAllowed: boolean | null
   }
   warnings: string[]
 }

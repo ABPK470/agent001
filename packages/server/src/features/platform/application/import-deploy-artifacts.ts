@@ -212,13 +212,16 @@ function applyEnvironments(doc: EnvironmentsDoc): number {
       agentServiceBaseUrl: (raw.agentServiceBaseUrl as string | null) ?? null,
       etlServiceBaseUrl: (raw.etlServiceBaseUrl as string | null) ?? null,
       gateServiceBaseUrl: (raw.gateServiceBaseUrl as string | null) ?? null,
+      serviceUrls:
+        raw.serviceUrls && typeof raw.serviceUrls === "object" && !Array.isArray(raw.serviceUrls)
+          ? (raw.serviceUrls as Record<string, string | null>)
+          : undefined,
       defaultAccessMode: (raw.defaultAccessMode as SyncEnvironment["defaultAccessMode"]) ?? "read_write",
       allowedOperations: (raw.allowedOperations as SyncEnvironment["allowedOperations"]) ?? undefined,
       denyDml: Boolean(raw.denyDml),
       denyDdl: Boolean(raw.denyDdl),
       approvalRequiredOperations:
         (raw.approvalRequiredOperations as SyncEnvironment["approvalRequiredOperations"]) ?? [],
-      syncAllowlist: Array.isArray(raw.syncAllowlist) ? raw.syncAllowlist.map(String) : [],
       allowedSyncTargets: Array.isArray(raw.allowedSyncTargets)
         ? raw.allowedSyncTargets.map(String)
         : [],

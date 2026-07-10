@@ -39,12 +39,12 @@ type Editable = Pick<
   | "agentServiceBaseUrl"
   | "etlServiceBaseUrl"
   | "gateServiceBaseUrl"
+  | "serviceUrls"
   | "defaultAccessMode"
   | "allowedOperations"
   | "denyDml"
   | "denyDdl"
   | "approvalRequiredOperations"
-  | "syncAllowlist"
   | "allowedSyncTargets"
 >
 
@@ -75,6 +75,22 @@ function sanitise(body: Record<string, unknown>): Partial<Editable> | string {
       out[field] = body[field] as string | null
     }
   }
+  if (body["serviceUrls"] !== undefined) {
+    if (body["serviceUrls"] === null || typeof body["serviceUrls"] !== "object" || Array.isArray(body["serviceUrls"]))
+      return "serviceUrls must be an object of string|null values"
+    const map: Record<string, string | null> = {}
+    for (const [rawKey, rawValue] of Object.entries(body["serviceUrls"] as Record<string, unknown>)) {
+      const key = rawKey.trim().toLowerCase()
+      if (!key) continue
+      if (rawValue === null) {
+        map[key] = null
+        continue
+      }
+      if (typeof rawValue !== "string") return `serviceUrls.${key} must be a string or null`
+      map[key] = rawValue.trim() || null
+    }
+    out.serviceUrls = map
+  }
   if (body["defaultAccessMode"] !== undefined) {
     if (!isEnvAccessMode(body["defaultAccessMode"]))
       return `defaultAccessMode must be one of ${ENV_ACCESS_MODES.join("|")}`
@@ -100,10 +116,6 @@ function sanitise(body: Record<string, unknown>): Partial<Editable> | string {
   if (body["denyDdl"] !== undefined) {
     if (typeof body["denyDdl"] !== "boolean") return "denyDdl must be boolean"
     out.denyDdl = body["denyDdl"]
-  }
-  if (body["syncAllowlist"] !== undefined) {
-    if (!Array.isArray(body["syncAllowlist"])) return "syncAllowlist must be an array of UPN strings"
-    out.syncAllowlist = body["syncAllowlist"].map(String)
   }
   if (body["allowedSyncTargets"] !== undefined) {
     if (body["allowedSyncTargets"] !== null && !Array.isArray(body["allowedSyncTargets"]))
@@ -230,8 +242,8 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         ...(sanitised.denyDml !== undefined ? { denyDml: sanitised.denyDml } : {}),
         ...(sanitised.denyDdl !== undefined ? { denyDdl: sanitised.denyDdl } : {}),
         approvalRequiredOperations: sanitised.approvalRequiredOperations ?? [],
-        syncAllowlist: sanitised.syncAllowlist ?? [],
         allowedSyncTargets: sanitised.allowedSyncTargets ?? [],
+        ...(sanitised.serviceUrls ? { serviceUrls: sanitised.serviceUrls } : {}),
       })
       db.saveSyncEnvironment(serialiseEnvironment(env, req.session.upn))
       rebuildLiveSyncEnvironments(host)

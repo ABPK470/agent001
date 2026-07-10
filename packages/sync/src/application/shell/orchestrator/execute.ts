@@ -68,9 +68,6 @@ export async function executeSync(
   if (targetEnv.name.toLowerCase() === "prod" && !process.env["SYNC_ALLOW_PROD"]) {
     throw new Error(`Sync to PROD is currently disabled. Set SYNC_ALLOW_PROD=1 to unlock.`)
   }
-  if (targetEnv.syncAllowlist.length && (!opts.userUpn || !targetEnv.syncAllowlist.includes(opts.userUpn))) {
-    throw new Error(`User ${opts.userUpn ?? "<anonymous>"} is not in sync allowlist for "${targetEnv.name}".`)
-  }
 
   if (!plan.executionContract) {
     throw new Error(`Plan ${planId} predates the unified execution contract — re-preview before executing.`)

@@ -327,6 +327,13 @@ export function SyncMetadataModal({
   }
 
   function startTargetEdit(item: SyncEnvironmentAdmin): void {
+    if (
+      targetFormOpen
+      && targetFormMode === "edit"
+      && targetEditingId === item.name
+    ) {
+      return
+    }
     const snapshot = targetFormFromEnv(item)
     setTargetFormOpen(true)
     setTargetFormMode("edit")
@@ -909,6 +916,11 @@ export function SyncMetadataModal({
                     onChange={setTargetForm}
                     mode={targetFormMode}
                     readOnly={targetFormReadOnly}
+                    stackLevel={stackLevel + 1}
+                    peerTargets={targets.items.map((item) => ({
+                      name: item.name,
+                      displayName: item.displayName,
+                    }))}
                   />
                 </div>
               </>
