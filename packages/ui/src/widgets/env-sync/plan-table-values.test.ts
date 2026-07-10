@@ -4,6 +4,7 @@ import {
   formatCellFull,
   formatCellPreview,
   isCellPreviewTruncated,
+  partitionSampleRowColumns,
   sampleRowColumns,
   sampleRowDetailSubtitle,
   sampleRowDetailTitle,
@@ -51,6 +52,14 @@ describe("plan-table-values", () => {
       oldValues: { b: 1, a: 2 },
       newValues: { c: 3, a: 4 },
     })).toEqual(["a", "b", "c"])
+  })
+
+  it("partitions update columns into changed and unchanged groups", () => {
+    expect(partitionSampleRowColumns({
+      oldValues: { a: 1, b: 2, c: 3 },
+      newValues: { a: 1, b: 9, c: 3 },
+      changedColumns: ["b"],
+    })).toEqual({ changed: ["b"], unchanged: ["a", "c"] })
   })
 
   it("builds row modal titles and subtitles", () => {

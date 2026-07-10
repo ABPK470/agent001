@@ -63,6 +63,21 @@ export function sampleRowColumns(sample: SampleRowShape): string[] {
   return columns.sort((a, b) => a.localeCompare(b))
 }
 
+/** Split update columns into changed vs unchanged for diff-first layout. */
+export function partitionSampleRowColumns(sample: SampleRowShape): {
+  changed: string[]
+  unchanged: string[]
+} {
+  const changedSet = new Set(sample.changedColumns ?? [])
+  const changed: string[] = []
+  const unchanged: string[] = []
+  for (const column of sampleRowColumns(sample)) {
+    if (changedSet.has(column)) changed.push(column)
+    else unchanged.push(column)
+  }
+  return { changed, unchanged }
+}
+
 export function sampleRowDetailTitle(kind: SampleRowDetail["kind"]): string {
   if (kind === "insert") return "Insert row"
   if (kind === "update") return "Update row"
