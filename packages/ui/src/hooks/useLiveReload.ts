@@ -7,12 +7,20 @@ export function useLiveReload(
   load: () => void | Promise<void>,
   match: (eventType: string) => boolean,
 ): void {
-  const tick = useStore((s) => s.sseEventLog.filter((e) => match(String(e.type))).length)
+  const loadRef = useRef(load)
+  loadRef.current = load
+
+  const matchRef = useRef(match)
+  matchRef.current = match
+
+  const tick = useStore((s) =>
+    s.sseEventLog.filter((e) => matchRef.current(String(e.type))).length,
+  )
   const lastRef = useRef<number | null>(null)
 
   useEffect(() => {
-    void load()
-  }, [load])
+    void loadRef.current()
+  }, [])
 
   useEffect(() => {
     if (lastRef.current === null) {
@@ -21,6 +29,6 @@ export function useLiveReload(
     }
     if (tick === lastRef.current) return
     lastRef.current = tick
-    void load()
-  }, [tick, load])
+    void loadRef.current()
+  }, [tick])
 }

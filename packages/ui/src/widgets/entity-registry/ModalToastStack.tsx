@@ -1,4 +1,4 @@
-import type { JSX } from "react"
+import { useCallback, type JSX } from "react"
 import { ToastStack, useToasts, type Toast } from "../../components/ToastStack"
 
 const AUTO_DISMISS_MS = 15_000
@@ -13,9 +13,14 @@ export function useModalToasts(autoDismissMs = AUTO_DISMISS_MS): {
 } {
   const { toasts, pushToast, dismissToast, clearToasts } = useToasts({ err: autoDismissMs })
 
+  const pushErrorToast = useCallback(
+    (message: string) => pushToast(message, "err"),
+    [pushToast],
+  )
+
   return {
     toasts: toasts.map(({ id, message }) => ({ id, message })),
-    pushToast: (message) => pushToast(message, "err"),
+    pushToast: pushErrorToast,
     dismissToast,
     clearToasts,
   }

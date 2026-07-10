@@ -6,6 +6,7 @@ import { GitBranch, GitFork, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../../../api"
+import { useInitialCatalogSelection } from "../../../hooks/useInitialCatalogSelection"
 import { useLiveReload } from "../../../hooks/useLiveReload"
 import { useMe } from "../../../hooks/useMe"
 import type { EntityRegistryDefinition, EntityRegistryStrategy, EntityRegistryStrategyHistoryEntry } from "../../../types"
@@ -56,7 +57,7 @@ export function StrategiesModal({
 }: StrategiesModalProps): JSX.Element {
   const { me } = useMe()
   const isAdmin = me?.isAdmin ?? false
-  const { toasts, pushToast, dismissToast, clearToasts } = useModalToasts()
+  const { toasts, pushToast, dismissToast } = useModalToasts()
 
   const [items, setItems] = useState<EntityRegistryStrategy[]>([])
   const [busy, setBusy] = useState(true)
@@ -69,7 +70,6 @@ export function StrategiesModal({
 
   const load = useCallback(async (): Promise<void> => {
     setBusy(true)
-    clearToasts()
     try {
       const response = await api.listEntityRegistryStrategies()
       setItems(response.items)
@@ -78,23 +78,11 @@ export function StrategiesModal({
     } finally {
       setBusy(false)
     }
-  }, [clearToasts, pushToast])
+  }, [pushToast])
 
   useLiveReload(load, (type) => type.startsWith("entity_registry."))
 
-  useEffect(() => {
-    if (items.length === 0) return
-    setSelectedId((current) => (
-      current && items.some((strategy) => strategy.id === current) ? current : items[0]!.id
-    ))
-  }, [items])
-
-  useEffect(() => {
-    if (!initialStrategyId || items.length === 0) return
-    if (items.some((strategy) => strategy.id === initialStrategyId)) {
-      setSelectedId(initialStrategyId)
-    }
-  }, [initialStrategyId, items])
+  useInitialCatalogSelection(items, selectedId, setSelectedId, initialStrategyId)
 
   const chosen = useMemo(
     () => items.find((strategy) => strategy.id === selectedId) ?? null,

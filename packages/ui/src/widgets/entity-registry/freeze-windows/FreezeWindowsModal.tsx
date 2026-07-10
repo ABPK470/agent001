@@ -5,8 +5,9 @@
 import { EventType } from "@mia/shared-enums"
 import { Calendar, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import type { JSX } from "react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { api } from "../../../api"
+import { useInitialCatalogSelection } from "../../../hooks/useInitialCatalogSelection"
 import { useLiveReload } from "../../../hooks/useLiveReload"
 import { useMe } from "../../../hooks/useMe"
 import type { FreezeWindow } from "../../../types"
@@ -50,7 +51,7 @@ export function FreezeWindowsModal({
 }: FreezeWindowsModalProps): JSX.Element {
   const { me } = useMe()
   const isAdmin = me?.isAdmin ?? false
-  const { toasts, pushToast, dismissToast, clearToasts } = useModalToasts()
+  const { toasts, pushToast, dismissToast } = useModalToasts()
 
   const [items, setItems] = useState<FreezeWindow[]>([])
   const [busy, setBusy] = useState(true)
@@ -61,7 +62,6 @@ export function FreezeWindowsModal({
 
   const load = useCallback(async (): Promise<void> => {
     setBusy(true)
-    clearToasts()
     try {
       const response = await api.listFreezeWindows()
       setItems(response.items)
@@ -70,18 +70,13 @@ export function FreezeWindowsModal({
     } finally {
       setBusy(false)
     }
-  }, [clearToasts, pushToast])
+  }, [pushToast])
 
   useLiveReload(load, (type) =>
     type === EventType.FreezeWindowUpserted || type === EventType.FreezeWindowDeleted,
   )
 
-  useEffect(() => {
-    if (!initialWindowId || items.length === 0) return
-    if (items.some((item) => item.id === initialWindowId)) {
-      setSelectedId(initialWindowId)
-    }
-  }, [initialWindowId, items])
+  useInitialCatalogSelection(items, selectedId, setSelectedId, initialWindowId)
 
   const chosen = useMemo(
     () => items.find((window) => window.id === selectedId) ?? null,
