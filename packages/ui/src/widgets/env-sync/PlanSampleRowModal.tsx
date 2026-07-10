@@ -1,5 +1,5 @@
 import { ChevronDown, ChevronRight, Minus, Plus } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 
 import { ModalShell } from "./chrome"
 import { DIFF } from "./constants"
@@ -11,6 +11,7 @@ import {
   sampleRowDetailTitle,
   type SampleRowDetail,
 } from "./plan-table-values"
+import { buildInlineTextDiff, type DiffHighlightSegment } from "./plan-text-diff"
 
 export const PLAN_ROW_DIFF_BODY_CLASS = "flex-1 min-h-0 overflow-y-auto px-6 py-4"
 export const PLAN_ROW_DIFF_SUMMARY_CLASS = "shrink-0 border-b border-border-subtle bg-elevated px-6 py-3"
@@ -27,7 +28,7 @@ export function PlanSampleRowModal({ detail, onClose }: {
     <ModalShell
       title={sampleRowDetailTitle(kind)}
       subtitle={sampleRowDetailSubtitle(detail)}
-      size="default"
+      size="focus"
       onClose={onClose}
     >
       <DiffSummaryBar kind={kind} changed={changed} unchanged={unchanged} columnCount={columns.length} />
@@ -147,6 +148,12 @@ function DiffFieldBlock({ column, oldValue, newValue }: {
   oldValue: unknown
   newValue: unknown
 }) {
+  const inlineDiff = useMemo(() => {
+    const oldText = formatCellFull(oldValue)
+    const newText = formatCellFull(newValue)
+    return buildInlineTextDiff(oldText, newText)
+  }, [oldValue, newValue])
+
   return (
     <article className="rounded-lg border border-border/50 overflow-hidden bg-surface/30">
       <header className="flex items-center justify-between gap-3 px-3 py-2 border-b border-border/30 bg-elevated/70">
@@ -157,13 +164,13 @@ function DiffFieldBlock({ column, oldValue, newValue }: {
         <DiffValuePanel
           label="Current (target)"
           icon={<Minus size={12} />}
-          value={oldValue}
+          segments={inlineDiff.old}
           tone="removed"
         />
         <DiffValuePanel
           label="After sync (source)"
           icon={<Plus size={12} />}
-          value={newValue}
+          segments={inlineDiff.new}
           tone="added"
         />
       </div>
@@ -171,11 +178,12 @@ function DiffFieldBlock({ column, oldValue, newValue }: {
   )
 }
 
-function DiffValuePanel({ label, icon, value, tone }: {
+function DiffValuePanel({ label, icon, segments, tone, plainText }: {
   label: string
   icon: ReactNode
-  value: unknown
+  segments?: DiffHighlightSegment[]
   tone: "removed" | "added"
+  plainText?: string
 }) {
   const isRemoved = tone === "removed"
   const accent = isRemoved ? DIFF.del : DIFF.upd
@@ -202,9 +210,55 @@ function DiffValuePanel({ label, icon, value, tone }: {
         className="m-0 p-3 text-sm font-mono whitespace-pre-wrap break-all text-text min-w-0"
         style={{ color: isRemoved ? DIFF.oldRow : DIFF.upd }}
       >
-        {formatCellFull(value)}
+        {segments
+          ? <DiffHighlightedText segments={segments} variant={isRemoved ? "old" : "new"} />
+          : plainText}
       </pre>
     </div>
+  )
+}
+
+function DiffHighlightedText({ segments, variant }: {
+  segments: DiffHighlightSegment[]
+  variant: "old" | "new"
+}) {
+  return (
+    <>
+      {segments.map((segment, index) => {
+        if (segment.kind === "same") {
+          return <span key={index}>{segment.text}</span>
+        }
+        if (segment.kind === "removed" && variant === "old") {
+          return (
+            <mark
+              key={index}
+              className="rounded-sm px-0.5 line-through decoration-1"
+              style={{
+                color: DIFF.del,
+                backgroundColor: "color-mix(in srgb, var(--color-viz-coral) 28%, transparent)",
+              }}
+            >
+              {segment.text}
+            </mark>
+          )
+        }
+        if (segment.kind === "added" && variant === "new") {
+          return (
+            <mark
+              key={index}
+              className="rounded-sm px-0.5 font-semibold"
+              style={{
+                color: DIFF.upd,
+                backgroundColor: "color-mix(in srgb, var(--color-viz-peach) 32%, transparent)",
+              }}
+            >
+              {segment.text}
+            </mark>
+          )
+        }
+        return null
+      })}
+    </>
   )
 }
 

@@ -51,6 +51,7 @@ describe("PlanTables regression guards", () => {
 describe("PlanSampleRowModal regression guards", () => {
   it("uses diff-first layout with fixed summary and scrollable body", () => {
     const src = readSource(planSampleRowModalPath)
+    expect(src).toContain('size="focus"')
     expect(src).toContain("PLAN_ROW_DIFF_SUMMARY_CLASS")
     expect(src).toContain("PLAN_ROW_DIFF_BODY_CLASS")
     expect(PLAN_ROW_DIFF_SUMMARY_CLASS).toContain("shrink-0")
@@ -58,12 +59,13 @@ describe("PlanSampleRowModal regression guards", () => {
     expect(src).not.toContain("sticky top-0")
   })
 
-  it("shows side-by-side before/after panels for changed columns", () => {
+  it("shows side-by-side before/after panels with inline word highlighting", () => {
     const src = readSource(planSampleRowModalPath)
     expect(src).toContain("DiffFieldBlock")
     expect(src).toContain("Current (target)")
     expect(src).toContain("After sync (source)")
-    expect(src).toContain("partitionSampleRowColumns")
+    expect(src).toContain("buildInlineTextDiff")
+    expect(src).toContain("DiffHighlightedText")
     expect(src).toContain("will change")
   })
 
