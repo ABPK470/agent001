@@ -11,7 +11,7 @@
  * edit versions of the custom id. Version history is immutable.
  */
 
-import { GitFork, Pencil, Plus } from "lucide-react"
+import { GitFork, Pencil, Plus, Trash2 } from "lucide-react"
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../../api"
@@ -21,6 +21,8 @@ import type {
   EntityRegistryStrategy,
   EntityRegistryStrategyHistoryEntry,
 } from "../../types"
+import { ConfirmModal } from "./chrome"
+import { useConsole } from "./console-context"
 import { PANEL } from "./design"
 import {
   ConsolePanel, DetailBody, DetailToolbar, Empty, IconAction, ItemShell, RailEmpty,
@@ -28,7 +30,7 @@ import {
 } from "./shared"
 import { StrategyEditorModal } from "./StrategyEditorModal"
 import { StrategyColumnsModal, StrategyEntitiesModal, StrategyHistoryModal } from "./StrategyDetailModals"
-import { blankCustomStrategy, describeStrategyEffects, provenanceLabel } from "./strategy-helpers"
+import { blankCustomStrategy, describeStrategyEffects, isTenantCustomStrategy, provenanceLabel } from "./strategy-helpers"
 import { useLiveReload } from "./useLiveReload"
 
 type EditorState =
@@ -42,12 +44,16 @@ const KIND_ORDER = ["bundled", "manual", "imported", "agent"] as const
 export function StrategiesPanel(): JSX.Element {
   const { me } = useMe()
   const isAdmin = me?.isAdmin ?? false
+  const { notify, notifyError } = useConsole()
 
   const [items, setItems] = useState<EntityRegistryStrategy[]>([])
   const [busy, setBusy] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [selected, setSelected] = useState<string | null>(null)
   const [editor, setEditor] = useState<EditorState>(null)
+  const [retireTarget, setRetireTarget] = useState<EntityRegistryStrategy | null>(null)
+  const [retireBusy, setRetireBusy] = useState(false)
+  const [retireErr, setRetireErr] = useState<string | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     setBusy(true)
@@ -65,6 +71,7 @@ export function StrategiesPanel(): JSX.Element {
   useLiveReload(load, (type) => type.startsWith("entity_registry."))
 
   const chosen = useMemo(() => items.find((s) => s.id === selected) ?? null, [items, selected])
+  const chosenIsCustom = chosen ? isTenantCustomStrategy(chosen) : false
 
   useEffect(() => {
     if (items.length === 0) return
@@ -90,6 +97,25 @@ export function StrategiesPanel(): JSX.Element {
     return ordered
   }, [items])
 
+  async function confirmRetire(): Promise<void> {
+    if (!retireTarget) return
+    setRetireBusy(true)
+    setRetireErr(null)
+    try {
+      await api.retireEntityRegistryStrategy(retireTarget.id)
+      notify(`Retired ${retireTarget.id}`)
+      setRetireTarget(null)
+      setSelected((current) => (current === retireTarget.id ? null : current))
+      await load()
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      setRetireErr(message)
+      notifyError(message)
+    } finally {
+      setRetireBusy(false)
+    }
+  }
+
   return (
     <ConsolePanel err={err} onClearErr={() => setErr(null)}>
       <ItemShell
@@ -104,11 +130,7 @@ export function StrategiesPanel(): JSX.Element {
             title={chosen.displayName}
             subtitle={`${chosen.id} · v${chosen.version}${chosen.versionLabel ? ` (${chosen.versionLabel})` : ""}`}
             actions={isAdmin ? (
-              chosen.provenance.kind === "bundled" ? (
-                <IconAction label="Fork" onClick={() => setEditor({ mode: "fork", seed: chosen })}>
-                  <GitFork {...TOOLBAR_ICON} />
-                </IconAction>
-              ) : (
+              chosenIsCustom ? (
                 <>
                   <IconAction label="Edit" onClick={() => setEditor({ mode: "edit", seed: chosen })}>
                     <Pencil {...TOOLBAR_ICON} />
@@ -116,7 +138,14 @@ export function StrategiesPanel(): JSX.Element {
                   <IconAction label="Fork" onClick={() => setEditor({ mode: "fork", seed: chosen })}>
                     <GitFork {...TOOLBAR_ICON} />
                   </IconAction>
+                  <IconAction label="Retire" onClick={() => { setRetireErr(null); setRetireTarget(chosen) }}>
+                    <Trash2 {...TOOLBAR_ICON} />
+                  </IconAction>
                 </>
+              ) : (
+                <IconAction label="Fork to edit" onClick={() => setEditor({ mode: "fork", seed: chosen })}>
+                  <GitFork {...TOOLBAR_ICON} />
+                </IconAction>
               )
             ) : undefined}
           />
@@ -154,6 +183,19 @@ export function StrategiesPanel(): JSX.Element {
             setEditor(null)
             void load()
           }}
+        />
+      )}
+
+      {retireTarget && (
+        <ConfirmModal
+          title="Retire strategy"
+          message={`Retire "${retireTarget.displayName}" (${retireTarget.id})? Version history is kept for pinned entity references, but the strategy disappears from the catalogue and cannot be picked for new entities.`}
+          confirmLabel="Retire"
+          danger
+          busy={retireBusy}
+          error={retireErr}
+          onCancel={() => !retireBusy && setRetireTarget(null)}
+          onConfirm={() => void confirmRetire()}
         />
       )}
     </ConsolePanel>
@@ -198,6 +240,12 @@ function StrategyDetail({ s }: {
 
   return (
     <DetailBody>
+      {!isTenantCustomStrategy(s) && (
+        <p className="mb-3 rounded-lg border border-border-subtle bg-overlay-1/40 px-3 py-2 text-sm leading-relaxed text-text-muted">
+          Shipped defaults are read-only. Use <span className="text-text">Fork to edit</span> to create a tenant copy you can edit, version, or retire.
+        </p>
+      )}
+
       {s.description && <p className="mb-3 text-sm text-text-muted leading-relaxed">{s.description}</p>}
 
       <ul className={`${PANEL} mb-3 space-y-1 px-3 py-2`}>

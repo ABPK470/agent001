@@ -769,6 +769,15 @@ export const api = {
       items: import("./types").EntityRegistryStrategyHistoryEntry[]
     }>(`/api/entity-registry/strategies/${encodeURIComponent(id)}/history${qs ? `?${qs}` : ""}`)
   },
+  retireEntityRegistryStrategy: (id: string, opts?: { tenant?: string }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<{ retiredAt: string }>(
+      `/api/entity-registry/strategies/${encodeURIComponent(id)}${qs ? `?${qs}` : ""}`,
+      { method: "DELETE" },
+    )
+  },
 
   // ── Freeze windows (governance) ──────────────────────────────
   listFreezeWindows: (opts?: { tenant?: string }) => {

@@ -479,6 +479,52 @@ describe("listAvailableStrategies", () => {
   })
 })
 
+describe("retireScd2Strategy", () => {
+  it("removes a tenant custom strategy from the catalogue", async () => {
+    const m = await setup()
+    const base = m.resolveScd2Strategy("acme", "generic-scd2")!
+    m.saveScd2Strategy({
+      tenantId: "acme",
+      strategy: { ...base, id: "acme-retire-me", displayName: "Retire me", provenance: { kind: "manual" } },
+      actor: "u",
+      reason: "create",
+    })
+    expect(m.listAvailableStrategies("acme").some((s) => s.id === "acme-retire-me")).toBe(true)
+
+    const result = m.retireScd2Strategy("acme", "acme-retire-me")
+    expect(result?.retiredAt).toBeTruthy()
+    expect(m.listAvailableStrategies("acme").some((s) => s.id === "acme-retire-me")).toBe(false)
+    expect(m.resolveScd2Strategy("acme", "acme-retire-me", 1)?.displayName).toBe("Retire me")
+  })
+
+  it("returns null for bundled-only ids with no tenant row", async () => {
+    const m = await setup()
+    expect(m.retireScd2Strategy("acme", "mymi-scd2")).toBeNull()
+  })
+
+  it("refuses retire when active entities still reference the strategy", async () => {
+    const m = await setup()
+    const base = m.resolveScd2Strategy("acme", "generic-scd2")!
+    m.saveScd2Strategy({
+      tenantId: "acme",
+      strategy: { ...base, id: "acme-in-use", displayName: "In use", provenance: { kind: "manual" } },
+      actor: "u",
+      reason: "create",
+    })
+    m.saveEntityDefinition({
+      tenantId: "acme",
+      def: validDef({
+        tenantId: "acme",
+        id: "uses-strategy",
+        scd2: { strategyId: "acme-in-use", strategyVersion: 1, entityOverride: null },
+      }),
+      actor: "u",
+      reason: "test",
+    })
+    expect(() => m.retireScd2Strategy("acme", "acme-in-use")).toThrow(/referenced by/)
+  })
+})
+
 describe("listScd2StrategyHistory", () => {
   it("returns seeded bundled versions for _default tenant", async () => {
     const m = await setup()

@@ -671,16 +671,57 @@ export function listAvailableStrategies(tenantId: string): Scd2Strategy[] {
   return [...tenantStrategies, ...defaults]
 }
 
-function readTenantStrategies(db: ReturnType<typeof getDb>, tenantId: string): Scd2Strategy[] {
+function readTenantStrategies(
+  db: ReturnType<typeof getDb>,
+  tenantId: string,
+  opts: { includeRetired?: boolean } = {},
+): Scd2Strategy[] {
   const rows = db
     .prepare(
-      `SELECT s.id, s.current_version, v.body_json
+      `SELECT s.id, s.current_version, s.retired_at, v.body_json
        FROM scd2_strategies s
        JOIN scd2_strategy_versions v
          ON v.tenant_id = s.tenant_id AND v.id = s.id AND v.version = s.current_version
        WHERE s.tenant_id = ?
+       ${opts.includeRetired ? "" : "AND s.retired_at IS NULL"}
        ORDER BY s.id`
     )
-    .all(tenantId) as { id: string; current_version: number; body_json: string }[]
+    .all(tenantId) as { id: string; current_version: number; retired_at: string | null; body_json: string }[]
   return rows.map((r) => JSON.parse(r.body_json) as Scd2Strategy)
+}
+
+export function countActiveEntitiesUsingStrategy(tenantId: string, strategyId: string): number {
+  return listEntityDefinitions(tenantId).filter((def) => def.scd2.strategyId === strategyId).length
+}
+
+/**
+ * Retire a tenant-owned strategy. Shipped bundled defaults that only exist
+ * as inherited constants cannot be retired — fork a custom copy instead.
+ * Historical version rows remain for pinned entity references.
+ */
+export function retireScd2Strategy(
+  tenantId: string,
+  id: string,
+): { retiredAt: string } | null {
+  const db = getDb()
+  const pointer = db
+    .prepare(`SELECT current_version, retired_at FROM scd2_strategies WHERE tenant_id = ? AND id = ?`)
+    .get(tenantId, id) as { current_version: number; retired_at: string | null } | undefined
+  if (!pointer) return null
+  if (pointer.retired_at) return { retiredAt: pointer.retired_at }
+
+  const inUse = countActiveEntitiesUsingStrategy(tenantId, id)
+  if (inUse > 0) {
+    throw new Error(
+      `Strategy "${id}" is referenced by ${inUse} active entity definition(s). Retire or reassign them first.`,
+    )
+  }
+
+  const retiredAt = new Date().toISOString()
+  db.prepare(`UPDATE scd2_strategies SET retired_at = ? WHERE tenant_id = ? AND id = ?`).run(
+    retiredAt,
+    tenantId,
+    id,
+  )
+  return { retiredAt }
 }

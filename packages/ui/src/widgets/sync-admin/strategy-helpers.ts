@@ -4,6 +4,10 @@
 
 import type { EntityRegistryStrategy } from "../../types"
 
+export function isTenantCustomStrategy(strategy: EntityRegistryStrategy): boolean {
+  return strategy.provenance.kind !== "bundled"
+}
+
 export function provenanceLabel(kind: EntityRegistryStrategy["provenance"]["kind"]): string {
   switch (kind) {
     case "bundled": return "Shipped default"

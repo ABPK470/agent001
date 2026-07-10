@@ -156,6 +156,7 @@ export const EventType = {
   EntityRegistrySaved: "entity_registry.saved",
   EntityRegistryRetired: "entity_registry.retired",
   EntityRegistryStrategySaved: "entity_registry.strategy.saved",
+  EntityRegistryStrategyRetired: "entity_registry.strategy.retired",
   EntityRegistryImported: "entity_registry.imported",
 
   // Reconciliation Proposer (Phase 1)

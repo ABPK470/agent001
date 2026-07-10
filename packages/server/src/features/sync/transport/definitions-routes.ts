@@ -513,6 +513,40 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     return { tenantId, items: [...stored, ...bundled] }
   })
 
+  app.delete<{ Params: { id: string } }>(
+    "/api/entity-registry/strategies/:id",
+    async (req, reply) => {
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { error: "admin only" }
+      }
+      const tenantId = resolveTenant(req)
+      const id = req.params.id
+      if (!id) {
+        reply.code(400)
+        return { error: "strategy id is required" }
+      }
+      try {
+        const result = db.retireScd2Strategy(tenantId, id)
+        if (!result) {
+          reply.code(404)
+          return {
+            error: `strategy not found for tenant: ${id}. Shipped defaults cannot be deleted — fork a custom copy first.`,
+          }
+        }
+        audit(req, "entity_registry.strategy_retired", { tenantId, id })
+        broadcast({
+          type: EventType.EntityRegistryStrategyRetired,
+          data: { tenantId, id, actor: req.session.upn, retiredAt: result.retiredAt },
+        })
+        return result
+      } catch (error) {
+        reply.code(409)
+        return { error: error instanceof Error ? error.message : String(error) }
+      }
+    },
+  )
+
   app.get<{ Params: { id: string } }>(
     "/api/entity-registry/strategies/:id/history",
     async (req) => {

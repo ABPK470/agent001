@@ -173,6 +173,7 @@ export {
   readEntityVersionBody,
   resolveScd2Strategy,
   retireEntityDefinition,
+  retireScd2Strategy,
   saveEntityDefinition,
   saveScd2Strategy,
   wipeEntityRegistry,
