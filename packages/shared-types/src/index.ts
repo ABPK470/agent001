@@ -1237,6 +1237,8 @@ export {
 } from "./binding-display.js"
 export {
   BUILTIN_TARGET_SQL,
+  BUILTIN_VALUE_SOURCE_DESCRIPTIONS,
+  BUILTIN_VALUE_SOURCE_TYPES,
   collectCatalogIdsFromValueSource,
   collectCatalogIdsFromValueSources,
   formatValueSourcePreview,
@@ -1244,6 +1246,7 @@ export {
   isSyncStepFieldKey,
   isValueSource,
   readStepFieldValue,
+  STEP_FIELD_DESCRIPTIONS,
   stepFieldKeysFromValueSource,
   SYNC_STEP_FIELD_KEYS,
   validateValueSource,

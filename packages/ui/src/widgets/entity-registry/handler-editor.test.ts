@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  buildWiringCatalogListItems,
   defaultHandlerForType,
   defaultProcedureParameters,
   formatProcedureSummary,
@@ -59,5 +60,24 @@ describe("handler-editor", () => {
   it("defaults custom handler types", () => {
     expect(defaultProcedureParameters()).toEqual([{ name: "id", source: { type: "planEntityId" } }])
     expect(defaultHandlerForType("custom_sql").sqlBatch).toBe("")
+  })
+
+  it("lists built-in wiring entries plus custom SQL sources", () => {
+    const items = buildWiringCatalogListItems([
+      {
+        id: "myLookup",
+        label: "My lookup",
+        builtIn: false,
+        definition: {
+          description: "Custom",
+          query: "SELECT 1 AS x FROM core.Contract WHERE contractId = @entityId",
+          resultColumn: "x",
+        },
+      },
+    ])
+    expect(items.some((item) => item.id === "planEntityId" && item.wiringKind === "builtinValueSource")).toBe(true)
+    expect(items.some((item) => item.id === "objectName" && item.wiringKind === "builtinStepField")).toBe(true)
+    expect(items.some((item) => item.id === "myLookup" && item.wiringKind === "custom")).toBe(true)
+    expect(items.length).toBeGreaterThanOrEqual(10)
   })
 })

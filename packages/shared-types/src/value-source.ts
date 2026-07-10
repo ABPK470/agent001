@@ -51,7 +51,7 @@ export const BUILTIN_TARGET_SQL = {
   },
 } as const
 
-const BUILTIN_VALUE_SOURCE_TYPES = new Set<string>([
+const VALUE_SOURCE_TYPE_SET = new Set<string>([
   "planEntityId",
   "planActor",
   "currentStepId",
@@ -64,6 +64,15 @@ const BUILTIN_VALUE_SOURCE_TYPES = new Set<string>([
   "catalog",
 ])
 
+export const BUILTIN_VALUE_SOURCE_TYPES: readonly BuiltinValueSource["type"][] = [
+  "planEntityId",
+  "planActor",
+  "currentStepId",
+  "contractName",
+  "ruleInputDatasetId",
+  "contractPipelineId",
+]
+
 export function isSyncStepFieldKey(value: string): value is SyncStepFieldKey {
   return (SYNC_STEP_FIELD_KEYS as readonly string[]).includes(value)
 }
@@ -71,7 +80,7 @@ export function isSyncStepFieldKey(value: string): value is SyncStepFieldKey {
 export function isValueSource(raw: unknown): raw is ValueSource {
   if (!raw || typeof raw !== "object" || !("type" in raw)) return false
   const type = (raw as { type: unknown }).type
-  if (typeof type !== "string" || !BUILTIN_VALUE_SOURCE_TYPES.has(type)) return false
+  if (typeof type !== "string" || !VALUE_SOURCE_TYPE_SET.has(type)) return false
   switch (type) {
     case "stepField":
       return isSyncStepFieldKey(String((raw as { field?: unknown }).field ?? ""))
@@ -136,10 +145,30 @@ const BUILTIN_PREVIEW: Record<BuiltinValueSource["type"], string> = {
   contractPipelineId: "Query: Contract pipeline id",
 }
 
+/** Operator-facing descriptions for built-in value sources (Configuration → Wiring). */
+export const BUILTIN_VALUE_SOURCE_DESCRIPTIONS: Record<BuiltinValueSource["type"], string> = {
+  planEntityId:
+    "Numeric id of the entity being synced (contractId, datasetId, ruleId, …). Same for every step in the run.",
+  planActor: "UPN of the user who started the sync run.",
+  currentStepId: "Flow step id (step.id) of the step currently executing.",
+  contractName:
+    "Contract name on target after metadata sync (core.Contract.name for plan entity id).",
+  ruleInputDatasetId: "Target SQL: inputDatasetId from core.Rule for the synced rule.",
+  contractPipelineId: "Target SQL: pipelineId from core.Pipeline for the synced contract.",
+}
+
 const STEP_FIELD_LABELS: Record<SyncStepFieldKey, string> = {
   objectName: "Text: Object name",
   auditObjectType: "Text: Audit object type",
   pipelineName: "Text: Pipeline name",
+}
+
+/** Operator-facing descriptions for built-in step text fields (Configuration → Wiring). */
+export const STEP_FIELD_DESCRIPTIONS: Record<SyncStepFieldKey, string> = {
+  objectName: "Dependency object name string (e.g. content, rule). Typed on each flow step.",
+  auditObjectType:
+    "Contract / Dataset / Rule label for audit gate procedures (@objType). Typed on each flow step.",
+  pipelineName: "Agent pipeline display name (not pipeline id). Typed on each flow step.",
 }
 
 export function formatValueSourcePreview(

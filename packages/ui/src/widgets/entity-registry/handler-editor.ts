@@ -10,11 +10,14 @@ import type {
 } from "../../types"
 import {
   BUILTIN_TARGET_SQL,
+  BUILTIN_VALUE_SOURCE_DESCRIPTIONS,
+  BUILTIN_VALUE_SOURCE_TYPES,
   formatHandlerInputPreviewHint,
   formatValueSourcePreview,
   isLiteralHandlerSlot,
   isStepBoundHandlerSlot,
   normalizeKindDefinition,
+  STEP_FIELD_DESCRIPTIONS,
   stepFieldKeysFromHandler,
   SYNC_STEP_FIELD_KEYS,
 } from "../../types"
@@ -84,14 +87,84 @@ export type SyncPlanBindingSourceUiCatalog = CustomValueSourceUiCatalog
 /** @deprecated Use CustomValueSourceUiEntry */
 export type SyncPlanBindingSourceUiEntry = CustomValueSourceUiEntry
 
-const BUILTIN_LISTBOX_TYPES = [
-  "planEntityId",
-  "planActor",
-  "currentStepId",
-  "contractName",
-  "ruleInputDatasetId",
-  "contractPipelineId",
-] as const satisfies ReadonlyArray<ValueSource["type"]>
+const BUILTIN_LISTBOX_TYPES = BUILTIN_VALUE_SOURCE_TYPES satisfies ReadonlyArray<ValueSource["type"]>
+
+export type WiringCatalogListItem = {
+  id: string
+  label: string
+  hint?: string
+  builtIn: boolean
+  wiringKind: "builtinValueSource" | "builtinStepField" | "custom"
+}
+
+export function builtinValueSourceDefinition(
+  type: (typeof BUILTIN_VALUE_SOURCE_TYPES)[number],
+): CustomValueSourceDefinition {
+  const sql = BUILTIN_TARGET_SQL[type as keyof typeof BUILTIN_TARGET_SQL]
+  if (sql) {
+    return {
+      description: BUILTIN_VALUE_SOURCE_DESCRIPTIONS[type],
+      query: sql.query,
+      resultColumn: sql.resultColumn,
+      resultType: sql.resultType,
+    }
+  }
+  return {
+    description: BUILTIN_VALUE_SOURCE_DESCRIPTIONS[type],
+    query: "",
+    resultColumn: "",
+  }
+}
+
+export function buildWiringCatalogListItems(
+  customSources: ReadonlyArray<{
+    id: string
+    label: string
+    definition: CustomValueSourceDefinition
+    builtIn: boolean
+  }>,
+): WiringCatalogListItem[] {
+  const builtins: WiringCatalogListItem[] = [
+    ...BUILTIN_VALUE_SOURCE_TYPES.map((type) => ({
+      id: type,
+      label: formatValueSourcePreview({ type }),
+      hint: type in BUILTIN_TARGET_SQL ? "Query · built-in SQL" : "Auto · plan context",
+      builtIn: true,
+      wiringKind: "builtinValueSource" as const,
+    })),
+    ...SYNC_STEP_FIELD_KEYS.map((field) => ({
+      id: field,
+      label: formatValueSourcePreview({ type: "stepField", field }),
+      hint: `Text · step.${field}`,
+      builtIn: true,
+      wiringKind: "builtinStepField" as const,
+    })),
+  ]
+  const custom = customSources.map((entry) => ({
+    id: entry.id,
+    label: formatValueSourcePreview(
+      { type: "catalog", id: entry.id },
+      {
+        customCatalog: { [entry.id]: entry.definition },
+        customLabels: { [entry.id]: entry.label },
+      },
+    ),
+    hint: "Query · custom SQL",
+    builtIn: entry.builtIn,
+    wiringKind: "custom" as const,
+  }))
+  return [...builtins, ...custom].sort((a, b) => a.label.localeCompare(b.label))
+}
+
+export function wiringBuiltinDescription(item: WiringCatalogListItem): string {
+  if (item.wiringKind === "builtinValueSource") {
+    return BUILTIN_VALUE_SOURCE_DESCRIPTIONS[item.id as (typeof BUILTIN_VALUE_SOURCE_TYPES)[number]]
+  }
+  if (item.wiringKind === "builtinStepField") {
+    return STEP_FIELD_DESCRIPTIONS[item.id as SyncStepFieldKey]
+  }
+  return ""
+}
 
 export const PRIOR_STEP_OUTPUT_LISTBOX_VALUE = "__prior_step_output__"
 

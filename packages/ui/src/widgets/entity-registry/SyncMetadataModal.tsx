@@ -8,7 +8,6 @@ import { api } from "../../api"
 import type { AuthoredSyncFlowStep, SyncFlowKindDefinition, SyncMetadataCatalogResponse, CustomValueSourceDefinition } from "../../types"
 import {
   flowStepPickerOptions,
-  formatValueSourcePreview,
   handlerInputSlots,
   idToCatalogDescription,
   idToCatalogLabel,
@@ -24,12 +23,16 @@ import {
   DEFAULT_STEP_TYPE_DEFINITION,
   StepTypeDefinitionEditor,
 } from "./CatalogDefinitionEditor"
-import { FORM_HEADING, HELP_TEXT, ICON_BTN, ICON_BTN_PRIMARY, META_TEXT, PANEL, TAB_PILL, TEXT_BTN, TEXT_BTN_PRIMARY } from "./chrome"
+import { FORM_HEADING, HELP_TEXT, ICON_BTN, ICON_BTN_PRIMARY, META_TEXT, PANEL, SUBSECTION_HEADING, TAB_PILL, TEXT_BTN, TEXT_BTN_PRIMARY } from "./chrome"
 import { FormSurfaceExecutionSteps } from "./EntityEditSurfaces"
 import { buildStepTypeCatalogLookup } from "./execution-step-shared"
 import { FormFieldGroup, FormSectionCard } from "./form-section"
 import {
+  buildWiringCatalogListItems,
+  builtinValueSourceDefinition,
   customValueSourceCatalogFromMetadata,
+  wiringBuiltinDescription,
+  type WiringCatalogListItem,
 } from "./handler-editor"
 import { ModalShell } from "./ModalShell"
 import { ModalToastStack, useModalToasts } from "./ModalToastStack"
@@ -87,12 +90,7 @@ function activeFormSlice(snapshot: FormSnapshot, tab: CatalogTab): unknown {
   }
 }
 
-type WiringListItem = {
-  id: string
-  label: string
-  hint?: string
-  builtIn: boolean
-}
+type WiringViewKind = "custom" | "builtinValueSource" | "builtinStepField"
 
 const TAB_SINGULAR: Record<CatalogTab, string> = {
   flows: "flow",
@@ -103,7 +101,7 @@ const TAB_SINGULAR: Record<CatalogTab, string> = {
 const VIEW_DESCRIPTIONS: Record<CatalogView, string> = {
   flows: "Ordered steps each entity runs. Expand a step for Text: values or per-flow resolver overrides.",
   actions: "Wire each parameter to Auto:, Query:, Text:, a literal, earlier-step output, or leave blank for per-flow choice.",
-  wiring: "Custom SQL value sources referenced from handler parameters and flow step bindings.",
+  wiring: "Built-in resolvers (plan context, target SQL, step text fields) plus custom SQL lookups you define.",
 }
 
 const NAV_VIEWS: Array<{ view: CatalogView; label: string }> = [
@@ -165,6 +163,7 @@ export function SyncMetadataModal({
   const [labelTouched, setLabelTouched] = useState(false)
   const [descTouched, setDescTouched] = useState(false)
   const [listQuery, setListQuery] = useState("")
+  const [wiringViewKind, setWiringViewKind] = useState<WiringViewKind>("custom")
   const [formBaseline, setFormBaseline] = useState<FormSnapshot>(() => emptyFormSnapshot())
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
   const pendingInitialFlowId = useRef(initialFlowId)
@@ -224,6 +223,7 @@ export function SyncMetadataModal({
       return
     }
     if (tab === "customValueSources") {
+      setWiringViewKind("custom")
       const source = nextCatalog.customValueSources.find((entry) => entry.id === savedId)
       if (source) startEdit(source, { customValueSourceDefinition: source.definition })
     }
@@ -280,6 +280,7 @@ export function SyncMetadataModal({
     setFormMode("create")
     setEditingId(null)
     setEditingBuiltIn(false)
+    setWiringViewKind("custom")
     const snapshot = emptyFormSnapshot()
     applyFormSnapshot(snapshot)
     setFormBaselineFrom(snapshot)
@@ -292,6 +293,7 @@ export function SyncMetadataModal({
     setFormMode("create")
     setEditingId(null)
     setEditingBuiltIn(false)
+    setWiringViewKind("custom")
     const snapshot = emptyFormSnapshot()
     applyFormSnapshot(snapshot)
     setFormBaselineFrom(snapshot)
@@ -342,20 +344,32 @@ export function SyncMetadataModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once when catalog loads
   }, [catalog])
 
-  const wiringListItems = useMemo((): WiringListItem[] => {
-    return (catalog?.customValueSources ?? []).map((entry) => ({
-      id: entry.id,
-      label: formatValueSourcePreview(
-        { type: "catalog", id: entry.id },
-        {
-          customCatalog: { [entry.id]: entry.definition },
-          customLabels: { [entry.id]: entry.label },
-        },
-      ),
-      hint: "Query · custom SQL",
-      builtIn: entry.builtIn,
-    }))
+  const wiringListItems = useMemo((): WiringCatalogListItem[] => {
+    return buildWiringCatalogListItems(catalog?.customValueSources ?? [])
   }, [catalog])
+
+  function startViewBuiltinWiring(item: WiringCatalogListItem): void {
+    setFormOpen(true)
+    setFormMode("edit")
+    setEditingId(item.id)
+    setEditingBuiltIn(true)
+    setWiringViewKind(item.wiringKind === "custom" ? "custom" : item.wiringKind)
+    const snapshot: FormSnapshot = {
+      formId: item.id,
+      formLabel: item.label,
+      formDescription: "",
+      formSteps: [],
+      formStepTypeDefinition: { ...DEFAULT_STEP_TYPE_DEFINITION },
+      formCustomValueSourceDefinition:
+        item.wiringKind === "builtinValueSource"
+          ? builtinValueSourceDefinition(item.id as Parameters<typeof builtinValueSourceDefinition>[0])
+          : { ...DEFAULT_CUSTOM_VALUE_SOURCE_DEFINITION, description: wiringBuiltinDescription(item) },
+    }
+    applyFormSnapshot(snapshot)
+    setFormBaselineFrom(snapshot)
+    setLabelTouched(true)
+    setDescTouched(true)
+  }
 
   function switchView(next: CatalogView): void {
     setCatalogView(next)
@@ -370,9 +384,14 @@ export function SyncMetadataModal({
     closeForm()
   }
 
-  function selectWiringItem(item: WiringListItem): void {
+  function selectWiringItem(item: WiringCatalogListItem): void {
     setCatalogView("wiring")
     setTab("customValueSources")
+    if (item.wiringKind !== "custom") {
+      startViewBuiltinWiring(item)
+      return
+    }
+    setWiringViewKind("custom")
     const entry = catalog?.customValueSources?.find((row) => row.id === item.id)
     if (entry) startEdit(entry, { customValueSourceDefinition: entry.definition })
   }
@@ -496,6 +515,7 @@ export function SyncMetadataModal({
 
   function requestSave(): void {
     if (!formOpen) return
+    if (catalogView === "wiring" && wiringViewKind !== "custom") return
     const id = formId.trim()
     const label = formLabel.trim()
     if (!id || !label) return
@@ -625,7 +645,13 @@ export function SyncMetadataModal({
               <button
                 type="button"
                 onClick={requestSave}
-                disabled={busy || !formOpen || !formId.trim() || !formLabel.trim()}
+                disabled={
+                  busy
+                  || !formOpen
+                  || !formId.trim()
+                  || !formLabel.trim()
+                  || (catalogView === "wiring" && wiringViewKind !== "custom")
+                }
                 className={ICON_BTN_PRIMARY}
                 title={isFormDirty ? "Save unsaved changes" : "Save"}
                 aria-label="Save"
@@ -718,7 +744,12 @@ export function SyncMetadataModal({
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto bg-base/20 p-5">
-            {formMode === "edit" && editingBuiltIn && tab === "customValueSources" && (
+            {formMode === "edit" && editingBuiltIn && tab === "customValueSources" && wiringViewKind !== "custom" && (
+              <p className={`mb-4 ${HELP_TEXT}`}>
+                Built-in wiring — read-only reference. Use these when wiring action parameters or flow step fields.
+              </p>
+            )}
+            {formMode === "edit" && editingBuiltIn && tab === "customValueSources" && wiringViewKind === "custom" && (
               <p className={`mb-4 ${HELP_TEXT}`}>
                 Built-in value source — SQL is locked. You can still update the name and description.
               </p>
@@ -796,6 +827,7 @@ export function SyncMetadataModal({
                 </>
               ) : (
                 <>
+              {(tab !== "customValueSources" || wiringViewKind === "custom") && (
               <FormSectionCard
                 title="Identity"
                 description={
@@ -835,6 +867,7 @@ export function SyncMetadataModal({
                 </FormFieldGroup>
               </div>
               </FormSectionCard>
+              )}
               {tab === "stepTypes" && (
                 <FormSectionCard
                   title="Handler wiring"
@@ -856,7 +889,39 @@ export function SyncMetadataModal({
                   />
                 </FormSectionCard>
               )}
-              {tab === "customValueSources" && (
+              {tab === "customValueSources" && wiringViewKind === "builtinStepField" && (
+                <FormSectionCard
+                  title="Step text field"
+                  description="Operator types this on each flow step — not stored in the wiring catalog."
+                >
+                  <p className="text-sm leading-relaxed text-text-muted">
+                    {formCustomValueSourceDefinition.description}
+                  </p>
+                  <p className={`${META_TEXT} mt-3 font-mono`}>step.{formId}</p>
+                </FormSectionCard>
+              )}
+              {tab === "customValueSources" && wiringViewKind === "builtinValueSource" && (
+                <FormSectionCard
+                  title="Built-in resolver"
+                  description="Embedded in the platform — referenced as a ValueSource type, not a catalog id."
+                >
+                  <p className="text-sm leading-relaxed text-text-muted">
+                    {formCustomValueSourceDefinition.description}
+                  </p>
+                  {formCustomValueSourceDefinition.query.trim() ? (
+                    <div className="mt-3 space-y-2">
+                      <p className={SUBSECTION_HEADING}>Target SQL</p>
+                      <pre className="overflow-x-auto rounded-lg border border-border-subtle bg-base/60 p-3 font-mono text-xs leading-relaxed text-text">
+                        {formCustomValueSourceDefinition.query.trim()}
+                      </pre>
+                      <p className={`${META_TEXT} font-mono`}>
+                        → {formCustomValueSourceDefinition.resultColumn.trim() || "?"}
+                      </p>
+                    </div>
+                  ) : null}
+                </FormSectionCard>
+              )}
+              {tab === "customValueSources" && wiringViewKind === "custom" && (
                 <FormSectionCard
                   title="Custom SQL definition"
                   description={
