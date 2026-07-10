@@ -16,6 +16,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 
 import { api } from "../../api"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { ToastStack, useWidgetToasts } from "../../hooks/useWidgetToasts"
 import { useStore } from "../../store"
 import type { PublishedSyncDefinition, SyncEntityType, SyncEnvironment, SyncPlan } from "../../types"
 import { IconButton, TOOLBAR_ICON } from "../entity-registry/IconButton"
@@ -26,7 +27,7 @@ import {
   WidgetToolbarSearchSlot,
   WidgetToolbarTrailing,
 } from "../widget-toolbar"
-import { Empty, Err, Loading, ModalShell } from "./chrome"
+import { Empty, Loading, ModalShell } from "./chrome"
 import { DIFF, dot, ENTITY_TYPES, normalizeOptionalTableSelection } from "./constants"
 import { DefinitionContent } from "./DefinitionContent"
 import { cancelExec, completeExecFromAgent, getExecPlanId, getExecSnapshot, resetExec, startExecStream, subscribeExec } from "./exec-store"
@@ -45,9 +46,9 @@ import {
 } from "./workflow"
 
 export function EnvSync() {
+  const { toasts, dismissToast, notifyError } = useWidgetToasts()
   const [envs, setEnvs] = useState<SyncEnvironment[]>([])
   const [definitions, setDefinitions] = useState<PublishedSyncDefinition[]>([])
-  const [loadErr, setLoadErr] = useState<string | null>(null)
   const [modal, setModal] = useState<ModalKind>(null)
   const [hasNewAgentSync, setHasNewAgentSync] = useState(false)
   const isFirstMountRef = useRef(true)
@@ -65,7 +66,6 @@ export function EnvSync() {
 
   const [previewing, setPreviewing] = useState(false)
   const [planLoading, setPlanLoading] = useState(false)
-  const [previewErr, setPreviewErr] = useState<string | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [execModalOpen, setExecModalOpen] = useState(false)
   const exec = useSyncExternalStore(subscribeExec, getExecSnapshot)
@@ -121,7 +121,6 @@ export function EnvSync() {
     clearPlanState()
     setExpanded(new Set())
     setExecModalOpen(false)
-    setPreviewErr(null)
     if (getExecSnapshot().kind !== "running") resetExec()
   }, [clearPlanState])
 
@@ -179,7 +178,7 @@ export function EnvSync() {
       } catch (error) {
         setSearchResults([])
         setSearchOpen(false)
-        setSearchErr(error instanceof Error ? error.message : String(error))
+        notifyError(error instanceof Error ? error.message : String(error))
       } finally {
         setSearchLoading(false)
       }
@@ -216,7 +215,7 @@ export function EnvSync() {
       const nextPlan = await api.syncPlan(planId)
       if (nextPlan.error) {
         if (opts.showNotFoundErr) {
-          setPreviewErr(`Plan ${planId} not found — it may have been pruned from history.`)
+          notifyError(`Plan ${planId} not found — it may have been pruned from history.`)
         }
         clearStalePlanId(planId)
         return null
@@ -225,7 +224,7 @@ export function EnvSync() {
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
       if (opts.showNotFoundErr) {
-        setPreviewErr(/not found|expired/i.test(msg)
+        notifyError(/not found|expired/i.test(msg)
           ? "Plan not found — it may have been pruned from history."
           : `Failed to load plan: ${msg}`)
       }
@@ -238,7 +237,6 @@ export function EnvSync() {
     const planEntityType = getPlanEntityType(nextPlan) ?? entityType
     const entityIdStr = String(nextPlan.entity.id)
     setPlan(nextPlan)
-    setPreviewErr(null)
     setExpanded(new Set())
     setForm({
       planId: nextPlan.planId,
@@ -260,7 +258,6 @@ export function EnvSync() {
   async function openPlanFromHistory(planId: string) {
     setModal(null)
     setHasNewAgentSync(false)
-    setPreviewErr(null)
     setExpanded(new Set())
     setExecModalOpen(false)
     if (getExecSnapshot().kind !== "running") resetExec()
@@ -283,7 +280,7 @@ export function EnvSync() {
         else if (nextEnvs.length === 1 && !target) nextForm.target = nextEnvs[0].name
         if (Object.keys(nextForm).length) setForm(nextForm)
       })
-      .catch((error) => !dead && setLoadErr(error instanceof Error ? error.message : String(error)))
+      .catch((error) => !dead && notifyError(error instanceof Error ? error.message : String(error)))
     return () => { dead = true }
   }, [])
 
@@ -349,7 +346,6 @@ export function EnvSync() {
   async function onPreview() {
     if (!canPreview) return
     setPreviewing(true)
-    setPreviewErr(null)
     discardStaleWorkflow()
     try {
       const requestEnabledOptionalTables = Array.isArray(form.enabledOptionalTables) ? enabledOptionalTables : undefined
@@ -362,7 +358,7 @@ export function EnvSync() {
         enabledOptionalTables: requestEnabledOptionalTables,
       })
       if (result.error) {
-        setPreviewErr(result.error)
+        notifyError(result.error)
         setForm({ planId: null })
       } else {
         loadedPlanIdRef.current = result.planId
@@ -376,7 +372,7 @@ export function EnvSync() {
         )
       }
     } catch (error) {
-      setPreviewErr(error instanceof Error ? error.message : String(error))
+      notifyError(error instanceof Error ? error.message : String(error))
       setForm({ planId: null })
     } finally {
       setPreviewing(false)
@@ -386,10 +382,6 @@ export function EnvSync() {
   function onExecConfirmed() {
     if (!displayPlan) return
     startExecStream(displayPlan.planId)
-  }
-
-  if (loadErr) {
-    return <Err>{loadErr}</Err>
   }
 
   const srcOpts: ListboxOption<string>[] = envs.filter((entry) => entry.role !== "target").map((entry) => ({ value: entry.name, label: entry.displayName.toUpperCase(), dot: dot(entry.color) }))
@@ -412,7 +404,7 @@ export function EnvSync() {
   const execForDisplayPlan = displayPlan != null && (execPlanId === displayPlan.planId || exec.kind === "running")
 
   return (
-    <div className="h-full overflow-hidden flex flex-col gap-3 text-text pb-1">
+    <div className="relative h-full overflow-hidden flex flex-col gap-3 text-text pb-1">
       <WidgetToolbar className="env-sync-toolbar overflow-visible z-20">
         <WidgetToolbarLeading>
           <label className="env-sync-field">
@@ -641,11 +633,7 @@ export function EnvSync() {
         </WidgetToolbarTrailing>
       </WidgetToolbar>
 
-      {previewErr ? (
-        <div className="flex-1 flex items-center justify-center">
-          <Err>{previewErr}</Err>
-        </div>
-      ) : previewing ? (
+      {previewing ? (
         <Loading>Building plan…</Loading>
       ) : planLoading ? (
         <Loading>Loading plan…</Loading>
@@ -673,7 +661,7 @@ export function EnvSync() {
           size="focus"
           onClose={() => { setModal(null); setHasNewAgentSync(false) }}
         >
-          <HistoryContent onOpen={(planId) => { void openPlanFromHistory(planId) }} />
+          <HistoryContent onOpen={(planId) => { void openPlanFromHistory(planId) }} onNotifyError={notifyError} />
         </ModalShell>
       )}
       {execModalOpen && (displayPlan || execPlanId) && (
@@ -690,6 +678,7 @@ export function EnvSync() {
           }}
         />
       )}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

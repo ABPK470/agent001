@@ -2,10 +2,11 @@
  * Entity registry — minimal shell: list + task-focused detail.
  */
 
-import { Trash2, X } from "lucide-react"
+import { Trash2 } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useMemo, useState } from "react"
 import { api } from "../api"
+import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
 import { useMe } from "../hooks/useMe"
 import { useStore } from "../store"
 import type { EntityRegistryDefinition, EntityRegistryHistoryEntry } from "../types"
@@ -36,7 +37,7 @@ export function EntityRegistry(): JSX.Element {
   const [history, setHistory] = useState<EntityRegistryHistoryEntry[]>([])
   const [yamlText, setYamlText] = useState("")
   const [busy, setBusy] = useState(false)
-  const [toast, setToast] = useState<string | null>(null)
+  const { toasts, dismissToast, notify, notifyError } = useWidgetToasts()
   const [modal, setModal] = useState<null | { kind: "new" } | { kind: "edit"; def: EntityRegistryDefinition }>(null)
   const [syncMetadataOpen, setSyncMetadataOpen] = useState(false)
   const [publishOpen, setPublishOpen] = useState(false)
@@ -66,7 +67,7 @@ export function EntityRegistry(): JSX.Element {
         return current
       })
     } catch (e) {
-      setToast(e instanceof Error ? e.message : String(e))
+      notifyError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
@@ -88,14 +89,14 @@ export function EntityRegistry(): JSX.Element {
     setHistoryOpen(false)
     if (tab === "overview") {
       void api.getEntityRegistryYaml(selectedId).then(setYamlText).catch((e) =>
-        setToast(String(e)))
+        notifyError(String(e)))
     }
   }, [tab, selectedId])
 
   useEffect(() => {
     if (!selectedId || !historyOpen) return
     void api.getEntityRegistryHistory(selectedId).then(setHistory).catch((e) =>
-      setToast(String(e)))
+      notifyError(String(e)))
   }, [selectedId, historyOpen])
 
   const activeEntityCount = useMemo(
@@ -111,7 +112,7 @@ export function EntityRegistry(): JSX.Element {
       setRetireCandidate(null)
       await refreshList({ keepSelection: true })
     } catch (e) {
-      setToast(e instanceof Error ? e.message : String(e))
+      notifyError(e instanceof Error ? e.message : String(e))
     } finally {
       setBusy(false)
     }
@@ -138,16 +139,7 @@ export function EntityRegistry(): JSX.Element {
 
   return (
     <>
-      <div className="entity-registry flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel p-3">
-        {toast && (
-          <div className="mb-2 flex shrink-0 items-center gap-2 rounded-lg border border-border-subtle px-3 py-1.5 text-xs text-text-muted">
-            <span className="flex-1 truncate">{toast}</span>
-            <button type="button" onClick={() => setToast(null)} aria-label="Dismiss">
-              <X className="h-3 w-3" />
-            </button>
-          </div>
-        )}
-
+      <div className="entity-registry relative flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel p-3">
         <div className={WIDGET_ENVELOPE}>
           <div className="entity-registry-shell grid min-h-0 flex-1 overflow-hidden">
             <aside className="entity-rail flex min-h-0 flex-col border-r border-border-subtle">
@@ -191,6 +183,7 @@ export function EntityRegistry(): JSX.Element {
             </div>
           </div>
         </div>
+        <ToastStack toasts={toasts} onDismiss={dismissToast} />
       </div>
 
       {historyOpen && selectedId && (
@@ -228,7 +221,7 @@ export function EntityRegistry(): JSX.Element {
           entityCount={activeEntityCount}
           onClose={() => setPublishOpen(false)}
           onPublished={(res) => {
-            setToast(`Published ${res.definitionCount} definition(s)`)
+            notify(`Published ${res.definitionCount} definition(s)`)
             void refreshList({ keepSelection: true })
           }}
         />

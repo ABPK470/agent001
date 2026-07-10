@@ -36,6 +36,8 @@ export function DetailsPanel({
   llm,
   health,
   usage,
+  onNotify,
+  onNotifyError,
 }: {
   run: Run | undefined
   agents: AgentDefinition[]
@@ -44,6 +46,8 @@ export function DetailsPanel({
   llm: LlmConfig | null
   health: HealthData | null
   usage: UsageData | null
+  onNotify?: (message: string) => void
+  onNotifyError?: (message: string) => void
 }) {
   return (
     <div className="text-[13px]">
@@ -67,7 +71,7 @@ export function DetailsPanel({
         )}
       </TreeSection>
 
-      {run && <WorkspaceChangesSection run={run} />}
+      {run && <WorkspaceChangesSection run={run} onNotify={onNotify} onNotifyError={onNotifyError} />}
 
       <TreeSection title="System">
         {llm && (
@@ -141,11 +145,14 @@ export function DetailsPanel({
 
 // ── Workspace Changes — diff + apply inline ──────────────────────
 
-function WorkspaceChangesSection({ run }: { run: Run }) {
+function WorkspaceChangesSection({ run, onNotify, onNotifyError }: {
+  run: Run
+  onNotify?: (message: string) => void
+  onNotifyError?: (message: string) => void
+}) {
   const upsertRun = useStore((s) => s.upsertRun)
   const [diff, setDiff] = useState<WorkspaceDiff | null>(null)
   const [loading, setLoading] = useState(false)
-  const [result, setResult] = useState<string | null>(null)
   const busyRef = useRef(false)
   const autoKey = useRef<string | null>(null)
 
@@ -153,7 +160,6 @@ function WorkspaceChangesSection({ run }: { run: Run }) {
     if (busyRef.current) return
     busyRef.current = true
     setLoading(true)
-    setResult(null)
     try {
       const d = await api.getRunWorkspaceDiff(run.id)
       setDiff(d)
@@ -172,21 +178,20 @@ function WorkspaceChangesSection({ run }: { run: Run }) {
     if (busyRef.current) return
     busyRef.current = true
     setLoading(true)
-    setResult(null)
     try {
       const r = await api.applyRunWorkspaceDiff(run.id)
       const total = r.applied.added + r.applied.modified + r.applied.deleted
-      setResult(`Applied ${total} file changes`)
+      onNotify?.(`Applied ${total} file changes`)
       setDiff(null)
       upsertRun({ id: run.id, pendingWorkspaceChanges: 0 })
       autoKey.current = null
     } catch {
-      setResult("Failed to apply changes")
+      onNotifyError?.("Failed to apply changes")
     } finally {
       busyRef.current = false
       setLoading(false)
     }
-  }, [run.id, upsertRun])
+  }, [run.id, upsertRun, onNotify, onNotifyError])
 
   // Auto-load diff when pending changes exist
   useEffect(() => {
@@ -225,7 +230,6 @@ function WorkspaceChangesSection({ run }: { run: Run }) {
               disabled={loading}
             >Apply</button>
           </div>
-          {result && <div className="text-[11px]" style={{ color: C.dim }}>{result}</div>}
         </div>
       ) : (
         <div className="px-4 py-1" style={{ color: C.dim }}>No pending changes</div>
@@ -241,7 +245,6 @@ export function ComparePanel({
   onCompare,
   result,
   loading,
-  error,
 }: {
   runs: Run[]
   onCompare: (idA: string, idB: string) => void
@@ -258,7 +261,6 @@ export function ComparePanel({
     summary: string
   } | null
   loading?: boolean
-  error?: string | null
 }) {
   const [runA, setRunA] = useState<string>("")
   const [runB, setRunB] = useState<string>("")
@@ -318,11 +320,6 @@ export function ComparePanel({
       </div>
       {completedRuns.length < 2 && (
         <div style={{ color: C.dim }}>Need at least 2 completed runs to compare.</div>
-      )}
-      {error && (
-        <div className="rounded px-2 py-1.5 text-[12px]" style={{ background: C.coral + "15", color: C.coral, border: `1px solid ${C.coral}30` }}>
-          {error}
-        </div>
       )}
       {result && (
         <div className="space-y-2 pt-1" style={{ borderTop: `1px solid ${C.border}` }}>

@@ -5,7 +5,7 @@ import { api } from "../../api"
 import { useStore } from "../../store"
 import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../util"
-import { EmptyHistory, Err, Loading } from "./chrome"
+import { EmptyHistory, Loading } from "./chrome"
 import { DIFF } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { HistoryPlanTables } from "./PlanTables"
@@ -60,14 +60,18 @@ function formatAuditAction(action: string): string {
   return map[action] ?? action
 }
 
-export function HistoryContent({ onOpen }: { onOpen?: (planId: string) => void }) {
+export function HistoryContent({
+  onOpen,
+  onNotifyError,
+}: {
+  onOpen?: (planId: string) => void
+  onNotifyError?: (message: string) => void
+}) {
   const [page, setPage] = useState(1)
   const [data, setData] = useState<Awaited<ReturnType<typeof api.syncHistory>> | null>(null)
-  const [err, setErr] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
   const reload = useCallback((nextPage = page) => {
-    setErr(null)
     setLoading(true)
     api
       .syncHistory(nextPage, PAGE_SIZE)
@@ -75,9 +79,11 @@ export function HistoryContent({ onOpen }: { onOpen?: (planId: string) => void }
         setData(result)
         setPage(result.page)
       })
-      .catch((error) => setErr(error instanceof Error ? error.message : String(error)))
+      .catch((error) => {
+        onNotifyError?.(error instanceof Error ? error.message : String(error))
+      })
       .finally(() => setLoading(false))
-  }, [page])
+  }, [page, onNotifyError])
 
   useEffect(() => {
     reload(1)
@@ -103,7 +109,6 @@ export function HistoryContent({ onOpen }: { onOpen?: (planId: string) => void }
     if (agentSyncExec) reload(page)
   }, [agentSyncExec, page, reload])
 
-  if (err) return <Err>{err}</Err>
   if (loading && !data) return <Loading>Loading history…</Loading>
   if (!data || data.items.length === 0) return <EmptyHistory />
 
@@ -150,18 +155,26 @@ export function HistoryContent({ onOpen }: { onOpen?: (planId: string) => void }
         </div>
       </div>
       {items.map((run) => (
-        <HistoryRunRow key={run.planId} run={run} onOpen={onOpen} />
+        <HistoryRunRow key={run.planId} run={run} onOpen={onOpen} onNotifyError={onNotifyError} />
       ))}
     </div>
   )
 }
 
-function HistoryRunRow({ run, onOpen }: { run: SyncRunItem; onOpen?: (planId: string) => void }) {
+function HistoryRunRow({
+  run,
+  onOpen,
+  onNotifyError,
+}: {
+  run: SyncRunItem
+  onOpen?: (planId: string) => void
+  onNotifyError?: (message: string) => void
+}) {
   const [open, setOpen] = useState(false)
   const [plan, setPlan] = useState<SyncPlan | null>(null)
-  const [planErr, setPlanErr] = useState<string | null>(null)
   const [audit, setAudit] = useState<SyncAuditEvent[] | null>(null)
-  const [auditErr, setAuditErr] = useState<string | null>(null)
+  const planLoadFailedRef = useRef(false)
+  const auditLoadFailedRef = useRef(false)
 
   const totals = run.executeTotals ?? run.previewTotals
   const label = plan ? formatPlanEntityLabel(plan) : entityLabel(run)
@@ -170,18 +183,20 @@ function HistoryRunRow({ run, onOpen }: { run: SyncRunItem; onOpen?: (planId: st
     if (!open) return
     let cancelled = false
 
-    if (!audit && !auditErr) {
+    if (!audit && !auditLoadFailedRef.current) {
       api
         .syncHistoryDetail(run.planId)
         .then((detail) => {
           if (!cancelled) setAudit(detail.audit)
         })
         .catch((error) => {
-          if (!cancelled) setAuditErr(error instanceof Error ? error.message : String(error))
+          if (cancelled) return
+          auditLoadFailedRef.current = true
+          onNotifyError?.(`Could not load audit trail: ${error instanceof Error ? error.message : String(error)}`)
         })
     }
 
-    if (run.planAvailable && !plan && !planErr) {
+    if (run.planAvailable && !plan && !planLoadFailedRef.current) {
       api
         .syncPlan(run.planId)
         .then((next) => {
@@ -189,14 +204,16 @@ function HistoryRunRow({ run, onOpen }: { run: SyncRunItem; onOpen?: (planId: st
           setPlan(next)
         })
         .catch((error) => {
-          if (!cancelled) setPlanErr(error instanceof Error ? error.message : String(error))
+          if (cancelled) return
+          planLoadFailedRef.current = true
+          onNotifyError?.(`Could not load persisted plan: ${error instanceof Error ? error.message : String(error)}`)
         })
     }
 
     return () => {
       cancelled = true
     }
-  }, [open, run.planId, run.planAvailable, plan, planErr, audit, auditErr])
+  }, [open, run.planId, run.planAvailable, plan, audit, onNotifyError])
 
   return (
     <div className="border-b border-border/40">
@@ -272,23 +289,11 @@ function HistoryRunRow({ run, onOpen }: { run: SyncRunItem; onOpen?: (planId: st
             </div>
           )}
 
-          {planErr && (
-            <div className="rounded-lg border border-warning/20 bg-warning/5 px-3 py-2 text-xs text-warning">
-              Could not load persisted plan: {planErr}
-            </div>
-          )}
-
           {plan && (
             <div className="rounded-lg border border-border-subtle overflow-hidden">
               <div className="max-h-[28rem] overflow-y-auto">
                 <HistoryPlanTables plan={plan} />
               </div>
-            </div>
-          )}
-
-          {auditErr && (
-            <div className="rounded-lg border border-warning/20 bg-warning/5 px-3 py-2 text-xs text-warning">
-              Could not load audit trail: {auditErr}
             </div>
           )}
 

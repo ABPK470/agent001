@@ -23,6 +23,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { RunStatus } from "../enums"
+import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useMe } from "../hooks/useMe"
 import { ThreadRunsPanel } from "../features/threads/ThreadRunsPanel"
@@ -83,6 +84,7 @@ const TOOL_LABELS: Record<string, string> = {
 }
 
 export function OperatorEnvironment() {
+  const { toasts, dismissToast, notify, notifyError, notifyInfo } = useWidgetToasts()
   // ── Auth / role (Phase E.5 — gates admin-only UI surfaces) ───
   const { me } = useMe()
   const isAdmin = me?.isAdmin ?? false
@@ -166,8 +168,6 @@ export function OperatorEnvironment() {
   const [goalAttachments, setGoalAttachments] = useState<FileAttachment[]>([])
   const [submitting, setSubmitting] = useState(false)
   const cmdConsole = useCommandConsole()
-  const [rollbackMsg, setRollbackMsg] = useState<string | null>(null)
-  const [workspaceMsg, setWorkspaceMsg] = useState<string | null>(null)
   const [applyingWorkspace, setApplyingWorkspace] = useState(false)
   const [rolledBack, setRolledBack] = useState(false)
   const [searchQuery, setSearchQuery] = useState("")
@@ -369,61 +369,46 @@ export function OperatorEnvironment() {
 
   const handleRollback = useCallback(async () => {
     if (!activeRun) return
-    setRollbackMsg(null)
     try {
       const preview = await api.previewRollback(activeRun.id)
       if (preview.wouldCompensate.length === 0) {
-        setRollbackMsg("nothing to rollback")
+        notifyInfo("Nothing to rollback")
         setRolledBack(true)
         return
       }
       if (preview.wouldFail.length > 0) {
-        setRollbackMsg(`blocked: ${preview.wouldFail[0].reason}`)
+        notifyError(`Rollback blocked: ${preview.wouldFail[0].reason}`)
         return
       }
       const result = await api.rollbackRun(activeRun.id)
-      setRollbackMsg(`rolled back ${result.compensated} effects`)
+      notify(`Rolled back ${result.compensated} effects`)
       setRolledBack(true)
     } catch {
-      setRollbackMsg("rollback failed")
+      notifyError("Rollback failed")
     }
-  }, [activeRun])
+  }, [activeRun, notify, notifyError, notifyInfo])
 
   const handleApplyWorkspace = useCallback(async () => {
     if (!activeRun || applyingWorkspace) return
     setApplyingWorkspace(true)
-    setWorkspaceMsg(null)
     try {
       const result = await api.applyRunWorkspaceDiff(activeRun.id)
       if (!result) {
-        setWorkspaceMsg("nothing to apply")
+        notifyInfo("Nothing to apply")
         return
       }
       const total = result.applied.added + result.applied.modified + result.applied.deleted
       upsertRun({ id: activeRun.id, pendingWorkspaceChanges: 0 })
-      setWorkspaceMsg(`applied ${total} change${total === 1 ? "" : "s"}`)
+      notify(`Applied ${total} file change${total === 1 ? "" : "s"}`)
     } catch {
-      setWorkspaceMsg("apply failed")
+      notifyError("Failed to apply workspace changes")
     } finally {
       setApplyingWorkspace(false)
     }
-  }, [activeRun, applyingWorkspace, upsertRun])
+  }, [activeRun, applyingWorkspace, notify, notifyError, notifyInfo, upsertRun])
 
   // Reset rolledBack state when switching runs
   useEffect(() => { setRolledBack(false) }, [activeRunId])
-
-  // Auto-dismiss rollback message after 8 seconds
-  useEffect(() => {
-    if (!rollbackMsg) return
-    const timer = setTimeout(() => setRollbackMsg(null), 8000)
-    return () => clearTimeout(timer)
-  }, [rollbackMsg])
-
-  useEffect(() => {
-    if (!workspaceMsg) return
-    const timer = setTimeout(() => setWorkspaceMsg(null), 8000)
-    return () => clearTimeout(timer)
-  }, [workspaceMsg])
 
   // ── Comparison state ───────────────────────────────────────────
   const [compareResult, setCompareResult] = useState<{
@@ -439,7 +424,6 @@ export function OperatorEnvironment() {
     summary: string
   } | null>(null)
   const [compareLoading, setCompareLoading] = useState(false)
-  const [compareError, setCompareError] = useState<string | null>(null)
 
   // ── Activity bar items ────────────────────────────────────────
   const activityItems: Array<{ id: SidebarSection; Icon: LucideIcon; label: string; badge?: number }> = [
@@ -494,27 +478,27 @@ export function OperatorEnvironment() {
 
   const handleCompare = useCallback(async (idA: string, idB: string) => {
     setCompareResult(null)
-    setCompareError(null)
     setCompareLoading(true)
     try {
       const result = await api.compareTrajectories(idA, idB)
       setCompareResult(result)
     } catch (err) {
-      setCompareError(err instanceof Error ? err.message : "Comparison failed")
+      notifyError(err instanceof Error ? err.message : "Comparison failed")
     }
     setCompareLoading(false)
-  }, [])
+  }, [notifyError])
 
   const renderSidebarSection = (section: SidebarSection) => {
     if (section === SidebarSection.Runs)
       return <ThreadRunsPanel variant="ioe" />
     if (section === SidebarSection.Compare)
       return <ComparePanel runs={runs} onCompare={handleCompare}
-        result={compareResult} loading={compareLoading} error={compareError} />
+        result={compareResult} loading={compareLoading} />
     if (section === SidebarSection.Details)
       return (
         <DetailsPanel run={activeRun} agents={agents} tools={tools}
-          policies={policies} llm={llm} health={health} usage={usage} />
+          policies={policies} llm={llm} health={health} usage={usage}
+          onNotify={notify} onNotifyError={notifyError} />
       )
     return null
   }
@@ -544,7 +528,7 @@ export function OperatorEnvironment() {
   return (
     <div
       ref={rootRef}
-      className="flex flex-col h-full overflow-hidden"
+      className="relative flex flex-col h-full overflow-hidden"
       style={{ background: C.base, color: C.text, fontFamily: "var(--font-sans)", fontSize: 13 }}
     >
       {/* ── Search Bar (top) ─────────────────────────────── */}
@@ -738,12 +722,6 @@ export function OperatorEnvironment() {
               )}
               {(activeRun?.status === RunStatus.Completed || isFailed || isCancelled || isCrashed) && !rolledBack && (
                 <ActionBtn label="ROLLBACK" color={C.warning} onClick={handleRollback} />
-              )}
-              {rollbackMsg && (
-                <span className="text-[13px] ml-1" style={{ color: C.warning }}>{rollbackMsg}</span>
-              )}
-              {workspaceMsg && (
-                <span className="text-[13px] ml-1" style={{ color: C.success }}>{workspaceMsg}</span>
               )}
             </div>
           </div>
@@ -1102,6 +1080,7 @@ export function OperatorEnvironment() {
             : ""}
         </span>
       </div>
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

@@ -11,7 +11,6 @@
  */
 
 import {
-    AlertCircle,
     ChevronRight,
     Database,
     Download,
@@ -30,6 +29,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { Listbox, type ListboxOption } from "../components/Listbox"
+import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
 import { useContainerSize } from "../hooks/useContainerSize"
 
 // ── Types ────────────────────────────────────────────────────────
@@ -164,6 +164,7 @@ function SizeBar({ value, max, className = "" }: { value: number; max: number; c
 // ── Main component ───────────────────────────────────────────────
 
 export function MymiDb() {
+  const { toasts, dismissToast, notifyError } = useWidgetToasts()
   // ── Top-level mode ───────────────────────────────────────────
   const [topMode, setTopMode] = useState<"explorer" | "datamodel">("explorer")
 
@@ -173,7 +174,6 @@ export function MymiDb() {
   const [stats, setStats]               = useState<SchemaStat[]>([])
   const [schemas, setSchemas]           = useState<SchemaInfo[]>([])
   const [schemasLoading, setSchemasLoading] = useState(false)
-  const [schemasError, setSchemasError] = useState<string | null>(null)
   const [activeSchema, setActiveSchema] = useState<string | null>(null)
 
   // ── Object list state ────────────────────────────────────────
@@ -190,7 +190,6 @@ export function MymiDb() {
   // ── Detail data ──────────────────────────────────────────────
   const [preview, setPreview]           = useState<PreviewData | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
-  const [previewError, setPreviewError] = useState<string | null>(null)
 
   const [columns, setColumns]           = useState<ColDef[]>([])
   const [columnsLoading, setColumnsLoading] = useState(false)
@@ -224,7 +223,6 @@ export function MymiDb() {
 
   const loadSchemas = useCallback(async (db?: string) => {
     setSchemasLoading(true)
-    setSchemasError(null)
     setActiveSchema(null)
     setObjects([])
     setActiveObject(null)
@@ -237,11 +235,11 @@ export function MymiDb() {
       setSchemas(Array.isArray(s) ? s : [])
       setStats(Array.isArray(o) ? o : [])
     } catch (e) {
-      setSchemasError(e instanceof Error ? e.message : "Failed to load schemas")
+      notifyError(e instanceof Error ? e.message : "Failed to load schemas")
     } finally {
       setSchemasLoading(false)
     }
-  }, [])
+  }, [notifyError])
 
   useEffect(() => {
     if (activeDb !== undefined) loadSchemas(activeDb)
@@ -264,10 +262,10 @@ export function MymiDb() {
   useEffect(() => {
     if (!activeObject || !activeSchema) return
     if (activeTab === "preview") {
-      setPreviewLoading(true); setPreviewError(null); setPreview(null)
+      setPreviewLoading(true); setPreview(null)
       api.mymiPreview(activeSchema, activeObject.name, activeDb)
         .then(setPreview)
-        .catch((e) => setPreviewError(e instanceof Error ? e.message : "Failed"))
+        .catch((e) => notifyError(e instanceof Error ? e.message : "Failed to load preview"))
         .finally(() => setPreviewLoading(false))
     } else if (activeTab === "columns") {
       setColumnsLoading(true); setColumns([])
@@ -335,7 +333,7 @@ export function MymiDb() {
   ]
 
   return (
-    <div ref={rootRef} className="flex flex-col h-full overflow-hidden text-text">
+    <div ref={rootRef} className="relative flex flex-col h-full overflow-hidden text-text">
 
       {/* ── Header (toolbar — title comes from WidgetFrame) ───────── */}
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border shrink-0 bg-surface">
@@ -408,7 +406,7 @@ export function MymiDb() {
       </div>
 
       {/* ── Data Model mode ────────────────────────────────────── */}
-      {topMode === "datamodel" && <DataModelView db={activeDb} />}
+      {topMode === "datamodel" && <DataModelView db={activeDb} onNotifyError={notifyError} />}
 
       {/* ── Explorer mode ──────────────────────────────────────── */}
       {topMode === "explorer" && <>
@@ -508,11 +506,6 @@ export function MymiDb() {
             {schemasLoading && (
               <div className="flex items-center gap-2 px-3 py-4 text-text-muted text-xs">
                 <Loader2 size={12} className="animate-spin" /> Loading…
-              </div>
-            )}
-            {schemasError && (
-              <div className="flex items-start gap-1.5 px-2 py-2 text-error text-[11px]">
-                <AlertCircle size={12} className="shrink-0 mt-0.5" />{schemasError}
               </div>
             )}
 
@@ -702,7 +695,6 @@ export function MymiDb() {
                   {activeTab === "preview" && (
                     <>
                       {previewLoading && <Spinner />}
-                      {previewError && <ErrorMsg msg={previewError} />}
                       {preview && !previewLoading && (
                         preview.rows.length === 0
                           ? <Empty msg="No rows" />
@@ -882,6 +874,7 @@ export function MymiDb() {
         </div>
       )}
       </>}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }
@@ -892,14 +885,6 @@ function Spinner() {
   return (
     <div className="flex items-center gap-2 px-4 py-6 text-text-muted text-sm">
       <Loader2 size={14} className="animate-spin" /> Loading…
-    </div>
-  )
-}
-
-function ErrorMsg({ msg }: { msg: string }) {
-  return (
-    <div className="flex items-start gap-2 px-4 py-4 text-error text-sm">
-      <AlertCircle size={14} className="shrink-0 mt-0.5" />{msg}
     </div>
   )
 }
@@ -1217,9 +1202,8 @@ function RelationsList({ relations, centerSchema, centerName }: {
 
 // ── DataModelView ─────────────────────────────────────────────────
 
-function DataModelView({ db }: { db?: string }) {
+function DataModelView({ db, onNotifyError }: { db?: string; onNotifyError?: (message: string) => void }) {
   const [loading, setLoading]   = useState(true)
-  const [error, setError]       = useState<string | null>(null)
   const [raw, setRaw]           = useState<{ objects: Omit<ModelObject, "category">[]; relations: ModelRelation[] } | null>(null)
   const [schemaFilter, setSchemaFilter] = useState<Set<string>>(new Set())
   const [catFilter, setCatFilter]       = useState<Set<string>>(new Set())
@@ -1230,17 +1214,17 @@ function DataModelView({ db }: { db?: string }) {
 
   useEffect(() => {
     setLoading(true)
-    setError(null)
     api.mymiDataModel(db)
       .then((d) => {
         if (d && typeof d === "object" && "error" in d) {
-          setError(String((d as Record<string, unknown>).error)); return
+          onNotifyError?.(String((d as Record<string, unknown>).error))
+          return
         }
         setRaw(d)
       })
-      .catch((e) => setError(String(e)))
+      .catch((e) => onNotifyError?.(String(e)))
       .finally(() => setLoading(false))
-  }, [db])
+  }, [db, onNotifyError])
 
   const objects = useMemo<ModelObject[]>(() => {
     if (!raw || !Array.isArray(raw.objects)) return []
@@ -1303,10 +1287,11 @@ function DataModelView({ db }: { db?: string }) {
       <Loader2 size={16} className="animate-spin" /> Loading data model…
     </div>
   )
-  if (error) return (
-    <div className="flex-1 flex items-center justify-center text-error text-sm">{error}</div>
+  if (!raw) return (
+    <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
+      Data model unavailable.
+    </div>
   )
-  if (!raw) return null
 
   const total = raw.objects.length
   const totalRels = raw.relations.length

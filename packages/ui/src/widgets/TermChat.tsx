@@ -26,6 +26,7 @@ import { STICKY_GOAL_HOME_OFFSET_PX, STICKY_GOAL_HOME_TOP, StickyUserGoal } from
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
 import { useMe } from "../hooks/useMe"
+import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
 import { CHAT_SCROLL_HOST_ATTR, isNearBottom } from "../lib/chatScroll"
 import {
@@ -215,6 +216,8 @@ function ChatTurn({
   onClearUnpin,
   pendingInput,
   onRespond,
+  onNotify,
+  onNotifyError,
 }: {
   run: {
     id: string
@@ -237,6 +240,8 @@ function ChatTurn({
   onClearUnpin: (runId: string) => void
   pendingInput?: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   onRespond: (response: string) => void
+  onNotify?: (message: string) => void
+  onNotifyError?: (message: string) => void
 }): React.ReactElement {
   const turnRef = useRef<HTMLDivElement>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
@@ -381,6 +386,8 @@ function ChatTurn({
           isActive={isActive}
           pendingInput={pendingInput}
           onRespond={onRespond}
+          onNotify={onNotify}
+          onNotifyError={onNotifyError}
         />
       </div>
     </div>
@@ -2237,11 +2244,14 @@ function RunErrorBanner({ error }: { error: string }) {
 
 // ── Workspace diff pill ───────────────────────────────────────────
 
-function WorkspaceDiffCard({ runId }: { runId: string }) {
+function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
+  runId: string
+  onNotify?: (message: string) => void
+  onNotifyError?: (message: string) => void
+}) {
   const [diff, setDiff] = useState<WorkspaceDiff | null>(null)
   const [applying, setApplying] = useState(false)
   const [applied, setApplied] = useState(false)
-  const [error, setError] = useState<string | null>(null)
   const [open, setOpen] = useState(false)
   const upsertRun = useStore((s) => s.upsertRun)
 
@@ -2251,13 +2261,13 @@ function WorkspaceDiffCard({ runId }: { runId: string }) {
 
   async function apply() {
     setApplying(true)
-    setError(null)
     try {
       await api.applyRunWorkspaceDiff(runId)
       upsertRun({ id: runId, pendingWorkspaceChanges: 0 })
+      onNotify?.("Saved to workspace")
       setApplied(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Apply failed")
+      onNotifyError?.(err instanceof Error ? err.message : "Apply failed")
       setApplying(false)
     }
   }
@@ -2311,10 +2321,6 @@ function WorkspaceDiffCard({ runId }: { runId: string }) {
         </div>
       )}
 
-      {error && (
-        <p className="px-3 pb-2 text-[11px] text-error">{error}</p>
-      )}
-
       {hasPathContext && (
         <div className="px-3 py-2 border-t border-border-subtle bg-overlay-1 space-y-1">
           {diff?.executionRoot && (
@@ -2350,6 +2356,8 @@ function RunMessageImpl({
   isActive,
   pendingInput,
   onRespond,
+  onNotify,
+  onNotifyError,
 }: {
   run: {
     id: string
@@ -2363,6 +2371,8 @@ function RunMessageImpl({
   isActive: boolean
   pendingInput?: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   onRespond: (response: string) => void
+  onNotify?: (message: string) => void
+  onNotifyError?: (message: string) => void
 }) {
   const trace = run.trace ?? []
   const liveStreamingAnswer = isActive && isRunActiveStatus(run.status) ? (run.streamingAnswer ?? "") : ""
@@ -2542,7 +2552,7 @@ function RunMessageImpl({
       )}
 
       {/* Workspace diff */}
-      {showDiff && <WorkspaceDiffCard runId={run.id} />}
+      {showDiff && <WorkspaceDiffCard runId={run.id} onNotify={onNotify} onNotifyError={onNotifyError} />}
     </div>
   )
 }
@@ -2555,6 +2565,8 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
     prev.run === next.run
     && prev.isActive === next.isActive
     && prev.onRespond === next.onRespond
+    && prev.onNotify === next.onNotify
+    && prev.onNotifyError === next.onNotifyError
     // pendingInput only matters for the run it targets
     && (prev.pendingInput?.runId === next.pendingInput?.runId
       ? prev.pendingInput?.question === next.pendingInput?.question
@@ -2798,7 +2810,7 @@ export function TermChat({
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [pendingAttachments, setPendingAttachments] = useState<PendingAttachment[]>([])
   const [dragOver, setDragOver] = useState(false)
-  const [attachError, setAttachError] = useState<string | null>(null)
+  const { toasts, dismissToast, notify, notifyError } = useWidgetToasts()
   const cmdConsole = useCommandConsole()
 
   const { me } = useMe()
@@ -2965,20 +2977,19 @@ export function TermChat({
       // Only clear chips after a successful start so the user doesn't
       // lose context if the request failed mid-flight.
       setPendingAttachments([])
-      setAttachError(null)
     } catch (e) {
       // Surface the server error and ensure the chat doesn't get stuck on
       // "Working". A failed startRun never produces a runs row, so any
       // activeRunId we may have optimistically picked up from an SSE
       // race must be cleared too.
       const msg = e instanceof Error ? e.message : String(e)
-      setAttachError(`Failed to start run: ${msg}`)
+      notifyError(`Failed to start run: ${msg}`)
       setActiveRun(null)
       setDraft(effectiveGoal)
     } finally {
       setSending(false)
     }
-  }, [input, sending, slashOnlyMode, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, mode, tryDispatchSlash, clearDraft, setDraft])
+  }, [input, sending, slashOnlyMode, selectedAgent, setActiveRun, pendingAttachments, scrollToBottom, continuityThreadId, mode, tryDispatchSlash, clearDraft, setDraft, notifyError])
 
   const cancel = useCallback(async () => {
     if (!scopedActiveRunId) return
@@ -2987,10 +2998,9 @@ export function TermChat({
 
   const uploadFiles = useCallback(async (files: File[]) => {
     if (files.length === 0) return
-    setAttachError(null)
     for (const file of files) {
       if (file.size > ATTACH_MAX_BYTES) {
-        setAttachError(`${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB — max ${ATTACH_MAX_BYTES / 1024 / 1024} MB per attachment`)
+        notifyError(`${file.name} is ${(file.size / 1024 / 1024).toFixed(1)} MB — max ${ATTACH_MAX_BYTES / 1024 / 1024} MB per attachment`)
         continue
       }
       try {
@@ -3000,10 +3010,10 @@ export function TermChat({
           { id: meta.id, name: meta.normalizedName, sizeBytes: meta.sizeBytes, mediaType: meta.mediaType },
         ])
       } catch (e) {
-        setAttachError(`Upload failed for ${file.name}: ${e instanceof Error ? e.message : String(e)}`)
+        notifyError(`Upload failed for ${file.name}: ${e instanceof Error ? e.message : String(e)}`)
       }
     }
-  }, [])
+  }, [notifyError])
 
   const removeAttachment = useCallback((id: string) => {
     setPendingAttachments((prev) => prev.filter((a) => a.id !== id))
@@ -3400,9 +3410,6 @@ export function TermChat({
                         heroRevealProgress={heroRevealProgress}
                       />
                     </div>
-                    {attachError && (
-                      <p className="-mt-4 text-[12px] text-error text-center">{attachError}</p>
-                    )}
                   </div>
                 </div>
               )}
@@ -3424,6 +3431,8 @@ export function TermChat({
                   onClearUnpin={clearUnpinnedGoal}
                   pendingInput={pendingInput}
                   onRespond={handleRespond}
+                  onNotify={notify}
+                  onNotifyError={notifyError}
                 />
               ))}
             </div>
@@ -3478,9 +3487,6 @@ export function TermChat({
                     heroRevealProgress={heroRevealProgress}
                   />
                 </div>
-                {attachError && (
-                  <p className="-mt-4 text-[12px] text-error text-center">{attachError}</p>
-                )}
               </div>
             </div>
           )}
@@ -3502,6 +3508,8 @@ export function TermChat({
               onClearUnpin={clearUnpinnedGoal}
               pendingInput={pendingInput}
               onRespond={handleRespond}
+              onNotify={notify}
+              onNotifyError={notifyError}
             />
           ))}
         </div>
@@ -3542,12 +3550,10 @@ export function TermChat({
               variant={isHomeMode && showEmptyState ? "hero" : "default"}
               heroRevealProgress={heroRevealProgress}
             />
-            {attachError && (
-              <p className="mt-1.5 text-[12px] text-error text-center">{attachError}</p>
-            )}
           </div>
         </div>
       )}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }

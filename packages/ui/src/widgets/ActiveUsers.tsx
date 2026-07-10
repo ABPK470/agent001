@@ -21,6 +21,7 @@
 import type { ReactNode } from "react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
 import { useStore } from "../store"
 import { ActiveUsersRunModal, type RunPreview } from "./ActiveUsersRunModal"
 import {
@@ -111,10 +112,10 @@ function sortUsers(users: UserRow[], key: SortKey, dir: SortDir): UserRow[] {
 // ── Component ──────────────────────────────────────────────────
 
 export function ActiveUsers(): ReactNode {
+  const { toasts, dismissToast, notifyError } = useWidgetToasts()
   const [users, setUsers] = useState<UserRow[]>([])
   const [summary, setSummary] = useState<UserSummary | null>(null)
   const [activeRuns, setActiveRuns] = useState<ActiveRunRow[]>([])
-  const [error, setError] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const connected = useStore((s) => s.connected)
 
@@ -137,19 +138,18 @@ export function ActiveUsers(): ReactNode {
         fetch("/api/admin/users", { credentials: "include" }),
         fetch("/api/admin/active-runs", { credentials: "include" }),
       ])
-      if (u.status === 403 || r.status === 403) { setError("Admin only"); setLoading(false); return }
+      if (u.status === 403 || r.status === 403) { notifyError("Admin only"); setLoading(false); return }
       const uJson = (await u.json()) as { users: UserRow[]; summary: UserSummary }
       const rJson = (await r.json()) as { runs: ActiveRunRow[] }
       setUsers(uJson.users ?? [])
       setSummary(uJson.summary ?? null)
       setActiveRuns(rJson.runs ?? [])
-      setError(null)
       setLoading(false)
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      notifyError(err instanceof Error ? err.message : String(err))
       setLoading(false)
     }
-  }, [])
+  }, [notifyError])
 
   // ── Run history (paginated) ──────────────────────────────────
 
@@ -183,12 +183,13 @@ export function ActiveUsers(): ReactNode {
         [identifier]: { rows: json.runs ?? [], total: json.total ?? 0, offset, loading: false, error: false },
       }))
     } catch {
+      notifyError(`Failed to load run history`)
       setHistory((h) => ({
         ...h,
         [identifier]: { ...(h[identifier] ?? { rows: [], total: 0, offset }), loading: false, error: true },
       }))
     }
-  }, [])
+  }, [notifyError])
 
   const toggle = useCallback((identifier: string) => {
     setExpanded((cur) => {
@@ -205,11 +206,11 @@ export function ActiveUsers(): ReactNode {
       await api.setUserAdmin(user.identifier, next)
       await refreshSummary()
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err))
+      notifyError(err instanceof Error ? err.message : String(err))
     } finally {
       setAdminBusy(null)
     }
-  }, [refreshSummary])
+  }, [refreshSummary, notifyError])
 
   // Refs mirror the latest expanded/history values so the SSE-driven effect
   // below can read them without listing them as dependencies. Putting
@@ -326,10 +327,9 @@ export function ActiveUsers(): ReactNode {
   }, [])
 
   if (loading) return <div className="active-users-widget text-text-muted p-4">Loading…</div>
-  if (error)   return <div className="active-users-widget text-error p-4">{error}</div>
 
   return (
-    <div className="active-users-widget h-full flex flex-col overflow-hidden">
+    <div className="active-users-widget relative h-full flex flex-col overflow-hidden">
       {/* Stat strip */}
       {summary && (
         <div className="shrink-0 border-b border-border-subtle">
@@ -544,6 +544,7 @@ export function ActiveUsers(): ReactNode {
           onClose={() => setRunModal(null)}
         />
       )}
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
     </div>
   )
 }
@@ -822,9 +823,6 @@ function UserDetail({ user, liveRuns, history, adminBusy, onToggleAdmin, onPageC
         {/* States */}
         {history?.loading && !history.rows.length && (
           <div className="px-4 py-3 text-text-muted/50">Loading…</div>
-        )}
-        {history?.error && (
-          <div className="px-4 py-3 text-error">Failed to load history.</div>
         )}
         {history && !history.loading && history.rows.length === 0 && !history.error && (
           <div className="px-4 py-3 text-text-muted/40">No runs yet.</div>
