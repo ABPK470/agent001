@@ -1,12 +1,19 @@
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, Loader2, XCircle } from "lucide-react"
-import { useMemo, useState } from "react"
+import { useMemo, useState, type CSSProperties } from "react"
 
 import type { SyncPlan, SyncPlanTable } from "../../types"
 import { movementOfTable, tableMovementTotal } from "../../types"
 import { timeAgo } from "../../util"
+import { ModalShell } from "./chrome"
 import { DIFF } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { buildExecTableStatus } from "./exec-status"
+import {
+  formatCellFull,
+  formatCellPreview,
+  sampleValueDetailLabel,
+  type SampleValueDetail,
+} from "./plan-table-values"
 import type { ExecState } from "./types"
 
 export function PlanView({ plan, expanded, setExpanded, exec }: {
@@ -174,7 +181,7 @@ function Detail({ row }: { row: SyncPlanTable }) {
         const color = kind === "insert" ? DIFF.ins : kind === "update" ? DIFF.upd : DIFF.del
         const total = movementOfTable(row)[kind]
         return (
-          <SampleSection key={kind} kind={kind} samples={samples} total={total} color={color} />
+          <SampleSection key={kind} kind={kind} samples={samples} total={total} color={color} table={row.table} />
         )
       })}
       <div className="text-sm text-text-muted/40 text-right tabular-nums font-mono">{row.diffDurationMs}ms</div>
@@ -184,11 +191,12 @@ function Detail({ row }: { row: SyncPlanTable }) {
 
 const INITIAL_ROWS = 5
 
-function SampleSection({ kind, samples, total, color }: {
+function SampleSection({ kind, samples, total, color, table }: {
   kind: "insert" | "update" | "delete"
   samples: SyncPlanTable["samples"]["insert"]
   total: number
   color: string
+  table: string
 }) {
   const [showAll, setShowAll] = useState(false)
   const visible = showAll ? samples : samples.slice(0, INITIAL_ROWS)
@@ -211,13 +219,18 @@ function SampleSection({ kind, samples, total, color }: {
         </div>
       </div>
       <div className="overflow-x-auto show-scrollbar">
-        <SampleTbl kind={kind} samples={visible} />
+        <SampleTbl kind={kind} samples={visible} table={table} />
       </div>
     </div>
   )
 }
 
-function SampleTbl({ kind, samples }: { kind: "insert" | "update" | "delete"; samples: SyncPlanTable["samples"]["insert"] }) {
+function SampleTbl({ kind, samples, table }: {
+  kind: "insert" | "update" | "delete"
+  samples: SyncPlanTable["samples"]["insert"]
+  table: string
+}) {
+  const [detail, setDetail] = useState<SampleValueDetail | null>(null)
   const maxCols = 12
   const cols = useMemo(() => {
     const all: string[] = []
@@ -240,50 +253,127 @@ function SampleTbl({ kind, samples }: { kind: "insert" | "update" | "delete"; sa
   }, [samples, kind])
 
   return (
-    <table className="w-auto text-sm font-mono border-separate border-spacing-0">
-      <thead>
-        <tr className="text-text-muted">
-          {cols.map((column) => (
-            <th
-              key={column}
-              className="text-left px-2.5 py-1.5 font-normal whitespace-nowrap border-b border-border/30 bg-surface/30 sticky top-0"
-            >{column}</th>
-          ))}
-        </tr>
-      </thead>
-      <tbody>
-        {samples.map((sample, index) => {
-          if (kind === "update") {
-            const changed = new Set(sample.changedColumns ?? [])
-            return (
-              <tr key={index} className="border-b border-border/20">
-                {cols.map((column) => {
-                  const oldValue = formatValue(sample.oldValues?.[column])
-                  const newValue = formatValue(sample.newValues?.[column])
-                  return (
+    <>
+      <table className="w-auto text-sm font-mono border-separate border-spacing-0">
+        <thead>
+          <tr className="text-text-muted">
+            {cols.map((column) => (
+              <th
+                key={column}
+                className="text-left px-2.5 py-1.5 font-normal whitespace-nowrap border-b border-border/30 bg-surface/30 sticky top-0"
+              >{column}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {samples.map((sample, index) => {
+            if (kind === "update") {
+              const changed = new Set(sample.changedColumns ?? [])
+              return (
+                <tr key={index} className="border-b border-border/20">
+                  {cols.map((column) => (
                     <td key={column} className="px-2.5 py-1 align-top whitespace-nowrap border-b border-border/20">
                       {changed.has(column)
-                        ? <><div className="line-through" style={{ color: DIFF.oldRow }}>{oldValue}</div><div style={{ color: DIFF.upd, fontWeight: 500 }}>{newValue}</div></>
-                        : <span className="text-text">{newValue}</span>}
+                        ? (
+                          <>
+                            <SampleCell
+                              table={table}
+                              column={column}
+                              kind={kind}
+                              variant="old"
+                              value={sample.oldValues?.[column]}
+                              className="line-through"
+                              style={{ color: DIFF.oldRow }}
+                              onOpen={setDetail}
+                            />
+                            <SampleCell
+                              table={table}
+                              column={column}
+                              kind={kind}
+                              variant="new"
+                              value={sample.newValues?.[column]}
+                              style={{ color: DIFF.upd, fontWeight: 500 }}
+                              onOpen={setDetail}
+                            />
+                          </>
+                        )
+                        : (
+                          <SampleCell
+                            table={table}
+                            column={column}
+                            kind={kind}
+                            variant="new"
+                            value={sample.newValues?.[column]}
+                            className="text-text"
+                            onOpen={setDetail}
+                          />
+                        )}
                     </td>
-                  )
-                })}
+                  ))}
+                </tr>
+              )
+            }
+            return (
+              <tr key={index}>
+                {cols.map((column) => (
+                  <td key={column} className="px-2.5 py-1 text-text whitespace-nowrap border-b border-border/20">
+                    <SampleCell
+                      table={table}
+                      column={column}
+                      kind={kind}
+                      variant="value"
+                      value={sample.values?.[column]}
+                      onOpen={setDetail}
+                    />
+                  </td>
+                ))}
               </tr>
             )
-          }
-          return (
-            <tr key={index}>
-              {cols.map((column) => <td key={column} className="px-2.5 py-1 text-text whitespace-nowrap border-b border-border/20">{formatValue(sample.values?.[column])}</td>)}
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
+          })}
+        </tbody>
+      </table>
+      {detail && <SampleValueDetailModal detail={detail} onClose={() => setDetail(null)} />}
+    </>
   )
 }
-function formatValue(value: unknown): string {
-  if (value == null) return "null"
-  if (typeof value === "object") return JSON.stringify(value)
-  const text = String(value)
-  return text.length > 80 ? `${text.slice(0, 77)}…` : text
+
+function SampleCell({ table, column, kind, variant, value, className, style, onOpen }: {
+  table: string
+  column: string
+  kind: "insert" | "update" | "delete"
+  variant: SampleValueDetail["variant"]
+  value: unknown
+  className?: string
+  style?: CSSProperties
+  onOpen: (detail: SampleValueDetail) => void
+}) {
+  return (
+    <button
+      type="button"
+      className={`block max-w-xs truncate text-left bg-transparent border-0 p-0 font-inherit cursor-pointer hover:underline decoration-dotted underline-offset-2 ${className ?? ""}`}
+      style={style}
+      onClick={() => onOpen({ table, column, kind, variant, value })}
+      title="View full value"
+    >
+      {formatCellPreview(value)}
+    </button>
+  )
+}
+
+function SampleValueDetailModal({ detail, onClose }: {
+  detail: SampleValueDetail
+  onClose: () => void
+}) {
+  return (
+    <ModalShell
+      title={detail.column}
+      subtitle={sampleValueDetailLabel(detail)}
+      size="default"
+      onClose={onClose}
+    >
+      <pre className="px-6 py-5 text-sm font-mono whitespace-pre-wrap break-all text-text min-w-0">
+        {formatCellFull(detail.value)}
+      </pre>
+    </ModalShell>
+  )
 }
