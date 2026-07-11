@@ -3545,8 +3545,24 @@ textarea.input {
 }
 
 .thread-rail-item-dropdown--platform {
-  min-width: 14rem;
+  min-width: 15rem;
   transform: none;
+}
+
+.thread-rail-item-dropdown__section {
+  display: flex;
+  flex-direction: column;
+}
+
+.thread-rail-item-dropdown__section-label {
+  display: block;
+  padding: 0.35rem 0.55rem 0.15rem;
+  font-size: 0.625rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: color-mix(in srgb, var(--text-muted) 70%, transparent);
+  user-select: none;
 }
 
 .thread-rail-item-dropdown__toggle {
@@ -3591,6 +3607,17 @@ textarea.input {
 .thread-rail-item-dropdown-item--danger:focus-visible {
   color: var(--error);
   background: color-mix(in srgb, var(--error) 12%, transparent);
+}
+
+.thread-rail-item-dropdown-item--emphasis {
+  color: var(--text);
+  font-weight: 500;
+}
+
+.thread-rail-item-dropdown-item--emphasis:hover,
+.thread-rail-item-dropdown-item--emphasis:focus-visible {
+  color: var(--text);
+  background: color-mix(in srgb, var(--accent) 10%, var(--overlay-2));
 }
 
 /* Threads widget — flat navigator aligned with chat thread rail */

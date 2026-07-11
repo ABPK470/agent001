@@ -85,7 +85,7 @@ export function EntityRailHeader({
           <div ref={menuRef} className="relative">
             <IconButton
               ref={menuBtnRef}
-              label="Entity registry platform"
+              label="Catalog menu"
               onClick={toggleMenu}
               disabled={busy}
               active={menuOpen}
