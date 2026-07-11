@@ -787,6 +787,18 @@ export const api = {
       },
     )
   },
+  importEntityDeployArtifact: (json: string, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryYamlImportResponse>(
+      `/api/entity-registry/entities/import-artifact${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ json, reason, dryRun: opts?.dryRun ?? false }),
+      },
+    )
+  },
   listEntityRegistryStrategies: (opts?: { tenant?: string }) => {
     const p = new URLSearchParams()
     if (opts?.tenant) p.set("tenant", opts.tenant)

@@ -8,6 +8,7 @@ import { api } from "../../api"
 import type { EntityRegistryDefinition } from "../../types"
 import { DefinitionExportMenu } from "./DefinitionExportMenu"
 import { DefinitionOverview } from "./DefinitionOverview"
+import { EntityArtifactImportModal } from "./EntityArtifactImportModal"
 import { PANEL, TAB_ERROR } from "./chrome"
 import { SegmentToggle } from "./SegmentToggle"
 import { TabBody, TabPanelHeader, TabShell } from "./TabChrome"
@@ -18,14 +19,17 @@ export interface EntityYamlProps {
   def: EntityRegistryDefinition
   jsonText: string
   entityId: string
+  isAdmin?: boolean
+  onImported?: () => void
 }
 
-export function EntityYaml({ def, jsonText, entityId }: EntityYamlProps): JSX.Element {
+export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: EntityYamlProps): JSX.Element {
   const [exportBusy, setExportBusy] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [view, setView] = useState<DefinitionView>("overview")
   const [registryJson, setRegistryJson] = useState(jsonText)
   const [artifactJson, setArtifactJson] = useState("")
+  const [importOpen, setImportOpen] = useState(false)
 
   useEffect(() => {
     setRegistryJson(jsonText)
@@ -86,6 +90,16 @@ export function EntityYaml({ def, jsonText, entityId }: EntityYamlProps): JSX.El
   return (
     <TabShell>
       {exportError && <div className={TAB_ERROR}>{exportError}</div>}
+      {importOpen && (
+        <EntityArtifactImportModal
+          entityId={entityId}
+          onClose={() => setImportOpen(false)}
+          onImported={() => {
+            setImportOpen(false)
+            onImported?.()
+          }}
+        />
+      )}
 
       <TabBody>
         <div className={`${PANEL} flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-elevated/20`}>
@@ -96,6 +110,7 @@ export function EntityYaml({ def, jsonText, entityId }: EntityYamlProps): JSX.El
               onDownloadRegistryJson={() => void downloadRegistryJson()}
               onCopyDeployArtifact={() => void copyDeployArtifact()}
               onDownloadDeployArtifact={() => void downloadDeployArtifact()}
+              onImportDeployArtifact={isAdmin ? () => setImportOpen(true) : undefined}
             />
             <SegmentToggle
               value={view}

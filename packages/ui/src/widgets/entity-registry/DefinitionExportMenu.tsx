@@ -2,7 +2,7 @@
  * Definition tab — export single entity as registry JSON (B) or deploy artifact (A).
  */
 
-import { Copy, Download, Share } from "lucide-react"
+import { Copy, Download, Share, Upload } from "lucide-react"
 import type { JSX } from "react"
 import { ToolbarMenu, ToolbarMenuItem } from "./ToolbarMenu"
 
@@ -12,6 +12,7 @@ export interface DefinitionExportMenuProps {
   onDownloadRegistryJson: () => void
   onCopyDeployArtifact: () => void
   onDownloadDeployArtifact: () => void
+  onImportDeployArtifact?: () => void
 }
 
 export function DefinitionExportMenu({
@@ -20,6 +21,7 @@ export function DefinitionExportMenu({
   onDownloadRegistryJson,
   onCopyDeployArtifact,
   onDownloadDeployArtifact,
+  onImportDeployArtifact,
 }: DefinitionExportMenuProps): JSX.Element {
   return (
     <ToolbarMenu
@@ -53,6 +55,14 @@ export function DefinitionExportMenu({
         onClick={onDownloadDeployArtifact}
         disabled={exportBusy}
       />
+      {onImportDeployArtifact && (
+        <ToolbarMenuItem
+          icon={<Upload size={14} />}
+          label="Import deploy artifact"
+          onClick={onImportDeployArtifact}
+          disabled={exportBusy}
+        />
+      )}
     </ToolbarMenu>
   )
 }

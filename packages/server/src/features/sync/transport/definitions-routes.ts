@@ -39,6 +39,7 @@ import {
 } from "../domain/entity-yaml.js"
 import { applyEntityRunYaml, validateEntityRunYaml } from "../application/apply-entity-run-yaml.js"
 import { loadAuthoringFlowCatalog } from "../application/definitions.js"
+import { importAuthoredSyncFromText } from "../application/import-authored-sync.js"
 import { loadCatalogSnapshotForSuggest } from "../application/load-catalog-for-suggest.js"
 import { recordSyncCatalogChange } from "../../platform/application/sync-catalog-versioning.js"
 
@@ -441,6 +442,47 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       }
       return result
     }
+  )
+
+  app.post<{ Body: { json: string; reason: string; dryRun?: boolean } }>(
+    "/api/entity-registry/entities/import-artifact",
+    async (req, reply): Promise<EntityRegistryYamlImportResponse | { error: string }> => {
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { error: "admin only" }
+      }
+      if (!projectRoot) {
+        reply.code(503)
+        return { error: "artifact import requires server projectRoot" }
+      }
+      if (typeof req.body?.json !== "string" || req.body.json.trim() === "") {
+        reply.code(400)
+        return { error: "'json' body is required" }
+      }
+      if (!req.body.reason || req.body.reason.trim() === "") {
+        reply.code(400)
+        return { error: "'reason' is required" }
+      }
+      const tenantId = resolveTenant(req)
+      const dryRun = Boolean(req.body.dryRun)
+      const result = importAuthoredSyncFromText({
+        tenantId,
+        actor: req.session.upn,
+        reason: req.body.reason,
+        content: req.body.json,
+        projectRoot,
+        dryRun,
+      })
+      if (!dryRun) {
+        audit(req, "entity_registry.imported", {
+          tenantId,
+          format: "artifact",
+          savedCount: result.saved.length,
+          errorCount: result.errors.length,
+        })
+      }
+      return result
+    },
   )
 
   app.post<{ Body: EntityRegistryPreviewYamlRequest }>(

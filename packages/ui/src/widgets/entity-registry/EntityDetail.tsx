@@ -55,17 +55,27 @@ export interface EntityDetailContentProps {
   def: EntityRegistryDefinition
   tab: EntityTab
   jsonText: string
+  isAdmin?: boolean
+  onImported?: () => void
 }
 
 export function EntityDetailContent({
   def,
   tab,
   jsonText,
+  isAdmin,
+  onImported,
 }: EntityDetailContentProps): JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {tab === "overview" && (
-        <EntityYaml def={def} jsonText={jsonText} entityId={def.id} />
+        <EntityYaml
+          def={def}
+          jsonText={jsonText}
+          entityId={def.id}
+          isAdmin={isAdmin}
+          onImported={onImported}
+        />
       )}
       {tab === "tables" && <EntityTables def={def} />}
     </div>

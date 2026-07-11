@@ -194,6 +194,12 @@ export function EntityRegistry(): JSX.Element {
                       def={selected}
                       tab={tab}
                       jsonText={jsonText}
+                      isAdmin={isAdmin}
+                      onImported={() => {
+                        void refreshList({ keepSelection: true })
+                        void api.getEntityRegistryJson(selected.id).then(setJsonText).catch((e) =>
+                          notifyError(String(e)))
+                      }}
                     />
                   </>
                 )

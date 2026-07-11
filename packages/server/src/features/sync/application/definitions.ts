@@ -186,6 +186,35 @@ function inferFlowTemplateId(
   return defaultFlowTemplateId(entityId, flowTemplateCatalog)
 }
 
+/** Build sync_definition_configs row from an authored deploy artifact. */
+export function syncConfigFromAuthoredSync(
+  tenantId: string,
+  entity: EntityDefinition,
+  authored: AuthoredSyncDefinition,
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
+  actor: string,
+  existing?: db.DbSyncDefinitionConfig | null,
+): db.DbSyncDefinitionConfig {
+  const base = existing ?? defaultConfigForEntity(entity, flowTemplateCatalog)
+  const flowTemplateId = inferFlowTemplateId(entity.id, authored, flowTemplateCatalog)
+  return {
+    tenant_id: tenantId,
+    entity_id: entity.id,
+    flow_preset: flowTemplateId,
+    execution_steps_json: JSON.stringify(resolveFlowSteps(flowTemplateId, flowTemplateCatalog)),
+    service_profile_ref: authored.bindings?.serviceProfileRef ?? base.service_profile_ref,
+    environment_policy_ref: authored.bindings?.environmentPolicyRef ?? base.environment_policy_ref,
+    ownership_team: authored.ownership?.team ?? base.ownership_team,
+    ownership_owner: authored.ownership?.owner ?? base.ownership_owner,
+    review_status: authored.ownership?.reviewStatus ?? base.review_status,
+    ownership_notes_json: JSON.stringify(
+      authored.ownership?.notes ?? (JSON.parse(base.ownership_notes_json) as string[]),
+    ),
+    updated_at: new Date().toISOString(),
+    updated_by: actor,
+  }
+}
+
 function seedFromRepoDefinition(
   projectRoot: string,
   entity: EntityDefinition
@@ -194,22 +223,8 @@ function seedFromRepoDefinition(
   const path = resolve(projectRoot, AUTHORED_DEFINITIONS_DIR, `${entity.id}.json`)
   if (!existsSync(path)) return null
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as Partial<AuthoredSyncDefinition>
-    const base = defaultConfigForEntity(entity, flowTemplateCatalog)
-    const flowTemplateId = inferFlowTemplateId(entity.id, parsed, flowTemplateCatalog)
-    return {
-      ...base,
-      flow_preset: flowTemplateId,
-      execution_steps_json: JSON.stringify(resolveFlowSteps(flowTemplateId, flowTemplateCatalog)),
-      service_profile_ref: parsed.bindings?.serviceProfileRef ?? base.service_profile_ref,
-      environment_policy_ref: parsed.bindings?.environmentPolicyRef ?? base.environment_policy_ref,
-      ownership_team: parsed.ownership?.team ?? base.ownership_team,
-      ownership_owner: parsed.ownership?.owner ?? base.ownership_owner,
-      review_status: parsed.ownership?.reviewStatus ?? base.review_status,
-      ownership_notes_json: JSON.stringify(
-        parsed.ownership?.notes ?? (JSON.parse(base.ownership_notes_json) as string[])
-      )
-    }
+    const parsed = JSON.parse(readFileSync(path, "utf-8")) as AuthoredSyncDefinition
+    return syncConfigFromAuthoredSync(entity.tenantId, entity, parsed, flowTemplateCatalog, "system")
   } catch (error) {
     console.warn(
       `[sync-definitions] failed to seed config from ${path}:`,
