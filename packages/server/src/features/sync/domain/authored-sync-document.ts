@@ -14,6 +14,10 @@ import {
 } from "@mia/sync"
 
 import type { DbSyncDefinitionConfig } from "../../../platform/persistence/sqlite.js"
+import {
+  assertAuthoredExportRoundTrip,
+  assertEntityExportable,
+} from "../application/assert-entity-export.js"
 
 export function syncConfigInputFromDb(row: DbSyncDefinitionConfig): SyncDefinitionConfigInput {
   return {
@@ -34,13 +38,16 @@ export function entityToAuthoredSyncDefinition(
   config: SyncDefinitionConfigInput | null,
   options: { sourceArtifact?: string | null } = {},
 ): AuthoredSyncDefinition {
+  assertEntityExportable(entity)
   const sourceArtifact =
     options.sourceArtifact ?? `deploy/sync/artifacts/entities/${entity.id}.json`
-  return compileAuthoredSyncDefinition(entity, {
+  const authored = compileAuthoredSyncDefinition(entity, {
     flowTemplateCatalog,
     config: config ?? undefined,
     sourceArtifact,
   })
+  assertAuthoredExportRoundTrip(entity, authored)
+  return authored
 }
 
 /** Stable JSON for git diff — matches bundled entity artifact formatting. */

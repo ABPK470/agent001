@@ -39,6 +39,11 @@ import {
   parseEntitiesYaml
 } from "../domain/entity-yaml.js"
 import { applyEntityRunYaml, validateEntityRunYaml } from "../application/apply-entity-run-yaml.js"
+import {
+  assertEntityExportable,
+  assertTenantEntitiesExportable,
+  EntityExportValidationError,
+} from "../application/assert-entity-export.js"
 import { loadAuthoringFlowCatalog } from "../application/definitions.js"
 import { importAuthoredSyncFromText } from "../application/import-authored-sync.js"
 import { loadCatalogSnapshotForSuggest } from "../application/load-catalog-for-suggest.js"
@@ -168,6 +173,7 @@ function importEntitiesFromText(args: {
 function exportEntityRegistryJson(tenantId: string, entityId: string): string {
   const def = db.getEntityDefinition(tenantId, entityId, { includeRetired: true })
   if (!def) return ""
+  assertEntityExportable(def)
   const config = db.getSyncDefinitionConfig(tenantId, entityId)
   const run = config ? entityRunYamlFromConfig(config) : null
   return formatEntityJson(def, run)
@@ -203,6 +209,15 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       reply.code(404)
       return { error: `entity not found: ${req.params.id}` }
     }
+    try {
+      assertEntityExportable(def)
+    } catch (error) {
+      if (error instanceof EntityExportValidationError) {
+        reply.code(409)
+        return { error: error.message, entityId: error.entityId, validation: error.result }
+      }
+      throw error
+    }
     reply.header("content-type", "application/yaml; charset=utf-8")
     const config = db.getSyncDefinitionConfig(tenantId, req.params.id)
     const run = config ? entityRunYamlFromConfig(config) : null
@@ -210,13 +225,21 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
   })
 
   const sendRegistryJson = (tenantId: string, entityId: string, reply: import("fastify").FastifyReply) => {
-    const body = exportEntityRegistryJson(tenantId, entityId)
-    if (!body) {
-      reply.code(404)
-      return { error: `entity not found: ${entityId}` }
+    try {
+      const body = exportEntityRegistryJson(tenantId, entityId)
+      if (!body) {
+        reply.code(404)
+        return { error: `entity not found: ${entityId}` }
+      }
+      reply.header("content-type", "application/json; charset=utf-8")
+      return body
+    } catch (error) {
+      if (error instanceof EntityExportValidationError) {
+        reply.code(409)
+        return { error: error.message, entityId: error.entityId, validation: error.result }
+      }
+      throw error
     }
-    reply.header("content-type", "application/json; charset=utf-8")
-    return body
   }
 
   app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id/registry.json", async (req, reply) => {
@@ -243,20 +266,37 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         reply.code(404)
         return { error: `entity not found: ${req.params.id}` }
       }
-      const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
-      const configRow = db.getSyncDefinitionConfig(tenantId, req.params.id)
-      const authored = entityToAuthoredSyncDefinition(
-        def,
-        flowTemplateCatalog,
-        configRow ? syncConfigInputFromDb(configRow) : null,
-      )
-      reply.header("content-type", "application/json; charset=utf-8")
-      return formatAuthoredSyncJson(authored)
+      try {
+        const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
+        const configRow = db.getSyncDefinitionConfig(tenantId, req.params.id)
+        const authored = entityToAuthoredSyncDefinition(
+          def,
+          flowTemplateCatalog,
+          configRow ? syncConfigInputFromDb(configRow) : null,
+        )
+        reply.header("content-type", "application/json; charset=utf-8")
+        return formatAuthoredSyncJson(authored)
+      } catch (error) {
+        if (error instanceof EntityExportValidationError) {
+          reply.code(409)
+          return { error: error.message, entityId: error.entityId, validation: error.result }
+        }
+        throw error
+      }
     },
   )
 
   app.get("/api/entity-registry/entities.yaml", async (req, reply) => {
     const tenantId = resolveTenant(req)
+    try {
+      assertTenantEntitiesExportable(tenantId, { includeRetired: true })
+    } catch (error) {
+      if (error instanceof EntityExportValidationError) {
+        reply.code(409)
+        return { error: error.message, entityId: error.entityId, validation: error.result }
+      }
+      throw error
+    }
     const defs = db.listEntityDefinitions(tenantId, { includeRetired: true })
     const runs = new Map(
       defs

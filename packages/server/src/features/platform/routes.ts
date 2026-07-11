@@ -136,6 +136,18 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
         .header("Content-Disposition", `attachment; filename="${filename}"`)
       return reply.send(buffer)
     } catch (error) {
+      const { EntityExportValidationError } = await import(
+        "../sync/application/assert-entity-export.js"
+      )
+      if (error instanceof EntityExportValidationError) {
+        reply.code(409)
+        return {
+          ok: false,
+          message: error.message,
+          entityId: error.entityId,
+          validation: error.result,
+        }
+      }
       reply.code(500)
       return {
         ok: false,
@@ -164,6 +176,18 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
         .header("Content-Disposition", `attachment; filename="${filename}"`)
       return reply.send(buffer)
     } catch (error) {
+      const { EntityExportValidationError } = await import(
+        "../sync/application/assert-entity-export.js"
+      )
+      if (error instanceof EntityExportValidationError) {
+        reply.code(409)
+        return {
+          ok: false,
+          message: error.message,
+          entityId: error.entityId,
+          validation: error.result,
+        }
+      }
       reply.code(500)
       return {
         ok: false,

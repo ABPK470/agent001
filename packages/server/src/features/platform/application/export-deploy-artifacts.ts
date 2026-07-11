@@ -15,6 +15,7 @@ import { buildFlowCatalog } from "@mia/sync"
 
 import type { EntityRegistryExportDocument } from "../../sync/domain/entity-yaml.js"
 import { buildEntityRegistryExportDocument, entityRunYamlFromConfig } from "../../sync/domain/entity-yaml.js"
+import { assertTenantEntitiesExportable } from "../../sync/application/assert-entity-export.js"
 import * as db from "../../../platform/persistence/sqlite.js"
 
 const DEFAULT_TENANT = "_default"
@@ -220,6 +221,9 @@ export function buildDeployCatalogSnapshot(
   options: BuildDeployCatalogSnapshotOptions = {},
 ): DeployCatalogSnapshot {
   const tenantId = options.tenantId ?? DEFAULT_TENANT
+  assertTenantEntitiesExportable(tenantId, {
+    includeRetired: options.includeRetiredEntities ?? false,
+  })
   const exportedAt = new Date().toISOString()
   const entities = exportEntityRegistryDocument(tenantId, options.includeRetiredEntities ?? false)
   const syncMetadata = exportSyncMetadataDocument(tenantId)

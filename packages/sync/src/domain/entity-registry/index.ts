@@ -19,6 +19,10 @@ export {
 export { normalizeEntityDefinition, normalizeTableScope, compileFkPathPredicate } from "./normalize-table-scope.js"
 export { projectTablePredicate } from "./project-predicate.js"
 export {
+  validateAuthoredExportRoundTrip,
+  validateEntityExportable,
+} from "./export-validation.js"
+export {
   entityIdFromTableName,
   humanizeTableName,
   normalizeQualifiedTableName,
