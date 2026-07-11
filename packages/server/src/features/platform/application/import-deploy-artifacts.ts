@@ -12,10 +12,16 @@ import { tmpdir } from "node:os"
 import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import type { Scd2Strategy, SyncEnvironment } from "@mia/sync"
 import { defaultSyncDefinitionFlowTemplateId, hasSyncDefinitionFlowTemplate, withPermissionDefaults } from "@mia/sync"
+import { validateCatalogId } from "@mia/shared-types"
 
 import * as db from "../../../platform/persistence/sqlite.js"
 import { getDb } from "../../../platform/persistence/sqlite.js"
-import { normalizeFlowStepKinds } from "../../../platform/persistence/db/normalize-flow-step-kinds.js"
+import {
+  buildFlowCatalogFromSyncMetadataDoc,
+  FlowStepsValidationError,
+  prepareFlowStepsForStorage,
+  validateFlowStepsForCatalog,
+} from "../../sync/domain/flow-steps.js"
 import { applyEntityRunYaml } from "../../sync/application/apply-entity-run-yaml.js"
 import {
   ensureSyncDefinitionConfigs,
@@ -192,6 +198,28 @@ export function validateDeployCatalogSnapshot(snapshot: DeployCatalogSnapshot): 
   counts.flows = meta.flows && typeof meta.flows === "object" ? Object.keys(meta.flows).length : 0
   if (counts.flows === 0) errors.push("sync-metadata.json: flows object is required")
 
+  for (const stepType of meta.stepTypes ?? []) {
+    const idError = validateCatalogId(stepType.id, "Kind id")
+    if (idError) errors.push(`sync-metadata.json stepTypes: ${idError}`)
+  }
+  for (const source of meta.customValueSources ?? []) {
+    const idError = validateCatalogId(source.id, "Custom value source id")
+    if (idError) errors.push(`sync-metadata.json customValueSources: ${idError}`)
+  }
+
+  const flowCatalog =
+    errors.length === 0 ? buildFlowCatalogFromSyncMetadataDoc(meta) : null
+  for (const [flowId, flow] of Object.entries(meta.flows ?? {})) {
+    const flowIdError = validateCatalogId(flowId, "Flow id")
+    if (flowIdError) {
+      errors.push(`sync-metadata.json flows: ${flowIdError}`)
+      continue
+    }
+    if (!flowCatalog) continue
+    const flowError = validateFlowStepsForCatalog(flow.steps ?? [], flowCatalog)
+    if (flowError) errors.push(`sync-metadata.json flow "${flowId}": ${flowError}`)
+  }
+
   const flowIds = new Set(Object.keys(meta.flows ?? {}))
   flowIds.add("metadataOnly")
 
@@ -288,6 +316,7 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
   const stepTypes = doc.stepTypes ?? []
   const wiring = doc.customValueSources ?? []
   const flows = doc.flows ?? {}
+  const flowCatalog = buildFlowCatalogFromSyncMetadataDoc(doc)
 
   const phaseIds = new Set(phases.map((p) => p.id))
   const kindIds = new Set(stepTypes.map((k) => k.id))
@@ -339,12 +368,19 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
 
   for (const [id, flow] of Object.entries(flows)) {
     const existing = db.getSyncRunPreset(tenantId, id)
+    let stepsJson: string
+    try {
+      stepsJson = JSON.stringify(prepareFlowStepsForStorage(flow.steps ?? [], flowCatalog))
+    } catch (error) {
+      const message = error instanceof FlowStepsValidationError ? error.message : String(error)
+      throw new Error(`sync-metadata.json flow "${id}": ${message}`)
+    }
     db.saveSyncRunPreset({
       tenant_id: tenantId,
       id,
       label: flow.label,
       description: flow.description ?? "",
-      steps_json: JSON.stringify(normalizeFlowStepKinds((flow.steps ?? []) as AuthoredSyncFlowStep[])),
+      steps_json: stepsJson,
       built_in: existing?.built_in ?? 1,
       updated_at: new Date().toISOString(),
       updated_by: "catalog-import",

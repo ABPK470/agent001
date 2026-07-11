@@ -13,20 +13,19 @@ import {
   validateCatalogId,
   validateValueSource,
 } from "@mia/shared-types"
-import { buildFlowCatalog, validateAuthoredSyncFlow } from "@mia/sync"
 import type { FastifyInstance } from "fastify"
 
 import * as db from "../../../platform/persistence/sqlite.js"
 import { recordSyncCatalogChange } from "../../platform/application/sync-catalog-versioning.js"
+import {
+  buildFlowCatalogFromSyncMetadataDoc,
+  prepareFlowStepsForStorage,
+} from "../domain/flow-steps.js"
 
 const TENANT = "_default"
 
 function afterCatalogMutation(reason: string, actor: string): void {
   recordSyncCatalogChange({ reason, actor })
-}
-
-function sanitizeFlowSteps(steps: AuthoredSyncFlowStep[]): AuthoredSyncFlowStep[] {
-  return steps.map(({ phase: _phase, ...step }) => step)
 }
 
 function mapCatalog() {
@@ -41,7 +40,7 @@ function mapCatalog() {
       id: row.id,
       label: row.label,
       description: row.description,
-      steps: sanitizeFlowSteps(db.parsePresetSteps(row.steps_json)),
+      steps: db.parsePresetSteps(row.steps_json),
       builtIn: row.built_in === 1,
     })),
     customValueSources: db.listSyncRunBindingSources(TENANT).map((row) => ({
@@ -79,27 +78,24 @@ function validateHandlerBindings(
 }
 
 function flowCatalogFromDb() {
-  return buildFlowCatalog(
-    db.listSyncRunPhases(TENANT),
-    db.listSyncRunKinds(TENANT),
-    db.listSyncRunBindingSources(TENANT),
-  )
-}
-
-function validateFlowSteps(steps: AuthoredSyncFlowStep[]): string | null {
-  for (const step of steps) {
-    const stepIdError = validateCatalogId(step.id, "Step id")
-    if (stepIdError) return `Step: ${stepIdError}`
-    const kindIdError = validateCatalogId(step.kind, "Kind id")
-    if (kindIdError) return `Step "${step.id}": ${kindIdError}`
-  }
-  const validation = validateAuthoredSyncFlow(steps, "contract", flowCatalogFromDb(), {
-    skipEntityTypeCheck: true,
+  return buildFlowCatalogFromSyncMetadataDoc({
+    phases: db.listSyncRunPhases(TENANT).map((row) => ({
+      id: row.id,
+      label: row.label,
+      sortOrder: row.sort_order,
+      definition: db.mapPhaseDefinition(row),
+    })),
+    stepTypes: db.listSyncRunKinds(TENANT).map((row) => ({
+      id: row.id,
+      label: row.label,
+      definition: db.mapKindDefinition(row),
+    })),
+    customValueSources: db.listSyncRunBindingSources(TENANT).map((row) => ({
+      id: row.id,
+      label: row.label,
+      definition: db.mapCustomValueSourceDefinition(row),
+    })),
   })
-  if (validation.errors.length > 0) {
-    return validation.errors.map((issue) => issue.message).join("; ")
-  }
-  return null
 }
 
 export function registerSyncMetadataRoutes(app: FastifyInstance): void {
@@ -201,9 +197,16 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
     const idError = validateCatalogId(id, "Flow id")
     if (idError) return reply.code(400).send({ error: idError })
     const existing = db.getSyncRunPreset(TENANT, id)
-    const steps = sanitizeFlowSteps(req.body.steps ?? (existing ? db.parsePresetSteps(existing.steps_json) : []))
-    const flowError = validateFlowSteps(steps)
-    if (flowError) return reply.code(400).send({ error: flowError })
+    const flowCatalog = flowCatalogFromDb()
+    const rawSteps = req.body.steps ?? (existing ? db.parsePresetSteps(existing.steps_json) : [])
+    let steps: AuthoredSyncFlowStep[]
+    try {
+      steps = prepareFlowStepsForStorage(rawSteps, flowCatalog)
+    } catch (error) {
+      return reply.code(400).send({
+        error: error instanceof Error ? error.message : String(error),
+      })
+    }
     db.saveSyncRunPreset({
       tenant_id: TENANT,
       id,

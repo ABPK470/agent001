@@ -786,7 +786,7 @@ Excluded unless `enabledOptionalTables` explicitly enables them:
 
 ### Execute step sequences (default flow templates)
 
-Steps below are the **default** order from `deploy/sync/artifacts/flow-templates.json`. Published definitions may differ if operators edited flow config. Every entity type includes **`metadata-sync`** (`metadataSync`) as the transactional core.
+Steps below are the **default** order from `deploy/sync/artifacts/flow-templates.json`. Published definitions may differ if operators edited flow config. Every entity type includes **`metadataSync`** as the transactional core.
 
 #### `contract` — full deploy (21 steps)
 
@@ -794,7 +794,7 @@ Steps below are the **default** order from `deploy/sync/artifacts/flow-templates
 |---|---------|-------|------|--------------|
 | 1 | `audit-check` | pre-transaction | `auditCheck` | Target audit validation (`syncOrNot`) |
 | 2 | `target-lock` | pre-transaction | `targetLock` | Lock contract on target |
-| 3 | `metadata-sync` | metadata | `metadataSync` | **Transactional MERGE/DELETE** |
+| 3 | `metadataSync` | metadata | `metadataSync` | **Transactional MERGE/DELETE** |
 | 4 | `pipeline-register` | post-metadata | `pipelineRegister` | Agent: register contract pipelines |
 | 5 | `contract-undeploy` | post-metadata | `contractUndeploy` | Undeploy marked contract objects |
 | 6 | `contract-unlock-after-undeploy` | post-metadata | `targetUnlock` | Unlock after undeploy |
@@ -820,7 +820,7 @@ Steps 4–21 are **not** rolled back if a later step fails.
 
 | # | Step id | Kind |
 |---|---------|------|
-| 1 | `metadata-sync` | `metadataSync` |
+| 1 | `metadataSync` | `metadataSync` |
 | 2 | `dataset-deploy` | `datasetDeploy` (ETL HTTP) |
 | 3 | `sync-date` | `syncDate` |
 
@@ -828,7 +828,7 @@ Steps 4–21 are **not** rolled back if a later step fails.
 
 | # | Step id | Kind |
 |---|---------|------|
-| 1 | `metadata-sync` | `metadataSync` |
+| 1 | `metadataSync` | `metadataSync` |
 | 2 | `dataset-deploy` | `datasetDeploy` (input dataset via `ruleInputDatasetId`) |
 | 3 | `rules-deploy` | `rulesDeploy` |
 | 4 | `handle-dependencies` | `handleDependencies` |
@@ -839,14 +839,14 @@ Steps 4–21 are **not** rolled back if a later step fails.
 
 | # | Step id | Kind |
 |---|---------|------|
-| 1 | `metadata-sync` | `metadataSync` |
+| 1 | `metadataSync` | `metadataSync` |
 | 2 | `pipeline-register` | `pipelineRegister` |
 
 #### `gateMetadata` (3 steps)
 
 | # | Step id | Kind |
 |---|---------|------|
-| 1 | `metadata-sync` | `metadataSync` |
+| 1 | `metadataSync` | `metadataSync` |
 | 2 | `meta-refresh` | `metaRefresh` (Gate HTTP) |
 | 3 | `pipeline-start` | `pipelineStart` — pipeline name `"All Lists content item population"` |
 
@@ -854,14 +854,14 @@ Steps 4–21 are **not** rolled back if a later step fails.
 
 | # | Step id | Kind |
 |---|---------|------|
-| 1 | `metadata-sync` | `metadataSync` |
+| 1 | `metadataSync` | `metadataSync` |
 | 2 | `handle-dependencies` | `handleDependencies` (`objectName: content`) |
 
 #### `metadataOnly` (1 step)
 
 | # | Step id | Kind |
 |---|---------|------|
-| 1 | `metadata-sync` | `metadataSync` |
+| 1 | `metadataSync` | `metadataSync` |
 
 Use when an entity definition should apply row changes only — no ETL/Agent/Gate/contract deploy callbacks.
 

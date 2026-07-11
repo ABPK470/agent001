@@ -257,29 +257,26 @@ describe("catalog import/export round-trip", () => {
     expect(result.stderr.some((line) => line.includes('Refusing to publish "content"'))).toBe(false)
   })
 
-  it("publish accepts legacy kebab-case metadata-sync step kinds from stored presets", () => {
-    db.saveSyncRunPreset({
-      tenant_id: "_default",
-      id: "content",
-      label: "Legacy content",
-      description: "kebab-case kinds",
-      steps_json: JSON.stringify([
-        {
-          id: "metadata-sync",
-          phase: "metadata",
-          kind: "metadata-sync",
-          title: "Metadata sync",
-          description: "Apply metadata",
-        },
-      ]),
-      built_in: 1,
-      updated_at: new Date().toISOString(),
-      updated_by: "test",
-    })
+  it("rejects catalog snapshots with kebab-case flow step kinds", () => {
+    const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
+    const meta = snapshot.syncMetadata as {
+      flows?: Record<string, { label: string; description?: string; steps: unknown[] }>
+    }
+    const contentFlow = meta.flows?.content
+    expect(contentFlow).toBeTruthy()
+    contentFlow!.steps = [
+      {
+        id: "metadata-sync",
+        phase: "metadata",
+        kind: "metadata-sync",
+        title: "Metadata sync",
+        description: "Apply metadata",
+      },
+    ]
 
-    const result = publishSyncDefinitionsFromDb(projectRoot)
-    expect(result.stderr.some((line) => line.includes('Refusing to publish "content"'))).toBe(false)
-    expect(result.definitionCount).toBeGreaterThan(0)
+    const preview = validateDeployCatalogSnapshot(snapshot)
+    expect(preview.ok).toBe(false)
+    expect(preview.errors.some((error) => error.includes("camelCase"))).toBe(true)
   })
 
   it("catalog rollback retires entities added after the restored version", () => {
