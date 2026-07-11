@@ -140,6 +140,19 @@ export function EntityRegistry(): JSX.Element {
     }
   }
 
+  async function exportDeployArtifacts(): Promise<void> {
+    if (!isAdmin || exportingConfig) return
+    setExportingConfig(true)
+    try {
+      const { filename, bytes } = await api.downloadDeployArtifacts()
+      notify(`Exported deploy artifacts (${filename}, ${bytes.toLocaleString()} bytes)`)
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : String(e))
+    } finally {
+      setExportingConfig(false)
+    }
+  }
+
   function openHistory(entity: EntityRegistryDefinition): void {
     setSelectedId(entity.id)
     setHistoryOpen(true)
@@ -168,6 +181,7 @@ export function EntityRegistry(): JSX.Element {
                 onSyncMetadata={() => setSyncMetadataOpen(true)}
                 onPublish={openPublish}
                 onExportConfig={() => void exportConfiguration()}
+                onExportDeployArtifacts={() => void exportDeployArtifacts()}
                 onImportConfig={() => setImportOpen(true)}
                 onCatalogVersions={() => setVersionsOpen(true)}
               />

@@ -294,6 +294,14 @@ export const api = {
         { method: "POST", body: JSON.stringify(body ?? {}) },
       ),
     ),
+  downloadDeployArtifacts: (body?: { includeRetiredEntities?: boolean }) =>
+    import("./lib/userDownload.js").then(({ downloadAuthenticated }) =>
+      downloadAuthenticated(
+        "/api/platform/deploy-artifacts/export/download",
+        "mia-deploy-artifacts.zip",
+        { method: "POST", body: JSON.stringify(body ?? {}) },
+      ),
+    ),
   listSyncCatalogVersions: () =>
     json<{
       ok: boolean

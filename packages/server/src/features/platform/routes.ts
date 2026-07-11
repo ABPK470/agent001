@@ -144,6 +144,34 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     }
   })
 
+  app.post("/api/platform/deploy-artifacts/export/download", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { ok: false, message: "Admin only" }
+    }
+    const body = (req.body ?? {}) as {
+      includeRetiredEntities?: boolean
+    }
+    try {
+      const { exportDeployGitZipBuffer } = await import(
+        "./application/export-deploy-git-artifacts.js"
+      )
+      const { buffer, filename } = exportDeployGitZipBuffer(opts.projectRoot, {
+        includeRetiredEntities: body.includeRetiredEntities,
+      })
+      reply
+        .header("Content-Type", "application/zip")
+        .header("Content-Disposition", `attachment; filename="${filename}"`)
+      return reply.send(buffer)
+    } catch (error) {
+      reply.code(500)
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : "Deploy artifact export failed",
+      }
+    }
+  })
+
   app.post("/api/platform/artifacts/refresh", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)
