@@ -22,6 +22,7 @@ import {
   listSyncDefinitionAdminItems,
   listSyncDefinitionRuntimeOptions,
   defaultEntityFlowId,
+  PublishSyncDefinitionsError,
   publishSyncDefinitionsFromDb,
   resetSyncDefinitionConfig,
   upsertSyncDefinitionConfig
@@ -307,7 +308,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         return {
           error: error instanceof Error ? error.message : String(error),
           stdout: [],
-          stderr: []
+          stderr: error instanceof PublishSyncDefinitionsError ? error.stderr : [],
         }
       }
     }

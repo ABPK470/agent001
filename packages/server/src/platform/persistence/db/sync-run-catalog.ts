@@ -3,6 +3,7 @@ import { loadSyncMetadataArtifact, parseKindDefinition, parsePhaseDefinition } f
 import { resolve } from "node:path"
 
 import { getDb } from "../connection.js"
+import { normalizeFlowStepKinds } from "./normalize-flow-step-kinds.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -159,7 +160,7 @@ export function syncRunCatalogEmpty(tenantId = DEFAULT_TENANT): boolean {
 export function parsePresetSteps(json: string): AuthoredSyncFlowStep[] {
   const parsed = JSON.parse(json) as unknown
   if (!Array.isArray(parsed)) return []
-  return parsed as AuthoredSyncFlowStep[]
+  return normalizeFlowStepKinds(parsed as AuthoredSyncFlowStep[])
 }
 
 export function mapPhaseDefinition(row: Pick<DbSyncRunPhase, "id" | "label" | "definition_json">) {

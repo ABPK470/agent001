@@ -14,6 +14,7 @@ import {
   buildFlowCatalog,
   compilePublishedSyncDefinition,
   defaultSyncDefinitionFlowTemplateId,
+  hasSyncDefinitionFlowTemplate,
   loadSyncDefinitionFlowTemplateCatalog,
   normalizeAuthoredSyncFlowSteps,
   resolveFlowSteps,
@@ -123,10 +124,15 @@ export function loadAuthoringFlowCatalog(
   // DB presets override shipped flows; keep platform builtins (e.g. metadataOnly) from file catalog.
   const flowTemplates = { ...fileCatalog.flowTemplates } as Record<string, SyncDefinitionFlowTemplate>
   for (const preset of presets) {
+    const dbSteps = db.parsePresetSteps(preset.steps_json)
+    const fileSteps =
+      preset.id in fileCatalog.flowTemplates
+        ? fileCatalog.flowTemplates[preset.id as EntityRegistrySyncFlowTemplateId].steps
+        : undefined
     flowTemplates[preset.id] = {
       label: preset.label,
       description: preset.description,
-      steps: db.parsePresetSteps(preset.steps_json),
+      steps: dbSteps.length > 0 ? dbSteps : (fileSteps ?? dbSteps),
     }
   }
   return {
@@ -257,6 +263,25 @@ export function ensureSyncDefinitionConfigs(projectRoot: string, tenantId = DEFA
   }
 }
 
+/** Re-resolve per-entity flow steps from catalog after bulk metadata/config import. */
+export function rehydrateSyncDefinitionConfigSteps(
+  projectRoot: string,
+  tenantId = DEFAULT_TENANT_ID,
+): void {
+  const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
+  for (const row of db.listSyncDefinitionConfigs(tenantId)) {
+    const flowPreset =
+      row.flow_preset?.trim() && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, row.flow_preset)
+        ? row.flow_preset
+        : defaultFlowTemplateId(row.entity_id, flowTemplateCatalog)
+    db.saveSyncDefinitionConfig({
+      ...row,
+      flow_preset: flowPreset,
+      execution_steps_json: JSON.stringify(resolveFlowSteps(flowPreset, flowTemplateCatalog)),
+    })
+  }
+}
+
 export function listSyncDefinitionAdminItems(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID
@@ -325,6 +350,20 @@ function resolveExecutionStepsForValidation(
   return resolveFlowSteps(config.flow_preset, flowTemplateCatalog)
 }
 
+export class PublishSyncDefinitionsError extends Error {
+  readonly stderr: string[]
+
+  constructor(stderr: string[]) {
+    super(
+      stderr.length > 0
+        ? `Publish refused all entities: ${stderr.join(" ")}`
+        : "Publish refused all entities",
+    )
+    this.name = "PublishSyncDefinitionsError"
+    this.stderr = stderr
+  }
+}
+
 export function publishSyncDefinitionsFromDb(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID
@@ -337,6 +376,7 @@ export function publishSyncDefinitionsFromDb(
   stderr: string[]
 } {
   ensureSyncDefinitionConfigs(projectRoot, tenantId)
+  rehydrateSyncDefinitionConfigSteps(projectRoot, tenantId)
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
   const flowCatalog = buildFlowCatalog(
     db.listSyncRunPhases(tenantId),
@@ -347,7 +387,7 @@ export function publishSyncDefinitionsFromDb(
   const configs = new Map(db.listSyncDefinitionConfigs(tenantId).map((row) => [row.entity_id, row]))
   const publishedAt = new Date().toISOString()
   const publishedVersion = publishedAt
-  const definitions: Record<string, PublishedSyncDefinition | null> = {}
+  const compiled: Record<string, PublishedSyncDefinition | null> = {}
   const stderr: string[] = []
 
   for (const entity of entities) {
@@ -356,7 +396,7 @@ export function publishSyncDefinitionsFromDb(
       stderr.push(
         `Refusing to publish "${entity.id}": ${entityValidation.errors.map((issue) => issue.message).join("; ")}`
       )
-      definitions[entity.id] = null
+      compiled[entity.id] = null
       continue
     }
     for (const warning of entityValidation.warnings) {
@@ -373,13 +413,13 @@ export function publishSyncDefinitionsFromDb(
       stderr.push(
         `Refusing to publish "${entity.id}": ${validation.errors.map((issue) => issue.message).join("; ")}`
       )
-      definitions[entity.id] = null
+      compiled[entity.id] = null
       continue
     }
     for (const warning of validation.warnings) {
       stderr.push(`[${entity.id}] ${warning.message}`)
     }
-    definitions[entity.id] = compilePublishedSyncDefinition(
+    compiled[entity.id] = compilePublishedSyncDefinition(
       entity,
       config,
       flowTemplateCatalog,
@@ -395,6 +435,18 @@ export function publishSyncDefinitionsFromDb(
     )
   }
 
+  const newlyPublishedCount = Object.values(compiled).filter((value) => value !== null).length
+  if (newlyPublishedCount === 0) {
+    throw new PublishSyncDefinitionsError(stderr)
+  }
+
+  const previousBundle = loadPublishedBundle(projectRoot)
+  const definitions: Record<string, PublishedSyncDefinition | null> = {}
+  for (const entity of entities) {
+    definitions[entity.id] =
+      compiled[entity.id] ?? previousBundle?.definitions?.[entity.id] ?? null
+  }
+
   const bundle: PersistedPublishedBundle = {
     version: 1,
     publishedAt,
@@ -408,13 +460,16 @@ export function publishSyncDefinitionsFromDb(
   const vocabularyIds = reloadPublishedSyncVocabulary(projectRoot)
   _resetGoalClassificationCache()
 
+  const definitionCount = Object.values(definitions).filter((value) => value !== null).length
+
   return {
     publishedAt,
     publishedVersion,
-    definitionCount: Object.keys(definitions).length,
+    definitionCount,
     publishedBundlePath: PUBLISHED_BUNDLE_PATH,
     stdout: [
       `Wrote published definition bundle to ${outputPath}`,
+      `Published ${newlyPublishedCount} definition(s) this run; bundle retains ${definitionCount} total`,
       `Reloaded published sync vocabulary (${vocabularyIds.length} entity types)`
     ],
     stderr

@@ -33,7 +33,18 @@ export function PublishDefinitionsModal({
       setPhase("done")
       onPublished?.(res)
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      const apiError = e as Error & { stderr?: string[] }
+      setError(apiError.message)
+      if (apiError.stderr?.length) {
+        setResult({
+          publishedAt: "",
+          publishedVersion: "",
+          definitionCount: 0,
+          publishedBundlePath: "",
+          stdout: [],
+          stderr: apiError.stderr,
+        })
+      }
       setPhase("done")
     }
   }
@@ -148,11 +159,18 @@ export function PublishDefinitionsModal({
               {result && result.stderr.length > 0 && (
                 <div className="mt-3 max-h-40 overflow-y-auto rounded-lg border border-border-subtle bg-overlay-1 px-3 py-2">
                   <p className="field-label mb-1.5">
-                    Warnings
+                    {result.stderr.some((line) => line.startsWith("Refusing to publish"))
+                      ? "Errors"
+                      : "Warnings"}
                   </p>
                   <ul className="space-y-1 text-sm leading-snug text-text-muted font-mono">
                     {result.stderr.map((line) => (
-                      <li key={line}>{line}</li>
+                      <li
+                        key={line}
+                        className={line.startsWith("Refusing to publish") ? "text-error" : undefined}
+                      >
+                        {line}
+                      </li>
                     ))}
                   </ul>
                 </div>

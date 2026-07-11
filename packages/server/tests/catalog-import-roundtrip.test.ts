@@ -18,6 +18,11 @@ import {
   writeDeployCatalogSnapshot,
 } from "../src/features/platform/application/export-deploy-artifacts.js"
 import {
+  commitSyncCatalogVersion,
+  rollbackSyncCatalogVersion,
+} from "../src/features/platform/application/sync-catalog-versioning.js"
+import { publishSyncDefinitionsFromDb } from "../src/features/sync/application/definitions.js"
+import {
   ensureSyncDefinitionConfigs,
   listSyncDefinitionAdminItems,
   loadAuthoringFlowCatalog,
@@ -183,5 +188,125 @@ describe("catalog import/export round-trip", () => {
     })
     expect(result.files).toContain("sync-definition-configs.json")
     rmSync(parent, { recursive: true, force: true })
+  })
+
+  it("catalog import retires active entities missing from the snapshot", () => {
+    const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
+    const template = db.getEntityDefinition("_default", "contract")
+    expect(template).toBeTruthy()
+
+    db.saveEntityDefinition({
+      tenantId: "_default",
+      actor: "test",
+      reason: "test-add",
+      def: {
+        ...template!,
+        id: "restoreOrphanTest",
+        displayName: "Restore Orphan Test",
+      },
+    })
+    expect(db.getEntityDefinition("_default", "restoreOrphanTest")).toBeTruthy()
+
+    const applied = applyDeployCatalogSnapshot({
+      snapshot,
+      actor: "test",
+      projectRoot,
+      dryRun: false,
+    })
+    expect(applied.applied).toBe(true)
+    expect(db.getEntityDefinition("_default", "restoreOrphanTest")).toBeNull()
+    expect(
+      db.getEntityDefinition("_default", "restoreOrphanTest", { includeRetired: true })?.retiredAt,
+    ).toBeTruthy()
+    expect(db.getEntityDefinition("_default", "contract")).toBeTruthy()
+  })
+
+  it("catalog rollback still publishes core entities with metadataSync", () => {
+    const baseline = commitSyncCatalogVersion({ reason: "test-baseline", actor: "test" })
+    commitSyncCatalogVersion({ reason: "test-follow-up", actor: "test" })
+
+    rollbackSyncCatalogVersion({
+      targetVersion: baseline.version,
+      actor: "test",
+      projectRoot,
+    })
+
+    const result = publishSyncDefinitionsFromDb(projectRoot)
+    for (const entityId of ["content", "contract", "dataset"]) {
+      expect(result.stderr.some((line) => line.includes(`Refusing to publish "${entityId}"`))).toBe(false)
+    }
+  })
+
+  it("loadAuthoringFlowCatalog falls back to shipped steps when a DB preset is empty", async () => {
+    const { loadAuthoringFlowCatalog } = await import("../src/features/sync/application/definitions.js")
+    db.saveSyncRunPreset({
+      tenant_id: "_default",
+      id: "content",
+      label: "Broken content",
+      description: "empty steps in db",
+      steps_json: "[]",
+      built_in: 1,
+      updated_at: new Date().toISOString(),
+      updated_by: "test",
+    })
+
+    const catalog = loadAuthoringFlowCatalog(projectRoot, "_default")
+    expect(catalog.flowTemplates.content.steps.some((step) => step.kind === "metadataSync")).toBe(true)
+
+    const result = publishSyncDefinitionsFromDb(projectRoot)
+    expect(result.stderr.some((line) => line.includes('Refusing to publish "content"'))).toBe(false)
+  })
+
+  it("publish accepts legacy kebab-case metadata-sync step kinds from stored presets", () => {
+    db.saveSyncRunPreset({
+      tenant_id: "_default",
+      id: "content",
+      label: "Legacy content",
+      description: "kebab-case kinds",
+      steps_json: JSON.stringify([
+        {
+          id: "metadata-sync",
+          phase: "metadata",
+          kind: "metadata-sync",
+          title: "Metadata sync",
+          description: "Apply metadata",
+        },
+      ]),
+      built_in: 1,
+      updated_at: new Date().toISOString(),
+      updated_by: "test",
+    })
+
+    const result = publishSyncDefinitionsFromDb(projectRoot)
+    expect(result.stderr.some((line) => line.includes('Refusing to publish "content"'))).toBe(false)
+    expect(result.definitionCount).toBeGreaterThan(0)
+  })
+
+  it("catalog rollback retires entities added after the restored version", () => {
+    const baseline = commitSyncCatalogVersion({ reason: "test-baseline", actor: "test" })
+    const template = db.getEntityDefinition("_default", "contract")
+    expect(template).toBeTruthy()
+
+    db.saveEntityDefinition({
+      tenantId: "_default",
+      actor: "test",
+      reason: "test-add",
+      def: {
+        ...template!,
+        id: "rollbackOrphanTest",
+        displayName: "Rollback Orphan Test",
+      },
+    })
+    commitSyncCatalogVersion({ reason: "test-with-orphan", actor: "test" })
+    expect(db.getEntityDefinition("_default", "rollbackOrphanTest")).toBeTruthy()
+
+    rollbackSyncCatalogVersion({
+      targetVersion: baseline.version,
+      actor: "test",
+      projectRoot,
+    })
+
+    expect(db.getEntityDefinition("_default", "rollbackOrphanTest")).toBeNull()
+    expect(db.getEntityDefinition("_default", "contract")).toBeTruthy()
   })
 })

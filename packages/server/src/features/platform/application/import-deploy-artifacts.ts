@@ -11,12 +11,18 @@ import { tmpdir } from "node:os"
 
 import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import type { Scd2Strategy, SyncEnvironment } from "@mia/sync"
-import { withPermissionDefaults } from "@mia/sync"
+import { defaultSyncDefinitionFlowTemplateId, hasSyncDefinitionFlowTemplate, withPermissionDefaults } from "@mia/sync"
 
 import * as db from "../../../platform/persistence/sqlite.js"
 import { getDb } from "../../../platform/persistence/sqlite.js"
+import { normalizeFlowStepKinds } from "../../../platform/persistence/db/normalize-flow-step-kinds.js"
 import { applyEntityRunYaml } from "../../sync/application/apply-entity-run-yaml.js"
-import { ensureSyncDefinitionConfigs, upsertSyncDefinitionConfig } from "../../sync/application/definitions.js"
+import {
+  ensureSyncDefinitionConfigs,
+  loadAuthoringFlowCatalog,
+  rehydrateSyncDefinitionConfigSteps,
+  upsertSyncDefinitionConfig,
+} from "../../sync/application/definitions.js"
 import {
   buildEntityRegistryExportDocument,
   parseEntitiesJson,
@@ -338,7 +344,7 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
       id,
       label: flow.label,
       description: flow.description ?? "",
-      steps_json: JSON.stringify(flow.steps ?? []),
+      steps_json: JSON.stringify(normalizeFlowStepKinds((flow.steps ?? []) as AuthoredSyncFlowStep[])),
       built_in: existing?.built_in ?? 1,
       updated_at: new Date().toISOString(),
       updated_by: "catalog-import",
@@ -367,6 +373,7 @@ function applySyncDefinitionConfigs(
   actor: string,
 ): number {
   if (!doc?.configs?.length) return 0
+  const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
   const importedIds = new Set(doc.configs.map((config) => config.entityId))
   for (const row of db.listSyncDefinitionConfigs(tenantId)) {
     if (!importedIds.has(row.entity_id)) {
@@ -375,10 +382,13 @@ function applySyncDefinitionConfigs(
   }
   const now = new Date().toISOString()
   for (const config of doc.configs) {
+    const flowPreset = hasSyncDefinitionFlowTemplate(flowTemplateCatalog, config.flowPreset)
+      ? config.flowPreset
+      : defaultSyncDefinitionFlowTemplateId(config.entityId, flowTemplateCatalog)
     upsertSyncDefinitionConfig(projectRoot, {
       tenant_id: tenantId,
       entity_id: config.entityId,
-      flow_preset: config.flowPreset,
+      flow_preset: flowPreset,
       execution_steps_json: "[]",
       service_profile_ref: config.serviceProfileRef,
       environment_policy_ref: config.environmentPolicyRef,
@@ -393,27 +403,65 @@ function applySyncDefinitionConfigs(
   return doc.configs.length
 }
 
-function applyEntities(
+function collectSnapshotEntityIds(snapshot: DeployCatalogSnapshot): Set<string> {
+  const ids = new Set<string>()
+  for (const id of snapshot.entityIds ?? []) {
+    const trimmed = id.trim()
+    if (trimmed) ids.add(trimmed)
+  }
+  for (const entry of snapshot.entityRegistry?.entities ?? []) {
+    const parsed = parseEntitiesJson(JSON.stringify(entry))
+    for (const item of parsed) {
+      if (item.ok && item.def?.id) ids.add(item.def.id)
+    }
+  }
+  return ids
+}
+
+function applyEntityDefinitions(
   tenantId: string,
-  doc: EntityRegistryExportDocument | null,
+  snapshot: DeployCatalogSnapshot,
   actor: string,
-  projectRoot?: string,
 ): number {
-  if (!doc?.entities?.length) return 0
+  const importedIds = collectSnapshotEntityIds(snapshot)
   let count = 0
-  for (const entry of doc.entities) {
+
+  for (const entry of snapshot.entityRegistry?.entities ?? []) {
     const parsed = parseEntitiesJson(JSON.stringify(entry))
     for (const item of parsed) {
       if (!item.ok || !item.def) throw new Error(item.error ?? "entity parse failed")
-      const result = db.saveEntityDefinition({
+      db.saveEntityDefinition({
         tenantId,
         def: { ...item.def, tenantId },
         actor,
         reason: "catalog-import",
       })
-      if (item.run && projectRoot) {
-        applyEntityRunYaml(projectRoot, tenantId, result.id, item.run, actor)
-      }
+      count++
+    }
+  }
+
+  // Match environments and sync-definition configs: drop active entities absent from snapshot.
+  for (const entity of db.listEntityDefinitions(tenantId, { includeRetired: false })) {
+    if (!importedIds.has(entity.id)) {
+      db.retireEntityDefinition(tenantId, entity.id, actor)
+    }
+  }
+
+  return count
+}
+
+function applyEntityRunBindings(
+  tenantId: string,
+  snapshot: DeployCatalogSnapshot,
+  actor: string,
+  projectRoot: string,
+): number {
+  let count = 0
+  for (const entry of snapshot.entityRegistry?.entities ?? []) {
+    const parsed = parseEntitiesJson(JSON.stringify(entry))
+    for (const item of parsed) {
+      if (!item.ok || !item.run) continue
+      applyEntityRunYaml(projectRoot, tenantId, item.def!.id, item.run, actor)
       count++
     }
   }
@@ -447,14 +495,16 @@ export function applyDeployCatalogSnapshot(args: {
     applyEnvironments(args.snapshot.environments as EnvironmentsDoc)
     applySyncMetadata(tenantId, args.snapshot.syncMetadata as SyncMetadataDoc)
     applyStrategies(tenantId, args.snapshot.strategies as StrategiesDoc, args.actor)
-    applyEntities(tenantId, args.snapshot.entityRegistry, args.actor, args.projectRoot)
+    applyEntityDefinitions(tenantId, args.snapshot, args.actor)
     applySyncDefinitionConfigs(
       tenantId,
       args.snapshot.syncDefinitionConfigs,
       args.projectRoot,
       args.actor,
     )
+    applyEntityRunBindings(tenantId, args.snapshot, args.actor, args.projectRoot)
     ensureSyncDefinitionConfigs(args.projectRoot, tenantId)
+    rehydrateSyncDefinitionConfigSteps(args.projectRoot, tenantId)
   })()
 
   return { ...preview, dryRun: false, applied: true }
