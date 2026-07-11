@@ -17,6 +17,7 @@ export interface EntityRailHeaderProps {
   onExportConfig: () => void
   onExportDeployArtifacts: () => void
   onImportConfig: () => void
+  onImportDeployArtifacts: () => void
   onCatalogVersions: () => void
 }
 
@@ -29,6 +30,7 @@ export function EntityRailHeader({
   onExportConfig,
   onExportDeployArtifacts,
   onImportConfig,
+  onImportDeployArtifacts,
   onCatalogVersions,
 }: EntityRailHeaderProps): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -117,7 +119,16 @@ export function EntityRailHeader({
                   onClick={() => { closeMenu(); onImportConfig() }}
                 >
                   <Upload size={13} strokeWidth={1.75} />
-                  <span>Import configuration</span>
+                  <span>Import catalog snapshot</span>
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="thread-rail-item-dropdown-item"
+                  onClick={() => { closeMenu(); onImportDeployArtifacts() }}
+                >
+                  <Upload size={13} strokeWidth={1.75} />
+                  <span>Import deploy artifacts</span>
                 </button>
                 <button
                   type="button"

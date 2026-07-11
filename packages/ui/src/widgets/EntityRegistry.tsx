@@ -11,6 +11,7 @@ import { useMe } from "../hooks/useMe"
 import { useStore } from "../store"
 import type { EntityRegistryDefinition, EntityRegistryHistoryEntry } from "../types"
 import { CatalogImportModal } from "../components/CatalogImportModal"
+import { DeployArtifactImportModal } from "../components/DeployArtifactImportModal"
 import { CatalogVersionsModal } from "../components/CatalogVersionsModal"
 import { Empty } from "./sync-admin/shared"
 import {
@@ -45,6 +46,7 @@ export function EntityRegistry(): JSX.Element {
   const [publishOpen, setPublishOpen] = useState(false)
   const [exportingConfig, setExportingConfig] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
+  const [deployImportOpen, setDeployImportOpen] = useState(false)
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [retireCandidate, setRetireCandidate] = useState<EntityRegistryDefinition | null>(null)
 
@@ -183,6 +185,7 @@ export function EntityRegistry(): JSX.Element {
                 onExportConfig={() => void exportConfiguration()}
                 onExportDeployArtifacts={() => void exportDeployArtifacts()}
                 onImportConfig={() => setImportOpen(true)}
+                onImportDeployArtifacts={() => setDeployImportOpen(true)}
                 onCatalogVersions={() => setVersionsOpen(true)}
               />
               <div className="entity-rail-scroll min-h-0 flex-1 overflow-y-auto">
@@ -270,7 +273,16 @@ export function EntityRegistry(): JSX.Element {
         <CatalogImportModal
           onClose={() => setImportOpen(false)}
           onImported={() => {
-            notify("Configuration imported")
+            notify("Catalog snapshot imported")
+            void refreshList({ keepSelection: true })
+          }}
+        />
+      )}
+      {deployImportOpen && (
+        <DeployArtifactImportModal
+          onClose={() => setDeployImportOpen(false)}
+          onImported={() => {
+            notify("Deploy artifacts imported")
             void refreshList({ keepSelection: true })
           }}
         />

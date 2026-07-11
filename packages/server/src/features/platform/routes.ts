@@ -207,6 +207,41 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     }
   })
 
+  app.post("/api/platform/deploy-artifacts/import", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { ok: false, message: "Admin only" }
+    }
+    const body = (req.body ?? {}) as {
+      zipBase64?: string
+      dryRun?: boolean
+    }
+    if (!body.zipBase64) {
+      reply.code(400)
+      return { ok: false, message: "zipBase64 is required" }
+    }
+    try {
+      const { parseDeployGitZipBuffer, applyDeployGitBundle } = await import(
+        "./application/import-deploy-git-artifacts.js"
+      )
+      const buffer = Buffer.from(body.zipBase64, "base64")
+      const bundle = parseDeployGitZipBuffer(buffer)
+      const result = applyDeployGitBundle({
+        bundle,
+        actor: req.session.upn,
+        projectRoot: opts.projectRoot,
+        dryRun: body.dryRun,
+      })
+      return { ok: result.ok, preview: result }
+    } catch (error) {
+      reply.code(400)
+      return {
+        ok: false,
+        message: error instanceof Error ? error.message : "Deploy artifact import failed",
+      }
+    }
+  })
+
   app.get("/api/platform/catalog/versions", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)

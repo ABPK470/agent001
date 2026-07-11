@@ -330,6 +330,20 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
+  importDeployArtifacts: (body: { zipBase64: string; dryRun?: boolean }) =>
+    json<{
+      ok: boolean
+      preview: {
+        ok: boolean
+        errors: string[]
+        counts: Record<string, number>
+        dryRun: boolean
+        applied: boolean
+      }
+    }>("/api/platform/deploy-artifacts/import", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
   rollbackSyncCatalog: (version: number) =>
     json<{
       ok: boolean
