@@ -90,6 +90,29 @@ export function teardownCatalogOperatorFixture(fixture: CatalogOperatorFixture):
   process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
 }
 
+export async function buildEntityRegistryApp(
+  fixture: CatalogOperatorFixture,
+): Promise<FastifyInstance> {
+  const { registerEntityRegistryRoutes } = await import(
+    "../../src/features/sync/transport/definitions-routes.js"
+  )
+  const { seedUser, seedSession } = await import("../_fk-helpers.js")
+
+  seedUser(fixture.testDb, fixture.adminSession.upn, {
+    displayName: fixture.adminSession.displayName,
+    isAdmin: fixture.adminSession.isAdmin,
+  })
+  seedSession(fixture.testDb, fixture.adminSession.sid, fixture.adminSession.upn)
+
+  const app = Fastify({ logger: false })
+  app.addHook("onRequest", async (req) => {
+    ;(req as unknown as { session: CurrentSession }).session = fixture.adminSession
+  })
+  registerEntityRegistryRoutes(app, fixture.projectRoot)
+  await app.ready()
+  return app
+}
+
 export async function buildSyncMetadataApp(
   fixture: CatalogOperatorFixture,
 ): Promise<FastifyInstance> {

@@ -238,10 +238,10 @@ function validateTables(
       seenOrders.add(t.executionOrder)
     }
     validateScope(t.scope, errors, `${path}/scope`)
-    if (t.enabledByDefault !== false && t.scope.kind === "sql" && looksIncompleteScopePredicate(t.scope.predicate)) {
+    if (t.scope.kind === "sql" && looksIncompleteScopePredicate(t.scope.predicate)) {
       errors.push({
-        code: "scope_incomplete_enabled",
-        message: `Table "${t.name}" is enabled by default but has an incomplete scope predicate.`,
+        code: "scope_incomplete",
+        message: `Table "${t.name}" has an incomplete scope predicate — import reviewed deploy artifacts or fix scope against the entry sproc.`,
         path: `${path}/scope/predicate`,
       })
     }
@@ -252,14 +252,10 @@ function validateTables(
         path: `${path}/note`,
       })
     }
-    if (
-      t.verified &&
-      t.scope.kind === "sql" &&
-      isDegradedLegacyFallbackPredicate(t.scope.predicate)
-    ) {
+    if (t.scope.kind === "sql" && isDegradedLegacyFallbackPredicate(t.scope.predicate)) {
       errors.push({
         code: "scope_degraded_legacy",
-        message: `Table "${t.name}" is verified but uses a degraded IN-list fallback predicate instead of ground-truth EXISTS/sproc SQL.`,
+        message: `Table "${t.name}" uses a degraded IN-list fallback predicate instead of ground-truth EXISTS/sproc SQL.`,
         path: `${path}/scope/predicate`,
       })
     }
@@ -436,6 +432,8 @@ function validateLineage(
 }
 
 function validateVersion(def: EntityDefinition, errors: ValidationError[]): void {
+  // shapeAsEntity stamps version 0 as an import placeholder — save overwrites it.
+  if (def.version === 0) return
   if (!Number.isInteger(def.version) || def.version < 1) {
     errors.push({
       code: "version_not_positive",

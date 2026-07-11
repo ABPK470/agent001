@@ -18,6 +18,7 @@ import {
   loadSyncDefinitionFlowTemplateCatalog,
   suggestEntityDraft,
   suggestEntityTable,
+  validateEntityDefinition,
   type EntityDefinition,
   type Scd2Strategy
 } from "@mia/sync"
@@ -105,6 +106,12 @@ function importEntitiesFromText(args: {
         continue
       }
     }
+    const defWithTenant = { ...item.def, tenantId: args.tenantId }
+    const validation = validateEntityDefinition(defWithTenant)
+    if (!validation.ok) {
+      errors.push({ id: item.def.id, error: validation })
+      continue
+    }
     const existing = db.getEntityDefinition(args.tenantId, item.def.id, { includeRetired: true })
     const created = existing === null
     if (args.dryRun) {
@@ -120,7 +127,7 @@ function importEntitiesFromText(args: {
     try {
       const result = db.saveEntityDefinition({
         tenantId: args.tenantId,
-        def: { ...item.def, tenantId: args.tenantId },
+        def: defWithTenant,
         actor: args.actor,
         reason: args.reason
       })

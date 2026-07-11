@@ -11,6 +11,7 @@ import { tmpdir } from "node:os"
 
 import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import type { Scd2Strategy, SyncEnvironment } from "@mia/sync"
+import { validateEntityDefinition } from "@mia/sync"
 import { defaultSyncDefinitionFlowTemplateId, hasSyncDefinitionFlowTemplate, withPermissionDefaults } from "@mia/sync"
 import { validateCatalogId } from "@mia/shared-types"
 
@@ -253,8 +254,22 @@ export function validateDeployCatalogSnapshot(snapshot: DeployCatalogSnapshot): 
     for (const entry of snapshot.entityRegistry.entities) {
       const parsed = parseEntitiesJson(JSON.stringify(entry))
       for (const item of parsed) {
-        if (!item.ok) errors.push(`entity ${item.error}`)
-        else if (item.run) validateFlowPreset(String(item.def?.id ?? "unknown"), item.run.template)
+        if (!item.ok) {
+          errors.push(`entity ${item.error}`)
+          continue
+        }
+        if (item.def) {
+          const validation = validateEntityDefinition({
+            ...item.def,
+            tenantId: item.def.tenantId || DEFAULT_TENANT,
+          })
+          if (!validation.ok) {
+            for (const issue of validation.errors) {
+              errors.push(`entity "${item.def.id}": ${issue.message}`)
+            }
+          }
+        }
+        if (item.run) validateFlowPreset(String(item.def?.id ?? "unknown"), item.run.template)
       }
     }
   }

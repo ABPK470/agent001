@@ -76,8 +76,11 @@ describe("degraded legacy predicate guards", () => {
     ).toBe(false)
   })
 
-  it("rejects degraded entities at validation time", () => {
-    const result = validateEntityDefinition(degradedContentEntity())
+  it("rejects degraded IN-list fallback predicates even when unverified", () => {
+    const entity = degradedContentEntity()
+    entity.tables[0]!.verified = false
+    entity.tables[0]!.enabledByDefault = false
+    const result = validateEntityDefinition(entity)
     expect(result.ok).toBe(false)
     expect(result.errors.some((error) => error.code === "scope_degraded_legacy")).toBe(true)
   })
