@@ -1,6 +1,38 @@
 import { describe, expect, it } from "vitest"
 
-import { assertSupportedSyncDirection, withPermissionDefaults } from "./environments.js"
+import {
+  assertNoRemovedSyncEnvironmentFields,
+  assertSupportedSyncDirection,
+  findRemovedSyncEnvironmentFields,
+  normalizeStoredSyncEnvironment,
+  withPermissionDefaults,
+} from "./environments.js"
+
+describe("removed sync environment fields", () => {
+  it("detects syncAllowlist as removed", () => {
+    expect(findRemovedSyncEnvironmentFields({ syncAllowlist: [] })).toEqual(["syncAllowlist"])
+  })
+
+  it("rejects syncAllowlist on config ingest", () => {
+    expect(() => assertNoRemovedSyncEnvironmentFields({ syncAllowlist: ["a@b.com"] }, "test")).toThrow(
+      /removed field "syncAllowlist"/,
+    )
+  })
+
+  it("strips syncAllowlist when normalizing stored JSON", () => {
+    const env = normalizeStoredSyncEnvironment("UAT", {
+      name: "UAT",
+      displayName: "UAT",
+      color: "teal",
+      role: "both",
+      ringOrder: 1,
+      syncAllowlist: ["ghost@example.com"],
+      allowedSyncTargets: ["DEV"],
+    })
+    expect("syncAllowlist" in env).toBe(false)
+    expect(env.allowedSyncTargets).toEqual(["DEV"])
+  })
+})
 
 describe("assertSupportedSyncDirection", () => {
   it("allows explicitly configured targets", () => {

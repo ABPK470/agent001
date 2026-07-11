@@ -374,7 +374,7 @@ function buildSyncExecuteTool(host: SyncRuntimeHost): Tool {
       "Apply a previously-computed sync plan (from sync_preview) to the target environment. " +
       "MUTATIVE — modifies target data inside a single transaction with rollback on any error. " +
       "Refuses to run if: confirm!=true, plan is missing/expired, plan is older than 1 hour, " +
-      "target environment is read-only, or current user is not in the target's allowlist.",
+      "target environment is read-only (hosted policy), PROD is locked, or governance preflight fails.",
     parameters: {
       type: "object",
       properties: {

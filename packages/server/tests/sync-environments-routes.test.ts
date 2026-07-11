@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { AgentHost } from "@mia/agent"
 import { createPublishedSyncDefinitionRegistry } from "@mia/sync"
 import type { CurrentSession } from "../src/features/auth/index.js"
+import * as db from "../src/platform/persistence/db/index.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -134,7 +135,7 @@ describe("sync-environment routes", () => {
 
     const update = await app.inject({
       method: "PUT",
-      url: "/api/sync-environments/UAT",
+      url: "/api/sync-environments/UAT?allowBuiltinEdit=true",
       payload: { role: "source", allowedSyncTargets: ["DEV", "PROD"] }
     })
     expect(update.statusCode).toBe(200)
@@ -143,7 +144,7 @@ describe("sync-environment routes", () => {
 
     const remove = await app.inject({
       method: "DELETE",
-      url: "/api/sync-environments/UAT"
+      url: "/api/sync-environments/UAT?allowBuiltinEdit=true"
     })
     expect(remove.statusCode).toBe(200)
 
@@ -211,6 +212,66 @@ describe("sync-environment routes", () => {
     })
     expect(host.sync.environments.items.get("UAT")?.role).toBe("both")
     expect(host.sync.environments.items.get("UAT")?.allowedSyncTargets).toEqual(["DEV"])
+
+    await app.close()
+  })
+
+  it("rejects syncAllowlist in update payloads", async () => {
+    const { app } = await buildApp(adminSession())
+
+    const update = await app.inject({
+      method: "PUT",
+      url: "/api/sync-environments/UAT?allowBuiltinEdit=true",
+      payload: { syncAllowlist: [] },
+    })
+    expect(update.statusCode).toBe(400)
+    expect(update.json()).toMatchObject({ error: expect.stringContaining('removed field "syncAllowlist"') })
+
+    await app.close()
+  })
+
+  it("strips legacy syncAllowlist from stored rows on read and write", async () => {
+    const { app } = await buildApp(adminSession())
+    const now = new Date().toISOString()
+    db.saveSyncEnvironment({
+      name: "UAT",
+      body_json: JSON.stringify({
+        name: "UAT",
+        displayName: "UAT",
+        color: "teal",
+        role: "both",
+        ringOrder: 1,
+        syncAllowlist: ["ghost@example.com"],
+        allowedSyncTargets: ["DEV"],
+        defaultAccessMode: "read_write",
+        allowedOperations: ["query_read"],
+        denyDml: false,
+        denyDdl: false,
+        approvalRequiredOperations: [],
+      }),
+      created_at: now,
+      updated_at: now,
+      updated_by: "seed",
+    })
+
+    const listed = await app.inject({ method: "GET", url: "/api/sync-environments" })
+    expect(listed.statusCode).toBe(200)
+    const uat = (listed.json() as Array<Record<string, unknown>>).find((env) => env.name === "UAT")
+    expect(uat).toBeTruthy()
+    expect(uat).not.toHaveProperty("syncAllowlist")
+
+    const updated = await app.inject({
+      method: "PUT",
+      url: "/api/sync-environments/UAT?allowBuiltinEdit=true",
+      payload: { displayName: "UAT cleaned" },
+    })
+    expect(updated.statusCode).toBe(200)
+
+    const row = db.getSyncEnvironment("UAT")
+    expect(row).toBeTruthy()
+    const stored = JSON.parse(row!.body_json) as Record<string, unknown>
+    expect(stored).not.toHaveProperty("syncAllowlist")
+    expect(stored.displayName).toBe("UAT cleaned")
 
     await app.close()
   })

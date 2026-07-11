@@ -112,6 +112,41 @@ export interface LoadSyncEnvironmentsResult {
   source: "file" | "mssql" | "none"
 }
 
+/** Legacy fields removed from SyncEnvironment — rejected on API/config ingest. */
+export const REMOVED_SYNC_ENVIRONMENT_FIELDS = ["syncAllowlist"] as const
+
+export type RemovedSyncEnvironmentField = (typeof REMOVED_SYNC_ENVIRONMENT_FIELDS)[number]
+
+export function removedSyncEnvironmentFieldError(field: string, label = "request"): string {
+  return `${label}: removed field "${field}" is no longer supported — use hosted policy (defaultAccessMode, allowedOperations) and approvals instead of per-environment UPN lists.`
+}
+
+export function findRemovedSyncEnvironmentFields(
+  source: Record<string, unknown>,
+): RemovedSyncEnvironmentField[] {
+  return REMOVED_SYNC_ENVIRONMENT_FIELDS.filter(
+    (field) => field in source && source[field] !== undefined,
+  )
+}
+
+export function assertNoRemovedSyncEnvironmentFields(source: Record<string, unknown>, label: string): void {
+  const found = findRemovedSyncEnvironmentFields(source)
+  if (found.length > 0) {
+    throw new Error(removedSyncEnvironmentFieldError(found[0]!, label))
+  }
+}
+
+/** Strip legacy keys and apply permission defaults — use on every DB read/write. */
+export function normalizeStoredSyncEnvironment(
+  name: string,
+  raw: Record<string, unknown>,
+): SyncEnvironment {
+  return withPermissionDefaults({
+    ...(raw as Partial<SyncEnvironment>),
+    name,
+  })
+}
+
 // Environment registry lives on the supplied host.
 
 /** Configure all environments at once. Replaces any prior config. */
@@ -220,8 +255,12 @@ export function loadSyncEnvironments(
       const raw = readFileSync(configPath, "utf-8")
       const parsed = JSON.parse(raw) as SyncEnvironmentsConfigFile
       if (parsed.version !== 1) throw new Error(`Unsupported version: ${parsed.version}`)
-      const environments = parsed.environments.map((e) =>
-        withPermissionDefaults({
+      const environments = parsed.environments.map((e) => {
+        assertNoRemovedSyncEnvironmentFields(
+          e as Record<string, unknown>,
+          `${relPath} environment "${e.name}"`,
+        )
+        return withPermissionDefaults({
           name: e.name,
           displayName: e.displayName ?? e.name,
           color: e.color ?? "slate",
@@ -238,7 +277,7 @@ export function loadSyncEnvironments(
           denyDdl: e.denyDdl,
           approvalRequiredOperations: e.approvalRequiredOperations
         })
-      )
+      })
       return {
         environments,
         summary: environments.map((env) => `${env.name}[${env.role}/${env.defaultAccessMode}]`).join(", "),

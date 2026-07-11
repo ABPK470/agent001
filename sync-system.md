@@ -188,7 +188,7 @@ savePlan(SyncPlan)
 | PROD target | Hard* | Hard* | `SYNC_ALLOW_PROD=1` |
 | Catalog drift | Soft (warning) | Hard | `detectCatalogDrift` |
 | Freeze windows active | Soft (warning) | Hard** | `evaluateFreezeWindows` |
-| Target sync allowlist | Soft (warning) | Hard | `targetEnv.syncAllowlist` |
+| Hosted policy (read-only target) | Hard | Hard | `defaultAccessMode`, `allowedOperations` |
 | Scope conflicts | Surfaced | Hard | `detectScopeMisattribution` |
 | Plan age | — | Hard (>1h) | `planTooOldToExecute` |
 
@@ -329,10 +329,10 @@ Discrepancies appear as preview warnings, not blockers.
 | `role` | `source`, `target`, or `both` |
 | `ringOrder` | Deployment ring ordering (0=dev, 1=uat, 2=prod) |
 | `allowedSyncTargets` | When source: explicit target allowlist (`null` = unrestricted) |
-| `syncAllowlist` | UPNs allowed to **execute** on this env (empty = open) |
-| `agentServiceBaseUrl` | Post-sync Agent callbacks |
-| `etlServiceBaseUrl` | Dataset/rule ETL deploy callbacks |
-| `gateServiceBaseUrl` | Gate metadata refresh |
+| `serviceUrls` | Named HTTP service base URLs (agent, etl, gate, custom) — preferred over legacy URL fields |
+| `agentServiceBaseUrl` | Legacy post-sync Agent callback URL (merged into `serviceUrls`) |
+| `etlServiceBaseUrl` | Legacy dataset/rule ETL deploy callback URL |
+| `gateServiceBaseUrl` | Legacy gate metadata refresh URL |
 | `defaultAccessMode` | `read_only` vs `read_write` — drives hosted policy |
 | `allowedOperations` | Explicit operation allowlist for hosted mode |
 
@@ -564,7 +564,7 @@ The selection is frozen in `recipeSnapshot.enabledOptionalTables` on the plan.
 | 2 | Plan exists, not expired (1h) |
 | 3 | Environment roles + direction |
 | 4 | PROD guard |
-| 5 | Target `syncAllowlist` vs `userUpn` |
+| 5 | Hosted policy — target `read_only` / missing `sync_execute` in `allowedOperations` |
 | 6 | `executionContract` present |
 | 7 | Catalog drift — **fatal** (preview only warned) |
 | 8 | Freeze windows — **fatal** unless override |
@@ -981,9 +981,11 @@ Parses goals like `sync contract abcd from uat to dev` into `SyncOperationIntent
 - Evaluated at preview (warning) and execute (block).
 - Override: `overrideFreezeWindow: true` on execute (audited in decision log).
 
-### Sync allowlist
+### Hosted access policy
 
-Per-environment `syncAllowlist: string[]` of UPNs. Empty = open. Execute enforces; preview warns.
+Per-environment `defaultAccessMode`, `allowedOperations`, `denyDml`, and `denyDdl` drive the hosted policy engine. Execute is blocked when the target environment is read-only or does not allow `sync_execute`. Approvals are configured through the dedicated approval workflow, not per-environment UPN lists.
+
+**Removed:** `syncAllowlist` (per-env UPN execute list) was removed — do not add it to config; the API and file loader reject it.
 
 ### Production target lock
 

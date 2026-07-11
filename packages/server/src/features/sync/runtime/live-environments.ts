@@ -1,6 +1,7 @@
 import { getMssqlConfig, type AgentHost } from "@mia/agent"
 import {
   loadSyncEnvironments,
+  normalizeStoredSyncEnvironment,
   replaceEnvironments,
   withPermissionDefaults,
   type SyncEnvironment
@@ -42,10 +43,7 @@ function mergeLegacyOverrides(environments: SyncEnvironment[]): SyncEnvironment[
 }
 
 function parsePersistedEnvironment(row: db.DbSyncEnvironment): SyncEnvironment {
-  return withPermissionDefaults({
-    ...(JSON.parse(row.body_json) as SyncEnvironment),
-    name: row.name
-  })
+  return normalizeStoredSyncEnvironment(row.name, JSON.parse(row.body_json) as Record<string, unknown>)
 }
 
 function renderSummary(environments: SyncEnvironment[]): string {

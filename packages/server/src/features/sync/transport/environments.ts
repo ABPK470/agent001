@@ -7,8 +7,11 @@ import { EventType } from "@mia/shared-enums"
 import {
   ENV_ACCESS_MODES,
   ENV_ROLES,
+  findRemovedSyncEnvironmentFields,
   isEnvAccessMode,
   isEnvRole,
+  normalizeStoredSyncEnvironment,
+  removedSyncEnvironmentFieldError,
   type EnvOperation,
   type SyncEnvironment,
   withPermissionDefaults,
@@ -49,6 +52,11 @@ type Editable = Pick<
 >
 
 function sanitise(body: Record<string, unknown>): Partial<Editable> | string {
+  const removed = findRemovedSyncEnvironmentFields(body)
+  if (removed.length > 0) {
+    return removedSyncEnvironmentFieldError(removed[0]!, "request")
+  }
+
   const out: Partial<Editable> = {}
   if (body["displayName"] !== undefined) {
     if (typeof body["displayName"] !== "string" || body["displayName"].trim() === "")
@@ -158,7 +166,7 @@ function serialiseEnvironment(
 function parseEnvironmentRow(
   row: db.DbSyncEnvironment
 ): SyncEnvironment & { updatedAt: string; updatedBy: string | null; builtIn: boolean } {
-  const env = JSON.parse(row.body_json) as SyncEnvironment
+  const env = normalizeStoredSyncEnvironment(row.name, JSON.parse(row.body_json) as Record<string, unknown>)
   return {
     ...env,
     updatedAt: row.updated_at,
@@ -282,12 +290,12 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         reply.code(400)
         return { error: sanitised }
       }
-      const next = {
-        ...(JSON.parse(row.body_json) as SyncEnvironment),
+      const env = withPermissionDefaults({
+        ...normalizeStoredSyncEnvironment(req.params.name, JSON.parse(row.body_json) as Record<string, unknown>),
         ...sanitised,
-        name: req.params.name
-      }
-      db.saveSyncEnvironment(serialiseEnvironment(next, req.session.upn, row.created_at))
+        name: req.params.name,
+      })
+      db.saveSyncEnvironment(serialiseEnvironment(env, req.session.upn, row.created_at))
       rebuildLiveSyncEnvironments(host)
       refreshEnvDerivedPolicies(host, req.params.name)
       audit(req, "sync_env.update", { name: req.params.name, fields: sanitised })
