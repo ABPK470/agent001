@@ -1,43 +1,41 @@
 /**
- * Definition tab — copy, download, compiled bundle.
+ * Definition tab — export single entity JSON (includes run binding).
  */
 
-import { Copy, Download, Package, Share } from "lucide-react"
+import { Copy, Download, Share } from "lucide-react"
 import type { JSX } from "react"
 import { ToolbarMenu, ToolbarMenuItem } from "./ToolbarMenu"
 
 export interface DefinitionExportMenuProps {
-  isAdmin: boolean
-  bundleBusy: boolean
-  onCopy: () => void
-  onDownload: () => void
-  onCopyBundle: () => void
+  exportBusy: boolean
+  onCopyJson: () => void
+  onDownloadJson: () => void
 }
 
 export function DefinitionExportMenu({
-  isAdmin,
-  bundleBusy,
-  onCopy,
-  onDownload,
-  onCopyBundle,
+  exportBusy,
+  onCopyJson,
+  onDownloadJson,
 }: DefinitionExportMenuProps): JSX.Element {
   return (
     <ToolbarMenu
-      title="Export definition"
-      ariaLabel="Export definition"
+      title="Export entity"
+      ariaLabel="Export entity"
       trigger={<Share size={16} />}
       minWidthClass="min-w-[11.5rem]"
     >
-      <ToolbarMenuItem icon={<Copy size={14} />} label="Copy to clipboard" onClick={onCopy} />
-      <ToolbarMenuItem icon={<Download size={14} />} label="Download file" onClick={onDownload} />
-      {isAdmin && (
-        <ToolbarMenuItem
-          icon={<Package size={14} />}
-          label="Copy compiled bundle"
-          onClick={onCopyBundle}
-          disabled={bundleBusy}
-        />
-      )}
+      <ToolbarMenuItem
+        icon={<Copy size={14} />}
+        label="Copy entity JSON"
+        onClick={onCopyJson}
+        disabled={exportBusy}
+      />
+      <ToolbarMenuItem
+        icon={<Download size={14} />}
+        label="Download entity JSON"
+        onClick={onDownloadJson}
+        disabled={exportBusy}
+      />
     </ToolbarMenu>
   )
 }

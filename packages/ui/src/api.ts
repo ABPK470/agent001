@@ -692,16 +692,13 @@ export const api = {
     if (!res.ok) throw new Error(await res.text())
     return await res.text()
   },
-  getEntityRegistrySyncDefinitionScaffold: (id: string, opts?: { tenant?: string } & EntityRegistrySyncDefinitionScaffoldRequest) => {
+  getEntityRegistryJson: async (id: string, opts?: { tenant?: string }): Promise<string> => {
     const p = new URLSearchParams()
     if (opts?.tenant) p.set("tenant", opts.tenant)
-    if (opts?.flowTemplateId) p.set("flowTemplateId", opts.flowTemplateId)
-    if (opts?.serviceProfileRef) p.set("serviceProfileRef", opts.serviceProfileRef)
-    if (opts?.environmentPolicyRef) p.set("environmentPolicyRef", opts.environmentPolicyRef)
     const qs = p.toString()
-    return json<EntityRegistrySyncDefinitionScaffoldResponse>(
-      `/api/entity-registry/entities/${encodeURIComponent(id)}/scaffold-sync-definition${qs ? `?${qs}` : ""}`,
-    )
+    const res = await fetch(`${BASE}/api/entity-registry/entities/${encodeURIComponent(id)}.json${qs ? `?${qs}` : ""}`, { credentials: "include" })
+    if (!res.ok) throw new Error(await res.text())
+    return await res.text()
   },
   suggestEntityRegistryDraft: (rootTable: string, opts?: { tenant?: string }) => {
     const p = new URLSearchParams()
@@ -776,18 +773,6 @@ export const api = {
       {
         method: "POST",
         body:   JSON.stringify({ yaml, reason, dryRun: opts?.dryRun ?? false }),
-      },
-    )
-  },
-  importEntityRegistryDocument: (content: string, format: import("./types").EntityRegistryImportFormat, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
-    const p = new URLSearchParams()
-    if (opts?.tenant) p.set("tenant", opts.tenant)
-    const qs = p.toString()
-    return json<import("./types").EntityRegistryYamlImportResponse>(
-      `/api/entity-registry/entities/import${qs ? `?${qs}` : ""}`,
-      {
-        method: "POST",
-        body:   JSON.stringify({ content, format, reason, dryRun: opts?.dryRun ?? false }),
       },
     )
   },

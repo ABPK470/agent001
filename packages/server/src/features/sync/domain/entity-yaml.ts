@@ -43,6 +43,11 @@ export function formatEntityYaml(def: EntityDefinition, run?: EntityRunYaml | nu
   return stringify(orderEntity(def, run), { lineWidth: 0, sortMapEntries: false })
 }
 
+/** JSON export for a single entity — same shape as one entry in entity-registry.json (includes run binding). */
+export function formatEntityJson(def: EntityDefinition, run?: EntityRunYaml | null): string {
+  return `${JSON.stringify(orderEntity(def, run), null, 2)}\n`
+}
+
 /**
  * Serialise many EntityDefinitions as a multi-doc YAML stream (one
  * `---` separator per entity). Order is preserved.

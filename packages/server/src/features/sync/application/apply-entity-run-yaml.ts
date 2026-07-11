@@ -1,18 +1,21 @@
 import {
   hasSyncDefinitionFlowTemplate,
-  loadSyncDefinitionFlowTemplateCatalog,
 } from "@mia/sync"
 
 import * as db from "../../../platform/persistence/sqlite.js"
 import type { EntityRunYaml } from "../domain/entity-yaml.js"
-import { upsertSyncDefinitionConfig } from "./definitions.js"
+import { loadAuthoringFlowCatalog, upsertSyncDefinitionConfig } from "./definitions.js"
 
-export function validateEntityRunYaml(projectRoot: string, run: EntityRunYaml): string | null {
+export function validateEntityRunYaml(
+  projectRoot: string,
+  run: EntityRunYaml,
+  tenantId = "_default",
+): string | null {
   if (run.steps && run.steps.length > 0) {
     return "run.steps is not supported — define steps on the flow in Sync metadata → Flows"
   }
-  if (db.getSyncRunPreset("_default", run.template)) return null
-  const catalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
+  if (db.getSyncRunPreset(tenantId, run.template)) return null
+  const catalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
   if (!hasSyncDefinitionFlowTemplate(catalog, run.template)) {
     return `unknown run.template "${run.template}"`
   }

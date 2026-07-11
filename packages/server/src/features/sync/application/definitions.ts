@@ -20,6 +20,7 @@ import {
   validateAuthoredSyncFlow,
   validateEntityDefinition,
   type EntityDefinition,
+  type SyncDefinitionFlowTemplate,
   type SyncDefinitionFlowTemplateCatalog
 } from "@mia/sync"
 
@@ -111,28 +112,27 @@ interface PersistedPublishedBundle {
   definitions: Record<string, PublishedSyncDefinition | null>
 }
 
-function loadAuthoringFlowCatalog(
+export function loadAuthoringFlowCatalog(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID,
 ): SyncDefinitionFlowTemplateCatalog {
+  const fileCatalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
   const presets = db.listSyncRunPresets(tenantId)
-  if (presets.length > 0) {
-    const flowTemplates = Object.fromEntries(
-      presets.map((preset) => [
-        preset.id,
-        {
-          label: preset.label,
-          description: preset.description,
-          steps: db.parsePresetSteps(preset.steps_json),
-        },
-      ]),
-    )
-    return {
-      version: 1,
-      flowTemplates: flowTemplates as SyncDefinitionFlowTemplateCatalog["flowTemplates"],
+  if (presets.length === 0) return fileCatalog
+
+  // DB presets override shipped flows; keep platform builtins (e.g. metadataOnly) from file catalog.
+  const flowTemplates = { ...fileCatalog.flowTemplates } as Record<string, SyncDefinitionFlowTemplate>
+  for (const preset of presets) {
+    flowTemplates[preset.id] = {
+      label: preset.label,
+      description: preset.description,
+      steps: db.parsePresetSteps(preset.steps_json),
     }
   }
-  return loadSyncDefinitionFlowTemplateCatalog(projectRoot)
+  return {
+    version: 1,
+    flowTemplates: flowTemplates as SyncDefinitionFlowTemplateCatalog["flowTemplates"],
+  }
 }
 
 /** @deprecated Use loadAuthoringFlowCatalog */

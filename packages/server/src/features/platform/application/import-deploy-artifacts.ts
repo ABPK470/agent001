@@ -16,12 +16,13 @@ import { withPermissionDefaults } from "@mia/sync"
 import * as db from "../../../platform/persistence/sqlite.js"
 import { getDb } from "../../../platform/persistence/sqlite.js"
 import { applyEntityRunYaml } from "../../sync/application/apply-entity-run-yaml.js"
+import { ensureSyncDefinitionConfigs, upsertSyncDefinitionConfig } from "../../sync/application/definitions.js"
 import {
   buildEntityRegistryExportDocument,
   parseEntitiesJson,
   type EntityRegistryExportDocument,
 } from "../../sync/domain/entity-yaml.js"
-import type { DeployCatalogSnapshot } from "./export-deploy-artifacts.js"
+import type { DeployCatalogSnapshot, SyncDefinitionConfigExportDocument } from "./export-deploy-artifacts.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -102,6 +103,15 @@ export function parseCatalogBundleFromDir(bundleDir: string): DeployCatalogSnaps
     entityRegistry = null
   }
 
+  let syncDefinitionConfigs: SyncDefinitionConfigExportDocument | null = null
+  const configPath = join(root, "artifacts", "sync-definition-configs.json")
+  try {
+    const raw = requireObject(readJsonFile(configPath), "artifacts/sync-definition-configs.json")
+    syncDefinitionConfigs = raw as unknown as SyncDefinitionConfigExportDocument
+  } catch {
+    syncDefinitionConfigs = null
+  }
+
   const entityIds = Array.isArray(manifest.entityIds)
     ? (manifest.entityIds as string[])
     : entityRegistry?.entities?.map((entry) => String((entry as { id?: string }).id ?? "")).filter(Boolean) ?? []
@@ -114,6 +124,7 @@ export function parseCatalogBundleFromDir(bundleDir: string): DeployCatalogSnaps
     strategies,
     environments,
     entityRegistry,
+    syncDefinitionConfigs,
     entityIds,
   }
 }
@@ -175,6 +186,27 @@ export function validateDeployCatalogSnapshot(snapshot: DeployCatalogSnapshot): 
   counts.flows = meta.flows && typeof meta.flows === "object" ? Object.keys(meta.flows).length : 0
   if (counts.flows === 0) errors.push("sync-metadata.json: flows object is required")
 
+  const flowIds = new Set(Object.keys(meta.flows ?? {}))
+  flowIds.add("metadataOnly")
+
+  const validateFlowPreset = (entityId: string, flowPreset: string): void => {
+    if (!flowPreset.trim()) {
+      errors.push(`entity "${entityId}": flow reference is required`)
+      return
+    }
+    if (!flowIds.has(flowPreset)) {
+      errors.push(
+        `entity "${entityId}": unknown flow "${flowPreset}". Define it under Configuration → Flows.`,
+      )
+    }
+  }
+
+  if (snapshot.syncDefinitionConfigs?.configs) {
+    for (const config of snapshot.syncDefinitionConfigs.configs) {
+      validateFlowPreset(config.entityId, config.flowPreset)
+    }
+  }
+
   const strategiesDoc = snapshot.strategies as StrategiesDoc
   if (!Array.isArray(strategiesDoc.strategies)) {
     errors.push("strategies.json: strategies array is required")
@@ -188,6 +220,7 @@ export function validateDeployCatalogSnapshot(snapshot: DeployCatalogSnapshot): 
       const parsed = parseEntitiesJson(JSON.stringify(entry))
       for (const item of parsed) {
         if (!item.ok) errors.push(`entity ${item.error}`)
+        else if (item.run) validateFlowPreset(String(item.def?.id ?? "unknown"), item.run.template)
       }
     }
   }
@@ -327,6 +360,39 @@ function applyStrategies(tenantId: string, doc: StrategiesDoc, actor: string): v
   }
 }
 
+function applySyncDefinitionConfigs(
+  tenantId: string,
+  doc: SyncDefinitionConfigExportDocument | null,
+  projectRoot: string,
+  actor: string,
+): number {
+  if (!doc?.configs?.length) return 0
+  const importedIds = new Set(doc.configs.map((config) => config.entityId))
+  for (const row of db.listSyncDefinitionConfigs(tenantId)) {
+    if (!importedIds.has(row.entity_id)) {
+      db.deleteSyncDefinitionConfig(tenantId, row.entity_id)
+    }
+  }
+  const now = new Date().toISOString()
+  for (const config of doc.configs) {
+    upsertSyncDefinitionConfig(projectRoot, {
+      tenant_id: tenantId,
+      entity_id: config.entityId,
+      flow_preset: config.flowPreset,
+      execution_steps_json: "[]",
+      service_profile_ref: config.serviceProfileRef,
+      environment_policy_ref: config.environmentPolicyRef,
+      ownership_team: config.ownershipTeam,
+      ownership_owner: config.ownershipOwner,
+      review_status: config.reviewStatus,
+      ownership_notes_json: JSON.stringify(config.ownershipNotes),
+      updated_at: now,
+      updated_by: actor,
+    })
+  }
+  return doc.configs.length
+}
+
 function applyEntities(
   tenantId: string,
   doc: EntityRegistryExportDocument | null,
@@ -365,6 +431,16 @@ export function applyDeployCatalogSnapshot(args: {
     return { ...preview, dryRun: true, applied: false }
   }
 
+  if (!args.projectRoot) {
+    return {
+      ...preview,
+      ok: false,
+      dryRun: false,
+      applied: false,
+      errors: [...preview.errors, "projectRoot is required to apply catalog import"],
+    }
+  }
+
   const tenantId = args.snapshot.tenantId || DEFAULT_TENANT
 
   getDb().transaction(() => {
@@ -372,6 +448,13 @@ export function applyDeployCatalogSnapshot(args: {
     applySyncMetadata(tenantId, args.snapshot.syncMetadata as SyncMetadataDoc)
     applyStrategies(tenantId, args.snapshot.strategies as StrategiesDoc, args.actor)
     applyEntities(tenantId, args.snapshot.entityRegistry, args.actor, args.projectRoot)
+    applySyncDefinitionConfigs(
+      tenantId,
+      args.snapshot.syncDefinitionConfigs,
+      args.projectRoot,
+      args.actor,
+    )
+    ensureSyncDefinitionConfigs(args.projectRoot, tenantId)
   })()
 
   return { ...preview, dryRun: false, applied: true }

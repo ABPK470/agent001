@@ -1,91 +1,81 @@
 /**
- * Overview tab — read-only summary with optional YAML/JSON source view.
+ * Overview tab — read-only summary with optional JSON source view.
  */
 
 import type { JSX } from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { api } from "../../api"
-import type { EntityRegistryDefinition } from "../../types"
 import { DefinitionExportMenu } from "./DefinitionExportMenu"
 import { DefinitionOverview } from "./DefinitionOverview"
 import { PANEL, TAB_ERROR } from "./chrome"
 import { SegmentToggle } from "./SegmentToggle"
 import { TabBody, TabPanelHeader, TabShell } from "./TabChrome"
 
-export type DefinitionView = "overview" | "yaml" | "json"
+export type DefinitionView = "overview" | "json"
 
 export interface EntityYamlProps {
-  yaml: string
-  def: EntityRegistryDefinition
+  jsonText: string
   entityId: string
-  isAdmin: boolean
 }
 
-export function EntityYaml({ yaml, def, entityId, isAdmin }: EntityYamlProps): JSX.Element {
-  const [bundleBusy, setBundleBusy] = useState(false)
-  const [bundleError, setBundleError] = useState<string | null>(null)
+export function EntityYaml({ jsonText, entityId }: EntityYamlProps): JSX.Element {
+  const [exportBusy, setExportBusy] = useState(false)
+  const [exportError, setExportError] = useState<string | null>(null)
   const [view, setView] = useState<DefinitionView>("overview")
+  const [exportJson, setExportJson] = useState(jsonText)
 
-  const content = view === "yaml" ? yaml : `${JSON.stringify(def, null, 2)}\n`
+  useEffect(() => {
+    setExportJson(jsonText)
+  }, [jsonText])
 
-  function doCopy() {
-    void navigator.clipboard.writeText(view === "overview" ? yaml : content)
+  async function loadExportJson(): Promise<string> {
+    setExportBusy(true)
+    setExportError(null)
+    try {
+      const next = await api.getEntityRegistryJson(entityId)
+      setExportJson(next)
+      return next
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setExportError(message)
+      throw error
+    } finally {
+      setExportBusy(false)
+    }
   }
 
-  function doDownload() {
-    const format = view === "json" ? "json" : "yaml"
-    const body = view === "json" ? content : yaml
-    const blob = new Blob([body], { type: format === "yaml" ? "application/yaml" : "application/json" })
+  async function copyJson(): Promise<void> {
+    const text = exportJson.trim() ? exportJson : await loadExportJson()
+    await navigator.clipboard.writeText(text)
+  }
+
+  async function downloadJson(): Promise<void> {
+    const text = exportJson.trim() ? exportJson : await loadExportJson()
+    const blob = new Blob([text], { type: "application/json" })
     const url = URL.createObjectURL(blob)
     const a = document.createElement("a")
     a.href = url
-    a.download = `${entityId}.${format}`
+    a.download = `${entityId}.json`
     a.click()
     URL.revokeObjectURL(url)
   }
 
-  async function loadBundle(): Promise<{ text: string; fileName: string }> {
-    setBundleBusy(true)
-    setBundleError(null)
-    try {
-      const result = await api.getEntityRegistrySyncDefinitionScaffold(entityId)
-      return {
-        text: `${JSON.stringify(result.definition, null, 2)}\n`,
-        fileName: result.suggestedPath.split("/").at(-1) ?? `${entityId}.json`,
-      }
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setBundleError(message)
-      throw error
-    } finally {
-      setBundleBusy(false)
-    }
-  }
-
-  async function copyBundle() {
-    const { text } = await loadBundle()
-    await navigator.clipboard.writeText(text)
-  }
-
   return (
     <TabShell>
-      {bundleError && <div className={TAB_ERROR}>{bundleError}</div>}
+      {exportError && <div className={TAB_ERROR}>{exportError}</div>}
 
       <TabBody>
         <div className={`${PANEL} flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-elevated/20`}>
           <TabPanelHeader>
             <DefinitionExportMenu
-              isAdmin={isAdmin}
-              bundleBusy={bundleBusy}
-              onCopy={doCopy}
-              onDownload={doDownload}
-              onCopyBundle={() => void copyBundle()}
+              exportBusy={exportBusy}
+              onCopyJson={() => void copyJson()}
+              onDownloadJson={() => void downloadJson()}
             />
             <SegmentToggle
               value={view}
               options={[
                 { value: "overview", label: "Overview" },
-                { value: "yaml", label: "YAML" },
                 { value: "json", label: "JSON" },
               ]}
               onChange={setView}
@@ -98,7 +88,7 @@ export function EntityYaml({ yaml, def, entityId, isAdmin }: EntityYamlProps): J
               <DefinitionOverview def={def} />
             ) : (
               <pre className="entity-registry-definition__code m-0 font-mono text-xs leading-relaxed text-text">
-                {content || "…"}
+                {exportJson || "…"}
               </pre>
             )}
           </div>

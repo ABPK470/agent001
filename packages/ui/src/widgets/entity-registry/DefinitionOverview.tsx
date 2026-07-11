@@ -23,7 +23,7 @@ export function DefinitionOverview({ def }: DefinitionOverviewProps): JSX.Elemen
     void api.listSyncDefinitionConfigs()
       .then((configs) => setRunConfig(configs.find((item) => item.id === def.id) ?? null))
       .catch(() => setRunConfig(null))
-  }, [def.id])
+  }, [def.id, def.version])
 
   const sections = buildDefinitionSections(
     def,

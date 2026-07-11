@@ -6,10 +6,8 @@ import { resolve } from "node:path"
 
 import { EventType } from "@mia/shared-enums"
 import type {
-  EntityRegistryDocumentImportRequest,
   EntityRegistryDraftSuggestion,
   EntityRegistryTableSuggestion,
-  EntityRegistrySyncDefinitionScaffoldResponse,
   EntityRegistrySyncFlowTemplateId,
   EntityRegistryYamlImportResponse,
   type EntityRegistryDefinition,
@@ -18,7 +16,6 @@ import type {
 import {
   hasSyncDefinitionFlowTemplate,
   loadSyncDefinitionFlowTemplateCatalog,
-  scaffoldSyncDefinition,
   suggestEntityDraft,
   suggestEntityTable,
   type EntityDefinition,
@@ -29,6 +26,7 @@ import { broadcast } from "../../../platform/events/broadcaster.js"
 import * as db from "../../../platform/persistence/sqlite.js"
 import {
   formatEntitiesYaml,
+  formatEntityJson,
   formatEntityYaml,
   entityRunYamlFromConfig,
   parseEntitiesJson,
@@ -189,6 +187,19 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     return formatEntityYaml(def, run)
   })
 
+  app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id.json", async (req, reply) => {
+    const tenantId = resolveTenant(req)
+    const def = db.getEntityDefinition(tenantId, req.params.id, { includeRetired: true })
+    if (!def) {
+      reply.code(404)
+      return { error: `entity not found: ${req.params.id}` }
+    }
+    reply.header("content-type", "application/json; charset=utf-8")
+    const config = db.getSyncDefinitionConfig(tenantId, req.params.id)
+    const run = config ? entityRunYamlFromConfig(config) : null
+    return formatEntityJson(def, run)
+  })
+
   app.get("/api/entity-registry/entities.yaml", async (req, reply) => {
     const tenantId = resolveTenant(req)
     const defs = db.listEntityDefinitions(tenantId, { includeRetired: true })
@@ -206,57 +217,6 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
 
   app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id/history", async (req) =>
     db.listEntityDefinitionHistory(resolveTenant(req), req.params.id)
-  )
-
-  app.get<{
-    Params: { id: string }
-    Querystring: { flowTemplateId?: string; serviceProfileRef?: string; environmentPolicyRef?: string }
-  }>(
-    "/api/entity-registry/entities/:id/scaffold-sync-definition",
-    async (
-      req,
-      reply
-    ): Promise<EntityRegistrySyncDefinitionScaffoldResponse | { error: string; stderr?: string[] }> => {
-      if (!req.session?.isAdmin) {
-        reply.code(403)
-        return { error: "admin only" }
-      }
-      if (!projectRoot) {
-        reply.code(500)
-        return { error: "projectRoot not configured" }
-      }
-      const tenantId = resolveTenant(req)
-      const def = db.getEntityDefinition(tenantId, req.params.id, { includeRetired: true })
-      if (!def) {
-        reply.code(404)
-        return { error: `entity not found: ${req.params.id}` }
-      }
-
-      try {
-        const definition = scaffoldSyncDefinition(def, {
-          projectRoot,
-          sourceArtifact: resolve(projectRoot, "entity-registry", `${req.params.id}.json`),
-          flowTemplateId: resolveFlowTemplateId(req.query.flowTemplateId, projectRoot),
-          serviceProfileRef: req.query.serviceProfileRef ?? "default",
-          environmentPolicyRef: req.query.environmentPolicyRef ?? "default"
-        })
-        audit(req, "entity_registry.sync_definition_scaffolded", {
-          tenantId,
-          id: req.params.id,
-          flowTemplateId: req.query.flowTemplateId ?? null,
-          serviceProfileRef: req.query.serviceProfileRef ?? "default",
-          environmentPolicyRef: req.query.environmentPolicyRef ?? "default"
-        })
-        return {
-          suggestedPath: `deploy/sync/artifacts/entities/${req.params.id}.json`,
-          definition,
-          stderr: []
-        }
-      } catch (error) {
-        reply.code(400)
-        return { error: error instanceof Error ? error.message : String(error), stderr: [] }
-      }
-    }
   )
 
   app.get<{ Querystring: { rootTable?: string } }>(
@@ -413,50 +373,6 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     })
     return result
   })
-
-  app.post<{ Body: EntityRegistryDocumentImportRequest }>(
-    "/api/entity-registry/entities/import",
-    async (req, reply): Promise<EntityRegistryYamlImportResponse | { error: string }> => {
-      if (!req.session?.isAdmin) {
-        reply.code(403)
-        return { error: "admin only" }
-      }
-      if (typeof req.body?.content !== "string" || req.body.content.trim() === "") {
-        reply.code(400)
-        return { error: "'content' body is required" }
-      }
-      if (req.body.format !== "yaml" && req.body.format !== "json") {
-        reply.code(400)
-        return { error: "'format' must be 'yaml' or 'json'" }
-      }
-      if (!req.body.reason || req.body.reason.trim() === "") {
-        reply.code(400)
-        return { error: "'reason' is required" }
-      }
-      const tenantId = resolveTenant(req)
-      const dryRun = Boolean(req.body.dryRun)
-      const result = importEntitiesFromText({
-        tenantId,
-        actor: req.session.upn,
-        reason: req.body.reason,
-        content: req.body.content,
-        format: req.body.format,
-        dryRun,
-        projectRoot
-      })
-
-      if (!dryRun) {
-        audit(req, "entity_registry.imported", {
-          tenantId,
-          format: req.body.format,
-          savedCount: result.saved.length,
-          errorCount: result.errors.length
-        })
-      }
-
-      return result
-    }
-  )
 
   app.post<{ Body: { yaml: string; reason: string; dryRun?: boolean } }>(
     "/api/entity-registry/entities/import-yaml",

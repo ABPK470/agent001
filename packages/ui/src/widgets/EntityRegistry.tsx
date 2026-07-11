@@ -37,7 +37,7 @@ export function EntityRegistry(): JSX.Element {
   const [tab, setTab] = useState<EntityTab>("overview")
   const [historyOpen, setHistoryOpen] = useState(false)
   const [history, setHistory] = useState<EntityRegistryHistoryEntry[]>([])
-  const [yamlText, setYamlText] = useState("")
+  const [jsonText, setJsonText] = useState("")
   const [busy, setBusy] = useState(false)
   const { toasts, dismissToast, notify, notifyError } = useWidgetToasts()
   const [modal, setModal] = useState<null | { kind: "new" } | { kind: "edit"; def: EntityRegistryDefinition }>(null)
@@ -93,7 +93,7 @@ export function EntityRegistry(): JSX.Element {
     if (!selectedId) return
     setHistoryOpen(false)
     if (tab === "overview") {
-      void api.getEntityRegistryYaml(selectedId).then(setYamlText).catch((e) =>
+      void api.getEntityRegistryJson(selectedId).then(setJsonText).catch((e) =>
         notifyError(String(e)))
     }
   }, [tab, selectedId])
@@ -193,8 +193,7 @@ export function EntityRegistry(): JSX.Element {
                     <EntityDetailContent
                       def={selected}
                       tab={tab}
-                      yamlText={yamlText}
-                      isAdmin={isAdmin}
+                      jsonText={jsonText}
                     />
                   </>
                 )

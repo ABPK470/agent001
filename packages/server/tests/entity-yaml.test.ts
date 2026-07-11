@@ -13,7 +13,9 @@ import { describe, expect, it } from "vitest"
 import {
   buildEntityRegistryExportDocument,
   formatEntitiesYaml,
+  formatEntityJson,
   formatEntityYaml,
+  parseEntitiesJson,
   parseEntitiesYaml,
   parseEntityYaml
 } from "../src/features/sync/domain/entity-yaml.js"
@@ -214,5 +216,21 @@ describe("entity-yaml round-trip", () => {
     const parsed = parseEntityYaml(yaml)
     expect(parsed.ok).toBe(true)
     expect(parsed.run).toBeNull()
+  })
+
+  it("round-trips run block through JSON export", () => {
+    const json = formatEntityJson(FULL_DEF, {
+      template: "dataset",
+      service: "default",
+      environment: "default",
+    })
+    const parsed = parseEntitiesJson(json)[0]!
+    expect(parsed.ok).toBe(true)
+    expect(parsed.run).toEqual({
+      template: "dataset",
+      service: "default",
+      environment: "default",
+    })
+    expect(stripServerStamped(parsed.def!)).toEqual(stripServerStamped(FULL_DEF))
   })
 })

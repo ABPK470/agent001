@@ -54,20 +54,18 @@ export function EntityDetailToolbar({
 export interface EntityDetailContentProps {
   def: EntityRegistryDefinition
   tab: EntityTab
-  yamlText: string
-  isAdmin: boolean
+  jsonText: string
 }
 
 export function EntityDetailContent({
   def,
   tab,
-  yamlText,
-  isAdmin,
+  jsonText,
 }: EntityDetailContentProps): JSX.Element {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {tab === "overview" && (
-        <EntityYaml yaml={yamlText} def={def} entityId={def.id} isAdmin={isAdmin} />
+        <EntityYaml jsonText={jsonText} entityId={def.id} />
       )}
       {tab === "tables" && <EntityTables def={def} />}
     </div>
@@ -79,8 +77,7 @@ export interface EntityDetailProps {
   def: EntityRegistryDefinition
   tab: EntityTab
   onTab: (tab: EntityTab) => void
-  yamlText: string
-  isAdmin: boolean
+  jsonText: string
 }
 
 export function EntityDetail(props: EntityDetailProps): JSX.Element {
@@ -90,8 +87,7 @@ export function EntityDetail(props: EntityDetailProps): JSX.Element {
       <EntityDetailContent
         def={props.def}
         tab={props.tab}
-        yamlText={props.yamlText}
-        isAdmin={props.isAdmin}
+        jsonText={props.jsonText}
       />
     </div>
   )

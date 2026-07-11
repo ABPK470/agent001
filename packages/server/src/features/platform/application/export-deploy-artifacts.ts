@@ -29,7 +29,23 @@ export interface DeployCatalogSnapshot {
   strategies: Record<string, unknown>
   environments: Record<string, unknown>
   entityRegistry: EntityRegistryExportDocument | null
+  syncDefinitionConfigs: SyncDefinitionConfigExportDocument | null
   entityIds: string[]
+}
+
+export interface SyncDefinitionConfigExportDocument {
+  version: 1
+  _comment: string
+  configs: Array<{
+    entityId: string
+    flowPreset: string
+    serviceProfileRef: string
+    environmentPolicyRef: string
+    ownershipTeam: string
+    ownershipOwner: string | null
+    reviewStatus: "legacy-review-required" | "reviewed"
+    ownershipNotes: string[]
+  }>
 }
 
 export interface BuildDeployCatalogSnapshotOptions {
@@ -162,6 +178,24 @@ function exportFlowTemplatesDocument(syncMetadata: Record<string, unknown>) {
   }
 }
 
+function exportSyncDefinitionConfigsDocument(tenantId: string): SyncDefinitionConfigExportDocument {
+  const configs = db.listSyncDefinitionConfigs(tenantId)
+  return {
+    version: 1,
+    _comment: "SQLite snapshot — per-entity flow bindings (template, service, environment).",
+    configs: configs.map((row) => ({
+      entityId: row.entity_id,
+      flowPreset: row.flow_preset,
+      serviceProfileRef: row.service_profile_ref,
+      environmentPolicyRef: row.environment_policy_ref,
+      ownershipTeam: row.ownership_team,
+      ownershipOwner: row.ownership_owner,
+      reviewStatus: row.review_status,
+      ownershipNotes: JSON.parse(row.ownership_notes_json) as string[],
+    })),
+  }
+}
+
 function exportEntityRegistryDocument(tenantId: string, includeRetired: boolean): {
   document: EntityRegistryExportDocument | null
   entityIds: string[]
@@ -198,6 +232,7 @@ export function buildDeployCatalogSnapshot(
     strategies: exportStrategiesDocument(tenantId),
     environments: exportEnvironmentsDocument(),
     entityRegistry: entities.document,
+    syncDefinitionConfigs: exportSyncDefinitionConfigsDocument(tenantId),
     entityIds: entities.entityIds,
   }
 }
@@ -233,6 +268,7 @@ export function writeDeployCatalogSnapshot(
     "strategies.json",
     "flow-templates.json",
     ...(snapshot.entityRegistry ? ["entity-registry.json"] : []),
+    ...(snapshot.syncDefinitionConfigs?.configs.length ? ["sync-definition-configs.json"] : []),
   ]
 
   const files = [
@@ -252,6 +288,9 @@ export function writeDeployCatalogSnapshot(
 
   if (snapshot.entityRegistry) {
     files.push(writeJsonFile(artifactsDir, "entity-registry.json", snapshot.entityRegistry))
+  }
+  if (snapshot.syncDefinitionConfigs && snapshot.syncDefinitionConfigs.configs.length > 0) {
+    files.push(writeJsonFile(artifactsDir, "sync-definition-configs.json", snapshot.syncDefinitionConfigs))
   }
 
   let zipPath: string | null = null
