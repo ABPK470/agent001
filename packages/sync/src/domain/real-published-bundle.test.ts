@@ -17,8 +17,10 @@ import { selectDefinitionTables } from "./definition-selection.js"
 import { getPublishedSyncDefinition, loadPublishedSyncDefinitionBundle } from "./published-definitions.js"
 
 describe("real published bundle (read-only)", () => {
-  function stripStepBindings<T extends { bindings?: unknown }>(steps: T[]): Array<Omit<T, "bindings">> {
-    return steps.map(({ bindings: _bindings, ...step }) => step)
+  function stripFlowPresentation<T extends { bindings?: unknown; phase?: unknown }>(
+    steps: T[],
+  ): Array<Omit<T, "bindings" | "phase">> {
+    return steps.map(({ bindings: _bindings, phase: _phase, ...step }) => step)
   }
 
   it("bundle file exists at the expected repo path", () => {
@@ -45,8 +47,8 @@ describe("real published bundle (read-only)", () => {
       readFileSync(resolve(REPO_ROOT, "deploy/sync/artifacts/flow-templates.json"), "utf-8")
     ) as { flowTemplates: { contract: { steps: unknown[] } } }
 
-    expect(stripStepBindings(contract.executionFlow.steps)).toEqual(
-      stripStepBindings(catalog.flowTemplates.contract.steps)
+    expect(stripFlowPresentation(contract.executionFlow.steps)).toEqual(
+      stripFlowPresentation(catalog.flowTemplates.contract.steps)
     )
   })
 

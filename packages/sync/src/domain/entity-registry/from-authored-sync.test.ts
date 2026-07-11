@@ -11,7 +11,7 @@ import { validateEntityDefinition } from "./validate.js"
 const repoRoot = resolve(import.meta.dirname, "../../../../..")
 
 describe("resolveReviewPlaceholderPredicate", () => {
-  it("resolves content type lookup scopes from the content tree", () => {
+  it("does not guess degraded IN predicates from review placeholders", () => {
     const resolved = resolveReviewPlaceholderPredicate(
       "contentTypeId IN (/* review contentTypeIds */)",
       {
@@ -22,9 +22,7 @@ describe("resolveReviewPlaceholderPredicate", () => {
         scopeColumn: "contentTypeId",
       },
     )
-    expect(resolved).toContain("{ids}")
-    expect(resolved).toContain("[gate].[Content]")
-    expect(looksIncompleteScopePredicate(resolved!)).toBe(false)
+    expect(resolved).toBeNull()
   })
 })
 

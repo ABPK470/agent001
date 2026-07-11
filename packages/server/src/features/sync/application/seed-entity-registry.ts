@@ -15,7 +15,9 @@ import type { AuthoredSyncDefinition } from "@mia/shared-types"
 import {
   entityDefinitionFromAuthoredSync,
   loadEntityDefinitionsFromDocument,
+  projectTablePredicate,
   validateEntityDefinition,
+  type EntityDefinition,
 } from "@mia/sync"
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
@@ -51,6 +53,57 @@ export function seedEntityRegistryIfEmpty(
   }
 
   return seedFromArtifacts(resolve(projectRoot, ARTIFACTS_DIR), tenantId)
+}
+
+/** Re-import shipped deploy artifacts when SQLite entity rows have drifted to degraded predicates. */
+export function repairBundledEntityDefinitionsFromArtifacts(
+  projectRoot: string,
+  tenantId = DEFAULT_TENANT_ID,
+): string[] {
+  const artifactsDir = resolve(projectRoot, ARTIFACTS_DIR)
+  if (!existsSync(artifactsDir)) return []
+
+  const repaired: string[] = []
+  for (const file of readdirSync(artifactsDir)
+    .filter((name) => name.endsWith(".json"))
+    .sort()) {
+    const path = resolve(artifactsDir, file)
+    const authored = JSON.parse(readFileSync(path, "utf-8")) as AuthoredSyncDefinition
+    const canonical = entityDefinitionFromAuthoredSync(authored, tenantId)
+    const canonicalValidation = validateEntityDefinition(canonical)
+    if (!canonicalValidation.ok) {
+      throw new Error(
+        `[entity-registry] deploy artifact ${file} failed validation: ${canonicalValidation.errors[0]?.message ?? "unknown"}`,
+      )
+    }
+
+    const existing = db.getEntityDefinition(tenantId, authored.id)
+    if (!existing || !validateEntityDefinition(existing).ok || entityDefinitionDrifted(existing, canonical)) {
+      db.saveEntityDefinition({
+        tenantId,
+        def: canonical,
+        actor: SEED_ACTOR,
+        reason: "repair:deploy-artifact",
+      })
+      repaired.push(authored.id)
+    }
+  }
+  return repaired
+}
+
+function entityDefinitionDrifted(existing: EntityDefinition, canonical: EntityDefinition): boolean {
+  const canonicalPredicates = new Map(
+    canonical.tables.map((table) => [
+      table.name.toLowerCase(),
+      projectTablePredicate(canonical, table),
+    ]),
+  )
+  for (const table of existing.tables) {
+    const expected = canonicalPredicates.get(table.name.toLowerCase())
+    if (!expected) continue
+    if (projectTablePredicate(existing, table) !== expected) return true
+  }
+  return false
 }
 
 function seedFromYaml(yamlPath: string, tenantId: string): EntityRegistrySeedResult {

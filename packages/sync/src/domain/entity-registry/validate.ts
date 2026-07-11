@@ -25,7 +25,11 @@
 
 import { normalizeScd2Strategy } from "./scd2-policy.js"
 import { findEntityTableOrderViolations, orderEntityTablesDetailed } from "./order.js"
-import { looksIncompleteScopePredicate } from "./resolve-scope-predicate.js"
+import {
+  hasUnresolvedLegacyPipelineNote,
+  isDegradedLegacyFallbackPredicate,
+  looksIncompleteScopePredicate,
+} from "./resolve-scope-predicate.js"
 import {
   type EntityDefinition,
   type EntityTable,
@@ -238,6 +242,24 @@ function validateTables(
       errors.push({
         code: "scope_incomplete_enabled",
         message: `Table "${t.name}" is enabled by default but has an incomplete scope predicate.`,
+        path: `${path}/scope/predicate`,
+      })
+    }
+    if (hasUnresolvedLegacyPipelineNote(t.note)) {
+      errors.push({
+        code: "scope_degraded_legacy",
+        message: `Table "${t.name}" still has an unresolved legacy pipeline predicate — import reviewed deploy artifacts or fix scope against the entry sproc.`,
+        path: `${path}/note`,
+      })
+    }
+    if (
+      t.verified &&
+      t.scope.kind === "sql" &&
+      isDegradedLegacyFallbackPredicate(t.scope.predicate)
+    ) {
+      errors.push({
+        code: "scope_degraded_legacy",
+        message: `Table "${t.name}" is verified but uses a degraded IN-list fallback predicate instead of ground-truth EXISTS/sproc SQL.`,
         path: `${path}/scope/predicate`,
       })
     }

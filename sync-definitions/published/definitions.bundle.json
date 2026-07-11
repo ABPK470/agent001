@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "publishedAt": "2026-07-09T13:03:34.920Z",
-  "publishedVersion": "2026-07-09T13:03:34.920Z",
+  "publishedAt": "2026-07-11T16:27:33.199Z",
+  "publishedVersion": "2026-07-11T16:27:33.199Z",
   "definitions": {
     "content": {
       "schemaVersion": 1,
@@ -46,7 +46,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "gate.Content",
@@ -56,7 +74,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "gate.ContentLinkType",
@@ -66,7 +102,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "gate.ContentLink",
@@ -76,7 +130,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "gate.UserGroupPermission",
@@ -87,7 +159,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncContentObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncContentObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           }
         ],
         "executionOrder": [
@@ -110,7 +200,6 @@
         "steps": [
           {
             "id": "metadataSync",
-            "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
             "description": "Apply transactional metadata changes for the selected content scope.",
@@ -118,7 +207,6 @@
           },
           {
             "id": "handleDependencies",
-            "phase": "postMetadata",
             "kind": "handleDependencies",
             "title": "Handle dependencies",
             "description": "Refresh downstream content dependency state.",
@@ -127,24 +215,7 @@
           }
         ],
         "catalog": {
-          "phases": {
-            "metadata": {
-              "summary": "Core metadata transaction",
-              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
-              "boundary": "metadata_transaction",
-              "connection": "target",
-              "defaultFailureMode": "fatal",
-              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
-            },
-            "postMetadata": {
-              "summary": "After metadata commit",
-              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
-              "boundary": "post_metadata",
-              "connection": "mixed",
-              "defaultFailureMode": "warning",
-              "orderingHint": "All steps after the first metadataSync step."
-            }
-          },
+          "phases": {},
           "kinds": {
             "metadataSync": {
               "summary": "Apply metadata change set",
@@ -170,14 +241,15 @@
                   {
                     "name": "id",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   },
                   {
                     "name": "objectName",
                     "source": {
-                      "type": "stepField",
-                      "field": "objectName"
+                      "type": "catalog",
+                      "id": "objectName"
                     }
                   }
                 ]
@@ -216,8 +288,8 @@
         "sourceArtifact": "entity-registry:_default/content",
         "sourceVersion": "1"
       },
-      "publishedAt": "2026-07-09T13:03:34.920Z",
-      "publishedVersion": "2026-07-09T13:03:34.920Z"
+      "publishedAt": "2026-07-11T16:27:33.199Z",
+      "publishedVersion": "2026-07-11T16:27:33.199Z"
     },
     "contract": {
       "schemaVersion": 1,
@@ -262,7 +334,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.ContractColumn",
@@ -272,7 +362,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Dataset",
@@ -282,7 +390,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.DatasetMapping",
@@ -292,7 +418,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.DatasetColumn",
@@ -302,7 +446,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.DatasetMappingColumn",
@@ -312,7 +474,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Pipeline",
@@ -322,7 +502,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Activity",
@@ -332,7 +530,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Rule",
@@ -343,7 +559,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Step",
@@ -354,7 +588,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleColumn",
@@ -365,7 +617,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleCondition",
@@ -376,7 +646,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleLink",
@@ -387,7 +675,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleConditionValue",
@@ -398,7 +704,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           }
         ],
         "executionOrder": [
@@ -439,7 +763,6 @@
         "steps": [
           {
             "id": "auditCheck",
-            "phase": "preTransaction",
             "kind": "auditCheck",
             "title": "Audit check (before sync)",
             "description": "Source uspAuditRunCheck — decide whether metadata sync should run.",
@@ -448,7 +771,6 @@
           },
           {
             "id": "targetLock",
-            "phase": "preTransaction",
             "kind": "targetLock",
             "title": "Target lock",
             "description": "Lock the target contract deployment window.",
@@ -456,7 +778,6 @@
           },
           {
             "id": "metadataSync",
-            "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
             "description": "Apply transactional metadata changes for the selected contract scope.",
@@ -464,19 +785,18 @@
           },
           {
             "id": "pipelineRegister",
-            "phase": "postMetadata",
             "kind": "pipelineRegister",
             "title": "Pipeline register",
             "description": "Register affected pipelines with the target agent service.",
             "bindings": {
               "pipelineId": {
-                "type": "contractPipelineId"
+                "type": "catalog",
+                "id": "contractPipelineId"
               }
             }
           },
           {
             "id": "contractUndeploy",
-            "phase": "postMetadata",
             "kind": "contractUndeploy",
             "title": "Contract undeploy",
             "description": "Undeploy the target contract before redeployment.",
@@ -484,7 +804,6 @@
           },
           {
             "id": "contractUnlockAfterUndeploy",
-            "phase": "postMetadata",
             "kind": "targetUnlock",
             "title": "Unlock after undeploy",
             "description": "Unlock the contract after undeploy.",
@@ -492,7 +811,6 @@
           },
           {
             "id": "auditCheckPreDeploy",
-            "phase": "postMetadata",
             "kind": "auditCheck",
             "title": "Audit check (before deploy)",
             "description": "Re-run source audit after undeploy, before physical dataset creation.",
@@ -501,7 +819,6 @@
           },
           {
             "id": "contractLockForDeploy",
-            "phase": "postMetadata",
             "kind": "targetLock",
             "title": "Lock for deploy",
             "description": "Lock the contract for deployment.",
@@ -509,7 +826,6 @@
           },
           {
             "id": "contractPreScript",
-            "phase": "postMetadata",
             "kind": "contractPreScript",
             "title": "Pre-deploy script",
             "description": "Run contract pre-deployment scripts.",
@@ -517,7 +833,6 @@
           },
           {
             "id": "contractCreateDatasetStage",
-            "phase": "postMetadata",
             "kind": "contractCreateStageDataset",
             "title": "Create stage dataset",
             "description": "Create the stage dataset.",
@@ -525,7 +840,6 @@
           },
           {
             "id": "contractCreateDatasetArchive",
-            "phase": "postMetadata",
             "kind": "contractCreateArchiveDataset",
             "title": "Create archive dataset",
             "description": "Create the archive dataset.",
@@ -533,7 +847,6 @@
           },
           {
             "id": "contractCreateDatasetList",
-            "phase": "postMetadata",
             "kind": "contractCreateListDataset",
             "title": "Create list dataset",
             "description": "Create the list dataset.",
@@ -541,7 +854,6 @@
           },
           {
             "id": "contractCreateDatasetDim",
-            "phase": "postMetadata",
             "kind": "contractCreateDimDataset",
             "title": "Create dim dataset",
             "description": "Create the dimension dataset.",
@@ -549,7 +861,6 @@
           },
           {
             "id": "contractCreateDatasetFact",
-            "phase": "postMetadata",
             "kind": "contractCreateFactDataset",
             "title": "Create fact dataset",
             "description": "Create the fact dataset.",
@@ -557,7 +868,6 @@
           },
           {
             "id": "contractCreateFks",
-            "phase": "postMetadata",
             "kind": "contractCreateDatasetFks",
             "title": "Create dataset FKs",
             "description": "Reconcile contract dataset foreign keys.",
@@ -565,7 +875,6 @@
           },
           {
             "id": "contractDeployEtl",
-            "phase": "postMetadata",
             "kind": "contractDeployEtl",
             "title": "Deploy ETL",
             "description": "Deploy ETL custom transformations.",
@@ -573,7 +882,6 @@
           },
           {
             "id": "contractDeployRoutine",
-            "phase": "postMetadata",
             "kind": "contractDeployRoutine",
             "title": "Deploy routines",
             "description": "Deploy contract routines.",
@@ -581,7 +889,6 @@
           },
           {
             "id": "contractPostScript",
-            "phase": "postMetadata",
             "kind": "contractPostScript",
             "title": "Post-deploy script",
             "description": "Run contract post-deployment scripts.",
@@ -589,7 +896,6 @@
           },
           {
             "id": "contractUnlockAfterDeploy",
-            "phase": "postMetadata",
             "kind": "targetUnlock",
             "title": "Unlock after deploy",
             "description": "Unlock the contract after deployment.",
@@ -597,7 +903,6 @@
           },
           {
             "id": "setSyncDate",
-            "phase": "postMetadata",
             "kind": "syncDate",
             "title": "Sync date",
             "description": "Stamp the contract sync date.",
@@ -606,7 +911,6 @@
           },
           {
             "id": "setDeployDate",
-            "phase": "postMetadata",
             "kind": "deployDate",
             "title": "Deploy date",
             "description": "Stamp the contract deploy date.",
@@ -615,32 +919,7 @@
           }
         ],
         "catalog": {
-          "phases": {
-            "preTransaction": {
-              "summary": "Before metadata merge on target",
-              "description": "Steps run on the source database before the metadata sync transaction opens on the target. Typical uses: audit gates (syncOrNot), contract locks. Failures here stop the entire run.",
-              "boundary": "pre_metadata",
-              "connection": "source",
-              "defaultFailureMode": "fatal",
-              "orderingHint": "Must appear before the first metadataSync step in the flow array."
-            },
-            "metadata": {
-              "summary": "Core metadata transaction",
-              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
-              "boundary": "metadata_transaction",
-              "connection": "target",
-              "defaultFailureMode": "fatal",
-              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
-            },
-            "postMetadata": {
-              "summary": "After metadata commit",
-              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
-              "boundary": "post_metadata",
-              "connection": "mixed",
-              "defaultFailureMode": "warning",
-              "orderingHint": "All steps after the first metadataSync step."
-            }
-          },
+          "phases": {},
           "kinds": {
             "auditCheck": {
               "summary": "Audit gate (sync or not)",
@@ -653,14 +932,15 @@
                   {
                     "name": "id",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   },
                   {
                     "name": "objType",
                     "source": {
-                      "type": "stepField",
-                      "field": "auditObjectType"
+                      "type": "catalog",
+                      "id": "auditObjectType"
                     }
                   },
                   {
@@ -705,7 +985,8 @@
                   {
                     "name": "contractId",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   },
                   {
@@ -776,7 +1057,8 @@
                   {
                     "name": "contractId",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   }
                 ]
@@ -801,7 +1083,8 @@
                   {
                     "name": "contractId",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   },
                   {
@@ -834,7 +1117,8 @@
                   {
                     "name": "contractName",
                     "source": {
-                      "type": "contractName"
+                      "type": "catalog",
+                      "id": "contractName"
                     }
                   },
                   {
@@ -875,7 +1159,8 @@
                   {
                     "name": "ContractName",
                     "source": {
-                      "type": "contractName"
+                      "type": "catalog",
+                      "id": "contractName"
                     }
                   },
                   {
@@ -925,7 +1210,8 @@
                   {
                     "name": "ContractName",
                     "source": {
-                      "type": "contractName"
+                      "type": "catalog",
+                      "id": "contractName"
                     }
                   },
                   {
@@ -975,7 +1261,8 @@
                   {
                     "name": "ContractName",
                     "source": {
-                      "type": "contractName"
+                      "type": "catalog",
+                      "id": "contractName"
                     }
                   },
                   {
@@ -1025,7 +1312,8 @@
                   {
                     "name": "ContractName",
                     "source": {
-                      "type": "contractName"
+                      "type": "catalog",
+                      "id": "contractName"
                     }
                   },
                   {
@@ -1075,7 +1363,8 @@
                   {
                     "name": "ContractName",
                     "source": {
-                      "type": "contractName"
+                      "type": "catalog",
+                      "id": "contractName"
                     }
                   },
                   {
@@ -1125,7 +1414,8 @@
                   {
                     "name": "contractName",
                     "source": {
-                      "type": "contractName"
+                      "type": "catalog",
+                      "id": "contractName"
                     }
                   },
                   {
@@ -1183,7 +1473,8 @@
                   {
                     "name": "contractName",
                     "source": {
-                      "type": "contractName"
+                      "type": "catalog",
+                      "id": "contractName"
                     }
                   },
                   {
@@ -1217,7 +1508,8 @@
                   {
                     "name": "contractName",
                     "source": {
-                      "type": "contractName"
+                      "type": "catalog",
+                      "id": "contractName"
                     }
                   },
                   {
@@ -1259,7 +1551,8 @@
                   {
                     "name": "contractName",
                     "source": {
-                      "type": "contractName"
+                      "type": "catalog",
+                      "id": "contractName"
                     }
                   },
                   {
@@ -1301,14 +1594,15 @@
                   {
                     "name": "id",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   },
                   {
                     "name": "objType",
                     "source": {
-                      "type": "stepField",
-                      "field": "auditObjectType"
+                      "type": "catalog",
+                      "id": "auditObjectType"
                     }
                   },
                   {
@@ -1353,14 +1647,15 @@
                   {
                     "name": "id",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   },
                   {
                     "name": "objType",
                     "source": {
-                      "type": "stepField",
-                      "field": "auditObjectType"
+                      "type": "catalog",
+                      "id": "auditObjectType"
                     }
                   },
                   {
@@ -1436,8 +1731,8 @@
         "sourceArtifact": "entity-registry:_default/contract",
         "sourceVersion": "1"
       },
-      "publishedAt": "2026-07-09T13:03:34.920Z",
-      "publishedVersion": "2026-07-09T13:03:34.920Z"
+      "publishedAt": "2026-07-11T16:27:33.199Z",
+      "publishedVersion": "2026-07-11T16:27:33.199Z"
     },
     "dataset": {
       "schemaVersion": 1,
@@ -1482,7 +1777,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Pipeline",
@@ -1492,7 +1805,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Activity",
@@ -1502,7 +1833,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.DatasetMapping",
@@ -1512,7 +1861,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.DatasetColumn",
@@ -1522,7 +1889,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.DatasetMappingColumn",
@@ -1532,7 +1917,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Rule",
@@ -1543,7 +1946,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleColumn",
@@ -1554,7 +1975,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleCondition",
@@ -1565,7 +2004,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleLink",
@@ -1576,7 +2033,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Step",
@@ -1587,7 +2062,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleConditionValue",
@@ -1598,7 +2091,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDatasetObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           }
         ],
         "executionOrder": [
@@ -1635,7 +2146,6 @@
         "steps": [
           {
             "id": "metadataSync",
-            "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
             "description": "Apply transactional metadata changes for the selected dataset scope.",
@@ -1643,19 +2153,18 @@
           },
           {
             "id": "datasetDeploy",
-            "phase": "postMetadata",
             "kind": "datasetDeploy",
             "title": "Dataset deploy",
             "description": "Deploy the dataset using the target ETL service.",
             "bindings": {
               "datasetId": {
-                "type": "planEntityId"
+                "type": "catalog",
+                "id": "planEntityId"
               }
             }
           },
           {
             "id": "syncDate",
-            "phase": "postMetadata",
             "kind": "syncDate",
             "title": "Sync date",
             "description": "Stamp the dataset sync date after deployment.",
@@ -1664,24 +2173,7 @@
           }
         ],
         "catalog": {
-          "phases": {
-            "metadata": {
-              "summary": "Core metadata transaction",
-              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
-              "boundary": "metadata_transaction",
-              "connection": "target",
-              "defaultFailureMode": "fatal",
-              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
-            },
-            "postMetadata": {
-              "summary": "After metadata commit",
-              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
-              "boundary": "post_metadata",
-              "connection": "mixed",
-              "defaultFailureMode": "warning",
-              "orderingHint": "All steps after the first metadataSync step."
-            }
-          },
+          "phases": {},
           "kinds": {
             "metadataSync": {
               "summary": "Apply metadata change set",
@@ -1712,7 +2204,8 @@
                   {
                     "name": "userFullName",
                     "source": {
-                      "type": "planActor"
+                      "type": "catalog",
+                      "id": "planActor"
                     }
                   }
                 ]
@@ -1739,14 +2232,15 @@
                   {
                     "name": "id",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   },
                   {
                     "name": "objType",
                     "source": {
-                      "type": "stepField",
-                      "field": "auditObjectType"
+                      "type": "catalog",
+                      "id": "auditObjectType"
                     }
                   },
                   {
@@ -1809,8 +2303,8 @@
         "sourceArtifact": "entity-registry:_default/dataset",
         "sourceVersion": "1"
       },
-      "publishedAt": "2026-07-09T13:03:34.920Z",
-      "publishedVersion": "2026-07-09T13:03:34.920Z"
+      "publishedAt": "2026-07-11T16:27:33.199Z",
+      "publishedVersion": "2026-07-11T16:27:33.199Z"
     },
     "gateMetadata": {
       "schemaVersion": 1,
@@ -1855,7 +2349,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "gate.jsonSchema",
@@ -1865,7 +2377,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "gate.MetaView",
@@ -1875,7 +2405,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "gate.MetaColumn",
@@ -1885,7 +2433,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "gate.Content",
@@ -1896,7 +2462,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "gate.ContentLink",
@@ -1907,7 +2491,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "gate.UserGroupPermission",
@@ -1918,7 +2520,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           }
         ],
         "executionOrder": [
@@ -1945,7 +2565,6 @@
         "steps": [
           {
             "id": "metadataSync",
-            "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
             "description": "Apply transactional metadata changes for the selected gate metadata scope.",
@@ -1953,7 +2572,6 @@
           },
           {
             "id": "metaRefresh",
-            "phase": "postMetadata",
             "kind": "metaRefresh",
             "title": "Meta refresh",
             "description": "Refresh target gate metadata.",
@@ -1961,7 +2579,6 @@
           },
           {
             "id": "pipelineStart",
-            "phase": "postMetadata",
             "kind": "pipelineStart",
             "title": "Pipeline start",
             "description": "Start the downstream gate refresh pipeline.",
@@ -1970,24 +2587,7 @@
           }
         ],
         "catalog": {
-          "phases": {
-            "metadata": {
-              "summary": "Core metadata transaction",
-              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
-              "boundary": "metadata_transaction",
-              "connection": "target",
-              "defaultFailureMode": "fatal",
-              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
-            },
-            "postMetadata": {
-              "summary": "After metadata commit",
-              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
-              "boundary": "post_metadata",
-              "connection": "mixed",
-              "defaultFailureMode": "warning",
-              "orderingHint": "All steps after the first metadataSync step."
-            }
-          },
+          "phases": {},
           "kinds": {
             "metadataSync": {
               "summary": "Apply metadata change set",
@@ -2031,8 +2631,8 @@
                   {
                     "name": "name",
                     "source": {
-                      "type": "stepField",
-                      "field": "pipelineName"
+                      "type": "catalog",
+                      "id": "pipelineName"
                     }
                   }
                 ]
@@ -2064,8 +2664,8 @@
         "sourceArtifact": "entity-registry:_default/gateMetadata",
         "sourceVersion": "1"
       },
-      "publishedAt": "2026-07-09T13:03:34.920Z",
-      "publishedVersion": "2026-07-09T13:03:34.920Z"
+      "publishedAt": "2026-07-11T16:27:33.199Z",
+      "publishedVersion": "2026-07-11T16:27:33.199Z"
     },
     "pipelineActivity": {
       "schemaVersion": 1,
@@ -2110,7 +2710,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Activity",
@@ -2120,7 +2738,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Step",
@@ -2131,7 +2767,25 @@
             "groundedByPipeline": false,
             "enabledByDefault": false,
             "userControllable": true,
-            "note": "Predicate inferred from FK graph. Verify against core.uspSyncPipelineObjectsTran body."
+            "note": "Predicate inferred from FK graph. Verify against core.uspSyncPipelineObjectsTran body.",
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           }
         ],
         "executionOrder": [
@@ -2150,7 +2804,6 @@
         "steps": [
           {
             "id": "metadataSync",
-            "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
             "description": "Apply transactional metadata changes for the selected pipeline activity scope.",
@@ -2158,36 +2811,19 @@
           },
           {
             "id": "pipelineRegister",
-            "phase": "postMetadata",
             "kind": "pipelineRegister",
             "title": "Pipeline register",
             "description": "Register the target pipeline with the agent service.",
             "bindings": {
               "pipelineId": {
-                "type": "planEntityId"
+                "type": "catalog",
+                "id": "planEntityId"
               }
             }
           }
         ],
         "catalog": {
-          "phases": {
-            "metadata": {
-              "summary": "Core metadata transaction",
-              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
-              "boundary": "metadata_transaction",
-              "connection": "target",
-              "defaultFailureMode": "fatal",
-              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
-            },
-            "postMetadata": {
-              "summary": "After metadata commit",
-              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
-              "boundary": "post_metadata",
-              "connection": "mixed",
-              "defaultFailureMode": "warning",
-              "orderingHint": "All steps after the first metadataSync step."
-            }
-          },
+          "phases": {},
           "kinds": {
             "metadataSync": {
               "summary": "Apply metadata change set",
@@ -2243,8 +2879,8 @@
         "sourceArtifact": "entity-registry:_default/pipelineActivity",
         "sourceVersion": "1"
       },
-      "publishedAt": "2026-07-09T13:03:34.920Z",
-      "publishedVersion": "2026-07-09T13:03:34.920Z"
+      "publishedAt": "2026-07-11T16:27:33.199Z",
+      "publishedVersion": "2026-07-11T16:27:33.199Z"
     },
     "rule": {
       "schemaVersion": 1,
@@ -2289,7 +2925,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.DatasetMapping",
@@ -2299,7 +2953,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.DatasetColumn",
@@ -2309,7 +2981,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.DatasetMappingColumn",
@@ -2319,7 +3009,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleLinkType",
@@ -2329,7 +3037,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleType",
@@ -2339,7 +3065,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.Rule",
@@ -2349,7 +3093,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleLink",
@@ -2359,7 +3121,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleCondition",
@@ -2369,7 +3149,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleConditionValue",
@@ -2379,7 +3177,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           },
           {
             "name": "core.RuleColumn",
@@ -2389,7 +3205,25 @@
             "verified": true,
             "groundedByPipeline": true,
             "enabledByDefault": true,
-            "userControllable": false
+            "userControllable": false,
+            "scd2Policy": {
+              "excludeFromDiff": [
+                "validFrom",
+                "validTo",
+                "isLocked",
+                "sync-date",
+                "deploy-date"
+              ],
+              "onInsert": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "onUpdate": {
+                "validFrom": "GETUTCDATE()",
+                "validTo": "NULL"
+              },
+              "identityHandling": "setIdentityInsertOn"
+            }
           }
         ],
         "executionOrder": [
@@ -2424,7 +3258,6 @@
         "steps": [
           {
             "id": "metadataSync",
-            "phase": "metadata",
             "kind": "metadataSync",
             "title": "Metadata sync",
             "description": "Apply transactional metadata changes for the selected rule scope.",
@@ -2432,19 +3265,18 @@
           },
           {
             "id": "datasetDeploy",
-            "phase": "postMetadata",
             "kind": "datasetDeploy",
             "title": "Dataset deploy",
             "description": "Deploy datasets required by the rule on the target ETL service.",
             "bindings": {
               "datasetId": {
-                "type": "ruleInputDatasetId"
+                "type": "catalog",
+                "id": "ruleInputDatasetId"
               }
             }
           },
           {
             "id": "rulesDeploy",
-            "phase": "postMetadata",
             "kind": "rulesDeploy",
             "title": "Rules deploy",
             "description": "Deploy the rule package on the target ETL service.",
@@ -2452,7 +3284,6 @@
           },
           {
             "id": "syncDate",
-            "phase": "postMetadata",
             "kind": "syncDate",
             "title": "Sync date",
             "description": "Stamp the rule sync date.",
@@ -2461,7 +3292,6 @@
           },
           {
             "id": "deployDate",
-            "phase": "postMetadata",
             "kind": "deployDate",
             "title": "Deploy date",
             "description": "Stamp the rule deploy date.",
@@ -2470,24 +3300,7 @@
           }
         ],
         "catalog": {
-          "phases": {
-            "metadata": {
-              "summary": "Core metadata transaction",
-              "description": "The metadataSync step runs in a single SQL transaction on the target: applies the change set (MERGE/DELETE with FK handling). This is the only transactional metadata apply.",
-              "boundary": "metadata_transaction",
-              "connection": "target",
-              "defaultFailureMode": "fatal",
-              "orderingHint": "Exactly one metadataSync per flow; marks the split between pre- and post-metadata execution."
-            },
-            "postMetadata": {
-              "summary": "After metadata commit",
-              "description": "Deploy actions, HTTP calls, dependency refresh, pipeline start, and post-deploy audits. Most steps warn on failure but allow the run to complete.",
-              "boundary": "post_metadata",
-              "connection": "mixed",
-              "defaultFailureMode": "warning",
-              "orderingHint": "All steps after the first metadataSync step."
-            }
-          },
+          "phases": {},
           "kinds": {
             "metadataSync": {
               "summary": "Apply metadata change set",
@@ -2518,7 +3331,8 @@
                   {
                     "name": "userFullName",
                     "source": {
-                      "type": "planActor"
+                      "type": "catalog",
+                      "id": "planActor"
                     }
                   }
                 ]
@@ -2547,13 +3361,15 @@
                   {
                     "name": "ruleId",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   },
                   {
                     "name": "userFullName",
                     "source": {
-                      "type": "planActor"
+                      "type": "catalog",
+                      "id": "planActor"
                     }
                   }
                 ]
@@ -2579,14 +3395,15 @@
                   {
                     "name": "id",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   },
                   {
                     "name": "objType",
                     "source": {
-                      "type": "stepField",
-                      "field": "auditObjectType"
+                      "type": "catalog",
+                      "id": "auditObjectType"
                     }
                   },
                   {
@@ -2631,14 +3448,15 @@
                   {
                     "name": "id",
                     "source": {
-                      "type": "planEntityId"
+                      "type": "catalog",
+                      "id": "planEntityId"
                     }
                   },
                   {
                     "name": "objType",
                     "source": {
-                      "type": "stepField",
-                      "field": "auditObjectType"
+                      "type": "catalog",
+                      "id": "auditObjectType"
                     }
                   },
                   {
@@ -2711,8 +3529,8 @@
         "sourceArtifact": "entity-registry:_default/rule",
         "sourceVersion": "1"
       },
-      "publishedAt": "2026-07-09T13:03:34.920Z",
-      "publishedVersion": "2026-07-09T13:03:34.920Z"
+      "publishedAt": "2026-07-11T16:27:33.199Z",
+      "publishedVersion": "2026-07-11T16:27:33.199Z"
     }
   }
 }

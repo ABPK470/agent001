@@ -5,6 +5,7 @@ import {
   ensureDeploySyncMetadataSeeds,
   ensureFlowPresetsSeeded,
   loadPersistedSyncEnvironments,
+  repairBundledEntityDefinitionsFromArtifacts,
   seedEntityRegistryIfEmpty,
   seedSyncMetadataIfEmpty,
 } from "../features/sync/index.js"
@@ -34,6 +35,12 @@ export function loadBootSyncEnvironments(projectRoot: string, connections: Reado
   ensureFlowPresetsSeeded(projectRoot)
   ensureDeploySyncMetadataSeeds(projectRoot)
   ensureCustomValueSourcesSeeded(projectRoot)
+  const repairedEntities = repairBundledEntityDefinitionsFromArtifacts(projectRoot)
+  if (repairedEntities.length > 0) {
+    console.log(
+      `[entity-registry] repaired ${repairedEntities.length} bundled definition(s) from deploy artifacts: ${repairedEntities.join(", ")}`,
+    )
+  }
   ensureSyncDefinitionConfigs(projectRoot)
   const environments = loadPersistedSyncEnvironments(projectRoot, connections)
   ensureInitialSyncCatalogVersion("system")

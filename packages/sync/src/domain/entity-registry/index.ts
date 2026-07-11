@@ -43,6 +43,8 @@ export {
 } from "./scd2-policy.js"
 export * from "./types.js"
 export {
+  hasUnresolvedLegacyPipelineNote,
+  isDegradedLegacyFallbackPredicate,
   looksIncompleteScopePredicate,
   resolveReviewPlaceholderPredicate,
 } from "./resolve-scope-predicate.js"

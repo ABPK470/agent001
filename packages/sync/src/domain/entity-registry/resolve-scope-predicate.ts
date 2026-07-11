@@ -13,22 +13,6 @@ export interface ScopeResolveContext {
   scopeColumn: string | null
 }
 
-function quoteTable(name: string): string {
-  const parts = name.split(".")
-  if (parts.length === 2) {
-    return `[${parts[0]!.replace(/]/g, "]]")}].[${parts[1]!.replace(/]/g, "]]")}]`
-  }
-  return `[${name.replace(/]/g, "]]")}]`
-}
-
-function quoteColumn(column: string): string {
-  return `[${column.replace(/]/g, "]]")}]`
-}
-
-function idToken(selfJoinColumn: string | null): "{id}" | "{ids}" {
-  return selfJoinColumn?.trim() ? "{ids}" : "{id}"
-}
-
 function hasReviewPlaceholder(predicate: string): boolean {
   return /\/\*[\s\S]*?\*\//.test(predicate) || /\breview\b/i.test(predicate)
 }
@@ -41,69 +25,35 @@ export function looksIncompleteScopePredicate(predicate: string): boolean {
   return false
 }
 
+const UNRESOLVED_LEGACY_PIPELINE_NOTE =
+  /Predicate unresolved from legacy pipeline variable @/i
+
+export function hasUnresolvedLegacyPipelineNote(note: string | null | undefined): boolean {
+  return typeof note === "string" && UNRESOLVED_LEGACY_PIPELINE_NOTE.test(note)
+}
+
+/**
+ * Detects the degraded IN (SELECT DISTINCT …) fallback produced by incomplete
+ * legacy imports. Ground-truth predicates from deploy artifacts use EXISTS
+ * correlation or sproc-derived SQL — never this pattern for verified tables.
+ */
+export function isDegradedLegacyFallbackPredicate(predicate: string): boolean {
+  if (typeof predicate !== "string" || predicate.trim().length === 0) return false
+  if (/\bEXISTS\s*\(/i.test(predicate)) return false
+  return /\bIN\s*\(\s*SELECT\s+DISTINCT\b/i.test(predicate)
+}
+
 /**
  * Derive a concrete scope from known legacy pipeline-variable patterns.
  * Returns null when the table must be reviewed manually against the entry sproc.
+ *
+ * First principles: never guess degraded IN-list fallbacks — operators must
+ * import reviewed deploy artifacts or run legacy derivation with full sproc body.
  */
 export function resolveReviewPlaceholderPredicate(
   predicate: string,
-  ctx: ScopeResolveContext,
+  _ctx: ScopeResolveContext,
 ): string | null {
   if (!looksIncompleteScopePredicate(predicate)) return predicate.trim()
-
-  const tableKey = ctx.tableName.toLowerCase()
-  const column = ctx.scopeColumn?.trim()
-  if (!column) return null
-
-  const ids = idToken(ctx.selfJoinColumn)
-  const root = quoteTable(ctx.rootTable)
-  const rootId = quoteColumn(ctx.idColumn)
-
-  switch (tableKey) {
-    case "gate.contenttype":
-      if (column === "contentTypeId") {
-        return `${quoteColumn(column)} IN (SELECT DISTINCT ${quoteColumn(column)} FROM ${quoteTable("gate.Content")} WHERE ${quoteColumn("contentId")} IN (${ids}))`
-      }
-      break
-    case "gate.contentlinktype":
-      if (column === "contentLinkTypeId") {
-        return `${quoteColumn(column)} IN (SELECT DISTINCT ${quoteColumn(column)} FROM ${quoteTable("gate.ContentLink")} WHERE ${quoteColumn("contentId")} IN (${ids}))`
-      }
-      break
-    case "gate.jsonschema":
-      if (column === "jsonSchemaId") {
-        return `${quoteColumn(column)} IN (SELECT DISTINCT ${quoteColumn(column)} FROM ${root} WHERE ${rootId} = {id} AND ${quoteColumn(column)} IS NOT NULL)`
-      }
-      break
-    case "core.dataset":
-      if (column === "datasetId") {
-        return `${quoteColumn(column)} IN (SELECT DISTINCT ${quoteColumn("inputDatasetId")} FROM ${quoteTable("core.Rule")} WHERE ${quoteColumn("ruleId")} IN (${ids}) AND ${quoteColumn("inputDatasetId")} IS NOT NULL)`
-      }
-      break
-    case "core.datasetcolumn":
-      if (column === "datasetId") {
-        return `${quoteColumn(column)} IN (SELECT DISTINCT ${quoteColumn("inputDatasetId")} FROM ${quoteTable("core.Rule")} WHERE ${quoteColumn("ruleId")} IN (${ids}) AND ${quoteColumn("inputDatasetId")} IS NOT NULL)`
-      }
-      break
-    case "core.datasetmapping":
-    case "core.datasetmappingcolumn":
-      if (column === "datasetMappingId") {
-        return `${quoteColumn(column)} IN (SELECT DISTINCT dm.${quoteColumn("datasetMappingId")} FROM ${quoteTable("core.DatasetMapping")} dm INNER JOIN ${quoteTable("core.Rule")} r ON r.${quoteColumn("inputDatasetId")} = dm.${quoteColumn("datasetId_Left")} WHERE r.${quoteColumn("ruleId")} IN (${ids}) AND dm.${quoteColumn("datasetMappingId")} IS NOT NULL)`
-      }
-      break
-    case "core.rulelinktype":
-      if (column === "ruleLinkTypeId") {
-        return `${quoteColumn(column)} IN (SELECT DISTINCT ${quoteColumn("ruleLinkTypeId")} FROM ${quoteTable("core.RuleLink")} WHERE ${quoteColumn("ruleId")} IN (${ids}) AND ${quoteColumn("ruleLinkTypeId")} IS NOT NULL)`
-      }
-      break
-    case "core.ruletype":
-      if (column === "ruleTypeId") {
-        return `${quoteColumn(column)} IN (SELECT DISTINCT ${quoteColumn("ruleTypeId")} FROM ${root} WHERE ${quoteColumn("ruleId")} IN (${ids}) AND ${quoteColumn("ruleTypeId")} IS NOT NULL)`
-      }
-      break
-    default:
-      break
-  }
-
   return null
 }
