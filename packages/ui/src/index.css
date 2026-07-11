@@ -532,6 +532,16 @@ body {
   background: color-mix(in srgb, var(--color-accent) 9%, rgba(30, 25, 20, 0.055));
 }
 
+/* Selected segment — same surface as entity rail selection */
+.registry-mode-toggle__btn--active {
+  background: color-mix(in srgb, var(--color-accent) 11%, var(--color-overlay-2));
+  color: var(--color-text);
+}
+
+:root[data-theme="light"] .registry-mode-toggle__btn--active {
+  background: color-mix(in srgb, var(--color-accent) 9%, rgba(30, 25, 20, 0.055));
+}
+
 .entity-rail-item {
   display: block;
   min-width: 0;
@@ -3532,6 +3542,21 @@ textarea.input {
   position: fixed;
   z-index: 210;
   transform: translateX(-100%);
+}
+
+.thread-rail-item-dropdown--platform {
+  min-width: 14rem;
+  transform: none;
+}
+
+.thread-rail-item-dropdown__toggle {
+  padding: 0.35rem 0.4rem 0.45rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.thread-rail-item-dropdown__separator {
+  margin: 0.25rem 0;
+  border-top: 1px solid var(--border);
 }
 
 :root[data-theme="dark"] .thread-rail-item-dropdown {

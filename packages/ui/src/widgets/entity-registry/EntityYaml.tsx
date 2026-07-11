@@ -6,10 +6,10 @@ import type { JSX } from "react"
 import { useEffect, useState } from "react"
 import { api } from "../../api"
 import type { EntityRegistryDefinition } from "../../types"
+import { PANEL, TAB_ERROR } from "./chrome"
 import { DefinitionExportMenu } from "./DefinitionExportMenu"
 import { DefinitionOverview } from "./DefinitionOverview"
 import { EntityArtifactImportModal } from "./EntityArtifactImportModal"
-import { PANEL, TAB_ERROR } from "./chrome"
 import { SegmentToggle } from "./SegmentToggle"
 import { TabBody, TabPanelHeader, TabShell } from "./TabChrome"
 
@@ -116,7 +116,7 @@ export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: Ent
               value={view}
               options={[
                 { value: "overview", label: "Overview" },
-                { value: "json", label: "Registry JSON" },
+                { value: "json", label: "JSON" },
               ]}
               onChange={setView}
               ariaLabel="Definition view"

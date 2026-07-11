@@ -2,10 +2,11 @@
  * Entity sidebar header — label + compact icon actions.
  */
 
-import { Download, History, Plus, Rocket, Settings2, Upload, Workflow } from "lucide-react"
+import { Plus, Settings2 } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { EntityRailPlatformMenu } from "./EntityRailPlatformMenu"
 import { IconButton, TOOLBAR_ICON } from "./IconButton"
 
 export interface EntityRailHeaderProps {
@@ -96,76 +97,24 @@ export function EntityRailHeader({
             {menuOpen && menuAnchor && createPortal(
               <div
                 ref={dropdownRef}
-                className="thread-rail-item-dropdown thread-rail-item-dropdown--portal"
+                className="thread-rail-item-dropdown thread-rail-item-dropdown--portal thread-rail-item-dropdown--platform"
                 role="menu"
                 style={{
                   top: menuAnchor.bottom + 4,
-                  left: menuAnchor.right,
+                  left: menuAnchor.left,
                 }}
               >
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="thread-rail-item-dropdown-item"
-                  onClick={() => { closeMenu(); onSyncMetadata() }}
-                >
-                  <Workflow size={13} strokeWidth={1.75} />
-                  <span>Configuration</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="thread-rail-item-dropdown-item"
-                  onClick={() => { closeMenu(); onImportConfig() }}
-                >
-                  <Upload size={13} strokeWidth={1.75} />
-                  <span>Import catalog snapshot</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="thread-rail-item-dropdown-item"
-                  onClick={() => { closeMenu(); onImportDeployArtifacts() }}
-                >
-                  <Upload size={13} strokeWidth={1.75} />
-                  <span>Import deploy artifacts</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="thread-rail-item-dropdown-item"
-                  onClick={() => { closeMenu(); onExportConfig() }}
-                >
-                  <Download size={13} strokeWidth={1.75} />
-                  <span>Export catalog snapshot</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="thread-rail-item-dropdown-item"
-                  onClick={() => { closeMenu(); onExportDeployArtifacts() }}
-                >
-                  <Download size={13} strokeWidth={1.75} />
-                  <span>Export deploy artifacts</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="thread-rail-item-dropdown-item"
-                  onClick={() => { closeMenu(); onCatalogVersions() }}
-                >
-                  <History size={13} strokeWidth={1.75} />
-                  <span>Configuration versions</span>
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className="thread-rail-item-dropdown-item"
-                  onClick={() => { closeMenu(); onPublish() }}
-                >
-                  <Rocket size={13} strokeWidth={1.75} />
-                  <span>Publish all</span>
-                </button>
+                <EntityRailPlatformMenu
+                  busy={busy}
+                  onClose={closeMenu}
+                  onSyncMetadata={onSyncMetadata}
+                  onPublish={onPublish}
+                  onExportConfig={onExportConfig}
+                  onExportDeployArtifacts={onExportDeployArtifacts}
+                  onImportConfig={onImportConfig}
+                  onImportDeployArtifacts={onImportDeployArtifacts}
+                  onCatalogVersions={onCatalogVersions}
+                />
               </div>,
               document.body,
             )}
