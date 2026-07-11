@@ -22,7 +22,8 @@ Three execution regions  — before metadataSync | metadataSync (SQL tx) | after
 |------|---------|
 | **Entity registry** | Versioned DB records (`EntityDefinition`): root table, dependent tables, scope per table, policies. |
 | **Sync definition** | Full operational contract: structure + governance + bindings + execution flow. |
-| **Authored sync definition** | JSON shape before publish (`AuthoredSyncDefinition`). Repo drafts under `deploy/sync/artifacts/entities/`. |
+| **Authored sync definition** | JSON shape before publish (`AuthoredSyncDefinition`). Repo drafts under `deploy/sync/artifacts/entities/`. Also called **Format A**. |
+| **Entity registry export** | UI/DB shape (`EntityDefinition` + optional `run` bindings). Bulk file: `entity-registry.json`. Also called **Format B**. See [ARTIFACT-FORMATS.md](../../deploy/sync/ARTIFACT-FORMATS.md). |
 | **Published sync definition** | Authored shape + `publishedAt` / `publishedVersion`. **Runtime authority** for preview/execute. |
 | **Execution contract** | Snapshot on `SyncPlan` that reproduces preview at execute: definition metadata + flow steps + governance. |
 | **SyncPlan** | Persisted preview envelope: entity, envs, `executionContract`, per-table `changeSet`, `stats`, samples, warnings. |
@@ -41,6 +42,8 @@ Three execution regions  — before metadataSync | metadataSync (SQL tx) | after
 | **Execution region** | Derived from position vs `metadataSync`: before (pre-tx), metadata (single SQL tx), after (deploy/HTTP). Not a separate catalog. |
 
 ## Compilers (all use `projectTablePredicate`)
+
+Format A ↔ Format B conversion is documented in [deploy/sync/ARTIFACT-FORMATS.md](../../deploy/sync/ARTIFACT-FORMATS.md).
 
 | Function | When | Output |
 |----------|------|--------|

@@ -215,6 +215,8 @@ Stores the structural truth for each entity:
 
 The registry is **mutable** and versioned. Changes do not affect runtime sync until **publish**.
 
+**Import/export shapes:** The registry UI uses **Format B** (`EntityDefinition` YAML/JSON). Git boot seeds use **Format A** (`AuthoredSyncDefinition` in `deploy/sync/artifacts/entities/`). Both compile from the same SQLite rows. See [deploy/sync/ARTIFACT-FORMATS.md](deploy/sync/ARTIFACT-FORMATS.md).
+
 ### Layer 2 — Published bundle (runtime, JSON)
 
 **Path:** `sync-definitions/published/definitions.bundle.json`

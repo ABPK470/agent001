@@ -82,7 +82,7 @@ export function EntityRailPlatformMenu({
     <>
       <MenuItem
         icon={<Workflow {...ICON} />}
-        label="Edit flows & wiring"
+        label="Configuration"
         disabled={busy}
         onClick={run(onSyncMetadata)}
       />

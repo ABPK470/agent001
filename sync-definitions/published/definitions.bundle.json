@@ -1,7 +1,7 @@
 {
   "version": 1,
-  "publishedAt": "2026-07-11T16:27:33.199Z",
-  "publishedVersion": "2026-07-11T16:27:33.199Z",
+  "publishedAt": "2026-07-11T18:07:42.999Z",
+  "publishedVersion": "2026-07-11T18:07:42.999Z",
   "definitions": {
     "content": {
       "schemaVersion": 1,
@@ -286,10 +286,10 @@
       "provenance": {
         "kind": "legacy-migration",
         "sourceArtifact": "entity-registry:_default/content",
-        "sourceVersion": "1"
+        "sourceVersion": "8"
       },
-      "publishedAt": "2026-07-11T16:27:33.199Z",
-      "publishedVersion": "2026-07-11T16:27:33.199Z"
+      "publishedAt": "2026-07-11T18:07:42.999Z",
+      "publishedVersion": "2026-07-11T18:07:42.999Z"
     },
     "contract": {
       "schemaVersion": 1,
@@ -1729,10 +1729,10 @@
       "provenance": {
         "kind": "legacy-migration",
         "sourceArtifact": "entity-registry:_default/contract",
-        "sourceVersion": "1"
+        "sourceVersion": "8"
       },
-      "publishedAt": "2026-07-11T16:27:33.199Z",
-      "publishedVersion": "2026-07-11T16:27:33.199Z"
+      "publishedAt": "2026-07-11T18:07:42.999Z",
+      "publishedVersion": "2026-07-11T18:07:42.999Z"
     },
     "dataset": {
       "schemaVersion": 1,
@@ -2301,10 +2301,10 @@
       "provenance": {
         "kind": "legacy-migration",
         "sourceArtifact": "entity-registry:_default/dataset",
-        "sourceVersion": "1"
+        "sourceVersion": "8"
       },
-      "publishedAt": "2026-07-11T16:27:33.199Z",
-      "publishedVersion": "2026-07-11T16:27:33.199Z"
+      "publishedAt": "2026-07-11T18:07:42.999Z",
+      "publishedVersion": "2026-07-11T18:07:42.999Z"
     },
     "gateMetadata": {
       "schemaVersion": 1,
@@ -2662,10 +2662,10 @@
       "provenance": {
         "kind": "legacy-migration",
         "sourceArtifact": "entity-registry:_default/gateMetadata",
-        "sourceVersion": "1"
+        "sourceVersion": "8"
       },
-      "publishedAt": "2026-07-11T16:27:33.199Z",
-      "publishedVersion": "2026-07-11T16:27:33.199Z"
+      "publishedAt": "2026-07-11T18:07:42.999Z",
+      "publishedVersion": "2026-07-11T18:07:42.999Z"
     },
     "pipelineActivity": {
       "schemaVersion": 1,
@@ -2877,10 +2877,10 @@
       "provenance": {
         "kind": "legacy-migration",
         "sourceArtifact": "entity-registry:_default/pipelineActivity",
-        "sourceVersion": "1"
+        "sourceVersion": "7"
       },
-      "publishedAt": "2026-07-11T16:27:33.199Z",
-      "publishedVersion": "2026-07-11T16:27:33.199Z"
+      "publishedAt": "2026-07-11T18:07:42.999Z",
+      "publishedVersion": "2026-07-11T18:07:42.999Z"
     },
     "rule": {
       "schemaVersion": 1,
@@ -2909,10 +2909,10 @@
       "ownership": {
         "team": "sync-platform",
         "owner": null,
-        "reviewStatus": "reviewed",
+        "reviewStatus": "legacy-review-required",
         "notes": [
           "Bootstrapped from legacy pipeline ground truth.",
-          "All current legacy sync tables were derived directly from pipeline evidence."
+          "Contains FK-inferred optional scope that still needs deliberate review."
         ]
       },
       "metadata": {
@@ -3527,10 +3527,10 @@
       "provenance": {
         "kind": "legacy-migration",
         "sourceArtifact": "entity-registry:_default/rule",
-        "sourceVersion": "1"
+        "sourceVersion": "8"
       },
-      "publishedAt": "2026-07-11T16:27:33.199Z",
-      "publishedVersion": "2026-07-11T16:27:33.199Z"
+      "publishedAt": "2026-07-11T18:07:42.999Z",
+      "publishedVersion": "2026-07-11T18:07:42.999Z"
     }
   }
 }

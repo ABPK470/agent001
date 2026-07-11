@@ -3575,10 +3575,6 @@ textarea.input {
   border-top: 1px solid var(--border);
 }
 
-:root[data-theme="dark"] .thread-rail-item-dropdown {
-  background: color-mix(in srgb, var(--panel) 92%, transparent);
-}
-
 .thread-rail-item-dropdown-item {
   display: flex;
   width: 100%;

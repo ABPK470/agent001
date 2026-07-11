@@ -2,6 +2,8 @@
 
 Bootstrap data for sync: rebuild **legacy MyMI pipelines** into mia **entity registry** + **sync metadata**, then seed SQLite on first boot.
 
+**Artifact formats:** Entity JSON exists in two shapes — **Format A** (git deploy artifacts) and **Format B** (registry / catalog snapshot). See [ARTIFACT-FORMATS.md](./ARTIFACT-FORMATS.md) for when to use each, file layouts, and import/export paths.
+
 **Not in this tree:** SQLite schema migrations live in `packages/server/src/platform/persistence/migrations/`.
 
 ## Why this exists
@@ -59,7 +61,7 @@ Handler wiring always uses `{ "type": "catalog", "id": "…" }` — no legacy sh
 |------|---------------|------------|
 | `artifacts/sync-metadata.json` | `sync_run_phases`, `sync_run_kinds`, `sync_run_binding_sources`, `sync_run_presets` | Configuration → Flows / Actions / Wiring |
 | `artifacts/strategies.json` | `scd2_strategies`, `scd2_strategy_versions` | Entity Registry → Strategies |
-| `artifacts/entities/*.json` | entity registry | Entity Registry |
+| `artifacts/entities/*.json` | entity registry (Format A) | Entity Registry |
 | `sync-environments.json` | `sync_environments` | Policies → Environments |
 | `artifacts/flow-templates.json` | (derived view of flows) | compile-time helper |
 
@@ -102,9 +104,11 @@ Wiring (`customValueSources`) is included automatically via `sync-metadata-deriv
 
 After refresh: restart server → review Entity Registry → **Publish**.
 
-## Export from SQLite (snapshot — not repo overwrite)
+## Export from SQLite (Format B — not repo overwrite)
 
-After editing in the UI, export the live catalog to a **timestamped folder on your machine** (never overwrites `deploy/sync` seeds in the repo):
+After editing in the UI, export the live catalog as a **Format B** snapshot to a timestamped folder on your machine (never overwrites `deploy/sync` seeds in the repo). For **Format A** (git layout with `artifacts/entities/*.json`), use Entity Registry → **Deploy artifacts** or see [ARTIFACT-FORMATS.md](./ARTIFACT-FORMATS.md).
+
+```sh
 
 ```sh
 npm run export-deploy-catalog --workspace @mia/server
@@ -115,7 +119,7 @@ npm run export-deploy-catalog --workspace @mia/server -- --zip
 npm run export-deploy-catalog --workspace @mia/server -- --dry-run
 ```
 
-**Folder contents** (mirrors `deploy/sync/` layout):
+**Folder contents** (Format B — similar to `deploy/sync/` but entities are bulk JSON, not `entities/*.json`):
 
 ```
 mia-sync-export-<timestamp>/
@@ -126,6 +130,7 @@ mia-sync-export-<timestamp>/
     strategies.json
     flow-templates.json
     entity-registry.json
+    sync-definition-configs.json    # when configs exist
 ```
 
 | Path | Source (SQLite) |
@@ -135,7 +140,8 @@ mia-sync-export-<timestamp>/
 | `artifacts/sync-metadata.json` | phases, actions, wiring, flows |
 | `artifacts/strategies.json` | all SCD2 strategies |
 | `artifacts/flow-templates.json` | flow template view |
-| `artifacts/entity-registry.json` | entity definitions + run bindings |
+| `artifacts/entity-registry.json` | entity definitions + run bindings (Format B) |
+| `artifacts/sync-definition-configs.json` | per-entity flow/service/env bindings |
 
 Entities-only subset:
 
@@ -143,15 +149,17 @@ Entities-only subset:
 npm run entity-registry:export --workspace @mia/server -- --output ~/Downloads
 ```
 
-API:
+API (Format B):
 - `POST /api/platform/artifacts/export` — snapshot JSON (save client-side)
-- `POST /api/platform/artifacts/export/download` — zip download (Entity Registry → **Export configuration**)
-- `POST /api/platform/catalog/import` — apply export zip to SQLite (Entity Registry → **Import configuration**)
+- `POST /api/platform/artifacts/export/download` — zip (Entity Registry → **Catalog snapshot**)
+- `POST /api/platform/catalog/import` — apply zip to SQLite (Entity Registry → **Catalog snapshot** import)
 - `GET /api/platform/catalog/versions` — version history; `POST /api/platform/catalog/rollback` — restore
+
+Format A bulk export/import: `POST /api/platform/deploy-artifacts/export/download` and `…/import` (Entity Registry → **Deploy artifacts**). See [ARTIFACT-FORMATS.md](./ARTIFACT-FORMATS.md).
 
 CLI writes the folder locally.
 
-Review the snapshot, then copy pieces into `deploy/sync/` manually if you intend to ship new seeds in git.
+To ship new git seeds: export **Deploy artifacts** (Format A) or compile manually from a catalog snapshot — do not copy `entity-registry.json` directly into `artifacts/entities/`.
 
 ## Offline refresh (tests / CI, no MSSQL)
 
