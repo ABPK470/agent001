@@ -46,6 +46,10 @@ describe("runMigrations", () => {
     ).sql
     expect(attachSql).toContain("'user_draft'")
     expect(attachSql).not.toContain("'session'")
+
+    expect(
+      testDb.prepare("SELECT name FROM sqlite_master WHERE name='sync_catalog_versions'").get(),
+    ).toBeTruthy()
   })
 
   it("is idempotent across repeated runs", () => {

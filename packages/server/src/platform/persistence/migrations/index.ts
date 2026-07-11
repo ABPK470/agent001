@@ -6,8 +6,6 @@
 
 import type Database from "better-sqlite3"
 import { runBaselineMigration } from "./0001_baseline.js"
-import { runSyncCatalogVersionsMigration } from "./0002_sync_catalog_versions.js"
-import { runCatalogCamelcaseIdsMigration } from "./0003_catalog_camelcase_ids.js"
 
 export interface Migration {
   version: number
@@ -17,8 +15,6 @@ export interface Migration {
 
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
-  { version: 2, name: "sync_catalog_versions", up: runSyncCatalogVersionsMigration },
-  { version: 3, name: "catalog_camelcase_ids", up: runCatalogCamelcaseIdsMigration },
 ]
 
 export function runMigrations(db: Database.Database): void {
@@ -51,7 +47,7 @@ export function listMigrations(db: Database.Database): Array<{
   return MIGRATIONS.map((m) => ({
     version: m.version,
     name: m.name,
-    applied_at: applied.get(m.version)?.applied_at ?? null
+    applied_at: applied.get(m.version)?.applied_at ?? null,
   }))
 }
 
@@ -75,6 +71,6 @@ function getAppliedVersions(db: Database.Database): Set<number> {
 
 function recordMigration(db: Database.Database, migration: Migration): void {
   db.prepare(
-    "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, datetime('now'))"
+    "INSERT INTO schema_migrations (version, name, applied_at) VALUES (?, ?, datetime('now'))",
   ).run(migration.version, migration.name)
 }
