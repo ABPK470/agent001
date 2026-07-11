@@ -270,6 +270,8 @@ export {
   saveSyncRunPhase,
   saveSyncRunPreset,
   syncRunCatalogEmpty,
+  syncBuiltInFlowPresetsFromArtifact,
+  serializeBuiltInFlowStepsFromArtifact,
   syncDeploySyncMetadataFromArtifact,
   type DbSyncRunKind,
   type DbSyncRunPhase,

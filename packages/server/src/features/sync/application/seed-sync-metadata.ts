@@ -15,7 +15,7 @@ function seedFlowPresetsFromMetadata(
       id,
       label: flow.label,
       description: flow.description,
-      steps_json: JSON.stringify(flow.steps),
+      steps_json: db.serializeBuiltInFlowStepsFromArtifact(metadata, flow.steps),
       built_in: 1,
       updated_at: now,
       updated_by: null,
@@ -25,7 +25,7 @@ function seedFlowPresetsFromMetadata(
 
 /** Upsert built-in flow presets from deploy/sync/artifacts/sync-metadata.json. */
 export function refreshBuiltInFlowPresetsFromArtifact(projectRoot: string): void {
-  seedFlowPresetsFromMetadata(loadSyncMetadataArtifact(resolve(projectRoot)))
+  db.syncBuiltInFlowPresetsFromArtifact(projectRoot, DEFAULT_TENANT)
 }
 
 /** Seed built-in flows when sync_run_presets is empty (migrations may populate other catalog tables first). */

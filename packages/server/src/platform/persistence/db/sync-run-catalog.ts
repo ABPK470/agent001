@@ -2,8 +2,12 @@ import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import { loadSyncMetadataArtifact, parseKindDefinition, parsePhaseDefinition } from "@mia/sync"
 import { resolve } from "node:path"
 
+import {
+  buildFlowCatalogFromSyncMetadataDoc,
+  parseStoredFlowStepsJson,
+  prepareFlowStepsForStorage,
+} from "../../../features/sync/domain/flow-steps.js"
 import { getDb } from "../connection.js"
-import { parseStoredFlowStepsJson } from "../../../features/sync/domain/flow-steps.js"
 
 const DEFAULT_TENANT = "_default"
 
@@ -161,6 +165,61 @@ export function parsePresetSteps(json: string): AuthoredSyncFlowStep[] {
   return parseStoredFlowStepsJson(json)
 }
 
+function flowCatalogFromSyncMetadataArtifact(
+  metadata: ReturnType<typeof loadSyncMetadataArtifact>,
+) {
+  return buildFlowCatalogFromSyncMetadataDoc({
+    phases: metadata.phases,
+    stepTypes: metadata.stepTypes,
+    customValueSources: metadata.customValueSources,
+  })
+}
+
+function serializeFlowStepsFromArtifact(
+  metadata: ReturnType<typeof loadSyncMetadataArtifact>,
+  steps: AuthoredSyncFlowStep[],
+): string {
+  return JSON.stringify(prepareFlowStepsForStorage(steps, flowCatalogFromSyncMetadataArtifact(metadata)))
+}
+
+/** @internal Used when seeding built-in presets from an already-loaded artifact document. */
+export function serializeBuiltInFlowStepsFromArtifact(
+  metadata: ReturnType<typeof loadSyncMetadataArtifact>,
+  steps: AuthoredSyncFlowStep[],
+): string {
+  return serializeFlowStepsFromArtifact(metadata, steps)
+}
+
+/** Upsert built-in flow presets from deploy/sync/artifacts/sync-metadata.json (canonical camelCase). */
+export function syncBuiltInFlowPresetsFromArtifact(
+  projectRoot: string,
+  tenantId = DEFAULT_TENANT,
+): void {
+  const metadata = loadSyncMetadataArtifact(resolve(projectRoot))
+  const now = new Date().toISOString()
+  const stmt = getDb().prepare(
+    `INSERT INTO sync_run_presets (tenant_id, id, label, description, steps_json, built_in, updated_at, updated_by)
+     VALUES (?, ?, ?, ?, ?, 1, ?, NULL)
+     ON CONFLICT(tenant_id, id) DO UPDATE SET
+       label = excluded.label,
+       description = excluded.description,
+       steps_json = CASE WHEN sync_run_presets.built_in = 1 THEN excluded.steps_json ELSE sync_run_presets.steps_json END,
+       updated_at = excluded.updated_at,
+       updated_by = NULL`,
+  )
+
+  for (const [id, flow] of Object.entries(metadata.flows)) {
+    stmt.run(
+      tenantId,
+      id,
+      flow.label,
+      flow.description ?? "",
+      serializeFlowStepsFromArtifact(metadata, flow.steps),
+      now,
+    )
+  }
+}
+
 export function mapPhaseDefinition(row: Pick<DbSyncRunPhase, "id" | "label" | "definition_json">) {
   return parsePhaseDefinition(row.definition_json, row.id, row.label)
 }
@@ -235,6 +294,8 @@ export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId
       built_in: row.built_in,
     })
   }
+
+  syncBuiltInFlowPresetsFromArtifact(projectRoot, tenantId)
 }
 
 /** @deprecated Use syncDeploySyncMetadataFromArtifact */

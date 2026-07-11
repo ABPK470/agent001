@@ -448,10 +448,36 @@ describe("catalog operator workflows — publish pipeline", () => {
     expect(result.stderr.some((line) => line.includes('Refusing to publish "content"'))).toBe(false)
   })
 
-  it("parsePresetSteps fails fast on legacy kebab-case data corrupting SQLite", () => {
+  it("boot refresh replaces legacy kebab-case built-in presets from deploy artifact", () => {
     db.saveSyncRunPreset({
       tenant_id: TENANT,
       id: "content",
+      label: "Legacy content",
+      description: "kebab injected",
+      steps_json: JSON.stringify([
+        {
+          id: "metadata-sync",
+          kind: "metadata-sync",
+          title: "Metadata sync",
+          description: "bad",
+        },
+      ]),
+      built_in: 1,
+      updated_at: new Date().toISOString(),
+      updated_by: "operator",
+    })
+
+    db.syncBuiltInFlowPresetsFromArtifact(fixture.projectRoot, TENANT)
+
+    const steps = db.parsePresetSteps(db.getSyncRunPreset(TENANT, "content")!.steps_json)
+    expect(steps.some((step) => step.kind === "metadataSync")).toBe(true)
+    expect(steps.every((step) => isCatalogId(step.id) && isCatalogId(step.kind))).toBe(true)
+  })
+
+  it("parsePresetSteps fails fast on operator custom presets with kebab-case ids", () => {
+    db.saveSyncRunPreset({
+      tenant_id: TENANT,
+      id: "operatorCustomFlow",
       label: "Legacy corrupt",
       description: "kebab injected",
       steps_json: JSON.stringify([
@@ -467,9 +493,9 @@ describe("catalog operator workflows — publish pipeline", () => {
       updated_by: "operator",
     })
 
-    expect(() => db.parsePresetSteps(db.getSyncRunPreset(TENANT, "content")!.steps_json)).toThrow(
-      FlowStepsValidationError,
-    )
+    expect(() =>
+      db.parsePresetSteps(db.getSyncRunPreset(TENANT, "operatorCustomFlow")!.steps_json),
+    ).toThrow(FlowStepsValidationError)
   })
 
   it("import then publish resolves metadataSync for every core entity type", () => {

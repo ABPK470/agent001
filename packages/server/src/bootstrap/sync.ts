@@ -29,11 +29,12 @@ export function loadBootSyncEnvironments(projectRoot: string, connections: Reado
       `[entity-registry] seeded ${entitySeed.seeded} definition(s) from ${label}: ${entitySeed.entityIds.join(", ")}`,
     )
   }
-  ensureSyncDefinitionConfigs(projectRoot)
+  // Refresh deploy catalog (including built-in flow presets) before reading presets for publish.
   seedSyncMetadataIfEmpty(projectRoot)
   ensureFlowPresetsSeeded(projectRoot)
   ensureDeploySyncMetadataSeeds(projectRoot)
   ensureCustomValueSourcesSeeded(projectRoot)
+  ensureSyncDefinitionConfigs(projectRoot)
   const environments = loadPersistedSyncEnvironments(projectRoot, connections)
   ensureInitialSyncCatalogVersion("system")
   return environments
