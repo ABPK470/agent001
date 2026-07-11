@@ -700,6 +700,17 @@ export const api = {
     if (!res.ok) throw new Error(await res.text())
     return await res.text()
   },
+  getEntityDeployArtifactJson: async (id: string, opts?: { tenant?: string }): Promise<string> => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    const res = await fetch(
+      `${BASE}/api/entity-registry/entities/${encodeURIComponent(id)}/artifact.json${qs ? `?${qs}` : ""}`,
+      { credentials: "include" },
+    )
+    if (!res.ok) throw new Error(await res.text())
+    return await res.text()
+  },
   suggestEntityRegistryDraft: (rootTable: string, opts?: { tenant?: string }) => {
     const p = new URLSearchParams()
     p.set("rootTable", rootTable)

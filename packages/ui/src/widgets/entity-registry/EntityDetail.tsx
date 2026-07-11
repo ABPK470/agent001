@@ -65,7 +65,7 @@ export function EntityDetailContent({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {tab === "overview" && (
-        <EntityYaml jsonText={jsonText} entityId={def.id} />
+        <EntityYaml def={def} jsonText={jsonText} entityId={def.id} />
       )}
       {tab === "tables" && <EntityTables def={def} />}
     </div>

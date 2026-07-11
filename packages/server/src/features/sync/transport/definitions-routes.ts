@@ -25,6 +25,11 @@ import type { FastifyInstance, FastifyRequest } from "fastify"
 import { broadcast } from "../../../platform/events/broadcaster.js"
 import * as db from "../../../platform/persistence/sqlite.js"
 import {
+  entityToAuthoredSyncDefinition,
+  formatAuthoredSyncJson,
+  syncConfigInputFromDb,
+} from "../domain/authored-sync-document.js"
+import {
   formatEntitiesYaml,
   formatEntityJson,
   formatEntityYaml,
@@ -33,6 +38,7 @@ import {
   parseEntitiesYaml
 } from "../domain/entity-yaml.js"
 import { applyEntityRunYaml, validateEntityRunYaml } from "../application/apply-entity-run-yaml.js"
+import { loadAuthoringFlowCatalog } from "../application/definitions.js"
 import { loadCatalogSnapshotForSuggest } from "../application/load-catalog-for-suggest.js"
 import { recordSyncCatalogChange } from "../../platform/application/sync-catalog-versioning.js"
 
@@ -199,6 +205,31 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     const run = config ? entityRunYamlFromConfig(config) : null
     return formatEntityJson(def, run)
   })
+
+  app.get<{ Params: { id: string } }>(
+    "/api/entity-registry/entities/:id/artifact.json",
+    async (req, reply) => {
+      if (!projectRoot) {
+        reply.code(503)
+        return { error: "artifact export requires server projectRoot" }
+      }
+      const tenantId = resolveTenant(req)
+      const def = db.getEntityDefinition(tenantId, req.params.id, { includeRetired: true })
+      if (!def) {
+        reply.code(404)
+        return { error: `entity not found: ${req.params.id}` }
+      }
+      const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
+      const configRow = db.getSyncDefinitionConfig(tenantId, req.params.id)
+      const authored = entityToAuthoredSyncDefinition(
+        def,
+        flowTemplateCatalog,
+        configRow ? syncConfigInputFromDb(configRow) : null,
+      )
+      reply.header("content-type", "application/json; charset=utf-8")
+      return formatAuthoredSyncJson(authored)
+    },
+  )
 
   app.get("/api/entity-registry/entities.yaml", async (req, reply) => {
     const tenantId = resolveTenant(req)

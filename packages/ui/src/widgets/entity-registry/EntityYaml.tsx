@@ -5,6 +5,7 @@
 import type { JSX } from "react"
 import { useEffect, useState } from "react"
 import { api } from "../../api"
+import type { EntityRegistryDefinition } from "../../types"
 import { DefinitionExportMenu } from "./DefinitionExportMenu"
 import { DefinitionOverview } from "./DefinitionOverview"
 import { PANEL, TAB_ERROR } from "./chrome"
@@ -14,26 +15,28 @@ import { TabBody, TabPanelHeader, TabShell } from "./TabChrome"
 export type DefinitionView = "overview" | "json"
 
 export interface EntityYamlProps {
+  def: EntityRegistryDefinition
   jsonText: string
   entityId: string
 }
 
-export function EntityYaml({ jsonText, entityId }: EntityYamlProps): JSX.Element {
+export function EntityYaml({ def, jsonText, entityId }: EntityYamlProps): JSX.Element {
   const [exportBusy, setExportBusy] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
   const [view, setView] = useState<DefinitionView>("overview")
-  const [exportJson, setExportJson] = useState(jsonText)
+  const [registryJson, setRegistryJson] = useState(jsonText)
+  const [artifactJson, setArtifactJson] = useState("")
 
   useEffect(() => {
-    setExportJson(jsonText)
+    setRegistryJson(jsonText)
   }, [jsonText])
 
-  async function loadExportJson(): Promise<string> {
+  async function loadRegistryJson(): Promise<string> {
     setExportBusy(true)
     setExportError(null)
     try {
       const next = await api.getEntityRegistryJson(entityId)
-      setExportJson(next)
+      setRegistryJson(next)
       return next
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error)
@@ -44,20 +47,40 @@ export function EntityYaml({ jsonText, entityId }: EntityYamlProps): JSX.Element
     }
   }
 
-  async function copyJson(): Promise<void> {
-    const text = exportJson.trim() ? exportJson : await loadExportJson()
+  async function loadDeployArtifact(): Promise<string> {
+    setExportBusy(true)
+    setExportError(null)
+    try {
+      const next = await api.getEntityDeployArtifactJson(entityId)
+      setArtifactJson(next)
+      return next
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      setExportError(message)
+      throw error
+    } finally {
+      setExportBusy(false)
+    }
+  }
+
+  async function copyRegistryJson(): Promise<void> {
+    const text = registryJson.trim() ? registryJson : await loadRegistryJson()
     await navigator.clipboard.writeText(text)
   }
 
-  async function downloadJson(): Promise<void> {
-    const text = exportJson.trim() ? exportJson : await loadExportJson()
-    const blob = new Blob([text], { type: "application/json" })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement("a")
-    a.href = url
-    a.download = `${entityId}.json`
-    a.click()
-    URL.revokeObjectURL(url)
+  async function downloadRegistryJson(): Promise<void> {
+    const text = registryJson.trim() ? registryJson : await loadRegistryJson()
+    downloadText(`${entityId}.registry.json`, text)
+  }
+
+  async function copyDeployArtifact(): Promise<void> {
+    const text = artifactJson.trim() ? artifactJson : await loadDeployArtifact()
+    await navigator.clipboard.writeText(text)
+  }
+
+  async function downloadDeployArtifact(): Promise<void> {
+    const text = artifactJson.trim() ? artifactJson : await loadDeployArtifact()
+    downloadText(`${entityId}.json`, text)
   }
 
   return (
@@ -69,14 +92,16 @@ export function EntityYaml({ jsonText, entityId }: EntityYamlProps): JSX.Element
           <TabPanelHeader>
             <DefinitionExportMenu
               exportBusy={exportBusy}
-              onCopyJson={() => void copyJson()}
-              onDownloadJson={() => void downloadJson()}
+              onCopyRegistryJson={() => void copyRegistryJson()}
+              onDownloadRegistryJson={() => void downloadRegistryJson()}
+              onCopyDeployArtifact={() => void copyDeployArtifact()}
+              onDownloadDeployArtifact={() => void downloadDeployArtifact()}
             />
             <SegmentToggle
               value={view}
               options={[
                 { value: "overview", label: "Overview" },
-                { value: "json", label: "JSON" },
+                { value: "json", label: "Registry JSON" },
               ]}
               onChange={setView}
               ariaLabel="Definition view"
@@ -88,7 +113,7 @@ export function EntityYaml({ jsonText, entityId }: EntityYamlProps): JSX.Element
               <DefinitionOverview def={def} />
             ) : (
               <pre className="entity-registry-definition__code m-0 font-mono text-xs leading-relaxed text-text">
-                {exportJson || "…"}
+                {registryJson || "…"}
               </pre>
             )}
           </div>
@@ -96,4 +121,14 @@ export function EntityYaml({ jsonText, entityId }: EntityYamlProps): JSX.Element
       </TabBody>
     </TabShell>
   )
+}
+
+function downloadText(filename: string, text: string): void {
+  const blob = new Blob([text], { type: "application/json" })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement("a")
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
 }
