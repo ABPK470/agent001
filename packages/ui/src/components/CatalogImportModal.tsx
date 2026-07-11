@@ -52,8 +52,8 @@ export function CatalogImportModal({
 
   return (
     <ModalShell
-      title="Import configuration"
-      subtitle="Apply a mia-sync-export zip to SQLite. Repo deploy/sync files and .env are never modified."
+      title="Import catalog snapshot"
+      subtitle="Apply a mia-sync-export zip (entity-registry.json + sync-metadata). Repo deploy/sync files are never modified."
       icon={<Upload size={20} className="text-text-muted" />}
       onClose={onClose}
       size="default"
@@ -78,7 +78,7 @@ export function CatalogImportModal({
           if (file) void readFile(file)
         }} />
         <button type="button" className="w-full rounded-lg border border-dashed border-border-subtle px-4 py-8 text-sm text-text-muted hover:bg-elevated/30" onClick={() => inputRef.current?.click()}>
-          {fileName ? `Selected: ${fileName}` : "Choose export zip…"}
+          {fileName ? `Selected: ${fileName}` : "Choose mia-sync-export zip…"}
         </button>
         <label className="block text-sm">
           <span className="text-text-muted">Reason</span>

@@ -43,7 +43,7 @@ export function formatEntityYaml(def: EntityDefinition, run?: EntityRunYaml | nu
   return stringify(orderEntity(def, run), { lineWidth: 0, sortMapEntries: false })
 }
 
-/** JSON export for a single entity — same shape as one entry in entity-registry.json (includes run binding). */
+/** JSON export for a single entity — registry format B (includes run binding). */
 export function formatEntityJson(def: EntityDefinition, run?: EntityRunYaml | null): string {
   return `${JSON.stringify(orderEntity(def, run), null, 2)}\n`
 }

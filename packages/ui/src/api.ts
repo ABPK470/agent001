@@ -718,7 +718,10 @@ export const api = {
     const p = new URLSearchParams()
     if (opts?.tenant) p.set("tenant", opts.tenant)
     const qs = p.toString()
-    const res = await fetch(`${BASE}/api/entity-registry/entities/${encodeURIComponent(id)}.json${qs ? `?${qs}` : ""}`, { credentials: "include" })
+    const res = await fetch(
+      `${BASE}/api/entity-registry/entities/${encodeURIComponent(id)}/registry.json${qs ? `?${qs}` : ""}`,
+      { credentials: "include" },
+    )
     if (!res.ok) throw new Error(await res.text())
     return await res.text()
   },
@@ -806,6 +809,18 @@ export const api = {
       {
         method: "POST",
         body:   JSON.stringify({ yaml, reason, dryRun: opts?.dryRun ?? false }),
+      },
+    )
+  },
+  importEntityRegistryJson: (json: string, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("./types").EntityRegistryYamlImportResponse>(
+      `/api/entity-registry/entities/import-registry-json${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ json, reason, dryRun: opts?.dryRun ?? false }),
       },
     )
   },

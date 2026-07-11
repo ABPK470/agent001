@@ -134,7 +134,7 @@ export function EntityRegistry(): JSX.Element {
     setExportingConfig(true)
     try {
       const { filename, bytes } = await api.downloadPlatformArtifacts()
-      notify(`Exported configuration (${filename}, ${bytes.toLocaleString()} bytes)`)
+      notify(`Exported catalog snapshot (${filename}, ${bytes.toLocaleString()} bytes)`)
     } catch (e) {
       notifyError(e instanceof Error ? e.message : String(e))
     } finally {

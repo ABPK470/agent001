@@ -104,7 +104,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       return {
         ok: true,
         message:
-          "Catalog snapshot built from SQLite. Use /api/platform/artifacts/export/download for a zip file.",
+          "Catalog snapshot built from SQLite. Use /api/platform/artifacts/export/download for mia-sync-export zip.",
         snapshot,
       }
     } catch (error) {

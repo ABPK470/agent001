@@ -158,6 +158,14 @@ function importEntitiesFromText(args: {
   return { ok: errors.length === 0, saved, skipped, errors, dryRun: args.dryRun, preview: preview.length > 0 ? preview : undefined }
 }
 
+function exportEntityRegistryJson(tenantId: string, entityId: string): string {
+  const def = db.getEntityDefinition(tenantId, entityId, { includeRetired: true })
+  if (!def) return ""
+  const config = db.getSyncDefinitionConfig(tenantId, entityId)
+  const run = config ? entityRunYamlFromConfig(config) : null
+  return formatEntityJson(def, run)
+}
+
 export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?: string): void {
   app.get("/api/entity-registry/entities", async (req) => {
     const tenantId = resolveTenant(req)
@@ -194,17 +202,25 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     return formatEntityYaml(def, run)
   })
 
-  app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id.json", async (req, reply) => {
-    const tenantId = resolveTenant(req)
-    const def = db.getEntityDefinition(tenantId, req.params.id, { includeRetired: true })
-    if (!def) {
+  const sendRegistryJson = (tenantId: string, entityId: string, reply: import("fastify").FastifyReply) => {
+    const body = exportEntityRegistryJson(tenantId, entityId)
+    if (!body) {
       reply.code(404)
-      return { error: `entity not found: ${req.params.id}` }
+      return { error: `entity not found: ${entityId}` }
     }
     reply.header("content-type", "application/json; charset=utf-8")
-    const config = db.getSyncDefinitionConfig(tenantId, req.params.id)
-    const run = config ? entityRunYamlFromConfig(config) : null
-    return formatEntityJson(def, run)
+    return body
+  }
+
+  app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id/registry.json", async (req, reply) => {
+    const tenantId = resolveTenant(req)
+    return sendRegistryJson(tenantId, req.params.id, reply)
+  })
+
+  /** @deprecated Use /entities/:id/registry.json — kept for backward compatibility. */
+  app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id.json", async (req, reply) => {
+    const tenantId = resolveTenant(req)
+    return sendRegistryJson(tenantId, req.params.id, reply)
   })
 
   app.get<{ Params: { id: string } }>(
@@ -442,6 +458,44 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       }
       return result
     }
+  )
+
+  app.post<{ Body: { json: string; reason: string; dryRun?: boolean } }>(
+    "/api/entity-registry/entities/import-registry-json",
+    async (req, reply): Promise<EntityRegistryYamlImportResponse | { error: string }> => {
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { error: "admin only" }
+      }
+      if (typeof req.body?.json !== "string" || req.body.json.trim() === "") {
+        reply.code(400)
+        return { error: "'json' body is required" }
+      }
+      if (!req.body.reason || req.body.reason.trim() === "") {
+        reply.code(400)
+        return { error: "'reason' is required" }
+      }
+      const tenantId = resolveTenant(req)
+      const dryRun = Boolean(req.body.dryRun)
+      const result = importEntitiesFromText({
+        tenantId,
+        actor: req.session.upn,
+        reason: req.body.reason,
+        content: req.body.json,
+        format: "json",
+        dryRun,
+        projectRoot,
+      })
+      if (!dryRun) {
+        audit(req, "entity_registry.imported", {
+          tenantId,
+          format: "registry-json",
+          savedCount: result.saved.length,
+          errorCount: result.errors.length,
+        })
+      }
+      return result
+    },
   )
 
   app.post<{ Body: { json: string; reason: string; dryRun?: boolean } }>(
