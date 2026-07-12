@@ -63,6 +63,12 @@ export function failStep(step: Step, error: string): void {
   step.completedAt = new Date()
 }
 
+export function blockStep(step: Step, reason: string): void {
+  transitionStep(step, StepStatus.Blocked)
+  step.error = reason
+  step.completedAt = new Date()
+}
+
 // ── Pure (immutable) Step helpers ─────────────────────────────────
 
 function assertStepTransitionAllowed(step: Step, target: StepStatus): void {

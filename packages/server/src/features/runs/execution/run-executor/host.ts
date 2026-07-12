@@ -16,6 +16,7 @@ import {
   renderCachedHeader,
   saveToolKnowledge
 } from "../../../../platform/persistence/memory.js"
+import * as db from "../../../../platform/persistence/sqlite.js"
 import type { ActiveRunRecord, ExecuteRunCommand, PerRunHostBundle, RunWorkspace } from "./types.js"
 
 function createRunContextForExecution(
@@ -47,15 +48,25 @@ function createRunContextForExecution(
 function createPolicyContext(
   runId: string,
   activeRun: ActiveRunRecord | undefined,
-  runWorkspace: RunWorkspace
+  runWorkspace: RunWorkspace,
+  opts?: { parentRunId?: string | null }
 ): HostedPolicyContext {
   const role = activeRun?.role ?? PolicyRole.Admin
+  const grantRunIds = [runId, opts?.parentRunId].filter((id): id is string => !!id)
+  const toolApprovalGrants = db.listApprovedToolGrantsForRuns(grantRunIds).map((grant) => ({
+    grantId: grant.id,
+    toolName: grant.toolName,
+    args: grant.args,
+  }))
+
   return {
     runId,
+    parentRunId: opts?.parentRunId ?? null,
     runMode: role === PolicyRole.HostedUser ? PolicyRunMode.Hosted : PolicyRunMode.Developer,
     role,
     sandboxRoot: runWorkspace.executionRoot,
-    actorUpn: activeRun?.ownerUpn ?? null
+    actorUpn: activeRun?.ownerUpn ?? null,
+    toolApprovalGrants: toolApprovalGrants.length > 0 ? toolApprovalGrants : undefined,
   }
 }
 
@@ -66,7 +77,9 @@ export function createPerRunHost(
 ): PerRunHostBundle {
   const { request, runtime } = command
   const runContext = createRunContextForExecution(activeRun, request.runId, runtime.controller)
-  const policyCtx = createPolicyContext(request.runId, activeRun, runWorkspace)
+  const policyCtx = createPolicyContext(request.runId, activeRun, runWorkspace, {
+    parentRunId: request.resume?.parentRunId ?? null,
+  })
   const bootOptions = bootHostDepsToConfigureAgentOptions(runtime.bootHostDeps)
   const perRunHost: AgentHost = configureAgent({
     ...bootOptions,

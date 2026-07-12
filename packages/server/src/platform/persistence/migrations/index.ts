@@ -6,6 +6,7 @@
 
 import type Database from "better-sqlite3"
 import { runBaselineMigration } from "./0001_baseline.js"
+import { runRunToolApprovalsMigration } from "./0002_run_tool_approvals.js"
 
 export interface Migration {
   version: number
@@ -15,6 +16,7 @@ export interface Migration {
 
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
+  { version: 2, name: "run_tool_approvals", up: runRunToolApprovalsMigration },
 ]
 
 export function runMigrations(db: Database.Database): void {

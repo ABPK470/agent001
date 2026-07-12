@@ -18,6 +18,8 @@ import { PolicyDbEnvironment, PolicyRole, PolicyRunMode } from "./enums/policy.j
 export interface HostedPolicyContext {
   /** Run identity (for audit cross-referencing). */
   readonly runId: string
+  /** When resuming, the checkpointed run that owns pending approvals/grants. */
+  readonly parentRunId?: string | null
   /** Effective execution profile of the run. Drives default-deny. */
   readonly runMode: PolicyRunMode
   /** Caller role used by selector rules. */
@@ -34,4 +36,13 @@ export interface HostedPolicyContext {
   readonly actorUpn?: string | null
   /** Originating session id, mirrored from cookie sid. */
   readonly sessionId?: string | null
+  /**
+   * One-time operator grants for blocked tool calls on this run (or its
+   * parent when resuming). Matched by tool name + persisted args.
+   */
+  readonly toolApprovalGrants?: ReadonlyArray<{
+    grantId: string
+    toolName: string
+    args: Record<string, unknown>
+  }>
 }

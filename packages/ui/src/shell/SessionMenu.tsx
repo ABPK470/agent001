@@ -6,9 +6,9 @@ import { Activity, Brain, LogOut, Scale, Shield, Terminal } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { AgentEditor } from "../components/AgentEditor"
 import { AuditModal } from "../components/AuditModal"
-import { PolicyEditor } from "../components/PolicyEditor"
 import { UsageModal } from "../components/UsageModal"
 import type { Me } from "../hooks/useMe"
+import { useStore } from "../store"
 import { accountDisplayName, accountRoleLabel, accountSubtitle } from "./account"
 import { AsciiMicroField } from "./AsciiMicroField"
 import { CHAT_CHROME_BTN } from "./ChatChrome"
@@ -35,7 +35,7 @@ function menuItemClass(destructive = false): string {
 export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "default" }: Props) {
   const [open, setOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
-  const [policyOpen, setPolicyOpen] = useState(false)
+  const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
   const [usageOpen, setUsageOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
@@ -153,7 +153,7 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
                   role="menuitem"
                   className={menuItemClass()}
                   onClick={() => {
-                    setPolicyOpen(true)
+                    setPolicyEditorOpen(true)
                     close()
                   }}
                 >
@@ -196,7 +196,6 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
       </div>
 
       {agentOpen && <AgentEditor onClose={() => setAgentOpen(false)} />}
-      {policyOpen && <PolicyEditor onClose={() => setPolicyOpen(false)} />}
       {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
     </>

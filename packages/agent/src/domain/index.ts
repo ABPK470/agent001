@@ -17,7 +17,12 @@
 export * from "./enums/index.js"
 
 // Errors
-export { DomainError, InvalidTransitionError, PolicyViolationError } from "./errors.js"
+export {
+  ApprovalRequiredError,
+  DomainError,
+  InvalidTransitionError,
+  PolicyViolationError
+} from "./errors.js"
 
 // Models
 export {
@@ -32,6 +37,7 @@ export {
   createRun,
   failRun,
   failRunPure,
+  blockStep,
   failStep,
   replaceStepInRunPure,
   startPlanning,

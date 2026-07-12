@@ -15,6 +15,7 @@ import { broadcast, broadcastTrace } from "../../../../platform/events/broadcast
 import * as db from "../../../../platform/persistence/sqlite.js"
 import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 import { handlePlannerTrace } from "../../core/coordination/planner-events.js"
+import { consumeMatchingToolGrant } from "../../application/run-tool-approval.js"
 import { persistToolResult } from "../tool-result-persister.js"
 import type { DelegateRuntimeContext, ExecuteRunCommand, ExecutionEnvironment } from "./types.js"
 
@@ -141,6 +142,14 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
         result: data.result,
         isError: data.isError
       })
+      if (!data.isError) {
+        consumeMatchingToolGrant(
+          request.runId,
+          request.resume?.parentRunId ?? null,
+          data.toolName,
+          data.args as Record<string, unknown>
+        )
+      }
     },
     onLlmCall: (data) => {
       if (data.phase === "request") {

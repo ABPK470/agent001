@@ -262,6 +262,49 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     return { runId: newRunId }
   })
 
+  app.get("/api/runs/tool-approvals/pending", async (req, reply) => {
+    try {
+      const { listPendingToolApprovalsForSession } = await import(
+        "../application/run-tool-approval.js"
+      )
+      return listPendingToolApprovalsForSession(req.session ?? null)
+    } catch (error) {
+      reply.code(error instanceof Error && error.message.includes("Authentication") ? 401 : 400)
+      return { error: error instanceof Error ? error.message : "Failed to list pending approvals" }
+    }
+  })
+
+  app.post<{ Params: { id: string } }>(
+    "/api/runs/tool-approvals/:id/approve",
+    async (req, reply) => {
+      try {
+        const { approveRunToolStep } = await import("../application/run-tool-approval.js")
+        return approveRunToolStep(orchestrator, req.params.id, req.session ?? null)
+      } catch (error) {
+        reply.code(error instanceof Error && error.message.includes("Authentication") ? 401 : 400)
+        return { error: error instanceof Error ? error.message : "Approval failed" }
+      }
+    }
+  )
+
+  app.post<{ Params: { id: string }; Body: { reason?: string } }>(
+    "/api/runs/tool-approvals/:id/deny",
+    async (req, reply) => {
+      try {
+        const { denyRunToolStep } = await import("../application/run-tool-approval.js")
+        return denyRunToolStep(
+          orchestrator,
+          req.params.id,
+          req.session ?? null,
+          req.body?.reason
+        )
+      } catch (error) {
+        reply.code(error instanceof Error && error.message.includes("Authentication") ? 401 : 400)
+        return { error: error instanceof Error ? error.message : "Deny failed" }
+      }
+    }
+  )
+
   app.post<{ Params: { id: string } }>("/api/runs/:id/rerun", async (req, reply) => {
     const original = db.getRun(req.params.id)
     if (!original || !canAccessRun(req.session, original)) {

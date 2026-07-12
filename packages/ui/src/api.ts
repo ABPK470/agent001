@@ -119,6 +119,30 @@ export const api = {
   resumeRun: (id: string) => json<{ runId: string }>(`/api/runs/${id}/resume`, {
     method: "POST",
   }),
+  listPendingToolApprovals: () =>
+    json<Array<{
+      id: string
+      runId: string
+      stepId: string
+      toolName: string
+      args: Record<string, unknown>
+      reason: string
+      policyName: string
+      status: string
+      requestedAt: string
+      resolvedAt: string | null
+      resolvedBy: string | null
+    }>>("/api/runs/tool-approvals/pending"),
+  approveRunToolStep: (approvalId: string) =>
+    json<{ ok: true; runId: string; resumedRunId: string | null }>(
+      `/api/runs/tool-approvals/${encodeURIComponent(approvalId)}/approve`,
+      { method: "POST" },
+    ),
+  denyRunToolStep: (approvalId: string, reason?: string) =>
+    json<{ ok: true; runId: string }>(
+      `/api/runs/tool-approvals/${encodeURIComponent(approvalId)}/deny`,
+      { method: "POST", body: JSON.stringify(reason ? { reason } : {}) },
+    ),
   rerunRun: (id: string) => json<{ runId: string }>(`/api/runs/${id}/rerun`, {
     method: "POST",
   }),

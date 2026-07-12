@@ -9,6 +9,7 @@
 import { Bell, CheckCircle2, RotateCcw, ShieldAlert, XCircle } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../api"
+import { RunStatus } from "../enums"
 import { useStore } from "../store"
 import type { Notification, NotificationAction } from "../types"
 
@@ -37,16 +38,25 @@ const TYPE_COLOR: Record<string, string> = {
   "approval.required": "var(--color-warning)",
 }
 
+function approvalIdFromNotification(notification: Notification): string | undefined {
+  const action = notification.actions.find((a) => a.action === "approve-run-step")
+  return action?.data?.approvalId as string | undefined
+}
+
 export function NotificationPanel() {
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const notifications = useStore((s) => s.notifications)
   const unreadCount = useStore((s) => s.unreadCount)
-  const setNotifications = useStore((s) => s.setNotifications)
   const markNotificationRead = useStore((s) => s.markNotificationRead)
   const markAllRead = useStore((s) => s.markAllRead)
   const setActiveRun = useStore((s) => s.setActiveRun)
   const openModalWidget = useStore((s) => s.openModalWidget)
+  const upsertRun = useStore((s) => s.upsertRun)
+  const upsertPendingToolApproval = useStore((s) => s.upsertPendingToolApproval)
+  const setApprovalModalOpen = useStore((s) => s.setApprovalModalOpen)
+  const clearPendingToolApproval = useStore((s) => s.clearPendingToolApproval)
+  const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
 
   // Close on outside click
   useEffect(() => {
@@ -60,17 +70,49 @@ export function NotificationPanel() {
     return () => document.removeEventListener("mousedown", handleClick)
   }, [open])
 
-  const handleAction = useCallback(async (notification: Notification, action: NotificationAction) => {
-    // Mark as read
+  const actOnApproval = useCallback(async (
+    notification: Notification,
+    decision: "approve" | "deny",
+    approvalId: string,
+  ) => {
     markNotificationRead(notification.id)
     api.markNotificationRead(notification.id).catch(() => {})
 
+    try {
+      if (decision === "approve") {
+        const result = await api.approveRunToolStep(approvalId)
+        if (result.resumedRunId) {
+          setActiveRun(result.resumedRunId)
+          upsertRun({ id: result.resumedRunId, status: RunStatus.Running })
+        } else {
+          upsertRun({ id: result.runId, status: RunStatus.WaitingForApproval })
+        }
+      } else {
+        await api.denyRunToolStep(approvalId)
+        if (notification.runId) {
+          upsertRun({ id: notification.runId, status: RunStatus.Cancelled })
+        }
+      }
+      clearPendingToolApproval()
+    } catch {
+      /* SSE approval.resolved will reconcile if another tab acted */
+    }
+    setOpen(false)
+  }, [
+    markNotificationRead,
+    setActiveRun,
+    upsertRun,
+    clearPendingToolApproval,
+  ])
+
+  const handleAction = useCallback(async (notification: Notification, action: NotificationAction) => {
     switch (action.action) {
       case "view-run": {
+        markNotificationRead(notification.id)
+        api.markNotificationRead(notification.id).catch(() => {})
         const runId = action.data?.runId as string | undefined
         if (runId) {
           setActiveRun(runId)
-          // Check if run-status widget is in the current view — if not, open as modal
           const { views, activeViewId } = useStore.getState()
           const view = views.find((v) => v.id === activeViewId)
           const hasRunStatus = view?.widgets.some((w) => w.type === "run-status")
@@ -83,6 +125,8 @@ export function NotificationPanel() {
       }
 
       case "resume-run": {
+        markNotificationRead(notification.id)
+        api.markNotificationRead(notification.id).catch(() => {})
         const runId = action.data?.runId as string | undefined
         if (runId) {
           try {
@@ -95,6 +139,8 @@ export function NotificationPanel() {
       }
 
       case "rollback-run": {
+        markNotificationRead(notification.id)
+        api.markNotificationRead(notification.id).catch(() => {})
         const runId = action.data?.runId as string | undefined
         if (runId) {
           try {
@@ -106,6 +152,8 @@ export function NotificationPanel() {
       }
 
       case "apply-run-diff": {
+        markNotificationRead(notification.id)
+        api.markNotificationRead(notification.id).catch(() => {})
         const runId = action.data?.runId as string | undefined
         if (runId) {
           try {
@@ -119,9 +167,26 @@ export function NotificationPanel() {
         break
       }
 
+      case "approve-run-step": {
+        const approvalId = action.data?.approvalId as string | undefined
+        if (approvalId) {
+          await actOnApproval(notification, "approve", approvalId)
+        }
+        break
+      }
+
+      case "deny-run-step": {
+        const approvalId = action.data?.approvalId as string | undefined
+        if (approvalId) {
+          await actOnApproval(notification, "deny", approvalId)
+        }
+        break
+      }
+
       case "open-policies": {
-        // This action is handled by the parent — we just close the panel
-        // The PolicyEditor modal will be opened by the parent
+        markNotificationRead(notification.id)
+        api.markNotificationRead(notification.id).catch(() => {})
+        setPolicyEditorOpen(true)
         setOpen(false)
         break
       }
@@ -129,7 +194,28 @@ export function NotificationPanel() {
       default:
         setOpen(false)
     }
-  }, [markNotificationRead, setActiveRun, openModalWidget])
+  }, [
+    actOnApproval,
+    markNotificationRead,
+    openModalWidget,
+    setActiveRun,
+    setPolicyEditorOpen,
+  ])
+
+  const handleOpenApproval = useCallback((notification: Notification) => {
+    if (notification.type !== "approval.required" || !notification.runId) return
+    const toolMatch = notification.message.match(/^Tool "([^"]+)"/)
+    upsertPendingToolApproval({
+      runId: notification.runId,
+      stepId: notification.stepId ?? "",
+      approvalId: approvalIdFromNotification(notification) ?? null,
+      toolName: toolMatch?.[1] ?? "unknown",
+      reason: notification.message.replace(/^Tool "[^"]+" needs approval: /, "") || notification.message,
+      notificationId: notification.id,
+    })
+    setApprovalModalOpen(true)
+    setOpen(false)
+  }, [setApprovalModalOpen, upsertPendingToolApproval])
 
   const handleMarkAllRead = useCallback(() => {
     markAllRead()
@@ -138,7 +224,6 @@ export function NotificationPanel() {
 
   return (
     <div className="relative" ref={panelRef}>
-      {/* Bell icon */}
       <button
         className="relative flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-text hover:bg-overlay-3 transition-colors"
         onClick={() => setOpen((v) => !v)}
@@ -154,10 +239,8 @@ export function NotificationPanel() {
         )}
       </button>
 
-      {/* Dropdown panel */}
       {open && (
         <div className="absolute right-0 top-full mt-1.5 w-80 max-h-[480px] bg-elevated border border-border rounded-xl shadow-xl shadow-black/40 z-50 flex flex-col overflow-hidden">
-          {/* Header */}
           <div className="flex items-center justify-between px-4 pt-3 pb-2.5 border-b border-border shrink-0">
             <span className="text-sm font-semibold text-text">
               Notifications
@@ -172,7 +255,6 @@ export function NotificationPanel() {
             )}
           </div>
 
-          {/* List */}
           <div className="flex-1 overflow-y-auto">
             {notifications.length === 0 ? (
               <div className="flex items-center justify-center py-12 text-text-muted text-sm">
@@ -180,8 +262,9 @@ export function NotificationPanel() {
               </div>
             ) : (
               notifications.map((n) => {
-                const Icon = TYPE_ICON[n.type] ?? Bell;
-                const color = TYPE_COLOR[n.type] ?? "var(--color-text-muted)";
+                const Icon = TYPE_ICON[n.type] ?? Bell
+                const color = TYPE_COLOR[n.type] ?? "var(--color-text-muted)"
+                const isApproval = n.type === "approval.required"
 
                 return (
                   <div
@@ -197,26 +280,35 @@ export function NotificationPanel() {
                         style={{ color }}
                       />
                       <div className="flex-1 min-w-0">
-                        <div className="flex items-center justify-between gap-2">
-                          <span className="text-[13px] font-medium text-text truncate">
-                            {n.title}
-                          </span>
-                          <span className="text-[11px] text-text-muted shrink-0">
-                            {timeAgo(n.createdAt)}
-                          </span>
-                        </div>
-                        <p className="text-[12px] text-text-secondary mt-0.5 leading-relaxed line-clamp-2">
-                          {n.message}
-                        </p>
+                        <button
+                          type="button"
+                          className="w-full text-left"
+                          onClick={() => isApproval && handleOpenApproval(n)}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[13px] font-medium text-text truncate">
+                              {n.title}
+                            </span>
+                            <span className="text-[11px] text-text-muted shrink-0">
+                              {timeAgo(n.createdAt)}
+                            </span>
+                          </div>
+                          <p className="text-[12px] text-text-secondary mt-0.5 leading-relaxed line-clamp-2">
+                            {n.message}
+                          </p>
+                        </button>
 
-                        {/* Actions */}
                         {n.actions.length > 0 && (
-                          <div className="flex gap-2 mt-2">
+                          <div className="flex flex-wrap gap-2 mt-2">
                             {n.actions.map((action, i) => (
                               <button
                                 key={i}
-                                className="text-[11px] px-2.5 py-1 rounded-md text-accent bg-accent/10 hover:bg-accent/20 transition-colors"
-                                onClick={() => handleAction(n, action)}
+                                className={`text-[11px] px-2.5 py-1 rounded-md transition-colors ${
+                                  action.action === "deny-run-step"
+                                    ? "text-error bg-error/10 hover:bg-error/20"
+                                    : "text-accent bg-accent/10 hover:bg-accent/20"
+                                }`}
+                                onClick={() => void handleAction(n, action)}
                               >
                                 {action.label}
                               </button>
@@ -226,12 +318,12 @@ export function NotificationPanel() {
                       </div>
                     </div>
                   </div>
-                );
+                )
               })
             )}
           </div>
         </div>
       )}
     </div>
-  );
+  )
 }

@@ -4,7 +4,6 @@ import { presentToolCall, serializeToolCallArgs } from "@mia/shared-types"
 import { broadcast, toBroadcastData } from "../../../../platform/events/broadcaster.js"
 import * as db from "../../../../platform/persistence/sqlite.js"
 import type { NotificationOpts } from "../../../../ports/orchestration.js"
-import { NotificationActionType } from "../../../../shared/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 
 type EventWiringServices = {
@@ -170,26 +169,12 @@ export function wireEventBroadcasting(
   })
   subscriptions.push(unsubscribeAudit)
 
-  // Approval requests → notifications
+  // Approval requests → live SSE only; notification + DB record created in finalizeWaitingForApprovalRun.
   const unsubscribeApproval = services.eventBus.subscribe("approval.required", async (event: DomainEvent) => {
     const data = toBroadcastData(event)
     const eventRunId = getEventRunId(event)
     if (eventRunId && eventRunId !== runId) return
-    const toolName = data["toolName"] as string
-    const reason = data["reason"] as string
-    const stepId = getStepId(event)
-    createNotification({
-      type: EventType.ApprovalRequired,
-      title: "Approval required",
-      message: `Tool "${toolName}" needs approval: ${reason}`,
-      runId,
-      stepId,
-      actions: [
-        { label: "Review", action: NotificationActionType.ViewRun, data: { runId } },
-        { label: "Edit Policies", action: NotificationActionType.OpenPolicies, data: { runId } }
-      ]
-    })
-    broadcast({ type: EventType.ApprovalRequired, data: { runId, stepId, toolName, reason } })
+    broadcast({ type: EventType.ApprovalRequired, data: { ...data, runId: eventRunId ?? runId } })
   })
   subscriptions.push(unsubscribeApproval)
 

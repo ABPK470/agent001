@@ -297,6 +297,20 @@ export {
 } from "./sync-catalog-versions.js"
 
 export {
+  consumeRunToolApprovalGrant,
+  getPendingRunToolApproval,
+  getRunToolApproval,
+  listApprovedToolGrantsForRuns,
+  listPendingRunToolApprovalsForRuns,
+  markRunToolApprovalApproved,
+  markRunToolApprovalDenied,
+  markRunWaitingForApproval,
+  upsertPendingRunToolApproval,
+  type RunToolApprovalRecord,
+  type RunToolApprovalStatus,
+} from "./run-tool-approvals.js"
+
+export {
   countAdmins,
   countUsers,
   findUserByUpn,

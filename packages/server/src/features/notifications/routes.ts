@@ -132,6 +132,24 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
           }
           return { ok: true, runId, applied: result }
         }
+        case "approve-run-step": {
+          const approvalId = data?.approvalId as string | undefined
+          if (!approvalId) {
+            reply.code(400)
+            return { error: "approvalId required" }
+          }
+          const { approveRunToolStep } = await import("../runs/application/run-tool-approval.js")
+          return approveRunToolStep(orchestrator, approvalId, req.session ?? null)
+        }
+        case "deny-run-step": {
+          const approvalId = data?.approvalId as string | undefined
+          if (!approvalId) {
+            reply.code(400)
+            return { error: "approvalId required" }
+          }
+          const { denyRunToolStep } = await import("../runs/application/run-tool-approval.js")
+          return denyRunToolStep(orchestrator, approvalId, req.session ?? null)
+        }
         default:
           return { ok: true }
       }

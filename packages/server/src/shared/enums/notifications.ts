@@ -14,7 +14,9 @@ export const NotificationActionType = {
   ResumeRun: "resume-run",
   ApplyRunDiff: "apply-run-diff",
   CancelRun: "cancel-run",
-  OpenPolicies: "open-policies"
+  OpenPolicies: "open-policies",
+  ApproveRunStep: "approve-run-step",
+  DenyRunStep: "deny-run-step",
 } as const
 
 export type NotificationActionType = (typeof NotificationActionType)[keyof typeof NotificationActionType]

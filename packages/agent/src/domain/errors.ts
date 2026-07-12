@@ -27,3 +27,18 @@ export class PolicyViolationError extends DomainError {
     this.name = "PolicyViolationError"
   }
 }
+
+/** Tool blocked pending operator approval — run should pause, not fail. */
+export class ApprovalRequiredError extends DomainError {
+  constructor(
+    public readonly runId: string,
+    public readonly stepId: string,
+    public readonly toolName: string,
+    public readonly args: Record<string, unknown>,
+    public readonly reason: string,
+    public readonly policyName: string
+  ) {
+    super(`Approval required for tool "${toolName}": ${reason}`)
+    this.name = "ApprovalRequiredError"
+  }
+}

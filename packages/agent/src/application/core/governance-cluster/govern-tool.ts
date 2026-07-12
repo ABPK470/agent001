@@ -8,10 +8,12 @@ import { randomUUID } from "node:crypto"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
 import type { ExecutableTool } from "../../../domain/agent-types.js"
 import {
+  ApprovalRequiredError,
   type ExecutionRecord,
   PolicyViolationError,
   StepStatus,
   approvalRequired,
+  blockStep,
   completeStep,
   failStep,
   startStep,
@@ -69,9 +71,11 @@ export function governTool(
           options?.policyContext ?? null
         )
         if (policyResult !== null) {
-          // Approval required — block and emit event for notification
+          const policyName = policyResult.startsWith("Policy '")
+            ? (policyResult.match(/^Policy '([^']+)'/)?.[1] ?? "require_approval")
+            : "require_approval"
           startStep(step)
-          failStep(step, `Blocked by policy: ${policyResult}`)
+          blockStep(step, policyResult)
           await services.auditService.log({
             actor: state.actor,
             action: "tool.blocked",
@@ -79,12 +83,18 @@ export function governTool(
             resourceId: state.run.id,
             detail: { tool: tool.name, reason: policyResult, stepId: step.id }
           })
-          // Emit approval.required event so the orchestrator can create a notification
           await services.eventBus.publish(
             approvalRequired(state.run.id, step.id, tool.name, persistedArgs, policyResult)
           )
           await services.runRepo.save(state.run)
-          return `BLOCKED: ${policyResult}. This tool call was prevented by a governance policy. The user has been notified and may adjust policies and resume the run.`
+          throw new ApprovalRequiredError(
+            state.run.id,
+            step.id,
+            tool.name,
+            persistedArgs,
+            policyResult,
+            policyName
+          )
         }
       } catch (err) {
         if (err instanceof PolicyViolationError) {

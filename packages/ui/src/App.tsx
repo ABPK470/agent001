@@ -4,6 +4,7 @@ import { api, createEventStream, createPopoutEventRelay } from "./api"
 import { Canvas, type CanvasHandle } from "./components/Canvas"
 import { ChatHomePage } from "./components/ChatHomePage"
 import { MobileNav } from "./components/MobileNav"
+import { ApprovalRequiredModal } from "./components/ApprovalRequiredModal"
 import { PolicyEditor } from "./components/PolicyEditor"
 import { Toolbar } from "./components/Toolbar"
 import { UsageModal } from "./components/UsageModal"
@@ -73,6 +74,9 @@ export function App() {
   const setAudit = useStore((s) => s.setAudit)
   const setTrace = useStore((s) => s.setTrace)
   const setNotifications = useStore((s) => s.setNotifications)
+  const setPendingToolApproval = useStore((s) => s.setPendingToolApproval)
+  const policyEditorOpen = useStore((s) => s.policyEditorOpen)
+  const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
   const views = useStore((s) => s.views)
   const activeViewId = useStore((s) => s.activeViewId)
   const canvasRef = useRef<CanvasHandle>(null)
@@ -80,7 +84,6 @@ export function App() {
   const [mobileWidgetIdx, setMobileWidgetIdx] = useState(0)
   const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const [policyOpen, setPolicyOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
   const [shellMode, setShellMode] = useState<AppShellMode>("chat")
   const [shellVisible, setShellVisible] = useState(true)
@@ -258,8 +261,41 @@ export function App() {
   // Reload notifications on identity change so each user only sees their own.
   useEffect(() => {
     if (!me) return
-    api.listNotifications(50).then(setNotifications).catch(() => {})
-  }, [me?.upn, setNotifications])
+    api.listNotifications(50).then((items) => {
+      setNotifications(items)
+      const pendingNote = items.find((n) => n.type === "approval.required" && !n.read)
+        ?? items.find((n) => n.type === "approval.required")
+      if (!pendingNote?.runId) return
+      const approveAction = pendingNote.actions.find((a) => a.action === "approve-run-step")
+      const toolMatch = pendingNote.message.match(/^Tool "([^"]+)"/)
+      setPendingToolApproval({
+        approvalId: (approveAction?.data?.approvalId as string | undefined) ?? null,
+        runId: pendingNote.runId,
+        stepId: pendingNote.stepId ?? "",
+        toolName: toolMatch?.[1] ?? "unknown",
+        reason: pendingNote.message.replace(/^Tool "[^"]+" needs approval: /, "") || pendingNote.message,
+        notificationId: pendingNote.id,
+      })
+      useStore.getState().setApprovalModalOpen(false)
+    }).catch(() => {})
+    api.listPendingToolApprovals().then((approvals) => {
+      const pending = approvals.find((a) => a.status === "pending")
+      if (!pending) return
+      const state = useStore.getState()
+      if (state.pendingToolApproval?.approvalId) return
+      setPendingToolApproval({
+        approvalId: pending.id,
+        runId: pending.runId,
+        stepId: pending.stepId,
+        toolName: pending.toolName,
+        reason: pending.reason,
+        policyName: pending.policyName,
+        args: pending.args,
+        notificationId: state.pendingToolApproval?.notificationId ?? null,
+      })
+      useStore.getState().setApprovalModalOpen(false)
+    }).catch(() => {})
+  }, [me?.upn, setNotifications, setPendingToolApproval])
 
   // Restore the EnvSync widget operator context from the user's most recent
   // manual sync run (env pair + entity type). Plans are hydrated only by
@@ -560,7 +596,7 @@ export function App() {
                     </button>
                     <button
                       className="flex items-center gap-2.5 w-full px-4 py-3 text-sm text-text-secondary active:bg-overlay-2"
-                      onClick={() => { setPolicyOpen(true); setMobileMenuOpen(false) }}
+                      onClick={() => { setPolicyEditorOpen(true); setMobileMenuOpen(false) }}
                     >
                       <Shield size={15} /> Policies
                     </button>
@@ -625,7 +661,6 @@ export function App() {
         />
 
         {mobileCatalogOpen && <WidgetCatalog onClose={() => setMobileCatalogOpen(false)} />}
-        {policyOpen && <PolicyEditor onClose={() => setPolicyOpen(false)} />}
         {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       </div>
     )
@@ -648,6 +683,8 @@ export function App() {
   return (
     <>
       {welcomeOverlay}
+      <ApprovalRequiredModal />
+      {policyEditorOpen && !popOut && <PolicyEditor onClose={() => setPolicyEditorOpen(false)} />}
       <div
         className={`app-shell-view flex flex-col h-screen min-h-[100dvh] ${shellVisible ? "" : "app-shell-view--fading"}`}
       >

@@ -684,6 +684,23 @@ body {
 }
 
 /* ── Entity Registry · shell chrome ───────────────────────────── */
+.modal-surface,
+.modal-surface * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
+.modal-surface button,
+.modal-surface [role="tab"],
+.modal-surface summary,
+.modal-surface input,
+.modal-surface textarea,
+.modal-surface select,
+.modal-surface [aria-haspopup="listbox"] {
+  user-select: none !important;
+  -webkit-user-select: none !important;
+}
+
 .entity-registry,
 .modal-surface,
 .sync-admin {

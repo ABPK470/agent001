@@ -158,7 +158,7 @@ export function SelectorRulesTab({ rules, tools, onReload, onDelete }: Props) {
   }
 
   return (
-    <div className="space-y-3">
+    <div className="selector-rules-tab space-y-4">
       <HelpPanel open={helpOpen} onToggle={() => setHelpOpen((v) => !v)} toolCount={tools.length} />
 
       <div className="flex items-center justify-between gap-3 flex-wrap pb-3 border-b border-border-subtle">
@@ -167,7 +167,7 @@ export function SelectorRulesTab({ rules, tools, onReload, onDelete }: Props) {
             <button
               key={f.v}
               onClick={() => setFilter(f.v)}
-              className={`px-2.5 py-1 text-[12px] rounded-md transition-colors ${
+              className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
                 filter === f.v
                   ? "bg-surface text-text shadow-sm"
                   : "text-text-muted hover:text-text"
@@ -176,9 +176,9 @@ export function SelectorRulesTab({ rules, tools, onReload, onDelete }: Props) {
           ))}
         </div>
         <button
-          className="px-3 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 flex items-center gap-1.5"
+          className="px-3.5 py-2 text-sm rounded-lg bg-accent/20 text-accent hover:bg-accent/30 flex items-center gap-1.5"
           onClick={() => openEdit(null)}
-        ><FilePlus size={13} /> New rule</button>
+        ><FilePlus size={15} /> New rule</button>
       </div>
 
       {editing === NEW_KEY && (
@@ -222,7 +222,7 @@ export function SelectorRulesTab({ rules, tools, onReload, onDelete }: Props) {
           />
         ))}
         {filteredRules.length === 0 && (
-          <div className="text-text-muted text-[13px] text-center py-6">No rules match this filter.</div>
+          <div className="text-text-muted text-sm text-center py-8">No rules match this filter.</div>
         )}
       </div>
     </div>
@@ -242,14 +242,14 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
     <div className="rounded-xl bg-overlay-2/60 border border-border-subtle">
       <button
         onClick={onToggle}
-        className="w-full flex items-center justify-between gap-2 px-4 py-2.5 text-left"
+        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
       >
-        <span className="flex items-center gap-2 text-[13px] font-semibold text-text">
-          <BookOpen size={14} className="text-accent" />
+        <span className="flex items-center gap-2 text-sm font-semibold text-text">
+          <BookOpen size={16} className="text-accent" />
           How Selector Rules work
         </span>
         <span className="flex items-center gap-2">
-          <span className="text-[11px] text-text-muted hidden sm:inline">
+          <span className="text-xs text-text-muted hidden sm:inline">
             <strong className="text-text">{SELECTOR_KEYS.length}</strong> dimensions ·{" "}
             <strong className="text-text">{enumValueCount}</strong> fixed values ·{" "}
             <strong className="text-text">{toolCount}</strong> tools ·{" "}
@@ -260,7 +260,7 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
       </button>
 
       {open && (
-        <div className="px-4 pb-4 space-y-4 text-[12.5px] text-text-secondary leading-relaxed border-t border-border-subtle pt-3">
+        <div className="px-4 pb-4 space-y-4 text-sm text-text-secondary leading-relaxed border-t border-border-subtle pt-4">
           <section>
             <h4 className="font-semibold text-text mb-1">The model</h4>
             <p>
@@ -284,16 +284,17 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
                 const Icon = e.icon
                 return (
                   <li key={e.value} className="flex items-start gap-2">
-                    <Icon size={13} className={`${e.color} mt-0.5 shrink-0`} />
+                    <Icon size={14} className={`${e.color} mt-0.5 shrink-0`} />
                     <span><code className={`font-mono ${e.color}`}>{e.value}</code> — {e.description}</span>
                   </li>
                 )
               })}
             </ul>
             <p className="mt-2 text-text-muted">
-              <code className="font-mono">require_approval</code> emits an <code>approval.required</code>{" "}
-              event that surfaces in the Notification panel (top-right bell). Currently you must edit
-              the policy and resume the run; there is no inline accept/decline button yet.
+              <code className="font-mono">require_approval</code> pauses the run and emits{" "}
+              <code className="font-mono">approval.required</code>. A modal opens immediately so you
+              can approve or deny; the same actions stay available in the notification bell until
+              the run is resumed or cancelled.
             </p>
           </section>
 
@@ -308,11 +309,11 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
                 <div key={s.key} className="rounded-md bg-canvas/40 border border-border-subtle px-3 py-2">
                   <div className="flex items-baseline gap-2 mb-0.5 flex-wrap">
                     <code className="font-mono text-text font-semibold">{s.key}</code>
-                    <span className="text-[10px] text-text-muted uppercase tracking-wider">{s.type}</span>
+                    <span className="text-xs text-text-muted uppercase tracking-wider">{s.type}</span>
                   </div>
-                  <p className="text-[11.5px] text-text-muted mb-1">{s.description}</p>
+                  <p className="text-sm text-text-muted mb-1">{s.description}</p>
                   {s.enumValues && (
-                    <ul className="space-y-0.5 text-[11.5px]">
+                    <ul className="space-y-0.5 text-sm">
                       {s.enumValues.map((v) => (
                         <li key={v.value}>
                           <code className="font-mono text-accent">{v.value}</code>
@@ -322,7 +323,7 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
                     </ul>
                   )}
                   {s.examples && (
-                    <p className="text-[11.5px] text-text-faint mt-1">
+                    <p className="text-sm text-text-faint mt-1">
                       e.g. {s.examples.map((ex, i) => (
                         <span key={ex}>{i > 0 && ", "}<code className="font-mono">{ex}</code></span>
                       ))}
@@ -362,7 +363,7 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
             <ul className="space-y-1">
               {Object.values(SOURCE_META).map((s) => (
                 <li key={s.value}>
-                  <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${s.badgeClass}`}>{s.label}</span>
+                  <span className={`text-xs uppercase tracking-wider px-1.5 py-0.5 rounded ${s.badgeClass}`}>{s.label}</span>
                   <span className="text-text-muted"> — {s.description}</span>
                 </li>
               ))}
@@ -408,26 +409,26 @@ function RuleRow(props: RowProps) {
 
   return (
     <div className={`rounded-lg border ${isEditing ? "border-accent/40 bg-overlay-2" : "border-border-subtle bg-overlay-2"}`}>
-      <div className="flex items-center gap-3 px-3 py-2">
-        <EffIcon size={14} className={`${eff.color} shrink-0`} />
+      <div className="flex items-center gap-3 px-4 py-2.5">
+        <EffIcon size={16} className={`${eff.color} shrink-0`} />
         <div className="flex-1 min-w-0">
           <div className="flex items-center gap-2 flex-wrap">
-            <span className="text-[13px] font-mono text-text truncate">{rule.name}</span>
-            <span className={`text-[10px] uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.badgeClass}`}>
+            <span className="text-sm font-mono text-text truncate">{rule.name}</span>
+            <span className={`text-xs uppercase tracking-wider px-1.5 py-0.5 rounded ${badge.badgeClass}`}>
               {badge.label}
             </span>
-            {priority !== null && <span className="text-[10px] text-text-muted">prio {priority}</span>}
-            {rule.updatedAt && <span className="text-[10px] text-text-muted">edited by {rule.updatedBy ?? "?"}</span>}
+            {priority !== null && <span className="text-xs text-text-muted">prio {priority}</span>}
+            {rule.updatedAt && <span className="text-xs text-text-muted">edited by {rule.updatedBy ?? "?"}</span>}
           </div>
-          <div className="text-[12px] text-text-muted truncate" title={summary}>{summary}</div>
+          <div className="text-sm text-text-muted truncate" title={summary}>{summary}</div>
         </div>
         {!isEditing && (
           <>
-            <button onClick={onEdit} className="text-text-muted hover:text-text text-[12px] px-2">
+            <button onClick={onEdit} className="text-text-muted hover:text-text text-sm px-2">
               {isReadOnly ? "Override" : "Edit"}
             </button>
             <button onClick={onDelete} className="text-error/70 hover:text-error p-1" title="Delete">
-              <Trash2 size={13} />
+              <Trash2 size={15} />
             </button>
           </>
         )}
@@ -531,25 +532,25 @@ function RuleEditor(props: EditorProps) {
   const activeDimCount = Object.values(form.selectors).filter((v) => v !== ANY).length
 
   return (
-    <div ref={editorRef} className={`${props.embedded ? "px-4 py-4" : "px-4 py-3.5 rounded-xl bg-overlay-2 border border-accent/30"} space-y-4`}>
+    <div ref={editorRef} className={`${props.embedded ? "px-5 py-5" : "px-5 py-4 rounded-xl bg-overlay-2 border border-accent/30"} space-y-5`}>
       <div className="flex items-center justify-between">
-        <span className="text-sm font-semibold text-text">{title}</span>
+        <span className="text-base font-semibold text-text">{title}</span>
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => mode === "form" ? switchToJson() : switchToForm()}
-            className="text-[11px] text-text-muted hover:text-text px-2 py-1 rounded hover:bg-overlay-3"
+            className="text-xs text-text-muted hover:text-text px-2.5 py-1.5 rounded hover:bg-overlay-3"
             title="Toggle between structured form and raw JSON"
           >{mode === "form" ? "Show JSON" : "Show form"}</button>
-          <button onClick={onCancel} className="text-text-muted hover:text-text p-1 rounded hover:bg-overlay-3" title="Close">
-            <X size={14} />
+          <button onClick={onCancel} className="text-text-muted hover:text-text p-1.5 rounded hover:bg-overlay-3" title="Close">
+            <X size={16} />
           </button>
         </div>
       </div>
 
       {props.readOnlyOriginNotice && (
-        <div className="px-3 py-2 rounded-lg bg-warning/10 border border-warning/30 text-[12px] text-warning flex items-start gap-2">
-          <AlertCircle size={13} className="mt-0.5 shrink-0" />
+        <div className="px-3.5 py-2.5 rounded-lg bg-warning/10 border border-warning/30 text-sm text-warning flex items-start gap-2">
+          <AlertCircle size={15} className="mt-0.5 shrink-0" />
           <span>
             This rule is a <strong>{props.readOnlyOriginNotice.label}</strong> and lives outside the database.
             Saving creates a new <strong>operator</strong> rule with the same name that overrides it on the next run.
@@ -559,20 +560,20 @@ function RuleEditor(props: EditorProps) {
       )}
 
       {props.showTemplates && props.onUseTemplate && (
-        <div className="rounded-lg bg-canvas/40 border border-border-subtle p-3">
-          <div className="flex items-center gap-1.5 mb-2">
-            <Sparkles size={12} className="text-accent" />
-            <span className="text-[12px] font-semibold text-text">Start from a template</span>
-            <span className="text-[11px] text-text-muted">— click to pre-fill the form</span>
+        <div className="rounded-lg bg-canvas/40 border border-border-subtle p-3.5">
+          <div className="flex items-center gap-1.5 mb-2.5">
+            <Sparkles size={14} className="text-accent" />
+            <span className="text-sm font-semibold text-text">Start from a template</span>
+            <span className="text-sm text-text-muted">— click to pre-fill the form</span>
           </div>
-          <div className="flex flex-wrap gap-1.5">
+          <div className="flex flex-wrap gap-2">
             {RULE_TEMPLATES.map((t) => (
               <button
                 key={t.id}
                 type="button"
                 onClick={() => props.onUseTemplate!(t)}
                 title={t.description}
-                className="px-2.5 py-1 text-[11.5px] rounded-md bg-overlay-2 border border-border-subtle text-text-secondary hover:text-text hover:border-accent/40 hover:bg-overlay-3 transition-colors"
+                className="px-3 py-1.5 text-sm rounded-md bg-overlay-2 border border-border-subtle text-text-secondary hover:text-text hover:border-accent/40 hover:bg-overlay-3 transition-colors"
               >{t.label}</button>
             ))}
           </div>
@@ -581,30 +582,30 @@ function RuleEditor(props: EditorProps) {
 
       {mode === "json" ? (
         <div>
-          <div className="text-[12px] text-text-muted mb-1">
+          <div className="text-sm text-text-muted mb-1.5">
             Raw <code className="font-mono">parameters</code> JSON. Switch back to Form to round-trip into the structured editor.
           </div>
           <textarea
             value={jsonDraft}
             onChange={(e) => setJsonDraft(e.target.value)}
-            rows={12}
-            className="w-full px-3 py-2 rounded-lg bg-surface border border-border-subtle text-[12px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
+            rows={14}
+            className="w-full px-3 py-2.5 rounded-lg bg-surface border border-border-subtle text-sm font-mono leading-relaxed focus:outline-none focus:ring-1 focus:ring-accent"
             spellCheck={false}
           />
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-5">
           <Section number={1} label="Name this rule" hint="Lowercase + underscores recommended.">
             <input
               placeholder="e.g. allow_dev_query"
               value={form.name}
               onChange={(e) => setForm((s) => ({ ...s, name: e.target.value }))}
-              className="w-full px-3 py-1.5 rounded-lg bg-surface border border-border-subtle text-[13px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
+              className="w-full px-3 py-2 rounded-lg bg-surface border border-border-subtle text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </Section>
 
           <Section number={2} label="What should happen?" hint="Picked when this rule wins.">
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5">
               {EFFECT_META.map((e) => {
                 const Icon = e.icon
                 const active = form.effect === e.value
@@ -614,16 +615,16 @@ function RuleEditor(props: EditorProps) {
                     type="button"
                     onClick={() => setForm((s) => ({ ...s, effect: e.value as Effect }))}
                     title={e.description}
-                    className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-left transition-colors ${
+                    className={`flex items-start gap-2.5 px-3.5 py-3 rounded-lg border text-left transition-colors ${
                       active
                         ? `${e.color} ${e.bg} border-current font-medium`
                         : "border-border-subtle bg-surface text-text-muted hover:text-text hover:bg-overlay-3"
                     }`}
                   >
-                    <Icon size={15} className="shrink-0" />
+                    <Icon size={17} className="shrink-0 mt-0.5" />
                     <div className="min-w-0">
-                      <div className="text-[13px]">{e.label}</div>
-                      <div className="text-[10.5px] opacity-70 leading-tight truncate">{e.description}</div>
+                      <div className="text-sm font-medium">{e.label}</div>
+                      <div className="text-xs opacity-80 leading-snug mt-0.5">{e.description}</div>
                     </div>
                   </button>
                 )
@@ -647,55 +648,55 @@ function RuleEditor(props: EditorProps) {
                 />
               ))}
             </div>
-            <div className="text-[11px] text-text-muted mt-1.5 px-1">
+            <div className="text-xs text-text-muted mt-2 px-1">
               {SELECTOR_KEYS.length} dimensions · {activeDimCount} active in this rule
             </div>
           </Section>
 
           <Section number={4} label="Tie-breaker priority + audit reason">
-            <div className="grid grid-cols-1 sm:grid-cols-[160px_1fr] gap-3">
+            <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] gap-4">
               <div>
-                <label className="block text-[11.5px] text-text-muted mb-1">Priority</label>
+                <label className="block text-sm text-text-muted mb-1.5">Priority</label>
                 <input
                   type="number"
                   value={form.priority}
                   onChange={(e) => setForm((s) => ({ ...s, priority: Number(e.target.value) || 0 }))}
-                  className="w-full px-3 py-1.5 rounded-lg bg-surface border border-border-subtle text-[13px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="w-full px-3 py-2 rounded-lg bg-surface border border-border-subtle text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent"
                 />
-                <div className={`text-[11px] mt-1 ${band.color}`} title={band.description}>
+                <div className={`text-sm mt-1.5 ${band.color}`} title={band.description}>
                   {band.label}
                 </div>
               </div>
               <div>
-                <label className="block text-[11.5px] text-text-muted mb-1">
+                <label className="block text-sm text-text-muted mb-1.5">
                   Reason <span className="text-text-faint">— shown to operators on approval prompts and in audit logs</span>
                 </label>
                 <textarea
                   value={form.reason}
                   onChange={(e) => setForm((s) => ({ ...s, reason: e.target.value }))}
-                  rows={2}
+                  rows={3}
                   placeholder="e.g. PROD is read-only by default in hosted mode"
-                  className="w-full px-3 py-1.5 rounded-lg bg-surface border border-border-subtle text-[12.5px] focus:outline-none focus:ring-1 focus:ring-accent resize-y"
+                  className="w-full px-3 py-2 rounded-lg bg-surface border border-border-subtle text-sm leading-relaxed focus:outline-none focus:ring-1 focus:ring-accent resize-y"
                 />
               </div>
             </div>
 
-            <details className="mt-3">
-              <summary className="text-[11.5px] text-text-muted cursor-pointer hover:text-text select-none">
+            <details className="mt-4">
+              <summary className="text-sm text-text-muted cursor-pointer hover:text-text select-none">
                 Advanced: change condition form (default: <code className="font-mono">selectors</code>)
               </summary>
-              <div className="mt-2">
+              <div className="mt-2.5">
                 <input
                   list="condition-presets"
                   placeholder="selectors"
                   value={form.condition}
                   onChange={(e) => setForm((s) => ({ ...s, condition: e.target.value }))}
-                  className="w-full px-3 py-1.5 rounded-lg bg-surface border border-border-subtle text-[13px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
+                  className="w-full px-3 py-2 rounded-lg bg-surface border border-border-subtle text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent"
                 />
                 <datalist id="condition-presets">
                   {CONDITION_FORMS.map((c) => <option key={c.value} value={c.value} />)}
                 </datalist>
-                <div className="text-[11px] text-text-muted mt-1">
+                <div className="text-sm text-text-muted mt-1.5">
                   Use <code className="font-mono">action:&lt;tool&gt;</code> for the coarse single-tool form. Otherwise leave as <code className="font-mono">selectors</code>.
                 </div>
               </div>
@@ -704,20 +705,20 @@ function RuleEditor(props: EditorProps) {
         </div>
       )}
 
-      <div className="px-3 py-2 rounded-lg bg-info/10 border border-info/20 text-[12px] text-info flex items-start gap-2">
-        <Info size={13} className="mt-0.5 shrink-0" />
+      <div className="px-3.5 py-2.5 rounded-lg bg-info/10 border border-info/20 text-sm text-info flex items-start gap-2">
+        <Info size={15} className="mt-0.5 shrink-0" />
         <span><strong>Preview:</strong> {previewSummary}</span>
       </div>
 
-      {error && <p className="text-[12px] text-error">{error}</p>}
+      {error && <p className="text-sm text-error">{error}</p>}
 
-      <div className="flex gap-2">
+      <div className="flex gap-2.5">
         <button
           onClick={onSave}
           disabled={saving || !form.name.trim()}
-          className="px-3 py-1.5 text-[13px] rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-40"
+          className="px-4 py-2 text-sm rounded-lg bg-accent/20 text-accent hover:bg-accent/30 disabled:opacity-40"
         >{saving ? "Saving…" : "Save rule"}</button>
-        <button onClick={onCancel} className="px-3 py-1.5 text-[13px] text-text-muted">Cancel</button>
+        <button onClick={onCancel} className="px-4 py-2 text-sm text-text-muted">Cancel</button>
       </div>
     </div>
   )
@@ -745,12 +746,12 @@ function DimensionRow({
     && !COMMON_TOOL_GLOBS.includes(value)
 
   return (
-    <div className={`grid grid-cols-[140px_1fr] gap-3 px-3 py-2 ${isActive ? "bg-accent/5" : ""}`}>
-      <div className="pt-1.5 min-w-0">
-        <div className="text-[12.5px] text-text font-medium truncate" title={meta.description}>
+    <div className={`grid grid-cols-[11rem_minmax(0,1fr)] gap-4 px-4 py-3 ${isActive ? "bg-accent/5" : ""}`}>
+      <div className="pt-2 min-w-0">
+        <div className="text-sm text-text font-medium leading-snug" title={meta.description}>
           {meta.label}
         </div>
-        <div className="text-[10.5px] text-text-faint font-mono truncate">{meta.key}</div>
+        <div className="text-xs text-text-faint font-mono truncate mt-0.5">{meta.key}</div>
       </div>
 
       <div className="min-w-0">
@@ -759,7 +760,7 @@ function DimensionRow({
             value={value}
             onChange={onChange}
             ariaLabel={meta.label}
-            size="sm"
+            size="md"
             variant="card"
             className="w-full font-mono"
             options={[
@@ -783,7 +784,7 @@ function DimensionRow({
                 }
               }}
               ariaLabel="Tool"
-              size="sm"
+              size="md"
               variant="card"
               className="w-full font-mono"
               options={[
@@ -802,7 +803,7 @@ function DimensionRow({
                 value={value}
                 onChange={(e) => onChange(e.target.value)}
                 placeholder="e.g. mssql_*"
-                className="w-full px-2.5 py-1.5 rounded-lg bg-surface border border-border-subtle text-[13px] font-mono focus:outline-none focus:ring-1 focus:ring-accent"
+                className="w-full px-3 py-2 rounded-lg bg-surface border border-border-subtle text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent"
               />
             )}
           </div>
@@ -811,10 +812,10 @@ function DimensionRow({
             value={value}
             placeholder={meta.placeholder ?? "Any (leave empty)"}
             onChange={(e) => onChange(e.target.value)}
-            className={`w-full px-2.5 py-1.5 rounded-lg bg-surface border border-border-subtle text-[13px] font-mono focus:outline-none focus:ring-1 focus:ring-accent ${isActive ? "" : "text-text-muted"}`}
+            className={`w-full px-3 py-2 rounded-lg bg-surface border border-border-subtle text-sm font-mono focus:outline-none focus:ring-1 focus:ring-accent ${isActive ? "" : "text-text-muted"}`}
           />
         )}
-        <div className="text-[11px] text-text-muted mt-0.5 leading-snug">
+        <div className="text-sm text-text-muted mt-1 leading-snug">
           {valueDescription ?? meta.description}
           {meta.examples && meta.type !== "enum" && !valueDescription && (
             <> · e.g. {meta.examples.slice(0, 3).map((ex, i) => (
@@ -841,12 +842,12 @@ function Section({
 }) {
   return (
     <div>
-      <div className="flex items-baseline gap-2 mb-1.5 flex-wrap">
-        <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-accent/15 text-accent text-[11px] font-semibold shrink-0">
+      <div className="flex items-baseline gap-2.5 mb-2 flex-wrap">
+        <span className="inline-flex items-center justify-center w-6 h-6 rounded-full bg-accent/15 text-accent text-xs font-semibold shrink-0">
           {number}
         </span>
-        <h4 className="text-[13px] font-semibold text-text">{label}</h4>
-        {hint && <span className="text-[11.5px] text-text-muted">— {hint}</span>}
+        <h4 className="text-base font-semibold text-text">{label}</h4>
+        {hint && <span className="text-sm text-text-muted">— {hint}</span>}
       </div>
       {children}
     </div>

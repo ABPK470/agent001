@@ -37,6 +37,7 @@ export function statusColor(status: string): string {
     case RunStatus.Failed: return "var(--color-error)"
     case RunStatus.Crashed: return "var(--color-error)"
     case RunStatus.Running: case RunStatus.Pending: case RunStatus.Planning: return "var(--color-accent)"
+    case RunStatus.WaitingForApproval: return "var(--color-warning)"
     case RunStatus.Cancelled: return "var(--color-warning)"
     default: return "var(--color-text-muted)"
   }

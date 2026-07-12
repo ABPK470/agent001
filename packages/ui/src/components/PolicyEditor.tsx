@@ -286,14 +286,14 @@ export function PolicyEditor({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className={`${MODAL_SURFACE_CLASS} w-full max-w-[960px] h-full sm:h-[85vh] sm:max-h-[820px] flex flex-col`}
+        className={`${MODAL_SURFACE_CLASS} policy-editor-modal w-full max-w-[min(1080px,calc(100vw-1.5rem))] h-full sm:h-[90vh] sm:max-h-[920px] flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-border-subtle shrink-0">
+        <div className="flex items-center justify-between px-7 pt-5 pb-4 border-b border-border-subtle shrink-0">
           <div className="flex items-center gap-2.5">
-            <Shield size={20} className="text-text-muted" />
-            <h2 className="text-lg font-semibold text-text">Governance & Security</h2>
+            <Shield size={22} className="text-text-muted" />
+            <h2 className="text-xl font-semibold text-text">Governance & Security</h2>
           </div>
           <button className="text-text-muted hover:text-text p-1.5 rounded-lg hover:bg-overlay-3 transition-colors" onClick={onClose}>
             <X size={18} />
@@ -301,11 +301,11 @@ export function PolicyEditor({ onClose }: Props) {
         </div>
 
         {/* Tabs */}
-        <div className="flex gap-1 px-6 pt-4 pb-3 shrink-0 border-b border-border-subtle overflow-x-auto">
+        <div className="flex gap-1.5 px-7 pt-4 pb-3 shrink-0 border-b border-border-subtle overflow-x-auto">
           {TABS.map((t) => (
             <button
               key={t.id}
-              className={`px-3.5 py-1.5 text-[13px] rounded-lg transition-colors whitespace-nowrap ${
+              className={`px-4 py-2 text-sm rounded-lg transition-colors whitespace-nowrap ${
                 tab === t.id
                   ? "bg-accent/15 text-accent font-medium"
                   : "text-text-muted hover:text-text hover:bg-overlay-2"
@@ -318,8 +318,8 @@ export function PolicyEditor({ onClose }: Props) {
         </div>
 
         {/* Tab subtitle / context — explains what THIS tab governs vs the others. */}
-        <div className="px-6 pt-3.5 pb-2 shrink-0">
-          <p className="text-[12.5px] text-text-muted leading-relaxed">
+        <div className="px-7 pt-3.5 pb-2.5 shrink-0">
+          <p className="text-sm text-text-muted leading-relaxed">
             {tab === "tools"    && <><strong className="text-text">Tool Permissions</strong> — coarse-grained on/off for every tool, regardless of arguments. Sets simple <code className="font-mono">action:&lt;tool&gt;</code> rules. For nuanced control (per-environment, per-command, per-path) use <em>Selector Rules</em>.</>}
             {tab === "rules"    && <><strong className="text-text">Selector Rules</strong> — the full policy engine. Each rule matches on selectors (tool, path, command regex, dbEnvironment, scope, etc.) and resolves by priority. Includes baseline hosted defaults and per-env-derived rules; you can override or augment any of them.</>}
             {tab === "model"    && <><strong className="text-text">Model</strong> — LLM provider, model, credentials. Active on the next run.</>}
@@ -330,19 +330,19 @@ export function PolicyEditor({ onClose }: Props) {
 
         {/* Error banner */}
         {error && (
-          <div className="mx-6 mb-3 px-3 py-2 bg-error/10 text-error text-[13px] rounded-lg">
+          <div className="mx-7 mb-3 px-3 py-2 bg-error/10 text-error text-sm rounded-lg">
             {error}
           </div>
         )}
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto px-6 pb-5 min-h-0">
+        <div className="flex-1 overflow-y-auto px-7 pb-6 min-h-0">
           {loading ? (
             <div className="text-text-muted text-sm text-center py-8">Loading...</div>
           ) : tab === "tools" ? (
             /* ── Tool Permissions tab ──────────────────────── */
             <div className="space-y-2">
-              <div className="mb-4 px-3 py-2 rounded-lg bg-overlay-2/50 border border-border-subtle text-[12.5px] text-text-muted">
+              <div className="mb-4 px-3 py-2 rounded-lg bg-overlay-2/50 border border-border-subtle text-sm text-text-muted">
                 Each tool is <span className="text-success font-medium">allowed by default</span>.
                 Selecting a state here writes an <code className="font-mono">action:&lt;tool&gt;</code> rule into Selector Rules.
               </div>
@@ -361,15 +361,15 @@ export function PolicyEditor({ onClose }: Props) {
                       <div className="flex items-center gap-2.5">
                         <span className="text-sm font-semibold text-text font-mono">{tool.name}</span>
                         {!currentEffect && (
-                          <span className="text-[11px] uppercase font-semibold tracking-wider text-success">allowed</span>
+                          <span className="text-xs uppercase font-semibold tracking-wider text-success">allowed</span>
                         )}
                         {effectStyle && (
-                          <span className={`text-[11px] uppercase font-semibold tracking-wider ${effectStyle.color}`}>
+                          <span className={`text-xs uppercase font-semibold tracking-wider ${effectStyle.color}`}>
                             {effectStyle.label}
                           </span>
                         )}
                       </div>
-                      <div className="text-[13px] text-text-muted mt-0.5 line-clamp-2">{tool.description}</div>
+                      <div className="text-sm text-text-muted mt-0.5 line-clamp-2">{tool.description}</div>
                     </div>
                     <EffectSegmented
                       value={currentEffect}
@@ -393,7 +393,7 @@ export function PolicyEditor({ onClose }: Props) {
               <div className="flex items-center justify-between">
                 <p className="text-sm text-text-muted">Configure the LLM provider and model used by the agent.</p>
                 {llmActiveProvider && (
-                  <span className="flex items-center gap-1.5 text-[12px] text-text-muted bg-overlay-2 border border-border-subtle rounded-full px-3 py-1">
+                  <span className="flex items-center gap-1.5 text-sm text-text-muted bg-overlay-2 border border-border-subtle rounded-full px-3 py-1">
                     <span className="w-1.5 h-1.5 rounded-full bg-success inline-block" />
                     {llmActiveProvider} / {llmActiveModel}
                   </span>
@@ -406,7 +406,7 @@ export function PolicyEditor({ onClose }: Props) {
                   <Cpu size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Provider</span>
                 </div>
-                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                <p className="text-sm text-text-muted leading-relaxed mb-3">
                   Choose the LLM backend. Switching provider updates the model and URL defaults below.
                 </p>
                 <div className="flex gap-2 flex-wrap">
@@ -440,7 +440,7 @@ export function PolicyEditor({ onClose }: Props) {
                 <div className="space-y-3 mb-4">
                   {/* Model */}
                   <div>
-                    <label className="text-[13px] text-text-muted block mb-1.5">
+                    <label className="text-sm text-text-muted block mb-1.5">
                       {llmProvider === "databricks" ? "Serving endpoint" : "Model"}
                     </label>
                     <input
@@ -448,14 +448,14 @@ export function PolicyEditor({ onClose }: Props) {
                       value={llmModel}
                       onChange={(e) => setLlmModel(e.target.value)}
                       placeholder={llmDefaults[llmProvider]?.model ?? "model name"}
-                      className="w-full px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                      className="w-full px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-sm"
                     />
                   </div>
 
                   {/* API Key — only shown for copilot-chat (Device Flow auto-fills if blank). */}
                   {llmProvider === "copilot-chat" && (
                     <div>
-                      <label className="text-[13px] text-text-muted block mb-1.5">
+                      <label className="text-sm text-text-muted block mb-1.5">
                         GitHub Token
                       </label>
                       <div className="relative">
@@ -464,7 +464,7 @@ export function PolicyEditor({ onClose }: Props) {
                           value={llmApiKey}
                           onChange={(e) => setLlmApiKey(e.target.value)}
                           placeholder={llmDefaults[llmProvider]?.placeholder ?? "Leave blank to keep existing"}
-                          className="w-full px-3 py-1.5 pr-10 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                          className="w-full px-3 py-1.5 pr-10 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-sm"
                         />
                         <button
                           type="button"
@@ -474,7 +474,7 @@ export function PolicyEditor({ onClose }: Props) {
                           {showApiKey ? <EyeOff size={14} /> : <Eye size={14} />}
                         </button>
                       </div>
-                      <p className="text-[12px] text-text-muted mt-1">Leave blank to keep the existing key.</p>
+                      <p className="text-sm text-text-muted mt-1">Leave blank to keep the existing key.</p>
                     </div>
                   )}
 
@@ -490,8 +490,8 @@ export function PolicyEditor({ onClose }: Props) {
                   >
                     {llmSaving ? "Saving…" : "Apply"}
                   </button>
-                  {llmSaved && <span className="text-[13px] text-success">Saved — active on next run</span>}
-                  {llmError && <span className="text-[13px] text-error">{llmError}</span>}
+                  {llmSaved && <span className="text-sm text-success">Saved — active on next run</span>}
+                  {llmError && <span className="text-sm text-error">{llmError}</span>}
                 </div>
               </div>
             </div>
@@ -508,12 +508,12 @@ export function PolicyEditor({ onClose }: Props) {
                   <FolderOpen size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Workspace (developer mode)</span>
                 </div>
-                <p className="text-[13px] text-text-muted leading-relaxed mb-2">
+                <p className="text-sm text-text-muted leading-relaxed mb-2">
                   Root for <code className="font-mono text-text">read_file</code>, <code className="font-mono text-text">write_file</code>,
                   <code className="font-mono text-text"> run_command</code> and friends when the server is running in
                   <strong className="text-text"> developer mode</strong> (<code className="font-mono">AGENT_HOSTED_MODE</code> unset). Every run shares this directory.
                 </p>
-                <p className="text-[12px] text-warning/90 leading-relaxed mb-3">
+                <p className="text-sm text-warning/90 leading-relaxed mb-3">
                   ⚠ In <strong>hosted mode</strong> this field is ignored — each run gets its own isolated sandbox under <code className="font-mono">runWorkspaceRoot</code>, and the agent cannot reach this path.
                 </p>
                 <div className="flex gap-2">
@@ -522,7 +522,7 @@ export function PolicyEditor({ onClose }: Props) {
                     value={wsPath}
                     onChange={(e) => setWsPath(e.target.value)}
                     placeholder="/path/to/workspace"
-                    className="flex-1 px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-[13px]"
+                    className="flex-1 px-3 py-1.5 rounded-lg bg-overlay-2 border border-border-subtle text-sm text-text placeholder:text-text-muted/50 focus:outline-none focus:ring-1 focus:ring-accent font-mono text-sm"
                   />
                   <button
                     onClick={handleSaveWorkspace}
@@ -532,8 +532,8 @@ export function PolicyEditor({ onClose }: Props) {
                     {wsSaving ? "Saving…" : "Apply"}
                   </button>
                 </div>
-                {wsError && <p className="text-[12px] text-error mt-1.5">{wsError}</p>}
-                {wsSaved && <p className="text-[12px] text-success mt-1.5">Workspace updated</p>}
+                {wsError && <p className="text-sm text-error mt-1.5">{wsError}</p>}
+                {wsSaved && <p className="text-sm text-success mt-1.5">Workspace updated</p>}
               </div>
 
               {/* Shell blocklist */}
@@ -545,14 +545,14 @@ export function PolicyEditor({ onClose }: Props) {
                   {shellExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
                   <Terminal size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Shell Command Blocklist</span>
-                  <span className="text-[12px] text-text-muted ml-auto">{SHELL_BLOCKLIST.length} patterns</span>
+                  <span className="text-sm text-text-muted ml-auto">{SHELL_BLOCKLIST.length} patterns</span>
                 </button>
                 {shellExpanded && (
                   <div className="mt-3 flex flex-wrap gap-1.5">
                     {SHELL_BLOCKLIST.map((p) => (
                       <span
                         key={p}
-                        className="px-2 py-0.5 text-[11px] font-mono text-error/80 bg-error/5 rounded"
+                        className="px-2 py-0.5 text-xs font-mono text-error/80 bg-error/5 rounded"
                       >
                         {p}
                       </span>
@@ -570,18 +570,18 @@ export function PolicyEditor({ onClose }: Props) {
                   {ssrfExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
                   <Globe size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">SSRF Protection</span>
-                  <span className="text-[12px] text-text-muted ml-auto">{SSRF_BLOCKED.length} patterns</span>
+                  <span className="text-sm text-text-muted ml-auto">{SSRF_BLOCKED.length} patterns</span>
                 </button>
                 {ssrfExpanded && (
                   <div className="mt-3">
-                    <p className="text-[12px] text-text-muted mb-2">
+                    <p className="text-sm text-text-muted mb-2">
                       The fetch_url tool blocks requests to internal/private network addresses:
                     </p>
                     <div className="flex flex-wrap gap-1.5">
                       {SSRF_BLOCKED.map((p) => (
                         <span
                           key={p}
-                          className="px-2 py-0.5 text-[11px] font-mono text-warning/80 bg-warning/5 rounded"
+                          className="px-2 py-0.5 text-xs font-mono text-warning/80 bg-warning/5 rounded"
                         >
                           {p}
                         </span>
@@ -597,7 +597,7 @@ export function PolicyEditor({ onClose }: Props) {
                   <Shield size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Policy Enforcement</span>
                 </div>
-                <p className="text-[13px] text-text-muted leading-relaxed">
+                <p className="text-sm text-text-muted leading-relaxed">
                   All policy rules are evaluated <strong>before every tool call</strong>.
                   Denied actions throw an error immediately. "Require Approval" blocks
                   the agent until approved. Rules apply to all new runs.
@@ -613,11 +613,11 @@ export function PolicyEditor({ onClose }: Props) {
                   {sqlGuardExpanded ? <ChevronDown size={14} className="text-text-muted" /> : <ChevronRight size={14} className="text-text-muted" />}
                   <Database size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">SQL Engine Invariants</span>
-                  <span className="text-[12px] text-text-muted ml-auto">read-only · enforced in tool layer</span>
+                  <span className="text-sm text-text-muted ml-auto">read-only · enforced in tool layer</span>
                 </button>
                 {sqlGuardExpanded && (
                   <div className="mt-3 space-y-2.5">
-                    <p className="text-[12px] text-text-muted leading-relaxed">
+                    <p className="text-sm text-text-muted leading-relaxed">
                       These rails are baked into <code className="font-mono text-text">query_mssql</code> /
                       <code className="font-mono text-text"> export_query_to_file</code> at the agent layer
                       (<code className="font-mono text-text">packages/agent/src/tools/mssql/validation.ts</code>).
@@ -625,14 +625,14 @@ export function PolicyEditor({ onClose }: Props) {
                       <strong> not operator-toggleable</strong> — weakening them would let the agent
                       mutate production data.
                     </p>
-                    <ul className="text-[12.5px] text-text-secondary leading-relaxed space-y-1.5 pl-1">
+                    <ul className="text-sm text-text-secondary leading-relaxed space-y-1.5 pl-1">
                       <li><span className="text-success font-medium">✓ ALLOWED on local <code className="font-mono">#temp</code> tables</span> — <code className="font-mono">CREATE TABLE</code>, <code className="font-mono">SELECT … INTO</code>, <code className="font-mono">INSERT</code>, <code className="font-mono">UPDATE</code>, <code className="font-mono">DELETE</code>, <code className="font-mono">CREATE INDEX</code>, <code className="font-mono">TRUNCATE</code>, <code className="font-mono">DROP</code>, <code className="font-mono">MERGE</code>.</li>
                       <li><span className="text-error font-medium">✗ BLOCKED forever</span> — any mutation (CREATE/INSERT/UPDATE/DELETE/DROP/ALTER/TRUNCATE/MERGE/CREATE INDEX/SELECT INTO) targeting an <strong>existing real table, view, index, procedure, schema</strong>, or <code className="font-mono">sys.*</code> object.</li>
                       <li><span className="text-error font-medium">✗ BLOCKED</span> — global <code className="font-mono">##temp</code> tables (would survive past the session and leak across runs). Only single-<code className="font-mono">#</code> local temps are permitted.</li>
                       <li><span className="text-error font-medium">✗ BLOCKED</span> — <code className="font-mono">EXEC</code>, <code className="font-mono">sp_executesql</code>, <code className="font-mono">xp_*</code>, <code className="font-mono">OPENROWSET</code>, <code className="font-mono">OPENQUERY</code>, <code className="font-mono">BULK INSERT</code>, <code className="font-mono">DBCC</code>, <code className="font-mono">SHUTDOWN</code>, <code className="font-mono">RECONFIGURE</code>.</li>
                       <li><span className="text-text-muted">ℹ Per-row safety cap</span> — <code className="font-mono">query_mssql</code> hard-limits to 1 000 rows; use <code className="font-mono">export_query_to_file</code> for larger pulls.</li>
                     </ul>
-                    <p className="text-[11.5px] text-text-muted/80 leading-relaxed pt-2 border-t border-border-subtle/40">
+                    <p className="text-sm text-text-muted/80 leading-relaxed pt-2 border-t border-border-subtle/40">
                       Want to relax this? You can't, by design. To stage data, the agent uses a <code className="font-mono text-text">#temp</code> table
                       and follows the micro-ETL pattern (that prompt section is injected only on data-shaped goals to keep token cost low for non-DB chats).
                     </p>
@@ -648,22 +648,22 @@ export function PolicyEditor({ onClose }: Props) {
                   <Trash2 size={15} className="text-error" />
                   <span className="text-sm font-semibold text-text">Restore Defaults</span>
                 </div>
-                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                <p className="text-sm text-text-muted leading-relaxed mb-3">
                   Delete all runs, logs, audit entries, trace history, checkpoints, and token usage.
                   <strong> Policies and dashboard layout will be preserved.</strong>
                 </p>
                 {!confirmReset ? (
                   <button
-                    className="px-4 py-2 text-[13px] text-error hover:bg-error/10 border border-error/20 rounded-lg"
+                    className="px-4 py-2 text-sm text-error hover:bg-error/10 border border-error/20 rounded-lg"
                     onClick={() => setConfirmReset(true)}
                   >
                     Reset All Data
                   </button>
                 ) : (
                   <div className="flex items-center gap-3">
-                    <span className="text-[13px] text-error">Are you sure?</span>
+                    <span className="text-sm text-error">Are you sure?</span>
                     <button
-                      className="px-4 py-2 text-[13px] bg-error text-text rounded-lg disabled:opacity-40"
+                      className="px-4 py-2 text-sm bg-error text-text rounded-lg disabled:opacity-40"
                       disabled={resetting}
                       onClick={async () => {
                         setResetting(true)
@@ -680,7 +680,7 @@ export function PolicyEditor({ onClose }: Props) {
                       {resetting ? "Resetting..." : "Yes, Delete Everything"}
                     </button>
                     <button
-                      className="px-3 py-2 text-[13px] text-text-muted hover:text-text rounded-lg"
+                      className="px-3 py-2 text-sm text-text-muted hover:text-text rounded-lg"
                       onClick={() => setConfirmReset(false)}
                     >
                       Cancel
@@ -698,13 +698,13 @@ export function PolicyEditor({ onClose }: Props) {
                   <Database size={15} className="text-accent" />
                   <span className="text-sm font-semibold text-text">MSSQL schema catalog</span>
                 </div>
-                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                <p className="text-sm text-text-muted leading-relaxed mb-3">
                   Introspected table/FK metadata cached on disk for <code className="font-mono text-text">search_catalog</code>,
                   schema exploration tools, and Entity Registry “Suggest from schema”. Built from live MSSQL — not from shipped
                   sync artifacts or Entity Registry publish.
                 </p>
                 {platformHealth && (
-                  <div className="text-[12.5px] text-text-secondary space-y-1 mb-3">
+                  <div className="text-sm text-text-secondary space-y-1 mb-3">
                     <p>
                       MSSQL: {platformHealth.mssql.configured ? platformHealth.mssql.summary : "not configured"}
                       {platformHealth.catalog.available && platformHealth.catalog.detail
@@ -728,7 +728,7 @@ export function PolicyEditor({ onClose }: Props) {
                 )}
                 <button
                   type="button"
-                  className="px-4 py-2 text-[13px] text-accent border border-accent/30 rounded-lg hover:bg-accent/10 disabled:opacity-40"
+                  className="px-4 py-2 text-sm text-accent border border-accent/30 rounded-lg hover:bg-accent/10 disabled:opacity-40"
                   disabled={catalogRebuilding || !platformHealth?.mssql.configured}
                   onClick={async () => {
                     setCatalogRebuilding(true)
@@ -748,7 +748,7 @@ export function PolicyEditor({ onClose }: Props) {
                   {catalogRebuilding ? "Rebuilding catalog…" : "Rebuild schema catalog"}
                 </button>
                 {catalogRebuildMessage && (
-                  <p className="text-[12px] text-text-muted mt-2">{catalogRebuildMessage}</p>
+                  <p className="text-sm text-text-muted mt-2">{catalogRebuildMessage}</p>
                 )}
               </div>
 
@@ -757,7 +757,7 @@ export function PolicyEditor({ onClose }: Props) {
                   <Database size={15} className="text-text-muted" />
                   <span className="text-sm font-semibold text-text">Deploy sync artifacts</span>
                 </div>
-                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                <p className="text-sm text-text-muted leading-relaxed mb-3">
                   Import entity definitions and sync step catalog into SQLite from bundled release files or by
                   regenerating from live MyMI/MSSQL. After import, <strong>publish from Entity Registry</strong> before
                   running sync — this does not build the schema catalog above.
@@ -765,7 +765,7 @@ export function PolicyEditor({ onClose }: Props) {
                 <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
-                    className="px-4 py-2 text-[13px] text-text-secondary border border-border rounded-lg hover:bg-overlay-2 disabled:opacity-40"
+                    className="px-4 py-2 text-sm text-text-secondary border border-border rounded-lg hover:bg-overlay-2 disabled:opacity-40"
                     disabled={artifactsRefreshing !== null}
                     onClick={async () => {
                       setArtifactsRefreshing("shipped")
@@ -788,7 +788,7 @@ export function PolicyEditor({ onClose }: Props) {
                     <select
                       value={mssqlConnection}
                       onChange={(e) => setMssqlConnection(e.target.value)}
-                      className="rounded-lg border border-border bg-surface px-2 py-2 text-[13px] text-text"
+                      className="rounded-lg border border-border bg-surface px-2 py-2 text-sm text-text"
                     >
                       {platformHealth.mssql.connections.map((c) => (
                         <option key={c} value={c}>{c}</option>
@@ -797,7 +797,7 @@ export function PolicyEditor({ onClose }: Props) {
                   )}
                   <button
                     type="button"
-                    className="px-4 py-2 text-[13px] text-accent border border-accent/30 rounded-lg hover:bg-accent/10 disabled:opacity-40"
+                    className="px-4 py-2 text-sm text-accent border border-accent/30 rounded-lg hover:bg-accent/10 disabled:opacity-40"
                     disabled={artifactsRefreshing !== null || !platformHealth?.mssql.configured}
                     onClick={async () => {
                       setArtifactsRefreshing("mssql")
@@ -822,7 +822,7 @@ export function PolicyEditor({ onClose }: Props) {
                   </button>
                 </div>
                 {artifactsMessage && (
-                  <p className="text-[12px] text-text-muted mt-2">{artifactsMessage}</p>
+                  <p className="text-sm text-text-muted mt-2">{artifactsMessage}</p>
                 )}
               </div>
 
@@ -833,21 +833,21 @@ export function PolicyEditor({ onClose }: Props) {
                   <Trash2 size={15} className="text-error" />
                   <span className="text-sm font-semibold text-text">Factory Reset Platform</span>
                 </div>
-                <p className="text-[13px] text-text-muted leading-relaxed mb-3">
+                <p className="text-sm text-text-muted leading-relaxed mb-3">
                   Wipe entity definitions, sync configs, and the published bundle, then re-seed from deploy artifacts.
                   <strong> Publish again from Entity Registry before sync is operational.</strong>
                   Policies, dashboard layout, and run history are preserved.
                 </p>
                 {!confirmFactoryReset ? (
                   <button
-                    className="px-4 py-2 text-[13px] text-error hover:bg-error/10 border border-error/20 rounded-lg"
+                    className="px-4 py-2 text-sm text-error hover:bg-error/10 border border-error/20 rounded-lg"
                     onClick={() => setConfirmFactoryReset(true)}
                   >
                     Factory Reset Platform
                   </button>
                 ) : (
                   <div className="space-y-3">
-                    <p className="text-[13px] text-text-secondary">
+                    <p className="text-sm text-text-secondary">
                       Type <code className="font-mono text-text">FACTORY RESET</code> to confirm.
                     </p>
                     <input
@@ -855,11 +855,11 @@ export function PolicyEditor({ onClose }: Props) {
                       value={factoryResetPhrase}
                       onChange={(e) => setFactoryResetPhrase(e.target.value)}
                       placeholder="FACTORY RESET"
-                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-[13px] text-text focus:outline-none focus:ring-1 focus:ring-border-strong"
+                      className="w-full rounded-lg border border-border bg-surface px-3 py-2 text-sm text-text focus:outline-none focus:ring-1 focus:ring-border-strong"
                     />
                     <div className="flex items-center gap-3">
                       <button
-                        className="px-4 py-2 text-[13px] bg-error text-text rounded-lg disabled:opacity-40"
+                        className="px-4 py-2 text-sm bg-error text-text rounded-lg disabled:opacity-40"
                         disabled={factoryResetting || factoryResetPhrase !== "FACTORY RESET"}
                         onClick={async () => {
                           setFactoryResetting(true)
@@ -877,7 +877,7 @@ export function PolicyEditor({ onClose }: Props) {
                         {factoryResetting ? "Resetting..." : "Reset Platform"}
                       </button>
                       <button
-                        className="px-3 py-2 text-[13px] text-text-muted hover:text-text rounded-lg"
+                        className="px-3 py-2 text-sm text-text-muted hover:text-text rounded-lg"
                         onClick={() => {
                           setConfirmFactoryReset(false)
                           setFactoryResetPhrase("")
@@ -913,7 +913,7 @@ function EffectSegmented({ value, onChange }: { value: Effect | null; onChange: 
           key={o.v}
           type="button"
           onClick={() => onChange(o.v)}
-          className={`px-3 py-1 text-[12px] rounded-md transition-colors ${
+          className={`px-3.5 py-1.5 text-sm rounded-md transition-colors ${
             current === o.v ? `${o.cls} bg-overlay-3 font-medium` : "text-text-muted hover:text-text"
           }`}
         >{o.label}</button>

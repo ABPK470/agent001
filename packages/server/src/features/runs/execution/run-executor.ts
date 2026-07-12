@@ -1,3 +1,4 @@
+import { ApprovalRequiredError } from "@mia/agent"
 import { createChildUsageReporter, createRunAgent, normalizeRunAnswer } from "./run-executor/agent.js"
 import { prepareExecutionEnvironment } from "./run-executor/environment.js"
 import {
@@ -5,6 +6,7 @@ import {
   finalizeCancelledRun,
   finalizeCompletedRun,
   finalizeFailedRun,
+  finalizeWaitingForApprovalRun,
   maybeRunReflection
 } from "./run-executor/finalization.js"
 import { acquireRunSlot } from "./run-executor/support.js"
@@ -38,6 +40,10 @@ export async function executeRunImpl(command: ExecuteRunCommand): Promise<void> 
     await maybeRunReflection(command, env, answer)
     await finalizeCompletedRun(command, env, agent, answer)
   } catch (error) {
+    if (error instanceof ApprovalRequiredError && env && agent) {
+      await finalizeWaitingForApprovalRun(command, env, agent, error)
+      return
+    }
     if (env && agent) {
       await finalizeFailedRun(command, env, agent, error)
       return

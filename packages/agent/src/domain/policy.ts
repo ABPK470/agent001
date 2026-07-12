@@ -25,8 +25,25 @@ import { PolicyEffect } from "./enums/index.js"
 import { PolicyViolationError } from "./errors.js"
 import type { PolicyEvaluator } from "./interfaces.js"
 import type { AgentRun, PolicyRule, Step } from "./models.js"
+import { stripRuntimeToolArgs } from "@mia/shared-types"
+
 import type { HostedPolicyContext } from "./policy-context.js"
 import { extractToolFacts, resolveSelectorRules } from "./policy-selectors.js"
+
+function stableArgsKey(args: Record<string, unknown>): string {
+  return JSON.stringify(stripRuntimeToolArgs(args))
+}
+
+function hasToolApprovalGrant(
+  ctx: HostedPolicyContext | null | undefined,
+  step: Step
+): boolean {
+  if (!ctx?.toolApprovalGrants?.length) return false
+  const key = stableArgsKey(step.input)
+  return ctx.toolApprovalGrants.some(
+    (grant) => grant.toolName === step.action && stableArgsKey(grant.args) === key
+  )
+}
 
 export class RulePolicyEvaluator implements PolicyEvaluator {
   private rules: PolicyRule[] = []
@@ -46,6 +63,10 @@ export class RulePolicyEvaluator implements PolicyEvaluator {
     step: Step,
     ctx: HostedPolicyContext | null = null
   ): Promise<string | null> {
+    if (hasToolApprovalGrant(ctx, step)) {
+      return null
+    }
+
     // 1. Legacy action: rules — preserve original first-match semantics.
     for (const rule of this.rules) {
       if (rule.condition === "selectors") continue

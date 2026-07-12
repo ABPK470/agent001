@@ -15,6 +15,7 @@ import {
   syncProgressToTraceEntry,
   type SyncProgressState
 } from "./sync-trace-progress.js"
+import { pendingApprovalFromEvent } from "./components/ApprovalRequiredModal.js"
 import { api } from "./api"
 import { readSseEntityId, readSseRunId, readSseStepId } from "@mia/shared-types"
 import {
@@ -42,6 +43,18 @@ import type {
   WidgetType,
 } from "./types"
 import { randomId } from "./util"
+
+/** Live + hydrated state for the approval-required modal. */
+export interface PendingToolApproval {
+  approvalId: string | null
+  runId: string
+  stepId: string
+  toolName: string
+  reason: string
+  policyName?: string
+  args?: Record<string, unknown>
+  notificationId?: string | null
+}
 
 function truncateSyncToolResult(text: string, max = 1200): string {
   const t = text.trim()
@@ -314,6 +327,18 @@ interface AppState {
   // Pending user input (ask_user tool)
   pendingInput: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
   clearPendingInput: () => void
+
+  /** Blocked tool call awaiting operator approve/deny (require_approval policy). */
+  pendingToolApproval: PendingToolApproval | null
+  approvalModalOpen: boolean
+  setPendingToolApproval: (pending: PendingToolApproval | null) => void
+  clearPendingToolApproval: () => void
+  setApprovalModalOpen: (open: boolean) => void
+  upsertPendingToolApproval: (patch: Partial<PendingToolApproval> & { runId: string; stepId: string }) => void
+
+  /** Policy editor modal — shared so notifications can open it. */
+  policyEditorOpen: boolean
+  setPolicyEditorOpen: (open: boolean) => void
 
   // Dismissed workspace diff run IDs (session-only — not persisted)
   dismissedWorkspaceDiffRunIds: Set<string>
@@ -887,6 +912,8 @@ function formatLogEntryInner(
       return { type: t, message: `Rollback ${data["action"]} — ${data["target"]}`, timestamp }
     case "approval.required":
       return { type: t, message: `Approval required — ${data["toolName"]}: ${data["reason"]}`, timestamp }
+    case "approval.resolved":
+      return { type: t, message: `Approval ${data["decision"]} — ${data["runId"]}`, timestamp }
     case "events.connected":
       return { type: t, message: `Connected to event stream`, timestamp }
     case "events.disconnected":
@@ -1366,6 +1393,35 @@ export const useStore = create<AppState>()(
       pendingInput: null,
       clearPendingInput: () => set({ pendingInput: null }),
 
+      pendingToolApproval: null,
+      approvalModalOpen: false,
+      setPendingToolApproval: (pending) => set({
+        pendingToolApproval: pending,
+        approvalModalOpen: pending !== null,
+      }),
+      clearPendingToolApproval: () => set({ pendingToolApproval: null, approvalModalOpen: false }),
+      setApprovalModalOpen: (open) => set({ approvalModalOpen: open }),
+      upsertPendingToolApproval: (patch) => set((s) => {
+        const existing = s.pendingToolApproval
+        const same = existing && existing.runId === patch.runId && existing.stepId === patch.stepId
+        return {
+          pendingToolApproval: {
+            approvalId: patch.approvalId ?? (same ? existing.approvalId : null),
+            runId: patch.runId,
+            stepId: patch.stepId,
+            toolName: patch.toolName ?? (same ? existing.toolName : "unknown"),
+            reason: patch.reason ?? (same ? existing.reason : "Policy requires approval"),
+            policyName: patch.policyName ?? (same ? existing.policyName : undefined),
+            args: patch.args ?? (same ? existing.args : undefined),
+            notificationId: patch.notificationId ?? (same ? existing.notificationId : null),
+          },
+          approvalModalOpen: same ? s.approvalModalOpen : true,
+        }
+      }),
+
+      policyEditorOpen: false,
+      setPolicyEditorOpen: (open) => set({ policyEditorOpen: open }),
+
       // Dismissed workspace diff run IDs (session-only)
       dismissedWorkspaceDiffRunIds: new Set<string>(),
       dismissWorkspaceDiff: (runId) => set((s) => ({
@@ -1502,6 +1558,9 @@ export const useStore = create<AppState>()(
               }
             }
             set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null, activeSyncInvocation: null, syncProgressStates: new Map() })
+            if (get().pendingToolApproval?.runId === (data["runId"] as string)) {
+              set({ pendingToolApproval: null, approvalModalOpen: false })
+            }
             break
 
           case "run.failed":
@@ -1525,6 +1584,9 @@ export const useStore = create<AppState>()(
               set((s) => ({ runs: appendRunTrace(s.runs, data["runId"] as string, { kind: "error", text: data["error"] as string }) }))
             }
             set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null, activeSyncInvocation: null, syncProgressStates: new Map() })
+            if (get().pendingToolApproval?.runId === (data["runId"] as string)) {
+              set({ pendingToolApproval: null, approvalModalOpen: false })
+            }
             break
 
           case "run.cancelled":
@@ -1854,7 +1916,7 @@ export const useStore = create<AppState>()(
           }
 
           case "notification": {
-            store.addNotification({
+            const notification: Notification = {
               id: data["id"] as string,
               type: data["notificationType"] as string,
               title: data["title"] as string,
@@ -1864,7 +1926,70 @@ export const useStore = create<AppState>()(
               actions: (data["actions"] as Notification["actions"]) ?? [],
               read: false,
               createdAt: timestamp,
+            }
+            store.addNotification(notification)
+            if (notification.type === "approval.required" && notification.runId) {
+              const approveAction = notification.actions.find((a) => a.action === "approve-run-step")
+              const approvalId = approveAction?.data?.approvalId as string | undefined
+              const toolMatch = notification.message.match(/^Tool "([^"]+)"/)
+              get().upsertPendingToolApproval({
+                runId: notification.runId,
+                stepId: notification.stepId ?? "",
+                approvalId: approvalId ?? null,
+                toolName: toolMatch?.[1] ?? "unknown",
+                reason: notification.message.replace(/^Tool "[^"]+" needs approval: /, "") || notification.message,
+                notificationId: notification.id,
+              })
+            }
+            break
+          }
+
+          case "approval.required": {
+            const runId = data["runId"] as string
+            const stepId = (data["stepId"] as string) ?? ""
+            const pending = pendingApprovalFromEvent(data as Record<string, unknown>)
+            const existing = get().pendingToolApproval
+            get().upsertPendingToolApproval({
+              runId,
+              stepId,
+              approvalId: pending.approvalId ?? existing?.approvalId ?? null,
+              toolName: pending.toolName,
+              reason: pending.reason,
+              policyName: pending.policyName,
+              args: pending.args,
+              notificationId: existing?.notificationId ?? pending.notificationId ?? null,
             })
+            store.upsertRun({ id: runId, status: RunStatus.WaitingForApproval })
+            if (!existing || existing.runId !== runId || existing.stepId !== stepId) {
+              const traceEntry: TraceEntry = {
+                kind: "error",
+                text: `Waiting for approval — ${pending.toolName}: ${pending.reason}`,
+              }
+              store.addTrace(traceEntry)
+              if (runId) {
+                runTraceBuf.push({ runId, entry: traceEntry })
+                scheduleRunFlush(set)
+              }
+            }
+            break
+          }
+
+          case "approval.resolved": {
+            const runId = data["runId"] as string
+            const stepId = (data["stepId"] as string) ?? ""
+            const approvalId = data["approvalId"] as string | undefined
+            const decision = data["decision"] as string
+            const pending = get().pendingToolApproval
+            if (
+              pending &&
+              (pending.approvalId === approvalId ||
+                (pending.runId === runId && pending.stepId === stepId))
+            ) {
+              set({ pendingToolApproval: null, approvalModalOpen: false })
+            }
+            if (decision === "denied") {
+              store.upsertRun({ id: runId, status: RunStatus.Cancelled, completedAt: timestamp })
+            }
             break
           }
 
