@@ -10,6 +10,7 @@ import {
   getEnvironments,
   listPublishedSyncDefinitions,
   loadPlan,
+  loadPublishedSyncDefinitionBundle,
   previewSync,
   searchEntities,
   type EntityType,
@@ -17,6 +18,7 @@ import {
 } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import { broadcast } from "../../platform/events/broadcaster.js"
+import { PUBLISHED_SYNC_BUNDLE_PATH } from "../../bootstrap/published-sync-bundle.js"
 import * as db from "../../platform/persistence/sqlite.js"
 import {
   listSyncDefinitionAdminItems,
@@ -164,6 +166,31 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     return getEnvironments(host)
   })
   app.get("/api/sync/definitions", async () => listPublishedSyncDefinitions(host, projectRoot))
+  app.get<{ Params: { entityId: string } }>(
+    "/api/sync/definitions/:entityId/published-bundle",
+    async (req, reply) => {
+      try {
+        const bundle = loadPublishedSyncDefinitionBundle(host, projectRoot)
+        const definition = bundle.definitions[req.params.entityId]
+        if (!definition) {
+          reply.code(404)
+          return { error: `No published definition for "${req.params.entityId}" in ${PUBLISHED_SYNC_BUNDLE_PATH}` }
+        }
+        return {
+          bundlePath: PUBLISHED_SYNC_BUNDLE_PATH,
+          bundlePublishedAt: bundle.publishedAt,
+          bundlePublishedVersion: bundle.publishedVersion,
+          definition
+        }
+      } catch (error) {
+        reply.code(404)
+        return {
+          error: error instanceof Error ? error.message : String(error),
+          bundlePath: PUBLISHED_SYNC_BUNDLE_PATH
+        }
+      }
+    }
+  )
   app.get("/api/sync-definition-configs", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)

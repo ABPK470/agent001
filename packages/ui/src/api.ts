@@ -537,6 +537,14 @@ export const api = {
   // ── ABI Environment Sync ────────────────────────────────────
   syncEnvironments: () => json<SyncEnvironment[]>("/api/sync/environments"),
   syncDefinitions: () => json<PublishedSyncDefinition[]>("/api/sync/definitions"),
+  syncPublishedBundleEntry: (entityId: string) =>
+    json<{
+      bundlePath?: string
+      bundlePublishedAt?: string
+      bundlePublishedVersion?: string
+      definition?: PublishedSyncDefinition
+      error?: string
+    }>(`/api/sync/definitions/${encodeURIComponent(entityId)}/published-bundle`),
   publishSyncDefinitions: () => json<PublishSyncDefinitionsResponse>("/api/sync/definitions/publish", { method: "POST" }),
   syncSearch: (params: {
     entityType: SyncEntityType

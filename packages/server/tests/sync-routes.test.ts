@@ -239,6 +239,18 @@ describe("sync routes", () => {
     expect(body[0]).toMatchObject({ id: "pipelineActivity" })
     expect(typeof body[0]?.publishedVersion).toBe("string")
 
+    const bundleEntry = await app.inject({
+      method: "GET",
+      url: "/api/sync/definitions/pipelineActivity/published-bundle"
+    })
+    expect(bundleEntry.statusCode).toBe(200)
+    const bundleBody = bundleEntry.json() as {
+      bundlePath: string
+      definition: { id: string }
+    }
+    expect(bundleBody.bundlePath).toBe("sync-definitions/published/definitions.bundle.json")
+    expect(bundleBody.definition.id).toBe("pipelineActivity")
+
     await app.close()
   })
 })

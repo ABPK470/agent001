@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, GitBranch, ListChecks, Loader2, XCircle } from "lucide-react"
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, GitBranch, Loader2, XCircle } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import type { SyncPlan, SyncPlanTable } from "../../types"
@@ -7,9 +7,15 @@ import { timeAgo } from "../../util"
 import { DIFF } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { buildExecTableStatus } from "./exec-status"
+import { PlanPublishedBundleModal } from "./PlanPublishedBundleModal"
 import { PlanSampleRowModal } from "./PlanSampleRowModal"
 import { formatCellPreview, type SampleRowDetail } from "./plan-table-values"
 import type { ExecState } from "./types"
+
+function shortVersionLabel(version: string): string {
+  if (version.length <= 20) return version
+  return `${version.slice(0, 19)}…`
+}
 
 export function PlanView({ plan, expanded, setExpanded, exec }: {
   plan: SyncPlan
@@ -21,12 +27,14 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
   const hasConflicts = (totals.conflicts ?? 0) > 0
   const expired = (Date.now() - plan.createdAtMs) > 3600_000
   const sorted = useMemo(() => [...plan.tables].sort((a, b) => net(b) - net(a)), [plan])
+  const [bundleOpen, setBundleOpen] = useState(false)
 
   const execStatus = useMemo(() => buildExecTableStatus(exec), [exec])
 
   const warnings = [...plan.preflight.issues, ...plan.warnings]
-  const decisionLog = plan.decisionLog ?? []
   const flowSteps = plan.executionContract.flow.steps ?? []
+  const definitionId = plan.executionContract.definitionId
+  const pinnedVersion = plan.executionContract.definitionPublishedVersion
 
   return (
     <>
@@ -37,7 +45,7 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
               <h3 className="text-base font-semibold text-text truncate">
                 {formatPlanEntityLabel(plan)}
               </h3>
-              <div className="flex items-center gap-2 mt-1 text-sm text-text-muted">
+              <div className="flex items-center gap-2 mt-1 text-sm text-text-muted flex-wrap">
                 <span className="text-text-muted/60 font-mono text-xs">{plan.source} → {plan.target}</span>
                 <span className="text-text-muted/30">·</span>
                 <span className="flex items-center gap-1 text-text-muted/60">
@@ -46,9 +54,19 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
                 {expired && <span className="text-warning font-medium text-xs px-1.5 py-0.5 rounded bg-warning/10">expired</span>}
               </div>
             </div>
+            <button
+              onClick={() => setBundleOpen(true)}
+              className="shrink-0 rounded border border-border-subtle bg-overlay-1 px-2.5 py-1.5 text-left hover:bg-elevated/40 transition-colors max-w-[14rem]"
+              title="View published bundle entry on disk"
+            >
+              <span className="block text-[10px] uppercase tracking-wide text-text-muted">Published bundle</span>
+              <span className="block text-xs font-mono text-accent truncate mt-0.5">
+                {definitionId}@{shortVersionLabel(pinnedVersion)}
+              </span>
+            </button>
           </div>
 
-          <div className="flex items-center gap-4 mt-3">
+          <div className="flex items-center gap-4 mt-3 flex-wrap">
             <div className="flex items-center gap-3 font-mono text-sm tabular-nums">
               {totals.insert > 0 && <span style={{ color: DIFF.ins }}><span className="text-lg font-semibold">{totals.insert}</span> <span className="text-xs">ins</span></span>}
               {totals.update > 0 && <span style={{ color: DIFF.upd }}><span className="text-lg font-semibold">{totals.update}</span> <span className="text-xs">upd</span></span>}
@@ -58,27 +76,12 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
             </div>
             <span className="text-text-muted/30">·</span>
             <span className="text-sm text-text-muted">{totals.tablesCount} tables w/ changes</span>
-            {flowSteps.length > 0 && (
-              <>
-                <span className="text-text-muted/30">·</span>
-                <span className="text-sm text-text-muted">{flowSteps.length} execute steps</span>
-              </>
-            )}
           </div>
         </div>
       </div>
 
-      {(decisionLog.length > 0 || flowSteps.length > 0) && (
-        <PlanInsights decisionLog={decisionLog} flowSteps={flowSteps} />
-      )}
-
-      {warnings.length > 0 && (
-        <div className="rounded-lg border border-warning/20 bg-warning/5 px-4 py-2.5 flex items-start gap-2 text-sm text-warning shrink-0">
-          <AlertTriangle size={13} className="mt-0.5 shrink-0" />
-          <div className="space-y-0.5 font-mono">
-            {warnings.map((warning, index) => <div key={index}>{warning}</div>)}
-          </div>
-        </div>
+      {(warnings.length > 0 || flowSteps.length > 0) && (
+        <PlanCollapsibleSections warnings={warnings} flowSteps={flowSteps} />
       )}
 
       <div className="rounded-lg overflow-hidden flex-1 min-h-0 flex flex-col">
@@ -114,6 +117,10 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
           })}
         </div>
       </div>
+
+      {bundleOpen && (
+        <PlanPublishedBundleModal plan={plan} onClose={() => setBundleOpen(false)} />
+      )}
     </>
   )
 }
@@ -144,48 +151,33 @@ export function net(table: SyncPlanTable): number {
   return tableMovementTotal(table)
 }
 
-function PlanInsights({
-  decisionLog,
+function PlanCollapsibleSections({
+  warnings,
   flowSteps,
 }: {
-  decisionLog: NonNullable<SyncPlan["decisionLog"]>
+  warnings: string[]
   flowSteps: SyncPlan["executionContract"]["flow"]["steps"]
 }) {
-  const [decisionsOpen, setDecisionsOpen] = useState(decisionLog.some((d) => d.severity !== "info"))
+  const [warningsOpen, setWarningsOpen] = useState(warnings.length > 0)
   const [flowOpen, setFlowOpen] = useState(false)
 
   return (
     <div className="rounded-lg border border-border-subtle overflow-hidden shrink-0 divide-y divide-border-subtle">
-      {decisionLog.length > 0 && (
+      {warnings.length > 0 && (
         <div>
           <button
-            onClick={() => setDecisionsOpen((open) => !open)}
+            onClick={() => setWarningsOpen((open) => !open)}
             className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-elevated/30 transition-colors text-left"
           >
-            {decisionsOpen ? <ChevronDown size={13} className="text-text-muted shrink-0" /> : <ChevronRight size={13} className="text-text-muted shrink-0" />}
-            <ListChecks size={14} className="text-text-muted/70 shrink-0" />
-            <span className="text-sm font-medium text-text">Preview decisions</span>
-            <span className="text-xs text-text-muted ml-1">({decisionLog.length})</span>
+            {warningsOpen ? <ChevronDown size={13} className="text-text-muted shrink-0" /> : <ChevronRight size={13} className="text-text-muted shrink-0" />}
+            <AlertTriangle size={14} className="text-warning shrink-0" />
+            <span className="text-sm font-medium text-text">Warnings</span>
+            <span className="text-xs text-text-muted ml-1">({warnings.length})</span>
           </button>
-          {decisionsOpen && (
-            <div className="px-4 pb-3 space-y-2 max-h-48 overflow-y-auto">
-              {decisionLog.map((decision) => (
-                <div
-                  key={decision.id}
-                  className={`rounded border px-3 py-2 text-sm ${
-                    decision.severity === "error"
-                      ? "border-error/30 bg-error-soft/30"
-                      : decision.severity === "warning"
-                        ? "border-warning/30 bg-warning/5"
-                        : "border-border-subtle bg-base/30"
-                  }`}
-                >
-                  <div className="flex items-center gap-2">
-                    <span className="text-[10px] uppercase tracking-wide text-text-muted">{decision.category}</span>
-                    <span className="font-medium text-text">{decision.title}</span>
-                  </div>
-                  <p className="mt-1 text-xs text-text-muted leading-relaxed">{decision.summary}</p>
-                </div>
+          {warningsOpen && (
+            <div className="px-4 pb-3 space-y-1 max-h-48 overflow-y-auto font-mono text-sm text-warning">
+              {warnings.map((warning, index) => (
+                <div key={index} className="leading-relaxed break-all">{warning}</div>
               ))}
             </div>
           )}
