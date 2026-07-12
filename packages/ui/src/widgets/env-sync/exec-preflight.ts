@@ -5,12 +5,18 @@ export interface ExecPreflightCheck {
   label: string
   passed: boolean
   detail: string | null
+  /** When false, shown for transparency only — never blocks execute. */
+  blocking?: boolean
+}
+
+export function planHasMetadataChanges(plan: SyncPlan): boolean {
+  return plan.totals.insert + plan.totals.update + plan.totals.delete > 0
 }
 
 export function buildExecPreflightChecks(plan: SyncPlan): ExecPreflightCheck[] {
-  const hasChanges =
-    plan.totals.insert + plan.totals.update + plan.totals.delete > 0
+  const hasChanges = planHasMetadataChanges(plan)
   const conflictCount = plan.totals.conflicts ?? 0
+  const { insert, update, delete: del, tablesCount } = plan.totals
 
   return [
     {
@@ -32,20 +38,27 @@ export function buildExecPreflightChecks(plan: SyncPlan): ExecPreflightCheck[] {
       detail: conflictCount > 0 ? `${conflictCount} conflict(s) in plan` : null
     },
     {
-      id: "changes",
-      label: "Plan has changes to apply",
-      passed: hasChanges,
-      detail: hasChanges ? null : "No inserts, updates, or deletes"
+      id: "metadata-diff",
+      label: hasChanges ? "Metadata changes to apply" : "Metadata already in sync",
+      passed: true,
+      blocking: false,
+      detail: hasChanges
+        ? `+${insert} ~${update} -${del} across ${tablesCount} table(s)`
+        : "No row diffs — metadataSync is a no-op; deploy and post-metadata steps still run"
     }
   ]
 }
 
 export function execPreflightBlocked(plan: SyncPlan): boolean {
-  return buildExecPreflightChecks(plan).some((check) => !check.passed)
+  return buildExecPreflightChecks(plan).some(
+    (check) => check.blocking !== false && !check.passed
+  )
 }
 
 export function execPreflightBlockReason(plan: SyncPlan): string | null {
-  const failed = buildExecPreflightChecks(plan).filter((check) => !check.passed)
+  const failed = buildExecPreflightChecks(plan).filter(
+    (check) => check.blocking !== false && !check.passed
+  )
   if (failed.length === 0) return null
   return failed.map((check) => check.detail ?? check.label).join("; ")
 }

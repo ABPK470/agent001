@@ -5,7 +5,7 @@ import { createPortal } from "react-dom"
 import type { SyncEnvironment, SyncExecuteProgress, SyncPlan } from "../../types"
 import { tableHasMovement } from "../../types"
 import { DIFF } from "./constants"
-import { buildExecPreflightChecks, execPreflightBlocked, execPreflightBlockReason } from "./exec-preflight"
+import { buildExecPreflightChecks, execPreflightBlocked, execPreflightBlockReason, planHasMetadataChanges } from "./exec-preflight"
 import { buildExecTableStatus } from "./exec-status"
 import { buildDeployProgress, syncFlowStepLabel } from "./exec-deploy-status"
 import { countMetadataTableProgress, metadataProgressLabel } from "./exec-progress"
@@ -79,6 +79,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
   const preflightChecks = useMemo(() => (plan ? buildExecPreflightChecks(plan) : []), [plan])
   const preflightBlocked = plan ? execPreflightBlocked(plan) : false
   const preflightBlockReason = plan ? execPreflightBlockReason(plan) : null
+  const metadataInSync = plan ? !planHasMetadataChanges(plan) : false
 
   const stats = [
     { n: totals.insert, label: "insert", color: DIFF.ins },
@@ -156,18 +157,40 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
             <div className="flex-1 overflow-y-auto">
               <div className="px-4 sm:px-5 pt-4 pb-3 text-center">
                 <p className="text-sm text-text-muted">
-                  Apply changes to <span className="font-semibold text-text">{tgtEnv?.displayName ?? plan?.target ?? "target"}</span>
+                  {metadataInSync ? (
+                    <>
+                      Re-run the full sync flow on{" "}
+                      <span className="font-semibold text-text">{tgtEnv?.displayName ?? plan?.target ?? "target"}</span>
+                    </>
+                  ) : (
+                    <>
+                      Apply metadata and run the full flow on{" "}
+                      <span className="font-semibold text-text">{tgtEnv?.displayName ?? plan?.target ?? "target"}</span>
+                    </>
+                  )}
                 </p>
               </div>
 
+              {metadataInSync && (
+                <div className="mx-4 sm:mx-5 mb-3 rounded-lg border border-info/30 bg-info-soft/40 px-3 py-2.5 text-xs leading-relaxed text-text">
+                  Metadata already matches the target. Execute will still run audit gates, locks, deploy steps,
+                  pipeline start, and other post-metadata actions.
+                </div>
+              )}
+
               <div className="mx-4 sm:mx-5 rounded-lg border border-border-subtle bg-overlay-1 px-4 py-3">
                 <div className="flex items-center justify-center gap-5 font-mono text-sm tabular-nums">
-                  {stats.map((stat) => (
+                  {stats.length > 0 ? stats.map((stat) => (
                     <div key={stat.label} className="text-center">
                       <div className="text-lg font-semibold" style={{ color: stat.color }}>{stat.n}</div>
                       <div className="text-xs text-text-muted">{stat.label}</div>
                     </div>
-                  ))}
+                  )) : (
+                    <div className="text-center">
+                      <div className="text-lg font-semibold text-text-muted">0</div>
+                      <div className="text-xs text-text-muted">metadata row changes</div>
+                    </div>
+                  )}
                   <div className="text-center">
                     <div className="text-lg font-semibold text-text-muted">{totals.tablesCount}</div>
                     <div className="text-xs text-text-muted">tables w/ changes</div>
@@ -182,15 +205,19 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                   </p>
                   {preflightChecks.map((check) => (
                     <div key={check.id} className="flex items-start gap-2 text-xs">
-                      {check.passed ? (
+                      {check.blocking === false ? (
+                        <CheckCircle2 size={14} className="shrink-0 mt-0.5 text-info" />
+                      ) : check.passed ? (
                         <CheckCircle2 size={14} className="shrink-0 mt-0.5" style={{ color: DIFF.ins }} />
                       ) : (
                         <XCircle size={14} className="shrink-0 mt-0.5" style={{ color: DIFF.del }} />
                       )}
                       <div className="min-w-0">
                         <div className={check.passed ? "text-text-muted" : "text-text"}>{check.label}</div>
-                        {!check.passed && check.detail && (
-                          <div className="text-text-muted/80 mt-0.5 leading-snug">{check.detail}</div>
+                        {check.detail && (
+                          <div className={`mt-0.5 leading-snug ${check.blocking === false ? "text-text-muted/80" : check.passed ? "text-text-muted/80" : "text-text-muted/80"}`}>
+                            {check.detail}
+                          </div>
                         )}
                       </div>
                     </div>
@@ -219,7 +246,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                 Cancel
               </button>
               <button type="button" onClick={onConfirm} disabled={preflightBlocked} className="flex-1 h-9 text-sm text-text bg-accent hover:bg-accent-hover rounded-lg flex items-center justify-center gap-1.5 transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-                <Ship size={14} /> Execute
+                <Ship size={14} /> {metadataInSync ? "Run full flow" : "Execute"}
               </button>
             </div>
           </div>

@@ -7,6 +7,7 @@ import { timeAgo } from "../../util"
 import { DIFF } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { buildExecTableStatus } from "./exec-status"
+import { planHasMetadataChanges } from "./exec-preflight"
 import { PlanPublishedBundleModal } from "./PlanPublishedBundleModal"
 import { PlanSampleRowModal } from "./PlanSampleRowModal"
 import { formatCellPreview, type SampleRowDetail } from "./plan-table-values"
@@ -76,6 +77,12 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
             </div>
             <span className="text-text-muted/30">·</span>
             <span className="text-sm text-text-muted">{totals.tablesCount} tables w/ changes</span>
+            {!planHasMetadataChanges(plan) && (
+              <>
+                <span className="text-text-muted/30">·</span>
+                <span className="text-sm text-info">metadata in sync — full flow still runnable</span>
+              </>
+            )}
           </div>
         </div>
       </div>

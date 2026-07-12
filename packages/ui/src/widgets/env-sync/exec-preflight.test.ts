@@ -42,7 +42,25 @@ describe("execPreflight", () => {
     expect(buildExecPreflightChecks(plan).find((c) => c.id === "catalog")?.passed).toBe(false)
   })
 
-  it("passes when all checks are green", () => {
+  it("passes when all blocking checks are green", () => {
     expect(execPreflightBlocked(minimalPlan())).toBe(false)
+  })
+
+  it("does not block when metadata is already in sync (zero row changes)", () => {
+    const plan = minimalPlan()
+    plan.totals = {
+      insert: 0,
+      update: 0,
+      delete: 0,
+      unchanged: 42,
+      lowConfidence: 0,
+      conflicts: 0,
+      tablesCount: 0
+    }
+    expect(execPreflightBlocked(plan)).toBe(false)
+    const meta = buildExecPreflightChecks(plan).find((c) => c.id === "metadata-diff")
+    expect(meta?.blocking).toBe(false)
+    expect(meta?.passed).toBe(true)
+    expect(meta?.detail).toContain("no-op")
   })
 })

@@ -31,7 +31,7 @@ import { Empty, Loading, ModalShell } from "./chrome"
 import { DIFF, dot, ENTITY_TYPES, normalizeOptionalTableSelection } from "./constants"
 import { DefinitionContent } from "./DefinitionContent"
 import { cancelExec, completeExecFromAgent, getExecPlanId, getExecSnapshot, resetExec, startExecStream, subscribeExec } from "./exec-store"
-import { execPreflightBlocked, execPreflightBlockReason } from "./exec-preflight"
+import { execPreflightBlocked, execPreflightBlockReason, planHasMetadataChanges } from "./exec-preflight"
 import { ExecModal } from "./ExecModal"
 import { HistoryContent } from "./HistoryContent"
 import { net, PlanView } from "./PlanTables"
@@ -412,9 +412,7 @@ export function EnvSync() {
   }))
 
   const hasPlan = !!displayPlan
-  const hasChanges = displayPlan
-    ? displayPlan.totals.insert + displayPlan.totals.update + displayPlan.totals.delete > 0
-    : false
+  const hasMetadataChanges = displayPlan ? planHasMetadataChanges(displayPlan) : false
   const hasConflicts = displayPlan ? (displayPlan.totals.conflicts ?? 0) > 0 : false
   const preflightBlocked = displayPlan ? execPreflightBlocked(displayPlan) : false
   const preflightBlockReason = displayPlan ? execPreflightBlockReason(displayPlan) : null
@@ -639,12 +637,12 @@ export function EnvSync() {
                     : expired ? "Plan expired — re-preview"
                     : hasConflicts ? "Resolve conflicts before syncing"
                       : preflightBlocked ? (preflightBlockReason ?? "Preflight checks failed — open execute modal")
-                        : !hasChanges ? "No changes to sync"
+                        : !hasMetadataChanges ? "Run full flow — metadata already in sync"
                           : "Execute sync"
                 }
                 variant="primary"
                 onClick={() => setExecModalOpen(true)}
-                disabled={expired || hasConflicts || !hasChanges || preflightBlocked || searchLoading}
+                disabled={expired || hasConflicts || preflightBlocked || searchLoading}
               >
                 <Ship {...TOOLBAR_ICON} />
               </IconButton>
