@@ -69,11 +69,14 @@ export function searchEvents(
   const conditions: string[] = []
   const params: unknown[] = []
 
-  // Free-text: search both the data JSON blob AND the type column so that
-  // e.g. searching "failed" finds events whose type contains "failed".
+  // Free-text: each word (≥2 chars) must appear in type OR data JSON.
+  // e.g. "preview started" matches type sync.preview.started.
   if (q.length >= 2) {
-    conditions.push("(data LIKE ? OR type LIKE ?)")
-    params.push(`%${q}%`, `%${q}%`)
+    const words = q.split(/\s+/).filter((w) => w.length >= 2)
+    for (const word of words) {
+      conditions.push("(data LIKE ? OR type LIKE ?)")
+      params.push(`%${word}%`, `%${word}%`)
+    }
   }
   if (opts?.before) {
     conditions.push("created_at < ?")

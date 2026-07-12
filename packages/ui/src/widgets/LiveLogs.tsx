@@ -35,6 +35,33 @@ import {
 const EVENT_TYPES = ["all", "run", "step", "sync", "agent", "api", "system"] as const
 type EventType = (typeof EVENT_TYPES)[number]
 
+/** Words from the search box must all appear somewhere in these fields. */
+function logSearchHaystack(log: LogEntry): string {
+  return `${log.message} ${log.type} ${log.eventName ?? ""} ${JSON.stringify(log.data ?? {})}`.toLowerCase()
+}
+
+function logMatchesSearch(log: LogEntry, rawQuery: string): boolean {
+  const words = rawQuery.trim().toLowerCase().split(/\s+/).filter((w) => w.length >= 2)
+  if (words.length === 0) return true
+  const hay = logSearchHaystack(log)
+  return words.every((w) => hay.includes(w))
+}
+
+function logMatchesFilters(
+  log: LogEntry,
+  typeFilters: Set<EventType>,
+  errorsOnly: boolean,
+  searchText: string,
+): boolean {
+  const hasTypeFilter = typeFilters.size > 0 || errorsOnly
+  if (hasTypeFilter) {
+    const matchesType = typeFilters.size > 0 && typeFilters.has(log.type as EventType)
+    const matchesError = errorsOnly && log.error
+    if (!matchesType && !matchesError) return false
+  }
+  return logMatchesSearch(log, searchText)
+}
+
 /** Map UI filter chips → event_log.type LIKE prefixes for DB search. */
 function eventTypeDbPatterns(filters: Set<EventType>): string[] | undefined {
   if (filters.size === 0) return undefined
@@ -80,15 +107,32 @@ export function LiveLogs() {
   // DB fallback search — triggered when in-memory results = 0 and query ≥ 3 chars
   const [dbResults, setDbResults] = useState<LogEntry[]>([])
   const [dbSearching, setDbSearching] = useState(false)
-  const [dbQuery, setDbQuery] = useState("")
+  /** Set when the latest DB query finishes — avoids stale "no matches" flashes. */
+  const [dbSearchKey, setDbSearchKey] = useState("")
   const dbTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const runDbSearch = useCallback(async (q: string, filters: Set<EventType>, errorsOnlySearch: boolean) => {
+  const activeSearchKey = useMemo(
+    () => JSON.stringify({
+      q: searchText.trim(),
+      types: [...typeFilters].sort(),
+      errorsOnly,
+    }),
+    [searchText, typeFilters, errorsOnly],
+  )
+
+  const searchActive = searchText.trim().length >= 2 || typeFilters.size > 0 || errorsOnly
+
+  const runDbSearch = useCallback(async (
+    q: string,
+    filters: Set<EventType>,
+    errorsOnlySearch: boolean,
+    searchKey: string,
+  ) => {
     const typePatterns = eventTypeDbPatterns(filters)
     const canSearchText = q.trim().length >= 2
     if (!canSearchText && !typePatterns && !errorsOnlySearch) {
       setDbResults([])
-      setDbQuery("")
+      setDbSearchKey("")
       return
     }
     setDbSearching(true)
@@ -97,7 +141,7 @@ export function LiveLogs() {
         type_patterns: errorsOnlySearch
           ? ["%.failed", "%error%"]
           : typePatterns,
-        limit: 200,
+        limit: 300,
       })
       const entries: LogEntry[] = []
       for (const event of res.events) {
@@ -105,26 +149,23 @@ export function LiveLogs() {
         if (entry) entries.push(entry)
       }
       setDbResults(entries)
-      setDbQuery(q.trim())
+      setDbSearchKey(searchKey)
     } catch { /* ignore */ }
     setDbSearching(false)
   }, [])
 
-  // Fall back to SQLite when in-memory buffer has no matches (or user is
-  // filtering by type/errors). UI chips use groups like "sync"; DB rows use
-  // types like "sync.preview.started" — search via type_patterns, not exact type.
+  // Query SQLite when filtering — in-memory buffer is capped (~5k) and may miss
+  // older events. Type chips map to type_patterns (sync. → sync.preview.*, etc.).
   useEffect(() => {
     setDbResults([])
-    setDbQuery("")
+    setDbSearchKey("")
     if (dbTimer.current) clearTimeout(dbTimer.current)
-    const canSearchText = searchText.trim().length >= 2
-    const hasTypeFilter = typeFilters.size > 0 || errorsOnly
-    if (!canSearchText && !hasTypeFilter) return
+    if (!searchActive) return
     dbTimer.current = setTimeout(() => {
-      void runDbSearch(searchText, typeFilters, errorsOnly)
+      void runDbSearch(searchText, typeFilters, errorsOnly, activeSearchKey)
     }, 600)
     return () => { if (dbTimer.current) clearTimeout(dbTimer.current) }
-  }, [searchText, typeFilters, errorsOnly, runDbSearch])
+  }, [searchText, typeFilters, errorsOnly, searchActive, activeSearchKey, runDbSearch])
 
   // Freeze on pause
   useEffect(() => {
@@ -145,20 +186,29 @@ export function LiveLogs() {
     return c
   }, [source])
 
-  // Filter pipeline — type chips + errors are OR-combined, search is AND
-  const filtered = useMemo(() => {
-    const needle = searchText.trim().toLowerCase()
-    return source.filter((l) => {
-      const hasTypeFilter = typeFilters.size > 0 || errorsOnly
-      if (hasTypeFilter) {
-        const matchesType = typeFilters.size > 0 && typeFilters.has(l.type as EventType)
-        const matchesError = errorsOnly && l.error
-        if (!matchesType && !matchesError) return false
-      }
-      if (needle && !`${l.message} ${l.type}`.toLowerCase().includes(needle)) return false
-      return true
-    })
-  }, [source, typeFilters, errorsOnly, searchText])
+  const filtered = useMemo(
+    () => source.filter((l) => logMatchesFilters(l, typeFilters, errorsOnly, searchText)),
+    [source, typeFilters, errorsOnly, searchText],
+  )
+
+  const dbFiltered = useMemo(
+    () => dbResults.filter((l) => logMatchesFilters(l, typeFilters, errorsOnly, searchText)),
+    [dbResults, typeFilters, errorsOnly, searchText],
+  )
+
+  const dbOnly = useMemo(() => {
+    const liveKeys = new Set(
+      filtered.map((l) => `${l.eventName ?? ""}\0${l.timestamp ?? ""}\0${l.message}`),
+    )
+    return dbFiltered.filter(
+      (l) => !liveKeys.has(`${l.eventName ?? ""}\0${l.timestamp ?? ""}\0${l.message}`),
+    )
+  }, [dbFiltered, filtered])
+
+  const dbReady = searchActive && dbSearchKey === activeSearchKey && !dbSearching
+  const showDbSection = dbReady && dbOnly.length > 0
+  const showDbSearching = searchActive && dbSearching
+  const showEmpty = searchActive && dbReady && filtered.length === 0 && dbOnly.length === 0
 
   // Auto-scroll — use scrollTop for reliable rapid-fire updates
   useEffect(() => {
@@ -271,7 +321,8 @@ export function LiveLogs() {
         <LogWidgetToolbarSearch
           value={searchText}
           onChange={setSearchText}
-          placeholder="Filter events…"
+          placeholder="Search message, event type, plan id…"
+          loading={dbSearching}
         />
 
         <LogWidgetToolbarTail>
@@ -300,9 +351,9 @@ export function LiveLogs() {
         className="log-stream flex-1 min-h-0 overflow-y-auto"
         onScroll={handleScroll}
       >
-        {filtered.length === 0 && (
+        {source.length === 0 && !searchActive && (
           <div className="text-text-muted text-center pt-12 font-sans text-sm">
-            {source.length === 0 ? "Waiting for events…" : "No matches"}
+            Waiting for events…
           </div>
         )}
 
@@ -310,28 +361,38 @@ export function LiveLogs() {
           <LogRow key={i} log={log} setTypeFilters={setTypeFilters} compact={compact} tiny={tiny} />
         ))}
 
-        {(searchText.trim().length >= 2 || typeFilters.size > 0 || errorsOnly) && filtered.length === 0 && (
-          <div>
-            {dbSearching && (
-              <div className="text-text-muted text-sm text-center py-4">Searching event log database…</div>
-            )}
-            {!dbSearching && dbQuery === searchText.trim() && dbResults.length === 0 && (
-              <div className="text-text-muted text-sm text-center py-4">No matches in database either.</div>
-            )}
-            {!dbSearching && dbResults.length > 0 && (
-              <>
-                <div className="flex items-center gap-2 px-3 py-2 text-sm text-text-muted border-y border-border-subtle">
-                  <Database size={14} />
-                  <span>
-                    Database — {dbResults.length} historical match{dbResults.length === 1 ? "" : "es"}
-                    {dbQuery ? ` for "${dbQuery}"` : ""}
-                  </span>
-                </div>
-                {dbResults.map((log, i) => (
-                  <LogRow key={`db:${i}`} log={log} setTypeFilters={setTypeFilters} compact={compact} tiny={tiny} />
-                ))}
-              </>
-            )}
+        {showDbSearching && filtered.length === 0 && dbOnly.length === 0 && (
+          <div className="text-text-muted text-sm text-center py-10">
+            Searching event log database…
+          </div>
+        )}
+
+        {showDbSection && (
+          <div className={`${filtered.length > 0 ? "mt-3" : "mt-2"} border-t border-border-subtle`}>
+            <div className="flex items-center gap-2 px-3 py-3 text-sm text-text-muted bg-elevated/30">
+              <Database size={14} className="shrink-0" />
+              <span>
+                From database — {dbOnly.length} match{dbOnly.length === 1 ? "" : "es"}
+                {searchText.trim() ? ` for “${searchText.trim()}”` : ""}
+                {filtered.length > 0 ? (
+                  <span className="text-text-muted/60"> (older, not in live buffer)</span>
+                ) : (
+                  <span className="text-text-muted/60"> (not in live buffer)</span>
+                )}
+              </span>
+            </div>
+            {dbOnly.map((log, i) => (
+              <LogRow key={`db:${log.eventName ?? i}:${log.timestamp}`} log={log} setTypeFilters={setTypeFilters} compact={compact} tiny={tiny} />
+            ))}
+          </div>
+        )}
+
+        {showEmpty && (
+          <div className="text-text-muted text-center pt-10 pb-6 font-sans text-sm space-y-1">
+            <p>No matches in live buffer or database.</p>
+            <p className="text-xs text-text-muted/60 max-w-md mx-auto">
+              Search message text, event type (e.g. preview, failed), plan id, entity/table names — or use type chips, then add keywords.
+            </p>
           </div>
         )}
 
