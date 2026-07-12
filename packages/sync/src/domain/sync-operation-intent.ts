@@ -195,7 +195,7 @@ export function formatSyncOperationIntentBlock(intent: SyncOperationIntent): str
     "<sync_operation_intent>",
     "Parsed deterministically: the user wants an ABI environment sync preview.",
     `entityType: ${intent.entityType}`,
-    `route: ${intent.source} → ${intent.target}`
+    `direction: ${intent.source} → ${intent.target}`
   ]
   if (intent.entityId) {
     lines.push(`entityId: ${intent.entityId} (primary key on the recipe root table — e.g. tableId for gateMetadata)`)

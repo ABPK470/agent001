@@ -199,7 +199,7 @@ function RunDetail({ run, plan, busy, err }: { run: SyncRunRow; plan: SyncPlan |
   return (
     <DetailBody>
       <DetailGrid>
-        <DetailField label="Route" value={`${run.source} → ${run.target}`} mono />
+        <DetailField label="Direction" value={`${run.source} → ${run.target}`} mono />
         <DetailField label="Status" value={run.status} />
         <DetailField label="Actor" value={run.actorUpn ?? "system"} />
         <DetailField label="Started" value={formatDateTime(run.startedAt)} />

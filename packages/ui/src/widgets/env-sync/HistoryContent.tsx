@@ -14,12 +14,18 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api, type SyncHistoryParams, type SyncHistoryPage, type SyncRunStatus } from "../../api"
 import { DateField } from "../../components/DateField"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import { ModalSearchField } from "../../components/ModalSearchField"
 import { SearchablePick } from "../../components/SearchablePick"
 import { useMe } from "../../hooks/useMe"
 import { useStore } from "../../store"
 import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../util"
+import {
+  LOG_TOOLBAR_CHIP,
+  LOG_TOOLBAR_CHIP_ACTIVE,
+  LOG_TOOLBAR_CHIP_IDLE,
+  LOG_TOOLBAR_ICON_BTN,
+  WidgetToolbarSearch,
+} from "../widget-toolbar"
 import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
@@ -50,6 +56,10 @@ const SORT_OPTIONS: ListboxOption<NonNullable<HistoryFilters["sort"]>>[] = [
   { value: "finished_desc", label: "Recently finished" },
   { value: "finished_asc", label: "Earliest finished" },
 ]
+
+function formatSyncDirection(source: string, target: string): string {
+  return `${source} → ${target}`
+}
 
 function entityLabel(run: SyncRunItem): string {
   const ref = `${run.entityType}#${run.entityId}`
@@ -334,28 +344,23 @@ function HistorySearchBar({
   loading: boolean
   onRefresh: () => void
 }) {
+  const filtersActive = filtersOpen || activeFilterCount > 0
+
   return (
-    <div className="shrink-0 border-b border-border/40 px-4 py-3 space-y-2">
-      <div className="flex items-center gap-2">
-        <div className="min-w-0 flex-1">
-          <ModalSearchField
-            value={searchDraft}
-            onChange={onSearchChange}
-            placeholder="Search entity, route, user, plan id…"
-            aria-label="Search sync history"
-          />
-        </div>
+    <div className="shrink-0 border-b border-border/40 px-4 py-2">
+      <div className="widget-toolbar__search-row">
+        <WidgetToolbarSearch
+          value={searchDraft}
+          onChange={onSearchChange}
+          placeholder="Search entity, direction, user, plan id…"
+        />
         <button
           type="button"
           onClick={onToggleFilters}
-          className={`inline-flex items-center gap-1.5 rounded-lg border px-3 py-2 text-xs transition-colors ${
-            filtersOpen || activeFilterCount > 0
-              ? "border-accent/30 bg-accent/10 text-accent"
-              : "border-border/50 text-text-muted hover:text-text hover:bg-elevated/30"
-          }`}
+          className={`${LOG_TOOLBAR_CHIP} ${filtersActive ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE}`}
           title="Filters"
         >
-          <SlidersHorizontal size={14} />
+          <SlidersHorizontal size={13} />
           Filters
           {activeFilterCount > 0 && (
             <span className="rounded-full bg-accent/20 px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
@@ -367,15 +372,12 @@ function HistorySearchBar({
         <button
           type="button"
           onClick={onRefresh}
-          className="p-2 rounded-lg border border-border/50 text-text-muted hover:text-text hover:bg-elevated/30"
+          className={LOG_TOOLBAR_ICON_BTN}
           title="Refresh"
         >
-          <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
+          <RefreshCw size={13} className={loading ? "animate-spin" : undefined} />
         </button>
       </div>
-      <p className="text-[11px] text-text-muted/55">
-        Persisted preview and execution history — filter by user, status, route, or date range.
-      </p>
     </div>
   )
 }
@@ -540,6 +542,7 @@ function HistoryRunRow({
   onNotifyError?: (message: string) => void
 }) {
   const [open, setOpen] = useState(false)
+  const [planOpen, setPlanOpen] = useState(false)
   const [plan, setPlan] = useState<SyncPlan | null>(null)
   const [audit, setAudit] = useState<SyncAuditEvent[] | null>(null)
   const planLoadFailedRef = useRef(false)
@@ -584,6 +587,10 @@ function HistoryRunRow({
     }
   }, [open, run.planId, run.planAvailable, plan, audit, onNotifyError])
 
+  useEffect(() => {
+    if (!open) setPlanOpen(false)
+  }, [open])
+
   return (
     <div className="border-b border-border/40">
       <button
@@ -620,63 +627,81 @@ function HistoryRunRow({
       </button>
 
       {open && (
-        <div className="px-4 py-3 bg-base/30 border-t border-border/30 text-sm space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <div className="flex items-center gap-2 text-xs text-text-muted/50 font-mono min-w-0">
-              <span className="shrink-0">plan</span>
-              <span className="text-text-muted truncate">{run.planId}</span>
-            </div>
+        <div className="border-t border-border/30 bg-base/20 px-4 py-2 text-xs space-y-2">
+          <div className="flex items-center justify-between gap-2 min-w-0">
+            <code className="truncate text-[11px] text-text-muted/60">{run.planId}</code>
             {onOpen && run.planAvailable && (
               <button
                 type="button"
-                className="text-text-muted hover:text-accent/80 transition-colors shrink-0"
+                className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-text-muted transition-colors hover:bg-elevated/40 hover:text-accent"
                 onClick={(e) => {
                   e.stopPropagation()
                   onOpen(run.planId)
                 }}
-                title="View plan"
+                title="Open in sync widget"
               >
-                <View size={16} />
+                <View size={13} />
+                <span>Open</span>
               </button>
             )}
           </div>
 
-          <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
-            <HistoryKv label="Entity" value={label} />
-            <HistoryKv label="Route" value={`${run.source} → ${run.target}`} />
-            <HistoryKv label="Actor" value={run.actorUpn ?? "—"} />
-            <HistoryKv label="Started" value={formatHistoryDateTime(run.startedAt)} />
-            {run.finishedAt && <HistoryKv label="Finished" value={formatHistoryDateTime(run.finishedAt)} />}
+          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
+            <HistoryMeta label="Direction" value={formatSyncDirection(run.source, run.target)} />
+            <HistoryMeta label="Actor" value={run.actorUpn ?? "—"} />
+            <HistoryMeta label="Started" value={formatHistoryDateTime(run.startedAt)} />
+            {run.finishedAt && <HistoryMeta label="Finished" value={formatHistoryDateTime(run.finishedAt)} />}
             {run.durationMs != null && (
-              <HistoryKv label="Duration" value={`${(run.durationMs / 1000).toFixed(1)}s`} />
+              <HistoryMeta label="Duration" value={`${(run.durationMs / 1000).toFixed(1)}s`} />
             )}
           </div>
 
           {run.error && (
-            <div className="rounded-lg border border-error/20 bg-error/5 px-3 py-2 text-xs font-mono break-all text-error">
+            <div className="rounded border border-error/20 bg-error/5 px-2.5 py-1.5 font-mono text-[11px] break-all text-error">
               {run.error}
             </div>
           )}
 
-          {plan && (
-            <div className="rounded-lg border border-border-subtle overflow-hidden">
-              <div className="max-h-[28rem] overflow-y-auto">
-                <HistoryPlanTables plan={plan} />
-              </div>
-            </div>
-          )}
-
           {audit && audit.length > 0 && (
-            <div className="space-y-1.5">
-              <div className="text-[11px] uppercase tracking-[0.16em] text-text-muted/50">Audit</div>
+            <div className="space-y-1">
+              <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted/50">Audit</div>
               {audit.map((event, index) => (
                 <HistoryAuditRow key={`${event.action}:${event.timestamp}:${index}`} event={event} />
               ))}
             </div>
           )}
+
+          {run.planAvailable && (
+            <div className="pt-0.5">
+              <button
+                type="button"
+                onClick={() => setPlanOpen((value) => !value)}
+                className="inline-flex items-center gap-1 text-[11px] text-text-muted transition-colors hover:text-text"
+              >
+                {planOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                {planOpen ? "Hide plan tables" : plan ? "Show plan tables" : "Loading plan…"}
+              </button>
+              {planOpen && plan && (
+                <div className="mt-1.5 overflow-hidden rounded border border-border-subtle">
+                  <div className="max-h-56 overflow-y-auto show-scrollbar">
+                    <HistoryPlanTables plan={plan} />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
     </div>
+  )
+}
+
+function HistoryMeta({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="inline-flex min-w-0 items-baseline gap-1.5">
+      <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-text-muted/50">{label}</span>
+      <span className="truncate font-mono text-text">{value}</span>
+    </span>
   )
 }
 
@@ -687,8 +712,8 @@ function HistoryAuditRow({ event }: { event: SyncAuditEvent }) {
   const actionColor = failed ? DIFF.del : completed ? DIFF.ins : undefined
 
   return (
-    <div className="rounded border border-border-subtle bg-overlay-1">
-      <div className="flex items-center gap-2 px-3 py-1.5">
+    <div className="rounded border border-border-subtle/80 bg-overlay-1/60">
+      <div className="flex items-center gap-2 px-2 py-1">
         <span className="text-xs font-medium shrink-0" style={actionColor ? { color: actionColor } : undefined}>
           {formatAuditAction(event.action)}
         </span>
@@ -708,21 +733,12 @@ function HistoryAuditRow({ event }: { event: SyncAuditEvent }) {
         )}
       </div>
       {jsonOpen && event.detail != null && (
-        <div className="px-3 pb-2 border-t border-border-subtle">
-          <pre className="text-xs text-text-muted/60 font-mono whitespace-pre-wrap break-all leading-relaxed pt-1.5 max-h-48 overflow-y-auto show-scrollbar">
+        <div className="border-t border-border-subtle px-2 pb-1.5">
+          <pre className="max-h-36 overflow-y-auto pt-1 font-mono text-[10px] leading-relaxed break-all whitespace-pre-wrap text-text-muted/60 show-scrollbar">
             {JSON.stringify(event.detail, null, 2)}
           </pre>
         </div>
       )}
-    </div>
-  )
-}
-
-function HistoryKv({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-lg border border-border/40 bg-overlay-1/50 px-3 py-2 min-w-0">
-      <div className="text-[11px] uppercase tracking-[0.14em] text-text-muted/55">{label}</div>
-      <div className="mt-1 text-sm text-text font-mono leading-5 break-all">{value}</div>
     </div>
   )
 }
