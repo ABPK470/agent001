@@ -28,9 +28,9 @@ export function buildMinimalTestFlowCatalog() {
     [
       {
         id: "metadataSync",
-        label: "Metadata sync",
+        label: "metadataSync",
         definition_json: JSON.stringify({
-          summary: "Apply metadata change set",
+          summary: "Metadata sync",
           description: "Runs metadata sync",
           handler: { type: "metadata_sync", connection: "target" },
           stepFields: {},

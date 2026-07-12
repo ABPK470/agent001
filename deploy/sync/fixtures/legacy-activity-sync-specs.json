@@ -5,9 +5,9 @@
       "stepTypeId": "metadataSync",
       "stepType": {
         "id": "metadataSync",
-        "label": "Apply metadata change set",
+        "label": "metadataSync",
         "definition": {
-          "summary": "Apply metadata change set",
+          "summary": "Metadata sync",
           "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
           "handler": {
             "type": "metadata_sync",
@@ -80,9 +80,9 @@
       "stepTypeId": "metadataSync",
       "stepType": {
         "id": "metadataSync",
-        "label": "Apply metadata change set",
+        "label": "metadataSync",
         "definition": {
-          "summary": "Apply metadata change set",
+          "summary": "Metadata sync",
           "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
           "handler": {
             "type": "metadata_sync",
@@ -292,9 +292,9 @@
       "stepTypeId": "metadataSync",
       "stepType": {
         "id": "metadataSync",
-        "label": "Apply metadata change set",
+        "label": "metadataSync",
         "definition": {
-          "summary": "Apply metadata change set",
+          "summary": "Metadata sync",
           "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
           "handler": {
             "type": "metadata_sync",
@@ -1351,9 +1351,9 @@
       "stepTypeId": "metadataSync",
       "stepType": {
         "id": "metadataSync",
-        "label": "Apply metadata change set",
+        "label": "metadataSync",
         "definition": {
-          "summary": "Apply metadata change set",
+          "summary": "Metadata sync",
           "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
           "handler": {
             "type": "metadata_sync",
@@ -1613,9 +1613,9 @@
       "stepTypeId": "metadataSync",
       "stepType": {
         "id": "metadataSync",
-        "label": "Apply metadata change set",
+        "label": "metadataSync",
         "definition": {
-          "summary": "Apply metadata change set",
+          "summary": "Metadata sync",
           "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
           "handler": {
             "type": "metadata_sync",
@@ -1758,9 +1758,9 @@
       "stepTypeId": "metadataSync",
       "stepType": {
         "id": "metadataSync",
-        "label": "Apply metadata change set",
+        "label": "metadataSync",
         "definition": {
-          "summary": "Apply metadata change set",
+          "summary": "Metadata sync",
           "description": "Runs the core metadata sync in one target transaction: FK NOCHECK, MERGE/DELETE from the compiled change set, re-enable FKs, commit.",
           "handler": {
             "type": "metadata_sync",

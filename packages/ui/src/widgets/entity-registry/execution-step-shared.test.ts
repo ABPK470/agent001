@@ -24,7 +24,7 @@ describe("execution-step-shared", () => {
       [
         "metadataSync",
         {
-          summary: "Apply metadata change set",
+          summary: "Metadata sync",
           description: "",
           handler: { type: "metadata_sync" as const, connection: "target" as const },
           stepFields: {},
@@ -39,9 +39,9 @@ describe("execution-step-shared", () => {
     ).toEqual({
       kind: "metadataSync",
       id: "metadataSync",
-      title: "Apply metadata change set",
+      title: "Metadata sync",
     })
-    expect(kindDisplayLabel("metadataSync", catalog)).toBe("Apply metadata change set")
+    expect(kindDisplayLabel("metadataSync", catalog)).toBe("Metadata sync")
   })
 
   it("includes handler type in flow step header lines", () => {
