@@ -5,20 +5,23 @@ import {
   ChevronRight,
   Clock,
   RefreshCw,
-  Search,
   SlidersHorizontal,
   View,
   X,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
 import { api, type SyncHistoryParams, type SyncHistoryPage, type SyncRunStatus } from "../../api"
+import { DateField } from "../../components/DateField"
+import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { ModalSearchField } from "../../components/ModalSearchField"
+import { SearchablePick } from "../../components/SearchablePick"
 import { useMe } from "../../hooks/useMe"
 import { useStore } from "../../store"
 import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../util"
 import { EmptyHistory, Loading } from "./chrome"
-import { DIFF } from "./constants"
+import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { HistoryPlanTables } from "./PlanTables"
 
@@ -41,10 +44,7 @@ const STATUS_OPTIONS: Array<{ value: SyncRunStatus; label: string }> = [
   { value: "skipped", label: "Skipped" },
 ]
 
-const FILTER_INPUT =
-  "w-full rounded-lg border border-border/50 bg-overlay-1/40 px-3 py-1.5 text-sm text-text placeholder:text-text-muted/45 focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20"
-
-const SORT_OPTIONS: Array<{ value: NonNullable<HistoryFilters["sort"]>; label: string }> = [
+const SORT_OPTIONS: ListboxOption<NonNullable<HistoryFilters["sort"]>>[] = [
   { value: "started_desc", label: "Newest first" },
   { value: "started_asc", label: "Oldest first" },
   { value: "finished_desc", label: "Recently finished" },
@@ -126,7 +126,32 @@ export function HistoryContent({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [data, setData] = useState<SyncHistoryPage | null>(null)
   const [loading, setLoading] = useState(true)
+  const [envOptions, setEnvOptions] = useState<ListboxOption<string>[]>([{ value: "", label: "Any environment" }])
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const entityTypeOptions = useMemo<ListboxOption<string>[]>(
+    () => [
+      { value: "", label: "Any entity type" },
+      ...ENTITY_TYPES.map((type) => ({ value: type, label: type })),
+    ],
+    [],
+  )
+
+  useEffect(() => {
+    api
+      .syncEnvironments()
+      .then((envs) =>
+        setEnvOptions([
+          { value: "", label: "Any environment" },
+          ...envs.map((env) => ({
+            value: env.name,
+            label: env.displayName.toUpperCase(),
+            dot: dot(env.color),
+          })),
+        ]),
+      )
+      .catch(() => {})
+  }, [])
 
   const activeFilterCount = useMemo(() => countActiveFilters(filters, searchDraft), [filters, searchDraft])
   const hasActiveFilters = activeFilterCount > 0
@@ -227,6 +252,8 @@ export function HistoryContent({
         <HistoryFiltersPanel
           filters={filters}
           isAdmin={isAdmin}
+          envOptions={envOptions}
+          entityTypeOptions={entityTypeOptions}
           onFiltersChange={(patch) => {
             setFilters((current) => ({ ...current, ...patch }))
             setPage(1)
@@ -310,16 +337,14 @@ function HistorySearchBar({
   return (
     <div className="shrink-0 border-b border-border/40 px-4 py-3 space-y-2">
       <div className="flex items-center gap-2">
-        <label className="relative flex-1 min-w-0">
-          <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-text-muted/50 pointer-events-none" />
-          <input
-            type="search"
+        <div className="min-w-0 flex-1">
+          <ModalSearchField
             value={searchDraft}
-            onChange={(event) => onSearchChange(event.target.value)}
+            onChange={onSearchChange}
             placeholder="Search entity, route, user, plan id…"
-            className="w-full rounded-lg border border-border/50 bg-overlay-1/40 pl-9 pr-3 py-2 text-sm text-text placeholder:text-text-muted/45 focus:outline-none focus:border-accent/40 focus:ring-1 focus:ring-accent/20"
+            aria-label="Search sync history"
           />
-        </label>
+        </div>
         <button
           type="button"
           onClick={onToggleFilters}
@@ -358,6 +383,8 @@ function HistorySearchBar({
 function HistoryFiltersPanel({
   filters,
   isAdmin,
+  envOptions,
+  entityTypeOptions,
   onFiltersChange,
   selectedStatuses,
   onToggleStatus,
@@ -366,6 +393,8 @@ function HistoryFiltersPanel({
 }: {
   filters: HistoryFilters
   isAdmin: boolean
+  envOptions: ListboxOption<string>[]
+  entityTypeOptions: ListboxOption<string>[]
   onFiltersChange: (patch: Partial<HistoryFilters>) => void
   selectedStatuses: SyncRunStatus[]
   onToggleStatus: (status: SyncRunStatus) => void
@@ -375,7 +404,7 @@ function HistoryFiltersPanel({
   return (
     <div className="shrink-0 border-b border-border/40 px-4 py-3 bg-base/20 space-y-3">
       <div className="space-y-1.5">
-        <div className="text-[11px] uppercase tracking-[0.14em] text-text-muted/55">Status</div>
+        <div className="field-label">Status</div>
         <div className="flex flex-wrap gap-1.5">
           {STATUS_OPTIONS.map((option) => {
             const active = selectedStatuses.includes(option.value)
@@ -399,74 +428,80 @@ function HistoryFiltersPanel({
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <HistoryFilterField label="From">
-          <input
-            type="date"
-            value={filters.from ?? ""}
-            onChange={(event) => onFiltersChange({ from: event.target.value || undefined })}
-            className={FILTER_INPUT}
+          <DateField
+            value={filters.from}
+            onChange={(from) => onFiltersChange({ from })}
+            placeholder="Any start date"
+            ariaLabel="Filter from date"
+            size="sm"
+            className="w-full"
           />
         </HistoryFilterField>
         <HistoryFilterField label="To">
-          <input
-            type="date"
-            value={filters.to ?? ""}
-            onChange={(event) => onFiltersChange({ to: event.target.value || undefined })}
-            className={FILTER_INPUT}
+          <DateField
+            value={filters.to}
+            onChange={(to) => onFiltersChange({ to })}
+            placeholder="Any end date"
+            ariaLabel="Filter to date"
+            size="sm"
+            className="w-full"
           />
         </HistoryFilterField>
         <HistoryFilterField label="Sort">
-          <select
+          <Listbox
             value={filters.sort ?? "started_desc"}
-            onChange={(event) =>
-              onFiltersChange({ sort: event.target.value as NonNullable<HistoryFilters["sort"]> })
-            }
-            className={FILTER_INPUT}
-          >
-            {SORT_OPTIONS.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
+            options={SORT_OPTIONS}
+            onChange={(sort) => onFiltersChange({ sort })}
+            size="sm"
+            className="w-full listbox-control"
+            ariaLabel="Sort order"
+          />
         </HistoryFilterField>
         <HistoryFilterField label="Entity type">
-          <input
-            type="text"
+          <Listbox
             value={filters.entityType ?? ""}
-            onChange={(event) => onFiltersChange({ entityType: event.target.value || undefined })}
-            placeholder="e.g. contract"
-            className={FILTER_INPUT}
+            options={entityTypeOptions}
+            onChange={(entityType) => onFiltersChange({ entityType: entityType || undefined })}
+            size="sm"
+            className="w-full listbox-control"
+            ariaLabel="Entity type"
+            placeholder="Any entity type"
           />
         </HistoryFilterField>
       </div>
 
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         <HistoryFilterField label={isAdmin ? "User (UPN)" : "User"}>
-          <input
-            type="text"
+          <SearchablePick
             value={filters.actorUpn ?? ""}
-            onChange={(event) => onFiltersChange({ actorUpn: event.target.value || undefined })}
+            options={[]}
+            onChange={(actorUpn) => onFiltersChange({ actorUpn: actorUpn || undefined })}
             placeholder={isAdmin ? "Filter by UPN" : "Your runs only"}
+            ariaLabel="Filter by user"
             disabled={!isAdmin}
-            className={`${FILTER_INPUT} disabled:opacity-50`}
+            className="listbox-control"
           />
         </HistoryFilterField>
         <HistoryFilterField label="Source">
-          <input
-            type="text"
+          <Listbox
             value={filters.source ?? ""}
-            onChange={(event) => onFiltersChange({ source: event.target.value || undefined })}
-            placeholder="e.g. dev"
-            className={FILTER_INPUT}
+            options={envOptions}
+            onChange={(source) => onFiltersChange({ source: source || undefined })}
+            size="sm"
+            className="w-full listbox-control"
+            ariaLabel="Source environment"
+            placeholder="Any source"
           />
         </HistoryFilterField>
         <HistoryFilterField label="Target">
-          <input
-            type="text"
+          <Listbox
             value={filters.target ?? ""}
-            onChange={(event) => onFiltersChange({ target: event.target.value || undefined })}
-            placeholder="e.g. uat"
-            className={FILTER_INPUT}
+            options={envOptions}
+            onChange={(target) => onFiltersChange({ target: target || undefined })}
+            size="sm"
+            className="w-full listbox-control"
+            ariaLabel="Target environment"
+            placeholder="Any target"
           />
         </HistoryFilterField>
         <div className="flex items-end">
@@ -486,10 +521,10 @@ function HistoryFiltersPanel({
   )
 }
 
-function HistoryFilterField({ label, children }: { label: string; children: ReactNode }) {
+function HistoryFilterField({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block space-y-1 min-w-0">
-      <span className="text-[11px] uppercase tracking-[0.14em] text-text-muted/55">{label}</span>
+    <label className="block min-w-0 space-y-1">
+      <span className="field-label">{label}</span>
       {children}
     </label>
   )
