@@ -1,6 +1,7 @@
 import { syncExecuteStream } from "../../api"
 import type { SyncExecuteProgress } from "../../types"
 import { appendCancelledTableEvents } from "./exec-status"
+import { execTerminalSuccess, isTerminalExecEvent } from "./exec-progress"
 import type { ExecState } from "./types"
 
 let execState: ExecState = { kind: "idle" }
@@ -50,14 +51,14 @@ export function startExecStream(planId: string): void {
     (event) => {
       if (userCancelled) return
       events.push(event)
-      if (event.type === "completed" || event.type === "skipped" || event.type === "failed") {
+      if (isTerminalExecEvent(event)) {
         execState = {
           kind: "done",
-          success: event.type === "completed" || event.type === "skipped",
+          success: execTerminalSuccess(event),
           skipped: event.type === "skipped",
           events: [...events],
-          error: event.type === "failed" ? event.error : undefined,
-          message: event.type === "skipped" ? (event.message ?? event.error) : undefined,
+          error: event.type === "failed" ? (event.error ?? event.message) : undefined,
+          message: event.type === "skipped" ? (event.message ?? event.error) : event.message,
         }
         execStream?.close()
         execStream = null
@@ -88,10 +89,27 @@ export function cancelExec(): void {
 }
 
 export function completeExecFromAgent(planId: string, success: boolean, error?: string): void {
+  if (execState.kind === "running" && execPlanId === planId) {
+    execState = {
+      kind: "done",
+      success,
+      events: execState.events,
+      error: success ? undefined : error,
+    }
+    execStream?.close()
+    execStream = null
+    notifyExec()
+    return
+  }
+  if (execState.kind === "done" && execState.events.length > 1) {
+    execPlanId = planId
+    notifyExec()
+    return
+  }
   execState = {
     kind: "done",
     success,
-    events: [{ type: success ? "completed" : "failed", error } as SyncExecuteProgress],
+    events: [{ type: success ? "completed" : "failed", error, message: error } as SyncExecuteProgress],
     error,
   }
   execPlanId = planId

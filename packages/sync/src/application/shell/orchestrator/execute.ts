@@ -337,7 +337,16 @@ async function executeSyncInner(
     const stepErrorSummary = hasStepFailures
       ? stepWarnings.map((w) => `${w.step}: ${w.error}`).join("; ")
       : undefined
-    onProgress({ type: SyncProgressKind.Completed, message: completedMsg })
+    if (hasStepFailures) {
+      onProgress({
+        type: SyncProgressKind.Failed,
+        step: "deploy",
+        error: stepErrorSummary,
+        message: completedMsg,
+      })
+    } else {
+      onProgress({ type: SyncProgressKind.Completed, message: completedMsg })
+    }
     emit(opts.host, EventType.SyncExecuteCompleted, {
       planId,
       definitionId: executionContract.definitionId,

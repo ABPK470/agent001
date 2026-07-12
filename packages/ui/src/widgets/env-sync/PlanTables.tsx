@@ -53,7 +53,7 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
               {totals.unchanged > 0 && <span className="text-text-muted"><span className="text-lg font-semibold">{totals.unchanged}</span> <span className="text-xs">eq</span></span>}
             </div>
             <span className="text-text-muted/30">·</span>
-            <span className="text-sm text-text-muted">{totals.tablesCount} tables</span>
+            <span className="text-sm text-text-muted">{totals.tablesCount} tables w/ changes</span>
           </div>
         </div>
       </div>

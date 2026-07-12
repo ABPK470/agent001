@@ -8,6 +8,11 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import {
+  createPreviewProgress,
+  reduceEnvSyncPreviewProgress,
+  type EnvSyncPreviewProgress,
+} from "./widgets/env-sync/preview-progress.js"
+import {
   createSyncProgressState,
   finalizeSyncProgress,
   reduceSyncSseEvent,
@@ -105,6 +110,13 @@ function applySyncSseToStore(
   type: string,
   data: Record<string, unknown>
 ): void {
+  if (type.startsWith("sync.preview.") && get().envSyncPreviewProgress) {
+    const next = reduceEnvSyncPreviewProgress(get().envSyncPreviewProgress, type, data)
+    if (next && next !== get().envSyncPreviewProgress) {
+      set({ envSyncPreviewProgress: next })
+    }
+  }
+
   if (!type.startsWith("sync.")) return
   const active = get().activeSyncInvocation
   const activeRunId = get().activeRunId
@@ -373,6 +385,9 @@ interface AppState {
   /** In-memory plan body for the sync widget — survives widget remounts within a session. */
   envSyncPlan: SyncPlan | null
   setEnvSyncPlan: (plan: SyncPlan | null) => void
+  /** Live preview progress from sync.preview.* SSE while widget preview is running. */
+  envSyncPreviewProgress: EnvSyncPreviewProgress | null
+  setEnvSyncPreviewProgress: (progress: EnvSyncPreviewProgress | null) => void
 
   // Last sync execute result from agent (chat-triggered). Cleared when widget resets.
   agentSyncExec: { planId: string; success: boolean; result: string } | null
@@ -1466,6 +1481,8 @@ export const useStore = create<AppState>()(
       setEnvSyncForm: (patch) => set((s) => ({ envSyncForm: { ...s.envSyncForm, ...patch } })),
       envSyncPlan: null,
       setEnvSyncPlan: (plan) => set({ envSyncPlan: plan }),
+      envSyncPreviewProgress: null,
+      setEnvSyncPreviewProgress: (progress) => set({ envSyncPreviewProgress: progress }),
 
       agentSyncExec: null,
       clearAgentSyncExec: () => set({ agentSyncExec: null }),

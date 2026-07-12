@@ -35,6 +35,8 @@ import { execPreflightBlocked, execPreflightBlockReason } from "./exec-preflight
 import { ExecModal } from "./ExecModal"
 import { HistoryContent } from "./HistoryContent"
 import { PlanView } from "./PlanTables"
+import { PreviewProgressPanel } from "./PreviewProgressPanel"
+import { createPreviewProgress } from "./preview-progress"
 import type { ModalKind, SearchHit } from "./types"
 import {
   formatSearchHitLabel,
@@ -57,6 +59,8 @@ export function EnvSync() {
   const setForm = useStore((s) => s.setEnvSyncForm)
   const plan = useStore((s) => s.envSyncPlan)
   const setPlan = useStore((s) => s.setEnvSyncPlan)
+  const previewProgress = useStore((s) => s.envSyncPreviewProgress)
+  const setPreviewProgress = useStore((s) => s.setEnvSyncPreviewProgress)
   const agentSyncExec = useStore((s) => s.agentSyncExec)
   const clearAgentSyncExec = useStore((s) => s.clearAgentSyncExec)
   const agentSyncExecStarted = useStore((s) => s.agentSyncExecStarted)
@@ -121,8 +125,9 @@ export function EnvSync() {
     clearPlanState()
     setExpanded(new Set())
     setExecModalOpen(false)
+    setPreviewProgress(null)
     if (getExecSnapshot().kind !== "running") resetExec()
-  }, [clearPlanState])
+  }, [clearPlanState, setPreviewProgress])
 
   useEffect(() => {
     if (!definition) return
@@ -347,6 +352,12 @@ export function EnvSync() {
     if (!canPreview) return
     setPreviewing(true)
     discardStaleWorkflow()
+    setPreviewProgress(createPreviewProgress({
+      entityType,
+      entityId: previewInput,
+      source,
+      target,
+    }))
     try {
       const requestEnabledOptionalTables = Array.isArray(form.enabledOptionalTables) ? enabledOptionalTables : undefined
       const result = await api.syncPreview({
@@ -633,8 +644,12 @@ export function EnvSync() {
         </WidgetToolbarTrailing>
       </WidgetToolbar>
 
-      {previewing ? (
-        <Loading>Building plan…</Loading>
+      {previewing || previewProgress ? (
+        previewProgress ? (
+          <PreviewProgressPanel progress={previewProgress} />
+        ) : (
+          <Loading>Building plan…</Loading>
+        )
       ) : planLoading ? (
         <Loading>Loading plan…</Loading>
       ) : displayPlan ? (

@@ -8,6 +8,7 @@ import { DIFF } from "./constants"
 import { buildExecPreflightChecks, execPreflightBlocked, execPreflightBlockReason } from "./exec-preflight"
 import { buildExecTableStatus } from "./exec-status"
 import { buildDeployProgress, syncFlowStepLabel } from "./exec-deploy-status"
+import { countMetadataTableProgress, metadataProgressLabel } from "./exec-progress"
 import { execAuditLogEvents } from "./exec-log-events"
 import type { ExecState } from "./types"
 
@@ -50,18 +51,20 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
     [plan],
   )
   const total = affectedTables.length
-  const done = useMemo(
-    () => exec.kind === "idle" ? 0 : new Set(exec.events.filter((event) => event.type === "table-done").map((event) => event.table)).size,
-    [exec],
+  const execStatus = useMemo(() => buildExecTableStatus(exec), [exec])
+  const metaProgress = useMemo(
+    () => countMetadataTableProgress(exec, affectedTables, execStatus),
+    [exec, affectedTables, execStatus],
   )
+  const done = metaProgress.committed
+  const pct = metaProgress.pct
   const deployProgress = useMemo(
     () => (exec.kind === "idle" ? { total: 0, done: 0, failed: 0, skipped: 0 } : buildDeployProgress(exec.events, plan)),
-    [exec, plan]
+    [exec, plan],
   )
   const deployResolved = deployProgress.done + deployProgress.failed + deployProgress.skipped
   const deployPct =
     deployProgress.total > 0 ? Math.min(100, (deployResolved / deployProgress.total) * 100) : 0
-  const pct = total > 0 ? Math.min(100, (done / total) * 100) : 0
   const events: SyncExecuteProgress[] = exec.kind !== "idle" ? exec.events : []
   const logEvents = useMemo(() => execAuditLogEvents(events), [events])
   const latestEvent = events.length > 0 ? events[events.length - 1] : null
@@ -73,7 +76,6 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
   const sinceLastEventMs = exec.kind === "running" ? now - exec.lastEventAt : 0
   const stalled = isRunning && sinceLastEventMs >= STALL_WARN_MS
 
-  const execStatus = useMemo(() => buildExecTableStatus(exec), [exec])
   const preflightChecks = useMemo(() => (plan ? buildExecPreflightChecks(plan) : []), [plan])
   const preflightBlocked = plan ? execPreflightBlocked(plan) : false
   const preflightBlockReason = plan ? execPreflightBlockReason(plan) : null
@@ -168,7 +170,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                   ))}
                   <div className="text-center">
                     <div className="text-lg font-semibold text-text-muted">{totals.tablesCount}</div>
-                    <div className="text-xs text-text-muted">tables</div>
+                    <div className="text-xs text-text-muted">tables w/ changes</div>
                   </div>
                 </div>
               </div>
@@ -202,9 +204,12 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                 </div>
               )}
 
-              <div className="px-4 sm:px-5 pt-3 pb-4 text-center">
+              <div className="px-4 sm:px-5 pt-3 pb-4 text-center space-y-1">
                 <p className="text-[11px] text-text-muted/50 font-mono">
-                  single txn · rollback on error · {planId.slice(0, 8)}
+                  metadata = one target transaction (rollback on error)
+                </p>
+                <p className="text-[11px] text-text-muted/40 font-mono">
+                  deploy steps run after commit · {planId.slice(0, 8)}
                 </p>
               </div>
             </div>
@@ -230,7 +235,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                   </span>
                   <span className="text-xs font-mono tabular-nums text-text-muted shrink-0">
                     {total > 0 ? (
-                      <>{done}/{total} tables · {Math.round(pct)}%</>
+                      <>{metadataProgressLabel(metaProgress, isRunning)}</>
                     ) : isRunning ? (
                       <>{formatElapsed(elapsedMs)}</>
                     ) : success ? (
@@ -308,11 +313,26 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
                     return (
                       <span key={tableName} className="flex items-center gap-1.5">
                         {status === "running" && <Loader2 size={11} className="animate-spin text-accent shrink-0" />}
+                        {status === "applying" && <Loader2 size={11} className="animate-spin text-warning shrink-0" />}
                         {status === "done" && <CheckCircle2 size={11} style={{ color: DIFF.ins }} className="shrink-0" />}
                         {status === "failed" && <XCircle size={11} style={{ color: DIFF.del }} className="shrink-0" />}
                         {status === "cancelled" && <XCircle size={11} className="shrink-0 text-text-muted/50" />}
                         {!status && <span className="w-[11px] h-[11px] rounded-full border border-border shrink-0" />}
-                        <span className={`${status === "done" ? "text-text-muted/40" : status === "failed" ? "" : "text-text"}`} style={status === "failed" ? { color: DIFF.del } : undefined}>{short}</span>
+                        <span
+                          className={`${
+                            status === "done"
+                              ? "text-text-muted/40"
+                              : status === "applying"
+                                ? "text-warning/90"
+                                : status === "failed"
+                                  ? ""
+                                  : "text-text"
+                          }`}
+                          style={status === "failed" ? { color: DIFF.del } : undefined}
+                          title={status === "applying" ? "Applied in transaction — not committed until metadata step succeeds" : undefined}
+                        >
+                          {short}
+                        </span>
                       </span>
                     )
                   })}
@@ -331,21 +351,24 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
               {logEvents.map((event, index) => {
                 const label = event.step ? syncFlowStepLabel(plan, event.step) : event.type
                 const isDeploy = event.type === "deploy-step"
+                const isInTxn = event.type === "table-progress" && !event.error
                 const detail = event.type === "failed" || event.deployStatus === "failed"
                   ? (event.error ?? event.message ?? null)
                   : event.type === "skipped" || event.deployStatus === "skipped"
                     ? (event.message ?? "skipped")
-                  : event.error
-                    ? event.error
-                    : event.message && event.message !== label
-                      ? event.message
-                      : null
+                    : event.error
+                      ? event.error
+                      : event.message && event.message !== label
+                        ? event.message
+                        : null
                 const rows = typeof event.rowsApplied === "number" ? `${event.rowsApplied}` : null
                 const detailIsError = !!(event.error || event.type === "failed" || event.deployStatus === "failed")
                 const detailIsSkipped = event.type === "skipped" || event.deployStatus === "skipped"
                 const stepClass =
                   detailIsSkipped
                     ? "text-warning/90"
+                    : isInTxn
+                      ? "text-warning/80"
                     : isDeploy && event.deployStatus === "skipped"
                     ? "text-text-muted/60"
                     : isDeploy

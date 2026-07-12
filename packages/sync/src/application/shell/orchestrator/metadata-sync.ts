@@ -41,6 +41,7 @@ export async function runMetadataSync(
   const host = input.host
 
   const appliedTotals = { insert: 0, update: 0, delete: 0 }
+  const pendingCommitted: Array<{ table: string; rowsApplied: number; op: "upsert" | "delete" }> = []
   const allTables = plan.executionContract.metadata.executionOrder
   const constraintTables = constraintRelaxationTables(plan)
   const movementTables = dataMovementTables(plan)
@@ -113,13 +114,14 @@ export async function runMetadataSync(
             `[sync.metadata] ${tableName}: MERGE rowsAffected (${applied}) ≠ changeSet movement (${movement.insert + movement.update})`
           )
         }
-        onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
-        emit(host, EventType.SyncExecuteTableDone, {
-          planId,
+        onProgress({
+          type: SyncProgressKind.TableProgress,
           table: tableName,
-          op: "upsert",
-          rowsApplied: applied
+          rowsApplied: applied,
+          rowsTotal,
+          message: "Applied in transaction (not yet committed)",
         })
+        pendingCommitted.push({ table: tableName, rowsApplied: applied, op: "upsert" })
       } catch (error) {
         throw fail(error, { table: tableName, op: "upsert" })
       }
@@ -151,13 +153,14 @@ export async function runMetadataSync(
           telemetryContext
         )
         appliedTotals.delete += applied
-        onProgress({ type: SyncProgressKind.TableDone, table: tableName, rowsApplied: applied })
-        emit(host, EventType.SyncExecuteTableDone, {
-          planId,
+        onProgress({
+          type: SyncProgressKind.TableProgress,
           table: tableName,
-          op: "delete",
-          rowsApplied: applied
+          rowsApplied: applied,
+          rowsTotal: toDelete.length,
+          message: "Deleted in transaction (not yet committed)",
         })
+        pendingCommitted.push({ table: tableName, rowsApplied: applied, op: "delete" })
       } catch (error) {
         throw fail(error, { table: tableName, op: "delete" })
       }
@@ -184,6 +187,17 @@ export async function runMetadataSync(
     } catch (error) {
       throw fail(error, { op: "commit" })
     }
+
+    for (const entry of pendingCommitted) {
+      onProgress({ type: SyncProgressKind.TableDone, table: entry.table, rowsApplied: entry.rowsApplied })
+      emit(host, EventType.SyncExecuteTableDone, {
+        planId,
+        table: entry.table,
+        op: entry.op,
+        rowsApplied: entry.rowsApplied,
+      })
+    }
+
     return { applied: appliedTotals }
   } catch (e) {
     for (const t of allTables) {
@@ -204,6 +218,15 @@ export async function runMetadataSync(
       step: "metadataSync",
       message: "Metadata sync rolled back — no target metadata changes were committed.",
     })
+    for (const entry of pendingCommitted) {
+      onProgress({
+        type: SyncProgressKind.TableProgress,
+        table: entry.table,
+        rowsApplied: entry.rowsApplied,
+        message: "Rolled back — not committed",
+        error: "Transaction rolled back",
+      })
+    }
     throw e instanceof SyncExecuteError ? e : fail(e, { op: "transaction" })
   }
 }

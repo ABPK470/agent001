@@ -248,8 +248,12 @@ export function reduceSyncSseEvent(
       break
     }
     case "sync.execute.completed": {
-      next.status = "done"
-      next.result = "Sync execute completed"
+      const warnings = Array.isArray(data["warnings"]) ? (data["warnings"] as unknown[]) : []
+      next.status = warnings.length > 0 ? "error" : "done"
+      next.level = warnings.length > 0 ? "warn" : next.level
+      next.result = warnings.length > 0
+        ? `Execute finished with ${warnings.length} deploy step failure(s)`
+        : "Sync execute completed"
       break
     }
     case "sync.execute.failed": {
