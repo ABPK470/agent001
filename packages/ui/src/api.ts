@@ -649,9 +649,20 @@ export const api = {
     ),
 
   /** Full-text search of the persistent event_log table. Used by LiveLogs DB-fallback. */
-  searchEvents: (q: string, opts: { types?: string[]; limit?: number; before?: string; after?: string } = {}) => {
-    const p = new URLSearchParams({ q })
+  searchEvents: (
+    q: string,
+    opts: {
+      types?: string[]
+      type_patterns?: string[]
+      limit?: number
+      before?: string
+      after?: string
+    } = {},
+  ) => {
+    const p = new URLSearchParams()
+    if (q.trim()) p.set("q", q.trim())
     if (opts.types?.length) p.set("type", opts.types.join(","))
+    if (opts.type_patterns?.length) p.set("type_patterns", opts.type_patterns.join(","))
     if (opts.limit) p.set("limit", String(opts.limit))
     if (opts.before) p.set("before", opts.before)
     if (opts.after) p.set("after", opts.after)

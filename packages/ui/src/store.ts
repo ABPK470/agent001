@@ -679,7 +679,7 @@ function eventType(type: string): string {
  * human-readable message for every known event. Returns null for
  * high-frequency events that would spam the log (answer.chunk, debug.trace).
  */
-function formatLogEntry(
+export function formatLogEntry(
   type: string,
   data: Record<string, unknown>,
   timestamp: string,

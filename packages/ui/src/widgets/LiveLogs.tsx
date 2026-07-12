@@ -13,7 +13,7 @@ import { AlertCircle, ArrowDown, ChevronRight, Database, Filter, Pause, Play } f
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { useContainerSize } from "../hooks/useContainerSize"
-import { useStore } from "../store"
+import { formatLogEntry, useStore } from "../store"
 import type { LogEntry } from "../types"
 import {
   LOG_TOOLBAR_CHIP,
@@ -34,6 +34,21 @@ import {
 
 const EVENT_TYPES = ["all", "run", "step", "sync", "agent", "api", "system"] as const
 type EventType = (typeof EVENT_TYPES)[number]
+
+/** Map UI filter chips → event_log.type LIKE prefixes for DB search. */
+function eventTypeDbPatterns(filters: Set<EventType>): string[] | undefined {
+  if (filters.size === 0) return undefined
+  const patterns: string[] = []
+  for (const filter of filters) {
+    if (filter === "sync") patterns.push("sync.")
+    if (filter === "run") patterns.push("run.")
+    if (filter === "step") patterns.push("step.", "tool_call.")
+    if (filter === "agent") patterns.push("delegation.", "planner.", "agent.", "debug.")
+    if (filter === "api") patterns.push("api.")
+    if (filter === "system") patterns.push("events.", "session.", "sync_env.")
+  }
+  return patterns.length > 0 ? patterns : undefined
+}
 
 /** Message text color per type — the core visual differentiation. */
 const MSG_COLOR: Record<string, string> = {
@@ -68,37 +83,48 @@ export function LiveLogs() {
   const [dbQuery, setDbQuery] = useState("")
   const dbTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const runDbSearch = useCallback(async (q: string, types: string[]) => {
-    if (q.length < 3) { setDbResults([]); setDbQuery(""); return }
+  const runDbSearch = useCallback(async (q: string, filters: Set<EventType>, errorsOnlySearch: boolean) => {
+    const typePatterns = eventTypeDbPatterns(filters)
+    const canSearchText = q.trim().length >= 2
+    if (!canSearchText && !typePatterns && !errorsOnlySearch) {
+      setDbResults([])
+      setDbQuery("")
+      return
+    }
     setDbSearching(true)
     try {
-      const res = await api.searchEvents(q, { types: types.length ? types : undefined, limit: 200 })
-      setDbResults(res.events.map((e) => ({
-        type: e.type,
-        message: (e.data["message"] as string | undefined) ?? JSON.stringify(e.data).slice(0, 120),
-        timestamp: e.timestamp,
-        eventName: (e.data["event"] as string | undefined) ?? undefined,
-        data: e.data,
-        error: !!(e.data["error"]),
-      })))
-      setDbQuery(q)
+      const res = await api.searchEvents(canSearchText ? q.trim() : "", {
+        type_patterns: errorsOnlySearch
+          ? ["%.failed", "%error%"]
+          : typePatterns,
+        limit: 200,
+      })
+      const entries: LogEntry[] = []
+      for (const event of res.events) {
+        const entry = formatLogEntry(event.type, event.data ?? {}, event.timestamp)
+        if (entry) entries.push(entry)
+      }
+      setDbResults(entries)
+      setDbQuery(q.trim())
     } catch { /* ignore */ }
     setDbSearching(false)
   }, [])
 
-  // When search text changes: reset DB results immediately; if in-memory has 0
-  // matches after 600ms debounce, fall back to DB search.
+  // Fall back to SQLite when in-memory buffer has no matches (or user is
+  // filtering by type/errors). UI chips use groups like "sync"; DB rows use
+  // types like "sync.preview.started" — search via type_patterns, not exact type.
   useEffect(() => {
     setDbResults([])
     setDbQuery("")
     if (dbTimer.current) clearTimeout(dbTimer.current)
-    if (!searchText || searchText.length < 3) return
+    const canSearchText = searchText.trim().length >= 2
+    const hasTypeFilter = typeFilters.size > 0 || errorsOnly
+    if (!canSearchText && !hasTypeFilter) return
     dbTimer.current = setTimeout(() => {
-      void runDbSearch(searchText, [...typeFilters])
+      void runDbSearch(searchText, typeFilters, errorsOnly)
     }, 600)
     return () => { if (dbTimer.current) clearTimeout(dbTimer.current) }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [searchText, typeFilters])
+  }, [searchText, typeFilters, errorsOnly, runDbSearch])
 
   // Freeze on pause
   useEffect(() => {
@@ -284,19 +310,22 @@ export function LiveLogs() {
           <LogRow key={i} log={log} setTypeFilters={setTypeFilters} compact={compact} tiny={tiny} />
         ))}
 
-        {searchText.length >= 3 && filtered.length === 0 && (
+        {(searchText.trim().length >= 2 || typeFilters.size > 0 || errorsOnly) && filtered.length === 0 && (
           <div>
             {dbSearching && (
               <div className="text-text-muted text-sm text-center py-4">Searching event log database…</div>
             )}
-            {!dbSearching && dbQuery === searchText && dbResults.length === 0 && (
+            {!dbSearching && dbQuery === searchText.trim() && dbResults.length === 0 && (
               <div className="text-text-muted text-sm text-center py-4">No matches in database either.</div>
             )}
             {!dbSearching && dbResults.length > 0 && (
               <>
                 <div className="flex items-center gap-2 px-3 py-2 text-sm text-text-muted border-y border-border-subtle">
                   <Database size={14} />
-                  <span>Database — {dbResults.length} historical matches for "{dbQuery}"</span>
+                  <span>
+                    Database — {dbResults.length} historical match{dbResults.length === 1 ? "" : "es"}
+                    {dbQuery ? ` for "${dbQuery}"` : ""}
+                  </span>
                 </div>
                 {dbResults.map((log, i) => (
                   <LogRow key={`db:${i}`} log={log} setTypeFilters={setTypeFilters} compact={compact} tiny={tiny} />
