@@ -152,7 +152,7 @@ export function formatSyncDriftIntentBlock(intent: SyncDriftIntent): string {
   const lines = [
     "<sync_drift_intent>",
     "Parsed deterministically: cross-environment ABI metadata diff (hash preview engine — not ad-hoc SQL or the background proposer).",
-    `direction: ${intent.source} → ${intent.target}`
+    `route: ${intent.source} → ${intent.target}`
   ]
 
   if (intent.scopeQuery) {

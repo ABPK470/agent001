@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Clock,
+  Loader2,
   RefreshCw,
   SlidersHorizontal,
   View,
@@ -20,11 +21,10 @@ import { useStore } from "../../store"
 import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../util"
 import {
-  LOG_TOOLBAR_CHIP,
-  LOG_TOOLBAR_CHIP_ACTIVE,
-  LOG_TOOLBAR_CHIP_IDLE,
-  LOG_TOOLBAR_ICON_BTN,
+  WidgetToolbar,
+  WidgetToolbarLeading,
   WidgetToolbarSearch,
+  WidgetToolbarTrailing,
 } from "../widget-toolbar"
 import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
@@ -56,10 +56,6 @@ const SORT_OPTIONS: ListboxOption<NonNullable<HistoryFilters["sort"]>>[] = [
   { value: "finished_desc", label: "Recently finished" },
   { value: "finished_asc", label: "Earliest finished" },
 ]
-
-function formatSyncDirection(source: string, target: string): string {
-  return `${source} → ${target}`
-}
 
 function entityLabel(run: SyncRunItem): string {
   const ref = `${run.entityType}#${run.entityId}`
@@ -256,6 +252,12 @@ export function HistoryContent({
         activeFilterCount={activeFilterCount}
         loading={loading}
         onRefresh={() => reload(page)}
+        rangeStart={rangeStart}
+        rangeEnd={rangeEnd}
+        total={total}
+        page={page}
+        totalPages={totalPages}
+        onPageChange={(nextPage) => reload(nextPage)}
       />
 
       {filtersOpen && (
@@ -274,34 +276,6 @@ export function HistoryContent({
           hasActiveFilters={hasActiveFilters}
         />
       )}
-
-      <div className="flex shrink-0 items-center justify-between text-sm text-text-muted px-4 py-2 border-b border-border/40 gap-3">
-        <span>{total === 0 ? "No runs" : `${rangeStart}–${rangeEnd} of ${total}`}</span>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            disabled={page <= 1 || loading}
-            onClick={() => reload(page - 1)}
-            className="p-1 rounded hover:text-text disabled:opacity-30"
-            title="Previous page"
-          >
-            <ChevronLeft size={16} />
-          </button>
-          <span className="font-mono text-xs tabular-nums">
-            {page}
-            {totalPages > 0 ? ` / ${totalPages}` : ""}
-          </span>
-          <button
-            type="button"
-            disabled={page >= totalPages || loading}
-            onClick={() => reload(page + 1)}
-            className="p-1 rounded hover:text-text disabled:opacity-30"
-            title="Next page"
-          >
-            <ChevronRight size={16} />
-          </button>
-        </div>
-      </div>
 
       {items.length === 0 ? (
         <EmptyHistory
@@ -335,6 +309,12 @@ function HistorySearchBar({
   activeFilterCount,
   loading,
   onRefresh,
+  rangeStart,
+  rangeEnd,
+  total,
+  page,
+  totalPages,
+  onPageChange,
 }: {
   searchDraft: string
   onSearchChange: (value: string) => void
@@ -343,42 +323,83 @@ function HistorySearchBar({
   activeFilterCount: number
   loading: boolean
   onRefresh: () => void
+  rangeStart: number
+  rangeEnd: number
+  total: number
+  page: number
+  totalPages: number
+  onPageChange: (page: number) => void
 }) {
-  const filtersActive = filtersOpen || activeFilterCount > 0
-
   return (
-    <div className="shrink-0 border-b border-border/40 px-4 py-2">
-      <div className="widget-toolbar__search-row">
-        <WidgetToolbarSearch
-          value={searchDraft}
-          onChange={onSearchChange}
-          placeholder="Search entity, direction, user, plan id…"
-        />
+    <WidgetToolbar compact className="shrink-0 border-b border-border/40 px-3 py-1.5">
+      <WidgetToolbarLeading>
         <button
           type="button"
           onClick={onToggleFilters}
-          className={`${LOG_TOOLBAR_CHIP} ${filtersActive ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE}`}
-          title="Filters"
+          className={`widget-toolbar__chip ${
+            filtersOpen || activeFilterCount > 0 ? "widget-toolbar__chip--active" : "widget-toolbar__chip--idle"
+          }`}
+          title="Search and filter sync history"
         >
           <SlidersHorizontal size={13} />
           Filters
           {activeFilterCount > 0 && (
-            <span className="rounded-full bg-accent/20 px-1.5 py-0.5 font-mono text-[10px] tabular-nums">
+            <span className="rounded-full bg-accent/20 px-1.5 py-px font-mono text-[10px] tabular-nums">
               {activeFilterCount}
             </span>
           )}
-          {filtersOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+        </button>
+      </WidgetToolbarLeading>
+      <WidgetToolbarSearch
+        value={searchDraft}
+        onChange={onSearchChange}
+        placeholder="Search history…"
+        onClear={() => onSearchChange("")}
+      />
+      <WidgetToolbarTrailing>
+        <span className="widget-toolbar__count hidden sm:inline-flex">
+          <span className="widget-toolbar__count-filtered">
+            {total === 0 ? "No runs" : `${rangeStart}–${rangeEnd}`}
+          </span>
+          {total > 0 && (
+            <>
+              <span className="widget-toolbar__count-sep">/</span>
+              <span className="widget-toolbar__count-total">{total}</span>
+            </>
+          )}
+        </span>
+        <button
+          type="button"
+          disabled={page <= 1 || loading}
+          onClick={() => onPageChange(page - 1)}
+          className="widget-toolbar__icon-btn disabled:opacity-30"
+          title="Previous page"
+        >
+          <ChevronLeft size={14} />
+        </button>
+        <span className="font-mono text-[11px] tabular-nums text-text-muted">
+          {page}
+          {totalPages > 0 ? `/${totalPages}` : ""}
+        </span>
+        <button
+          type="button"
+          disabled={page >= totalPages || loading}
+          onClick={() => onPageChange(page + 1)}
+          className="widget-toolbar__icon-btn disabled:opacity-30"
+          title="Next page"
+        >
+          <ChevronRight size={14} />
         </button>
         <button
           type="button"
           onClick={onRefresh}
-          className={LOG_TOOLBAR_ICON_BTN}
+          className="widget-toolbar__icon-btn"
           title="Refresh"
         >
-          <RefreshCw size={13} className={loading ? "animate-spin" : undefined} />
+          <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
         </button>
-      </div>
-    </div>
+      </WidgetToolbarTrailing>
+    </WidgetToolbar>
   )
 }
 
@@ -404,7 +425,7 @@ function HistoryFiltersPanel({
   hasActiveFilters: boolean
 }) {
   return (
-    <div className="shrink-0 border-b border-border/40 px-4 py-3 bg-base/20 space-y-3">
+    <div className="shrink-0 border-b border-border/40 px-3 py-2 bg-base/20 space-y-2.5">
       <div className="space-y-1.5">
         <div className="field-label">Status</div>
         <div className="flex flex-wrap gap-1.5">
@@ -542,8 +563,8 @@ function HistoryRunRow({
   onNotifyError?: (message: string) => void
 }) {
   const [open, setOpen] = useState(false)
-  const [planOpen, setPlanOpen] = useState(false)
   const [plan, setPlan] = useState<SyncPlan | null>(null)
+  const [planLoading, setPlanLoading] = useState(false)
   const [audit, setAudit] = useState<SyncAuditEvent[] | null>(null)
   const planLoadFailedRef = useRef(false)
   const auditLoadFailedRef = useRef(false)
@@ -569,6 +590,7 @@ function HistoryRunRow({
     }
 
     if (run.planAvailable && !plan && !planLoadFailedRef.current) {
+      setPlanLoading(true)
       api
         .syncPlan(run.planId)
         .then((next) => {
@@ -580,6 +602,9 @@ function HistoryRunRow({
           planLoadFailedRef.current = true
           onNotifyError?.(`Could not load persisted plan: ${error instanceof Error ? error.message : String(error)}`)
         })
+        .finally(() => {
+          if (!cancelled) setPlanLoading(false)
+        })
     }
 
     return () => {
@@ -587,16 +612,12 @@ function HistoryRunRow({
     }
   }, [open, run.planId, run.planAvailable, plan, audit, onNotifyError])
 
-  useEffect(() => {
-    if (!open) setPlanOpen(false)
-  }, [open])
-
   return (
     <div className="border-b border-border/40">
       <button
         type="button"
         onClick={() => setOpen((value) => !value)}
-        className="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-elevated/30 transition-colors text-sm"
+        className="w-full text-left px-3 py-1.5 flex items-center gap-2 hover:bg-elevated/30 transition-colors text-sm"
       >
         {open ? (
           <ChevronDown size={13} className="text-text-muted shrink-0" />
@@ -627,81 +648,105 @@ function HistoryRunRow({
       </button>
 
       {open && (
-        <div className="border-t border-border/30 bg-base/20 px-4 py-2 text-xs space-y-2">
-          <div className="flex items-center justify-between gap-2 min-w-0">
-            <code className="truncate text-[11px] text-text-muted/60">{run.planId}</code>
+        <div className="px-3 py-2.5 bg-base/20 border-t border-border/30 space-y-2.5 text-sm">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
+            <code className="min-w-0 truncate text-[11px] font-mono text-text-muted/60">{run.planId}</code>
             {onOpen && run.planAvailable && (
               <button
                 type="button"
-                className="inline-flex shrink-0 items-center gap-1 rounded px-1.5 py-0.5 text-text-muted transition-colors hover:bg-elevated/40 hover:text-accent"
+                className="inline-flex shrink-0 items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
                   onOpen(run.planId)
                 }}
-                title="Open in sync widget"
               >
-                <View size={13} />
-                <span>Open</span>
+                <View size={12} />
+                Open in sync
               </button>
             )}
           </div>
 
-          <div className="flex flex-wrap gap-x-4 gap-y-1.5">
-            <HistoryMeta label="Direction" value={formatSyncDirection(run.source, run.target)} />
-            <HistoryMeta label="Actor" value={run.actorUpn ?? "—"} />
-            <HistoryMeta label="Started" value={formatHistoryDateTime(run.startedAt)} />
-            {run.finishedAt && <HistoryMeta label="Finished" value={formatHistoryDateTime(run.finishedAt)} />}
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-text-muted">
+            <MetaItem label="Actor" value={run.actorUpn ?? "—"} />
+            <MetaSep />
+            <MetaItem label="Route" value={`${run.source} → ${run.target}`} mono />
+            <MetaSep />
+            <MetaItem label="Started" value={formatHistoryDateTime(run.startedAt)} />
+            {run.finishedAt && (
+              <>
+                <MetaSep />
+                <MetaItem label="Finished" value={formatHistoryDateTime(run.finishedAt)} />
+              </>
+            )}
             {run.durationMs != null && (
-              <HistoryMeta label="Duration" value={`${(run.durationMs / 1000).toFixed(1)}s`} />
+              <>
+                <MetaSep />
+                <MetaItem label="Duration" value={`${(run.durationMs / 1000).toFixed(1)}s`} />
+              </>
             )}
           </div>
 
           {run.error && (
-            <div className="rounded border border-error/20 bg-error/5 px-2.5 py-1.5 font-mono text-[11px] break-all text-error">
+            <div className="rounded-md border border-error/20 bg-error/5 px-2.5 py-1.5 text-[11px] font-mono leading-relaxed break-all text-error">
               {run.error}
             </div>
           )}
 
-          {audit && audit.length > 0 && (
-            <div className="space-y-1">
-              <div className="text-[10px] uppercase tracking-[0.14em] text-text-muted/50">Audit</div>
-              {audit.map((event, index) => (
-                <HistoryAuditRow key={`${event.action}:${event.timestamp}:${index}`} event={event} />
-              ))}
+          {run.planAvailable && planLoading && !plan && (
+            <div className="flex items-center gap-2 text-xs text-text-muted">
+              <Loader2 size={12} className="animate-spin" />
+              Loading persisted plan…
             </div>
           )}
 
-          {run.planAvailable && (
-            <div className="pt-0.5">
-              <button
-                type="button"
-                onClick={() => setPlanOpen((value) => !value)}
-                className="inline-flex items-center gap-1 text-[11px] text-text-muted transition-colors hover:text-text"
-              >
-                {planOpen ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
-                {planOpen ? "Hide plan tables" : plan ? "Show plan tables" : "Loading plan…"}
-              </button>
-              {planOpen && plan && (
-                <div className="mt-1.5 overflow-hidden rounded border border-border-subtle">
-                  <div className="max-h-56 overflow-y-auto show-scrollbar">
-                    <HistoryPlanTables plan={plan} />
-                  </div>
-                </div>
-              )}
-            </div>
-          )}
+          {plan && <HistoryPlanTables plan={plan} />}
+
+          {audit && audit.length > 0 && <HistoryAuditSection audit={audit} />}
         </div>
       )}
     </div>
   )
 }
 
-function HistoryMeta({ label, value }: { label: string; value: string }) {
+function MetaItem({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <span className="inline-flex min-w-0 items-baseline gap-1.5">
-      <span className="shrink-0 text-[10px] uppercase tracking-[0.12em] text-text-muted/50">{label}</span>
-      <span className="truncate font-mono text-text">{value}</span>
+    <span className="inline-flex items-center gap-1 min-w-0">
+      <span className="text-text-muted/45">{label}</span>
+      <span className={`text-text truncate ${mono ? "font-mono" : ""}`}>{value}</span>
     </span>
+  )
+}
+
+function MetaSep() {
+  return <span className="text-text-muted/25 hidden sm:inline">·</span>
+}
+
+function HistoryAuditSection({ audit }: { audit: SyncAuditEvent[] }) {
+  const [open, setOpen] = useState(false)
+
+  return (
+    <div className="rounded-md border border-border-subtle overflow-hidden">
+      <button
+        type="button"
+        onClick={() => setOpen((value) => !value)}
+        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-elevated/20 transition-colors"
+      >
+        {open ? (
+          <ChevronDown size={12} className="text-text-muted shrink-0" />
+        ) : (
+          <ChevronRight size={12} className="text-text-muted shrink-0" />
+        )}
+        <span className="field-label mb-0">Audit trail</span>
+        <span className="text-[11px] font-mono text-text-muted/50">({audit.length})</span>
+      </button>
+      {open && (
+        <div className="border-t border-border-subtle divide-y divide-border/30">
+          {audit.map((event, index) => (
+            <HistoryAuditRow key={`${event.action}:${event.timestamp}:${index}`} event={event} />
+          ))}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -712,29 +757,29 @@ function HistoryAuditRow({ event }: { event: SyncAuditEvent }) {
   const actionColor = failed ? DIFF.del : completed ? DIFF.ins : undefined
 
   return (
-    <div className="rounded border border-border-subtle/80 bg-overlay-1/60">
-      <div className="flex items-center gap-2 px-2 py-1">
-        <span className="text-xs font-medium shrink-0" style={actionColor ? { color: actionColor } : undefined}>
+    <div className="bg-overlay-1/40">
+      <div className="flex items-center gap-2 px-2.5 py-1.5">
+        <span className="text-[11px] font-medium shrink-0" style={actionColor ? { color: actionColor } : undefined}>
           {formatAuditAction(event.action)}
         </span>
-        <span className="text-xs text-text-muted truncate">{event.actor}</span>
+        <span className="text-[11px] text-text-muted truncate">{event.actor}</span>
         <span className="flex-1" />
-        <span className="text-xs text-text-muted/40 font-mono tabular-nums">
-          {new Date(event.timestamp).toLocaleTimeString()}
+        <span className="text-[11px] text-text-muted/40 font-mono tabular-nums">
+          {new Date(event.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
         </span>
         {event.detail != null && (
           <button
             type="button"
             onClick={() => setJsonOpen((value) => !value)}
-            className="text-xs text-text-muted/40 hover:text-text-muted px-1 py-0.5 rounded hover:bg-elevated transition-colors"
+            className="text-[10px] uppercase tracking-wide text-text-muted/40 hover:text-text-muted px-1 py-0.5 rounded hover:bg-elevated transition-colors"
           >
             {jsonOpen ? "hide" : "json"}
           </button>
         )}
       </div>
       {jsonOpen && event.detail != null && (
-        <div className="border-t border-border-subtle px-2 pb-1.5">
-          <pre className="max-h-36 overflow-y-auto pt-1 font-mono text-[10px] leading-relaxed break-all whitespace-pre-wrap text-text-muted/60 show-scrollbar">
+        <div className="px-2.5 pb-2 border-t border-border-subtle">
+          <pre className="text-[11px] text-text-muted/60 font-mono whitespace-pre-wrap break-all leading-relaxed pt-1.5 max-h-36 overflow-y-auto show-scrollbar">
             {JSON.stringify(event.detail, null, 2)}
           </pre>
         </div>

@@ -1,5 +1,5 @@
 /**
- * Build a sync preview or execute pipeline: entity name, direction, decision log,
+ * Build a sync preview or execute pipeline: entity name, route, decision log,
  * and per-table or per-step activities from sync.* events.
  */
 
@@ -59,7 +59,7 @@ export function buildSyncPipeline(
     meta?.entity_display_name ??
     eventHints.entityDisplayName ??
     entityRef
-  const direction =
+  const route =
     planSummary?.source && planSummary?.target
       ? `${planSummary.source} → ${planSummary.target}`
       : meta
@@ -68,7 +68,7 @@ export function buildSyncPipeline(
           ? `${eventHints.source} → ${eventHints.target}`
           : ""
   const runId = extractRunIdFromEvents(events)
-  const subtitleParts = [direction]
+  const subtitleParts = [route]
   if (planSummary?.definitionPublishedVersion)
     subtitleParts.push(`def ${planSummary.definitionPublishedVersion}`)
   if (runId) subtitleParts.push(`via agent ${runId.slice(0, 8)}`)

@@ -4,9 +4,10 @@ import { useMemo, useState } from "react"
 import type { SyncPlan, SyncPlanTable } from "../../types"
 import { movementOfTable, tableMovementTotal } from "../../types"
 import { timeAgo } from "../../util"
+import { ModalShell } from "./chrome"
 import { DIFF } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
-import { buildExecTableStatus } from "./exec-status"
+import { buildExecTableStatus, type ExecTableStatus } from "./exec-status"
 import { planHasMetadataChanges } from "./exec-preflight"
 import { PlanPublishedBundleModal } from "./PlanPublishedBundleModal"
 import { PlanSampleRowModal } from "./PlanSampleRowModal"
@@ -98,26 +99,16 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
             const status = execStatus.get(row.table)
             return (
               <div key={row.table}>
-                <button
-                  onClick={() => {
+                <PlanTableSummaryRow
+                  row={row}
+                  open={isOpen}
+                  onToggle={() => {
                     const next = new Set(expanded)
                     isOpen ? next.delete(row.table) : next.add(row.table)
                     setExpanded(next)
                   }}
-                  className="w-full text-left px-4 py-2 flex items-center gap-2 hover:bg-elevated/30 transition-colors"
-                >
-                  {isOpen ? <ChevronDown size={13} className="text-text-muted shrink-0" /> : <ChevronRight size={13} className="text-text-muted shrink-0" />}
-                  <span className="text-sm font-mono text-text flex-1 truncate">{row.table}</span>
-                  {status === "running" && <Loader2 size={13} className="animate-spin text-accent shrink-0" />}
-                  {status === "done" && <CheckCircle2 size={13} className="shrink-0" style={{ color: DIFF.ins }} />}
-                  {status === "failed" && <XCircle size={13} className="shrink-0" style={{ color: DIFF.del }} />}
-                  {status === "cancelled" && <XCircle size={13} className="shrink-0 text-text-muted/50" title="Cancelled" />}
-                  <Ct n={movementOfTable(row).insert} color={DIFF.ins} label="ins" />
-                  <Ct n={movementOfTable(row).update} color={DIFF.upd} label="upd" />
-                  <Ct n={movementOfTable(row).delete} color={DIFF.del} label="del" />
-                  {row.conflicts.length > 0 && <Ct n={row.conflicts.length} color="var(--color-warning)" label="conflict" />}
-                  <Ct n={row.stats.unchanged} color={DIFF.eqDim} label="eq" dim />
-                </button>
+                  status={status}
+                />
                 {isOpen && <Detail row={row} />}
               </div>
             )
@@ -133,24 +124,144 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
 }
 
 export function HistoryPlanTables({ plan }: { plan: SyncPlan }) {
-  const sorted = [...plan.tables].sort((a, b) => net(b) - net(a))
+  const [selectedTable, setSelectedTable] = useState<SyncPlanTable | null>(null)
+  const sorted = useMemo(() => [...plan.tables].sort((a, b) => net(b) - net(a)), [plan])
+  const changedCount = sorted.filter((row) => net(row) > 0 || row.conflicts.length > 0).length
 
   return (
-    <div className="divide-y divide-border/30">
-      {sorted.map((row) => (
-        <div key={row.table} className="px-4 py-3 bg-base/20 space-y-2">
-          <div className="flex items-center gap-3 text-sm">
-            <span className="font-mono text-text flex-1 truncate">{row.table}</span>
-            <Ct n={movementOfTable(row).insert} color={DIFF.ins} label="ins" />
-            <Ct n={movementOfTable(row).update} color={DIFF.upd} label="upd" />
-            <Ct n={movementOfTable(row).delete} color={DIFF.del} label="del" />
-            {row.conflicts.length > 0 && <Ct n={row.conflicts.length} color="var(--color-warning)" label="conflict" />}
-            <Ct n={row.stats.unchanged} color={DIFF.eqDim} label="eq" dim />
-          </div>
-          <Detail row={row} />
+    <>
+      <div className="space-y-1.5">
+        <div className="flex items-center justify-between gap-2">
+          <span className="field-label">Plan tables</span>
+          <span className="text-[11px] font-mono text-text-muted/55 tabular-nums">
+            {changedCount > 0 ? `${changedCount} with changes` : "no changes"} · {sorted.length} total
+          </span>
         </div>
-      ))}
-    </div>
+        <div className="rounded-md border border-border-subtle overflow-hidden divide-y divide-border/30">
+          {sorted.map((row) => (
+            <PlanTableSummaryRow
+              key={row.table}
+              row={row}
+              compact
+              onOpen={() => setSelectedTable(row)}
+            />
+          ))}
+        </div>
+      </div>
+      {selectedTable && (
+        <HistoryPlanTableModal
+          plan={plan}
+          row={selectedTable}
+          onClose={() => setSelectedTable(null)}
+        />
+      )}
+    </>
+  )
+}
+
+export function HistoryPlanTableModal({
+  plan,
+  row,
+  onClose,
+}: {
+  plan: SyncPlan
+  row: SyncPlanTable
+  onClose: () => void
+}) {
+  const movement = movementOfTable(row)
+  const subtitle = `${formatPlanEntityLabel(plan)} · ${plan.source} → ${plan.target}`
+
+  return (
+    <ModalShell
+      title={row.table}
+      subtitle={subtitle}
+      size="focus"
+      stackLevel={1}
+      onClose={onClose}
+      footer={
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-mono tabular-nums text-text-muted">
+          {movement.insert > 0 && <span style={{ color: DIFF.ins }}>{movement.insert.toLocaleString()} ins</span>}
+          {movement.update > 0 && <span style={{ color: DIFF.upd }}>{movement.update.toLocaleString()} upd</span>}
+          {movement.delete > 0 && <span style={{ color: DIFF.del }}>{movement.delete.toLocaleString()} del</span>}
+          {row.conflicts.length > 0 && (
+            <span className="text-warning">{row.conflicts.length.toLocaleString()} conflict{row.conflicts.length === 1 ? "" : "s"}</span>
+          )}
+          {row.stats.unchanged > 0 && (
+            <span className="text-text-muted/60">{row.stats.unchanged.toLocaleString()} eq</span>
+          )}
+        </div>
+      }
+    >
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto show-scrollbar">
+        <Detail row={row} />
+      </div>
+    </ModalShell>
+  )
+}
+
+function PlanTableSummaryRow({
+  row,
+  open,
+  onToggle,
+  onOpen,
+  compact,
+  status,
+}: {
+  row: SyncPlanTable
+  open?: boolean
+  onToggle?: () => void
+  onOpen?: () => void
+  compact?: boolean
+  status?: ExecTableStatus
+}) {
+  const movement = movementOfTable(row)
+  const hasActivity = net(row) > 0 || row.conflicts.length > 0
+  const interactive = Boolean(onToggle ?? onOpen)
+  const py = compact ? "py-1.5" : "py-2"
+  const textSize = compact ? "text-xs" : "text-sm"
+  const showRunning = status === "running" || status === "applying"
+
+  return (
+    <button
+      type="button"
+      disabled={!interactive}
+      onClick={onToggle ?? onOpen}
+      className={[
+        "w-full text-left flex items-center gap-2 transition-colors",
+        compact ? "px-3" : "px-4",
+        py,
+        interactive ? "hover:bg-elevated/30 cursor-pointer group" : "cursor-default",
+        !hasActivity && compact ? "opacity-60" : "",
+      ].join(" ")}
+    >
+      {onToggle ? (
+        open ? (
+          <ChevronDown size={compact ? 12 : 13} className="text-text-muted shrink-0" />
+        ) : (
+          <ChevronRight size={compact ? 12 : 13} className="text-text-muted shrink-0" />
+        )
+      ) : (
+        <ChevronRight
+          size={compact ? 12 : 13}
+          className="text-text-muted/40 shrink-0 transition-colors group-hover:text-accent"
+        />
+      )}
+      <span className={`${textSize} font-mono text-text flex-1 truncate`}>{row.table}</span>
+      {showRunning && <Loader2 size={compact ? 12 : 13} className="animate-spin text-accent shrink-0" />}
+      {status === "done" && <CheckCircle2 size={compact ? 12 : 13} className="shrink-0" style={{ color: DIFF.ins }} />}
+      {status === "failed" && <XCircle size={compact ? 12 : 13} className="shrink-0" style={{ color: DIFF.del }} />}
+      {status === "cancelled" && <XCircle size={compact ? 12 : 13} className="shrink-0 text-text-muted/50" aria-label="Cancelled" />}
+      <Ct n={movement.insert} color={DIFF.ins} label="ins" compact={compact} />
+      <Ct n={movement.update} color={DIFF.upd} label="upd" compact={compact} />
+      <Ct n={movement.delete} color={DIFF.del} label="del" compact={compact} />
+      {row.conflicts.length > 0 && <Ct n={row.conflicts.length} color="var(--color-warning)" label="conflict" compact={compact} />}
+      <Ct n={row.stats.unchanged} color={DIFF.eqDim} label="eq" dim compact={compact} />
+      {onOpen && compact && (
+        <span className="text-[10px] uppercase tracking-wide text-text-muted/40 opacity-0 transition-opacity group-hover:opacity-100 shrink-0">
+          Open
+        </span>
+      )}
+    </button>
   )
 }
 
@@ -222,10 +333,13 @@ function PlanCollapsibleSections({
   )
 }
 
-function Ct({ n, color, label, dim }: { n: number; color: string; label: string; dim?: boolean }) {
+function Ct({ n, color, label, dim, compact }: { n: number; color: string; label: string; dim?: boolean; compact?: boolean }) {
   if (n <= 0) return null
   return (
-    <span className="text-sm font-mono tabular-nums shrink-0" style={{ color, opacity: dim ? 0.4 : 1 }}>
+    <span
+      className={`${compact ? "text-xs" : "text-sm"} font-mono tabular-nums shrink-0`}
+      style={{ color, opacity: dim ? 0.4 : 1 }}
+    >
       {n.toLocaleString()} <span className="opacity-60">{label}</span>
     </span>
   )

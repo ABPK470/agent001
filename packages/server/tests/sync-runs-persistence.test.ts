@@ -160,7 +160,7 @@ describe("sync run persistence", () => {
     expect(page3).toHaveLength(1)
   })
 
-  it("filters sync runs by status, search, direction, and date range", () => {
+  it("filters sync runs by status, search, route, and date range", () => {
     seedUser(testDb, "pka")
     seedUser(testDb, "bob")
     recordSyncRunPreview({
