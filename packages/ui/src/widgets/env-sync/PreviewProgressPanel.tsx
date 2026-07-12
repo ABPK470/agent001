@@ -12,10 +12,10 @@ export function PreviewProgressPanel({ progress }: { progress: EnvSyncPreviewPro
   const pct = total > 0 ? Math.min(100, ((done + failed) / total) * 100) : progress.status === "done" ? 100 : 0
 
   return (
-    <div className="mx-4 my-4 rounded-lg border border-border-subtle bg-overlay-1 px-4 py-4 space-y-3">
+    <div className="mx-4 my-2 rounded-lg border border-border-subtle bg-overlay-1 px-4 py-4 space-y-3 shrink-0">
       <div className="flex items-baseline justify-between gap-3">
         <span className="text-[10px] font-semibold uppercase tracking-wider text-text-muted">
-          Preview progress
+          Scanning tables…
         </span>
         <span className="text-xs font-mono tabular-nums text-text-muted">
           {progress.status === "running" && total > 0 ? `${done + failed}/${total} tables` : progress.status}

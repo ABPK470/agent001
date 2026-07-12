@@ -140,3 +140,11 @@ export function previewTablesDone(progress: EnvSyncPreviewProgress): number {
 export function previewTablesFailed(progress: EnvSyncPreviewProgress): number {
   return Object.values(progress.tables).filter((row) => row.status === "failed").length
 }
+
+/** True while the widget should show live preview progress instead of the plan detail view. */
+export function isPreviewInProgress(
+  previewing: boolean,
+  progress: EnvSyncPreviewProgress | null,
+): boolean {
+  return previewing || progress?.status === "running"
+}

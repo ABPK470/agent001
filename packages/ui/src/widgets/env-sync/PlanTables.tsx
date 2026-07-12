@@ -1,4 +1,4 @@
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, Loader2, XCircle } from "lucide-react"
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronRight, Clock, GitBranch, ListChecks, Loader2, XCircle } from "lucide-react"
 import { useMemo, useState } from "react"
 
 import type { SyncPlan, SyncPlanTable } from "../../types"
@@ -25,6 +25,8 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
   const execStatus = useMemo(() => buildExecTableStatus(exec), [exec])
 
   const warnings = [...plan.preflight.issues, ...plan.warnings]
+  const decisionLog = plan.decisionLog ?? []
+  const flowSteps = plan.executionContract.flow.steps ?? []
 
   return (
     <>
@@ -36,6 +38,8 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
                 {formatPlanEntityLabel(plan)}
               </h3>
               <div className="flex items-center gap-2 mt-1 text-sm text-text-muted">
+                <span className="text-text-muted/60 font-mono text-xs">{plan.source} → {plan.target}</span>
+                <span className="text-text-muted/30">·</span>
                 <span className="flex items-center gap-1 text-text-muted/60">
                   <Clock size={11} />{timeAgo(new Date(plan.createdAtMs).toISOString())}
                 </span>
@@ -54,9 +58,19 @@ export function PlanView({ plan, expanded, setExpanded, exec }: {
             </div>
             <span className="text-text-muted/30">·</span>
             <span className="text-sm text-text-muted">{totals.tablesCount} tables w/ changes</span>
+            {flowSteps.length > 0 && (
+              <>
+                <span className="text-text-muted/30">·</span>
+                <span className="text-sm text-text-muted">{flowSteps.length} execute steps</span>
+              </>
+            )}
           </div>
         </div>
       </div>
+
+      {(decisionLog.length > 0 || flowSteps.length > 0) && (
+        <PlanInsights decisionLog={decisionLog} flowSteps={flowSteps} />
+      )}
 
       {warnings.length > 0 && (
         <div className="rounded-lg border border-warning/20 bg-warning/5 px-4 py-2.5 flex items-start gap-2 text-sm text-warning shrink-0">
@@ -128,6 +142,85 @@ export function HistoryPlanTables({ plan }: { plan: SyncPlan }) {
 
 export function net(table: SyncPlanTable): number {
   return tableMovementTotal(table)
+}
+
+function PlanInsights({
+  decisionLog,
+  flowSteps,
+}: {
+  decisionLog: NonNullable<SyncPlan["decisionLog"]>
+  flowSteps: SyncPlan["executionContract"]["flow"]["steps"]
+}) {
+  const [decisionsOpen, setDecisionsOpen] = useState(decisionLog.some((d) => d.severity !== "info"))
+  const [flowOpen, setFlowOpen] = useState(false)
+
+  return (
+    <div className="rounded-lg border border-border-subtle overflow-hidden shrink-0 divide-y divide-border-subtle">
+      {decisionLog.length > 0 && (
+        <div>
+          <button
+            onClick={() => setDecisionsOpen((open) => !open)}
+            className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-elevated/30 transition-colors text-left"
+          >
+            {decisionsOpen ? <ChevronDown size={13} className="text-text-muted shrink-0" /> : <ChevronRight size={13} className="text-text-muted shrink-0" />}
+            <ListChecks size={14} className="text-text-muted/70 shrink-0" />
+            <span className="text-sm font-medium text-text">Preview decisions</span>
+            <span className="text-xs text-text-muted ml-1">({decisionLog.length})</span>
+          </button>
+          {decisionsOpen && (
+            <div className="px-4 pb-3 space-y-2 max-h-48 overflow-y-auto">
+              {decisionLog.map((decision) => (
+                <div
+                  key={decision.id}
+                  className={`rounded border px-3 py-2 text-sm ${
+                    decision.severity === "error"
+                      ? "border-error/30 bg-error-soft/30"
+                      : decision.severity === "warning"
+                        ? "border-warning/30 bg-warning/5"
+                        : "border-border-subtle bg-base/30"
+                  }`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className="text-[10px] uppercase tracking-wide text-text-muted">{decision.category}</span>
+                    <span className="font-medium text-text">{decision.title}</span>
+                  </div>
+                  <p className="mt-1 text-xs text-text-muted leading-relaxed">{decision.summary}</p>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+      {flowSteps.length > 0 && (
+        <div>
+          <button
+            onClick={() => setFlowOpen((open) => !open)}
+            className="w-full flex items-center gap-2 px-4 py-2.5 hover:bg-elevated/30 transition-colors text-left"
+          >
+            {flowOpen ? <ChevronDown size={13} className="text-text-muted shrink-0" /> : <ChevronRight size={13} className="text-text-muted shrink-0" />}
+            <GitBranch size={14} className="text-text-muted/70 shrink-0" />
+            <span className="text-sm font-medium text-text">Execution flow</span>
+            <span className="text-xs text-text-muted ml-1">({flowSteps.length} steps)</span>
+          </button>
+          {flowOpen && (
+            <ol className="px-4 pb-3 space-y-1 max-h-48 overflow-y-auto list-none">
+              {flowSteps.map((step, index) => (
+                <li key={step.id} className="flex items-start gap-2 text-sm font-mono">
+                  <span className="text-text-muted/40 tabular-nums w-5 shrink-0 text-right">{index + 1}.</span>
+                  <div className="min-w-0">
+                    <span className="text-text">{step.title || step.kind}</span>
+                    {step.description && (
+                      <p className="text-xs text-text-muted mt-0.5 leading-relaxed">{step.description}</p>
+                    )}
+                  </div>
+                </li>
+              ))}
+            </ol>
+          )}
+        </div>
+      )}
+    </div>
+  )
 }
 
 function Ct({ n, color, label, dim }: { n: number; color: string; label: string; dim?: boolean }) {

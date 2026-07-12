@@ -34,9 +34,9 @@ import { cancelExec, completeExecFromAgent, getExecPlanId, getExecSnapshot, rese
 import { execPreflightBlocked, execPreflightBlockReason } from "./exec-preflight"
 import { ExecModal } from "./ExecModal"
 import { HistoryContent } from "./HistoryContent"
-import { PlanView } from "./PlanTables"
+import { net, PlanView } from "./PlanTables"
 import { PreviewProgressPanel } from "./PreviewProgressPanel"
-import { createPreviewProgress } from "./preview-progress"
+import { createPreviewProgress, isPreviewInProgress } from "./preview-progress"
 import type { ModalKind, SearchHit } from "./types"
 import {
   formatSearchHitLabel,
@@ -381,12 +381,20 @@ export function EnvSync() {
             ? formatSearchHitLabel({ id: result.entity.id, name: result.entity.displayName })
             : entityIdStr,
         )
+        setExpanded(
+          new Set(
+            result.tables
+              .filter((row) => net(row) > 0 || (row.conflicts?.length ?? 0) > 0)
+              .map((row) => row.table),
+          ),
+        )
       }
     } catch (error) {
       notifyError(error instanceof Error ? error.message : String(error))
       setForm({ planId: null })
     } finally {
       setPreviewing(false)
+      setPreviewProgress(null)
     }
   }
 
@@ -413,6 +421,7 @@ export function EnvSync() {
   const expired = displayPlan ? Date.now() - displayPlan.createdAtMs > 3600_000 : false
   const execActive = exec.kind !== "idle"
   const execForDisplayPlan = displayPlan != null && (execPlanId === displayPlan.planId || exec.kind === "running")
+  const previewActive = isPreviewInProgress(previewing, previewProgress)
 
   return (
     <div className="relative h-full overflow-hidden flex flex-col gap-3 text-text pb-1">
@@ -644,19 +653,21 @@ export function EnvSync() {
         </WidgetToolbarTrailing>
       </WidgetToolbar>
 
-      {previewing || previewProgress ? (
-        previewProgress ? (
-          <PreviewProgressPanel progress={previewProgress} />
+      <div className="flex-1 min-h-0 flex flex-col gap-3 overflow-hidden">
+        {previewActive ? (
+          previewProgress ? (
+            <PreviewProgressPanel progress={previewProgress} />
+          ) : (
+            <Loading>Building plan…</Loading>
+          )
+        ) : planLoading ? (
+          <Loading>Loading plan…</Loading>
+        ) : displayPlan ? (
+          <PlanView plan={displayPlan} expanded={expanded} setExpanded={setExpanded} exec={exec} />
         ) : (
-          <Loading>Building plan…</Loading>
-        )
-      ) : planLoading ? (
-        <Loading>Loading plan…</Loading>
-      ) : displayPlan ? (
-        <PlanView plan={displayPlan} expanded={expanded} setExpanded={setExpanded} exec={exec} />
-      ) : (
-        <Empty envs={envs} blocker={blocker} srcEnv={srcEnv} tgtEnv={tgtEnv} hasDefinitions={definitions.length > 0} />
-      )}
+          <Empty envs={envs} blocker={blocker} srcEnv={srcEnv} tgtEnv={tgtEnv} hasDefinitions={definitions.length > 0} />
+        )}
+      </div>
 
       {modal === "definition" && (
         <ModalShell
