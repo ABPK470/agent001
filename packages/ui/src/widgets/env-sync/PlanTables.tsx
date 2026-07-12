@@ -133,7 +133,7 @@ export function HistoryPlanTables({ plan }: { plan: SyncPlan }) {
       <div className="space-y-1.5">
         <div className="flex items-center justify-between gap-2">
           <span className="field-label">Plan tables</span>
-          <span className="text-[11px] font-mono text-text-muted/55 tabular-nums">
+          <span className="text-xs font-mono text-text tabular-nums">
             {changedCount > 0 ? `${changedCount} with changes` : "no changes"} · {sorted.length} total
           </span>
         </div>
@@ -231,7 +231,6 @@ function PlanTableSummaryRow({
         compact ? "px-3" : "px-4",
         py,
         interactive ? "hover:bg-elevated/30 cursor-pointer group" : "cursor-default",
-        !hasActivity && compact ? "opacity-60" : "",
       ].join(" ")}
     >
       {onToggle ? (
@@ -243,19 +242,25 @@ function PlanTableSummaryRow({
       ) : (
         <ChevronRight
           size={compact ? 12 : 13}
-          className="text-text-muted/40 shrink-0 transition-colors group-hover:text-accent"
+          className="text-text-muted shrink-0 transition-colors group-hover:text-accent"
         />
       )}
-      <span className={`${textSize} font-mono text-text flex-1 truncate`}>{row.table}</span>
+      <span
+        className={`${textSize} font-mono flex-1 truncate ${hasActivity || !compact ? "text-text" : "text-text-muted"}`}
+      >
+        {row.table}
+      </span>
       {showRunning && <Loader2 size={compact ? 12 : 13} className="animate-spin text-accent shrink-0" />}
       {status === "done" && <CheckCircle2 size={compact ? 12 : 13} className="shrink-0" style={{ color: DIFF.ins }} />}
       {status === "failed" && <XCircle size={compact ? 12 : 13} className="shrink-0" style={{ color: DIFF.del }} />}
-      {status === "cancelled" && <XCircle size={compact ? 12 : 13} className="shrink-0 text-text-muted/50" aria-label="Cancelled" />}
-      <Ct n={movement.insert} color={DIFF.ins} label="ins" compact={compact} />
-      <Ct n={movement.update} color={DIFF.upd} label="upd" compact={compact} />
-      <Ct n={movement.delete} color={DIFF.del} label="del" compact={compact} />
-      {row.conflicts.length > 0 && <Ct n={row.conflicts.length} color="var(--color-warning)" label="conflict" compact={compact} />}
-      <Ct n={row.stats.unchanged} color={DIFF.eqDim} label="eq" dim compact={compact} />
+      {status === "cancelled" && <XCircle size={compact ? 12 : 13} className="shrink-0 text-text-muted" aria-label="Cancelled" />}
+      <Ct n={movement.insert} color={DIFF.ins} label="ins" compact={compact} neutral={compact} />
+      <Ct n={movement.update} color={DIFF.upd} label="upd" compact={compact} neutral={compact} />
+      <Ct n={movement.delete} color={DIFF.del} label="del" compact={compact} neutral={compact} />
+      {row.conflicts.length > 0 && (
+        <Ct n={row.conflicts.length} color="var(--color-warning)" label="conflict" compact={compact} neutral={compact} />
+      )}
+      <Ct n={row.stats.unchanged} color={DIFF.eqDim} label="eq" dim compact={compact} neutral={compact} />
       {onOpen && compact && (
         <span className="text-[10px] uppercase tracking-wide text-text-muted/40 opacity-0 transition-opacity group-hover:opacity-100 shrink-0">
           Open
@@ -333,8 +338,33 @@ function PlanCollapsibleSections({
   )
 }
 
-function Ct({ n, color, label, dim, compact }: { n: number; color: string; label: string; dim?: boolean; compact?: boolean }) {
+function Ct({
+  n,
+  color,
+  label,
+  dim,
+  compact,
+  neutral,
+}: {
+  n: number
+  color: string
+  label: string
+  dim?: boolean
+  compact?: boolean
+  neutral?: boolean
+}) {
   if (n <= 0) return null
+  if (neutral) {
+    return (
+      <span
+        className={`${compact ? "text-xs" : "text-sm"} font-mono tabular-nums shrink-0 ${
+          dim ? "text-text-muted" : "text-text"
+        }`}
+      >
+        {n.toLocaleString()} {label}
+      </span>
+    )
+  }
   return (
     <span
       className={`${compact ? "text-xs" : "text-sm"} font-mono tabular-nums shrink-0`}

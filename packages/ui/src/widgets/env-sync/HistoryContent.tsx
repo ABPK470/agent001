@@ -22,7 +22,6 @@ import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../util"
 import {
   WidgetToolbar,
-  WidgetToolbarLeading,
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
 } from "../widget-toolbar"
@@ -331,25 +330,7 @@ function HistorySearchBar({
   onPageChange: (page: number) => void
 }) {
   return (
-    <WidgetToolbar compact className="shrink-0 border-b border-border/40 px-3 py-1.5">
-      <WidgetToolbarLeading>
-        <button
-          type="button"
-          onClick={onToggleFilters}
-          className={`widget-toolbar__chip ${
-            filtersOpen || activeFilterCount > 0 ? "widget-toolbar__chip--active" : "widget-toolbar__chip--idle"
-          }`}
-          title="Search and filter sync history"
-        >
-          <SlidersHorizontal size={13} />
-          Filters
-          {activeFilterCount > 0 && (
-            <span className="rounded-full bg-accent/20 px-1.5 py-px font-mono text-[10px] tabular-nums">
-              {activeFilterCount}
-            </span>
-          )}
-        </button>
-      </WidgetToolbarLeading>
+    <WidgetToolbar className="shrink-0 border-b border-border/40 !rounded-none !border-x-0 !border-t-0 !bg-transparent px-3 py-1.5">
       <WidgetToolbarSearch
         value={searchDraft}
         onChange={onSearchChange}
@@ -389,6 +370,26 @@ function HistorySearchBar({
           title="Next page"
         >
           <ChevronRight size={14} />
+        </button>
+        <button
+          type="button"
+          onClick={onToggleFilters}
+          className={`widget-toolbar__icon-btn relative ${
+            filtersOpen || activeFilterCount > 0 ? "text-accent" : ""
+          }`}
+          title={
+            activeFilterCount > 0
+              ? `Filters (${activeFilterCount} active)`
+              : "Filters"
+          }
+          aria-pressed={filtersOpen}
+        >
+          <SlidersHorizontal size={14} />
+          {activeFilterCount > 0 && (
+            <span className="absolute -top-0.5 -right-0.5 flex h-3.5 min-w-3.5 items-center justify-center rounded-full bg-accent px-0.5 text-[9px] font-mono font-medium leading-none text-text-on-accent">
+              {activeFilterCount}
+            </span>
+          )}
         </button>
         <button
           type="button"
