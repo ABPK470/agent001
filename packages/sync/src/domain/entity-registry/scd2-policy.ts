@@ -129,6 +129,34 @@ export function toScd2TablePolicy(policy: Pick<Scd2Strategy, "excludeFromDiff" |
   }
 }
 
+/** Keep only stamp expressions for columns that exist on the target table. */
+export function filterPolicyStampsToTargetColumns(
+  stamps: Record<string, string>,
+  targetColumns: Iterable<string>,
+): Record<string, string> {
+  const names = new Set(Array.from(targetColumns, (c) => c.trim()).filter(Boolean))
+  return Object.fromEntries(Object.entries(stamps).filter(([col]) => names.has(col)))
+}
+
+export function scd2PolicyTargetColumnIssues(
+  tableName: string,
+  policy: Pick<Scd2TablePolicy, "onInsert" | "onUpdate">,
+  targetColumns: Iterable<string>,
+): string[] {
+  const names = new Set(Array.from(targetColumns, (c) => c.trim().toLowerCase()).filter(Boolean))
+  const required = new Set([
+    ...Object.keys(policy.onInsert),
+    ...Object.keys(policy.onUpdate),
+  ])
+  const issues: string[] = []
+  for (const col of required) {
+    if (!names.has(col.trim().toLowerCase())) {
+      issues.push(`${tableName}.${col}: missing on target (required by frozen scd2Policy)`)
+    }
+  }
+  return issues
+}
+
 export function dedupeColumns(columns: readonly string[]): string[] {
   const seen = new Set<string>()
   const out: string[] = []

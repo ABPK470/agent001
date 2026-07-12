@@ -8,6 +8,7 @@
 
 import { type Transaction } from "mssql"
 import type { Scd2TablePolicy } from "@mia/shared-types"
+import { filterPolicyStampsToTargetColumns } from "../../../domain/entity-registry/scd2-policy.js"
 import { buildBatchWhere } from "../../../domain/diff-engine/sql-helpers.js"
 import type { SyncRuntimeHost } from "../../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
@@ -147,6 +148,9 @@ export async function applyInsertsUpdates(
     is_computed: boolean
   }>
   const identityCol = targetCols.find((c) => c.is_identity)?.name ?? null
+  const targetColNames = new Set(targetCols.map((c) => c.name))
+  const onInsertStamps = filterPolicyStampsToTargetColumns(policy.onInsert, targetColNames)
+  const onUpdateStamps = filterPolicyStampsToTargetColumns(policy.onUpdate, targetColNames)
   const allSourceCols = new Set(Object.keys(rows[0]))
   const omitIdentity = policy.identityHandling === "omit-identity-column"
 
@@ -188,7 +192,7 @@ export async function applyInsertsUpdates(
 
   // Build MERGE UPDATE SET — data cols from source + policy stamp expressions
   const updateParts: string[] = updateCols.map((c) => `T.[${c}] = S.[${c}]`)
-  for (const [col, expr] of Object.entries(policy.onUpdate)) {
+  for (const [col, expr] of Object.entries(onUpdateStamps)) {
     if (!updateParts.some((part) => part.startsWith(`T.[${col}]`))) {
       updateParts.push(`T.[${col}] = ${expr}`)
     }
@@ -199,7 +203,7 @@ export async function applyInsertsUpdates(
 
   const insertTargetCols = [...tempCols]
   const insertValueExprs = [...tempCols.map((c) => `S.[${c}]`)]
-  for (const [col, expr] of Object.entries(policy.onInsert)) {
+  for (const [col, expr] of Object.entries(onInsertStamps)) {
     if (!insertTargetCols.includes(col)) {
       insertTargetCols.push(col)
       insertValueExprs.push(expr)

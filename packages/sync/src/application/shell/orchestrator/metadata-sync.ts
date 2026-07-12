@@ -199,6 +199,11 @@ export async function runMetadataSync(
     } catch {
       /* ignore */
     }
+    onProgress({
+      type: SyncProgressKind.Step,
+      step: "metadataSync",
+      message: "Metadata sync rolled back — no target metadata changes were committed.",
+    })
     throw e instanceof SyncExecuteError ? e : fail(e, { op: "transaction" })
   }
 }

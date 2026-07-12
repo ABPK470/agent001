@@ -27,6 +27,16 @@ export function buildExecTableStatus(exec: ExecState): Map<string, ExecTableStat
 
   // Cancel / client abort — no server `failed` event, but tables may still be `running`.
   if (exec.kind === "done" && !exec.success) {
+    const metadataFailed = exec.events.some(
+      (event) =>
+        event.type === "failed"
+        && (event.step === "metadataSync" || event.error?.includes("metadataSync")),
+    )
+    if (metadataFailed) {
+      for (const [tableName, state] of statuses) {
+        if (state === "done") statuses.set(tableName, "failed")
+      }
+    }
     for (const [tableName, state] of statuses) {
       if (state === "running") statuses.set(tableName, cancelled ? "cancelled" : "failed")
     }
