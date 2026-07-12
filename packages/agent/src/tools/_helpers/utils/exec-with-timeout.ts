@@ -8,6 +8,7 @@
 
 import { HIGH_RISK_TOOLS, SAFE_RETRY_TOOLS } from "../../../domain/agent-constants.js"
 import type { ToolResultEnvelope } from "../../../domain/agent-types.js"
+import { ApprovalRequiredError } from "../../../domain/errors.js"
 import { didToolCallFail, extractToolFailureText, normalizeToolExecutionOutput } from "../result.js"
 
 export interface ToolExecutionConfig {
@@ -76,6 +77,7 @@ export async function executeToolWithTimeout(
           outcome: normalized.outcome
         }
       } catch (toolErr) {
+        if (toolErr instanceof ApprovalRequiredError) throw toolErr
         return {
           result: JSON.stringify({ error: (toolErr as Error).message }),
           isError: true,

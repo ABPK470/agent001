@@ -1,7 +1,7 @@
 /**
  * ApprovalRequiredModal — operator decision surface for blocked tool calls.
  *
- * Opens immediately on live `approval.required` SSE (primary path).
+ * Opens on authoritative `approval.required` SSE from finalize (includes approvalId).
  * The bell notification keeps the same Approve / Deny actions as durable backup.
  */
 

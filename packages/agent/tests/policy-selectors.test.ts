@@ -285,6 +285,26 @@ describe("selector policy engine", () => {
     expect(result.error).toBeUndefined()
   })
 
+  it("approved tool grant bypasses require_approval for matching tool+args", async () => {
+    const ev = new RulePolicyEvaluator()
+    ev.addRule({
+      name: "approve_fetch",
+      effect: PolicyEffect.RequireApproval,
+      condition: "selectors",
+      parameters: {
+        selectors: { role: "hosted_user", tool: "fetch_url" },
+        reason: "outbound network needs approval",
+      },
+    })
+    const step = makeStep("fetch_url", { url: "https://example.com" })
+    const ctx = hostedCtx({
+      toolApprovalGrants: [{ toolName: "fetch_url", args: { url: "https://example.com" } }],
+    })
+    const result = await evaluate(ev, step, ctx)
+    expect(result.approval).toBeNull()
+    expect(result.error).toBeUndefined()
+  })
+
   it("inert (empty selectors) rule never matches", async () => {
     const ev = new RulePolicyEvaluator()
     const rule: PolicyRule = {

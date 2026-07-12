@@ -140,4 +140,44 @@ describe("wireEventBroadcasting", () => {
 
     unsubscribe()
   })
+
+  it("broadcasts approval.required SSE for the owning run without creating a notification", async () => {
+    const eventBus = new StubEventBus()
+    const auditLog = { subscribe: vi.fn(() => () => {}) }
+    const saveTrace = vi.fn()
+    const createNotification = vi.fn()
+    const state = { run: { steps: [] } }
+
+    const unsubscribe = wireEventBroadcasting(
+      { eventBus, auditLog },
+      "run-own",
+      state,
+      saveTrace,
+      createNotification
+    )
+
+    await eventBus.publish(
+      evt("approval.required", {
+        runId: "run-own",
+        stepId: "step-own",
+        toolName: "fetch_url",
+        reason: "network approval"
+      })
+    )
+
+    expect(createNotification).not.toHaveBeenCalled()
+    expect(broadcast).toHaveBeenCalledWith(
+      expect.objectContaining({
+        type: EventType.ApprovalRequired,
+        data: expect.objectContaining({
+          runId: "run-own",
+          stepId: "step-own",
+          toolName: "fetch_url",
+          reason: "network approval",
+        }),
+      })
+    )
+
+    unsubscribe()
+  })
 })

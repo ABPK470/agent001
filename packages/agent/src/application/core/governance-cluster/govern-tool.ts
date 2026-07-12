@@ -12,7 +12,6 @@ import {
   type ExecutionRecord,
   PolicyViolationError,
   StepStatus,
-  approvalRequired,
   blockStep,
   completeStep,
   failStep,
@@ -83,9 +82,6 @@ export function governTool(
             resourceId: state.run.id,
             detail: { tool: tool.name, reason: policyResult, stepId: step.id }
           })
-          await services.eventBus.publish(
-            approvalRequired(state.run.id, step.id, tool.name, persistedArgs, policyResult)
-          )
           await services.runRepo.save(state.run)
           throw new ApprovalRequiredError(
             state.run.id,

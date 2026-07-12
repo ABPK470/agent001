@@ -331,6 +331,7 @@ interface AppState {
   /** Blocked tool call awaiting operator approve/deny (require_approval policy). */
   pendingToolApproval: PendingToolApproval | null
   approvalModalOpen: boolean
+  approvalModalDismissed: boolean
   setPendingToolApproval: (pending: PendingToolApproval | null) => void
   clearPendingToolApproval: () => void
   setApprovalModalOpen: (open: boolean) => void
@@ -1395,15 +1396,25 @@ export const useStore = create<AppState>()(
 
       pendingToolApproval: null,
       approvalModalOpen: false,
+      approvalModalDismissed: false,
       setPendingToolApproval: (pending) => set({
         pendingToolApproval: pending,
-        approvalModalOpen: pending !== null,
+        approvalModalOpen: pending !== null && !!pending.approvalId,
+        approvalModalDismissed: false,
       }),
-      clearPendingToolApproval: () => set({ pendingToolApproval: null, approvalModalOpen: false }),
-      setApprovalModalOpen: (open) => set({ approvalModalOpen: open }),
+      clearPendingToolApproval: () => set({
+        pendingToolApproval: null,
+        approvalModalOpen: false,
+        approvalModalDismissed: false,
+      }),
+      setApprovalModalOpen: (open) => set((s) => ({
+        approvalModalOpen: open,
+        approvalModalDismissed: !open && !!s.pendingToolApproval ? true : s.approvalModalDismissed,
+      })),
       upsertPendingToolApproval: (patch) => set((s) => {
         const existing = s.pendingToolApproval
         const same = existing && existing.runId === patch.runId && existing.stepId === patch.stepId
+        const gotAuthoritativeId = !!patch.approvalId && !(same && existing.approvalId)
         return {
           pendingToolApproval: {
             approvalId: patch.approvalId ?? (same ? existing.approvalId : null),
@@ -1415,7 +1426,11 @@ export const useStore = create<AppState>()(
             args: patch.args ?? (same ? existing.args : undefined),
             notificationId: patch.notificationId ?? (same ? existing.notificationId : null),
           },
-          approvalModalOpen: same ? s.approvalModalOpen : true,
+          approvalModalOpen: gotAuthoritativeId
+            ? !s.approvalModalDismissed
+            : same
+              ? s.approvalModalOpen
+              : false,
         }
       }),
 
@@ -1559,7 +1574,7 @@ export const useStore = create<AppState>()(
             }
             set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null, activeSyncInvocation: null, syncProgressStates: new Map() })
             if (get().pendingToolApproval?.runId === (data["runId"] as string)) {
-              set({ pendingToolApproval: null, approvalModalOpen: false })
+              set({ pendingToolApproval: null, approvalModalOpen: false, approvalModalDismissed: false })
             }
             break
 
@@ -1585,7 +1600,7 @@ export const useStore = create<AppState>()(
             }
             set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null, activeSyncInvocation: null, syncProgressStates: new Map() })
             if (get().pendingToolApproval?.runId === (data["runId"] as string)) {
-              set({ pendingToolApproval: null, approvalModalOpen: false })
+              set({ pendingToolApproval: null, approvalModalOpen: false, approvalModalDismissed: false })
             }
             break
 
@@ -1985,7 +2000,7 @@ export const useStore = create<AppState>()(
               (pending.approvalId === approvalId ||
                 (pending.runId === runId && pending.stepId === stepId))
             ) {
-              set({ pendingToolApproval: null, approvalModalOpen: false })
+              set({ pendingToolApproval: null, approvalModalOpen: false, approvalModalDismissed: false })
             }
             if (decision === "denied") {
               store.upsertRun({ id: runId, status: RunStatus.Cancelled, completedAt: timestamp })
