@@ -67,13 +67,15 @@ export function buildSyncPipeline(
         : eventHints.source && eventHints.target
           ? `${eventHints.source} → ${eventHints.target}`
           : ""
+  const runId = extractRunIdFromEvents(events)
   const subtitleParts = [route]
   if (planSummary?.definitionPublishedVersion)
     subtitleParts.push(`def ${planSummary.definitionPublishedVersion}`)
+  if (runId) subtitleParts.push(`via agent ${runId.slice(0, 8)}`)
 
   const activities =
     kind === OperationKind.SyncPreview
-      ? [...buildDecisionActivities(planSummary, startedAt), ...groupSyncPreviewActivities(events)]
+      ? [...buildPreflightActivity(planSummary, startedAt), ...groupSyncPreviewActivities(events)]
       : [...buildPreflightActivity(planSummary, startedAt), ...groupSyncExecuteActivities(events)]
 
   return {
@@ -146,6 +148,14 @@ function extractSyncEntityHintsFromEvents(events: OperationEvent[]): {
   return { entityType, entityId, entityDisplayName, source, target, definitionId }
 }
 
+function extractRunIdFromEvents(events: OperationEvent[]): string | null {
+  for (const ev of events) {
+    const runId = strField(ev.data, "runId")
+    if (runId) return runId
+  }
+  return null
+}
+
 function buildPreflightActivity(
   planSummary: ReturnType<typeof loadPersistedSyncPlanSummary>,
   fallbackTimestamp: string
@@ -178,28 +188,21 @@ function buildPreflightActivity(
   ]
 }
 
-function buildDecisionActivities(
-  planSummary: ReturnType<typeof loadPersistedSyncPlanSummary>,
-  fallbackTimestamp: string
-): OperationActivity[] {
-  if (!planSummary || planSummary.decisionLog.length === 0) return []
-  return planSummary.decisionLog.map((decision, index) => ({
-    id: `decision:${decision.id}:${index}`,
-    name: decision.title,
-    status: decision.severity === "error" ? OperationStatus.Failed : OperationStatus.Success,
-    startedAt: decision.recordedAt ?? fallbackTimestamp,
-    endedAt: decision.recordedAt ?? fallbackTimestamp,
-    durationMs: 0,
-    summary: decision.summary,
-    ...(decision.details ? { details: decision.details } : {}),
-    events: []
-  }))
-}
-
 function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity[] {
   const activities: OperationActivity[] = []
-  const miscEvents: OperationEvent[] = []
   const openTables = new Map<string, OperationActivity>()
+  const pipelineFailed = events.some((ev) => ev.type === EventType.SyncPreviewFailed)
+
+  const failOpenTables = (endTs: string, reason?: string): void => {
+    for (const child of openTables.values()) {
+      child.status = OperationStatus.Failed
+      child.endedAt = endTs
+      child.durationMs = durationOf(child.startedAt, endTs)
+      child.error = reason ?? "Preview failed"
+      child.summary = reason ?? "Preview failed"
+    }
+    openTables.clear()
+  }
 
   for (const ev of events) {
     const t = ev.type
@@ -210,7 +213,7 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
       const target = strField(ev.data, "target")
       activities.push({
         id: "preview-started",
-        name: "Preview started",
+        name: "started",
         status: OperationStatus.Success,
         startedAt: ev.timestamp,
         endedAt: ev.timestamp,
@@ -227,7 +230,7 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
         : undefined
       activities.push({
         id: "preview-completed",
-        name: "Preview completed",
+        name: "completed",
         status: OperationStatus.Success,
         startedAt: ev.timestamp,
         endedAt: ev.timestamp,
@@ -238,14 +241,16 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
       continue
     }
     if (t === EventType.SyncPreviewFailed) {
+      const error = strField(ev.data, "error") ?? undefined
+      failOpenTables(ev.timestamp, error ?? "Preview failed")
       activities.push({
         id: "preview-failed",
-        name: "Preview failed",
+        name: "failed",
         status: OperationStatus.Failed,
         startedAt: ev.timestamp,
         endedAt: ev.timestamp,
         durationMs: numField(ev.data, "durationMs"),
-        error: strField(ev.data, "error") ?? undefined,
+        error,
         events: [ev]
       })
       continue
@@ -280,7 +285,15 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
         else if (scanMs != null) open.summary = `${scanMs}ms`
         openTables.delete(table)
       } else {
-        miscEvents.push(ev)
+        activities.push({
+          id: `tbl-orphan:${table}:${activities.length}`,
+          name: table,
+          status: t === EventType.SyncPreviewTableDone ? OperationStatus.Success : OperationStatus.Failed,
+          startedAt: ev.timestamp,
+          endedAt: ev.timestamp,
+          durationMs: numField(ev.data, "durationMs"),
+          events: [ev]
+        })
       }
       continue
     }
@@ -288,25 +301,28 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
       openTables.get(table)!.events.push(ev)
       continue
     }
-    miscEvents.push(ev)
-  }
 
-  if (miscEvents.length > 0) {
-    const start = miscEvents[0].timestamp
-    const end = miscEvents[miscEvents.length - 1].timestamp
     activities.push({
-      id: "preview-other",
-      name: "Other preview events",
-      status: inferPipelineStatus(miscEvents),
-      startedAt: start,
-      endedAt: end,
-      durationMs: durationOf(start, end),
-      events: miscEvents
+      id: `preview-misc:${activities.length}`,
+      name: formatEventTypeName(t),
+      status: OperationStatus.Success,
+      startedAt: ev.timestamp,
+      endedAt: ev.timestamp,
+      durationMs: 0,
+      events: [ev]
     })
   }
 
-  activities.sort((a, b) => a.startedAt.localeCompare(b.startedAt))
+  const lastTs = events[events.length - 1]?.timestamp ?? new Date().toISOString()
+  if (pipelineFailed && openTables.size > 0) {
+    failOpenTables(lastTs)
+  }
+
   return activities
+}
+
+function formatEventTypeName(type: string): string {
+  return type.replace(/^sync\.(preview|execute)\./, "").replace(/\./g, " ")
 }
 
 function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity[] {

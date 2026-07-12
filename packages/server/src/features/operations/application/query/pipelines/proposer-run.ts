@@ -53,8 +53,7 @@ export function buildProposerRunPipeline(runId: string, events: OperationEvent[]
 
 function groupProposerActivities(events: OperationEvent[]): OperationActivity[] {
   const activities: OperationActivity[] = []
-  const proposalEvents: OperationEvent[] = []
-  const misc: OperationEvent[] = []
+  let findings: OperationActivity | null = null
 
   for (const ev of events) {
     const t = ev.type
@@ -101,42 +100,42 @@ function groupProposerActivities(events: OperationEvent[]): OperationActivity[] 
       continue
     }
     if (t === EventType.SyncProposalCreated) {
-      proposalEvents.push(ev)
+      if (!findings) {
+        findings = {
+          id: "proposals",
+          name: "Findings ingested",
+          status: OperationStatus.Running,
+          startedAt: ev.timestamp,
+          endedAt: null,
+          durationMs: null,
+          events: [ev]
+        }
+        activities.push(findings)
+      } else {
+        findings.events.push(ev)
+      }
       continue
     }
-    misc.push(ev)
-  }
 
-  if (proposalEvents.length > 0) {
-    const start = proposalEvents[0].timestamp
-    const end = proposalEvents[proposalEvents.length - 1].timestamp
     activities.push({
-      id: "proposals",
-      name: "Findings ingested",
+      id: `misc:${activities.length}`,
+      name: t.replace(/^sync\.proposer\./, "").replace(/\./g, " "),
       status: OperationStatus.Success,
-      startedAt: start,
-      endedAt: end,
-      durationMs: durationOf(start, end),
-      summary: `${proposalEvents.length} proposal${proposalEvents.length === 1 ? "" : "s"}`,
-      events: proposalEvents,
+      startedAt: ev.timestamp,
+      endedAt: ev.timestamp,
+      durationMs: 0,
+      events: [ev]
     })
   }
 
-  if (misc.length > 0) {
-    const start = misc[0].timestamp
-    const end = misc[misc.length - 1].timestamp
-    activities.push({
-      id: "misc",
-      name: "Other events",
-      status: inferPipelineStatus(misc),
-      startedAt: start,
-      endedAt: end,
-      durationMs: durationOf(start, end),
-      events: misc,
-    })
+  if (findings) {
+    const last = findings.events[findings.events.length - 1]
+    findings.endedAt = last.timestamp
+    findings.durationMs = durationOf(findings.startedAt, last.timestamp)
+    findings.status = OperationStatus.Success
+    findings.summary = `${findings.events.length} proposal${findings.events.length === 1 ? "" : "s"}`
   }
 
-  activities.sort((a, b) => a.startedAt.localeCompare(b.startedAt))
   return activities
 }
 

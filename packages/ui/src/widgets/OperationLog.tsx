@@ -106,10 +106,18 @@ function dayLabel(iso: string): string {
 
 function matchesPipeline(p: OperationPipeline, needle: string): boolean {
   if (!needle) return true
+  const activityHay = (activities: OperationActivity[]): string[] =>
+    activities.flatMap((a) => [
+      a.name,
+      a.summary ?? "",
+      a.error ?? "",
+      ...(a.children?.flatMap((c) => [c.name, c.summary ?? "", c.error ?? ""]) ?? []),
+      ...a.events.map((e) => e.type),
+    ])
+
   const hay = [
-    p.title, p.subtitle ?? "", p.id, p.error ?? "",
-    ...p.activities.map(a => `${a.name} ${a.summary ?? ""} ${a.error ?? ""}`),
-    ...p.activities.flatMap(a => a.events.map(e => e.type)),
+    p.title, p.subtitle ?? "", p.id, p.error ?? "", p.planId ?? "",
+    ...activityHay(p.activities),
   ].join(" ").toLowerCase()
   return hay.includes(needle)
 }
@@ -156,15 +164,33 @@ const EXEC_STEP_DESCRIPTIONS: Record<string, string> = {
 }
 
 function formatActivityName(pipelineKind: OperationKind, activity: OperationActivity): string {
-  if (pipelineKind !== OperationKind.SyncExecute) return activity.name
-  if (activity.name === "Preflight checks") return activity.name
-  if (activity.name === "started") return "Started"
-  if (activity.name === "completed") return "Completed"
-  if (activity.name === "failed") return "Failed"
-  if (activity.name === "phases" || activity.name === "other events" || activity.name.startsWith("tbl:")) return activity.name
-  if (activity.name.includes(" (")) return activity.name
-  if (activity.name === "skipped" || activity.name === "Execute skipped") return "Execute skipped"
-  return humanizeToken(activity.name)
+  if (pipelineKind === OperationKind.SyncExecute) {
+    if (activity.name === "Preflight checks") return activity.name
+    if (activity.name === "started") return "Started"
+    if (activity.name === "completed") return "Completed"
+    if (activity.name === "failed") return "Failed"
+    if (activity.name === "phases" || activity.name === "other events" || activity.name.startsWith("tbl:")) return activity.name
+    if (activity.name.includes(" (")) return activity.name
+    if (activity.name === "skipped" || activity.name === "Execute skipped") return "Execute skipped"
+    return humanizeToken(activity.name)
+  }
+  if (pipelineKind === OperationKind.SyncPreview) {
+    if (activity.name === "Preflight checks") return activity.name
+    if (activity.name === "started") return "Started"
+    if (activity.name === "completed") return "Completed"
+    if (activity.name === "failed") return "Failed"
+    return activity.name
+  }
+  if (pipelineKind === OperationKind.AgentRun) {
+    if (activity.name === "Sync preview" || activity.name === "Sync execute") return activity.name
+    if (activity.name === "queued") return "Queued"
+    if (activity.name === "started") return "Started"
+    if (activity.name === "completed") return "Completed"
+    if (activity.name === "failed") return "Failed"
+    if (activity.name === "cancelled") return "Cancelled"
+    return humanizeToken(activity.name)
+  }
+  return activity.name
 }
 
 function effectiveActivityStatus(
@@ -187,7 +213,20 @@ function defaultActivitySummary(pipelineKind: OperationKind, activity: Operation
   if (activity.summary) return activity.summary
   if (pipelineKind === OperationKind.SyncExecute) {
     if (activity.status === "skipped") return activity.summary ?? activity.error
-    return EXEC_STEP_DESCRIPTIONS[activity.name] ?? undefined
+    return (
+      EXEC_STEP_DESCRIPTIONS[activity.name] ??
+      EXEC_STEP_DESCRIPTIONS[activity.name.replace(/-done$/, "Done")] ??
+      undefined
+    )
+  }
+  if (pipelineKind === OperationKind.AgentRun) {
+    const planId = activity.details?.["planId"]
+    if (typeof planId === "string" && activity.name === "Sync preview") {
+      return `Full detail in Preview pipeline · plan ${planId.slice(0, 8)}`
+    }
+    if (typeof planId === "string" && activity.name === "Sync execute") {
+      return `Full detail in Execute pipeline · plan ${planId.slice(0, 8)}`
+    }
   }
   return undefined
 }

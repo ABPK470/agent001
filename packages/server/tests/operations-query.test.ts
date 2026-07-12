@@ -387,8 +387,8 @@ describe("listOperations sync bucketing", () => {
     expect(preview).toBeDefined()
     expect(preview?.eventCount).toBe(4)
     expect(preview?.activities.some((a) => a.name === "Contract")).toBe(true)
-    expect(preview?.activities.some((a) => a.name === "Preview started")).toBe(true)
-    expect(preview?.activities.some((a) => a.name === "Preview completed")).toBe(true)
+    expect(preview?.activities.some((a) => a.name === "started")).toBe(true)
+    expect(preview?.activities.some((a) => a.name === "completed")).toBe(true)
     const contract = preview?.activities.find((a) => a.name === "Contract")
     expect(contract?.summary).toBe("100 ins · 0 upd · 0 del · 1200ms")
     expect(contract?.events).toHaveLength(2)
@@ -441,10 +441,82 @@ describe("listOperations sync bucketing", () => {
     const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const preview = result.operations[0]
-    const scope = preview.activities.find((a) => a.name === "Table scope selected")
+    const scope = preview.activities.find((a) => a.name === "Preflight checks")
 
     expect(scope?.events).toHaveLength(0)
-    expect(scope?.details).toEqual({ tableCount: 8, excludedFkOnly: ["AuditLog"] })
+    expect(scope?.details?.["decisions"]).toEqual([
+      expect.objectContaining({
+        details: { tableCount: 8, excludedFkOnly: ["AuditLog"] }
+      })
+    ])
+  })
+
+  it("orders agent run activities chronologically with sync delegation markers", async () => {
+    listEvents.mockReturnValue([
+      {
+        type: EventType.RunCompleted,
+        created_at: "2026-05-27T14:56:38.000Z",
+        data: JSON.stringify({ runId: "run-agent-1" })
+      },
+      {
+        type: EventType.SyncAgentExecuteCompleted,
+        created_at: "2026-05-27T14:56:37.500Z",
+        data: JSON.stringify({ runId: "run-agent-1", planId: "plan-1", success: true })
+      },
+      {
+        type: EventType.SyncAgentExecuteStarted,
+        created_at: "2026-05-27T14:56:34.500Z",
+        data: JSON.stringify({ runId: "run-agent-1", planId: "plan-1" })
+      },
+      {
+        type: EventType.StepCompleted,
+        created_at: "2026-05-27T14:56:34.000Z",
+        data: JSON.stringify({ runId: "run-agent-1", tool: "sync_execute", durationMs: 3200 })
+      },
+      {
+        type: EventType.StepStarted,
+        created_at: "2026-05-27T14:56:33.500Z",
+        data: JSON.stringify({ runId: "run-agent-1", tool: "sync_execute" })
+      },
+      {
+        type: EventType.SyncAgentPreview,
+        created_at: "2026-05-27T14:56:33.000Z",
+        data: JSON.stringify({
+          runId: "run-agent-1",
+          planId: "plan-1",
+          source: "dev",
+          target: "uat"
+        })
+      },
+      {
+        type: EventType.RunStarted,
+        created_at: "2026-05-27T14:56:32.000Z",
+        data: JSON.stringify({ runId: "run-agent-1", goal: "sync contract" })
+      }
+    ])
+
+    getRun.mockReturnValue({
+      status: "completed",
+      completed_at: "2026-05-27T14:56:38.000Z",
+      goal: "sync contract",
+      step_count: 1,
+      agent_id: "copilot",
+      error: null
+    })
+    getSyncRun.mockReturnValue(undefined)
+
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const agent = listOperations({ limit: 50 }).operations.find((op) => op.kind === OperationKind.AgentRun)
+
+    expect(agent?.activities.map((a) => a.name)).toEqual([
+      "started",
+      "Sync preview",
+      "sync_execute",
+      "Sync execute",
+      "completed"
+    ])
+    expect(agent?.activities[1]?.details).toEqual({ planId: "plan-1", phase: "preview" })
+    expect(agent?.activities[3]?.status).toBe(OperationStatus.Success)
   })
 
   it("uses distinct pipeline ids and keeps execute skip metadata off preview rows", async () => {
