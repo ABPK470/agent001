@@ -5,10 +5,9 @@
  * over all non-meta columns at query time. Outer-joins source and target by PK,
  * classifies each row as INSERT / UPDATE / DELETE / UNCHANGED.
  *
- * Mirrors the behaviour of legacy `core.uspSyncObjectTran`:
- *   - Excluded from comparison: validFrom, validTo, isLocked, syncDate, deployDate, identity PK
- *   - On INSERT: identity preserved (SET IDENTITY_INSERT ON), validFrom = GETUTCDATE(), validTo = NULL
- *   - On UPDATE: identity not modified; non-meta columns copied; validFrom reset
+ * Mirrors the behaviour of legacy `core.uspSyncObjectTran`.
+ * Per-table `scd2Policy` is grounded on live source/target columns at preview;
+ * strategy templates may name validFrom/validTo/etc. but only existing columns apply.
  *
  * Per-table comparisons run in parallel by the orchestrator.
  *

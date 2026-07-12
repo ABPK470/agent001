@@ -198,6 +198,37 @@ function rowsToSnapshot(
   return { tables, cols }
 }
 
+/** Live column names per qualified table (preserves catalog casing from sys.columns). */
+export async function fetchTableColumnNamesMap(
+  host: MssqlAccessHost,
+  connection: string,
+  tables: readonly string[],
+): Promise<Map<string, string[]>> {
+  const out = new Map<string, string[]>()
+  if (tables.length === 0) return out
+  for (const qn of tables) {
+    const [schema, name] = qn.split(".")
+    if (!schema || !name) {
+      out.set(qn, [])
+      continue
+    }
+    const rows = await queryWithRetry<{ name: string }>(
+      host,
+      connection,
+      `
+      SELECT c.name
+      FROM sys.columns c
+      WHERE c.object_id = OBJECT_ID('${schema.replace(/'/g, "''")}.${name.replace(/'/g, "''")}')
+      ORDER BY c.column_id
+    `,
+      2,
+      eventHostFromAccess(host),
+    )
+    out.set(qn, rows.map((row) => row.name))
+  }
+  return out
+}
+
 /**
  * Compare schemas. When `restrictTables` is provided (typically the recipe's
  * `tables[]` list), only those tables are checked — surfaces only issues

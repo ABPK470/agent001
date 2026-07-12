@@ -10,7 +10,7 @@ describe("scd2 policy stamp helpers", () => {
     expect(
       filterPolicyStampsToTargetColumns(
         { validFrom: "GETUTCDATE()", validTo: "NULL", syncDate: "GETUTCDATE()" },
-        new Set(["validFrom", "syncDate", "name"]),
+        ["validFrom", "syncDate", "name"],
       ),
     ).toEqual({
       validFrom: "GETUTCDATE()",
@@ -18,7 +18,7 @@ describe("scd2 policy stamp helpers", () => {
     })
   })
 
-  it("reports policy columns missing on target", () => {
+  it("reports omitted stamp columns as informational runtime notes", () => {
     expect(
       scd2PolicyTargetColumnIssues(
         "core.DatasetMapping",
@@ -28,6 +28,6 @@ describe("scd2 policy stamp helpers", () => {
         },
         ["datasetMappingId", "validFrom"],
       ),
-    ).toEqual(["core.DatasetMapping.validTo: missing on target (required by frozen scd2Policy)"])
+    ).toEqual(["core.DatasetMapping.validTo: stamp column absent on target (omitted at runtime)"])
   })
 })

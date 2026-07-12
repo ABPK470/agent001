@@ -8,7 +8,8 @@ import {
   isCompletionEvent,
   isFailureEvent,
   isSkippedEvent,
-  isSubStepFailureEvent
+  isSubStepFailureEvent,
+  syncExecuteCompletedHasWarnings,
 } from "@mia/agent"
 import { OperationStatus } from "./types.js"
 import type { OperationEvent } from "./types.js"
@@ -56,11 +57,19 @@ export function humanizeEntityType(value: string | null | undefined): string {
 }
 
 export function inferPipelineStatus(events: OperationEvent[]): OperationStatus {
-  const hasSubStepFailure = events.some((e) => isSubStepFailureEvent(e.type))
+  const hasSubStepFailure =
+    events.some((e) => isSubStepFailureEvent(e.type))
+    || events.some((e) => e.type === "sync.execute.completed" && syncExecuteCompletedHasWarnings(e.data))
   for (let i = events.length - 1; i >= 0; i--) {
-    const t = events[i].type
+    const ev = events[i]
+    const t = ev.type
     if (isSkippedEvent(t)) return OperationStatus.Skipped
-    if (isCompletionEvent(t)) return hasSubStepFailure ? OperationStatus.Failed : OperationStatus.Success
+    if (isCompletionEvent(t)) {
+      if (t === "sync.execute.completed" && syncExecuteCompletedHasWarnings(ev.data)) {
+        return OperationStatus.Failed
+      }
+      return hasSubStepFailure ? OperationStatus.Failed : OperationStatus.Success
+    }
     if (isFailureEvent(t)) return OperationStatus.Failed
     if (isCancellationEvent(t)) return OperationStatus.Cancelled
   }

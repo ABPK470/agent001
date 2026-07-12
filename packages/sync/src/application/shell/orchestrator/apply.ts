@@ -8,7 +8,9 @@
 
 import { type Transaction } from "mssql"
 import type { Scd2TablePolicy } from "@mia/shared-types"
-import { filterPolicyStampsToTargetColumns } from "../../../domain/entity-registry/scd2-policy.js"
+import {
+  materializeScd2PolicyForSchema,
+} from "../../../domain/entity-registry/scd2-policy.js"
 import { buildBatchWhere } from "../../../domain/diff-engine/sql-helpers.js"
 import type { SyncRuntimeHost } from "../../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
@@ -101,8 +103,8 @@ export async function fetchPkColumns(
 /**
  * Apply inserts + updates by reading source rows via the source pool and
  * writing them to the target via a temp table + MERGE.
- * Column exclusions and stamp expressions come from the frozen per-table
- * `scd2Policy` on the published definition.
+ * Column exclusions and stamp expressions come from the schema-grounded
+ * `scd2Policy` frozen on the plan at preview time.
  */
 export async function applyInsertsUpdates(
   host: SyncRuntimeHost,
@@ -112,8 +114,6 @@ export async function applyInsertsUpdates(
   pkColumns: string[],
   telemetryContext?: SyncTelemetryContext
 ): Promise<number> {
-  const policy = requireScd2Policy(plan, tableName)
-  const excluded = new Set(policy.excludeFromDiff)
   const tableResult = plan.tables.find((t: SyncPlanTable) => t.table === tableName)
   if (!tableResult) return 0
   if (pkColumns.length === 0) throw new Error(`No PK for ${tableName} — cannot MERGE.`)
@@ -128,7 +128,7 @@ export async function applyInsertsUpdates(
   )
   if (rows.length === 0) return 0
 
-  // 2. Discover columns from target metadata (not source row keys — schemas may diverge).
+  // Discover columns from target metadata (not source row keys — schemas may diverge).
   const colResult = await trackedQuery(
     host,
     plan.target,
@@ -147,10 +147,15 @@ export async function applyInsertsUpdates(
     is_identity: boolean
     is_computed: boolean
   }>
+  const policy = materializeScd2PolicyForSchema(
+    requireScd2Policy(plan, tableName),
+    Object.keys(rows[0]!),
+    targetCols.map((c) => c.name),
+  ).policy
+  const excluded = new Set(policy.excludeFromDiff)
   const identityCol = targetCols.find((c) => c.is_identity)?.name ?? null
-  const targetColNames = new Set(targetCols.map((c) => c.name))
-  const onInsertStamps = filterPolicyStampsToTargetColumns(policy.onInsert, targetColNames)
-  const onUpdateStamps = filterPolicyStampsToTargetColumns(policy.onUpdate, targetColNames)
+  const onInsertStamps = policy.onInsert
+  const onUpdateStamps = policy.onUpdate
   const allSourceCols = new Set(Object.keys(rows[0]))
   const omitIdentity = policy.identityHandling === "omit-identity-column"
 

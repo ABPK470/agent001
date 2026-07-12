@@ -10,8 +10,9 @@ import { computePlanTotals, movementFromChangeSet } from "@mia/shared-types"
 import { randomUUID } from "node:crypto"
 import { resolvePreviewTableConcurrency } from "../../../adapters/mssql/pool-concurrency.js"
 import { requirePublishedFlowCatalog } from "../../../domain/flow-catalog.js"
-import { detectCatalogDrift } from "../../../domain/catalog-drift.js"
+import { detectCatalogDrift, fetchTableColumnNamesMap } from "../../../domain/catalog-drift.js"
 import { selectDefinitionTables, type SyncEntityId } from "../../../domain/definition-selection.js"
+import { materializeDefinitionTablesForSchema } from "../../../domain/entity-registry/materialize-scd2-for-schema.js"
 import { coerceSyncEntityId } from "../../../domain/entity-instance-ref.js"
 import { buildDependencyGraph, diffTable } from "../../../domain/diff-engine/index.js"
 import { assertSupportedSyncDirection, getEnvironment } from "../../../domain/environments.js"
@@ -172,6 +173,18 @@ async function previewSyncInner(
       }
     }
 
+    const tableNames = activeTables.map((t) => t.name)
+    const [sourceColumnsByTable, targetColumnsByTable] = await Promise.all([
+      fetchTableColumnNamesMap(input.host, input.source, tableNames),
+      fetchTableColumnNamesMap(input.host, input.target, tableNames),
+    ])
+    const materialized = materializeDefinitionTablesForSchema(
+      activeTables,
+      sourceColumnsByTable,
+      targetColumnsByTable,
+    )
+    const schemaGroundedTables = materialized.tables
+
     // Per-table diff with bounded concurrency. Going wider exhausts the mssql
     // pool and produces "Connection is closed" cascades that flap classification
     // between runs (a failed table reports counts:0/0/0/0 instead of its real
@@ -179,16 +192,16 @@ async function previewSyncInner(
     const pkColumnsByTable = await fetchPkColumns(
       input.host,
       input.source,
-      activeTables.map((t) => t.name)
+      schemaGroundedTables.map((t) => t.name)
     )
     const tableConcurrency = resolvePreviewTableConcurrency(
       input.host,
       input.source,
       input.target
     )
-    const tableTotal = activeTables.length
+    const tableTotal = schemaGroundedTables.length
     const tableResults: SyncPlanTable[] = await mapWithConcurrency(
-      activeTables.map((t, tableIndex) => ({ t, tableIndex })),
+      schemaGroundedTables.map((t, tableIndex) => ({ t, tableIndex })),
       tableConcurrency,
       async ({ t, tableIndex }) => {
         const tableT0 = Date.now()
@@ -280,7 +293,28 @@ async function previewSyncInner(
       )
     }
 
+    if (materialized.omissionSummaries.length > 0) {
+      warnings.push(
+        ...materialized.omissionSummaries.map((line) => `[scd2-schema] ${line}`),
+      )
+    }
+
     const decisionLog = [
+      {
+        id: "scd2-schema-grounding",
+        recordedAt: createdAt,
+        stage: "preview" as const,
+        category: "definition" as const,
+        severity: materialized.omissionSummaries.length > 0 ? ("info" as const) : ("info" as const),
+        title: "SCD2 policy grounded on live schema",
+        summary:
+          materialized.omissionSummaries.length > 0
+            ? `${materialized.omissionSummaries.length} table(s): strategy columns omitted where absent on source/target.`
+            : "All strategy columns present on synced tables for this plan.",
+        details: {
+          omissions: materialized.omissionSummaries,
+        },
+      },
       {
         id: "definition-contract",
         recordedAt: createdAt,
@@ -400,7 +434,7 @@ async function previewSyncInner(
           rootTable: definition.rootTable,
           rootKeyColumn: definition.idColumn,
           selfJoinColumn: definition.selfJoinColumn,
-          tables: activeTables.map((t) => ({
+          tables: schemaGroundedTables.map((t) => ({
             name: t.name,
             scopeColumn: t.scopeColumn,
             predicate: t.predicate,

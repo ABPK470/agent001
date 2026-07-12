@@ -129,13 +129,95 @@ export function toScd2TablePolicy(policy: Pick<Scd2Strategy, "excludeFromDiff" |
   }
 }
 
+/** Case-insensitive column lookup; returns the policy spelling when present on the table. */
+export function resolveColumnOnTable(requested: string, available: Iterable<string>): string | null {
+  const lower = requested.trim().toLowerCase()
+  if (!lower) return null
+  for (const col of available) {
+    if (col.trim().toLowerCase() === lower) return requested.trim()
+  }
+  return null
+}
+
+export interface Scd2PolicySchemaOmissions {
+  excludeFromDiff: string[]
+  onInsert: string[]
+  onUpdate: string[]
+}
+
+/**
+ * Ground-truth SCD2 policy for one table: intersect strategy/template fields with
+ * live source (diff exclusions) and target (MERGE stamps) columns.
+ * Strategy presets may name validFrom/validTo/etc.; omit anything absent on this table.
+ */
+export function materializeScd2PolicyForSchema(
+  base: Scd2TablePolicy,
+  sourceColumns: Iterable<string>,
+  targetColumns: Iterable<string>,
+): { policy: Scd2TablePolicy; omitted: Scd2PolicySchemaOmissions } {
+  const src = [...sourceColumns]
+  const tgt = [...targetColumns]
+
+  const excludeFromDiff: string[] = []
+  const omittedExclude: string[] = []
+  for (const col of base.excludeFromDiff) {
+    if (resolveColumnOnTable(col, src)) excludeFromDiff.push(col.trim())
+    else omittedExclude.push(col.trim())
+  }
+
+  const onInsert: Record<string, string> = {}
+  const omittedInsert: string[] = []
+  for (const [col, expr] of Object.entries(base.onInsert)) {
+    if (resolveColumnOnTable(col, tgt)) onInsert[col.trim()] = expr
+    else omittedInsert.push(col.trim())
+  }
+
+  const onUpdate: Record<string, string> = {}
+  const omittedUpdate: string[] = []
+  for (const [col, expr] of Object.entries(base.onUpdate)) {
+    if (resolveColumnOnTable(col, tgt)) onUpdate[col.trim()] = expr
+    else omittedUpdate.push(col.trim())
+  }
+
+  return {
+    policy: {
+      excludeFromDiff: dedupeColumns(excludeFromDiff),
+      onInsert,
+      onUpdate,
+      identityHandling: base.identityHandling,
+    },
+    omitted: {
+      excludeFromDiff: dedupeColumns(omittedExclude),
+      onInsert: dedupeColumns(omittedInsert),
+      onUpdate: dedupeColumns(omittedUpdate),
+    },
+  }
+}
+
+export function formatScd2PolicyOmissionSummary(
+  tableName: string,
+  omitted: Scd2PolicySchemaOmissions,
+): string | null {
+  const parts: string[] = []
+  if (omitted.excludeFromDiff.length > 0) {
+    parts.push(`excludeFromDiff: ${omitted.excludeFromDiff.join(", ")}`)
+  }
+  if (omitted.onInsert.length > 0) parts.push(`onInsert: ${omitted.onInsert.join(", ")}`)
+  if (omitted.onUpdate.length > 0) parts.push(`onUpdate: ${omitted.onUpdate.join(", ")}`)
+  if (parts.length === 0) return null
+  return `${tableName} — strategy columns not on this table (${parts.join("; ")})`
+}
+
 /** Keep only stamp expressions for columns that exist on the target table. */
 export function filterPolicyStampsToTargetColumns(
   stamps: Record<string, string>,
   targetColumns: Iterable<string>,
 ): Record<string, string> {
-  const names = new Set(Array.from(targetColumns, (c) => c.trim()).filter(Boolean))
-  return Object.fromEntries(Object.entries(stamps).filter(([col]) => names.has(col)))
+  const out: Record<string, string> = {}
+  for (const [col, expr] of Object.entries(stamps)) {
+    if (resolveColumnOnTable(col, targetColumns)) out[col.trim()] = expr
+  }
+  return out
 }
 
 export function scd2PolicyTargetColumnIssues(
@@ -143,18 +225,24 @@ export function scd2PolicyTargetColumnIssues(
   policy: Pick<Scd2TablePolicy, "onInsert" | "onUpdate">,
   targetColumns: Iterable<string>,
 ): string[] {
-  const names = new Set(Array.from(targetColumns, (c) => c.trim().toLowerCase()).filter(Boolean))
-  const required = new Set([
-    ...Object.keys(policy.onInsert),
-    ...Object.keys(policy.onUpdate),
-  ])
+  const omitted = materializeScd2PolicyForSchema(
+    {
+      excludeFromDiff: [],
+      onInsert: policy.onInsert,
+      onUpdate: policy.onUpdate,
+      identityHandling: "none",
+    },
+    [],
+    targetColumns,
+  ).omitted
   const issues: string[] = []
-  for (const col of required) {
-    if (!names.has(col.trim().toLowerCase())) {
-      issues.push(`${tableName}.${col}: missing on target (required by frozen scd2Policy)`)
-    }
+  for (const col of omitted.onInsert) {
+    issues.push(`${tableName}.${col}: stamp column absent on target (omitted at runtime)`)
   }
-  return issues
+  for (const col of omitted.onUpdate) {
+    issues.push(`${tableName}.${col}: stamp column absent on target (omitted at runtime)`)
+  }
+  return [...new Set(issues)]
 }
 
 export function dedupeColumns(columns: readonly string[]): string[] {

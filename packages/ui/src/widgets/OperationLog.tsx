@@ -768,7 +768,12 @@ function pickEventSummary(ev: OperationEvent): string {
     const applied = ev.data["applied"]
     if (applied && typeof applied === "object") {
       const counts = applied as Record<string, unknown>
-      return `${counts["insert"] ?? 0} ins · ${counts["update"] ?? 0} upd · ${counts["delete"] ?? 0} del`
+      const base = `${counts["insert"] ?? 0} ins · ${counts["update"] ?? 0} upd · ${counts["delete"] ?? 0} del`
+      const warnings = ev.data["warnings"]
+      if (Array.isArray(warnings) && warnings.length > 0) {
+        return `${base} · ${warnings.length} deploy failure(s)`
+      }
+      return base
     }
   }
   if (ev.type === "sync.preview.started") {

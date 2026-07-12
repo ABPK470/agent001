@@ -4,7 +4,7 @@
  */
 
 import { EventType } from "@mia/agent"
-import { SyncRunStatus } from "@mia/shared-enums"
+import { SyncRunStatus, syncExecuteCompletedHasWarnings } from "@mia/shared-enums"
 import { readSseEntityId } from "@mia/shared-types"
 import { OperationKind, OperationStatus } from "../../../../../shared/enums/operations.js"
 import * as db from "../../../../../platform/persistence/sqlite.js"
@@ -30,11 +30,14 @@ export function buildSyncPipeline(
   const startedAt = events[0].timestamp
   const lastEv = events[events.length - 1]
   const inferred = inferPipelineStatus(events)
+  const executeCompletedWithWarnings = events.some(
+    (ev) => ev.type === EventType.SyncExecuteCompleted && syncExecuteCompletedHasWarnings(ev.data),
+  )
   const status: OperationStatus =
     kind === OperationKind.SyncExecute
-      ? meta?.status === SyncRunStatus.Success
+      ? meta?.status === SyncRunStatus.Success && !executeCompletedWithWarnings
         ? OperationStatus.Success
-        : meta?.status === SyncRunStatus.Failed
+        : meta?.status === SyncRunStatus.Failed || executeCompletedWithWarnings
           ? OperationStatus.Failed
           : meta?.status === SyncRunStatus.Skipped
             ? OperationStatus.Skipped
@@ -313,6 +316,12 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       const applied = ev.data["applied"] as Record<string, unknown> | undefined
       if (applied) {
         summary = `${applied["insert"] ?? 0} ins · ${applied["update"] ?? 0} upd · ${applied["delete"] ?? 0} del`
+      }
+      const warnings = ev.data["warnings"] as Array<{ step: string; error: string }> | undefined
+      if (warnings && warnings.length > 0) {
+        status = OperationStatus.Failed
+        error = warnings.map((w) => `${w.step}: ${w.error}`).join("; ")
+        summary = summary ? `${summary} · ${warnings.length} deploy failure(s)` : `${warnings.length} deploy failure(s)`
       }
     } else if (type === EventType.SyncExecuteFailed) {
       status = OperationStatus.Failed

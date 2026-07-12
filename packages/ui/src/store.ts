@@ -797,8 +797,18 @@ function formatLogEntryInner(
         const dur = data["durationMs"] as number | undefined
         const durStr = dur != null ? ` in ${(dur / 1000).toFixed(1)}s` : ""
         const warns = data["warnings"] as Array<{ step: string; error: string }> | undefined
-        const warnStr = warns && warns.length > 0 ? ` (${warns.length} warning${warns.length === 1 ? "" : "s"})` : ""
-        return { type: t, error: !!(warns && warns.length > 0), message: `Execute complete — plan ${planId}${durStr}${warnStr}`, timestamp }
+        const hasWarnings = Array.isArray(warns) && warns.length > 0
+        const warnStr = hasWarnings
+          ? ` — ${warns!.length} deploy failure${warns!.length === 1 ? "" : "s"}`
+          : ""
+        return {
+          type: t,
+          error: hasWarnings,
+          message: hasWarnings
+            ? `Execute finished with deploy failures — plan ${planId}${durStr}${warnStr}`
+            : `Execute complete — plan ${planId}${durStr}`,
+          timestamp,
+        }
       }
       case "sync.execute.failed":
         return {

@@ -356,6 +356,12 @@ export function isSubStepFailureEvent(t: EventType): boolean {
   return SUB_STEP_FAILURE_EVENTS.has(t)
 }
 
+/** Execute completed but post-metadata deploy steps reported failures. */
+export function syncExecuteCompletedHasWarnings(data: Record<string, unknown>): boolean {
+  const warnings = data["warnings"]
+  return Array.isArray(warnings) && warnings.length > 0
+}
+
 export function isTerminalRunEvent(t: EventType): boolean {
   return (
     t === EventType.RunCompleted ||
