@@ -813,8 +813,8 @@ Steps below are the **default** order from `deploy/sync/artifacts/flow-templates
 | 17 | `contract-deploy-routine` | post-metadata | `contractDeployRoutine` | Deploy routines |
 | 18 | `contract-post-script` | post-metadata | `contractPostScript` | Post-deploy scripts |
 | 19 | `contract-unlock-after-deploy` | post-metadata | `targetUnlock` | Unlock after deploy |
-| 20 | `set-sync-date` | post-metadata | `syncDate` | Stamp sync date (source audit) |
-| 21 | `set-deploy-date` | post-metadata | `deployDate` | Stamp deploy date (target audit) |
+| 20 | `setSyncDate` | post-metadata | `syncDate` | Stamp sync date (source audit) |
+| 21 | `setDeployDate` | post-metadata | `deployDate` | Stamp deploy date (target audit) |
 
 Steps 4–21 are **not** rolled back if a later step fails.
 
@@ -824,7 +824,7 @@ Steps 4–21 are **not** rolled back if a later step fails.
 |---|---------|------|
 | 1 | `metadataSync` | `metadataSync` |
 | 2 | `dataset-deploy` | `datasetDeploy` (ETL HTTP) |
-| 3 | `sync-date` | `syncDate` |
+| 3 | `syncDate` | `syncDate` |
 
 #### `rule` (6 steps)
 
@@ -834,8 +834,8 @@ Steps 4–21 are **not** rolled back if a later step fails.
 | 2 | `dataset-deploy` | `datasetDeploy` (input dataset via `ruleInputDatasetId`) |
 | 3 | `rules-deploy` | `rulesDeploy` |
 | 4 | `handle-dependencies` | `handleDependencies` |
-| 5 | `sync-date` | `syncDate` |
-| 6 | `deploy-date` | `deployDate` |
+| 5 | `syncDate` | `syncDate` |
+| 6 | `deployDate` | `deployDate` |
 
 #### `pipelineActivity` (2 steps)
 

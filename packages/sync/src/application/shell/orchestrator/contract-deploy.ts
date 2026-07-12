@@ -351,7 +351,7 @@ export async function deployRoutine(
 // Audit check
 // ────────────────────────────────────────────────────────────
 
-type AuditAction = "deploy-date" | "sync-date" | "runOrNot" | "syncOrNot"
+type AuditAction = "deployDate" | "syncDate" | "runOrNot" | "syncOrNot"
 
 /**
  * Enforce legacy `uspAuditRunCheck` gate semantics for syncOrNot/runOrNot.
@@ -386,7 +386,7 @@ export function assertAuditGateAllowsProceed(
  * Calls `core.uspAuditRunCheck` on the given pool (source or target).
  * The proc handles all four actions internally:
  *   - `syncOrNot` / `runOrNot` — returns status=success|stop (stop → {@link AuditGateSkippedError})
- *   - `deploy-date` / `sync-date` — stamps the date, returns success
+ *   - `deployDate` / `syncDate` — stamps the date, returns success
  */
 export async function runAuditCheckDirect(
   host: SyncRuntimeHost,
@@ -420,8 +420,8 @@ type AuditGateAction = "syncOrNot" | "runOrNot"
 
 /**
  * Legacy Mymi: `uspAuditRunCheck` gate actions (`syncOrNot` / `runOrNot`) run on the
- * sync **source** environment (system-of-record). Date stamps use source (`sync-date`)
- * or target (`deploy-date`) explicitly at call sites.
+ * sync **source** environment (system-of-record). Date stamps use source (`syncDate`)
+ * or target (`deployDate`) explicitly at call sites.
  */
 export async function runContractAuditGateOnSource(
   host: SyncRuntimeHost,

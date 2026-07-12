@@ -45,7 +45,7 @@ describe("shipped SCD2 strategies artifact", () => {
 
   it("mymi-scd2 mirrors the legacy core.uspSyncObjectTran exclusions", () => {
     const s = shippedStrategyById(repoRoot, "mymi-scd2")!
-    expect(s.excludeFromDiff).toEqual(["validFrom", "validTo", "isLocked", "sync-date", "deploy-date"])
+    expect(s.excludeFromDiff).toEqual(["validFrom", "validTo", "isLocked", "syncDate", "deployDate"])
     expect(s.identityHandling).toBe("setIdentityInsertOn")
     expect(s.onInsert).toEqual({ validFrom: "GETUTCDATE()", validTo: "NULL" })
   })
@@ -163,7 +163,7 @@ describe("resolveEffectiveScd2 — legacy strategy normalization", () => {
       validFromCol: "validFrom",
       validToCol: "validTo",
       isLockedCol: "isLocked",
-      excludedFromDiffCols: ["sync-date"],
+      excludedFromDiffCols: ["syncDate"],
     } as Scd2Strategy & {
       validFromCol: string
       validToCol: string
@@ -173,7 +173,7 @@ describe("resolveEffectiveScd2 — legacy strategy normalization", () => {
     }
     const eff = resolveEffectiveScd2({ strategy: legacy, entityOverride: null, table: table() })
     expect(eff.excludeFromDiff).toEqual(
-      expect.arrayContaining(["validFrom", "validTo", "isLocked", "sync-date"]),
+      expect.arrayContaining(["validFrom", "validTo", "isLocked", "syncDate"]),
     )
   })
 })

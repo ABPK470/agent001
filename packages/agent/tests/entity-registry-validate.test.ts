@@ -385,7 +385,7 @@ describe("validateScd2Strategy", () => {
 
   it("accepts hyphenated legacy ABI column names", () => {
     const r = validateScd2Strategy(
-      validStrategy({ excludeFromDiff: ["validFrom", "sync-date", "deploy-date"] }),
+      validStrategy({ excludeFromDiff: ["validFrom", "syncDate", "deployDate"] }),
     )
     expect(r.ok).toBe(true)
   })

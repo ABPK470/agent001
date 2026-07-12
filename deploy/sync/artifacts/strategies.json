@@ -6,7 +6,7 @@
       "id": "mymi-scd2",
       "displayName": "Mymi ABI SCD2",
       "description": "Validity range + lock/sync/deploy audit columns excluded from diff; identity insert enabled.",
-      "excludeFromDiff": ["validFrom", "validTo", "isLocked", "sync-date", "deploy-date"],
+      "excludeFromDiff": ["validFrom", "validTo", "isLocked", "syncDate", "deployDate"],
       "onInsert": { "validFrom": "GETUTCDATE()", "validTo": "NULL" },
       "onUpdate": { "validFrom": "GETUTCDATE()", "validTo": "NULL" },
       "identityHandling": "setIdentityInsertOn",

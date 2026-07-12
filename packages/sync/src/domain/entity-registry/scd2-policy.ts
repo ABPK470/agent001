@@ -176,7 +176,7 @@ export const SCD2_STRATEGY_PRESETS: readonly Scd2StrategyPreset[] = [
     label: "Mymi ABI preset",
     description: "Validity range plus lock/sync/deploy audit columns excluded from diff.",
     strategy: {
-      excludeFromDiff: ["validFrom", "validTo", "isLocked", "sync-date", "deploy-date"],
+      excludeFromDiff: ["validFrom", "validTo", "isLocked", "syncDate", "deployDate"],
       onInsert: { validFrom: "GETUTCDATE()", validTo: "NULL" },
       onUpdate: { validFrom: "GETUTCDATE()", validTo: "NULL" },
       identityHandling: "setIdentityInsertOn",

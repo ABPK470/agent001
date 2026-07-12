@@ -7,6 +7,7 @@
 import type Database from "better-sqlite3"
 import { runBaselineMigration } from "./0001_baseline.js"
 import { runRunToolApprovalsMigration } from "./0002_run_tool_approvals.js"
+import { runScd2ColumnCamelcaseMigration } from "./0003_scd2_column_camelcase.js"
 
 export interface Migration {
   version: number
@@ -17,6 +18,7 @@ export interface Migration {
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
   { version: 2, name: "run_tool_approvals", up: runRunToolApprovalsMigration },
+  { version: 3, name: "scd2_column_camelcase", up: runScd2ColumnCamelcaseMigration },
 ]
 
 export function runMigrations(db: Database.Database): void {
