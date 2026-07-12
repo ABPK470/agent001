@@ -31,6 +31,50 @@ import { sseStepDedupeToken } from "@mia/shared-types"
 
 export { OperationKind, OperationStatus }
 
+export type SyncRunStatus = "started" | "preview" | "success" | "failed" | "skipped"
+
+export type SyncHistorySort = "started_desc" | "started_asc" | "finished_desc" | "finished_asc"
+
+export interface SyncRunSummary {
+  planId: string
+  entityType: string
+  entityId: string
+  entityDisplayName: string | null
+  source: string
+  target: string
+  actorUpn: string | null
+  status: SyncRunStatus
+  error: string | null
+  previewTotals: { insert: number; update: number; delete: number }
+  executeTotals: { insert: number; update: number; delete: number } | null
+  startedAt: string
+  finishedAt: string | null
+  durationMs: number | null
+  planAvailable: boolean
+}
+
+export interface SyncHistoryParams {
+  page?: number
+  pageSize?: number
+  q?: string
+  status?: SyncRunStatus[]
+  entityType?: string
+  actorUpn?: string
+  source?: string
+  target?: string
+  from?: string
+  to?: string
+  sort?: SyncHistorySort
+}
+
+export interface SyncHistoryPage {
+  items: SyncRunSummary[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
 const BASE = ""
 
 // ── REST API ─────────────────────────────────────────────────────
@@ -564,49 +608,24 @@ export const api = {
       `/api/sync/execute/${encodeURIComponent(planId)}`,
       { method: "POST" },
     ),
-  syncHistory: (page = 1, pageSize = 25) =>
-    json<{
-      items: Array<{
-        planId: string
-        entityType: string
-        entityId: string
-        entityDisplayName: string | null
-        source: string
-        target: string
-        actorUpn: string | null
-        status: "started" | "preview" | "success" | "failed"
-        error: string | null
-        previewTotals: { insert: number; update: number; delete: number }
-        executeTotals: { insert: number; update: number; delete: number } | null
-        startedAt: string
-        finishedAt: string | null
-        durationMs: number | null
-        planAvailable: boolean
-      }>
-      total: number
-      page: number
-      pageSize: number
-      totalPages: number
-    }>(`/api/sync/history?page=${page}&pageSize=${pageSize}`),
+  syncHistory: (params: SyncHistoryParams = {}) => {
+    const sp = new URLSearchParams()
+    sp.set("page", String(params.page ?? 1))
+    sp.set("pageSize", String(params.pageSize ?? 25))
+    if (params.q?.trim()) sp.set("q", params.q.trim())
+    if (params.status?.length) sp.set("status", params.status.join(","))
+    if (params.entityType?.trim()) sp.set("entityType", params.entityType.trim())
+    if (params.actorUpn?.trim()) sp.set("actorUpn", params.actorUpn.trim())
+    if (params.source?.trim()) sp.set("source", params.source.trim())
+    if (params.target?.trim()) sp.set("target", params.target.trim())
+    if (params.from?.trim()) sp.set("from", params.from.trim())
+    if (params.to?.trim()) sp.set("to", params.to.trim())
+    if (params.sort) sp.set("sort", params.sort)
+    return json<SyncHistoryPage>(`/api/sync/history?${sp}`)
+  },
   syncHistoryDetail: (planId: string) =>
     json<{
-      run: {
-        planId: string
-        entityType: string
-        entityId: string
-        entityDisplayName: string | null
-        source: string
-        target: string
-        actorUpn: string | null
-        status: "started" | "preview" | "success" | "failed"
-        error: string | null
-        previewTotals: { insert: number; update: number; delete: number }
-        executeTotals: { insert: number; update: number; delete: number } | null
-        startedAt: string
-        finishedAt: string | null
-        durationMs: number | null
-        planAvailable: boolean
-      }
+      run: SyncRunSummary
       audit: Array<{
         action: string
         actor: string
@@ -617,23 +636,7 @@ export const api = {
     }>(`/api/sync/history/${encodeURIComponent(planId)}`),
   /** Recent sync execution runs — used to restore the EnvSync widget on cold start. */
   syncRuns: (limit = 25) =>
-    json<Array<{
-      planId: string
-      entityType: string
-      entityId: string
-      entityDisplayName: string | null
-      source: string
-      target: string
-      actorUpn: string | null
-      status: "started" | "preview" | "success" | "failed"
-      error: string | null
-      previewTotals: { insert: number; update: number; delete: number }
-      executeTotals: { insert: number; update: number; delete: number } | null
-      startedAt: string
-      finishedAt: string | null
-      durationMs: number | null
-      planAvailable?: boolean
-    }>>(`/api/sync/runs?limit=${limit}`),
+    json<Array<SyncRunSummary & { planAvailable?: boolean }>>(`/api/sync/runs?limit=${limit}`),
 
   /**
    * Recent persisted events from the unified `event_log` table.

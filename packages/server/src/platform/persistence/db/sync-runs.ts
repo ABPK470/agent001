@@ -163,20 +163,92 @@ export function listSyncRuns(limit = 50): SyncRunRow[] {
     .all(limit) as SyncRunRow[]
 }
 
-export interface ListSyncRunsPaginatedInput {
-  page: number
-  pageSize: number
+export type SyncRunHistorySort =
+  | "started_desc"
+  | "started_asc"
+  | "finished_desc"
+  | "finished_asc"
+
+export interface SyncRunHistoryFilters {
   actorUpn?: string | null
+  search?: string
+  status?: SyncRunStatus[]
+  entityType?: string
+  source?: string
+  target?: string
+  startedAfter?: string
+  startedBefore?: string
 }
 
-export function countSyncRuns(opts?: { actorUpn?: string | null }): number {
-  if (opts?.actorUpn) {
-    const row = getDb()
-      .prepare(`SELECT COUNT(1) AS c FROM sync_runs WHERE actor_upn = ?`)
-      .get(opts.actorUpn) as { c: number }
-    return row.c
+export interface ListSyncRunsPaginatedInput extends SyncRunHistoryFilters {
+  page: number
+  pageSize: number
+  sort?: SyncRunHistorySort
+}
+
+function syncRunHistoryOrderBy(sort: SyncRunHistorySort = "started_desc"): string {
+  switch (sort) {
+    case "started_asc":
+      return "started_at ASC"
+    case "finished_desc":
+      return "finished_at IS NULL, finished_at DESC"
+    case "finished_asc":
+      return "finished_at ASC"
+    default:
+      return "started_at DESC"
   }
-  const row = getDb().prepare(`SELECT COUNT(1) AS c FROM sync_runs`).get() as { c: number }
+}
+
+function buildSyncRunHistoryWhere(filters: SyncRunHistoryFilters): { where: string; params: unknown[] } {
+  const clauses: string[] = []
+  const params: unknown[] = []
+
+  if (filters.actorUpn) {
+    clauses.push("actor_upn = ?")
+    params.push(filters.actorUpn)
+  }
+  if (filters.status?.length) {
+    clauses.push(`status IN (${filters.status.map(() => "?").join(", ")})`)
+    params.push(...filters.status)
+  }
+  if (filters.entityType?.trim()) {
+    clauses.push("entity_type = ?")
+    params.push(filters.entityType.trim())
+  }
+  if (filters.source?.trim()) {
+    clauses.push("source = ?")
+    params.push(filters.source.trim())
+  }
+  if (filters.target?.trim()) {
+    clauses.push("target = ?")
+    params.push(filters.target.trim())
+  }
+  if (filters.startedAfter?.trim()) {
+    clauses.push("started_at >= ?")
+    params.push(filters.startedAfter.trim())
+  }
+  if (filters.startedBefore?.trim()) {
+    clauses.push("started_at <= ?")
+    params.push(`${filters.startedBefore.trim()} 23:59:59`)
+  }
+  const search = filters.search?.trim()
+  if (search) {
+    const q = `%${search}%`
+    clauses.push(
+      `(entity_display_name LIKE ? OR entity_id LIKE ? OR entity_type LIKE ? OR plan_id LIKE ? OR source LIKE ? OR target LIKE ? OR actor_upn LIKE ?)`
+    )
+    params.push(q, q, q, q, q, q, q)
+  }
+
+  return {
+    where: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "",
+    params
+  }
+}
+
+export function countSyncRuns(filters: SyncRunHistoryFilters = {}): number {
+  const { where, params } = buildSyncRunHistoryWhere(filters)
+  const row = getDb().prepare(`SELECT COUNT(1) AS c FROM sync_runs ${where}`).get(...params) as { c: number }
   return row.c
 }
 
@@ -184,16 +256,11 @@ export function listSyncRunsPaginated(input: ListSyncRunsPaginatedInput): SyncRu
   const page = Math.max(1, input.page)
   const pageSize = Math.max(1, input.pageSize)
   const offset = (page - 1) * pageSize
-  if (input.actorUpn) {
-    return getDb()
-      .prepare(
-        `SELECT * FROM sync_runs WHERE actor_upn = ? ORDER BY started_at DESC LIMIT ? OFFSET ?`
-      )
-      .all(input.actorUpn, pageSize, offset) as SyncRunRow[]
-  }
+  const { where, params } = buildSyncRunHistoryWhere(input)
+  const orderBy = syncRunHistoryOrderBy(input.sort)
   return getDb()
-    .prepare(`SELECT * FROM sync_runs ORDER BY started_at DESC LIMIT ? OFFSET ?`)
-    .all(pageSize, offset) as SyncRunRow[]
+    .prepare(`SELECT * FROM sync_runs ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
+    .all(...params, pageSize, offset) as SyncRunRow[]
 }
 
 export function getSyncRun(planId: string): SyncRunRow | undefined {

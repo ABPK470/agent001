@@ -94,11 +94,18 @@ export function Empty({ envs, blocker, srcEnv, tgtEnv, hasDefinitions }: {
   )
 }
 
-export function EmptyHistory() {
+export function EmptyHistory({
+  message = "No sync history yet",
+  action,
+}: {
+  message?: string
+  action?: ReactNode
+}) {
   return (
     <div className="flex flex-col items-center justify-center min-h-[200px] text-text-muted gap-2 py-12">
       <History size={20} className="opacity-40" />
-      <p className="text-sm">No sync history yet</p>
+      <p className="text-sm">{message}</p>
+      {action}
     </div>
   )
 }

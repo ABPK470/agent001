@@ -3,7 +3,7 @@
  */
 
 import { type AgentHost } from "@mia/agent"
-import { EventType } from "@mia/shared-enums"
+import { EventType, isSyncRunStatus, type SyncRunStatus } from "@mia/shared-enums"
 import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import {
   executeSync,
@@ -124,6 +124,60 @@ function auditSync(
     db.recordSyncAudit({ planId, actor, actorUpn, action, detail })
   } catch (error) {
     console.error("auditSync failed:", error instanceof Error ? error.message : error)
+  }
+}
+
+const SYNC_HISTORY_SORTS = ["started_desc", "started_asc", "finished_desc", "finished_asc"] as const
+type SyncHistorySort = (typeof SYNC_HISTORY_SORTS)[number]
+
+function parseSyncHistoryStatuses(raw: string | undefined): SyncRunStatus[] | undefined {
+  if (!raw?.trim()) return undefined
+  const statuses = raw
+    .split(",")
+    .map((value) => value.trim())
+    .filter(isSyncRunStatus)
+  return statuses.length > 0 ? statuses : undefined
+}
+
+function parseSyncHistorySort(raw: string | undefined): SyncHistorySort {
+  if (raw && (SYNC_HISTORY_SORTS as readonly string[]).includes(raw)) {
+    return raw as SyncHistorySort
+  }
+  return "started_desc"
+}
+
+function parseSyncHistoryQuery(
+  query: {
+    page?: string
+    pageSize?: string
+    q?: string
+    status?: string
+    entityType?: string
+    actorUpn?: string
+    source?: string
+    target?: string
+    from?: string
+    to?: string
+    sort?: string
+  },
+  viewerUpn: string | undefined,
+  isAdmin: boolean
+): db.ListSyncRunsPaginatedInput {
+  const page = Math.max(1, Number(query.page) || 1)
+  const pageSize = Math.min(100, Math.max(1, Number(query.pageSize) || 25))
+  const actorUpn = isAdmin ? query.actorUpn?.trim() || undefined : viewerUpn
+  return {
+    page,
+    pageSize,
+    actorUpn,
+    search: query.q?.trim() || undefined,
+    status: parseSyncHistoryStatuses(query.status),
+    entityType: query.entityType?.trim() || undefined,
+    source: query.source?.trim() || undefined,
+    target: query.target?.trim() || undefined,
+    startedAfter: query.from?.trim() || undefined,
+    startedBefore: query.to?.trim() || undefined,
+    sort: parseSyncHistorySort(query.sort)
   }
 }
 
@@ -515,24 +569,32 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     }
   })
 
-  app.get<{ Querystring: { page?: string; pageSize?: string } }>("/api/sync/history", async (req) => {
+  app.get<{
+    Querystring: {
+      page?: string
+      pageSize?: string
+      q?: string
+      status?: string
+      entityType?: string
+      actorUpn?: string
+      source?: string
+      target?: string
+      from?: string
+      to?: string
+      sort?: string
+    }
+  }>("/api/sync/history", async (req) => {
     const isAdmin = !!req.session.isAdmin
     const viewerUpn = req.session.upn
-    const page = Math.max(1, Number(req.query.page) || 1)
-    const pageSize = Math.min(100, Math.max(1, Number(req.query.pageSize) || 25))
-    const actorFilter = isAdmin ? undefined : viewerUpn
-    const total = db.countSyncRuns(actorFilter ? { actorUpn: actorFilter } : undefined)
-    const rows = db.listSyncRunsPaginated({
-      page,
-      pageSize,
-      actorUpn: actorFilter
-    })
-    const totalPages = total === 0 ? 0 : Math.ceil(total / pageSize)
+    const filters = parseSyncHistoryQuery(req.query, viewerUpn, isAdmin)
+    const total = db.countSyncRuns(filters)
+    const rows = db.listSyncRunsPaginated(filters)
+    const totalPages = total === 0 ? 0 : Math.ceil(total / filters.pageSize)
     return {
       items: rows.map(mapSyncRunRow),
       total,
-      page,
-      pageSize,
+      page: filters.page,
+      pageSize: filters.pageSize,
       totalPages
     }
   })

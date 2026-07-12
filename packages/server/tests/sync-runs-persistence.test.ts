@@ -159,4 +159,52 @@ describe("sync run persistence", () => {
     const page3 = listSyncRunsPaginated({ page: 3, pageSize: 2, actorUpn: "pka" })
     expect(page3).toHaveLength(1)
   })
+
+  it("filters sync runs by status, search, route, and date range", () => {
+    seedUser(testDb, "pka")
+    seedUser(testDb, "bob")
+    recordSyncRunPreview({
+      planId: "plan-alpha",
+      entityType: "contract",
+      entityId: "1",
+      entityDisplayName: "Alpha Contract",
+      source: "dev",
+      target: "uat",
+      actorUpn: "pka",
+      previewTotals: { insert: 1, update: 0, delete: 0 },
+      planJson: "{}"
+    })
+    recordSyncRunPreview({
+      planId: "plan-beta",
+      entityType: "employee",
+      entityId: "2",
+      entityDisplayName: "Beta Employee",
+      source: "dev",
+      target: "prod",
+      actorUpn: "bob",
+      previewTotals: { insert: 0, update: 1, delete: 0 },
+      planJson: "{}"
+    })
+    testDb.prepare(`UPDATE sync_runs SET started_at = ?, status = ? WHERE plan_id = ?`).run(
+      "2026-01-10 08:00:00",
+      SyncRunStatus.Success,
+      "plan-alpha"
+    )
+    testDb.prepare(`UPDATE sync_runs SET started_at = ? WHERE plan_id = ?`).run(
+      "2026-02-20 12:00:00",
+      "plan-beta"
+    )
+
+    expect(countSyncRuns({ status: [SyncRunStatus.Preview] })).toBe(1)
+    expect(countSyncRuns({ status: [SyncRunStatus.Success] })).toBe(1)
+    expect(countSyncRuns({ search: "Alpha" })).toBe(1)
+    expect(countSyncRuns({ actorUpn: "bob" })).toBe(1)
+    expect(countSyncRuns({ source: "dev", target: "prod" })).toBe(1)
+    expect(countSyncRuns({ startedAfter: "2026-02-01" })).toBe(1)
+    expect(countSyncRuns({ startedBefore: "2026-01-31" })).toBe(1)
+
+    const asc = listSyncRunsPaginated({ page: 1, pageSize: 10, sort: "started_asc" })
+    expect(asc[0]?.plan_id).toBe("plan-alpha")
+    expect(asc[1]?.plan_id).toBe("plan-beta")
+  })
 })

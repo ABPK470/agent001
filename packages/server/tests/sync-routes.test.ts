@@ -253,4 +253,46 @@ describe("sync routes", () => {
 
     await app.close()
   })
+
+  it("GET /api/sync/history supports search and status filters", async () => {
+    const { app } = await buildApp(adminSession())
+    const { recordSyncRunPreview } = await import("../src/platform/persistence/db/sync-runs.js")
+    const { seedUser } = await import("./_fk-helpers.js")
+
+    seedUser(testDb, "admin@example.com", { displayName: "Admin User", isAdmin: true })
+
+    recordSyncRunPreview({
+      planId: "hist-preview",
+      entityType: "contract",
+      entityId: "1",
+      entityDisplayName: "Route Test Contract",
+      source: "dev",
+      target: "uat",
+      actorUpn: "admin@example.com",
+      previewTotals: { insert: 1, update: 0, delete: 0 },
+      planJson: "{}"
+    })
+    recordSyncRunPreview({
+      planId: "hist-other",
+      entityType: "employee",
+      entityId: "2",
+      entityDisplayName: "Other Entity",
+      source: "dev",
+      target: "prod",
+      actorUpn: "admin@example.com",
+      previewTotals: { insert: 0, update: 1, delete: 0 },
+      planJson: "{}"
+    })
+
+    const filtered = await app.inject({
+      method: "GET",
+      url: "/api/sync/history?q=Route+Test&status=preview&source=dev&target=uat&sort=started_desc"
+    })
+    expect(filtered.statusCode).toBe(200)
+    const body = filtered.json() as { total: number; items: Array<{ planId: string }> }
+    expect(body.total).toBe(1)
+    expect(body.items[0]?.planId).toBe("hist-preview")
+
+    await app.close()
+  })
 })
