@@ -1115,6 +1115,8 @@ export interface OperationActivity {
   details?: Record<string, unknown>
   error?: string
   events: OperationEvent[]
+  /** Nested detail rows (e.g. per-table work under metadataSync). */
+  children?: OperationActivity[]
 }
 export interface OperationPipeline {
   id: string

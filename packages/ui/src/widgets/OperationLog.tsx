@@ -128,6 +128,7 @@ const EXEC_STEP_DESCRIPTIONS: Record<string, string> = {
   targetLock: "Lock the contract while deployment is in progress.",
   metadataSync: "Apply metadata row changes on the target environment.",
   metadataSyncDone: "Metadata transaction committed successfully.",
+  "metadataSync-done": "Metadata transaction committed successfully.",
   pipelineRegister: "Register or refresh the pipeline in the Agent service.",
   contractUndeploy: "Remove previously deployed artifacts marked for replacement.",
   contractUnlockAfterUndeploy: "Release the contract lock after undeploy completes.",
@@ -156,10 +157,30 @@ const EXEC_STEP_DESCRIPTIONS: Record<string, string> = {
 
 function formatActivityName(pipelineKind: OperationKind, activity: OperationActivity): string {
   if (pipelineKind !== OperationKind.SyncExecute) return activity.name
+  if (activity.name === "Preflight checks") return activity.name
+  if (activity.name === "started") return "Started"
+  if (activity.name === "completed") return "Completed"
+  if (activity.name === "failed") return "Failed"
   if (activity.name === "phases" || activity.name === "other events" || activity.name.startsWith("tbl:")) return activity.name
   if (activity.name.includes(" (")) return activity.name
   if (activity.name === "skipped" || activity.name === "Execute skipped") return "Execute skipped"
   return humanizeToken(activity.name)
+}
+
+function effectiveActivityStatus(
+  activity: OperationActivity,
+  pipelineStatus: OperationStatus,
+  parentStatus?: OperationStatus
+): OperationStatus {
+  if (
+    activity.status === OperationStatus.Running &&
+    (pipelineStatus === OperationStatus.Failed ||
+      parentStatus === OperationStatus.Failed ||
+      parentStatus === OperationStatus.Skipped)
+  ) {
+    return OperationStatus.Failed
+  }
+  return activity.status
 }
 
 function defaultActivitySummary(pipelineKind: OperationKind, activity: OperationActivity): string | undefined {
@@ -601,8 +622,11 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
                 activity={a}
                 pipelineKind={pipeline.kind}
                 pipelineId={pipeline.id}
+                pipelineStatus={pipeline.status}
                 expanded={actExpanded.has(key)}
                 onToggle={() => toggleActivity(key)}
+                actExpanded={actExpanded}
+                toggleActivity={toggleActivity}
                 evExpanded={evExpanded}
                 toggleEvent={toggleEvent}
               />
@@ -616,23 +640,30 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 
 // ── Activity row ─────────────────────────────────────────────────
 
-function ActivityRow({ activity, pipelineKind, pipelineId, expanded, onToggle, evExpanded, toggleEvent }: {
+function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, parentStatus, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent }: {
   activity: OperationActivity
   pipelineKind: OperationKind
   pipelineId: string
+  pipelineStatus: OperationStatus
+  parentStatus?: OperationStatus
+  depth?: number
   expanded: boolean
   onToggle: () => void
+  actExpanded: Set<string>
+  toggleActivity: (key: string) => void
   evExpanded: Set<string>
   toggleEvent: (key: string) => void
 }) {
-  const sm = STATUS_META[activity.status]
-  const StatusIcon = activity.status === "failed" ? XCircle
-    : activity.status === "running" ? Loader2 : null
+  const status = effectiveActivityStatus(activity, pipelineStatus, parentStatus)
+  const sm = STATUS_META[status]
+  const StatusIcon = status === "failed" ? XCircle
+    : status === "running" ? Loader2 : null
   const renderedName = formatActivityName(pipelineKind, activity)
   const renderedSummary = defaultActivitySummary(pipelineKind, activity)
+  const hasChildren = (activity.children?.length ?? 0) > 0
 
   return (
-    <div className="rounded border border-border-subtle">
+    <div className="rounded border border-border-subtle" style={depth > 0 ? { marginLeft: depth * 12 } : undefined}>
       <button
         className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-overlay-2 transition-colors text-left"
         onClick={onToggle}
@@ -641,7 +672,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, expanded, onToggle, e
         {StatusIcon && (
           <StatusIcon
             size={11}
-            className={`shrink-0 ${activity.status === "running" ? "animate-spin" : ""}`}
+            className={`shrink-0 ${status === "running" ? "animate-spin" : ""}`}
             style={{ color: sm.color }}
           />
         )}
@@ -651,7 +682,9 @@ function ActivityRow({ activity, pipelineKind, pipelineId, expanded, onToggle, e
           <span className="shrink-0 text-[11px] text-text-muted/70 truncate max-w-[18rem]">{renderedSummary}</span>
         )}
         <div className="flex-1 min-w-0" />
-        <span className="shrink-0 text-[11px] text-text-muted/60 tabular-nums">{activity.events.length} ev</span>
+        {activity.events.length > 0 && (
+          <span className="shrink-0 text-[11px] text-text-muted/60 tabular-nums">{activity.events.length} ev</span>
+        )}
         <span className="shrink-0 text-[11px] text-text-muted tabular-nums w-14 text-right">{fmtDuration(activity.durationMs)}</span>
         <span className="shrink-0 text-[11px] text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(activity.startedAt)}</span>
       </button>
@@ -675,6 +708,26 @@ function ActivityRow({ activity, pipelineKind, pipelineId, expanded, onToggle, e
               )}
             </div>
           )}
+          {hasChildren && activity.children!.map((child) => {
+            const childKey = pipelineActivityKey(pipelineId, child.id)
+            return (
+              <ActivityRow
+                key={childKey}
+                activity={child}
+                pipelineKind={pipelineKind}
+                pipelineId={pipelineId}
+                pipelineStatus={pipelineStatus}
+                parentStatus={status}
+                depth={(depth ?? 0) + 1}
+                expanded={actExpanded.has(childKey)}
+                onToggle={() => toggleActivity(childKey)}
+                actExpanded={actExpanded}
+                toggleActivity={toggleActivity}
+                evExpanded={evExpanded}
+                toggleEvent={toggleEvent}
+              />
+            )
+          })}
           {activity.events.map((ev, idx) => {
             const key = `${pipelineId}|${activity.id}|${idx}`
             return (

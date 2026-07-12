@@ -74,7 +74,7 @@ export function buildSyncPipeline(
   const activities =
     kind === OperationKind.SyncPreview
       ? [...buildDecisionActivities(planSummary, startedAt), ...groupSyncPreviewActivities(events)]
-      : [...buildDecisionActivities(planSummary, startedAt), ...groupSyncExecuteActivities(events)]
+      : [...buildPreflightActivity(planSummary, startedAt), ...groupSyncExecuteActivities(events)]
 
   return {
     id: `${planId}:${kind === OperationKind.SyncExecute ? "execute" : "preview"}`,
@@ -144,6 +144,38 @@ function extractSyncEntityHintsFromEvents(events: OperationEvent[]): {
   }
 
   return { entityType, entityId, entityDisplayName, source, target, definitionId }
+}
+
+function buildPreflightActivity(
+  planSummary: ReturnType<typeof loadPersistedSyncPlanSummary>,
+  fallbackTimestamp: string
+): OperationActivity[] {
+  if (!planSummary || planSummary.decisionLog.length === 0) return []
+  const decisions = planSummary.decisionLog
+  const startedAt = decisions[0]?.recordedAt ?? fallbackTimestamp
+  const endedAt = decisions[decisions.length - 1]?.recordedAt ?? fallbackTimestamp
+  const hasError = decisions.some((decision) => decision.severity === "error")
+  return [
+    {
+      id: "preflight",
+      name: "Preflight checks",
+      status: hasError ? OperationStatus.Failed : OperationStatus.Success,
+      startedAt,
+      endedAt,
+      durationMs: durationOf(startedAt, endedAt),
+      summary: `${decisions.length} check(s) from preview`,
+      details: {
+        decisions: decisions.map((decision) => ({
+          id: decision.id,
+          title: decision.title,
+          summary: decision.summary,
+          severity: decision.severity,
+          ...(decision.details ? { details: decision.details } : {})
+        }))
+      },
+      events: []
+    }
+  ]
 }
 
 function buildDecisionActivities(
@@ -278,27 +310,55 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
 }
 
 function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity[] {
+  const METADATA_STEP = "metadataSync"
   const activities: OperationActivity[] = []
   let currentStep: OperationActivity | null = null
-  let currentTable: { name: string; act: OperationActivity } | null = null
+  const openTables = new Map<string, OperationActivity>()
+  const pipelineFailed = events.some(
+    (ev) =>
+      ev.type === EventType.SyncExecuteFailed ||
+      ev.type === EventType.SyncExecuteStepFailed ||
+      (ev.type === EventType.SyncExecuteCompleted && syncExecuteCompletedHasWarnings(ev.data))
+  )
 
-  const closeStep = (endTs: string): void => {
-    if (currentStep) {
-      currentStep.endedAt = endTs
-      currentStep.durationMs = durationOf(currentStep.startedAt, endTs)
-      if (currentStep.status === OperationStatus.Running) currentStep.status = OperationStatus.Success
-      currentStep = null
+  const failOpenTables = (endTs: string, reason?: string): void => {
+    for (const child of openTables.values()) {
+      child.status = OperationStatus.Failed
+      child.endedAt = endTs
+      child.durationMs = durationOf(child.startedAt, endTs)
+      child.error = reason ?? "Rolled back — not committed"
+      child.summary = "Rolled back — not committed"
     }
+    openTables.clear()
   }
 
-  const closeTable = (endTs: string): void => {
-    if (currentTable) {
-      currentTable.act.endedAt = endTs
-      currentTable.act.durationMs = durationOf(currentTable.act.startedAt, endTs)
-      if (currentTable.act.status === OperationStatus.Running)
-        currentTable.act.status = OperationStatus.Success
-      currentTable = null
+  const finalizeStep = (endTs: string, status?: OperationStatus, error?: string): void => {
+    if (!currentStep) return
+    if (currentStep.name === METADATA_STEP && status === OperationStatus.Failed) {
+      failOpenTables(endTs, error ?? "Rolled back — not committed")
     }
+    currentStep.endedAt = endTs
+    currentStep.durationMs = durationOf(currentStep.startedAt, endTs)
+    if (status) currentStep.status = status
+    else if (currentStep.status === OperationStatus.Running) currentStep.status = OperationStatus.Success
+    if (error) currentStep.error = error
+    currentStep = null
+    openTables.clear()
+  }
+
+  const openFlowStep = (stepName: string, ev: OperationEvent): void => {
+    finalizeStep(ev.timestamp)
+    currentStep = {
+      id: `estep:${activities.length}`,
+      name: stepName,
+      status: OperationStatus.Running,
+      startedAt: ev.timestamp,
+      endedAt: null,
+      durationMs: null,
+      events: [ev],
+      ...(stepName === METADATA_STEP ? { children: [] as OperationActivity[] } : {})
+    }
+    activities.push(currentStep)
   }
 
   const pushLifecycleActivity = (ev: OperationEvent): void => {
@@ -309,10 +369,12 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
     let error: string | undefined
 
     if (type === EventType.SyncExecuteStarted) {
+      name = "started"
       const source = strField(ev.data, "source")
       const target = strField(ev.data, "target")
       summary = source && target ? `${source} → ${target}` : undefined
     } else if (type === EventType.SyncExecuteCompleted) {
+      name = "completed"
       const applied = ev.data["applied"] as Record<string, unknown> | undefined
       if (applied) {
         summary = `${applied["insert"] ?? 0} ins · ${applied["update"] ?? 0} upd · ${applied["delete"] ?? 0} del`
@@ -324,6 +386,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
         summary = summary ? `${summary} · ${warnings.length} deploy failure(s)` : `${warnings.length} deploy failure(s)`
       }
     } else if (type === EventType.SyncExecuteFailed) {
+      name = "failed"
       status = OperationStatus.Failed
       error = strField(ev.data, "error") ?? undefined
       summary = error
@@ -331,70 +394,76 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       status = OperationStatus.Skipped
       name = "Execute skipped"
       summary = strField(ev.data, "message") ?? strField(ev.data, "step") ?? undefined
-    } else if (type === EventType.SyncExecuteArchiveSkipped) {
-      summary = strField(ev.data, "reason") ?? undefined
-    } else if (type === EventType.SyncExecuteArchiveProbeBatch) {
-      const tables = Array.isArray(ev.data["tables"]) ? (ev.data["tables"] as unknown[]).length : null
-      const durationMs = numField(ev.data, "durationMs")
-      summary =
-        [tables != null ? `${tables} tables` : null, durationMs != null ? `${durationMs}ms` : null]
-          .filter(Boolean)
-          .join(" · ") || undefined
     }
 
     activities.push({
-      id: `elifecycle:${activities.length}`,
+      id: `lifecycle:${activities.length}`,
       name,
       status,
       startedAt: ev.timestamp,
       endedAt: ev.timestamp,
-      durationMs: 0,
+      durationMs: numField(ev.data, "durationMs") ?? 0,
       ...(summary ? { summary } : {}),
       ...(error ? { error } : {}),
       events: [ev]
     })
   }
 
+  const attachToMetadataStep = (ev: OperationEvent): void => {
+    if (currentStep?.name === METADATA_STEP) {
+      currentStep.events.push(ev)
+    } else if (currentStep) {
+      currentStep.events.push(ev)
+    }
+  }
+
   for (const ev of events) {
     const t = ev.type
+
     if (
       t === EventType.SyncExecuteStarted ||
       t === EventType.SyncExecuteCompleted ||
       t === EventType.SyncExecuteFailed ||
-      t === EventType.SyncExecuteSkipped ||
-      t === EventType.SyncExecuteArchiveSkipped ||
-      t === EventType.SyncExecuteArchiveProbeBatch
+      t === EventType.SyncExecuteSkipped
     ) {
-      closeTable(ev.timestamp)
-      closeStep(ev.timestamp)
+      finalizeStep(ev.timestamp, t === EventType.SyncExecuteFailed ? OperationStatus.Failed : undefined)
+      if (pipelineFailed && openTables.size > 0) {
+        failOpenTables(ev.timestamp)
+      }
       pushLifecycleActivity(ev)
       continue
     }
-    if (t === EventType.SyncExecuteStep) {
-      closeStep(ev.timestamp)
-      const stepName = strField(ev.data, "step") ?? "step"
-      currentStep = {
-        id: `estep:${activities.length}`,
-        name: stepName,
-        status: OperationStatus.Running,
-        startedAt: ev.timestamp,
-        endedAt: null,
-        durationMs: null,
-        events: [ev]
-      }
-      activities.push(currentStep)
+
+    if (
+      t === EventType.SyncExecuteArchiveSkipped ||
+      t === EventType.SyncExecuteArchiveProbeBatch ||
+      t === EventType.SyncExecuteArchiveProbe
+    ) {
+      attachToMetadataStep(ev)
       continue
     }
+
+    if (t === EventType.SyncExecuteStep) {
+      const stepName = strField(ev.data, "step") ?? "step"
+      if (stepName === `${METADATA_STEP}-done`) {
+        if (currentStep?.name === METADATA_STEP) {
+          currentStep.events.push(ev)
+          finalizeStep(ev.timestamp, OperationStatus.Success)
+        }
+        openFlowStep(stepName, ev)
+        finalizeStep(ev.timestamp, OperationStatus.Success)
+        continue
+      }
+      openFlowStep(stepName, ev)
+      continue
+    }
+
     if (t === EventType.SyncExecuteStepFailed) {
       const stepName = strField(ev.data, "step") ?? "step"
       const errMsg = strField(ev.data, "error") ?? OperationStatus.Failed
-      if (currentStep && currentStep.name === stepName) {
+      if (currentStep && (currentStep.name === stepName || stepName === METADATA_STEP)) {
         currentStep.events.push(ev)
-        currentStep.status = OperationStatus.Failed
-        currentStep.error = errMsg
-        currentStep.endedAt = ev.timestamp
-        currentStep.durationMs = durationOf(currentStep.startedAt, ev.timestamp)
-        currentStep = null
+        finalizeStep(ev.timestamp, OperationStatus.Failed, errMsg)
       } else {
         activities.push({
           id: `estep:${activities.length}`,
@@ -409,53 +478,65 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       }
       continue
     }
+
     if (t === EventType.SyncExecuteTableStart) {
-      closeStep(ev.timestamp)
       const tableName = strField(ev.data, "table") ?? "table"
       const op = strField(ev.data, "op") ?? "apply"
       const rows = numField(ev.data, "rowsTotal")
-      const act: OperationActivity = {
-        id: `etbl:${activities.length}`,
-        name: `${tableName} (${op}${rows != null ? ` ${rows} rows` : ""})`,
-        status: OperationStatus.Running,
-        startedAt: ev.timestamp,
-        endedAt: null,
-        durationMs: null,
-        events: [ev]
+      if (currentStep?.name === METADATA_STEP) {
+        currentStep.events.push(ev)
+        const child: OperationActivity = {
+          id: `etbl:${tableName}:${currentStep.children?.length ?? 0}`,
+          name: tableName,
+          status: OperationStatus.Running,
+          startedAt: ev.timestamp,
+          endedAt: null,
+          durationMs: null,
+          summary: `${op}${rows != null ? ` · ${rows} row(s)` : ""}`,
+          events: [ev]
+        }
+        if (!currentStep.children) currentStep.children = []
+        currentStep.children.push(child)
+        openTables.set(tableName, child)
+        continue
       }
-      activities.push(act)
-      currentTable = { name: tableName, act }
-      continue
-    }
-    if (t === EventType.SyncExecuteTableDone && currentTable) {
-      currentTable.act.events.push(ev)
-      currentTable.act.endedAt = ev.timestamp
-      currentTable.act.durationMs = durationOf(currentTable.act.startedAt, ev.timestamp)
-      currentTable.act.status = OperationStatus.Success
-      const applied = numField(ev.data, "rowsApplied")
-      if (applied != null) currentTable.act.summary = `${applied} rows applied`
-      currentTable = null
-      continue
-    }
-    if (t === EventType.SyncExecuteTableDone) {
-      pushLifecycleActivity(ev)
+      attachToMetadataStep(ev)
       continue
     }
 
-    if (currentTable) {
-      currentTable.act.events.push(ev)
+    if (t === EventType.SyncExecuteTableDone) {
+      const tableName = strField(ev.data, "table") ?? ""
+      const child = openTables.get(tableName)
+      if (child) {
+        child.events.push(ev)
+        child.endedAt = ev.timestamp
+        child.durationMs = durationOf(child.startedAt, ev.timestamp)
+        child.status = OperationStatus.Success
+        const applied = numField(ev.data, "rowsApplied")
+        if (applied != null) child.summary = `${applied} row(s) committed`
+        openTables.delete(tableName)
+        currentStep?.events.push(ev)
+        continue
+      }
+      attachToMetadataStep(ev)
       continue
     }
+
     if (currentStep) {
       currentStep.events.push(ev)
       continue
     }
-
-    pushLifecycleActivity(ev)
   }
 
+  const lastTs = events[events.length - 1]?.timestamp ?? new Date().toISOString()
   if (currentStep) {
-    closeStep(events[events.length - 1].timestamp)
+    if (pipelineFailed && currentStep.status === OperationStatus.Running) {
+      finalizeStep(lastTs, OperationStatus.Failed)
+    } else {
+      finalizeStep(lastTs)
+    }
+  } else if (pipelineFailed && openTables.size > 0) {
+    failOpenTables(lastTs)
   }
 
   return activities

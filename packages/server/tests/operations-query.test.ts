@@ -217,11 +217,118 @@ describe("listOperations sync bucketing", () => {
 
     expect(execute.title).toBe("Execute Contract — AccountClientMapping")
     expect(execute.subtitle).toContain("def 2026-05-28T09:59:59.000Z")
-    expect(execute.activities[0]?.name).toBe("Published definition selected")
-    expect(execute.activities[0]?.summary).toBe(
-      "Using published definition contract@2026-05-28T09:59:59.000Z."
-    )
+    expect(execute.activities[0]?.name).toBe("Preflight checks")
+    expect(execute.activities[0]?.summary).toBe("1 check(s) from preview")
     expect(execute.activities.some((activity) => activity.name === "metadataSync")).toBe(true)
+  })
+
+  it("groups metadata table work under the metadataSync flow step and fails open tables on rollback", async () => {
+    listEvents.mockReturnValue([
+      {
+        type: EventType.SyncExecuteFailed,
+        created_at: "2026-07-12T15:21:00.000Z",
+        data: JSON.stringify({
+          planId: "plan-meta-fail",
+          error: "metadataSync / upsert / core.DatasetMapping failed",
+          step: "metadataSync",
+          table: "core.DatasetMapping",
+          op: "upsert"
+        })
+      },
+      {
+        type: EventType.SyncExecuteStepFailed,
+        created_at: "2026-07-12T15:20:59.000Z",
+        data: JSON.stringify({
+          planId: "plan-meta-fail",
+          step: "metadataSync",
+          table: "core.DatasetMapping",
+          op: "upsert",
+          error: "metadataSync / upsert / core.DatasetMapping failed"
+        })
+      },
+      {
+        type: EventType.SyncExecuteTableStart,
+        created_at: "2026-07-12T15:20:58.000Z",
+        data: JSON.stringify({
+          planId: "plan-meta-fail",
+          table: "core.DatasetMapping",
+          op: "upsert",
+          rowsTotal: 3
+        })
+      },
+      {
+        type: EventType.SyncExecuteTableStart,
+        created_at: "2026-07-12T15:20:56.000Z",
+        data: JSON.stringify({
+          planId: "plan-meta-fail",
+          table: "core.ContractColumn",
+          op: "upsert",
+          rowsTotal: 1
+        })
+      },
+      {
+        type: EventType.SyncExecuteArchiveProbeBatch,
+        created_at: "2026-07-12T15:20:54.500Z",
+        data: JSON.stringify({ planId: "plan-meta-fail", tables: ["core.ContractColumn"], durationMs: 468 })
+      },
+      {
+        type: EventType.SyncExecuteStep,
+        created_at: "2026-07-12T15:20:54.000Z",
+        data: JSON.stringify({ planId: "plan-meta-fail", step: "metadataSync" })
+      },
+      {
+        type: EventType.SyncExecuteStep,
+        created_at: "2026-07-12T15:20:53.500Z",
+        data: JSON.stringify({ planId: "plan-meta-fail", step: "targetLock" })
+      },
+      {
+        type: EventType.SyncExecuteStep,
+        created_at: "2026-07-12T15:20:53.000Z",
+        data: JSON.stringify({ planId: "plan-meta-fail", step: "auditCheck" })
+      },
+      {
+        type: EventType.SyncExecuteStarted,
+        created_at: "2026-07-12T15:20:50.000Z",
+        data: JSON.stringify({ planId: "plan-meta-fail", source: "uat", target: "dev" })
+      }
+    ])
+
+    getRun.mockReturnValue(undefined)
+    getSyncRun.mockReturnValue({
+      status: "failed",
+      finished_at: "2026-07-12T15:21:00.000Z",
+      duration_ms: 10000,
+      entity_display_name: "Contract",
+      entity_type: "contract",
+      entity_id: "1",
+      source: "uat",
+      target: "dev",
+      error: "metadataSync / upsert / core.DatasetMapping failed"
+    })
+    getSyncRunPlanJson.mockReturnValue(null)
+
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const result = listOperations({ limit: 50 })
+    const execute = result.operations[0]
+
+    expect(execute.activities.map((a) => a.name)).toEqual([
+      "started",
+      "auditCheck",
+      "targetLock",
+      "metadataSync",
+      "failed"
+    ])
+    expect(execute.activities.some((a) => a.name === "archive.probe.batch")).toBe(false)
+
+    const metadata = execute.activities.find((a) => a.name === "metadataSync")
+    expect(metadata?.status).toBe(OperationStatus.Failed)
+    expect(metadata?.children).toHaveLength(2)
+    expect(metadata?.children?.map((c) => c.name)).toEqual([
+      "core.ContractColumn",
+      "core.DatasetMapping"
+    ])
+    expect(metadata?.children?.every((c) => c.status === OperationStatus.Failed)).toBe(true)
+    expect(metadata?.children?.every((c) => c.summary === "Rolled back — not committed")).toBe(true)
   })
 
   it("correlates legacy preview events by previewId when planId is only on completed", async () => {
