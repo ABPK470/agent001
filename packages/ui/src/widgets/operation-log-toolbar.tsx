@@ -1,6 +1,6 @@
-import { Filter, X } from "lucide-react"
+import { Check, Filter, X } from "lucide-react"
 import type { OperationStatus } from "../api"
-import { LogStatusLabel, statusSoftBgClass, statusTextClass } from "../operation-log-row"
+import { statusFilterActiveClass } from "../operation-log-row"
 import {
   LOG_TOOLBAR_CHIP,
   LOG_TOOLBAR_CHIP_ACTIVE,
@@ -15,6 +15,29 @@ import {
 } from "./widget-toolbar"
 
 const ALL_STATUSES: OperationStatus[] = ["running", "success", "failed", "cancelled", "skipped"]
+
+function StatusFilterChip({
+  status,
+  active,
+  onClick,
+}: {
+  status: OperationStatus
+  active: boolean
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={`${LOG_TOOLBAR_CHIP} capitalize ${
+        active ? statusFilterActiveClass(status) : LOG_TOOLBAR_CHIP_IDLE
+      }`}
+    >
+      {status}
+    </button>
+  )
+}
 
 export function OperationLogToolbar({
   kindView,
@@ -56,6 +79,7 @@ export function OperationLogToolbar({
           return (
             <button
               key={v}
+              type="button"
               onClick={() => setKindView(v)}
               className={`${LOG_TOOLBAR_CHIP} ${active ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE}`}
             >
@@ -68,22 +92,17 @@ export function OperationLogToolbar({
 
         {!compact ? (
           <>
-            {ALL_STATUSES.map((s) => {
-              const on = statuses.has(s)
-              return (
-                <button
-                  key={s}
-                  onClick={() => toggleStatus(s)}
-                  className={`${LOG_TOOLBAR_CHIP} ${
-                    on ? `${statusSoftBgClass(s)} ${statusTextClass(s)} font-medium` : LOG_TOOLBAR_CHIP_IDLE
-                  }`}
-                >
-                  {s}
-                </button>
-              )
-            })}
+            {ALL_STATUSES.map((s) => (
+              <StatusFilterChip
+                key={s}
+                status={s}
+                active={statuses.has(s)}
+                onClick={() => toggleStatus(s)}
+              />
+            ))}
             {statuses.size > 0 && (
               <button
+                type="button"
                 onClick={clearStatuses}
                 className={`${LOG_TOOLBAR_ICON_BTN} text-text-muted hover:text-text hover:bg-elevated/40`}
                 title="Clear status filters"
@@ -95,6 +114,7 @@ export function OperationLogToolbar({
         ) : (
           <div className="relative shrink-0">
             <button
+              type="button"
               onClick={() => setStatusesOpen((v) => !v)}
               className={`${LOG_TOOLBAR_CHIP} ${
                 statuses.size > 0 ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE
@@ -106,29 +126,37 @@ export function OperationLogToolbar({
             {statusesOpen && (
               <>
                 <div className="fixed inset-0 z-40" onClick={() => setStatusesOpen(false)} />
-                <div className="absolute left-0 top-full mt-1 z-50 bg-elevated border border-border rounded-md shadow-2xl py-1 min-w-[160px]">
+                <div className="absolute left-0 top-full z-50 mt-1 min-w-[168px] rounded-md border border-border bg-elevated py-1 shadow-2xl">
                   {ALL_STATUSES.map((s) => {
                     const on = statuses.has(s)
                     return (
                       <button
                         key={s}
+                        type="button"
                         onClick={() => toggleStatus(s)}
-                        className={`flex items-center justify-between gap-3 w-full text-left px-3 py-2 text-xs transition-colors ${
+                        aria-pressed={on}
+                        className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm capitalize transition-colors ${
                           on
-                            ? `${statusSoftBgClass(s)} ${statusTextClass(s)} font-medium`
-                            : "text-text-muted hover:text-text hover:bg-overlay-2"
+                            ? statusFilterActiveClass(s)
+                            : "text-text-muted hover:bg-overlay-2 hover:text-text"
                         }`}
                       >
-                        <LogStatusLabel status={s} compact />
+                        <Check
+                          size={14}
+                          className={`shrink-0 ${on ? "opacity-100" : "opacity-0"}`}
+                          aria-hidden
+                        />
+                        {s}
                       </button>
                     )
                   })}
                   {statuses.size > 0 && (
                     <button
+                      type="button"
                       onClick={clearStatuses}
-                      className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-xs text-text-muted hover:text-text hover:bg-overlay-2"
+                      className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-sm text-text-muted hover:bg-overlay-2 hover:text-text"
                     >
-                      <X size={12} />
+                      <X size={14} />
                       Clear filters
                     </button>
                   )}

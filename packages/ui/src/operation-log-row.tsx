@@ -82,7 +82,22 @@ export function statusSoftBgClass(status: OperationStatus): string {
   }
 }
 
-export const OP_LOG_MUTED = "text-text-muted"
+export function statusFilterActiveClass(status: OperationStatus): string {
+  switch (status) {
+    case "success":
+      return "ring-1 ring-inset ring-success/50 bg-success-soft text-success font-medium"
+    case "failed":
+      return "ring-1 ring-inset ring-error/50 bg-error-soft text-error font-medium"
+    case "skipped":
+      return "ring-1 ring-inset ring-warning/50 bg-warning-soft text-warning font-medium"
+    case "running":
+      return "ring-1 ring-inset ring-info/50 bg-info-soft text-info font-medium"
+    case "cancelled":
+      return "ring-1 ring-inset ring-border-strong bg-panel-3 text-text-secondary font-medium"
+    default:
+      return "ring-1 ring-inset ring-border bg-overlay-2 text-text-muted font-medium"
+  }
+}
 /** Description / summary after the middle dot — one step lighter than the label. */
 export const OP_LOG_DESC = "text-text-faint"
 
