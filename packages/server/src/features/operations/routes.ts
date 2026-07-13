@@ -5,10 +5,15 @@
 import type { FastifyInstance } from "fastify"
 import { subscribeToEvents } from "../../platform/events/broadcaster.js"
 import { searchEvents } from "../../platform/persistence/events.js"
+import { isOperationLogEvent } from "./application/query/operation-log-events.js"
 import {
   listOperations,
+  OPERATIONS_HEAD_EVENT_LIMIT,
   OPERATIONS_PAGE_EVENT_LIMIT
 } from "./application/query/index.js"
+
+/** Debounce SSE snapshots so bursty event streams do not rebuild the log continuously. */
+const OPERATIONS_STREAM_DEBOUNCE_MS = 1500
 
 export function registerOperationRoutes(app: FastifyInstance): void {
   app.get<{
@@ -42,13 +47,20 @@ export function registerOperationRoutes(app: FastifyInstance): void {
     return listOperations({ runId: req.params.runId })
   })
 
-  app.get("/api/operations/stream", (req, reply) => {
+  app.get<{
+    Querystring: { kind?: string; search?: string }
+  }>("/api/operations/stream", (req, reply) => {
     reply.raw.writeHead(200, {
       "Content-Type": "text/event-stream",
       "Cache-Control": "no-cache, no-transform",
       Connection: "keep-alive",
       "X-Accel-Buffering": "no"
     })
+
+    const streamFilters = {
+      kind: req.query.kind,
+      search: req.query.search
+    }
 
     const send = (data: unknown): boolean => {
       try {
@@ -59,14 +71,27 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       }
     }
 
-    send({ refresh: true, at: new Date().toISOString() })
+    // Connected comment only — the client loads via REST; SSE pushes debounced head snapshots.
+    try {
+      reply.raw.write(`: connected\n\n`)
+    } catch {
+      return
+    }
 
     let debounce: ReturnType<typeof setTimeout> | null = null
-    const unsubscribe = subscribeToEvents(() => {
+    const pushHeadSnapshot = (): void => {
+      const snapshot = listOperations({
+        limit: OPERATIONS_HEAD_EVENT_LIMIT,
+        kind: streamFilters.kind,
+        search: streamFilters.search
+      })
+      if (!send({ ...snapshot, live: true })) unsubscribe()
+    }
+
+    const unsubscribe = subscribeToEvents((event) => {
+      if (!isOperationLogEvent(event.type)) return
       if (debounce) clearTimeout(debounce)
-      debounce = setTimeout(() => {
-        if (!send({ refresh: true, at: new Date().toISOString() })) unsubscribe()
-      }, 400)
+      debounce = setTimeout(pushHeadSnapshot, OPERATIONS_STREAM_DEBOUNCE_MS)
     })
 
     const heartbeat = setInterval(() => {

@@ -1,14 +1,17 @@
 /**
  * Operation Log data layer — one source: SQLite event_log via GET /api/operations.
- * SSE is a refresh signal only; pagination uses infinite scroll (before cursor).
+ *
+ * - REST: initial load, filter changes, infinite scroll (before cursor).
+ * - SSE: debounced head snapshots pushed by the server (no client refetch loop).
  */
 
 import { useCallback, useEffect, useRef, useState } from "react"
-import type { OperationPipeline } from "../api"
+import type { OperationPipeline, OperationsResponse } from "../api"
 import { api } from "../api"
 import type { OperationLogFocus } from "../store"
 
-export const OPERATIONS_PAGE_EVENT_LIMIT = 5000
+/** Must match server OPERATIONS_PAGE_EVENT_LIMIT. */
+export const OPERATIONS_PAGE_EVENT_LIMIT = 2000
 
 export type OperationLogKindView = "all" | "agent" | "sync"
 
@@ -48,6 +51,24 @@ function serverKindParam(kindView: OperationLogKindView): string | undefined {
 function serverSearchParam(search: string): string | undefined {
   const trimmed = search.trim()
   return trimmed.length >= 2 ? trimmed : undefined
+}
+
+function operationsStreamUrl(kindView: OperationLogKindView, search: string): string {
+  const params = new URLSearchParams()
+  const kind = serverKindParam(kindView)
+  const q = serverSearchParam(search)
+  if (kind) params.set("kind", kind)
+  if (q) params.set("search", q)
+  const qs = params.toString()
+  return `/api/operations/stream${qs ? `?${qs}` : ""}`
+}
+
+function isOperationsSnapshot(data: unknown): data is OperationsResponse {
+  return (
+    typeof data === "object" &&
+    data != null &&
+    Array.isArray((data as OperationsResponse).operations)
+  )
 }
 
 export interface UseOperationLogDataResult {
@@ -101,7 +122,7 @@ export function useOperationLogData(opts: {
     [kindView],
   )
 
-  // Focus: full audit for one plan or run
+  // Focus: full audit for one plan or run (REST only)
   useEffect(() => {
     if (!focus) return
     let cancelled = false
@@ -139,7 +160,7 @@ export function useOperationLogData(opts: {
     }
   }, [focus])
 
-  // List: initial load when filters change
+  // List: REST load on filter change (once per change, not on every event)
   useEffect(() => {
     if (focus) return
     const gen = ++listGeneration.current
@@ -168,11 +189,35 @@ export function useOperationLogData(opts: {
       })
   }, [focus, kindView, searchQuery, fetchListPage])
 
-  // SSE: refresh head page only
+  // SSE: server pushes debounced head snapshots — merge in place, no HTTP refetch
   useEffect(() => {
     if (focus) return
-    const es = new EventSource("/api/operations/stream", { withCredentials: true })
-    es.onmessage = () => {
+    const es = new EventSource(operationsStreamUrl(kindView, debouncedSearch.current), {
+      withCredentials: true,
+    })
+    es.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data as string) as unknown
+        if (!isOperationsSnapshot(data)) return
+        if (document.visibilityState === "hidden") return
+        setPipelines((prev) =>
+          mergeHeadRefresh(prev, data.operations, data.oldestTimestamp),
+        )
+        setScannedEvents(data.scannedEvents)
+        setCursorBefore((before) => before ?? data.oldestTimestamp)
+        setHasMore((more) => more || data.hasMore)
+      } catch {
+        /* ignore malformed frames */
+      }
+    }
+    return () => es.close()
+  }, [focus, kindView, searchQuery])
+
+  // Refresh once when tab becomes visible again (SSE may have been skipped while hidden)
+  useEffect(() => {
+    if (focus) return
+    const onVisible = (): void => {
+      if (document.visibilityState !== "visible") return
       void fetchListPage()
         .then((res) => {
           setPipelines((prev) =>
@@ -184,7 +229,8 @@ export function useOperationLogData(opts: {
         })
         .catch(() => { /* keep existing data */ })
     }
-    return () => es.close()
+    document.addEventListener("visibilitychange", onVisible)
+    return () => document.removeEventListener("visibilitychange", onVisible)
   }, [focus, fetchListPage])
 
   const loadMore = useCallback(() => {

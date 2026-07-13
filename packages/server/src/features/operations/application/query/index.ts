@@ -6,7 +6,7 @@
  * activities (steps, tables, lifecycle) and the underlying events.
  */
 
-export { listOperations, OPERATIONS_PAGE_EVENT_LIMIT } from "./list-operations.js"
+export { listOperations, OPERATIONS_PAGE_EVENT_LIMIT, OPERATIONS_HEAD_EVENT_LIMIT } from "./list-operations.js"
 export type { ListOperationsResult } from "./types.js"
 export { listOperationsForPlan } from "./list-operations-for-plan.js"
 export { listOperationsForRun } from "./list-operations-for-run.js"

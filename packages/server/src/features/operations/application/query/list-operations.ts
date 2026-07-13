@@ -13,8 +13,11 @@ import { listOperationsForPlan } from "./list-operations-for-plan.js"
 import { listOperationsForRun } from "./list-operations-for-run.js"
 import type { ListOperationsOpts, ListOperationsResult } from "./types.js"
 
-/** Events read per page when scanning event_log (newest first, cursor via `before`). */
-export const OPERATIONS_PAGE_EVENT_LIMIT = 5000
+/** Events read per REST page when scanning event_log (newest first, cursor via `before`). */
+export const OPERATIONS_PAGE_EVENT_LIMIT = 2000
+
+/** Smaller window for debounced SSE head snapshots — covers live/running work without full rescans. */
+export const OPERATIONS_HEAD_EVENT_LIMIT = 1000
 
 export function listOperations(opts: ListOperationsOpts = {}): ListOperationsResult {
   if (opts.planId) {
