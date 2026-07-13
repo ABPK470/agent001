@@ -1,26 +1,33 @@
 import type { OperationKind, OperationStatus } from "../../api"
 import { OperationKind as Kind } from "../../api"
 
-/** Linear-style design tokens — flat list, subtle hover, no card chrome. */
+/**
+ * Activity widget typography — matches app design tokens (text-sm body, text-xs labels).
+ * Do not use sub-xs pixel sizes for readable content.
+ */
 export const AL = {
-  row: "group relative flex min-h-[36px] items-center gap-2 px-3 py-1.5 text-[13px] leading-snug text-text transition-colors hover:bg-overlay-hover",
-  rowButton: "group relative flex min-h-[36px] w-full items-center gap-2 px-3 py-1.5 text-left text-[13px] leading-snug text-text transition-colors hover:bg-overlay-hover",
-  rowCompact: "group relative flex min-h-[32px] items-center gap-2 px-3 py-1 text-[12px] leading-snug text-text transition-colors hover:bg-overlay-hover",
+  /** Primary list row — 14px body, comfortable hit target */
+  row: "group relative flex min-h-10 items-center gap-2.5 px-3 py-2 text-sm leading-normal text-text transition-colors hover:bg-overlay-hover",
+  rowButton:
+    "group relative flex min-h-10 w-full items-center gap-2.5 px-3 py-2 text-left text-sm leading-normal text-text transition-colors hover:bg-overlay-hover",
+  /** Nested step / trace row — same 14px, slightly tighter padding */
+  rowCompact:
+    "group relative flex min-h-9 items-center gap-2.5 px-3 py-1.5 text-sm leading-normal text-text transition-colors hover:bg-overlay-hover",
   rowCompactButton:
-    "group relative flex min-h-[32px] w-full items-center gap-2 px-3 py-1 text-left text-[12px] leading-snug text-text transition-colors hover:bg-overlay-hover",
+    "group relative flex min-h-9 w-full items-center gap-2.5 px-3 py-1.5 text-left text-sm leading-normal text-text transition-colors hover:bg-overlay-hover",
   title: "font-medium text-text truncate",
-  subtitle: "text-text-muted truncate",
-  meta: "shrink-0 tabular-nums text-[12px] text-text-muted",
-  identifier: "shrink-0 font-mono text-[11px] text-text-faint uppercase tracking-wide",
+  subtitle: "text-sm text-text-muted truncate",
+  meta: "shrink-0 tabular-nums text-sm text-text-muted",
+  identifier: "shrink-0 font-mono text-xs text-text-faint uppercase tracking-wide",
   divider: "border-b border-border-subtle",
   sectionHeader:
-    "sticky top-0 z-10 flex items-center gap-2 bg-canvas/95 px-3 py-2 text-[11px] font-medium uppercase tracking-wider text-text-muted backdrop-blur-sm",
-  nest: "border-l border-border-subtle ml-[18px] pl-0",
+    "sticky top-0 z-10 flex items-center gap-2 bg-canvas/95 px-3 py-2.5 text-xs font-semibold uppercase tracking-wider text-text-muted backdrop-blur-sm",
+  nest: "border-l border-border-subtle ml-5 pl-0",
   action:
-    "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:bg-overlay-2 hover:text-text",
+    "shrink-0 rounded px-2 py-1 text-sm font-medium text-text-muted opacity-0 transition-opacity group-hover:opacity-100 hover:bg-overlay-2 hover:text-text",
   actionVisible:
-    "shrink-0 rounded px-1.5 py-0.5 text-[11px] font-medium text-text-muted hover:bg-overlay-2 hover:text-text",
-  panel: "mx-3 mb-2 rounded-md border border-border-subtle bg-panel/60 px-3 py-2",
+    "shrink-0 rounded px-2 py-1 text-sm font-medium text-text-muted hover:bg-overlay-2 hover:text-text",
+  panel: "mx-3 mb-2 rounded-md border border-border-subtle bg-panel/60 px-3 py-2.5 text-sm",
 } as const
 
 export function statusColorClass(status: OperationStatus): string {

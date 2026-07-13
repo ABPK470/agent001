@@ -37,7 +37,7 @@ export function TraceItem({ ev }: { ev: OperationEvent }) {
   return (
     <>
       <div className={AL.rowCompact}>
-        <span className="w-4 shrink-0" />
+        <span className="w-5 shrink-0" />
         {hasData && !isSql ? (
           <button type="button" className="min-w-0 flex-1 truncate text-left" onClick={() => setExpanded((v) => !v)}>
             <span className={`font-medium ${tone}`}>{label ?? summary}</span>
@@ -52,13 +52,13 @@ export function TraceItem({ ev }: { ev: OperationEvent }) {
         {durationMs != null ? <span className={AL.meta}>{durationMs}ms</span> : null}
         {isSql && sqlFields && (
           <button type="button" className={AL.actionVisible} onClick={() => openSqlTrace(sqlFields)}>
-            <Database size={11} className="inline mr-0.5" />
+            <Database size={13} className="inline mr-1" />
             SQL
           </button>
         )}
         {isStep && toolIo && (
           <button type="button" className={AL.actionVisible} onClick={() => setIoOpen(true)}>
-            <Wrench size={11} className="inline mr-0.5" />
+            <Wrench size={13} className="inline mr-1" />
             I/O
           </button>
         )}
@@ -84,8 +84,8 @@ export function SqlTraceItem({
 }) {
   return (
     <div className={AL.rowCompact}>
-      <span className="w-4 shrink-0" />
-      <span className="min-w-0 flex-1 truncate font-mono text-[12px] text-text-secondary">{summary}</span>
+      <span className="w-5 shrink-0" />
+      <span className="min-w-0 flex-1 truncate font-mono text-sm text-text-secondary">{summary}</span>
       {durationMs != null ? <span className={AL.meta}>{durationMs}ms</span> : null}
       <button type="button" className={AL.actionVisible} onClick={onOpenSql}>
         <Database size={11} className="inline mr-0.5" />

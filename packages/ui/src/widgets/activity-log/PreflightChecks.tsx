@@ -23,7 +23,7 @@ function PreflightRow({ decision }: { decision: SyncDecisionEntry }) {
         className={AL.rowCompactButton}
         onClick={() => hasDetails && setOpen((v) => !v)}
       >
-        <span className="w-4 shrink-0" />
+        <span className="w-5 shrink-0" />
         <span className={`min-w-0 flex-1 truncate font-medium ${statusColorClass(status)}`}>
           {decision.title ?? decision.id}
         </span>

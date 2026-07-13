@@ -5,7 +5,7 @@ import { statusLabel } from "../../lib/operation-presentation"
 
 export function StatusIcon({
   status,
-  size = 14,
+  size = 16,
   showLabel,
 }: {
   status: OperationStatus
@@ -37,11 +37,11 @@ export function StatusIcon({
   }
 
   if (!showLabel) {
-    return <span className="flex w-4 shrink-0 items-center justify-center">{icon}</span>
+    return <span className="flex w-5 shrink-0 items-center justify-center">{icon}</span>
   }
 
   return (
-    <span className={`inline-flex items-center gap-1 shrink-0 text-[11px] font-medium ${colorClass}`}>
+    <span className={`inline-flex items-center gap-1.5 shrink-0 text-sm font-medium ${colorClass}`}>
       {icon}
       {statusLabel(status)}
     </span>
@@ -51,7 +51,7 @@ export function StatusIcon({
 export function KindBadge({ abbrev, color }: { abbrev: string; color: string }) {
   return (
     <span
-      className="shrink-0 rounded px-1 py-px font-mono text-[10px] font-medium uppercase tracking-wide text-text-muted"
+      className="shrink-0 rounded px-1.5 py-0.5 font-mono text-xs font-medium uppercase tracking-wide text-text-muted"
       style={{ color }}
     >
       {abbrev}
@@ -63,7 +63,7 @@ export function RowMeta({ duration, time }: { duration?: string | null; time?: s
   return (
     <span className="ml-auto flex shrink-0 items-center gap-3">
       {duration ? <span className={AL.meta}>{duration}</span> : null}
-      {time ? <span className={`${AL.meta} w-14 text-right`}>{time}</span> : null}
+      {time ? <span className={`${AL.meta} w-16 text-right`}>{time}</span> : null}
     </span>
   )
 }

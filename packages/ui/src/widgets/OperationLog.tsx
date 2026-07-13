@@ -894,14 +894,12 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
 
   if (isSqlOnlyActivity(activity)) {
     return (
-      <LogGroup nested={depth > 0} flat={linear}>
-        <SqlOnlyActivityRow
-          activity={activity}
-          status={status}
-          linear={linear}
-          isLast
-        />
-      </LogGroup>
+      <SqlOnlyActivityRow
+        activity={activity}
+        status={status}
+        linear={linear}
+        isLast={isLast}
+      />
     )
   }
 
@@ -929,8 +927,8 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
     </button>
   ) : undefined
 
-  return (
-    <LogGroup nested={depth > 0} flat={linear}>
+  const rowBody = (
+    <>
       <OpLogRow
         linear={linear}
         isLast={isLast && !hasExpandedContent}
@@ -1050,12 +1048,17 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
           })}
         </LogNest>
       )}
-
       {ioModalOpen && toolIo && (
         <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
       )}
-    </LogGroup>
+    </>
   )
+
+  if (depth === 0 && !linear) {
+    return <LogGroup>{rowBody}</LogGroup>
+  }
+
+  return rowBody
 }
 
 // ── Event row ────────────────────────────────────────────────────

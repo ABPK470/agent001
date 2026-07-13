@@ -145,14 +145,14 @@ export function ActivityLog() {
 
         <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
           {loading && filtered.length === 0 && (
-            <div className="flex items-center justify-center gap-2 py-16 text-[13px] text-text-muted">
-              <Loader2 size={16} className="animate-spin" />
+            <div className="flex items-center justify-center gap-2 py-16 text-sm text-text-muted">
+              <Loader2 size={18} className="animate-spin" />
               Loading…
             </div>
           )}
 
           {!loading && filtered.length === 0 && (
-            <p className="py-16 text-center text-[13px] text-text-muted">{emptyMessage}</p>
+            <p className="py-16 text-center text-sm text-text-muted">{emptyMessage}</p>
           )}
 
           {filtered.length > 0 && (
@@ -173,8 +173,8 @@ export function ActivityLog() {
           {hasMore && (
             <div ref={sentinelRef} className="flex justify-center py-8">
               {loadingMore && (
-                <span className="flex items-center gap-2 text-[12px] text-text-muted">
-                  <Loader2 size={12} className="animate-spin" />
+                <span className="flex items-center gap-2 text-sm text-text-muted">
+                  <Loader2 size={14} className="animate-spin" />
                   Loading more…
                 </span>
               )}

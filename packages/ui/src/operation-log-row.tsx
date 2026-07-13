@@ -84,7 +84,7 @@ export function statusSoftBgClass(status: OperationStatus): string {
 
 export const OP_LOG_MUTED = "text-text-muted"
 
-/** Colored status word — never mixed with text-text. */
+/** Colored status badge — soft background + status-colored text (pipeline / parent rows). */
 export function LogStatusLabel({
   status,
   compact,
@@ -94,7 +94,7 @@ export function LogStatusLabel({
 }) {
   return (
     <span
-      className={`inline-flex items-center gap-0.5 shrink-0 font-semibold uppercase tracking-wide ${compact ? "text-[10px]" : "text-[11px]"} ${statusTextClass(status)}`}
+      className={`inline-flex items-center gap-0.5 shrink-0 rounded px-1.5 py-0.5 font-semibold uppercase tracking-wide ${compact ? "text-[10px]" : "text-[11px]"} ${statusSoftBgClass(status)} ${statusTextClass(status)}`}
     >
       {status === "running" && <Loader2 size={10} className="animate-spin" />}
       {status}
@@ -228,6 +228,10 @@ export function OpLogRow({
   linear?: boolean
   isLast?: boolean
 }) {
+  const rowClass = linear
+    ? `flex items-center gap-2.5 px-3 py-2 text-left text-text transition-colors hover:bg-elevated/50 ${isLast ? "" : ""}`
+    : `flex items-center gap-2 px-2.5 py-1.5 text-left text-text transition-colors hover:bg-overlay-2/80 ${isLast ? "" : "border-b border-border-subtle"}`
+
   const cells = (
     <LogRowCells
       expanded={expanded}
@@ -239,24 +243,31 @@ export function OpLogRow({
       meta={meta}
       durationMs={durationMs}
       timestamp={timestamp}
-      actions={actions}
+      actions={undefined}
       linear={linear}
     />
   )
 
-  const rowClass = linear
-    ? `flex items-center gap-2.5 px-3 py-2 text-left text-text transition-colors hover:bg-elevated/50 ${isLast ? "" : ""}`
-    : `flex items-center gap-2 px-2.5 py-1.5 text-left text-text transition-colors hover:bg-overlay-2/80 ${isLast ? "" : "border-b border-border-subtle"}`
+  if (expandable && onToggle) {
+    return (
+      <>
+        <div className={rowClass}>
+          <button type="button" className="flex min-w-0 flex-1 items-center gap-2 text-left" onClick={onToggle}>
+            {cells}
+          </button>
+          {actions}
+        </div>
+        {expanded && children}
+      </>
+    )
+  }
 
   return (
     <>
-      {expandable && onToggle ? (
-        <button type="button" className={`w-full ${rowClass}`} onClick={onToggle}>
-          {cells}
-        </button>
-      ) : (
-        <div className={rowClass}>{cells}</div>
-      )}
+      <div className={rowClass}>
+        {cells}
+        {actions}
+      </div>
       {expanded && children}
     </>
   )

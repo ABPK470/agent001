@@ -98,11 +98,11 @@ export function StepItem({
   return (
     <>
       <button type="button" className={rowClass} onClick={onToggle}>
-        <ChevronRight
-          size={12}
-          className={`shrink-0 text-text-faint transition-transform ${expanded ? "rotate-90" : ""}`}
-        />
-        <StatusIcon status={status} size={13} />
+          <ChevronRight
+            size={14}
+            className={`shrink-0 text-text-faint transition-transform ${expanded ? "rotate-90" : ""}`}
+          />
+        <StatusIcon status={status} size={16} />
         <span className={`min-w-0 flex-1 truncate ${depth === 0 ? AL.title : "font-medium"} ${statusColorClass(status)}`}>
           {name}
         </span>
@@ -110,7 +110,7 @@ export function StepItem({
           <span className={`hidden min-w-0 max-w-[40%] truncate ${AL.subtitle} lg:inline`}>{summary}</span>
         ) : null}
         <span className={AL.meta}>{fmtDuration(activity.durationMs)}</span>
-        <span className={`${AL.meta} w-14 text-right`}>{fmtTime(activity.startedAt)}</span>
+        <span className={`${AL.meta} w-16 text-right`}>{fmtTime(activity.startedAt)}</span>
         {toolIo && (
           <span
             role="button"
@@ -127,7 +127,7 @@ export function StepItem({
               }
             }}
           >
-            <Wrench size={11} className="inline mr-0.5" />
+            <Wrench size={13} className="inline mr-1" />
             I/O
           </span>
         )}

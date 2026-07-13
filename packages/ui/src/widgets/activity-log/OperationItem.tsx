@@ -45,7 +45,7 @@ export function OperationItem({
       <div className="flex items-stretch">
         <button type="button" className={`${AL.rowButton} min-w-0 flex-1`} onClick={onToggle}>
           <ChevronRight
-            size={14}
+            size={16}
             className={`shrink-0 text-text-faint transition-transform ${expanded ? "rotate-90" : ""}`}
           />
           <StatusIcon status={pipeline.status} />
@@ -67,7 +67,7 @@ export function OperationItem({
             onClick={() => onCancel!(pipeline)}
             className="flex w-9 shrink-0 items-center justify-center text-text-faint transition-colors hover:bg-error/10 hover:text-error disabled:opacity-40"
           >
-            {cancelling ? <Loader2 size={14} className="animate-spin" /> : <Square size={12} />}
+            {cancelling ? <Loader2 size={16} className="animate-spin" /> : <Square size={14} />}
           </button>
         )}
       </div>
@@ -78,7 +78,7 @@ export function OperationItem({
             <div className={`${AL.panel} text-error`}>{pipeline.error}</div>
           )}
           {pipeline.activities.length === 0 && (
-            <p className="px-3 py-2 text-[12px] text-text-muted">No steps recorded.</p>
+            <p className="px-3 py-2.5 text-sm text-text-muted">No steps recorded.</p>
           )}
           {pipeline.activities.map((activity) => {
             const key = pipelineActivityKey(pipeline.id, activity.id)

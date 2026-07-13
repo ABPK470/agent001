@@ -38,7 +38,7 @@ export function ActivityLogToolbar({
 }) {
   return (
     <div className="shrink-0 border-b border-border-subtle bg-panel/40">
-      <div className={`flex items-center gap-3 px-3 ${compact ? "flex-wrap py-2" : "h-10 py-0"}`}>
+      <div className={`flex items-center gap-3 px-3 ${compact ? "flex-wrap py-2.5" : "h-11 py-0"}`}>
         <nav className="flex shrink-0 items-center gap-0.5" aria-label="Scope">
           {KIND_TABS.map((tab) => {
             const active = kindView === tab.id
@@ -47,7 +47,7 @@ export function ActivityLogToolbar({
                 key={tab.id}
                 type="button"
                 onClick={() => setKindView(tab.id)}
-                className={`rounded-md px-2.5 py-1 text-[13px] font-medium transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                   active
                     ? "bg-overlay-2 text-text"
                     : "text-text-muted hover:text-text hover:bg-overlay-1"
@@ -61,8 +61,8 @@ export function ActivityLogToolbar({
 
         <div className="relative min-w-0 flex-1">
           <Search
-            size={14}
-            className="pointer-events-none absolute left-2.5 top-1/2 -translate-y-1/2 text-text-faint"
+            size={15}
+            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-text-faint"
           />
           <input
             type="search"
@@ -70,7 +70,7 @@ export function ActivityLogToolbar({
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search operations…"
             aria-busy={searchPending || undefined}
-            className="h-8 w-full rounded-md border border-border-subtle bg-canvas/60 pl-8 pr-8 text-[13px] text-text placeholder:text-text-faint focus:border-border-focus focus:outline-none"
+            className="h-9 w-full rounded-md border border-border-subtle bg-canvas/60 pl-9 pr-9 text-sm text-text placeholder:text-text-faint focus:border-border-focus focus:outline-none"
           />
           {search && (
             <button
@@ -93,7 +93,7 @@ export function ActivityLogToolbar({
                     key={s}
                     type="button"
                     onClick={() => toggleStatus(s)}
-                    className={`rounded-full px-2 py-0.5 text-[11px] font-medium capitalize transition-colors ${
+                    className={`rounded-full px-2.5 py-1 text-sm font-medium capitalize transition-colors ${
                       on
                         ? `bg-overlay-2 ${statusColorClass(s)}`
                         : "text-text-muted hover:bg-overlay-1 hover:text-text"
@@ -119,13 +119,13 @@ export function ActivityLogToolbar({
             <button
               type="button"
               onClick={clearStatuses}
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1 text-[12px] text-text-muted hover:bg-overlay-1"
+              className="inline-flex items-center gap-1.5 rounded-md px-2.5 py-1.5 text-sm text-text-muted hover:bg-overlay-1"
             >
               <Filter size={12} />
               {statuses.size} filter{statuses.size === 1 ? "" : "s"}
             </button>
           )}
-          <span className="hidden text-[12px] text-text-faint sm:inline">
+          <span className="hidden text-sm text-text-faint sm:inline">
             {filteredCount === totalCount ? filteredCount : `${filteredCount} / ${totalCount}`}
           </span>
         </div>
@@ -152,7 +152,7 @@ export function DaySection({
       <button
         type="button"
         onClick={onToggle}
-        className="sticky top-0 z-10 flex w-full items-center gap-1.5 border-b border-border-subtle bg-canvas/95 px-3 py-2 text-left text-[11px] font-medium uppercase tracking-wider text-text-muted backdrop-blur-sm hover:text-text-secondary"
+        className="sticky top-0 z-10 flex w-full items-center gap-2 border-b border-border-subtle bg-canvas/95 px-3 py-2.5 text-left text-xs font-semibold uppercase tracking-wider text-text-muted backdrop-blur-sm hover:text-text-secondary"
       >
         <ChevronRight size={12} className={`transition-transform ${collapsed ? "" : "rotate-90"}`} />
         {label}
