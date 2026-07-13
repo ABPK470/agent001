@@ -25,6 +25,7 @@ import {
   OP_LOG,
   OP_LOG_MONO,
   OP_LOG_MUTED,
+  OP_LOG_DESC,
   OpLogRow,
 } from "../operation-log-row"
 import {
@@ -618,7 +619,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
             <span className={`min-w-0 flex-1 truncate ${OP_LOG} ${OP_LOG_MUTED}`}>
               <span className="font-medium">{pipeline.title}</span>
               {formattedSubtitle && !compact && (
-                <span className={`${OP_LOG_MONO} font-normal`}> · {formattedSubtitle}</span>
+                <span className={`${OP_LOG_MONO} font-normal ${OP_LOG_DESC}`}> · {formattedSubtitle}</span>
               )}
             </span>
             <span className={`shrink-0 tabular-nums text-[13px] ${OP_LOG_MUTED}`}>
@@ -690,7 +691,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
         <span className={`min-w-0 flex-1 ${OP_LOG} ${OP_LOG_MUTED}`}>
           <span className="font-medium">{pipeline.title}</span>
           {formattedSubtitle && !compact && (
-            <span className={`${OP_LOG_MONO} font-normal`}> · {formattedSubtitle}</span>
+            <span className={`${OP_LOG_MONO} font-normal ${OP_LOG_DESC}`}> · {formattedSubtitle}</span>
           )}
         </span>
         <span className={`shrink-0 tabular-nums ${OP_LOG} ${OP_LOG_MUTED}`}>
@@ -1121,7 +1122,7 @@ function EventRow({ ev, expanded, onToggle, linear, isLast, depth = 0 }: {
             <span className={OP_LOG_MUTED}>{summary}</span>
           )
         }
-        meta={label && summary ? <span className={OP_LOG_MUTED}>{summary}</span> : undefined}
+        meta={label && summary ? summary : undefined}
         durationMs={durationMs}
         timestamp={ev.timestamp}
         actions={

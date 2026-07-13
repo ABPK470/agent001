@@ -83,6 +83,8 @@ export function statusSoftBgClass(status: OperationStatus): string {
 }
 
 export const OP_LOG_MUTED = "text-text-muted"
+/** Description / summary after the middle dot — one step lighter than the label. */
+export const OP_LOG_DESC = "text-text-faint"
 
 /** Colored status badge — soft background + status-colored text (pipeline / parent rows). */
 export function LogStatusLabel({
@@ -186,7 +188,7 @@ function LogRowCells({
       )}
       <span className={`min-w-0 flex-1 truncate ${textSize}`}>
         <span className={`${labelWeight} ${OP_LOG_MUTED}`}>{label}</span>
-        {meta ? <span className={`font-normal ${OP_LOG_MUTED}`}> · {meta}</span> : null}
+        {meta ? <span className={`font-normal ${OP_LOG_DESC}`}> · {meta}</span> : null}
       </span>
       <span className={`shrink-0 tabular-nums w-14 text-right ${textSize} ${OP_LOG_MUTED}`}>
         {durationMs !== undefined ? fmtDuration(durationMs ?? null) : ""}
