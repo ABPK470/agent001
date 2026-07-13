@@ -1,56 +1,8 @@
 import { Maximize2, X } from "lucide-react"
 import { useEffect, useState } from "react"
-import { api } from "../api"
 import { CodeBlock } from "./CodeBlock"
+import { fetchSqlLogText } from "../sync-sql-log-cache"
 import { formatSqlTraceMeta, readSqlTraceFields, type SqlTraceFields } from "../sync-sql-trace"
-
-function needsSqlFetch(fields: SqlTraceFields): boolean {
-  return fields.sqlLogId != null
-}
-
-/** Resolve full SQL from event preview + optional sync_sql_log id. */
-export function useResolvedSql(fields: SqlTraceFields): {
-  sql: string
-  loading: boolean
-  error: string | null
-} {
-  const [resolvedSql, setResolvedSql] = useState(fields.sql)
-  const [loading, setLoading] = useState(() => needsSqlFetch(fields))
-  const [loadError, setLoadError] = useState<string | null>(null)
-  const truncated = fields.sqlLength != null && fields.sqlLength > fields.sql.length
-
-  useEffect(() => {
-    let cancelled = false
-    if (!needsSqlFetch(fields)) {
-      setResolvedSql(fields.sql)
-      setLoading(false)
-      setLoadError(null)
-      return
-    }
-    setLoading(true)
-    void api
-      .getSqlLog(fields.sqlLogId!)
-      .then((row) => {
-        if (!cancelled) {
-          setResolvedSql(row.sql)
-          setLoadError(null)
-          setLoading(false)
-        }
-      })
-      .catch((e) => {
-        if (!cancelled) {
-          setLoadError(e instanceof Error ? e.message : String(e))
-          setResolvedSql(fields.sql)
-          setLoading(false)
-        }
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [fields.sql, fields.sqlLogId, fields.sqlLength, truncated])
-
-  return { sql: resolvedSql, loading, error: loadError }
-}
 
 export function SqlTraceBlock({
   fields,
@@ -62,27 +14,15 @@ export function SqlTraceBlock({
   maxHeight?: number
 }) {
   const [modalOpen, setModalOpen] = useState(false)
-  const { sql: resolvedSql, loading, error: loadError } = useResolvedSql(fields)
-  const truncated = fields.sqlLength != null && fields.sqlLength > fields.sql.length
-  const displayFields = { ...fields, sql: resolvedSql }
 
   return (
-    <div className={`rounded-md border border-border-subtle overflow-hidden ${compact ? "text-xs" : "text-sm"}`}>
+    <div className={`rounded-md border border-border-subtle overflow-hidden ${compact ? "" : ""}`}>
       <div className="flex items-start justify-between gap-2 px-2.5 py-1.5 border-b border-border-subtle bg-elevated/30">
-        <div className="min-w-0 space-y-0.5">
-          {resolvedSql.trim() ? (
-            <span className="font-mono text-text min-w-0 break-all whitespace-pre-wrap block">{resolvedSql}</span>
-          ) : loading ? (
-            <span className="text-text-muted text-xs">Loading SQL…</span>
-          ) : (
-            <span className="font-mono text-text-muted min-w-0 break-all whitespace-pre-wrap">{formatSqlTraceMeta(displayFields)}</span>
-          )}
-          <span className="font-mono text-text-muted/70 text-[10px] block">{formatSqlTraceMeta(displayFields)}</span>
-        </div>
-        {(truncated || fields.sqlLogId) && (
+        <span className="font-mono text-text min-w-0 break-all whitespace-pre-wrap">{fields.sql.trim() || formatSqlTraceMeta(fields)}</span>
+        {(fields.sqlLogId != null || fields.sql.trim()) && (
           <button
             type="button"
-            className="shrink-0 inline-flex items-center gap-1 text-accent hover:text-accent-hover text-xs"
+            className="shrink-0 inline-flex items-center gap-1 text-accent hover:text-accent-hover"
             onClick={() => setModalOpen(true)}
           >
             <Maximize2 size={12} />
@@ -90,20 +30,14 @@ export function SqlTraceBlock({
           </button>
         )}
       </div>
-      {loadError && (
-        <div className="px-2.5 py-1 text-warning text-xs border-b border-border-subtle">{loadError}</div>
+      {fields.sql.trim() && (
+        <CodeBlock code={fields.sql} lang="sql" maxHeight={maxHeight} />
       )}
-      {resolvedSql.trim() && (
-        <CodeBlock code={resolvedSql} lang="sql" maxHeight={maxHeight} />
-      )}
-      {displayFields.error && (
-        <div className="px-2.5 py-1 text-error text-xs border-t border-border-subtle break-all whitespace-pre-wrap">{displayFields.error}</div>
+      {fields.error && (
+        <div className="px-2.5 py-1 text-error border-t border-border-subtle break-all whitespace-pre-wrap">{fields.error}</div>
       )}
       {modalOpen && (
-        <SqlTraceModal
-          fields={displayFields}
-          onClose={() => setModalOpen(false)}
-        />
+        <SqlTraceModal fields={fields} onClose={() => setModalOpen(false)} />
       )}
     </div>
   )
@@ -130,7 +64,36 @@ export function SqlTraceModal({
   fields: SqlTraceFields
   onClose: () => void
 }) {
-  const { sql: fullSql, loading, error } = useResolvedSql(fields)
+  const [fullSql, setFullSql] = useState(fields.sql)
+  const [loading, setLoading] = useState(fields.sqlLogId != null)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (fields.sqlLogId == null) {
+      setLoading(false)
+      return
+    }
+    let cancelled = false
+    setLoading(true)
+    void fetchSqlLogText(fields.sqlLogId)
+      .then((sql) => {
+        if (!cancelled) {
+          setFullSql(sql)
+          setError(null)
+          setLoading(false)
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setError(e instanceof Error ? e.message : String(e))
+          setFullSql(fields.sql)
+          setLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [fields.sqlLogId])
 
   return (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
@@ -140,21 +103,21 @@ export function SqlTraceModal({
       >
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-subtle">
           <div className="min-w-0">
-            <div className="text-sm font-medium text-text break-all">{fields.label}</div>
-            <div className="text-xs font-mono text-text-muted break-all">{formatSqlTraceMeta({ ...fields, sql: fullSql })}</div>
+            <div className="font-medium text-text break-all">{fields.label}</div>
+            <div className="font-mono text-text break-all">{formatSqlTraceMeta({ ...fields, sql: fullSql })}</div>
           </div>
-          <button type="button" className="text-text-muted hover:text-text" onClick={onClose} aria-label="Close">
+          <button type="button" className="text-text hover:opacity-80" onClick={onClose} aria-label="Close">
             <X size={18} />
           </button>
         </div>
         <div className="flex-1 min-h-0 overflow-auto p-3">
-          {loading && <div className="text-sm text-text-muted py-8 text-center">Loading full SQL…</div>}
-          {!loading && error && <div className="text-sm text-error py-4 break-all whitespace-pre-wrap">{error}</div>}
+          {loading && <div className="text-text py-8 text-center">Loading full SQL…</div>}
+          {!loading && error && <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>}
           {!loading && !error && (
             <CodeBlock code={fullSql.trim() || fields.sql.trim() || "-- no SQL recorded"} lang="sql" maxHeight={9999} />
           )}
           {fields.error && (
-            <div className="mt-3 text-sm text-error break-all whitespace-pre-wrap">{fields.error}</div>
+            <div className="mt-3 text-error break-all whitespace-pre-wrap">{fields.error}</div>
           )}
         </div>
       </div>
@@ -181,7 +144,7 @@ export function SqlTraceList({
 }) {
   if (items.length === 0) {
     return (
-      <div className="text-sm text-text-muted py-4 text-center">
+      <div className="text-text py-4 text-center">
         No SQL trace recorded for this plan yet.
       </div>
     )

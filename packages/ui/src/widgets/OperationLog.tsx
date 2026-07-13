@@ -8,7 +8,7 @@ import { Brain, ChevronRight, Database, FileSearch, Filter, GitCompareArrows, Lo
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
-import { SqlTraceModal, useResolvedSql } from "../components/SqlTrace"
+import { SqlTraceModal } from "../components/SqlTrace"
 import { DecisionLogPanel, isSyncDecisionLogDetails } from "../components/DecisionLogPanel"
 import { CodeBlock } from "../components/CodeBlock"
 import { JsonViewer } from "../components/JsonViewer"
@@ -91,11 +91,15 @@ const STATUS_MESSAGE_BOX: Record<OperationStatus, string> = {
 }
 
 const LOG_ROW_ACTION =
-  "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded transition-colors"
+  "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[0.8125rem] font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded transition-colors"
+
+/** Single font size for the whole widget — matches toolbar chips (0.8125rem). */
+const OP_LOG = "text-[0.8125rem] leading-snug text-text"
+const OP_LOG_MONO = `${OP_LOG} font-mono`
 
 function StatusMessage({ status, children }: { status: OperationStatus; children: ReactNode }) {
   return (
-    <div className={`px-2 py-1 mb-1 rounded border text-xs break-all leading-relaxed ${STATUS_MESSAGE_BOX[status]}`}>
+    <div className={`px-2 py-1 mb-1 rounded border break-all ${OP_LOG} ${STATUS_MESSAGE_BOX[status]}`}>
       {children}
     </div>
   )
@@ -267,7 +271,7 @@ function effectiveActivityStatus(
 function defaultActivitySummary(pipelineKind: OperationKind, activity: OperationActivity): string | undefined {
   if (activity.name === "result") return undefined
   if (activity.status === "skipped" && activity.children?.some((c) => c.name === "result")) {
-    return undefined
+    return flowStepDescription(activity)
   }
   if (activity.summary && activity.status !== "skipped") return activity.summary
   if (pipelineKind === OperationKind.SyncExecute) {
@@ -307,6 +311,20 @@ function isSyncExecuteFlowStep(kind: OperationKind, activity: OperationActivity)
 
 function shouldHideSyncExecuteStepEvent(kind: OperationKind, activity: OperationActivity, ev: OperationEvent): boolean {
   return isSyncExecuteFlowStep(kind, activity) && ev.type === "sync.execute.step"
+}
+
+function isSqlOnlyActivity(activity: OperationActivity): boolean {
+  return (
+    activity.name.startsWith("SQL · ") &&
+    activity.events.length === 1 &&
+    isSyncSqlEventType(activity.events[0]!.type) &&
+    (activity.children?.length ?? 0) === 0
+  )
+}
+
+function sqlPreviewFromEvent(ev: OperationEvent): string {
+  const fields = readSqlTraceFields(ev.data)
+  return fields?.sql.trim() || "SQL"
 }
 
 /** Expansion key for an activity row — scoped to pipeline id (preview vs execute differ). */
@@ -475,7 +493,7 @@ export function OperationLog() {
   }, [error, mode, pipelines.length, statuses.size, needle, operationLogFocus?.kind])
 
   return (
-    <div ref={rootRef} className="h-full flex flex-col gap-2.5 overflow-hidden text-text">
+    <div ref={rootRef} className={`h-full flex flex-col gap-2.5 overflow-hidden ${OP_LOG}`}>
 
       <LogWidgetToolbar compact={compact}>
         <LogWidgetToolbarFilters>
@@ -763,23 +781,23 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
         className="min-w-0 flex-1 flex items-center gap-2 px-3 py-2 hover:bg-overlay-2 transition-colors text-left"
         onClick={onToggle}
       >
-        <ChevronRight size={14} className={`shrink-0 text-text-muted/60 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        <ChevronRight size={14} className={`shrink-0 text-text transition-transform ${expanded ? "rotate-90" : ""}`} />
         <Icon size={14} className="shrink-0" style={{ color: km.color }} />
-        <span className={`shrink-0 text-xs uppercase tracking-wide px-1.5 py-0.5 rounded ${sm.tone}`}>
+        <span className={`shrink-0 uppercase tracking-wide px-1.5 py-0.5 rounded ${OP_LOG} ${sm.tone}`}>
           {pipeline.status === "running" && <Loader2 size={9} className="inline mr-0.5 animate-spin" />}
           {pipeline.status}
         </span>
-        <span className="min-w-0 truncate text-xs text-text">{pipeline.title}</span>
+        <span className={`min-w-0 truncate ${OP_LOG}`}>{pipeline.title}</span>
 
         {pipeline.subtitle && !compact && (
-          <span className="shrink-0 text-xs text-text-muted/60 font-mono truncate max-w-[14rem]">{pipeline.subtitle}</span>
+          <span className={`shrink-0 truncate max-w-[14rem] ${OP_LOG_MONO}`}>{pipeline.subtitle}</span>
         )}
         <div className="flex-1 min-w-0" />
-        <span className="shrink-0 text-xs text-text-muted/60 tabular-nums">
+        <span className={`shrink-0 tabular-nums ${OP_LOG}`}>
           {pipeline.activityCount} act · {pipeline.eventCount} ev
         </span>
-        <span className="shrink-0 text-xs text-text-muted tabular-nums w-16 text-right">{fmtDuration(pipeline.durationMs)}</span>
-        <span className="shrink-0 text-xs text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(pipeline.startedAt)}</span>
+        <span className={`shrink-0 tabular-nums w-16 text-right ${OP_LOG}`}>{fmtDuration(pipeline.durationMs)}</span>
+        <span className={`shrink-0 tabular-nums w-20 text-right ${OP_LOG}`}>{fmtTime(pipeline.startedAt)}</span>
       </button>
       {showRunAudit && (
         <button
@@ -852,6 +870,122 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
   )
 }
 
+// ── SQL-only activity (one line + modal, no expand) ──────────────
+
+function SqlOnlyActivityRow({
+  activity,
+  status,
+  sm,
+  depth,
+  StatusIcon,
+}: {
+  activity: OperationActivity
+  status: OperationStatus
+  sm: (typeof STATUS_META)[OperationStatus]
+  depth?: number
+  StatusIcon: typeof XCircle | typeof Loader2 | null
+}) {
+  const [modalOpen, setModalOpen] = useState(false)
+  const ev = activity.events[0]!
+  const fields = readSqlTraceFields(ev.data)
+  const line = sqlPreviewFromEvent(ev)
+
+  return (
+    <div
+      className="rounded border border-border-subtle flex items-center gap-2 px-2.5 py-1.5"
+      style={depth != null && depth > 0 ? { marginLeft: depth * 12 } : undefined}
+    >
+      {StatusIcon ? (
+        <StatusIcon
+          size={11}
+          className={`shrink-0 ${status === "running" ? "animate-spin" : ""}`}
+          style={{ color: sm.color }}
+        />
+      ) : (
+        <span className="w-[11px] h-[11px] rounded-full shrink-0" style={{ background: sm.color, opacity: 0.6 }} />
+      )}
+      <span className={`min-w-0 flex-1 break-all whitespace-pre-wrap ${OP_LOG_MONO}`}>{line}</span>
+      {activity.summary && (
+        <span className={`shrink-0 ${OP_LOG_MONO}`}>{activity.summary}</span>
+      )}
+      <span className={`shrink-0 tabular-nums ${OP_LOG}`}>{fmtDuration(activity.durationMs)}</span>
+      <span className={`shrink-0 tabular-nums w-20 text-right ${OP_LOG}`}>{fmtTime(activity.startedAt)}</span>
+      {fields && (
+        <button
+          type="button"
+          className={LOG_ROW_ACTION}
+          onClick={() => setModalOpen(true)}
+        >
+          <Database size={10} />
+          SQL
+        </button>
+      )}
+      {modalOpen && fields && (
+        <SqlTraceModal fields={fields} onClose={() => setModalOpen(false)} />
+      )}
+    </div>
+  )
+}
+
+// ── Flow-step SQL row (expand → result JSON; SQL icon → modal) ───
+
+function FlowStepSqlRow({
+  ev,
+  resultData,
+  expanded,
+  onToggle,
+}: {
+  ev: OperationEvent
+  resultData?: Record<string, unknown>
+  expanded: boolean
+  onToggle: () => void
+}) {
+  const [modalOpen, setModalOpen] = useState(false)
+  const fields = readSqlTraceFields(ev.data)
+  const preview = sqlPreviewFromEvent(ev)
+  const expandable = resultData != null && Object.keys(resultData).length > 0
+
+  return (
+    <div>
+      <div className="flex items-baseline gap-1 pr-1">
+        <button
+          type="button"
+          className={`min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-left hover:bg-overlay-2 transition-colors ${expandable ? "" : "cursor-default"}`}
+          onClick={() => expandable && onToggle()}
+        >
+          <ChevronRight
+            size={9}
+            className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""} ${expandable ? "text-text" : "invisible"}`}
+          />
+          <span className={`shrink-0 tabular-nums w-20 ${OP_LOG_MONO}`}>{fmtTime(ev.timestamp)}</span>
+          <span className={`min-w-0 break-all whitespace-pre-wrap ${OP_LOG_MONO}`}>{preview}</span>
+        </button>
+        {fields && (
+          <button
+            type="button"
+            className={LOG_ROW_ACTION}
+            onClick={(e) => {
+              e.stopPropagation()
+              setModalOpen(true)
+            }}
+          >
+            <Database size={10} />
+            SQL
+          </button>
+        )}
+      </div>
+      {expanded && resultData && (
+        <div className="px-2 pb-1">
+          <CodeBlock code={JSON.stringify(resultData, null, 2)} lang="json" maxHeight={480} />
+        </div>
+      )}
+      {modalOpen && fields && (
+        <SqlTraceModal fields={fields} onClose={() => setModalOpen(false)} />
+      )}
+    </div>
+  )
+}
+
 // ── Activity row ─────────────────────────────────────────────────
 
 function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipelineError, parentStatus, parentPhaseId, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, onOpenSyncPlan }: {
@@ -901,13 +1035,25 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   const delegationPlanId =
     typeof activity.details?.["planId"] === "string" ? activity.details["planId"] : null
 
+  if (isSqlOnlyActivity(activity)) {
+    return (
+      <SqlOnlyActivityRow
+        activity={activity}
+        status={status}
+        sm={sm}
+        depth={depth}
+        StatusIcon={StatusIcon}
+      />
+    )
+  }
+
   return (
     <div className="rounded border border-border-subtle" style={depth > 0 ? { marginLeft: depth * 12 } : undefined}>
       <button
-        className="w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-overlay-2 transition-colors text-left"
+        className={`w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-overlay-2 transition-colors text-left ${OP_LOG}`}
         onClick={onToggle}
       >
-        <ChevronRight size={12} className={`shrink-0 text-text-muted/60 transition-transform ${expanded ? "rotate-90" : ""}`} />
+        <ChevronRight size={12} className={`shrink-0 text-text transition-transform ${expanded ? "rotate-90" : ""}`} />
         {StatusIcon && (
           <StatusIcon
             size={11}
@@ -916,18 +1062,18 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
           />
         )}
         {!StatusIcon && <span className="w-[11px] h-[11px] rounded-full shrink-0" style={{ background: sm.color, opacity: 0.6 }} />}
-        <span className="min-w-0 break-all text-xs text-text font-mono">{renderedName}</span>
+        <span className={`min-w-0 break-all ${OP_LOG_MONO}`}>{renderedName}</span>
         {renderedSummary && !isResultRow && (
-          <span className="shrink-0 text-xs text-text-muted/70 break-all min-w-0 max-w-[50%]">
+          <span className={`shrink-0 break-all min-w-0 max-w-[50%] ${OP_LOG}`}>
             {renderedSummary}
           </span>
         )}
         <div className="flex-1 min-w-0" />
         {activity.events.length > 0 && !isResultRow && !isFlowStep && (
-          <span className="shrink-0 text-xs text-text-muted/60 tabular-nums">{activity.events.length} ev</span>
+          <span className={`shrink-0 tabular-nums ${OP_LOG}`}>{activity.events.length} ev</span>
         )}
-        <span className="shrink-0 text-xs text-text-muted tabular-nums w-14 text-right">{fmtDuration(activity.durationMs)}</span>
-        <span className="shrink-0 text-xs text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(activity.startedAt)}</span>
+        <span className={`shrink-0 tabular-nums w-14 text-right ${OP_LOG}`}>{fmtDuration(activity.durationMs)}</span>
+        <span className={`shrink-0 tabular-nums w-20 text-right ${OP_LOG}`}>{fmtTime(activity.startedAt)}</span>
         {delegationPlanId && onOpenSyncPlan && (
           <button
             type="button"
@@ -967,21 +1113,21 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
             <StatusMessage status={status}>{statusMessage}</StatusMessage>
           )}
           {stepDescription && !statusMessage && !isFlowStep && (
-            <p className="px-2 py-1 text-xs text-text-muted/70 leading-relaxed">{stepDescription}</p>
+            <p className={`px-2 py-1 ${OP_LOG}`}>{stepDescription}</p>
           )}
-          {isFlowStep && stepDescription && (
-            <p className="px-2 py-0.5 text-[11px] text-text-muted/60 leading-relaxed">{stepDescription}</p>
-          )}
-          {isFlowStep && sqlEvents.map((ev, idx) => (
-            <SqlCompactRow key={`sql:${idx}`} ev={ev} />
-          ))}
-          {isFlowStep && resultChild?.events[0] && (
-            <CodeBlock
-              code={JSON.stringify(resultChild.events[0].data, null, 2)}
-              lang="json"
-              maxHeight={480}
-            />
-          )}
+          {isFlowStep && sqlEvents.map((ev, idx) => {
+            const key = `${pipelineId}|${activity.id}|sql:${idx}`
+            const resultData = resultChild?.events[0]?.data as Record<string, unknown> | undefined
+            return (
+              <FlowStepSqlRow
+                key={key}
+                ev={ev}
+                resultData={resultData}
+                expanded={evExpanded.has(key)}
+                onToggle={() => toggleEvent(key)}
+              />
+            )
+          })}
           {isResultRow && activity.events[0] && (
             <CodeBlock
               code={JSON.stringify(activity.events[0].data, null, 2)}
@@ -1062,39 +1208,6 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   )
 }
 
-// ── Compact SQL row (flow steps: one line + modal) ─────────────────
-
-function SqlCompactRow({ ev }: { ev: OperationEvent }) {
-  const [modalOpen, setModalOpen] = useState(false)
-  const fields = readSqlTraceFields(ev.data)
-  const { sql, loading } = useResolvedSql(fields ?? { label: "query", connection: "?", sql: "" })
-  if (!fields) return null
-  const displaySql = loading ? "Loading SQL…" : sql.trim() || fields.sql.trim() || "SQL"
-
-  return (
-    <div className="flex items-baseline gap-1 pr-1">
-      <div className="min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-xs">
-        <span className="shrink-0 text-text-muted/50 tabular-nums w-20 font-mono">{fmtTime(ev.timestamp)}</span>
-        <span className="min-w-0 break-all whitespace-pre-wrap font-mono text-[11px] text-text-muted">{displaySql}</span>
-      </div>
-      <button
-        type="button"
-        className={LOG_ROW_ACTION}
-        onClick={(e) => {
-          e.stopPropagation()
-          setModalOpen(true)
-        }}
-      >
-        <Database size={10} />
-        SQL
-      </button>
-      {modalOpen && (
-        <SqlTraceModal fields={{ ...fields, sql: sql.trim() || fields.sql }} onClose={() => setModalOpen(false)} />
-      )}
-    </div>
-  )
-}
-
 // ── Event row ────────────────────────────────────────────────────
 
 function EventRow({ ev, expanded, onToggle }: {
@@ -1110,18 +1223,10 @@ function EventRow({ ev, expanded, onToggle }: {
   const isSql = isSyncSqlEventType(ev.type)
   const isStep = isAgentStepEventType(ev.type)
   const sqlFields = isSql ? readSqlTraceFields(ev.data) : null
-  const resolvedSqlState = useResolvedSql(
-    sqlFields ?? { label: "query", connection: "?", sql: "" },
-  )
   const toolIo = isStep ? readToolIoFromEvent(ev) : null
   const summary = pickEventSummary(ev)
   const label = formatEventLabel(ev)
-  const sqlSummary =
-    isSql && sqlFields
-      ? resolvedSqlState.loading
-        ? "Loading SQL…"
-        : resolvedSqlState.sql.trim() || summary
-      : null
+  const sqlPreview = isSql && sqlFields ? sqlPreviewFromEvent(ev) : null
   const displayData = isStep
     ? stripToolIoForInlineDisplay(ev.data)
     : ev.data
@@ -1130,27 +1235,25 @@ function EventRow({ ev, expanded, onToggle }: {
     <div>
       <div className="flex items-baseline gap-1 pr-1">
         <button
-          className={`min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-left text-xs hover:bg-overlay-2 transition-colors ${
+          className={`min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-left hover:bg-overlay-2 transition-colors ${
             hasData && !isSql ? "cursor-pointer" : "cursor-default"
           }`}
           onClick={() => hasData && !isSql && onToggle()}
         >
           <ChevronRight
             size={9}
-            className={`shrink-0 mt-1 text-text-muted/40 transition-transform ${expanded ? "rotate-90" : ""} ${hasData && !isSql ? "" : "invisible"}`}
+            className={`shrink-0 mt-1 transition-transform ${expanded ? "rotate-90" : ""} ${hasData && !isSql ? "text-text" : "invisible"}`}
           />
-          <span className="shrink-0 text-text-muted/50 tabular-nums w-20 font-mono">{fmtTime(ev.timestamp)}</span>
-          <span className={`shrink-0 font-mono ${
-            isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : "text-text-muted/70"
+          <span className={`shrink-0 tabular-nums w-20 ${OP_LOG_MONO}`}>{fmtTime(ev.timestamp)}</span>
+          <span className={`shrink-0 ${OP_LOG_MONO} ${
+            isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : ""
           }`}>{label}</span>
-          {sqlSummary && (
-            <span className={`min-w-0 break-all whitespace-pre-wrap font-mono text-[11px] ${
-              isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : "text-text-muted"
-            }`}>{sqlSummary}</span>
+          {sqlPreview && (
+            <span className={`min-w-0 break-all whitespace-pre-wrap ${OP_LOG_MONO}`}>{sqlPreview}</span>
           )}
           {summary && !isSql && (
-            <span className={`min-w-0 break-all whitespace-pre-wrap ${
-              isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : "text-text-muted"
+            <span className={`min-w-0 break-all whitespace-pre-wrap ${OP_LOG} ${
+              isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : ""
             }`}>{summary}</span>
           )}
         </button>
@@ -1184,7 +1287,7 @@ function EventRow({ ev, expanded, onToggle }: {
         </div>
       )}
       {sqlModalOpen && sqlFields && (
-        <SqlTraceModal fields={{ ...sqlFields, sql: resolvedSqlState.sql.trim() || sqlFields.sql }} onClose={() => setSqlModalOpen(false)} />
+        <SqlTraceModal fields={sqlFields} onClose={() => setSqlModalOpen(false)} />
       )}
       {ioModalOpen && toolIo && (
         <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
