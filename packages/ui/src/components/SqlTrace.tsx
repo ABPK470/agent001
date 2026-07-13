@@ -108,9 +108,7 @@ export function SqlTraceModal({
     : error
       ? <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>
       : (
-        <pre className="font-mono text-[0.8125rem] leading-snug text-text whitespace-pre-wrap break-all m-0">
-          {fullSql.trim() || fields.sql.trim() || "-- no SQL recorded"}
-        </pre>
+        <CodeBlock code={fullSql.trim() || fields.sql.trim() || "-- no SQL recorded"} lang="sql" maxHeight={720} />
       )
 
   return createPortal(

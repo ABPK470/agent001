@@ -197,6 +197,8 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
   const activities: OperationActivity[] = []
   const openTables = new Map<string, OperationActivity>()
   const pipelineFailed = events.some((ev) => ev.type === EventType.SyncPreviewFailed)
+  let catalogQueriesParent: OperationActivity | null = null
+  let sqlChildIndex = 0
 
   const failOpenTables = (endTs: string, reason?: string): void => {
     for (const child of openTables.values()) {
@@ -318,19 +320,12 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
         }
       }
       if (!attached) {
-        activities.push({
-          id: `sql:${activities.length}`,
-          name: `SQL · ${sqlLabel}`,
-          status: ev.data["error"] ? OperationStatus.Failed : OperationStatus.Success,
-          startedAt: ev.timestamp,
-          endedAt: ev.timestamp,
-          durationMs: numField(ev.data, "durationMs"),
-          summary: [
-            strField(ev.data, "connection"),
-            numField(ev.data, "rowCount") != null ? `${numField(ev.data, "rowCount")} rows` : null,
-          ].filter(Boolean).join(" · ") || undefined,
-          events: [ev],
-        })
+        catalogQueriesParent = attachOrphanSqlActivity(
+          activities,
+          catalogQueriesParent,
+          ev,
+          sqlChildIndex++,
+        )
       }
       continue
     }
@@ -356,6 +351,63 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
 
 function formatEventTypeName(type: string): string {
   return type.replace(/^sync\.(preview|execute)\./, "").replace(/\./g, " ")
+}
+
+function buildSqlChildActivity(ev: OperationEvent, index: number): OperationActivity {
+  const sqlLabel = strField(ev.data, "label") ?? "query"
+  return {
+    id: `sql-child:${index}`,
+    name: `SQL · ${sqlLabel}`,
+    status: ev.data["error"] ? OperationStatus.Failed : OperationStatus.Success,
+    startedAt: ev.timestamp,
+    endedAt: ev.timestamp,
+    durationMs: numField(ev.data, "durationMs"),
+    summary: [
+      strField(ev.data, "connection"),
+      numField(ev.data, "rowCount") != null ? `${numField(ev.data, "rowCount")} rows` : null,
+    ].filter(Boolean).join(" · ") || undefined,
+    events: [ev],
+  }
+}
+
+function finalizeCatalogQueriesParent(parent: OperationActivity): void {
+  const children = parent.children ?? []
+  if (children.length === 0) return
+  parent.startedAt = children[0]!.startedAt
+  parent.endedAt = children[children.length - 1]!.endedAt
+  parent.durationMs = durationOf(parent.startedAt, parent.endedAt ?? parent.startedAt)
+  parent.status = children.some((c) => c.status === OperationStatus.Failed)
+    ? OperationStatus.Failed
+    : children.some((c) => c.status === OperationStatus.Running)
+      ? OperationStatus.Running
+      : OperationStatus.Success
+  parent.summary = `${children.length} quer${children.length === 1 ? "y" : "ies"}`
+}
+
+function attachOrphanSqlActivity(
+  activities: OperationActivity[],
+  catalogParent: OperationActivity | null,
+  ev: OperationEvent,
+  childIndex: number,
+): OperationActivity {
+  let parent = catalogParent
+  if (!parent) {
+    parent = {
+      id: "catalog-queries",
+      name: "Catalog queries",
+      status: OperationStatus.Running,
+      startedAt: ev.timestamp,
+      endedAt: null,
+      durationMs: null,
+      children: [],
+      events: [],
+    }
+    activities.push(parent)
+  }
+  const child = buildSqlChildActivity(ev, childIndex)
+  parent.children!.push(child)
+  finalizeCatalogQueriesParent(parent)
+  return parent
 }
 
 const SYNC_EXECUTE_STEP_LABELS: Record<string, string> = {
@@ -453,6 +505,8 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
   const activities: OperationActivity[] = []
   let currentStep: OperationActivity | null = null
   const openTables = new Map<string, OperationActivity>()
+  let catalogQueriesParent: OperationActivity | null = null
+  let sqlChildIndex = 0
   const pipelineFailed = events.some(
     (ev) =>
       ev.type === EventType.SyncExecuteFailed ||
@@ -677,16 +731,12 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
     }
 
     if (t.endsWith(".sql")) {
-      activities.push({
-        id: `sql:${activities.length}`,
-        name: `SQL · ${strField(ev.data, "label") ?? "query"}`,
-        status: ev.data["error"] ? OperationStatus.Failed : OperationStatus.Success,
-        startedAt: ev.timestamp,
-        endedAt: ev.timestamp,
-        durationMs: numField(ev.data, "durationMs"),
-        summary: strField(ev.data, "connection") ?? undefined,
-        events: [ev],
-      })
+      catalogQueriesParent = attachOrphanSqlActivity(
+        activities,
+        catalogQueriesParent,
+        ev,
+        sqlChildIndex++,
+      )
       continue
     }
   }

@@ -29,6 +29,48 @@ export function fmtTime(iso: string): string {
   return d.toLocaleTimeString(undefined, { hour12: false })
 }
 
+export function fmtDateTime(iso: string): string {
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return iso
+  return d.toLocaleString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
+}
+
+/** Format pipeline subtitle — humanize ISO timestamps embedded after `def`. */
+export function formatPipelineSubtitle(subtitle: string): string {
+  return subtitle.replace(
+    /\bdef\s+(\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})?)/g,
+    (_, iso: string) => `def ${fmtDateTime(iso)}`,
+  )
+}
+
+export function statusTextClass(status: OperationStatus): string {
+  switch (status) {
+    case "success":
+      return "text-success"
+    case "failed":
+      return "text-error"
+    case "skipped":
+      return "text-warning"
+    case "running":
+      return "text-info"
+    case "cancelled":
+      return "text-text-muted"
+    default:
+      return "text-text"
+  }
+}
+
+/** Single muted tone for descriptions — same at every nesting depth. */
+export const OP_LOG_MUTED = "text-text-muted"
+
 /** Status indicator — dot for terminal states; spinner only while running. */
 export function StatusDot({ status }: { status: OperationStatus }) {
   const color = STATUS_COLOR[status]
@@ -81,8 +123,10 @@ function OpLogRowCells({
       ) : (
         <span className="w-[11px] shrink-0" aria-hidden />
       )}
-      <span className={`min-w-0 flex-1 break-all ${OP_LOG}`}>{label}</span>
-      {meta ? <span className={`shrink-0 break-all max-w-[40%] ${OP_LOG}`}>{meta}</span> : null}
+      <span className="min-w-0 flex-1 flex items-baseline gap-x-2 gap-y-0.5 flex-wrap">
+        <span className={`break-all ${OP_LOG}`}>{label}</span>
+        {meta ? <span className={`break-all ${OP_LOG} ${OP_LOG_MUTED}`}>{meta}</span> : null}
+      </span>
       <span className={`shrink-0 tabular-nums w-14 text-right ${OP_LOG}`}>
         {durationMs !== undefined ? fmtDuration(durationMs ?? null) : ""}
       </span>
