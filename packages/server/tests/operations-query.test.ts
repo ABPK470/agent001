@@ -581,4 +581,84 @@ describe("listOperations sync bucketing", () => {
     expect(executePhase?.error).toBe("Source audit gate failed — execute skipped")
     expect(executePhase?.children?.some((a) => a.name === "Execute skipped")).toBe(true)
   })
+
+  it("excludes system pipelines from the operation log list", async () => {
+    listEvents.mockReturnValue([
+      {
+        type: "server.started",
+        created_at: "2026-07-13T10:00:00.000Z",
+        data: JSON.stringify({ version: "1.0" }),
+      },
+      {
+        type: EventType.SyncPreviewCompleted,
+        created_at: "2026-07-13T09:00:00.000Z",
+        data: JSON.stringify({
+          planId: "plan-visible",
+          totals: { insert: 0, update: 1, delete: 0 },
+        }),
+      },
+    ])
+
+    getRun.mockReturnValue(undefined)
+    getSyncRun.mockReturnValue({
+      status: "success",
+      finished_at: "2026-07-13T09:00:01.000Z",
+      duration_ms: 1000,
+      entity_display_name: "Contract",
+      entity_type: "contract",
+      entity_id: "1",
+      source: "dev",
+      target: "uat",
+      error: null,
+    })
+
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const result = listOperations({ limit: 50 })
+
+    expect(result.operations.every((op) => op.kind !== OperationKind.System)).toBe(true)
+    expect(result.operations.some((op) => op.id === "plan-visible")).toBe(true)
+    expect(result.hasMore).toBe(false)
+    expect(result.mode).toBe("list")
+  })
+
+  it("filters sync kind to include unified sync-run pipelines", async () => {
+    listEvents.mockReturnValue([
+      {
+        type: EventType.SyncExecuteCompleted,
+        created_at: "2026-07-13T10:00:00.000Z",
+        data: JSON.stringify({ planId: "plan-1", applied: { insert: 0, update: 0, delete: 0 } }),
+      },
+      {
+        type: EventType.RunCompleted,
+        created_at: "2026-07-13T09:00:00.000Z",
+        data: JSON.stringify({ runId: "run-1" }),
+      },
+    ])
+
+    getRun.mockReturnValue({
+      status: "completed",
+      completed_at: "2026-07-13T09:00:01.000Z",
+      goal: "test",
+      step_count: 0,
+      agent_id: "copilot",
+      error: null,
+    })
+    getSyncRun.mockReturnValue({
+      status: "success",
+      finished_at: "2026-07-13T10:00:01.000Z",
+      duration_ms: 1000,
+      entity_display_name: "Contract",
+      entity_type: "contract",
+      entity_id: "1",
+      source: "dev",
+      target: "uat",
+      error: null,
+    })
+
+    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const result = listOperations({ limit: 50, kind: "sync" })
+
+    expect(result.operations).toHaveLength(1)
+    expect(result.operations[0]?.kind).toBe(OperationKind.SyncRun)
+  })
 })

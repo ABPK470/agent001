@@ -7,40 +7,39 @@ import { subscribeToEvents } from "../../platform/events/broadcaster.js"
 import { searchEvents } from "../../platform/persistence/events.js"
 import {
   listOperations,
-  listOperationsForPlan,
-  listOperationsForRun
+  OPERATIONS_PAGE_EVENT_LIMIT
 } from "./application/query/index.js"
 
 export function registerOperationRoutes(app: FastifyInstance): void {
   app.get<{
-    Querystring: { limit?: string; before?: string; search?: string; kind?: string; status?: string }
+    Querystring: {
+      limit?: string
+      before?: string
+      search?: string
+      kind?: string
+      status?: string
+      planId?: string
+      runId?: string
+    }
   }>("/api/operations", async (req) => {
-    const limit = Math.min(Number(req.query.limit) || 1000, 5000)
+    const limit = Math.min(Number(req.query.limit) || OPERATIONS_PAGE_EVENT_LIMIT, 10_000)
     return listOperations({
       limit,
       before: req.query.before,
       search: req.query.search,
       kind: req.query.kind,
-      status: req.query.status
+      status: req.query.status,
+      planId: req.query.planId,
+      runId: req.query.runId
     })
   })
 
   app.get<{ Params: { planId: string } }>("/api/operations/plan/:planId", async (req) => {
-    const { operation, scannedEvents } = listOperationsForPlan(req.params.planId)
-    return {
-      operation,
-      scannedEvents,
-      operations: operation ? [operation] : []
-    }
+    return listOperations({ planId: req.params.planId })
   })
 
   app.get<{ Params: { runId: string } }>("/api/operations/run/:runId", async (req) => {
-    const { operation, scannedEvents } = listOperationsForRun(req.params.runId)
-    return {
-      operation,
-      scannedEvents,
-      operations: operation ? [operation] : []
-    }
+    return listOperations({ runId: req.params.runId })
   })
 
   app.get("/api/operations/stream", (req, reply) => {
@@ -60,13 +59,13 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       }
     }
 
-    send(listOperations({ limit: 2000 }))
+    send({ refresh: true, at: new Date().toISOString() })
 
     let debounce: ReturnType<typeof setTimeout> | null = null
     const unsubscribe = subscribeToEvents(() => {
       if (debounce) clearTimeout(debounce)
       debounce = setTimeout(() => {
-        if (!send(listOperations({ limit: 2000 }))) unsubscribe()
+        if (!send({ refresh: true, at: new Date().toISOString() })) unsubscribe()
       }, 400)
     })
 

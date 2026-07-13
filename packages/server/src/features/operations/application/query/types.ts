@@ -50,8 +50,21 @@ export interface ListOperationsOpts {
   limit?: number
   before?: string
   search?: string
+  /** `all` | `agent` | `sync` | specific OperationKind */
   kind?: string
   status?: string
+  /** When set, return the full audit tree for one sync plan (no pagination). */
+  planId?: string
+  /** When set, return the full audit tree for one agent run (no pagination). */
+  runId?: string
+}
+
+export interface ListOperationsResult {
+  operations: OperationPipeline[]
+  scannedEvents: number
+  oldestTimestamp: string | null
+  hasMore: boolean
+  mode: "list" | "focus"
 }
 
 export interface EventBucket {

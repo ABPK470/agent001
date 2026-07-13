@@ -719,24 +719,34 @@ export const api = {
    * sync executes, system minute-buckets) so the UI can render an expandable
    * tree.
    */
-  operations: (opts: { limit?: number; before?: string; search?: string; kind?: string; status?: string } = {}) => {
+  operations: (opts: {
+    limit?: number
+    before?: string
+    search?: string
+    kind?: string
+    status?: string
+    planId?: string
+    runId?: string
+  } = {}) => {
     const params = new URLSearchParams()
     if (opts.limit != null) params.set("limit", String(opts.limit))
     if (opts.before) params.set("before", opts.before)
     if (opts.search) params.set("search", opts.search)
     if (opts.kind) params.set("kind", opts.kind)
     if (opts.status) params.set("status", opts.status)
+    if (opts.planId) params.set("planId", opts.planId)
+    if (opts.runId) params.set("runId", opts.runId)
     const qs = params.toString()
     return json<OperationsResponse>(`/api/operations${qs ? `?${qs}` : ""}`)
   },
 
   /** Full audit tree for one sync plan (no event window cap). */
   operationsForPlan: (planId: string) =>
-    json<OperationAuditResponse>(`/api/operations/plan/${encodeURIComponent(planId)}`),
+    json<OperationsResponse>(`/api/operations/plan/${encodeURIComponent(planId)}`),
 
   /** Full audit tree for one agent run (no event window cap). */
   operationsForRun: (runId: string) =>
-    json<OperationAuditResponse>(`/api/operations/run/${encodeURIComponent(runId)}`),
+    json<OperationsResponse>(`/api/operations/run/${encodeURIComponent(runId)}`),
 
   // ── Attachments ────────────────────────────────────────────────
   /**
@@ -1210,13 +1220,13 @@ export interface OperationsResponse {
   operations: OperationPipeline[]
   scannedEvents: number
   oldestTimestamp: string | null
+  hasMore: boolean
+  mode: "list" | "focus"
 }
 
-/** Plan- or run-scoped audit response (single pipeline, all correlated events). */
-export interface OperationAuditResponse {
+/** @deprecated Use OperationsResponse — plan/run routes return the same shape. */
+export interface OperationAuditResponse extends OperationsResponse {
   operation: OperationPipeline | null
-  scannedEvents: number
-  operations: OperationPipeline[]
 }
 
 /**

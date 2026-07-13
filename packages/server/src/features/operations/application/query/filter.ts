@@ -2,7 +2,26 @@
  * Apply optional query filters (kind, status, free-text search) after pipelines are built.
  */
 
+import { OperationKind } from "../../../../shared/enums/operations.js"
 import type { ListOperationsOpts, OperationPipeline } from "./types.js"
+
+function matchesKindFilter(pipeline: OperationPipeline, kind: string): boolean {
+  if (kind === "all") return true
+  if (kind === "agent") return pipeline.kind === OperationKind.AgentRun
+  if (kind === "sync") {
+    return (
+      pipeline.kind === OperationKind.SyncRun ||
+      pipeline.kind === OperationKind.SyncPreview ||
+      pipeline.kind === OperationKind.SyncExecute ||
+      pipeline.kind === OperationKind.ProposerRun
+    )
+  }
+  return pipeline.kind === kind
+}
+
+export function excludeSystemPipelines(operations: OperationPipeline[]): OperationPipeline[] {
+  return operations.filter((p) => p.kind !== OperationKind.System)
+}
 
 export function filterOperations(
   operations: OperationPipeline[],
@@ -11,7 +30,7 @@ export function filterOperations(
   let filtered = operations
 
   if (opts.kind && opts.kind !== "all") {
-    filtered = filtered.filter((p) => p.kind === opts.kind)
+    filtered = filtered.filter((p) => matchesKindFilter(p, opts.kind!))
   }
   if (opts.status && opts.status !== "all") {
     filtered = filtered.filter((p) => p.status === opts.status)

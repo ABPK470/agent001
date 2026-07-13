@@ -1,17 +1,17 @@
 /**
  * Operation Log — audit-oriented view of platform activity (pipelines → steps → events).
  *
- * Data: GET /api/operations/stream (SSE) + paginated GET /api/operations?before= for older history.
- * Raw events live in event_log; this widget groups them into operator-friendly pipelines.
+ * Data: paginated GET /api/operations (SQLite event_log). SSE only signals refresh.
  */
 
 import { Brain, ChevronRight, Database, Filter, GitCompareArrows, Loader2, Settings, Square, Wrench, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import type { OperationActivity, OperationEvent, OperationPipeline, OperationsResponse } from "../api"
+import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
 import { SqlTraceModal } from "../components/SqlTrace"
 import { ToolCallModal, ToolIoBlock } from "../components/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
+import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
 import { useStore } from "../store"
 import { isSyncSqlEventType, readSqlTraceFields } from "../sync-sql-trace"
 import {
@@ -33,24 +33,6 @@ import {
   LogWidgetToolbarSearch,
   LogWidgetToolbarTail,
 } from "./widget-toolbar"
-
-/** Events scanned per snapshot / page — audit window, not “live tail only”. */
-const AUDIT_EVENT_LIMIT = 2000
-
-function mergeOperationPipelines(
-  ...groups: OperationPipeline[][]
-): OperationPipeline[] {
-  const byId = new Map<string, OperationPipeline>()
-  for (const group of groups) {
-    for (const pipeline of group) {
-      const existing = byId.get(pipeline.id)
-      if (!existing || pipeline.eventCount > existing.eventCount) {
-        byId.set(pipeline.id, pipeline)
-      }
-    }
-  }
-  return [...byId.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
-}
 
 // ── Visuals ──────────────────────────────────────────────────────
 
@@ -97,8 +79,6 @@ const STATUS_META: Record<OperationStatus, { color: string; tone: string }> = {
 
 // system kind is intentionally excluded from the ops log — those events live in the Event Stream widget
 const ALL_STATUSES: OperationStatus[] = ["running", "success", "failed", "cancelled", "skipped"]
-
-type KindView = "all" | "agent" | "sync"
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -325,36 +305,32 @@ export function OperationLog() {
   const focusOperationLogRun = useStore((s) => s.focusOperationLogRun)
   const clearOperationLogFocus = useStore((s) => s.clearOperationLogFocus)
 
-  const [livePipelines, setLivePipelines] = useState<OperationPipeline[]>([])
-  const [olderPipelines, setOlderPipelines] = useState<OperationPipeline[]>([])
-  const [auditPipeline, setAuditPipeline] = useState<OperationPipeline | null>(null)
-  const [auditMeta, setAuditMeta] = useState<{ scannedEvents: number } | null>(null)
-  const [auditLoading, setAuditLoading] = useState(false)
-  const [liveMeta, setLiveMeta] = useState<{ scannedEvents: number; oldestTimestamp: string | null }>({
-    scannedEvents: 0,
-    oldestTimestamp: null,
-  })
-  const [olderBefore, setOlderBefore] = useState<string | null>(null)
-  const [loadingOlder, setLoadingOlder] = useState(false)
-  const [hasMoreOlder, setHasMoreOlder] = useState(false)
-  const [kindView, setKindView] = useState<KindView>("all")
+  const [kindView, setKindView] = useState<OperationLogKindView>("all")
   const [statuses, setStatuses] = useState<Set<OperationStatus>>(new Set())
   const [search, setSearch] = useState("")
-  // full-history deep search (BE scan of all events)
-  const [histLoading, setHistLoading] = useState(false)
-  const [histResults, setHistResults] = useState<OperationPipeline[] | null>(null)
-  const histTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [actExpanded, setActExpanded] = useState<Set<string>>(new Set())
   const [evExpanded, setEvExpanded] = useState<Set<string>>(new Set())
-  // day group collapse state: empty = all expanded
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
   const rootRef = useRef<HTMLDivElement>(null)
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const sentinelRef = useRef<HTMLDivElement>(null)
   const { width } = useContainerSize(rootRef)
   const compact = width > 0 && width < 860
   const tiny = width > 0 && width < 480
   const [statusesOpen, setStatusesOpen] = useState(false)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+
+  const {
+    pipelines,
+    loading,
+    loadingMore,
+    hasMore,
+    loadMore,
+    mode,
+    scannedEvents,
+    error,
+  } = useOperationLogData({ focus: operationLogFocus, kindView, search })
 
   const expandAuditTree = useCallback((pipeline: OperationPipeline) => {
     setExpanded(new Set([pipeline.id]))
@@ -371,38 +347,9 @@ export function OperationLog() {
   }, [])
 
   useEffect(() => {
-    if (!operationLogFocus) {
-      setAuditPipeline(null)
-      setAuditMeta(null)
-      return
-    }
-    let cancelled = false
-    setAuditLoading(true)
-    const load =
-      operationLogFocus.kind === "plan"
-        ? api.operationsForPlan(operationLogFocus.id)
-        : api.operationsForRun(operationLogFocus.id)
-    void load
-      .then((res) => {
-        if (cancelled) return
-        const pipeline = res.operation ?? res.operations[0] ?? null
-        setAuditPipeline(pipeline)
-        setAuditMeta({ scannedEvents: res.scannedEvents })
-        if (pipeline) expandAuditTree(pipeline)
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setAuditPipeline(null)
-          setAuditMeta(null)
-        }
-      })
-      .finally(() => {
-        if (!cancelled) setAuditLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [operationLogFocus, expandAuditTree])
+    if (mode !== "focus" || pipelines.length !== 1) return
+    expandAuditTree(pipelines[0]!)
+  }, [mode, pipelines, expandAuditTree])
 
   const cancelPipeline = useCallback(async (pipeline: OperationPipeline): Promise<void> => {
     if (pipeline.status !== "running") return
@@ -419,68 +366,6 @@ export function OperationLog() {
       setCancellingId(null)
     }
   }, [])
-  useEffect(() => {
-    const es = new EventSource("/api/operations/stream", { withCredentials: true })
-    es.onopen    = () => { /* connected */ }
-    es.onerror   = () => { /* reconnecting */ }
-    es.onmessage = (e) => {
-      try {
-        const data = JSON.parse(e.data as string) as OperationsResponse
-        if (Array.isArray(data.operations)) {
-          setLivePipelines(data.operations)
-          setLiveMeta({
-            scannedEvents: data.scannedEvents ?? data.operations.length,
-            oldestTimestamp: data.oldestTimestamp ?? null,
-          })
-        }
-      } catch { /* ignore */ }
-    }
-    return () => es.close()
-  }, [])
-
-  const loadOlder = useCallback(async () => {
-    const before = olderBefore ?? liveMeta.oldestTimestamp
-    if (!before || loadingOlder) return
-    setLoadingOlder(true)
-    try {
-      const res = await api.operations({ limit: AUDIT_EVENT_LIMIT, before })
-      setOlderPipelines((prev) => mergeOperationPipelines(prev, res.operations))
-      setOlderBefore(res.oldestTimestamp)
-      setHasMoreOlder(
-        Boolean(res.oldestTimestamp) && (res.scannedEvents ?? 0) >= AUDIT_EVENT_LIMIT,
-      )
-    } catch { /* ignore */ } finally {
-      setLoadingOlder(false)
-    }
-  }, [olderBefore, liveMeta.oldestTimestamp, loadingOlder])
-
-  const pipelines = useMemo(
-    () => mergeOperationPipelines(olderPipelines, livePipelines),
-    [olderPipelines, livePipelines],
-  )
-
-  const canLoadOlder = Boolean(
-    (olderBefore ?? liveMeta.oldestTimestamp) &&
-    (hasMoreOlder || olderPipelines.length === 0) &&
-    (liveMeta.scannedEvents >= AUDIT_EVENT_LIMIT || olderBefore != null),
-  )
-
-  // ── Full-history search (debounced, fires when SSE results are sparse) ──
-  useEffect(() => {
-    if (histTimer.current) clearTimeout(histTimer.current)
-    if (!search || search.length < 2) { setHistResults(null); return }
-    histTimer.current = setTimeout(async () => {
-      setHistLoading(true)
-      try {
-        const res = await api.operations({ limit: 5000, search })
-        // also strip system from history results
-        setHistResults(res.operations.filter(p => p.kind !== "system"))
-      } catch { /* ignore */ } finally {
-        setHistLoading(false)
-      }
-    }, 800)
-    return () => { if (histTimer.current) clearTimeout(histTimer.current) }
-  }, [search])
 
   // ── Toggle helpers ────────────────────────────────────────────
   const toggleStatus = useCallback((s: OperationStatus) => {
@@ -499,21 +384,42 @@ export function OperationLog() {
     setCollapsedDays(s => { const n = new Set(s); n.has(label) ? n.delete(label) : n.add(label); return n })
   }, [])
 
-  // ── Filtering — system kind is always excluded ────────────────
   const needle = search.trim().toLowerCase()
-  // exclude system pipelines; they belong in the Event Stream widget
-  const nonSystem = useMemo(() =>
-    (histResults ?? pipelines).filter(p => p.kind !== "system")
-  , [histResults, pipelines])
+  const serverSearchActive = needle.length >= 2
 
-  const filtered = useMemo(() => nonSystem.filter(p => {
-    if (kindView === "agent" && p.kind !== "agent-run") return false
-    if (kindView === "sync" && p.kind !== "sync-preview" && p.kind !== "sync-execute" && p.kind !== "sync-run" && p.kind !== "proposer-run") return false
+  const filtered = useMemo(() => pipelines.filter((p) => {
     if (statuses.size > 0 && !statuses.has(p.status)) return false
-    // When histResults are active, BE already applied the search; local needle is redundant
-    if (needle && !histResults && !matchesPipeline(p, needle)) return false
+    if (!serverSearchActive && needle && !matchesPipeline(p, needle)) return false
     return true
-  }), [nonSystem, kindView, statuses, needle, histResults])
+  }), [pipelines, statuses, needle, serverSearchActive])
+
+  const searchPending = serverSearchActive && loading && mode === "list"
+
+  useEffect(() => {
+    if (mode === "focus" || !hasMore) return
+    const root = scrollRef.current
+    const target = sentinelRef.current
+    if (!root || !target) return
+    const obs = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting) loadMore()
+      },
+      { root, rootMargin: "240px" },
+    )
+    obs.observe(target)
+    return () => obs.disconnect()
+  }, [mode, hasMore, loadMore, filtered.length])
+
+  const emptyMessage = useMemo(() => {
+    if (error) return error
+    if (mode === "focus" && pipelines.length === 0) {
+      return `No operation events found for this ${operationLogFocus?.kind === "plan" ? "plan" : "run"}.`
+    }
+    if (pipelines.length === 0) return "No operations recorded yet."
+    if (statuses.size > 0) return "No operations match the selected statuses."
+    if (needle) return "No operations match your search."
+    return "No operations recorded yet."
+  }, [error, mode, pipelines.length, statuses.size, needle, operationLogFocus?.kind])
 
   return (
     <div ref={rootRef} className="h-full flex flex-col gap-2.5 overflow-hidden text-text">
@@ -598,32 +504,32 @@ export function OperationLog() {
 
         <LogWidgetToolbarSearch
           value={search}
-          onChange={(value) => { setSearch(value); if (!value) setHistResults(null) }}
+          onChange={setSearch}
           placeholder="Filter operations…"
-          loading={histLoading}
-          onClear={() => { setSearch(""); setHistResults(null) }}
+          loading={searchPending}
+          onClear={() => setSearch("")}
         />
 
         <LogWidgetToolbarTail>
-          <LogWidgetToolbarCount filtered={filtered.length} total={nonSystem.length} hidden={tiny} />
+          <LogWidgetToolbarCount filtered={filtered.length} total={pipelines.length} hidden={tiny} />
         </LogWidgetToolbarTail>
       </LogWidgetToolbar>
 
       {/* ── Body ────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto pr-1">
-        {operationLogFocus && (
+      <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1">
+        {mode === "focus" && operationLogFocus && (
           <div className="mb-3 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
             <div className="min-w-0 flex-1">
-              <div className="text-xs uppercase tracking-wide text-accent/80">Audit view</div>
+              <div className="text-xs uppercase tracking-wide text-accent/80">Focused operation</div>
               <div className="text-xs text-text font-mono truncate">
                 {operationLogFocus.label ??
                   (operationLogFocus.kind === "plan"
                     ? `plan ${operationLogFocus.id}`
                     : `run ${operationLogFocus.id}`)}
               </div>
-              {auditMeta && (
+              {scannedEvents > 0 && (
                 <div className="text-xs text-text-muted/70 tabular-nums">
-                  {auditMeta.scannedEvents.toLocaleString()} events · full history
+                  {scannedEvents.toLocaleString()} correlated events
                 </div>
               )}
             </div>
@@ -633,51 +539,23 @@ export function OperationLog() {
               className="shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text hover:bg-overlay-2 rounded transition-colors"
             >
               <X size={12} />
-              Back to live view
+              Back to list
             </button>
           </div>
         )}
 
-        {operationLogFocus && auditLoading && (
-          <div className="text-text-muted/60 text-xs text-center py-8">Loading full audit…</div>
-        )}
-
-        {operationLogFocus && !auditLoading && !auditPipeline && (
-          <div className="text-text-muted text-center pt-8 text-sm">
-            No operation events found for this {operationLogFocus.kind === "plan" ? "plan" : "run"}.
+        {loading && filtered.length === 0 && (
+          <div className="text-text-muted/60 text-xs text-center py-8 flex items-center justify-center gap-2">
+            <Loader2 size={14} className="animate-spin" />
+            Loading operations…
           </div>
         )}
 
-        {operationLogFocus && !auditLoading && auditPipeline && (
-          <OperationPipelineList
-            pipelines={[auditPipeline]}
-            compact={compact}
-            expanded={expanded}
-            togglePipeline={togglePipeline}
-            actExpanded={actExpanded}
-            toggleActivity={toggleActivity}
-            evExpanded={evExpanded}
-            toggleEvent={toggleEvent}
-            collapsedDays={collapsedDays}
-            toggleDay={toggleDay}
-            onOpenSyncPlan={(planId) => focusOperationLogPlan(planId)}
-            onFocusAgentRun={(runId, label) => focusOperationLogRun(runId, label)}
-            onCancelPipeline={cancelPipeline}
-            cancellingId={cancellingId}
-          />
+        {!loading && filtered.length === 0 && (
+          <div className="text-text-muted text-center pt-12 text-sm">{emptyMessage}</div>
         )}
 
-        {!operationLogFocus && histLoading && (
-          <div className="text-text-muted/60 text-xs text-center py-4">Searching full history…</div>
-        )}
-
-        {!operationLogFocus && !histLoading && filtered.length === 0 && (
-          <div className="text-text-muted text-center pt-12 text-sm">
-            {pipelines.length === 0 ? "No operations recorded yet." : "No matches."}
-          </div>
-        )}
-
-        {!operationLogFocus && !histLoading && filtered.length > 0 && (
+        {filtered.length > 0 && (
           <OperationPipelineList
             pipelines={filtered}
             compact={compact}
@@ -696,20 +574,14 @@ export function OperationLog() {
           />
         )}
 
-        {!operationLogFocus && !histLoading && !search && canLoadOlder && (
-          <div className="py-4 flex flex-col items-center gap-1 border-t border-border-subtle/60 mt-2">
-            <button
-              type="button"
-              disabled={loadingOlder}
-              onClick={() => void loadOlder()}
-              className="text-xs text-accent hover:text-accent-hover disabled:opacity-50"
-            >
-              {loadingOlder ? "Loading older operations…" : "Load older operations"}
-            </button>
-            <span className="text-xs text-text-muted/50 font-mono">
-              Audit window · {liveMeta.scannedEvents.toLocaleString()} recent events
-              {olderPipelines.length > 0 ? ` · +${olderPipelines.length} from earlier pages` : ""}
-            </span>
+        {mode === "list" && hasMore && (
+          <div ref={sentinelRef} className="py-6 flex justify-center">
+            {loadingMore && (
+              <span className="text-xs text-text-muted/60 flex items-center gap-2">
+                <Loader2 size={12} className="animate-spin" />
+                Loading more…
+              </span>
+            )}
           </div>
         )}
       </div>
