@@ -36,6 +36,21 @@ export function correlateEventsIntoBuckets(
     if (isProposerEvent && runId) {
       kind = OperationKind.ProposerRun
       key = `proposer:${runId}`
+    } else if (
+      planId &&
+      ev.type.startsWith("sync.") &&
+      ev.type.endsWith(".sql")
+    ) {
+      const scope = strField(ev.data, "scope")
+      const executeSql =
+        ev.type === "sync.execute.sql" ||
+        scope === "execute" ||
+        scope === "rollback" ||
+        scope === "metadata" ||
+        scope === "apply"
+      kind = executeSql ? OperationKind.SyncExecute : OperationKind.SyncPreview
+      key = executeSql ? `plan:${planId}:execute` : `plan:${planId}:preview`
+      bucketPlanId = planId
     } else if (planId && ev.type.startsWith("sync.execute")) {
       kind = OperationKind.SyncExecute
       key = `plan:${planId}:execute`

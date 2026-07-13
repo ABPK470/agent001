@@ -38,7 +38,7 @@ export function SqlTraceBlock({
         <div className="px-2.5 py-1 text-error text-xs border-t border-border-subtle">{fields.error}</div>
       )}
       {modalOpen && (
-        <SqlFullModal
+        <SqlTraceModal
           fields={fields}
           onClose={() => setModalOpen(false)}
         />
@@ -61,7 +61,7 @@ export function SqlTraceFromEventData({
   return <SqlTraceBlock fields={fields} compact={compact} maxHeight={maxHeight} />
 }
 
-function SqlFullModal({
+export function SqlTraceModal({
   fields,
   onClose,
 }: {

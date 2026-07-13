@@ -302,6 +302,34 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
       continue
     }
 
+    if (t.endsWith(".sql")) {
+      const sqlLabel = strField(ev.data, "label") ?? "query"
+      let attached = false
+      for (const [tbl, act] of openTables) {
+        if (sqlLabel.includes(tbl)) {
+          act.events.push(ev)
+          attached = true
+          break
+        }
+      }
+      if (!attached) {
+        activities.push({
+          id: `sql:${activities.length}`,
+          name: `SQL · ${sqlLabel}`,
+          status: ev.data["error"] ? OperationStatus.Failed : OperationStatus.Success,
+          startedAt: ev.timestamp,
+          endedAt: ev.timestamp,
+          durationMs: numField(ev.data, "durationMs"),
+          summary: [
+            strField(ev.data, "connection"),
+            numField(ev.data, "rowCount") != null ? `${numField(ev.data, "rowCount")} rows` : null,
+          ].filter(Boolean).join(" · ") || undefined,
+          events: [ev],
+        })
+      }
+      continue
+    }
+
     activities.push({
       id: `preview-misc:${activities.length}`,
       name: formatEventTypeName(t),
@@ -539,7 +567,25 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
     }
 
     if (currentStep) {
+      if (t.endsWith(".sql")) {
+        currentStep.events.push(ev)
+        continue
+      }
       currentStep.events.push(ev)
+      continue
+    }
+
+    if (t.endsWith(".sql")) {
+      activities.push({
+        id: `sql:${activities.length}`,
+        name: `SQL · ${strField(ev.data, "label") ?? "query"}`,
+        status: ev.data["error"] ? OperationStatus.Failed : OperationStatus.Success,
+        startedAt: ev.timestamp,
+        endedAt: ev.timestamp,
+        durationMs: numField(ev.data, "durationMs"),
+        summary: strField(ev.data, "connection") ?? undefined,
+        events: [ev],
+      })
       continue
     }
   }

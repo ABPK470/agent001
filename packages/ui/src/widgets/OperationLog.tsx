@@ -1,18 +1,17 @@
 /**
- * Operation Log — three-level history of platform activity, live via SSE.
+ * Operation Log — audit-oriented view of platform activity (pipelines → steps → events).
  *
- * Data source: GET /api/operations/stream (SSE, no polling).
- * Filters: multi-select kind + status chips, free-text search.
- * Layout: operations grouped by day.
+ * Data: GET /api/operations/stream (SSE) + paginated GET /api/operations?before= for older history.
+ * Raw events live in event_log; this widget groups them into operator-friendly pipelines.
  */
 
 import { Brain, ChevronRight, Database, Filter, GitCompareArrows, Loader2, Settings, Square, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline, OperationsResponse } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
-import { SqlTraceFromEventData } from "../components/SqlTrace"
+import { SqlTraceModal } from "../components/SqlTrace"
 import { useContainerSize } from "../hooks/useContainerSize"
-import { isSyncSqlEventType } from "../sync-sql-trace"
+import { isSyncSqlEventType, readSqlTraceFields } from "../sync-sql-trace"
 import {
   LOG_TOOLBAR_CHIP,
   LOG_TOOLBAR_CHIP_ACTIVE,
@@ -25,6 +24,24 @@ import {
   LogWidgetToolbarSearch,
   LogWidgetToolbarTail,
 } from "./widget-toolbar"
+
+/** Events scanned per snapshot / page — audit window, not “live tail only”. */
+const AUDIT_EVENT_LIMIT = 2000
+
+function mergeOperationPipelines(
+  ...groups: OperationPipeline[][]
+): OperationPipeline[] {
+  const byId = new Map<string, OperationPipeline>()
+  for (const group of groups) {
+    for (const pipeline of group) {
+      const existing = byId.get(pipeline.id)
+      if (!existing || pipeline.eventCount > existing.eventCount) {
+        byId.set(pipeline.id, pipeline)
+      }
+    }
+  }
+  return [...byId.values()].sort((a, b) => b.startedAt.localeCompare(a.startedAt))
+}
 
 // ── Visuals ──────────────────────────────────────────────────────
 
@@ -274,7 +291,15 @@ function formatEventLabel(ev: OperationEvent): string {
 }
 
 export function OperationLog() {
-  const [pipelines, setPipelines] = useState<OperationPipeline[]>([])
+  const [livePipelines, setLivePipelines] = useState<OperationPipeline[]>([])
+  const [olderPipelines, setOlderPipelines] = useState<OperationPipeline[]>([])
+  const [liveMeta, setLiveMeta] = useState<{ scannedEvents: number; oldestTimestamp: string | null }>({
+    scannedEvents: 0,
+    oldestTimestamp: null,
+  })
+  const [olderBefore, setOlderBefore] = useState<string | null>(null)
+  const [loadingOlder, setLoadingOlder] = useState(false)
+  const [hasMoreOlder, setHasMoreOlder] = useState(false)
   const [kindView, setKindView] = useState<KindView>("all")
   const [statuses, setStatuses] = useState<Set<OperationStatus>>(new Set())
   const [search, setSearch] = useState("")
@@ -316,11 +341,44 @@ export function OperationLog() {
     es.onmessage = (e) => {
       try {
         const data = JSON.parse(e.data as string) as OperationsResponse
-        if (Array.isArray(data.operations)) setPipelines(data.operations)
+        if (Array.isArray(data.operations)) {
+          setLivePipelines(data.operations)
+          setLiveMeta({
+            scannedEvents: data.scannedEvents ?? data.operations.length,
+            oldestTimestamp: data.oldestTimestamp ?? null,
+          })
+        }
       } catch { /* ignore */ }
     }
     return () => es.close()
   }, [])
+
+  const loadOlder = useCallback(async () => {
+    const before = olderBefore ?? liveMeta.oldestTimestamp
+    if (!before || loadingOlder) return
+    setLoadingOlder(true)
+    try {
+      const res = await api.operations({ limit: AUDIT_EVENT_LIMIT, before })
+      setOlderPipelines((prev) => mergeOperationPipelines(prev, res.operations))
+      setOlderBefore(res.oldestTimestamp)
+      setHasMoreOlder(
+        Boolean(res.oldestTimestamp) && (res.scannedEvents ?? 0) >= AUDIT_EVENT_LIMIT,
+      )
+    } catch { /* ignore */ } finally {
+      setLoadingOlder(false)
+    }
+  }, [olderBefore, liveMeta.oldestTimestamp, loadingOlder])
+
+  const pipelines = useMemo(
+    () => mergeOperationPipelines(olderPipelines, livePipelines),
+    [olderPipelines, livePipelines],
+  )
+
+  const canLoadOlder = Boolean(
+    (olderBefore ?? liveMeta.oldestTimestamp) &&
+    (hasMoreOlder || olderPipelines.length === 0) &&
+    (liveMeta.scannedEvents >= AUDIT_EVENT_LIMIT || olderBefore != null),
+  )
 
   // ── Full-history search (debounced, fires when SSE results are sparse) ──
   useEffect(() => {
@@ -493,6 +551,23 @@ export function OperationLog() {
             onCancelPipeline={cancelPipeline}
             cancellingId={cancellingId}
           />
+        )}
+
+        {!histLoading && !search && canLoadOlder && (
+          <div className="py-4 flex flex-col items-center gap-1 border-t border-border-subtle/60 mt-2">
+            <button
+              type="button"
+              disabled={loadingOlder}
+              onClick={() => void loadOlder()}
+              className="text-xs text-accent hover:text-accent-hover disabled:opacity-50"
+            >
+              {loadingOlder ? "Loading older operations…" : "Load older operations"}
+            </button>
+            <span className="text-[10px] text-text-muted/50 font-mono">
+              Audit window · {liveMeta.scannedEvents.toLocaleString()} recent events
+              {olderPipelines.length > 0 ? ` · +${olderPipelines.length} from earlier pages` : ""}
+            </span>
+          </div>
         )}
       </div>
     </div>
@@ -797,38 +872,60 @@ function EventRow({ ev, expanded, onToggle }: {
   expanded: boolean
   onToggle: () => void
 }) {
+  const [sqlModalOpen, setSqlModalOpen] = useState(false)
   const hasData = ev.data && Object.keys(ev.data).length > 0
   const isError = !!ev.data["error"]
+  const isSql = isSyncSqlEventType(ev.type)
+  const sqlFields = isSql ? readSqlTraceFields(ev.data) : null
   const summary = pickEventSummary(ev)
   const label = formatEventLabel(ev)
+
   return (
     <div>
-      <button
-        className={`w-full flex items-baseline gap-2 px-2 py-0.5 text-left text-[11px] hover:bg-overlay-2 transition-colors ${
-          hasData ? "cursor-pointer" : "cursor-default"
-        }`}
-        onClick={() => hasData && onToggle()}
-      >
-        <ChevronRight
-          size={9}
-          className={`shrink-0 mt-1 text-text-muted/40 transition-transform ${expanded ? "rotate-90" : ""} ${hasData ? "" : "invisible"}`}
-        />
-        <span className="shrink-0 text-text-muted/50 tabular-nums w-20 font-mono">{fmtTime(ev.timestamp)}</span>
-        <span className={`shrink-0 font-mono ${isError ? "text-error" : "text-text-muted/70"}`}>{label}</span>
-        {summary && <span className={`min-w-0 break-all ${isError ? "text-error" : "text-text-muted"}`}>{summary}</span>}
-      </button>
+      <div className="flex items-baseline gap-1 pr-1">
+        <button
+          className={`min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-left text-[11px] hover:bg-overlay-2 transition-colors ${
+            hasData ? "cursor-pointer" : "cursor-default"
+          }`}
+          onClick={() => hasData && onToggle()}
+        >
+          <ChevronRight
+            size={9}
+            className={`shrink-0 mt-1 text-text-muted/40 transition-transform ${expanded ? "rotate-90" : ""} ${hasData ? "" : "invisible"}`}
+          />
+          <span className="shrink-0 text-text-muted/50 tabular-nums w-20 font-mono">{fmtTime(ev.timestamp)}</span>
+          <span className={`shrink-0 font-mono ${isError ? "text-error" : "text-text-muted/70"}`}>{label}</span>
+          {summary && <span className={`min-w-0 break-all ${isError ? "text-error" : "text-text-muted"}`}>{summary}</span>}
+        </button>
+        {isSql && sqlFields && (
+          <button
+            type="button"
+            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-[10px] font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
+            onClick={() => setSqlModalOpen(true)}
+          >
+            <Database size={10} />
+            SQL
+          </button>
+        )}
+      </div>
       {expanded && hasData && (
-        <div className="ml-7 my-1 space-y-1">
-          {isSyncSqlEventType(ev.type) && (
-            <SqlTraceFromEventData data={ev.data} compact maxHeight={140} />
-          )}
+        <div className="ml-7 my-1">
           <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-[10.5px] leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
-            {JSON.stringify(ev.data, null, 2)}
+            {JSON.stringify(stripSqlPayloadForDisplay(ev.type, ev.data), null, 2)}
           </pre>
         </div>
       )}
+      {sqlModalOpen && sqlFields && (
+        <SqlTraceModal fields={sqlFields} onClose={() => setSqlModalOpen(false)} />
+      )}
     </div>
   )
+}
+
+function stripSqlPayloadForDisplay(type: string, data: Record<string, unknown>): Record<string, unknown> {
+  if (!isSyncSqlEventType(type)) return data
+  const { sql: _sql, __fullSql: _full, ...rest } = data
+  return rest
 }
 
 // Pull a one-line summary from an event's data payload for inline display.

@@ -38,13 +38,13 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       }
     }
 
-    send(listOperations({ limit: 500 }))
+    send(listOperations({ limit: 2000 }))
 
     let debounce: ReturnType<typeof setTimeout> | null = null
     const unsubscribe = subscribeToEvents(() => {
       if (debounce) clearTimeout(debounce)
       debounce = setTimeout(() => {
-        if (!send(listOperations({ limit: 500 }))) unsubscribe()
+        if (!send(listOperations({ limit: 2000 }))) unsubscribe()
       }, 400)
     })
 
