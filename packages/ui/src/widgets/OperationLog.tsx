@@ -5,14 +5,22 @@
  * Raw events live in event_log; this widget groups them into operator-friendly pipelines.
  */
 
-import { Brain, ChevronRight, Database, Filter, GitCompareArrows, Loader2, Settings, Square, X, XCircle } from "lucide-react"
+import { Brain, ChevronRight, Database, Filter, GitCompareArrows, Loader2, Settings, Square, Wrench, X, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline, OperationsResponse } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
 import { SqlTraceModal } from "../components/SqlTrace"
+import { ToolCallModal, ToolIoBlock } from "../components/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useStore } from "../store"
 import { isSyncSqlEventType, readSqlTraceFields } from "../sync-sql-trace"
+import {
+  buildToolIoFromStepEvents,
+  isAgentStepEventType,
+  readToolIoFromActivity,
+  readToolIoFromEvent,
+  stripToolIoForInlineDisplay,
+} from "../tool-call-io"
 import {
   LOG_TOOLBAR_CHIP,
   LOG_TOOLBAR_CHIP_ACTIVE,
@@ -254,10 +262,10 @@ function defaultActivitySummary(pipelineKind: OperationKind, activity: Operation
   if (pipelineKind === OperationKind.AgentRun) {
     const planId = activity.details?.["planId"]
     if (typeof planId === "string" && activity.name === "Sync preview") {
-      return `Full detail in Preview pipeline · plan ${planId.slice(0, 8)}`
+      return `Delegated preview · plan ${planId.slice(0, 8)}`
     }
     if (typeof planId === "string" && activity.name === "Sync execute") {
-      return `Full detail in Execute pipeline · plan ${planId.slice(0, 8)}`
+      return `Delegated execute · plan ${planId.slice(0, 8)}`
     }
   }
   return undefined
@@ -299,6 +307,9 @@ function formatEventLabel(ev: OperationEvent): string {
     case "sync.proposer.run.failed": return "Scan failed"
     case "sync.proposer.run.cancelled": return "Scan cancelled"
     case "sync.proposal.created": return "Proposal created"
+    case "step.started": return "Tool call"
+    case "step.completed": return "Tool result"
+    case "step.failed": return "Tool failed"
     default: return ev.type
   }
 }
@@ -306,6 +317,7 @@ function formatEventLabel(ev: OperationEvent): string {
 export function OperationLog() {
   const operationLogFocus = useStore((s) => s.operationLogFocus)
   const focusOperationLogPlan = useStore((s) => s.focusOperationLogPlan)
+  const focusOperationLogRun = useStore((s) => s.focusOperationLogRun)
   const clearOperationLogFocus = useStore((s) => s.clearOperationLogFocus)
 
   const [livePipelines, setLivePipelines] = useState<OperationPipeline[]>([])
@@ -644,6 +656,7 @@ export function OperationLog() {
             collapsedDays={collapsedDays}
             toggleDay={toggleDay}
             onOpenSyncPlan={(planId) => focusOperationLogPlan(planId)}
+            onFocusAgentRun={(runId, label) => focusOperationLogRun(runId, label)}
             onCancelPipeline={cancelPipeline}
             cancellingId={cancellingId}
           />
@@ -672,6 +685,7 @@ export function OperationLog() {
             collapsedDays={collapsedDays}
             toggleDay={toggleDay}
             onOpenSyncPlan={(planId) => focusOperationLogPlan(planId)}
+            onFocusAgentRun={(runId, label) => focusOperationLogRun(runId, label)}
             onCancelPipeline={cancelPipeline}
             cancellingId={cancellingId}
           />
@@ -710,6 +724,7 @@ export function OperationPipelineList({
   collapsedDays,
   toggleDay,
   onOpenSyncPlan,
+  onFocusAgentRun,
   onCancelPipeline,
   cancellingId,
 }: {
@@ -724,6 +739,7 @@ export function OperationPipelineList({
   collapsedDays: Set<string>
   toggleDay: (label: string) => void
   onOpenSyncPlan?: (planId: string) => void
+  onFocusAgentRun?: (runId: string, label?: string) => void
   onCancelPipeline?: (pipeline: OperationPipeline) => void
   cancellingId?: string | null
 }) {
@@ -765,6 +781,7 @@ export function OperationPipelineList({
                   toggleEvent={toggleEvent}
                   compact={compact}
                   onOpenSyncPlan={onOpenSyncPlan}
+                  onFocusAgentRun={onFocusAgentRun}
                   onCancel={onCancelPipeline}
                   cancelling={cancellingId === p.id}
                 />
@@ -779,7 +796,7 @@ export function OperationPipelineList({
 
 // ── Pipeline row ─────────────────────────────────────────────────
 
-function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, compact, onOpenSyncPlan, onCancel, cancelling }: {
+function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, compact, onOpenSyncPlan, onFocusAgentRun, onCancel, cancelling }: {
   pipeline: OperationPipeline
   expanded: boolean
   onToggle: () => void
@@ -789,6 +806,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
   toggleEvent: (key: string) => void
   compact: boolean
   onOpenSyncPlan?: (planId: string) => void
+  onFocusAgentRun?: (runId: string, label?: string) => void
   onCancel?: (pipeline: OperationPipeline) => void
   cancelling?: boolean
 }) {
@@ -840,6 +858,17 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 
       {expanded && (
         <div className="border-t border-border-subtle bg-base/40 px-2 py-1.5 space-y-0.5">
+          {pipeline.kind === OperationKind.AgentRun && onFocusAgentRun && (
+            <div className="px-2.5 py-1">
+              <button
+                type="button"
+                className="text-[11px] font-mono text-text-muted hover:text-accent transition-colors"
+                onClick={() => onFocusAgentRun(pipeline.id, pipeline.title)}
+              >
+                full run audit · {pipeline.id.slice(0, 8)}
+              </button>
+            </div>
+          )}
           {onOpenSyncPlan && (pipeline.kind === OperationKind.SyncPreview || pipeline.kind === OperationKind.SyncExecute || pipeline.kind === OperationKind.SyncRun) && (
             <div className="px-2.5 py-1">
               <button
@@ -867,6 +896,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
                 pipelineKind={pipeline.kind}
                 pipelineId={pipeline.id}
                 pipelineStatus={pipeline.status}
+                onOpenSyncPlan={onOpenSyncPlan}
                 expanded={actExpanded.has(key)}
                 onToggle={() => toggleActivity(key)}
                 actExpanded={actExpanded}
@@ -884,7 +914,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 
 // ── Activity row ─────────────────────────────────────────────────
 
-function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, parentStatus, parentPhaseId, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent }: {
+function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, parentStatus, parentPhaseId, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, onOpenSyncPlan }: {
   activity: OperationActivity
   pipelineKind: OperationKind
   pipelineId: string
@@ -898,7 +928,9 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
   toggleActivity: (key: string) => void
   evExpanded: Set<string>
   toggleEvent: (key: string) => void
+  onOpenSyncPlan?: (planId: string) => void
 }) {
+  const [ioModalOpen, setIoModalOpen] = useState(false)
   const phaseId = activity.id.startsWith("phase:") ? activity.id : parentPhaseId
   const effectiveKind = activityPipelineKind(pipelineKind, phaseId)
   const status = effectiveActivityStatus(activity, pipelineStatus, parentStatus)
@@ -908,6 +940,11 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
   const renderedName = formatActivityName(effectiveKind, activity)
   const renderedSummary = defaultActivitySummary(effectiveKind, activity)
   const hasChildren = (activity.children?.length ?? 0) > 0
+  const toolIo =
+    readToolIoFromActivity(activity) ??
+    (activity.events.length > 0 ? buildToolIoFromStepEvents(activity.events) : null)
+  const delegationPlanId =
+    typeof activity.details?.["planId"] === "string" ? activity.details["planId"] : null
 
   return (
     <div className="rounded border border-border-subtle" style={depth > 0 ? { marginLeft: depth * 12 } : undefined}>
@@ -934,7 +971,24 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
         )}
         <span className="shrink-0 text-[11px] text-text-muted tabular-nums w-14 text-right">{fmtDuration(activity.durationMs)}</span>
         <span className="shrink-0 text-[11px] text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(activity.startedAt)}</span>
+        {toolIo && (
+          <button
+            type="button"
+            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-[10px] font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
+            onClick={(e) => {
+              e.stopPropagation()
+              setIoModalOpen(true)
+            }}
+          >
+            <Wrench size={10} />
+            I/O
+          </button>
+        )}
       </button>
+
+      {ioModalOpen && toolIo && (
+        <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
+      )}
 
       {expanded && (
         <div className="border-t border-border-subtle px-2.5 py-1.5 space-y-0.5 bg-base/30">
@@ -948,7 +1002,19 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
               {activity.summary && (
                 <p className="text-[11px] text-text-muted leading-relaxed">{activity.summary}</p>
               )}
-              {activity.details && Object.keys(activity.details).length > 0 && (
+              {delegationPlanId && onOpenSyncPlan && (
+                <button
+                  type="button"
+                  className="text-[11px] font-mono text-accent hover:text-accent-hover"
+                  onClick={() => onOpenSyncPlan(delegationPlanId)}
+                >
+                  Open sync audit · plan {delegationPlanId.slice(0, 8)}
+                </button>
+              )}
+              {toolIo && !activity.events.length && (
+                <ToolIoBlock io={toolIo} compact maxHeight={120} />
+              )}
+              {activity.details && Object.keys(activity.details).length > 0 && !toolIo && (
                 <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-[10.5px] leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
                   {JSON.stringify(activity.details, null, 2)}
                 </pre>
@@ -973,9 +1039,15 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
                 toggleActivity={toggleActivity}
                 evExpanded={evExpanded}
                 toggleEvent={toggleEvent}
+                onOpenSyncPlan={onOpenSyncPlan}
               />
             )
           })}
+          {activity.events.length > 0 && toolIo && (
+            <div className="px-2 py-1">
+              <ToolIoBlock io={toolIo} compact maxHeight={100} />
+            </div>
+          )}
           {activity.events.map((ev, idx) => {
             const key = `${pipelineId}|${activity.id}|${idx}`
             return (
@@ -1001,12 +1073,20 @@ function EventRow({ ev, expanded, onToggle }: {
   onToggle: () => void
 }) {
   const [sqlModalOpen, setSqlModalOpen] = useState(false)
+  const [ioModalOpen, setIoModalOpen] = useState(false)
   const hasData = ev.data && Object.keys(ev.data).length > 0
   const isError = !!ev.data["error"]
   const isSql = isSyncSqlEventType(ev.type)
+  const isStep = isAgentStepEventType(ev.type)
   const sqlFields = isSql ? readSqlTraceFields(ev.data) : null
+  const toolIo = isStep ? readToolIoFromEvent(ev) : null
   const summary = pickEventSummary(ev)
   const label = formatEventLabel(ev)
+  const displayData = isSql
+    ? stripSqlPayloadForDisplay(ev.type, ev.data)
+    : isStep
+      ? stripToolIoForInlineDisplay(ev.data)
+      : ev.data
 
   return (
     <div>
@@ -1035,16 +1115,29 @@ function EventRow({ ev, expanded, onToggle }: {
             SQL
           </button>
         )}
+        {isStep && toolIo && (
+          <button
+            type="button"
+            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-[10px] font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
+            onClick={() => setIoModalOpen(true)}
+          >
+            <Wrench size={10} />
+            I/O
+          </button>
+        )}
       </div>
       {expanded && hasData && (
         <div className="ml-7 my-1">
           <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-[10.5px] leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
-            {JSON.stringify(stripSqlPayloadForDisplay(ev.type, ev.data), null, 2)}
+            {JSON.stringify(displayData, null, 2)}
           </pre>
         </div>
       )}
       {sqlModalOpen && sqlFields && (
         <SqlTraceModal fields={sqlFields} onClose={() => setSqlModalOpen(false)} />
+      )}
+      {ioModalOpen && toolIo && (
+        <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
       )}
     </div>
   )
@@ -1058,6 +1151,21 @@ function stripSqlPayloadForDisplay(type: string, data: Record<string, unknown>):
 
 // Pull a one-line summary from an event's data payload for inline display.
 function pickEventSummary(ev: OperationEvent): string {
+  if (ev.type === "step.started") {
+    const toolIo = readToolIoFromEvent(ev)
+    return toolIo?.argsSummary ?? resolveInlineToolName(ev.data)
+  }
+  if (ev.type === "step.completed") {
+    const toolIo = readToolIoFromEvent(ev)
+    const dur = ev.data["durationMs"]
+    const durPart = typeof dur === "number" ? `${dur}ms` : null
+    const outPart = toolIo?.outputText ? truncateInline(toolIo.outputText, 100) : null
+    return [outPart, durPart].filter(Boolean).join(" · ") || "completed"
+  }
+  if (ev.type === "step.failed") {
+    const err = typeof ev.data["error"] === "string" ? ev.data["error"] : "step failed"
+    return truncateInline(err, 120)
+  }
   if (ev.type === "sync.execute.step") {
     const step = typeof ev.data["step"] === "string" ? String(ev.data["step"]) : ""
     return EXEC_STEP_DESCRIPTIONS[step] ?? humanizeToken(step)
@@ -1164,6 +1272,20 @@ function pickEventSummary(ev: OperationEvent): string {
     else if (typeof v === "string" || typeof v === "number") parts.push(String(v))
   }
   return parts.slice(0, 4).join(" · ")
+}
+
+function resolveInlineToolName(data: Record<string, unknown>): string {
+  const action = data["action"]
+  if (typeof action === "string" && action.length > 0) return action
+  const tool = data["tool"]
+  if (typeof tool === "string" && tool.length > 0) return tool
+  return "step"
+}
+
+function truncateInline(text: string, max: number): string {
+  const t = text.replace(/\s+/g, " ").trim()
+  if (t.length <= max) return t
+  return t.slice(0, max - 1) + "…"
 }
 
 // `fmtDateTime` exported in case an embedded view wants the long form

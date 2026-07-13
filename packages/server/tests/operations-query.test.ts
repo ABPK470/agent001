@@ -89,22 +89,19 @@ describe("listOperations sync bucketing", () => {
     const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
 
-    expect(result.operations).toHaveLength(3)
+    expect(result.operations).toHaveLength(2)
     expect(result.operations.map((op) => op.kind)).toEqual([
-      OperationKind.SyncExecute,
-      OperationKind.SyncPreview,
+      OperationKind.SyncRun,
       OperationKind.AgentRun
     ])
 
-    const execute = result.operations.find((op) => op.kind === OperationKind.SyncExecute)
-    const preview = result.operations.find((op) => op.kind === OperationKind.SyncPreview)
+    const syncRun = result.operations.find((op) => op.kind === OperationKind.SyncRun)
     const agent = result.operations.find((op) => op.kind === OperationKind.AgentRun)
 
-    expect(execute?.title).toBe("Execute Contract — AccountClientMapping")
-    expect(execute?.status).toBe(OperationStatus.Success)
-    expect(execute?.activities.some((activity) => activity.name === "deploy-etl")).toBe(true)
-    expect(preview?.title).toBe("Preview Contract — AccountClientMapping")
-    expect(preview?.eventCount).toBe(1)
+    expect(syncRun?.id).toBe("plan-1")
+    expect(syncRun?.activities.map((a) => a.name)).toEqual(["Preview", "Execute"])
+    expect(syncRun?.activities[1]?.children?.some((activity) => activity.name === "deploy-etl")).toBe(true)
+    expect(syncRun?.status).toBe(OperationStatus.Success)
     expect(agent?.eventCount).toBe(3)
   })
 
@@ -144,15 +141,17 @@ describe("listOperations sync bucketing", () => {
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
 
-    expect(execute.title).toBe("Execute Dataset — agent.vPipelineRunContract")
-    expect(execute.activities).toHaveLength(3)
-    expect(execute.activities[0]?.name).toBe("started")
-    expect(execute.activities[0]?.status).toBe(OperationStatus.Success)
-    expect(execute.activities[0]?.summary).toBe("dev → uat")
-    expect(execute.activities[1]?.name).toBe("syncDate")
-    expect(execute.activities[1]?.events.map((event) => event.type)).toEqual([EventType.SyncExecuteStep])
-    expect(execute.activities[2]?.name).toBe("completed")
-    expect(execute.activities[2]?.summary).toBe("0 ins · 0 upd · 0 del")
+    expect(execute.kind).toBe(OperationKind.SyncRun)
+    expect(execute.title).toBe("Sync Dataset — agent.vPipelineRunContract")
+    const executePhase = execute.activities.find((a) => a.name === "Execute")
+    expect(executePhase?.children).toHaveLength(3)
+    expect(executePhase?.children?.[0]?.name).toBe("started")
+    expect(executePhase?.children?.[0]?.status).toBe(OperationStatus.Success)
+    expect(executePhase?.children?.[0]?.summary).toBe("dev → uat")
+    expect(executePhase?.children?.[1]?.name).toBe("syncDate")
+    expect(executePhase?.children?.[1]?.events.map((event) => event.type)).toEqual([EventType.SyncExecuteStep])
+    expect(executePhase?.children?.[2]?.name).toBe("completed")
+    expect(executePhase?.children?.[2]?.summary).toBe("0 ins · 0 upd · 0 del")
   })
 
   it("renders persisted sync decision records as first-class activities", async () => {
@@ -214,12 +213,13 @@ describe("listOperations sync bucketing", () => {
     const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
+    const executePhase = execute.activities.find((a) => a.name === "Execute")
 
-    expect(execute.title).toBe("Execute Contract — AccountClientMapping")
+    expect(execute.title).toBe("Sync Contract — AccountClientMapping")
     expect(execute.subtitle).toContain("def 2026-05-28T09:59:59.000Z")
-    expect(execute.activities[0]?.name).toBe("Preflight checks")
-    expect(execute.activities[0]?.summary).toBe("1 check(s) from preview")
-    expect(execute.activities.some((activity) => activity.name === "metadataSync")).toBe(true)
+    expect(executePhase?.children?.[0]?.name).toBe("Preflight checks")
+    expect(executePhase?.children?.[0]?.summary).toBe("1 check(s) from preview")
+    expect(executePhase?.children?.some((activity) => activity.name === "metadataSync")).toBe(true)
   })
 
   it("groups metadata table work under the metadataSync flow step and fails open tables on rollback", async () => {
@@ -310,17 +310,18 @@ describe("listOperations sync bucketing", () => {
     const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
+    const executePhase = execute.activities.find((a) => a.name === "Execute")
 
-    expect(execute.activities.map((a) => a.name)).toEqual([
+    expect(executePhase?.children?.map((a) => a.name)).toEqual([
       "started",
       "auditCheck",
       "targetLock",
       "metadataSync",
       "failed"
     ])
-    expect(execute.activities.some((a) => a.name === "archive.probe.batch")).toBe(false)
+    expect(executePhase?.children?.some((a) => a.name === "archive.probe.batch")).toBe(false)
 
-    const metadata = execute.activities.find((a) => a.name === "metadataSync")
+    const metadata = executePhase?.children?.find((a) => a.name === "metadataSync")
     expect(metadata?.status).toBe(OperationStatus.Failed)
     expect(metadata?.children).toHaveLength(2)
     expect(metadata?.children?.map((c) => c.name)).toEqual([
@@ -382,14 +383,16 @@ describe("listOperations sync bucketing", () => {
 
     const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
-    const preview = result.operations.find((op) => op.kind === OperationKind.SyncPreview)
+    const preview = result.operations.find((op) => op.kind === OperationKind.SyncRun)
 
     expect(preview).toBeDefined()
     expect(preview?.eventCount).toBe(4)
-    expect(preview?.activities.some((a) => a.name === "Contract")).toBe(true)
-    expect(preview?.activities.some((a) => a.name === "started")).toBe(true)
-    expect(preview?.activities.some((a) => a.name === "completed")).toBe(true)
-    const contract = preview?.activities.find((a) => a.name === "Contract")
+    expect(preview?.activities[0]?.name).toBe("Preview")
+    const previewPhase = preview?.activities[0]
+    expect(previewPhase?.children?.some((a) => a.name === "Contract")).toBe(true)
+    expect(previewPhase?.children?.some((a) => a.name === "started")).toBe(true)
+    expect(previewPhase?.children?.some((a) => a.name === "completed")).toBe(true)
+    const contract = previewPhase?.children?.find((a) => a.name === "Contract")
     expect(contract?.summary).toBe("100 ins · 0 upd · 0 del · 1200ms")
     expect(contract?.events).toHaveLength(2)
   })
@@ -440,8 +443,8 @@ describe("listOperations sync bucketing", () => {
 
     const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
-    const preview = result.operations[0]
-    const scope = preview.activities.find((a) => a.name === "Preflight checks")
+    const preview = result.operations.find((op) => op.kind === OperationKind.SyncRun)
+    const scope = preview?.activities[0]?.children?.find((a) => a.name === "Preflight checks")
 
     expect(scope?.events).toHaveLength(0)
     expect(scope?.details?.["decisions"]).toEqual([
@@ -515,7 +518,11 @@ describe("listOperations sync bucketing", () => {
       "Sync execute",
       "completed"
     ])
-    expect(agent?.activities[1]?.details).toEqual({ planId: "plan-1", phase: "preview" })
+    expect(agent?.activities[1]?.details).toEqual({
+      planId: "plan-1",
+      phase: "preview",
+      auditHint: "Open full sync audit in Pipelines"
+    })
     expect(agent?.activities[3]?.status).toBe(OperationStatus.Success)
   })
 
@@ -560,17 +567,18 @@ describe("listOperations sync bucketing", () => {
     const { listOperations } = await import("../src/features/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
 
-    const preview = result.operations.find((op) => op.kind === OperationKind.SyncPreview)
-    const execute = result.operations.find((op) => op.kind === OperationKind.SyncExecute)
+    const preview = result.operations.find((op) => op.id === "plan-skip")
+    const executePhase = preview?.activities.find((a) => a.name === "Execute")
 
-    expect(preview?.id).toBe("plan-skip:preview")
-    expect(execute?.id).toBe("plan-skip:execute")
+    expect(preview?.kind).toBe(OperationKind.SyncRun)
+    expect(preview?.id).toBe("plan-skip")
     expect(preview?.planId).toBe("plan-skip")
-    expect(execute?.planId).toBe("plan-skip")
-    expect(preview?.status).toBe(OperationStatus.Success)
-    expect(preview?.error).toBeUndefined()
-    expect(execute?.status).toBe(OperationStatus.Skipped)
-    expect(execute?.error).toBe("Source audit gate failed — execute skipped")
-    expect(execute?.activities.some((a) => a.name === "Execute skipped")).toBe(true)
+    expect(preview?.status).toBe(OperationStatus.Skipped)
+    expect(preview?.activities[0]?.name).toBe("Preview")
+    expect(preview?.activities[0]?.status).toBe(OperationStatus.Success)
+    expect(preview?.activities[0]?.error).toBeUndefined()
+    expect(executePhase?.status).toBe(OperationStatus.Skipped)
+    expect(executePhase?.error).toBe("Source audit gate failed — execute skipped")
+    expect(executePhase?.children?.some((a) => a.name === "Execute skipped")).toBe(true)
   })
 })

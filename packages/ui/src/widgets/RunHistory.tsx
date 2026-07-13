@@ -5,7 +5,7 @@
  * Shows status, goal, time, step count, and inline actions.
  */
 
-import { GitBranch, Play, RotateCcw, Square, Undo2 } from "lucide-react"
+import { GitBranch, NotebookTabs, Play, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
 import { RunStatus } from "../enums"
@@ -17,6 +17,7 @@ export function RunHistory() {
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
+  const focusOperationLogRun = useStore((s) => s.focusOperationLogRun)
   const activeThreadId = useStore((s) => s.activeThreadId)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [rolledBackIds, setRolledBackIds] = useState<Set<string>>(new Set())
@@ -110,6 +111,16 @@ export function RunHistory() {
 
           {/* Inline actions (visible on hover) */}
           <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button
+              className="p-1.5 text-accent/80 hover:text-accent hover:bg-accent/10 rounded-md ring-1 ring-border hover:ring-accent/30 transition-colors"
+              onClick={(e) => {
+                e.stopPropagation()
+                focusOperationLogRun(run.id, truncate(run.goal, 40))
+              }}
+              title="View in Pipelines"
+            >
+              <NotebookTabs size={14} strokeWidth={2.25} />
+            </button>
             {isActive && (
               <button
                 className="p-1.5 text-error/80 hover:text-error hover:bg-error/10 rounded-md ring-1 ring-border hover:ring-error/30 transition-colors"

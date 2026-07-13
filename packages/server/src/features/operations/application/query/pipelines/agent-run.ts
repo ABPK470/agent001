@@ -7,7 +7,9 @@ import { EventType, RunStatus } from "@mia/agent"
 import { OperationKind, OperationStatus } from "../../../../../shared/enums/operations.js"
 import * as db from "../../../../../platform/persistence/sqlite.js"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../types.js"
+import { buildToolIoFromStepEvents, buildToolIoSummary, resolveStepToolName } from "../tool-io.js"
 import { durationOf, inferPipelineStatus, numField, strField } from "../utils.js"
+import { presentToolCall } from "@mia/shared-types"
 
 export function buildAgentRunPipeline(runId: string, events: OperationEvent[]): OperationPipeline {
   const run = db.getRun(runId)
@@ -144,7 +146,7 @@ function groupAgentRunActivities(
         ]
           .filter(Boolean)
           .join(" · "),
-        details: { planId, phase: "preview" },
+        details: { planId, phase: "preview", auditHint: "Open full sync audit in Pipelines" },
         events: [ev]
       })
       continue
@@ -159,8 +161,8 @@ function groupAgentRunActivities(
         startedAt: ev.timestamp,
         endedAt: null,
         durationMs: null,
-        summary: `plan ${planId.slice(0, 8)} · see execute pipeline for step detail`,
-        details: { planId, phase: "execute" },
+        summary: `plan ${planId.slice(0, 8)} · see sync-run audit for step detail`,
+        details: { planId, phase: "execute", auditHint: "Open full sync audit in Pipelines" },
         events: [ev]
       }
       activities.push(act)
@@ -176,7 +178,10 @@ function groupAgentRunActivities(
     }
 
     if (t === EventType.StepStarted) {
-      const toolName = strField(ev.data, "tool") ?? strField(ev.data, "name") ?? "step"
+      const toolName = resolveStepToolName(ev.data)
+      const input = (ev.data["input"] as Record<string, unknown> | undefined) ?? {}
+      const argsSummary =
+        Object.keys(input).length > 0 ? presentToolCall(toolName, input).summary : undefined
       const act: OperationActivity = {
         id: `step:${activities.length}`,
         name: toolName,
@@ -184,6 +189,7 @@ function groupAgentRunActivities(
         startedAt: ev.timestamp,
         endedAt: null,
         durationMs: null,
+        summary: argsSummary,
         events: [ev]
       }
       activities.push(act)
@@ -199,8 +205,14 @@ function groupAgentRunActivities(
         step.durationMs = durationOf(step.startedAt, ev.timestamp)
         step.status = t === EventType.StepCompleted ? OperationStatus.Success : OperationStatus.Failed
         if (t === EventType.StepFailed) step.error = strField(ev.data, "error") ?? "step failed"
-        const dur = numField(ev.data, "durationMs")
-        if (dur != null && !step.summary) step.summary = `${(dur / 1000).toFixed(1)}s`
+        const toolIo = buildToolIoFromStepEvents(step.events)
+        if (toolIo) {
+          step.details = { toolIo }
+          step.summary = buildToolIoSummary(toolIo) ?? step.summary
+        } else {
+          const dur = numField(ev.data, "durationMs")
+          if (dur != null && !step.summary) step.summary = `${(dur / 1000).toFixed(1)}s`
+        }
       } else {
         activities.push({
           id: `step-orphan:${activities.length}`,

@@ -353,6 +353,31 @@ function formatEventTypeName(type: string): string {
   return type.replace(/^sync\.(preview|execute)\./, "").replace(/\./g, " ")
 }
 
+const SYNC_EXECUTE_STEP_LABELS: Record<string, string> = {
+  auditCheck: "Verify source audit gate before applying changes",
+  targetLock: "Acquire exclusive lock on target entity",
+  metadataSync: "Deploy metadata tables (FK-ordered upserts)",
+  "metadataSync-done": "Metadata deploy finished",
+  deployEtl: "Trigger ETL deployment on target",
+  "deploy-etl": "Trigger ETL deployment on target",
+  pipelineStart: "Start registered pipeline on target service",
+  setSyncDate: "Stamp target row sync date",
+  setDeployDate: "Stamp target row deploy date",
+  syncDate: "Stamp target row sync date",
+  deployDate: "Stamp target row deploy date",
+  contractDeploy: "Run full contract deployment sequence",
+  datasetDeploy: "Trigger dataset deployment in ETL",
+  rulesDeploy: "Trigger rule deployment in ETL",
+}
+
+function syncExecuteStepSummary(stepName: string): string | undefined {
+  return (
+    SYNC_EXECUTE_STEP_LABELS[stepName] ??
+    SYNC_EXECUTE_STEP_LABELS[stepName.replace(/-done$/, "Done")] ??
+    undefined
+  )
+}
+
 function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity[] {
   const METADATA_STEP = "metadataSync"
   const activities: OperationActivity[] = []
@@ -392,6 +417,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
 
   const openFlowStep = (stepName: string, ev: OperationEvent): void => {
     finalizeStep(ev.timestamp)
+    const stepSummary = syncExecuteStepSummary(stepName)
     currentStep = {
       id: `estep:${activities.length}`,
       name: stepName,
@@ -400,6 +426,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       endedAt: null,
       durationMs: null,
       events: [ev],
+      ...(stepSummary ? { summary: stepSummary } : {}),
       ...(stepName === METADATA_STEP ? { children: [] as OperationActivity[] } : {})
     }
     activities.push(currentStep)
@@ -517,6 +544,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
           endedAt: ev.timestamp,
           durationMs: 0,
           error: errMsg,
+          summary: syncExecuteStepSummary(stepName),
           events: [ev]
         })
       }

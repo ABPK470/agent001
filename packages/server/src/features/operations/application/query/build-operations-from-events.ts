@@ -7,6 +7,7 @@ import type { DbEvent } from "../../../../platform/persistence/db/events.js"
 import { buildPipelinesFromBuckets } from "./build-pipelines.js"
 import { buildPreviewToPlanMap, correlateEventsIntoBuckets } from "./correlate.js"
 import { filterOperations } from "./filter.js"
+import { mergeSyncPlanPipelines } from "./merge-sync-run.js"
 import type { ListOperationsOpts, OperationEvent, OperationPipeline } from "./types.js"
 import { safeParse } from "./utils.js"
 
@@ -31,5 +32,6 @@ export function buildOperationsFromEvents(
 ): OperationPipeline[] {
   const previewToPlan = buildPreviewToPlanMap(chrono)
   const buckets = correlateEventsIntoBuckets(chrono, previewToPlan)
-  return filterOperations(buildPipelinesFromBuckets(buckets.values()), opts)
+  const built = filterOperations(buildPipelinesFromBuckets(buckets.values()), opts)
+  return mergeSyncPlanPipelines(built)
 }
