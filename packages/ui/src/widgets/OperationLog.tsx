@@ -8,7 +8,7 @@ import { Brain, ChevronRight, Database, FileSearch, Filter, GitCompareArrows, Lo
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
-import { SqlTraceModal, SqlTraceFromEventData, useResolvedSql } from "../components/SqlTrace"
+import { SqlTraceModal, useResolvedSql } from "../components/SqlTrace"
 import { DecisionLogPanel, isSyncDecisionLogDetails } from "../components/DecisionLogPanel"
 import { CodeBlock } from "../components/CodeBlock"
 import { JsonViewer } from "../components/JsonViewer"
@@ -296,6 +296,17 @@ function flowStepDescription(activity: OperationActivity): string | undefined {
     EXEC_STEP_DESCRIPTIONS[activity.name.replace(/-done$/, "Done")] ??
     activity.summary
   )
+}
+
+function isSyncExecuteFlowStep(kind: OperationKind, activity: OperationActivity): boolean {
+  if (kind !== OperationKind.SyncExecute) return false
+  if (activity.id.startsWith("lifecycle:")) return false
+  if (activity.name.startsWith("tbl:")) return false
+  return !["started", "completed", "failed", "Preflight checks", "skipped", "result", "Execute skipped"].includes(activity.name)
+}
+
+function shouldHideSyncExecuteStepEvent(kind: OperationKind, activity: OperationActivity, ev: OperationEvent): boolean {
+  return isSyncExecuteFlowStep(kind, activity) && ev.type === "sync.execute.step"
 }
 
 /** Expansion key for an activity row — scoped to pipeline id (preview vs execute differ). */
@@ -870,8 +881,14 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   const renderedName = formatActivityName(effectiveKind, activity)
   const renderedSummary = defaultActivitySummary(effectiveKind, activity)
   const isResultRow = activity.name === "result"
+  const isFlowStep = isSyncExecuteFlowStep(effectiveKind, activity)
+  const resultChild = activity.children?.find((c) => c.name === "result")
   const hasChildren = (activity.children?.length ?? 0) > 0
-  const hasResultChild = activity.children?.some((c) => c.name === "result") ?? false
+  const hasResultChild = resultChild != null
+  const sqlEvents = activity.events.filter((ev) => isSyncSqlEventType(ev.type))
+  const visibleEvents = activity.events.filter(
+    (ev) => !isSyncSqlEventType(ev.type) && !shouldHideSyncExecuteStepEvent(effectiveKind, activity, ev),
+  )
   const statusMessage =
     isResultRow || hasResultChild ? null : activity.error ?? null
   const stepDescription =
@@ -906,7 +923,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
           </span>
         )}
         <div className="flex-1 min-w-0" />
-        {activity.events.length > 0 && !isResultRow && (
+        {activity.events.length > 0 && !isResultRow && !isFlowStep && (
           <span className="shrink-0 text-xs text-text-muted/60 tabular-nums">{activity.events.length} ev</span>
         )}
         <span className="shrink-0 text-xs text-text-muted tabular-nums w-14 text-right">{fmtDuration(activity.durationMs)}</span>
@@ -949,8 +966,21 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
           {statusMessage && !isDuplicatePipelineMessage(pipelineError, statusMessage) && (
             <StatusMessage status={status}>{statusMessage}</StatusMessage>
           )}
-          {stepDescription && !statusMessage && (
+          {stepDescription && !statusMessage && !isFlowStep && (
             <p className="px-2 py-1 text-xs text-text-muted/70 leading-relaxed">{stepDescription}</p>
+          )}
+          {isFlowStep && stepDescription && (
+            <p className="px-2 py-0.5 text-[11px] text-text-muted/60 leading-relaxed">{stepDescription}</p>
+          )}
+          {isFlowStep && sqlEvents.map((ev, idx) => (
+            <SqlCompactRow key={`sql:${idx}`} ev={ev} />
+          ))}
+          {isFlowStep && resultChild?.events[0] && (
+            <CodeBlock
+              code={JSON.stringify(resultChild.events[0].data, null, 2)}
+              lang="json"
+              maxHeight={480}
+            />
           )}
           {isResultRow && activity.events[0] && (
             <CodeBlock
@@ -976,7 +1006,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               )}
             </div>
           )}
-          {hasChildren && !isResultRow && activity.children!.map((child) => {
+          {hasChildren && !isResultRow && !hasResultChild && activity.children!.map((child) => {
             const childKey = pipelineActivityKey(pipelineId, child.id)
             return (
               <ActivityRow
@@ -1004,7 +1034,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               <ToolIoBlock io={toolIo} compact maxHeight={100} />
             </div>
           )}
-          {!isResultRow && activity.events.map((ev, idx) => {
+          {!isResultRow && !isFlowStep && activity.events.map((ev, idx) => {
             const key = `${pipelineId}|${activity.id}|${idx}`
             return (
               <EventRow
@@ -1015,7 +1045,51 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               />
             )
           })}
+          {isFlowStep && visibleEvents.map((ev, idx) => {
+            const key = `${pipelineId}|${activity.id}|misc:${idx}`
+            return (
+              <EventRow
+                key={key}
+                ev={ev}
+                expanded={evExpanded.has(key)}
+                onToggle={() => toggleEvent(key)}
+              />
+            )
+          })}
         </div>
+      )}
+    </div>
+  )
+}
+
+// ── Compact SQL row (flow steps: one line + modal) ─────────────────
+
+function SqlCompactRow({ ev }: { ev: OperationEvent }) {
+  const [modalOpen, setModalOpen] = useState(false)
+  const fields = readSqlTraceFields(ev.data)
+  const { sql, loading } = useResolvedSql(fields ?? { label: "query", connection: "?", sql: "" })
+  if (!fields) return null
+  const displaySql = loading ? "Loading SQL…" : sql.trim() || fields.sql.trim() || "SQL"
+
+  return (
+    <div className="flex items-baseline gap-1 pr-1">
+      <div className="min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-xs">
+        <span className="shrink-0 text-text-muted/50 tabular-nums w-20 font-mono">{fmtTime(ev.timestamp)}</span>
+        <span className="min-w-0 break-all whitespace-pre-wrap font-mono text-[11px] text-text-muted">{displaySql}</span>
+      </div>
+      <button
+        type="button"
+        className={LOG_ROW_ACTION}
+        onClick={(e) => {
+          e.stopPropagation()
+          setModalOpen(true)
+        }}
+      >
+        <Database size={10} />
+        SQL
+      </button>
+      {modalOpen && (
+        <SqlTraceModal fields={{ ...fields, sql: sql.trim() || fields.sql }} onClose={() => setModalOpen(false)} />
       )}
     </div>
   )
@@ -1048,24 +1122,22 @@ function EventRow({ ev, expanded, onToggle }: {
         ? "Loading SQL…"
         : resolvedSqlState.sql.trim() || summary
       : null
-  const displayData = isSql
-    ? stripSqlPayloadForDisplay(ev.type, ev.data)
-    : isStep
-      ? stripToolIoForInlineDisplay(ev.data)
-      : ev.data
+  const displayData = isStep
+    ? stripToolIoForInlineDisplay(ev.data)
+    : ev.data
 
   return (
     <div>
       <div className="flex items-baseline gap-1 pr-1">
         <button
           className={`min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-left text-xs hover:bg-overlay-2 transition-colors ${
-            hasData ? "cursor-pointer" : "cursor-default"
+            hasData && !isSql ? "cursor-pointer" : "cursor-default"
           }`}
-          onClick={() => hasData && onToggle()}
+          onClick={() => hasData && !isSql && onToggle()}
         >
           <ChevronRight
             size={9}
-            className={`shrink-0 mt-1 text-text-muted/40 transition-transform ${expanded ? "rotate-90" : ""} ${hasData ? "" : "invisible"}`}
+            className={`shrink-0 mt-1 text-text-muted/40 transition-transform ${expanded ? "rotate-90" : ""} ${hasData && !isSql ? "" : "invisible"}`}
           />
           <span className="shrink-0 text-text-muted/50 tabular-nums w-20 font-mono">{fmtTime(ev.timestamp)}</span>
           <span className={`shrink-0 font-mono ${
@@ -1086,7 +1158,10 @@ function EventRow({ ev, expanded, onToggle }: {
           <button
             type="button"
             className={LOG_ROW_ACTION}
-            onClick={() => setSqlModalOpen(true)}
+            onClick={(e) => {
+              e.stopPropagation()
+              setSqlModalOpen(true)
+            }}
           >
             <Database size={10} />
             SQL
@@ -1103,30 +1178,19 @@ function EventRow({ ev, expanded, onToggle }: {
           </button>
         )}
       </div>
-      {expanded && isSql && sqlFields && (
-        <div className="ml-7 my-1">
-          <SqlTraceFromEventData data={ev.data} maxHeight={360} />
-        </div>
-      )}
       {expanded && hasData && !isSql && (
         <div className="ml-7 my-1">
           <JsonViewer value={displayData} label="event" defaultExpandDepth={3} maxHeight={360} />
         </div>
       )}
       {sqlModalOpen && sqlFields && (
-        <SqlTraceModal fields={sqlFields} onClose={() => setSqlModalOpen(false)} />
+        <SqlTraceModal fields={{ ...sqlFields, sql: resolvedSqlState.sql.trim() || sqlFields.sql }} onClose={() => setSqlModalOpen(false)} />
       )}
       {ioModalOpen && toolIo && (
         <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
       )}
     </div>
   )
-}
-
-function stripSqlPayloadForDisplay(type: string, data: Record<string, unknown>): Record<string, unknown> {
-  if (!isSyncSqlEventType(type)) return data
-  const { sql: _sql, __fullSql: _full, ...rest } = data
-  return rest
 }
 
 // Pull a one-line summary from an event's data payload for inline display.
