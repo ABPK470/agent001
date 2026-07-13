@@ -36,7 +36,6 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "env-sync",      label: "Sync",          desc: "Pick source, target, entity, preview and execute changes", Icon: Ship },
   { type: "mymi-db",       label: "Mymi DB",       desc: "Browse MyMI DB schemas, tables, views, and preview data", Icon: Database },
   { type: "operation-log", label: "Pipelines",     desc: "Pipeline monitor — agent runs, sync",         Icon: NotebookTabs },
-  { type: "activity-log",  label: "Activity",        desc: "Linear-style operations list — same data, issue-list UX", Icon: Activity },
   { type: "live-logs",     label: "Event Stream",  desc: "Real-time SSE event stream",                  Icon: ScrollText },
   { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: History },
   { type: "agent-chat",    label: "Agent Chat",    desc: "Older version of agent chat",                 Icon: MessageSquare },

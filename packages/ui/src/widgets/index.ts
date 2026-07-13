@@ -11,7 +11,6 @@ import { EntityRegistry } from "./EntityRegistry"
 import { EnvSync } from "./EnvSync"
 import { LiveLogs } from "./LiveLogs"
 import { MymiDb } from "./MymiDb"
-import { ActivityLog } from "./ActivityLog"
 import { OperationLog } from "./OperationLog"
 import { OperatorEnvironment } from "./OperatorEnvironment"
 import { RunHistory } from "./RunHistory"
@@ -38,7 +37,6 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "active-users": ActiveUsers,
   "env-sync": EnvSync,
   "operation-log": OperationLog,
-  "activity-log": ActivityLog,
   "entity-registry": EntityRegistry,
   "sync-proposals": SyncProposals,
   "sync-approvals": SyncApprovals,

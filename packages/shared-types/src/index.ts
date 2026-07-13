@@ -431,7 +431,6 @@ export type WidgetType =
   | "active-users"
   | "env-sync"
   | "operation-log"
-  | "activity-log"
   | "entity-registry"
   | "sync-proposals"
   | "sync-approvals"
@@ -449,7 +448,6 @@ export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
   "env-sync",
   "live-logs",
   "operation-log",
-  "activity-log",
   "mymi-db",
   "run-history",
   "operator-env",
