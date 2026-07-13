@@ -8,17 +8,14 @@
 import { AlertTriangle, ShieldCheck, ShieldX, X } from "lucide-react"
 import { useState } from "react"
 import { api } from "../api"
+import { JsonViewer } from "./JsonViewer"
 import { RunStatus } from "../enums"
 import { useStore, type PendingToolApproval } from "../store"
 import { modalOverlayClass, MODAL_SURFACE_CLASS } from "../widgets/entity-registry/modal-overlay"
 
-function formatArgs(args: Record<string, unknown> | undefined): string {
-  if (!args || Object.keys(args).length === 0) return "(no arguments)"
-  try {
-    return JSON.stringify(args, null, 2)
-  } catch {
-    return String(args)
-  }
+function formatArgs(args: Record<string, unknown> | undefined): Record<string, unknown> | null {
+  if (!args || Object.keys(args).length === 0) return null
+  return args
 }
 
 export function ApprovalRequiredModal(): JSX.Element | null {
@@ -124,9 +121,11 @@ export function ApprovalRequiredModal(): JSX.Element | null {
             <div className="text-xs font-semibold uppercase tracking-wide text-text-muted mb-1.5">
               Tool arguments
             </div>
-            <pre className="text-sm font-mono text-text-secondary bg-overlay-2 border border-border-subtle rounded-lg p-3 overflow-x-auto whitespace-pre-wrap select-text">
-              {formatArgs(pending.args)}
-            </pre>
+            {formatArgs(pending.args) ? (
+              <JsonViewer value={formatArgs(pending.args)!} label="arguments" defaultExpandDepth={2} maxHeight={240} />
+            ) : (
+              <p className="text-sm text-text-muted italic">(no arguments)</p>
+            )}
           </div>
           {error && (
             <p className="text-sm text-error">{error}</p>

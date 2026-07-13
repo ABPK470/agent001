@@ -535,7 +535,24 @@ describe("listOperations sync bucketing", () => {
           planId: "plan-skip",
           step: "auditCheck",
           message: "Source audit gate failed — execute skipped",
+          durationMs: 1000,
         }),
+      },
+      {
+        type: EventType.SyncExecuteSql,
+        created_at: "2026-05-27T15:00:01.500Z",
+        data: JSON.stringify({
+          planId: "plan-skip",
+          label: "flowStep.auditCheck(auditCheck)",
+          connection: "uat",
+          rowCount: 0,
+          durationMs: 415,
+        }),
+      },
+      {
+        type: EventType.SyncExecuteStep,
+        created_at: "2026-05-27T15:00:01.000Z",
+        data: JSON.stringify({ planId: "plan-skip", step: "auditCheck" }),
       },
       {
         type: EventType.SyncExecuteStarted,
@@ -569,6 +586,7 @@ describe("listOperations sync bucketing", () => {
 
     const preview = result.operations.find((op) => op.id === "plan-skip")
     const executePhase = preview?.activities.find((a) => a.name === "Execute")
+    const auditCheck = executePhase?.children?.find((a) => a.name === "auditCheck")
 
     expect(preview?.kind).toBe(OperationKind.SyncRun)
     expect(preview?.id).toBe("plan-skip")
@@ -578,8 +596,15 @@ describe("listOperations sync bucketing", () => {
     expect(preview?.activities[0]?.status).toBe(OperationStatus.Success)
     expect(preview?.activities[0]?.error).toBeUndefined()
     expect(executePhase?.status).toBe(OperationStatus.Skipped)
-    expect(executePhase?.error).toBe("Source audit gate failed — execute skipped")
-    expect(executePhase?.children?.some((a) => a.name === "Execute skipped")).toBe(true)
+    expect(executePhase?.error).toBeUndefined()
+    expect(executePhase?.children?.some((a) => a.name === "Execute skipped")).toBe(false)
+    expect(auditCheck?.status).toBe(OperationStatus.Skipped)
+    expect(auditCheck?.events.map((e) => e.type)).toEqual([
+      EventType.SyncExecuteStep,
+      EventType.SyncExecuteSql,
+    ])
+    expect(auditCheck?.children?.[0]?.name).toBe("result")
+    expect(auditCheck?.children?.[0]?.summary).toBe("Source audit gate failed — execute skipped")
   })
 
   it("excludes system pipelines from the operation log list", async () => {

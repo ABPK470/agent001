@@ -65,7 +65,7 @@ function phaseActivity(
     endedAt: pipe.endedAt,
     durationMs: pipe.durationMs,
     summary: summariseSyncEvents(summaryKind, events),
-    error: pipe.error,
+    error: pipe.status === OperationStatus.Failed ? pipe.error : undefined,
     events: [],
     children: pipe.activities
   }

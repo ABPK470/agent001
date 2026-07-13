@@ -2,6 +2,7 @@ import { BookOpen, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
 import { api } from "../../api"
+import { JsonViewer } from "../../components/JsonViewer"
 import type { PublishedSyncDefinition, SyncPlan } from "../../types"
 import { Err, ModalShell } from "./chrome"
 
@@ -95,9 +96,9 @@ export function PlanPublishedBundleModal({
               current published bundle entry — not a historical snapshot stored in the database.
             </div>
           )}
-          <pre className="flex-1 min-h-0 overflow-auto rounded border border-border-subtle bg-base/40 p-3 text-[11px] leading-relaxed font-mono text-text-muted whitespace-pre-wrap break-all">
-            {JSON.stringify(definition, null, 2)}
-          </pre>
+          <div className="flex-1 min-h-0">
+            <JsonViewer value={definition} label="definition" defaultExpandDepth={2} maxHeight={560} />
+          </div>
         </div>
       )}
     </ModalShell>

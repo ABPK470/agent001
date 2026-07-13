@@ -1,5 +1,6 @@
 import type { JSX } from "react"
 import type { EntityRegistryDefinition, EntityRegistryStrategy, EntityRegistryStrategyHistoryEntry } from "../../../types"
+import { JsonViewer } from "../../../components/JsonViewer"
 import { ModalShell } from "../ModalShell"
 import { AdminModalCanvas, AdminModalRoot, FormSectionCard } from "../governance/modal-layout"
 import { AdminTable, AdminTd, AdminTh } from "../../sync-admin/shared"
@@ -113,10 +114,10 @@ export function StrategyPolicyModal({
             <p className="font-mono text-sm">{strategy.excludeFromDiff.join(", ") || "—"}</p>
           </FormSectionCard>
           <FormSectionCard title="On insert">
-            <pre className="overflow-x-auto font-mono text-xs">{JSON.stringify(strategy.onInsert, null, 2)}</pre>
+            <JsonViewer value={strategy.onInsert} label="onInsert" defaultExpandDepth={2} maxHeight={280} />
           </FormSectionCard>
           <FormSectionCard title="On update">
-            <pre className="overflow-x-auto font-mono text-xs">{JSON.stringify(strategy.onUpdate, null, 2)}</pre>
+            <JsonViewer value={strategy.onUpdate} label="onUpdate" defaultExpandDepth={2} maxHeight={280} />
           </FormSectionCard>
           <FormSectionCard title="Identity handling">
             <p className="text-sm">{identityLabel}</p>

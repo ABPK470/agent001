@@ -14,6 +14,7 @@
 
 import { ChevronDown, ChevronRight, Clock, Copy, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { JsonViewer } from "../components/JsonViewer"
 import { useStore } from "../store"
 import type { TraceEntry } from "../types"
 import { fmtTokens } from "../util"
@@ -129,9 +130,7 @@ function MessageBubble({ msg, index }: {
                 <span className="text-sm font-mono font-semibold text-warning">{tc.name}</span>
                 <span className="text-xs text-text-muted/30 font-mono">{tc.id.slice(0, 12)}</span>
               </div>
-              <pre className="code-pre mt-0.5">
-                {JSON.stringify(tc.arguments, null, 2)}
-              </pre>
+              <JsonViewer value={tc.arguments} label="arguments" defaultExpandDepth={2} maxHeight={200} />
             </div>
           ))}
         </div>
@@ -161,9 +160,7 @@ function ToolDefinition({ tool }: {
             {showSchema ? "hide schema" : "show parameter schema"}
           </button>
           {showSchema && (
-            <pre className="code-pre mt-1 max-h-[200px] overflow-y-auto">
-              {JSON.stringify(tool.parameters, null, 2)}
-            </pre>
+            <JsonViewer value={tool.parameters} label="schema" defaultExpandDepth={2} maxHeight={200} />
           )}
         </>
       )}
@@ -465,9 +462,7 @@ function LlmCallEntry({ call, index }: {
                           <span className="text-sm font-mono font-semibold text-warning">{tc.name}</span>
                           <span className="text-xs text-text-muted/30 font-mono">{tc.id}</span>
                         </div>
-                        <pre className="code-pre mt-0.5">
-                          {JSON.stringify(tc.arguments, null, 2)}
-                        </pre>
+                        <JsonViewer value={tc.arguments} label="arguments" defaultExpandDepth={2} maxHeight={200} />
                       </div>
                     ))}
                   </div>

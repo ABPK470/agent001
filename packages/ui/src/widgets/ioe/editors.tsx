@@ -5,6 +5,7 @@
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CodeBlock, extractToolCode, ToolResultTable, ToolStepInput, ToolStepOutput } from "../../components/CodeBlock"
+import { JsonViewer } from "../../components/JsonViewer"
 import { EditorTab, RunStatus } from "../../enums"
 import type { AgentDefinition, BusMessage, Run, Step, TraceEntry } from "../../types"
 import { fmtTokens, formatMs, remediationHintForValidationCode, truncate } from "../../util"
@@ -723,12 +724,7 @@ function TraceChild({ entry: e }: { entry: TraceEntry }) {
             return (
               <div className="mt-1 ml-3 space-y-1.5">
                 {otherArgs && (
-                  <pre
-                    className="text-[12px] font-mono rounded px-2 py-1"
-                    style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}` }}
-                  >
-                    {JSON.stringify(otherArgs, null, 2)}
-                  </pre>
+                  <JsonViewer value={otherArgs} label="args" defaultExpandDepth={2} maxHeight={180} />
                 )}
                 <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={220} />
               </div>
@@ -2698,7 +2694,7 @@ function ToolCallInline({ tc }: {
       </div>
       {open && (
         <div className="ml-5 py-0.5">
-          <Pane text={JSON.stringify(tc.arguments, null, 2)} />
+          <JsonViewer value={tc.arguments} label="arguments" defaultExpandDepth={2} maxHeight={240} />
         </div>
       )}
     </div>
@@ -2736,10 +2732,7 @@ function ExecutionRow({ entry: e }: { entry: TraceEntry }) {
               return (
                 <div className="space-y-1.5">
                   {otherArgs && (
-                    <pre className="text-[12px] font-mono rounded px-2 py-1"
-                      style={{ background: C.elevated, color: C.muted, border: `1px solid ${C.border}` }}>
-                      {JSON.stringify(otherArgs, null, 2)}
-                    </pre>
+                    <JsonViewer value={otherArgs} label="args" defaultExpandDepth={2} maxHeight={180} />
                   )}
                   <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={240} />
                 </div>

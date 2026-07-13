@@ -383,6 +383,71 @@ function syncExecuteStepSummary(stepName: string): string | undefined {
   )
 }
 
+function findFlowStepActivity(activities: OperationActivity[], stepName: string): OperationActivity | null {
+  for (let i = activities.length - 1; i >= 0; i--) {
+    const activity = activities[i]!
+    if (activity.name === stepName && !activity.id.startsWith("lifecycle:")) {
+      return activity
+    }
+  }
+  return null
+}
+
+function attachSkipResultToStep(
+  step: OperationActivity,
+  ev: OperationEvent,
+  message: string
+): void {
+  step.status = OperationStatus.Skipped
+  step.endedAt = ev.timestamp
+  step.durationMs = durationOf(step.startedAt, ev.timestamp)
+  step.children = step.children ?? []
+  step.children.push({
+    id: `result:${step.id}:${step.children.length}`,
+    name: "result",
+    status: OperationStatus.Skipped,
+    startedAt: ev.timestamp,
+    endedAt: ev.timestamp,
+    durationMs: numField(ev.data, "durationMs") ?? durationOf(step.startedAt, ev.timestamp),
+    summary: message,
+    events: [ev]
+  })
+}
+
+function applyExecuteSkipped(
+  ev: OperationEvent,
+  activities: OperationActivity[],
+  currentStep: OperationActivity | null,
+  finalizeStep: (endTs: string, status?: OperationStatus, error?: string) => void
+): void {
+  const stepName = strField(ev.data, "step")
+  const message = strField(ev.data, "message") ?? "Execute skipped"
+
+  if (currentStep && (!stepName || currentStep.name === stepName)) {
+    attachSkipResultToStep(currentStep, ev, message)
+    finalizeStep(ev.timestamp, OperationStatus.Skipped)
+    return
+  }
+
+  if (stepName) {
+    const target = findFlowStepActivity(activities, stepName)
+    if (target) {
+      attachSkipResultToStep(target, ev, message)
+      return
+    }
+  }
+
+  activities.push({
+    id: `lifecycle:${activities.length}`,
+    name: stepName ?? "skipped",
+    status: OperationStatus.Skipped,
+    startedAt: ev.timestamp,
+    endedAt: ev.timestamp,
+    durationMs: numField(ev.data, "durationMs") ?? 0,
+    events: [ev]
+  })
+}
+
 function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity[] {
   const METADATA_STEP = "metadataSync"
   const activities: OperationActivity[] = []
@@ -466,10 +531,6 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       status = OperationStatus.Failed
       error = strField(ev.data, "error") ?? undefined
       summary = error
-    } else if (type === EventType.SyncExecuteSkipped) {
-      status = OperationStatus.Skipped
-      name = "Execute skipped"
-      summary = strField(ev.data, "message") ?? strField(ev.data, "step") ?? undefined
     }
 
     activities.push({
@@ -499,14 +560,21 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
     if (
       t === EventType.SyncExecuteStarted ||
       t === EventType.SyncExecuteCompleted ||
-      t === EventType.SyncExecuteFailed ||
-      t === EventType.SyncExecuteSkipped
+      t === EventType.SyncExecuteFailed
     ) {
       finalizeStep(ev.timestamp, t === EventType.SyncExecuteFailed ? OperationStatus.Failed : undefined)
       if (pipelineFailed && openTables.size > 0) {
         failOpenTables(ev.timestamp)
       }
       pushLifecycleActivity(ev)
+      continue
+    }
+
+    if (t === EventType.SyncExecuteSkipped) {
+      if (pipelineFailed && openTables.size > 0) {
+        failOpenTables(ev.timestamp)
+      }
+      applyExecuteSkipped(ev, activities, currentStep, finalizeStep)
       continue
     }
 

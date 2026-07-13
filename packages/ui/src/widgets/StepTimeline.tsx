@@ -9,6 +9,7 @@
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { CodeBlock, extractToolCode, ToolStepOutput } from "../components/CodeBlock"
+import { JsonViewer } from "../components/JsonViewer"
 import { RunStatus } from "../enums"
 import { useStore } from "../store"
 import { formatMs } from "../util"
@@ -123,9 +124,7 @@ export function StepTimeline() {
                         <div className="space-y-1">
                           <span className="text-[13px] text-text-muted uppercase tracking-wide">Input</span>
                           {Object.keys(otherArgs).length > 0 && (
-                            <pre className="text-[12px] font-mono text-text-secondary bg-base rounded px-2 py-1 mt-0.5">
-                              {JSON.stringify(otherArgs, null, 2)}
-                            </pre>
+                            <JsonViewer value={otherArgs} label="args" defaultExpandDepth={2} maxHeight={160} />
                           )}
                           <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={180} />
                         </div>
@@ -134,9 +133,7 @@ export function StepTimeline() {
                     return (
                       <div>
                         <span className="text-[13px] text-text-muted uppercase tracking-wide">Input</span>
-                        <pre className="text-[13px] font-mono text-text-secondary bg-base rounded-lg p-2 mt-0.5 max-h-40 overflow-auto">
-                          {JSON.stringify(step.input, null, 2)}
-                        </pre>
+                        <JsonViewer value={step.input} label="input" defaultExpandDepth={2} maxHeight={180} />
                       </div>
                     )
                   })()}

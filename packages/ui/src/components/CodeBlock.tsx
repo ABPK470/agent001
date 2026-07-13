@@ -16,6 +16,7 @@ import { Check, Copy } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { C } from "../widgets/ioe/constants"
 import { DataTable } from "./DataTable"
+import { JsonViewer } from "./JsonViewer"
 import { tokenizeSql, type SqlToken } from "./sql-highlight"
 
 function SqlHighlight({ code }: { code: string }) {
@@ -271,28 +272,14 @@ export function ToolStepInput({
     return (
       <div className="space-y-1.5">
         {Object.keys(otherArgs).length > 0 && (
-          <pre
-            className="code-pre rounded px-2 py-1"
-            style={{ background: C.elevated, border: `1px solid ${C.border}` }}
-          >
-            {JSON.stringify(otherArgs, null, 2)}
-          </pre>
+          <JsonViewer value={otherArgs} label="args" defaultExpandDepth={2} maxHeight={160} />
         )}
         <CodeBlock code={extracted.code} lang={extracted.lang} maxHeight={maxHeight} />
       </div>
     )
   }
   return (
-    <pre
-      className="code-pre rounded-lg px-3 py-2 overflow-auto"
-      style={{
-        background: C.base,
-        maxHeight,
-        border: `1px solid ${C.border}`,
-      }}
-    >
-      {JSON.stringify(input, null, 2)}
-    </pre>
+    <JsonViewer value={input} label="input" defaultExpandDepth={2} maxHeight={maxHeight} />
   )
 }
 
@@ -341,16 +328,12 @@ export function ToolStepOutput({
       {resultStr !== null ? (
         <ToolResultTable text={resultStr} maxHeight={maxHeight} />
       ) : otherFields.length > 0 ? (
-        <pre
-          className="code-pre rounded-lg px-3 py-2 overflow-auto"
-          style={{
-            background: C.base,
-            maxHeight,
-            border: `1px solid ${C.border}`,
-          }}
-        >
-          {JSON.stringify(Object.fromEntries(otherFields), null, 2)}
-        </pre>
+        <JsonViewer
+          value={Object.fromEntries(otherFields)}
+          label="output"
+          defaultExpandDepth={2}
+          maxHeight={maxHeight}
+        />
       ) : null}
     </div>
   )

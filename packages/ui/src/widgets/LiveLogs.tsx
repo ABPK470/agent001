@@ -13,6 +13,7 @@ import { AlertCircle, ArrowDown, ChevronRight, Database, Filter, Pause, Play } f
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
 import { SqlTraceFromEventData } from "../components/SqlTrace"
+import { JsonViewer } from "../components/JsonViewer"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { formatLogEntry, useStore } from "../store"
 import type { LogEntry } from "../types"
@@ -456,9 +457,7 @@ function LogRow({ log, setTypeFilters, compact, tiny }: {
           {log.eventName && isSyncSqlEventType(log.eventName) && (
             <SqlTraceFromEventData data={log.data} compact maxHeight={compact ? 120 : 180} />
           )}
-          <pre className="log-payload m-0">
-            {JSON.stringify(log.data, null, 2)}
-          </pre>
+          <JsonViewer value={log.data} label="payload" defaultExpandDepth={2} maxHeight={compact ? 160 : 240} />
         </div>
       )}
     </div>

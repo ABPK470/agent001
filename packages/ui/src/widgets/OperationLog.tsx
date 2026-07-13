@@ -9,6 +9,8 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
 import { SqlTraceModal } from "../components/SqlTrace"
+import { DecisionLogPanel, isSyncDecisionLogDetails } from "../components/DecisionLogPanel"
+import { JsonViewer } from "../components/JsonViewer"
 import { ToolCallModal, ToolIoBlock } from "../components/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
@@ -96,6 +98,11 @@ function StatusMessage({ status, children }: { status: OperationStatus; children
       {children}
     </div>
   )
+}
+
+function isDuplicatePipelineMessage(pipelineError: string | undefined, text: string | undefined): boolean {
+  if (!pipelineError || !text) return false
+  return pipelineError === text
 }
 
 function activitySummaryTone(status: OperationStatus): string {
@@ -220,6 +227,7 @@ function formatActivityName(pipelineKind: OperationKind, activity: OperationActi
     if (activity.name === "phases" || activity.name === "other events" || activity.name.startsWith("tbl:")) return activity.name
     if (activity.name.includes(" (")) return activity.name
     if (activity.name === "skipped" || activity.name === "Execute skipped") return "Execute skipped"
+    if (activity.name === "result") return "Result"
     return humanizeToken(activity.name)
   }
   if (pipelineKind === OperationKind.SyncPreview) {
@@ -810,6 +818,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
                 pipelineKind={pipeline.kind}
                 pipelineId={pipeline.id}
                 pipelineStatus={pipeline.status}
+                pipelineError={pipeline.error}
                 onOpenSyncPlan={onOpenSyncPlan}
                 expanded={actExpanded.has(key)}
                 onToggle={() => toggleActivity(key)}
@@ -828,11 +837,12 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 
 // ── Activity row ─────────────────────────────────────────────────
 
-function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, parentStatus, parentPhaseId, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, onOpenSyncPlan }: {
+function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipelineError, parentStatus, parentPhaseId, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, onOpenSyncPlan }: {
   activity: OperationActivity
   pipelineKind: OperationKind
   pipelineId: string
   pipelineStatus: OperationStatus
+  pipelineError?: string
   parentStatus?: OperationStatus
   parentPhaseId?: string
   depth?: number
@@ -855,7 +865,11 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
   const renderedSummary = defaultActivitySummary(effectiveKind, activity)
   const hasChildren = (activity.children?.length ?? 0) > 0
   const statusMessage = activity.error ?? (
-    (status === "failed" || status === "skipped" || status === "cancelled") && activity.summary
+    (status === "failed" || status === "skipped" || status === "cancelled") &&
+    activity.summary &&
+    activity.name !== "result" &&
+    !isDuplicatePipelineMessage(pipelineError, activity.summary) &&
+    !(activity.id.startsWith("phase:") && isDuplicatePipelineMessage(pipelineError, activity.summary))
       ? activity.summary
       : null
   )
@@ -939,9 +953,11 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
                 <ToolIoBlock io={toolIo} compact maxHeight={120} />
               )}
               {activity.details && Object.keys(activity.details).length > 0 && !toolIo && (
-                <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-xs leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
-                  {JSON.stringify(activity.details, null, 2)}
-                </pre>
+                isSyncDecisionLogDetails(activity.details) ? (
+                  <DecisionLogPanel decisions={activity.details.decisions} />
+                ) : (
+                  <JsonViewer value={activity.details} label="details" defaultExpandDepth={2} maxHeight={280} />
+                )
               )}
             </div>
           )}
@@ -954,6 +970,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
                 pipelineKind={pipelineKind}
                 pipelineId={pipelineId}
                 pipelineStatus={pipelineStatus}
+                pipelineError={pipelineError}
                 parentStatus={status}
                 parentPhaseId={phaseId}
                 depth={(depth ?? 0) + 1}
@@ -980,6 +997,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
                 ev={ev}
                 expanded={evExpanded.has(key)}
                 onToggle={() => toggleEvent(key)}
+                hideSummary={activity.name === "result"}
               />
             )
           })}
@@ -991,10 +1009,11 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
 
 // ── Event row ────────────────────────────────────────────────────
 
-function EventRow({ ev, expanded, onToggle }: {
+function EventRow({ ev, expanded, onToggle, hideSummary = false }: {
   ev: OperationEvent
   expanded: boolean
   onToggle: () => void
+  hideSummary?: boolean
 }) {
   const [sqlModalOpen, setSqlModalOpen] = useState(false)
   const [ioModalOpen, setIoModalOpen] = useState(false)
@@ -1030,7 +1049,7 @@ function EventRow({ ev, expanded, onToggle }: {
           <span className={`shrink-0 font-mono ${
             isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : "text-text-muted/70"
           }`}>{label}</span>
-          {summary && (
+          {summary && !hideSummary && (
             <span className={`min-w-0 break-all ${
               isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : "text-text-muted"
             }`}>{summary}</span>
@@ -1059,9 +1078,7 @@ function EventRow({ ev, expanded, onToggle }: {
       </div>
       {expanded && hasData && (
         <div className="ml-7 my-1">
-          <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-xs leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
-            {JSON.stringify(displayData, null, 2)}
-          </pre>
+          <JsonViewer value={displayData} label="event" defaultExpandDepth={2} maxHeight={240} />
         </div>
       )}
       {sqlModalOpen && sqlFields && (

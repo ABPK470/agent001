@@ -19,7 +19,6 @@ function phaseFromPipeline(
 ): OperationActivity {
   const lifecycleSummary =
     pipe.activities.find((a) => a.name === "completed")?.summary ??
-    pipe.activities.find((a) => a.name === "Execute skipped")?.summary ??
     pipe.activities.find((a) => a.name === "failed")?.summary
 
   return {
@@ -30,7 +29,7 @@ function phaseFromPipeline(
     endedAt: pipe.endedAt,
     durationMs: pipe.durationMs,
     summary: lifecycleSummary,
-    error: pipe.error,
+    error: pipe.status === OperationStatus.Failed ? pipe.error : undefined,
     events: [],
     children: pipe.activities
   }

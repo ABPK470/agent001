@@ -31,6 +31,7 @@ import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { HistoryPlanTables } from "./PlanTables"
 import { SqlTraceList } from "../../components/SqlTrace"
+import { JsonViewer } from "../../components/JsonViewer"
 
 const PAGE_SIZE = 25
 const SEARCH_DEBOUNCE_MS = 300
@@ -854,10 +855,8 @@ function HistoryAuditRow({ event }: { event: SyncAuditEvent }) {
         )}
       </div>
       {jsonOpen && event.detail != null && (
-        <div className="px-2.5 pb-2 border-t border-border-subtle">
-          <pre className="text-[11px] text-text-muted/60 font-mono whitespace-pre-wrap break-all leading-relaxed pt-1.5 max-h-36 overflow-y-auto show-scrollbar">
-            {JSON.stringify(event.detail, null, 2)}
-          </pre>
+        <div className="px-2.5 pb-2 border-t border-border-subtle pt-1.5">
+          <JsonViewer value={event.detail} label="detail" defaultExpandDepth={2} maxHeight={180} />
         </div>
       )}
     </div>
