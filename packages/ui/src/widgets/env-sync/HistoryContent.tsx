@@ -30,11 +30,13 @@ import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { HistoryPlanTables } from "./PlanTables"
-import { SqlTraceList } from "../../components/SqlTrace"
+import { SqlTraceList, SqlTraceModal } from "../../components/SqlTrace"
+import type { SqlTraceFields } from "../../sync-sql-trace"
 import { JsonViewer } from "../../components/JsonViewer"
 
 const PAGE_SIZE = 25
 const SEARCH_DEBOUNCE_MS = 300
+const SQL_TRACE_PAGE = 50
 
 type SyncRunItem = SyncHistoryPage["items"][number]
 type SyncAuditEvent = Awaited<ReturnType<typeof api.syncHistoryDetail>>["audit"][number]
@@ -572,9 +574,13 @@ function HistoryRunRow({
   const [audit, setAudit] = useState<SyncAuditEvent[] | null>(null)
   const [sqlTrace, setSqlTrace] = useState<Awaited<ReturnType<typeof api.syncSqlTrace>> | null>(null)
   const [sqlTraceLoading, setSqlTraceLoading] = useState(false)
+  const [sqlTraceLoadingMore, setSqlTraceLoadingMore] = useState(false)
   const planLoadFailedRef = useRef(false)
   const auditLoadFailedRef = useRef(false)
   const sqlTraceLoadFailedRef = useRef(false)
+  const auditLoadedRef = useRef(false)
+  const planLoadedRef = useRef(false)
+  const sqlTraceLoadedRef = useRef(false)
   const focusOperationLogPlan = useStore((s) => s.focusOperationLogPlan)
 
   const totals = run.executeTotals ?? run.previewTotals
@@ -584,7 +590,8 @@ function HistoryRunRow({
     if (!open) return
     let cancelled = false
 
-    if (!audit && !auditLoadFailedRef.current) {
+    if (!auditLoadedRef.current && !auditLoadFailedRef.current) {
+      auditLoadedRef.current = true
       api
         .syncHistoryDetail(run.planId)
         .then((detail) => {
@@ -597,7 +604,8 @@ function HistoryRunRow({
         })
     }
 
-    if (run.planAvailable && !plan && !planLoadFailedRef.current) {
+    if (run.planAvailable && !planLoadedRef.current && !planLoadFailedRef.current) {
+      planLoadedRef.current = true
       setPlanLoading(true)
       api
         .syncPlan(run.planId)
@@ -615,10 +623,11 @@ function HistoryRunRow({
         })
     }
 
-    if (!sqlTrace && !sqlTraceLoadFailedRef.current) {
+    if (!sqlTraceLoadedRef.current && !sqlTraceLoadFailedRef.current) {
+      sqlTraceLoadedRef.current = true
       setSqlTraceLoading(true)
       api
-        .syncSqlTrace(run.planId)
+        .syncSqlTrace(run.planId, { limit: SQL_TRACE_PAGE, offset: 0 })
         .then((trace) => {
           if (!cancelled) setSqlTrace(trace)
         })
@@ -635,7 +644,29 @@ function HistoryRunRow({
     return () => {
       cancelled = true
     }
-  }, [open, run.planId, run.planAvailable, plan, audit, sqlTrace, onNotifyError])
+  }, [open, run.planId, run.planAvailable, onNotifyError])
+
+  const loadMoreSqlTrace = useCallback(() => {
+    if (!sqlTrace || sqlTraceLoadingMore || sqlTrace.count >= sqlTrace.total) return
+    setSqlTraceLoadingMore(true)
+    api
+      .syncSqlTrace(run.planId, { limit: SQL_TRACE_PAGE, offset: sqlTrace.count })
+      .then((page) => {
+        setSqlTrace((prev) =>
+          prev
+            ? {
+                ...page,
+                items: [...prev.items, ...page.items],
+                count: prev.items.length + page.items.length,
+              }
+            : page,
+        )
+      })
+      .catch((error) => {
+        onNotifyError?.(`Could not load more SQL trace: ${error instanceof Error ? error.message : String(error)}`)
+      })
+      .finally(() => setSqlTraceLoadingMore(false))
+  }, [run.planId, sqlTrace, sqlTraceLoadingMore, onNotifyError])
 
   return (
     <div className="border-b border-border/40">
@@ -739,7 +770,12 @@ function HistoryRunRow({
 
           {plan && <HistoryPlanTables plan={plan} />}
 
-          <HistorySqlTraceSection loading={sqlTraceLoading} trace={sqlTrace} />
+          <HistorySqlTraceSection
+            loading={sqlTraceLoading}
+            loadingMore={sqlTraceLoadingMore}
+            trace={sqlTrace}
+            onLoadMore={loadMoreSqlTrace}
+          />
 
           {audit && audit.length > 0 && <HistoryAuditSection audit={audit} />}
         </div>
@@ -763,38 +799,60 @@ function MetaSep() {
 
 function HistorySqlTraceSection({
   loading,
+  loadingMore,
   trace,
+  onLoadMore,
 }: {
   loading: boolean
+  loadingMore: boolean
   trace: Awaited<ReturnType<typeof api.syncSqlTrace>> | null
+  onLoadMore: () => void
 }) {
-  const [open, setOpen] = useState(true)
+  const [open, setOpen] = useState(false)
+  const [sqlModal, setSqlModal] = useState<SqlTraceFields | null>(null)
 
   return (
-    <div className="rounded-md border border-border-subtle overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-elevated/30 transition-colors"
-      >
-        {open ? <ChevronDown size={13} className="text-text-muted" /> : <ChevronRight size={13} className="text-text-muted" />}
-        <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">SQL trace</span>
-        {trace && (
-          <span className="text-[11px] font-mono text-text-muted/50">({trace.total})</span>
-        )}
-      </button>
-      {open && (
-        <div className="border-t border-border-subtle px-2.5 py-2">
-          {loading && (
-            <div className="flex items-center gap-2 text-xs text-text-muted py-2">
-              <Loader2 size={12} className="animate-spin" />
-              Loading SQL trace…
-            </div>
+    <>
+      <div className="rounded-md border border-border-subtle overflow-hidden">
+        <button
+          type="button"
+          onClick={() => setOpen((value) => !value)}
+          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-elevated/30 transition-colors"
+        >
+          {open ? <ChevronDown size={13} className="text-text-muted" /> : <ChevronRight size={13} className="text-text-muted" />}
+          <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">SQL trace</span>
+          {trace && (
+            <span className="text-[11px] font-mono text-text-muted/50">({trace.total})</span>
           )}
-          {!loading && trace && <SqlTraceList items={trace.items} compact />}
-        </div>
-      )}
-    </div>
+        </button>
+        {open && (
+          <div className="border-t border-border-subtle px-2.5 py-2">
+            {loading && (
+              <div className="flex items-center gap-2 text-xs text-text-muted py-2">
+                <Loader2 size={12} className="animate-spin" />
+                Loading SQL trace…
+              </div>
+            )}
+            {!loading && trace && (
+              <>
+                <SqlTraceList items={trace.items} onOpenSql={setSqlModal} />
+                {trace.count < trace.total && (
+                  <button
+                    type="button"
+                    className="mt-2 text-xs text-accent hover:text-accent-hover font-mono"
+                    disabled={loadingMore}
+                    onClick={onLoadMore}
+                  >
+                    {loadingMore ? "Loading…" : `Load more (${trace.count} / ${trace.total})`}
+                  </button>
+                )}
+              </>
+            )}
+          </div>
+        )}
+      </div>
+      {sqlModal && <SqlTraceModal fields={sqlModal} onClose={() => setSqlModal(null)} />}
+    </>
   )
 }
 

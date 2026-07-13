@@ -4,7 +4,7 @@
  * Data: paginated GET /api/operations (SQLite event_log). SSE only signals refresh.
  */
 
-import { Brain, ChevronRight, Database, FileSearch, Filter, GitCompareArrows, Loader2, Settings, Square, Wrench, X, XCircle } from "lucide-react"
+import { Brain, ChevronRight, Database, FileSearch, Filter, GitCompareArrows, Loader2, Settings, Square, Wrench, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
@@ -15,6 +15,7 @@ import { ToolCallModal, ToolIoBlock } from "../components/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
 import { OperationLogModalsProvider, useOpLogOpenSqlTrace } from "../operation-log-modals"
+import { fmtDuration, fmtTime, OP_LOG, OP_LOG_MONO, OpLogRow } from "../operation-log-row"
 import {
   describeSqlEvent,
   describeSqlOnlyActivity,
@@ -98,10 +99,6 @@ const STATUS_MESSAGE_BOX: Record<OperationStatus, string> = {
 const LOG_ROW_ACTION =
   "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-[0.8125rem] font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded transition-colors"
 
-/** Single font size for the whole widget — matches toolbar chips (0.8125rem). */
-const OP_LOG = "text-[0.8125rem] leading-snug text-text"
-const OP_LOG_MONO = `${OP_LOG} font-mono`
-
 function StatusMessage({ status, children }: { status: OperationStatus; children: ReactNode }) {
   return (
     <div className={`px-2 py-1 mb-1 rounded border break-all ${OP_LOG} ${STATUS_MESSAGE_BOX[status]}`}>
@@ -119,22 +116,6 @@ function isDuplicatePipelineMessage(pipelineError: string | undefined, text: str
 const ALL_STATUSES: OperationStatus[] = ["running", "success", "failed", "cancelled", "skipped"]
 
 // ── Helpers ──────────────────────────────────────────────────────
-
-function fmtDuration(ms: number | null): string {
-  if (ms == null) return "—"
-  if (ms < 1000) return `${ms}ms`
-  if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`
-  const m = Math.floor(ms / 60_000)
-  const s = Math.round((ms % 60_000) / 1000)
-  return `${m}m ${s}s`
-}
-
-function fmtTime(iso: string): string {
-  // Render as local HH:MM:SS for readability
-  const d = new Date(iso)
-  if (Number.isNaN(d.getTime())) return iso
-  return d.toLocaleTimeString(undefined, { hour12: false })
-}
 
 function fmtDateTime(iso: string): string {
   const d = new Date(iso)
@@ -417,9 +398,17 @@ export function OperationLog() {
     setActExpanded(actKeys)
   }, [])
 
+  const focusExpandedRef = useRef<string | null>(null)
+
   useEffect(() => {
-    if (mode !== "focus" || pipelines.length !== 1) return
-    expandAuditTree(pipelines[0]!)
+    if (mode !== "focus" || pipelines.length !== 1) {
+      if (mode !== "focus") focusExpandedRef.current = null
+      return
+    }
+    const pipeline = pipelines[0]!
+    if (focusExpandedRef.current === pipeline.id) return
+    focusExpandedRef.current = pipeline.id
+    expandAuditTree(pipeline)
   }, [mode, pipelines, expandAuditTree])
 
   const cancelPipeline = useCallback(async (pipeline: OperationPipeline): Promise<void> => {
@@ -877,46 +866,37 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 function SqlOnlyActivityRow({
   activity,
   status,
-  sm,
   depth,
-  StatusIcon,
 }: {
   activity: OperationActivity
   status: OperationStatus
-  sm: (typeof STATUS_META)[OperationStatus]
   depth?: number
-  StatusIcon: typeof XCircle | typeof Loader2 | null
 }) {
   const openSqlTrace = useOpLogOpenSqlTrace()
   const trace = describeSqlOnlyActivity(activity)
 
   return (
-    <div
-      className="rounded border border-border-subtle flex items-center gap-2 px-2.5 py-1.5"
-      style={depth != null && depth > 0 ? { marginLeft: depth * 12 } : undefined}
-    >
-      {StatusIcon ? (
-        <StatusIcon
-          size={11}
-          className={`shrink-0 ${status === "running" ? "animate-spin" : ""}`}
-          style={{ color: sm.color }}
-        />
-      ) : (
-        <span className="w-[11px] h-[11px] rounded-full shrink-0" style={{ background: sm.color, opacity: 0.6 }} />
-      )}
-      <span className={`min-w-0 flex-1 break-all ${OP_LOG}`}>{formatTraceRowSummary(trace)}</span>
-      <span className={`shrink-0 tabular-nums w-20 text-right ${OP_LOG}`}>{fmtTime(activity.startedAt)}</span>
-      {trace.sqlFields && (
-        <button
-          type="button"
-          className={LOG_ROW_ACTION}
-          onClick={() => openSqlTrace(trace.sqlFields!)}
-        >
-          <Database size={10} />
-          {trace.detailLabel}
-        </button>
-      )}
-    </div>
+    <OpLogRow
+      status={status}
+      depth={depth}
+      bordered
+      showChevron={false}
+      label={formatTraceRowSummary(trace)}
+      durationMs={activity.durationMs}
+      timestamp={activity.startedAt}
+      actions={
+        trace.sqlFields ? (
+          <button
+            type="button"
+            className={LOG_ROW_ACTION}
+            onClick={() => openSqlTrace(trace.sqlFields!)}
+          >
+            <Database size={10} />
+            {trace.detailLabel}
+          </button>
+        ) : undefined
+      }
+    />
   )
 }
 
@@ -938,21 +918,16 @@ function FlowStepSqlRow({
   const expandable = resultData != null && Object.keys(resultData).length > 0
 
   return (
-    <div>
-      <div className="flex items-baseline gap-1 pr-1">
-        <button
-          type="button"
-          className={`min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-left hover:bg-overlay-2 transition-colors ${expandable ? "" : "cursor-default"}`}
-          onClick={() => expandable && onToggle()}
-        >
-          <ChevronRight
-            size={9}
-            className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""} ${expandable ? "text-text" : "invisible"}`}
-          />
-          <span className={`shrink-0 tabular-nums w-20 ${OP_LOG}`}>{fmtTime(ev.timestamp)}</span>
-          <span className={`min-w-0 break-all ${OP_LOG}`}>{formatTraceRowSummary(trace)}</span>
-        </button>
-        {trace.sqlFields && (
+    <OpLogRow
+      expanded={expanded}
+      expandable={expandable}
+      onToggle={onToggle}
+      showStatus={false}
+      label={formatTraceRowSummary(trace)}
+      durationMs={trace.durationMs}
+      timestamp={ev.timestamp}
+      actions={
+        trace.sqlFields ? (
           <button
             type="button"
             className={LOG_ROW_ACTION}
@@ -964,14 +939,15 @@ function FlowStepSqlRow({
             <Database size={10} />
             {trace.detailLabel}
           </button>
-        )}
-      </div>
-      {expanded && resultData && (
-        <div className="px-2 pb-1">
+        ) : undefined
+      }
+    >
+      {resultData && (
+        <div className="border-t border-border-subtle px-2.5 py-1.5 bg-base/30">
           <CodeBlock code={JSON.stringify(resultData, null, 2)} lang="json" maxHeight={480} />
         </div>
       )}
-    </div>
+    </OpLogRow>
   )
 }
 
@@ -998,9 +974,6 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   const phaseId = activity.id.startsWith("phase:") ? activity.id : parentPhaseId
   const effectiveKind = activityPipelineKind(pipelineKind, phaseId)
   const status = effectiveActivityStatus(activity, pipelineStatus, parentStatus)
-  const sm = STATUS_META[status]
-  const StatusIcon = status === "failed" ? XCircle
-    : status === "running" ? Loader2 : null
   const renderedName = formatActivityName(effectiveKind, activity)
   const renderedSummary = defaultActivitySummary(effectiveKind, activity)
   const isResultRow = activity.name === "result"
@@ -1029,75 +1002,58 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
       <SqlOnlyActivityRow
         activity={activity}
         status={status}
-        sm={sm}
         depth={depth}
-        StatusIcon={StatusIcon}
       />
     )
   }
 
-  return (
-    <div className="rounded border border-border-subtle" style={depth > 0 ? { marginLeft: depth * 12 } : undefined}>
-      <button
-        className={`w-full flex items-center gap-2 px-2.5 py-1.5 hover:bg-overlay-2 transition-colors text-left ${OP_LOG}`}
-        onClick={onToggle}
-      >
-        <ChevronRight size={12} className={`shrink-0 text-text transition-transform ${expanded ? "rotate-90" : ""}`} />
-        {StatusIcon && (
-          <StatusIcon
-            size={11}
-            className={`shrink-0 ${status === "running" ? "animate-spin" : ""}`}
-            style={{ color: sm.color }}
-          />
-        )}
-        {!StatusIcon && <span className="w-[11px] h-[11px] rounded-full shrink-0" style={{ background: sm.color, opacity: 0.6 }} />}
-        <span className={`min-w-0 break-all ${OP_LOG_MONO}`}>{renderedName}</span>
-        {renderedSummary && !isResultRow && (
-          <span className={`shrink-0 break-all min-w-0 max-w-[50%] ${OP_LOG}`}>
-            {renderedSummary}
-          </span>
-        )}
-        <div className="flex-1 min-w-0" />
-        {activity.events.length > 0 && !isResultRow && !isFlowStep && (
-          <span className={`shrink-0 tabular-nums ${OP_LOG}`}>{activity.events.length} ev</span>
-        )}
-        <span className={`shrink-0 tabular-nums w-14 text-right ${OP_LOG}`}>{fmtDuration(activity.durationMs)}</span>
-        <span className={`shrink-0 tabular-nums w-20 text-right ${OP_LOG}`}>{fmtTime(activity.startedAt)}</span>
-        {delegationPlanId && onOpenSyncPlan && (
-          <button
-            type="button"
-            title="Open sync audit"
-            className={LOG_ROW_ACTION}
-            onClick={(e) => {
-              e.stopPropagation()
-              onOpenSyncPlan(delegationPlanId)
-            }}
-          >
-            <FileSearch size={10} />
-            Audit
-          </button>
-        )}
-        {toolIo && (
-          <button
-            type="button"
-            className={LOG_ROW_ACTION}
-            onClick={(e) => {
-              e.stopPropagation()
-              setIoModalOpen(true)
-            }}
-          >
-            <Wrench size={10} />
-            I/O
-          </button>
-        )}
-      </button>
-
-      {ioModalOpen && toolIo && (
-        <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
+  const rowActions = (
+    <>
+      {delegationPlanId && onOpenSyncPlan && (
+        <button
+          type="button"
+          title="Open sync audit"
+          className={LOG_ROW_ACTION}
+          onClick={(e) => {
+            e.stopPropagation()
+            onOpenSyncPlan(delegationPlanId)
+          }}
+        >
+          <FileSearch size={10} />
+          Audit
+        </button>
       )}
+      {toolIo && (
+        <button
+          type="button"
+          className={LOG_ROW_ACTION}
+          onClick={(e) => {
+            e.stopPropagation()
+            setIoModalOpen(true)
+          }}
+        >
+          <Wrench size={10} />
+          I/O
+        </button>
+      )}
+    </>
+  )
 
-      {expanded && (
-        <div className="border-t border-border-subtle px-2.5 py-1.5 space-y-0.5 bg-base/30">
+  return (
+    <OpLogRow
+      status={status}
+      depth={depth}
+      bordered
+      expanded={expanded}
+      expandable
+      onToggle={onToggle}
+      label={<span className={OP_LOG_MONO}>{renderedName}</span>}
+      meta={renderedSummary && !isResultRow ? renderedSummary : undefined}
+      durationMs={activity.durationMs}
+      timestamp={activity.startedAt}
+      actions={rowActions}
+    >
+      <div className="border-t border-border-subtle px-2.5 py-1.5 space-y-0.5 bg-base/30">
           {statusMessage && !isDuplicatePipelineMessage(pipelineError, statusMessage) && (
             <StatusMessage status={status}>{statusMessage}</StatusMessage>
           )}
@@ -1191,9 +1147,12 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               />
             )
           })}
-        </div>
+      </div>
+
+      {ioModalOpen && toolIo && (
+        <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
       )}
-    </div>
+    </OpLogRow>
   )
 }
 
@@ -1219,65 +1178,61 @@ function EventRow({ ev, expanded, onToggle }: {
   const displayData = isStep
     ? stripToolIoForInlineDisplay(ev.data)
     : ev.data
+  const durationMs = typeof ev.data["durationMs"] === "number" ? ev.data["durationMs"] : null
+  const toneClass = isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : ""
 
   return (
-    <div>
-      <div className="flex items-baseline gap-1 pr-1">
-        <button
-          className={`min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-left hover:bg-overlay-2 transition-colors ${
-            hasData && !isSql ? "cursor-pointer" : "cursor-default"
-          }`}
-          onClick={() => hasData && !isSql && onToggle()}
-        >
-          <ChevronRight
-            size={9}
-            className={`shrink-0 mt-1 transition-transform ${expanded ? "rotate-90" : ""} ${hasData && !isSql ? "text-text" : "invisible"}`}
-          />
-          <span className={`shrink-0 tabular-nums w-20 ${OP_LOG}`}>{fmtTime(ev.timestamp)}</span>
-          {label && (
-            <span className={`shrink-0 ${OP_LOG_MONO} ${
-              isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : ""
-            }`}>{label}</span>
-          )}
-          {summary && (
-            <span className={`min-w-0 break-all whitespace-pre-wrap ${OP_LOG} ${
-              isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : ""
-            }`}>{summary}</span>
-          )}
-        </button>
-        {isSql && sqlFields && (
-          <button
-            type="button"
-            className={LOG_ROW_ACTION}
-            onClick={(e) => {
-              e.stopPropagation()
-              openSqlTrace(sqlFields)
-            }}
-          >
-            <Database size={10} />
-            SQL
-          </button>
+    <>
+      <OpLogRow
+        expanded={expanded}
+        expandable={hasData && !isSql}
+        onToggle={onToggle}
+        showStatus={false}
+        label={
+          label ? (
+            <span className={`${OP_LOG_MONO} ${toneClass}`}>{label}</span>
+          ) : (
+            <span className={toneClass}>{summary}</span>
+          )
+        }
+        meta={label && summary ? <span className={toneClass}>{summary}</span> : undefined}
+        durationMs={durationMs}
+        timestamp={ev.timestamp}
+        actions={
+          <>
+            {isSql && sqlFields && (
+              <button
+                type="button"
+                className={LOG_ROW_ACTION}
+                onClick={() => openSqlTrace(sqlFields)}
+              >
+                <Database size={10} />
+                SQL
+              </button>
+            )}
+            {isStep && toolIo && (
+              <button
+                type="button"
+                className={LOG_ROW_ACTION}
+                onClick={() => setIoModalOpen(true)}
+              >
+                <Wrench size={10} />
+                I/O
+              </button>
+            )}
+          </>
+        }
+      >
+        {hasData && !isSql && (
+          <div className="border-t border-border-subtle px-2.5 py-1.5 bg-base/30">
+            <JsonViewer value={displayData} label="event" defaultExpandDepth={3} maxHeight={360} />
+          </div>
         )}
-        {isStep && toolIo && (
-          <button
-            type="button"
-            className={LOG_ROW_ACTION}
-            onClick={() => setIoModalOpen(true)}
-          >
-            <Wrench size={10} />
-            I/O
-          </button>
-        )}
-      </div>
-      {expanded && hasData && !isSql && (
-        <div className="ml-7 my-1">
-          <JsonViewer value={displayData} label="event" defaultExpandDepth={3} maxHeight={360} />
-        </div>
-      )}
+      </OpLogRow>
       {ioModalOpen && toolIo && (
         <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
       )}
-    </div>
+    </>
   )
 }
 

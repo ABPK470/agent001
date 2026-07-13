@@ -143,6 +143,7 @@ export function SqlTraceModal({
 export function SqlTraceList({
   items,
   compact,
+  onOpenSql,
 }: {
   items: Array<{
     id: number
@@ -156,6 +157,8 @@ export function SqlTraceList({
     sqlLength: number
   }>
   compact?: boolean
+  /** When set, rows open SQL via shared modal instead of inline blocks. */
+  onOpenSql?: (fields: SqlTraceFields) => void
 }) {
   if (items.length === 0) {
     return (
@@ -164,6 +167,44 @@ export function SqlTraceList({
       </div>
     )
   }
+
+  if (onOpenSql) {
+    return (
+      <div className="space-y-0.5">
+        {items.map((item) => {
+          const fields: SqlTraceFields = {
+            label: item.scope ? `${item.label} (${item.scope})` : item.label,
+            connection: item.connection,
+            sql: item.sqlPreview,
+            sqlLength: item.sqlLength,
+            sqlLogId: item.id,
+            rowCount: item.rowCount,
+            durationMs: item.durationMs,
+            error: item.error,
+          }
+          const summary = [
+            `SQL ${item.label}`,
+            item.connection,
+            item.durationMs != null ? `${item.durationMs}ms` : null,
+            item.rowCount != null ? `${item.rowCount} rows` : null,
+          ].filter(Boolean).join(" · ")
+          return (
+            <div key={item.id} className="flex items-center gap-2 px-2 py-1 text-[0.8125rem] text-text">
+              <span className="min-w-0 flex-1 break-all font-mono">{summary}</span>
+              <button
+                type="button"
+                className="shrink-0 text-accent hover:text-accent-hover font-mono"
+                onClick={() => onOpenSql(fields)}
+              >
+                SQL
+              </button>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+
   return (
     <div className="space-y-2">
       {items.map((item) => (
