@@ -27,10 +27,12 @@ function DecisionRow({
   decision,
   linear,
   isLast,
+  depth = 0,
 }: {
   decision: SyncDecisionEntry
   linear?: boolean
   isLast?: boolean
+  depth?: number
 }) {
   const status = severityToStatus(decision.severity)
   const hasDetails =
@@ -41,6 +43,7 @@ function DecisionRow({
     <OpLogRow
       linear={linear}
       isLast={isLast && !expanded}
+      depth={depth}
       status={status}
       expanded={expanded}
       expandable={hasDetails}
@@ -83,9 +86,11 @@ export function isSyncDecisionLogDetails(
 export function DecisionLogPanel({
   decisions,
   linear,
+  depth = 0,
 }: {
   decisions: SyncDecisionEntry[]
   linear?: boolean
+  depth?: number
 }) {
   return (
     <>
@@ -94,6 +99,7 @@ export function DecisionLogPanel({
           key={decision.id}
           decision={decision}
           linear={linear}
+          depth={depth}
           isLast={idx === decisions.length - 1}
         />
       ))}

@@ -713,7 +713,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
       </div>
 
       {expanded && (
-        <LogNest>
+        <LogNest root>
           {pipeline.error && (
             <div className="px-2.5 py-1.5">
               <StatusMessage status={pipeline.status}>{pipeline.error}</StatusMessage>
@@ -755,11 +755,13 @@ function SqlOnlyActivityRow({
   status,
   linear,
   isLast,
+  depth = 0,
 }: {
   activity: OperationActivity
   status: OperationStatus
   linear?: boolean
   isLast?: boolean
+  depth?: number
 }) {
   const openSqlTrace = useOpLogOpenSqlTrace()
   const trace = describeSqlOnlyActivity(activity)
@@ -768,6 +770,7 @@ function SqlOnlyActivityRow({
     <OpLogRow
       linear={linear}
       isLast={isLast}
+      depth={depth}
       status={status}
       showChevron={false}
       label={
@@ -802,6 +805,7 @@ function FlowStepSqlRow({
   onToggle,
   linear,
   isLast,
+  depth = 0,
 }: {
   ev: OperationEvent
   resultData?: Record<string, unknown>
@@ -809,6 +813,7 @@ function FlowStepSqlRow({
   onToggle: () => void
   linear?: boolean
   isLast?: boolean
+  depth?: number
 }) {
   const openSqlTrace = useOpLogOpenSqlTrace()
   const trace = describeSqlEvent(ev)
@@ -818,6 +823,7 @@ function FlowStepSqlRow({
     <OpLogRow
       linear={linear}
       isLast={isLast && !expanded}
+      depth={depth}
       expanded={expanded}
       expandable={expandable}
       onToggle={onToggle}
@@ -898,6 +904,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
         status={status}
         linear={linear}
         isLast={isLast}
+        depth={depth}
       />
     )
   }
@@ -931,6 +938,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
       <OpLogRow
         linear={linear}
         isLast={isLast && !hasExpandedContent}
+        depth={depth}
         status={status}
         expanded={expanded}
         expandable
@@ -955,6 +963,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               <FlowStepSqlRow
                 key={key}
                 linear={linear}
+                depth={depth + 1}
                 isLast={idx === sqlEvents.length - 1 && !hasChildren && visibleEvents.length === 0}
                 ev={ev}
                 resultData={resultData}
@@ -981,7 +990,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               )}
               {activity.details && Object.keys(activity.details).length > 0 && !toolIo && (
                 isSyncDecisionLogDetails(activity.details) ? (
-                  <DecisionLogPanel decisions={activity.details.decisions} linear={linear} />
+                  <DecisionLogPanel decisions={activity.details.decisions} linear={linear} depth={depth + 1} />
                 ) : (
                   <div className="px-2.5 py-1.5">
                     <JsonViewer value={activity.details} label="details" defaultExpandDepth={2} maxHeight={280} />
@@ -1025,6 +1034,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               <EventRow
                 key={idx}
                 linear={linear}
+                depth={depth + 1}
                 isLast={idx === activity.events.length - 1}
                 ev={ev}
                 expanded={evExpanded.has(key)}
@@ -1038,6 +1048,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               <EventRow
                 key={key}
                 linear={linear}
+                depth={depth + 1}
                 isLast={idx === visibleEvents.length - 1}
                 ev={ev}
                 expanded={evExpanded.has(key)}
@@ -1062,12 +1073,13 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
 
 // ── Event row ────────────────────────────────────────────────────
 
-function EventRow({ ev, expanded, onToggle, linear, isLast }: {
+function EventRow({ ev, expanded, onToggle, linear, isLast, depth = 0 }: {
   ev: OperationEvent
   expanded: boolean
   onToggle: () => void
   linear?: boolean
   isLast?: boolean
+  depth?: number
 }) {
   const openSqlTrace = useOpLogOpenSqlTrace()
   const [ioModalOpen, setIoModalOpen] = useState(false)
@@ -1096,6 +1108,7 @@ function EventRow({ ev, expanded, onToggle, linear, isLast }: {
       <OpLogRow
         linear={linear}
         isLast={isLast && !expanded}
+        depth={depth}
         expanded={expanded}
         expandable={hasData && !isSql}
         onToggle={onToggle}

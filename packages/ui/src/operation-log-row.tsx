@@ -152,6 +152,7 @@ function LogRowCells({
   timestamp,
   actions,
   linear,
+  depth = 0,
 }: {
   expanded: boolean
   expandable: boolean
@@ -164,8 +165,10 @@ function LogRowCells({
   timestamp?: string | null
   actions?: ReactNode
   linear?: boolean
+  depth?: number
 }) {
   const textSize = linear ? "text-[13px]" : OP_LOG
+  const labelWeight = depth > 0 ? "font-normal" : "font-medium"
   return (
     <>
       {showChevron ? (
@@ -182,7 +185,7 @@ function LogRowCells({
         <span className="w-[7px] shrink-0" aria-hidden />
       )}
       <span className={`min-w-0 flex-1 truncate ${textSize}`}>
-        <span className={`font-medium ${OP_LOG_MUTED}`}>{label}</span>
+        <span className={`${labelWeight} ${OP_LOG_MUTED}`}>{label}</span>
         {meta ? <span className={`font-normal ${OP_LOG_MUTED}`}> · {meta}</span> : null}
       </span>
       <span className={`shrink-0 tabular-nums w-14 text-right ${textSize} ${OP_LOG_MUTED}`}>
@@ -212,6 +215,7 @@ export function OpLogRow({
   children,
   linear,
   isLast,
+  depth = 0,
 }: {
   status?: OperationStatus
   expanded?: boolean
@@ -227,10 +231,11 @@ export function OpLogRow({
   children?: ReactNode
   linear?: boolean
   isLast?: boolean
+  depth?: number
 }) {
   const rowClass = linear
     ? `flex items-center gap-2.5 px-3 py-2 text-left text-text transition-colors hover:bg-elevated/50 ${isLast ? "" : ""}`
-    : `flex items-center gap-2 px-2.5 py-1.5 text-left text-text transition-colors hover:bg-overlay-2/80 ${isLast ? "" : "border-b border-border-subtle"}`
+    : `flex items-center gap-2 px-2.5 py-1.5 text-left text-text transition-colors hover:bg-overlay-2/80 ${isLast ? "" : "border-b border-border-subtle"} ${expanded && expandable ? "bg-overlay-1/50" : ""}`
 
   const cells = (
     <LogRowCells
@@ -245,6 +250,7 @@ export function OpLogRow({
       timestamp={timestamp}
       actions={undefined}
       linear={linear}
+      depth={depth}
     />
   )
 
@@ -273,22 +279,33 @@ export function OpLogRow({
   )
 }
 
-/** Indent nested rows with a left rail (Linear-style). */
+/** Indent nested content — each level adds a left guide rail. */
 export function LogNest({
   children,
   linear,
+  root,
 }: {
   children: ReactNode
   linear?: boolean
+  /** First level under a pipeline card header */
+  root?: boolean
 }) {
+  if (linear) {
+    return (
+      <div className="border-l border-border-subtle ml-[1.125rem] pl-0">
+        {children}
+      </div>
+    )
+  }
+  if (root) {
+    return (
+      <div className="border-t border-l border-border-subtle ml-3 mr-0.5 bg-base/20">
+        {children}
+      </div>
+    )
+  }
   return (
-    <div
-      className={
-        linear
-          ? "border-l border-border-subtle ml-[1.125rem] pl-0"
-          : "border-t border-border-subtle bg-base/20"
-      }
-    >
+    <div className="border-l border-border-subtle ml-4 pl-0">
       {children}
     </div>
   )
