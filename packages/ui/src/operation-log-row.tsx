@@ -2,7 +2,7 @@ import { ChevronRight, Loader2 } from "lucide-react"
 import type { ReactNode } from "react"
 import type { OperationStatus } from "./api"
 
-export const OP_LOG = "text-[0.8125rem] leading-snug text-text"
+export const OP_LOG = "text-[0.8125rem] leading-snug"
 export const OP_LOG_MONO = `${OP_LOG} font-mono`
 
 const STATUS_COLOR: Record<OperationStatus, string> = {
@@ -43,7 +43,6 @@ export function fmtDateTime(iso: string): string {
   })
 }
 
-/** Format pipeline subtitle — humanize ISO timestamps embedded after `def`. */
 export function formatPipelineSubtitle(subtitle: string): string {
   return subtitle.replace(
     /\bdef\s+(\d{4}-\d{2}-\d{2}T[\d:.]+(?:Z|[+-]\d{2}:\d{2})?)/g,
@@ -64,14 +63,45 @@ export function statusTextClass(status: OperationStatus): string {
     case "cancelled":
       return "text-text-muted"
     default:
-      return "text-text"
+      return "text-text-muted"
   }
 }
 
-/** Single muted tone for descriptions — same at every nesting depth. */
+export function statusSoftBgClass(status: OperationStatus): string {
+  switch (status) {
+    case "success":
+      return "bg-success-soft"
+    case "failed":
+      return "bg-error-soft"
+    case "skipped":
+      return "bg-warning-soft"
+    case "running":
+      return "bg-info-soft"
+    default:
+      return "bg-overlay-2"
+  }
+}
+
 export const OP_LOG_MUTED = "text-text-muted"
 
-/** Status indicator — dot for terminal states; spinner only while running. */
+/** Colored status word — never mixed with text-text. */
+export function LogStatusLabel({
+  status,
+  compact,
+}: {
+  status: OperationStatus
+  compact?: boolean
+}) {
+  return (
+    <span
+      className={`inline-flex items-center gap-0.5 shrink-0 font-semibold uppercase tracking-wide ${compact ? "text-[10px]" : "text-[11px]"} ${statusTextClass(status)}`}
+    >
+      {status === "running" && <Loader2 size={10} className="animate-spin" />}
+      {status}
+    </span>
+  )
+}
+
 export function StatusDot({ status }: { status: OperationStatus }) {
   const color = STATUS_COLOR[status]
   if (status === "running") {
@@ -79,13 +109,38 @@ export function StatusDot({ status }: { status: OperationStatus }) {
   }
   return (
     <span
-      className="w-[11px] h-[11px] rounded-full shrink-0"
-      style={{ background: color, opacity: 0.85 }}
+      className="w-[7px] h-[7px] rounded-full shrink-0"
+      style={{ background: color }}
     />
   )
 }
 
-function OpLogRowCells({
+/** Bordered group — pipeline card or nested step group. */
+export function LogGroup({
+  children,
+  nested,
+  flat,
+}: {
+  children: ReactNode
+  nested?: boolean
+  /** Linear variant: no outer border. */
+  flat?: boolean
+}) {
+  if (flat) {
+    return <div className="divide-y divide-border-subtle">{children}</div>
+  }
+  return (
+    <div
+      className={`rounded-md border border-border-subtle overflow-hidden bg-overlay-1/40 ${
+        nested ? "ml-3 mt-0.5" : "mb-1 last:mb-0"
+      }`}
+    >
+      {children}
+    </div>
+  )
+}
+
+function LogRowCells({
   expanded,
   expandable,
   showChevron,
@@ -96,6 +151,7 @@ function OpLogRowCells({
   durationMs,
   timestamp,
   actions,
+  linear,
 }: {
   expanded: boolean
   expandable: boolean
@@ -107,32 +163,32 @@ function OpLogRowCells({
   durationMs?: number | null
   timestamp?: string | null
   actions?: ReactNode
+  linear?: boolean
 }) {
+  const textSize = linear ? "text-[13px]" : OP_LOG
   return (
     <>
       {showChevron ? (
         <ChevronRight
-          size={12}
-          className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""} ${expandable ? "text-text" : "invisible"}`}
+          size={linear ? 14 : 12}
+          className={`shrink-0 text-text-muted transition-transform ${expanded ? "rotate-90" : ""} ${expandable ? "opacity-100" : "opacity-0"}`}
         />
       ) : (
-        <span className="w-3 shrink-0" aria-hidden />
+        <span className="w-3.5 shrink-0" aria-hidden />
       )}
       {showStatus && status ? (
         <StatusDot status={status} />
       ) : (
-        <span className="w-[11px] shrink-0" aria-hidden />
+        <span className="w-[7px] shrink-0" aria-hidden />
       )}
-      <span className="min-w-0 flex-1 inline">
-        <span className={`break-all ${OP_LOG}`}>{label}</span>
-        {meta ? (
-          <span className={`${OP_LOG} ${OP_LOG_MUTED}`}> · {meta}</span>
-        ) : null}
+      <span className={`min-w-0 flex-1 truncate ${textSize}`}>
+        <span className="font-medium">{label}</span>
+        {meta ? <span className={`font-normal ${OP_LOG_MUTED}`}> · {meta}</span> : null}
       </span>
-      <span className={`shrink-0 tabular-nums w-14 text-right ${OP_LOG}`}>
+      <span className={`shrink-0 tabular-nums w-14 text-right ${textSize} ${OP_LOG_MUTED}`}>
         {durationMs !== undefined ? fmtDuration(durationMs ?? null) : ""}
       </span>
-      <span className={`shrink-0 tabular-nums w-20 text-right ${OP_LOG}`}>
+      <span className={`shrink-0 tabular-nums w-[4.5rem] text-right ${textSize} ${OP_LOG_MUTED}`}>
         {timestamp ? fmtTime(timestamp) : ""}
       </span>
       {actions}
@@ -140,7 +196,7 @@ function OpLogRowCells({
   )
 }
 
-/** Standard pipeline log row — same column layout everywhere. */
+/** Unified row — same layout at every depth; nesting via LogNest. */
 export function OpLogRow({
   status,
   expanded = false,
@@ -148,14 +204,14 @@ export function OpLogRow({
   onToggle,
   showChevron = true,
   showStatus = true,
-  depth = 0,
-  bordered = false,
   label,
   meta,
   durationMs,
   timestamp,
   actions,
   children,
+  linear,
+  isLast,
 }: {
   status?: OperationStatus
   expanded?: boolean
@@ -163,17 +219,17 @@ export function OpLogRow({
   onToggle?: () => void
   showChevron?: boolean
   showStatus?: boolean
-  depth?: number
-  bordered?: boolean
   label: ReactNode
   meta?: ReactNode
   durationMs?: number | null
   timestamp?: string | null
   actions?: ReactNode
   children?: ReactNode
+  linear?: boolean
+  isLast?: boolean
 }) {
   const cells = (
-    <OpLogRowCells
+    <LogRowCells
       expanded={expanded}
       expandable={expandable}
       showChevron={showChevron}
@@ -184,26 +240,45 @@ export function OpLogRow({
       durationMs={durationMs}
       timestamp={timestamp}
       actions={actions}
+      linear={linear}
     />
   )
 
-  const wrapClass = bordered ? "rounded border border-border-subtle overflow-hidden" : ""
-  const style = depth > 0 ? { marginLeft: depth * 12 } : undefined
+  const rowClass = linear
+    ? `flex items-center gap-2.5 px-3 py-2 text-left text-text transition-colors hover:bg-elevated/50 ${isLast ? "" : ""}`
+    : `flex items-center gap-2 px-2.5 py-1.5 text-left text-text transition-colors hover:bg-overlay-2/80 ${isLast ? "" : "border-b border-border-subtle"}`
 
   return (
-    <div className={wrapClass} style={style}>
+    <>
       {expandable && onToggle ? (
-        <button
-          type="button"
-          className={`w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-overlay-2 transition-colors ${OP_LOG}`}
-          onClick={onToggle}
-        >
+        <button type="button" className={`w-full ${rowClass}`} onClick={onToggle}>
           {cells}
         </button>
       ) : (
-        <div className={`flex items-center gap-2 px-2.5 py-1.5 ${OP_LOG}`}>{cells}</div>
+        <div className={rowClass}>{cells}</div>
       )}
       {expanded && children}
+    </>
+  )
+}
+
+/** Indent nested rows with a left rail (Linear-style). */
+export function LogNest({
+  children,
+  linear,
+}: {
+  children: ReactNode
+  linear?: boolean
+}) {
+  return (
+    <div
+      className={
+        linear
+          ? "border-l border-border-subtle ml-[1.125rem] pl-0"
+          : "border-t border-border-subtle bg-base/20"
+      }
+    >
+      {children}
     </div>
   )
 }

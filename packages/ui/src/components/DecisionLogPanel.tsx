@@ -23,7 +23,15 @@ function severityToStatus(severity: string | null | undefined): OperationStatus 
   return OperationStatus.Success
 }
 
-function DecisionRow({ decision }: { decision: SyncDecisionEntry }) {
+function DecisionRow({
+  decision,
+  linear,
+  isLast,
+}: {
+  decision: SyncDecisionEntry
+  linear?: boolean
+  isLast?: boolean
+}) {
   const status = severityToStatus(decision.severity)
   const hasDetails =
     decision.details != null && Object.keys(decision.details).length > 0
@@ -31,6 +39,8 @@ function DecisionRow({ decision }: { decision: SyncDecisionEntry }) {
 
   return (
     <OpLogRow
+      linear={linear}
+      isLast={isLast && !expanded}
       status={status}
       expanded={expanded}
       expandable={hasDetails}
@@ -44,7 +54,7 @@ function DecisionRow({ decision }: { decision: SyncDecisionEntry }) {
       meta={decision.summary ?? undefined}
     >
       {hasDetails && (
-        <div className="border-t border-border-subtle px-2.5 py-1.5 bg-base/30">
+        <div className={`px-2.5 py-1.5 ${linear ? "bg-elevated/30" : "bg-base/30 border-t border-border-subtle"}`}>
           <JsonViewer
             value={decision.details}
             label="details"
@@ -70,12 +80,23 @@ export function isSyncDecisionLogDetails(
   )
 }
 
-export function DecisionLogPanel({ decisions }: { decisions: SyncDecisionEntry[] }) {
+export function DecisionLogPanel({
+  decisions,
+  linear,
+}: {
+  decisions: SyncDecisionEntry[]
+  linear?: boolean
+}) {
   return (
-    <div className="space-y-0.5">
-      {decisions.map((decision) => (
-        <DecisionRow key={decision.id} decision={decision} />
+    <>
+      {decisions.map((decision, idx) => (
+        <DecisionRow
+          key={decision.id}
+          decision={decision}
+          linear={linear}
+          isLast={idx === decisions.length - 1}
+        />
       ))}
-    </div>
+    </>
   )
 }

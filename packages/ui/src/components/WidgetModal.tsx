@@ -30,6 +30,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "active-users": "Active Users",
   "env-sync": "Sync",
   "operation-log": "Pipelines",
+  "activity-log": "Activity",
   "entity-registry": "Entity Registry",
   "sync-proposals": "Sync Proposals",
   "sync-approvals": "Sync Admin · Approvals",

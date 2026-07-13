@@ -4,7 +4,7 @@
  * Data: paginated GET /api/operations (SQLite event_log). SSE only signals refresh.
  */
 
-import { Brain, ChevronRight, Database, Filter, GitCompareArrows, Loader2, Settings, Square, Wrench, X } from "lucide-react"
+import { Brain, ChevronRight, Database, GitCompareArrows, Loader2, Settings, Square, Wrench } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
@@ -19,6 +19,9 @@ import {
   fmtDuration,
   fmtTime,
   formatPipelineSubtitle,
+  LogGroup,
+  LogNest,
+  LogStatusLabel,
   OP_LOG,
   OP_LOG_MONO,
   OP_LOG_MUTED,
@@ -38,18 +41,7 @@ import {
   readToolIoFromEvent,
   stripToolIoForInlineDisplay,
 } from "../tool-call-io"
-import {
-  LOG_TOOLBAR_CHIP,
-  LOG_TOOLBAR_CHIP_ACTIVE,
-  LOG_TOOLBAR_CHIP_IDLE,
-  LOG_TOOLBAR_DIVIDER,
-  LOG_TOOLBAR_ICON_BTN,
-  LogWidgetToolbar,
-  LogWidgetToolbarCount,
-  LogWidgetToolbarFilters,
-  LogWidgetToolbarSearch,
-  LogWidgetToolbarTail,
-} from "./widget-toolbar"
+import { OperationLogToolbar } from "./operation-log-toolbar"
 
 // ── Visuals ──────────────────────────────────────────────────────
 
@@ -85,15 +77,6 @@ const KIND_META: Record<
     },
 };
 
-const STATUS_META: Record<OperationStatus, { color: string; tone: string }> = {
-  running:   { color: "var(--color-info)", tone: "bg-info-soft text-info" },
-  success:   { color: "var(--color-success)", tone: "bg-success-soft text-success" },
-  failed:    { color: "var(--color-error)", tone: "bg-error-soft text-error" },
-  cancelled: { color: "var(--color-text-muted)", tone: "bg-overlay-2 text-text-muted" },
-  skipped:   { color: "var(--color-warning)", tone: "bg-warning-soft text-warning" },
-  unknown:   { color: "var(--color-text-muted)", tone: "bg-overlay-2 text-text-muted" },
-}
-
 /** Message box in expanded rows — matches the row's terminal status, not always error-red. */
 const STATUS_MESSAGE_BOX: Record<OperationStatus, string> = {
   running:   "bg-info-soft border-info/30 text-info",
@@ -120,9 +103,6 @@ function isDuplicatePipelineMessage(pipelineError: string | undefined, text: str
   return pipelineError === text
 }
 
-// system kind is intentionally excluded
-const ALL_STATUSES: OperationStatus[] = ["running", "success", "failed", "cancelled", "skipped"]
-
 // ── Helpers ──────────────────────────────────────────────────────
 
 // ── Component ────────────────────────────────────────────────────
@@ -138,7 +118,7 @@ function dayLabel(iso: string): string {
   return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" })
 }
 
-function matchesPipeline(p: OperationPipeline, needle: string): boolean {
+export function matchesPipeline(p: OperationPipeline, needle: string): boolean {
   if (!needle) return true
   const activityHay = (activities: OperationActivity[]): string[] =>
     activities.flatMap((a) => [
@@ -450,96 +430,22 @@ export function OperationLog() {
     <OperationLogModalsProvider>
     <div ref={rootRef} className={`h-full flex flex-col gap-2.5 overflow-hidden ${OP_LOG}`}>
 
-      <LogWidgetToolbar compact={compact}>
-        <LogWidgetToolbarFilters>
-          {(["all", "agent", "sync"] as const).map(v => {
-            const active = v === kindView
-            const label = v === "sync" ? (compact || tiny ? "sync" : "synchronization") : v
-            return (
-              <button key={v} onClick={() => setKindView(v)}
-                className={`${LOG_TOOLBAR_CHIP} ${active ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE}`}
-              >{label}</button>
-            )
-          })}
-
-          {!compact && <div className={LOG_TOOLBAR_DIVIDER} aria-hidden />}
-
-          {!compact ? (
-            <>
-              {ALL_STATUSES.map(s => {
-                const on = statuses.has(s)
-                const m  = STATUS_META[s]
-                return (
-                  <button key={s} onClick={() => toggleStatus(s)}
-                    className={`${LOG_TOOLBAR_CHIP} ${on ? `${m.tone} font-medium` : LOG_TOOLBAR_CHIP_IDLE}`}
-                  >{s}</button>
-                )
-              })}
-              {statuses.size > 0 && (
-                <button onClick={() => setStatuses(new Set())}
-                  className={`${LOG_TOOLBAR_ICON_BTN} text-text-muted/60 hover:text-text hover:bg-elevated/40`}
-                  title="Clear status filters"
-                ><X size={14} /></button>
-              )}
-            </>
-          ) : (
-            <div className="relative shrink-0">
-              <button
-                onClick={() => setStatusesOpen(v => !v)}
-                className={`${LOG_TOOLBAR_CHIP} ${
-                  statuses.size > 0 ? LOG_TOOLBAR_CHIP_ACTIVE : LOG_TOOLBAR_CHIP_IDLE
-                }`}
-              >
-                <Filter size={13} />
-                {statuses.size === 0 ? "status" : `${statuses.size} status`}
-              </button>
-              {statusesOpen && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setStatusesOpen(false)} />
-                  <div className="absolute left-0 top-full mt-1 z-50 bg-elevated border border-border rounded-md shadow-2xl py-1 min-w-[160px]">
-                    {ALL_STATUSES.map(s => {
-                      const on = statuses.has(s)
-                      const m = STATUS_META[s]
-                      return (
-                        <button
-                          key={s}
-                          onClick={() => toggleStatus(s)}
-                          className={`flex items-center justify-between gap-3 w-full text-left px-3 py-2 text-xs transition-colors ${
-                            on ? `${m.tone} font-medium` : "text-text-muted hover:text-text hover:bg-overlay-2"
-                          }`}
-                        >
-                          <span>{s}</span>
-                        </button>
-                      )
-                    })}
-                    {statuses.size > 0 && (
-                      <button
-                        onClick={() => setStatuses(new Set())}
-                        className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-xs text-text-muted hover:text-text hover:bg-overlay-2"
-                      >
-                        <X size={12} />
-                        Clear filters
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
-        </LogWidgetToolbarFilters>
-
-        <LogWidgetToolbarSearch
-          value={search}
-          onChange={setSearch}
-          placeholder="Filter operations…"
-          loading={searchPending}
-          onClear={() => setSearch("")}
-        />
-
-        <LogWidgetToolbarTail>
-          <LogWidgetToolbarCount filtered={filtered.length} total={pipelines.length} hidden={tiny} />
-        </LogWidgetToolbarTail>
-      </LogWidgetToolbar>
+      <OperationLogToolbar
+        kindView={kindView}
+        setKindView={setKindView}
+        statuses={statuses}
+        toggleStatus={toggleStatus}
+        clearStatuses={() => setStatuses(new Set())}
+        search={search}
+        setSearch={setSearch}
+        searchPending={searchPending}
+        compact={compact}
+        tiny={tiny}
+        statusesOpen={statusesOpen}
+        setStatusesOpen={setStatusesOpen}
+        filteredCount={filtered.length}
+        totalCount={pipelines.length}
+      />
 
       {/* ── Body ────────────────────────────────────────── */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1">
@@ -600,6 +506,7 @@ export function OperationPipelineList({
   toggleDay,
   onCancelPipeline,
   cancellingId,
+  linear = false,
 }: {
   pipelines: OperationPipeline[]
   compact: boolean
@@ -613,6 +520,7 @@ export function OperationPipelineList({
   toggleDay: (label: string) => void
   onCancelPipeline?: (pipeline: OperationPipeline) => void
   cancellingId?: string | null
+  linear?: boolean
 }) {
   const byDay = useMemo(() => {
     const groups: Array<{ label: string; items: OperationPipeline[] }> = []
@@ -629,9 +537,13 @@ export function OperationPipelineList({
     {byDay.map(group => {
       const collapsed = collapsedDays.has(group.label)
       return (
-        <div key={group.label} className="mb-3">
+        <div key={group.label} className={linear ? "mb-4" : "mb-3"}>
           <button
-            className="sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-xs uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80 transition-colors text-left"
+            className={`sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-left ${
+              linear
+                ? "text-[11px] font-medium uppercase tracking-wider text-text-muted bg-surface/95 backdrop-blur-sm"
+                : "text-xs uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80"
+            } transition-colors`}
             onClick={() => toggleDay(group.label)}
           >
             <ChevronRight size={10} className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`} />
@@ -639,10 +551,11 @@ export function OperationPipelineList({
             <span className="ml-1 text-text-muted/30 normal-case tracking-normal">{group.items.length}</span>
           </button>
           {!collapsed && (
-            <div className="space-y-1">
+            <div className={linear ? "space-y-0" : "space-y-1"}>
               {group.items.map(p => (
                 <PipelineRow
                   key={p.id}
+                  linear={linear}
                   pipeline={p}
                   expanded={expanded.has(p.id)}
                   onToggle={() => togglePipeline(p.id)}
@@ -665,7 +578,7 @@ export function OperationPipelineList({
 
 // ── Pipeline row ─────────────────────────────────────────────────
 
-function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, compact, onCancel, cancelling }: {
+function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, compact, onCancel, cancelling, linear }: {
   pipeline: OperationPipeline
   expanded: boolean
   onToggle: () => void
@@ -676,9 +589,9 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
   compact: boolean
   onCancel?: (pipeline: OperationPipeline) => void
   cancelling?: boolean
+  linear?: boolean
 }) {
   const km = KIND_META[pipeline.kind]
-  const sm = STATUS_META[pipeline.status]
   const Icon = km.Icon
   const canCancel =
     pipeline.status === "running" &&
@@ -688,30 +601,104 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
     ? formatPipelineSubtitle(pipeline.subtitle)
     : null
 
+  if (linear) {
+    return (
+      <div className="border-b border-border-subtle last:border-b-0">
+        <div className="flex items-center gap-1 pr-1">
+          <button
+            type="button"
+            className="min-w-0 flex-1 flex items-center gap-2.5 px-3 py-2 hover:bg-elevated/50 transition-colors text-left"
+            onClick={onToggle}
+          >
+            <ChevronRight
+              size={14}
+              className={`shrink-0 text-text-muted transition-transform ${expanded ? "rotate-90" : ""}`}
+            />
+            <Icon size={15} className="shrink-0" style={{ color: km.color }} />
+            <LogStatusLabel status={pipeline.status} />
+            <span className="min-w-0 flex-1 truncate text-[13px] text-text">
+              <span className="font-medium">{pipeline.title}</span>
+              {formattedSubtitle && !compact && (
+                <span className={`${OP_LOG_MONO} font-normal ${OP_LOG_MUTED}`}> · {formattedSubtitle}</span>
+              )}
+            </span>
+            <span className={`shrink-0 tabular-nums text-[13px] ${OP_LOG_MUTED}`}>
+              {fmtDuration(pipeline.durationMs)}
+            </span>
+            <span className={`shrink-0 tabular-nums text-[13px] w-[4.5rem] text-right ${OP_LOG_MUTED}`}>
+              {fmtTime(pipeline.startedAt)}
+            </span>
+          </button>
+          {canCancel && (
+            <button
+              type="button"
+              title="Stop"
+              disabled={cancelling}
+              onClick={() => onCancel!(pipeline)}
+              className="shrink-0 inline-flex h-7 w-7 items-center justify-center rounded-md text-text-muted transition-colors hover:bg-error/10 hover:text-error disabled:opacity-40"
+            >
+              {cancelling ? <Loader2 size={13} className="animate-spin" /> : <Square size={12} />}
+            </button>
+          )}
+        </div>
+        {expanded && (
+          <LogNest linear>
+            {pipeline.error && (
+              <div className="px-3 py-2">
+                <StatusMessage status={pipeline.status}>{pipeline.error}</StatusMessage>
+              </div>
+            )}
+            {pipeline.activities.length === 0 && (
+              <div className="px-3 py-2 text-xs text-text-muted">No activities recorded.</div>
+            )}
+            {pipeline.activities.map((a, idx) => {
+              const key = pipelineActivityKey(pipeline.id, a.id)
+              return (
+                <ActivityRow
+                  key={key}
+                  linear
+                  isLast={idx === pipeline.activities.length - 1}
+                  activity={a}
+                  pipelineKind={pipeline.kind}
+                  pipelineId={pipeline.id}
+                  pipelineStatus={pipeline.status}
+                  pipelineError={pipeline.error}
+                  expanded={actExpanded.has(key)}
+                  onToggle={() => toggleActivity(key)}
+                  actExpanded={actExpanded}
+                  toggleActivity={toggleActivity}
+                  evExpanded={evExpanded}
+                  toggleEvent={toggleEvent}
+                />
+              )
+            })}
+          </LogNest>
+        )}
+      </div>
+    )
+  }
+
   return (
-    <div className="rounded-md border border-border-subtle bg-overlay-1 overflow-hidden">
+    <LogGroup>
       <div className="flex items-center gap-1 pr-1">
       <button
-        className="min-w-0 flex-1 flex items-center gap-2 px-3 py-2 hover:bg-overlay-2 transition-colors text-left"
+        className="min-w-0 flex-1 flex items-center gap-2 px-3 py-2 hover:bg-overlay-2/80 transition-colors text-left"
         onClick={onToggle}
       >
-        <ChevronRight size={14} className={`shrink-0 text-text transition-transform ${expanded ? "rotate-90" : ""}`} />
+        <ChevronRight size={14} className={`shrink-0 text-text-muted transition-transform ${expanded ? "rotate-90" : ""}`} />
         <Icon size={14} className="shrink-0" style={{ color: km.color }} />
-        <span className={`shrink-0 uppercase tracking-wide px-1.5 py-0.5 rounded ${OP_LOG} ${sm.tone}`}>
-          {pipeline.status === "running" && <Loader2 size={9} className="inline mr-0.5 animate-spin" />}
-          {pipeline.status}
-        </span>
-        <span className={`min-w-0 flex-1 ${OP_LOG}`}>
-          <span className="break-all">{pipeline.title}</span>
+        <LogStatusLabel status={pipeline.status} />
+        <span className={`min-w-0 flex-1 ${OP_LOG} text-text`}>
+          <span className="font-medium">{pipeline.title}</span>
           {formattedSubtitle && !compact && (
-            <span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}> · {formattedSubtitle}</span>
+            <span className={`${OP_LOG_MONO} font-normal ${OP_LOG_MUTED}`}> · {formattedSubtitle}</span>
           )}
         </span>
         <span className={`shrink-0 tabular-nums ${OP_LOG} ${OP_LOG_MUTED}`}>
           {pipeline.activityCount} act · {pipeline.eventCount} ev
         </span>
-        <span className={`shrink-0 tabular-nums w-16 text-right ${OP_LOG}`}>{fmtDuration(pipeline.durationMs)}</span>
-        <span className={`shrink-0 tabular-nums w-20 text-right ${OP_LOG}`}>{fmtTime(pipeline.startedAt)}</span>
+        <span className={`shrink-0 tabular-nums w-16 text-right ${OP_LOG} ${OP_LOG_MUTED}`}>{fmtDuration(pipeline.durationMs)}</span>
+        <span className={`shrink-0 tabular-nums w-[4.5rem] text-right ${OP_LOG} ${OP_LOG_MUTED}`}>{fmtTime(pipeline.startedAt)}</span>
       </button>
       {canCancel && (
         <button
@@ -727,20 +714,21 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
       </div>
 
       {expanded && (
-        <div className="border-t border-border-subtle bg-base/40 px-2 py-1.5 space-y-0.5">
+        <LogNest>
           {pipeline.error && (
-            <div className="px-2.5">
+            <div className="px-2.5 py-1.5">
               <StatusMessage status={pipeline.status}>{pipeline.error}</StatusMessage>
             </div>
           )}
           {pipeline.activities.length === 0 && (
-            <div className="px-2.5 py-2 text-xs text-text-muted/60">No activities recorded.</div>
+            <div className="px-2.5 py-2 text-xs text-text-muted">No activities recorded.</div>
           )}
-          {pipeline.activities.map((a) => {
+          {pipeline.activities.map((a, idx) => {
             const key = pipelineActivityKey(pipeline.id, a.id)
             return (
               <ActivityRow
                 key={key}
+                isLast={idx === pipeline.activities.length - 1}
                 activity={a}
                 pipelineKind={pipeline.kind}
                 pipelineId={pipeline.id}
@@ -755,9 +743,9 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
               />
             )
           })}
-        </div>
+        </LogNest>
       )}
-    </div>
+    </LogGroup>
   )
 }
 
@@ -766,20 +754,22 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 function SqlOnlyActivityRow({
   activity,
   status,
-  depth,
+  linear,
+  isLast,
 }: {
   activity: OperationActivity
   status: OperationStatus
-  depth?: number
+  linear?: boolean
+  isLast?: boolean
 }) {
   const openSqlTrace = useOpLogOpenSqlTrace()
   const trace = describeSqlOnlyActivity(activity)
 
   return (
     <OpLogRow
+      linear={linear}
+      isLast={isLast}
       status={status}
-      depth={depth}
-      bordered
       showChevron={false}
       label={
         <span className={`${OP_LOG_MONO} ${statusTextClass(status)}`}>
@@ -811,11 +801,15 @@ function FlowStepSqlRow({
   resultData,
   expanded,
   onToggle,
+  linear,
+  isLast,
 }: {
   ev: OperationEvent
   resultData?: Record<string, unknown>
   expanded: boolean
   onToggle: () => void
+  linear?: boolean
+  isLast?: boolean
 }) {
   const openSqlTrace = useOpLogOpenSqlTrace()
   const trace = describeSqlEvent(ev)
@@ -823,6 +817,8 @@ function FlowStepSqlRow({
 
   return (
     <OpLogRow
+      linear={linear}
+      isLast={isLast && !expanded}
       expanded={expanded}
       expandable={expandable}
       onToggle={onToggle}
@@ -847,7 +843,7 @@ function FlowStepSqlRow({
       }
     >
       {resultData && (
-        <div className="border-t border-border-subtle px-2.5 py-1.5 bg-base/30">
+        <div className={`px-3 py-2 ${linear ? "bg-elevated/30" : "bg-base/30 border-t border-border-subtle"}`}>
           <CodeBlock code={JSON.stringify(resultData, null, 2)} lang="json" maxHeight={480} />
         </div>
       )}
@@ -857,7 +853,7 @@ function FlowStepSqlRow({
 
 // ── Activity row ─────────────────────────────────────────────────
 
-function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipelineError, parentStatus, parentPhaseId, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent }: {
+function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipelineError, parentStatus, parentPhaseId, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, linear, isLast }: {
   activity: OperationActivity
   pipelineKind: OperationKind
   pipelineId: string
@@ -872,6 +868,8 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   toggleActivity: (key: string) => void
   evExpanded: Set<string>
   toggleEvent: (key: string) => void
+  linear?: boolean
+  isLast?: boolean
 }) {
   const [ioModalOpen, setIoModalOpen] = useState(false)
   const phaseId = activity.id.startsWith("phase:") ? activity.id : parentPhaseId
@@ -896,49 +894,62 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
 
   if (isSqlOnlyActivity(activity)) {
     return (
-      <SqlOnlyActivityRow
-        activity={activity}
-        status={status}
-        depth={depth}
-      />
+      <LogGroup nested={depth > 0} flat={linear}>
+        <SqlOnlyActivityRow
+          activity={activity}
+          status={status}
+          linear={linear}
+          isLast
+        />
+      </LogGroup>
     )
   }
 
-  const rowActions = (
-    <>
-      {toolIo && (
-        <button
-          type="button"
-          className={LOG_ROW_ACTION}
-          onClick={(e) => {
-            e.stopPropagation()
-            setIoModalOpen(true)
-          }}
-        >
-          <Wrench size={10} />
-          I/O
-        </button>
-      )}
-    </>
-  )
+  const hasExpandedContent =
+    expanded &&
+    (statusMessage ||
+      isFlowStep ||
+      isResultRow ||
+      hasChildren ||
+      visibleEvents.length > 0 ||
+      (!isResultRow && activity.events.length > 0) ||
+      (!isResultRow && activity.events.length === 0 && activity.details))
+
+  const rowActions = toolIo ? (
+    <button
+      type="button"
+      className={LOG_ROW_ACTION}
+      onClick={(e) => {
+        e.stopPropagation()
+        setIoModalOpen(true)
+      }}
+    >
+      <Wrench size={10} />
+      I/O
+    </button>
+  ) : undefined
 
   return (
-    <OpLogRow
-      status={status}
-      depth={depth}
-      bordered
-      expanded={expanded}
-      expandable
-      onToggle={onToggle}
-      label={<span className={`${OP_LOG_MONO} ${statusTextClass(status)}`}>{renderedName}</span>}
-      meta={renderedSummary && !isResultRow ? renderedSummary : undefined}
-      durationMs={activity.durationMs}
-      timestamp={activity.startedAt}
-      actions={rowActions}
-    >
-      <div className="border-t border-border-subtle px-2.5 py-1.5 space-y-0.5 bg-base/30">
+    <LogGroup nested={depth > 0} flat={linear}>
+      <OpLogRow
+        linear={linear}
+        isLast={isLast && !hasExpandedContent}
+        status={status}
+        expanded={expanded}
+        expandable
+        onToggle={onToggle}
+        label={<span className={`${OP_LOG_MONO} ${statusTextClass(status)}`}>{renderedName}</span>}
+        meta={renderedSummary && !isResultRow ? renderedSummary : undefined}
+        durationMs={activity.durationMs}
+        timestamp={activity.startedAt}
+        actions={rowActions}
+      />
+      {expanded && (
+        <LogNest linear={linear}>
           {statusMessage && !isDuplicatePipelineMessage(pipelineError, statusMessage) && (
-            <StatusMessage status={status}>{statusMessage}</StatusMessage>
+            <div className="px-2.5 py-1.5">
+              <StatusMessage status={status}>{statusMessage}</StatusMessage>
+            </div>
           )}
           {isFlowStep && sqlEvents.map((ev, idx) => {
             const key = `${pipelineId}|${activity.id}|sql:${idx}`
@@ -946,6 +957,8 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
             return (
               <FlowStepSqlRow
                 key={key}
+                linear={linear}
+                isLast={idx === sqlEvents.length - 1 && !hasChildren && visibleEvents.length === 0}
                 ev={ev}
                 resultData={resultData}
                 expanded={evExpanded.has(key)}
@@ -954,31 +967,39 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
             )
           })}
           {isResultRow && activity.events[0] && (
-            <CodeBlock
-              code={JSON.stringify(activity.events[0].data, null, 2)}
-              lang="json"
-              maxHeight={480}
-            />
+            <div className="px-2.5 py-1.5">
+              <CodeBlock
+                code={JSON.stringify(activity.events[0].data, null, 2)}
+                lang="json"
+                maxHeight={480}
+              />
+            </div>
           )}
           {!isResultRow && activity.events.length === 0 && activity.details && !statusMessage && (
-            <div className="px-2 py-1.5 space-y-1.5">
+            <div className="px-0 py-0">
               {toolIo && !activity.events.length && (
-                <ToolIoBlock io={toolIo} compact maxHeight={120} />
+                <div className="px-2.5 py-1.5">
+                  <ToolIoBlock io={toolIo} compact maxHeight={120} />
+                </div>
               )}
               {activity.details && Object.keys(activity.details).length > 0 && !toolIo && (
                 isSyncDecisionLogDetails(activity.details) ? (
-                  <DecisionLogPanel decisions={activity.details.decisions} />
+                  <DecisionLogPanel decisions={activity.details.decisions} linear={linear} />
                 ) : (
-                  <JsonViewer value={activity.details} label="details" defaultExpandDepth={2} maxHeight={280} />
+                  <div className="px-2.5 py-1.5">
+                    <JsonViewer value={activity.details} label="details" defaultExpandDepth={2} maxHeight={280} />
+                  </div>
                 )
               )}
             </div>
           )}
-          {hasChildren && !isResultRow && !hasResultChild && activity.children!.map((child) => {
+          {hasChildren && !isResultRow && !hasResultChild && activity.children!.map((child, idx) => {
             const childKey = pipelineActivityKey(pipelineId, child.id)
             return (
               <ActivityRow
                 key={childKey}
+                linear={linear}
+                isLast={idx === activity.children!.length - 1}
                 activity={child}
                 pipelineKind={pipelineKind}
                 pipelineId={pipelineId}
@@ -997,7 +1018,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
             )
           })}
           {!isResultRow && activity.events.length > 0 && toolIo && (
-            <div className="px-2 py-1">
+            <div className="px-2.5 py-1">
               <ToolIoBlock io={toolIo} compact maxHeight={100} />
             </div>
           )}
@@ -1006,6 +1027,8 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
             return (
               <EventRow
                 key={idx}
+                linear={linear}
+                isLast={idx === activity.events.length - 1}
                 ev={ev}
                 expanded={evExpanded.has(key)}
                 onToggle={() => toggleEvent(key)}
@@ -1017,27 +1040,32 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
             return (
               <EventRow
                 key={key}
+                linear={linear}
+                isLast={idx === visibleEvents.length - 1}
                 ev={ev}
                 expanded={evExpanded.has(key)}
                 onToggle={() => toggleEvent(key)}
               />
             )
           })}
-      </div>
+        </LogNest>
+      )}
 
       {ioModalOpen && toolIo && (
         <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />
       )}
-    </OpLogRow>
+    </LogGroup>
   )
 }
 
 // ── Event row ────────────────────────────────────────────────────
 
-function EventRow({ ev, expanded, onToggle }: {
+function EventRow({ ev, expanded, onToggle, linear, isLast }: {
   ev: OperationEvent
   expanded: boolean
   onToggle: () => void
+  linear?: boolean
+  isLast?: boolean
 }) {
   const openSqlTrace = useOpLogOpenSqlTrace()
   const [ioModalOpen, setIoModalOpen] = useState(false)
@@ -1060,6 +1088,8 @@ function EventRow({ ev, expanded, onToggle }: {
   return (
     <>
       <OpLogRow
+        linear={linear}
+        isLast={isLast && !expanded}
         expanded={expanded}
         expandable={hasData && !isSql}
         onToggle={onToggle}
@@ -1100,7 +1130,7 @@ function EventRow({ ev, expanded, onToggle }: {
         }
       >
         {hasData && !isSql && (
-          <div className="border-t border-border-subtle px-2.5 py-1.5 bg-base/30">
+          <div className={`px-2.5 py-1.5 ${linear ? "bg-elevated/30" : "bg-base/30 border-t border-border-subtle"}`}>
             <JsonViewer value={displayData} label="event" defaultExpandDepth={3} maxHeight={360} />
           </div>
         )}
