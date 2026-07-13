@@ -4,8 +4,8 @@
  * Data: paginated GET /api/operations (SQLite event_log). SSE only signals refresh.
  */
 
-import { Brain, ChevronRight, Database, Filter, GitCompareArrows, Loader2, Settings, Square, Wrench, X, XCircle } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { Brain, ChevronRight, Database, FileSearch, Filter, GitCompareArrows, Loader2, Settings, Square, Wrench, X, XCircle } from "lucide-react"
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
 import { SqlTraceModal } from "../components/SqlTrace"
@@ -75,6 +75,34 @@ const STATUS_META: Record<OperationStatus, { color: string; tone: string }> = {
   cancelled: { color: "var(--color-text-muted)", tone: "bg-overlay-2 text-text-muted" },
   skipped:   { color: "var(--color-warning)", tone: "bg-warning-soft text-warning" },
   unknown:   { color: "var(--color-text-muted)", tone: "bg-overlay-2 text-text-muted" },
+}
+
+/** Message box in expanded rows — matches the row's terminal status, not always error-red. */
+const STATUS_MESSAGE_BOX: Record<OperationStatus, string> = {
+  running:   "bg-info-soft border-info/30 text-info",
+  success:   "bg-success-soft border-success/30 text-success",
+  failed:    "bg-error-soft border-error/30 text-error",
+  cancelled: "bg-overlay-2 border-border-subtle text-text-muted",
+  skipped:   "bg-warning-soft border-warning/30 text-warning",
+  unknown:   "bg-overlay-2 border-border-subtle text-text-muted",
+}
+
+const LOG_ROW_ACTION =
+  "shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 text-xs font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded transition-colors"
+
+function StatusMessage({ status, children }: { status: OperationStatus; children: ReactNode }) {
+  return (
+    <div className={`px-2 py-1 mb-1 rounded border text-xs break-all leading-relaxed ${STATUS_MESSAGE_BOX[status]}`}>
+      {children}
+    </div>
+  )
+}
+
+function activitySummaryTone(status: OperationStatus): string {
+  if (status === "failed") return "text-error"
+  if (status === "skipped") return "text-warning"
+  if (status === "cancelled") return "text-text-muted"
+  return "text-text-muted/70"
 }
 
 // system kind is intentionally excluded from the ops log — those events live in the Event Stream widget
@@ -694,6 +722,14 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
     pipeline.status === "running" &&
     onCancel &&
     (pipeline.kind === OperationKind.AgentRun || pipeline.kind === OperationKind.ProposerRun)
+  const showRunAudit = pipeline.kind === OperationKind.AgentRun && onFocusAgentRun
+  const syncPlanId =
+    onOpenSyncPlan &&
+    (pipeline.kind === OperationKind.SyncPreview ||
+      pipeline.kind === OperationKind.SyncExecute ||
+      pipeline.kind === OperationKind.SyncRun)
+      ? syncPlanIdFromPipeline(pipeline)
+      : null
 
   return (
     <div className="rounded-md border border-border-subtle bg-overlay-1 overflow-hidden">
@@ -720,6 +756,28 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
         <span className="shrink-0 text-xs text-text-muted tabular-nums w-16 text-right">{fmtDuration(pipeline.durationMs)}</span>
         <span className="shrink-0 text-xs text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(pipeline.startedAt)}</span>
       </button>
+      {showRunAudit && (
+        <button
+          type="button"
+          title="Open full run audit"
+          className={LOG_ROW_ACTION}
+          onClick={() => onFocusAgentRun!(pipeline.id, pipeline.title)}
+        >
+          <FileSearch size={10} />
+          Audit
+        </button>
+      )}
+      {syncPlanId && (
+        <button
+          type="button"
+          title="Open full sync audit"
+          className={LOG_ROW_ACTION}
+          onClick={() => onOpenSyncPlan!(syncPlanId)}
+        >
+          <FileSearch size={10} />
+          Audit
+        </button>
+      )}
       {canCancel && (
         <button
           type="button"
@@ -735,30 +793,9 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 
       {expanded && (
         <div className="border-t border-border-subtle bg-base/40 px-2 py-1.5 space-y-0.5">
-          {pipeline.kind === OperationKind.AgentRun && onFocusAgentRun && (
-            <div className="px-2.5 py-1">
-              <button
-                type="button"
-                className="text-xs font-mono text-text-muted hover:text-accent transition-colors"
-                onClick={() => onFocusAgentRun(pipeline.id, pipeline.title)}
-              >
-                full run audit · {pipeline.id.slice(0, 8)}
-              </button>
-            </div>
-          )}
-          {onOpenSyncPlan && (pipeline.kind === OperationKind.SyncPreview || pipeline.kind === OperationKind.SyncExecute || pipeline.kind === OperationKind.SyncRun) && (
-            <div className="px-2.5 py-1">
-              <button
-                className="text-xs font-mono text-text-muted hover:text-accent transition-colors"
-                onClick={() => onOpenSyncPlan(syncPlanIdFromPipeline(pipeline))}
-              >
-                {pipeline.kind === OperationKind.SyncRun ? "full audit" : "view plan"} {syncPlanIdFromPipeline(pipeline).slice(0, 8)}
-              </button>
-            </div>
-          )}
-          {pipeline.error && (pipeline.kind === OperationKind.SyncExecute || pipeline.kind === OperationKind.SyncRun) && (
-            <div className="px-2.5 py-1.5 mb-1 rounded bg-error-soft border border-error/30 text-xs text-error break-all">
-              {pipeline.error}
+          {pipeline.error && (
+            <div className="px-2.5">
+              <StatusMessage status={pipeline.status}>{pipeline.error}</StatusMessage>
             </div>
           )}
           {pipeline.activities.length === 0 && (
@@ -817,6 +854,11 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
   const renderedName = formatActivityName(effectiveKind, activity)
   const renderedSummary = defaultActivitySummary(effectiveKind, activity)
   const hasChildren = (activity.children?.length ?? 0) > 0
+  const statusMessage = activity.error ?? (
+    (status === "failed" || status === "skipped" || status === "cancelled") && activity.summary
+      ? activity.summary
+      : null
+  )
   const toolIo =
     readToolIoFromActivity(activity) ??
     (activity.events.length > 0 ? buildToolIoFromStepEvents(activity.events) : null)
@@ -839,8 +881,10 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
         )}
         {!StatusIcon && <span className="w-[11px] h-[11px] rounded-full shrink-0" style={{ background: sm.color, opacity: 0.6 }} />}
         <span className="min-w-0 truncate text-xs text-text font-mono">{renderedName}</span>
-        {renderedSummary && (
-          <span className="shrink-0 text-xs text-text-muted/70 truncate max-w-[18rem]">{renderedSummary}</span>
+        {renderedSummary && !statusMessage && (
+          <span className={`shrink-0 text-xs truncate max-w-[18rem] ${activitySummaryTone(status)}`}>
+            {renderedSummary}
+          </span>
         )}
         <div className="flex-1 min-w-0" />
         {activity.events.length > 0 && (
@@ -848,10 +892,24 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
         )}
         <span className="shrink-0 text-xs text-text-muted tabular-nums w-14 text-right">{fmtDuration(activity.durationMs)}</span>
         <span className="shrink-0 text-xs text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(activity.startedAt)}</span>
+        {delegationPlanId && onOpenSyncPlan && (
+          <button
+            type="button"
+            title="Open sync audit"
+            className={LOG_ROW_ACTION}
+            onClick={(e) => {
+              e.stopPropagation()
+              onOpenSyncPlan(delegationPlanId)
+            }}
+          >
+            <FileSearch size={10} />
+            Audit
+          </button>
+        )}
         {toolIo && (
           <button
             type="button"
-            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-xs font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
+            className={LOG_ROW_ACTION}
             onClick={(e) => {
               e.stopPropagation()
               setIoModalOpen(true)
@@ -869,24 +927,13 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
 
       {expanded && (
         <div className="border-t border-border-subtle px-2.5 py-1.5 space-y-0.5 bg-base/30">
-          {activity.error && (
-            <div className="px-2 py-1 mb-1 rounded bg-error-soft border border-error/30 text-xs text-error break-all">
-              {activity.error}
-            </div>
+          {statusMessage && (
+            <StatusMessage status={status}>{statusMessage}</StatusMessage>
           )}
-          {activity.events.length === 0 && (activity.summary || activity.details) && (
+          {activity.events.length === 0 && (activity.summary || activity.details) && !statusMessage && (
             <div className="px-2 py-1.5 space-y-1.5">
               {activity.summary && (
                 <p className="text-xs text-text-muted leading-relaxed">{activity.summary}</p>
-              )}
-              {delegationPlanId && onOpenSyncPlan && (
-                <button
-                  type="button"
-                  className="text-xs font-mono text-accent hover:text-accent-hover"
-                  onClick={() => onOpenSyncPlan(delegationPlanId)}
-                >
-                  Open sync audit · plan {delegationPlanId.slice(0, 8)}
-                </button>
               )}
               {toolIo && !activity.events.length && (
                 <ToolIoBlock io={toolIo} compact maxHeight={120} />
@@ -952,7 +999,8 @@ function EventRow({ ev, expanded, onToggle }: {
   const [sqlModalOpen, setSqlModalOpen] = useState(false)
   const [ioModalOpen, setIoModalOpen] = useState(false)
   const hasData = ev.data && Object.keys(ev.data).length > 0
-  const isError = !!ev.data["error"]
+  const isFailedEvent = ev.type.includes(".failed") || !!ev.data["error"]
+  const isSkippedEvent = ev.type.includes(".skipped")
   const isSql = isSyncSqlEventType(ev.type)
   const isStep = isAgentStepEventType(ev.type)
   const sqlFields = isSql ? readSqlTraceFields(ev.data) : null
@@ -979,13 +1027,19 @@ function EventRow({ ev, expanded, onToggle }: {
             className={`shrink-0 mt-1 text-text-muted/40 transition-transform ${expanded ? "rotate-90" : ""} ${hasData ? "" : "invisible"}`}
           />
           <span className="shrink-0 text-text-muted/50 tabular-nums w-20 font-mono">{fmtTime(ev.timestamp)}</span>
-          <span className={`shrink-0 font-mono ${isError ? "text-error" : "text-text-muted/70"}`}>{label}</span>
-          {summary && <span className={`min-w-0 break-all ${isError ? "text-error" : "text-text-muted"}`}>{summary}</span>}
+          <span className={`shrink-0 font-mono ${
+            isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : "text-text-muted/70"
+          }`}>{label}</span>
+          {summary && (
+            <span className={`min-w-0 break-all ${
+              isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : "text-text-muted"
+            }`}>{summary}</span>
+          )}
         </button>
         {isSql && sqlFields && (
           <button
             type="button"
-            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-xs font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
+            className={LOG_ROW_ACTION}
             onClick={() => setSqlModalOpen(true)}
           >
             <Database size={10} />
@@ -995,7 +1049,7 @@ function EventRow({ ev, expanded, onToggle }: {
         {isStep && toolIo && (
           <button
             type="button"
-            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-xs font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
+            className={LOG_ROW_ACTION}
             onClick={() => setIoModalOpen(true)}
           >
             <Wrench size={10} />
