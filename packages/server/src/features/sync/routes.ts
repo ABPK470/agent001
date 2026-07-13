@@ -633,6 +633,48 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     return { run: mapSyncRunRow(row), audit }
   })
 
+  app.get<{
+    Params: { planId: string }
+    Querystring: { limit?: string; offset?: string }
+  }>("/api/sync/history/:planId/sql-trace", async (req, reply) => {
+    const isAdmin = !!req.session.isAdmin
+    const viewerUpn = req.session.upn
+    const row = db.getSyncRun(req.params.planId)
+    if (!row) {
+      reply.code(404)
+      return { error: `Sync run ${req.params.planId} not found` }
+    }
+    if (!isAdmin && viewerUpn && row.actor_upn !== viewerUpn) {
+      reply.code(403)
+      return { error: "forbidden" }
+    }
+    const limit = Math.min(Number(req.query.limit) || 500, 2000)
+    const offset = Math.max(Number(req.query.offset) || 0, 0)
+    const items = db.listSyncSqlLogByPlan(req.params.planId, { limit, offset })
+    return {
+      planId: req.params.planId,
+      count: items.length,
+      total: db.countSyncSqlLogByPlan(req.params.planId),
+      items: items.map((entry) => ({
+        id: entry.id,
+        planId: entry.plan_id,
+        previewId: entry.preview_id,
+        eventType: entry.event_type,
+        scope: entry.scope,
+        label: entry.label,
+        connection: entry.connection,
+        durationMs: entry.duration_ms,
+        rowCount: entry.row_count,
+        error: entry.error,
+        createdAt: entry.created_at,
+        sqlPreview: entry.sql_text.length > 2000
+          ? entry.sql_text.slice(0, 2000) + `… [+${entry.sql_text.length - 2000} chars]`
+          : entry.sql_text,
+        sqlLength: entry.sql_text.length,
+      })),
+    }
+  })
+
   app.get<{ Querystring: { limit?: string } }>("/api/sync/runs", async (req) => {
     const isAdmin = !!req.session.isAdmin
     const viewerUpn = req.session.upn

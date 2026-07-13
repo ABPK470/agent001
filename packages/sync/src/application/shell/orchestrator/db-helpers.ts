@@ -134,6 +134,52 @@ export async function trackedQuery<T = unknown>(
   })
 }
 
+/**
+ * Run a parameterized (or custom) query while logging `sqlForLog` for telemetry.
+ * Use when the executed statement differs from the human-readable log text.
+ */
+export async function trackedLoggedQuery<T = unknown>(
+  host: SyncEventHost & MssqlAccessHost,
+  connection: string,
+  label: string,
+  sqlForLog: string,
+  runQuery: () => Promise<sql.IResult<T>>,
+  telemetryContext?: SyncTelemetryContext
+): Promise<sql.IResult<T>> {
+  const t0 = Date.now()
+  try {
+    const result = await runQuery()
+    emitSyncSqlEvent(
+      host,
+      {
+        label,
+        connection,
+        sql: sqlForLog,
+        durationMs: Date.now() - t0,
+        rowCount:
+          result.recordset?.length ?? result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
+        attempts: 1
+      },
+      telemetryContext
+    )
+    return result
+  } catch (e) {
+    emitSyncSqlEvent(
+      host,
+      {
+        label,
+        connection,
+        sql: sqlForLog,
+        durationMs: Date.now() - t0,
+        attempts: 1,
+        error: e instanceof Error ? e.message : String(e)
+      },
+      telemetryContext
+    )
+    throw e
+  }
+}
+
 /** Same as trackedQuery but for `.execute(sproc)` calls. */
 export async function trackedExecute(
   host: SyncEventHost & MssqlAccessHost,

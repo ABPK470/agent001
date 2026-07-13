@@ -6,9 +6,12 @@
  *   sync_execute     : execute a previously-computed plan with safety rails
  */
 
+import { randomUUID } from "node:crypto"
 import type { ExecutableTool, Tool, ToolMetadata } from "@mia/agent"
 import { movementOfTable, tableMovementTotal } from "@mia/shared-types"
 import { parseEntityInstanceRef } from "../../domain/entity-instance-ref.js"
+import { DEFAULT_MYMI_SCHEMA_ALLOWLIST, detectCatalogDrift } from "../../domain/catalog-drift.js"
+import { SyncOperationType } from "../../domain/enums.js"
 import { getEnvironments } from "../../domain/environments.js"
 import {
   isPublishedSyncEntityType,
@@ -20,7 +23,7 @@ import {
   formatSyncScopeResolution,
   resolveSyncScope
 } from "../../domain/sync-scope-resolution.js"
-import { getPool, type SyncRuntimeHost } from "../../ports/index.js"
+import type { SyncRuntimeHost } from "../../ports/index.js"
 import { executeSync, previewSync, resolveSyncEntitySearch, searchEntities } from "./orchestrator/index.js"
 import { loadPlan } from "./plan-store.js"
 import { formatSyncPreviewDashboardFence } from "./preview-dashboard.js"
@@ -47,10 +50,6 @@ function validatePublishedEntityType(host: SyncRuntimeHost, entityType: string):
   }
 }
 
-function normalizeCatalogName(name: string): string {
-  return name.trim().toLowerCase()
-}
-
 // ── compare_catalogs ─────────────────────────────────────────────
 
 function buildCompareCatalogsTool(host: SyncRuntimeHost): Tool {
@@ -73,28 +72,25 @@ function buildCompareCatalogsTool(host: SyncRuntimeHost): Tool {
       const source = String(args.source).trim()
       const target = String(args.target).trim()
       try {
-        const [src, tgt] = await Promise.all([fetchSchema(host, source), fetchSchema(host, target)])
-        const issues: string[] = []
-        // Tables missing on target
-        for (const t of src.tables) if (!tgt.tables.has(t)) issues.push(`Missing on target: ${t}`)
-        for (const t of tgt.tables)
-          if (!src.tables.has(t)) issues.push(`Extra on target (not in source): ${t}`)
-        // Column differences for tables present in both
-        for (const t of src.tables) {
-          if (!tgt.tables.has(t)) continue
-          const sc = src.cols.get(t) ?? new Map()
-          const tc = tgt.cols.get(t) ?? new Map()
-          for (const [c, ty] of sc) {
-            const tt = tc.get(c)
-            if (!tt) issues.push(`${t}.${c}: missing on target`)
-            else if (tt !== ty) issues.push(`${t}.${c}: type mismatch (source=${ty}, target=${tt})`)
-          }
-          for (const c of tc.keys()) if (!sc.has(c)) issues.push(`${t}.${c}: extra on target (not in source)`)
+        const ctx = {
+          kind: SyncOperationType.Preview,
+          opId: randomUUID(),
+          scope: "catalog" as const,
+          source,
+          target
         }
+        const drift = await detectCatalogDrift(
+          host,
+          source,
+          target,
+          undefined,
+          DEFAULT_MYMI_SCHEMA_ALLOWLIST,
+          ctx
+        )
+        const issues = drift.issues
         const lines = [
           `Catalog comparison: ${source} → ${target}`,
-          `  Source tables: ${src.tables.size}`,
-          `  Target tables: ${tgt.tables.size}`,
+          `  Compatible: ${drift.catalogCompatible ? "yes" : "no"}`,
           `  Issues found: ${issues.length}`,
           ...issues.slice(0, 200).map((i) => `    • ${i}`),
           ...(issues.length > 200 ? [`    … and ${issues.length - 200} more`] : [])
@@ -123,35 +119,6 @@ export function createCompareCatalogsTool(host: SyncRuntimeHost): ExecutableTool
   return buildCompareCatalogsTool(host)
 }
 
-async function fetchSchema(
-  host: SyncRuntimeHost,
-  connection: string
-): Promise<{ tables: Set<string>; cols: Map<string, Map<string, string>> }> {
-  const { pool } = await getPool(host, connection)
-  const r = await pool.request().query(`
-    SELECT TABLE_SCHEMA, TABLE_NAME, COLUMN_NAME, DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA IN ('core','coreArchive','gate','gateArchive','master')
-  `)
-  const tables = new Set<string>()
-  const cols = new Map<string, Map<string, string>>()
-  for (const row of r.recordset as Array<{
-    TABLE_SCHEMA: string
-    TABLE_NAME: string
-    COLUMN_NAME: string
-    DATA_TYPE: string
-    CHARACTER_MAXIMUM_LENGTH: number | null
-  }>) {
-    const qn = normalizeCatalogName(`${row.TABLE_SCHEMA}.${row.TABLE_NAME}`)
-    tables.add(qn)
-    if (!cols.has(qn)) cols.set(qn, new Map())
-    const type = row.CHARACTER_MAXIMUM_LENGTH
-      ? `${row.DATA_TYPE}(${row.CHARACTER_MAXIMUM_LENGTH})`
-      : row.DATA_TYPE
-    cols.get(qn)!.set(normalizeCatalogName(row.COLUMN_NAME), type)
-  }
-  return { tables, cols }
-}
 
 // ── search_sync_entities ─────────────────────────────────────────
 

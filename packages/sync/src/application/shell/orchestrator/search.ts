@@ -3,13 +3,16 @@
  */
 
 import sqlMod from "mssql"
+import { randomUUID } from "node:crypto"
 import type { PublishedSyncDefinition } from "@mia/shared-types"
 
 import { parseEntityInstanceRef, coerceSyncEntityId } from "../../../domain/entity-instance-ref.js"
 import type { SyncEntityId } from "../../../domain/definition-selection.js"
+import { SyncOperationType } from "../../../domain/enums.js"
 import { getPublishedSyncDefinition } from "../../../domain/published-definitions.js"
+import type { SyncTelemetryContext } from "../../../ports/events.js"
 import { getPool, type SyncRuntimeHost } from "../../../ports/index.js"
-import { projectRoot, qtable } from "./db-helpers.js"
+import { projectRoot, qtable, trackedLoggedQuery, trackedQuery } from "./db-helpers.js"
 
 export interface EntitySearchResult {
   id: string | number
@@ -30,6 +33,17 @@ export function resolveSyncEntitySearch(
   return { q: parsed.entityQuery ?? rawQuery.trim(), mode: "name" }
 }
 
+function discoveryContext(telemetryContext?: SyncTelemetryContext): SyncTelemetryContext {
+  if (telemetryContext) {
+    return { ...telemetryContext, scope: telemetryContext.scope ?? "discovery" }
+  }
+  return {
+    kind: SyncOperationType.Preview,
+    opId: randomUUID(),
+    scope: "discovery"
+  }
+}
+
 function invalidRootNameColumnError(definition: PublishedSyncDefinition, columns: string[]): Error {
   const detail =
     columns.length > 0
@@ -45,7 +59,8 @@ function invalidRootNameColumnError(definition: PublishedSyncDefinition, columns
 async function resolveDisplayColumn(
   host: SyncRuntimeHost,
   source: string,
-  definition: PublishedSyncDefinition
+  definition: PublishedSyncDefinition,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<string> {
   if (!definition.labelColumn) {
     throw new Error(
@@ -58,20 +73,40 @@ async function resolveDisplayColumn(
       `Sync definition configuration error for ${definition.id}: rootTable "${definition.rootTable}" must be schema-qualified.`
     )
   }
-  const { pool } = await getPool(host, source)
-  const result = await pool
-    .request()
-    .input("schema", sqlMod.NVarChar(128), schema)
-    .input("table", sqlMod.NVarChar(128), table).query(`
+  const ctx = discoveryContext(telemetryContext)
+  const sqlForLog = `
       SELECT c.name
       FROM sys.columns c
       INNER JOIN sys.objects o ON o.object_id = c.object_id
       INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
-      WHERE s.name = @schema
-        AND o.name = @table
+      WHERE s.name = N'${schema.replace(/'/g, "''")}'
+        AND o.name = N'${table.replace(/'/g, "''")}'
         AND o.type IN ('U', 'V')
       ORDER BY c.column_id
-    `)
+    `
+  const result = await trackedLoggedQuery(
+    host,
+    source,
+    `discovery.columns(${definition.rootTable})`,
+    sqlForLog,
+    async () => {
+      const { pool } = await getPool(host, source)
+      return pool
+        .request()
+        .input("schema", sqlMod.NVarChar(128), schema)
+        .input("table", sqlMod.NVarChar(128), table).query(`
+          SELECT c.name
+          FROM sys.columns c
+          INNER JOIN sys.objects o ON o.object_id = c.object_id
+          INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
+          WHERE s.name = @schema
+            AND o.name = @table
+            AND o.type IN ('U', 'V')
+          ORDER BY c.column_id
+        `)
+    },
+    ctx
+  )
 
   const columns = result.recordset
     .map((row: Record<string, unknown>) => String(row.name ?? ""))
@@ -91,40 +126,76 @@ export async function searchEntities(
   mode: EntitySearchMode = "name"
 ): Promise<EntitySearchResult[]> {
   const definition = getPublishedSyncDefinition(host, projectRoot(host), entityType)
-  const displayColumn = await resolveDisplayColumn(host, source, definition)
-  const { pool } = await getPool(host, source)
+  const ctx = discoveryContext()
+  const displayColumn = await resolveDisplayColumn(host, source, definition, ctx)
   const safeLike = query.replace(/[%_[\]^]/g, "[$&]")
   const capped = Math.min(limit, 500)
 
   if (mode === "id") {
-    const r = await pool
-      .request()
-      .input("q", sqlMod.NVarChar(100), `${safeLike}%`)
-      .input("limit", sqlMod.Int, capped).query(`
-        SELECT TOP (@limit)
+    const sqlForLog = `
+        SELECT TOP (${capped})
           [${definition.idColumn}] AS id,
           [${displayColumn}] AS name
         FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
-        WHERE CAST([${definition.idColumn}] AS NVARCHAR(100)) LIKE @q
+        WHERE CAST([${definition.idColumn}] AS NVARCHAR(100)) LIKE N'${safeLike.replace(/'/g, "''")}%'
         ORDER BY [${definition.idColumn}]
-      `)
+      `
+    const r = await trackedLoggedQuery(
+      host,
+      source,
+      `discovery.searchById(${entityType})`,
+      sqlForLog,
+      async () => {
+        const { pool } = await getPool(host, source)
+        return pool
+          .request()
+          .input("q", sqlMod.NVarChar(100), `${safeLike}%`)
+          .input("limit", sqlMod.Int, capped).query(`
+            SELECT TOP (@limit)
+              [${definition.idColumn}] AS id,
+              [${displayColumn}] AS name
+            FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
+            WHERE CAST([${definition.idColumn}] AS NVARCHAR(100)) LIKE @q
+            ORDER BY [${definition.idColumn}]
+          `)
+      },
+      ctx
+    )
     return r.recordset.map((row: Record<string, unknown>) => ({
       id: row.id as string | number,
       name: (row.name as string | null) ?? null
     }))
   }
 
-  const r = await pool
-    .request()
-    .input("q", sqlMod.NVarChar(400), `%${safeLike}%`)
-    .input("limit", sqlMod.Int, capped).query(`
-      SELECT TOP (@limit)
+  const sqlForLog = `
+      SELECT TOP (${capped})
         [${definition.idColumn}] AS id,
         [${displayColumn}] AS name
       FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
-      WHERE [${displayColumn}] LIKE @q
+      WHERE [${displayColumn}] LIKE N'%${safeLike.replace(/'/g, "''")}%'
       ORDER BY [${displayColumn}]
-    `)
+    `
+  const r = await trackedLoggedQuery(
+    host,
+    source,
+    `discovery.searchByName(${entityType})`,
+    sqlForLog,
+    async () => {
+      const { pool } = await getPool(host, source)
+      return pool
+        .request()
+        .input("q", sqlMod.NVarChar(400), `%${safeLike}%`)
+        .input("limit", sqlMod.Int, capped).query(`
+          SELECT TOP (@limit)
+            [${definition.idColumn}] AS id,
+            [${displayColumn}] AS name
+          FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
+          WHERE [${displayColumn}] LIKE @q
+          ORDER BY [${displayColumn}]
+        `)
+    },
+    ctx
+  )
   return r.recordset.map((row: Record<string, unknown>) => ({
     id: row.id as string | number,
     name: (row.name as string | null) ?? null
@@ -135,16 +206,19 @@ export async function fetchEntityDisplayName(
   host: SyncRuntimeHost,
   definition: PublishedSyncDefinition,
   entityId: string | number,
-  source: string
+  source: string,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<string | null> {
   const id = coerceSyncEntityId(entityId)
-  const displayColumn = await resolveDisplayColumn(host, source, definition)
-  const { pool } = await getPool(host, source)
-  const r = await pool.request().query(`
+  const ctx = discoveryContext(telemetryContext)
+  const displayColumn = await resolveDisplayColumn(host, source, definition, ctx)
+  const idLiteral = typeof id === "number" ? String(id) : `N'${String(id).replace(/'/g, "''")}'`
+  const sqlText = `
     SELECT TOP 1 [${displayColumn}] AS displayName
     FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
-    WHERE [${definition.idColumn}] = ${typeof id === "number" ? id : `'${String(id).replace(/'/g, "''")}'`}
-  `)
+    WHERE [${definition.idColumn}] = ${idLiteral}
+  `
+  const r = await trackedQuery(host, source, sqlText, `discovery.displayName(${definition.rootTable})`, ctx)
   return (r.recordset[0]?.displayName as string | undefined) ?? null
 }
 
@@ -152,24 +226,46 @@ export async function expandTreeIds(
   host: SyncRuntimeHost,
   definition: PublishedSyncDefinition,
   entityId: string | number,
-  source: string
+  source: string,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<Array<string | number>> {
   const id = coerceSyncEntityId(entityId)
   if (!definition.selfJoinColumn) return [id]
-  const { pool } = await getPool(host, source)
+  const ctx = discoveryContext(telemetryContext)
   const pk = definition.idColumn
   const fk = definition.selfJoinColumn
   const table = qtable(definition.rootTable)
-  const idParam = typeof id === "number" ? sqlMod.Int : sqlMod.NVarChar(400)
-  const r = await pool.request().input("rootId", idParam, id).query(`
+  const idLiteral = typeof id === "number" ? String(id) : `N'${String(id).replace(/'/g, "''")}'`
+  const sqlForLog = `
       ;WITH tree AS (
-        SELECT [${pk}] FROM ${table} WHERE [${pk}] = @rootId
+        SELECT [${pk}] FROM ${table} WHERE [${pk}] = ${idLiteral}
         UNION ALL
         SELECT child.[${pk}] FROM ${table} child
         INNER JOIN tree parent ON child.[${fk}] = parent.[${pk}]
       )
       SELECT [${pk}] AS id FROM tree
       OPTION (MAXRECURSION 100)
-    `)
+    `
+  const idParam = typeof id === "number" ? sqlMod.Int : sqlMod.NVarChar(400)
+  const r = await trackedLoggedQuery(
+    host,
+    source,
+    `discovery.expandTree(${definition.rootTable})`,
+    sqlForLog,
+    async () => {
+      const { pool } = await getPool(host, source)
+      return pool.request().input("rootId", idParam, id).query(`
+          ;WITH tree AS (
+            SELECT [${pk}] FROM ${table} WHERE [${pk}] = @rootId
+            UNION ALL
+            SELECT child.[${pk}] FROM ${table} child
+            INNER JOIN tree parent ON child.[${fk}] = parent.[${pk}]
+          )
+          SELECT [${pk}] AS id FROM tree
+          OPTION (MAXRECURSION 100)
+        `)
+    },
+    ctx
+  )
   return r.recordset.map((row: Record<string, unknown>) => row.id as string | number)
 }

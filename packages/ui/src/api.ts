@@ -634,6 +634,48 @@ export const api = {
         detail: unknown
       }>
     }>(`/api/sync/history/${encodeURIComponent(planId)}`),
+  syncSqlTrace: (planId: string, opts?: { limit?: number; offset?: number }) => {
+    const sp = new URLSearchParams()
+    if (opts?.limit) sp.set("limit", String(opts.limit))
+    if (opts?.offset) sp.set("offset", String(opts.offset))
+    const q = sp.toString()
+    return json<{
+      planId: string
+      count: number
+      total: number
+      items: Array<{
+        id: number
+        planId: string | null
+        previewId: string | null
+        eventType: string
+        scope: string | null
+        label: string
+        connection: string
+        durationMs: number | null
+        rowCount: number | null
+        error: string | null
+        createdAt: string
+        sqlPreview: string
+        sqlLength: number
+      }>
+    }>(`/api/sync/history/${encodeURIComponent(planId)}/sql-trace${q ? `?${q}` : ""}`)
+  },
+  getSqlLog: (id: number) =>
+    json<{
+      id: number
+      planId: string | null
+      previewId: string | null
+      eventType: string
+      scope: string | null
+      label: string
+      connection: string
+      sql: string
+      sqlLength: number
+      durationMs: number | null
+      rowCount: number | null
+      error: string | null
+      createdAt: string
+    }>(`/api/events/sql/${id}`),
   /** Recent sync execution runs — used to restore the EnvSync widget on cold start. */
   syncRuns: (limit = 25) =>
     json<Array<SyncRunSummary & { planAvailable?: boolean }>>(`/api/sync/runs?limit=${limit}`),

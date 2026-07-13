@@ -10,6 +10,12 @@ export type SyncEventSink = (event: SyncEvent) => void
 export interface SyncTelemetryContext {
   kind: SyncOperationType
   opId: string
+  /** Stable plan id — present for preview + execute. */
+  planId?: string
+  /** Preview session id — equals opId during preview. */
+  previewId?: string
+  /** Sub-scope: catalog, discovery, diff, apply, metadata, rollback, … */
+  scope?: string
   source?: string
   target?: string
 }

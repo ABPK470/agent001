@@ -220,6 +220,8 @@ export const EventType = {
   // Sync — SQL trace events emitted from query helpers
   SyncPreviewSql: "sync.preview.sql",
   SyncExecuteSql: "sync.execute.sql",
+  SyncCatalogSql: "sync.catalog.sql",
+  SyncDiscoverySql: "sync.discovery.sql",
 } as const
 
 export type EventType = (typeof EventType)[keyof typeof EventType]

@@ -69,6 +69,8 @@ export async function previewSync(input: PreviewInput): Promise<SyncPlan> {
   const telemetryContext: SyncTelemetryContext = {
     kind: SyncOperationType.Preview,
     opId: previewId,
+    planId,
+    previewId,
     source: normalized.source,
     target: normalized.target
   }
@@ -141,10 +143,10 @@ async function previewSyncInner(
     }
 
     // Resolve entity display name
-    const displayName = await fetchEntityDisplayName(input.host, definition, entityId, input.source)
+    const displayName = await fetchEntityDisplayName(input.host, definition, entityId, input.source, telemetryContext)
 
     const expandedIds = definition.selfJoinColumn
-      ? await expandTreeIds(input.host, definition, entityId, input.source)
+      ? await expandTreeIds(input.host, definition, entityId, input.source, telemetryContext)
       : null
 
     const allowedSchemas = Array.from(
@@ -164,7 +166,8 @@ async function previewSyncInner(
         input.source,
         input.target,
         activeTables.map((t) => t.name),
-        allowedSchemas
+        allowedSchemas,
+        telemetryContext
       )
     } catch (e) {
       catalogPreflight = {
@@ -175,8 +178,8 @@ async function previewSyncInner(
 
     const tableNames = activeTables.map((t) => t.name)
     const [sourceColumnsByTable, targetColumnsByTable] = await Promise.all([
-      fetchTableColumnNamesMap(input.host, input.source, tableNames),
-      fetchTableColumnNamesMap(input.host, input.target, tableNames),
+      fetchTableColumnNamesMap(input.host, input.source, tableNames, telemetryContext),
+      fetchTableColumnNamesMap(input.host, input.target, tableNames, telemetryContext),
     ])
     const materialized = materializeDefinitionTablesForSchema(
       activeTables,

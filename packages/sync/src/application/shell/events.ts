@@ -5,6 +5,7 @@
 import { EventType, SyncOperationType } from "../../domain/enums.js"
 import type { SqlEventInput, SyncEventSink, SyncTelemetryContext } from "../../ports/events.js"
 import type { SyncEventHost } from "../../ports/host.js"
+import { resolveSyncSqlEventType } from "./sql-event-type.js"
 
 export type { SqlEventInput, SyncEvent, SyncEventSink, SyncTelemetryContext } from "../../ports/events.js"
 
@@ -28,26 +29,29 @@ export function emitSyncSqlEvent(
   context?: SyncTelemetryContext
 ): void {
   const ctx = context
-  const prefix = ctx?.kind ?? SyncOperationType.Preview
+  const eventType = resolveSyncSqlEventType(ctx)
+  const planId = ctx?.planId ?? (ctx?.kind === SyncOperationType.Execute ? ctx?.opId : null)
+  const previewId =
+    ctx?.previewId ?? (ctx?.kind === SyncOperationType.Preview ? ctx?.opId : null)
   const truncated =
     input.sql.length > SQL_EVENT_MAX_CHARS
       ? input.sql.slice(0, SQL_EVENT_MAX_CHARS) + `… [+${input.sql.length - SQL_EVENT_MAX_CHARS} chars]`
       : input.sql
-  emitSyncEvent(
-    host,
-    prefix === SyncOperationType.Execute ? EventType.SyncExecuteSql : EventType.SyncPreviewSql,
-    {
-      opId: ctx?.opId ?? null,
-      label: input.label,
-      connection: input.connection,
-      durationMs: input.durationMs,
-      rowCount: input.rowCount ?? null,
-      attempts: input.attempts,
-      error: input.error ?? null,
-      sql: truncated,
-      sqlLength: input.sql.length
-    }
-  )
+  emitSyncEvent(host, eventType, {
+    opId: ctx?.opId ?? null,
+    planId: planId ?? null,
+    previewId: previewId ?? null,
+    scope: ctx?.scope ?? null,
+    label: input.label,
+    connection: input.connection,
+    durationMs: input.durationMs,
+    rowCount: input.rowCount ?? null,
+    attempts: input.attempts,
+    error: input.error ?? null,
+    sql: truncated,
+    sqlLength: input.sql.length,
+    __fullSql: input.sql,
+  })
 
   if (process.env["SYNC_DEBUG_SQL"] === "1") {
     const status = input.error

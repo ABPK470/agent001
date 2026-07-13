@@ -139,4 +139,32 @@ export function registerEventRoutes(app: FastifyInstance): void {
     db.deleteWebhookDrain(req.params.id)
     return { ok: true }
   })
+
+  app.get<{ Params: { id: string } }>("/api/events/sql/:id", async (req, reply) => {
+    const id = Number(req.params.id)
+    if (!Number.isFinite(id) || id <= 0) {
+      reply.code(400)
+      return { error: "invalid sql log id" }
+    }
+    const row = db.getSyncSqlLog(id)
+    if (!row) {
+      reply.code(404)
+      return { error: "sql log not found" }
+    }
+    return {
+      id: row.id,
+      planId: row.plan_id,
+      previewId: row.preview_id,
+      eventType: row.event_type,
+      scope: row.scope,
+      label: row.label,
+      connection: row.connection,
+      sql: row.sql_text,
+      sqlLength: row.sql_text.length,
+      durationMs: row.duration_ms,
+      rowCount: row.row_count,
+      error: row.error,
+      createdAt: row.created_at,
+    }
+  })
 }

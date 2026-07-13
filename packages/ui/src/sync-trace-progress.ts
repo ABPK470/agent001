@@ -103,6 +103,25 @@ export function createSyncProgressState(invocationId: string, tool: string): Syn
   }
 }
 
+function applySyncSqlTrace(
+  next: SyncProgressState,
+  data: Record<string, unknown>,
+): SyncProgressState {
+  const sql = str(data, "sql")
+  next.sql = {
+    label: str(data, "label") || "query",
+    connection: str(data, "connection"),
+    preview: sql,
+    rowCount: num(data, "rowCount"),
+    durationMs: num(data, "durationMs"),
+  }
+  const rows = next.sql.rowCount != null ? `${next.sql.rowCount} rows` : "?"
+  const dur = next.sql.durationMs != null ? ` · ${next.sql.durationMs}ms` : ""
+  const scope = str(data, "scope")
+  next.detail = `${next.sql.label}${scope ? ` (${scope})` : ""} · ${next.sql.connection} · ${rows}${dur}`
+  return next
+}
+
 export function reduceSyncSseEvent(
   state: SyncProgressState,
   type: string,
@@ -201,20 +220,12 @@ export function reduceSyncSseEvent(
       next.detail = `${table}: ${str(data, "error") || "failed"}`
       break
     }
-    case "sync.preview.sql": {
-      const sql = str(data, "sql")
-      next.sql = {
-        label: str(data, "label") || "query",
-        connection: str(data, "connection"),
-        preview: sql,
-        rowCount: num(data, "rowCount"),
-        durationMs: num(data, "durationMs")
-      }
-      const rows = next.sql.rowCount != null ? `${next.sql.rowCount} rows` : "?"
-      const dur = next.sql.durationMs != null ? ` · ${next.sql.durationMs}ms` : ""
-      next.detail = `${next.sql.label} · ${next.sql.connection} · ${rows}${dur}`
+    case "sync.preview.sql":
+    case "sync.execute.sql":
+    case "sync.catalog.sql":
+    case "sync.discovery.sql":
+      applySyncSqlTrace(next, data)
       break
-    }
     case "sync.retry": {
       next.level = "warn"
       const phase = str(data, "phase")

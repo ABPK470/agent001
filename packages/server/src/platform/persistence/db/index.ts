@@ -156,6 +156,16 @@ export {
 } from "./sync-runs.js"
 
 export {
+  countSyncSqlLogByPlan,
+  enrichSyncSqlEventData,
+  getSyncSqlLog,
+  listSyncSqlLogByPlan,
+  recordSyncSqlLog,
+  stripInternalSqlFields,
+  type SyncSqlLogRow
+} from "./sync-sql-log.js"
+
+export {
   listRecentSyncAudit,
   listSyncAuditForPlan,
   recordSyncAudit,

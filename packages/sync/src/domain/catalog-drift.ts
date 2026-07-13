@@ -5,16 +5,14 @@
  *   - the `compare_catalogs` agent tool (full schema comparison)
  *   - the preview preflight gate (restricted to recipe tables)
  *   - the execute preflight gate (hard refusal on drift)
- *
- * Schema scope is supplied by the caller (typically derived from the
- * active entity registry). Callers that haven't migrated yet pass
- * {@link DEFAULT_MYMI_SCHEMA_ALLOWLIST} for the historical Mymi set.
  */
 
 import type sql from "mssql"
 import { withPoolSlot } from "../adapters/mssql/pool-gate.js"
+import { runQueryWithRetry } from "../domain/diff-engine/sql-helpers.js"
 import { emitSyncEvent } from "../application/shell/events.js"
 import { EventType } from "./enums.js"
+import type { SyncTelemetryContext } from "../ports/events.js"
 import { getPool, type MssqlAccessHost, type SyncEventHost } from "../ports/index.js"
 
 export interface CatalogDriftResult {
@@ -60,13 +58,41 @@ function isTransientCatalogDriftError(e: unknown): boolean {
   )
 }
 
+function catalogContext(
+  telemetryContext: SyncTelemetryContext | undefined,
+): SyncTelemetryContext | undefined {
+  if (!telemetryContext) return undefined
+  return { ...telemetryContext, scope: telemetryContext.scope ?? "catalog" }
+}
+
+function eventHostFromAccess(host: MssqlAccessHost): SyncEventHost | undefined {
+  const candidate = host as unknown as Partial<SyncEventHost>
+  if (candidate.sync?.events) return host as unknown as SyncEventHost
+  return undefined
+}
+
 async function queryWithRetry<T>(
   host: MssqlAccessHost,
   connection: string,
   query: string,
+  label: string,
   maxRetries = 2,
-  eventHost?: SyncEventHost
+  telemetryContext?: SyncTelemetryContext
 ): Promise<T[]> {
+  const eventHost = eventHostFromAccess(host)
+  const ctx = catalogContext(telemetryContext)
+  if (eventHost && ctx) {
+    const result = await runQueryWithRetry<T>(
+      host as SyncEventHost & MssqlAccessHost,
+      connection,
+      query,
+      label,
+      maxRetries,
+      ctx
+    )
+    return result.recordset
+  }
+
   return withPoolSlot(host, connection, async () => {
     const { pool } = await getPool(host, connection)
     let lastErr: unknown
@@ -99,22 +125,13 @@ async function queryWithRetry<T>(
   })
 }
 
-function eventHostFromAccess(host: MssqlAccessHost): SyncEventHost | undefined {
-  const candidate = host as unknown as Partial<SyncEventHost>
-  if (candidate.sync?.events) return host as unknown as SyncEventHost
-  return undefined
-}
-
 async function fetchSchema(
   host: MssqlAccessHost,
   connection: string,
-  schemas: readonly string[]
+  schemas: readonly string[],
+  telemetryContext?: SyncTelemetryContext
 ): Promise<SchemaSnapshot> {
   if (schemas.length === 0) {
-    // Defensive: an empty allowlist would generate `IN ()` (a SQL syntax
-    // error). Return an empty snapshot instead — the caller's restrict
-    // set will then drive every comparison to a "missing on source" issue,
-    // which is the correct behaviour.
     return { tables: new Set(), cols: new Map() }
   }
   const list = schemas.map((s) => `'${s.replace(/'/g, "''")}'`).join(",")
@@ -132,21 +149,18 @@ async function fetchSchema(
     FROM INFORMATION_SCHEMA.COLUMNS
     WHERE TABLE_SCHEMA IN (${list})
   `,
+    "catalog.schema.columns",
     2,
-    eventHostFromAccess(host)
+    telemetryContext
   )
   return rowsToSnapshot(rows)
 }
 
-/**
- * Fetch column metadata only for the recipe tables being synced.
- * Avoids scanning every table in core/gate/master — the schema-wide
- * INFORMATION_SCHEMA query can exceed the 2-minute pool requestTimeout.
- */
 async function fetchSchemaForTables(
   host: MssqlAccessHost,
   connection: string,
-  tables: readonly string[]
+  tables: readonly string[],
+  telemetryContext?: SyncTelemetryContext
 ): Promise<SchemaSnapshot> {
   if (tables.length === 0) return { tables: new Set(), cols: new Map() }
   const literals = tables
@@ -169,8 +183,9 @@ async function fetchSchemaForTables(
     FROM INFORMATION_SCHEMA.COLUMNS
     WHERE LOWER(TABLE_SCHEMA + '.' + TABLE_NAME) IN (${literals})
   `,
+    "catalog.tables.columns",
     2,
-    eventHostFromAccess(host)
+    telemetryContext
   )
   return rowsToSnapshot(rows)
 }
@@ -203,6 +218,7 @@ export async function fetchTableColumnNamesMap(
   host: MssqlAccessHost,
   connection: string,
   tables: readonly string[],
+  telemetryContext?: SyncTelemetryContext
 ): Promise<Map<string, string[]>> {
   const out = new Map<string, string[]>()
   if (tables.length === 0) return out
@@ -221,8 +237,9 @@ export async function fetchTableColumnNamesMap(
       WHERE c.object_id = OBJECT_ID('${schema.replace(/'/g, "''")}.${name.replace(/'/g, "''")}')
       ORDER BY c.column_id
     `,
+      `catalog.columns(${qn})`,
       2,
-      eventHostFromAccess(host),
+      telemetryContext
     )
     out.set(qn, rows.map((row) => row.name))
   }
@@ -233,19 +250,14 @@ export async function fetchTableColumnNamesMap(
  * Compare schemas. When `restrictTables` is provided (typically the recipe's
  * `tables[]` list), only those tables are checked — surfaces only issues
  * relevant to the upcoming sync.
- *
- * `allowedSchemas` bounds the INFORMATION_SCHEMA query so we don't pull
- * the entire DB. The set is derived by the caller from the active entity
- * registry (or {@link DEFAULT_MYMI_SCHEMA_ALLOWLIST} for legacy callers).
- * When `restrictTables` is set, the allowed-schemas set is automatically
- * augmented with the schema prefix of each restricted table.
  */
 export async function detectCatalogDrift(
   host: MssqlAccessHost,
   source: string,
   target: string,
   restrictTables?: Iterable<string>,
-  allowedSchemas: readonly string[] = DEFAULT_MYMI_SCHEMA_ALLOWLIST
+  allowedSchemas: readonly string[] = DEFAULT_MYMI_SCHEMA_ALLOWLIST,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<CatalogDriftResult> {
   const restrict = restrictTables
     ? new Set(Array.from(restrictTables, (name) => normalizeCatalogName(name)))
@@ -259,10 +271,11 @@ export async function detectCatalogDrift(
   }
   const schemaList = [...schemaSet]
   const restrictList = restrict ? [...restrict] : null
+  const ctx = catalogContext(telemetryContext)
   const loadSnapshot = (connection: string) =>
     restrictList && restrictList.length > 0
-      ? fetchSchemaForTables(host, connection, restrictList)
-      : fetchSchema(host, connection, schemaList)
+      ? fetchSchemaForTables(host, connection, restrictList, ctx)
+      : fetchSchema(host, connection, schemaList, ctx)
   const [src, tgt] = await Promise.all([loadSnapshot(source), loadSnapshot(target)])
   const issues: string[] = []
   const tablesToCheck = restrict ?? src.tables
@@ -295,7 +308,8 @@ export async function detectCatalogDrift(
 export async function tableHasTriggers(
   host: MssqlAccessHost,
   connection: string,
-  qualifiedName: string
+  qualifiedName: string,
+  telemetryContext?: SyncTelemetryContext
 ): Promise<boolean> {
   const [schema, name] = qualifiedName.split(".")
   if (!schema || !name) return false
@@ -310,8 +324,9 @@ export async function tableHasTriggers(
       JOIN sys.schemas s ON s.schema_id = o.schema_id
       WHERE s.name = '${schema}' AND o.name = '${name}' AND t.is_disabled = 0
     `,
+      `catalog.triggers(${qualifiedName})`,
       2,
-      eventHostFromAccess(host)
+      telemetryContext
     )
     return (rows[0]?.cnt ?? 0) > 0
   } catch {

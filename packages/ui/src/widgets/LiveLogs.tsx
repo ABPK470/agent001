@@ -12,9 +12,11 @@
 import { AlertCircle, ArrowDown, ChevronRight, Database, Filter, Pause, Play } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { SqlTraceFromEventData } from "../components/SqlTrace"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { formatLogEntry, useStore } from "../store"
 import type { LogEntry } from "../types"
+import { isSyncSqlEventType } from "../sync-sql-trace"
 import {
   LOG_TOOLBAR_CHIP,
   LOG_TOOLBAR_CHIP_ACTIVE,
@@ -450,7 +452,10 @@ function LogRow({ log, setTypeFilters, compact, tiny }: {
         </span>
       </div>
       {expanded && log.data && (
-        <div className={`${compact ? "pl-3 pr-3" : "pl-[7rem] pr-4"} py-2 bg-base border-l-2 border-border-subtle ml-3`}>
+        <div className={`${compact ? "pl-3 pr-3" : "pl-[7rem] pr-4"} py-2 bg-base border-l-2 border-border-subtle ml-3 space-y-2`}>
+          {log.eventName && isSyncSqlEventType(log.eventName) && (
+            <SqlTraceFromEventData data={log.data} compact maxHeight={compact ? 120 : 180} />
+          )}
           <pre className="log-payload m-0">
             {JSON.stringify(log.data, null, 2)}
           </pre>

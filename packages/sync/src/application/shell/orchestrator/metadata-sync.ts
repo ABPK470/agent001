@@ -203,7 +203,17 @@ export async function runMetadataSync(
     for (const t of allTables) {
       if (!constraintTables.has(t)) continue
       try {
-        await tx.request().query(ENABLE_CONSTRAINTS_SQL(t))
+        const rollbackCtx = telemetryContext
+          ? { ...telemetryContext, scope: "rollback" }
+          : undefined
+        await trackedQuery(
+          host,
+          target,
+          ENABLE_CONSTRAINTS_SQL(t),
+          `rollback.check-constraint(${t})`,
+          rollbackCtx,
+          tx.request()
+        )
       } catch {
         /* tx may already be aborted */
       }

@@ -73,6 +73,14 @@ export async function executeSync(
     throw new Error(`Plan ${planId} predates the unified execution contract — re-preview before executing.`)
   }
 
+  const telemetryContext: SyncTelemetryContext = {
+    kind: SyncOperationType.Execute,
+    opId: planId,
+    planId,
+    source: plan.source,
+    target: plan.target
+  }
+
   throwIfAborted(signal)
   onProgress({
     type: SyncProgressKind.Step,
@@ -88,7 +96,8 @@ export async function executeSync(
     plan.source,
     plan.target,
     plan.executionContract.metadata.tables.map((t) => t.name),
-    allowedSchemas
+    allowedSchemas,
+    telemetryContext
   )
   throwIfAborted(signal)
   if (!drift.catalogCompatible) {
@@ -188,12 +197,6 @@ export async function executeSync(
     totals: plan.totals
   })
 
-  const telemetryContext: SyncTelemetryContext = {
-    kind: SyncOperationType.Execute,
-    opId: planId,
-    source: plan.source,
-    target: plan.target
-  }
   return executeSyncInner(plan, planId, opts, onProgress, execT0, telemetryContext, signal)
 }
 

@@ -10,7 +10,9 @@ import { Brain, ChevronRight, Database, Filter, GitCompareArrows, Loader2, Setti
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline, OperationsResponse } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
+import { SqlTraceFromEventData } from "../components/SqlTrace"
 import { useContainerSize } from "../hooks/useContainerSize"
+import { isSyncSqlEventType } from "../sync-sql-trace"
 import {
   LOG_TOOLBAR_CHIP,
   LOG_TOOLBAR_CHIP_ACTIVE,
@@ -251,7 +253,11 @@ function formatEventLabel(ev: OperationEvent): string {
     case "sync.execute.step.failed": return "Step failed"
     case "sync.execute.table.start": return "Table apply"
     case "sync.execute.table.done": return "Table done"
-    case "sync.execute.sql": return "SQL"
+    case "sync.execute.sql":
+    case "sync.catalog.sql":
+    case "sync.discovery.sql":
+    case "sync.preview.sql":
+      return "SQL"
     case "sync.execute.archive.probe": return "Archive probe"
     case "sync.execute.archive.probe.batch": return "Archive probe batch"
     case "sync.execute.archive.skipped": return "Archive skipped"
@@ -812,9 +818,14 @@ function EventRow({ ev, expanded, onToggle }: {
         {summary && <span className={`min-w-0 break-all ${isError ? "text-error" : "text-text-muted"}`}>{summary}</span>}
       </button>
       {expanded && hasData && (
-        <pre className="ml-7 my-1 px-2 py-1.5 bg-base border-l-2 border-border-subtle text-[10.5px] leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
-          {JSON.stringify(ev.data, null, 2)}
-        </pre>
+        <div className="ml-7 my-1 space-y-1">
+          {isSyncSqlEventType(ev.type) && (
+            <SqlTraceFromEventData data={ev.data} compact maxHeight={140} />
+          )}
+          <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-[10.5px] leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
+            {JSON.stringify(ev.data, null, 2)}
+          </pre>
+        </div>
       )}
     </div>
   )
@@ -904,11 +915,18 @@ function pickEventSummary(ev: OperationEvent): string {
   if (ev.type === "sync.execute.table.done") {
     return `${ev.data["table"] ?? "table"} · ${ev.data["rowsApplied"] ?? "?"} rows applied`
   }
-  if (ev.type === "sync.execute.sql") {
+  if (ev.type.endsWith(".sql") && ev.type.startsWith("sync.")) {
     const label = ev.data["label"] ?? "query"
     const rowCount = ev.data["rowCount"] ?? "?"
     const durationMs = ev.data["durationMs"] ?? "?"
-    return `${label} · ${rowCount} rows · ${durationMs}ms`
+    const connection = ev.data["connection"]
+    const scope = ev.data["scope"]
+    return [
+      scope ? `${label} (${scope})` : label,
+      connection,
+      `${rowCount} rows`,
+      `${durationMs}ms`,
+    ].filter(Boolean).join(" · ")
   }
   const d = ev.data
   const parts: string[] = []

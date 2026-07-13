@@ -752,10 +752,27 @@ function formatLogEntryInner(
         return { type: t, message: `Preview complete — plan ${planId}`, timestamp }
       case "sync.preview.failed":
         return { type: t, error: true, message: `Preview failed: ${data["error"] ?? "unknown"}`, timestamp }
-      case "sync.preview.sql": {
+      case "sync.preview.sql":
+      case "sync.execute.sql":
+      case "sync.catalog.sql":
+      case "sync.discovery.sql": {
         const rows = data["rowCount"] != null ? `${data["rowCount"]} rows` : "?"
         const dur = data["durationMs"] != null ? `${data["durationMs"]}ms` : ""
-        return { type: t, message: `SQL preview — ${data["label"] ?? "?"}  →  ${rows}${dur ? ` in ${dur}` : ""}`, timestamp }
+        const scope = data["scope"] ? ` [${data["scope"]}]` : ""
+        const prefix =
+          type === "sync.execute.sql"
+            ? "SQL execute"
+            : type === "sync.catalog.sql"
+              ? "SQL catalog"
+              : type === "sync.discovery.sql"
+                ? "SQL discovery"
+                : "SQL preview"
+        return {
+          type: t,
+          message: `${prefix}${scope} — ${data["label"] ?? "?"} @ ${data["connection"] ?? "?"} → ${rows}${dur ? ` in ${dur}` : ""}`,
+          timestamp,
+          error: Boolean(data["error"]),
+        }
       }
       case "sync.preview.table.start":
         return { type: t, message: `Scanning ${data["table"]}…`, timestamp }
@@ -823,12 +840,17 @@ function formatLogEntryInner(
         }
       case "sync.execute.archive.skipped":
         return { type: t, message: `Archive skipped — ${data["reason"] ?? ""}`, timestamp }
-      case "sync.execute.sql": {
-        const dur = data["durationMs"] as number | undefined
-        const label = data["label"] as string | undefined
-        return { type: t, message: `SQL ${label ?? "query"} — ${data["rowCount"] ?? "?"} rows, ${dur ?? "?"}ms`, timestamp }
-      }
       default:
+        if (type.endsWith(".sql") && type.startsWith("sync.")) {
+          const rows = data["rowCount"] != null ? `${data["rowCount"]} rows` : "?"
+          const dur = data["durationMs"] != null ? `${data["durationMs"]}ms` : ""
+          return {
+            type: t,
+            message: `SQL — ${data["label"] ?? "?"} @ ${data["connection"] ?? "?"} → ${rows}${dur ? ` in ${dur}` : ""}`,
+            timestamp,
+            error: Boolean(data["error"]),
+          }
+        }
         return { type: t, message: type.slice(5), timestamp }
     }
   }

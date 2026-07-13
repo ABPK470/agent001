@@ -99,7 +99,10 @@ export function resolveSyncPlanId(
 ): string | null {
   const planId = strField(ev.data, "planId")
   if (planId) return planId
+  const opId = strField(ev.data, "opId")
+  if (opId && ev.type.startsWith("sync.execute")) return opId
   const previewId = strField(ev.data, "previewId")
   if (previewId) return previewToPlan.get(previewId) ?? null
+  if (opId && ev.type.startsWith("sync.preview")) return previewToPlan.get(opId) ?? null
   return null
 }

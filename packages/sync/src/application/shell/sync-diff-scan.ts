@@ -8,17 +8,13 @@
 
 import { movementOfTable } from "@mia/shared-types"
 import { resolveEntityPreviewConcurrency } from "../../adapters/mssql/pool-concurrency.js"
-import { withPoolSlot } from "../../adapters/mssql/pool-gate.js"
 import type { SyncEntityId } from "../../domain/definition-selection.js"
-import { EventType } from "../../domain/enums.js"
+import { EventType, SyncOperationType } from "../../domain/enums.js"
 import { assertSupportedSyncDirection, getEnvironment } from "../../domain/environments.js"
-import {
-  getPublishedSyncDefinitionForHost,
-  type PublishedSyncDefinition
-} from "../../domain/published-definitions.js"
-import { getPool, type SyncRuntimeHost } from "../../ports/index.js"
+import { getPublishedSyncDefinitionForHost, type PublishedSyncDefinition } from "../../domain/published-definitions.js"
+import type { SyncRuntimeHost } from "../../ports/index.js"
 import { emitSyncEvent } from "./events.js"
-import { mapWithConcurrency } from "./orchestrator/db-helpers.js"
+import { mapWithConcurrency, projectRoot, trackedQuery } from "./orchestrator/db-helpers.js"
 import { previewSync } from "./orchestrator/preview.js"
 import type { SyncPlan } from "./plan-store.js"
 
@@ -130,14 +126,17 @@ async function countRootInstances(
   rootTable: string
 ): Promise<number> {
   const { schema, name } = parseRootTable(rootTable)
-  return withPoolSlot(host, conn, async () => {
-    const { pool } = await getPool(host, conn)
-    const qt = `[${schema}].[${name}]`
-    const countR = await pool.request().query<{ cnt: number }>(
-      `SELECT COUNT_BIG(1) AS cnt FROM ${qt} WITH (NOLOCK)`
-    )
-    return Number(countR.recordset[0]?.cnt ?? 0)
-  })
+  const qt = `[${schema}].[${name}]`
+  const sqlText = `SELECT COUNT_BIG(1) AS cnt FROM ${qt} WITH (NOLOCK)`
+  const ctx = { kind: SyncOperationType.Preview, opId: `scan-${rootTable}`, scope: "discovery" as const }
+  const countR = await trackedQuery<{ cnt: number }>(
+    host,
+    conn,
+    sqlText,
+    `discovery.scanCount(${rootTable})`,
+    ctx
+  )
+  return Number(countR.recordset[0]?.cnt ?? 0)
 }
 
 async function discoverRootInstances(
@@ -153,25 +152,27 @@ async function discoverRootInstances(
       ? Math.floor(sampleLimit)
       : undefined
 
-  return withPoolSlot(host, conn, async () => {
-    const { pool } = await getPool(host, conn)
-    const qt = `[${schema}].[${name}]`
-    const qid = `[${idColumn}]`
-    const countR = await pool.request().query<{ cnt: number }>(
-      `SELECT COUNT_BIG(1) AS cnt FROM ${qt} WITH (NOLOCK)`
-    )
-    const totalOnSource = Number(countR.recordset[0]?.cnt ?? 0)
-    const labelSel = labelColumn ? `, [${labelColumn}] AS label` : ""
-    const topClause = limit != null ? `TOP (${limit}) ` : ""
-    const listR = await pool.request().query<{ id: string | number; label?: string | null }>(
-      `SELECT ${topClause}${qid} AS id${labelSel} FROM ${qt} WITH (NOLOCK) ORDER BY ${qid}`
-    )
-    const instances = (listR.recordset ?? []).map((row) => ({
-      id: row.id,
-      label: labelColumn && row.label != null ? String(row.label) : null
-    }))
-    return { instances, totalOnSource }
-  })
+  const ctx = { kind: SyncOperationType.Preview, opId: `scan-${rootTable}`, scope: "discovery" as const }
+  const qt = `[${schema}].[${name}]`
+  const qid = `[${idColumn}]`
+  const countSql = `SELECT COUNT_BIG(1) AS cnt FROM ${qt} WITH (NOLOCK)`
+  const countR = await trackedQuery<{ cnt: number }>(host, conn, countSql, `discovery.scanCount(${rootTable})`, ctx)
+  const totalOnSource = Number(countR.recordset[0]?.cnt ?? 0)
+  const labelSel = labelColumn ? `, [${labelColumn}] AS label` : ""
+  const topClause = limit != null ? `TOP (${limit}) ` : ""
+  const listSql = `SELECT ${topClause}${qid} AS id${labelSel} FROM ${qt} WITH (NOLOCK) ORDER BY ${qid}`
+  const listR = await trackedQuery<{ id: string | number; label?: string | null }>(
+    host,
+    conn,
+    listSql,
+    `discovery.scanList(${rootTable})`,
+    ctx
+  )
+  const instances = (listR.recordset ?? []).map((row) => ({
+    id: row.id,
+    label: labelColumn && row.label != null ? String(row.label) : null
+  }))
+  return { instances, totalOnSource }
 }
 
 export async function syncDiffScan(input: SyncDiffScanInput): Promise<SyncDiffScanResult> {

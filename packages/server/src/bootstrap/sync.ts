@@ -12,6 +12,7 @@ import {
 import { syncPlanActorUpn } from "../features/sync/application/plan-actor.js"
 import { ensureInitialSyncCatalogVersion } from "../features/platform/application/sync-catalog-versioning.js"
 import { broadcast } from "../platform/events/broadcaster.js"
+import { enrichSyncSqlEventData } from "../platform/persistence/db/sync-sql-log.js"
 import {
   getSyncRunPlanJson,
   recordSyncRunFinish,
@@ -49,7 +50,8 @@ export function loadBootSyncEnvironments(projectRoot: string, connections: Reado
 
 export function createSyncEventSink(): AgentHost["sync"]["events"]["sink"] {
   return (event) => {
-    broadcast({ type: event.type, data: event.data })
+    const data = enrichSyncSqlEventData(event.type, event.data)
+    broadcast({ type: event.type, data })
   }
 }
 
