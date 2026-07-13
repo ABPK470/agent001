@@ -98,6 +98,7 @@ export function statusFilterActiveClass(status: OperationStatus): string {
       return "ring-1 ring-inset ring-border bg-overlay-2 text-text-muted font-medium"
   }
 }
+export const OP_LOG_MUTED = "text-text-muted"
 /** Description / summary after the middle dot — one step lighter than the label. */
 export const OP_LOG_DESC = "text-text-faint"
 
