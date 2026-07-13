@@ -180,6 +180,23 @@ export async function trackedLoggedQuery<T = unknown>(
   }
 }
 
+/** Format EXEC … with bound parameter values for SQL telemetry. */
+export function formatMssqlExecLog(procedure: string, params: Record<string, unknown>): string {
+  const entries = Object.entries(params)
+  if (entries.length === 0) return `EXEC ${procedure}`
+  const args = entries
+    .map(([name, value]) => `@${name}=${formatSqlLogLiteral(value)}`)
+    .join(", ")
+  return `EXEC ${procedure} ${args}`
+}
+
+function formatSqlLogLiteral(value: unknown): string {
+  if (value === null || value === undefined) return "NULL"
+  if (typeof value === "number") return String(value)
+  if (typeof value === "boolean") return value ? "1" : "0"
+  return `N'${String(value).replace(/'/g, "''")}'`
+}
+
 /** Same as trackedQuery but for `.execute(sproc)` calls. */
 export async function trackedExecute(
   host: SyncEventHost & MssqlAccessHost,
@@ -187,8 +204,10 @@ export async function trackedExecute(
   sprocName: string,
   label: string,
   telemetryContext?: SyncTelemetryContext,
-  request?: { execute: (sproc: string) => Promise<sql.IProcedureResult<unknown>> }
+  request?: { execute: (sproc: string) => Promise<sql.IProcedureResult<unknown>> },
+  sqlForLog?: string
 ): Promise<sql.IProcedureResult<unknown>> {
+  const sqlText = sqlForLog ?? `EXEC ${sprocName}`
   const run = async (req: {
     execute: (sproc: string) => Promise<sql.IProcedureResult<unknown>>
   }): Promise<sql.IProcedureResult<unknown>> => {
@@ -200,7 +219,7 @@ export async function trackedExecute(
         {
           label,
           connection,
-          sql: `EXEC ${sprocName}`,
+          sql: sqlText,
           durationMs: Date.now() - t0,
           rowCount: result.rowsAffected?.reduce((a: number, b: number) => a + b, 0) ?? 0,
           attempts: 1
@@ -214,7 +233,7 @@ export async function trackedExecute(
         {
           label,
           connection,
-          sql: `EXEC ${sprocName}`,
+          sql: sqlText,
           durationMs: Date.now() - t0,
           attempts: 1,
           error: e instanceof Error ? e.message : String(e)

@@ -22,7 +22,7 @@
 import sqlMod, { type ConnectionPool, type IProcedureResult, type IRecordSet } from "mssql"
 import type { SyncRuntimeHost } from "../../../ports/index.js"
 import type { SyncTelemetryContext } from "../events.js"
-import { trackedExecute, trackedQuery } from "./db-helpers.js"
+import { formatMssqlExecLog, trackedExecute, trackedQuery } from "./db-helpers.js"
 import { AuditGateSkippedError } from "./types.js"
 
 // ────────────────────────────────────────────────────────────
@@ -408,7 +408,13 @@ export async function runAuditCheckDirect(
     procs.auditRunCheck,
     `contractDeploy.auditRunCheck(${params.action}/${params.objType}/${params.id})`,
     telemetryContext,
-    req
+    req,
+    formatMssqlExecLog(procs.auditRunCheck, {
+      id: String(params.id),
+      objType: params.objType,
+      action: params.action,
+      schema: params.schema ?? "core",
+    }),
   )
 
   const row = (result.recordsets?.[0] as IRecordSet<{ status: string; message: string }> | undefined)?.[0]

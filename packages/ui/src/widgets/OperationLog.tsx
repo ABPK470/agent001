@@ -8,8 +8,9 @@ import { Brain, ChevronRight, Database, FileSearch, Filter, GitCompareArrows, Lo
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
-import { SqlTraceModal } from "../components/SqlTrace"
+import { SqlTraceModal, SqlTraceFromEventData, useResolvedSql } from "../components/SqlTrace"
 import { DecisionLogPanel, isSyncDecisionLogDetails } from "../components/DecisionLogPanel"
+import { CodeBlock } from "../components/CodeBlock"
 import { JsonViewer } from "../components/JsonViewer"
 import { ToolCallModal, ToolIoBlock } from "../components/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
@@ -105,14 +106,7 @@ function isDuplicatePipelineMessage(pipelineError: string | undefined, text: str
   return pipelineError === text
 }
 
-function activitySummaryTone(status: OperationStatus): string {
-  if (status === "failed") return "text-error"
-  if (status === "skipped") return "text-warning"
-  if (status === "cancelled") return "text-text-muted"
-  return "text-text-muted/70"
-}
-
-// system kind is intentionally excluded from the ops log — those events live in the Event Stream widget
+// system kind is intentionally excluded
 const ALL_STATUSES: OperationStatus[] = ["running", "success", "failed", "cancelled", "skipped"]
 
 // ── Helpers ──────────────────────────────────────────────────────
@@ -271,9 +265,13 @@ function effectiveActivityStatus(
 }
 
 function defaultActivitySummary(pipelineKind: OperationKind, activity: OperationActivity): string | undefined {
-  if (activity.summary) return activity.summary
+  if (activity.name === "result") return undefined
+  if (activity.status === "skipped" && activity.children?.some((c) => c.name === "result")) {
+    return undefined
+  }
+  if (activity.summary && activity.status !== "skipped") return activity.summary
   if (pipelineKind === OperationKind.SyncExecute) {
-    if (activity.status === "skipped") return activity.summary ?? activity.error
+    if (activity.status === "skipped") return activity.error ?? undefined
     return (
       EXEC_STEP_DESCRIPTIONS[activity.name] ??
       EXEC_STEP_DESCRIPTIONS[activity.name.replace(/-done$/, "Done")] ??
@@ -290,6 +288,14 @@ function defaultActivitySummary(pipelineKind: OperationKind, activity: Operation
     }
   }
   return undefined
+}
+
+function flowStepDescription(activity: OperationActivity): string | undefined {
+  return (
+    EXEC_STEP_DESCRIPTIONS[activity.name] ??
+    EXEC_STEP_DESCRIPTIONS[activity.name.replace(/-done$/, "Done")] ??
+    activity.summary
+  )
 }
 
 /** Expansion key for an activity row — scoped to pipeline id (preview vs execute differ). */
@@ -863,16 +869,15 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
     : status === "running" ? Loader2 : null
   const renderedName = formatActivityName(effectiveKind, activity)
   const renderedSummary = defaultActivitySummary(effectiveKind, activity)
+  const isResultRow = activity.name === "result"
   const hasChildren = (activity.children?.length ?? 0) > 0
-  const statusMessage = activity.error ?? (
-    (status === "failed" || status === "skipped" || status === "cancelled") &&
-    activity.summary &&
-    activity.name !== "result" &&
-    !isDuplicatePipelineMessage(pipelineError, activity.summary) &&
-    !(activity.id.startsWith("phase:") && isDuplicatePipelineMessage(pipelineError, activity.summary))
-      ? activity.summary
-      : null
-  )
+  const hasResultChild = activity.children?.some((c) => c.name === "result") ?? false
+  const statusMessage =
+    isResultRow || hasResultChild ? null : activity.error ?? null
+  const stepDescription =
+    !isResultRow && effectiveKind === OperationKind.SyncExecute && activity.name !== "started" && activity.name !== "completed" && activity.name !== "failed" && activity.name !== "Preflight checks"
+      ? flowStepDescription(activity)
+      : undefined
   const toolIo =
     readToolIoFromActivity(activity) ??
     (activity.events.length > 0 ? buildToolIoFromStepEvents(activity.events) : null)
@@ -894,14 +899,14 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
           />
         )}
         {!StatusIcon && <span className="w-[11px] h-[11px] rounded-full shrink-0" style={{ background: sm.color, opacity: 0.6 }} />}
-        <span className="min-w-0 truncate text-xs text-text font-mono">{renderedName}</span>
-        {renderedSummary && !statusMessage && (
-          <span className={`shrink-0 text-xs truncate max-w-[18rem] ${activitySummaryTone(status)}`}>
+        <span className="min-w-0 break-all text-xs text-text font-mono">{renderedName}</span>
+        {renderedSummary && !isResultRow && (
+          <span className="shrink-0 text-xs text-text-muted/70 break-all min-w-0 max-w-[50%]">
             {renderedSummary}
           </span>
         )}
         <div className="flex-1 min-w-0" />
-        {activity.events.length > 0 && (
+        {activity.events.length > 0 && !isResultRow && (
           <span className="shrink-0 text-xs text-text-muted/60 tabular-nums">{activity.events.length} ev</span>
         )}
         <span className="shrink-0 text-xs text-text-muted tabular-nums w-14 text-right">{fmtDuration(activity.durationMs)}</span>
@@ -941,10 +946,20 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
 
       {expanded && (
         <div className="border-t border-border-subtle px-2.5 py-1.5 space-y-0.5 bg-base/30">
-          {statusMessage && (
+          {statusMessage && !isDuplicatePipelineMessage(pipelineError, statusMessage) && (
             <StatusMessage status={status}>{statusMessage}</StatusMessage>
           )}
-          {activity.events.length === 0 && (activity.summary || activity.details) && !statusMessage && (
+          {stepDescription && !statusMessage && (
+            <p className="px-2 py-1 text-xs text-text-muted/70 leading-relaxed">{stepDescription}</p>
+          )}
+          {isResultRow && activity.events[0] && (
+            <CodeBlock
+              code={JSON.stringify(activity.events[0].data, null, 2)}
+              lang="json"
+              maxHeight={480}
+            />
+          )}
+          {!isResultRow && activity.events.length === 0 && (activity.summary || activity.details) && !statusMessage && (
             <div className="px-2 py-1.5 space-y-1.5">
               {activity.summary && (
                 <p className="text-xs text-text-muted leading-relaxed">{activity.summary}</p>
@@ -961,7 +976,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               )}
             </div>
           )}
-          {hasChildren && activity.children!.map((child) => {
+          {hasChildren && !isResultRow && activity.children!.map((child) => {
             const childKey = pipelineActivityKey(pipelineId, child.id)
             return (
               <ActivityRow
@@ -984,12 +999,12 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               />
             )
           })}
-          {activity.events.length > 0 && toolIo && (
+          {!isResultRow && activity.events.length > 0 && toolIo && (
             <div className="px-2 py-1">
               <ToolIoBlock io={toolIo} compact maxHeight={100} />
             </div>
           )}
-          {activity.events.map((ev, idx) => {
+          {!isResultRow && activity.events.map((ev, idx) => {
             const key = `${pipelineId}|${activity.id}|${idx}`
             return (
               <EventRow
@@ -997,7 +1012,6 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
                 ev={ev}
                 expanded={evExpanded.has(key)}
                 onToggle={() => toggleEvent(key)}
-                hideSummary={activity.name === "result"}
               />
             )
           })}
@@ -1009,11 +1023,10 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
 
 // ── Event row ────────────────────────────────────────────────────
 
-function EventRow({ ev, expanded, onToggle, hideSummary = false }: {
+function EventRow({ ev, expanded, onToggle }: {
   ev: OperationEvent
   expanded: boolean
   onToggle: () => void
-  hideSummary?: boolean
 }) {
   const [sqlModalOpen, setSqlModalOpen] = useState(false)
   const [ioModalOpen, setIoModalOpen] = useState(false)
@@ -1023,9 +1036,18 @@ function EventRow({ ev, expanded, onToggle, hideSummary = false }: {
   const isSql = isSyncSqlEventType(ev.type)
   const isStep = isAgentStepEventType(ev.type)
   const sqlFields = isSql ? readSqlTraceFields(ev.data) : null
+  const resolvedSqlState = useResolvedSql(
+    sqlFields ?? { label: "query", connection: "?", sql: "" },
+  )
   const toolIo = isStep ? readToolIoFromEvent(ev) : null
   const summary = pickEventSummary(ev)
   const label = formatEventLabel(ev)
+  const sqlSummary =
+    isSql && sqlFields
+      ? resolvedSqlState.loading
+        ? "Loading SQL…"
+        : resolvedSqlState.sql.trim() || summary
+      : null
   const displayData = isSql
     ? stripSqlPayloadForDisplay(ev.type, ev.data)
     : isStep
@@ -1049,8 +1071,13 @@ function EventRow({ ev, expanded, onToggle, hideSummary = false }: {
           <span className={`shrink-0 font-mono ${
             isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : "text-text-muted/70"
           }`}>{label}</span>
-          {summary && !hideSummary && (
-            <span className={`min-w-0 break-all ${
+          {sqlSummary && (
+            <span className={`min-w-0 break-all whitespace-pre-wrap font-mono text-[11px] ${
+              isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : "text-text-muted"
+            }`}>{sqlSummary}</span>
+          )}
+          {summary && !isSql && (
+            <span className={`min-w-0 break-all whitespace-pre-wrap ${
               isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : "text-text-muted"
             }`}>{summary}</span>
           )}
@@ -1076,9 +1103,14 @@ function EventRow({ ev, expanded, onToggle, hideSummary = false }: {
           </button>
         )}
       </div>
-      {expanded && hasData && (
+      {expanded && isSql && sqlFields && (
         <div className="ml-7 my-1">
-          <JsonViewer value={displayData} label="event" defaultExpandDepth={2} maxHeight={240} />
+          <SqlTraceFromEventData data={ev.data} maxHeight={360} />
+        </div>
+      )}
+      {expanded && hasData && !isSql && (
+        <div className="ml-7 my-1">
+          <JsonViewer value={displayData} label="event" defaultExpandDepth={3} maxHeight={360} />
         </div>
       )}
       {sqlModalOpen && sqlFields && (
@@ -1107,16 +1139,15 @@ function pickEventSummary(ev: OperationEvent): string {
     const toolIo = readToolIoFromEvent(ev)
     const dur = ev.data["durationMs"]
     const durPart = typeof dur === "number" ? `${dur}ms` : null
-    const outPart = toolIo?.outputText ? truncateInline(toolIo.outputText, 100) : null
+    const outPart = toolIo?.outputText ?? null
     return [outPart, durPart].filter(Boolean).join(" · ") || "completed"
   }
   if (ev.type === "step.failed") {
     const err = typeof ev.data["error"] === "string" ? ev.data["error"] : "step failed"
-    return truncateInline(err, 120)
+    return err
   }
   if (ev.type === "sync.execute.step") {
-    const step = typeof ev.data["step"] === "string" ? String(ev.data["step"]) : ""
-    return EXEC_STEP_DESCRIPTIONS[step] ?? humanizeToken(step)
+    return ""
   }
   if (ev.type === "sync.execute.step.failed") {
     const step = typeof ev.data["step"] === "string" ? String(ev.data["step"]) : "step"
@@ -1197,17 +1228,16 @@ function pickEventSummary(ev: OperationEvent): string {
     return `${ev.data["table"] ?? "table"} · ${ev.data["rowsApplied"] ?? "?"} rows applied`
   }
   if (ev.type.endsWith(".sql") && ev.type.startsWith("sync.")) {
-    const label = ev.data["label"] ?? "query"
-    const rowCount = ev.data["rowCount"] ?? "?"
-    const durationMs = ev.data["durationMs"] ?? "?"
+    const sql = typeof ev.data["sql"] === "string" ? ev.data["sql"].trim() : ""
+    if (sql) return sql
+    const rowCount = ev.data["rowCount"]
+    const durationMs = ev.data["durationMs"]
     const connection = ev.data["connection"]
-    const scope = ev.data["scope"]
     return [
-      scope ? `${label} (${scope})` : label,
-      connection,
-      `${rowCount} rows`,
-      `${durationMs}ms`,
-    ].filter(Boolean).join(" · ")
+      connection != null ? String(connection) : null,
+      rowCount != null ? `${rowCount} rows` : null,
+      durationMs != null ? `${durationMs}ms` : null,
+    ].filter(Boolean).join(" · ") || "SQL"
   }
   const d = ev.data
   const parts: string[] = []
@@ -1228,12 +1258,6 @@ function resolveInlineToolName(data: Record<string, unknown>): string {
   const tool = data["tool"]
   if (typeof tool === "string" && tool.length > 0) return tool
   return "step"
-}
-
-function truncateInline(text: string, max: number): string {
-  const t = text.replace(/\s+/g, " ").trim()
-  if (t.length <= max) return t
-  return t.slice(0, max - 1) + "…"
 }
 
 // `fmtDateTime` exported in case an embedded view wants the long form

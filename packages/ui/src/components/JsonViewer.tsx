@@ -16,9 +16,11 @@ export interface JsonViewerProps {
   label?: string
 }
 
-function truncate(text: string, max = 48): string {
-  if (text.length <= max) return text
-  return `${text.slice(0, max - 1)}…`
+function formatScalarDisplay(value: unknown): string {
+  if (value === null) return "null"
+  if (typeof value === "string") return JSON.stringify(value)
+  if (typeof value === "number" || typeof value === "boolean") return String(value)
+  return String(value)
 }
 
 function serialize(value: unknown): string {
@@ -30,10 +32,7 @@ function serialize(value: unknown): string {
 }
 
 function previewScalar(value: unknown): string {
-  if (value === null) return "null"
-  if (typeof value === "string") return `"${truncate(value)}"`
-  if (typeof value === "number" || typeof value === "boolean") return String(value)
-  return String(value)
+  return formatScalarDisplay(value)
 }
 
 function previewContainer(value: unknown[]): string {
@@ -64,7 +63,7 @@ function JsonPrimitive({ name, value }: { name?: string; value: unknown }) {
           <span className="text-text-muted/50 shrink-0">:</span>
         </>
       )}
-      <span className={`min-w-0 break-all ${valueClass}`}>{previewScalar(value)}</span>
+      <span className={`min-w-0 break-all whitespace-pre-wrap ${valueClass}`}>{formatScalarDisplay(value)}</span>
     </div>
   )
 }
@@ -114,7 +113,7 @@ function JsonNode({
           </>
         )}
         {collapsed ? (
-          <span className="text-text-muted/70 min-w-0 truncate">{collapsedPreview}</span>
+          <span className="text-text-muted/70 min-w-0 break-all">{collapsedPreview}</span>
         ) : (
           <span className="text-text-muted/50">{isArray ? "[" : "{"}</span>
         )}

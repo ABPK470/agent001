@@ -10,7 +10,7 @@ import { createsDatasetLayer } from "../../../domain/flow-kind-dataset-layer.js"
 import { assertAuditGateAllowsProceed } from "./contract-deploy.js"
 import type { SyncExecutionContractStep } from "../plan-store.js"
 import type { FlowStepRunContext, FlowStepRunResult } from "./flow-step-executor.js"
-import { trackedExecute } from "./db-helpers.js"
+import { formatMssqlExecLog, trackedExecute } from "./db-helpers.js"
 import { resolveHandlerInputs } from "./handler-inputs.js"
 import { mergeProcedureResultOutputs } from "./step-output-registry.js"
 
@@ -36,6 +36,7 @@ export async function executeMssqlProcedure(
     `flowStep.${step.kind}(${step.id})`,
     ctx.telemetryContext,
     req,
+    formatMssqlExecLog(procedure, values),
   )
 
   const action = values["action"]

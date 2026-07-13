@@ -4,6 +4,56 @@ import { api } from "../api"
 import { CodeBlock } from "./CodeBlock"
 import { formatSqlTraceMeta, readSqlTraceFields, type SqlTraceFields } from "../sync-sql-trace"
 
+function needsSqlFetch(fields: SqlTraceFields): boolean {
+  if (!fields.sqlLogId) return false
+  const truncated = fields.sqlLength != null && fields.sqlLength > fields.sql.length
+  return !fields.sql.trim() || truncated
+}
+
+/** Resolve full SQL from event preview + optional sync_sql_log id. */
+export function useResolvedSql(fields: SqlTraceFields): {
+  sql: string
+  loading: boolean
+  error: string | null
+} {
+  const [resolvedSql, setResolvedSql] = useState(fields.sql)
+  const [loading, setLoading] = useState(false)
+  const [loadError, setLoadError] = useState<string | null>(null)
+  const truncated = fields.sqlLength != null && fields.sqlLength > fields.sql.length
+
+  useEffect(() => {
+    let cancelled = false
+    if (!needsSqlFetch(fields)) {
+      setResolvedSql(fields.sql)
+      setLoading(false)
+      setLoadError(null)
+      return
+    }
+    setLoading(true)
+    void api
+      .getSqlLog(fields.sqlLogId!)
+      .then((row) => {
+        if (!cancelled) {
+          setResolvedSql(row.sql)
+          setLoadError(null)
+          setLoading(false)
+        }
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          setLoadError(e instanceof Error ? e.message : String(e))
+          setResolvedSql(fields.sql)
+          setLoading(false)
+        }
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [fields.sql, fields.sqlLogId, fields.sqlLength, truncated])
+
+  return { sql: resolvedSql, loading, error: loadError }
+}
+
 export function SqlTraceBlock({
   fields,
   compact = false,
@@ -14,12 +64,23 @@ export function SqlTraceBlock({
   maxHeight?: number
 }) {
   const [modalOpen, setModalOpen] = useState(false)
+  const { sql: resolvedSql, loading, error: loadError } = useResolvedSql(fields)
   const truncated = fields.sqlLength != null && fields.sqlLength > fields.sql.length
+  const displayFields = { ...fields, sql: resolvedSql }
 
   return (
     <div className={`rounded-md border border-border-subtle overflow-hidden ${compact ? "text-xs" : "text-sm"}`}>
       <div className="flex items-start justify-between gap-2 px-2.5 py-1.5 border-b border-border-subtle bg-elevated/30">
-        <span className="font-mono text-text-muted min-w-0 break-all">{formatSqlTraceMeta(fields)}</span>
+        <div className="min-w-0 space-y-0.5">
+          {resolvedSql.trim() ? (
+            <span className="font-mono text-text min-w-0 break-all whitespace-pre-wrap block">{resolvedSql}</span>
+          ) : loading ? (
+            <span className="text-text-muted text-xs">Loading SQL…</span>
+          ) : (
+            <span className="font-mono text-text-muted min-w-0 break-all whitespace-pre-wrap">{formatSqlTraceMeta(displayFields)}</span>
+          )}
+          <span className="font-mono text-text-muted/70 text-[10px] block">{formatSqlTraceMeta(displayFields)}</span>
+        </div>
         {(truncated || fields.sqlLogId) && (
           <button
             type="button"
@@ -31,15 +92,18 @@ export function SqlTraceBlock({
           </button>
         )}
       </div>
-      {fields.sql.trim() && (
-        <CodeBlock code={fields.sql} lang="sql" maxHeight={maxHeight} />
+      {loadError && (
+        <div className="px-2.5 py-1 text-warning text-xs border-b border-border-subtle">{loadError}</div>
       )}
-      {fields.error && (
-        <div className="px-2.5 py-1 text-error text-xs border-t border-border-subtle">{fields.error}</div>
+      {resolvedSql.trim() && (
+        <CodeBlock code={resolvedSql} lang="sql" maxHeight={maxHeight} />
+      )}
+      {displayFields.error && (
+        <div className="px-2.5 py-1 text-error text-xs border-t border-border-subtle break-all whitespace-pre-wrap">{displayFields.error}</div>
       )}
       {modalOpen && (
         <SqlTraceModal
-          fields={fields}
+          fields={displayFields}
           onClose={() => setModalOpen(false)}
         />
       )}

@@ -6,10 +6,14 @@ import { trackedExecute, trackedQuery } from "./db-helpers.js"
 import { executeMssqlProcedure } from "./procedure-params.js"
 import { testFlowStepRunContext } from "../../../test-support/value-source-context.js"
 
-vi.mock("./db-helpers.js", () => ({
-  trackedExecute: vi.fn(),
-  trackedQuery: vi.fn(),
-}))
+vi.mock("./db-helpers.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./db-helpers.js")>()
+  return {
+    ...actual,
+    trackedExecute: vi.fn(),
+    trackedQuery: vi.fn(),
+  }
+})
 
 const trackedExecuteMock = vi.mocked(trackedExecute)
 const trackedQueryMock = vi.mocked(trackedQuery)
@@ -51,6 +55,7 @@ describe("executeMssqlProcedure", () => {
       "flowStep.contractPreScript(preScript)",
       undefined,
       expect.anything(),
+      expect.stringContaining("EXEC core.uspRunContractDeploymentScripts"),
     )
   })
 
