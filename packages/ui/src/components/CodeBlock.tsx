@@ -16,58 +16,16 @@ import { Check, Copy } from "lucide-react"
 import { useState, type ReactNode } from "react"
 import { C } from "../widgets/ioe/constants"
 import { DataTable } from "./DataTable"
-
-// ── SQL keyword set ──────────────────────────────────────────────
-
-const SQL_KW = new Set(
-  (
-    "SELECT FROM WHERE JOIN LEFT RIGHT INNER OUTER CROSS FULL ON AND OR NOT " +
-    "GROUP BY ORDER HAVING WITH AS UNION ALL DISTINCT TOP COUNT SUM MIN MAX AVG " +
-    "CASE WHEN THEN ELSE END IN LIKE BETWEEN NULL IS EXISTS INSERT INTO UPDATE DELETE " +
-    "SET VALUES CREATE ALTER DROP TABLE VIEW INDEX ASC DESC CAST CONVERT COALESCE " +
-    "ISNULL IIF OVER PARTITION ROW_NUMBER RANK DENSE_RANK NTILE " +
-    "NOLOCK READPAST UPDLOCK ROWLOCK TABLOCK TABLOCKX " +
-    "OBJECT_SCHEMA_NAME OBJECT_NAME DB_ID OBJECT_ID SCHEMA_NAME " +
-    "TYPE_NAME DATABASEPROPERTYEX SERVERPROPERTY " +
-    "PRIMARY KEY FOREIGN REFERENCES CONSTRAINT DEFAULT CHECK UNIQUE " +
-    "BEGIN END COMMIT ROLLBACK TRANSACTION EXEC EXECUTE RETURN " +
-    "DECLARE PRINT IF ELSE WHILE BREAK CONTINUE GOTO " +
-    "WITH NOCHECK OPTION RECOMPILE MAXDOP"
-  ).split(" "),
-)
-
-// ── SQL tokeniser ────────────────────────────────────────────────
-
-type SqlToken = { k: "kw" | "str" | "cmt" | "num" | "plain"; t: string }
-
-/**
- * Split a SQL string into typed tokens using a single-pass regex.
- * Priority order: string literals → line comments → block comments →
- *   numbers → identifier/keyword → everything else (punctuation, whitespace).
- */
-function tokenizeSql(sql: string): SqlToken[] {
-  const re =
-    /('(?:[^'\\]|\\.)*'|'')|(--.*)|(\/\*[\s\S]*?\*\/)|(\b\d+(?:\.\d+)?\b)|([A-Za-z_]\w*)|([^\w]+)/g
-  const toks: SqlToken[] = []
-  let m: RegExpExecArray | null
-  while ((m = re.exec(sql)) !== null) {
-    if (m[1] !== undefined) toks.push({ k: "str",   t: m[1] })
-    else if (m[2] !== undefined) toks.push({ k: "cmt",  t: m[2] })
-    else if (m[3] !== undefined) toks.push({ k: "cmt",  t: m[3] })
-    else if (m[4] !== undefined) toks.push({ k: "num",  t: m[4] })
-    else if (m[5] !== undefined) toks.push({ k: SQL_KW.has(m[5].toUpperCase()) ? "kw" : "plain", t: m[5] })
-    else if (m[6] !== undefined) toks.push({ k: "plain", t: m[6] })
-  }
-  return toks
-}
+import { tokenizeSql, type SqlToken } from "./sql-highlight"
 
 function SqlHighlight({ code }: { code: string }) {
   const toks = tokenizeSql(code)
-  const els: ReactNode[] = toks.map((tok, i) => {
-    if (tok.k === "kw")  return <span key={i} style={{ color: C.accent }}>{tok.t}</span>
+  const els: ReactNode[] = toks.map((tok: SqlToken, i: number) => {
+    if (tok.k === "kw") return <span key={i} style={{ color: C.accent }}>{tok.t}</span>
     if (tok.k === "str") return <span key={i} style={{ color: C.success }}>{tok.t}</span>
     if (tok.k === "cmt") return <span key={i} style={{ color: C.dim, fontStyle: "italic" }}>{tok.t}</span>
     if (tok.k === "num") return <span key={i} style={{ color: C.peach }}>{tok.t}</span>
+    if (tok.k === "ident") return <span key={i} style={{ color: C.textSecondary }}>{tok.t}</span>
     return <span key={i} style={{ color: C.textSecondary }}>{tok.t}</span>
   })
   return <>{els}</>

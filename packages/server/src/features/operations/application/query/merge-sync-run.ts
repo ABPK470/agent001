@@ -2,9 +2,11 @@
  * Merge sync-preview + sync-execute pipelines into one sync-run row for the live feed.
  */
 
+import { SyncRunStatus } from "@mia/shared-enums"
 import { OperationKind, OperationStatus } from "../../../../shared/enums/operations.js"
+import * as db from "../../../../platform/persistence/sqlite.js"
 import type { OperationActivity, OperationPipeline } from "./types.js"
-import { durationOf } from "./utils.js"
+import { durationOf, syncRunStatusToOperationStatus } from "./utils.js"
 
 function planIdFromPipeline(op: OperationPipeline): string {
   return op.planId ?? op.id.replace(/:(preview|execute)$/, "")
@@ -46,12 +48,13 @@ function buildSyncRunFromParts(
   const primary = execute ?? preview!
   const startedAt = preview?.startedAt ?? execute!.startedAt
   const endedAt = execute?.endedAt ?? preview?.endedAt ?? null
+  const meta = db.getSyncRun?.(planId)
 
   let status: OperationStatus = primary.status
   if (preview && execute) {
     if (execute.status === OperationStatus.Failed || preview.status === OperationStatus.Failed) {
       status = OperationStatus.Failed
-    } else if (execute.status === OperationStatus.Skipped) {
+    } else if (execute.status === OperationStatus.Skipped || preview.status === OperationStatus.Skipped) {
       status = OperationStatus.Skipped
     } else if (execute.status === OperationStatus.Running || preview.status === OperationStatus.Running) {
       status = OperationStatus.Running
@@ -60,6 +63,10 @@ function buildSyncRunFromParts(
     } else {
       status = execute.status
     }
+  }
+
+  if (meta?.status) {
+    status = syncRunStatusToOperationStatus(meta.status, status)
   }
 
   return {

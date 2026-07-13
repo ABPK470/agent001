@@ -11,8 +11,9 @@ import {
   isSubStepFailureEvent,
   syncExecuteCompletedHasWarnings,
 } from "@mia/agent"
+import { SyncRunStatus } from "@mia/shared-enums"
 import { OperationStatus } from "./types.js"
-import type { OperationEvent } from "./types.js"
+import type { OperationActivity, OperationEvent } from "./types.js"
 
 export function safeParse(s: string): Record<string, unknown> {
   try {
@@ -105,4 +106,43 @@ export function resolveSyncPlanId(
   if (previewId) return previewToPlan.get(previewId) ?? null
   if (opId && ev.type.startsWith("sync.preview")) return previewToPlan.get(opId) ?? null
   return null
+}
+
+export function syncRunStatusToOperationStatus(
+  metaStatus: string | null | undefined,
+  inferred: OperationStatus,
+  opts?: { executeCompletedWithWarnings?: boolean }
+): OperationStatus {
+  if (metaStatus === SyncRunStatus.Success) {
+    return opts?.executeCompletedWithWarnings ? OperationStatus.Failed : OperationStatus.Success
+  }
+  if (metaStatus === SyncRunStatus.Failed) return OperationStatus.Failed
+  if (metaStatus === SyncRunStatus.Skipped) return OperationStatus.Skipped
+  if (metaStatus === SyncRunStatus.Started || metaStatus === SyncRunStatus.Preview) {
+    return inferred === OperationStatus.Unknown ? OperationStatus.Running : inferred
+  }
+  return inferred
+}
+
+/** Close activities still marked running when sync_runs says the run ended. */
+export function finalizeStaleRunningActivities(
+  activities: OperationActivity[],
+  endTs: string,
+  terminal: OperationStatus,
+  reason?: string
+): void {
+  if (terminal === OperationStatus.Running || terminal === OperationStatus.Unknown) return
+  const walk = (rows: OperationActivity[]): void => {
+    for (const row of rows) {
+      if (row.status === OperationStatus.Running) {
+        row.status = terminal
+        row.endedAt = endTs
+        row.durationMs = durationOf(row.startedAt, endTs)
+        if (reason && !row.summary) row.summary = reason
+        if (reason && terminal === OperationStatus.Failed) row.error = reason
+      }
+      if (row.children?.length) walk(row.children)
+    }
+  }
+  walk(activities)
 }

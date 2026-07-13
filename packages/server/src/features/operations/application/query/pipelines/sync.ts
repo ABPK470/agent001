@@ -4,7 +4,7 @@
  */
 
 import { EventType } from "@mia/agent"
-import { SyncRunStatus, syncExecuteCompletedHasWarnings } from "@mia/shared-enums"
+import { syncExecuteCompletedHasWarnings } from "@mia/shared-enums"
 import { readSseEntityId } from "@mia/shared-types"
 import { OperationKind, OperationStatus } from "../../../../../shared/enums/operations.js"
 import * as db from "../../../../../platform/persistence/sqlite.js"
@@ -16,7 +16,9 @@ import {
   inferPipelineStatus,
   numField,
   readTableCounts,
-  strField
+  strField,
+  syncRunStatusToOperationStatus,
+  finalizeStaleRunningActivities
 } from "../utils.js"
 
 export function buildSyncPipeline(
@@ -33,22 +35,16 @@ export function buildSyncPipeline(
   const executeCompletedWithWarnings = events.some(
     (ev) => ev.type === EventType.SyncExecuteCompleted && syncExecuteCompletedHasWarnings(ev.data),
   )
-  const status: OperationStatus =
-    kind === OperationKind.SyncExecute
-      ? meta?.status === SyncRunStatus.Success && !executeCompletedWithWarnings
-        ? OperationStatus.Success
-        : meta?.status === SyncRunStatus.Failed || executeCompletedWithWarnings
-          ? OperationStatus.Failed
-          : meta?.status === SyncRunStatus.Skipped
-            ? OperationStatus.Skipped
-            : inferred
-      : inferred
+  const status =
+    kind === OperationKind.SyncPreview && inferred !== OperationStatus.Running
+      ? inferred
+      : syncRunStatusToOperationStatus(meta?.status, inferred, {
+          executeCompletedWithWarnings
+        })
   const endedAt =
-    kind === OperationKind.SyncExecute
-      ? meta?.finished_at ?? (status !== OperationStatus.Running ? lastEv.timestamp : null)
-      : status !== OperationStatus.Running
-        ? lastEv.timestamp
-        : null
+    meta?.finished_at ??
+    (status !== OperationStatus.Running ? lastEv.timestamp : null)
+
   const entityType = planSummary?.entityType ?? meta?.entity_type ?? eventHints.entityType ?? null
   const entityTypeLabel = humanizeEntityType(
     planSummary?.definitionId ?? eventHints.definitionId ?? entityType
@@ -77,6 +73,15 @@ export function buildSyncPipeline(
     kind === OperationKind.SyncPreview
       ? [...buildPreflightActivity(planSummary, startedAt), ...groupSyncPreviewActivities(events)]
       : [...buildPreflightActivity(planSummary, startedAt), ...groupSyncExecuteActivities(events)]
+
+  if (status !== OperationStatus.Running && endedAt) {
+    finalizeStaleRunningActivities(
+      activities,
+      endedAt,
+      status,
+      meta?.error ?? (status === OperationStatus.Skipped ? "Skipped" : undefined)
+    )
+  }
 
   return {
     id: `${planId}:${kind === OperationKind.SyncExecute ? "execute" : "preview"}`,

@@ -238,15 +238,20 @@ function effectiveActivityStatus(
   pipelineStatus: OperationStatus,
   parentStatus?: OperationStatus
 ): OperationStatus {
-  if (
-    activity.status === OperationStatus.Running &&
-    (pipelineStatus === OperationStatus.Failed ||
-      parentStatus === OperationStatus.Failed ||
-      parentStatus === OperationStatus.Skipped)
-  ) {
-    return OperationStatus.Failed
-  }
-  return activity.status
+  if (activity.status !== OperationStatus.Running) return activity.status
+  const parentTerminal =
+    parentStatus === OperationStatus.Failed ||
+    parentStatus === OperationStatus.Skipped ||
+    parentStatus === OperationStatus.Cancelled
+      ? parentStatus
+      : null
+  const pipelineTerminal =
+    pipelineStatus === OperationStatus.Failed ||
+    pipelineStatus === OperationStatus.Skipped ||
+    pipelineStatus === OperationStatus.Cancelled
+      ? pipelineStatus
+      : null
+  return parentTerminal ?? pipelineTerminal ?? activity.status
 }
 
 function defaultActivitySummary(pipelineKind: OperationKind, activity: OperationActivity): string | undefined {
@@ -567,7 +572,7 @@ export function OperationLog() {
                         <button
                           key={s}
                           onClick={() => toggleStatus(s)}
-                          className={`flex items-center justify-between gap-3 w-full text-left px-3 py-2 text-[13px] transition-colors ${
+                          className={`flex items-center justify-between gap-3 w-full text-left px-3 py-2 text-xs transition-colors ${
                             on ? `${m.tone} font-medium` : "text-text-muted hover:text-text hover:bg-overlay-2"
                           }`}
                         >
@@ -578,7 +583,7 @@ export function OperationLog() {
                     {statuses.size > 0 && (
                       <button
                         onClick={() => setStatuses(new Set())}
-                        className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-[12px] text-text-muted hover:text-text hover:bg-overlay-2"
+                        className="flex w-full items-center gap-2 border-t border-border-subtle px-3 py-2 text-xs text-text-muted hover:text-text hover:bg-overlay-2"
                       >
                         <X size={12} />
                         Clear filters
@@ -609,15 +614,15 @@ export function OperationLog() {
         {operationLogFocus && (
           <div className="mb-3 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
             <div className="min-w-0 flex-1">
-              <div className="text-[11px] uppercase tracking-wide text-accent/80">Audit view</div>
-              <div className="text-[12px] text-text font-mono truncate">
+              <div className="text-xs uppercase tracking-wide text-accent/80">Audit view</div>
+              <div className="text-xs text-text font-mono truncate">
                 {operationLogFocus.label ??
                   (operationLogFocus.kind === "plan"
                     ? `plan ${operationLogFocus.id}`
                     : `run ${operationLogFocus.id}`)}
               </div>
               {auditMeta && (
-                <div className="text-[10px] text-text-muted/70 tabular-nums">
+                <div className="text-xs text-text-muted/70 tabular-nums">
                   {auditMeta.scannedEvents.toLocaleString()} events · full history
                 </div>
               )}
@@ -625,7 +630,7 @@ export function OperationLog() {
             <button
               type="button"
               onClick={clearOperationLogFocus}
-              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 text-[11px] text-text-muted hover:text-text hover:bg-overlay-2 rounded transition-colors"
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text hover:bg-overlay-2 rounded transition-colors"
             >
               <X size={12} />
               Back to live view
@@ -701,7 +706,7 @@ export function OperationLog() {
             >
               {loadingOlder ? "Loading older operations…" : "Load older operations"}
             </button>
-            <span className="text-[10px] text-text-muted/50 font-mono">
+            <span className="text-xs text-text-muted/50 font-mono">
               Audit window · {liveMeta.scannedEvents.toLocaleString()} recent events
               {olderPipelines.length > 0 ? ` · +${olderPipelines.length} from earlier pages` : ""}
             </span>
@@ -760,7 +765,7 @@ export function OperationPipelineList({
       return (
         <div key={group.label} className="mb-3">
           <button
-            className="sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-[10px] uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80 transition-colors text-left"
+            className="sticky top-0 z-10 w-full flex items-center gap-1.5 px-2 py-1 mb-1 text-xs uppercase tracking-wider text-text-muted/50 bg-surface/80 backdrop-blur-sm hover:text-text-muted/80 transition-colors text-left"
             onClick={() => toggleDay(group.label)}
           >
             <ChevronRight size={10} className={`shrink-0 transition-transform ${collapsed ? "" : "rotate-90"}`} />
@@ -827,21 +832,21 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
       >
         <ChevronRight size={14} className={`shrink-0 text-text-muted/60 transition-transform ${expanded ? "rotate-90" : ""}`} />
         <Icon size={14} className="shrink-0" style={{ color: km.color }} />
-        <span className={`shrink-0 text-[10px] uppercase tracking-wide px-1.5 py-0.5 rounded ${sm.tone}`}>
+        <span className={`shrink-0 text-xs uppercase tracking-wide px-1.5 py-0.5 rounded ${sm.tone}`}>
           {pipeline.status === "running" && <Loader2 size={9} className="inline mr-0.5 animate-spin" />}
           {pipeline.status}
         </span>
-        <span className="min-w-0 truncate text-[13px] text-text">{pipeline.title}</span>
+        <span className="min-w-0 truncate text-xs text-text">{pipeline.title}</span>
 
         {pipeline.subtitle && !compact && (
-          <span className="shrink-0 text-[11px] text-text-muted/60 font-mono truncate max-w-[14rem]">{pipeline.subtitle}</span>
+          <span className="shrink-0 text-xs text-text-muted/60 font-mono truncate max-w-[14rem]">{pipeline.subtitle}</span>
         )}
         <div className="flex-1 min-w-0" />
-        <span className="shrink-0 text-[11px] text-text-muted/60 tabular-nums">
+        <span className="shrink-0 text-xs text-text-muted/60 tabular-nums">
           {pipeline.activityCount} act · {pipeline.eventCount} ev
         </span>
-        <span className="shrink-0 text-[11px] text-text-muted tabular-nums w-16 text-right">{fmtDuration(pipeline.durationMs)}</span>
-        <span className="shrink-0 text-[11px] text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(pipeline.startedAt)}</span>
+        <span className="shrink-0 text-xs text-text-muted tabular-nums w-16 text-right">{fmtDuration(pipeline.durationMs)}</span>
+        <span className="shrink-0 text-xs text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(pipeline.startedAt)}</span>
       </button>
       {canCancel && (
         <button
@@ -862,7 +867,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
             <div className="px-2.5 py-1">
               <button
                 type="button"
-                className="text-[11px] font-mono text-text-muted hover:text-accent transition-colors"
+                className="text-xs font-mono text-text-muted hover:text-accent transition-colors"
                 onClick={() => onFocusAgentRun(pipeline.id, pipeline.title)}
               >
                 full run audit · {pipeline.id.slice(0, 8)}
@@ -872,7 +877,7 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
           {onOpenSyncPlan && (pipeline.kind === OperationKind.SyncPreview || pipeline.kind === OperationKind.SyncExecute || pipeline.kind === OperationKind.SyncRun) && (
             <div className="px-2.5 py-1">
               <button
-                className="text-[11px] font-mono text-text-muted hover:text-accent transition-colors"
+                className="text-xs font-mono text-text-muted hover:text-accent transition-colors"
                 onClick={() => onOpenSyncPlan(syncPlanIdFromPipeline(pipeline))}
               >
                 {pipeline.kind === OperationKind.SyncRun ? "full audit" : "view plan"} {syncPlanIdFromPipeline(pipeline).slice(0, 8)}
@@ -880,12 +885,12 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
             </div>
           )}
           {pipeline.error && (pipeline.kind === OperationKind.SyncExecute || pipeline.kind === OperationKind.SyncRun) && (
-            <div className="px-2.5 py-1.5 mb-1 rounded bg-error-soft border border-error/30 text-[12px] text-error break-all">
+            <div className="px-2.5 py-1.5 mb-1 rounded bg-error-soft border border-error/30 text-xs text-error break-all">
               {pipeline.error}
             </div>
           )}
           {pipeline.activities.length === 0 && (
-            <div className="px-2.5 py-2 text-[12px] text-text-muted/60">No activities recorded.</div>
+            <div className="px-2.5 py-2 text-xs text-text-muted/60">No activities recorded.</div>
           )}
           {pipeline.activities.map((a) => {
             const key = pipelineActivityKey(pipeline.id, a.id)
@@ -961,20 +966,20 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
           />
         )}
         {!StatusIcon && <span className="w-[11px] h-[11px] rounded-full shrink-0" style={{ background: sm.color, opacity: 0.6 }} />}
-        <span className="min-w-0 truncate text-[12px] text-text font-mono">{renderedName}</span>
+        <span className="min-w-0 truncate text-xs text-text font-mono">{renderedName}</span>
         {renderedSummary && (
-          <span className="shrink-0 text-[11px] text-text-muted/70 truncate max-w-[18rem]">{renderedSummary}</span>
+          <span className="shrink-0 text-xs text-text-muted/70 truncate max-w-[18rem]">{renderedSummary}</span>
         )}
         <div className="flex-1 min-w-0" />
         {activity.events.length > 0 && (
-          <span className="shrink-0 text-[11px] text-text-muted/60 tabular-nums">{activity.events.length} ev</span>
+          <span className="shrink-0 text-xs text-text-muted/60 tabular-nums">{activity.events.length} ev</span>
         )}
-        <span className="shrink-0 text-[11px] text-text-muted tabular-nums w-14 text-right">{fmtDuration(activity.durationMs)}</span>
-        <span className="shrink-0 text-[11px] text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(activity.startedAt)}</span>
+        <span className="shrink-0 text-xs text-text-muted tabular-nums w-14 text-right">{fmtDuration(activity.durationMs)}</span>
+        <span className="shrink-0 text-xs text-text-muted/50 tabular-nums w-20 text-right">{fmtTime(activity.startedAt)}</span>
         {toolIo && (
           <button
             type="button"
-            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-[10px] font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
+            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-xs font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
             onClick={(e) => {
               e.stopPropagation()
               setIoModalOpen(true)
@@ -993,19 +998,19 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
       {expanded && (
         <div className="border-t border-border-subtle px-2.5 py-1.5 space-y-0.5 bg-base/30">
           {activity.error && (
-            <div className="px-2 py-1 mb-1 rounded bg-error-soft border border-error/30 text-[11px] text-error break-all">
+            <div className="px-2 py-1 mb-1 rounded bg-error-soft border border-error/30 text-xs text-error break-all">
               {activity.error}
             </div>
           )}
           {activity.events.length === 0 && (activity.summary || activity.details) && (
             <div className="px-2 py-1.5 space-y-1.5">
               {activity.summary && (
-                <p className="text-[11px] text-text-muted leading-relaxed">{activity.summary}</p>
+                <p className="text-xs text-text-muted leading-relaxed">{activity.summary}</p>
               )}
               {delegationPlanId && onOpenSyncPlan && (
                 <button
                   type="button"
-                  className="text-[11px] font-mono text-accent hover:text-accent-hover"
+                  className="text-xs font-mono text-accent hover:text-accent-hover"
                   onClick={() => onOpenSyncPlan(delegationPlanId)}
                 >
                   Open sync audit · plan {delegationPlanId.slice(0, 8)}
@@ -1015,7 +1020,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
                 <ToolIoBlock io={toolIo} compact maxHeight={120} />
               )}
               {activity.details && Object.keys(activity.details).length > 0 && !toolIo && (
-                <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-[10.5px] leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
+                <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-xs leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
                   {JSON.stringify(activity.details, null, 2)}
                 </pre>
               )}
@@ -1092,7 +1097,7 @@ function EventRow({ ev, expanded, onToggle }: {
     <div>
       <div className="flex items-baseline gap-1 pr-1">
         <button
-          className={`min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-left text-[11px] hover:bg-overlay-2 transition-colors ${
+          className={`min-w-0 flex-1 flex items-baseline gap-2 px-2 py-0.5 text-left text-xs hover:bg-overlay-2 transition-colors ${
             hasData ? "cursor-pointer" : "cursor-default"
           }`}
           onClick={() => hasData && onToggle()}
@@ -1108,7 +1113,7 @@ function EventRow({ ev, expanded, onToggle }: {
         {isSql && sqlFields && (
           <button
             type="button"
-            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-[10px] font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
+            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-xs font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
             onClick={() => setSqlModalOpen(true)}
           >
             <Database size={10} />
@@ -1118,7 +1123,7 @@ function EventRow({ ev, expanded, onToggle }: {
         {isStep && toolIo && (
           <button
             type="button"
-            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-[10px] font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
+            className="shrink-0 inline-flex items-center gap-1 px-1.5 py-0.5 mr-1 text-xs font-mono text-accent hover:text-accent-hover hover:bg-accent/10 rounded"
             onClick={() => setIoModalOpen(true)}
           >
             <Wrench size={10} />
@@ -1128,7 +1133,7 @@ function EventRow({ ev, expanded, onToggle }: {
       </div>
       {expanded && hasData && (
         <div className="ml-7 my-1">
-          <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-[10.5px] leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
+          <pre className="px-2 py-1.5 bg-base border-l-2 border-border-subtle text-xs leading-[1.5] text-text-muted/70 whitespace-pre-wrap break-all rounded-r">
             {JSON.stringify(displayData, null, 2)}
           </pre>
         </div>
