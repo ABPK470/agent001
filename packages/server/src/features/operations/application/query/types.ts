@@ -32,7 +32,7 @@ export interface OperationActivity {
 export interface OperationPipeline {
   id: string
   kind: OperationKind
-  /** Sync plan id when kind is sync-preview or sync-execute (id is kind-scoped). */
+  /** Sync plan id when kind is sync-preview, sync-execute, or sync-run. */
   planId?: string
   title: string
   subtitle?: string

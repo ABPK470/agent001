@@ -7,6 +7,8 @@
  */
 
 export { listOperations } from "./list-operations.js"
+export { listOperationsForPlan } from "./list-operations-for-plan.js"
+export { listOperationsForRun } from "./list-operations-for-run.js"
 export type {
   ListOperationsOpts,
   OperationActivity,

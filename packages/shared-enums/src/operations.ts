@@ -11,6 +11,8 @@ export const OperationKind = {
   AgentRun:    "agent-run",
   SyncPreview: "sync-preview",
   SyncExecute: "sync-execute",
+  /** Full preview + execute audit tree for one sync plan (plan-scoped query). */
+  SyncRun:     "sync-run",
   ProposerRun: "proposer-run",
   System:      "system",
 } as const

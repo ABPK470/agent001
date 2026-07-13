@@ -5,7 +5,11 @@
 import type { FastifyInstance } from "fastify"
 import { subscribeToEvents } from "../../platform/events/broadcaster.js"
 import { searchEvents } from "../../platform/persistence/events.js"
-import { listOperations } from "./application/query/index.js"
+import {
+  listOperations,
+  listOperationsForPlan,
+  listOperationsForRun
+} from "./application/query/index.js"
 
 export function registerOperationRoutes(app: FastifyInstance): void {
   app.get<{
@@ -19,6 +23,24 @@ export function registerOperationRoutes(app: FastifyInstance): void {
       kind: req.query.kind,
       status: req.query.status
     })
+  })
+
+  app.get<{ Params: { planId: string } }>("/api/operations/plan/:planId", async (req) => {
+    const { operation, scannedEvents } = listOperationsForPlan(req.params.planId)
+    return {
+      operation,
+      scannedEvents,
+      operations: operation ? [operation] : []
+    }
+  })
+
+  app.get<{ Params: { runId: string } }>("/api/operations/run/:runId", async (req) => {
+    const { operation, scannedEvents } = listOperationsForRun(req.params.runId)
+    return {
+      operation,
+      scannedEvents,
+      operations: operation ? [operation] : []
+    }
   })
 
   app.get("/api/operations/stream", (req, reply) => {

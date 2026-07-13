@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Clock,
   Loader2,
+  NotebookTabs,
   RefreshCw,
   SlidersHorizontal,
   View,
@@ -573,6 +574,7 @@ function HistoryRunRow({
   const planLoadFailedRef = useRef(false)
   const auditLoadFailedRef = useRef(false)
   const sqlTraceLoadFailedRef = useRef(false)
+  const focusOperationLogPlan = useStore((s) => s.focusOperationLogPlan)
 
   const totals = run.executeTotals ?? run.previewTotals
   const label = plan ? formatPlanEntityLabel(plan) : entityLabel(run)
@@ -673,19 +675,32 @@ function HistoryRunRow({
         <div className="px-3 py-2.5 bg-base/20 border-t border-border/30 space-y-2.5 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
             <code className="min-w-0 truncate text-[11px] font-mono text-text-muted/60">{run.planId}</code>
-            {onOpen && run.planAvailable && (
+            <div className="flex shrink-0 items-center gap-3">
               <button
                 type="button"
-                className="inline-flex shrink-0 items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition-colors"
+                className="inline-flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition-colors"
                 onClick={(e) => {
                   e.stopPropagation()
-                  onOpen(run.planId)
+                  focusOperationLogPlan(run.planId, label)
                 }}
               >
-                <View size={12} />
-                Open in sync
+                <NotebookTabs size={12} />
+                View in Pipelines
               </button>
-            )}
+              {onOpen && run.planAvailable && (
+                <button
+                  type="button"
+                  className="inline-flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition-colors"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    onOpen(run.planId)
+                  }}
+                >
+                  <View size={12} />
+                  Open in sync
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-text-muted">

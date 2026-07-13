@@ -730,6 +730,14 @@ export const api = {
     return json<OperationsResponse>(`/api/operations${qs ? `?${qs}` : ""}`)
   },
 
+  /** Full audit tree for one sync plan (no event window cap). */
+  operationsForPlan: (planId: string) =>
+    json<OperationAuditResponse>(`/api/operations/plan/${encodeURIComponent(planId)}`),
+
+  /** Full audit tree for one agent run (no event window cap). */
+  operationsForRun: (runId: string) =>
+    json<OperationAuditResponse>(`/api/operations/run/${encodeURIComponent(runId)}`),
+
   // ── Attachments ────────────────────────────────────────────────
   /**
    * Upload a single file as an attachment. Returns the persisted metadata
@@ -1185,7 +1193,7 @@ export interface OperationActivity {
 export interface OperationPipeline {
   id: string
   kind: OperationKind
-  /** Sync plan id when kind is sync-preview or sync-execute (id is kind-scoped). */
+  /** Sync plan id when kind is sync-preview, sync-execute, or sync-run. */
   planId?: string
   title: string
   subtitle?: string
@@ -1202,6 +1210,13 @@ export interface OperationsResponse {
   operations: OperationPipeline[]
   scannedEvents: number
   oldestTimestamp: string | null
+}
+
+/** Plan- or run-scoped audit response (single pipeline, all correlated events). */
+export interface OperationAuditResponse {
+  operation: OperationPipeline | null
+  scannedEvents: number
+  operations: OperationPipeline[]
 }
 
 /**

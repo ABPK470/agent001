@@ -11,6 +11,7 @@ import type { OperationActivity, OperationEvent, OperationPipeline, OperationsRe
 import { api, OperationKind, OperationStatus } from "../api"
 import { SqlTraceModal } from "../components/SqlTrace"
 import { useContainerSize } from "../hooks/useContainerSize"
+import { useStore } from "../store"
 import { isSyncSqlEventType, readSqlTraceFields } from "../sync-sql-trace"
 import {
   LOG_TOOLBAR_CHIP,
@@ -59,6 +60,11 @@ const KIND_META: Record<
         label: "execute",
         Icon: Database,
         color: "var(--color-success)",
+    },
+    "sync-run": {
+        label: "sync",
+        Icon: Database,
+        color: "var(--color-info)",
     },
     "proposer-run": {
         label: "scan",
@@ -182,6 +188,13 @@ const EXEC_STEP_DESCRIPTIONS: Record<string, string> = {
   rulesDeploy: "Trigger rule deployment in ETL.",
 }
 
+function activityPipelineKind(pipelineKind: OperationKind, parentPhaseId?: string): OperationKind {
+  if (pipelineKind !== OperationKind.SyncRun) return pipelineKind
+  if (parentPhaseId === "phase:preview") return OperationKind.SyncPreview
+  if (parentPhaseId === "phase:execute") return OperationKind.SyncExecute
+  return pipelineKind
+}
+
 function formatActivityName(pipelineKind: OperationKind, activity: OperationActivity): string {
   if (pipelineKind === OperationKind.SyncExecute) {
     if (activity.name === "Preflight checks") return activity.name
@@ -291,8 +304,15 @@ function formatEventLabel(ev: OperationEvent): string {
 }
 
 export function OperationLog() {
+  const operationLogFocus = useStore((s) => s.operationLogFocus)
+  const focusOperationLogPlan = useStore((s) => s.focusOperationLogPlan)
+  const clearOperationLogFocus = useStore((s) => s.clearOperationLogFocus)
+
   const [livePipelines, setLivePipelines] = useState<OperationPipeline[]>([])
   const [olderPipelines, setOlderPipelines] = useState<OperationPipeline[]>([])
+  const [auditPipeline, setAuditPipeline] = useState<OperationPipeline | null>(null)
+  const [auditMeta, setAuditMeta] = useState<{ scannedEvents: number } | null>(null)
+  const [auditLoading, setAuditLoading] = useState(false)
   const [liveMeta, setLiveMeta] = useState<{ scannedEvents: number; oldestTimestamp: string | null }>({
     scannedEvents: 0,
     oldestTimestamp: null,
@@ -318,6 +338,54 @@ export function OperationLog() {
   const tiny = width > 0 && width < 480
   const [statusesOpen, setStatusesOpen] = useState(false)
   const [cancellingId, setCancellingId] = useState<string | null>(null)
+
+  const expandAuditTree = useCallback((pipeline: OperationPipeline) => {
+    setExpanded(new Set([pipeline.id]))
+    const actKeys = new Set<string>()
+    const walk = (activities: OperationActivity[], phaseId?: string) => {
+      for (const activity of activities) {
+        const nextPhase = activity.id.startsWith("phase:") ? activity.id : phaseId
+        actKeys.add(pipelineActivityKey(pipeline.id, activity.id))
+        if (activity.children?.length) walk(activity.children, nextPhase)
+      }
+    }
+    walk(pipeline.activities)
+    setActExpanded(actKeys)
+  }, [])
+
+  useEffect(() => {
+    if (!operationLogFocus) {
+      setAuditPipeline(null)
+      setAuditMeta(null)
+      return
+    }
+    let cancelled = false
+    setAuditLoading(true)
+    const load =
+      operationLogFocus.kind === "plan"
+        ? api.operationsForPlan(operationLogFocus.id)
+        : api.operationsForRun(operationLogFocus.id)
+    void load
+      .then((res) => {
+        if (cancelled) return
+        const pipeline = res.operation ?? res.operations[0] ?? null
+        setAuditPipeline(pipeline)
+        setAuditMeta({ scannedEvents: res.scannedEvents })
+        if (pipeline) expandAuditTree(pipeline)
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setAuditPipeline(null)
+          setAuditMeta(null)
+        }
+      })
+      .finally(() => {
+        if (!cancelled) setAuditLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [operationLogFocus, expandAuditTree])
 
   const cancelPipeline = useCallback(async (pipeline: OperationPipeline): Promise<void> => {
     if (pipeline.status !== "running") return
@@ -423,7 +491,7 @@ export function OperationLog() {
 
   const filtered = useMemo(() => nonSystem.filter(p => {
     if (kindView === "agent" && p.kind !== "agent-run") return false
-    if (kindView === "sync" && p.kind !== "sync-preview" && p.kind !== "sync-execute" && p.kind !== "proposer-run") return false
+    if (kindView === "sync" && p.kind !== "sync-preview" && p.kind !== "sync-execute" && p.kind !== "sync-run" && p.kind !== "proposer-run") return false
     if (statuses.size > 0 && !statuses.has(p.status)) return false
     // When histResults are active, BE already applied the search; local needle is redundant
     if (needle && !histResults && !matchesPipeline(p, needle)) return false
@@ -526,17 +594,72 @@ export function OperationLog() {
 
       {/* ── Body ────────────────────────────────────────── */}
       <div className="flex-1 overflow-y-auto pr-1">
-        {histLoading && (
+        {operationLogFocus && (
+          <div className="mb-3 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
+            <div className="min-w-0 flex-1">
+              <div className="text-[11px] uppercase tracking-wide text-accent/80">Audit view</div>
+              <div className="text-[12px] text-text font-mono truncate">
+                {operationLogFocus.label ??
+                  (operationLogFocus.kind === "plan"
+                    ? `plan ${operationLogFocus.id}`
+                    : `run ${operationLogFocus.id}`)}
+              </div>
+              {auditMeta && (
+                <div className="text-[10px] text-text-muted/70 tabular-nums">
+                  {auditMeta.scannedEvents.toLocaleString()} events · full history
+                </div>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={clearOperationLogFocus}
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 text-[11px] text-text-muted hover:text-text hover:bg-overlay-2 rounded transition-colors"
+            >
+              <X size={12} />
+              Back to live view
+            </button>
+          </div>
+        )}
+
+        {operationLogFocus && auditLoading && (
+          <div className="text-text-muted/60 text-xs text-center py-8">Loading full audit…</div>
+        )}
+
+        {operationLogFocus && !auditLoading && !auditPipeline && (
+          <div className="text-text-muted text-center pt-8 text-sm">
+            No operation events found for this {operationLogFocus.kind === "plan" ? "plan" : "run"}.
+          </div>
+        )}
+
+        {operationLogFocus && !auditLoading && auditPipeline && (
+          <OperationPipelineList
+            pipelines={[auditPipeline]}
+            compact={compact}
+            expanded={expanded}
+            togglePipeline={togglePipeline}
+            actExpanded={actExpanded}
+            toggleActivity={toggleActivity}
+            evExpanded={evExpanded}
+            toggleEvent={toggleEvent}
+            collapsedDays={collapsedDays}
+            toggleDay={toggleDay}
+            onOpenSyncPlan={(planId) => focusOperationLogPlan(planId)}
+            onCancelPipeline={cancelPipeline}
+            cancellingId={cancellingId}
+          />
+        )}
+
+        {!operationLogFocus && histLoading && (
           <div className="text-text-muted/60 text-xs text-center py-4">Searching full history…</div>
         )}
 
-        {!histLoading && filtered.length === 0 && (
+        {!operationLogFocus && !histLoading && filtered.length === 0 && (
           <div className="text-text-muted text-center pt-12 text-sm">
             {pipelines.length === 0 ? "No operations recorded yet." : "No matches."}
           </div>
         )}
 
-        {!histLoading && filtered.length > 0 && (
+        {!operationLogFocus && !histLoading && filtered.length > 0 && (
           <OperationPipelineList
             pipelines={filtered}
             compact={compact}
@@ -548,12 +671,13 @@ export function OperationLog() {
             toggleEvent={toggleEvent}
             collapsedDays={collapsedDays}
             toggleDay={toggleDay}
+            onOpenSyncPlan={(planId) => focusOperationLogPlan(planId)}
             onCancelPipeline={cancelPipeline}
             cancellingId={cancellingId}
           />
         )}
 
-        {!histLoading && !search && canLoadOlder && (
+        {!operationLogFocus && !histLoading && !search && canLoadOlder && (
           <div className="py-4 flex flex-col items-center gap-1 border-t border-border-subtle/60 mt-2">
             <button
               type="button"
@@ -716,17 +840,17 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 
       {expanded && (
         <div className="border-t border-border-subtle bg-base/40 px-2 py-1.5 space-y-0.5">
-          {onOpenSyncPlan && (pipeline.kind === OperationKind.SyncPreview || pipeline.kind === OperationKind.SyncExecute) && (
+          {onOpenSyncPlan && (pipeline.kind === OperationKind.SyncPreview || pipeline.kind === OperationKind.SyncExecute || pipeline.kind === OperationKind.SyncRun) && (
             <div className="px-2.5 py-1">
               <button
                 className="text-[11px] font-mono text-text-muted hover:text-accent transition-colors"
                 onClick={() => onOpenSyncPlan(syncPlanIdFromPipeline(pipeline))}
               >
-                view plan {syncPlanIdFromPipeline(pipeline).slice(0, 8)}
+                {pipeline.kind === OperationKind.SyncRun ? "full audit" : "view plan"} {syncPlanIdFromPipeline(pipeline).slice(0, 8)}
               </button>
             </div>
           )}
-          {pipeline.error && pipeline.kind === OperationKind.SyncExecute && (
+          {pipeline.error && (pipeline.kind === OperationKind.SyncExecute || pipeline.kind === OperationKind.SyncRun) && (
             <div className="px-2.5 py-1.5 mb-1 rounded bg-error-soft border border-error/30 text-[12px] text-error break-all">
               {pipeline.error}
             </div>
@@ -760,12 +884,13 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
 
 // ── Activity row ─────────────────────────────────────────────────
 
-function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, parentStatus, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent }: {
+function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, parentStatus, parentPhaseId, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent }: {
   activity: OperationActivity
   pipelineKind: OperationKind
   pipelineId: string
   pipelineStatus: OperationStatus
   parentStatus?: OperationStatus
+  parentPhaseId?: string
   depth?: number
   expanded: boolean
   onToggle: () => void
@@ -774,12 +899,14 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
   evExpanded: Set<string>
   toggleEvent: (key: string) => void
 }) {
+  const phaseId = activity.id.startsWith("phase:") ? activity.id : parentPhaseId
+  const effectiveKind = activityPipelineKind(pipelineKind, phaseId)
   const status = effectiveActivityStatus(activity, pipelineStatus, parentStatus)
   const sm = STATUS_META[status]
   const StatusIcon = status === "failed" ? XCircle
     : status === "running" ? Loader2 : null
-  const renderedName = formatActivityName(pipelineKind, activity)
-  const renderedSummary = defaultActivitySummary(pipelineKind, activity)
+  const renderedName = formatActivityName(effectiveKind, activity)
+  const renderedSummary = defaultActivitySummary(effectiveKind, activity)
   const hasChildren = (activity.children?.length ?? 0) > 0
 
   return (
@@ -838,6 +965,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, paren
                 pipelineId={pipelineId}
                 pipelineStatus={pipelineStatus}
                 parentStatus={status}
+                parentPhaseId={phaseId}
                 depth={(depth ?? 0) + 1}
                 expanded={actExpanded.has(childKey)}
                 onToggle={() => toggleActivity(childKey)}

@@ -105,6 +105,73 @@ export function searchEvents(
     .all(...params) as DbEvent[]
 }
 
+/** All sync events for a plan (chronological). Used by plan-scoped operation audit. */
+export function listEventsForPlanId(planId: string, opts?: { limit?: number }): DbEvent[] {
+  const limit = Math.min(opts?.limit ?? 20_000, 50_000)
+  const db = getDb()
+
+  const primary = db
+    .prepare(
+      `
+    SELECT * FROM event_log
+    WHERE type LIKE 'sync.%'
+      AND (
+        json_extract(data, '$.planId') = ?
+        OR json_extract(data, '$.opId') = ?
+      )
+    ORDER BY created_at ASC
+    LIMIT ?
+  `
+    )
+    .all(planId, planId, limit) as DbEvent[]
+
+  const previewIds = new Set<string>()
+  for (const row of primary) {
+    try {
+      const data = JSON.parse(row.data) as Record<string, unknown>
+      for (const key of ["previewId", "opId"] as const) {
+        const id = data[key]
+        if (typeof id === "string" && id.length > 0 && id !== planId) previewIds.add(id)
+      }
+    } catch {
+      /* ignore malformed rows */
+    }
+  }
+
+  if (previewIds.size === 0) return primary
+
+  const placeholders = [...previewIds].map(() => "?").join(",")
+  const correlated = db
+    .prepare(
+      `
+    SELECT * FROM event_log
+    WHERE type LIKE 'sync.%'
+      AND json_extract(data, '$.opId') IN (${placeholders})
+    ORDER BY created_at ASC
+  `
+    )
+    .all(...previewIds) as DbEvent[]
+
+  const byId = new Map<number, DbEvent>()
+  for (const row of [...primary, ...correlated]) byId.set(row.id, row)
+  return [...byId.values()].sort((a, b) => a.created_at.localeCompare(b.created_at))
+}
+
+/** All events carrying a runId (chronological). Used by run-scoped operation audit. */
+export function listEventsForRunId(runId: string, opts?: { limit?: number }): DbEvent[] {
+  const limit = Math.min(opts?.limit ?? 20_000, 50_000)
+  return getDb()
+    .prepare(
+      `
+    SELECT * FROM event_log
+    WHERE json_extract(data, '$.runId') = ?
+    ORDER BY created_at ASC
+    LIMIT ?
+  `
+    )
+    .all(runId, limit) as DbEvent[]
+}
+
 export interface DbWebhookDrain {
   id: string
   url: string

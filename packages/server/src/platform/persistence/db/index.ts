@@ -132,6 +132,8 @@ export {
   deleteWebhookDrain,
   getWebhookDrain,
   listEvents,
+  listEventsForPlanId,
+  listEventsForRunId,
   listWebhookDrains,
   saveEvent,
   saveWebhookDrain,

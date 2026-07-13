@@ -3,13 +3,12 @@
  * Called by listOperations in index.ts.
  */
 
-import { isEventType } from "@mia/agent"
 import * as db from "../../../../platform/persistence/sqlite.js"
-import { buildPipelinesFromBuckets } from "./build-pipelines.js"
-import { buildPreviewToPlanMap, correlateEventsIntoBuckets } from "./correlate.js"
-import { filterOperations } from "./filter.js"
-import type { ListOperationsOpts, OperationEvent, OperationPipeline } from "./types.js"
-import { safeParse } from "./utils.js"
+import {
+  buildOperationsFromEvents,
+  mapDbEventsChronological
+} from "./build-operations-from-events.js"
+import type { ListOperationsOpts, OperationPipeline } from "./types.js"
 
 export function listOperations(opts: ListOperationsOpts = {}): {
   operations: OperationPipeline[]
@@ -22,14 +21,8 @@ export function listOperations(opts: ListOperationsOpts = {}): {
     return { operations: [], scannedEvents: 0, oldestTimestamp: null }
   }
 
-  const chrono = [...events].reverse().flatMap<OperationEvent>((e) => {
-    if (!isEventType(e.type)) return []
-    return [{ type: e.type, timestamp: e.created_at, data: safeParse(e.data) }]
-  })
-
-  const previewToPlan = buildPreviewToPlanMap(chrono)
-  const buckets = correlateEventsIntoBuckets(chrono, previewToPlan)
-  const operations = filterOperations(buildPipelinesFromBuckets(buckets.values()), opts)
+  const chrono = mapDbEventsChronological(events)
+  const operations = buildOperationsFromEvents(chrono, opts)
 
   return {
     operations,
