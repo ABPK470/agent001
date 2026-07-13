@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Clock,
   Loader2,
-  NotebookTabs,
   RefreshCw,
   SlidersHorizontal,
   View,
@@ -18,7 +17,6 @@ import { DateField } from "../../components/DateField"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SearchablePick } from "../../components/SearchablePick"
 import { useMe } from "../../hooks/useMe"
-import { useStore } from "../../store"
 import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../util"
 import {
@@ -30,7 +28,7 @@ import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { HistoryPlanTables } from "./PlanTables"
-import { SqlTraceList, SqlTraceModal } from "../../components/SqlTrace"
+import { SqlTraceModal } from "../../components/SqlTrace"
 import type { SqlTraceFields } from "../../sync-sql-trace"
 import { JsonViewer } from "../../components/JsonViewer"
 
@@ -581,7 +579,6 @@ function HistoryRunRow({
   const auditLoadedRef = useRef(false)
   const planLoadedRef = useRef(false)
   const sqlTraceLoadedRef = useRef(false)
-  const focusOperationLogPlan = useStore((s) => s.focusOperationLogPlan)
 
   const totals = run.executeTotals ?? run.previewTotals
   const label = plan ? formatPlanEntityLabel(plan) : entityLabel(run)
@@ -706,33 +703,20 @@ function HistoryRunRow({
       {open && (
         <div className="px-3 py-2.5 bg-base/20 border-t border-border/30 space-y-2.5 text-sm">
           <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1">
-            <code className="min-w-0 truncate text-[11px] font-mono text-text-muted/60">{run.planId}</code>
-            <div className="flex shrink-0 items-center gap-3">
+            <code className="min-w-0 break-all text-[11px] font-mono text-text-muted">{run.planId}</code>
+            {onOpen && run.planAvailable && (
               <button
                 type="button"
-                className="inline-flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition-colors"
+                className="inline-flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition-colors shrink-0"
                 onClick={(e) => {
                   e.stopPropagation()
-                  focusOperationLogPlan(run.planId, label)
+                  onOpen(run.planId)
                 }}
               >
-                <NotebookTabs size={12} />
-                View in Pipelines
+                <View size={12} />
+                Open in sync
               </button>
-              {onOpen && run.planAvailable && (
-                <button
-                  type="button"
-                  className="inline-flex items-center gap-1 text-[11px] text-accent hover:text-accent/80 transition-colors"
-                  onClick={(e) => {
-                    e.stopPropagation()
-                    onOpen(run.planId)
-                  }}
-                >
-                  <View size={12} />
-                  Open in sync
-                </button>
-              )}
-            </div>
+            )}
           </div>
 
           <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1 text-xs text-text-muted">
@@ -761,27 +745,191 @@ function HistoryRunRow({
             </div>
           )}
 
-          {run.planAvailable && planLoading && !plan && (
-            <div className="flex items-center gap-2 text-xs text-text-muted">
-              <Loader2 size={12} className="animate-spin" />
-              Loading persisted plan…
-            </div>
-          )}
-
-          {plan && <HistoryPlanTables plan={plan} />}
-
-          <HistorySqlTraceSection
-            loading={sqlTraceLoading}
-            loadingMore={sqlTraceLoadingMore}
-            trace={sqlTrace}
-            onLoadMore={loadMoreSqlTrace}
+          <HistoryRunDetail
+            plan={plan}
+            planLoading={run.planAvailable && planLoading && !plan}
+            audit={audit}
+            sqlTrace={sqlTrace}
+            sqlTraceLoading={sqlTraceLoading}
+            sqlTraceLoadingMore={sqlTraceLoadingMore}
+            onLoadMoreSql={loadMoreSqlTrace}
           />
-
-          {audit && audit.length > 0 && <HistoryAuditSection audit={audit} />}
         </div>
       )}
     </div>
   )
+}
+
+type SqlTracePage = NonNullable<Awaited<ReturnType<typeof api.syncSqlTrace>>>
+type SqlTraceItem = SqlTracePage["items"][number]
+
+type TimelineEntry =
+  | { kind: "audit"; ts: string; event: SyncAuditEvent }
+  | { kind: "sql"; ts: string; item: SqlTraceItem }
+
+function buildHistoryTimeline(
+  audit: SyncAuditEvent[] | null,
+  sqlTrace: SqlTracePage | null,
+): TimelineEntry[] {
+  const entries: TimelineEntry[] = []
+  for (const event of audit ?? []) {
+    entries.push({ kind: "audit", ts: event.timestamp, event })
+  }
+  for (const item of sqlTrace?.items ?? []) {
+    entries.push({ kind: "sql", ts: item.createdAt, item })
+  }
+  return entries.sort((a, b) => a.ts.localeCompare(b.ts))
+}
+
+function HistoryRunDetail({
+  plan,
+  planLoading,
+  audit,
+  sqlTrace,
+  sqlTraceLoading,
+  sqlTraceLoadingMore,
+  onLoadMoreSql,
+}: {
+  plan: SyncPlan | null
+  planLoading: boolean
+  audit: SyncAuditEvent[] | null
+  sqlTrace: SqlTracePage | null
+  sqlTraceLoading: boolean
+  sqlTraceLoadingMore: boolean
+  onLoadMoreSql: () => void
+}) {
+  const [sqlModal, setSqlModal] = useState<SqlTraceFields | null>(null)
+  const [expandedJson, setExpandedJson] = useState<string | null>(null)
+  const timeline = useMemo(() => buildHistoryTimeline(audit, sqlTrace), [audit, sqlTrace])
+  const showTimeline = sqlTraceLoading || timeline.length > 0
+
+  return (
+    <>
+      <div className="rounded-md border border-border-subtle overflow-hidden">
+        {planLoading && (
+          <div className="flex items-center gap-2 px-3 py-2 text-xs text-text-muted border-b border-border/30">
+            <Loader2 size={12} className="animate-spin" />
+            Loading persisted plan…
+          </div>
+        )}
+        {plan && (
+          <div className="px-3 py-2 border-b border-border/30">
+            <HistoryPlanTables plan={plan} />
+          </div>
+        )}
+        {showTimeline && (
+          <div className="px-3 py-2">
+            <div className="flex items-center justify-between gap-2 mb-1.5">
+              <span className="field-label mb-0">What happened</span>
+              {!sqlTraceLoading && timeline.length > 0 && (
+                <span className="text-xs font-mono text-text tabular-nums">{timeline.length} events</span>
+              )}
+            </div>
+            {sqlTraceLoading && timeline.length === 0 ? (
+              <div className="flex items-center gap-2 text-xs text-text-muted py-1">
+                <Loader2 size={12} className="animate-spin" />
+                Loading run timeline…
+              </div>
+            ) : (
+              <div className="rounded-md border border-border-subtle overflow-hidden divide-y divide-border/30">
+                {timeline.map((entry, index) => {
+                  const key =
+                    entry.kind === "audit"
+                      ? `audit:${entry.event.action}:${entry.ts}:${index}`
+                      : `sql:${entry.item.id}`
+                  if (entry.kind === "audit") {
+                    const failed = entry.event.action.endsWith(".failed")
+                    const completed = entry.event.action.endsWith(".completed")
+                    const tone = failed ? DIFF.del : completed ? DIFF.ins : undefined
+                    const jsonKey = `${key}:json`
+                    return (
+                      <div key={key}>
+                        <div className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-elevated/30 transition-colors">
+                          <span className="font-medium shrink-0" style={tone ? { color: tone } : undefined}>
+                            {formatAuditAction(entry.event.action)}
+                          </span>
+                          <span className="text-text-muted truncate min-w-0 flex-1">{entry.event.actor}</span>
+                          <span className="text-text-muted font-mono tabular-nums shrink-0">
+                            {formatHistoryTime(entry.ts)}
+                          </span>
+                          {entry.event.detail != null && (
+                            <button
+                              type="button"
+                              className="text-[10px] uppercase tracking-wide text-accent hover:text-accent-hover shrink-0"
+                              onClick={() => setExpandedJson((v) => (v === jsonKey ? null : jsonKey))}
+                            >
+                              {expandedJson === jsonKey ? "hide" : "detail"}
+                            </button>
+                          )}
+                        </div>
+                        {expandedJson === jsonKey && entry.event.detail != null && (
+                          <div className="px-3 pb-2 border-t border-border/30 bg-base/20">
+                            <JsonViewer value={entry.event.detail} label="detail" defaultExpandDepth={2} maxHeight={180} />
+                          </div>
+                        )}
+                      </div>
+                    )
+                  }
+                  const item = entry.item
+                  const fields: SqlTraceFields = {
+                    label: item.scope ? `${item.label} (${item.scope})` : item.label,
+                    connection: item.connection,
+                    sql: item.sqlPreview,
+                    sqlLength: item.sqlLength,
+                    sqlLogId: item.id,
+                    rowCount: item.rowCount,
+                    durationMs: item.durationMs,
+                    error: item.error,
+                  }
+                  const detail = [
+                    item.connection,
+                    item.durationMs != null ? `${item.durationMs}ms` : null,
+                    item.rowCount != null ? `${item.rowCount} rows` : null,
+                  ].filter(Boolean).join(" · ")
+                  return (
+                    <div key={key} className="flex items-center gap-2 px-3 py-1.5 text-xs hover:bg-elevated/30 transition-colors">
+                      <span className="font-medium text-text shrink-0">SQL · {item.label}</span>
+                      <span className="text-text-muted truncate min-w-0 flex-1">{detail}</span>
+                      <span className="text-text-muted font-mono tabular-nums shrink-0">
+                        {formatHistoryTime(entry.ts)}
+                      </span>
+                      <button
+                        type="button"
+                        className="text-[10px] uppercase tracking-wide text-accent hover:text-accent-hover shrink-0 font-mono"
+                        onClick={() => setSqlModal(fields)}
+                      >
+                        SQL
+                      </button>
+                    </div>
+                  )
+                })}
+              </div>
+            )}
+            {sqlTrace && sqlTrace.count < sqlTrace.total && (
+              <button
+                type="button"
+                className="mt-2 text-xs text-accent hover:text-accent-hover font-mono"
+                disabled={sqlTraceLoadingMore}
+                onClick={onLoadMoreSql}
+              >
+                {sqlTraceLoadingMore ? "Loading…" : `Load more SQL (${sqlTrace.count} / ${sqlTrace.total})`}
+              </button>
+            )}
+          </div>
+        )}
+      </div>
+      {sqlModal && <SqlTraceModal fields={sqlModal} onClose={() => setSqlModal(null)} />}
+    </>
+  )
+}
+
+function formatHistoryTime(value: string): string {
+  return new Date(value).toLocaleTimeString([], {
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  })
 }
 
 function MetaItem({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
@@ -795,130 +943,6 @@ function MetaItem({ label, value, mono }: { label: string; value: string; mono?:
 
 function MetaSep() {
   return <span className="text-text-muted/25 hidden sm:inline">·</span>
-}
-
-function HistorySqlTraceSection({
-  loading,
-  loadingMore,
-  trace,
-  onLoadMore,
-}: {
-  loading: boolean
-  loadingMore: boolean
-  trace: Awaited<ReturnType<typeof api.syncSqlTrace>> | null
-  onLoadMore: () => void
-}) {
-  const [open, setOpen] = useState(false)
-  const [sqlModal, setSqlModal] = useState<SqlTraceFields | null>(null)
-
-  return (
-    <>
-      <div className="rounded-md border border-border-subtle overflow-hidden">
-        <button
-          type="button"
-          onClick={() => setOpen((value) => !value)}
-          className="w-full flex items-center gap-2 px-2.5 py-1.5 text-left hover:bg-elevated/30 transition-colors"
-        >
-          {open ? <ChevronDown size={13} className="text-text-muted" /> : <ChevronRight size={13} className="text-text-muted" />}
-          <span className="text-[11px] font-medium uppercase tracking-wide text-text-muted">SQL trace</span>
-          {trace && (
-            <span className="text-[11px] font-mono text-text-muted/50">({trace.total})</span>
-          )}
-        </button>
-        {open && (
-          <div className="border-t border-border-subtle px-2.5 py-2">
-            {loading && (
-              <div className="flex items-center gap-2 text-xs text-text-muted py-2">
-                <Loader2 size={12} className="animate-spin" />
-                Loading SQL trace…
-              </div>
-            )}
-            {!loading && trace && (
-              <>
-                <SqlTraceList items={trace.items} onOpenSql={setSqlModal} />
-                {trace.count < trace.total && (
-                  <button
-                    type="button"
-                    className="mt-2 text-xs text-accent hover:text-accent-hover font-mono"
-                    disabled={loadingMore}
-                    onClick={onLoadMore}
-                  >
-                    {loadingMore ? "Loading…" : `Load more (${trace.count} / ${trace.total})`}
-                  </button>
-                )}
-              </>
-            )}
-          </div>
-        )}
-      </div>
-      {sqlModal && <SqlTraceModal fields={sqlModal} onClose={() => setSqlModal(null)} />}
-    </>
-  )
-}
-
-function HistoryAuditSection({ audit }: { audit: SyncAuditEvent[] }) {
-  const [open, setOpen] = useState(false)
-
-  return (
-    <div className="rounded-md border border-border-subtle overflow-hidden">
-      <button
-        type="button"
-        onClick={() => setOpen((value) => !value)}
-        className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left hover:bg-elevated/20 transition-colors"
-      >
-        {open ? (
-          <ChevronDown size={12} className="text-text-muted shrink-0" />
-        ) : (
-          <ChevronRight size={12} className="text-text-muted shrink-0" />
-        )}
-        <span className="field-label mb-0">Audit trail</span>
-        <span className="text-[11px] font-mono text-text-muted/50">({audit.length})</span>
-      </button>
-      {open && (
-        <div className="border-t border-border-subtle divide-y divide-border/30">
-          {audit.map((event, index) => (
-            <HistoryAuditRow key={`${event.action}:${event.timestamp}:${index}`} event={event} />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-function HistoryAuditRow({ event }: { event: SyncAuditEvent }) {
-  const [jsonOpen, setJsonOpen] = useState(false)
-  const failed = event.action.endsWith(".failed")
-  const completed = event.action.endsWith(".completed")
-  const actionColor = failed ? DIFF.del : completed ? DIFF.ins : undefined
-
-  return (
-    <div className="bg-overlay-1/40">
-      <div className="flex items-center gap-2 px-2.5 py-1.5">
-        <span className="text-[11px] font-medium shrink-0" style={actionColor ? { color: actionColor } : undefined}>
-          {formatAuditAction(event.action)}
-        </span>
-        <span className="text-[11px] text-text-muted truncate">{event.actor}</span>
-        <span className="flex-1" />
-        <span className="text-[11px] text-text-muted/40 font-mono tabular-nums">
-          {new Date(event.timestamp).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit", second: "2-digit" })}
-        </span>
-        {event.detail != null && (
-          <button
-            type="button"
-            onClick={() => setJsonOpen((value) => !value)}
-            className="text-[10px] uppercase tracking-wide text-text-muted/40 hover:text-text-muted px-1 py-0.5 rounded hover:bg-elevated transition-colors"
-          >
-            {jsonOpen ? "hide" : "json"}
-          </button>
-        )}
-      </div>
-      {jsonOpen && event.detail != null && (
-        <div className="px-2.5 pb-2 border-t border-border-subtle pt-1.5">
-          <JsonViewer value={event.detail} label="detail" defaultExpandDepth={2} maxHeight={180} />
-        </div>
-      )}
-    </div>
-  )
 }
 
 function formatHistoryDateTime(value: string): string {

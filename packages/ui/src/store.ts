@@ -227,11 +227,6 @@ function tracesToSteps(trace: TraceEntry[]): Step[] {
 /** Coalesce concurrent bootstrapThreads() calls (App + chat shell both trigger on login). */
 let threadsBootstrapInflight: Promise<void> | null = null
 
-/** Cross-widget focus for the Pipelines (operation-log) audit view. */
-export type OperationLogFocus =
-  | { kind: "plan"; id: string; label?: string }
-  | { kind: "run"; id: string; label?: string }
-
 // ── Store shape ──────────────────────────────────────────────────
 
 interface AppState {
@@ -251,14 +246,6 @@ interface AppState {
   addWidget: (viewId: string, type: WidgetType) => void
   removeWidget: (viewId: string, widgetId: string) => void
   updateLayouts: (viewId: string, layouts: LayoutItem[]) => void
-
-  /** Pipelines widget: pin a full plan/run audit view (cross-widget navigation). */
-  operationLogFocus: OperationLogFocus | null
-  setOperationLogFocus: (focus: OperationLogFocus | null) => void
-  focusOperationLogPlan: (planId: string, label?: string) => void
-  focusOperationLogRun: (runId: string, label?: string) => void
-  clearOperationLogFocus: () => void
-  ensureOperationLogWidget: () => void
 
   // Agent selection
   selectedAgentId: string | null
@@ -1088,34 +1075,6 @@ export const useStore = create<AppState>()(
           return { ...v, layouts: { ...v.layouts, lg: normalized } }
         }),
       })),
-
-      operationLogFocus: null,
-      setOperationLogFocus: (operationLogFocus) => set({ operationLogFocus }),
-      focusOperationLogPlan: (planId, label) => {
-        get().ensureOperationLogWidget()
-        set({ operationLogFocus: { kind: "plan", id: planId, label } })
-      },
-      focusOperationLogRun: (runId, label) => {
-        get().ensureOperationLogWidget()
-        set({ operationLogFocus: { kind: "run", id: runId, label } })
-      },
-      clearOperationLogFocus: () => set({ operationLogFocus: null }),
-      ensureOperationLogWidget: () => set((s) => {
-        const viewId = s.activeViewId
-        const view = s.views.find((v) => v.id === viewId)
-        if (!view || view.widgets.some((w) => w.type === "operation-log")) return s
-        const widget: Widget = { id: randomId(), type: "operation-log" }
-        const existing = view.layouts["lg"] ?? []
-        const defaults = WIDGET_DEFAULTS["operation-log"]
-        const newItem = findBestFit(existing, widget.id, defaults)
-        return {
-          views: s.views.map((v) =>
-            v.id === viewId
-              ? { ...v, widgets: [...v.widgets, widget], layouts: { ...v.layouts, lg: [...existing, newItem] } }
-              : v,
-          ),
-        }
-      }),
 
       // Agent selection
       selectedAgentId: null,

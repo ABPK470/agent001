@@ -123,9 +123,11 @@ function OpLogRowCells({
       ) : (
         <span className="w-[11px] shrink-0" aria-hidden />
       )}
-      <span className="min-w-0 flex-1 flex items-baseline gap-x-2 gap-y-0.5 flex-wrap">
+      <span className="min-w-0 flex-1 inline">
         <span className={`break-all ${OP_LOG}`}>{label}</span>
-        {meta ? <span className={`break-all ${OP_LOG} ${OP_LOG_MUTED}`}>{meta}</span> : null}
+        {meta ? (
+          <span className={`${OP_LOG} ${OP_LOG_MUTED}`}> · {meta}</span>
+        ) : null}
       </span>
       <span className={`shrink-0 tabular-nums w-14 text-right ${OP_LOG}`}>
         {durationMs !== undefined ? fmtDuration(durationMs ?? null) : ""}

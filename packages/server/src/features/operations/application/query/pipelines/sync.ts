@@ -197,7 +197,7 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
   const activities: OperationActivity[] = []
   const openTables = new Map<string, OperationActivity>()
   const pipelineFailed = events.some((ev) => ev.type === EventType.SyncPreviewFailed)
-  let catalogQueriesParent: OperationActivity | null = null
+  let previewReadsParent: OperationActivity | null = null
   let sqlChildIndex = 0
 
   const failOpenTables = (endTs: string, reason?: string): void => {
@@ -320,11 +320,13 @@ function groupSyncPreviewActivities(events: OperationEvent[]): OperationActivity
         }
       }
       if (!attached) {
-        catalogQueriesParent = attachOrphanSqlActivity(
+        previewReadsParent = attachOrphanSqlActivity(
           activities,
-          catalogQueriesParent,
+          previewReadsParent,
           ev,
           sqlChildIndex++,
+          PREVIEW_ORPHAN_SQL_PARENT_ID,
+          PREVIEW_ORPHAN_SQL_PARENT_NAME,
         )
       }
       continue
@@ -353,6 +355,14 @@ function formatEventTypeName(type: string): string {
   return type.replace(/^sync\.(preview|execute)\./, "").replace(/\./g, " ")
 }
 
+/** Parent activity for orphan preview SQL (FetchPk*, schema reads before table diff). */
+const PREVIEW_ORPHAN_SQL_PARENT_ID = "preview-reads"
+const PREVIEW_ORPHAN_SQL_PARENT_NAME = "Preview reads"
+
+/** Parent activity for orphan execute SQL outside a flow step. */
+const EXECUTE_ORPHAN_SQL_PARENT_ID = "execute-reads"
+const EXECUTE_ORPHAN_SQL_PARENT_NAME = "Execute reads"
+
 function buildSqlChildActivity(ev: OperationEvent, index: number): OperationActivity {
   const sqlLabel = strField(ev.data, "label") ?? "query"
   return {
@@ -370,7 +380,7 @@ function buildSqlChildActivity(ev: OperationEvent, index: number): OperationActi
   }
 }
 
-function finalizeCatalogQueriesParent(parent: OperationActivity): void {
+function finalizeOrphanSqlParent(parent: OperationActivity): void {
   const children = parent.children ?? []
   if (children.length === 0) return
   parent.startedAt = children[0]!.startedAt
@@ -381,20 +391,22 @@ function finalizeCatalogQueriesParent(parent: OperationActivity): void {
     : children.some((c) => c.status === OperationStatus.Running)
       ? OperationStatus.Running
       : OperationStatus.Success
-  parent.summary = `${children.length} quer${children.length === 1 ? "y" : "ies"}`
+  parent.summary = `${children.length} SQL quer${children.length === 1 ? "y" : "ies"}`
 }
 
 function attachOrphanSqlActivity(
   activities: OperationActivity[],
-  catalogParent: OperationActivity | null,
+  sqlParent: OperationActivity | null,
   ev: OperationEvent,
   childIndex: number,
+  parentId: string,
+  parentName: string,
 ): OperationActivity {
-  let parent = catalogParent
+  let parent = sqlParent
   if (!parent) {
     parent = {
-      id: "catalog-queries",
-      name: "Catalog queries",
+      id: parentId,
+      name: parentName,
       status: OperationStatus.Running,
       startedAt: ev.timestamp,
       endedAt: null,
@@ -406,7 +418,7 @@ function attachOrphanSqlActivity(
   }
   const child = buildSqlChildActivity(ev, childIndex)
   parent.children!.push(child)
-  finalizeCatalogQueriesParent(parent)
+  finalizeOrphanSqlParent(parent)
   return parent
 }
 
@@ -505,7 +517,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
   const activities: OperationActivity[] = []
   let currentStep: OperationActivity | null = null
   const openTables = new Map<string, OperationActivity>()
-  let catalogQueriesParent: OperationActivity | null = null
+  let executeReadsParent: OperationActivity | null = null
   let sqlChildIndex = 0
   const pipelineFailed = events.some(
     (ev) =>
@@ -731,11 +743,13 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
     }
 
     if (t.endsWith(".sql")) {
-      catalogQueriesParent = attachOrphanSqlActivity(
+      executeReadsParent = attachOrphanSqlActivity(
         activities,
-        catalogQueriesParent,
+        executeReadsParent,
         ev,
         sqlChildIndex++,
+        EXECUTE_ORPHAN_SQL_PARENT_ID,
+        EXECUTE_ORPHAN_SQL_PARENT_NAME,
       )
       continue
     }

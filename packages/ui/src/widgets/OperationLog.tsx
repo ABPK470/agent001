@@ -4,7 +4,7 @@
  * Data: paginated GET /api/operations (SQLite event_log). SSE only signals refresh.
  */
 
-import { Brain, ChevronRight, Database, FileSearch, Filter, GitCompareArrows, Loader2, Settings, Square, Wrench, X } from "lucide-react"
+import { Brain, ChevronRight, Database, Filter, GitCompareArrows, Loader2, Settings, Square, Wrench, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
@@ -14,7 +14,7 @@ import { JsonViewer } from "../components/JsonViewer"
 import { ToolCallModal, ToolIoBlock } from "../components/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
-import { OperationLogModalsProvider, useOpLogOpenAudit, useOpLogOpenSqlTrace } from "../operation-log-modals"
+import { OperationLogModalsProvider, useOpLogOpenSqlTrace } from "../operation-log-modals"
 import {
   fmtDuration,
   fmtTime,
@@ -30,7 +30,6 @@ import {
   describeSqlOnlyActivity,
   formatTraceRowSummary,
 } from "../operation-log-trace"
-import { useStore } from "../store"
 import { isSyncSqlEventType, readSqlTraceFields } from "../sync-sql-trace"
 import {
   buildToolIoFromStepEvents,
@@ -355,9 +354,6 @@ function formatEventLabel(ev: OperationEvent): string {
 }
 
 export function OperationLog() {
-  const operationLogFocus = useStore((s) => s.operationLogFocus)
-  const clearOperationLogFocus = useStore((s) => s.clearOperationLogFocus)
-
   const [kindView, setKindView] = useState<OperationLogKindView>("all")
   const [statuses, setStatuses] = useState<Set<OperationStatus>>(new Set())
   const [search, setSearch] = useState("")
@@ -380,37 +376,8 @@ export function OperationLog() {
     loadingMore,
     hasMore,
     loadMore,
-    mode,
-    scannedEvents,
     error,
-  } = useOperationLogData({ focus: operationLogFocus, kindView, search })
-
-  const expandAuditTree = useCallback((pipeline: OperationPipeline) => {
-    setExpanded(new Set([pipeline.id]))
-    const actKeys = new Set<string>()
-    const walk = (activities: OperationActivity[], phaseId?: string) => {
-      for (const activity of activities) {
-        const nextPhase = activity.id.startsWith("phase:") ? activity.id : phaseId
-        actKeys.add(pipelineActivityKey(pipeline.id, activity.id))
-        if (activity.children?.length) walk(activity.children, nextPhase)
-      }
-    }
-    walk(pipeline.activities)
-    setActExpanded(actKeys)
-  }, [])
-
-  const focusExpandedRef = useRef<string | null>(null)
-
-  useEffect(() => {
-    if (mode !== "focus" || pipelines.length !== 1) {
-      if (mode !== "focus") focusExpandedRef.current = null
-      return
-    }
-    const pipeline = pipelines[0]!
-    if (focusExpandedRef.current === pipeline.id) return
-    focusExpandedRef.current = pipeline.id
-    expandAuditTree(pipeline)
-  }, [mode, pipelines, expandAuditTree])
+  } = useOperationLogData({ kindView, search })
 
   const cancelPipeline = useCallback(async (pipeline: OperationPipeline): Promise<void> => {
     if (pipeline.status !== "running") return
@@ -454,10 +421,10 @@ export function OperationLog() {
     return true
   }), [pipelines, statuses, needle, serverSearchActive])
 
-  const searchPending = serverSearchActive && loading && mode === "list"
+  const searchPending = serverSearchActive && loading
 
   useEffect(() => {
-    if (mode === "focus" || !hasMore) return
+    if (!hasMore) return
     const root = scrollRef.current
     const target = sentinelRef.current
     if (!root || !target) return
@@ -469,18 +436,15 @@ export function OperationLog() {
     )
     obs.observe(target)
     return () => obs.disconnect()
-  }, [mode, hasMore, loadMore, filtered.length])
+  }, [hasMore, loadMore, filtered.length])
 
   const emptyMessage = useMemo(() => {
     if (error) return error
-    if (mode === "focus" && pipelines.length === 0) {
-      return `No operation events found for this ${operationLogFocus?.kind === "plan" ? "plan" : "run"}.`
-    }
     if (pipelines.length === 0) return "No operations recorded yet."
     if (statuses.size > 0) return "No operations match the selected statuses."
     if (needle) return "No operations match your search."
     return "No operations recorded yet."
-  }, [error, mode, pipelines.length, statuses.size, needle, operationLogFocus?.kind])
+  }, [error, pipelines.length, statuses.size, needle])
 
   return (
     <OperationLogModalsProvider>
@@ -579,33 +543,6 @@ export function OperationLog() {
 
       {/* ── Body ────────────────────────────────────────── */}
       <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1">
-        {mode === "focus" && operationLogFocus && (
-          <div className="mb-3 rounded-md border border-accent/30 bg-accent/5 px-3 py-2 flex flex-wrap items-center gap-x-3 gap-y-1">
-            <div className="min-w-0 flex-1">
-              <div className="text-xs uppercase tracking-wide text-accent/80">Focused operation</div>
-              <div className="text-xs text-text font-mono truncate">
-                {operationLogFocus.label ??
-                  (operationLogFocus.kind === "plan"
-                    ? `plan ${operationLogFocus.id}`
-                    : `run ${operationLogFocus.id}`)}
-              </div>
-              {scannedEvents > 0 && (
-                <div className="text-xs text-text-muted/70 tabular-nums">
-                  {scannedEvents.toLocaleString()} correlated events
-                </div>
-              )}
-            </div>
-            <button
-              type="button"
-              onClick={clearOperationLogFocus}
-              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 text-xs text-text-muted hover:text-text hover:bg-overlay-2 rounded transition-colors"
-            >
-              <X size={12} />
-              Back to list
-            </button>
-          </div>
-        )}
-
         {loading && filtered.length === 0 && (
           <div className="text-text-muted/60 text-xs text-center py-8 flex items-center justify-center gap-2">
             <Loader2 size={14} className="animate-spin" />
@@ -634,7 +571,7 @@ export function OperationLog() {
           />
         )}
 
-        {mode === "list" && hasMore && (
+        {hasMore && (
           <div ref={sentinelRef} className="py-6 flex justify-center">
             {loadingMore && (
               <span className="text-xs text-text-muted/60 flex items-center gap-2">
@@ -740,7 +677,6 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
   onCancel?: (pipeline: OperationPipeline) => void
   cancelling?: boolean
 }) {
-  const openAudit = useOpLogOpenAudit()
   const km = KIND_META[pipeline.kind]
   const sm = STATUS_META[pipeline.status]
   const Icon = km.Icon
@@ -748,13 +684,6 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
     pipeline.status === "running" &&
     onCancel &&
     (pipeline.kind === OperationKind.AgentRun || pipeline.kind === OperationKind.ProposerRun)
-  const showRunAudit = pipeline.kind === OperationKind.AgentRun
-  const syncPlanId =
-    pipeline.kind === OperationKind.SyncPreview ||
-    pipeline.kind === OperationKind.SyncExecute ||
-    pipeline.kind === OperationKind.SyncRun
-      ? syncPlanIdFromPipeline(pipeline)
-      : null
   const formattedSubtitle = pipeline.subtitle
     ? formatPipelineSubtitle(pipeline.subtitle)
     : null
@@ -772,10 +701,10 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
           {pipeline.status === "running" && <Loader2 size={9} className="inline mr-0.5 animate-spin" />}
           {pipeline.status}
         </span>
-        <span className="min-w-0 flex-1 flex flex-col gap-0.5">
-          <span className={`break-all ${OP_LOG}`}>{pipeline.title}</span>
+        <span className={`min-w-0 flex-1 ${OP_LOG}`}>
+          <span className="break-all">{pipeline.title}</span>
           {formattedSubtitle && !compact && (
-            <span className={`break-all ${OP_LOG_MONO} ${OP_LOG_MUTED}`}>{formattedSubtitle}</span>
+            <span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}> · {formattedSubtitle}</span>
           )}
         </span>
         <span className={`shrink-0 tabular-nums ${OP_LOG} ${OP_LOG_MUTED}`}>
@@ -784,28 +713,6 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
         <span className={`shrink-0 tabular-nums w-16 text-right ${OP_LOG}`}>{fmtDuration(pipeline.durationMs)}</span>
         <span className={`shrink-0 tabular-nums w-20 text-right ${OP_LOG}`}>{fmtTime(pipeline.startedAt)}</span>
       </button>
-      {showRunAudit && (
-        <button
-          type="button"
-          title="Open full run audit"
-          className={LOG_ROW_ACTION}
-          onClick={() => openAudit({ kind: "run", id: pipeline.id, label: pipeline.title })}
-        >
-          <FileSearch size={10} />
-          Audit
-        </button>
-      )}
-      {syncPlanId && (
-        <button
-          type="button"
-          title="Open full sync audit"
-          className={LOG_ROW_ACTION}
-          onClick={() => openAudit({ kind: "plan", id: syncPlanId, label: pipeline.title })}
-        >
-          <FileSearch size={10} />
-          Audit
-        </button>
-      )}
       {canCancel && (
         <button
           type="button"
@@ -967,7 +874,6 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   toggleEvent: (key: string) => void
 }) {
   const [ioModalOpen, setIoModalOpen] = useState(false)
-  const openAudit = useOpLogOpenAudit()
   const phaseId = activity.id.startsWith("phase:") ? activity.id : parentPhaseId
   const effectiveKind = activityPipelineKind(pipelineKind, phaseId)
   const status = effectiveActivityStatus(activity, pipelineStatus, parentStatus)
@@ -987,8 +893,6 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   const toolIo =
     readToolIoFromActivity(activity) ??
     (activity.events.length > 0 ? buildToolIoFromStepEvents(activity.events) : null)
-  const delegationPlanId =
-    typeof activity.details?.["planId"] === "string" ? activity.details["planId"] : null
 
   if (isSqlOnlyActivity(activity)) {
     return (
@@ -1002,20 +906,6 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
 
   const rowActions = (
     <>
-      {delegationPlanId && (
-        <button
-          type="button"
-          title="Open sync audit"
-          className={LOG_ROW_ACTION}
-          onClick={(e) => {
-            e.stopPropagation()
-            openAudit({ kind: "plan", id: delegationPlanId, label: renderedName })
-          }}
-        >
-          <FileSearch size={10} />
-          Audit
-        </button>
-      )}
       {toolIo && (
         <button
           type="button"

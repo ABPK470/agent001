@@ -8,7 +8,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { OperationPipeline, OperationsResponse } from "../api"
 import { api } from "../api"
-import type { OperationLogFocus } from "../store"
 
 /** Must match server OPERATIONS_PAGE_EVENT_LIMIT. */
 export const OPERATIONS_PAGE_EVENT_LIMIT = 2000
@@ -77,25 +76,20 @@ export interface UseOperationLogDataResult {
   loadingMore: boolean
   hasMore: boolean
   loadMore: () => void
-  mode: "list" | "focus"
-  scannedEvents: number
   error: string | null
 }
 
 export function useOperationLogData(opts: {
-  focus: OperationLogFocus | null
   kindView: OperationLogKindView
   search: string
 }): UseOperationLogDataResult {
-  const { focus, kindView, search } = opts
+  const { kindView, search } = opts
 
   const [pipelines, setPipelines] = useState<OperationPipeline[]>([])
   const [loading, setLoading] = useState(true)
   const [loadingMore, setLoadingMore] = useState(false)
   const [hasMore, setHasMore] = useState(false)
   const [cursorBefore, setCursorBefore] = useState<string | null>(null)
-  const [mode, setMode] = useState<"list" | "focus">("list")
-  const [scannedEvents, setScannedEvents] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   const listGeneration = useRef(0)
@@ -122,51 +116,10 @@ export function useOperationLogData(opts: {
     [kindView],
   )
 
-  // Focus: full audit for one plan or run (REST only)
   useEffect(() => {
-    if (!focus) return
-    let cancelled = false
-    setLoading(true)
-    setError(null)
-    setMode("focus")
-    setHasMore(false)
-    setCursorBefore(null)
-
-    const params =
-      focus.kind === "plan"
-        ? { planId: focus.id }
-        : { runId: focus.id }
-
-    void api
-      .operations(params)
-      .then((res) => {
-        if (cancelled) return
-        setPipelines(res.operations)
-        setScannedEvents(res.scannedEvents)
-        setMode(res.mode)
-      })
-      .catch((err: unknown) => {
-        if (cancelled) return
-        setPipelines([])
-        setScannedEvents(0)
-        setError(err instanceof Error ? err.message : "Failed to load audit")
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [focus])
-
-  // List: REST load on filter change (once per change, not on every event)
-  useEffect(() => {
-    if (focus) return
     const gen = ++listGeneration.current
     setLoading(true)
     setError(null)
-    setMode("list")
     setCursorBefore(null)
     setHasMore(false)
 
@@ -174,10 +127,8 @@ export function useOperationLogData(opts: {
       .then((res) => {
         if (gen !== listGeneration.current) return
         setPipelines(res.operations)
-        setScannedEvents(res.scannedEvents)
         setCursorBefore(res.oldestTimestamp)
         setHasMore(res.hasMore)
-        setMode(res.mode)
       })
       .catch((err: unknown) => {
         if (gen !== listGeneration.current) return
@@ -187,11 +138,9 @@ export function useOperationLogData(opts: {
       .finally(() => {
         if (gen === listGeneration.current) setLoading(false)
       })
-  }, [focus, kindView, searchQuery, fetchListPage])
+  }, [kindView, searchQuery, fetchListPage])
 
-  // SSE: server pushes debounced head snapshots — merge in place, no HTTP refetch
   useEffect(() => {
-    if (focus) return
     const es = new EventSource(operationsStreamUrl(kindView, debouncedSearch.current), {
       withCredentials: true,
     })
@@ -203,7 +152,6 @@ export function useOperationLogData(opts: {
         setPipelines((prev) =>
           mergeHeadRefresh(prev, data.operations, data.oldestTimestamp),
         )
-        setScannedEvents(data.scannedEvents)
         setCursorBefore((before) => before ?? data.oldestTimestamp)
         setHasMore((more) => more || data.hasMore)
       } catch {
@@ -211,11 +159,9 @@ export function useOperationLogData(opts: {
       }
     }
     return () => es.close()
-  }, [focus, kindView, searchQuery])
+  }, [kindView, searchQuery])
 
-  // Refresh once when tab becomes visible again (SSE may have been skipped while hidden)
   useEffect(() => {
-    if (focus) return
     const onVisible = (): void => {
       if (document.visibilityState !== "visible") return
       void fetchListPage()
@@ -223,7 +169,6 @@ export function useOperationLogData(opts: {
           setPipelines((prev) =>
             mergeHeadRefresh(prev, res.operations, res.oldestTimestamp),
           )
-          setScannedEvents(res.scannedEvents)
           setCursorBefore((before) => before ?? res.oldestTimestamp)
           setHasMore((more) => more || res.hasMore)
         })
@@ -231,10 +176,10 @@ export function useOperationLogData(opts: {
     }
     document.addEventListener("visibilitychange", onVisible)
     return () => document.removeEventListener("visibilitychange", onVisible)
-  }, [focus, fetchListPage])
+  }, [fetchListPage])
 
   const loadMore = useCallback(() => {
-    if (focus || loadingMore || !hasMore || !cursorBefore) return
+    if (loadingMore || !hasMore || !cursorBefore) return
     setLoadingMore(true)
     void fetchListPage(cursorBefore)
       .then((res) => {
@@ -244,7 +189,7 @@ export function useOperationLogData(opts: {
       })
       .catch(() => { /* ignore */ })
       .finally(() => setLoadingMore(false))
-  }, [focus, loadingMore, hasMore, cursorBefore, fetchListPage])
+  }, [loadingMore, hasMore, cursorBefore, fetchListPage])
 
   return {
     pipelines,
@@ -252,8 +197,6 @@ export function useOperationLogData(opts: {
     loadingMore,
     hasMore,
     loadMore,
-    mode,
-    scannedEvents,
     error,
   }
 }
