@@ -26,7 +26,6 @@ import {
   OP_LOG_MONO,
   OP_LOG_MUTED,
   OpLogRow,
-  statusTextClass,
 } from "../operation-log-row"
 import {
   describeSqlEvent,
@@ -616,10 +615,10 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
             />
             <Icon size={15} className="shrink-0" style={{ color: km.color }} />
             <LogStatusLabel status={pipeline.status} />
-            <span className="min-w-0 flex-1 truncate text-[13px] text-text">
+            <span className={`min-w-0 flex-1 truncate ${OP_LOG} ${OP_LOG_MUTED}`}>
               <span className="font-medium">{pipeline.title}</span>
               {formattedSubtitle && !compact && (
-                <span className={`${OP_LOG_MONO} font-normal ${OP_LOG_MUTED}`}> · {formattedSubtitle}</span>
+                <span className={`${OP_LOG_MONO} font-normal`}> · {formattedSubtitle}</span>
               )}
             </span>
             <span className={`shrink-0 tabular-nums text-[13px] ${OP_LOG_MUTED}`}>
@@ -688,10 +687,10 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
         <ChevronRight size={14} className={`shrink-0 text-text-muted transition-transform ${expanded ? "rotate-90" : ""}`} />
         <Icon size={14} className="shrink-0" style={{ color: km.color }} />
         <LogStatusLabel status={pipeline.status} />
-        <span className={`min-w-0 flex-1 ${OP_LOG} text-text`}>
+        <span className={`min-w-0 flex-1 ${OP_LOG} ${OP_LOG_MUTED}`}>
           <span className="font-medium">{pipeline.title}</span>
           {formattedSubtitle && !compact && (
-            <span className={`${OP_LOG_MONO} font-normal ${OP_LOG_MUTED}`}> · {formattedSubtitle}</span>
+            <span className={`${OP_LOG_MONO} font-normal`}> · {formattedSubtitle}</span>
           )}
         </span>
         <span className={`shrink-0 tabular-nums ${OP_LOG} ${OP_LOG_MUTED}`}>
@@ -772,7 +771,7 @@ function SqlOnlyActivityRow({
       status={status}
       showChevron={false}
       label={
-        <span className={`${OP_LOG_MONO} ${statusTextClass(status)}`}>
+        <span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}>
           {formatTraceRowSummary(trace)}
         </span>
       }
@@ -823,7 +822,7 @@ function FlowStepSqlRow({
       expandable={expandable}
       onToggle={onToggle}
       showStatus={false}
-      label={formatTraceRowSummary(trace)}
+      label={<span className={OP_LOG_MUTED}>{formatTraceRowSummary(trace)}</span>}
       durationMs={trace.durationMs}
       timestamp={ev.timestamp}
       actions={
@@ -936,7 +935,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
         expanded={expanded}
         expandable
         onToggle={onToggle}
-        label={<span className={`${OP_LOG_MONO} ${statusTextClass(status)}`}>{renderedName}</span>}
+        label={<span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}>{renderedName}</span>}
         meta={renderedSummary && !isResultRow ? renderedSummary : undefined}
         durationMs={activity.durationMs}
         timestamp={activity.startedAt}
@@ -1086,7 +1085,11 @@ function EventRow({ ev, expanded, onToggle, linear, isLast }: {
     ? stripToolIoForInlineDisplay(ev.data)
     : ev.data
   const durationMs = typeof ev.data["durationMs"] === "number" ? ev.data["durationMs"] : null
-  const toneClass = isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : ""
+  const evStatus: OperationStatus = isFailedEvent
+    ? OperationStatus.Failed
+    : isSkippedEvent
+      ? OperationStatus.Skipped
+      : OperationStatus.Success
 
   return (
     <>
@@ -1096,15 +1099,16 @@ function EventRow({ ev, expanded, onToggle, linear, isLast }: {
         expanded={expanded}
         expandable={hasData && !isSql}
         onToggle={onToggle}
-        showStatus={false}
+        showStatus
+        status={evStatus}
         label={
           label ? (
-            <span className={`${OP_LOG_MONO} ${toneClass}`}>{label}</span>
+            <span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}>{label}</span>
           ) : (
-            <span className={toneClass}>{summary}</span>
+            <span className={OP_LOG_MUTED}>{summary}</span>
           )
         }
-        meta={label && summary ? <span className={toneClass}>{summary}</span> : undefined}
+        meta={label && summary ? <span className={OP_LOG_MUTED}>{summary}</span> : undefined}
         durationMs={durationMs}
         timestamp={ev.timestamp}
         actions={

@@ -5,7 +5,7 @@
 import { useState } from "react"
 import { OperationStatus } from "../api"
 import { JsonViewer } from "./JsonViewer"
-import { OP_LOG_MONO, OpLogRow, statusTextClass } from "../operation-log-row"
+import { OP_LOG_MONO, OP_LOG_MUTED, OpLogRow } from "../operation-log-row"
 
 export interface SyncDecisionEntry {
   id: string
@@ -47,7 +47,7 @@ function DecisionRow({
       onToggle={() => setExpanded((v) => !v)}
       showChevron={hasDetails}
       label={
-        <span className={`${OP_LOG_MONO} ${statusTextClass(status)}`}>
+        <span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}>
           {decision.title ?? decision.id}
         </span>
       }

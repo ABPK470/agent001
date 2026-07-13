@@ -182,7 +182,7 @@ function LogRowCells({
         <span className="w-[7px] shrink-0" aria-hidden />
       )}
       <span className={`min-w-0 flex-1 truncate ${textSize}`}>
-        <span className="font-medium">{label}</span>
+        <span className={`font-medium ${OP_LOG_MUTED}`}>{label}</span>
         {meta ? <span className={`font-normal ${OP_LOG_MUTED}`}> · {meta}</span> : null}
       </span>
       <span className={`shrink-0 tabular-nums w-14 text-right ${textSize} ${OP_LOG_MUTED}`}>

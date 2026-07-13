@@ -1,6 +1,6 @@
 /**
- * Activity — Linear-style operations view.
- * Same data as Pipelines; purpose-built UI inspired by linear.app issue lists.
+ * Activity — Linear-style issue inbox + timeline detail.
+ * Not a variant of Pipelines: list selects an issue, detail is a vertical timeline.
  */
 
 import { Loader2 } from "lucide-react"
@@ -11,8 +11,7 @@ import { useContainerSize } from "../../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../../hooks/useOperationLogData"
 import { matchesPipeline, pipelineActivityKey, syncPlanIdFromPipeline } from "../../lib/operation-presentation"
 import { OperationLogModalsProvider } from "../../operation-log-modals"
-import { ActivityList } from "./ActivityList"
-import { ActivityLogToolbar } from "./ActivityLogToolbar"
+import { ActivityFeed, ActivityLogToolbar } from "./ActivityFeed"
 
 export { pipelineActivityKey, syncPlanIdFromPipeline }
 
@@ -20,8 +19,7 @@ export function ActivityLog() {
   const [kindView, setKindView] = useState<OperationLogKindView>("all")
   const [statuses, setStatuses] = useState<Set<OperationStatus>>(new Set())
   const [search, setSearch] = useState("")
-  const [expanded, setExpanded] = useState<Set<string>>(new Set())
-  const [actExpanded, setActExpanded] = useState<Set<string>>(new Set())
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [collapsedDays, setCollapsedDays] = useState<Set<string>>(new Set())
   const rootRef = useRef<HTMLDivElement>(null)
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -57,24 +55,6 @@ export function ActivityLog() {
       const n = new Set(prev)
       if (n.has(s)) n.delete(s)
       else n.add(s)
-      return n
-    })
-  }, [])
-
-  const togglePipeline = useCallback((id: string) => {
-    setExpanded((s) => {
-      const n = new Set(s)
-      if (n.has(id)) n.delete(id)
-      else n.add(id)
-      return n
-    })
-  }, [])
-
-  const toggleActivity = useCallback((key: string) => {
-    setActExpanded((s) => {
-      const n = new Set(s)
-      if (n.has(key)) n.delete(key)
-      else n.add(key)
       return n
     })
   }, [])
@@ -128,7 +108,7 @@ export function ActivityLog() {
 
   return (
     <OperationLogModalsProvider>
-      <div ref={rootRef} className="flex h-full flex-col overflow-hidden bg-canvas font-sans text-text">
+      <div ref={rootRef} className="flex h-full flex-col overflow-hidden bg-canvas font-sans">
         <ActivityLogToolbar
           kindView={kindView}
           setKindView={setKindView}
@@ -156,13 +136,11 @@ export function ActivityLog() {
           )}
 
           {filtered.length > 0 && (
-            <ActivityList
+            <ActivityFeed
               pipelines={filtered}
+              selectedId={selectedId}
+              onSelect={setSelectedId}
               compact={compact}
-              expanded={expanded}
-              togglePipeline={togglePipeline}
-              actExpanded={actExpanded}
-              toggleActivity={toggleActivity}
               collapsedDays={collapsedDays}
               toggleDay={toggleDay}
               onCancelPipeline={cancelPipeline}

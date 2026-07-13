@@ -1,27 +1,23 @@
 import { useMemo } from "react"
 import type { OperationPipeline } from "../../api"
 import { dayLabel } from "../../lib/operation-presentation"
-import { DaySection } from "./ActivityLogToolbar"
-import { OperationItem } from "./OperationItem"
+import { ActivityLogToolbar, DayGroup } from "./ActivityLogToolbar"
+import { IssueList } from "./IssueList"
 
-export function ActivityList({
+export function ActivityFeed({
   pipelines,
+  selectedId,
+  onSelect,
   compact,
-  expanded,
-  togglePipeline,
-  actExpanded,
-  toggleActivity,
   collapsedDays,
   toggleDay,
   onCancelPipeline,
   cancellingId,
 }: {
   pipelines: OperationPipeline[]
+  selectedId: string | null
+  onSelect: (id: string | null) => void
   compact: boolean
-  expanded: Set<string>
-  togglePipeline: (id: string) => void
-  actExpanded: Set<string>
-  toggleActivity: (key: string) => void
   collapsedDays: Set<string>
   toggleDay: (label: string) => void
   onCancelPipeline?: (pipeline: OperationPipeline) => void
@@ -42,30 +38,28 @@ export function ActivityList({
   }, [pipelines])
 
   return (
-    <div className="pb-2">
+    <>
       {byDay.map((group) => (
-        <DaySection
+        <DayGroup
           key={group.label}
           label={group.label}
           count={group.items.length}
           collapsed={collapsedDays.has(group.label)}
           onToggle={() => toggleDay(group.label)}
         >
-          {group.items.map((pipeline) => (
-            <OperationItem
-              key={pipeline.id}
-              pipeline={pipeline}
-              compact={compact}
-              expanded={expanded.has(pipeline.id)}
-              onToggle={() => togglePipeline(pipeline.id)}
-              actExpanded={actExpanded}
-              toggleActivity={toggleActivity}
-              onCancel={onCancelPipeline}
-              cancelling={cancellingId === pipeline.id}
-            />
-          ))}
-        </DaySection>
+          <IssueList
+            pipelines={group.items}
+            selectedId={selectedId}
+            onSelect={(id) => onSelect(selectedId === id ? null : id)}
+            compact={compact}
+            onCancel={onCancelPipeline}
+            cancellingId={cancellingId}
+          />
+        </DayGroup>
       ))}
-    </div>
+    </>
   )
 }
+
+// re-export toolbar for ActivityLog shell
+export { ActivityLogToolbar }
