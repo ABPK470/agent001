@@ -660,7 +660,7 @@ export const api = {
       }>
     }>(`/api/sync/history/${encodeURIComponent(planId)}/sql-trace${q ? `?${q}` : ""}`)
   },
-  getSqlLog: (id: number) =>
+  getSqlLog: (id: number, opts?: { signal?: AbortSignal }) =>
     json<{
       id: number
       planId: string | null
@@ -675,7 +675,7 @@ export const api = {
       rowCount: number | null
       error: string | null
       createdAt: string
-    }>(`/api/events/sql/${id}`),
+    }>(`/api/events/sql/${id}`, { signal: opts?.signal }),
   /** Recent sync execution runs — used to restore the EnvSync widget on cold start. */
   syncRuns: (limit = 25) =>
     json<Array<SyncRunSummary & { planAvailable?: boolean }>>(`/api/sync/runs?limit=${limit}`),

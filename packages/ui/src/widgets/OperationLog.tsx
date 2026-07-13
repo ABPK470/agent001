@@ -8,13 +8,18 @@ import { Brain, ChevronRight, Database, FileSearch, Filter, GitCompareArrows, Lo
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
-import { SqlTraceModal } from "../components/SqlTrace"
-import { DecisionLogPanel, isSyncDecisionLogDetails } from "../components/DecisionLogPanel"
 import { CodeBlock } from "../components/CodeBlock"
+import { DecisionLogPanel, isSyncDecisionLogDetails } from "../components/DecisionLogPanel"
 import { JsonViewer } from "../components/JsonViewer"
 import { ToolCallModal, ToolIoBlock } from "../components/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
+import { OperationLogModalsProvider, useOpLogOpenSqlTrace } from "../operation-log-modals"
+import {
+  describeSqlEvent,
+  describeSqlOnlyActivity,
+  formatTraceRowSummary,
+} from "../operation-log-trace"
 import { useStore } from "../store"
 import { isSyncSqlEventType, readSqlTraceFields } from "../sync-sql-trace"
 import {
@@ -322,11 +327,6 @@ function isSqlOnlyActivity(activity: OperationActivity): boolean {
   )
 }
 
-function sqlPreviewFromEvent(ev: OperationEvent): string {
-  const fields = readSqlTraceFields(ev.data)
-  return fields?.sql.trim() || "SQL"
-}
-
 /** Expansion key for an activity row — scoped to pipeline id (preview vs execute differ). */
 export function pipelineActivityKey(pipelineId: string, activityId: string): string {
   return `${pipelineId}|${activityId}`
@@ -493,6 +493,7 @@ export function OperationLog() {
   }, [error, mode, pipelines.length, statuses.size, needle, operationLogFocus?.kind])
 
   return (
+    <OperationLogModalsProvider>
     <div ref={rootRef} className={`h-full flex flex-col gap-2.5 overflow-hidden ${OP_LOG}`}>
 
       <LogWidgetToolbar compact={compact}>
@@ -657,6 +658,7 @@ export function OperationLog() {
         )}
       </div>
     </div>
+    </OperationLogModalsProvider>
   )
 }
 
@@ -885,10 +887,8 @@ function SqlOnlyActivityRow({
   depth?: number
   StatusIcon: typeof XCircle | typeof Loader2 | null
 }) {
-  const [modalOpen, setModalOpen] = useState(false)
-  const ev = activity.events[0]!
-  const fields = readSqlTraceFields(ev.data)
-  const line = sqlPreviewFromEvent(ev)
+  const openSqlTrace = useOpLogOpenSqlTrace()
+  const trace = describeSqlOnlyActivity(activity)
 
   return (
     <div
@@ -904,24 +904,17 @@ function SqlOnlyActivityRow({
       ) : (
         <span className="w-[11px] h-[11px] rounded-full shrink-0" style={{ background: sm.color, opacity: 0.6 }} />
       )}
-      <span className={`min-w-0 flex-1 break-all whitespace-pre-wrap ${OP_LOG_MONO}`}>{line}</span>
-      {activity.summary && (
-        <span className={`shrink-0 ${OP_LOG_MONO}`}>{activity.summary}</span>
-      )}
-      <span className={`shrink-0 tabular-nums ${OP_LOG}`}>{fmtDuration(activity.durationMs)}</span>
+      <span className={`min-w-0 flex-1 break-all ${OP_LOG}`}>{formatTraceRowSummary(trace)}</span>
       <span className={`shrink-0 tabular-nums w-20 text-right ${OP_LOG}`}>{fmtTime(activity.startedAt)}</span>
-      {fields && (
+      {trace.sqlFields && (
         <button
           type="button"
           className={LOG_ROW_ACTION}
-          onClick={() => setModalOpen(true)}
+          onClick={() => openSqlTrace(trace.sqlFields!)}
         >
           <Database size={10} />
-          SQL
+          {trace.detailLabel}
         </button>
-      )}
-      {modalOpen && fields && (
-        <SqlTraceModal fields={fields} onClose={() => setModalOpen(false)} />
       )}
     </div>
   )
@@ -940,9 +933,8 @@ function FlowStepSqlRow({
   expanded: boolean
   onToggle: () => void
 }) {
-  const [modalOpen, setModalOpen] = useState(false)
-  const fields = readSqlTraceFields(ev.data)
-  const preview = sqlPreviewFromEvent(ev)
+  const openSqlTrace = useOpLogOpenSqlTrace()
+  const trace = describeSqlEvent(ev)
   const expandable = resultData != null && Object.keys(resultData).length > 0
 
   return (
@@ -957,20 +949,20 @@ function FlowStepSqlRow({
             size={9}
             className={`shrink-0 transition-transform ${expanded ? "rotate-90" : ""} ${expandable ? "text-text" : "invisible"}`}
           />
-          <span className={`shrink-0 tabular-nums w-20 ${OP_LOG_MONO}`}>{fmtTime(ev.timestamp)}</span>
-          <span className={`min-w-0 break-all whitespace-pre-wrap ${OP_LOG_MONO}`}>{preview}</span>
+          <span className={`shrink-0 tabular-nums w-20 ${OP_LOG}`}>{fmtTime(ev.timestamp)}</span>
+          <span className={`min-w-0 break-all ${OP_LOG}`}>{formatTraceRowSummary(trace)}</span>
         </button>
-        {fields && (
+        {trace.sqlFields && (
           <button
             type="button"
             className={LOG_ROW_ACTION}
             onClick={(e) => {
               e.stopPropagation()
-              setModalOpen(true)
+              openSqlTrace(trace.sqlFields!)
             }}
           >
             <Database size={10} />
-            SQL
+            {trace.detailLabel}
           </button>
         )}
       </div>
@@ -978,9 +970,6 @@ function FlowStepSqlRow({
         <div className="px-2 pb-1">
           <CodeBlock code={JSON.stringify(resultData, null, 2)} lang="json" maxHeight={480} />
         </div>
-      )}
-      {modalOpen && fields && (
-        <SqlTraceModal fields={fields} onClose={() => setModalOpen(false)} />
       )}
     </div>
   )
@@ -1215,7 +1204,7 @@ function EventRow({ ev, expanded, onToggle }: {
   expanded: boolean
   onToggle: () => void
 }) {
-  const [sqlModalOpen, setSqlModalOpen] = useState(false)
+  const openSqlTrace = useOpLogOpenSqlTrace()
   const [ioModalOpen, setIoModalOpen] = useState(false)
   const hasData = ev.data && Object.keys(ev.data).length > 0
   const isFailedEvent = ev.type.includes(".failed") || !!ev.data["error"]
@@ -1223,10 +1212,10 @@ function EventRow({ ev, expanded, onToggle }: {
   const isSql = isSyncSqlEventType(ev.type)
   const isStep = isAgentStepEventType(ev.type)
   const sqlFields = isSql ? readSqlTraceFields(ev.data) : null
+  const sqlTrace = isSql ? describeSqlEvent(ev) : null
   const toolIo = isStep ? readToolIoFromEvent(ev) : null
-  const summary = pickEventSummary(ev)
-  const label = formatEventLabel(ev)
-  const sqlPreview = isSql && sqlFields ? sqlPreviewFromEvent(ev) : null
+  const summary = isSql && sqlTrace ? formatTraceRowSummary(sqlTrace) : pickEventSummary(ev)
+  const label = isSql ? null : formatEventLabel(ev)
   const displayData = isStep
     ? stripToolIoForInlineDisplay(ev.data)
     : ev.data
@@ -1244,14 +1233,13 @@ function EventRow({ ev, expanded, onToggle }: {
             size={9}
             className={`shrink-0 mt-1 transition-transform ${expanded ? "rotate-90" : ""} ${hasData && !isSql ? "text-text" : "invisible"}`}
           />
-          <span className={`shrink-0 tabular-nums w-20 ${OP_LOG_MONO}`}>{fmtTime(ev.timestamp)}</span>
-          <span className={`shrink-0 ${OP_LOG_MONO} ${
-            isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : ""
-          }`}>{label}</span>
-          {sqlPreview && (
-            <span className={`min-w-0 break-all whitespace-pre-wrap ${OP_LOG_MONO}`}>{sqlPreview}</span>
+          <span className={`shrink-0 tabular-nums w-20 ${OP_LOG}`}>{fmtTime(ev.timestamp)}</span>
+          {label && (
+            <span className={`shrink-0 ${OP_LOG_MONO} ${
+              isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : ""
+            }`}>{label}</span>
           )}
-          {summary && !isSql && (
+          {summary && (
             <span className={`min-w-0 break-all whitespace-pre-wrap ${OP_LOG} ${
               isFailedEvent ? "text-error" : isSkippedEvent ? "text-warning" : ""
             }`}>{summary}</span>
@@ -1263,7 +1251,7 @@ function EventRow({ ev, expanded, onToggle }: {
             className={LOG_ROW_ACTION}
             onClick={(e) => {
               e.stopPropagation()
-              setSqlModalOpen(true)
+              openSqlTrace(sqlFields)
             }}
           >
             <Database size={10} />
@@ -1285,9 +1273,6 @@ function EventRow({ ev, expanded, onToggle }: {
         <div className="ml-7 my-1">
           <JsonViewer value={displayData} label="event" defaultExpandDepth={3} maxHeight={360} />
         </div>
-      )}
-      {sqlModalOpen && sqlFields && (
-        <SqlTraceModal fields={sqlFields} onClose={() => setSqlModalOpen(false)} />
       )}
       {ioModalOpen && toolIo && (
         <ToolCallModal io={toolIo} onClose={() => setIoModalOpen(false)} />

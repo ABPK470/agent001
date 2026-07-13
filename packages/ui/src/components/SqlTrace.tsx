@@ -1,7 +1,8 @@
+import { createPortal } from "react-dom"
 import { Maximize2, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { CodeBlock } from "./CodeBlock"
-import { fetchSqlLogText } from "../sync-sql-log-cache"
+import { fetchSqlLogText, peekSqlLogText } from "../sync-sql-log-cache"
 import { formatSqlTraceMeta, readSqlTraceFields, type SqlTraceFields } from "../sync-sql-trace"
 
 export function SqlTraceBlock({
@@ -18,7 +19,7 @@ export function SqlTraceBlock({
   return (
     <div className={`rounded-md border border-border-subtle overflow-hidden ${compact ? "" : ""}`}>
       <div className="flex items-start justify-between gap-2 px-2.5 py-1.5 border-b border-border-subtle bg-elevated/30">
-        <span className="font-mono text-text min-w-0 break-all whitespace-pre-wrap">{fields.sql.trim() || formatSqlTraceMeta(fields)}</span>
+        <span className="font-mono text-text min-w-0 break-all whitespace-pre-wrap">{formatSqlTraceMeta(fields)}</span>
         {(fields.sqlLogId != null || fields.sql.trim()) && (
           <button
             type="button"
@@ -64,8 +65,9 @@ export function SqlTraceModal({
   fields: SqlTraceFields
   onClose: () => void
 }) {
-  const [fullSql, setFullSql] = useState(fields.sql)
-  const [loading, setLoading] = useState(fields.sqlLogId != null)
+  const initialCached = fields.sqlLogId != null ? peekSqlLogText(fields.sqlLogId) : undefined
+  const [fullSql, setFullSql] = useState(initialCached ?? fields.sql)
+  const [loading, setLoading] = useState(fields.sqlLogId != null && initialCached == null)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
@@ -73,8 +75,14 @@ export function SqlTraceModal({
       setLoading(false)
       return
     }
+    const hit = peekSqlLogText(fields.sqlLogId)
+    if (hit != null) {
+      setFullSql(hit)
+      setLoading(false)
+      setError(null)
+      return
+    }
     let cancelled = false
-    setLoading(true)
     void fetchSqlLogText(fields.sqlLogId)
       .then((sql) => {
         if (!cancelled) {
@@ -95,7 +103,17 @@ export function SqlTraceModal({
     }
   }, [fields.sqlLogId])
 
-  return (
+  const body = loading
+    ? <div className="text-text py-8 text-center">Loading full SQL…</div>
+    : error
+      ? <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>
+      : (
+        <pre className="font-mono text-[0.8125rem] leading-snug text-text whitespace-pre-wrap break-all m-0">
+          {fullSql.trim() || fields.sql.trim() || "-- no SQL recorded"}
+        </pre>
+      )
+
+  return createPortal(
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div
         className="w-full max-w-4xl max-h-[min(90dvh,900px)] flex flex-col rounded-lg border border-border-subtle bg-base shadow-2xl"
@@ -111,17 +129,14 @@ export function SqlTraceModal({
           </button>
         </div>
         <div className="flex-1 min-h-0 overflow-auto p-3">
-          {loading && <div className="text-text py-8 text-center">Loading full SQL…</div>}
-          {!loading && error && <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>}
-          {!loading && !error && (
-            <CodeBlock code={fullSql.trim() || fields.sql.trim() || "-- no SQL recorded"} lang="sql" maxHeight={9999} />
-          )}
+          {body}
           {fields.error && (
             <div className="mt-3 text-error break-all whitespace-pre-wrap">{fields.error}</div>
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
 }
 
