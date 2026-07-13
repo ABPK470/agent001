@@ -17,6 +17,7 @@ import { DateField } from "../../components/DateField"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SearchablePick } from "../../components/SearchablePick"
 import { useMe } from "../../hooks/useMe"
+import { useStore } from "../../store"
 import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../util"
 import {
