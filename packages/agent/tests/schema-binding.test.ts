@@ -5,7 +5,10 @@ import {
   detectBareInventedColumns,
   detectPostUnionGroupBy,
   detectUnverifiedTableRefs,
-  extractBaseTableRefs
+  extractBaseTableRefs,
+  extractCteOutputColumns,
+  outputNameFromSelectItem,
+  parseCteChain
 } from "../src/tools/mssql/schema-binding.js"
 import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
 
@@ -82,6 +85,31 @@ describe("detectPostUnionGroupBy", () => {
   })
 })
 
+describe("CTE column parsing", () => {
+  it("extracts explicit and implicit SELECT output names", () => {
+    expect(outputNameFromSelectItem("SUM(r.RevenueZARMTD) AS TotalRevenue")).toBe("TotalRevenue")
+    expect(outputNameFromSelectItem("r.pkClient")).toBe("pkClient")
+    expect(outputNameFromSelectItem("c.ClientName")).toBe("ClientName")
+  })
+
+  it("parses chained CTE definitions and their projections", () => {
+    const sql = `WITH base AS (
+  SELECT r.pkClient, SUM(r.RevenueZARMTD) AS rev
+  FROM publish.Revenue r
+  GROUP BY r.pkClient
+),
+ranked AS (
+  SELECT b.pkClient, b.rev, ROW_NUMBER() OVER (ORDER BY b.rev DESC) AS rn
+  FROM base b
+)
+SELECT ranked.rev FROM ranked`
+    const chain = parseCteChain(sql)
+    expect(chain?.ctes.map((c) => c.name)).toEqual(["base", "ranked"])
+    expect([...extractCteOutputColumns(chain!.ctes[0]!.body)]).toEqual(["pkclient", "rev"])
+    expect([...extractCteOutputColumns(chain!.ctes[1]!.body)]).toEqual(["pkclient", "rev", "rn"])
+  })
+})
+
 describe("validateQueryDetailed — schema binding", () => {
   const cat = buildGraph([
     table("publish", "Revenue", ["pkClient", "RevenueZARMTD"]),
@@ -97,6 +125,17 @@ describe("validateQueryDetailed — schema binding", () => {
     )
     expect(v.ok).toBe(false)
     expect(v.code).toBe("unverified_table_reference")
+  })
+
+  it("does not treat CTE/table qualifiers as bare invented columns", () => {
+    const aliasMap = new Map([["r", { alias: "r", qualifiedTable: "publish.Revenue" }]])
+    const offenders = detectBareInventedColumns(
+      "SELECT r.pkClient FROM publish.Revenue r JOIN agg ON r.pkClient = agg.pkClient WHERE agg.TotalRevenue > 0",
+      aliasMap,
+      (q) => (q === "publish.Revenue" ? { columns: [{ name: "pkClient" }] } : null),
+      { allowedBareColumns: new Set(["totalrevenue"]) }
+    )
+    expect(offenders.some((o) => o.column === "agg")).toBe(false)
   })
 
   it("flags bare invented tokens in WHERE", () => {

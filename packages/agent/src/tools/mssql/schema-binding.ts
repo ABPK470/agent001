@@ -58,6 +58,164 @@ export function splitUnionBranches(statement: string): string[] {
   return parts.map((p) => p.trim()).filter((p) => p.length > 0)
 }
 
+function stripTableHints(text: string): string {
+  return text.replace(/\bWITH\s*\([^)]*\)/gi, (m) => " ".repeat(m.length))
+}
+
+export interface CteDefinition {
+  readonly name: string
+  readonly body: string
+}
+
+export interface CteChain {
+  readonly ctes: readonly CteDefinition[]
+  readonly main: string
+}
+
+/** Split a SELECT list on top-level commas (paren-aware). */
+export function splitSelectListItems(selectList: string): string[] {
+  const items: string[] = []
+  let depth = 0
+  let start = 0
+  for (let i = 0; i < selectList.length; i++) {
+    const c = selectList[i]!
+    if (c === "(") depth++
+    else if (c === ")") depth--
+    else if (c === "," && depth === 0) {
+      items.push(selectList.slice(start, i))
+      start = i + 1
+    }
+  }
+  items.push(selectList.slice(start))
+  return items
+}
+
+/** Infer the output column name from one SELECT-list item. */
+export function outputNameFromSelectItem(item: string): string | null {
+  const trimmed = item.trim()
+  if (!trimmed || trimmed === "*") return null
+
+  const asMatch = /\bAS\s+\[?([A-Za-z_][\w]*)\]?\s*$/i.exec(trimmed)
+  if (asMatch) return asMatch[1]!
+
+  if (!/\(/.test(trimmed)) {
+    const implicit = /\s+\[?([A-Za-z_][\w]*)\]?\s*$/.exec(trimmed)
+    if (implicit) return implicit[1]!
+  }
+
+  const bracketed = /\[([A-Za-z_][\w]*)\]\s*$/.exec(trimmed)
+  if (bracketed) return bracketed[1]!
+
+  const dotted = /\.(?:\[?([A-Za-z_][\w]*)\]?)\s*$/.exec(trimmed)
+  if (dotted) return dotted[1]!
+
+  if (/^\[?([A-Za-z_][\w]*)\]?$/.test(trimmed)) return trimmed.replace(/[[\]]/g, "")
+  return null
+}
+
+/** Output column names exposed by a CTE/subquery SELECT body. */
+export function extractCteOutputColumns(body: string): ReadonlySet<string> {
+  const stripped = stripTableHints(stripForScan(body))
+  const m =
+    /\bSELECT\s+(?:DISTINCT\s+)?(?:TOP\s+(?:\(\s*\d+\s*\)|\d+)\s+(?:PERCENT\s+)?)?([\s\S]*?)\s+FROM\b/i.exec(
+      stripped
+    )
+  if (!m?.[1]) return new Set()
+
+  const cols = new Set<string>()
+  for (const item of splitSelectListItems(m[1])) {
+    const name = outputNameFromSelectItem(item)
+    if (name) cols.add(name.toLowerCase())
+  }
+  return cols
+}
+
+/**
+ * Parse `WITH cte AS (...), ... SELECT ...` into CTE bodies and the main query.
+ * Returns null when the statement is not CTE-shaped.
+ */
+export function parseCteChain(statement: string): CteChain | null {
+  const stripped = stripTableHints(stripForScan(statement))
+  const withHead = /^\s*WITH\s+/i.exec(stripped)
+  if (!withHead) return null
+
+  const ctes: CteDefinition[] = []
+  let pos = withHead[0].length
+
+  while (pos < stripped.length) {
+    const tail = stripped.slice(pos)
+    const nameMatch = /^\s*(\w+)\s+AS\s*\(/i.exec(tail)
+    if (!nameMatch) break
+
+    const name = nameMatch[1]!
+    pos += nameMatch[0].length - 1
+
+    let depth = 1
+    const bodyStart = pos + 1
+    pos++
+    while (pos < stripped.length && depth > 0) {
+      const c = stripped[pos]!
+      if (c === "(") depth++
+      else if (c === ")") depth--
+      pos++
+    }
+    if (depth !== 0) break
+
+    ctes.push({ name, body: stripped.slice(bodyStart, pos - 1) })
+
+    const after = stripped.slice(pos).trimStart()
+    if (after.startsWith(",")) {
+      pos = stripped.length - after.length + 1
+      continue
+    }
+    break
+  }
+
+  const main = stripped.slice(pos).trim()
+  if (ctes.length === 0 || !main) return null
+  return { ctes, main }
+}
+
+/** Map CTE names and their FROM aliases to the columns each exposes. */
+export function buildCteBindings(ctes: readonly CteDefinition[]): Map<string, ReadonlySet<string>> {
+  const bindings = new Map<string, ReadonlySet<string>>()
+  for (const cte of ctes) {
+    extendCteFromAliases(cte.body, bindings)
+    bindings.set(cte.name.toLowerCase(), extractCteOutputColumns(cte.body))
+  }
+  return bindings
+}
+
+/** Register `FROM cte alias` / `JOIN cte alias` aliases against known CTE outputs. */
+export function extendCteFromAliases(
+  fragment: string,
+  bindings: Map<string, ReadonlySet<string>>
+): void {
+  const stripped = stripTableHints(stripForScan(fragment))
+  const re =
+    /\b(?:FROM|JOIN)\s+(?:\[?(\w+)\]?\.\[?(\w+)\]?(?:\s+(?:AS\s+)?\[?(\w+)\]?)?|\[?(\w+)\]?(?:\s+(?:AS\s+)?\[?(\w+)\]?)?)/gi
+  let m: RegExpExecArray | null
+  while ((m = re.exec(stripped)) !== null) {
+    if (m[1] && m[2]) continue
+
+    const cteName = m[4]!.toLowerCase()
+    const cols = bindings.get(cteName)
+    if (!cols) continue
+
+    const aliasRaw = m[5]
+    const alias = aliasRaw && aliasRaw.toLowerCase() !== cteName ? aliasRaw.toLowerCase() : cteName
+    bindings.set(alias, cols)
+  }
+}
+
+export function unionCteOutputColumns(bindings: Map<string, ReadonlySet<string>>): ReadonlySet<string> {
+  const out = new Set<string>()
+  for (const cols of bindings.values()) {
+    for (const col of cols) out.add(col)
+  }
+  return out
+}
+
 /**
  * Illegal T-SQL: GROUP BY after the UNION chain at statement level
  * (each SELECT in a UNION must carry its own GROUP BY).
@@ -142,16 +300,24 @@ interface CatalogColTable {
   columns: ReadonlyArray<{ name: string }>
 }
 
+export interface BareColumnCheckOptions {
+  /** Column names projected by in-scope CTEs (may appear bare in ON/WHERE). */
+  readonly allowedBareColumns?: ReadonlySet<string>
+}
+
 /**
- * Bare identifiers in ON / WHERE and standalone SELECT items that do not
- * exist on any joined catalog table (e.g. `Name` when the column is `ClientName`).
+ * Bare identifiers in ON / WHERE that do not exist on any joined catalog table
+ * or in-scope CTE projection (e.g. `Name` when the column is `ClientName`, or
+ * a CTE alias like `ranked` in `ranked.rn` must not be treated as a column).
  */
 export function detectBareInventedColumns(
   statement: string,
   aliasMap: Map<string, AliasBinding>,
-  getTable: (q: string) => CatalogColTable | null
+  getTable: (q: string) => CatalogColTable | null,
+  options: BareColumnCheckOptions = {}
 ): BareColumnOffender[] {
-  if (aliasMap.size === 0) return []
+  const allowedBare = options.allowedBareColumns ?? new Set<string>()
+  if (aliasMap.size === 0 && allowedBare.size === 0) return []
 
   const tables = [...aliasMap.values()].map((b) => b.qualifiedTable)
   const colSets = tables.map((t) => {
@@ -159,7 +325,7 @@ export function detectBareInventedColumns(
     return { table: t, cols: new Set((tbl?.columns ?? []).map((c) => c.name.toLowerCase())) }
   })
 
-  const stripped = statement.replace(/\bWITH\s*\([^)]*\)/gi, (m) => " ".repeat(m.length))
+  const stripped = stripTableHints(statement)
   const clauses: string[] = []
   for (const m of stripped.matchAll(
     /\bON\s+([\s\S]*?)(?=\b(?:JOIN|WHERE|GROUP\s+BY|ORDER\s+BY|HAVING|UNION)\b|$)/gi
@@ -179,16 +345,18 @@ export function detectBareInventedColumns(
       if (BARE_SQL_KEYWORDS.has(lower)) continue
       if (lower.length < 2) continue
       const after = clause.charAt(m.index! + m[0].length)
-      if (after === "(") continue
+      if (after === "(" || after === ".") continue
       const before = clause.charAt(m.index! - 1)
       if (before === ".") continue
       if (seen.has(lower)) continue
+      if (allowedBare.has(lower)) continue
 
       let foundOn = 0
       for (const { cols } of colSets) {
         if (cols.has(lower)) foundOn++
       }
       if (foundOn > 0) continue
+      if (aliasMap.size === 0) continue
       seen.add(lower)
 
       const allCols = colSets.flatMap(({ table }) => getTable(table)?.columns ?? [])

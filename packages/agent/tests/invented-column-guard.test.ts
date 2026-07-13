@@ -137,18 +137,30 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
     expect(detectInventedColumns(query, accessor)).toEqual([])
   })
 
-  it("ignores CTE alias refs in outer SELECT (CTE name has no schema → no provenance)", () => {
-    // The outer `ranked.ClientName` reference cannot be checked because
-    // `ranked` is a CTE name with no `schema.table` binding in fromJoinRe.
-    // The inner-CTE refs (`r.pkClient`, `r.RevenueZARMTD`) ARE checked and
-    // pass cleanly against publish.Revenue.
+  it("validates CTE output columns instead of treating CTE aliases as catalog tables", () => {
+    const query = [
+      "WITH ranked AS (",
+      "  SELECT r.pkClient, SUM(r.RevenueZARMTD) AS rev FROM publish.Revenue r GROUP BY r.pkClient",
+      ")",
+      "SELECT ranked.rev, ranked.pkClient FROM ranked"
+    ].join("\n")
+    expect(detectInventedColumns(query, accessor)).toEqual([])
+  })
+
+  it("flags invented columns on a CTE projection", () => {
     const query = [
       "WITH ranked AS (",
       "  SELECT r.pkClient, SUM(r.RevenueZARMTD) AS rev FROM publish.Revenue r GROUP BY r.pkClient",
       ")",
       "SELECT ranked.ClientName FROM ranked"
     ].join("\n")
-    expect(detectInventedColumns(query, accessor)).toEqual([])
+    const offenders = detectInventedColumns(query, accessor)
+    expect(offenders).toHaveLength(1)
+    expect(offenders[0]).toMatchObject({
+      reference: "ranked.ClientName",
+      column: "ClientName",
+      table: "CTE ranked"
+    })
   })
 
   it("REGRESSION 2026-05-23: CTE statements DO still validate base-table aliases in outer SELECT", () => {
@@ -217,6 +229,73 @@ describe("detectInventedColumns — negatives (must not false-positive)", () => 
     const offenders = detectInventedColumns(query, accessor)
     expect(offenders.some((o) => o.column === "ClientName")).toBe(true)
   })
+})
+
+describe("detectInventedColumns — CTE-aware validation", () => {
+  const cteAccessor = () =>
+    makeCatalog({
+      "publish.Revenue": REVENUE_COLS,
+      "dim.Client": CLIENT_COLS
+    })
+
+  const cases: [string, string][] = [
+    [
+      "bare CTE column in WHERE",
+      `WITH agg AS (
+  SELECT r.pkClient, SUM(r.RevenueZARMTD) AS TotalRevenue
+  FROM publish.Revenue r
+  GROUP BY r.pkClient
+)
+SELECT r.pkClient, TotalRevenue
+FROM agg a
+JOIN publish.Revenue r ON r.pkClient = a.pkClient
+WHERE TotalRevenue > 0 AND r.pkMonth = 202501`
+    ],
+    [
+      "qualified CTE via FROM alias",
+      `WITH agg AS (
+  SELECT r.pkClient, SUM(r.RevenueZARMTD) AS TotalRevenue
+  FROM publish.Revenue r
+  GROUP BY r.pkClient
+)
+SELECT a.TotalRevenue, a.pkClient
+FROM agg a
+JOIN publish.Revenue r ON r.pkClient = a.pkClient`
+    ],
+    [
+      "qualified CTE via CTE name in JOIN",
+      `WITH agg AS (
+  SELECT r.pkClient, SUM(r.RevenueZARMTD) AS TotalRevenue
+  FROM publish.Revenue r
+  GROUP BY r.pkClient
+)
+SELECT agg.TotalRevenue
+FROM agg
+JOIN publish.Revenue r ON r.pkClient = agg.pkClient`
+    ],
+    [
+      "multi-CTE chain",
+      `WITH base AS (
+  SELECT r.pkClient, c.ClientName, SUM(r.RevenueZARMTD) AS rev
+  FROM publish.Revenue r
+  JOIN dim.Client c ON c.pkClient = r.pkClient
+  GROUP BY r.pkClient, c.ClientName
+),
+ranked AS (
+  SELECT b.ClientName, b.rev, ROW_NUMBER() OVER (ORDER BY b.rev DESC) AS rn
+  FROM base b
+)
+SELECT ranked.ClientName, ranked.rev
+FROM ranked
+WHERE ranked.rn = 1`
+    ]
+  ]
+
+  for (const [name, sql] of cases) {
+    it(`accepts valid ${name}`, () => {
+      expect(detectInventedColumns(sql, cteAccessor)).toEqual([])
+    })
+  }
 })
 
 describe("validateQueryDetailed — invented_column block", () => {

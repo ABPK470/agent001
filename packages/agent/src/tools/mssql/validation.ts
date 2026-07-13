@@ -11,7 +11,11 @@ import {
   detectBareInventedColumns,
   detectPostUnionGroupBy,
   detectUnverifiedTableRefs,
-  splitUnionBranches
+  extendCteFromAliases,
+  extractCteOutputColumns,
+  parseCteChain,
+  splitUnionBranches,
+  unionCteOutputColumns
 } from "./schema-binding.js"
 import {
   _resetCatalogQueriesCache,
@@ -523,9 +527,8 @@ export function detectAvgOfCoalesceZero(query: string): AvgOfCoalesceZeroOffende
 //
 // This guard reads the live catalog (built at startup from sys.all_columns)
 // and rejects qualified column references whose column does NOT exist on
-// the table the alias points to. It is intentionally CONSERVATIVE: when
-// alias provenance is ambiguous (CTE, derived table, UNION), it skips the
-// whole statement rather than risk a false positive.
+// the table the alias points to, or on a CTE projection when the alias
+// names a CTE. Derived-table subqueries and sys.* references are skipped.
 //
 // Catalog access is sync (`getCatalog()` returns an in-memory snapshot).
 // When no catalog is loaded (early startup, unit tests, server-less mode),
@@ -670,9 +673,8 @@ function nearestColumns(target: string, columns: ReadonlyArray<{ name: string }>
 /**
  * Conservative column-existence guard. Returns the list of qualified
  * column references whose column is provably absent from the catalog table
- * the alias resolves to. Statements with CTEs, derived tables, set
- * operators, or sys.* references are skipped (returned offenders only
- * cover statements where alias provenance is unambiguous).
+ * the alias resolves to, or from a CTE projection. Derived-table
+ * subqueries and sys.* references are skipped per fragment.
  */
 export function detectInventedColumns(
   query: string,
@@ -690,7 +692,11 @@ export function detectInventedColumns(
   const offenders: InventedColumnOffender[] = []
   const seen = new Set<string>()
 
-  const validateFragment = (stmt: string): void => {
+  const validateFragment = (
+    stmt: string,
+    cteBindings: Map<string, ReadonlySet<string>>,
+    allowedBareColumns: ReadonlySet<string>
+  ): void => {
     if (!stmt.trim()) return
     if (/\bFROM\s*\(\s*SELECT\b/i.test(stmt)) return
     if (/\bJOIN\s*\(\s*SELECT\b/i.test(stmt)) return
@@ -712,7 +718,7 @@ export function detectInventedColumns(
       aliasMap.set(candidate.toLowerCase(), { alias: candidate, qualifiedTable: qualified })
     }
 
-    if (aliasMap.size === 0) return
+    if (aliasMap.size === 0 && cteBindings.size === 0) return
 
     const refRe = /\b\[?(\w+)\]?\.\[?(\w+)\]?(?:\.\[?(\w+)\]?)?/g
     let rm: RegExpExecArray | null
@@ -736,6 +742,23 @@ export function detectInventedColumns(
       } else {
         const aliasLower = a.toLowerCase()
         if (reservedAliases.has(aliasLower)) continue
+
+        const cteCols = cteBindings.get(aliasLower)
+        if (cteCols) {
+          const colLower = b.toLowerCase()
+          if (cteCols.has(colLower)) continue
+          const key = `cte::${aliasLower}::${colLower}`
+          if (seen.has(key)) continue
+          seen.add(key)
+          offenders.push({
+            reference: `${a}.${b}`,
+            table: `CTE ${a}`,
+            column: b,
+            suggestions: [...cteCols].slice(0, 3)
+          })
+          continue
+        }
+
         const binding = aliasMap.get(aliasLower)
         if (!binding) continue
         if (NON_COLUMN_TOKEN.has(b.toLowerCase())) continue
@@ -761,7 +784,9 @@ export function detectInventedColumns(
       })
     }
 
-    for (const bare of detectBareInventedColumns(stmt, aliasMap, (q) => catalog.getTable(q))) {
+    for (const bare of detectBareInventedColumns(stmt, aliasMap, (q) => catalog.getTable(q), {
+      allowedBareColumns
+    })) {
       const key = `bare::${bare.column.toLowerCase()}`
       if (seen.has(key)) continue
       seen.add(key)
@@ -774,13 +799,31 @@ export function detectInventedColumns(
     }
   }
 
+  const validateStatement = (stmt: string): void => {
+    const chain = parseCteChain(stmt)
+    if (!chain) {
+      validateFragment(stmt, new Map(), new Set())
+      return
+    }
+
+    const cteBindings = new Map<string, ReadonlySet<string>>()
+    for (const cte of chain.ctes) {
+      extendCteFromAliases(cte.body, cteBindings)
+      validateFragment(cte.body, cteBindings, unionCteOutputColumns(cteBindings))
+      cteBindings.set(cte.name.toLowerCase(), extractCteOutputColumns(cte.body))
+    }
+
+    extendCteFromAliases(chain.main, cteBindings)
+    validateFragment(chain.main, cteBindings, unionCteOutputColumns(cteBindings))
+  }
+
   const statements = stripped.split(/;\s*/)
   for (const stmt of statements) {
     if (!stmt.trim()) continue
     if (/\bUNION\b/i.test(stmt)) {
-      for (const branch of splitUnionBranches(stmt)) validateFragment(branch)
+      for (const branch of splitUnionBranches(stmt)) validateStatement(branch)
     } else {
-      validateFragment(stmt)
+      validateStatement(stmt)
     }
   }
   return offenders
