@@ -1,10 +1,13 @@
 import sql from "mssql"
+import { getTenantConfig } from "../../application/shell/tenant-config.js"
 import { readToolTraceContext } from "../../application/shell/loop.js"
 import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
 import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/agent-types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import type { CatalogGraph } from "../catalog/graph/index.js"
+import { getCatalog } from "../catalog/index.js"
 import { getPool } from "./connection.js"
+import { resolveToolConnectionArg } from "./resolve-connection.js"
 import { detectDimJoinNullRot, renderDimJoinNullBanner } from "./dim-join-quality.js"
 import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
 import { formatResults } from "./formatter.js"
@@ -13,14 +16,7 @@ import { markMssqlTableVerified } from "./schema-verified.js"
 import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
 
 function catalogAccessorFor(host: AgentHost, connectionName: string): () => CatalogGraph | null {
-  return () => {
-    const exact = host.catalog.instances.get(connectionName)
-    if (exact) return exact
-    if (connectionName === "default" && host.catalog.instances.size > 0) {
-      return host.catalog.instances.values().next().value ?? null
-    }
-    return null
-  }
+  return () => getCatalog(host, connectionName)
 }
 
 function recordDoctrineLesson(
@@ -51,6 +47,7 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool {
       "CRITICAL: NEVER guess column names. Before writing ANY query, call explore_mssql_schema first " +
       "to get the exact column names and types for each table you plan to query. " +
       "Always use schema-qualified table names (e.g. agent.PipelineRun, not just PipelineRun). " +
+      "Bracket every table alias: FROM dim.Officer AS [off] and [off].[OfficerName] — never bare `off` (reserved-word safe; auto-fixed when possible). " +
       "Always SELECT only the columns you actually need — never SELECT * on tables with wide JSON/blob columns " +
       "(e.g. core.Dataset has a 50KB+ controlFlow column). " +
       "When data spans multiple tables/views, explore EACH table first, then JOIN them. " +
@@ -85,10 +82,15 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool {
     },
 
     async execute(args) {
-      const query = String(args.query).trim()
+      let query = String(args.query).trim()
       if (!query) return "Error: query cannot be empty."
 
-      const connectionName = args.connection ? String(args.connection).trim() : "default"
+      let connectionName: string
+      try {
+        connectionName = resolveToolConnectionArg(host, args)
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : String(err)}`
+      }
       const accessor = catalogAccessorFor(host, connectionName)
       const toolTrace = readToolTraceContext(args)
 
@@ -102,7 +104,7 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool {
         return `Error: ${err instanceof Error ? err.message : String(err)}`
       }
 
-      // Validate before executing
+      // Validate before executing (auto-normalizes alias bracketing).
       const validation = validateQueryDetailed(query, writeEnabled, {
         accessor,
         profiledTables: run?.mssqlProfileCalls ?? null,
@@ -127,6 +129,7 @@ function buildQueryMssqlTool(host: AgentHost, run?: RunContext): Tool {
         recordDoctrineLesson(run, validation.lesson)
         return validation.error ?? "Query blocked"
       }
+      query = validation.preparedQuery ?? query
 
       try {
         // Optional database switch
@@ -256,7 +259,12 @@ function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool {
     },
 
     async execute(args) {
-      const connectionName = args.connection ? String(args.connection).trim() : "default"
+      let connectionName: string
+      try {
+        connectionName = resolveToolConnectionArg(host, args)
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : String(err)}`
+      }
 
       let pool: sql.ConnectionPool
       try {
@@ -466,9 +474,22 @@ function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool {
 
             if (!result.recordset.length)
               return `No tables/views found matching '${String(args.search)}'. Try a different keyword.`
+
+            const ranking = new Map(
+              getTenantConfig().schemaRanking.map((r) => [r.schema.toLowerCase(), r.weight])
+            )
+            const rows = [...result.recordset].sort((a, b) => {
+              const recA = a as { TABLE_SCHEMA: string; ROW_COUNT?: number | null }
+              const recB = b as { TABLE_SCHEMA: string; ROW_COUNT?: number | null }
+              const wa = ranking.get(recA.TABLE_SCHEMA.toLowerCase()) ?? 0
+              const wb = ranking.get(recB.TABLE_SCHEMA.toLowerCase()) ?? 0
+              if (wb !== wa) return wb - wa
+              return (recB.ROW_COUNT ?? 0) - (recA.ROW_COUNT ?? 0)
+            })
+
             return (
-              `Tables/views matching '${String(args.search)}':\n` +
-              formatResults(result.recordsets as sql.IRecordSet<unknown>[], result.rowsAffected)
+              `Tables/views matching '${String(args.search)}' (ranked by analytic schema tier):\n` +
+              formatResults([rows] as sql.IRecordSet<unknown>[], [rows.length])
             )
           }
 

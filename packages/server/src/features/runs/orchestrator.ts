@@ -30,6 +30,7 @@ import type {
 import { TrajectoryEventKind } from "../../shared/enums/trajectory.js"
 import type { CurrentSession } from "../auth/runtime/context.js"
 import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
+import { persistLearnedTermFromResolution } from "./execution/clarifications-learned.js"
 import { createNotification, saveTrace } from "./execution/persistence.js"
 import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
@@ -428,6 +429,15 @@ export class AgentOrchestrator {
     const round = this.activeRuns.get(runId)?.traceSeq ?? 0
     const resolvedClarification = this.clarifications.resolvePending(runId, response, round)
     if (resolvedClarification) {
+      // Learn the term→table mapping durably (org-wide) so future runs reuse
+      // the user's answer instead of re-asking "what do you mean by X?".
+      const activeRun = this.activeRuns.get(runId)
+      persistLearnedTermFromResolution(
+        resolvedClarification,
+        activeRun?.goal ?? "",
+        activeRun?.ownerUpn ?? null,
+        this.bootHostDeps
+      )
       saveTrace(this.activeRuns, runId, {
         kind: TrajectoryEventKind.ClarificationResolved,
         findingId: resolvedClarification.findingId,

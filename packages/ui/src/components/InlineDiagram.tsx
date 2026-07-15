@@ -232,7 +232,7 @@ function RelationshipsDiagram({ data, kind }: { data: RelationshipsData; kind: G
                   {truncate(label, 22)}
                 </text>
                 {n.subtitle && (
-                  <text x={p.x + BOX_W / 2} y={p.y + 34} textAnchor="middle" fontSize={9} fill="rgba(148,163,184,0.85)">
+                  <text x={p.x + BOX_W / 2} y={p.y + 35} textAnchor="middle" fontSize={11} fill="var(--color-text-secondary)" fontWeight="500">
                     {truncate(n.subtitle, 26)}
                   </text>
                 )}

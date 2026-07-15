@@ -1,5 +1,12 @@
 import sql from "mssql"
 import type { AgentHost } from "../../application/shell/runtime.js"
+import {
+  canonicalizeConfiguredConnectionName,
+  listMssqlConnectionNames,
+  lookupRegistryKey,
+  resolveMssqlConnectionName,
+  tryResolveMssqlConnectionName
+} from "./resolve-connection.js"
 
 // ── Named connection registry ────────────────────────────────────
 
@@ -17,12 +24,15 @@ export interface DatabaseEntry {
 
 /** Override which named connection is used when connection='default' or is omitted. */
 export function setDefaultMssqlConnection(host: AgentHost, name: string): void {
-  host.mssql.defaultConnection.value = name
+  const canonical = canonicalizeConfiguredConnectionName(listMssqlConnectionNames(host), name)
+  host.mssql.defaultConnection.value = canonical ?? name
 }
 
-/** Return the configured default connection name (null = fall back to first). */
+/** Return the configured default connection name (canonical registry key). */
 export function getDefaultMssqlConnectionName(host: AgentHost): string | null {
-  return host.mssql.defaultConnection.value
+  const raw = host.mssql.defaultConnection.value
+  if (!raw) return null
+  return canonicalizeConfiguredConnectionName(listMssqlConnectionNames(host), raw) ?? raw
 }
 
 /**
@@ -97,7 +107,8 @@ export function setMssqlConfigs(
 
 /** Enable/disable write operations for a named connection (default: "default"). */
 export function setMssqlWriteEnabled(host: AgentHost, enabled: boolean, name = "default"): void {
-  const entry = host.mssql.databases.get(name)
+  const resolved = tryResolveMssqlConnectionName(host, name) ?? name
+  const entry = host.mssql.databases.get(resolved)
   if (entry) entry.writeEnabled = enabled
 }
 
@@ -123,21 +134,10 @@ export async function getPool(
   host: AgentHost,
   name = "default"
 ): Promise<{ pool: sql.ConnectionPool; entry: DatabaseEntry }> {
-  // In multi-database mode the connections are named (e.g. "uat", "dev") and
-  // there is no "default" entry.  Fall back to:
-  //   1. The connection named by setDefaultMssqlConnection() / MSSQL_DEFAULT_CONNECTION
-  //   2. The first configured connection (legacy fallback)
-  const mssql = host.mssql
-  const resolvedName = mssql.databases.has(name)
-    ? name
-    : name === "default" && mssql.databases.size > 0
-      ? mssql.defaultConnection.value && mssql.databases.has(mssql.defaultConnection.value)
-        ? mssql.defaultConnection.value
-        : (mssql.databases.keys().next().value as string)
-      : name
-  const entry = mssql.databases.get(resolvedName)
+  const resolvedName = resolveMssqlConnectionName(host, name)
+  const entry = host.mssql.databases.get(resolvedName)
   if (!entry) {
-    const available = Array.from(mssql.databases.keys()).join(", ") || "none"
+    const available = listMssqlConnectionNames(host).join(", ") || "none"
     throw new Error(
       `MSSQL connection "${name}" not configured. Available: ${available}. ` +
         `Call setMssqlConfig() or setMssqlConfigs() at startup.`

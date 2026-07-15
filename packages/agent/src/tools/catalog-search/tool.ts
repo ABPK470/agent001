@@ -2,6 +2,7 @@ import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
 import { getTenantConfig } from "../../application/shell/tenant-config.js"
 import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/agent-types.js"
 import { markMssqlTableVerified } from "../mssql/schema-verified.js"
+import { resolveMssqlConnectionName } from "../mssql/resolve-connection.js"
 import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"
 import {
   handleColumn,
@@ -76,7 +77,12 @@ function buildSearchCatalogTool(host: AgentHost, run?: RunContext): Tool {
     },
 
     async execute(args) {
-      const connName = args.connection ? String(args.connection).trim() : "default"
+      let connName: string
+      try {
+        connName = resolveMssqlConnectionName(host, args.connection ? String(args.connection).trim() : null)
+      } catch (err) {
+        return err instanceof Error ? err.message : String(err)
+      }
 
       if (args.refresh) {
         try {
@@ -115,7 +121,12 @@ function buildSearchCatalogTool(host: AgentHost, run?: RunContext): Tool {
         if (resolved) markMssqlTableVerified(run, resolved.qualifiedName)
         return result
       }
-      if (args.joins) return handleJoins(catalog, String(args.joins).trim())
+      if (args.joins) {
+        const joinsArg = String(args.joins).trim()
+        const resolved = catalog.getTable(joinsArg)
+        if (resolved) markMssqlTableVerified(run, resolved.qualifiedName)
+        return handleJoins(catalog, joinsArg)
+      }
       if (args.column) return handleColumn(catalog, String(args.column).trim())
 
       if (args.path) {

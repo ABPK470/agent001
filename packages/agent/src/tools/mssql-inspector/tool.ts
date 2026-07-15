@@ -2,7 +2,7 @@ import type sql from "mssql"
 import type { AgentHost } from "../../application/shell/runtime.js"
 import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/agent-types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
-import { getPool } from "../mssql/index.js"
+import { getPool, resolveToolConnectionArg } from "../mssql/index.js"
 import { runObjectInspection } from "./handlers/definition.js"
 import { runDependsOn, runSearch } from "./handlers/dependency.js"
 import { runIndexUsage, runMissingIndexes, runSlowQueries } from "./handlers/observability.js"
@@ -114,7 +114,12 @@ function buildInspectDefinitionTool(host: AgentHost): Tool {
     },
 
     async execute(args) {
-      const connName = args.connection ? String(args.connection).trim() : undefined
+      let connName: string
+      try {
+        connName = resolveToolConnectionArg(host, args)
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : String(err)}`
+      }
 
       // Cache pre-flight for `object=` mode — the T-SQL body of a view / proc
       // changes only on DDL, which the catalog fingerprint captures via

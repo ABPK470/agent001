@@ -33,6 +33,7 @@ import {
 } from "../src/application/core/planner.js"
 import { ToolFailureCircuitBreaker } from "../src/application/core/recovery.js"
 import * as delegationDecision from "../src/application/shell/delegation-cluster/decision/index.js"
+import { runDelegationGate } from "../src/application/core/planner-cluster/orchestrator/setup-delegation.js"
 import { CHILD_SYSTEM_PROMPT } from "../src/tools/index.js"
 import type { LLMClient, Tool } from "../src/domain/agent-types.js"
 
@@ -185,6 +186,147 @@ describe("Planner decision: assessPlannerDecision", () => {
     )
     expect(decision.shouldPlan).toBe(true)
     expect(decision.route).toBe("planner")
+  })
+
+  it("does not treat 'top 2.' mid-sentence as a numbered multi-step list", () => {
+    const decision = assessPlannerDecision(
+      "great are you able to create top 5 list of bankers? We have top 2. I want top 5",
+      []
+    )
+    expect(decision.route).toBe("direct")
+    expect(decision.reason).toBe("top_n_data_list")
+    expect(decision.shouldPlan).toBe(false)
+  })
+
+  it("routes domain data questions to the direct loop without planner decomposition", () => {
+    const decision = assessPlannerDecision("Show client revenue breakdown for last month", [])
+    expect(decision.route).toBe("direct")
+    expect(decision.reason).toBe("domain_data_query")
+    expect(decision.shouldPlan).toBe(false)
+  })
+
+  it("does not route score-only multi_step+tool_diversity without implementation scope to planner", () => {
+    const decision = assessPlannerDecision(
+      "create top 5 list of bankers? We have top 2. I want top 5",
+      []
+    )
+    expect(decision.route).toBe("direct")
+    expect(decision.shouldPlan).toBe(false)
+  })
+
+  it("still routes line-start numbered lists to planner when complexity warrants it", () => {
+    const decision = assessPlannerDecision(
+      "Build the full app:\n1. Create the schema\n2. Implement the API\n3. Ship the frontend",
+      []
+    )
+    expect(decision.shouldPlan).toBe(true)
+    expect(decision.route).toBe("planner")
+    expect(decision.reason).toContain("multi_step")
+  })
+})
+
+describe("Planner delegation gate", () => {
+  const subagentPlan: Plan = {
+    reason: "test plan",
+    confidence: 0.8,
+    requiresSynthesis: false,
+    steps: [
+      {
+        name: "resolve_metric_definition",
+        stepType: "subagent_task",
+        objective: "Clarify banker ranking metric",
+        inputContract: "Goal only",
+        acceptanceCriteria: ["Metric defined"],
+        requiredToolCapabilities: ["query_mssql"],
+        contextRequirements: [],
+        maxBudgetHint: "5 iterations",
+        canRunParallel: false,
+        executionContext: {
+          workspaceRoot: ".",
+          allowedReadRoots: ["."],
+          allowedWriteRoots: ["."],
+          allowedTools: ["query_mssql"],
+          requiredSourceArtifacts: [],
+          targetArtifacts: [],
+          effectClass: "readonly",
+          verificationMode: "none",
+          artifactRelations: []
+        }
+      }
+    ],
+    edges: []
+  }
+
+  it("falls back to the direct loop when delegation economics decline", () => {
+    const spy = vi.spyOn(delegationDecision, "assessDelegationDecision").mockReturnValue({
+      shouldDelegate: false,
+      reason: "score_below_threshold",
+      threshold: 0.2,
+      utilityScore: 0.19,
+      decompositionBenefit: 0.1,
+      coordinationOverhead: 0.3,
+      latencyCostRisk: 0.2,
+      safetyRisk: 0.13,
+      confidence: 0.4,
+      hardBlockedTaskClass: null,
+      hardBlockedTaskClassSource: null,
+      hardBlockedTaskClassSignal: null,
+      diagnostics: {}
+    })
+
+    try {
+      const gate = runDelegationGate(
+        subagentPlan,
+        "create top 5 list of bankers",
+        { route: "planner", score: 4, reason: "multi_step+tool_diversity" },
+        {},
+        undefined
+      )
+
+      expect(gate.blocked).toBe(true)
+      if (!gate.blocked) throw new Error("expected blocked gate")
+      expect(gate.result.handled).toBe(false)
+      expect(gate.result.skipReason).toContain("score_below_threshold")
+      expect(gate.result.answer).toBeUndefined()
+    } finally {
+      spy.mockRestore()
+    }
+  })
+
+  it("still fails closed for safety-risk delegation blocks", () => {
+    const spy = vi.spyOn(delegationDecision, "assessDelegationDecision").mockReturnValue({
+      shouldDelegate: false,
+      reason: "safety_risk_high",
+      threshold: 0.2,
+      utilityScore: 0.9,
+      decompositionBenefit: 0.8,
+      coordinationOverhead: 0.1,
+      latencyCostRisk: 0.1,
+      safetyRisk: 0.95,
+      confidence: 0.9,
+      hardBlockedTaskClass: null,
+      hardBlockedTaskClassSource: null,
+      hardBlockedTaskClassSignal: null,
+      diagnostics: {}
+    })
+
+    try {
+      const gate = runDelegationGate(
+        subagentPlan,
+        "delete production database",
+        { route: "planner", score: 6, reason: "delegation_cue" },
+        {},
+        undefined
+      )
+
+      expect(gate.blocked).toBe(true)
+      if (!gate.blocked) throw new Error("expected blocked gate")
+      expect(gate.result.handled).toBe(true)
+      expect(gate.result.answer).toContain('"kind": "planner_failure"')
+      expect(gate.result.answer).toContain('"stage": "delegation"')
+    } finally {
+      spy.mockRestore()
+    }
   })
 })
 

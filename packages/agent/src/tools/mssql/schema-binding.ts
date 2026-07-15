@@ -6,6 +6,15 @@
  */
 
 import type { CatalogAccessor } from "../catalog/index.js"
+import { verifiedTableKey } from "./schema-verified.js"
+
+function isTableVerified(refLower: string, verifiedTables: ReadonlySet<string>): boolean {
+  if (verifiedTables.has(refLower)) return true
+  for (const v of verifiedTables) {
+    if (verifiedTableKey(v) === refLower) return true
+  }
+  return false
+}
 
 function stripForScan(query: string): string {
   return query
@@ -45,9 +54,11 @@ export function detectUnverifiedTableRefs(
 
   const missing: string[] = []
   for (const ref of extractBaseTableRefs(query)) {
-    if (verifiedTables.has(ref)) continue
-    if (!catalog.getTable(ref)) continue
-    if (!missing.includes(ref)) missing.push(ref)
+    if (isTableVerified(ref, verifiedTables)) continue
+    const catalogTable = catalog.getTable(ref)
+    if (!catalogTable) continue
+    const canonical = catalogTable.qualifiedName
+    if (!missing.includes(canonical)) missing.push(canonical)
   }
   return missing
 }

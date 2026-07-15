@@ -288,7 +288,8 @@ export async function executeToolRound(
           toolName: call.name,
           args: call.arguments,
           result: execResult.result,
-          isError: true
+          isError: true,
+          messages
         })
       } catch (e) {
         log.logError(`onToolResult hook threw (ignored): ${e instanceof Error ? e.message : String(e)}`)
@@ -337,7 +338,8 @@ export async function executeToolRound(
           toolName: call.name,
           args: call.arguments,
           result: enriched,
-          isError: semanticFailure
+          isError: semanticFailure,
+          messages
         })
       } catch (e) {
         log.logError(`onToolResult hook threw (ignored): ${e instanceof Error ? e.message : String(e)}`)

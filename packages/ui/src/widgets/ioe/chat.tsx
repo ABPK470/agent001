@@ -124,7 +124,9 @@ export function ChatPanel({
     onScroll,
     scrollToBottom,
     pauseAutoScroll,
+    resumeAutoFollow,
     showJumpButton,
+    stickIfFollowing,
   } = useStickToBottomScroll({
     initialScroll: "none",
     followWhen: isRunning || Boolean(streamingAnswer),
@@ -149,6 +151,18 @@ export function ChatPanel({
       })
     })
   }, [chatTurns.length, isRunning, streamingAnswer, scrollToBottom])
+
+  useEffect(() => {
+    if (!isRunning && !streamingAnswer) return
+    stickIfFollowing()
+  }, [streamingAnswer, messages.length, isRunning, stickIfFollowing])
+
+  const jumpToLatest = useCallback(() => {
+    resumeAutoFollow()
+    requestAnimationFrame(() => {
+      scrollToBottom("instant", { stick: isRunning || Boolean(streamingAnswer) })
+    })
+  }, [resumeAutoFollow, scrollToBottom, isRunning, streamingAnswer])
 
   async function handleFileChange(e: React.ChangeEvent<HTMLInputElement>) {
     const files = Array.from(e.target.files ?? [])
@@ -280,7 +294,7 @@ export function ChatPanel({
       {showJumpButton && (
         <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
           <div className="pointer-events-auto">
-            <ScrollToLatestButton onClick={() => scrollToBottom("instant", { stick: false })} />
+            <ScrollToLatestButton onClick={jumpToLatest} />
           </div>
         </div>
       )}

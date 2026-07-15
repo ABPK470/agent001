@@ -195,6 +195,7 @@ export interface LLMClient {
       maxTokens?: number
       temperature?: number
       onToken?: (token: string) => void
+      onFirstToolCallDelta?: () => void
     }
   ): Promise<LLMResponse>
   /**
@@ -313,9 +314,21 @@ export interface AgentConfig {
   onNudge?: (data: { tag: string; message: string; iteration: number }) => void
   /**
    * Called once per tool call AFTER it finishes (success or failure), with the
-   * exact text the model sees as the tool result. Used by the server to
-   * persist structured payloads to `tool_results` for cross-turn grounding
-   * (no-amnesia memory). MUST NOT throw — wrap implementation in try/catch.
+   * exact text the model sees as the tool result, AND the live `messages`
+   * array as it stands immediately after the tool result was appended — i.e.
+   * the conversation state at the most recent durable unit of progress.
+   *
+   * Two server-side consumers ride this hook:
+   *   1. `persistToolResult` — writes a curated payload to `tool_results`
+   *      for cross-turn grounding (no-amnesia memory).
+   *   2. `writeRunCheckpoint` — snapshots `messages` into the `checkpoints`
+   *      table so resume picks up from THIS tool call rather than from the
+   *      last completed iteration. This is what makes resume tool-call
+   *      granular instead of iteration-granular.
+   *
+   * `messages` is the same array the loop mutates in place, so by the time
+   * this fires it already contains the just-appended tool result. MUST NOT
+   * throw — wrap implementation in try/catch.
    */
   onToolResult?: (data: {
     iteration: number
@@ -324,6 +337,8 @@ export interface AgentConfig {
     args: Record<string, unknown>
     result: string
     isError: boolean
+    /** Live message history, including the just-appended tool result. */
+    messages: Message[]
   }) => void
   /**
    * When true, defer recovery-hint system nudges until the agent first attempts

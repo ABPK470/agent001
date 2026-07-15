@@ -46,6 +46,9 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
   const [showJumpButton, setShowJumpButton] = useState(false)
 
   const suspendFollowUntilRef = useRef(0)
+  const lastContentHeightRef = useRef(0)
+  const lastStickAtRef = useRef(0)
+  const prevFollowWhenRef = useRef(followWhen)
 
   followWhenRef.current = followWhen
 
@@ -80,6 +83,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
 
   const resumeAutoFollow = useCallback(() => {
     suspendFollowUntilRef.current = 0
+    userEngagedRef.current = false
   }, [])
 
   const onScroll = useCallback(() => {
@@ -140,6 +144,7 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     if (resetChanged) {
       shouldStickRef.current = true
       userEngagedRef.current = false
+      lastContentHeightRef.current = 0
       programmaticScrollRef.current = true
       scrollHostToBottom(host)
       setShowJumpButton(false)
@@ -159,6 +164,18 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
       if (!hasInitializedRef.current) return
       cancelAnimationFrame(resizeRaf)
       resizeRaf = requestAnimationFrame(() => {
+        const height = inner.scrollHeight
+        // Track shrink so a later grow (e.g. after markdown reflow) still follows.
+        if (height < lastContentHeightRef.current) {
+          lastContentHeightRef.current = height
+          return
+        }
+        if (height === lastContentHeightRef.current) return
+        lastContentHeightRef.current = height
+
+        const now = performance.now()
+        if (now - lastStickAtRef.current < 48) return
+        lastStickAtRef.current = now
         stickIfFollowing()
       })
     })
@@ -170,6 +187,22 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     }
   }, [stickIfFollowing])
 
+  // When live generation starts, re-engage follow if the user is already at the
+  // bottom and has not explicitly scrolled away or expanded a row.
+  useEffect(() => {
+    const wasLive = prevFollowWhenRef.current
+    prevFollowWhenRef.current = followWhen
+    if (!followWhen || wasLive) return
+    const host = scrollHostRef.current
+    if (!host || userEngagedRef.current) return
+    if (Date.now() < suspendFollowUntilRef.current) return
+    if (isNearBottom(host, threshold)) {
+      shouldStickRef.current = true
+      setShowJumpButton(false)
+      stickIfFollowing()
+    }
+  }, [followWhen, stickIfFollowing, threshold])
+
   return {
     scrollHostRef,
     contentRef,
@@ -179,5 +212,6 @@ export function useStickToBottomScroll(options: UseStickToBottomScrollOptions = 
     suspendAutoFollow,
     resumeAutoFollow,
     showJumpButton,
+    stickIfFollowing,
   }
 }

@@ -341,6 +341,8 @@ do NOT exist — using them will produce `Invalid column name` errors.
 | Revenue by P&L / book | `fact.PNLRevenueMTD` | Month-to-date P&L. Always run explore_mssql_schema to get exact column names before querying. |
 | Account balances | `publish.Balances` or `fact.AfricaFlexDailyBalances` | publish view is pre-joined; fact table needs dim.Account join. Verify columns first. |
 | Client details / hierarchy | `dim.Client` + `dim.CIBParent` | 26M rows — always filter by `pkClient`. Join key: `pkClient`. |
+| Month / calendar / time grouping | `dim.Date` joined to `dim.Month` | Default reporting month: filter/group on `dim.Date.pkMonth` (FK → `dim.Month`). Do not ask which "month" table — use this path unless the user explicitly wants accounting month (`pkAccountingMonth`). |
+| ABSA customer filter | `etl.ABSA_CUSTOMER` or `dim.Client` | This deployment is ABSA's MyMI warehouse — "ABSA" refers to the bank's customer universe, not an unknown business term. |
 | Sales credits | `publish.AfricaSalesCreditTradesRules` | Pre-joined view with rules applied. Verify column names with explore_mssql_schema. |
 | Risk (RWA) | `fact.RWA` | 484M rows — mandatory date filter. Verify column names before use. |
 | Pipeline runs / ETL status | `agent.vPipelineRun` | Use the view, not the base table. Verify columns with explore_mssql_schema. |

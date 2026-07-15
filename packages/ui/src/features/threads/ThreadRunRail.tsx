@@ -216,7 +216,7 @@ export function ThreadRunRail({
         </div>
 
         <div className="thread-run-rail-capsule" role="navigation" aria-label="Jump to run">
-          <div className={`thread-run-rail-capsule-scroll${transcriptRuns.length > 16 ? " thread-run-rail-capsule-scroll--overflow" : ""}`}>
+          <div className={`thread-run-rail-capsule-scroll${transcriptRuns.length > 12 ? " thread-run-rail-capsule-scroll--overflow" : ""}`}>
             {transcriptRuns.map((run) => (
               <button
                 key={run.id}

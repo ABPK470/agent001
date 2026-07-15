@@ -1,4 +1,4 @@
-import { getCatalog, PolicyRole, resolveGoalDataAnchors, seedMssqlVerifiedTables, type AgentHost, type RunContext, type Tool } from "@mia/agent"
+import { getCatalog, PolicyRole, resolveEffectiveMssqlConnection, resolveGoalDataAnchors, seedMssqlVerifiedTables, type AgentHost, type RunContext, type Tool } from "@mia/agent"
 import { broadcastTrace } from "../../../../platform/events/broadcaster.js"
 import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 import { loadCandidateVerdicts, loadKnownObjects } from "../../core/data-blocks/known-objects.js"
@@ -56,9 +56,11 @@ export async function buildExecutionSystemMessages(
         })
       : []
 
+  const effectiveConnection = resolveEffectiveMssqlConnection(envBase.perRunHost, request.goal)
+
   const knownObjects = (() => {
     try {
-      return loadKnownObjects({ goal: request.goal, priorTurns })
+      return loadKnownObjects({ goal: request.goal, priorTurns, connection: effectiveConnection })
     } catch (error) {
       console.warn(`[run ${request.runId}] knownObjects load failed:`, (error as Error).message)
       return []
@@ -66,19 +68,17 @@ export async function buildExecutionSystemMessages(
   })()
 
   if (input.runContext) {
-    seedMssqlVerifiedTables(
-      input.runContext,
-      knownObjects.map((o) => o.qname)
-    )
-    try {
-      const catalog = getCatalog(envBase.perRunHost)
-      if (catalog) {
-        for (const anchor of resolveGoalDataAnchors(request.goal, catalog)) {
+    const catalog = getCatalog(envBase.perRunHost, effectiveConnection)
+    const verifiedQnames = knownObjects
+      .map((o) => o.qname)
+      .filter((q) => !catalog || catalog.getTable(q))
+    seedMssqlVerifiedTables(input.runContext, verifiedQnames)
+    if (catalog) {
+      for (const anchor of resolveGoalDataAnchors(request.goal, catalog)) {
+        if (catalog.getTable(anchor.qualifiedName)) {
           seedMssqlVerifiedTables(input.runContext, [anchor.qualifiedName])
         }
       }
-    } catch {
-      // catalog unavailable — skip goal-anchor seeding
     }
   }
 
@@ -98,7 +98,7 @@ export async function buildExecutionSystemMessages(
       try {
         return loadCandidateVerdicts({
           goal: request.goal,
-          catalog: getCatalog(envBase.perRunHost),
+          catalog: getCatalog(envBase.perRunHost, effectiveConnection),
           upn: envBase.activeRun?.ownerUpn ?? null
         })
       } catch (error) {

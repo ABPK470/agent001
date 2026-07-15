@@ -41,4 +41,4 @@ export interface DoctrineModule {
 }
 
 /** Total byte budget for the assembled doctrine block in the system prompt. */
-export const DOCTRINE_BLOCK_BUDGET_BYTES = 2816
+export const DOCTRINE_BLOCK_BUDGET_BYTES = 3008

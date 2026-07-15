@@ -42,6 +42,13 @@ export interface PlannerRoutingContext {
 /**
  * Attempt planner routing. Returns a final answer when the planner fully
  * handles the goal; otherwise the caller continues in the direct tool loop.
+ *
+ * Two-tier model:
+ *   Tier 0 (assessPlannerDecision) — cheap goal-class routing: data queries,
+ *     edits, and dialogue skip planner entirely.
+ *   Tier 1 (runDelegationGate, post-plan) — structural economics on the
+ *     generated plan: should child subagents run? Declining here falls back
+ *     to the direct loop; it is not a fatal error.
  */
 export async function attemptPlannerRouting(ctx: PlannerRoutingContext): Promise<PlannerRoutingResult> {
   const { goal, config } = ctx

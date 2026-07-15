@@ -308,7 +308,12 @@ export function OperatorEnvironment() {
       const threadId = useStore.getState().activeThreadId
       if (!threadId) return
       const { runId } = await api.startRun(goal, agentId || undefined, attachmentIds, threadId)
-      setActiveRun(runId)
+      useStore.getState().beginOptimisticRun({
+        id: runId,
+        goal,
+        threadId,
+        agentId: agentId ?? null,
+      })
       clearGoalInput()
       setGoalAttachments([])
     } catch {

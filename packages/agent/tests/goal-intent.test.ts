@@ -3,8 +3,10 @@ import type { Message } from "../src/domain/agent-types.js"
 import {
   extractPriorAssistantNarrative,
   extractTurnMinusOneAnswer,
+  isClarificationExemptGoal,
   isConversationalNoToolGoal,
-  isDirectDialogueGoal
+  isDirectDialogueGoal,
+  isDirectSyncExecuteCommand
 } from "../src/application/core/goal-intent.js"
 
 function priorTurnsMessage(answer: string, goal = "how many LOCs?"): Message {
@@ -133,5 +135,42 @@ describe("extractPriorAssistantNarrative", () => {
       priorTurnsMessage("Fresh offer: I can also generate a chart.")
     ]
     expect(extractPriorAssistantNarrative(messages)).toContain("Fresh offer")
+  })
+})
+
+describe("isDirectSyncExecuteCommand", () => {
+  it("recognises the canonical agent-emitted execute command", () => {
+    expect(isDirectSyncExecuteCommand("sync_execute planId=2134-124-24-124 confirm=true")).toBe(true)
+    expect(
+      isDirectSyncExecuteCommand('sync_execute planId="a1b2c3d4-e5f6-7890-abcd-ef1234567890" confirm=true')
+    ).toBe(true)
+  })
+
+  it("tolerates a leading assent prefix", () => {
+    expect(isDirectSyncExecuteCommand("ok, sync_execute planId=2134-124-24-124 confirm=true")).toBe(true)
+    expect(isDirectSyncExecuteCommand("yes sync_execute planId=2134 confirm=true")).toBe(true)
+    expect(isDirectSyncExecuteCommand("go ahead: sync_execute planId=2134-124-24-124 confirm=true")).toBe(true)
+  })
+
+  it("does not match questions about the command", () => {
+    expect(isDirectSyncExecuteCommand("what does sync_execute planId=2134 confirm=true do?")).toBe(false)
+    expect(isDirectSyncExecuteCommand("should I run sync_execute planId=2134 confirm=true?")).toBe(false)
+  })
+
+  it("does not match a bare sync_preview / natural-language sync goal", () => {
+    expect(isDirectSyncExecuteCommand("sync metadata from dev to uat")).toBe(false)
+    expect(isDirectSyncExecuteCommand("sync_preview contract 1234 from dev to uat")).toBe(false)
+  })
+})
+
+describe("isClarificationExemptGoal (direct sync execute command)", () => {
+  it("skips clarification for the direct execute command — no questions asked", () => {
+    expect(isClarificationExemptGoal("sync_execute planId=2134-124-24-124 confirm=true")).toBe(true)
+    expect(isClarificationExemptGoal("ok, sync_execute planId=2134-124-24-124 confirm=true")).toBe(true)
+  })
+
+  it("still loads tools for the direct execute command (it is NOT conversational-no-tool)", () => {
+    // The command is a task, not dialogue — tools must remain available.
+    expect(isConversationalNoToolGoal("sync_execute planId=2134-124-24-124 confirm=true")).toBe(false)
   })
 })

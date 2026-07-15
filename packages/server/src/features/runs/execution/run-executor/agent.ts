@@ -16,6 +16,7 @@ import * as db from "../../../../platform/persistence/sqlite.js"
 import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 import { handlePlannerTrace } from "../../core/coordination/planner-events.js"
 import { consumeMatchingToolGrant } from "../../application/run-tool-approval.js"
+import { writeRunCheckpoint } from "./checkpoint-writer.js"
 import { persistToolResult } from "../tool-result-persister.js"
 import type { DelegateRuntimeContext, ExecuteRunCommand, ExecutionEnvironment } from "./types.js"
 
@@ -150,6 +151,19 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
           data.args as Record<string, unknown>
         )
       }
+      // Tool-call-granular checkpoint: snapshot the live messages (which
+      // already include this tool result) so resume picks up from THIS call
+      // instead of from the last completed iteration. Keep `lastMessages`
+      // current at the same granularity so the failure/approval finalizers
+      // snapshot the right state if the run ends mid-iteration.
+      env.progress.lastMessages = data.messages
+      env.progress.lastIteration = data.iteration
+      writeRunCheckpoint({
+        runId: request.runId,
+        messages: data.messages,
+        iteration: data.iteration,
+        stepCounter: env.state.stepCounter
+      })
     },
     onLlmCall: (data) => {
       if (data.phase === "request") {
@@ -225,16 +239,17 @@ export function createRunAgent(command: ExecuteRunCommand, env: ExecutionEnviron
     onStep: async (messages, iteration) => {
       env.progress.lastMessages = messages
       env.progress.lastIteration = iteration
-      db.saveCheckpoint({
-        run_id: request.runId,
-        messages: JSON.stringify(messages),
+      // End-of-iteration safety net: the guard-abort paths (circuit breaker,
+      // forced abort round) append a system message without firing
+      // `onToolResult`, so the per-tool-call checkpoint above would miss
+      // them. This write covers that gap. In a normal iteration it is a
+      // harmless no-op rewrite of the last tool-call checkpoint (same
+      // messages, idempotent INSERT OR REPLACE).
+      writeRunCheckpoint({
+        runId: request.runId,
+        messages,
         iteration,
-        step_counter: env.state.stepCounter,
-        updated_at: new Date().toISOString()
-      })
-      broadcast({
-        type: EventType.CheckpointSaved,
-        data: { runId: request.runId, iteration, stepCounter: env.state.stepCounter }
+        stepCounter: env.state.stepCounter
       })
       env.persistCurrentRun()
     },

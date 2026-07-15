@@ -54,8 +54,25 @@
     "breakdown",
     "exposure",
     "mymi",
-    "uspSync"
+    "uspSync",
+    "absa",
+    "month",
+    "months"
   ],
+  "catalogBootstrap": {
+    "largeObjects": [],
+    "canonicalQualifiedNames": {
+      "client": "dim.Client",
+      "clients": "dim.Client",
+      "customer": "dim.Client",
+      "customers": "dim.Client",
+      "month": "dim.Month",
+      "months": "dim.Month",
+      "absa": "etl.ABSA_CUSTOMER"
+    },
+    "unionBranchCounts": {},
+    "highCardinalityKeys": {}
+  },
   "preAggregationTokens": [
     "Average",
     "Avg",

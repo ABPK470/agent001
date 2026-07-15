@@ -7,27 +7,35 @@
 import { MessageRole } from "../../../domain/enums/message.js"
 import { truncateMessages } from "../../../memory/index.js"
 import type { AgentConfig, LLMClient, Message, TokenUsage } from "../../../domain/agent-types.js"
+import { emitAnswerChunksPaced } from "./answer-stream-gate.js"
 
 export interface SynthesizeDeps {
   llm: LLMClient
   signal: AgentConfig["signal"]
   usage: TokenUsage
   incrementLlmCalls: () => void
+  onToken?: AgentConfig["onToken"]
 }
 
 export async function synthesizeFinalAnswer(deps: SynthesizeDeps, messages: Message[]): Promise<string> {
   try {
     const truncationResult = truncateMessages(messages)
-    const response = await deps.llm.chat(truncationResult.messages, [], { signal: deps.signal })
+    const response = await deps.llm.chat(truncationResult.messages, [], {
+      signal: deps.signal
+    })
     deps.incrementLlmCalls()
     if (response.usage) {
       deps.usage.promptTokens += response.usage.promptTokens
       deps.usage.completionTokens += response.usage.completionTokens
       deps.usage.totalTokens += response.usage.totalTokens
     }
-    return response.content ?? "(The agent was unable to produce a final answer.)"
+    const answer = response.content ?? "(The agent was unable to produce a final answer.)"
+    await emitAnswerChunksPaced(answer, deps.onToken)
+    return answer
   } catch {
-    return "(The agent was unable to produce a final answer.)"
+    const fallback = "(The agent was unable to produce a final answer.)"
+    await emitAnswerChunksPaced(fallback, deps.onToken)
+    return fallback
   }
 }
 

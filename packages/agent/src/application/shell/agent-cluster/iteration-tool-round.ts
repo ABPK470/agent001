@@ -40,8 +40,7 @@ export interface ToolCallsBranchResult {
 export async function executeToolCallsBranch(input: ToolCallsBranchInput): Promise<ToolCallsBranchResult> {
   const { response, messages, iteration: i, state, tools, toolList, config, allToolCalls } = input
 
-  // This iteration was intermediate — discard the buffered tokens.
-  config.onStreamDiscard?.()
+  // stream.reset is handled by the caller's answer gate before this runs.
   messages.push({
     role: MessageRole.Assistant,
     content: response.content,

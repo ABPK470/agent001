@@ -128,14 +128,20 @@ export function collectRunNavMarkers(
   transcriptRunIds: string[]
 ): RunNavMarker[] {
   const markers: RunNavMarker[] = []
-  for (const id of transcriptRunIds) {
+  const total = transcriptRunIds.length
+  for (let i = 0; i < total; i++) {
+    const id = transcriptRunIds[i]!
     const turn = content.querySelector<HTMLElement>(`[data-run-id="${id}"]`)
-    if (!turn) continue
-    const anchor = turn.querySelector<HTMLElement>("[data-run-goal-anchor]") ?? turn
-    markers.push({
-      id,
-      fraction: markerFractionForAnchor(anchor, content, host)
-    })
+    let fraction: number
+    if (turn) {
+      const anchor = turn.querySelector<HTMLElement>("[data-run-goal-anchor]") ?? turn
+      fraction = markerFractionForAnchor(anchor, content, host)
+    } else if (total <= 1) {
+      fraction = 0
+    } else {
+      fraction = i / (total - 1)
+    }
+    markers.push({ id, fraction })
   }
   return markers
 }

@@ -11,8 +11,8 @@
  * @module
  */
 
-import { MessageRole } from "../../domain/enums/message.js"
 import type { Message } from "../../domain/agent-types.js"
+import { MessageRole } from "../../domain/enums/message.js"
 import {
   DIALOGUE_MEMORY_RE,
   DIALOGUE_RECALL_RE,
@@ -36,6 +36,10 @@ const BARE_CHECKIN_RE = /^(?:test|ping|pong|echo)\s*[!.?]*$/i
 /** Short consent / go-ahead phrases (need context to distinguish from passive ack). */
 const ASSENT_PHRASE_RE =
   /^(?:ok(?:ay)?|k|yes|yep|yeah|y|sure|do it|go ahead|please|go for it|please do|sounds good|that works|let's do it|let's go)\s*[!.?]*$/i
+
+/** Leading assent prefix before a command ("ok, …", "yes, …", "go ahead: …"). */
+const LEADING_ASSENT_RE =
+  /^(?:ok(?:ay)?|k|yes|yep|yeah|y|sure|please|go ahead|do it|go for it|please do|sounds good|that works|let's do it|let's go)[,.:;]?\s+/i
 
 /** Thanks / closure after receiving an answer — always dialogue. */
 const PASSIVE_ACK_RE =
@@ -105,7 +109,24 @@ export function isConversationalNoToolGoal(goal: string, ctx?: GoalIntentContext
 
 /** Skip clarification detectors for conversational / non-data goals. */
 export function isClarificationExemptGoal(goal: string, ctx?: GoalIntentContext): boolean {
+  if (isDirectSyncExecuteCommand(goal)) return true
   return isConversationalNoToolGoal(goal, ctx)
+}
+
+/**
+ * Direct `sync_execute planId=<id> confirm=true` command — the exact reply
+ * the agent tells the user to send after a sync_preview.
+ *
+ * This is a structured, agent-generated command, not a natural-language
+ * question: there is nothing to clarify. The goal is the command.
+ */
+const DIRECT_SYNC_EXECUTE_COMMAND_RE =
+  /^\s*sync_execute\b[\s\S]{0,160}?\bplanId\s*=\s*["']?[A-Za-z0-9:_-]+["']?[\s\S]{0,160}?\bconfirm\s*=\s*true\b/i
+
+export function isDirectSyncExecuteCommand(goal: string): boolean {
+  const stripped = goal.trim().replace(LEADING_ASSENT_RE, "").trim()
+  if (!stripped || stripped.endsWith("?")) return false
+  return DIRECT_SYNC_EXECUTE_COMMAND_RE.test(stripped)
 }
 
 function isAssentPhrase(normalized: string): boolean {

@@ -786,6 +786,12 @@ export const api = {
     return json<UploadedAttachment[]>(`/api/attachments${qs ? `?${qs}` : ""}`)
   },
 
+  /** Download a promoted/generated attachment to the user's machine. */
+  downloadAttachment: (id: string, fallbackName: string) =>
+    import("./lib/userDownload.js").then(({ downloadAuthenticated }) =>
+      downloadAuthenticated(`/api/attachments/${encodeURIComponent(id)}/content`, fallbackName),
+    ),
+
   deleteAttachment: (id: string) =>
     json<{ ok: boolean }>(`/api/attachments/${id}`, { method: "DELETE" }),
 

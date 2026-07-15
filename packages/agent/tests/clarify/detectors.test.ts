@@ -304,6 +304,35 @@ describe("schemaMatchDetector", () => {
       expect(findings.map((f) => f.subject)).toEqual(["margin"])
     })
   })
+
+  it("suppresses domain entities with a canonical dim table mapping", () => {
+    const cat = catalogFrom([
+      table("archive", "ClientSnapshot", [col("pkClient", "int")]),
+      table("dim", "Client", [col("pkClient", "int"), col("Name", "nvarchar")])
+    ])
+    const tenant: TenantConfig = {
+      ...DEFAULT_TENANT_CONFIG,
+      domainKeywords: ["client", "clients"],
+      catalogBootstrap: {
+        ...DEFAULT_TENANT_CONFIG.catalogBootstrap,
+        canonicalQualifiedNames: { client: "dim.Client", clients: "dim.Client" }
+      }
+    }
+    expect(schemaMatchDetector.detect(ctx({ goal: "show top clients by revenue", catalog: cat, tenant }))).toEqual(
+      []
+    )
+  })
+
+  it("ranks dim tables ahead of archive when schema-match still fires", () => {
+    const cat = catalogFrom([
+      table("archive", "ClientSnapshot", [col("pkClient", "int")]),
+      table("archive", "ClientHistory", [col("pkClient", "int")]),
+      table("dim", "Client", [col("pkClient", "int"), col("Name", "nvarchar")])
+    ])
+    const findings = schemaMatchDetector.detect(ctx({ goal: "compare client tables", catalog: cat }))
+    expect(findings).toHaveLength(1)
+    expect(findings[0]!.candidates[0]).toBe("dim.Client")
+  })
 })
 
 // ── term-undefined ───────────────────────────────────────────────
@@ -339,6 +368,17 @@ describe("termUndefinedDetector", () => {
     const cat = catalogFrom([table("publish", "Sales", [col("amount", "decimal")])])
     expect(termUndefinedDetector.detect(ctx({ goal: "Show me sales", catalog: cat }))).toEqual([])
     expect(termUndefinedDetector.detect(ctx({ goal: "How are sales?", catalog: cat }))).toEqual([])
+  })
+
+  it("stays silent for ABSA when it is a configured domain keyword", () => {
+    const cat = catalogFrom([table("etl", "ABSA_CUSTOMER", [col("pkClient", "int")])])
+    const tenant: TenantConfig = {
+      ...DEFAULT_TENANT_CONFIG,
+      domainKeywords: ["absa"]
+    }
+    expect(termUndefinedDetector.detect(ctx({ goal: "Show ABSA clients only", catalog: cat, tenant }))).toEqual(
+      []
+    )
   })
 })
 
@@ -380,8 +420,16 @@ describe("grainUndefinedDetector", () => {
     expect(findings).toHaveLength(1)
     expect(findings[0]!.subject).toBe("month")
     expect(findings[0]!.candidates).toEqual(
-      expect.arrayContaining(["pkmonth", "pkaccountingmonth", "pkreportingmonth"])
+      expect.arrayContaining(["dim.Date.pkMonth", "dim.Date.pkAccountingMonth", "dim.Date.pkReportingMonth"])
     )
+  })
+
+  it("stays silent for month grain when dim.Month calendar path exists", () => {
+    const cat = catalogFrom([
+      table("dim", "Month", [col("pkMonth", "int"), col("MonthNo", "smallint")]),
+      table("dim", "Date", [col("pkMonth", "int"), col("pkAccountingMonth", "int")])
+    ])
+    expect(grainUndefinedDetector.detect(ctx({ goal: "summarise revenue monthly", catalog: cat }))).toEqual([])
   })
 
   it("stays silent when only one grain column matches", () => {

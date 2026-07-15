@@ -114,6 +114,29 @@ describe("tool_knowledge — save + lookup", () => {
     if (r.hit) expect(r.payload).toBe("v2")
   })
 
+  it("lookup is case-insensitive on connection (dev vs DEV)", async () => {
+    const mem = await setupMemory()
+    mem.saveToolKnowledge({
+      tool: "profile_data",
+      qname: "publish.Z",
+      mode: "fast",
+      connection: "DEV",
+      payload: "cached",
+      fingerprint: FP_A,
+      now: 1_000
+    })
+    const r = mem.lookupToolKnowledge({
+      tool: "profile_data",
+      qname: "publish.Z",
+      mode: "fast",
+      connection: "dev",
+      currentFingerprint: FP_A,
+      now: 1_500
+    })
+    expect(r.hit).toBe(true)
+    if (r.hit) expect(r.payload).toBe("cached")
+  })
+
   it("treats different modes as separate cache entries", async () => {
     const mem = await setupMemory()
     mem.saveToolKnowledge({

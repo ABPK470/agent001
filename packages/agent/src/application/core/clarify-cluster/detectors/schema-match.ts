@@ -16,6 +16,11 @@ import {
   resolveGoalDataAnchors,
   shouldSuppressAmbiguousTokenGivenAnchors
 } from "../goal-data-anchors.js"
+import {
+  isCanonicallyGroundedEntity,
+  rankEntityTableCandidates,
+  resolveCanonicalEntityTable
+} from "../entity-canonical.js"
 import { mergeReservedTokens } from "./reserved-tokens.js"
 import { goalTokens } from "./stopwords.js"
 
@@ -44,11 +49,10 @@ import { goalTokens } from "./stopwords.js"
  * resolve the path itself. The detector still blocks on ambiguous schema/table
  * names, and skips metric-position tokens like "by revenue".
  *
- * 1.5.0: goal data anchors — when the goal pins a data source
- * (`schema.table`, fuzzy typo, or unique bare name), suppress table-picker
- * ambiguity on descriptive domain words ("financial analysis on ai.X").
+ * 1.6.0: catalog-ranked candidates — dim/publish tables surface before archive;
+ * canonical entity resolution suppresses domain nouns with a known dim table.
  */
-const VERSION = "1.5.0"
+const VERSION = "1.6.0"
 
 /**
  * Tokens already disambiguated by a qualified reference the user wrote
@@ -160,19 +164,36 @@ export const schemaMatchDetector: Detector = {
       ) {
         continue
       }
+      if (isCanonicallyGroundedEntity(token, ctx.catalog, ctx.tenant, ctx.learnedTermMappings)) continue
       const matches = objectNameMatches(ctx.catalog, token)
       if (matches.size < 2) continue
-      const candidates = [...matches].sort().slice(0, MAX_CANDIDATES)
+
+      const canonical = resolveCanonicalEntityTable(token, ctx.catalog, ctx.tenant, ctx.learnedTermMappings)
+      if (canonical) {
+        const canonicalLc = canonical.toLowerCase()
+        const nonCanonical = [...matches].filter((k) => {
+          const t = ctx.catalog!.getTable(k)
+          return (t?.qualifiedName.toLowerCase() ?? k.toLowerCase()) !== canonicalLc
+        })
+        if (nonCanonical.length === 0) continue
+      }
+
+      const candidates = rankEntityTableCandidates(token, matches, ctx.catalog, MAX_CANDIDATES, {
+        goal: ctx.goal
+      })
       const totalCount = matches.size
+      const canonicalHint = canonical ? ` Prefer ${canonical} unless you need a subset.` : ""
       out.push({
         id: makeFindingId("schema-match", token),
         kind: "schema-match" as const,
         severity: "block" as const,
         subject: token,
-        reasoning: `"${token}" matches ${totalCount} catalog objects — the agent cannot pick one without input.`,
+        reasoning: `"${token}" matches ${totalCount} catalog objects — the agent cannot pick one without input.${canonicalHint}`,
         candidates,
         uiOptions: candidates,
-        suggestedQuestion: `When you say "${token}", which did you mean?`,
+        suggestedQuestion: canonical
+          ? `When you say "${token}", did you mean ${canonical} or a different table?`
+          : `When you say "${token}", which did you mean?`,
         source: "detector" as const
       })
     }

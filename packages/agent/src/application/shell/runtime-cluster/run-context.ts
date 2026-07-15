@@ -1,4 +1,5 @@
 import type { PolicyContext, RunContext, RunMemoryWriter, SyncOpContext, ToolTraceContext } from "./host.js"
+import { verifiedTableKey } from "../../../tools/mssql/schema-verified.js"
 
 export interface MakeRunContextOptions {
   signal?: AbortSignal | null
@@ -11,15 +12,16 @@ export interface MakeRunContextOptions {
 }
 
 export function makeRunContext(options: MakeRunContextOptions = {}): RunContext {
-  const verified = new Set(options.mssqlVerifiedTables ?? [])
-  for (const q of options.mssqlProfileCalls ?? []) verified.add(q.toLowerCase())
+  const verified = new Set<string>()
+  for (const q of options.mssqlVerifiedTables ?? []) verified.add(verifiedTableKey(q))
+  for (const q of options.mssqlProfileCalls ?? []) verified.add(verifiedTableKey(q))
   return {
     signal: options.signal ?? null,
     memory: options.memory ?? null,
     trace: options.trace ?? null,
     policy: options.policy ?? null,
     syncOp: options.syncOp ?? null,
-    mssqlProfileCalls: new Set(options.mssqlProfileCalls ?? []),
+    mssqlProfileCalls: new Set([...(options.mssqlProfileCalls ?? [])].map(verifiedTableKey)),
     mssqlVerifiedTables: verified
   }
 }

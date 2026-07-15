@@ -9,6 +9,7 @@
 
 import type { LLMClient, LLMResponse, Message, Tool } from "../domain/agent-types.js"
 import {
+  consumeOpenAICompatibleSSE,
   formatOpenAICompatibleMessage,
   formatOpenAICompatibleTools,
   parseOpenAICompatibleResponse
@@ -37,6 +38,82 @@ export class DatabricksClient implements LLMClient {
       maxTokens?: number
       temperature?: number
       onToken?: (token: string) => void
+      onFirstToolCallDelta?: () => void
+    }
+  ): Promise<LLMResponse> {
+    if (opts?.onToken) return this.chatStream(messages, tools, opts)
+    return this.chatComplete(messages, tools, opts)
+  }
+
+  private async chatStream(
+    messages: Message[],
+    tools: Tool[],
+    opts: {
+      signal?: AbortSignal
+      maxTokens?: number
+      temperature?: number
+      onToken?: (token: string) => void
+      onFirstToolCallDelta?: () => void
+    }
+  ): Promise<LLMResponse> {
+    const token = await this.getToken()
+    const url = `${this.host}/serving-endpoints/${this.endpoint}/invocations`
+    const tokenSource = process.env["DATABRICKS_TOKEN"] ? "pat" : "m2m"
+    console.debug(`[databricks] POST ${url} tokenSource=${tokenSource} stream=true`)
+
+    const body: Record<string, unknown> = {
+      messages: messages.map((m) => formatOpenAICompatibleMessage(m, true)),
+      max_completion_tokens: opts?.maxTokens ?? 16384,
+      stream: true,
+      stream_options: { include_usage: true }
+    }
+    if (opts?.temperature !== undefined) body.temperature = opts.temperature
+    if (tools.length > 0) body.tools = formatOpenAICompatibleTools(tools)
+
+    const res = await fetch(url, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${token}`,
+        Accept: "text/event-stream"
+      },
+      body: JSON.stringify(body),
+      signal: opts?.signal
+    })
+
+    if (!res.ok) {
+      const text = await res.text()
+      throw new Error(`Databricks API error ${res.status}: ${text}`)
+    }
+    if (!res.body) {
+      throw new Error("Databricks API returned an empty streaming body")
+    }
+
+    const streamed = await consumeOpenAICompatibleSSE(res.body, {
+      onToken: opts.onToken,
+      onFirstToolCallDelta: opts.onFirstToolCallDelta
+    })
+    if (streamed.finishReason === "length") {
+      throw new Error(
+        "LLM response truncated (finish_reason=length). The model hit its completion token limit before finishing."
+      )
+    }
+    return {
+      content: streamed.content || null,
+      toolCalls: streamed.toolCalls,
+      usage: streamed.usage
+    }
+  }
+
+  private async chatComplete(
+    messages: Message[],
+    tools: Tool[],
+    opts?: {
+      signal?: AbortSignal
+      maxTokens?: number
+      temperature?: number
+      onToken?: (token: string) => void
+      onFirstToolCallDelta?: () => void
     }
   ): Promise<LLMResponse> {
     const token = await this.getToken()

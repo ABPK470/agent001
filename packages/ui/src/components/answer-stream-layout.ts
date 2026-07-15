@@ -74,6 +74,36 @@ function trailingTableLayout(lines: string[]): StreamingAnswerLayout | null {
   }
 }
 
+function trailingPartialLineLayout(text: string): StreamingAnswerLayout | null {
+  if (!text.includes("\n")) return null
+
+  const lastBreak = text.lastIndexOf("\n")
+  const tail = text.slice(lastBreak + 1)
+
+  if (tail.length === 0) {
+    const committed = text.replace(/\s+$/, "")
+    if (!committed) return null
+    return { committed, remainder: "", remainderKind: "none" }
+  }
+
+  const before = text.slice(0, lastBreak)
+  if (!before.trim()) return null
+
+  return {
+    committed: before.replace(/\s+$/, ""),
+    remainder: tail,
+    remainderKind: "prose",
+  }
+}
+
+/** Single-line buffer that is already a complete heading — safe to format immediately. */
+function trailingSingleHeadingLayout(text: string): StreamingAnswerLayout | null {
+  if (text.includes("\n")) return null
+  const t = text.trimEnd()
+  if (!/^#{1,3}\s+\S/.test(t)) return null
+  return { committed: t, remainder: "", remainderKind: "none" }
+}
+
 function trailingProseLayout(text: string): StreamingAnswerLayout | null {
   const lastParaBreak = text.lastIndexOf("\n\n")
   if (lastParaBreak <= 0 || lastParaBreak >= text.length - 1) return null
@@ -90,6 +120,26 @@ function trailingProseLayout(text: string): StreamingAnswerLayout | null {
     committed: text.slice(0, lastParaBreak).replace(/\s+$/, ""),
     remainder: afterBreak,
     remainderKind: "prose",
+  }
+}
+
+/**
+ * Within a prose remainder, split complete lines (render as markdown) from the
+ * single in-flight line (glyph-settle animation).
+ */
+export function splitProseRemainder(remainder: string): { renderable: string; inFlight: string } {
+  if (!remainder) return { renderable: "", inFlight: "" }
+  const nl = remainder.lastIndexOf("\n")
+  if (nl < 0) {
+    // One line still arriving — format only when it is structurally complete.
+    if (/^#{1,3}\s+\S/.test(remainder.trimEnd())) {
+      return { renderable: remainder.trimEnd(), inFlight: "" }
+    }
+    return { renderable: "", inFlight: remainder }
+  }
+  return {
+    renderable: remainder.slice(0, nl).replace(/\s+$/, ""),
+    inFlight: remainder.slice(nl + 1),
   }
 }
 
@@ -115,6 +165,12 @@ export function splitStreamingAnswer(text: string): StreamingAnswerLayout {
 
   const proseLayout = trailingProseLayout(text)
   if (proseLayout) return proseLayout
+
+  const partialLineLayout = trailingPartialLineLayout(text)
+  if (partialLineLayout) return partialLineLayout
+
+  const singleHeadingLayout = trailingSingleHeadingLayout(text)
+  if (singleHeadingLayout) return singleHeadingLayout
 
   return { committed: "", remainder: text, remainderKind: "prose" }
 }

@@ -150,6 +150,16 @@ export interface ClarifyContext {
    */
   readonly domainVocabulary?: { readonly reservedTokens: ReadonlySet<string> }
   /**
+   * Durable term→table mappings the org has already learned from prior
+   * clarification answers (lowercase business noun → qualified table).
+   * Hydrated at run start from the `resolved_terms` store by `law-sections`
+   * and consulted by `entity-canonical` so a subject the org already
+   * resolved does not trigger a fresh `ask_user`. Only mappings whose
+   * qname resolves in the live catalog are included (stale ones are
+   * dropped at hydrate time). Absent in non-server contexts (CLI, tests).
+   */
+  readonly learnedTermMappings?: ReadonlyMap<string, string>
+  /**
    * Deterministic parse of a natural-language ABI sync preview goal
    * (sync + published entity type + from env to env). When set, catalog
    * disambiguation must not fire on entity instance names.

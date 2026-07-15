@@ -70,6 +70,13 @@ export const DOCTRINE_FIX_HINTS: Readonly<Record<string, string>> = {
     "Each SELECT inside UNION / UNION ALL must carry its own GROUP BY when aggregating.",
     "Bad: `SELECT … FROM t1 UNION ALL SELECT … FROM t2 GROUP BY x`.",
     "Good: aggregate inside each branch, or wrap the UNION in a CTE and GROUP BY on the outer query."
+  ].join(" "),
+
+  alias_bracket_convention: [
+    "Bracket every table alias in both declaration and references.",
+    "Declaration: `FROM dim.Officer AS [off]` — never `FROM dim.Officer off` or `AS off`.",
+    "References: `[off].[OfficerName]`, `[off].[pkOfficer]` — never `off.FullName`.",
+    "This is required because bare `off`/`on`/`as` are T-SQL reserved words and silently break parsing."
   ].join(" ")
 }
 
@@ -206,6 +213,18 @@ export const DOCTRINE_LESSON_TEMPLATES: Readonly<Record<string, DoctrineLessonTe
         "Catalog-verify every qualified column reference before writing SQL — the validator blocks references whose column does not exist on the aliased table. " +
         "Display names (ClientName, BankerName) live on dim.* tables; fact/publish views carry FKs only. Use `search_catalog` to confirm the column lives where you think it does.",
       evidence: ctx.detail ? `Blocked reference: ${ctx.detail}` : undefined,
+      category: "schema_fact"
+    }
+  },
+
+  alias_bracket_convention: (ctx) => {
+    const locator = ctx.detail ? shorten(ctx.detail, 80) : shorten(ctx.query, 60)
+    return {
+      subject: `doctrine:alias-bracket:${locator}`,
+      claim:
+        "Bracket every table alias: `FROM schema.Table AS [alias]` and `[alias].[Column]` in SELECT/JOIN/WHERE. " +
+        "Bare `off`/`on`/`as` are T-SQL reserved words and break parsing — never use them unbracketed.",
+      evidence: ctx.detail ? `Violation: ${ctx.detail}` : undefined,
       category: "schema_fact"
     }
   }

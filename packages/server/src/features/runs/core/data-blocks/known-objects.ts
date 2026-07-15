@@ -31,6 +31,8 @@ export interface LoadKnownObjectsOptions {
   goal: string
   priorTurns: readonly PriorTurn[]
   limit?: number
+  /** Scope tool_knowledge to the MSSQL connection this run targets. */
+  connection?: string
 }
 
 export interface KnownObjectRow {
@@ -88,6 +90,7 @@ function extractQnames(text: string): string[] {
  */
 export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[] {
   const limit = opts.limit ?? DEFAULT_LIMIT
+  const connection = opts.connection ?? "default"
   const candidates = new Set<string>()
   for (const q of extractQnames(opts.goal)) candidates.add(q)
   for (const t of opts.priorTurns) {
@@ -113,12 +116,12 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
         `
       SELECT qname, tool, mode, bytes, created_at, payload_text
       FROM tool_knowledge
-      WHERE qname IN (${placeholders})
+      WHERE qname IN (${placeholders}) AND lower(connection) = lower(?)
       ORDER BY created_at DESC
       LIMIT ?
     `
       )
-      .all(...candidates, limit) as Row[]
+      .all(...candidates, connection, limit) as Row[]
   }
 
   // Track which rows came from the goal-mention path vs the fallback
@@ -140,11 +143,12 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
         `
       SELECT qname, tool, mode, bytes, created_at, payload_text
       FROM tool_knowledge
+      WHERE lower(connection) = lower(?)
       ORDER BY created_at DESC
       LIMIT ?
     `
       )
-      .all(FALLBACK_TOPUP * 2) as Row[]
+      .all(connection, FALLBACK_TOPUP * 2) as Row[]
     for (const r of extra) {
       if (seenQnames.has(r.qname)) continue
       rows.push(r)

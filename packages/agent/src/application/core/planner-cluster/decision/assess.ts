@@ -11,6 +11,7 @@
  */
 
 import type { Message } from "../../types.js"
+import { goalContainsDomainKeyword } from "../../../shell/known-vocabulary.js"
 import {
   CONVERSATIONAL_DATA_QUERY_RE,
   DATA_FETCH_PIPELINE_RE,
@@ -29,7 +30,8 @@ import {
   REVIEW_QUESTION_RE,
   RUN_HISTORY_QUERY_RE,
   SIMPLE_DIALOGUE_RE,
-  SIMPLE_FUNCTION_WRITE_RE
+  SIMPLE_FUNCTION_WRITE_RE,
+  TOP_N_DATA_LIST_RE
 } from "../internal/decision-patterns.js"
 import type { PlannerDecision } from "../types.js"
 import type { RequestSignals } from "./signals.js"
@@ -103,6 +105,21 @@ export function assessPlannerDecision(messageText: string, history: readonly Mes
   ) {
     return direct("conversational_data_query", score)
   }
+  if (
+    TOP_N_DATA_LIST_RE.test(n) &&
+    !signals.hasDelegationCue &&
+    !signals.hasImplementationScopeCue
+  ) {
+    return direct("top_n_data_list", score)
+  }
+  if (
+    goalContainsDomainKeyword(n) &&
+    !signals.hasDelegationCue &&
+    !signals.hasImplementationScopeCue &&
+    !EXISTING_CODE_COUPLING_RE.test(n)
+  ) {
+    return direct("domain_data_query", score)
+  }
 
   // ── Planner (definitive) ──────────────────────────────────────
   if (signals.hasDelegationCue) return planner("delegation_cue", score)
@@ -124,8 +141,8 @@ export function assessPlannerDecision(messageText: string, history: readonly Mes
 
 function needsPlannerCoordination(signals: RequestSignals): boolean {
   return (
-    signals.hasMultiStepCue ||
     signals.hasDelegationCue ||
+    (signals.hasMultiStepCue && signals.hasImplementationScopeCue) ||
     signals.structuredBulletCount > 0 ||
     signals.targetFilePaths.length >= 2 ||
     COORDINATION_HEAVY_RE.test(signals.normalized) ||

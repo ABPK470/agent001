@@ -17,6 +17,7 @@ import {
   splitUnionBranches,
   unionCteOutputColumns
 } from "./schema-binding.js"
+import { prepareMssqlQueryAliases } from "./sql-alias-brackets.js"
 import {
   _resetCatalogQueriesCache,
   calendarDimensionTable,
@@ -225,12 +226,17 @@ export type QueryValidationCode =
   | "non_temp_mutation"
   | "large_object_overused"
   | "unsafe_large_object_scan"
+  | "alias_bracket_convention"
+  | "unverified_table_reference"
+  | "union_group_by_illegal"
 
 export interface QueryValidationDiagnostics {
   readonly ok: boolean
   readonly error: string | null
   readonly code: QueryValidationCode | null
   readonly analysis: MssqlQueryQualityAnalysis
+  /** Alias-bracket-normalized query (use this for execution when ok). */
+  readonly preparedQuery?: string
   /**
    * Optional auto-note payload (Gap 2). When a doctrine block fires AND a
    * lesson template exists for its code, the validator emits the lesson so
@@ -604,6 +610,7 @@ const ALIAS_RESERVED_KEYWORDS = new Set([
   "recompile",
   "maxdop",
   "nolock",
+  "off",
   "readonly",
   "tablock",
   "tablockx",
@@ -1189,7 +1196,24 @@ export function validateQueryDetailed(
   writeEnabled: boolean,
   options: QueryValidationOptions = {}
 ): QueryValidationDiagnostics {
+  const aliasPrep = prepareMssqlQueryAliases(query)
+  query = aliasPrep.query
   const analysis = analyzeMssqlQueryQuality(query, options.accessor)
+
+  if (aliasPrep.error) {
+    return {
+      ok: false,
+      error: withFixHint(aliasPrep.error, "alias_bracket_convention"),
+      code: "alias_bracket_convention",
+      analysis,
+      lesson:
+        getDoctrineLessonTemplate("alias_bracket_convention")?.({
+          query,
+          detail: "unbracketed table alias"
+        }) ?? null
+    }
+  }
+
   // Always block dangerous operations regardless of write mode — must run BEFORE
   // the write-mode gate so that EXEC / OPENROWSET / DBCC produce the dangerous
   // error message instead of the generic "write disabled" one.
@@ -1477,7 +1501,7 @@ export function validateQueryDetailed(
     }
   }
 
-  return { ok: true, error: null, code: null, analysis }
+  return { ok: true, error: null, code: null, analysis, preparedQuery: query }
 }
 
 /**

@@ -65,7 +65,22 @@ describe("detectUnverifiedTableRefs", () => {
       verified,
       accessor
     )
-    expect(missing).toEqual(["dim.client"])
+    expect(missing).toEqual(["dim.Client"])
+  })
+
+  it("accepts verified dim.Product when SQL uses dim.product casing", () => {
+    const cat2 = buildGraph([
+      table("dim", "Product", ["pk", "Name"]),
+      table("publish", "Revenue", ["pk"])
+    ])
+    const accessor2 = () => cat2
+    const verified = new Set(["dim.product", "publish.revenue"])
+    const missing = detectUnverifiedTableRefs(
+      "SELECT p.Name FROM dim.Product p JOIN publish.Revenue r ON r.pk = p.pk",
+      verified,
+      accessor2
+    )
+    expect(missing).toEqual([])
   })
 })
 

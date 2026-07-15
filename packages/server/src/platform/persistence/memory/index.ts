@@ -47,6 +47,17 @@ export type {
   TableVerdictInput,
   TableVerdictRole
 } from "./table-verdict.js"
+export {
+  listResolvedTerms,
+  pruneResolvedTerms,
+  saveResolvedTerm
+} from "./resolved-terms.js"
+export type {
+  ListResolvedTermsOptions,
+  PruneResolvedTermsOptions,
+  ResolvedTerm,
+  ResolvedTermInput
+} from "./resolved-terms.js"
 export { summarizeCachedPayload } from "./tool-knowledge-summarizer.js"
 export {
   fingerprintFromCatalogTable,

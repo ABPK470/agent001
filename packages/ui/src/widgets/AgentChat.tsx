@@ -364,7 +364,9 @@ export function AgentChat() {
     onScroll,
     scrollToBottom,
     pauseAutoScroll,
+    resumeAutoFollow,
     showJumpButton,
+    stickIfFollowing,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
     initialScroll: "none",
@@ -451,10 +453,17 @@ export function AgentChat() {
     try { await api.cancelRun(activeRunId) } catch { /* ignore */ }
   }
 
-  async function handleRespond(response: string) {
-    if (!pendingInput) return
-    clearPendingInput()
-    try { await api.respondToRun(pendingInput.runId, response) } catch { /* ignore */ }
+  async function handleRespond(runId: string, response: string) {
+    // Always call the API with the runId from the card; surface failures to
+    // AskUserPrompt instead of swallowing them (which used to leave the UI
+    // stuck on "waiting for agent" when the run was no longer answerable).
+    try {
+      await api.respondToRun(runId, response)
+    } catch (err) {
+      if (pendingInput?.runId === runId) clearPendingInput()
+      throw err
+    }
+    if (pendingInput?.runId === runId) clearPendingInput()
   }
 
   // Load agents on mount
@@ -508,9 +517,14 @@ export function AgentChat() {
       const threadId = useStore.getState().activeThreadId
       if (!threadId) throw new Error("No thread selected")
       const { runId } = await api.startRun(goal, agentId, attachmentIds, threadId)
-      setActiveRun(runId)
+      useStore.getState().beginOptimisticRun({
+        id: runId,
+        goal,
+        threadId,
+        agentId: agentId ?? null,
+      })
       setScrollToRunId(runId)
-      requestAnimationFrame(() => scrollToBottom("instant"))
+      requestAnimationFrame(() => scrollToBottom("instant", { stick: true }))
     } catch (err) {
       // Surface the server error and clear any optimistic activeRun so
       // the chat doesn't get stuck on "Working" when startRun never
@@ -616,6 +630,18 @@ export function AgentChat() {
       })
     })
   }, [recentRuns.length, isRunning, streamingAnswer, scrollToBottom])
+
+  useEffect(() => {
+    if (!isRunning && !streamingAnswer) return
+    stickIfFollowing()
+  }, [streamingAnswer, trace.length, isRunning, stickIfFollowing])
+
+  const jumpToLatest = useCallback(() => {
+    resumeAutoFollow()
+    requestAnimationFrame(() => {
+      scrollToBottom("instant", { stick: isRunning || Boolean(streamingAnswer) })
+    })
+  }, [resumeAutoFollow, scrollToBottom, isRunning, streamingAnswer])
 
   return (
       <div ref={rootRef} className="flex flex-col h-full gap-2">
@@ -961,7 +987,7 @@ export function AgentChat() {
                                                   sensitive={
                                                       pendingInput.sensitive
                                                   }
-                                                  onSubmit={handleRespond}
+                                                  onSubmit={(response) => handleRespond(run.id, response)}
                                               />
                                           ) : (
                                               <>
@@ -1316,7 +1342,7 @@ export function AgentChat() {
           {showJumpButton && (
             <div className="absolute bottom-2 left-1/2 -translate-x-1/2 z-20 pointer-events-none">
               <div className="pointer-events-auto">
-                <ScrollToLatestButton onClick={() => scrollToBottom("instant", { stick: false })} />
+                <ScrollToLatestButton onClick={jumpToLatest} />
               </div>
             </div>
           )}

@@ -26,6 +26,7 @@ export function buildKnownVocabulary(
 ): ReadonlySet<string> {
   const out = new Set<string>()
   for (const w of tenant.domainKeywords) out.add(w.toLowerCase())
+  for (const key of Object.keys(tenant.catalogBootstrap.canonicalQualifiedNames)) out.add(key.toLowerCase())
   for (const id of getPublishedSyncEntityIds()) out.add(id.toLowerCase())
   for (const s of catalogSchemaTokens(catalog)) out.add(s)
   return out

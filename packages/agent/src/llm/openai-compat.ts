@@ -20,6 +20,93 @@ function safeParseArgs(raw: string): Record<string, unknown> {
   }
 }
 
+export interface OpenAICompatibleStreamResult {
+  content: string
+  toolCalls: ToolCall[]
+  usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
+  finishReason: string | null
+}
+
+/** Consume an OpenAI-compatible chat-completions SSE body (shared by OpenAI + Databricks). */
+export async function consumeOpenAICompatibleSSE(
+  stream: ReadableStream<Uint8Array>,
+  options?: {
+    onToken?: (token: string) => void
+    /** Fires once when the model begins a tool-call stream (content after this is not user-facing). */
+    onFirstToolCallDelta?: () => void
+  } | ((token: string) => void)
+): Promise<OpenAICompatibleStreamResult> {
+  const onToken = typeof options === "function" ? options : options?.onToken
+  const onFirstToolCallDelta =
+    typeof options === "function" ? undefined : options?.onFirstToolCallDelta
+
+  let content = ""
+  const toolCallMap = new Map<number, { id: string; name: string; arguments: string }>()
+  let promptTokens = 0
+  let completionTokens = 0
+  let totalTokens = 0
+  let finishReason: string | null = null
+  let toolCallSeen = false
+  const reader = stream.getReader()
+  const decoder = new TextDecoder()
+  let buf = ""
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buf += decoder.decode(value, { stream: true })
+    const lines = buf.split("\n")
+    buf = lines.pop() ?? ""
+    for (const line of lines) {
+      if (!line.startsWith("data: ")) continue
+      const raw = line.slice(6).trim()
+      if (raw === "[DONE]") continue
+      let chunk: Record<string, unknown>
+      try {
+        chunk = JSON.parse(raw) as Record<string, unknown>
+      } catch {
+        continue
+      }
+      const choices = chunk.choices as Array<Record<string, unknown>> | undefined
+      const delta = choices?.[0]?.delta as Record<string, unknown> | undefined
+      const fr = choices?.[0]?.finish_reason as string | undefined
+      if (fr) finishReason = fr
+      if (typeof delta?.content === "string" && delta.content) {
+        content += delta.content
+        if (!toolCallSeen) onToken?.(delta.content)
+      }
+      if (Array.isArray(delta?.tool_calls)) {
+        if (!toolCallSeen) {
+          toolCallSeen = true
+          onFirstToolCallDelta?.()
+        }
+        for (const tc of delta.tool_calls as Array<Record<string, unknown>>) {
+          const idx = tc.index as number
+          const fn = tc.function as Record<string, unknown> | undefined
+          if (!toolCallMap.has(idx)) toolCallMap.set(idx, { id: "", name: "", arguments: "" })
+          const entry = toolCallMap.get(idx)!
+          if (typeof tc.id === "string") entry.id = tc.id
+          if (typeof fn?.name === "string") entry.name += fn.name
+          if (typeof fn?.arguments === "string") entry.arguments += fn.arguments
+        }
+      }
+      const usage = chunk.usage as Record<string, number> | undefined
+      if (usage?.total_tokens) {
+        promptTokens = usage.prompt_tokens
+        completionTokens = usage.completion_tokens
+        totalTokens = usage.total_tokens
+      }
+    }
+  }
+  return {
+    content,
+    toolCalls: [...toolCallMap.values()].map(
+      (tc): ToolCall => ({ id: tc.id, name: tc.name, arguments: safeParseArgs(tc.arguments) })
+    ),
+    usage: totalTokens > 0 ? { promptTokens, completionTokens, totalTokens } : undefined,
+    finishReason
+  }
+}
+
 export interface OpenAIMessage {
   role: string
   content: string | null | OpenAIContentBlock[]
@@ -75,6 +162,7 @@ export class OpenAICompatibleClient implements LLMClient {
       maxTokens?: number
       temperature?: number
       onToken?: (token: string) => void
+      onFirstToolCallDelta?: () => void
     }
   ): Promise<LLMResponse> {
     if (opts?.onToken) return this.chatStream(messages, tools, opts)
@@ -89,6 +177,7 @@ export class OpenAICompatibleClient implements LLMClient {
       maxTokens?: number
       temperature?: number
       onToken?: (token: string) => void
+      onFirstToolCallDelta?: () => void
     }
   ): Promise<LLMResponse> {
     const body: Record<string, unknown> = {
@@ -120,69 +209,19 @@ export class OpenAICompatibleClient implements LLMClient {
       throw new Error(`OpenAI API error ${res!.status}: ${text}`)
     }
 
-    let content = ""
-    const toolCallMap = new Map<number, { id: string; name: string; arguments: string }>()
-    let promptTokens = 0,
-      completionTokens = 0,
-      totalTokens = 0,
-      finishReason: string | null = null
-    const reader = res!.body!.getReader()
-    const decoder = new TextDecoder()
-    let buf = ""
-    while (true) {
-      const { done, value } = await reader.read()
-      if (done) break
-      buf += decoder.decode(value, { stream: true })
-      const lines = buf.split("\n")
-      buf = lines.pop() ?? ""
-      for (const line of lines) {
-        if (!line.startsWith("data: ")) continue
-        const raw = line.slice(6).trim()
-        if (raw === "[DONE]") continue
-        let chunk: Record<string, unknown>
-        try {
-          chunk = JSON.parse(raw) as Record<string, unknown>
-        } catch {
-          continue
-        }
-        const choices = chunk.choices as Array<Record<string, unknown>> | undefined
-        const delta = choices?.[0]?.delta as Record<string, unknown> | undefined
-        const fr = choices?.[0]?.finish_reason as string | undefined
-        if (fr) finishReason = fr
-        if (typeof delta?.content === "string" && delta.content) {
-          content += delta.content
-          opts.onToken?.(delta.content)
-        }
-        if (Array.isArray(delta?.tool_calls)) {
-          for (const tc of delta.tool_calls as Array<Record<string, unknown>>) {
-            const idx = tc.index as number
-            const fn = tc.function as Record<string, unknown> | undefined
-            if (!toolCallMap.has(idx)) toolCallMap.set(idx, { id: "", name: "", arguments: "" })
-            const entry = toolCallMap.get(idx)!
-            if (typeof tc.id === "string") entry.id = tc.id
-            if (typeof fn?.name === "string") entry.name += fn.name
-            if (typeof fn?.arguments === "string") entry.arguments += fn.arguments
-          }
-        }
-        const usage = chunk.usage as Record<string, number> | undefined
-        if (usage?.total_tokens) {
-          promptTokens = usage.prompt_tokens
-          completionTokens = usage.completion_tokens
-          totalTokens = usage.total_tokens
-        }
-      }
-    }
-    if (finishReason === "length") {
+    const streamed = await consumeOpenAICompatibleSSE(res!.body!, {
+      onToken: opts.onToken,
+      onFirstToolCallDelta: opts.onFirstToolCallDelta
+    })
+    if (streamed.finishReason === "length") {
       throw new Error(
         "LLM response truncated (finish_reason=length). The model hit its completion token limit before finishing. This usually means a tool call argument (like file content) was too large."
       )
     }
     return {
-      content: content || null,
-      toolCalls: [...toolCallMap.values()].map(
-        (tc): ToolCall => ({ id: tc.id, name: tc.name, arguments: safeParseArgs(tc.arguments) })
-      ),
-      usage: totalTokens > 0 ? { promptTokens, completionTokens, totalTokens } : undefined
+      content: streamed.content || null,
+      toolCalls: streamed.toolCalls,
+      usage: streamed.usage
     }
   }
 

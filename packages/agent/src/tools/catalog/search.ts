@@ -1,5 +1,6 @@
 import type { TableVerdictsReader } from "../../application/shell/runtime.js"
 import { getTenantConfig } from "../../application/shell/tenant-config.js"
+import { defaultSchemaRolePenalty, classifySchemaRole, rowCountBonusForSchema } from "./schema-role.js"
 import { tokenize } from "./helpers.js"
 import type { CatalogSearchHit, CatalogTable, ImplicitEdge } from "./types.js"
 
@@ -115,7 +116,7 @@ export function searchCatalog(
     const table = tables.get(key)
     if (!table) continue // concept-graph key may reference a table not in the catalog
     const colScore = colMatches.length * 10
-    const rowBonus = table.rowCount ? Math.min(Math.log10(table.rowCount + 1) * 2, 20) : 0
+    const rowBonus = rowCountBonusForSchema(table.schema, table.rowCount)
 
     // Schema tier boost: per-deployment ranking lives in tenant config
     // (`schemaRanking`). When unset, no per-schema bias is applied — search
@@ -182,6 +183,11 @@ export function searchCatalog(
  * Lookup is case-insensitive. Returns 0 when no match.
  */
 function schemaWeightFor(schema: string): number {
+  const tenantWeight = schemaWeightFromTenant(schema)
+  return tenantWeight + defaultSchemaRolePenalty(classifySchemaRole(schema))
+}
+
+function schemaWeightFromTenant(schema: string): number {
   const ranking = getTenantConfig().schemaRanking as
     | ReadonlyArray<{ schema: string; weight: number }>
     | Record<string, number>

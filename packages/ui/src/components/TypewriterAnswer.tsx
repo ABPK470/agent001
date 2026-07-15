@@ -1,9 +1,9 @@
 /**
- * TypewriterAnswer — sequential "printer" reveal for streaming agent answers.
+ * TypewriterAnswer — answer reveal for agent responses.
  *
- * Reveals content block-by-block: prose types out, tables grow row-by-row,
- * dashboards build then appear. Incomplete structured tails show skeletons
- * (never raw markdown / JSON).
+ * Live SSE streaming renders committed markdown blocks immediately and
+ * streams the volatile tail as ASCII glyphs (no cursor). Completed
+ * answers use block-by-block reveal, then SmartAnswer.
  */
 
 import { useEffect, useMemo, useRef, useState } from "react"
@@ -11,22 +11,55 @@ import {
   availablePrintUnits,
   CATCHUP_MULTIPLIER,
   CATCHUP_UNITS_THRESHOLD,
+  getLiveStreamingRenderParts,
   getStreamingSegments,
   revealFromUnits,
   snapProseTail,
   totalBlockUnits,
   UNITS_PER_SECOND,
 } from "./answer-stream-reveal"
+import { GlyphStreamText } from "./GlyphStreamText"
 import { SmartAnswer } from "./SmartAnswer"
 import { StructuredPendingBlock, TablePendingBlock } from "./StreamingBlocks"
 
-export function TypewriterAnswer({
+const bodyClass = (compact: boolean) =>
+  compact
+    ? "text-text-secondary text-[15px] leading-6 w-full min-w-0"
+    : "text-text-secondary text-base leading-relaxed w-full min-w-0"
+
+/** Live stream — formatted committed blocks + glyph tail for in-flight prose. */
+function StreamingLiveAnswer({ text, compact }: { text: string; compact: boolean }) {
+  const { blocks, glyphTail, layout } = useMemo(() => getLiveStreamingRenderParts(text), [text])
+
+  const hasBlockContent = blocks.length > 0
+  const hasGlyphTail = glyphTail.length > 0
+  const showStructuredPending =
+    (layout.remainderKind === "fenced" || layout.remainderKind === "table") &&
+    layout.remainder.length > 0
+
+  return (
+    <div className={[bodyClass(compact), "space-y-2"].join(" ")}>
+      {hasBlockContent ? <SmartAnswer blocks={blocks} compact={compact} /> : null}
+      {hasGlyphTail ? (
+        <div className="whitespace-pre-wrap break-words">
+          <GlyphStreamText text={glyphTail} />
+        </div>
+      ) : null}
+      {showStructuredPending && layout.remainderKind === "fenced" ? (
+        <StructuredPendingBlock lang={layout.fencedLang ?? "chart"} />
+      ) : null}
+      {showStructuredPending && layout.remainderKind === "table" ? (
+        <TablePendingBlock raw={layout.remainder} />
+      ) : null}
+    </div>
+  )
+}
+
+function TypewriterRevealAnswer({
   text,
-  streaming = false,
   compact = false,
 }: {
   text: string
-  streaming?: boolean
   compact?: boolean
 }) {
   const [units, setUnits] = useState(0)
@@ -51,8 +84,16 @@ export function TypewriterAnswer({
   }, [text])
 
   useEffect(() => {
+    const target = availablePrintUnits(getStreamingSegments(text))
+    if (unitsRef.current !== target) {
+      unitsRef.current = target
+      setUnits(target)
+    }
+  }, [text])
+
+  useEffect(() => {
     let cancelled = false
-    if (!streaming && unitsRef.current >= targetUnits) return
+    if (unitsRef.current >= targetUnits) return
 
     const tick = (now: number) => {
       if (cancelled) return
@@ -73,9 +114,7 @@ export function TypewriterAnswer({
         return
       }
       lastTickRef.current = null
-      if (streaming) {
-        rafRef.current = requestAnimationFrame(tick)
-      } else if (unitsRef.current < targetUnits) {
+      if (unitsRef.current < targetUnits) {
         rafRef.current = requestAnimationFrame(tick)
       } else {
         rafRef.current = null
@@ -89,30 +128,22 @@ export function TypewriterAnswer({
       rafRef.current = null
       lastTickRef.current = null
     }
-  }, [streaming, text, targetUnits])
+  }, [text, targetUnits])
 
   const blockReveal = useMemo(() => revealFromUnits(segments.blocks, units), [segments.blocks, units])
 
   const proseChars = Math.max(0, units - blockTotal)
   const proseTail =
     segments.layout.remainderKind === "prose" && segments.layout.remainder
-      ? snapProseTail(segments.layout.remainder, proseChars, !streaming && units >= targetUnits)
+      ? snapProseTail(segments.layout.remainder, proseChars, units >= targetUnits)
       : ""
 
   const showStructuredPending =
-    streaming &&
     (segments.layout.remainderKind === "fenced" || segments.layout.remainderKind === "table") &&
     segments.layout.remainder.length > 0 &&
     units >= blockTotal
 
-  const caughtUp = units >= availablePrintUnits(segments)
-  const waitingForMore =
-    streaming &&
-    caughtUp &&
-    segments.layout.remainderKind !== "fenced" &&
-    segments.layout.remainderKind !== "table"
-
-  const finished = !streaming && units >= targetUnits
+  const finished = units >= targetUnits
 
   if (finished) {
     return <SmartAnswer text={text} compact={compact} />
@@ -122,12 +153,7 @@ export function TypewriterAnswer({
   const hasProse = proseTail.length > 0
 
   return (
-    <div
-      className={[
-        compact ? "text-text-secondary text-[13px] leading-6 w-full min-w-0" : "text-text-secondary text-base leading-relaxed w-full min-w-0",
-        "space-y-2",
-      ].join(" ")}
-    >
+    <div className={[bodyClass(compact), "space-y-2"].join(" ")}>
       {hasBlockContent ? (
         <SmartAnswer
           blocks={segments.blocks}
@@ -139,15 +165,6 @@ export function TypewriterAnswer({
       {hasProse ? (
         <div>
           <SmartAnswer text={proseTail} streaming compact={compact} />
-          {streaming || units < targetUnits ? (
-            <span
-              className={[
-                "inline-block w-[2px] bg-accent/80 animate-pulse align-middle ml-0.5 -mt-1",
-                compact ? "h-[13px]" : "h-[1em]",
-              ].join(" ")}
-              aria-hidden
-            />
-          ) : null}
         </div>
       ) : null}
       {showStructuredPending && segments.layout.remainderKind === "fenced" ? (
@@ -156,12 +173,32 @@ export function TypewriterAnswer({
       {showStructuredPending && segments.layout.remainderKind === "table" ? (
         <TablePendingBlock raw={segments.layout.remainder} />
       ) : null}
-      {waitingForMore && !showStructuredPending ? (
-        <div className="flex items-center gap-2 pt-0.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-accent/70 animate-pulse shrink-0" />
-          <span className="text-[12px] text-text-muted font-mono">Generating…</span>
-        </div>
-      ) : null}
     </div>
   )
+}
+
+export function TypewriterAnswer({
+  text,
+  streaming = false,
+  compact = false,
+}: {
+  text: string
+  streaming?: boolean
+  compact?: boolean
+}) {
+  // Preserve the component across the live → completed transition. A streamed
+  // answer is already fully visible; starting TypewriterRevealAnswer from zero
+  // at completion would make it disappear and re-type. Historical answers,
+  // which mount completed and were never streamed in this session, still use
+  // the deliberate reveal.
+  const hasStreamedRef = useRef(streaming)
+  if (streaming) hasStreamedRef.current = true
+
+  if (streaming) {
+    return <StreamingLiveAnswer text={text} compact={compact} />
+  }
+  if (hasStreamedRef.current) {
+    return <SmartAnswer text={text} compact={compact} />
+  }
+  return <TypewriterRevealAnswer text={text} compact={compact} />
 }

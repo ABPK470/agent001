@@ -17,12 +17,15 @@
 import sql from "mssql"
 import { mkdir, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
+import { Buffer } from "node:buffer"
 import { readToolTraceContext } from "../../application/shell/loop.js"
 import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
 import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
 import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../domain/enums/tools.js"
 import { safePathResolvedWith } from "../filesystem-security.js"
+import { getCatalog } from "../catalog/index.js"
 import { getPool } from "./connection.js"
+import { resolveToolConnectionArg } from "./resolve-connection.js"
 import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
 import { emitMssqlQualityTrace } from "./trace.js"
 import { getQueryWarnings, validateQueryDetailed } from "./validation.js"
@@ -32,6 +35,24 @@ const MAX_EXPORT_ROWS = 1_000_000
 
 /** Number of preview rows returned to the LLM in the tool result. */
 const PREVIEW_ROWS = 20
+
+/**
+ * Above this size an export is NOT auto-promoted to a downloadable attachment —
+ * the bytes are read into memory to promote, and a multi-hundred-MB staging
+ * file would risk OOM-ing the server. The file still lands in the sandbox for
+ * the agent to read; the agent is told to split the export if the user needs
+ * it as a download. Mirrors the run-artifact download cap (64 MiB).
+ */
+const PROMOTE_MAX_BYTES = 64 * 1024 * 1024
+
+/** MIME per export format — used when promoting the file to an attachment. */
+const FORMAT_MEDIA_TYPE: Record<ExportFormat, string> = {
+  [ExportFormat.Csv]: "text/csv",
+  [ExportFormat.Tsv]: "text/tab-separated-values",
+  [ExportFormat.Json]: "application/json",
+  [ExportFormat.Jsonl]: "application/x-ndjson",
+  [ExportFormat.Txt]: "text/plain"
+}
 
 function inferFormat(path: string, explicit?: string): ExportFormat {
   if (explicit) {
@@ -74,6 +95,70 @@ function formatBytes(n: number): string {
   return `${(n / 1024 / 1024).toFixed(1)} MB`
 }
 
+/**
+ * Outcome of attempting to promote an exported file to a durable attachment.
+ * `note` is appended verbatim to the tool result so the agent knows whether
+ * the user gets a download link and can say so in its answer.
+ */
+interface PromotionResult {
+  note: string
+}
+
+/**
+ * Promote an exported sandbox file to a durable, user-downloadable attachment
+ * when `deliverable` is true. Guards:
+ *   • no attachment store bound (CLI / tests) → silent skip
+ *   • file above PROMOTE_MAX_BYTES → skip promote, tell agent to split
+ *   • promote throws (quota, IO) → never fail the export; warn instead
+ *
+ * Returns a short note for the tool result. The file remains in the sandbox
+ * either way so the agent can still read it back.
+ */
+export async function promoteExportedFile(opts: {
+  host: AgentHost
+  sandboxRelPath: string
+  mediaType: string
+  deliverable: boolean
+  byteSize: number
+  purposeTag: string | null
+}): Promise<PromotionResult> {
+  if (!opts.deliverable) {
+    return { note: `\nWorkspace file only (deliverable=false) — not promoted to a download.` }
+  }
+  const store = opts.host.attachments
+  if (!store) {
+    // No attachment backend (CLI / tests). The file is still in the sandbox.
+    return { note: `\nFile saved to workspace only (no attachment backend in this environment).` }
+  }
+  if (opts.byteSize > PROMOTE_MAX_BYTES) {
+    return {
+      note:
+        `\nFile is ${formatBytes(opts.byteSize)} — above the ${formatBytes(PROMOTE_MAX_BYTES)} ` +
+        `delivery cap, so it was NOT promoted to a download. It remains in the workspace. ` +
+        `If the user needs it as a download, split the export into smaller files.`
+    }
+  }
+  try {
+    const meta = await store.promoteFromSandbox(opts.sandboxRelPath, {
+      mediaType: opts.mediaType,
+      ...(opts.purposeTag !== null ? { purposeTag: opts.purposeTag } : {})
+    })
+    return {
+      note:
+        `\nSaved as a downloadable file: ${meta.normalizedName} (attachment id=${meta.id}, ` +
+        `${formatBytes(meta.sizeBytes)}). The user can download it via the link in chat — ` +
+        `mention this in your answer.`
+    }
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err)
+    return {
+      note:
+        `\nFile remains in the workspace; could not promote to a download (${msg}). ` +
+        `The user may not be able to retrieve this file.`
+    }
+  }
+}
+
 // ── Schema constants (shared between static export and factory) ───
 
 const EXPORT_QUERY_TO_FILE_DESCRIPTION =
@@ -85,7 +170,11 @@ const EXPORT_QUERY_TO_FILE_DESCRIPTION =
   "The tool writes the full dataset to disk and returns only a short summary plus the first " +
   `${PREVIEW_ROWS} rows for you to acknowledge in chat. ` +
   "Format is inferred from the file extension (.csv/.tsv/.json/.jsonl/.txt) or pass format= explicitly. " +
-  "For single-column queries, .txt produces a clean newline-separated list; otherwise prefer .csv."
+  "For single-column queries, .txt produces a clean newline-separated list; otherwise prefer .csv. " +
+  "By default (deliverable=true) the file is ALSO saved as a durable, user-downloadable attachment and " +
+  "the user gets a download link in chat — this is what you want whenever the export is meant for the " +
+  "user to review/keep. Set deliverable=false ONLY for intermediate staging files you will read back " +
+  "yourself (e.g. cross-batch handoff when #temp can't survive) — those stay in the workspace only."
 
 const EXPORT_QUERY_TO_FILE_PARAMETERS = {
   type: "object",
@@ -108,6 +197,19 @@ const EXPORT_QUERY_TO_FILE_PARAMETERS = {
         "json = single JSON array. jsonl = one JSON object per line. " +
         "txt = one row per line, fields joined with ' | ' (or just the value for single-column queries)."
     },
+    deliverable: {
+      type: "boolean",
+      description:
+        "true (default) = also save the file as a durable, user-downloadable attachment and surface a download link in chat. " +
+        "Use this whenever the export is for the user to review/keep. " +
+        "Set false ONLY for intermediate staging files the agent reads back itself (cross-batch handoff); " +
+        "those stay in the workspace only and are NOT promoted."
+    },
+    purposeTag: {
+      type: "string",
+      description:
+        "Optional short label stored on the promoted attachment (e.g. 'top-5-clients'). Ignored when deliverable=false."
+    },
     connection: {
       type: "string",
       description:
@@ -126,21 +228,19 @@ async function executeExportQueryToFile(
   args: Record<string, unknown>,
   opts: { resolveSafe: (p: string) => Promise<string>; host: AgentHost; run?: RunContext }
 ): Promise<string> {
-  const query = String(args.query ?? "").trim()
+  let query = String(args.query ?? "").trim()
   const pathArg = String(args.path ?? "").trim()
   if (!query) return "Error: query cannot be empty."
   if (!pathArg) return "Error: path cannot be empty."
 
-  const connectionName = args.connection ? String(args.connection).trim() : "default"
-  const toolTrace = readToolTraceContext(args)
-  const accessor = () => {
-    const exact = opts.host.catalog.instances.get(connectionName)
-    if (exact) return exact
-    if (connectionName === "default" && opts.host.catalog.instances.size > 0) {
-      return opts.host.catalog.instances.values().next().value ?? null
-    }
-    return null
+  let connectionName: string
+  try {
+    connectionName = resolveToolConnectionArg(opts.host, args)
+  } catch (err) {
+    return `Error: ${err instanceof Error ? err.message : String(err)}`
   }
+  const toolTrace = readToolTraceContext(args)
+  const accessor = () => getCatalog(opts.host, connectionName)
 
   let pool: sql.ConnectionPool
   let writeEnabled: boolean
@@ -182,6 +282,7 @@ async function executeExportQueryToFile(
     }
     return validation.error ?? "Query blocked"
   }
+  query = validation.preparedQuery ?? query
 
   // Resolve destination path safely under the workspace root.
   let target: string
@@ -272,6 +373,25 @@ async function executeExportQueryToFile(
     const content = chunks.join("")
     await writeFile(target, content, "utf-8")
 
+    // Auto-promote deliverable exports to a durable, user-downloadable
+    // attachment. This is the fix for "the file landed on the server and the
+    // user can't get it": promoted files survive hosted sandbox deletion and
+    // get a download link in chat. Staging files (deliverable=false) stay in
+    // the sandbox only. Best-effort — a promote failure never invalidates the
+    // export; the file is still on disk for the agent to read.
+    const deliverable = args.deliverable !== false
+    const purposeTag =
+      typeof args.purposeTag === "string" && args.purposeTag.trim() ? args.purposeTag.trim() : null
+    const byteSize = Buffer.byteLength(content, "utf-8")
+    const promotion = await promoteExportedFile({
+      host: opts.host,
+      sandboxRelPath: pathArg,
+      mediaType: FORMAT_MEDIA_TYPE[format],
+      deliverable,
+      byteSize,
+      purposeTag
+    })
+
     // Build short preview for the LLM.
     const previewLines: string[] = []
     const previewRows = rs.slice(0, PREVIEW_ROWS)
@@ -301,7 +421,7 @@ async function executeExportQueryToFile(
       } | null,
       profiledTables: opts.run?.mssqlProfileCalls ?? null
     })
-    const body = `${summary}${previewLabel}\n${previewLines.join("\n")}`
+    const body = `${summary}${previewLabel}\n${previewLines.join("\n")}${promotion.note}`
     emitMssqlQualityTrace(
       {
         toolMode: "export",

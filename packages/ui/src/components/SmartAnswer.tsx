@@ -211,7 +211,7 @@ function InlineText({ text }: { text: string }): React.ReactElement {
     const candidates: M[] = []
     if (boldMatch)   candidates.push({ idx: boldMatch.index!,   len: boldMatch[0].length,   node: <strong key={key++} className="font-semibold text-text">{boldMatch[1]}</strong> })
     if (italicMatch) candidates.push({ idx: italicMatch.index!, len: italicMatch[0].length, node: <em key={key++} className="italic">{italicMatch[1]}</em> })
-    if (codeMatch)   candidates.push({ idx: codeMatch.index!,   len: codeMatch[0].length,   node: <code key={key++} className={compact ? "font-mono text-[12px] text-text-muted bg-overlay-2 px-1.5 py-0.5 rounded" : "font-mono text-sm bg-accent-soft text-accent px-1.5 py-0.5 rounded border border-accent/25"}>{codeMatch[1]}</code> })
+    if (codeMatch)   candidates.push({ idx: codeMatch.index!,   len: codeMatch[0].length,   node: <code key={key++} className={compact ? "font-mono text-[15px] text-text-muted bg-overlay-2 px-1.5 py-0.5 rounded" : "font-mono text-sm bg-accent-soft text-accent px-1.5 py-0.5 rounded border border-accent/25"}>{codeMatch[1]}</code> })
 
     if (candidates.length === 0) { parts.push(remaining); break }
 
@@ -229,7 +229,7 @@ function StreamingCaret({ compact }: { compact?: boolean }) {
     <span
       className={[
         "inline-block w-[2px] bg-accent/80 animate-pulse align-middle ml-0.5",
-        compact ? "h-[13px]" : "h-[1em]",
+        compact ? "h-[15px]" : "h-[1em]",
       ].join(" ")}
       aria-hidden
     />
@@ -265,7 +265,7 @@ function CompactTable({
         cells wrapped aggressively, and trailing columns got clipped — the
         user reported this as "cut out, not acceptable".
       */}
-      <table className="w-auto min-w-full text-[12.5px] leading-6 border-collapse">
+      <table className="w-auto min-w-full text-[15px] leading-6 border-collapse">
         {/* <thead className="bg-overlay-hover/40"> */}
         <thead>
           <tr>
@@ -273,7 +273,7 @@ function CompactTable({
               <th
                 key={hi}
                 className={[
-                  "text-left font-bold text-text-secondary text-[14px] px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
+                  "text-left font-bold text-text-secondary text-[15px] px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
                   // "text-left font-bold text-text-muted tracking-wide text-[11px] px-3 py-1.5 border-b border-border-subtle whitespace-nowrap",
                   hi < headers.length - 1 ? "border-r border-border-subtle" : "",
                 ].join(" ")}
@@ -347,7 +347,7 @@ function CompactCodeBlock({ lang, text }: { lang: string; text: string }) {
           {lang}
         </div>
       )}
-      <pre className="px-3 py-2 text-[13px] leading-relaxed font-mono text-text-muted overflow-x-auto whitespace-pre">
+      <pre className="px-3 py-2 text-[15px] leading-relaxed font-mono text-text-muted overflow-x-auto whitespace-pre">
         {text}
       </pre>
       <button
@@ -388,7 +388,7 @@ export function SmartAnswer({
   return (
     <CompactContext.Provider value={compact}>
     <div className={[
-      compact ? "text-text-secondary text-[13px] leading-6 w-full min-w-0" : "text-text-secondary text-base leading-relaxed w-full min-w-0",
+      compact ? "text-text-secondary text-[15px] leading-6 w-full min-w-0" : "text-text-secondary text-base leading-relaxed w-full min-w-0",
       streaming ? "space-y-2" : "space-y-3",
     ].join(" ")}>
       {blocks.map((block, bi) => {
@@ -418,7 +418,7 @@ export function SmartAnswer({
             return (
               <div key={bi} className={`flex items-center gap-3 pt-1 pb-0.5 ${wrapClass}`}>
                 <span className="h-px flex-1 bg-gradient-to-r from-overlay-3 to-transparent" />
-                <p className="text-[13px] font-semibold tracking-[0.12em] uppercase text-text">
+                <p className="text-[15px] font-semibold tracking-[0.12em] uppercase text-text">
                   <InlineText text={b.text} />
                   {printing ? <StreamingCaret compact={compact} /> : null}
                 </p>
@@ -535,8 +535,8 @@ export function SmartAnswer({
                           <span className="mt-0.5 text-text-muted font-mono text-sm shrink-0">›</span>
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-                              <span className="font-mono text-text text-[13px] font-semibold">{commandItem.name}</span>
-                              <span className="text-[12px] text-text-muted font-mono break-all">{commandItem.detail}</span>
+                              <span className="font-mono text-text text-[15px] font-semibold">{commandItem.name}</span>
+                              <span className="text-[15px] text-text-muted font-mono break-all">{commandItem.detail}</span>
                             </div>
                           </div>
                         </div>
@@ -606,7 +606,7 @@ export function SmartAnswer({
               {tablePrinting && b.rows.length < (block.type === "table" ? block.rows.length : 0) ? (
                 <div className="flex items-center gap-2 px-1 pt-1">
                   <span className="w-1.5 h-1.5 rounded-full bg-accent/60 animate-pulse shrink-0" />
-                  <span className="text-[12px] text-text-muted">Adding rows…</span>
+                  <span className="text-[15px] text-text-muted">Adding rows…</span>
                 </div>
               ) : null}
             </div>

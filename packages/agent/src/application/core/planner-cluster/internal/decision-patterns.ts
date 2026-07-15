@@ -8,8 +8,9 @@
 // Direct-route gates and planner score signals
 // ============================================================================
 
-/** Multi-step work: "build X then Y", "first...then...", numbered lists */
-export const MULTI_STEP_RE = /\b(?:first|then|next|after that|step \d|phase \d|\d+\.\s|\bfinally\b)/i
+/** Multi-step work: "build X then Y", "first...then...", numbered lists at line starts */
+export const MULTI_STEP_RE =
+  /\b(?:first|then|next|after that|step \d|phase \d|(?:^|[\n;])\s*\d+\.\s|\bfinally\b)/im
 
 /**
  * Tool diversity: mentions construction/execution verbs that imply multiple tool categories.
@@ -137,6 +138,13 @@ export const DB_INVESTIGATION_RE =
  */
 export const DATA_FETCH_PIPELINE_RE =
   /\b(?:query|fetch|get|pull|retrieve|select|show|display|list|report\s+on|generate\s+(?:a\s+)?report)\b[\s\S]{0,80}\b(?:from\s+)?(?:database|db|mssql|sql\s+server|sql|table|data)\b|\b(?:mssql|sql\s+server|database|db)\b[\s\S]{0,80}\b(?:report|table|chart|display|html|dashboard|page|export|output|result)\b/i
+
+/**
+ * Ranking / top-N list requests over warehouse entities — single-shot query work.
+ * "Create top 5 list of bankers" must not enter planner decomposition.
+ */
+export const TOP_N_DATA_LIST_RE =
+  /\b(?:top\s+\d+|create\s+(?:a\s+)?top\s+\d+)\b[\s\S]{0,100}\b(?:list|bankers?|banker|clients?|client|officers?|officer|products?|accounts?|revenue|ranking|rank)\b/i
 
 /**
  * Simple function/script write: "create/implement/write a factorial function",

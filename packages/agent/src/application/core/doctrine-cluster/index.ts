@@ -2,6 +2,7 @@
 // validator delegation, and lint tests.
 
 import { aggregateNamingDoctrine } from "./aggregate-naming.js"
+import { aliasBracketingDoctrine } from "./alias-bracketing.js"
 import { bigViewBudgetDoctrine } from "./big-view-budget.js"
 import { tempNamingDoctrine } from "./temp-naming.js"
 import { tempScalarSubqueryDoctrine } from "./temp-scalar-subquery.js"
@@ -19,6 +20,7 @@ export type { DoctrineDiagnostic, DoctrineModule }
 
 /** Ordered list of MSSQL doctrines. Order is the prompt-assembly order. */
 export const MSSQL_DOCTRINES: readonly DoctrineModule[] = [
+  aliasBracketingDoctrine,
   tempNamingDoctrine,
   tempScalarSubqueryDoctrine,
   bigViewBudgetDoctrine,

@@ -61,6 +61,20 @@ export interface PendingToolApproval {
   notificationId?: string | null
 }
 
+/**
+ * A deliverable file the agent produced and promoted to the durable
+ * attachment store (e.g. an export_query_to_file CSV). Enough to render a
+ * download chip in chat; the bytes are fetched on click via
+ * `api.downloadAttachment(id, name)`.
+ */
+export interface GeneratedAttachment {
+  id: string
+  name: string
+  sizeBytes: number
+  mediaType: string
+  runId: string | null
+}
+
 function truncateSyncToolResult(text: string, max = 1200): string {
   const t = text.trim()
   if (t.length <= max) return t
@@ -257,6 +271,13 @@ interface AppState {
   setRuns: (runs: Run[]) => void
   setActiveRun: (id: string | null) => void
   upsertRun: (run: Partial<Run> & { id: string }) => void
+  /** Insert a pending run row immediately after POST /runs — before SSE run.queued. */
+  beginOptimisticRun: (input: {
+    id: string
+    goal: string
+    threadId: string
+    agentId?: string | null
+  }) => void
 
   // Threads (home chat workspaces)
   threads: Thread[]
@@ -394,6 +415,16 @@ interface AppState {
   clearAgentSyncExec: () => void
   /** planId of an in-progress agent-triggered execute. Set on execute.started, cleared on execute.completed/failed. */
   agentSyncExecStarted: string | null
+
+  // Agent-generated deliverable attachments (CSV/MD/… exports promoted via
+  // export_query_to_file or promote_attachment). Keyed by runId so the chat
+  // can render download chips under the run that produced them. Populated
+  // live from the `attachment.promoted` SSE event and reconciled on run
+  // completion via listAttachments({ runId }).
+  generatedAttachmentsByRun: Record<string, GeneratedAttachment[]>
+  addGeneratedAttachment: (runId: string, att: GeneratedAttachment) => void
+  setGeneratedAttachments: (runId: string, list: GeneratedAttachment[]) => void
+  clearGeneratedAttachments: (runId: string) => void
 
   // SSE event handler
   handleEvent: (event: SseEvent) => void
@@ -584,6 +615,7 @@ let traceFlushScheduled = false
 const runTraceBuf: Array<{ runId: string; entry: TraceEntry }> = []
 const runAnswerBuf = new Map<string, string>()
 let runFlushScheduled = false
+let answerFlushGeneration = 0
 // Answer chunks flush on requestAnimationFrame instead of microtask so the
 // user perceives word-by-word streaming. SSE delivers many events in one
 // network packet (EventSource dispatches them synchronously) — a microtask
@@ -627,8 +659,10 @@ function scheduleRunFlush(set: (fn: (s: AppState) => Partial<AppState>) => void)
 function scheduleAnswerFlush(set: (fn: (s: AppState) => Partial<AppState>) => void) {
   if (answerFlushScheduled) return
   answerFlushScheduled = true
+  const generation = answerFlushGeneration
   const flush = () => {
     answerFlushScheduled = false
+    if (generation !== answerFlushGeneration) return
     const batch = new Map(runAnswerBuf)
     runAnswerBuf.clear()
     if (batch.size === 0) return
@@ -1190,6 +1224,33 @@ export const useStore = create<AppState>()(
         }
       }),
 
+      beginOptimisticRun: (input) => {
+        const now = new Date().toISOString()
+        get().upsertRun({
+          id: input.id,
+          goal: input.goal,
+          threadId: input.threadId,
+          status: RunStatus.Pending,
+          answer: null,
+          stepCount: 0,
+          error: null,
+          pendingWorkspaceChanges: 0,
+          parentRunId: null,
+          agentId: input.agentId ?? null,
+          createdAt: now,
+          completedAt: null,
+          totalTokens: 0,
+          promptTokens: 0,
+          completionTokens: 0,
+          llmCalls: 0,
+          trace: [{ kind: "goal", text: input.goal }],
+          streamingAnswer: "",
+          auditTrail: [],
+          stepData: [],
+        })
+        set({ activeRunId: input.id })
+      },
+
       threads: [],
       activeThreadId: null,
       threadSidebarCollapsed: false,
@@ -1231,12 +1292,18 @@ export const useStore = create<AppState>()(
         }
         try {
           const runs = await api.listThreadRuns(threadId)
-          set({ runs })
+          // The user may have selected another thread while this request was
+          // in flight. Never let a stale response replace the current thread.
+          if (get().activeThreadId !== threadId) return
+          // Preserve SSE-owned fields (streamingAnswer, trace, steps, audit)
+          // when refreshing server metadata. A plain set({ runs }) erased
+          // visible in-progress answers during thread navigation.
+          get().setRuns(runs)
           if (runs.length > 0) {
             get().setActiveRun(runs[runs.length - 1]!.id)
           }
         } catch {
-          set({ runs: [] })
+          if (get().activeThreadId === threadId) set({ runs: [] })
         }
       },
       createNewThread: async () => {
@@ -1520,6 +1587,27 @@ export const useStore = create<AppState>()(
       clearAgentSyncExec: () => set({ agentSyncExec: null }),
       agentSyncExecStarted: null,
 
+      generatedAttachmentsByRun: {},
+      addGeneratedAttachment: (runId, att) =>
+        set((s) => {
+          const prev = s.generatedAttachmentsByRun[runId] ?? []
+          if (prev.some((a) => a.id === att.id)) return s
+          return {
+            generatedAttachmentsByRun: { ...s.generatedAttachmentsByRun, [runId]: [...prev, att] }
+          }
+        }),
+      setGeneratedAttachments: (runId, list) =>
+        set((s) => ({
+          generatedAttachmentsByRun: { ...s.generatedAttachmentsByRun, [runId]: list }
+        })),
+      clearGeneratedAttachments: (runId) =>
+        set((s) => {
+          if (!(runId in s.generatedAttachmentsByRun)) return s
+          const next = { ...s.generatedAttachmentsByRun }
+          delete next[runId]
+          return { generatedAttachmentsByRun: next }
+        }),
+
       // SSE event handler
       handleEvent: (event) => {
         const { type, data, timestamp } = event
@@ -1547,6 +1635,7 @@ export const useStore = create<AppState>()(
             store.resetLiveUsage()
             store.clearStreamingAnswer()
             set({ activeSyncInvocation: null, syncProgressStates: new Map() })
+            store.clearGeneratedAttachments(data["runId"] as string)
             store.addTrace({ kind: "goal", text: data["goal"] as string })
             store.upsertRun({
               id: data["runId"] as string,
@@ -1591,15 +1680,15 @@ export const useStore = create<AppState>()(
             break
 
           case "run.completed":
-            store.clearStreamingAnswer()
             store.addTrace({ kind: "answer", text: data["answer"] as string })
             {
               const completedRunId = readSseRunId(data) ?? get().activeRunId
               if (completedRunId) {
+                const completedAnswer = data["answer"] as string
                 store.upsertRun({
                   id: completedRunId,
                   status: RunStatus.Completed,
-                  answer: data["answer"] as string,
+                  answer: completedAnswer,
                   stepCount: data["stepCount"] as number,
                   pendingWorkspaceChanges: (data["pendingWorkspaceChanges"] as number) ?? 0,
                   completedAt: timestamp,
@@ -1610,17 +1699,39 @@ export const useStore = create<AppState>()(
                   streamingAnswer: "",
                 })
                 set((s) => ({
-                  runs: appendRunTrace(s.runs, completedRunId, { kind: "answer", text: data["answer"] as string }),
+                  runs: appendRunTrace(s.runs, completedRunId, { kind: "answer", text: completedAnswer }),
                 }))
-                void api.getRunTrace(completedRunId).then((rawTrace) => {
-                  const trace = rawTrace as TraceEntry[]
-                  set((s) => ({
-                    runs: patchRunFields(s.runs, completedRunId, { trace }),
-                    trace: s.activeRunId === completedRunId ? trace : s.trace,
-                  }))
-                }).catch(() => {})
+                const existingTraceLen =
+                  get().runs.find((r) => r.id === completedRunId)?.trace?.length ?? 0
+                if (existingTraceLen < 2) {
+                  void api.getRunTrace(completedRunId).then((rawTrace) => {
+                    const trace = rawTrace as TraceEntry[]
+                    set((s) => ({
+                      runs: patchRunFields(s.runs, completedRunId, { trace }),
+                      trace: s.activeRunId === completedRunId ? trace : s.trace,
+                    }))
+                  }).catch(() => {})
+                }
+                // Reconcile deliverable attachments for this run from the
+                // server — catches any promoted mid-run that SSE missed and
+                // drops soft-deleted ones. Best-effort.
+                void api.listAttachments({ runId: completedRunId })
+                  .then((rows) => {
+                    const list: GeneratedAttachment[] = rows
+                      .filter((r) => r.scope === "workspace_asset")
+                      .map((r) => ({
+                        id: r.id,
+                        name: r.normalizedName,
+                        sizeBytes: r.sizeBytes,
+                        mediaType: r.mediaType,
+                        runId: completedRunId
+                      }))
+                    store.setGeneratedAttachments(completedRunId, list)
+                  })
+                  .catch(() => {})
               }
             }
+            store.clearStreamingAnswer()
             set({ pendingInput: null, executingToolCalls: new Map(), pendingKill: null, activeSyncInvocation: null, syncProgressStates: new Map() })
             if (get().pendingToolApproval?.runId === (data["runId"] as string)) {
               set({ pendingToolApproval: null, approvalModalOpen: false, approvalModalDismissed: false })
@@ -1676,25 +1787,22 @@ export const useStore = create<AppState>()(
             break
           }
 
-          case "stream.reset":
+          case "stream.reset": {
             // The LLM response that was streaming had tool calls — it was
             // intermediate reasoning, not the final answer. Clear the buffer.
-            store.clearStreamingAnswer()
-            // Also drop any chunks that arrived before this reset but
-            // haven't yet been flushed by the next requestAnimationFrame —
-            // otherwise they get re-applied on top of the cleared answer
-            // and surface as a garbled fragment of the discarded reasoning
-            // (visible in the chat between a tool call and the next
-            // iteration as e.g. "PRO blocks temp D'll-only").
-            {
-              const resetRunId = (data["runId"] as string) ?? get().activeRunId
-              if (resetRunId) runAnswerBuf.delete(resetRunId)
-              else runAnswerBuf.clear()
-            }
+            const resetRunId = (data["runId"] as string) ?? get().activeRunId
+            answerFlushGeneration++
+            answerFlushScheduled = false
+            if (resetRunId) runAnswerBuf.delete(resetRunId)
+            else runAnswerBuf.clear()
             set((s) => ({
-              runs: s.activeRunId ? patchRunFields(s.runs, s.activeRunId, { streamingAnswer: "" }) : s.runs,
+              streamingAnswer: resetRunId && resetRunId === s.activeRunId ? "" : s.streamingAnswer,
+              runs: resetRunId
+                ? patchRunFields(s.runs, resetRunId, { streamingAnswer: "" })
+                : s.runs,
             }))
             break
+          }
 
           case "step.started": {
             const toolName = (data["action"] as string) ?? "unknown"
@@ -2200,6 +2308,23 @@ export const useStore = create<AppState>()(
               scheduleRunFlush(set)
             }
             set({ pendingInput: null })
+            break
+          }
+
+          case "attachment.promoted": {
+            // A sandbox file (e.g. an export_query_to_file CSV) was promoted
+            // to a durable, user-downloadable attachment. Surface it as a
+            // download chip under the run that produced it, live.
+            const runId = (data["runId"] as string | null) ?? null
+            if (runId) {
+              store.addGeneratedAttachment(runId, {
+                id: data["id"] as string,
+                name: (data["normalizedName"] as string) ?? "file",
+                sizeBytes: (data["sizeBytes"] as number) ?? 0,
+                mediaType: (data["mediaType"] as string) ?? "application/octet-stream",
+                runId
+              })
+            }
             break
           }
 

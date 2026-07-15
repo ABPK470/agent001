@@ -13,6 +13,7 @@
 import type { AgentHost } from "../application/shell/runtime.js"
 import type { ToolKnowledgeCachedTool, ToolKnowledgeFingerprint } from "../ports/index.js"
 import { getCatalog } from "./catalog/store.js"
+import { tryResolveMssqlConnectionName } from "./mssql/resolve-connection.js"
 
 function fnv1a32(s: string): string {
   let h = 0x811c9dc5
@@ -21,6 +22,10 @@ function fnv1a32(s: string): string {
     h = (h + ((h << 1) + (h << 4) + (h << 7) + (h << 8) + (h << 24))) >>> 0
   }
   return h.toString(16).padStart(8, "0")
+}
+
+function canonicalConnection(host: AgentHost, connName: string | undefined): string {
+  return tryResolveMssqlConnectionName(host, connName ?? null) ?? (connName?.trim() || "default")
 }
 
 /**
@@ -97,7 +102,7 @@ export function tryServeFromCache(
     tool,
     qname: qname.toLowerCase(),
     mode,
-    connection: connName ?? "default",
+    connection: canonicalConnection(host, connName),
     currentFingerprint: fingerprint
   })
   if (!res.hit) {
@@ -135,7 +140,7 @@ export function persistToCache(
       tool,
       qname: qname.toLowerCase(),
       mode,
-      connection: connName ?? "default",
+      connection: canonicalConnection(host, connName),
       payload,
       fingerprint
     })

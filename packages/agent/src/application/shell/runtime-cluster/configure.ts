@@ -13,6 +13,7 @@
 import { createPublishedSyncDefinitionRegistry, type SyncEnvironment } from "@mia/sync"
 import type sql from "mssql"
 import type { AgentHost } from "./host.js"
+import { canonicalizeConfiguredConnectionName } from "../../../tools/mssql/resolve-connection.js"
 
 export interface ConfigureMssqlConnection extends sql.config {
   name: string
@@ -92,7 +93,10 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
   const shellMode = options.shellMode ?? (options.shellClient ? "sandbox" : "host")
   const mssqlDatabases = options.mssqlDatabases ?? buildMssqlDatabases(options.mssqlConfigs)
   const mssqlDefaultConnection = options.mssqlDefaultConnection ?? {
-    value: options.mssqlDefaultConnectionName ?? null
+    value: canonicalizeConfiguredConnectionName(
+      mssqlDatabases.keys(),
+      options.mssqlDefaultConnectionName ?? null
+    )
   }
   const syncOptions = options.sync
   const syncState = {

@@ -50,11 +50,9 @@ import { useSlashCommandInput } from "../chat/useSlashCommandInput"
 import { ChatComposerShell } from "../chat/ChatComposerShell"
 import { useCommandConsole } from "../chat/useCommandConsole"
 import type { CommandConsoleState } from "../chat/useCommandConsole"
-import { useStore } from "../store"
+import { useStore, type GeneratedAttachment } from "../store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
 import { formatMs } from "../util"
-import { thinkingPrecedesToolCall } from "./ioe/constants"
-
 /** Pin/unpin dot layout — home + thread share one profile; widget has its own. */
 type GoalPinProfile = "home" | "widget"
 
@@ -151,7 +149,7 @@ function UserGoalText({ text }: { text: string }): React.ReactElement {
             pauseAutoScroll()
             setExpanded((value) => !value)
           }}
-          className="inline-flex items-center gap-1 text-[13px] font-medium text-text-muted transition-colors hover:text-text"
+          className="inline-flex items-center gap-1 text-[15px] font-medium text-text-muted transition-colors hover:text-text"
         >
           <span>{expanded ? "Show less" : "Show more"}</span>
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -239,7 +237,7 @@ function ChatTurn({
   onUnpin: (runId: string) => void
   onClearUnpin: (runId: string) => void
   pendingInput?: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
-  onRespond: (response: string) => void
+  onRespond: (runId: string, response: string) => Promise<void> | void
   onNotify?: (message: string) => void
   onNotifyError?: (message: string) => void
 }): React.ReactElement {
@@ -368,7 +366,7 @@ function ChatTurn({
         <div className={USER_GOAL_COLUMN_CLASS}>
           {!isOwnGoal && (
             <div className="flex flex-col items-end gap-1.5">
-              <span className="px-1.5 text-[11px] font-medium uppercase tracking-wide text-text-muted">
+              <span className="px-1.5 text-[15px] font-medium uppercase tracking-wide text-text-muted">
                 {run.displayName ?? run.upn}
               </span>
               <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
@@ -961,8 +959,8 @@ function deriveActiveMilestoneLabel(parts: ResponsePart[]): string {
     }
   }
 
-  // 5. Generic.
-  return "Working"
+  // 5. Generic — LLM working, answer not streaming yet.
+  return "Thinking…"
 }
 
 // Patch a tool's status both at the top level AND inside any
@@ -1066,55 +1064,6 @@ function pushNarrativePart(
   if (!trimmedText) return parts
   if (parts.some((part) => part.kind === "narrative" && part.id === id)) return parts
   return parts.concat({ kind: "narrative", id, text: trimmedText, tone })
-}
-
-// Guard against rendering fragmentary thinking previews that look like
-// jibberish in the chat (e.g. "The generic key search noisy target"
-// when the model emitted a clipped reasoning blurb). We require the
-// text to read as a complete-ish thought: end with sentence punctuation
-// AND be long enough to actually carry meaning. When the gate rejects,
-// the bottom shimmer takes over and the user sees a live activity hint
-// instead of a frozen-looking partial sentence.
-function looksLikeCompleteThought(text: string): boolean {
-  const t = text.trim()
-  if (t.length < 40) return false
-  return /[.!?…"”'’)\]]$/.test(t)
-}
-
-// Mid-stream guard for `liveStreamingAnswer`. Returns the longest prefix
-// of `text` that ends at a sentence terminator (or paragraph break) so
-// the chat only ever shows complete sentences. Anything past the last
-// terminator is held back — that tail is incomplete and would otherwise
-// freeze on screen as a fragment between iterations.
-//
-// Terminator family kept in sync with `looksLikeCompleteThought` so the
-// live-stream gate and the post-iteration thinking gate agree on what
-// "a complete thought" looks like.
-//
-// Falls back to the last paragraph break (\n\n) when there is no
-// sentence terminator — useful when the model emits markdown chunks
-// (lists / code) that don't end in punctuation but ARE structurally
-// complete at the paragraph boundary. Returns "" when nothing is yet
-// complete; the caller suppresses the markdown part and the bottom
-// "Working / Executing / …" shimmer takes over.
-function truncateToLastCompleteSentence(text: string): string {
-  const t = text.replace(/\s+$/, "")
-  if (!t) return ""
-  // Scan for the last sentence terminator that is followed by whitespace
-  // or end-of-string — that is the boundary the model has actually
-  // closed. A terminator mid-word (e.g. "v1.2" or "Dr.") is excluded by
-  // the lookahead.
-  const re = /[.!?…"”'’)\]](?=\s|$)/g
-  let lastTerm = -1
-  let m: RegExpExecArray | null
-  while ((m = re.exec(t)) !== null) lastTerm = m.index
-  if (lastTerm >= 0) return t.slice(0, lastTerm + 1)
-  // No sentence terminator yet. If the buffer spans multiple paragraphs
-  // (e.g. a streamed markdown list), keep everything before the last
-  // paragraph break so the partial last paragraph is held back.
-  const lastBreak = text.lastIndexOf("\n\n")
-  if (lastBreak > 0) return text.slice(0, lastBreak).replace(/\s+$/, "")
-  return ""
 }
 
 function hasHiddenToolDetails(summary: string, details?: string): boolean {
@@ -1319,10 +1268,9 @@ function buildResponseParts(
         break
       }
       case "thinking": {
-        if (!thinkingPrecedesToolCall(trace, index)) break
-        if (entry.text.trim() && looksLikeCompleteThought(entry.text)) {
-          parts = pushNarrativePart(parts, `narrative-thinking-${index}`, entry.text.trim())
-        }
+        // Pre-tool narration is internal reasoning — never render it as chat
+        // prose. Showing it here duplicated text that briefly appeared in the
+        // answer bubble before tool calls and made the thread feel corrupted.
         break
       }
       case "planning_preflight":
@@ -1561,28 +1509,10 @@ function buildResponseParts(
   // reveal cursor — the user sees the typewriter continue smoothly into
   // the final text instead of snapping it in at completion.
   if (liveStreamingAnswer) {
-    // ── Mid-stream fragment guard ────────────────────────────────
-    //
-    // `liveStreamingAnswer` is the raw accumulating token buffer for the
-    // current iteration's LLM response. It includes intermediate
-    // reasoning text — the model's "I'm going to look at X next" pre-
-    // tool narration — and gets cleared by `stream.reset` once tool
-    // calls arrive. Between bursts (network jitter, the model pausing,
-    // a tool taking a few seconds to return) the buffer often holds a
-    // truncated half-sentence like "I have attributes next product, fast"
-    // that sits frozen on screen for several seconds and reads as
-    // jibberish. Worse, while ANY text exists in the buffer we suppress
-    // the bottom "Executing / Planning / Thinking" shimmer (see
-    // `hasStreamingAnswer` below) — so the UI looks completely stalled.
-    //
-    // Fix: only render whole sentences. Anything after the last sentence
-    // terminator is held back until the model closes it. When the
-    // truncated string is empty, we don't push a markdown part at all —
-    // and the bottom shimmer carries the "we're still working" signal
-    // for the user. The held-back tail will appear the moment the model
-    // emits its terminator (or in the next iteration's complete-thinking
-    // entry, which has its own gate).
-    const display = truncateToLastCompleteSentence(stripFailureMarker(liveStreamingAnswer))
+    // Mirror the live token buffer directly — the SSE pipeline already
+    // delivers incremental chunks; gating on sentence boundaries made the
+    // UI look frozen then dump whole paragraphs at once.
+    const display = stripFailureMarker(liveStreamingAnswer)
     if (display) {
       parts = parts.map((part) =>
         part.kind === "progress" && part.status === "running" && PRIMARY_ACTIVITY_IDS.has(part.id)
@@ -1698,11 +1628,11 @@ function ScrollMaskedDetails({ text, maxHeight }: { text: string; maxHeight: num
 function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
   const isRunning = part.status === "running"
   const tone = part.level === "error" || part.status === "error" ? "error" : "neutral"
-  const lineClass = ["text-[12px] leading-5 font-mono", tone === "error" ? "text-error" : "text-text-faint"].join(" ")
+  const lineClass = ["text-[15px] leading-5 font-mono", tone === "error" ? "text-error" : "text-text-faint"].join(" ")
 
   return (
     <div className="ml-[14px] mt-0.5 pl-3 border-l border-border-subtle space-y-1">
-      <p className={["text-[12px] leading-5 font-mono", isRunning ? "activity-shimmer-tight text-text-muted" : "text-text-secondary"].join(" ")}>
+      <p className={["text-[15px] leading-5 font-mono", isRunning ? "activity-shimmer-tight text-text-muted" : "text-text-secondary"].join(" ")}>
         {part.headline}
       </p>
       {part.detail && <p className={lineClass}>{part.detail}</p>}
@@ -1717,7 +1647,7 @@ function ToolSyncProgressBody({ part }: { part: ResponseSyncProgressPart }) {
         </div>
       )}
       {part.result && (
-        <p className={["text-[12px] leading-5 font-mono", part.status === "error" ? "text-error" : "text-text-secondary"].join(" ")}>
+        <p className={["text-[15px] leading-5 font-mono", part.status === "error" ? "text-error" : "text-text-secondary"].join(" ")}>
           {part.result}
         </p>
       )}
@@ -1774,10 +1704,10 @@ function ToolPill({
               className="inline-flex min-w-0 max-w-full items-center gap-2 text-left transition-colors outline-none focus-visible:outline-none group cursor-pointer"
               style={{ width: "fit-content", maxWidth: "100%" }}
             >
-              <span className="text-[12px] font-mono text-text-muted group-hover:text-text transition-colors">{label}</span>
+              <span className="text-[15px] font-mono text-text-muted group-hover:text-text transition-colors">{label}</span>
               {previewText && !expanded && (
                 <span
-                  className="text-[12px] text-text-faint group-hover:text-text transition-colors font-mono min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis"
+                  className="text-[15px] text-text-faint group-hover:text-text transition-colors font-mono min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis"
                 >
                   {previewText}
                 </span>
@@ -1785,9 +1715,9 @@ function ToolPill({
             </button>
           ) : (
             <div className="flex min-w-0 max-w-full items-center gap-2">
-              <span className="text-[12px] font-mono text-text-muted transition-colors">{label}</span>
+              <span className="text-[15px] font-mono text-text-muted transition-colors">{label}</span>
               {previewText && !expanded && (
-                <span className="text-[12px] text-text-faint font-mono min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
+                <span className="text-[15px] text-text-faint font-mono min-w-0 flex-1 whitespace-nowrap overflow-hidden text-ellipsis">
                   {previewText}
                 </span>
               )}
@@ -1873,7 +1803,7 @@ function IterationBlock({
           userToggledRef.current = true
           setOpen((v) => !v)
         })}
-        className={`inline-flex max-w-full items-center gap-1.5 py-0.5 text-left text-[13px] leading-6 transition-colors hover:text-text-secondary ${headerToneClass}`}
+        className={`inline-flex max-w-full items-center gap-1.5 py-0.5 text-left text-[15px] leading-6 transition-colors hover:text-text-secondary ${headerToneClass}`}
       >
         <Chevron size={12} strokeWidth={1.5} className="text-text-faint shrink-0" />
         <span>{part.summary}</span>
@@ -1980,9 +1910,9 @@ function ProgressPill({ part }: { part: ResponseProgressPart }) {
     <div className={`flex gap-3 py-1.5 min-w-0 ${hasDetail ? "items-start" : "items-center"}`}>
       <StatusDot status={part.status} animated={part.shimmer === true} />
       <div className="min-w-0 flex-1">
-        <span className="text-[13px] font-normal tracking-[-0.01em] block text-text-muted">{part.label}</span>
+        <span className="text-[15px] font-normal tracking-[-0.01em] block text-text-muted">{part.label}</span>
         {part.detail && (
-          <div className="pt-0.5 text-[12px] leading-relaxed whitespace-pre-wrap break-words text-text-faint">
+          <div className="pt-0.5 text-[15px] leading-relaxed whitespace-pre-wrap break-words text-text-faint">
             {part.detail}
           </div>
         )}
@@ -2011,7 +1941,7 @@ function ActiveMilestone({ part }: { part: ResponseProgressPart }) {
   return (
     <div className="py-1.5 pr-2">
       <span
-        className="activity-shimmer-tight text-[13px] leading-6 font-normal inline-block"
+        className="activity-shimmer-tight text-[15px] leading-6 font-normal inline-block"
         style={{ "--sa": "var(--color-text)", "--sd": "var(--color-text-faint)" } as React.CSSProperties}
       >
         {text}
@@ -2175,7 +2105,7 @@ function HistoryDisclosure({
         ref={buttonRef}
         type="button"
         onClick={() => preserveToggle(buttonRef.current, () => setOpen((value) => !value))}
-        className="inline-flex max-w-full items-center gap-1.5 py-1 text-left text-[13px] text-text-faint hover:text-text-secondary transition-colors"
+        className="inline-flex max-w-full items-center gap-1.5 py-1 text-left text-[15px] text-text-faint hover:text-text-secondary transition-colors"
       >
         {open ? <ChevronDown size={12} strokeWidth={1.5} className="text-text-faint shrink-0" /> : <ChevronRight size={12} strokeWidth={1.5} className="text-text-faint shrink-0" />}
         <span className="truncate">{summary}</span>
@@ -2220,14 +2150,14 @@ function RunErrorBanner({ error }: { error: string }) {
 
   return (
     <div className="mt-3 max-w-full rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">
-      <div className="text-[13px] font-medium text-error">Run failed</div>
-      <p className="mt-1 text-[13px] leading-5 text-error/85 break-words">{summary}</p>
+      <div className="text-[15px] font-medium text-error">Run failed</div>
+      <p className="mt-1 text-[15px] leading-5 text-error/85 break-words">{summary}</p>
       {showDetails && (
         <>
           <button
             type="button"
             onClick={() => setExpanded((value) => !value)}
-            className="mt-2 text-[12px] font-medium text-error/75 hover:text-error"
+            className="mt-2 text-[15px] font-medium text-error/75 hover:text-error"
           >
             {expanded ? "Hide details" : "Show details"}
           </button>
@@ -2277,7 +2207,7 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
 
   if (applied) {
     return (
-      <div className="flex items-center gap-1.5 text-[11px] text-text-faint font-mono">
+      <div className="flex items-center gap-1.5 text-[15px] text-text-faint font-mono">
         <Check size={10} className="text-text-faint" />
         <span>saved to workspace</span>
       </div>
@@ -2292,7 +2222,7 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
         onClick={() => setOpen((x) => !x)}
       >
         <FolderOpen size={12} strokeWidth={1.5} className="shrink-0 text-text-faint" />
-        <span className="text-[13px] text-text-muted flex-1">
+        <span className="text-[15px] text-text-muted flex-1">
           {diff ? `${total} file${total !== 1 ? "s" : ""} changed` : "File changes ready"}
         </span>
         {open ? <ChevronDown size={12} strokeWidth={1.5} className="text-text-faint" /> : <ChevronRight size={12} strokeWidth={1.5} className="text-text-faint" />}
@@ -2301,19 +2231,19 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
       {open && diff && (
         <div className="px-3 pb-2 space-y-0.5 border-t border-border-subtle">
           {diff.added.map((f) => (
-            <div key={f} className="flex items-center gap-1.5 text-[12px] font-mono">
+            <div key={f} className="flex items-center gap-1.5 text-[15px] font-mono">
               <span className="text-success shrink-0">+</span>
               <span className="text-text-muted truncate">{f}</span>
             </div>
           ))}
           {diff.modified.map((f) => (
-            <div key={f} className="flex items-center gap-1.5 text-[12px] font-mono">
+            <div key={f} className="flex items-center gap-1.5 text-[15px] font-mono">
               <span className="text-warning shrink-0">~</span>
               <span className="text-text-muted truncate">{f}</span>
             </div>
           ))}
           {diff.deleted.map((f) => (
-            <div key={f} className="flex items-center gap-1.5 text-[12px] font-mono">
+            <div key={f} className="flex items-center gap-1.5 text-[15px] font-mono">
               <span className="text-error shrink-0">−</span>
               <span className="text-text-faint truncate line-through">{f}</span>
             </div>
@@ -2324,12 +2254,12 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
       {hasPathContext && (
         <div className="px-3 py-2 border-t border-border-subtle bg-overlay-1 space-y-1">
           {diff?.executionRoot && (
-            <div className="text-[11px] text-text-faint font-mono break-all">
+            <div className="text-[15px] text-text-faint font-mono break-all">
               from {diff.executionRoot}
             </div>
           )}
           {diff?.sourceRoot && (
-            <div className="text-[11px] text-text-muted font-mono break-all">
+            <div className="text-[15px] text-text-muted font-mono break-all">
               to {diff.sourceRoot}
             </div>
           )}
@@ -2338,7 +2268,7 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
 
       <div className="px-3 pb-2 flex gap-2 border-t border-border-subtle">
         <button
-          className="flex-1 mt-2 px-3 py-1.5 rounded-lg border border-border bg-transparent hover:bg-overlay-hover text-[13px] text-text-muted hover:text-text-secondary transition-colors disabled:opacity-30"
+          className="flex-1 mt-2 px-3 py-1.5 rounded-lg border border-border bg-transparent hover:bg-overlay-hover text-[15px] text-text-muted hover:text-text-secondary transition-colors disabled:opacity-30"
           onClick={apply}
           disabled={applying || !diff}
         >
@@ -2350,6 +2280,68 @@ function WorkspaceDiffCard({ runId, onNotify, onNotifyError }: {
 }
 
 // ── Run message block ─────────────────────────────────────────────
+
+function formatDeliverableBytes(n: number): string {
+  if (n < 1024) return `${n} B`
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`
+  return `${(n / 1024 / 1024).toFixed(1)} MB`
+}
+
+/**
+ * Stable empty-array sentinel. MUST live at module scope (not created inline
+ * in the selector) — zustand selects via `useSyncExternalStore`, and a
+ * selector that returns a fresh `[]` each call makes React believe the store
+ * snapshot changed between render and commit, re-rendering forever
+ * ("Maximum update depth exceeded"). Returning `undefined` from the selector
+ * and falling back to this constant outside it keeps the snapshot stable.
+ */
+const EMPTY_GENERATED_ATTACHMENTS: GeneratedAttachment[] = []
+
+/**
+ * Deliverable download chips — files the agent produced and promoted to the
+ * durable attachment store (e.g. an export_query_to_file CSV). Each chip is a
+ * clickable link that streams the file to the user's machine via
+ * `GET /api/attachments/:id/content` (Content-Disposition: attachment). The
+ * chips appear live as the agent promotes (SSE) and are reconciled on run
+ * completion, so the user always has a way to reach the export that used to
+ * vanish into the server sandbox.
+ */
+function DeliverableChips({ runId }: { runId: string }) {
+  const attachments = useStore((s) => s.generatedAttachmentsByRun[runId]) ?? EMPTY_GENERATED_ATTACHMENTS
+  const [busyId, setBusyId] = useState<string | null>(null)
+  if (attachments.length === 0) return null
+  const onDownload = async (id: string, name: string) => {
+    if (busyId === id) return
+    setBusyId(id)
+    try {
+      await api.downloadAttachment(id, name)
+    } catch {
+      /* ignore — download failures are non-fatal */
+    } finally {
+      setBusyId(null)
+    }
+  }
+  return (
+    <div className="pl-1 pt-1 flex flex-wrap items-center gap-1.5">
+      {attachments.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          onClick={() => onDownload(a.id, a.name)}
+          disabled={busyId === a.id}
+          title={`Download ${a.name}`}
+          aria-label={`Download ${a.name}`}
+          className="group inline-flex items-center gap-1.5 max-w-[320px] pl-2 pr-1.5 py-1 rounded-md bg-overlay-1 border border-border-subtle text-[15px] text-text leading-none transition-colors hover:bg-overlay-2 hover:border-border disabled:opacity-50"
+        >
+          <FolderOpen size={12} className="shrink-0 text-text-faint group-hover:text-text" />
+          <span className="truncate font-medium">{a.name}</span>
+          <span className="shrink-0 text-text-faint">{formatDeliverableBytes(a.sizeBytes)}</span>
+          <span className="shrink-0 text-text-faint group-hover:text-text">{busyId === a.id ? "…" : "↓"}</span>
+        </button>
+      ))}
+    </div>
+  )
+}
 
 function RunMessageImpl({
   run,
@@ -2370,7 +2362,7 @@ function RunMessageImpl({
   }
   isActive: boolean
   pendingInput?: { runId: string; question: string; options?: string[]; sensitive?: boolean } | null
-  onRespond: (response: string) => void
+  onRespond: (runId: string, response: string) => Promise<void> | void
   onNotify?: (message: string) => void
   onNotifyError?: (message: string) => void
 }) {
@@ -2473,32 +2465,26 @@ function RunMessageImpl({
             question={part.question}
             options={part.options}
             sensitive={part.sensitive}
-            onSubmit={onRespond}
+            onSubmit={(response) => onRespond(run.id, response)}
           />,
         )
         return
       }
 
       if (part.kind === "markdown") {
-        // History runs render instantly (AgentChat-style). Only the live
-        // active run uses the typewriter reveal.
         items.push(
-          isLiveRun ? (
-            <TypewriterAnswer
-              key={part.id}
-              text={part.text}
-              streaming={part.streaming === true}
-              compact
-            />
-          ) : (
-            <SmartAnswer key={part.id} text={part.text} compact />
-          ),
+          <TypewriterAnswer
+            key={part.id}
+            text={part.text}
+            streaming={part.streaming === true}
+            compact
+          />,
         )
         return
       }
 
       if (part.kind === "error") {
-        items.push(<div key={part.id} className="text-[13px] text-error font-mono">{part.text}</div>)
+        items.push(<div key={part.id} className="text-[15px] text-error font-mono">{part.text}</div>)
       }
     })
 
@@ -2520,7 +2506,7 @@ function RunMessageImpl({
       void lastToolHasRunning
       items.push(
         <div key="active-shimmer" className="py-1.5 pr-2">
-          <span className="activity-shimmer-tight text-[13px] leading-6 font-normal inline-block text-text-muted">
+          <span className="activity-shimmer-tight text-[15px] leading-6 font-normal inline-block text-text-muted">
             {milestoneLabel}
           </span>
         </div>,
@@ -2541,9 +2527,12 @@ function RunMessageImpl({
         </div>
       )}
 
+      {/* Deliverable downloads — files the agent promoted (CSV/MD/… exports) */}
+      <DeliverableChips runId={run.id} />
+
       {/* Error */}
       {run.status === "cancelled" && (
-        <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[13px] text-warning">
+        <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[15px] text-warning">
           Run cancelled.
         </div>
       )}
@@ -2577,10 +2566,6 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
 const FORCE_EMPTY_STATE_PREVIEW = false
 /** Widget / pop-out chat column — transcript and input share the same width. */
 const WIDGET_CHAT_COLUMN_CLASS = "w-[90%] max-w-[1400px] mx-auto"
-/** Newest runs shown on open; active run pinned at bottom of this window. */
-const INITIAL_VISIBLE_RUNS = 10
-/** Older runs revealed + hydrated when the user scrolls into history. */
-const HISTORY_PAGE_SIZE = 5
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
@@ -2827,7 +2812,6 @@ export function TermChat({
   const fileInputRef = useRef<HTMLInputElement>(null)
   const runRailScrollSyncRef = useRef<(() => void) | null>(null)
   const [scrollToRunId, setScrollToRunId] = useState<string | null>(null)
-  const [visibleRunCount, setVisibleRunCount] = useState(INITIAL_VISIBLE_RUNS)
   const [transcriptFadeTop, setTranscriptFadeTop] = useState(false)
   const [transcriptFadeBottom, setTranscriptFadeBottom] = useState(false)
   const [unpinnedGoalRunIds, setUnpinnedGoalRunIds] = useState<Set<string>>(() => new Set())
@@ -2881,6 +2865,7 @@ export function TermChat({
     suspendAutoFollow,
     resumeAutoFollow,
     showJumpButton,
+    stickIfFollowing,
   } = useStickToBottomScroll({
     resetKey: scrollToRunId,
     initialScroll: "none",
@@ -2970,10 +2955,15 @@ export function TermChat({
         attachmentIds.length > 0 ? attachmentIds : undefined,
         threadId
       )
+      useStore.getState().beginOptimisticRun({
+        id: runId,
+        goal: effectiveGoal,
+        threadId,
+        agentId: selectedAgent?.id ?? null,
+      })
       useStore.getState().revealThreadTitleFromGoal(threadId, effectiveGoal)
-      setActiveRun(runId)
       setScrollToRunId(runId)
-      requestAnimationFrame(() => scrollToBottom("instant"))
+      requestAnimationFrame(() => scrollToBottom("instant", { stick: true }))
       // Only clear chips after a successful start so the user doesn't
       // lose context if the request failed mid-flight.
       setPendingAttachments([])
@@ -3025,10 +3015,21 @@ export function TermChat({
     fileInputRef.current?.click()
   }, [])
 
-  const handleRespond = useCallback(async (response: string) => {
-    if (!pendingInput) return
-    clearPendingInput()
-    try { await api.respondToRun(pendingInput.runId, response) } catch { /* ignore */ }
+  const handleRespond = useCallback(async (runId: string, response: string) => {
+    // The runId comes from the prompt card's run (the trace part), NOT from
+    // the global pendingInput. This is the fix for the "Response sent —
+    // waiting for agent" hang: after a reload the trace card is still
+    // rendered but pendingInput is null (not persisted), so the old handler
+    // early-returned and never called the API — the agent stayed blocked
+    // forever. We always call the API here and let AskUserPrompt surface a
+    // failure (404 = run no longer answerable) instead of a frozen "waiting".
+    try {
+      await api.respondToRun(runId, response)
+    } catch (err) {
+      if (pendingInput?.runId === runId) clearPendingInput()
+      throw err
+    }
+    if (pendingInput?.runId === runId) clearPendingInput()
   }, [pendingInput, clearPendingInput])
 
   const unpinGoal = useCallback((runId: string) => {
@@ -3078,24 +3079,20 @@ export function TermChat({
   // Build message list: each "run" is a (user msg, assistant response) pair.
   // History is oldest-first; the active run is pinned at the bottom so the
   // input bar anchors to the most recent activity.
-  // Always paginate the most recent N runs in chronological order.
-  // Thread home loads ASC, global listRuns loads DESC — normalize here so
-  // widget mode after chat/thread home does not slice the wrong end.
-  const visibleRuns = useMemo(() => {
+  const threadRunsChronological = useMemo(() => {
     const scoped = continuityThreadId
       ? runs.filter((r) => r.threadId === continuityThreadId)
       : runs
-    const chronological = [...scoped].sort(
+    return [...scoped].sort(
       (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime(),
     )
-    return chronological.slice(Math.max(0, chronological.length - visibleRunCount))
-  }, [runs, visibleRunCount, continuityThreadId])
+  }, [runs, continuityThreadId])
 
   const displayRuns = useMemo(() => {
-    const history = visibleRuns.filter((r) => r.id !== scopedActiveRunId)
+    const history = threadRunsChronological.filter((r) => r.id !== scopedActiveRunId)
     if (scopedActiveRun) return [...history, scopedActiveRun]
     return history
-  }, [visibleRuns, scopedActiveRunId, scopedActiveRun])
+  }, [threadRunsChronological, scopedActiveRunId, scopedActiveRun])
 
   const showEmptyState = FORCE_EMPTY_STATE_PREVIEW || displayRuns.length === 0
   const latestDisplayRunId = displayRuns.length > 0 ? displayRuns[displayRuns.length - 1]!.id : null
@@ -3119,19 +3116,9 @@ export function TermChat({
     scrollHostRef,
   ])
 
-  const scopedRunCount = useMemo(() => {
-    if (!continuityThreadId) return runs.length
-    return runs.filter((r) => r.threadId === continuityThreadId).length
-  }, [runs, continuityThreadId])
-
-  const canLoadMoreHistory = visibleRunCount < scopedRunCount
-
   const didSelectLatestRef = useRef(false)
   const didInitialAnchorRef = useRef(false)
   const hadActiveTraceRef = useRef(false)
-  const topSentinelRef = useRef<HTMLDivElement>(null)
-  const pendingScrollPreserveRef = useRef<number | null>(null)
-  const historyLoadLockRef = useRef(false)
   const traceHydratingRef = useRef(new Set<string>())
 
   const hydrateRunTrace = useCallback(async (runId: string) => {
@@ -3154,60 +3141,47 @@ export function TermChat({
     }
   }, [scopedActiveRunId, runs, upsertRun])
 
-  // Full trace for every visible completed run (active/latest uses setActiveRun).
+  // Hydrate completed run traces when their turn scrolls into view (not all at once).
   useEffect(() => {
-    for (const run of visibleRuns) {
-      if (run.id === scopedActiveRunId) continue
-      if (isRunActiveStatus(run.status)) continue
-      if ((run.trace?.length ?? 0) > 0) continue
-      void hydrateRunTrace(run.id)
-    }
-  }, [visibleRuns, scopedActiveRunId, hydrateRunTrace])
+    const host = scrollHostRef.current
+    if (!host || displayRuns.length === 0) return
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (!entry.isIntersecting) continue
+          const runId = (entry.target as HTMLElement).dataset.runId
+          if (!runId || runId === scopedActiveRunId) continue
+          const run = runs.find((r) => r.id === runId)
+          if (!run || isRunActiveStatus(run.status)) continue
+          if ((run.trace?.length ?? 0) > 0) continue
+          void hydrateRunTrace(runId)
+        }
+      },
+      { root: host, rootMargin: "240px 0px", threshold: 0 },
+    )
+
+    const turns = host.querySelectorAll<HTMLElement>("[data-run-id]")
+    for (const turn of turns) observer.observe(turn)
+    return () => observer.disconnect()
+  }, [displayRuns, scopedActiveRunId, runs, hydrateRunTrace, scrollHostRef])
 
   useEffect(() => {
-    setVisibleRunCount(INITIAL_VISIBLE_RUNS)
     didSelectLatestRef.current = false
     didInitialAnchorRef.current = false
     hadActiveTraceRef.current = false
   }, [me?.upn, mode, activeThreadId])
 
-  // Scroll-up pagination: reveal + hydrate the next HISTORY_PAGE_SIZE older runs.
-  useEffect(() => {
-    const host = scrollHostRef.current
-    const sentinel = topSentinelRef.current
-    if (!host || !sentinel || !canLoadMoreHistory) return
-
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        if (!entry?.isIntersecting || historyLoadLockRef.current) return
-        historyLoadLockRef.current = true
-        pendingScrollPreserveRef.current = host.scrollHeight
-        setVisibleRunCount((prev) => Math.min(prev + HISTORY_PAGE_SIZE, scopedRunCount))
-        requestAnimationFrame(() => {
-          requestAnimationFrame(() => {
-            historyLoadLockRef.current = false
-          })
-        })
-      },
-      { root: host, threshold: 0 },
-    )
-    observer.observe(sentinel)
-    return () => observer.disconnect()
-  }, [canLoadMoreHistory, scopedRunCount])
-
-  useLayoutEffect(() => {
-    const host = scrollHostRef.current
-    const prevHeight = pendingScrollPreserveRef.current
-    if (!host || prevHeight == null) return
-    pendingScrollPreserveRef.current = null
-    const delta = host.scrollHeight - prevHeight
-    if (delta > 0) host.scrollTop += delta
-  }, [visibleRunCount, displayRuns.length])
-
   // Same path as AgentChat: setActiveRun loads full trace + steps into the store.
   useEffect(() => {
     if (!latestDisplayRunId) return
     if (didSelectLatestRef.current) return
+    const state = useStore.getState()
+    const active = state.runs.find((r) => r.id === state.activeRunId)
+    if (state.activeRunId && (!active || isRunActiveStatus(active.status))) {
+      didSelectLatestRef.current = true
+      return
+    }
     didSelectLatestRef.current = true
     setActiveRun(latestDisplayRunId)
   }, [latestDisplayRunId, setActiveRun])
@@ -3240,6 +3214,17 @@ export function TermChat({
     })
   }, [scopedActiveRunId, latestDisplayRunId, scopedActiveRun?.trace?.length, isRunning, streamingAnswer, scrollToBottom])
 
+  // Follow live output while generating — tokens, trace rows, and markdown reflow.
+  useEffect(() => {
+    if (!isRunning && !streamingAnswer) return
+    stickIfFollowing()
+  }, [
+    streamingAnswer,
+    scopedActiveRun?.trace?.length,
+    isRunning,
+    stickIfFollowing,
+  ])
+
   const jumpToLatest = useCallback(() => {
     resumeAutoFollow()
     if (latestDisplayRunId) setActiveRun(latestDisplayRunId)
@@ -3252,6 +3237,7 @@ export function TermChat({
 
   const jumpToRun = useCallback((runId: string) => {
     suspendAutoFollow()
+    void hydrateRunTrace(runId)
     requestAnimationFrame(() => {
       requestAnimationFrame(() => {
         const host = scrollHostRef.current
@@ -3261,16 +3247,16 @@ export function TermChat({
         el?.scrollIntoView({ behavior: "auto", block: "start" })
       })
     })
-  }, [suspendAutoFollow, scrollHostRef])
+  }, [suspendAutoFollow, scrollHostRef, hydrateRunTrace])
 
   // Top-to-bottom transcript order (oldest → newest, active run last).
   const threadNavRuns = useMemo(
-    () => displayRuns.map((run) => ({
+    () => threadRunsChronological.map((run) => ({
       id: run.id,
       goal: run.goal,
       createdAt: run.createdAt,
     })),
-    [displayRuns],
+    [threadRunsChronological],
   )
 
   return (
@@ -3414,10 +3400,6 @@ export function TermChat({
                 </div>
               )}
 
-              {!showEmptyState && canLoadMoreHistory && (
-                <div ref={topSentinelRef} className="h-px w-full shrink-0" aria-hidden />
-              )}
-
               {!showEmptyState && displayRuns.map((run) => (
                 <ChatTurn
                   key={run.id}
@@ -3489,10 +3471,6 @@ export function TermChat({
                 </div>
               </div>
             </div>
-          )}
-
-          {!showEmptyState && canLoadMoreHistory && (
-            <div ref={topSentinelRef} className="h-px w-full shrink-0" aria-hidden />
           )}
 
           {!showEmptyState && displayRuns.map((run) => (

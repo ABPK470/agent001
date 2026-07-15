@@ -1,7 +1,7 @@
 import { isDiagramLang, tryInferDiagramKind } from "./InlineDiagram"
 import type { AnswerBlock } from "./answer-parser"
 import { parseAnswerBlocks } from "./answer-parser"
-import { splitStreamingAnswer, type StreamingAnswerLayout } from "./answer-stream-layout"
+import { splitStreamingAnswer, splitProseRemainder, type StreamingAnswerLayout } from "./answer-stream-layout"
 
 export const BLOCK_GAP_UNITS = 36
 export const UNITS_PER_SECOND = 128
@@ -33,6 +33,31 @@ export function getStreamingSegments(text: string): StreamingSegments {
   const layout = splitStreamingAnswer(text)
   const blocks = layout.committed ? parseAnswerBlocks(layout.committed) : []
   return { blocks, layout }
+}
+
+/** Live SSE path — merge committed prefix + complete prose lines, glyph only the in-flight tail. */
+export function getLiveStreamingRenderParts(text: string): {
+  blocks: AnswerBlock[]
+  glyphTail: string
+  layout: StreamingAnswerLayout
+} {
+  const layout = splitStreamingAnswer(text)
+  let extraCommitted = ""
+  let glyphTail = ""
+
+  if (layout.remainderKind === "prose" && layout.remainder) {
+    const split = splitProseRemainder(layout.remainder)
+    extraCommitted = split.renderable
+    glyphTail = split.inFlight
+  }
+
+  const committedAll =
+    layout.committed && extraCommitted
+      ? `${layout.committed}\n${extraCommitted}`
+      : layout.committed || extraCommitted
+  const blocks = committedAll ? parseAnswerBlocks(committedAll) : []
+
+  return { blocks, glyphTail, layout }
 }
 
 function isDiagramBlock(block: AnswerBlock): boolean {

@@ -333,7 +333,8 @@ export function buildToolContext(tools: Tool[], opts?: BuildToolContextOptions):
         'EXPORTING LARGE LISTS — when the user asks for ALL rows of something (e.g. "give me all 4000 dataset names", "export the table", "save the results"):',
         "  • Use export_query_to_file(query='SELECT ...', path='datasets.csv') — it streams the FULL result set to disk and returns only a 20-row preview.",
         "  • Do NOT use query_mssql + write_file for this purpose. The model will only retype ~20 rows and the file will be truncated.",
-        "  • In your reply, acknowledge the file path + total row count, and quote the 20-row preview the tool returned. The user gets the full data via the file.",
+        "  • By default (deliverable=true) the file is ALSO saved as a durable, user-downloadable attachment and the user gets a download link in chat. Tell the user in your reply: name the file, the row count, and that they can download it via the link.",
+        "  • Set deliverable=false ONLY for intermediate staging files you will read back yourself (cross-batch handoff when #temp can't survive). Those stay in the workspace and are NOT promoted.",
         "  • Pick the file extension from intent: .csv for tabular, .txt for a single-column list, .jsonl for streaming JSON."
       )
     }
@@ -466,7 +467,8 @@ export function buildHostedRuntimeContext(opts: {
   }
   lines.push(
     "  DB defaults:   UAT and PROD are read-only; DML/DDL is blocked unless explicitly configured.",
-    "  Output:        files written inside the sandbox can be promoted to the user via the dedicated promotion flow."
+    "  Output:        export_query_to_file promotes deliverable exports to a user-downloadable attachment by default (deliverable=true).",
+    "                 Other sandbox files can still be promoted to the user via promote_attachment."
   )
   return lines.join("\n")
 }

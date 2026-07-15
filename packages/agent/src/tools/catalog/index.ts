@@ -30,6 +30,16 @@ export {
   getCatalogSchemaFingerprint,
   hasCatalog
 } from "./store.js"
+export { resolveEffectiveMssqlConnection } from "./effective-connection.js"
+export {
+  classifySchemaRole,
+  defaultSchemaRolePenalty,
+  isAnalyticEntityCandidate,
+  isDwhArchiveSchema,
+  rowCountBonusForSchema,
+  schemaTierSortKey,
+  type SchemaRole
+} from "./schema-role.js"
 export type {
   CatalogBuildOptions,
   CatalogColumn,

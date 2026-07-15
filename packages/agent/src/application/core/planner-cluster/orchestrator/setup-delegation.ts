@@ -2,10 +2,9 @@ import { BanditArmId, DelegationTraceKind } from "../../domain/index.js"
 /**
  * Step 3b of planner setup — delegation decision gate.
  *
- * Builds DelegationSubagentStepProfile records from the plan's subagent
- * steps, runs the bandit-tuned delegation decision, and either records
- * the trajectory or returns an early-exit PlannerResult when delegation
- * is blocked.
+ * Decides whether child-agent delegation economics justify running the
+ * planner pipeline. When economics decline, the caller falls back to the
+ * direct tool loop — declining subagent fan-out is not a fatal planner error.
  *
  * @module
  */
@@ -13,6 +12,7 @@ import { BanditArmId, DelegationTraceKind } from "../../domain/index.js"
 import {
   assessDelegationDecision,
   type DelegationDecisionInput,
+  type DelegationDecisionReason,
   type DelegationSubagentStepProfile
 } from "../../../shell/delegation-cluster/decision/index.js"
 import type { DelegationBanditTuner, DelegationTrajectoryRecord } from "../../../shell/delegation.js"
@@ -27,6 +27,12 @@ const EFFECT_CLASS_MAP: Record<string, "read_only" | "write" | "mixed"> = {
   shell: "mixed",
   mixed: "mixed"
 }
+
+/** True safety blocks — never fall back to direct loop. */
+const DELEGATION_FATAL_REASONS = new Set<DelegationDecisionReason>([
+  "safety_risk_high",
+  "hard_blocked_task_class"
+])
 
 export type DelegationGateOutcome =
   | { readonly blocked: true; readonly result: PlannerResult }
@@ -105,24 +111,37 @@ export function runDelegationGate(
   })
 
   if (!delegationDecision.shouldDelegate) {
-    const reason = `Delegation blocked: ${delegationDecision.reason} (utility=${delegationDecision.utilityScore.toFixed(2)}, safety=${delegationDecision.safetyRisk.toFixed(2)})`
+    const reason = `Delegation declined: ${delegationDecision.reason} (utility=${delegationDecision.utilityScore.toFixed(2)}, safety=${delegationDecision.safetyRisk.toFixed(2)})`
+
+    if (DELEGATION_FATAL_REASONS.has(delegationDecision.reason)) {
+      return {
+        blocked: true,
+        result: {
+          handled: true,
+          answer: buildPlannerFailurePayload({
+            stage: "delegation",
+            reason,
+            diagnostics: [
+              {
+                utilityScore: delegationDecision.utilityScore,
+                safetyRisk: delegationDecision.safetyRisk,
+                reason: delegationDecision.reason
+              }
+            ],
+            score: decision.score,
+            plannerReason: decision.reason
+          }),
+          plan,
+          skipReason: reason
+        }
+      }
+    }
+
+    // Economics declined child delegation — parent direct loop can still answer.
     return {
       blocked: true,
       result: {
-        handled: true,
-        answer: buildPlannerFailurePayload({
-          stage: "delegation",
-          reason,
-          diagnostics: [
-            {
-              utilityScore: delegationDecision.utilityScore,
-              safetyRisk: delegationDecision.safetyRisk,
-              reason: delegationDecision.reason
-            }
-          ],
-          score: decision.score,
-          plannerReason: decision.reason
-        }),
+        handled: false,
         plan,
         skipReason: reason
       }

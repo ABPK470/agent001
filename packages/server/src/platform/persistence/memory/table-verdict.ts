@@ -228,7 +228,7 @@ export function listTableVerdicts(options: ListTableVerdictsOptions = {}): Table
     }
     if (!meta.qname || !meta.role) continue
     const metaConn = (meta.connection ?? "default").trim() || "default"
-    if (metaConn !== connection) continue
+    if (metaConn.toLowerCase() !== connection.toLowerCase()) continue
     const key = meta.qname.toLowerCase()
     if (seen.has(key)) continue
     if (qnamesLower.length > 0 && !qnamesLower.includes(key)) continue

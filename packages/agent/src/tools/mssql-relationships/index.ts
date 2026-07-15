@@ -16,7 +16,7 @@ import {
   persistToCache,
   tryServeFromCache
 } from "../_tool-cache.js"
-import { getPool } from "../mssql/index.js"
+import { getPool, resolveToolConnectionArg } from "../mssql/index.js"
 import {
   bfs,
   buildAdjacency,
@@ -77,7 +77,12 @@ function buildDiscoverRelationshipsTool(host: AgentHost): Tool {
     },
 
     async execute(args) {
-      const connName = args.connection ? String(args.connection).trim() : undefined
+      let connName: string
+      try {
+        connName = resolveToolConnectionArg(host, args)
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : String(err)}`
+      }
 
       // ── Cache pre-flight (all four modes) ─────────────────────────
       // Relationship topology changes only on DDL; pure data churn never

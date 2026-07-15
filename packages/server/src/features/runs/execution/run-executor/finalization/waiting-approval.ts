@@ -5,27 +5,20 @@ import * as db from "../../../../../platform/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../shared/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../../shared/enums/trajectory.js"
 import { createNotification, persistAuditLog, persistTokenUsage } from "../../persistence.js"
-import { buildPersistedToolTrace } from "../support.js"
+import { writeRunCheckpoint } from "../checkpoint-writer.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
+/**
+ * Persist a checkpoint from the last live messages so a run parked for
+ * tool-approval is resumable. Delegates to the single checkpoint writer;
+ * the empty-messages guard lives there.
+ */
 function saveWaitingCheckpoint(command: ExecuteRunCommand, env: ExecutionEnvironment): void {
-  const { request } = command
-  if (env.progress.lastMessages.length === 0) return
-
-  db.saveCheckpoint({
-    run_id: request.runId,
-    messages: JSON.stringify(env.progress.lastMessages),
+  writeRunCheckpoint({
+    runId: command.request.runId,
+    messages: env.progress.lastMessages,
     iteration: env.progress.lastIteration,
-    step_counter: env.state.stepCounter,
-    updated_at: new Date().toISOString(),
-  })
-  broadcast({
-    type: EventType.CheckpointSaved,
-    data: {
-      runId: request.runId,
-      iteration: env.progress.lastIteration,
-      stepCounter: env.state.stepCounter,
-    },
+    stepCounter: env.state.stepCounter
   })
 }
 
@@ -35,7 +28,7 @@ export async function finalizeWaitingForApprovalRun(
   agent: Agent,
   error: ApprovalRequiredError
 ): Promise<void> {
-  const { request, runtime, sideEffects } = command
+  const { request, sideEffects } = command
 
   const approval = db.upsertPendingRunToolApproval({
     runId: error.runId,

@@ -12,7 +12,7 @@ import { getTenantConfig } from "../application/shell/tenant-config.js"
 import type { ExecutableTool, Tool, ToolMetadata } from "../domain/agent-types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "./_tool-cache.js"
 import { getCatalog } from "./catalog/store.js"
-import { getPool } from "./mssql/index.js"
+import { getPool, resolveToolConnectionArg } from "./mssql/index.js"
 import { markMssqlTableProfiled } from "./mssql/schema-verified.js"
 import { isLargeObject } from "./mssql/validation.js"
 
@@ -52,6 +52,51 @@ function parseTableName(input: string): { schema: string; table: string } | null
   return { schema, table }
 }
 
+// ── Cancellation ─────────────────────────────────────────────────
+//
+// profile_data issues several sequential mssql requests per call (object
+// identity, columns, row count, indexes, stats, sample, …). A stuck query
+// on one of them used to block the whole tool until the 120s timeout —
+// the run's kill signal had no way to interrupt it. `withCancellableRequest`
+// wires `request.cancel()` onto `run.signal` for each request, matching the
+// pattern in query_mssql / explore_mssql_schema / export_query_to_file, so
+// a stuck profile is cancellable the instant the run is aborted.
+
+class ProfileCancelledError extends Error {
+  constructor() {
+    super("Tool execution cancelled")
+    this.name = "ProfileCancelledError"
+  }
+}
+
+/**
+ * Create a one-shot mssql request whose in-flight query is cancelled when
+ * the run's kill signal fires. The listener is removed in `finally` so a
+ * long-lived run signal does not accumulate leaked listeners across the
+ * many requests a single profile issues. Throws `ProfileCancelledError`
+ * synchronously if the signal is already aborted, so the caller bails out
+ * instead of issuing a query that will immediately be cancelled.
+ */
+async function withCancellableRequest<T>(
+  pool: sql.ConnectionPool,
+  run: RunContext | undefined,
+  fn: (request: sql.Request) => Promise<T>
+): Promise<T> {
+  const request = pool.request()
+  const killSignal = run?.signal ?? null
+  if (!killSignal) return fn(request)
+  if (killSignal.aborted) throw new ProfileCancelledError()
+  const onKill = (): void => {
+    request.cancel()
+  }
+  killSignal.addEventListener("abort", onKill, { once: true })
+  try {
+    return await fn(request)
+  } finally {
+    killSignal.removeEventListener("abort", onKill)
+  }
+}
+
 // ── Mirror-freshness comparison (Plan v3 Phase 2) ────────────────
 //
 // Generic MSSQL primitive: compare a canonical object to its persisted
@@ -87,30 +132,33 @@ interface ObjectStats {
 async function fetchObjectStats(
   pool: sql.ConnectionPool,
   schema: string,
-  name: string
+  name: string,
+  run?: RunContext
 ): Promise<ObjectStats> {
   const qname = `${schema}.${name}`
-  const req = pool.request()
-  req.input("schema", sql.NVarChar, schema)
-  req.input("name", sql.NVarChar, name)
   // OBJECT_ID handles bracketed identifiers; we pass the bracketed form
   // to be safe against dotted names like persistedView.[publish.Revenue].
-  req.input("fullName", sql.NVarChar, `${escapeIdentifier(schema)}.${escapeIdentifier(name)}`)
-  const res = await req.query(`
-    DECLARE @oid INT = OBJECT_ID(@fullName);
-    SELECT
-      @oid AS object_id,
-      COALESCE((
-        SELECT SUM(row_count)
-        FROM sys.dm_db_partition_stats
-        WHERE object_id = @oid AND index_id IN (0, 1)
-      ), 0) AS row_count,
-      (
-        SELECT MAX(STATS_DATE(object_id, stats_id))
-        FROM sys.stats
-        WHERE object_id = @oid
-      ) AS stats_date
-  `)
+  const fullName = `${escapeIdentifier(schema)}.${escapeIdentifier(name)}`
+  const res = await withCancellableRequest(pool, run, async (req) => {
+    req.input("schema", sql.NVarChar, schema)
+    req.input("name", sql.NVarChar, name)
+    req.input("fullName", sql.NVarChar, fullName)
+    return req.query(`
+      DECLARE @oid INT = OBJECT_ID(@fullName);
+      SELECT
+        @oid AS object_id,
+        COALESCE((
+          SELECT SUM(row_count)
+          FROM sys.dm_db_partition_stats
+          WHERE object_id = @oid AND index_id IN (0, 1)
+        ), 0) AS row_count,
+        (
+          SELECT MAX(STATS_DATE(object_id, stats_id))
+          FROM sys.stats
+          WHERE object_id = @oid
+        ) AS stats_date
+    `)
+  })
   const row = res.recordset[0] as { object_id: number | null; row_count: number; stats_date: Date | null }
   if (row.object_id == null) {
     return { qname, rows: null, statsDate: null, exists: false }
@@ -237,7 +285,12 @@ function formatCompareMirror(result: CompareMirrorResult): string {
   return lines.join("\n")
 }
 
-async function runCompareMirror(pool: sql.ConnectionPool, schema: string, table: string): Promise<string> {
+async function runCompareMirror(
+  pool: sql.ConnectionPool,
+  schema: string,
+  table: string,
+  run?: RunContext
+): Promise<string> {
   const tenant = getTenantConfig()
   const mirrorSchema = tenant.mirrorSchema
   if (!mirrorSchema) {
@@ -250,9 +303,9 @@ async function runCompareMirror(pool: sql.ConnectionPool, schema: string, table:
   // The canonical input is the user-supplied schema.table. The mirror
   // form follows the deployment convention `<mirrorSchema>.<canonical-qname>`
   // — i.e. the mirror object's NAME is the full canonical qname.
-  const canonical = await fetchObjectStats(pool, schema, table)
+  const canonical = await fetchObjectStats(pool, schema, table, run)
   const mirrorName = `${schema}.${table}`
-  const mirror = await fetchObjectStats(pool, mirrorSchema, mirrorName)
+  const mirror = await fetchObjectStats(pool, mirrorSchema, mirrorName, run)
   const result = decideMirrorRecommendation(canonical, mirror)
   return formatCompareMirror(result)
 }
@@ -283,21 +336,23 @@ async function runFastProfile(
   schema: string,
   table: string,
   sampleCount: number,
-  requestedColumns: string[] | undefined
+  requestedColumns: string[] | undefined,
+  run?: RunContext
 ): Promise<string> {
   const fullTable = `${escapeIdentifier(schema)}.${escapeIdentifier(table)}`
   const qn = `${schema}.${table}`
 
   // 1. Object identity (table vs view, object_id)
-  const objRequest = pool.request()
-  objRequest.input("schema", sql.NVarChar, schema)
-  objRequest.input("table", sql.NVarChar, table)
-  const objResult = await objRequest.query(`
-    SELECT o.object_id, o.type, o.type_desc
-    FROM sys.objects o
-    INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
-    WHERE s.name = @schema AND o.name = @table AND o.type IN ('U', 'V')
-  `)
+  const objResult = await withCancellableRequest(pool, run, async (req) => {
+    req.input("schema", sql.NVarChar, schema)
+    req.input("table", sql.NVarChar, table)
+    return req.query(`
+      SELECT o.object_id, o.type, o.type_desc
+      FROM sys.objects o
+      INNER JOIN sys.schemas s ON s.schema_id = o.schema_id
+      WHERE s.name = @schema AND o.name = @table AND o.type IN ('U', 'V')
+    `)
+  })
   if (!objResult.recordset.length) {
     return `No table or view found at ${qn}. Check the name with explore_mssql_schema.`
   }
@@ -305,15 +360,16 @@ async function runFastProfile(
   const isView = objResult.recordset[0].type === "V"
 
   // 2. Columns
-  const colRequest = pool.request()
-  colRequest.input("schema", sql.NVarChar, schema)
-  colRequest.input("table", sql.NVarChar, table)
-  const colResult = await colRequest.query(`
-    SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
-    ORDER BY ORDINAL_POSITION
-  `)
+  const colResult = await withCancellableRequest(pool, run, async (req) => {
+    req.input("schema", sql.NVarChar, schema)
+    req.input("table", sql.NVarChar, table)
+    return req.query(`
+      SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+      ORDER BY ORDINAL_POSITION
+    `)
+  })
   let columns = colResult.recordset as Array<{
     COLUMN_NAME: string
     DATA_TYPE: string
@@ -328,18 +384,21 @@ async function runFastProfile(
   // 3. Row count (tables only — no DMV equivalent for views)
   let rowCount: number | null = null
   if (!isView) {
-    const countResult = await pool.request().input("oid", sql.Int, objectId).query(`
+    const countResult = await withCancellableRequest(pool, run, async (req) =>
+      req.input("oid", sql.Int, objectId).query(`
         SELECT SUM(row_count) AS rc
         FROM sys.dm_db_partition_stats
         WHERE object_id = @oid AND index_id IN (0, 1)
       `)
+    )
     rowCount = (countResult.recordset[0]?.rc as number | null) ?? 0
   }
 
   // 4. Indexes (tables only)
   const indexes: Array<{ name: string; type: string; cols: string[] }> = []
   if (!isView) {
-    const ixResult = await pool.request().input("oid", sql.Int, objectId).query(`
+    const ixResult = await withCancellableRequest(pool, run, async (req) =>
+      req.input("oid", sql.Int, objectId).query(`
         SELECT i.name AS index_name,
                i.type_desc,
                c.name AS col_name,
@@ -350,6 +409,7 @@ async function runFastProfile(
         WHERE i.object_id = @oid AND i.type > 0 AND ic.is_included_column = 0
         ORDER BY i.index_id, ic.key_ordinal
       `)
+    )
     const byName = new Map<string, { type: string; cols: string[] }>()
     for (const r of ixResult.recordset as Array<{
       index_name: string
@@ -367,7 +427,8 @@ async function runFastProfile(
   const statsByCol = new Map<string, FastColumnStat>()
   if (!isView) {
     try {
-      const statsResult = await pool.request().input("oid", sql.Int, objectId).query(`
+      const statsResult = await withCancellableRequest(pool, run, async (req) =>
+        req.input("oid", sql.Int, objectId).query(`
           SELECT c.name AS column_name,
                  MIN(CAST(h.range_high_key AS NVARCHAR(400))) AS min_val,
                  MAX(CAST(h.range_high_key AS NVARCHAR(400))) AS max_val,
@@ -383,10 +444,14 @@ async function runFastProfile(
           WHERE s.object_id = @oid
           GROUP BY c.name
         `)
+      )
       for (const r of statsResult.recordset as FastColumnStat[]) {
         statsByCol.set(r.column_name.toLowerCase(), r)
       }
-    } catch {
+    } catch (err) {
+      // A run cancellation must propagate, not be swallowed as a stats
+      // permission degradation.
+      if (err instanceof ProfileCancelledError) throw err
       // dm_db_stats_histogram requires VIEW DATABASE STATE; silently degrade.
     }
   }
@@ -403,11 +468,12 @@ async function runFastProfile(
   const sampleSkippedLarge = isLargeObject(qn)
   if (!sampleSkippedLarge) {
     try {
-      const sampleResult = await pool
-        .request()
-        .query(`SELECT TOP ${sampleCount} ${sampleCols} FROM ${fullTable}`)
+      const sampleResult = await withCancellableRequest(pool, run, async (req) =>
+        req.query(`SELECT TOP ${sampleCount} ${sampleCols} FROM ${fullTable}`)
+      )
       sampleRows = sampleResult.recordset as Array<Record<string, unknown>>
-    } catch {
+    } catch (err) {
+      if (err instanceof ProfileCancelledError) throw err
       // Sample failed (e.g. view with bad permissions) — continue without it.
     }
   }
@@ -543,6 +609,13 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
     },
 
     async execute(args) {
+      let connName: string
+      try {
+        connName = resolveToolConnectionArg(host, args)
+      } catch (err) {
+        return `Error: ${err instanceof Error ? err.message : String(err)}`
+      }
+
       const parsed = parseTableName(String(args.table).trim())
       if (!parsed) {
         return "Error: table must be schema-qualified (e.g. '<schema>.<Table>'). Use explore_mssql_schema to find table names."
@@ -550,7 +623,6 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
       const { schema, table } = parsed
       const sampleCount = Math.min(Math.max(Number(args.sample) || 5, 1), 20)
       const topN = Math.min(Math.max(Number(args.topN) || 5, 1), 10)
-      const connName = args.connection ? String(args.connection).trim() : undefined
       const mode: "fast" | "deep" = String(args.mode || "fast").toLowerCase() === "deep" ? "deep" : "fast"
 
       // ── Mirror-freshness comparison (Plan v3 Phase 2) ──────────────
@@ -567,8 +639,9 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
           return `Error: ${err instanceof Error ? err.message : String(err)}`
         }
         try {
-          return await runCompareMirror(pool, schema, table)
+          return await runCompareMirror(pool, schema, table, run)
         } catch (err) {
+          if (err instanceof ProfileCancelledError) return "Error: Tool execution cancelled"
           return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
         }
       }
@@ -637,6 +710,9 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
         return `Error: ${err instanceof Error ? err.message : String(err)}`
       }
 
+      // Bail out before issuing any SQL if the run was already cancelled.
+      if (run?.signal?.aborted) return "Error: Tool execution cancelled"
+
       if (mode === "fast") {
         try {
           const out = await runFastProfile(
@@ -644,7 +720,8 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
             schema,
             table,
             sampleCount,
-            args.columns as string[] | undefined
+            args.columns as string[] | undefined,
+            run
           )
           // Cache only successful live runs. runFastProfile may return error
           // strings (e.g. "No columns found ..."); avoid poisoning the cache.
@@ -658,6 +735,7 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
           }
           return out
         } catch (err) {
+          if (err instanceof ProfileCancelledError) return "Error: Tool execution cancelled"
           return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
         } finally {
           markProfileDataCalled(qn, run)
@@ -668,15 +746,16 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
         const fullTable = `${escapeIdentifier(schema)}.${escapeIdentifier(table)}`
 
         // Step 1: Get columns and their types
-        const colRequest = pool.request()
-        colRequest.input("schema", sql.NVarChar, schema)
-        colRequest.input("table", sql.NVarChar, table)
-        const colResult = await colRequest.query(`
-        SELECT c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE
-        FROM INFORMATION_SCHEMA.COLUMNS c
-        WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
-        ORDER BY c.ORDINAL_POSITION
-      `)
+        const colResult = await withCancellableRequest(pool, run, async (req) => {
+          req.input("schema", sql.NVarChar, schema)
+          req.input("table", sql.NVarChar, table)
+          return req.query(`
+          SELECT c.COLUMN_NAME, c.DATA_TYPE, c.IS_NULLABLE
+          FROM INFORMATION_SCHEMA.COLUMNS c
+          WHERE c.TABLE_SCHEMA = @schema AND c.TABLE_NAME = @table
+          ORDER BY c.ORDINAL_POSITION
+        `)
+        })
 
         if (!colResult.recordset.length) {
           return `No columns found for ${schema}.${table}. Check the table name with explore_mssql_schema.`
@@ -702,7 +781,9 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
         if (truncatedCols) targetColumns = targetColumns.slice(0, maxCols)
 
         // Step 2: Row count
-        const countResult = await pool.request().query(`SELECT COUNT_BIG(*) AS row_count FROM ${fullTable}`)
+        const countResult = await withCancellableRequest(pool, run, async (req) =>
+          req.query(`SELECT COUNT_BIG(*) AS row_count FROM ${fullTable}`)
+        )
         const rowCount = countResult.recordset[0].row_count as number
 
         // Step 3: Per-column statistics (single query for efficiency)
@@ -734,7 +815,9 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
 
         let statsRecord: Record<string, unknown> = {}
         if (statParts.length > 0 && rowCount > 0) {
-          const statsResult = await pool.request().query(`SELECT ${statParts.join(", ")} FROM ${fullTable}`)
+          const statsResult = await withCancellableRequest(pool, run, async (req) =>
+            req.query(`SELECT ${statParts.join(", ")} FROM ${fullTable}`)
+          )
           statsRecord = statsResult.recordset[0] as Record<string, unknown>
         }
 
@@ -775,13 +858,13 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
           for (const col of topNCols) {
             const escaped = escapeIdentifier(col.COLUMN_NAME)
             try {
-              const topResult = await pool
-                .request()
-                .query(
+              const topResult = await withCancellableRequest(pool, run, async (req) =>
+                req.query(
                   `SELECT TOP ${topN} ${escaped} AS val, COUNT(*) AS cnt ` +
                     `FROM ${fullTable} WHERE ${escaped} IS NOT NULL ` +
                     `GROUP BY ${escaped} ORDER BY COUNT(*) DESC`
                 )
+              )
               if (topResult.recordset.length > 0) {
                 sections.push(`  ${col.COLUMN_NAME}:`)
                 for (const r of topResult.recordset) {
@@ -789,7 +872,10 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
                   sections.push(`    ${v} (${(r.cnt as number).toLocaleString()})`)
                 }
               }
-            } catch {
+            } catch (err) {
+              // A run cancellation must propagate, not be swallowed as a
+              // benign per-column failure.
+              if (err instanceof ProfileCancelledError) throw err
               // Some column types can't be grouped — skip silently
             }
           }
@@ -801,9 +887,9 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
             .slice(0, 8)
             .map((c) => escapeIdentifier(c.COLUMN_NAME))
             .join(", ")
-          const sampleResult = await pool
-            .request()
-            .query(`SELECT TOP ${sampleCount} ${sampleCols} FROM ${fullTable}`)
+          const sampleResult = await withCancellableRequest(pool, run, async (req) =>
+            req.query(`SELECT TOP ${sampleCount} ${sampleCols} FROM ${fullTable}`)
+          )
           if (sampleResult.recordset.length > 0) {
             sections.push(`\nSample rows (${sampleResult.recordset.length}):`)
             const cols = Object.keys(sampleResult.recordset[0] as Record<string, unknown>)
@@ -827,6 +913,7 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
         persistToCache(host, "profile_data", qn, "deep", connName, out, fp)
         return out
       } catch (err) {
+        if (err instanceof ProfileCancelledError) return "Error: Tool execution cancelled"
         return `SQL Error: ${err instanceof Error ? err.message : String(err)}`
       } finally {
         // Phase 3: record that this table has been profiled this run, so the

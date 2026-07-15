@@ -14,6 +14,7 @@ import { buildKnownVocabulary } from "../../../shell/known-vocabulary.js"
 import type { CatalogGraph } from "../../../../tools/index.js"
 import type { Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
+import { isCanonicallyGroundedEntity } from "../entity-canonical.js"
 import { mergeReservedTokens } from "./reserved-tokens.js"
 import { isStopword } from "./stopwords.js"
 
@@ -87,6 +88,8 @@ export const termUndefinedDetector: Detector = {
 
   detect(ctx) {
     if (!ctx.catalog) return []
+    const catalog = ctx.catalog
+    const learned = ctx.learnedTermMappings
     const reserved = mergeReservedTokens(ctx)
     const out = []
     const seen = new Set<string>()
@@ -99,11 +102,17 @@ export const termUndefinedDetector: Detector = {
       seen.add(lc)
       // skip if any of its tokens is a stopword AND the phrase is single-word
       if (!phrase.includes(" ") && isStopword(phrase)) continue
-      if (isKnownInCatalog(lc, ctx.catalog)) continue
-      if (isKnownVocabulary(lc, ctx.tenant, ctx.catalog)) continue
+      if (isKnownInCatalog(lc, catalog)) continue
+      if (isKnownVocabulary(lc, ctx.tenant, catalog)) continue
+      // A prior clarification already resolved this term (or a singular/plural
+      // variant of it) to a specific table that still exists. Don't re-ask —
+      // re-asking a subject the org already answered is the "agent keeps
+      // asking about products" gap. This mirrors schema-match's suppression.
+      if (learned && isCanonicallyGroundedEntity(lc, catalog, ctx.tenant, learned)) continue
       if (reserved?.has(lc)) continue
       const phraseTokens = lc.split(/\s+/).filter((t) => t.length > 0)
       if (phraseTokens.some((t) => reserved?.has(t))) continue
+      if (learned && phraseTokens.some((t) => isCanonicallyGroundedEntity(t, catalog, ctx.tenant, learned))) continue
       out.push({
         id: makeFindingId("term-undefined", lc),
         kind: "term-undefined" as const,

@@ -140,7 +140,7 @@ export function lookupToolKnowledge(opts: LookupOptions): ToolKnowledgeResult {
     .prepare<unknown[], Row>(
       `SELECT payload_text, fingerprint, created_at, created_by_upn
          FROM tool_knowledge
-        WHERE tool = ? AND qname = ? AND mode = ? AND connection = ?
+        WHERE tool = ? AND qname = ? AND mode = ? AND lower(connection) = lower(?)
         LIMIT 1`
     )
     .get(opts.tool, opts.qname, mode, connection)
@@ -166,7 +166,7 @@ export function lookupToolKnowledge(opts: LookupOptions): ToolKnowledgeResult {
       .prepare(
         `UPDATE tool_knowledge
             SET last_hit_at = ?, hit_count = hit_count + 1
-          WHERE tool = ? AND qname = ? AND mode = ? AND connection = ?`
+          WHERE tool = ? AND qname = ? AND mode = ? AND lower(connection) = lower(?)`
       )
       .run(now, opts.tool, opts.qname, mode, connection)
   } catch {

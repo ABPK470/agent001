@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   activeBarIndexForRun,
   barTrackHeight,
+  collectRunNavMarkers,
   hasRoomForRunMinimap,
   layoutRunNavBars,
   navBarIndexForRun,
@@ -123,6 +124,28 @@ describe("barTrackHeight", () => {
   it("caps height at the bar slot maximum", () => {
     expect(barTrackHeight(4)).toBeLessThan(barTrackHeight(RUN_NAV_BAR_SLOT_MAX))
     expect(barTrackHeight(40)).toBe(barTrackHeight(RUN_NAV_BAR_SLOT_MAX))
+  })
+})
+
+describe("collectRunNavMarkers", () => {
+  it("uses index-based fractions when a run turn is not mounted yet", () => {
+    const host = {
+      scrollTop: 0,
+      scrollHeight: 1000,
+      clientHeight: 400,
+      getBoundingClientRect: () => mockRect(100, 400),
+    } as HTMLElement
+
+    const content = {
+      getBoundingClientRect: () => mockRect(100, 1000),
+      querySelector: () => null,
+    } as unknown as HTMLElement
+
+    const markers = collectRunNavMarkers(content, host, ["r1", "r2", "r3"])
+    expect(markers).toHaveLength(3)
+    expect(markers[0]?.fraction).toBe(0)
+    expect(markers[1]?.fraction).toBeCloseTo(0.5)
+    expect(markers[2]?.fraction).toBe(1)
   })
 })
 

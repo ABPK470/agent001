@@ -32,7 +32,12 @@ beforeAll(() => {
         "publish.balances": "publish.Balances",
         "fact.unotranspose": "fact.UnoTranspose",
         "persistedview.publish.revenue": "persistedView.publish.Revenue",
-        "persistedview.publish.balances": "persistedView.publish.Balances"
+        "persistedview.publish.balances": "persistedView.publish.Balances",
+        client: "dim.Client",
+        clients: "dim.Client",
+        month: "dim.Month",
+        months: "dim.Month",
+        absa: "etl.ABSA_CUSTOMER"
       },
       unionBranchCounts: {
         "publish.revenue": 59,
@@ -55,6 +60,30 @@ beforeAll(() => {
       { schema: "list", weight: 5 },
       { schema: "archive", weight: -20 },
       { schema: "etl", weight: -20 }
+    ],
+    domainKeywords: [
+      "client",
+      "clients",
+      "customer",
+      "customers",
+      "banker",
+      "bankers",
+      "revenue",
+      "balance",
+      "balances",
+      "transaction",
+      "transactions",
+      "merchant",
+      "merchants",
+      "risk",
+      "rwa",
+      "impairment",
+      "trading",
+      "market",
+      "markets",
+      "absa",
+      "month",
+      "months"
     ]
   })
 })

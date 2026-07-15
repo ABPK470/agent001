@@ -190,7 +190,7 @@ function VerticalBars(props: {
               )
             })}
             {/* Category label */}
-            <text x={groupX + groupW / 2} y={plotBottom + 14} textAnchor="middle" fontSize={10} fill="var(--color-text-secondary)">
+            <text x={groupX + groupW / 2} y={plotBottom + 15} textAnchor="middle" fontSize={12} fill="var(--color-text)">
               {truncate(cat, Math.max(Math.floor(bandW / 7), 4))}
             </text>
           </g>
@@ -221,7 +221,7 @@ function HorizontalBars(props: {
 }): React.ReactElement {
   const { categories, series, stacked, domMin, domMax, ticks, xLabel, yLabel, unit, fmt, precision } = props
   const plotH = Math.max(PLOT_H_PER_BAR * categories.length, PLOT_H_PER_BAR)
-  const labelW = Math.min(160, Math.max(80, longest(categories) * 6 + 12))
+  const labelW = Math.min(200, Math.max(96, longest(categories) * 7 + 14))
   const W = labelW + 24 + 320 + PAD_RIGHT
   const H = plotH + PAD_TOP + PAD_BOTTOM + (xLabel ? AXIS_LABEL_GAP : 0)
   const plotLeft = labelW + 12
@@ -257,8 +257,8 @@ function HorizontalBars(props: {
         return (
           <g key={ci}>
             {/* Category label */}
-            <text x={plotLeft - 8} y={groupY + groupH / 2 + 3} textAnchor="end" fontSize={10} fill="var(--color-text-secondary)">
-              {truncate(cat, 22)}
+            <text x={plotLeft - 8} y={groupY + groupH / 2 + 4} textAnchor="end" fontSize={12} fill="var(--color-text)">
+              {truncate(cat, 24)}
             </text>
             {series.map((s, si) => {
               const v = s.values[ci] ?? 0

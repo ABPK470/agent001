@@ -47,6 +47,47 @@ export function buildAgentRunPipeline(runId: string, events: OperationEvent[]): 
   }
 }
 
+/**
+ * Telemetry event types — the "supporting detail" stream of an agent run.
+ *
+ * These fire many times per run (one `debug.trace` per iteration/thinking/llm
+ * phase, one `checkpoint.saved` per tool call, …) and carry no action semantics
+ * of their own. Left ungrouped they each became a one-event "misc" row, which
+ * is the repetition the operator sees. We collapse every event of a given
+ * telemetry type into a single expandable activity row ("Debug trace", …)
+ * appended after the chronological action timeline, so the action stream
+ * (lifecycle + steps + sync delegation) stays clean and primary while the
+ * debug/telemetry detail is one expand to reveal the per-kind entries.
+ */
+const TELEMETRY_LABELS: Record<string, string> = {
+  [EventType.DebugTrace]: "Debug trace",
+  [EventType.UsageUpdated]: "Usage",
+  [EventType.CheckpointSaved]: "Checkpoint",
+  [EventType.ToolCallExecuting]: "Tool call",
+  [EventType.ToolCallCompleted]: "Tool call",
+  [EventType.ToolCallKilled]: "Tool call",
+  [EventType.DelegationIteration]: "Delegation",
+  [EventType.PlannerDelegationIteration]: "Delegation",
+}
+
+function telemetryLabel(type: string): string {
+  return TELEMETRY_LABELS[type] ?? type.replace(/^run\./, "").replace(/\./g, " ")
+}
+
+function summarizeTelemetryBucket(type: string, evs: OperationEvent[]): string {
+  if (type === EventType.DebugTrace) {
+    const kinds = new Set<string>()
+    for (const ev of evs) {
+      const entry = ev.data["entry"]
+      const k = entry && typeof entry === "object" ? (entry as Record<string, unknown>)["kind"] : null
+      if (typeof k === "string") kinds.add(k)
+    }
+    const kindList = [...kinds].slice(0, 6).join(", ")
+    return `${evs.length} entries${kindList ? ` · ${kindList}` : ""}`
+  }
+  return `${evs.length} entries`
+}
+
 function groupAgentRunActivities(
   events: OperationEvent[],
   pipelineStatus: OperationStatus
@@ -54,6 +95,47 @@ function groupAgentRunActivities(
   const activities: OperationActivity[] = []
   const openSteps: OperationActivity[] = []
   const openAgentSyncExecute = new Map<string, OperationActivity>()
+  // The single currently-open telemetry group (a run of consecutive same-type
+  // orphan events: debug.trace, usage.updated, memory.*, notification, …).
+  // It is emitted IN CHRONOLOGICAL POSITION — appended to `activities` when the
+  // first event of a run arrives, and closed (further appends stop) the moment a
+  // different-type event or an action row (lifecycle/step/sync) is emitted. This
+  // is what keeps the pipeline a faithful timeline: each burst of reasoning/
+  // telemetry collapses to one expandable row exactly where it happened, instead
+  // of one row per event or all telemetry dumped at the end.
+  let openTelemetry: OperationActivity | null = null
+  let openTelemetryType: string | null = null
+  // Most recent step activity (open or closed). Orphan tool_call.* kill-signals
+  // fold into it so every tool — including ask_user — is a step row, never a
+  // separate generic "Tool call" telemetry row.
+  let lastStepActivity: OperationActivity | null = null
+
+  const closeTelemetryGroup = (): void => {
+    openTelemetry = null
+    openTelemetryType = null
+  }
+
+  const appendTelemetryEvent = (type: string, ev: OperationEvent): void => {
+    if (openTelemetry && openTelemetryType === type) {
+      openTelemetry.events.push(ev)
+      openTelemetry.endedAt = ev.timestamp
+      openTelemetry.durationMs = durationOf(openTelemetry.startedAt, ev.timestamp)
+      return
+    }
+    closeTelemetryGroup()
+    openTelemetryType = type
+    openTelemetry = {
+      id: `telemetry:${type}:${activities.length}`,
+      name: telemetryLabel(type),
+      status: OperationStatus.Success,
+      startedAt: ev.timestamp,
+      endedAt: ev.timestamp,
+      durationMs: 0,
+      details: { telemetryType: type },
+      events: [ev]
+    }
+    activities.push(openTelemetry)
+  }
 
   const closeOpenStep = (endTs: string, failed: boolean, error?: string): void => {
     const step = openSteps.pop()
@@ -90,19 +172,23 @@ function groupAgentRunActivities(
     const t = ev.type
 
     if (t === EventType.RunQueued) {
+      closeTelemetryGroup()
       activities.push(instantActivity("queued", "queued", OperationStatus.Success, ev))
       continue
     }
     if (t === EventType.RunStarted) {
+      closeTelemetryGroup()
       activities.push(instantActivity("started", "started", OperationStatus.Success, ev))
       continue
     }
     if (t === EventType.RunCompleted) {
+      closeTelemetryGroup()
       closeAllOpenSteps(ev.timestamp, false)
       activities.push(instantActivity("completed", "completed", OperationStatus.Success, ev))
       continue
     }
     if (t === EventType.RunFailed) {
+      closeTelemetryGroup()
       const error = strField(ev.data, "error") ?? undefined
       closeAllOpenSteps(ev.timestamp, true, error)
       for (const [planId, act] of openAgentSyncExecute) {
@@ -116,6 +202,7 @@ function groupAgentRunActivities(
       continue
     }
     if (t === EventType.RunCancelled) {
+      closeTelemetryGroup()
       closeAllOpenSteps(ev.timestamp, true, "Cancelled")
       activities.push(
         instantActivity(
@@ -130,6 +217,7 @@ function groupAgentRunActivities(
     }
 
     if (t === EventType.SyncAgentPreview) {
+      closeTelemetryGroup()
       const planId = strField(ev.data, "planId") ?? "unknown"
       const source = strField(ev.data, "source")
       const target = strField(ev.data, "target")
@@ -153,6 +241,7 @@ function groupAgentRunActivities(
     }
 
     if (t === EventType.SyncAgentExecuteStarted) {
+      closeTelemetryGroup()
       const planId = strField(ev.data, "planId") ?? "unknown"
       const act: OperationActivity = {
         id: `agent-sync-execute:${planId}`,
@@ -178,6 +267,7 @@ function groupAgentRunActivities(
     }
 
     if (t === EventType.StepStarted) {
+      closeTelemetryGroup()
       const toolName = resolveStepToolName(ev.data)
       const input = (ev.data["input"] as Record<string, unknown> | undefined) ?? {}
       const argsSummary =
@@ -194,6 +284,7 @@ function groupAgentRunActivities(
       }
       activities.push(act)
       openSteps.push(act)
+      lastStepActivity = act
       continue
     }
 
@@ -214,7 +305,8 @@ function groupAgentRunActivities(
           if (dur != null && !step.summary) step.summary = `${(dur / 1000).toFixed(1)}s`
         }
       } else {
-        activities.push({
+        closeTelemetryGroup()
+        const orphan: OperationActivity = {
           id: `step-orphan:${activities.length}`,
           name: strField(ev.data, "tool") ?? "step",
           status: t === EventType.StepCompleted ? OperationStatus.Success : OperationStatus.Failed,
@@ -223,7 +315,9 @@ function groupAgentRunActivities(
           durationMs: numField(ev.data, "durationMs"),
           error: t === EventType.StepFailed ? strField(ev.data, "error") ?? undefined : undefined,
           events: [ev]
-        })
+        }
+        activities.push(orphan)
+        lastStepActivity = orphan
       }
       continue
     }
@@ -233,15 +327,29 @@ function groupAgentRunActivities(
       continue
     }
 
-    activities.push({
-      id: `misc:${activities.length}`,
-      name: t.replace(/^run\./, "").replace(/\./g, " "),
-      status: OperationStatus.Success,
-      startedAt: ev.timestamp,
-      endedAt: ev.timestamp,
-      durationMs: 0,
-      events: [ev]
-    })
+    // tool_call.* are kill-management signals wrapping the same tool execution
+    // a step.* row already represents (with full I/O). Fold them into the most
+    // recent step so every tool — including ask_user — is a step row, never a
+    // separate generic "Tool call" telemetry row.
+    if (
+      t === EventType.ToolCallExecuting ||
+      t === EventType.ToolCallCompleted ||
+      t === EventType.ToolCallKilled
+    ) {
+      if (lastStepActivity) {
+        closeTelemetryGroup()
+        lastStepActivity.events.push(ev)
+        continue
+      }
+      // No preceding step to fold into — degrade to a telemetry row.
+      appendTelemetryEvent(t, ev)
+      continue
+    }
+
+    // Orphan non-action event (debug.trace, checkpoint.saved, usage.updated,
+    // memory.*, notification, …). Group consecutive same-type events into one
+    // expandable row in chronological position — not one row per event.
+    appendTelemetryEvent(t, ev)
   }
 
   const lastTs = events[events.length - 1]?.timestamp ?? new Date().toISOString()
@@ -254,6 +362,25 @@ function groupAgentRunActivities(
       act.error = act.error ?? "Agent run ended before sync execute completed"
     }
     openAgentSyncExecute.clear()
+  }
+
+  // Finalize telemetry groups: compute each group's summary and terminal
+  // status from its accumulated events. (They were already pushed to
+  // `activities` in chronological position as they opened; this only fills in
+  // the aggregate fields that depend on the full event set.)
+  for (const act of activities) {
+    if (!act.id.startsWith("telemetry:")) continue
+    const type = (act.details?.["telemetryType"] as string | undefined) ?? act.id
+    act.summary = summarizeTelemetryBucket(type, act.events)
+    const hasFailure = act.events.some((ev) => {
+      if (ev.type.includes(".failed")) return true
+      if (typeof ev.data["error"] === "string") return true
+      // debug.trace carries its failure as entry.kind === "error" | "tool-error".
+      const entry = ev.data["entry"]
+      const k = entry && typeof entry === "object" ? (entry as Record<string, unknown>)["kind"] : null
+      return k === "error" || k === "tool-error"
+    })
+    act.status = hasFailure ? OperationStatus.Failed : OperationStatus.Success
   }
 
   return activities

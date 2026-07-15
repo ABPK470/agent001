@@ -24,6 +24,7 @@ import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../..
 import { attemptPlannerRouting } from "../../core/planner-routing.js"
 import { createAgentLoopState, DEFAULT_SYSTEM_PROMPT, completionContext, guardCompletion } from "../loop.js"
 import { buildInitialMessages, synthesizeFinalAnswer } from "./agent-helpers.js"
+import { createAnswerStreamGate } from "./answer-stream-gate.js"
 import { prepareIterationContext } from "./iteration-prepare.js"
 import { executeToolCallsBranch } from "./iteration-tool-round.js"
 
@@ -184,12 +185,24 @@ export class Agent {
         }
       })
 
-      // ── LLM call ──
-      // Stream tokens live to the UI via onToken. If this iteration turns out
-      // to have tool calls (intermediate reasoning), we call onStreamDiscard so
-      // the UI clears the partial text. Only final-answer iterations are kept.
-      // This gives genuine real-time streaming without fake setTimeout replays.
-      const iterOnToken: ((t: string) => void) | undefined = this.config.onToken
+      // A response is not a final answer merely because an earlier iteration
+      // used a tool: this iteration may still emit another tool call. Keep
+      // every tool-capable response private until the complete response has
+      // no tool calls and passes the completion guards. This is the key UI
+      // invariant: once prose enters the answer bubble, it is never revoked.
+      //
+      // The one safe live-stream case is a tool-free request (no tools exposed
+      // to the LLM): it cannot pivot into a tool round, so its tokens are
+      // guaranteed final and can stream live with the ASCII-glyph effect.
+      // Tool-capable iterations buffer silently, then release the approved
+      // answer as a paced glyph reveal (~2s) so the streaming feel is preserved
+      // without ever revoking visible text.
+      const allowLiveAnswerStream = chatToolsForLLM.length === 0
+      const answerGate = createAnswerStreamGate({
+        allowLiveStream: allowLiveAnswerStream,
+        onToken: this.config.onToken,
+        onStreamDiscard: this.config.onStreamDiscard
+      })
 
       this.config.onLlmCall?.({
         phase: LLMCallPhase.Request,
@@ -202,11 +215,11 @@ export class Agent {
       try {
         response = await this.llm.chat(contractMessages, chatToolsForLLM, {
           signal: this.config.signal,
-          onToken: iterOnToken
+          onToken: (token) => answerGate.onTokenDelta(token),
+          onFirstToolCallDelta: () => answerGate.onToolCallStarted()
         })
       } catch (err) {
-        // If streaming was in progress when the error occurred, discard the partial buffer
-        this.config.onStreamDiscard?.()
+        answerGate.discard()
         if (err instanceof Error && err.message.includes("finish_reason=length")) {
           const truncMsg =
             "⚠ OUTPUT TRUNCATED: Your last response was cut off because it exceeded the completion token limit. " +
@@ -259,12 +272,12 @@ export class Agent {
 
         if (guardResult) {
           if (guardResult.finalAnswer) {
+            await answerGate.flushApproved(guardResult.finalAnswer)
             if (this.config.verbose) log.logFinalAnswer(guardResult.finalAnswer)
             return guardResult.finalAnswer
           }
-          // Guard fired — the LLM's draft answer was rejected. Discard the
-          // buffered tokens so a partial/incorrect answer never shows in chat.
-          this.config.onStreamDiscard?.()
+          // Guard fired — never show the rejected draft in the answer bubble.
+          answerGate.discard()
           // Guard fired — inject messages and continue
           messages.push({
             role: MessageRole.Assistant,
@@ -285,14 +298,15 @@ export class Agent {
           continue
         }
 
-        // All guards passed — this IS the final answer. Tokens already
-        // streamed live; nothing more to do.
+        // All guards passed — emit the validated final answer to the UI.
         const answer = response.content ?? "(no response)"
+        await answerGate.flushApproved(answer)
         if (this.config.verbose) log.logFinalAnswer(answer)
         return answer
       }
 
       // ── Execute tool calls ──
+      // stream.reset already fired via onToolCallStarted during the LLM stream.
       const branchResult = await executeToolCallsBranch({
         response,
         messages,
@@ -337,6 +351,7 @@ export class Agent {
         llm: this.llm,
         signal: this.config.signal,
         usage: this.usage,
+        onToken: this.config.onToken,
         incrementLlmCalls: () => {
           this.llmCalls++
         }
