@@ -1,10 +1,13 @@
 import { createPortal } from "react-dom"
 import { X } from "lucide-react"
-import { memo, useEffect, useState } from "react"
+import { memo, useEffect, useMemo, useState } from "react"
+import { CodeBlock } from "./CodeBlock"
 import { fetchSqlLogText, peekSqlLogText } from "../sync-sql-log-cache"
 import { formatSqlTraceMeta, normalizeSqlTraceText, type SqlTraceFields } from "../sync-sql-trace"
 
 const SQL_DISPLAY_MAX_CHARS = 32_000
+/** Above this length we show plain text — tokenizeSql + per-token spans gets expensive. */
+const SQL_HIGHLIGHT_MAX_CHARS = 8_192
 
 function capSqlForDisplay(sql: string): string {
   if (sql.length <= SQL_DISPLAY_MAX_CHARS) return sql
@@ -17,14 +20,6 @@ function sqlPreviewIsComplete(preview: string, sqlLength?: number): boolean {
   if (!trimmed) return false
   if (sqlLength == null || sqlLength <= 0) return true
   return trimmed.length >= sqlLength
-}
-
-function SqlPlainBody({ code }: { code: string }) {
-  return (
-    <pre className="code-pre px-3 py-2 overflow-auto max-h-[min(70dvh,720px)] whitespace-pre-wrap break-all font-mono text-[0.8125rem] text-text rounded-lg border border-border-subtle bg-base">
-      {code}
-    </pre>
-  )
 }
 
 export const SqlTraceModal = memo(function SqlTraceModal({
@@ -89,18 +84,26 @@ export const SqlTraceModal = memo(function SqlTraceModal({
     }
   }, [fields.sqlLogId, previewSql, previewReady, previewComplete])
 
+  const resolvedCode = useMemo(
+    () =>
+      displaySql.trim() ||
+      (fields.sqlLength != null && fields.sqlLength > 0
+        ? `-- SQL text is not available in this event (${fields.sqlLength} chars were executed)`
+        : "-- no SQL recorded for this step"),
+    [displaySql, fields.sqlLength],
+  )
+
+  const highlightSql = resolvedCode.length <= SQL_HIGHLIGHT_MAX_CHARS
+
   const body = loading
     ? <div className="text-text py-8 text-center">Loading full SQL…</div>
     : error
       ? <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>
       : (
-        <SqlPlainBody
-          code={
-            displaySql.trim() ||
-            (fields.sqlLength != null && fields.sqlLength > 0
-              ? `-- SQL text is not available in this event (${fields.sqlLength} chars were executed)`
-              : "-- no SQL recorded for this step")
-          }
+        <CodeBlock
+          code={resolvedCode}
+          lang={highlightSql ? "sql" : "text"}
+          maxHeight={720}
         />
       )
 
