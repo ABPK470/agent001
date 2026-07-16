@@ -22,8 +22,9 @@ export async function fetchSqlLogText(id: number): Promise<string> {
     const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS)
     try {
       const row = await api.getSqlLog(id, { signal: controller.signal })
-      cache.set(id, row.sql)
-      return row.sql
+      const sql = typeof row.sql === "string" ? row.sql : ""
+      cache.set(id, sql)
+      return sql
     } finally {
       clearTimeout(timer)
       inflight.delete(id)

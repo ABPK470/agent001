@@ -96,10 +96,55 @@ export function countSyncSqlLogByPlan(planId: string): number {
   return row.cnt
 }
 
+const SQL_EVENT_PREVIEW_MAX_CHARS = 2_000
+
 /** Strip server-only full SQL before SSE / event_log JSON persistence. */
 export function stripInternalSqlFields(data: Record<string, unknown>): Record<string, unknown> {
   const { __fullSql: _full, ...rest } = data
   return rest
+}
+
+function truncateSqlPreview(fullSql: string): string {
+  return fullSql.length > SQL_EVENT_PREVIEW_MAX_CHARS
+    ? `${fullSql.slice(0, SQL_EVENT_PREVIEW_MAX_CHARS)}… [+${fullSql.length - SQL_EVENT_PREVIEW_MAX_CHARS} chars]`
+    : fullSql
+}
+
+function resolveSqlPreview(fullSql: string, existing: unknown): string {
+  if (typeof existing === "string" && existing.trim().length > 0) return existing
+  return truncateSqlPreview(fullSql)
+}
+
+function coercePersistedSqlLogId(value: unknown): number | null {
+  if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.trunc(value)
+  if (typeof value === "string" && /^\d+$/.test(value.trim())) {
+    const parsed = Number(value)
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : null
+  }
+  return null
+}
+
+/** Ensure persisted sync SQL events always carry a displayable preview + length. */
+export function hydratePersistedSqlEventData(
+  eventType: string,
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  if (!eventType.endsWith(".sql")) return data
+
+  const existingSql = typeof data["sql"] === "string" ? data["sql"] : ""
+  if (existingSql.trim().length > 0) return data
+
+  const sqlLogId = coercePersistedSqlLogId(data["sqlLogId"])
+  if (sqlLogId == null) return data
+
+  const row = getSyncSqlLog(sqlLogId)
+  if (!row) return data
+
+  return {
+    ...data,
+    sql: truncateSqlPreview(row.sql_text),
+    sqlLength: row.sql_text.length,
+  }
 }
 
 export function enrichSyncSqlEventData(
@@ -107,24 +152,47 @@ export function enrichSyncSqlEventData(
   data: Record<string, unknown>,
 ): Record<string, unknown> {
   if (!eventType.endsWith(".sql")) return data
-  const fullSql = typeof data["__fullSql"] === "string" ? data["__fullSql"] : typeof data["sql"] === "string" ? data["sql"] : null
-  if (!fullSql) return stripInternalSqlFields(data)
+  const fullSql =
+    typeof data["__fullSql"] === "string"
+      ? data["__fullSql"]
+      : typeof data["sql"] === "string"
+        ? data["sql"]
+        : null
+  const stripped = stripInternalSqlFields(data)
+  if (!fullSql) return stripped
 
-  const sqlLogId = recordSyncSqlLog({
-    planId: typeof data["planId"] === "string" ? data["planId"] : null,
-    previewId: typeof data["previewId"] === "string" ? data["previewId"] : null,
-    eventType,
-    scope: typeof data["scope"] === "string" ? data["scope"] : null,
-    label: typeof data["label"] === "string" ? data["label"] : "query",
-    connection: typeof data["connection"] === "string" ? data["connection"] : "?",
-    sqlText: fullSql,
-    durationMs: typeof data["durationMs"] === "number" ? data["durationMs"] : null,
-    rowCount: typeof data["rowCount"] === "number" ? data["rowCount"] : null,
-    error: typeof data["error"] === "string" ? data["error"] : null,
-  })
+  const sqlPreview = resolveSqlPreview(fullSql, stripped["sql"])
+  const sqlLength =
+    typeof stripped["sqlLength"] === "number" && stripped["sqlLength"] > 0
+      ? stripped["sqlLength"]
+      : fullSql.length
 
-  return {
-    ...stripInternalSqlFields(data),
-    sqlLogId,
+  try {
+    const sqlLogId = recordSyncSqlLog({
+      planId: typeof data["planId"] === "string" ? data["planId"] : null,
+      previewId: typeof data["previewId"] === "string" ? data["previewId"] : null,
+      eventType,
+      scope: typeof data["scope"] === "string" ? data["scope"] : null,
+      label: typeof data["label"] === "string" ? data["label"] : "query",
+      connection: typeof data["connection"] === "string" ? data["connection"] : "?",
+      sqlText: fullSql,
+      durationMs: typeof data["durationMs"] === "number" ? data["durationMs"] : null,
+      rowCount: typeof data["rowCount"] === "number" ? data["rowCount"] : null,
+      error: typeof data["error"] === "string" ? data["error"] : null,
+    })
+
+    return {
+      ...stripped,
+      sql: sqlPreview,
+      sqlLength,
+      sqlLogId,
+    }
+  } catch (error) {
+    console.warn("[sync-sql-log] recordSyncSqlLog failed; keeping inline SQL preview", error)
+    return {
+      ...stripped,
+      sql: sqlPreview,
+      sqlLength,
+    }
   }
 }

@@ -161,6 +161,7 @@ export {
   countSyncSqlLogByPlan,
   enrichSyncSqlEventData,
   getSyncSqlLog,
+  hydratePersistedSqlEventData,
   listSyncSqlLogByPlan,
   recordSyncSqlLog,
   stripInternalSqlFields,

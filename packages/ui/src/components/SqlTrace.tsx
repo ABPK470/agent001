@@ -3,7 +3,9 @@ import { Maximize2, X } from "lucide-react"
 import { useEffect, useState } from "react"
 import { CodeBlock } from "./CodeBlock"
 import { fetchSqlLogText, peekSqlLogText } from "../sync-sql-log-cache"
-import { formatSqlTraceMeta, readSqlTraceFields, type SqlTraceFields } from "../sync-sql-trace"
+import { formatSqlTraceMeta, hasSqlTraceContent, normalizeSqlTraceText, readSqlTraceFields, type SqlTraceFields } from "../sync-sql-trace"
+
+const SQL_HIGHLIGHT_MAX_CHARS = 48_000
 
 export function SqlTraceBlock({
   fields,
@@ -54,7 +56,7 @@ export function SqlTraceFromEventData({
   maxHeight?: number
 }) {
   const fields = readSqlTraceFields(data)
-  if (!fields) return null
+  if (!fields || !hasSqlTraceContent(fields)) return null
   return <SqlTraceBlock fields={fields} compact={compact} maxHeight={maxHeight} />
 }
 
@@ -65,28 +67,32 @@ export function SqlTraceModal({
   fields: SqlTraceFields
   onClose: () => void
 }) {
-  const initialCached = fields.sqlLogId != null ? peekSqlLogText(fields.sqlLogId) : undefined
-  const [fullSql, setFullSql] = useState(initialCached ?? fields.sql)
-  const [loading, setLoading] = useState(fields.sqlLogId != null && initialCached == null)
+  const previewSql = normalizeSqlTraceText(fields.sql)
+  const [fullSql, setFullSql] = useState(previewSql)
+  const [loading, setLoading] = useState(
+    fields.sqlLogId != null && peekSqlLogText(fields.sqlLogId) == null,
+  )
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    setError(null)
     if (fields.sqlLogId == null) {
+      setFullSql(previewSql)
       setLoading(false)
       return
     }
     const hit = peekSqlLogText(fields.sqlLogId)
     if (hit != null) {
-      setFullSql(hit)
+      setFullSql(normalizeSqlTraceText(hit))
       setLoading(false)
-      setError(null)
       return
     }
     let cancelled = false
+    setLoading(true)
     void fetchSqlLogText(fields.sqlLogId)
       .then((sql) => {
         if (!cancelled) {
-          setFullSql(sql)
+          setFullSql(normalizeSqlTraceText(sql))
           setError(null)
           setLoading(false)
         }
@@ -94,21 +100,34 @@ export function SqlTraceModal({
       .catch((e) => {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
-          setFullSql(fields.sql)
+          setFullSql(previewSql)
           setLoading(false)
         }
       })
     return () => {
       cancelled = true
     }
-  }, [fields.sqlLogId])
+  }, [fields.sqlLogId, previewSql])
+
+  const resolvedSql =
+    normalizeSqlTraceText(fullSql).trim() ||
+    previewSql.trim() ||
+    (fields.sqlLength != null && fields.sqlLength > 0
+      ? `-- SQL text is not available in this event (${fields.sqlLength} chars were executed)`
+      : "-- no SQL recorded for this step")
+
+  const highlightSql = resolvedSql.length <= SQL_HIGHLIGHT_MAX_CHARS
 
   const body = loading
     ? <div className="text-text py-8 text-center">Loading full SQL…</div>
     : error
       ? <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>
       : (
-        <CodeBlock code={fullSql.trim() || fields.sql.trim() || "-- no SQL recorded"} lang="sql" maxHeight={720} />
+        <CodeBlock
+          code={resolvedSql}
+          lang={highlightSql ? "sql" : "text"}
+          maxHeight={720}
+        />
       )
 
   return createPortal(

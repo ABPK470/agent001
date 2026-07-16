@@ -30,7 +30,7 @@ import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { HistoryPlanTables } from "./PlanTables"
 import { SqlTraceModal } from "../../components/SqlTrace"
-import type { SqlTraceFields } from "../../sync-sql-trace"
+import { hasSqlTraceContent, type SqlTraceFields } from "../../sync-sql-trace"
 import { JsonViewer } from "../../components/JsonViewer"
 
 const PAGE_SIZE = 25
@@ -900,6 +900,7 @@ function HistoryRunDetail({
                     durationMs: item.durationMs,
                     error: item.error,
                   }
+                  if (!hasSqlTraceContent(fields)) return null
                   const detail = [
                     item.connection,
                     item.durationMs != null ? `${item.durationMs}ms` : null,

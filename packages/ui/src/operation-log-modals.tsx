@@ -27,7 +27,9 @@ export function OperationLogModalsProvider({ children }: { children: ReactNode }
 export function useOpLogOpenSqlTrace(): OpLogModalsContextValue["openSqlTrace"] {
   const ctx = useContext(OpLogModalsContext)
   if (!ctx) {
-    throw new Error("useOpLogOpenSqlTrace must be used within OperationLogModalsProvider")
+    return () => {
+      console.warn("useOpLogOpenSqlTrace: OperationLogModalsProvider is missing")
+    }
   }
   return ctx.openSqlTrace
 }

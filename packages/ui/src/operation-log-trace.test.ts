@@ -23,4 +23,18 @@ describe("operation-log-trace", () => {
     })
     expect(formatTraceRowSummary(trace)).toBe("SQL FetchPkColumns(Core Activity) · uat · 415ms")
   })
+
+  it("omits sqlFields when audit SQL event has no resolvable text", () => {
+    const trace = describeSqlEvent({
+      type: "sync.execute.sql",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      data: {
+        label: "flowStep.auditCheck(auditCheck)",
+        connection: "uat",
+        durationMs: 415,
+        rowCount: 0,
+      },
+    })
+    expect(trace.sqlFields).toBeUndefined()
+  })
 })

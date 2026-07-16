@@ -9,20 +9,27 @@ import { buildPreviewToPlanMap, correlateEventsIntoBuckets } from "./correlate.j
 import { filterOperations } from "./filter.js"
 import { mergeSyncPlanPipelines } from "./merge-sync-run.js"
 import type { ListOperationsOpts, OperationEvent, OperationPipeline } from "./types.js"
+import { hydratePersistedSqlEventData } from "../../../../platform/persistence/db/sync-sql-log.js"
 import { safeParse } from "./utils.js"
+
+function mapDbEventRow(e: DbEvent): OperationEvent | null {
+  if (!isEventType(e.type)) return null
+  const data = hydratePersistedSqlEventData(e.type, safeParse(e.data))
+  return { type: e.type, timestamp: e.created_at, data }
+}
 
 export function mapDbEventsChronological(events: readonly DbEvent[]): OperationEvent[] {
   return [...events].reverse().flatMap<OperationEvent>((e) => {
-    if (!isEventType(e.type)) return []
-    return [{ type: e.type, timestamp: e.created_at, data: safeParse(e.data) }]
+    const mapped = mapDbEventRow(e)
+    return mapped ? [mapped] : []
   })
 }
 
 /** Map event_log rows already in ascending created_at order (plan/run audit queries). */
 export function mapDbEventsAsc(events: readonly DbEvent[]): OperationEvent[] {
   return events.flatMap<OperationEvent>((e) => {
-    if (!isEventType(e.type)) return []
-    return [{ type: e.type, timestamp: e.created_at, data: safeParse(e.data) }]
+    const mapped = mapDbEventRow(e)
+    return mapped ? [mapped] : []
   })
 }
 

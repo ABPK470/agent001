@@ -1,6 +1,6 @@
 import type { OperationActivity, OperationEvent } from "./api"
 import { isAgentStepEventType } from "./tool-call-io"
-import { isSyncSqlEventType, readSqlTraceFields, type SqlTraceFields } from "./sync-sql-trace"
+import { isSyncSqlEventType, hasSqlTraceContent, readSqlTraceFields, type SqlTraceFields } from "./sync-sql-trace"
 
 export type TraceKind = "sql" | "shell" | "script" | "io" | "event"
 
@@ -75,7 +75,7 @@ export function describeSqlEvent(ev: OperationEvent, activity?: OperationActivit
     connection: fields?.connection ?? activity?.summary ?? undefined,
     durationMs: fields?.durationMs ?? activity?.durationMs ?? null,
     detailLabel: "SQL",
-    sqlFields: fields ?? undefined,
+    sqlFields: fields && hasSqlTraceContent(fields) ? fields : undefined,
   }
 }
 

@@ -33,7 +33,7 @@ import {
   describeSqlOnlyActivity,
   formatTraceRowSummary,
 } from "../operation-log-trace"
-import { isSyncSqlEventType, readSqlTraceFields } from "../sync-sql-trace"
+import { isSyncSqlEventType, hasSqlTraceContent, readSqlTraceFields } from "../sync-sql-trace"
 import {
   buildToolIoFromStepEvents,
   isAgentStepEventType,
@@ -1260,7 +1260,7 @@ function EventRow({ ev, expanded, onToggle, linear, isLast, depth = 0 }: {
         timestamp={ev.timestamp}
         actions={
           <>
-            {isSql && sqlFields && (
+            {isSql && sqlFields && hasSqlTraceContent(sqlFields) && (
               <button
                 type="button"
                 className={LOG_ROW_ACTION}
