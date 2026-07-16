@@ -1,4 +1,4 @@
-import { syncExecuteStream } from "../../api"
+import { syncExecuteStream, api } from "../../api"
 import type { SyncExecuteProgress } from "../../types"
 import { appendCancelledTableEvents } from "./exec-status"
 import { execTerminalSuccess, isTerminalExecEvent } from "./exec-progress"
@@ -77,11 +77,17 @@ export function startExecStream(planId: string): void {
   )
 }
 
-/** Stop listening and mark the run cancelled. Closes SSE so the server can abort preflight work. */
-export function cancelExec(): void {
-  if (execState.kind !== "running") return
+/** Stop the server execute and mark the run cancelled locally. */
+export async function cancelExec(): Promise<void> {
+  if (execState.kind !== "running" || !execPlanId) return
   userCancelled = true
+  const planId = execPlanId
   const events = appendCancelledTableEvents(execState.events)
+  try {
+    await api.cancelSyncExecute(planId)
+  } catch {
+    /* execute may have finished between click and request */
+  }
   execStream?.close()
   execStream = null
   execState = { kind: "done", success: false, events, error: "Cancelled by user" }

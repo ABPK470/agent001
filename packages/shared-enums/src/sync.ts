@@ -16,6 +16,8 @@ export const SyncRunStatus = {
   Failed:  "failed",
   /** Audit gate returned stop — sync not required; not an error. */
   Skipped: "skipped",
+  /** User or client aborted an in-flight execute. */
+  Cancelled: "cancelled",
 } as const
 
 export type SyncRunStatus = (typeof SyncRunStatus)[keyof typeof SyncRunStatus]

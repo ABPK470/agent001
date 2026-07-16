@@ -118,6 +118,7 @@ export function syncRunStatusToOperationStatus(
   }
   if (metaStatus === SyncRunStatus.Failed) return OperationStatus.Failed
   if (metaStatus === SyncRunStatus.Skipped) return OperationStatus.Skipped
+  if (metaStatus === SyncRunStatus.Cancelled) return OperationStatus.Cancelled
   if (metaStatus === SyncRunStatus.Started || metaStatus === SyncRunStatus.Preview) {
     return inferred === OperationStatus.Unknown ? OperationStatus.Running : inferred
   }

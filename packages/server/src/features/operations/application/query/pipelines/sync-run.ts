@@ -96,7 +96,9 @@ export function buildSyncRunPipeline(planId: string, events: OperationEvent[]): 
           ? OperationStatus.Failed
           : meta?.status === SyncRunStatus.Skipped
             ? OperationStatus.Skipped
-            : executePipe.status
+            : meta?.status === SyncRunStatus.Cancelled
+              ? OperationStatus.Cancelled
+              : executePipe.status
   } else if (previewPipe) {
     status = previewPipe.status
   } else {

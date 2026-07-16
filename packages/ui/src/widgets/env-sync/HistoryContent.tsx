@@ -51,6 +51,7 @@ const STATUS_OPTIONS: Array<{ value: SyncRunStatus; label: string }> = [
   { value: "success", label: "Completed" },
   { value: "failed", label: "Failed" },
   { value: "skipped", label: "Skipped" },
+  { value: "cancelled", label: "Cancelled" },
 ]
 
 const SORT_OPTIONS: ListboxOption<NonNullable<HistoryFilters["sort"]>>[] = [
@@ -75,6 +76,8 @@ function runStatusTone(status: RunStatus): string {
       return "var(--color-warning)"
     case "started":
       return "var(--color-accent)"
+    case "cancelled":
+      return "var(--color-text-muted)"
     default:
       return "var(--color-text-muted)"
   }
@@ -90,6 +93,8 @@ function runStatusLabel(status: RunStatus): string {
       return "skipped"
     case "started":
       return "executing"
+    case "cancelled":
+      return "cancelled"
     default:
       return "preview"
   }
@@ -102,6 +107,7 @@ function formatAuditAction(action: string): string {
     "sync.execute.completed": "Execute completed",
     "sync.execute.skipped": "Execute skipped (audit gate)",
     "sync.execute.failed": "Execute failed",
+    "sync.execute.cancelled": "Execute cancelled",
   }
   return map[action] ?? action
 }
@@ -202,6 +208,7 @@ export function HistoryContent({
 
   const agentSyncExec = useStore((s) => s.agentSyncExec)
   const agentSyncExecStarted = useStore((s) => s.agentSyncExecStarted)
+  const syncHistoryRevision = useStore((s) => s.syncHistoryRevision)
   const syncFormPlanId = useStore((s) => s.envSyncForm.planId)
   const prevPlanIdRef = useRef<string | null>(null)
 
@@ -219,6 +226,17 @@ export function HistoryContent({
   useEffect(() => {
     if (agentSyncExec) reload(page)
   }, [agentSyncExec, page, reload])
+
+  useEffect(() => {
+    if (syncHistoryRevision > 0) reload(page)
+  }, [syncHistoryRevision, page, reload])
+
+  useEffect(() => {
+    const hasInFlight = data?.items.some((run) => run.status === "started")
+    if (!hasInFlight) return
+    const timer = setInterval(() => reload(page), 4000)
+    return () => clearInterval(timer)
+  }, [data?.items, page, reload])
 
   const clearFilters = () => {
     setSearchDraft("")

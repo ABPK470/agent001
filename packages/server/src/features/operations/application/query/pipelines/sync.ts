@@ -522,6 +522,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
   const pipelineFailed = events.some(
     (ev) =>
       ev.type === EventType.SyncExecuteFailed ||
+      ev.type === EventType.SyncExecuteCancelled ||
       ev.type === EventType.SyncExecuteStepFailed ||
       (ev.type === EventType.SyncExecuteCompleted && syncExecuteCompletedHasWarnings(ev.data))
   )
@@ -597,6 +598,11 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       status = OperationStatus.Failed
       error = strField(ev.data, "error") ?? undefined
       summary = error
+    } else if (type === EventType.SyncExecuteCancelled) {
+      name = "cancelled"
+      status = OperationStatus.Cancelled
+      error = "Cancelled by user"
+      summary = error
     }
 
     activities.push({
@@ -626,9 +632,17 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
     if (
       t === EventType.SyncExecuteStarted ||
       t === EventType.SyncExecuteCompleted ||
-      t === EventType.SyncExecuteFailed
+      t === EventType.SyncExecuteFailed ||
+      t === EventType.SyncExecuteCancelled
     ) {
-      finalizeStep(ev.timestamp, t === EventType.SyncExecuteFailed ? OperationStatus.Failed : undefined)
+      finalizeStep(
+        ev.timestamp,
+        t === EventType.SyncExecuteFailed
+          ? OperationStatus.Failed
+          : t === EventType.SyncExecuteCancelled
+            ? OperationStatus.Cancelled
+            : undefined,
+      )
       if (pipelineFailed && openTables.size > 0) {
         failOpenTables(ev.timestamp)
       }

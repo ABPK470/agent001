@@ -695,9 +695,9 @@ export function EnvSync() {
           execPlanId={execPlanId}
           tgtEnv={tgtEnv}
           onConfirm={onExecConfirmed}
-          onCancel={() => cancelExec()}
+          onCancel={() => { void cancelExec() }}
           onClose={() => {
-            if (exec.kind === "running") cancelExec()
+            if (exec.kind === "running") void cancelExec()
             setExecModalOpen(false)
           }}
         />

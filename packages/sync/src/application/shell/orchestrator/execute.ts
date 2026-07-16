@@ -400,30 +400,44 @@ async function executeSyncInner(
     }
 
     const failure = toSyncExecuteError(e, { step: "execute" })
-    const msg = failure.message
-    console.error(`[sync.execute] plan ${planId} failed:`, e)
+    const cancelled = Boolean(signal?.aborted)
+    const msg = cancelled ? "Cancelled by user" : failure.message
+    if (cancelled) {
+      console.warn(`[sync.execute] plan ${planId} cancelled`)
+    } else {
+      console.error(`[sync.execute] plan ${planId} failed:`, e)
+    }
     onProgress({
       type: SyncProgressKind.Failed,
       step: failure.step,
       table: failure.table,
       error: msg,
-      message: failure.causeDetail
+      message: cancelled ? msg : failure.causeDetail
     })
-    emit(opts.host, EventType.SyncExecuteFailed, {
-      planId,
-      definitionId: executionContract.definitionId,
-      definitionPublishedVersion: executionContract.definitionPublishedVersion,
-      error: msg,
-      step: failure.step,
-      table: failure.table ?? null,
-      op: failure.op ?? null,
-      cause: failure.causeDetail ?? null,
-      durationMs: Date.now() - execT0
-    })
+    if (cancelled) {
+      emit(opts.host, EventType.SyncExecuteCancelled, {
+        planId,
+        definitionId: executionContract.definitionId,
+        definitionPublishedVersion: executionContract.definitionPublishedVersion,
+        durationMs: Date.now() - execT0
+      })
+    } else {
+      emit(opts.host, EventType.SyncExecuteFailed, {
+        planId,
+        definitionId: executionContract.definitionId,
+        definitionPublishedVersion: executionContract.definitionPublishedVersion,
+        error: msg,
+        step: failure.step,
+        table: failure.table ?? null,
+        op: failure.op ?? null,
+        cause: failure.causeDetail ?? null,
+        durationMs: Date.now() - execT0
+      })
+    }
     try {
       getSyncRunSink(opts.host).finish({
         planId,
-        status: SyncRunStatus.Failed,
+        status: cancelled ? SyncRunStatus.Cancelled : SyncRunStatus.Failed,
         error: msg,
         durationMs: Date.now() - execT0
       })

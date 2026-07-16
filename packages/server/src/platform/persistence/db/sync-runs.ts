@@ -87,7 +87,14 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
          preview_deletes = excluded.preview_deletes,
          preview_totals_json = excluded.preview_totals_json,
          status = excluded.status,
-         started_at = datetime('now')`
+         started_at = datetime('now'),
+         finished_at = NULL,
+         duration_ms = NULL,
+         error = NULL,
+         executed_inserts = NULL,
+         executed_updates = NULL,
+         executed_deletes = NULL,
+         execute_totals_json = NULL`
     )
     .run(
       i.planId,
@@ -107,7 +114,11 @@ export function recordSyncRunStart(i: RecordSyncRunStartInput): void {
 
 export interface RecordSyncRunFinishInput {
   planId: string
-  status: typeof SyncRunStatus.Success | typeof SyncRunStatus.Failed | typeof SyncRunStatus.Skipped
+  status:
+    | typeof SyncRunStatus.Success
+    | typeof SyncRunStatus.Failed
+    | typeof SyncRunStatus.Skipped
+    | typeof SyncRunStatus.Cancelled
   error?: string | null
   executeTotals?: unknown
   durationMs: number
@@ -118,10 +129,11 @@ export function recordSyncRunFinish(i: RecordSyncRunFinishInput): void {
     !isSyncRunStatus(i.status) ||
     (i.status !== SyncRunStatus.Success &&
       i.status !== SyncRunStatus.Failed &&
-      i.status !== SyncRunStatus.Skipped)
+      i.status !== SyncRunStatus.Skipped &&
+      i.status !== SyncRunStatus.Cancelled)
   ) {
     throw new Error(
-      `recordSyncRunFinish.status must be 'success', 'failed', or 'skipped' (one of [${SYNC_RUN_STATUSES.join(", ")}]); got "${String(i.status)}" for plan ${i.planId}`
+      `recordSyncRunFinish.status must be 'success', 'failed', 'skipped', or 'cancelled' (one of [${SYNC_RUN_STATUSES.join(", ")}]); got "${String(i.status)}" for plan ${i.planId}`
     )
   }
   const c = i.executeTotals ? asCounts(i.executeTotals) : null

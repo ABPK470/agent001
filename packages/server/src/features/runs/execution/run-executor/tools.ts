@@ -297,35 +297,6 @@ function composeExecutionTools(
             const match = result.match(/^Plan\s+([a-f0-9-]{36})\b/)
             if (match) {
               const planId = match[1]
-              const totalsMatch = result.match(
-                /Totals:\s*\+(\d+)\s*~(\d+)\s*-(\d+)\s*\(=(\d+)\s*unchanged\)\s*across\s*(\d+)/
-              )
-              const previewTotals = totalsMatch
-                ? {
-                    insert: Number(totalsMatch[1]),
-                    update: Number(totalsMatch[2]),
-                    delete: Number(totalsMatch[3]),
-                    unchanged: Number(totalsMatch[4]),
-                    tablesCount: Number(totalsMatch[5])
-                  }
-                : {}
-              try {
-                db.recordSyncRunStart({
-                  planId,
-                  entityType: String(args["entityType"] ?? ""),
-                  entityId: readToolEntityId(args),
-                  entityDisplayName: null,
-                  source: String(args["source"] ?? ""),
-                  target: String(args["target"] ?? ""),
-                  actorUpn: activeRun?.ownerUpn ?? null,
-                  previewTotals
-                })
-              } catch (error) {
-                console.warn(
-                  "[sync-history] recordSyncRunStart failed:",
-                  error instanceof Error ? error.message : error
-                )
-              }
               broadcast({
                 type: EventType.SyncAgentPreview,
                 data: {

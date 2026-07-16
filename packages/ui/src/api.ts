@@ -31,7 +31,7 @@ import { sseStepDedupeToken } from "@mia/shared-types"
 
 export { OperationKind, OperationStatus }
 
-export type SyncRunStatus = "started" | "preview" | "success" | "failed" | "skipped"
+export type SyncRunStatus = "started" | "preview" | "success" | "failed" | "skipped" | "cancelled"
 
 export type SyncHistorySort = "started_desc" | "started_asc" | "finished_desc" | "finished_asc"
 
@@ -606,6 +606,11 @@ export const api = {
   syncExecute: (planId: string) =>
     json<{ planId: string; success: boolean; error?: string }>(
       `/api/sync/execute/${encodeURIComponent(planId)}`,
+      { method: "POST" },
+    ),
+  cancelSyncExecute: (planId: string) =>
+    json<{ cancelled: boolean; planId: string }>(
+      `/api/sync/execute/${encodeURIComponent(planId)}/cancel`,
       { method: "POST" },
     ),
   syncHistory: (params: SyncHistoryParams = {}) => {

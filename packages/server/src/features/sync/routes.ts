@@ -6,7 +6,6 @@ import { type AgentHost } from "@mia/agent"
 import { EventType, isSyncRunStatus, type SyncRunStatus } from "@mia/shared-enums"
 import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import {
-  executeSync,
   getEnvironments,
   listPublishedSyncDefinitions,
   loadPlan,
@@ -18,6 +17,7 @@ import {
 } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
 import { broadcast } from "../../platform/events/broadcaster.js"
+import { cancelOperation } from "../../platform/operations/cancel-registry.js"
 import { PUBLISHED_SYNC_BUNDLE_PATH } from "../../bootstrap/published-sync-bundle.js"
 import * as db from "../../platform/persistence/sqlite.js"
 import {
@@ -36,6 +36,10 @@ import {
 } from "./application/plan-summary.js"
 import { rebuildLiveSyncEnvironments } from "./runtime/live-environments.js"
 import { registerSyncMetadataRoutes } from "./transport/sync-metadata-routes.js"
+import {
+  runRegisteredSyncExecute,
+  SYNC_EXECUTE_OPERATION,
+} from "./runtime/execute-session.js"
 
 interface PublishSyncDefinitionsResponse {
   publishedAt: string
@@ -179,6 +183,17 @@ function parseSyncHistoryQuery(
     startedBefore: query.to?.trim() || undefined,
     sort: parseSyncHistorySort(query.sort)
   }
+}
+
+function syncExecuteAuditAction(result: {
+  success: boolean
+  skipped?: boolean
+  error?: string
+}): string {
+  if (result.skipped) return "sync.execute.skipped"
+  if (result.success) return "sync.execute.completed"
+  if (result.error === "Cancelled by user") return "sync.execute.cancelled"
+  return "sync.execute.failed"
 }
 
 function mapSyncRunRow(row: db.SyncRunRow) {
@@ -490,19 +505,19 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     const planDetail = planSummary && plan ? buildSyncAuditDetail(planSummary, plan.totals) : {}
     auditSync(req.params.planId, actor, actorUpn, "sync.execute.start", planDetail)
     try {
-      const result = await executeSync(req.params.planId, { host, confirm: true, userUpn: actor })
+      const result = await runRegisteredSyncExecute({
+        host,
+        planId: req.params.planId,
+        userUpn: actor,
+      })
       auditSync(
         req.params.planId,
         actor,
         actorUpn,
-        result.skipped
-          ? "sync.execute.skipped"
-          : result.success
-            ? "sync.execute.completed"
-            : "sync.execute.failed",
+        syncExecuteAuditAction(result),
         { ...planDetail, error: result.error ?? result.message ?? null, skipped: result.skipped ?? false }
       )
-      if (!result.success && !result.skipped) reply.code(500)
+      if (!result.success && !result.skipped && result.error !== "Cancelled by user") reply.code(500)
       return result
     } catch (error) {
       const msg = error instanceof Error ? error.message : String(error)
@@ -513,6 +528,16 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       reply.code(400)
       return { error: msg }
     }
+  })
+
+  app.post<{ Params: { planId: string } }>("/api/sync/execute/:planId/cancel", async (req, reply) => {
+    const planId = req.params.planId
+    const cancelled = cancelOperation(SYNC_EXECUTE_OPERATION, planId)
+    if (!cancelled) {
+      reply.code(404)
+      return { error: "No active execute to cancel" }
+    }
+    return { cancelled: true, planId }
   })
 
   app.get<{ Params: { planId: string } }>("/api/sync/execute/:planId/stream", async (req, reply) => {
@@ -526,31 +551,25 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     setupSse(reply)
     const send = (event: ExecuteProgress) => reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     const heartbeat = setInterval(() => reply.raw.write(`: hb\n\n`), 25_000)
-    const abort = new AbortController()
     let clientClosed = false
     req.raw.on("close", () => {
       clientClosed = true
       clearInterval(heartbeat)
-      abort.abort()
+      cancelOperation(SYNC_EXECUTE_OPERATION, req.params.planId, "Client disconnected")
     })
     try {
-      const result = await executeSync(req.params.planId, {
+      const result = await runRegisteredSyncExecute({
         host,
-        confirm: true,
-        onProgress: send,
+        planId: req.params.planId,
         userUpn: actor,
-        signal: abort.signal
+        onProgress: send,
       })
       if (!clientClosed) {
         auditSync(
           req.params.planId,
           actor,
           actorUpn,
-          result.skipped
-            ? "sync.execute.skipped"
-            : result.success
-              ? "sync.execute.completed"
-              : "sync.execute.failed",
+          syncExecuteAuditAction(result),
           { ...planDetail, error: result.error ?? result.message ?? null, skipped: result.skipped ?? false }
         )
       }

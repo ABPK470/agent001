@@ -444,6 +444,7 @@ function formatEventLabel(ev: OperationEvent): string {
     case "sync.execute.archive.skipped": return "Archive skipped"
     case "sync.execute.completed": return "Execute complete"
     case "sync.execute.failed": return "Execute failed"
+    case "sync.execute.cancelled": return "Execute cancelled"
     case "sync.execute.skipped": return "Execute skipped"
     case "sync.proposer.run.started": return "Scan started"
     case "sync.proposer.run.completed": return "Scan completed"
@@ -491,6 +492,11 @@ export function OperationLog() {
         await api.cancelRun(pipeline.id)
       } else if (pipeline.kind === OperationKind.ProposerRun) {
         await api.cancelProposerRun(pipeline.id)
+      } else if (
+        pipeline.kind === OperationKind.SyncRun ||
+        pipeline.kind === OperationKind.SyncExecute
+      ) {
+        await api.cancelSyncExecute(syncPlanIdFromPipeline(pipeline))
       }
     } catch {
       /* SSE refresh will reflect final state */
@@ -720,7 +726,10 @@ function PipelineRow({ pipeline, expanded, onToggle, actExpanded, toggleActivity
   const canCancel =
     pipeline.status === "running" &&
     onCancel &&
-    (pipeline.kind === OperationKind.AgentRun || pipeline.kind === OperationKind.ProposerRun)
+    (pipeline.kind === OperationKind.AgentRun ||
+      pipeline.kind === OperationKind.ProposerRun ||
+      pipeline.kind === OperationKind.SyncRun ||
+      pipeline.kind === OperationKind.SyncExecute)
   const formattedSubtitle = pipeline.subtitle
     ? formatPipelineSubtitle(pipeline.subtitle)
     : null

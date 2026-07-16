@@ -415,6 +415,8 @@ interface AppState {
   clearAgentSyncExec: () => void
   /** planId of an in-progress agent-triggered execute. Set on execute.started, cleared on execute.completed/failed. */
   agentSyncExecStarted: string | null
+  /** Bumped when a sync execute reaches a terminal state (history modal listens). */
+  syncHistoryRevision: number
 
   // Agent-generated deliverable attachments (CSV/MD/… exports promoted via
   // export_query_to_file or promote_attachment). Keyed by runId so the chat
@@ -1586,6 +1588,7 @@ export const useStore = create<AppState>()(
       agentSyncExec: null,
       clearAgentSyncExec: () => set({ agentSyncExec: null }),
       agentSyncExecStarted: null,
+      syncHistoryRevision: 0,
 
       generatedAttachmentsByRun: {},
       addGeneratedAttachment: (runId, att) =>
@@ -1622,6 +1625,14 @@ export const useStore = create<AppState>()(
 
         if (type.startsWith("sync.")) {
           applySyncSseToStore(get, set, type, data as Record<string, unknown>)
+          if (
+            type === "sync.execute.completed" ||
+            type === "sync.execute.failed" ||
+            type === "sync.execute.skipped" ||
+            type === "sync.execute.cancelled"
+          ) {
+            set((s) => ({ syncHistoryRevision: s.syncHistoryRevision + 1 }))
+          }
         }
 
         switch (type) {
@@ -1937,6 +1948,7 @@ export const useStore = create<AppState>()(
                 result: data["result"] as string ?? "",
               },
               agentSyncExecStarted: null,
+              syncHistoryRevision: get().syncHistoryRevision + 1,
             })
             break
           }

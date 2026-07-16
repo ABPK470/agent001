@@ -124,6 +124,7 @@ export const EventType = {
   SyncExecuteCompleted: "sync.execute.completed",
   SyncExecuteSkipped: "sync.execute.skipped",
   SyncExecuteFailed: "sync.execute.failed",
+  SyncExecuteCancelled: "sync.execute.cancelled",
   SyncExecuteStep: "sync.execute.step",
   SyncExecuteStepFailed: "sync.execute.step.failed",
   SyncExecuteTableStart: "sync.execute.table.start",
@@ -331,6 +332,7 @@ const CANCELLATION_EVENTS: ReadonlySet<EventType> = new Set([
   EventType.RunCancelled,
   EventType.AgentCancelled,
   EventType.SyncProposerRunCancelled,
+  EventType.SyncExecuteCancelled,
 ])
 
 const SUB_STEP_FAILURE_EVENTS: ReadonlySet<EventType> = new Set([
