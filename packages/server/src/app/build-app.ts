@@ -231,7 +231,14 @@ export async function buildApp(opts: BuildAppOptions) {
   registerAgentRoutes(app, orchestrator)
   registerLayoutRoutes(app)
   registerPolicyRoutes(app)
-  registerPlatformRoutes(app, { projectRoot, mssqlSummary, bootHost })
+  registerPlatformRoutes(app, {
+    projectRoot,
+    mssqlSummary,
+    bootHost,
+    getWorkspacePath: () => workspace.get(),
+    getActiveRunCount: () => orchestrator.getActiveRunIds().length,
+    getQueuePending: () => messageQueue.pendingCount,
+  })
   registerSyncEnvironmentRoutes(app, bootHost)
   registerProfileRoutes(app)
   registerAttachmentRoutes(app)

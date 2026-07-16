@@ -2,8 +2,9 @@
  * SessionMenu — identity + session actions behind a single burger control.
  */
 
-import { Activity, Brain, LogOut, Scale, Shield, Terminal } from "lucide-react"
+import { Activity, BookOpen, Brain, LogOut, Scale, Shield, Terminal } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
+import { AboutModal } from "../components/AboutModal"
 import { AgentEditor } from "../components/AgentEditor"
 import { AuditModal } from "../components/AuditModal"
 import { UsageModal } from "../components/UsageModal"
@@ -38,6 +39,7 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
   const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
   const [usageOpen, setUsageOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
+  const [aboutOpen, setAboutOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
   const displayName = accountDisplayName(me)
@@ -90,107 +92,171 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
         {open && (
           <div
             role="menu"
-            className="session-menu-panel absolute right-0 top-full z-50 mt-1.5 w-[17rem] overflow-hidden rounded-xl border border-border bg-panel-2 py-1 shadow-xl shadow-black/40"
+            className={`session-menu-panel absolute right-0 top-full z-50 mt-1.5 overflow-hidden rounded-xl border border-border bg-panel-2 shadow-xl shadow-black/40 ${
+              me.isAdmin ? "w-[17rem] py-1" : "w-[15.5rem] py-1.5"
+            }`}
           >
-            <div className="px-4 py-3.5">
-              <p className="truncate text-[15px] font-semibold leading-snug text-text">{displayName}</p>
-              {subtitle && (
-                <p className="mt-1 truncate font-mono text-[11px] leading-snug text-text-muted" title={me.upn}>
-                  {subtitle}
-                </p>
-              )}
-              <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">{role}</p>
-            </div>
-
-            {hasMenuActions && <div className="session-menu-divider" />}
-
-            {showTerminalItem && (
-              <button
-                type="button"
-                role="menuitem"
-                className={menuItemClass()}
-                onClick={() => {
-                  onSwitchUi!()
-                  close()
-                }}
-              >
-                <Terminal size={15} className="shrink-0 text-text-muted" />
-                Terminal UI
-              </button>
-            )}
-
-            {showAdminSection && (
+            {me.isAdmin ? (
               <>
-                <p className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">
-                  Administration
-                </p>
+                <div className="px-4 py-3.5">
+                  <p className="truncate text-[15px] font-semibold leading-snug text-text">{displayName}</p>
+                  {subtitle && (
+                    <p className="mt-1 truncate font-mono text-[11px] leading-snug text-text-muted" title={me.upn}>
+                      {subtitle}
+                    </p>
+                  )}
+                  <p className="mt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">{role}</p>
+                </div>
+
+                {hasMenuActions && <div className="session-menu-divider" />}
+
+                {showTerminalItem && (
+                  <button
+                    type="button"
+                    role="menuitem"
+                    className={menuItemClass()}
+                    onClick={() => {
+                      onSwitchUi!()
+                      close()
+                    }}
+                  >
+                    <Terminal size={15} className="shrink-0 text-text-muted" />
+                    Terminal UI
+                  </button>
+                )}
+
+                {showAdminSection && (
+                  <>
+                    <p className="px-4 pb-1 pt-2 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">
+                      Administration
+                    </p>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass()}
+                      onClick={() => {
+                        setAgentOpen(true)
+                        close()
+                      }}
+                    >
+                      <Brain size={15} className="shrink-0 text-text-muted" />
+                      Agents
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass()}
+                      onClick={() => {
+                        setUsageOpen(true)
+                        close()
+                      }}
+                    >
+                      <Activity size={15} className="shrink-0 text-text-muted" />
+                      Usage
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass()}
+                      onClick={() => {
+                        setPolicyEditorOpen(true)
+                        close()
+                      }}
+                    >
+                      <Shield size={15} className="shrink-0 text-text-muted" />
+                      Policies
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass()}
+                      onClick={() => {
+                        setAuditOpen(true)
+                        close()
+                      }}
+                    >
+                      <Scale size={15} className="shrink-0 text-text-muted" />
+                      Audit
+                    </button>
+                  </>
+                )}
+
+                {hasMenuActions && <div className="session-menu-divider" />}
+                <SessionThemeSwitch />
+
+                <div className="session-menu-divider" />
                 <button
                   type="button"
                   role="menuitem"
                   className={menuItemClass()}
                   onClick={() => {
-                    setAgentOpen(true)
+                    setAboutOpen(true)
                     close()
                   }}
                 >
-                  <Brain size={15} className="shrink-0 text-text-muted" />
-                  Agents
+                  <BookOpen size={15} className="shrink-0 text-text-muted" />
+                  About
+                </button>
+
+                <div className="session-menu-divider" />
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={menuItemClass(true)}
+                  onClick={() => {
+                    onSignOut()
+                    close()
+                  }}
+                >
+                  <LogOut size={15} className="shrink-0" />
+                  Sign out
+                </button>
+              </>
+            ) : (
+              <>
+                {/* Operator: one tight card — identity, theme, actions — few dividers. */}
+                <div className="px-3.5 pb-2 pt-2.5">
+                  <div className="flex min-w-0 items-baseline justify-between gap-2">
+                    <p className="truncate text-[14px] font-semibold leading-snug text-text">{displayName}</p>
+                    <span className="shrink-0 text-[10px] font-semibold uppercase tracking-[0.12em] text-text-faint">
+                      {role}
+                    </span>
+                  </div>
+                  {subtitle && (
+                    <p className="mt-0.5 truncate font-mono text-[11px] leading-snug text-text-muted" title={me.upn}>
+                      {subtitle}
+                    </p>
+                  )}
+                </div>
+
+                <SessionThemeSwitch compact />
+
+                <button
+                  type="button"
+                  role="menuitem"
+                  className={menuItemClass()}
+                  onClick={() => {
+                    setAboutOpen(true)
+                    close()
+                  }}
+                >
+                  <BookOpen size={15} className="shrink-0 text-text-muted" />
+                  About
                 </button>
                 <button
                   type="button"
                   role="menuitem"
-                  className={menuItemClass()}
+                  className={menuItemClass(true)}
                   onClick={() => {
-                    setUsageOpen(true)
+                    onSignOut()
                     close()
                   }}
                 >
-                  <Activity size={15} className="shrink-0 text-text-muted" />
-                  Usage
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={menuItemClass()}
-                  onClick={() => {
-                    setPolicyEditorOpen(true)
-                    close()
-                  }}
-                >
-                  <Shield size={15} className="shrink-0 text-text-muted" />
-                  Policies
-                </button>
-                <button
-                  type="button"
-                  role="menuitem"
-                  className={menuItemClass()}
-                  onClick={() => {
-                    setAuditOpen(true)
-                    close()
-                  }}
-                >
-                  <Scale size={15} className="shrink-0 text-text-muted" />
-                  Audit
+                  <LogOut size={15} className="shrink-0" />
+                  Sign out
                 </button>
               </>
             )}
-
-            {hasMenuActions && <div className="session-menu-divider" />}
-            <SessionThemeSwitch />
-
-            <div className="session-menu-divider" />
-            <button
-              type="button"
-              role="menuitem"
-              className={menuItemClass(true)}
-              onClick={() => {
-                onSignOut()
-                close()
-              }}
-            >
-              <LogOut size={15} className="shrink-0" />
-              Sign out
-            </button>
           </div>
         )}
       </div>
@@ -198,6 +264,7 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
       {agentOpen && <AgentEditor onClose={() => setAgentOpen(false)} />}
       {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
+      {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
     </>
   )
 }

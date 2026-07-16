@@ -399,6 +399,11 @@ export function isVisitorTool(name: string): boolean {
   return VISITOR_TOOL_NAMES.has(name)
 }
 
+/** Sorted visitor tool names — used by About / access dossier. */
+export function listVisitorToolNames(): string[] {
+  return [...VISITOR_TOOL_NAMES].sort()
+}
+
 // ── Per-run tool registry ────────────────────────────────────────
 // Static tools (above) are stateless. A second class of tools must be
 // constructed fresh per run because they close over run-scoped state:

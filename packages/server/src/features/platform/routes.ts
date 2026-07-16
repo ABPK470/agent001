@@ -2,6 +2,7 @@ import type { FastifyInstance } from "fastify"
 
 import type { AgentHost } from "@mia/agent"
 
+import { buildAboutDossier } from "./application/about-service.js"
 import {
   factoryResetSyncPlatform,
   getPlatformHealth,
@@ -23,6 +24,9 @@ export interface RegisterPlatformRoutesOptions {
   projectRoot: string
   mssqlSummary: string
   bootHost: AgentHost
+  getWorkspacePath?: () => string
+  getActiveRunCount?: () => number
+  getQueuePending?: () => number
 }
 
 export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatformRoutesOptions): void {
@@ -34,6 +38,35 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       return {
         ok: false,
         message: error instanceof Error ? error.message : "Failed to read platform health",
+      }
+    }
+  })
+
+  /** Documentary About dossier — available to every authenticated session. */
+  app.get("/api/about", async (req, reply) => {
+    const session = req.session
+    if (!session?.upn) {
+      reply.code(401)
+      return { error: "not authenticated" }
+    }
+    try {
+      return buildAboutDossier({
+        projectRoot: opts.projectRoot,
+        mssqlSummary: opts.mssqlSummary,
+        bootHost: opts.bootHost,
+        workspacePath: opts.getWorkspacePath?.() ?? "",
+        activeRuns: opts.getActiveRunCount?.() ?? 0,
+        queuePending: opts.getQueuePending?.() ?? 0,
+        viewer: {
+          upn: session.upn,
+          displayName: session.displayName ?? session.upn,
+          isAdmin: Boolean(session.isAdmin),
+        },
+      })
+    } catch (error) {
+      reply.code(500)
+      return {
+        error: error instanceof Error ? error.message : "Failed to build about dossier",
       }
     }
   })

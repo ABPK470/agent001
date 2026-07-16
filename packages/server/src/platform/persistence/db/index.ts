@@ -23,6 +23,7 @@ export {
 } from "./threads.js"
 
 export {
+  countAuditLog,
   dbRunToWire,
   findStaleRuns,
   getAuditLog,
@@ -32,6 +33,9 @@ export {
   getTokenUsage,
   getTraceEntries,
   getUsageTotals,
+  getUsageTotalsForUser,
+  listAuditFilterOptions,
+  listAuditLogPaginated,
   listRuns,
   listRunsWithUsage,
   listRunsWithUsageForThread,
@@ -47,14 +51,18 @@ export {
   saveRun,
   saveTokenUsage,
   saveTraceEntry,
+  type AuditLogFilters,
+  type AuditLogSort,
   type AuditScopeType,
   type DbAudit,
+  type DbAuditWithRun,
   type DbCheckpoint,
   type DbLog,
   type DbRun,
   type DbRunWithUsage,
   type DbTokenUsage,
   type DbTraceEntry,
+  type ListAuditLogPaginatedInput,
   type RunWireExtras,
   type UsageTotals
 } from "./runs.js"

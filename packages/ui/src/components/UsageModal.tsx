@@ -5,9 +5,8 @@
 import { Activity, Hash, MessageSquare, Zap } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
-import { useIsMobile } from "../hooks/useIsMobile"
 import { ModalShell } from "../widgets/entity-registry/ModalShell"
-import { modalViewerPanelClass } from "../widgets/entity-registry/modal-overlay"
+import { MODAL_ADMIN_PANEL } from "../widgets/entity-registry/modal-overlay"
 
 interface UsageData {
   totals: {
@@ -35,7 +34,6 @@ function formatNumber(n: number): string {
 }
 
 export function UsageModal({ onClose }: { onClose: () => void }) {
-  const isMobile = useIsMobile()
   const [data, setData] = useState<UsageData | null>(null)
   const [loading, setLoading] = useState(true)
 
@@ -49,7 +47,8 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
       subtitle="Token consumption across all agent runs. Included with GitHub Copilot Pro — no per-token cost."
       icon={<Activity size={20} className="text-text-muted" />}
       onClose={onClose}
-      widthClass={modalViewerPanelClass(isMobile)}
+      widthClass={MODAL_ADMIN_PANEL}
+      size="default"
     >
       {loading ? (
         <div className="flex flex-1 items-center justify-center py-12 text-sm text-text-muted">

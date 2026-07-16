@@ -35,6 +35,116 @@ export type SyncRunStatus = "started" | "preview" | "success" | "failed" | "skip
 
 export type SyncHistorySort = "started_desc" | "started_asc" | "finished_desc" | "finished_asc"
 
+export type AdminAuditSort = "timestamp_desc" | "timestamp_asc"
+
+export interface AdminAuditParams {
+  page?: number
+  pageSize?: number
+  q?: string
+  scopeType?: "run" | "admin" | ""
+  scopeId?: string
+  /** Platform user UPN (run owner or admin actor — same identity). */
+  user?: string
+  action?: string
+  runId?: string
+  threadId?: string
+  from?: string
+  to?: string
+  sort?: AdminAuditSort
+}
+
+export interface AdminAuditItem {
+  id: number
+  scopeType: "run" | "admin"
+  scopeId: string | null
+  runId: string | null
+  threadId: string | null
+  threadTitle: string | null
+  /** Resolved user UPN (run owner or admin actor). */
+  user: string | null
+  action: string
+  detail: Record<string, unknown>
+  timestamp: string
+  run: {
+    goal: string | null
+    status: string | null
+    upn: string | null
+    displayName: string | null
+    agentId: string | null
+  } | null
+}
+
+export interface AdminAuditFilterOptions {
+  users: Array<{ upn: string; role: "admin" | "operator" }>
+  scopeIds: string[]
+  actions: string[]
+}
+
+export interface AdminAuditPage {
+  items: AdminAuditItem[]
+  total: number
+  page: number
+  pageSize: number
+  totalPages: number
+}
+
+export interface AboutDossier {
+  product: { name: string; version: string }
+  runtime: { env: string; node: string }
+  viewer: {
+    upn: string
+    displayName: string
+    isAdmin: boolean
+    role: "admin" | "operator"
+  }
+  myUsage: {
+    runs: { total: number; completed: number; failed: number }
+    tokens: { prompt: number; completion: number; total: number; llmCalls: number }
+    syncRuns: { total: number }
+  }
+  access: {
+    directories: { allowed: string[]; denied: string[] }
+    tools: string[]
+    widgets: string[]
+    notes: string[]
+  }
+  environments: Array<{
+    name: string
+    displayName: string
+    role: string
+    ringOrder: number
+    defaultAccessMode: string
+    allowedOperations: string[]
+    denyDml: boolean
+    denyDdl: boolean
+    allowedSyncTargets: string[] | null
+  }>
+  providers: {
+    active: { id: string; model: string; configured: boolean }
+    available: Array<{ id: string; defaultModel: string; label: string }>
+  }
+  workspace: { path: string; mode: "full" | "sandbox" }
+  execution: {
+    sandboxMode: string
+    hostedMode: boolean
+    isolatedWorkspace: boolean
+    maxConcurrentRuns: number | null
+  }
+  dataPlane: {
+    ready: boolean
+    hints: string[]
+    mssql: { configured: boolean; connections: string[]; summary: string }
+    catalog: { available: boolean; detail: string | null }
+    entities: { count: number; valid: boolean; errors: string[] }
+    publish: {
+      ready: boolean
+      publishedAt: string | null
+      publishedVersion: string | null
+      definitionCount: number
+    }
+  }
+}
+
 export interface SyncRunSummary {
   planId: string
   entityType: string
@@ -249,6 +359,34 @@ export const api = {
     totals: { promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; runCount: number; completedRuns: number; failedRuns: number }
     runs: Array<{ runId: string; promptTokens: number; completionTokens: number; totalTokens: number; llmCalls: number; model: string; createdAt: string }>
   }>("/api/usage"),
+
+  // About — documentary platform dossier (any authenticated user)
+  getAbout: () => json<AboutDossier>("/api/about"),
+
+  // Admin audit browser
+  listAdminAudit: (params: AdminAuditParams = {}) => {
+    const qs = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) {
+      if (value == null || value === "") continue
+      qs.set(key, String(value))
+    }
+    const suffix = qs.toString() ? `?${qs}` : ""
+    return json<AdminAuditPage>(`/api/admin/audit${suffix}`)
+  },
+  adminAuditOptions: () => json<AdminAuditFilterOptions>("/api/admin/audit/options"),
+  exportAdminAudit: (params: AdminAuditParams & { format?: "csv" | "json" } = {}) => {
+    const qs = new URLSearchParams()
+    for (const [key, value] of Object.entries(params)) {
+      if (value == null || value === "") continue
+      qs.set(key, String(value))
+    }
+    if (!qs.has("format")) qs.set("format", "csv")
+    const stamp = new Date().toISOString().slice(0, 10)
+    const fallback = `mia-audit-${stamp}.${qs.get("format") === "json" ? "json" : "csv"}`
+    return import("./lib/userDownload.js").then(({ downloadAuthenticated }) =>
+      downloadAuthenticated(`/api/admin/audit/export?${qs}`, fallback),
+    )
+  },
 
   // Policies
   listPolicies: () => json<PolicyRule[]>("/api/policies"),

@@ -10,14 +10,17 @@ function modeIcon(mode: ThemeMode) {
   return Monitor
 }
 
-export function SessionThemeSwitch() {
+/** `compact` — operator menu: no section label, tighter padding. */
+export function SessionThemeSwitch({ compact = false }: { compact?: boolean } = {}) {
   const { mode, setTheme } = useTheme()
 
   return (
-    <div className="px-3 py-2.5">
-      <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">
-        Appearance
-      </p>
+    <div className={compact ? "px-3 py-1.5" : "px-3 py-2.5"}>
+      {!compact && (
+        <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.14em] text-text-faint">
+          Appearance
+        </p>
+      )}
       <div
         className="flex gap-0.5 rounded-lg border border-border-subtle bg-overlay-1 p-0.5"
         role="group"
@@ -32,14 +35,16 @@ export function SessionThemeSwitch() {
               type="button"
               onClick={() => setTheme(option)}
               aria-pressed={active}
+              title={option}
               className={[
-                "flex flex-1 items-center justify-center gap-1 rounded-md py-1.5 text-[11px] font-medium capitalize transition-colors",
+                "flex flex-1 items-center justify-center gap-1 rounded-md font-medium capitalize transition-colors",
+                compact ? "py-1.5 text-[12px]" : "py-1.5 text-[11px]",
                 active
                   ? "bg-panel-2 text-text shadow-sm"
                   : "text-text-muted hover:text-text-secondary",
               ].join(" ")}
             >
-              <Icon size={12} strokeWidth={2} />
+              <Icon size={compact ? 13 : 12} strokeWidth={2} />
               {option}
             </button>
           )

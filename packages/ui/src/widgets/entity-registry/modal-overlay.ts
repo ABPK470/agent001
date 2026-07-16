@@ -55,13 +55,20 @@ export const MODAL_ENTITY_WORKSPACE_PANEL = MODAL_ENTITY_FOCUS_PANEL
 export const MODAL_DETAIL_PANEL =
   "w-[min(40rem,92vw)] h-auto max-h-[min(72vh,36rem)]"
 
-/** Standard list/catalog viewers — Usage, Audit, Widget picker. */
+/** Standard list/catalog viewers — Widget picker, catalog browsers. */
 export const MODAL_VIEWER_PANEL =
   "w-[min(92vw,52rem)] h-[min(88vh,calc(100dvh-2rem))] min-h-[28rem]"
 
 /** Full-bleed viewer on narrow viewports. */
 export const MODAL_VIEWER_PANEL_MOBILE =
   "w-full max-w-none h-[min(96vh,calc(100dvh-0.5rem))]"
+
+/**
+ * Admin session modals — Policies, Audit, Usage, About.
+ * Same footprint so the session menu opens a consistent workspace.
+ */
+export const MODAL_ADMIN_PANEL =
+  "w-full max-w-[min(1080px,calc(100vw-1.5rem))] h-full sm:h-[90vh] sm:max-h-[920px]"
 
 export function modalViewerPanelClass(mobile = false): string {
   return `${mobile ? MODAL_VIEWER_PANEL_MOBILE : MODAL_VIEWER_PANEL} flex flex-col overflow-hidden`

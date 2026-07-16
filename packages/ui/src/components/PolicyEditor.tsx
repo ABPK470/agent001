@@ -34,7 +34,7 @@ import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../api"
 import type { PolicyRule, ToolInfo } from "../types"
 import { SelectorRulesTab } from "./policy/SelectorRulesTab"
-import { modalOverlayClass, MODAL_SURFACE_CLASS } from "../widgets/entity-registry/modal-overlay"
+import { modalOverlayClass, MODAL_ADMIN_PANEL, MODAL_SURFACE_CLASS } from "../widgets/entity-registry/modal-overlay"
 
 interface Props {
   onClose: () => void
@@ -286,7 +286,7 @@ export function PolicyEditor({ onClose }: Props) {
       onClick={onClose}
     >
       <div
-        className={`${MODAL_SURFACE_CLASS} policy-editor-modal w-full max-w-[min(1080px,calc(100vw-1.5rem))] h-full sm:h-[90vh] sm:max-h-[920px] flex flex-col`}
+        className={`${MODAL_SURFACE_CLASS} policy-editor-modal ${MODAL_ADMIN_PANEL} flex flex-col`}
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

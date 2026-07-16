@@ -307,6 +307,186 @@ export function getAuditLog(runId: string): DbAudit[] {
     .all(runId) as DbAudit[]
 }
 
+/** Admin cross-run / cross-scope audit browser filters. */
+export interface AuditLogFilters {
+  scopeType?: AuditScopeType
+  scopeId?: string
+  runId?: string
+  threadId?: string
+  /**
+   * Platform user (UPN) — matches run owner or admin-scope actor.
+   * Proxy identity and signed-up accounts are the same key.
+   */
+  user?: string
+  /** Exact action or prefix ending with `.` (e.g. `policy.`). */
+  action?: string
+  search?: string
+  from?: string
+  to?: string
+}
+
+export type AuditLogSort = "timestamp_desc" | "timestamp_asc"
+
+export interface ListAuditLogPaginatedInput extends AuditLogFilters {
+  page: number
+  pageSize: number
+  sort?: AuditLogSort
+}
+
+export interface DbAuditWithRun extends DbAudit {
+  run_goal: string | null
+  run_status: string | null
+  run_upn: string | null
+  run_display_name: string | null
+  run_agent_id: string | null
+  thread_id: string | null
+  thread_title: string | null
+}
+
+function buildAuditLogWhere(filters: AuditLogFilters): { where: string; params: unknown[] } {
+  const clauses: string[] = []
+  const params: unknown[] = []
+
+  if (filters.scopeType === "run" || filters.scopeType === "admin") {
+    clauses.push("a.scope_type = ?")
+    params.push(filters.scopeType)
+  }
+  if (filters.scopeId?.trim()) {
+    clauses.push("a.scope_id = ?")
+    params.push(filters.scopeId.trim())
+  }
+  if (filters.runId?.trim()) {
+    clauses.push("a.run_id = ?")
+    params.push(filters.runId.trim())
+  }
+  if (filters.threadId?.trim()) {
+    clauses.push("r.thread_id = ?")
+    params.push(filters.threadId.trim())
+  }
+  if (filters.user?.trim()) {
+    const upn = filters.user.trim()
+    // One identity: run owner (operator work) or admin actor UPN.
+    clauses.push("(r.upn = ? OR a.actor = ?)")
+    params.push(upn, upn)
+  }
+  const action = filters.action?.trim()
+  if (action) {
+    if (action.endsWith(".")) {
+      clauses.push("a.action LIKE ?")
+      params.push(`${action}%`)
+    } else {
+      clauses.push("a.action = ?")
+      params.push(action)
+    }
+  }
+  if (filters.from?.trim()) {
+    const from = filters.from.trim()
+    // Date-only inputs become start-of-day ISO so they compare correctly
+    // against timestamps that use `T` (string compare: `T` > space).
+    clauses.push("a.timestamp >= ?")
+    params.push(from.includes("T") ? from : `${from}T00:00:00`)
+  }
+  if (filters.to?.trim()) {
+    const to = filters.to.trim()
+    clauses.push("a.timestamp <= ?")
+    params.push(to.includes("T") ? to : `${to}T23:59:59.999`)
+  }
+  const search = filters.search?.trim()
+  if (search) {
+    const q = `%${search}%`
+    clauses.push(
+      `(a.action LIKE ? OR a.actor LIKE ? OR a.detail LIKE ? OR a.run_id LIKE ? OR a.scope_id LIKE ? OR IFNULL(r.goal, '') LIKE ? OR IFNULL(r.upn, '') LIKE ?)`,
+    )
+    params.push(q, q, q, q, q, q, q)
+  }
+
+  return {
+    where: clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "",
+    params,
+  }
+}
+
+const AUDIT_LIST_FROM = `
+  FROM audit_log a
+  LEFT JOIN runs r ON r.id = a.run_id
+  LEFT JOIN threads t ON t.id = r.thread_id
+`
+
+const AUDIT_LIST_SELECT = `
+  SELECT
+    a.id, a.run_id, a.scope_type, a.scope_id, a.actor, a.action, a.detail, a.timestamp,
+    r.goal AS run_goal, r.status AS run_status, r.upn AS run_upn,
+    r.display_name AS run_display_name, r.agent_id AS run_agent_id,
+    r.thread_id AS thread_id, t.title AS thread_title
+  ${AUDIT_LIST_FROM}
+`
+
+export function countAuditLog(filters: AuditLogFilters = {}): number {
+  const { where, params } = buildAuditLogWhere(filters)
+  const row = getDb()
+    .prepare(`SELECT COUNT(1) AS c ${AUDIT_LIST_FROM} ${where}`)
+    .get(...params) as { c: number }
+  return row.c
+}
+
+export function listAuditLogPaginated(input: ListAuditLogPaginatedInput): DbAuditWithRun[] {
+  const page = Math.max(1, input.page)
+  const pageSize = Math.max(1, input.pageSize)
+  const offset = (page - 1) * pageSize
+  const { where, params } = buildAuditLogWhere(input)
+  const orderBy = input.sort === "timestamp_asc" ? "a.timestamp ASC" : "a.timestamp DESC"
+  return getDb()
+    .prepare(`${AUDIT_LIST_SELECT} ${where} ORDER BY ${orderBy} LIMIT ? OFFSET ?`)
+    .all(...params, pageSize, offset) as DbAuditWithRun[]
+}
+
+/** Distinct users / scope_ids for filter pickers (admin audit UI). */
+export function listAuditFilterOptions(): {
+  users: Array<{ upn: string; role: "admin" | "operator" }>
+  scopeIds: string[]
+  actions: string[]
+} {
+  const db = getDb()
+  const users = (
+    db
+      .prepare(
+        `SELECT x.upn AS upn, COALESCE(u.is_admin, 0) AS is_admin
+         FROM (
+           SELECT DISTINCT upn FROM (
+             SELECT upn FROM users WHERE upn != ''
+             UNION
+             SELECT r.upn AS upn FROM audit_log a
+               INNER JOIN runs r ON r.id = a.run_id
+               WHERE r.upn IS NOT NULL AND r.upn != ''
+             UNION
+             SELECT a.actor AS upn FROM audit_log a
+               WHERE a.actor != '' AND a.actor NOT IN ('user', 'agent')
+           )
+         ) x
+         LEFT JOIN users u ON u.upn = x.upn
+         ORDER BY x.upn
+         LIMIT 200`,
+      )
+      .all() as Array<{ upn: string; is_admin: number }>
+  ).map((r) => ({
+    upn: r.upn,
+    role: r.is_admin === 1 ? ("admin" as const) : ("operator" as const),
+  }))
+  const scopeIds = (
+    db
+      .prepare(
+        `SELECT DISTINCT scope_id AS scope_id FROM audit_log WHERE scope_id IS NOT NULL AND scope_id != '' ORDER BY scope_id LIMIT 100`,
+      )
+      .all() as Array<{ scope_id: string }>
+  ).map((r) => r.scope_id)
+  const actions = (
+    db
+      .prepare(`SELECT DISTINCT action FROM audit_log WHERE action != '' ORDER BY action LIMIT 300`)
+      .all() as Array<{ action: string }>
+  ).map((r) => r.action)
+  return { users, scopeIds, actions }
+}
+
 // ── Checkpoint queries ───────────────────────────────────────────
 
 export interface DbCheckpoint {
@@ -443,5 +623,47 @@ export function getUsageTotals(): UsageTotals {
       "SELECT COUNT(*) as run_count, COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END),0) as completed_runs, COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END),0) as failed_runs FROM runs"
     )
     .get() as { run_count: number; completed_runs: number; failed_runs: number }
+  return { ...tokens, ...runStats }
+}
+
+/** Usage totals for one user (operator About / personal dossier). */
+export function getUsageTotalsForUser(upn: string): UsageTotals {
+  if (!upn) {
+    return {
+      total_prompt_tokens: 0,
+      total_completion_tokens: 0,
+      total_tokens: 0,
+      total_llm_calls: 0,
+      run_count: 0,
+      completed_runs: 0,
+      failed_runs: 0,
+    }
+  }
+  const tokens = getDb()
+    .prepare(
+      `
+      SELECT
+        COALESCE(SUM(t.prompt_tokens), 0) AS total_prompt_tokens,
+        COALESCE(SUM(t.completion_tokens), 0) AS total_completion_tokens,
+        COALESCE(SUM(t.total_tokens), 0) AS total_tokens,
+        COALESCE(SUM(t.llm_calls), 0) AS total_llm_calls
+      FROM runs r
+      LEFT JOIN token_usage t ON t.run_id = r.id
+      WHERE r.upn = ?
+    `,
+    )
+    .get(upn) as Omit<UsageTotals, "run_count" | "completed_runs" | "failed_runs">
+  const runStats = getDb()
+    .prepare(
+      `
+      SELECT
+        COUNT(*) AS run_count,
+        COALESCE(SUM(CASE WHEN status = 'completed' THEN 1 ELSE 0 END), 0) AS completed_runs,
+        COALESCE(SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END), 0) AS failed_runs
+      FROM runs
+      WHERE upn = ?
+    `,
+    )
+    .get(upn) as { run_count: number; completed_runs: number; failed_runs: number }
   return { ...tokens, ...runStats }
 }
