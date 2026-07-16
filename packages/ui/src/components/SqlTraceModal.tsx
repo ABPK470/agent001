@@ -1,103 +1,96 @@
 import { createPortal } from "react-dom"
 import { X } from "lucide-react"
-import { memo, useEffect, useMemo, useState } from "react"
+import { useEffect, useState } from "react"
 import { CodeBlock } from "./CodeBlock"
 import { fetchSqlLogText, peekSqlLogText } from "../sync-sql-log-cache"
 import { formatSqlTraceMeta, normalizeSqlTraceText, type SqlTraceFields } from "../sync-sql-trace"
 
-const SQL_DISPLAY_MAX_CHARS = 32_000
-
-function capSqlForDisplay(sql: string): string {
-  if (sql.length <= SQL_DISPLAY_MAX_CHARS) return sql
-  const omitted = sql.length - SQL_DISPLAY_MAX_CHARS
-  return `${sql.slice(0, SQL_DISPLAY_MAX_CHARS)}\n\n-- … ${omitted.toLocaleString()} more chars omitted --`
-}
-
-function sqlPreviewIsComplete(preview: string, sqlLength?: number): boolean {
+function previewLooksComplete(preview: string, sqlLength?: number): boolean {
   const trimmed = preview.trim()
   if (!trimmed) return false
   if (sqlLength == null || sqlLength <= 0) return true
   return trimmed.length >= sqlLength
 }
 
-export const SqlTraceModal = memo(function SqlTraceModal({
+/**
+ * Full-SQL modal for sync traces.
+ * Shows event preview immediately; fetches sync_sql_log only when sqlLogId
+ * is present and the preview is missing or truncated.
+ */
+export function SqlTraceModal({
   fields,
   onClose,
-  usePortal = true,
 }: {
   fields: SqlTraceFields
   onClose: () => void
-  usePortal?: boolean
 }) {
-  const previewSql = capSqlForDisplay(normalizeSqlTraceText(fields.sql))
-  const previewReady = previewSql.trim().length > 0
-  const previewComplete = sqlPreviewIsComplete(previewSql, fields.sqlLength)
-  const cachedFull =
+  const previewSql = normalizeSqlTraceText(fields.sql)
+  const cached =
     fields.sqlLogId != null ? peekSqlLogText(fields.sqlLogId) : undefined
 
-  const [displaySql, setDisplaySql] = useState(() =>
-    capSqlForDisplay(normalizeSqlTraceText(cachedFull ?? previewSql)),
-  )
+  const [sql, setSql] = useState(() => normalizeSqlTraceText(cached ?? previewSql))
   const [loading, setLoading] = useState(
-    () => !previewReady && fields.sqlLogId != null && cachedFull == null,
+    () =>
+      fields.sqlLogId != null &&
+      cached == null &&
+      !previewLooksComplete(previewSql, fields.sqlLength),
   )
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
+    setError(null)
+
     if (fields.sqlLogId == null) {
-      setDisplaySql(capSqlForDisplay(previewSql))
+      setSql(previewSql)
       setLoading(false)
       return
     }
+
     const hit = peekSqlLogText(fields.sqlLogId)
     if (hit != null) {
-      setDisplaySql(capSqlForDisplay(normalizeSqlTraceText(hit)))
+      setSql(normalizeSqlTraceText(hit))
       setLoading(false)
       return
     }
-    if (previewReady) {
-      setDisplaySql(capSqlForDisplay(previewSql))
+
+    // Preview is enough — no need to block on a fetch.
+    if (previewLooksComplete(previewSql, fields.sqlLength)) {
+      setSql(previewSql)
       setLoading(false)
-      if (previewComplete) return
+      return
     }
+
     let cancelled = false
-    if (!previewReady) setLoading(true)
+    setLoading(previewSql.trim().length === 0)
+    if (previewSql.trim()) setSql(previewSql)
+
     void fetchSqlLogText(fields.sqlLogId)
-      .then((sql) => {
+      .then((text) => {
         if (!cancelled) {
-          setDisplaySql(capSqlForDisplay(normalizeSqlTraceText(sql)))
-          setError(null)
+          setSql(normalizeSqlTraceText(text))
           setLoading(false)
         }
       })
       .catch((e) => {
         if (!cancelled) {
           setError(e instanceof Error ? e.message : String(e))
-          setDisplaySql(capSqlForDisplay(previewSql))
+          setSql(previewSql)
           setLoading(false)
         }
       })
+
     return () => {
       cancelled = true
     }
-  }, [fields.sqlLogId, previewSql, previewReady, previewComplete])
+  }, [fields.sqlLogId, fields.sqlLength, previewSql])
 
-  const resolvedCode = useMemo(
-    () =>
-      displaySql.trim() ||
-      (fields.sqlLength != null && fields.sqlLength > 0
-        ? `-- SQL text is not available in this event (${fields.sqlLength} chars were executed)`
-        : "-- no SQL recorded for this step"),
-    [displaySql, fields.sqlLength],
-  )
+  const code =
+    sql.trim() ||
+    (fields.sqlLength != null && fields.sqlLength > 0
+      ? `-- SQL text is not available in this event (${fields.sqlLength} chars were executed)`
+      : "-- no SQL recorded for this step")
 
-  const body = loading
-    ? <div className="text-text py-8 text-center">Loading full SQL…</div>
-    : error
-      ? <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>
-      : <CodeBlock code={resolvedCode} lang="sql" maxHeight={720} />
-
-  const shell = (
+  return createPortal(
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div
         className="w-full max-w-4xl max-h-[min(90dvh,900px)] flex flex-col rounded-lg border border-border-subtle bg-base shadow-2xl"
@@ -115,14 +108,19 @@ export const SqlTraceModal = memo(function SqlTraceModal({
           </button>
         </div>
         <div className="flex-1 min-h-0 overflow-auto p-3">
-          {body}
+          {loading ? (
+            <div className="text-text py-8 text-center">Loading full SQL…</div>
+          ) : error ? (
+            <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>
+          ) : (
+            <CodeBlock code={code} lang="sql" maxHeight={720} />
+          )}
           {fields.error && (
             <div className="mt-3 text-error break-all whitespace-pre-wrap">{fields.error}</div>
           )}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   )
-
-  return usePortal ? createPortal(shell, document.body) : shell
-})
+}

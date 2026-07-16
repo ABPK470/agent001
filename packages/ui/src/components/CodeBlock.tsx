@@ -8,7 +8,7 @@
 
 import { Check, Copy } from "lucide-react"
 import { useMemo, useState } from "react"
-import { C } from "../widgets/ioe/constants"
+import { CODE_THEME } from "./code-theme"
 import { SqlHighlight } from "./SqlHighlight"
 import { SQL_HIGHLIGHT_MAX_CHARS } from "./sql-highlight"
 
@@ -59,21 +59,21 @@ export function CodeBlock({
   }
 
   return (
-    <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+    <div className="rounded-lg overflow-hidden" style={{ border: `1px solid ${CODE_THEME.border}` }}>
       <div
         className="flex items-center justify-between px-3 py-1"
-        style={{ borderBottom: `1px solid ${C.border}` }}
+        style={{ borderBottom: `1px solid ${CODE_THEME.border}` }}
       >
         <span
           className="text-xs font-mono uppercase tracking-widest"
-          style={{ color: C.dim }}
+          style={{ color: CODE_THEME.dim }}
         >
           {label || "code"}
         </span>
         <button
           type="button"
           className="flex items-center gap-1 px-1.5 py-0.5 rounded text-xs cursor-pointer transition-colors hover:bg-overlay-2"
-          style={{ color: copied ? C.success : C.dim }}
+          style={{ color: copied ? CODE_THEME.success : CODE_THEME.dim }}
           onClick={copy}
           title="Copy to clipboard"
         >

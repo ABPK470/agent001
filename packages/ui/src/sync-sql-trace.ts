@@ -27,12 +27,7 @@ function coerceSqlLogId(value: unknown): number | null {
 }
 
 function coerceSqlText(value: unknown): string {
-  if (typeof value !== "string") return ""
-  // Guard against pathological event payloads blocking the UI thread.
-  if (value.length > 4_000) {
-    return `${value.slice(0, 4_000)}… [+${value.length - 4_000} chars]`
-  }
-  return value
+  return typeof value === "string" ? value : ""
 }
 
 /** True when the modal can show or fetch statement text. */
