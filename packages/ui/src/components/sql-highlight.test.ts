@@ -43,4 +43,21 @@ describe("tokenizeSql", () => {
     const toks = tokenizeSql("SELECT 'O''Brien' AS name")
     expect(toks.some((t) => t.k === "str" && t.t === "'O''Brien'")).toBe(true)
   })
+
+  it("tokenises T-SQL @parameters without hanging (audit EXEC shape)", () => {
+    const sql =
+      "EXEC core.uspAuditRunCheck @id=5011, @objType=N'Contract', @action=N'syncOrNot', @schema=N'core'"
+    const toks = tokenizeSql(sql)
+    expect(toks.some((t) => t.k === "kw" && t.t === "EXEC")).toBe(true)
+    expect(toks.some((t) => t.k === "ident" && t.t === "@id")).toBe(true)
+    expect(toks.some((t) => t.k === "ident" && t.t === "@objType")).toBe(true)
+    expect(toks.some((t) => t.k === "num" && t.t === "5011")).toBe(true)
+    expect(toks.map((t) => t.t).join("")).toBe(sql)
+  })
+
+  it("tokenises #temp table identifiers", () => {
+    const toks = tokenizeSql("SELECT * FROM #tmp JOIN ##global")
+    expect(toks.some((t) => t.t === "#tmp")).toBe(true)
+    expect(toks.some((t) => t.t === "##global")).toBe(true)
+  })
 })

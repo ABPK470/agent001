@@ -43,11 +43,14 @@ function isSqlKeyword(token: string): boolean {
 }
 
 function isIdentStart(ch: string): boolean {
+  // T-SQL: @param, #temp / ##global, ordinary identifiers.
   return /[A-Za-z_@#]/.test(ch)
 }
 
 function isIdentPart(ch: string): boolean {
-  return /[\w$#]/.test(ch)
+  // Must include every isIdentStart char — otherwise readIdent returns next===i
+  // and tokenizeSql infinite-loops (e.g. EXEC … @id=… froze the Pipelines SQL modal).
+  return /[\w@$#]/.test(ch)
 }
 
 function readLineComment(sql: string, i: number): { text: string; next: number } {
@@ -104,68 +107,64 @@ function readIdent(sql: string, i: number): { text: string; next: number } {
   return { text: sql.slice(i, j), next: j }
 }
 
-/** Tokenise T-SQL for syntax highlighting. */
+/** Tokenise T-SQL for syntax highlighting. Always advances ≥1 char per iteration. */
 export function tokenizeSql(sql: string): SqlToken[] {
   const toks: SqlToken[] = []
   let i = 0
 
   while (i < sql.length) {
+    const start = i
     const ch = sql[i]!
 
     if (ch === "-" && sql[i + 1] === "-") {
       const { text, next } = readLineComment(sql, i)
       toks.push({ k: "cmt", t: text })
       i = next
-      continue
-    }
-    if (ch === "/" && sql[i + 1] === "*") {
+    } else if (ch === "/" && sql[i + 1] === "*") {
       const { text, next } = readBlockComment(sql, i)
       toks.push({ k: "cmt", t: text })
       i = next
-      continue
-    }
-    if (ch === "'") {
+    } else if (ch === "'") {
       const { text, next } = readString(sql, i)
       toks.push({ k: "str", t: text })
       i = next
-      continue
-    }
-    if (ch === "[") {
+    } else if (ch === "[") {
       const { text, next } = readBracketIdent(sql, i)
       toks.push({ k: "ident", t: text })
       i = next
-      continue
-    }
-    if (/\d/.test(ch)) {
+    } else if (/\d/.test(ch)) {
       const { text, next } = readNumber(sql, i)
       toks.push({ k: "num", t: text })
       i = next
-      continue
-    }
-    if (isIdentStart(ch)) {
+    } else if (isIdentStart(ch)) {
       const { text, next } = readIdent(sql, i)
       toks.push({ k: isSqlKeyword(text) ? "kw" : "ident", t: text })
       i = next
-      continue
+    } else {
+      let j = i + 1
+      while (j < sql.length) {
+        const c = sql[j]!
+        if (
+          c === "'" ||
+          c === "[" ||
+          (c === "-" && sql[j + 1] === "-") ||
+          (c === "/" && sql[j + 1] === "*") ||
+          /\d/.test(c) ||
+          isIdentStart(c)
+        ) {
+          break
+        }
+        j++
+      }
+      toks.push({ k: "plain", t: sql.slice(i, j) })
+      i = j
     }
 
-    let j = i + 1
-    while (j < sql.length) {
-      const c = sql[j]!
-      if (
-        c === "'" ||
-        c === "[" ||
-        c === "-" && sql[j + 1] === "-" ||
-        c === "/" && sql[j + 1] === "*" ||
-        /\d/.test(c) ||
-        isIdentStart(c)
-      ) {
-        break
-      }
-      j++
+    // Hard guard: never spin forever if a reader fails to advance.
+    if (i <= start) {
+      toks.push({ k: "plain", t: ch })
+      i = start + 1
     }
-    toks.push({ k: "plain", t: sql.slice(i, j) })
-    i = j
   }
 
   return toks
