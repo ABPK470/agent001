@@ -274,7 +274,7 @@ const BASELINE_SQL = `
       execute_totals_json  TEXT,
       plan_json            TEXT,
       status               TEXT NOT NULL
-        CHECK (status IN ('started','preview','success','failed','skipped')),
+        CHECK (status IN ('started','preview','success','failed','skipped','cancelled')),
       error                TEXT,
       drift_detected_pct   REAL,
       started_at           TEXT NOT NULL DEFAULT (datetime('now')),
@@ -300,6 +300,25 @@ const BASELINE_SQL = `
     );
     CREATE INDEX IF NOT EXISTS idx_sync_audit_plan ON sync_audit(plan_id);
     CREATE INDEX IF NOT EXISTS idx_sync_audit_time ON sync_audit(timestamp DESC);
+
+    -- Full-text SQL trace — source of truth for complete statements (events carry previews).
+    CREATE TABLE IF NOT EXISTS sync_sql_log (
+      id           INTEGER PRIMARY KEY AUTOINCREMENT,
+      plan_id      TEXT,
+      preview_id   TEXT,
+      event_type   TEXT NOT NULL,
+      scope        TEXT,
+      label        TEXT NOT NULL,
+      connection   TEXT NOT NULL,
+      sql_text     TEXT NOT NULL,
+      duration_ms  INTEGER,
+      row_count    INTEGER,
+      error        TEXT,
+      created_at   TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_sync_sql_log_plan    ON sync_sql_log(plan_id, id);
+    CREATE INDEX IF NOT EXISTS idx_sync_sql_log_preview ON sync_sql_log(preview_id, id);
+    CREATE INDEX IF NOT EXISTS idx_sync_sql_log_time    ON sync_sql_log(created_at DESC);
 
     -- ── Sync-environment overrides (admin-editable on top of JSON) ──
     CREATE TABLE IF NOT EXISTS sync_environment_overrides (
@@ -1015,6 +1034,22 @@ const BASELINE_SQL = `
     );
     CREATE INDEX IF NOT EXISTS idx_tk_lookup  ON tool_knowledge(tool, qname);
     CREATE INDEX IF NOT EXISTS idx_tk_created ON tool_knowledge(created_at);
+
+    -- Durable store for clarification resolutions (business-term → warehouse-object mappings).
+    CREATE TABLE IF NOT EXISTS resolved_terms (
+      id              INTEGER PRIMARY KEY AUTOINCREMENT,
+      term            TEXT NOT NULL,
+      qname           TEXT NOT NULL,
+      connection      TEXT NOT NULL DEFAULT 'default',
+      created_by_upn  TEXT,
+      created_at      INTEGER NOT NULL,
+      last_hit_at     INTEGER,
+      hit_count       INTEGER NOT NULL DEFAULT 0,
+      UNIQUE(term, qname, connection)
+    );
+    CREATE INDEX IF NOT EXISTS idx_rt_term       ON resolved_terms(term);
+    CREATE INDEX IF NOT EXISTS idx_rt_conn       ON resolved_terms(connection);
+    CREATE INDEX IF NOT EXISTS idx_rt_created    ON resolved_terms(created_at DESC);
 
     CREATE TABLE IF NOT EXISTS effects (
       id         TEXT PRIMARY KEY,

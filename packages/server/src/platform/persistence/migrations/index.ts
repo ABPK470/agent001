@@ -6,10 +6,6 @@
 
 import type Database from "better-sqlite3"
 import { runBaselineMigration } from "./0001_baseline.js"
-import { runSyncSqlLogMigration } from "./0002_sync_sql_log.js"
-import { runResolvedTermsMigration } from "./0003_resolved_terms.js"
-import { runSyncRunCancelledStatusMigration } from "./0004_sync_run_cancelled_status.js"
-import { runBackfillSyncSqlEventLinksMigration } from "./0005_backfill_sync_sql_event_links.js"
 
 export interface Migration {
   version: number
@@ -19,10 +15,6 @@ export interface Migration {
 
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
-  { version: 2, name: "sync_sql_log", up: runSyncSqlLogMigration },
-  { version: 3, name: "resolved_terms", up: runResolvedTermsMigration },
-  { version: 4, name: "sync_run_cancelled_status", up: runSyncRunCancelledStatusMigration },
-  { version: 5, name: "backfill_sync_sql_event_links", up: runBackfillSyncSqlEventLinksMigration },
 ]
 
 export function runMigrations(db: Database.Database): void {

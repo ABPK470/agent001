@@ -1,6 +1,5 @@
 import Database from "better-sqlite3"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { backfillSyncSqlEventLogLinks } from "../src/platform/persistence/db/sync-sql-log-backfill.js"
 import {
   countSyncSqlLogByPlan,
   enrichSyncSqlEventData,
@@ -11,13 +10,6 @@ import {
 } from "../src/platform/persistence/db/sync-sql-log.js"
 
 let testDb: Database.Database
-
-function saveEvent(type: string, data: Record<string, unknown>, createdAt: string): number {
-  const result = testDb
-    .prepare("INSERT INTO event_log (type, data, created_at) VALUES (?, ?, ?)")
-    .run(type, JSON.stringify(data), createdAt)
-  return Number(result.lastInsertRowid)
-}
 
 describe("sync-sql-log", () => {
   beforeEach(async () => {
@@ -141,94 +133,5 @@ describe("sync-sql-log", () => {
 
     expect(hydrated["sql"]).toBeUndefined()
     expect(hydrated["sqlLogId"]).toBeUndefined()
-  })
-})
-
-describe("sync-sql-log backfill", () => {
-  beforeEach(async () => {
-    testDb = new Database(":memory:")
-    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
-    _setDb(testDb)
-    _migrate(testDb)
-    // Migration 5 runs on boot; reset event_log to simulate pre-backfill legacy rows.
-    testDb.exec("DELETE FROM event_log")
-  })
-
-  afterEach(() => {
-    testDb.close()
-  })
-
-  it("writes sqlLogId onto event_log when exactly one sync_sql_log row matches", () => {
-    const execSql =
-      "EXEC core.uspAuditRunCheck @id=5011, @objType=N'Contract', @action=N'syncOrNot', @schema=N'core'"
-    const sqlLogId = recordSyncSqlLog({
-      planId: "plan-legacy",
-      eventType: "sync.execute.sql",
-      label: "flowStep.auditCheck(auditCheck)",
-      connection: "uat",
-      sqlText: execSql,
-      durationMs: 415,
-      rowCount: 0,
-    })
-
-    const eventId = saveEvent(
-      "sync.execute.sql",
-      {
-        planId: "plan-legacy",
-        label: "flowStep.auditCheck(auditCheck)",
-        connection: "uat",
-        durationMs: 415,
-        rowCount: 0,
-      },
-      "2026-05-27T15:00:01.500Z",
-    )
-
-    const result = backfillSyncSqlEventLogLinks(testDb)
-    expect(result).toEqual({ repaired: 1, skippedNoMatch: 0, skippedAmbiguous: 0 })
-
-    const row = testDb.prepare("SELECT data FROM event_log WHERE id = ?").get(eventId) as {
-      data: string
-    }
-    const data = JSON.parse(row.data) as Record<string, unknown>
-    expect(data["sqlLogId"]).toBe(sqlLogId)
-    expect(data["sql"]).toBe(execSql)
-    expect(data["sqlLength"]).toBe(execSql.length)
-  })
-
-  it("skips ambiguous legacy rows instead of guessing", () => {
-    const label = "flowStep.auditCheck(auditCheck)"
-    recordSyncSqlLog({
-      planId: "plan-legacy",
-      eventType: "sync.execute.sql",
-      label,
-      connection: "uat",
-      sqlText: "EXEC core.uspAuditRunCheck @id=1",
-      durationMs: 415,
-      rowCount: 0,
-    })
-    recordSyncSqlLog({
-      planId: "plan-legacy",
-      eventType: "sync.execute.sql",
-      label,
-      connection: "uat",
-      sqlText: "EXEC core.uspAuditRunCheck @id=2",
-      durationMs: 415,
-      rowCount: 0,
-    })
-
-    saveEvent(
-      "sync.execute.sql",
-      {
-        planId: "plan-legacy",
-        label,
-        connection: "uat",
-        durationMs: 415,
-        rowCount: 0,
-      },
-      "2026-05-27T15:00:01.500Z",
-    )
-
-    const result = backfillSyncSqlEventLogLinks(testDb)
-    expect(result).toEqual({ repaired: 0, skippedNoMatch: 0, skippedAmbiguous: 1 })
   })
 })
