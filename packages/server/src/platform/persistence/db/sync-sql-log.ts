@@ -1,6 +1,10 @@
 /**
  * Persistent full-text SQL trace for sync (and related) MSSQL operations.
- * Event stream rows carry truncated previews; this table is the complete SOT.
+ *
+ * Contract:
+ *   - sync_sql_log holds the full statement (source of truth for complete text).
+ *   - event_log JSON for sync.*.sql events carries sql (preview), sqlLength, and sqlLogId.
+ *   - sqlLogId is the only runtime link between event_log and sync_sql_log.
  */
 
 import { getDb } from "../connection.js"
@@ -124,7 +128,10 @@ function coercePersistedSqlLogId(value: unknown): number | null {
   return null
 }
 
-/** Ensure persisted sync SQL events always carry a displayable preview + length. */
+/**
+ * Denormalize preview text from sync_sql_log when event_log has sqlLogId but no inline sql.
+ * This is a straight FK lookup — not a correlation guess.
+ */
 export function hydratePersistedSqlEventData(
   eventType: string,
   data: Record<string, unknown>,
@@ -147,6 +154,10 @@ export function hydratePersistedSqlEventData(
   }
 }
 
+/**
+ * Persist full SQL to sync_sql_log and return event payload with sqlLogId + preview.
+ * Called synchronously from the sync event sink before event_log insert.
+ */
 export function enrichSyncSqlEventData(
   eventType: string,
   data: Record<string, unknown>,
@@ -167,9 +178,16 @@ export function enrichSyncSqlEventData(
       ? stripped["sqlLength"]
       : fullSql.length
 
+  const planId =
+    typeof data["planId"] === "string"
+      ? data["planId"]
+      : typeof data["opId"] === "string"
+        ? data["opId"]
+        : null
+
   try {
     const sqlLogId = recordSyncSqlLog({
-      planId: typeof data["planId"] === "string" ? data["planId"] : null,
+      planId,
       previewId: typeof data["previewId"] === "string" ? data["previewId"] : null,
       eventType,
       scope: typeof data["scope"] === "string" ? data["scope"] : null,
