@@ -10,6 +10,9 @@ export type SqlTokenKind = "kw" | "str" | "cmt" | "num" | "ident" | "plain"
 
 export type SqlToken = { k: SqlTokenKind; t: string }
 
+/** tokenizeSql + per-token React spans is O(n); cap highlighting for safety. */
+export const SQL_HIGHLIGHT_MAX_CHARS = 8_192
+
 const CORE_SQL_KW = new Set(
   (
     "SELECT FROM WHERE JOIN LEFT RIGHT INNER OUTER CROSS FULL ON AND OR NOT " +

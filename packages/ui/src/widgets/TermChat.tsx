@@ -14,12 +14,12 @@ import { AskUserPrompt } from "../components/AskUserPrompt"
 import { AttachmentChips, type PendingAttachment } from "../components/AttachmentChips"
 import { ChatScrollProvider, useChatScroll } from "../components/ChatScrollContext"
 import { presentToolCallFromFormatted, toolCallPreview } from "@mia/shared-types"
+import { CodeBlock } from "../components/CodeBlock"
 import {
-  CodeBlock,
   extractToolCode,
   formatToolInputDisplay,
   parseToolArgsFormatted,
-} from "../components/CodeBlock"
+} from "../components/tool-code-display"
 import { ScrollToLatestButton } from "../components/ScrollToLatestButton"
 import { SmartAnswer } from "../components/SmartAnswer"
 import { STICKY_GOAL_HOME_OFFSET_PX, STICKY_GOAL_HOME_TOP, StickyUserGoal } from "../components/StickyUserGoal"

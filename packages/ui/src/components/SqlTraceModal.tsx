@@ -6,8 +6,6 @@ import { fetchSqlLogText, peekSqlLogText } from "../sync-sql-log-cache"
 import { formatSqlTraceMeta, normalizeSqlTraceText, type SqlTraceFields } from "../sync-sql-trace"
 
 const SQL_DISPLAY_MAX_CHARS = 32_000
-/** Above this length we show plain text — tokenizeSql + per-token spans gets expensive. */
-const SQL_HIGHLIGHT_MAX_CHARS = 8_192
 
 function capSqlForDisplay(sql: string): string {
   if (sql.length <= SQL_DISPLAY_MAX_CHARS) return sql
@@ -93,19 +91,11 @@ export const SqlTraceModal = memo(function SqlTraceModal({
     [displaySql, fields.sqlLength],
   )
 
-  const highlightSql = resolvedCode.length <= SQL_HIGHLIGHT_MAX_CHARS
-
   const body = loading
     ? <div className="text-text py-8 text-center">Loading full SQL…</div>
     : error
       ? <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>
-      : (
-        <CodeBlock
-          code={resolvedCode}
-          lang={highlightSql ? "sql" : "text"}
-          maxHeight={720}
-        />
-      )
+      : <CodeBlock code={resolvedCode} lang="sql" maxHeight={720} />
 
   const shell = (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>

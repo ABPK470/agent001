@@ -4,7 +4,13 @@
 
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { CodeBlock, extractToolCode, ToolResultTable, ToolStepInput, ToolStepOutput } from "../../components/CodeBlock"
+import { CodeBlock } from "../../components/CodeBlock"
+import {
+  extractToolCode,
+  ToolResultTable,
+  ToolStepInput,
+  ToolStepOutput,
+} from "../../components/tool-code-display"
 import { JsonViewer } from "../../components/JsonViewer"
 import { EditorTab, RunStatus } from "../../enums"
 import type { AgentDefinition, BusMessage, Run, Step, TraceEntry } from "../../types"

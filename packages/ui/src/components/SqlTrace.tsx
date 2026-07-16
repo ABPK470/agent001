@@ -1,6 +1,7 @@
 import { Maximize2 } from "lucide-react"
+import { useState } from "react"
 import { CodeBlock } from "./CodeBlock"
-import { openSqlTraceModalHost } from "../sql-trace-modal-host"
+import { SqlTraceModal } from "./SqlTraceModal"
 import { formatSqlTraceMeta, hasSqlTraceContent, readSqlTraceFields, type SqlTraceFields } from "../sync-sql-trace"
 
 export { SqlTraceModal } from "./SqlTraceModal"
@@ -14,6 +15,8 @@ export function SqlTraceBlock({
   compact?: boolean
   maxHeight?: number
 }) {
+  const [modalOpen, setModalOpen] = useState(false)
+
   return (
     <div className={`rounded-md border border-border-subtle overflow-hidden ${compact ? "" : ""}`}>
       <div className="flex items-start justify-between gap-2 px-2.5 py-1.5 border-b border-border-subtle bg-elevated/30">
@@ -22,7 +25,7 @@ export function SqlTraceBlock({
           <button
             type="button"
             className="shrink-0 inline-flex items-center gap-1 text-accent hover:text-accent-hover"
-            onClick={() => openSqlTraceModalHost(fields)}
+            onClick={() => setModalOpen(true)}
           >
             <Maximize2 size={12} />
             Full SQL
@@ -34,6 +37,9 @@ export function SqlTraceBlock({
       )}
       {fields.error && (
         <div className="px-2.5 py-1 text-error border-t border-border-subtle break-all whitespace-pre-wrap">{fields.error}</div>
+      )}
+      {modalOpen && (
+        <SqlTraceModal fields={fields} onClose={() => setModalOpen(false)} />
       )}
     </div>
   )
@@ -70,7 +76,6 @@ export function SqlTraceList({
     sqlLength: number
   }>
   compact?: boolean
-  /** When set, rows open SQL via shared modal instead of inline blocks. */
   onOpenSql?: (fields: SqlTraceFields) => void
 }) {
   if (items.length === 0) {

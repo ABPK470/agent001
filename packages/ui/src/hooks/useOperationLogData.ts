@@ -8,7 +8,6 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 import type { OperationPipeline, OperationsResponse } from "../api"
 import { api } from "../api"
-import { isSqlTraceModalOpen } from "../sql-trace-modal-host"
 
 /** Must match server OPERATIONS_PAGE_EVENT_LIMIT. */
 export const OPERATIONS_PAGE_EVENT_LIMIT = 2000
@@ -147,7 +146,6 @@ export function useOperationLogData(opts: {
     })
     es.onmessage = (event) => {
       try {
-        if (isSqlTraceModalOpen()) return
         const data = JSON.parse(event.data as string) as unknown
         if (!isOperationsSnapshot(data)) return
         if (document.visibilityState === "hidden") return

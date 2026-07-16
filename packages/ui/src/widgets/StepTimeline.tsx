@@ -8,7 +8,8 @@
 
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
-import { CodeBlock, extractToolCode, ToolStepOutput } from "../components/CodeBlock"
+import { CodeBlock } from "../components/CodeBlock"
+import { extractToolCode, ToolStepOutput } from "../components/tool-code-display"
 import { JsonViewer } from "../components/JsonViewer"
 import { RunStatus } from "../enums"
 import { useStore } from "../store"
