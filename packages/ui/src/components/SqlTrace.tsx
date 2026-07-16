@@ -4,8 +4,10 @@ import { memo, useEffect, useState } from "react"
 import { CodeBlock } from "./CodeBlock"
 import { fetchSqlLogText, peekSqlLogText } from "../sync-sql-log-cache"
 import { formatSqlTraceMeta, hasSqlTraceContent, normalizeSqlTraceText, readSqlTraceFields, type SqlTraceFields } from "../sync-sql-trace"
+import { openSqlTraceModalHost } from "../sql-trace-modal-host"
 
-const SQL_HIGHLIGHT_MAX_CHARS = 48_000
+const SQL_HIGHLIGHT_MAX_CHARS = 8_192
+const SQL_DISPLAY_MAX_CHARS = 100_000
 
 export function SqlTraceBlock({
   fields,
@@ -16,8 +18,6 @@ export function SqlTraceBlock({
   compact?: boolean
   maxHeight?: number
 }) {
-  const [modalOpen, setModalOpen] = useState(false)
-
   return (
     <div className={`rounded-md border border-border-subtle overflow-hidden ${compact ? "" : ""}`}>
       <div className="flex items-start justify-between gap-2 px-2.5 py-1.5 border-b border-border-subtle bg-elevated/30">
@@ -26,7 +26,7 @@ export function SqlTraceBlock({
           <button
             type="button"
             className="shrink-0 inline-flex items-center gap-1 text-accent hover:text-accent-hover"
-            onClick={() => setModalOpen(true)}
+            onClick={() => openSqlTraceModalHost(fields)}
           >
             <Maximize2 size={12} />
             Full SQL
@@ -38,9 +38,6 @@ export function SqlTraceBlock({
       )}
       {fields.error && (
         <div className="px-2.5 py-1 text-error border-t border-border-subtle break-all whitespace-pre-wrap">{fields.error}</div>
-      )}
-      {modalOpen && (
-        <SqlTraceModal fields={fields} onClose={() => setModalOpen(false)} />
       )}
     </div>
   )
@@ -67,12 +64,20 @@ function sqlPreviewIsComplete(preview: string, sqlLength?: number): boolean {
   return trimmed.length >= sqlLength
 }
 
+function capSqlForDisplay(sql: string): string {
+  if (sql.length <= SQL_DISPLAY_MAX_CHARS) return sql
+  const omitted = sql.length - SQL_DISPLAY_MAX_CHARS
+  return `${sql.slice(0, SQL_DISPLAY_MAX_CHARS)}\n\n-- … ${omitted.toLocaleString()} more chars omitted --`
+}
+
 export const SqlTraceModal = memo(function SqlTraceModal({
   fields,
   onClose,
+  usePortal = true,
 }: {
   fields: SqlTraceFields
   onClose: () => void
+  usePortal?: boolean
 }) {
   const previewSql = normalizeSqlTraceText(fields.sql)
   const previewReady = previewSql.trim().length > 0
@@ -90,23 +95,31 @@ export const SqlTraceModal = memo(function SqlTraceModal({
       cachedFull == null,
   )
   const [error, setError] = useState<string | null>(null)
+  const [bodyReady, setBodyReady] = useState(false)
 
   useEffect(() => {
-    setError(null)
+    const frame = requestAnimationFrame(() => setBodyReady(true))
+    return () => cancelAnimationFrame(frame)
+  }, [])
+
+  useEffect(() => {
     if (fields.sqlLogId == null) {
       setFullSql(previewSql)
       setLoading(false)
+      setError(null)
       return
     }
     const hit = peekSqlLogText(fields.sqlLogId)
     if (hit != null) {
       setFullSql(normalizeSqlTraceText(hit))
       setLoading(false)
+      setError(null)
       return
     }
     if (previewReady) {
       setFullSql(previewSql)
       setLoading(false)
+      setError(null)
       if (previewComplete) return
     }
     let cancelled = false
@@ -131,28 +144,33 @@ export const SqlTraceModal = memo(function SqlTraceModal({
     }
   }, [fields.sqlLogId, previewSql, previewReady, previewComplete])
 
-  const resolvedSql =
+  const resolvedSql = capSqlForDisplay(
     normalizeSqlTraceText(fullSql).trim() ||
     previewSql.trim() ||
     (fields.sqlLength != null && fields.sqlLength > 0
       ? `-- SQL text is not available in this event (${fields.sqlLength} chars were executed)`
-      : "-- no SQL recorded for this step")
+      : "-- no SQL recorded for this step"),
+  )
 
   const highlightSql = resolvedSql.length <= SQL_HIGHLIGHT_MAX_CHARS
 
-  const body = loading
-    ? <div className="text-text py-8 text-center">Loading full SQL…</div>
-    : error
-      ? <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>
-      : (
-        <CodeBlock
-          code={resolvedSql}
-          lang={highlightSql ? "sql" : "text"}
-          maxHeight={720}
-        />
-      )
+  const body = !bodyReady
+    ? <div className="text-text py-8 text-center">Opening…</div>
+    : loading
+      ? <div className="text-text py-8 text-center">Loading full SQL…</div>
+      : error
+        ? <div className="text-error py-4 break-all whitespace-pre-wrap">{error}</div>
+        : (
+          <CodeBlock
+            code={resolvedSql}
+            lang={highlightSql ? "sql" : "text"}
+            maxHeight={720}
+          />
+        )
 
-  return createPortal(
+  const metaSql = fullSql.length > 120 ? `${fullSql.slice(0, 120)}…` : fullSql
+
+  const shell = (
     <div className="fixed inset-0 z-[80] flex items-center justify-center p-4 bg-black/50" onClick={onClose}>
       <div
         className="w-full max-w-4xl max-h-[min(90dvh,900px)] flex flex-col rounded-lg border border-border-subtle bg-base shadow-2xl"
@@ -161,7 +179,7 @@ export const SqlTraceModal = memo(function SqlTraceModal({
         <div className="flex items-center justify-between gap-3 px-4 py-3 border-b border-border-subtle">
           <div className="min-w-0">
             <div className="font-medium text-text break-all">{fields.label}</div>
-            <div className="font-mono text-text break-all">{formatSqlTraceMeta({ ...fields, sql: fullSql })}</div>
+            <div className="font-mono text-text break-all">{formatSqlTraceMeta({ ...fields, sql: metaSql })}</div>
           </div>
           <button type="button" className="text-text hover:opacity-80" onClick={onClose} aria-label="Close">
             <X size={18} />
@@ -174,9 +192,10 @@ export const SqlTraceModal = memo(function SqlTraceModal({
           )}
         </div>
       </div>
-    </div>,
-    document.body,
+    </div>
   )
+
+  return usePortal ? createPortal(shell, document.body) : shell
 })
 
 export function SqlTraceList({

@@ -1,5 +1,5 @@
-import { createContext, useCallback, useContext, useMemo, useState, type ReactNode } from "react"
-import { SqlTraceModal } from "./components/SqlTrace"
+import { createContext, useCallback, useContext, useMemo, type ReactNode } from "react"
+import { openSqlTraceModalHost } from "./sql-trace-modal-host"
 import type { SqlTraceFields } from "./sync-sql-trace"
 
 type OpLogModalsContextValue = {
@@ -9,9 +9,8 @@ type OpLogModalsContextValue = {
 const OpLogModalsContext = createContext<OpLogModalsContextValue | null>(null)
 
 export function OperationLogModalsProvider({ children }: { children: ReactNode }) {
-  const [sqlFields, setSqlFields] = useState<SqlTraceFields | null>(null)
   const openSqlTrace = useCallback((fields: SqlTraceFields) => {
-    setSqlFields(fields)
+    openSqlTraceModalHost(fields)
   }, [])
 
   const value = useMemo(() => ({ openSqlTrace }), [openSqlTrace])
@@ -19,7 +18,6 @@ export function OperationLogModalsProvider({ children }: { children: ReactNode }
   return (
     <OpLogModalsContext.Provider value={value}>
       {children}
-      {sqlFields && <SqlTraceModal fields={sqlFields} onClose={() => setSqlFields(null)} />}
     </OpLogModalsContext.Provider>
   )
 }

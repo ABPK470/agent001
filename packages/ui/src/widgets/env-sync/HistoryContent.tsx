@@ -29,7 +29,7 @@ import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { HistoryPlanTables } from "./PlanTables"
-import { SqlTraceModal } from "../../components/SqlTrace"
+import { openSqlTraceModalHost } from "../../sql-trace-modal-host"
 import { hasSqlTraceContent, type SqlTraceFields } from "../../sync-sql-trace"
 import { JsonViewer } from "../../components/JsonViewer"
 
@@ -817,7 +817,6 @@ function HistoryRunDetail({
   sqlTraceLoadingMore: boolean
   onLoadMoreSql: () => void
 }) {
-  const [sqlModal, setSqlModal] = useState<SqlTraceFields | null>(null)
   const [expandedJson, setExpandedJson] = useState<string | null>(null)
   const timeline = useMemo(() => buildHistoryTimeline(audit, sqlTrace), [audit, sqlTrace])
   const showTimeline = sqlTraceLoading || timeline.length > 0
@@ -916,7 +915,7 @@ function HistoryRunDetail({
                       <button
                         type="button"
                         className="text-[10px] uppercase tracking-wide text-accent hover:text-accent-hover shrink-0 font-mono"
-                        onClick={() => setSqlModal(fields)}
+                        onClick={() => openSqlTraceModalHost(fields)}
                       >
                         SQL
                       </button>
@@ -938,7 +937,6 @@ function HistoryRunDetail({
           </div>
         )}
       </div>
-      {sqlModal && <SqlTraceModal fields={sqlModal} onClose={() => setSqlModal(null)} />}
     </>
   )
 }

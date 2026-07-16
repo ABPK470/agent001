@@ -105,6 +105,19 @@ function isDuplicatePipelineMessage(pipelineError: string | undefined, text: str
 
 // ── Helpers ──────────────────────────────────────────────────────
 
+const JSON_DISPLAY_MAX_CHARS = 48_000
+
+function safeJsonForDisplay(value: unknown, maxChars = JSON_DISPLAY_MAX_CHARS): string {
+  try {
+    const text = JSON.stringify(value, null, 2)
+    if (text.length <= maxChars) return text
+    const omitted = text.length - maxChars
+    return `${text.slice(0, maxChars)}\n\n/* … ${omitted.toLocaleString()} more chars */`
+  } catch {
+    return "[could not serialize result data]"
+  }
+}
+
 // ── Component ────────────────────────────────────────────────────
 
 function dayLabel(iso: string): string {
@@ -919,7 +932,10 @@ function SqlOnlyActivityRow({
           <button
             type="button"
             className={LOG_ROW_ACTION}
-            onClick={() => openSqlTrace(trace.sqlFields!)}
+            onClick={(e) => {
+              e.stopPropagation()
+              openSqlTrace(trace.sqlFields!)
+            }}
           >
             <Database size={10} />
             {trace.detailLabel}
@@ -952,6 +968,10 @@ function FlowStepSqlRow({
   const openSqlTrace = useOpLogOpenSqlTrace()
   const trace = describeSqlEvent(ev)
   const expandable = resultData != null && Object.keys(resultData).length > 0
+  const resultJson = useMemo(
+    () => (expanded && resultData ? safeJsonForDisplay(resultData) : null),
+    [expanded, resultData],
+  )
 
   return (
     <OpLogRow
@@ -981,9 +1001,9 @@ function FlowStepSqlRow({
         ) : undefined
       }
     >
-      {resultData && (
+      {resultJson && (
         <div className={`px-3 py-2 ${linear ? "bg-elevated/30" : "bg-base/30 border-t border-border-subtle"}`}>
-          <CodeBlock code={JSON.stringify(resultData, null, 2)} lang="json" maxHeight={480} />
+          <CodeBlock code={resultJson} lang="json" maxHeight={480} />
         </div>
       )}
     </OpLogRow>
@@ -1109,7 +1129,7 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
           {isResultRow && activity.events[0] && (
             <div className="px-2.5 py-1.5">
               <CodeBlock
-                code={JSON.stringify(activity.events[0].data, null, 2)}
+                code={safeJsonForDisplay(activity.events[0].data)}
                 lang="json"
                 maxHeight={480}
               />
@@ -1264,7 +1284,10 @@ function EventRow({ ev, expanded, onToggle, linear, isLast, depth = 0 }: {
               <button
                 type="button"
                 className={LOG_ROW_ACTION}
-                onClick={() => openSqlTrace(sqlFields)}
+                onClick={(e) => {
+                  e.stopPropagation()
+                  openSqlTrace(sqlFields)
+                }}
               >
                 <Database size={10} />
                 SQL
