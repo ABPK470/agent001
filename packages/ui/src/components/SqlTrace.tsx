@@ -1,6 +1,6 @@
 import { createPortal } from "react-dom"
 import { Maximize2, X } from "lucide-react"
-import { useEffect, useState } from "react"
+import { memo, useEffect, useState } from "react"
 import { CodeBlock } from "./CodeBlock"
 import { fetchSqlLogText, peekSqlLogText } from "../sync-sql-log-cache"
 import { formatSqlTraceMeta, hasSqlTraceContent, normalizeSqlTraceText, readSqlTraceFields, type SqlTraceFields } from "../sync-sql-trace"
@@ -60,7 +60,14 @@ export function SqlTraceFromEventData({
   return <SqlTraceBlock fields={fields} compact={compact} maxHeight={maxHeight} />
 }
 
-export function SqlTraceModal({
+function sqlPreviewIsComplete(preview: string, sqlLength?: number): boolean {
+  const trimmed = preview.trim()
+  if (!trimmed) return false
+  if (sqlLength == null || sqlLength <= 0) return true
+  return trimmed.length >= sqlLength
+}
+
+export const SqlTraceModal = memo(function SqlTraceModal({
   fields,
   onClose,
 }: {
@@ -68,9 +75,19 @@ export function SqlTraceModal({
   onClose: () => void
 }) {
   const previewSql = normalizeSqlTraceText(fields.sql)
-  const [fullSql, setFullSql] = useState(previewSql)
+  const previewReady = previewSql.trim().length > 0
+  const previewComplete = sqlPreviewIsComplete(previewSql, fields.sqlLength)
+  const cachedFull =
+    fields.sqlLogId != null ? peekSqlLogText(fields.sqlLogId) : undefined
+
+  const [fullSql, setFullSql] = useState(
+    () => normalizeSqlTraceText(cachedFull ?? previewSql),
+  )
   const [loading, setLoading] = useState(
-    fields.sqlLogId != null && peekSqlLogText(fields.sqlLogId) == null,
+    () =>
+      !previewReady &&
+      fields.sqlLogId != null &&
+      cachedFull == null,
   )
   const [error, setError] = useState<string | null>(null)
 
@@ -87,8 +104,13 @@ export function SqlTraceModal({
       setLoading(false)
       return
     }
+    if (previewReady) {
+      setFullSql(previewSql)
+      setLoading(false)
+      if (previewComplete) return
+    }
     let cancelled = false
-    setLoading(true)
+    if (!previewReady) setLoading(true)
     void fetchSqlLogText(fields.sqlLogId)
       .then((sql) => {
         if (!cancelled) {
@@ -107,7 +129,7 @@ export function SqlTraceModal({
     return () => {
       cancelled = true
     }
-  }, [fields.sqlLogId, previewSql])
+  }, [fields.sqlLogId, previewSql, previewReady, previewComplete])
 
   const resolvedSql =
     normalizeSqlTraceText(fullSql).trim() ||
@@ -155,7 +177,7 @@ export function SqlTraceModal({
     </div>,
     document.body,
   )
-}
+})
 
 export function SqlTraceList({
   items,

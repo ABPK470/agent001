@@ -13,7 +13,7 @@ import {
   type ToolCallArtifact,
 } from "@mia/shared-types"
 import { Check, Copy } from "lucide-react"
-import { useState, type ReactNode } from "react"
+import { useMemo, useState, type ReactNode } from "react"
 import { C } from "../widgets/ioe/constants"
 import { DataTable } from "./DataTable"
 import { JsonViewer } from "./JsonViewer"
@@ -68,6 +68,10 @@ export function CodeBlock({
 }) {
   const [copied, setCopied] = useState(false)
   const label = LANG_LABEL[lang] ?? lang.toUpperCase()
+  const body = useMemo(
+    () => (lang === "sql" ? <SqlHighlight code={code} /> : code),
+    [code, lang],
+  )
 
   function copy() {
     navigator.clipboard.writeText(code).catch(() => {})
@@ -104,7 +108,7 @@ export function CodeBlock({
         className="code-pre px-3 py-2.5 overflow-auto"
         style={{ maxHeight }}
       >
-        {lang === "sql" ? <SqlHighlight code={code} /> : code}
+        {body}
       </pre>
     </div>
   )
