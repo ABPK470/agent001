@@ -83,6 +83,7 @@ function WidgetThreadBlock({
   const [titleTooltipAnchor, setTitleTooltipAnchor] = useState<DOMRect | null>(null)
   const displayTitle = thread.title || "New thread"
   const runCount = thread.runCount ?? runs?.length ?? 0
+  const emptyRuns = expanded && !loading && (runs?.length ?? 0) === 0
 
   const closeTitleTooltip = () => {
     setTitleTooltipOpen(false)
@@ -151,6 +152,7 @@ function WidgetThreadBlock({
         "thread-nav-thread group",
         active ? "thread-nav-thread--active" : "",
         expanded ? "thread-nav-thread--expanded" : "",
+        emptyRuns ? "thread-nav-thread--empty" : "",
         thread.pinned ? "thread-nav-thread--pinned" : "",
         menuOpen ? "thread-nav-thread--menu-open" : "",
       ]
@@ -215,9 +217,8 @@ function WidgetThreadBlock({
             {loading && <div className="thread-nav-runs-status">Loading runs…</div>}
             {!loading && (runs?.length ?? 0) === 0 && (
               <EmptyState
-                icon={WIDGET_ICONS["run-history"]}
+                icon={WIDGET_ICONS["thread-nav"]}
                 message="No runs yet"
-                className="py-6"
               />
             )}
             {runs?.map((run) => (
@@ -324,7 +325,7 @@ export function ThreadRunsPanel(): React.ReactElement {
   const list = (
     <>
       {threads.length === 0 ? (
-        <EmptyState icon={WIDGET_ICONS["thread-nav"]} message="No threads yet" className="py-8" />
+        <EmptyState icon={WIDGET_ICONS["thread-nav"]} message="No threads yet" />
       ) : (
         threads.map((thread) => (
           <WidgetThreadBlock

@@ -3852,6 +3852,8 @@ textarea.input {
 }
 
 .thread-nav-scroll {
+  display: flex;
+  flex-direction: column;
   flex: 1;
   min-height: 0;
   overflow-y: auto;
@@ -4092,6 +4094,35 @@ textarea.input {
 .thread-nav-runs-wrap--open .thread-nav-runs {
   opacity: 1;
   transform: translateY(0);
+}
+
+/* Expanded thread with no runs — fill remaining panel so EmptyState can center */
+.thread-nav-thread--empty {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+}
+
+.thread-nav-thread--empty .thread-nav-runs-wrap--open {
+  flex: 1;
+  min-height: 0;
+}
+
+.thread-nav-thread--empty .thread-nav-runs-inner {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+.thread-nav-thread--empty .thread-nav-runs {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+  padding-left: 0;
+  padding-right: 0;
 }
 
 .thread-nav-runs-status {

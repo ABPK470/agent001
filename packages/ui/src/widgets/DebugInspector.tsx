@@ -12,13 +12,14 @@
  * this shows the raw inputs/outputs that explain WHY.
  */
 
-import { ChevronDown, ChevronRight, Clock, Copy, Bug, MousePointer2, Search } from "lucide-react"
+import { ChevronDown, ChevronRight, Clock, Copy, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { EmptyState } from "../components/EmptyState"
 import { JsonViewer } from "../components/JsonViewer"
 import { useStore } from "../store"
 import type { TraceEntry } from "../types"
 import { fmtTokens } from "../util"
+import { WIDGET_ICONS } from "./widget-icons"
 
 // ── Helpers ─────────────────────────────────────────────────────
 
@@ -282,12 +283,12 @@ export function DebugInspector() {
       {/* Main content */}
       <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto space-y-2 pr-1">
         {!activeRunId && (
-          <EmptyState icon={MousePointer2} message="Select a run to inspect" />
+          <EmptyState icon={WIDGET_ICONS["debug-inspector"]} message="Select a run to inspect" />
         )}
 
         {activeRunId && !hasDebugData && (
           <EmptyState
-            icon={Bug}
+            icon={WIDGET_ICONS["debug-inspector"]}
             message={
               trace.length === 0
                 ? "No trace data yet — start an agent run"

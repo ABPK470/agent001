@@ -32,7 +32,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "active-users",  label: "Active Users",  desc: "Who's online, what they're running",          Icon: WIDGET_ICONS["active-users"] },
   { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform", Icon: WIDGET_ICONS["entity-registry"] },
   { type: "sync-admin",     label: "Sync Operations", desc: "Proposals, runs, evidence, approvals, connections, schedules, notify routes", Icon: WIDGET_ICONS["sync-admin"] },
-  { type: "bridge",  label: "Bridge",   desc: "Move rows between connectors (SQL Server, Postgres, HTTP, Denodo, HDFS) through a declarative transform", Icon: WIDGET_ICONS["bridge"] },
+  { type: "bridge",  label: "Bridge",   desc: "Move rows between connectors through a declarative transform", Icon: WIDGET_ICONS["bridge"] },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {
