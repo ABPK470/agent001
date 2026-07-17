@@ -9,6 +9,7 @@ import {
   pixelsToGridRect,
   rectToPixels,
   resolveDragLayout,
+  reclaimSpace,
   resolveOverlaps,
   rowsForHeight,
   snapDragRect,
@@ -106,6 +107,37 @@ describe("smart drag swap", () => {
     const a = next.find((t) => t.id === "a")!
     const b = next.find((t) => t.id === "b")!
     expect(a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y).toBe(false)
+  })
+
+  it("reclaimSpace expands remaining tiles after one is removed", () => {
+    const remaining: LayoutTile[] = [
+      { id: "a", type: "term-chat", x: 0, y: 0, w: 4, h: 8, minW: 2, minH: 2 },
+      { id: "b", type: "run-history", x: 4, y: 0, w: 4, h: 8, minW: 2, minH: 2 },
+    ]
+    const next = reclaimSpace(remaining, 16)
+    const covered = next.reduce((sum, tile) => sum + tile.w * tile.h, 0)
+    expect(covered).toBe(COLS * 16)
+    expect(next.every((tile) => tile.y + tile.h <= 16)).toBe(true)
+  })
+
+  it("reclaimSpace fills the canvas when one tile remains", () => {
+    const next = reclaimSpace([
+      { id: "a", type: "term-chat", x: 2, y: 2, w: 4, h: 4, minW: 2, minH: 2 },
+    ], 12)
+    expect(next[0]).toMatchObject({ x: 0, y: 0, w: COLS, h: 12 })
+  })
+
+  it("reclaimSpace keeps a resized tile locked while neighbors fill the gap", () => {
+    const tiles: LayoutTile[] = [
+      { id: "chat", type: "term-chat", x: 0, y: 0, w: 6, h: 16, minW: 2, minH: 2 },
+      { id: "threads", type: "thread-nav", x: 9, y: 0, w: 3, h: 16, minW: 2, minH: 4 },
+    ]
+    const next = reclaimSpace(tiles, 16, new Set(["threads"]))
+    const chat = next.find((tile) => tile.id === "chat")!
+    const threads = next.find((tile) => tile.id === "threads")!
+    expect(threads).toMatchObject({ x: 9, w: 3, h: 16 })
+    expect(chat.w).toBeGreaterThanOrEqual(9)
+    expect(chat.x + chat.w).toBe(threads.x)
   })
 })
 

@@ -126,11 +126,14 @@ export function clampTile<T extends LayoutTile>(
 }
 
 /** Simple top-to-bottom compaction — moves tiles up when space allows. */
-export function compactDown(tiles: LayoutTile[]): LayoutTile[] {
+export function compactDown(
+  tiles: LayoutTile[],
+  lockedIds?: ReadonlySet<string>,
+): LayoutTile[] {
   const sorted = [...tiles].sort((a, b) => a.y - b.y || a.x - b.x)
   const placed: LayoutTile[] = []
   for (const tile of sorted) {
-    if (tile.pinned || tile.restore) {
+    if (tile.pinned || tile.restore || lockedIds?.has(tile.id)) {
       placed.push(tile)
       continue
     }
@@ -144,6 +147,75 @@ export function compactDown(tiles: LayoutTile[]): LayoutTile[] {
     placed.push(next)
   }
   return placed
+}
+
+/**
+ * Compact then grow unpinned tiles into empty cells until the canvas is packed.
+ * `lockedIds` keep their geometry (e.g. the tile the user just resized).
+ */
+export function reclaimSpace(
+  tiles: LayoutTile[],
+  maxRows: number,
+  lockedIds?: ReadonlySet<string>,
+): LayoutTile[] {
+  const rows = Math.max(1, maxRows)
+  const locked = lockedIds ?? new Set<string>()
+  if (tiles.length === 0) return tiles
+
+  if (tiles.length === 1) {
+    const only = tiles[0]!
+    if (only.pinned || locked.has(only.id)) return tiles
+    return [{
+      ...only,
+      ...clampRectToGrid({ x: 0, y: 0, w: COLS, h: rows }, rows, only.minW, only.minH),
+    }]
+  }
+
+  let current = compactDown(tiles.map((tile) => ({ ...tile })), locked)
+  const maxPasses = COLS + rows
+
+  for (let pass = 0; pass < maxPasses; pass++) {
+    let grew = false
+    // Grow unlocked neighbors first so they absorb gaps left by a shrink.
+    const order = [...current].sort((a, b) => {
+      const aLocked = locked.has(a.id) ? 1 : 0
+      const bLocked = locked.has(b.id) ? 1 : 0
+      if (aLocked !== bLocked) return aLocked - bLocked
+      return (b.w * b.h) - (a.w * a.h)
+    })
+
+    for (const tile of order) {
+      if (tile.pinned || tile.restore || locked.has(tile.id)) continue
+      const others = current.filter((other) => other.id !== tile.id)
+      let next = current.find((item) => item.id === tile.id)!
+
+      const tryGrow = (trial: GridRect): boolean => {
+        if (others.some((other) => rectsOverlap(trial, other))) return false
+        next = { ...next, ...trial }
+        grew = true
+        return true
+      }
+
+      if (next.x + next.w < COLS) {
+        tryGrow({ x: next.x, y: next.y, w: next.w + 1, h: next.h })
+      }
+      if (next.y + next.h < rows) {
+        tryGrow({ x: next.x, y: next.y, w: next.w, h: next.h + 1 })
+      }
+      if (next.x > 0) {
+        tryGrow({ x: next.x - 1, y: next.y, w: next.w + 1, h: next.h })
+      }
+      if (next.y > 0) {
+        tryGrow({ x: next.x, y: next.y - 1, w: next.w, h: next.h + 1 })
+      }
+
+      current = current.map((item) => item.id === tile.id ? next : item)
+    }
+
+    if (!grew) break
+  }
+
+  return current
 }
 
 /**

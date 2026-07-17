@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   colWidth as computeColWidth,
   pixelsToGridRect,
+  reclaimSpace,
   rectToPixels,
   resolveDragLayout,
   ROW_PX,
@@ -75,13 +76,14 @@ export function useGridInteraction({
 
       if (session.mode === "drag") {
         const next = snapDragRect(session.origin, deltaX, deltaY, cw, rows, rowPx)
-        const preview = resolveDragLayout(
+        const resolved = resolveDragLayout(
           session.baseTiles,
           session.tileId,
           next,
           session.origin,
           rows,
         )
+        const preview = reclaimSpace(resolved, rows, new Set([session.tileId]))
         setCandidate(next)
         setLayoutPreview(preview)
         return
@@ -113,12 +115,11 @@ export function useGridInteraction({
         rows,
         rowPx,
       )
-      setCandidate(next)
-      setLayoutPreview(
-        session.baseTiles.map((tile) =>
-          tile.id === session.tileId ? { ...tile, ...next } : tile,
-        ),
+      const resized = session.baseTiles.map((tile) =>
+        tile.id === session.tileId ? { ...tile, ...next } : tile,
       )
+      setCandidate(next)
+      setLayoutPreview(reclaimSpace(resized, rows, new Set([session.tileId])))
     }
 
     function onUp(event: PointerEvent) {
@@ -138,7 +139,7 @@ export function useGridInteraction({
           session.origin,
           rows,
         )
-        updateTiles(viewId, preview)
+        updateTiles(viewId, preview, session.tileId)
         clearSession()
         return
       }

@@ -9,6 +9,7 @@ import {
   compactDown,
   normalizeTiles,
   placeNewTile,
+  reclaimSpace,
   type GridRect,
 } from "../lib/grid-math"
 import { WIDGET_DEFAULTS } from "../lib/widget-layout-defaults"
@@ -78,7 +79,7 @@ interface LayoutState {
   addWidget: (viewId: string, type: WidgetType) => void
   removeWidget: (viewId: string, tileId: string) => void
   updateTileRect: (viewId: string, tileId: string, rect: GridRect) => void
-  updateTiles: (viewId: string, tiles: WorkspaceView["tiles"]) => void
+  updateTiles: (viewId: string, tiles: WorkspaceView["tiles"], lockedTileId?: string) => void
   setViewportRows: (rows: number) => void
   setTilePinned: (viewId: string, tileId: string, pinned: boolean) => void
   toggleTileMaximized: (viewId: string, tileId: string) => void
@@ -142,18 +143,15 @@ export const useLayoutStore = create<LayoutState>()(
       }),
 
       removeWidget: (viewId, tileId) => set((s) => ({
-        views: s.views.map((view) =>
-          view.id === viewId
-            ? {
-              ...view,
-              tiles: normalizeTiles(
-                view.tiles.filter((tile) => tile.id !== tileId),
-                WIDGET_DEFAULTS,
-                s.viewportRows,
-              ),
-            }
-            : view,
-        ),
+        views: s.views.map((view) => {
+          if (view.id !== viewId) return view
+          const remaining = view.tiles.filter((tile) => tile.id !== tileId)
+          const reclaimed = reclaimSpace(remaining, s.viewportRows)
+          return {
+            ...view,
+            tiles: normalizeTiles(reclaimed, WIDGET_DEFAULTS, s.viewportRows),
+          }
+        }),
         focusedTileId: s.focusedTileId === tileId ? null : s.focusedTileId,
         enteringTileIds: s.enteringTileIds.filter((id) => id !== tileId),
         soloTileId: s.soloTileId === tileId ? null : s.soloTileId,
@@ -171,20 +169,23 @@ export const useLayoutStore = create<LayoutState>()(
                 ...clampRectToGrid(rect, s.viewportRows, tile.minW, tile.minH),
               }
             })
+            const reclaimed = reclaimSpace(nextTiles, s.viewportRows, new Set([tileId]))
             return {
               ...view,
-              tiles: normalizeTiles(nextTiles, WIDGET_DEFAULTS, s.viewportRows),
+              tiles: normalizeTiles(reclaimed, WIDGET_DEFAULTS, s.viewportRows),
             }
           }),
         }
       }),
 
-      updateTiles: (viewId, tiles) => set((s) => {
+      updateTiles: (viewId, tiles, lockedTileId) => set((s) => {
         if (s.soloTileId) return s
+        const locked = lockedTileId ? new Set([lockedTileId]) : undefined
+        const reclaimed = reclaimSpace(tiles, s.viewportRows, locked)
         return {
           views: s.views.map((view) =>
             view.id === viewId
-              ? { ...view, tiles: normalizeTiles(tiles, WIDGET_DEFAULTS, s.viewportRows) }
+              ? { ...view, tiles: normalizeTiles(reclaimed, WIDGET_DEFAULTS, s.viewportRows) }
               : view,
           ),
         }
