@@ -1,6 +1,6 @@
 import { useEffect, useRef } from "react"
 
-import { useStore } from "../store"
+import { useStore } from "../state/store"
 
 /** Initial load + silent reload when matching SSE events arrive. */
 export function useLiveReload(

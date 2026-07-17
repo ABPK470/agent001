@@ -5,7 +5,7 @@
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import { api } from "../../../api"
+import { api } from "../../../client/index"
 import { Listbox, type ListboxOption } from "../../../components/Listbox"
 import type { ConnectorAdmin, SyncEnvironmentAdmin } from "../../../types"
 import { FormFieldGroup, FormSectionCard } from "../form-section"

@@ -5,7 +5,7 @@
 import { GitBranch, GitFork, Loader2, Pencil, Plus, Trash2 } from "lucide-react"
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { api } from "../../../api"
+import { api } from "../../../client/index"
 import { useInitialCatalogSelection } from "../../../hooks/useInitialCatalogSelection"
 import { useLiveReload } from "../../../hooks/useLiveReload"
 import { useMe } from "../../../hooks/useMe"

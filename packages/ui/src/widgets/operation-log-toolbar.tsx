@@ -1,6 +1,6 @@
 import { Check, Filter, X } from "lucide-react"
-import type { OperationStatus } from "../api"
-import { statusFilterActiveClass } from "../operation-log-row"
+import type { OperationStatus } from "../client/index"
+import { statusFilterActiveClass } from "./pipelines/operation-log-row"
 import {
   LOG_TOOLBAR_CHIP,
   LOG_TOOLBAR_CHIP_ACTIVE,

@@ -1,0 +1,123 @@
+/**
+ * WidgetFrame — container chrome for each dashboard widget.
+ *
+ * Provides:
+ *   - Drag handle (header bar)
+ *   - Title with widget type label
+ *   - Controls: pop-out to new window, close
+ *   - Content area
+ */
+
+import { ExternalLink, X } from "lucide-react"
+import { type ReactNode } from "react"
+import { useStore } from "../../state/store"
+import type { WidgetType } from "../../types"
+
+const WIDGET_LABELS: Record<WidgetType, string> = {
+  "thread-nav": "Threads",
+  "agent-chat": "Agent Chat",
+  "term-chat": "Chat",
+  "run-status": "Run Status",
+  "live-logs": "Event Stream",
+  "step-timeline": "Step Timeline",
+  "run-history": "Run History",
+  "debug-inspector": "Trace",
+  "mymi-db": "Mymi DB",
+  "active-users": "Active Users",
+  "env-sync": "Sync",
+  "operation-log": "Pipelines",
+  "entity-registry": "Entity Registry",
+  "sync-proposals": "Sync Proposals",
+  "sync-approvals": "Sync Admin · Approvals",
+  "sync-evidence":  "Sync Evidence",
+  "sync-admin":     "Sync Admin",
+  "bridge": "Bridge",
+}
+
+interface Props {
+  widgetId: string
+  viewId: string
+  type: WidgetType
+  children: ReactNode
+}
+
+export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
+  const removeWidget = useStore((s) => s.removeWidget)
+
+  function handlePopOut(event?: React.MouseEvent<HTMLButtonElement>) {
+    const state = useStore.getState()
+    const params = new URLSearchParams()
+    params.set("type", type)
+    if (state.activeRunId) params.set("runId", state.activeRunId)
+
+    // Transfer current live state so the popout starts with identical content
+    try {
+      localStorage.setItem("mia-popout-state", JSON.stringify({
+        logs: state.logs,
+        steps: state.steps,
+        audit: state.audit,
+        trace: state.trace,
+        activeRunId: state.activeRunId,
+      }))
+    } catch { /* quota exceeded — popout will fall back to API fetch */ }
+
+    // Size the popout to mirror the source widget when possible, capped to the screen
+    const sourceEl = (event?.currentTarget as HTMLElement | undefined)?.closest(".react-grid-item") as HTMLElement | null
+    const sourceRect = sourceEl?.getBoundingClientRect()
+    const screenW = window.screen.availWidth
+    const screenH = window.screen.availHeight
+    const desiredW = Math.round(Math.max(420, Math.min(sourceRect?.width ?? 800, screenW * 0.8)))
+    const desiredH = Math.round(Math.max(360, Math.min(sourceRect?.height ?? 600, screenH * 0.85)))
+    const features = `width=${desiredW},height=${desiredH},menubar=no,toolbar=no,location=no,status=no`
+
+    window.open(
+      `/?widget=${type}&${params.toString()}`,
+      `widget-${widgetId}`,
+      features,
+    )
+  }
+
+  const isTransparent = type === "term-chat" || type === "thread-nav"
+  const isFlush =
+    isTransparent
+    || type === "entity-registry"
+    || type === "sync-admin"
+    || type === "bridge"
+    || type.startsWith("sync-")
+
+  return (
+      <div
+      className={`flex flex-col h-full rounded-xl overflow-hidden ${isTransparent ? "bg-panel" : "bg-panel"}`}
+    >
+      {/* Header — drag handle; controls on the right, visible on hover */}
+      <div className="widget-drag-handle group flex items-center justify-between px-3 h-8 cursor-move shrink-0 select-none">
+        <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+          {WIDGET_LABELS[type]}
+        </span>
+        <div className="widget-controls flex items-center gap-0.5 opacity-0 pointer-events-none transition-opacity group-hover:opacity-100 group-hover:pointer-events-auto group-focus-within:opacity-100 group-focus-within:pointer-events-auto">
+          <button
+            className="text-text-muted hover:text-text p-1 rounded transition-colors"
+            onClick={(e) => handlePopOut(e)}
+            title="Pop out"
+          >
+            <ExternalLink size={15} />
+          </button>
+          <button
+            className="text-text-muted hover:text-error p-1 rounded transition-colors"
+            onClick={() => removeWidget(viewId, widgetId)}
+            title="Remove"
+          >
+            <X size={15} />
+          </button>
+        </div>
+      </div>
+
+      {/* Content area — widget-content class used by draggableCancel in Canvas.tsx */}
+      <div
+        className={`widget-content flex flex-1 flex-col overflow-hidden ${isFlush ? "p-0" : "p-3"}`}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}

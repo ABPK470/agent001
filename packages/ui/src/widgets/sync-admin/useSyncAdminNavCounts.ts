@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react"
 
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { useLiveReload } from "./useLiveReload"
 
 export interface SyncAdminNavCounts {

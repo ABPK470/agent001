@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react"
 import type { JSX } from "react"
 import { useMemo, useState } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import type { SyncEnvironmentAdmin } from "../../types"
 import { ModalBtnPrimary, ModalBtnSecondary, ModalShell } from "./chrome"

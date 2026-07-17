@@ -1,7 +1,7 @@
 import { Loader2 } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 import { useCallback, useRef, useState } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { Listbox } from "../../components/Listbox"
 import type { EntityRegistryTable, EntityRegistryTableScope } from "../../types"
 import { mergeTableSuggestion, tableSuggestionIsActionable } from "./entity-edit-form"

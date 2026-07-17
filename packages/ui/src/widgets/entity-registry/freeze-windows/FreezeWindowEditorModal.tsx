@@ -1,6 +1,6 @@
 import { Calendar, Loader2, Save } from "lucide-react"
 import type { JSX } from "react"
-import { api } from "../../../api"
+import { api } from "../../../client/index"
 import type { FreezeWindow, FreezeWindowSaveRequest } from "../../../types"
 import { ConfirmModal, ModalBtnPrimary, ModalBtnSecondary } from "../governance/modal-chrome"
 import {

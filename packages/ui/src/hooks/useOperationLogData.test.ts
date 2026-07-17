@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { OperationPipeline } from "../api"
+import type { OperationPipeline } from "../client/index"
 import { mergeHeadRefresh, mergeOperationPipelines } from "../hooks/useOperationLogData"
 
 function pipeline(id: string, startedAt: string, eventCount = 1): OperationPipeline {

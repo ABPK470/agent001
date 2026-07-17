@@ -11,7 +11,7 @@
 import { CalendarClock, Loader2 } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useState } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import type { FreezeWindow } from "../../types"
 
 export interface FreezeWindowsSelectProps {

@@ -5,7 +5,7 @@
 import { FileCode2, FormInput, Loader2, Save } from "lucide-react"
 import type { JSX } from "react"
 import { useMemo, useState } from "react"
-import { api } from "../../../api"
+import { api } from "../../../client/index"
 import { Listbox, type ListboxOption } from "../../../components/Listbox"
 import type { EntityRegistryStrategy } from "../../../types"
 import { Err } from "../../env-sync/chrome"

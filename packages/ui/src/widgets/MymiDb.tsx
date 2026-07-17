@@ -27,10 +27,10 @@ import {
     X
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { api } from "../api"
+import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
 import { Listbox, type ListboxOption } from "../components/Listbox"
-import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
+import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useContainerSize } from "../hooks/useContainerSize"
 
 // ── Types ────────────────────────────────────────────────────────

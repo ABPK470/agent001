@@ -6,7 +6,7 @@ import { EventType } from "@mia/shared-enums"
 import { Plus, Save } from "lucide-react"
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import {
   ConfirmModal,

@@ -1,7 +1,7 @@
 import { EventType, isLlmInteractionKind } from "@mia/shared-enums"
 import { useEffect, useRef, useState } from "react"
 
-import { useStore } from "../store"
+import { useStore } from "../state/store"
 
 export interface LlmInteraction {
   provider: string

@@ -6,7 +6,7 @@ import { CheckCircle2, Loader2, Rocket, X, XCircle } from "lucide-react"
 import type { JSX } from "react"
 import { useState } from "react"
 import { createPortal } from "react-dom"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import type { PublishSyncDefinitionsResponse } from "../../types"
 
 type PublishPhase = "idle" | "publishing" | "done"

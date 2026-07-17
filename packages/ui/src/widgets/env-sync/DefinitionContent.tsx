@@ -1,7 +1,7 @@
 import { AlertTriangle, BookOpen, CheckCircle2, Database, Key, ShieldAlert, ShieldCheck, Ship } from "lucide-react"
 
 import { EmptyState } from "../../components/EmptyState"
-import { useStore } from "../../store"
+import { useStore } from "../../state/store"
 import type { PublishedSyncDefinition } from "../../types"
 import { DIFF, normalizeOptionalTableSelection } from "./constants"
 import {

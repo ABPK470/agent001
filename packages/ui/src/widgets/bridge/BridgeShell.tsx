@@ -9,7 +9,7 @@
 import type { ConnectorInfo, MoveSummary, Transform } from "@mia/shared-types"
 import { Eye, Play, Shuffle } from "lucide-react"
 import { useEffect, useState, type JSX } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
 import { META_TEXT, TEXT_BTN, TEXT_BTN_PRIMARY } from "../entity-registry/chrome"
 import { ModalToastStack, useModalToasts } from "../entity-registry/ModalToastStack"

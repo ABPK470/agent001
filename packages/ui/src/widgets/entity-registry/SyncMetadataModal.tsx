@@ -4,7 +4,7 @@
 
 import { Lock, LockOpen, MousePointer2, Plus, Save, Search, Trash2, Workflow, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
 import type { AuthoredSyncFlowStep, CustomValueSourceDefinition, SyncEnvironmentAdmin, SyncFlowKindDefinition, SyncMetadataCatalogResponse } from "../../types"
 import {

@@ -3,9 +3,9 @@ import { RefreshCw } from "lucide-react"
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useState } from "react"
 
-import { api } from "../../api"
+import { api } from "../../client/index"
 import type { SyncPlan } from "../../types"
-import { timeAgo } from "../../util"
+import { timeAgo } from "../../lib/util"
 import { EvidencePanel } from "./EvidencePanel"
 import { useConsole } from "./console-context"
 import { TAB_PILL, PANEL } from "./design"
@@ -28,7 +28,7 @@ interface SyncRunRow {
   source: string
   target: string
   actorUpn: string | null
-  status: "started" | "preview" | "success" | "failed" | "skipped"
+  status: "started" | "preview" | "success" | "failed" | "skipped" | "cancelled"
   error: string | null
   startedAt: string
   finishedAt: string | null

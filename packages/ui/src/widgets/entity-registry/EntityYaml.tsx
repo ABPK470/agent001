@@ -4,7 +4,7 @@
 
 import type { JSX } from "react"
 import { useEffect, useState } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import type { EntityRegistryDefinition } from "../../types"
 import { PANEL, TAB_ERROR } from "./chrome"
 import { DefinitionExportMenu } from "./DefinitionExportMenu"

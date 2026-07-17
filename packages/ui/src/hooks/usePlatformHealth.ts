@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { api, type PlatformHealth } from "../api"
+import { api, type PlatformHealth } from "../client/index"
 
 export function usePlatformHealth(enabled: boolean): {
   health: PlatformHealth | null

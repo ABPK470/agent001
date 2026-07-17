@@ -16,9 +16,9 @@ import { ChevronDown, ChevronRight, Clock, Copy, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { EmptyState } from "../components/EmptyState"
 import { JsonViewer } from "../components/JsonViewer"
-import { useStore } from "../store"
+import { useStore } from "../state/store"
 import type { TraceEntry } from "../types"
-import { fmtTokens } from "../util"
+import { fmtTokens } from "../lib/util"
 import { WIDGET_ICONS } from "./widget-icons"
 
 // ── Helpers ─────────────────────────────────────────────────────

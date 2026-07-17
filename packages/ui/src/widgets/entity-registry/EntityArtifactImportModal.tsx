@@ -5,7 +5,7 @@
 import { AlertTriangle, CheckCircle2, Loader2, Upload } from "lucide-react"
 import type { JSX } from "react"
 import { useRef, useState } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { ModalShell } from "./ModalShell"
 
 export interface EntityArtifactImportModalProps {

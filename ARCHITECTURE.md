@@ -370,6 +370,25 @@ deduplicates across browser tabs via `BroadcastChannel` and auto-reconnects.
 It is a thin client: all orchestration, governance, and persistence live in
 the server. The UI only renders state and issues commands.
 
+### Folder structure
+
+```
+packages/ui/src/
+├── boot/          # main.tsx, global CSS
+├── app/           # App composition, home/, workspace/, session/brand helpers
+├── client/        # REST + SSE transport
+├── state/         # Zustand + SSE reducers
+├── widgets/       # product vertical slices
+├── components/    # presentation-only shared UI
+├── hooks/, lib/, theme/, enums/
+└── types.ts
+```
+
+Same “one job per folder” rule as the rest of the monorepo — FE-native names
+(`boot` / `app` / `client` / `state` / `widgets` / `components`), not agent
+`domain/core/runtime`. Enforce with `npm run lint:arch`. Details in
+[docs/doctrine.md](docs/doctrine.md).
+
 ---
 
 ## 9. Where state is allowed to live

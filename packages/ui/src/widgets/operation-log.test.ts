@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
-import { OperationKind } from "../api"
-import type { OperationPipeline } from "../api"
+import { OperationKind } from "../client/index"
+import type { OperationPipeline } from "../client/index"
 import { pipelineActivityKey, syncPlanIdFromPipeline } from "./OperationLog"
 
 function syncPipeline(over: Partial<OperationPipeline> & Pick<OperationPipeline, "id" | "kind">): OperationPipeline {

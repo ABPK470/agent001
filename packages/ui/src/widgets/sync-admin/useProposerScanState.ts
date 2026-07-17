@@ -1,8 +1,8 @@
 import { EventType } from "@mia/shared-enums"
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { api } from "../../api"
-import { useStore } from "../../store"
+import { api } from "../../client/index"
+import { useStore } from "../../state/store"
 
 export interface ActiveScan {
   runId: string

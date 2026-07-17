@@ -14,7 +14,7 @@
 import { Loader2 } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useMemo, useState } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import type { EntityRegistryStrategy } from "../../types"
 

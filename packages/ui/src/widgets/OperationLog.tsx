@@ -6,16 +6,16 @@
 
 import { Brain, ChevronRight, Database, GitCompareArrows, Loader2, Settings, Shuffle, Square, Wrench } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
-import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
-import { api, OperationKind, OperationStatus } from "../api"
+import type { OperationActivity, OperationEvent, OperationPipeline } from "../client/index"
+import { api, OperationKind, OperationStatus } from "../client/index"
 import { CodeBlock } from "../components/CodeBlock"
-import { DecisionLogPanel, isSyncDecisionLogDetails } from "../components/DecisionLogPanel"
+import { DecisionLogPanel, isSyncDecisionLogDetails } from "./pipelines/DecisionLogPanel"
 import { EmptyState } from "../components/EmptyState"
 import { JsonViewer } from "../components/JsonViewer"
-import { ToolCallModal, ToolIoBlock } from "../components/ToolCallModal"
+import { ToolCallModal, ToolIoBlock } from "./chat/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
-import { OperationLogModalsProvider, useOpLogOpenSqlTrace } from "../operation-log-modals"
+import { OperationLogModalsProvider, useOpLogOpenSqlTrace } from "./pipelines/operation-log-modals"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
   fmtDuration,
@@ -29,20 +29,20 @@ import {
   OP_LOG_MUTED,
   OP_LOG_DESC,
   OpLogRow,
-} from "../operation-log-row"
+} from "./pipelines/operation-log-row"
 import {
   describeSqlEvent,
   describeSqlOnlyActivity,
   formatTraceRowSummary,
-} from "../operation-log-trace"
-import { isSyncSqlEventType, hasSqlTraceContent, readSqlTraceFields } from "../sync-sql-trace"
+} from "./pipelines/operation-log-trace"
+import { isSyncSqlEventType, hasSqlTraceContent, readSqlTraceFields } from "./sync/trace/sync-sql-trace"
 import {
   buildToolIoFromStepEvents,
   isAgentStepEventType,
   readToolIoFromActivity,
   readToolIoFromEvent,
   stripToolIoForInlineDisplay,
-} from "../tool-call-io"
+} from "./chat/tool-call-io"
 import { OperationLogToolbar } from "./operation-log-toolbar"
 
 // ── Visuals ──────────────────────────────────────────────────────
@@ -1471,4 +1471,4 @@ function resolveInlineToolName(data: Record<string, unknown>): string {
   return "step"
 }
 
-export { fmtDateTime } from "../operation-log-row"
+export { fmtDateTime } from "./pipelines/operation-log-row"

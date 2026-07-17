@@ -3,7 +3,7 @@ import { useMemo, useState } from "react"
 
 import type { SyncPlan, SyncPlanTable } from "../../types"
 import { movementOfTable, tableMovementTotal } from "../../types"
-import { timeAgo } from "../../util"
+import { timeAgo } from "../../lib/util"
 import { ModalShell } from "./chrome"
 import { DIFF } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"

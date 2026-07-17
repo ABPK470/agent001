@@ -14,11 +14,11 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react"
 
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import { ToastStack, useWidgetToasts } from "../../hooks/useWidgetToasts"
+import { ToastStack, useWidgetToasts } from "../../components/useWidgetToasts"
 import { useContainerSize } from "../../hooks/useContainerSize"
-import { useStore } from "../../store"
+import { useStore } from "../../state/store"
 import type { PublishedSyncDefinition, SyncEntityType, SyncEnvironment, SyncPlan } from "../../types"
 import { IconButton, TOOLBAR_ICON } from "../entity-registry/IconButton"
 import { ToolbarMenu, ToolbarMenuItem } from "../entity-registry/ToolbarMenu"
@@ -37,7 +37,7 @@ import { ExecModal } from "./ExecModal"
 import { HistoryContent } from "./HistoryContent"
 import { net, PlanView } from "./PlanTables"
 import { PreviewProgressPanel } from "./PreviewProgressPanel"
-import { createPreviewProgress, isPreviewInProgress } from "./preview-progress"
+import { createPreviewProgress, isPreviewInProgress } from "../../state/env-sync-preview-progress"
 import type { ModalKind, SearchHit } from "./types"
 import {
   formatSearchHitLabel,

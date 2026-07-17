@@ -20,11 +20,11 @@
 
 import type { ReactNode } from "react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { api } from "../api"
+import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
 import { useContainerSize } from "../hooks/useContainerSize"
-import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
-import { useStore } from "../store"
+import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
+import { useStore } from "../state/store"
 import { ActiveUsersRunModal, type RunPreview } from "./ActiveUsersRunModal"
 import { WIDGET_ICONS } from "./widget-icons"
 import {

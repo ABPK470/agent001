@@ -8,8 +8,8 @@
 
 import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, Dot, Plus, Square } from "lucide-react"
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { api } from "../api"
-import { ThreadRunRail } from "../api/threads/ThreadRunRail"
+import { api } from "../client/index"
+import { ThreadRunRail } from "./threads/ThreadRunRail"
 import { AskUserPrompt } from "../components/AskUserPrompt"
 import { AttachmentChips, type PendingAttachment } from "../components/AttachmentChips"
 import { ChatScrollProvider, useChatScroll } from "../components/ChatScrollContext"
@@ -26,7 +26,7 @@ import { STICKY_GOAL_HOME_OFFSET_PX, STICKY_GOAL_HOME_TOP, StickyUserGoal } from
 import { TypewriterAnswer } from "../components/TypewriterAnswer"
 import { RunStatus } from "../enums"
 import { useMe } from "../hooks/useMe"
-import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
+import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useStickToBottomScroll } from "../hooks/useStickToBottomScroll"
 import { CHAT_SCROLL_HOST_ATTR, isNearBottom } from "../lib/chatScroll"
 import {
@@ -36,23 +36,23 @@ import {
   USER_GOAL_COLUMN_CLASS,
   USER_GOAL_PIN_SLOT_CLASS,
   USER_GOAL_TEXT_MAX_CLASS,
-} from "../shell/chatLayout.js"
+} from "../app/chatLayout.js"
 import {
   homeTranscriptColumnShellClassName,
   homeTranscriptScrollClassName,
   transcriptFadeOverlayClass,
-} from "../shell/chatTranscriptLayout.js"
-import { useComposerDraft } from "../chat/useComposerDraft"
-import { useChatSlashActions } from "../chat/useChatSlashActions"
-import { coerceSlashOnlyInput } from "../chat/commands"
-import type { ChatSlashCatalogEntry } from "../chat/commands"
-import { useSlashCommandInput } from "../chat/useSlashCommandInput"
-import { ChatComposerShell } from "../chat/ChatComposerShell"
-import { useCommandConsole } from "../chat/useCommandConsole"
-import type { CommandConsoleState } from "../chat/useCommandConsole"
-import { useStore, type GeneratedAttachment } from "../store"
+} from "../app/chatTranscriptLayout.js"
+import { useComposerDraft } from "./chat/useComposerDraft"
+import { useChatSlashActions } from "./chat/useChatSlashActions"
+import { coerceSlashOnlyInput } from "./chat/commands"
+import type { ChatSlashCatalogEntry } from "./chat/commands"
+import { useSlashCommandInput } from "./chat/useSlashCommandInput"
+import { ChatComposerShell } from "./chat/ChatComposerShell"
+import { useCommandConsole } from "./chat/useCommandConsole"
+import type { CommandConsoleState } from "./chat/useCommandConsole"
+import { useStore, type GeneratedAttachment } from "../state/store"
 import type { AgentDefinition, TraceEntry, WorkspaceDiff } from "../types"
-import { formatMs } from "../util"
+import { formatMs } from "../lib/util"
 /** Pin/unpin dot layout — home + thread share one profile; widget has its own. */
 type GoalPinProfile = "home" | "widget"
 

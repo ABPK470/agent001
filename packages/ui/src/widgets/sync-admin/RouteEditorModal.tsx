@@ -1,7 +1,7 @@
 import { Plus } from "lucide-react"
 import type { JSX } from "react"
 import { useState } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { ModalBtnPrimary, ModalBtnSecondary, ModalShell } from "./chrome"
 import { useConsole } from "./console-context"

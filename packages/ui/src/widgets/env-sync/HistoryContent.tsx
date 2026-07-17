@@ -12,14 +12,14 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import { api, type SyncHistoryParams, type SyncHistoryPage, type SyncRunStatus } from "../../api"
+import { api, type SyncHistoryParams, type SyncHistoryPage, type SyncRunStatus } from "../../client/index"
 import { DateField } from "../../components/DateField"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SearchablePick } from "../../components/SearchablePick"
 import { useMe } from "../../hooks/useMe"
-import { useStore } from "../../store"
+import { useStore } from "../../state/store"
 import type { SyncPlan } from "../../types"
-import { timeAgo } from "../../util"
+import { timeAgo } from "../../lib/util"
 import {
   WidgetToolbar,
   WidgetToolbarSearch,
@@ -29,8 +29,8 @@ import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
 import { HistoryPlanTables } from "./PlanTables"
-import { SqlTraceModal } from "../../components/SqlTraceModal"
-import { hasSqlTraceContent, type SqlTraceFields } from "../../sync-sql-trace"
+import { SqlTraceModal } from "../sync/trace/SqlTraceModal"
+import { hasSqlTraceContent, type SqlTraceFields } from "../sync/trace/sync-sql-trace"
 import { JsonViewer } from "../../components/JsonViewer"
 
 const PAGE_SIZE = 25

@@ -11,14 +11,14 @@
 
 import { AlertCircle, ArrowDown, ChevronRight, Database, Filter, Pause, Play } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { api } from "../api"
+import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
-import { SqlTraceFromEventData } from "../components/SqlTrace"
+import { SqlTraceFromEventData } from "./sync/trace/SqlTrace"
 import { JsonViewer } from "../components/JsonViewer"
 import { useContainerSize } from "../hooks/useContainerSize"
-import { formatLogEntry, useStore } from "../store"
+import { formatLogEntry, useStore } from "../state/store"
 import type { LogEntry } from "../types"
-import { isSyncSqlEventType } from "../sync-sql-trace"
+import { isSyncSqlEventType } from "./sync/trace/sync-sql-trace"
 import { WIDGET_ICONS } from "./widget-icons"
 import {
   LOG_TOOLBAR_CHIP,

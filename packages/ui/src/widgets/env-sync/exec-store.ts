@@ -1,4 +1,4 @@
-import { syncExecuteStream, api } from "../../api"
+import { syncExecuteStream, api } from "../../client/index"
 import type { SyncExecuteProgress } from "../../types"
 import { appendCancelledTableEvents } from "./exec-status"
 import { execTerminalSuccess, isTerminalExecEvent } from "./exec-progress"

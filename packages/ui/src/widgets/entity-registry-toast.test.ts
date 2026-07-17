@@ -11,7 +11,7 @@ const entityRegistryPath = join(
 describe("EntityRegistry notifications", () => {
   it("uses shared toast stack instead of inline banner notifications", () => {
     const src = readFileSync(entityRegistryPath, "utf8")
-    expect(src).toContain('from "../hooks/useWidgetToasts"')
+    expect(src).toContain('from "../components/useWidgetToasts"')
     expect(src).toContain("useWidgetToasts")
     expect(src).toContain("<ToastStack")
     expect(src).toContain('notify(`Published ${res.definitionCount} definition(s)`)')

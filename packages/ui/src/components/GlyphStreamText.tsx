@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react"
-import { ASCII_SCRAMBLE_GLYPHS } from "./IntroAsciiField"
+import { ASCII_FIELD_SCRAMBLE_GLYPHS } from "../lib/ascii-noise"
 
 const SETTLE_MS = 140
 const SETTLE_TICK_MS = 40
@@ -35,7 +35,7 @@ export function GlyphStreamText({
   if (!text) return null
 
   const now = performance.now()
-  const glyphs = ASCII_SCRAMBLE_GLYPHS
+  const glyphs = ASCII_FIELD_SCRAMBLE_GLYPHS
 
   return (
     <span className={className}>

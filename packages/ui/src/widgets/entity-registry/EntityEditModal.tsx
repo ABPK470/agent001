@@ -1,7 +1,7 @@
 import { AlertTriangle, CalendarClock, FilePenLine, GitBranch, Loader2, Save, Workflow } from "lucide-react"
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import type {
   AuthoredSyncFlowStep,

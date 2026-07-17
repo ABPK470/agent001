@@ -6,7 +6,7 @@ import { Clock, History, User } from "lucide-react"
 import type { JSX } from "react"
 import { EmptyState } from "../../components/EmptyState"
 import type { EntityRegistryHistoryEntry } from "../../types"
-import { timeAgo } from "../../util"
+import { timeAgo } from "../../lib/util"
 import { PANEL } from "./chrome"
 
 export interface EntityHistoryProps {

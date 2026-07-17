@@ -1,6 +1,6 @@
 import { EventType } from "@mia/shared-enums"
 import { useEffect, useRef } from "react"
-import { useStore } from "../store"
+import { useStore } from "../state/store"
 
 /** User aggregates / online status — not paginated run history. */
 export function isSummaryRefreshEvent(type: string): boolean {

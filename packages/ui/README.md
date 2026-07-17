@@ -5,26 +5,40 @@ SSE event stream.
 
 ## Layout
 
-| Folder / file | Purpose |
+```text
+src/
+├── boot/          # main.tsx, global CSS
+├── app/           # App composition, session/brand/layout, home/, workspace/
+├── client/        # REST + SSE transport
+├── state/         # Zustand store + SSE reducers
+├── widgets/       # product vertical slices (WidgetType tiles + private trees)
+├── components/    # presentation-only shared UI
+├── hooks/
+├── lib/
+├── theme/
+├── enums/
+└── types.ts
+```
+
+| Folder | Purpose |
 | --- | --- |
-| `main.tsx`, `App.tsx` | Bootstrap and root layout. |
-| `api.ts` | Typed REST client. |
-| `store.ts` | Zustand store — single source of UI state. |
-| `dashboardSync.ts` | SSE subscription + store reconciliation. |
-| `widgets/` | Self-contained UI features (run view, planner trace). |
-| `components/` | Generic, presentation-only components. |
-| `hooks/` | Reusable React hooks. |
-| `enums/` | Façade re-exports of `@mia/shared-enums`. |
-| `types.ts` | UI-facing trace + event payload types (sourced from shared enums). |
+| `boot/` | Process entry |
+| `app/` | Root App, home pages, workspace frame, session/brand helpers |
+| `client/` | Typed HTTP + SSE (not a folder named `api/`) |
+| `state/` | Zustand + live SSE reconciliation |
+| `widgets/` | Product slices — own their private trees |
+| `components/` | Presentation only — **no** store, **no** `client/` |
+| `hooks/` / `lib/` / `theme/` / `enums/` | Shared helpers and wire façades |
+
+Doctrine: [docs/doctrine.md](../../docs/doctrine.md). Enforce with `npm run lint:arch`.
 
 ## Conventions
 
-- **Wire types**: every enum value the server sends arrives typed. Pull
-  the type from `@mia/shared-enums` (re-exported here) and use it as the
-  union — never accept bare `string` for a known enum field.
-- **State**: live in the Zustand store. Components read with selectors;
-  no parallel `useState` for cross-cutting state.
-- **Events**: do not poll. The SSE stream is the source of truth; REST is
-  for actions, not for reading state that already streams.
-- **Widgets are vertical slices**: a widget owns its components, hooks,
-  styles. Lift to `components/` only when a second widget needs it.
+- **Wire types**: pull enums from `@mia/shared-enums` (re-exported via `enums/`);
+  never accept bare `string` for a known enum field.
+- **State**: live in the Zustand store under `state/`. Components read with
+  selectors; no parallel `useState` for cross-cutting state.
+- **Events**: do not poll. The SSE stream is the source of truth; REST is for
+  actions.
+- **Widgets are vertical slices**: a widget owns its private UI. Lift to
+  `components/` only when a second widget needs presentation-only code.

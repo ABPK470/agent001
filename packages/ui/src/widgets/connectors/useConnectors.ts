@@ -6,7 +6,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react"
 
-import { api } from "../../api"
+import { api } from "../../client/index"
 import type { ConnectorAdmin } from "../../types"
 
 export function useConnectors(

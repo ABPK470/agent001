@@ -1,0 +1,32 @@
+---
+description: Enforce @mia/ui layer doctrine when adding or moving files
+globs: packages/ui/**/*
+alwaysApply: false
+---
+
+# UI layer doctrine
+
+`@mia/ui` is the platform client. Do **not** fake agent `domain/core/runtime`.
+Do **not** name folders `shell/`, `chrome/`, `kit/`, `surfaces/`, or top-level `ui/`.
+
+| Kind of code | Put it in |
+| --- | --- |
+| `main.tsx`, global CSS | `boot/` |
+| App root, home pages, workspace frame, session/brand/layout | `app/` |
+| REST + SSE transport | `client/` |
+| Zustand + SSE reducers | `state/` |
+| Product vertical slices (`WidgetType` tiles + private trees) | `widgets/` |
+| Presentation-only shared UI | `components/` |
+| Hooks / pure helpers / tokens | `hooks/` · `lib/` · `theme/` |
+
+**Hard rule:** `components/` must not import `state/` or `client/`. If it needs store or HTTP, it belongs in `widgets/` or `app/`.
+
+**Forbidden:** `shell/`, `chrome/`, `kit/`, `surfaces/`, `features/`, `api/` (folder), Nest `application/` / `domain/` / `runtime/` / `transport/`.
+
+**Import direction** (enforced by `npm run lint:arch`):
+
+- `components` → `hooks`, `lib`, `theme`, `enums`, `types` only
+- `state` → `client`, `lib`, `enums`, `types` — not widgets/components/app
+- Outside the package: wire types from `@mia/shared-types` / `@mia/shared-enums` only
+
+Full contract: `docs/doctrine.md`.

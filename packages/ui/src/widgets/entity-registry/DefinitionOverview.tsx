@@ -4,7 +4,7 @@
 
 import { useEffect, useState } from "react"
 import type { JSX } from "react"
-import { api } from "../../api"
+import { api } from "../../client/index"
 import type { EntityRegistryDefinition, SyncDefinitionAdminItem } from "../../types"
 import { PANEL } from "./chrome"
 import { buildDefinitionSections, type DefinitionSectionId } from "./definition-helpers"

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react"
-import { api } from "../api"
+import { api } from "../client/index"
 
 const POLL_MS = 15000
 

@@ -1,8 +1,8 @@
 import { Loader2, XCircle } from "lucide-react"
 
 import { DIFF } from "./constants"
-import type { EnvSyncPreviewProgress } from "./preview-progress"
-import { previewTablesDone, previewTablesFailed } from "./preview-progress"
+import type { EnvSyncPreviewProgress } from "../../state/env-sync-preview-progress"
+import { previewTablesDone, previewTablesFailed } from "../../state/env-sync-preview-progress"
 
 export function PreviewProgressPanel({ progress }: { progress: EnvSyncPreviewProgress }) {
   const tableNames = Object.keys(progress.tables).sort()

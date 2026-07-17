@@ -13,8 +13,8 @@ import { EmptyState } from "../components/EmptyState"
 import { extractToolCode, ToolStepOutput } from "../components/tool-code-display"
 import { JsonViewer } from "../components/JsonViewer"
 import { RunStatus } from "../enums"
-import { useStore } from "../store"
-import { formatMs } from "../util"
+import { useStore } from "../state/store"
+import { formatMs } from "../lib/util"
 
 export function StepTimeline() {
   const steps = useStore((s) => s.steps)

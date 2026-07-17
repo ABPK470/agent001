@@ -4,13 +4,13 @@
 
 import { Loader2, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
-import { api } from "../api"
+import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
 import { RunStatus as RunStatusEnum } from "../enums"
 import { useContainerSize } from "../hooks/useContainerSize"
-import { useStore } from "../store"
+import { useStore } from "../state/store"
 import type { AgentDefinition, RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
-import { fmtTokens, statusColor, timeAgo } from "../util"
+import { fmtTokens, statusColor, timeAgo } from "../lib/util"
 import { WIDGET_ICONS } from "./widget-icons"
 
 type PlannerDecisionTrace = Extract<TraceEntry, { kind: "planner-decision" }>

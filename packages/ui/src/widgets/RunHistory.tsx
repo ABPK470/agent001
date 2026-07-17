@@ -7,12 +7,12 @@
 
 import { GitBranch, Play, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useEffect, useState } from "react"
-import { api } from "../api"
+import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
 import { RunStatus } from "../enums"
-import { useStore } from "../store"
+import { useStore } from "../state/store"
 import type { AgentDefinition } from "../types"
-import { fmtTokens, statusColor, timeAgo, truncate } from "../util"
+import { fmtTokens, statusColor, timeAgo, truncate } from "../lib/util"
 import { WIDGET_ICONS } from "./widget-icons"
 
 export function RunHistory() {

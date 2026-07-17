@@ -1,7 +1,7 @@
 import { BookOpen, Loader2 } from "lucide-react"
 import { useEffect, useState } from "react"
 
-import { api } from "../../api"
+import { api } from "../../client/index"
 import { JsonViewer } from "../../components/JsonViewer"
 import type { PublishedSyncDefinition, SyncPlan } from "../../types"
 import { Err, ModalShell } from "./chrome"

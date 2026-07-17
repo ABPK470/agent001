@@ -2,26 +2,13 @@
 /**
  * lint-arch.mjs — architecture / doctrine lint (no ESLint dependency).
  *
- * Enforces docs/doctrine.md hard edges for @mia/agent, @mia/server, @mia/sync:
+ * Enforces docs/doctrine.md hard edges for @mia/agent, @mia/server, @mia/sync, @mia/ui:
  *
- *   Agent:
- *     1. Forbidden resurrected trees (application/, domain/services/, …)
- *     2. Layer import direction
- *     3. No module-level mutable state outside allowlists
- *     4. No new AsyncLocalStorage for DI
- *
- *   Server:
- *     5. Canonical top-level folders (boot/http/infra/adapters/api/…)
- *     6. Forbidden Nest folders under api/ + retired top-level names
- *     7. Shell layer import direction
- *
- *   Sync (rhymes with agent):
- *     8. Forbidden application/ tree
- *     9. Layer import direction (domain/core/runtime/ports/tools/adapters)
- *    10. Module-level mutable state outside allowlists
- *
- *   Cross-package:
- *    11. Other packages must not deep-import agent or sync src
+ *   Agent / Sync / Server — see sections below
+ *   UI:
+ *     - Canonical top-level folders (boot/app/client/state/widgets/components/…)
+ *     - Forbidden shell/features/api/kit/surfaces/…
+ *     - Layer import direction
  *
  * Run: `npm run lint:arch`  (or `node scripts/lint-arch.mjs`)
  */
@@ -604,6 +591,133 @@ function lintSyncModuleState(file, src) {
   }
 }
 
+// ── UI: FE-native dialect ───────────────────────────────────────
+const UI_LAYERS = new Set([
+  "boot",
+  "app",
+  "client",
+  "state",
+  "widgets",
+  "components",
+  "hooks",
+  "lib",
+  "theme",
+  "enums",
+])
+
+const UI_ALLOWED = {
+  boot: new Set(["app", "components", "theme", "enums"]),
+  app: new Set(["widgets", "state", "client", "components", "hooks", "lib", "enums", "theme", "app"]),
+  widgets: new Set(["client", "state", "app", "components", "hooks", "lib", "enums", "theme", "widgets"]),
+  components: new Set(["hooks", "lib", "theme", "enums", "components"]),
+  state: new Set(["client", "lib", "enums", "state"]),
+  client: new Set(["enums", "lib", "client"]),
+  hooks: new Set(["client", "state", "lib", "enums", "hooks"]),
+  lib: new Set(["enums", "lib"]),
+  theme: new Set(["theme"]),
+  enums: new Set(["enums"]),
+}
+
+const UI_LAYER_ALLOWLIST = []
+
+const FORBIDDEN_UI_TREES = [
+  "shell",
+  "chrome",
+  "kit",
+  "surfaces",
+  "ui",
+  "features",
+  "api",
+  "application",
+]
+
+function uiLayerOf(relPath) {
+  const head = relPath.split("/")[0]
+  return UI_LAYERS.has(head) ? head : null
+}
+
+function isUiLayerAllowlisted(fromRel, toRel) {
+  for (const a of UI_LAYER_ALLOWLIST) {
+    if (a.from && a.from !== fromRel) continue
+    if (a.fromPrefix && !fromRel.startsWith(a.fromPrefix)) continue
+    if (a.toPrefix && !toRel.startsWith(a.toPrefix)) continue
+    return a
+  }
+  return null
+}
+
+function lintUiForbiddenTrees() {
+  for (const tree of FORBIDDEN_UI_TREES) {
+    const abs = join(UI_SRC, tree)
+    if (existsSync(abs)) {
+      fail(abs, 0, "ui-forbidden-tree",
+        `doctrine forbids packages/ui/src/${tree}/ — see docs/doctrine.md`)
+    }
+  }
+}
+
+function lintUiTopLevel() {
+  if (!existsSync(UI_SRC)) return
+  const allowedHeads = new Set([
+    ...UI_LAYERS,
+    "types.ts",
+    "vite-env.d.ts",
+  ])
+  for (const name of readdirSync(UI_SRC)) {
+    if (name.startsWith(".")) continue
+    const abs = join(UI_SRC, name)
+    const st = statSync(abs)
+    if (st.isFile()) {
+      if (name === "types.ts" || name === "vite-env.d.ts" || name.endsWith(".md") || name.endsWith(".css")) continue
+      fail(abs, 0, "ui-top-level", `unexpected file at ui src root: ${name}`)
+      continue
+    }
+    if (!allowedHeads.has(name)) {
+      fail(abs, 0, "ui-top-level",
+        `unknown ui top-level "${name}". Allowed: boot, app, client, state, widgets, components, hooks, lib, theme, enums`)
+    }
+  }
+}
+
+function lintUiLayerImports(file, src) {
+  const fromRel = relative(UI_SRC, file)
+  if (fromRel.endsWith(".test.ts") || fromRel.endsWith(".test.tsx")) return
+  const fromLayer = uiLayerOf(fromRel)
+  if (!fromLayer) return
+
+  const lines = src.split("\n")
+  const importRe = /(?:import|export)\s+(?:type\s+)?(?:[^"'`;]+?\s+from\s+)?["']([^"']+)["']/g
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) continue
+    importRe.lastIndex = 0
+    let m
+    while ((m = importRe.exec(line)) !== null) {
+      const spec = m[1]
+      if (!spec.startsWith(".")) continue
+      const targetAbs = resolveImportTarget(file, spec)
+      const toRel = relative(UI_SRC, targetAbs)
+      if (toRel.startsWith("..")) continue
+      // types.ts at src root is shared wire façade
+      if (toRel === "types.ts" || toRel.startsWith("types.")) continue
+      const toLayer = uiLayerOf(toRel)
+      if (!toLayer || toLayer === fromLayer) continue
+
+      const allowed = UI_ALLOWED[fromLayer]
+      if (allowed?.has(toLayer)) continue
+
+      const debt = isUiLayerAllowlisted(fromRel, toRel)
+      if (debt) continue
+
+      fail(file, i + 1, "ui-layer-import",
+        `${fromLayer} may not import ${toLayer} ("${spec}" → ${toRel}). ` +
+          `Allowed from ${fromLayer}: ${[...allowed].join(", ") || "(none)"}. ` +
+          `See docs/doctrine.md`)
+    }
+  }
+}
+
 // ── Run ─────────────────────────────────────────────────────────
 lintForbiddenTrees()
 
@@ -632,6 +746,14 @@ for (const f of syncFiles) {
   lintSyncModuleState(f, src)
 }
 
+lintUiForbiddenTrees()
+lintUiTopLevel()
+const uiFiles = existsSync(UI_SRC) ? walk(UI_SRC) : []
+for (const f of uiFiles) {
+  const src = readFileSync(f, "utf8")
+  lintUiLayerImports(f, src)
+}
+
 lintNoDeepPackageImports(SERVER_SRC, "server")
 lintNoDeepPackageImports(SYNC_SRC, "sync")
 lintNoDeepPackageImports(UI_SRC, "ui")
@@ -639,8 +761,8 @@ lintNoDeepPackageImports(AGENT_SRC, "agent")
 
 if (errors.length === 0) {
   console.log(
-    `lint-arch: ${agentFiles.length} agent + ${serverFiles.length} server + ${syncFiles.length} sync files OK ` +
-      `(${LAYER_ALLOWLIST.length} agent / ${SERVER_LAYER_ALLOWLIST.length} server / ${SYNC_LAYER_ALLOWLIST.length} sync debt allowlists).`,
+    `lint-arch: ${agentFiles.length} agent + ${serverFiles.length} server + ${syncFiles.length} sync + ${uiFiles.length} ui files OK ` +
+      `(${LAYER_ALLOWLIST.length} agent / ${SERVER_LAYER_ALLOWLIST.length} server / ${SYNC_LAYER_ALLOWLIST.length} sync / ${UI_LAYER_ALLOWLIST.length} ui debt allowlists).`,
   )
   process.exit(0)
 }

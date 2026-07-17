@@ -1,8 +1,8 @@
 import { EventType } from "@mia/shared-enums"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
-import { api } from "../../../api"
-import { useStore } from "../../../store"
+import { api } from "../../../client/index"
+import { useStore } from "../../../state/store"
 import type { SyncEnvironmentAdmin } from "../../../types"
 
 function envEventCount(log: ReadonlyArray<{ type: unknown }>): number {
