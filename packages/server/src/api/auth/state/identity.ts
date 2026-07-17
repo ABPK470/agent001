@@ -177,10 +177,9 @@ function tryResolveSession(req: FastifyRequest, reply: FastifyReply): CurrentSes
 }
 
 /**
- * Register the identity hook. Must be called AFTER @fastify/cookie is
- * registered and AFTER routes/auth.ts has been registered (so its paths
- * exist on the bypass list). The auth routes themselves do not enforce
- * the gate — see pathIsAuthExempt.
+ * Register the identity onRequest hook plus whoami/logout routes.
+ * Call after @fastify/cookie. Bypass is path-prefix based (`/api/auth/`, …),
+ * so auth routes may be registered before or after this — see pathIsAuthExempt.
  */
 export async function registerIdentity(app: FastifyInstance): Promise<void> {
   app.addHook("onRequest", async (req: FastifyRequest, reply: FastifyReply) => {
@@ -232,7 +231,7 @@ export async function registerIdentity(app: FastifyInstance): Promise<void> {
   })
 }
 
-/** @internal — exported for routes/auth.ts to mint the cookie after login/register. */
+/** Mint a sessions row and set the signed cookie (used by local login/register). */
 export function loginAndSetCookie(args: {
   reply: FastifyReply
   upn: string

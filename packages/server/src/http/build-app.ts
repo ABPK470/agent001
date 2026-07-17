@@ -92,13 +92,13 @@ export async function buildApp(opts: BuildAppOptions) {
   await app.register(cors, { origin: true, credentials: true })
   await app.register(cookie, { secret: process.env["MIA_COOKIE_SECRET"] ?? undefined })
 
-  // Identity middleware — resolves req.session and seeds AsyncLocalStorage.
-  // Must be registered AFTER @fastify/cookie. Adds GET /api/auth/whoami,
-  // POST /api/auth/logout, and the 401 gate for everything outside the
-  // auth bypass list.
+  // Identity: onRequest resolves req.session (signed cookie or SSO header),
+  // 401-gates everything outside the auth/static bypass list, and registers
+  // GET /api/auth/whoami + POST /api/auth/logout. Requires @fastify/cookie first.
+  // Session facts stay on req.session and are passed explicitly downstream —
+  // nothing is stored in AsyncLocalStorage.
   await registerIdentity(app)
-  // Auth routes (register/login/config) — paths are on the bypass list in
-  // identity.ts so they're reachable without a session.
+  // Local register / login / config under /api/auth/* (same bypass prefix).
   await registerAuthRoutes(app)
 
   app.addHook("onRequest", (req, _reply, done) => {
@@ -179,11 +179,9 @@ export async function buildApp(opts: BuildAppOptions) {
     // Disable Nagle's algorithm so each SSE frame is sent immediately
     // instead of being coalesced with subsequent writes into one TCP packet.
     reply.raw.socket?.setNoDelay(true)
-    // identity.ts:resolveSession() runs in onRequest BEFORE this handler and
-    // guarantees req.session is populated with a non-empty sid (header path,
-    // signed cookie, or `anon:<random>` minted on first contact). No defensive
-    // fallbacks here — a missing session would indicate the identity hook is
-    // broken and we want that to surface loudly, not be masked by "anon".
+    // registerIdentity's onRequest already resolved a real users-backed
+    // session (cookie or SSO). /api/events/stream is not on the bypass list,
+    // so a missing req.session here means the identity hook is broken — fail loud.
     const dispose = addSseClient(reply.raw, {
       upn: req.session.upn,
       sid: req.session.sid,
@@ -191,20 +189,14 @@ export async function buildApp(opts: BuildAppOptions) {
     })
 
     // ── Liveness ────────────────────────────────────────────────
-    // The SSE stream lifecycle IS the online signal. Touch the session
-    // immediately on open and every 25 s while connected; when the
-    // client disconnects we stop touching, and `last_seen_at` ages out
-    // within the 60 s "online" window. No polling endpoint required.
-    // Anonymous SSE connections (no real cookie session) carry an
-    // `anon:<random>` sid that has no row in `sessions`, so skip them.
+    // SSE connection lifecycle is the online signal: touch on open and every
+    // 25s while connected; on disconnect we stop, and last_seen_at ages out
+    // of the 60s "online" window. No polling endpoint.
     const sid = req.session.sid
-    const isRealSession = typeof sid === "string" && !sid.startsWith("anon:")
-    if (isRealSession) {
-      try {
-        touchSession(sid)
-      } catch {
-        /* observability only */
-      }
+    try {
+      touchSession(sid)
+    } catch {
+      /* observability only */
     }
     // Heartbeat every 25s — keeps intermediaries from idle-closing the
     // stream AND doubles as the liveness ping for the session row.
@@ -214,12 +206,10 @@ export async function buildApp(opts: BuildAppOptions) {
       } catch {
         /* dropped */
       }
-      if (isRealSession) {
-        try {
-          touchSession(sid)
-        } catch {
-          /* observability only */
-        }
+      try {
+        touchSession(sid)
+      } catch {
+        /* observability only */
       }
     }, 25_000)
     req.raw.on("close", () => {
