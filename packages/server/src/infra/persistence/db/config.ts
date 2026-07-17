@@ -3,10 +3,10 @@
  */
 
 import { PolicyEffect } from "@mia/agent"
-import { PolicySource } from "../../../shared/enums/index.js"
+import { PolicySource } from "../../../internal/enums/index.js"
 import { getDb } from "../connection.js"
 
-export { PolicySource } from "../../../shared/enums/index.js"
+export { PolicySource } from "../../../internal/enums/index.js"
 
 // ── Layout queries ───────────────────────────────────────────────
 

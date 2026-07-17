@@ -130,7 +130,7 @@ Before generating ANY plan, classify the task into one of these types. The type 
 
 ### Type A — Code-Writing Task
 The task asks you to BUILD, CREATE, or IMPLEMENT software: an app, game, tool, dashboard, script, API, or any deliverable that exists as code files (.ts, .js, .html, .py, .go, .rs, etc.).
-Key signals: "build", "create", "implement", "develop", "write a game/app/tool", "make a dashboard", explicit output file paths (.html/.js/.ts etc.).
+Key signals: "build", "create", "implement", "develop", "write a game/http/tool", "make a dashboard", explicit output file paths (.html/.js/.ts etc.).
 → Follow ALL rules including Rule 23 (CONTRACT-FIRST ARCHITECTURE with BLUEPRINT.md and function signatures).
 
 ### Type B — Tool-Execution / Investigation Task

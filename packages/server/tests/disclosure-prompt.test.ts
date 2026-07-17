@@ -17,8 +17,8 @@ import { mkdtemp, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import { buildSystemMessages } from "../src/features/runs/core/system-messages/index.js"
-import type { RunWorkspaceContext } from "../src/features/runs/workspace/index.js"
+import { buildSystemMessages } from "../src/api/runs/prompting/system-messages/index.js"
+import type { RunWorkspaceContext } from "../src/api/runs/workspace/index.js"
 
 const created: string[] = []
 

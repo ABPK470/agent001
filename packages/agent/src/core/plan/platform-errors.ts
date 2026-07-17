@@ -34,7 +34,7 @@ const PATTERNS: Array<{ regex: RegExp; build: (m: RegExpMatchArray) => PlatformU
       subject: `MSSQL connection "${m[1]}"`,
       remediation:
         "Add a SQL Server connector in the platform menu (Connectors) and restart the server. " +
-        "See packages/server/src/features/connectors for the connector model."
+        "See packages/server/src/api/connectors for the connector model."
     })
   },
   {

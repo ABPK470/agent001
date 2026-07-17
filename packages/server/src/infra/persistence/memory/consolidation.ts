@@ -1,6 +1,6 @@
 import { EventType } from "@mia/agent"
 import { getDb } from "../sqlite.js"
-import { MemoryRole, MemorySource, MemoryTier } from "../../../shared/enums/memory.js"
+import { MemoryRole, MemorySource, MemoryTier } from "../../../internal/enums/memory.js"
 import { broadcast } from "../../events/broadcaster.js"
 import { ingestTurn } from "./ingestion.js"
 import { DEDUP_JACCARD_THRESHOLD, jaccardSimilarity, tokenize, truncateAtBoundary } from "./scoring.js"

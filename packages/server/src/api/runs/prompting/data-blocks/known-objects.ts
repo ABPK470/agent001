@@ -21,8 +21,8 @@ import {
   summarizeCachedPayload,
   type CachedTool,
   type TableVerdictRole
-} from "../../../../platform/persistence/memory.js"
-import { getDb } from "../../../../platform/persistence/sqlite.js"
+} from "../../../../infra/persistence/memory.js"
+import { getDb } from "../../../../infra/persistence/sqlite.js"
 import type { PriorTurn } from "./prior-turns.js"
 
 export interface LoadKnownObjectsOptions {

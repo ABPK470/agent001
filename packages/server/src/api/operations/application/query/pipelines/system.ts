@@ -2,7 +2,7 @@
  * Build a catch-all pipeline for events with no runId or planId — grouped per minute.
  */
 
-import { OperationKind, OperationStatus } from "../../../../../shared/enums/operations.js"
+import { OperationKind, OperationStatus } from "../../../../../internal/enums/operations.js"
 import type { OperationEvent, OperationPipeline } from "../types.js"
 import { durationOf } from "../utils.js"
 

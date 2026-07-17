@@ -10,8 +10,8 @@ import { ApprovalRequiredError, EventType, RunStatus, type Agent } from "@mia/ag
 import Database from "better-sqlite3"
 import Fastify from "fastify"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { CurrentSession } from "../src/features/auth/index.js"
-import { NotificationActionType } from "../src/shared/enums/notifications.js"
+import type { CurrentSession } from "../src/api/auth/index.js"
+import { NotificationActionType } from "../src/internal/enums/notifications.js"
 import { seedRun, seedSession, seedUser } from "./_fk-helpers.js"
 
 const UPN = "alice@example.com"
@@ -41,7 +41,7 @@ afterEach(() => {
 })
 
 async function setupDb(): Promise<void> {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   seedUser(testDb, UPN)
@@ -53,11 +53,11 @@ describe("tool approval end-to-end", () => {
     await setupDb()
     seedRun(testDb, "run-e2e", { upn: UPN, status: "running", goal: "fetch report" })
 
-    const { subscribeToEvents } = await import("../src/platform/events/broadcaster.js")
+    const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
     const { finalizeWaitingForApprovalRun } = await import(
-      "../src/features/runs/execution/run-executor/finalization/waiting-approval.js"
+      "../src/api/runs/execution/run-executor/finalization/waiting-approval.js"
     )
-    const { listNotifications, getRun } = await import("../src/platform/persistence/db/index.js")
+    const { listNotifications, getRun } = await import("../src/infra/persistence/db/index.js")
 
     const events: { type: string; data: Record<string, unknown> }[] = []
     const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data as Record<string, unknown> }))
@@ -143,12 +143,12 @@ describe("tool approval end-to-end", () => {
 
       const approvalId = approvalEvent!.data["approvalId"] as string
       const resumeRun = vi.fn(() => "run-e2e-resumed")
-      const { registerRunRoutes } = await import("../src/features/runs/routes.js")
+      const { registerRunRoutes } = await import("../src/api/runs/routes.js")
       const app = Fastify({ logger: false })
       app.addHook("onRequest", async (req) => {
         ;(req as unknown as { session: CurrentSession }).session = session()
       })
-      registerRunRoutes(app, { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/features/runs/orchestrator.js").AgentOrchestrator)
+      registerRunRoutes(app, { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
       await app.ready()
 
       const approve = await app.inject({
@@ -170,9 +170,9 @@ describe("tool approval end-to-end", () => {
     await setupDb()
     seedRun(testDb, "run-deny", { upn: UPN, status: "waiting_for_approval" })
 
-    const { upsertPendingRunToolApproval } = await import("../src/platform/persistence/db/index.js")
-    const { subscribeToEvents } = await import("../src/platform/events/broadcaster.js")
-    const { registerRunRoutes } = await import("../src/features/runs/routes.js")
+    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
+    const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
+    const { registerRunRoutes } = await import("../src/api/runs/routes.js")
 
     const approval = upsertPendingRunToolApproval({
       runId: "run-deny",
@@ -191,7 +191,7 @@ describe("tool approval end-to-end", () => {
     app.addHook("onRequest", async (req) => {
       ;(req as unknown as { session: CurrentSession }).session = session()
     })
-    registerRunRoutes(app, { resumeRun: vi.fn(), cancelRun } as unknown as import("../src/features/runs/orchestrator.js").AgentOrchestrator)
+    registerRunRoutes(app, { resumeRun: vi.fn(), cancelRun } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
     await app.ready()
 
     try {

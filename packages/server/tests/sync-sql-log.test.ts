@@ -7,14 +7,14 @@ import {
   hydratePersistedSqlEventData,
   listSyncSqlLogByPlan,
   recordSyncSqlLog,
-} from "../src/platform/persistence/db/sync-sql-log.js"
+} from "../src/infra/persistence/db/sync-sql-log.js"
 
 let testDb: Database.Database
 
 describe("sync-sql-log", () => {
   beforeEach(async () => {
     testDb = new Database(":memory:")
-    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
     _setDb(testDb)
     _migrate(testDb)
   })

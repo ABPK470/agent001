@@ -5,7 +5,7 @@ import { tmpdir } from "node:os"
 import { resolve } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
-import type { CurrentSession } from "../src/features/auth/index.js"
+import type { CurrentSession } from "../src/api/auth/index.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -24,8 +24,8 @@ function adminSession(): CurrentSession {
 }
 
 async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
-  const { registerEntityRegistryRoutes } = await import("../src/features/sync/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { registerEntityRegistryRoutes } = await import("../src/api/sync/index.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
 
   _setDb(testDb)

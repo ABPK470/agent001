@@ -16,13 +16,13 @@ import { RunStatus } from "@mia/agent"
 import {
   extractOrderedToolSequence,
   formatChoreographyLine
-} from "../src/platform/persistence/memory/episodic-choreography.js"
+} from "../src/infra/persistence/memory/episodic-choreography.js"
 import {
   augmentGoalQueryForFts,
   episodicShortcutMatchesGoal,
   extractGoalClasses,
   goalClassesShareAffinity
-} from "../src/platform/persistence/memory/goal-class.js"
+} from "../src/infra/persistence/memory/goal-class.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -41,7 +41,7 @@ beforeEach(async () => {
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
   testDb.pragma("foreign_keys = OFF")
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
@@ -55,7 +55,7 @@ afterEach(() => {
 })
 
 function ingestSubstantiveRun(
-  mem: typeof import("../src/platform/persistence/memory/index.js"),
+  mem: typeof import("../src/infra/persistence/memory/index.js"),
   opts: { id: string; goal: string; upn: string }
 ): void {
   mem.ingestRunTurns({
@@ -191,7 +191,7 @@ describe("episodic choreography extraction", () => {
 
 describe("episodic recall — goal-class overlap", () => {
   it("recalls a prior run across surface-different but shape-similar goals", async () => {
-    const mem = await import("../src/platform/persistence/memory/index.js")
+    const mem = await import("../src/infra/persistence/memory/index.js")
     ingestSubstantiveRun(mem, {
       id: "r1",
       goal: "list top 3 products based on revenue for April 2025",
@@ -214,7 +214,7 @@ describe("episodic recall — goal-class overlap", () => {
   })
 
   it("still recalls on literal-token overlap", async () => {
-    const mem = await import("../src/platform/persistence/memory/index.js")
+    const mem = await import("../src/infra/persistence/memory/index.js")
     ingestSubstantiveRun(mem, {
       id: "r2",
       goal: "list top 3 products based on revenue for April 2025",
@@ -230,7 +230,7 @@ describe("episodic recall — goal-class overlap", () => {
   })
 
   it("does NOT match wholly unrelated goals", async () => {
-    const mem = await import("../src/platform/persistence/memory/index.js")
+    const mem = await import("../src/infra/persistence/memory/index.js")
     ingestSubstantiveRun(mem, {
       id: "r3",
       goal: "list top 3 products based on revenue for April 2025",
@@ -246,7 +246,7 @@ describe("episodic recall — goal-class overlap", () => {
   })
 
   it("stores goal-class tags in metadata for FTS indexing (not in visible content)", async () => {
-    const mem = await import("../src/platform/persistence/memory/index.js")
+    const mem = await import("../src/infra/persistence/memory/index.js")
     ingestSubstantiveRun(mem, {
       id: "r4",
       goal: "total revenue per month",

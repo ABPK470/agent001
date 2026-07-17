@@ -39,7 +39,7 @@ afterEach(() => {
 })
 
 async function bootstrap(): Promise<{ rootRunId: string }> {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _migrate(testDb)
   _setDb(testDb)
   const rootRunId = "00000000-0000-0000-0000-000000000001"
@@ -50,8 +50,8 @@ async function bootstrap(): Promise<{ rootRunId: string }> {
 describe("AgentBus persistence (B.1)", () => {
   it("writes every publish to the agent_messages table", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus } = await import("../src/platform/queue/agent-bus.js")
-    const { BusProtocol } = await import("../src/shared/enums/bus.js")
+    const { AgentBus } = await import("../src/infra/queue/agent-bus.js")
+    const { BusProtocol } = await import("../src/internal/enums/bus.js")
 
     const bus = new AgentBus(rootRunId)
     bus.publish({
@@ -95,8 +95,8 @@ describe("AgentBus persistence (B.1)", () => {
 
   it("cascade-deletes messages when the root run is removed", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus } = await import("../src/platform/queue/agent-bus.js")
-    const { BusProtocol } = await import("../src/shared/enums/bus.js")
+    const { AgentBus } = await import("../src/infra/queue/agent-bus.js")
+    const { BusProtocol } = await import("../src/internal/enums/bus.js")
     new AgentBus(rootRunId).publish({
       topic: "t",
       fromRunId: rootRunId,
@@ -114,8 +114,8 @@ describe("AgentBus persistence (B.1)", () => {
 describe("AgentBus history replay (B.2)", () => {
   it("a sibling spawned mid-tree sees prior messages in its initial inbox", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus, createBusTools } = await import("../src/platform/queue/agent-bus.js")
-    const { BusProtocol } = await import("../src/shared/enums/bus.js")
+    const { AgentBus, createBusTools } = await import("../src/infra/queue/agent-bus.js")
+    const { BusProtocol } = await import("../src/internal/enums/bus.js")
 
     const bus = new AgentBus(rootRunId)
     bus.publish({
@@ -144,8 +144,8 @@ describe("AgentBus history replay (B.2)", () => {
 
   it("does not include the agent's own messages in its inbox", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus, createBusTools } = await import("../src/platform/queue/agent-bus.js")
-    const { BusProtocol } = await import("../src/shared/enums/bus.js")
+    const { AgentBus, createBusTools } = await import("../src/infra/queue/agent-bus.js")
+    const { BusProtocol } = await import("../src/internal/enums/bus.js")
 
     const bus = new AgentBus(rootRunId)
     bus.publish({
@@ -173,8 +173,8 @@ describe("AgentBus history replay (B.2)", () => {
 describe("wait_for_response (B.2)", () => {
   it("resolves when an Answer arrives after subscription", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus, createBusTools } = await import("../src/platform/queue/agent-bus.js")
-    const { BusProtocol } = await import("../src/shared/enums/bus.js")
+    const { AgentBus, createBusTools } = await import("../src/infra/queue/agent-bus.js")
+    const { BusProtocol } = await import("../src/internal/enums/bus.js")
 
     const bus = new AgentBus(rootRunId)
     const askerTools = createBusTools(bus, "asker", "Asker")
@@ -211,8 +211,8 @@ describe("wait_for_response (B.2)", () => {
 
   it("fast-paths a pre-existing Answer in the DB", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus, createBusTools } = await import("../src/platform/queue/agent-bus.js")
-    const { BusProtocol } = await import("../src/shared/enums/bus.js")
+    const { AgentBus, createBusTools } = await import("../src/infra/queue/agent-bus.js")
+    const { BusProtocol } = await import("../src/internal/enums/bus.js")
 
     const bus = new AgentBus(rootRunId)
     const question = bus.publish({
@@ -241,7 +241,7 @@ describe("wait_for_response (B.2)", () => {
 
   it("returns a timeout marker when no answer arrives", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus, createBusTools } = await import("../src/platform/queue/agent-bus.js")
+    const { AgentBus, createBusTools } = await import("../src/infra/queue/agent-bus.js")
 
     const bus = new AgentBus(rootRunId)
     const tools = createBusTools(bus, "asker", "Asker")
@@ -256,8 +256,8 @@ describe("wait_for_response (B.2)", () => {
 
   it("rejects an Answer without reply_to via send_message", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus, createBusTools } = await import("../src/platform/queue/agent-bus.js")
-    const { BusProtocol } = await import("../src/shared/enums/bus.js")
+    const { AgentBus, createBusTools } = await import("../src/infra/queue/agent-bus.js")
+    const { BusProtocol } = await import("../src/internal/enums/bus.js")
 
     const bus = new AgentBus(rootRunId)
     const tools = createBusTools(bus, "responder", "Responder")
@@ -275,9 +275,9 @@ describe("wait_for_response (B.2)", () => {
 describe("Help protocol routing (B.3)", () => {
   it("emits AgentHelpRequested SSE in addition to AgentBusMessage", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus } = await import("../src/platform/queue/agent-bus.js")
-    const { BusProtocol } = await import("../src/shared/enums/bus.js")
-    const { subscribeToEvents } = await import("../src/platform/events/broadcaster.js")
+    const { AgentBus } = await import("../src/infra/queue/agent-bus.js")
+    const { BusProtocol } = await import("../src/internal/enums/bus.js")
+    const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
 
     const seen: string[] = []
     const unsubscribe = subscribeToEvents((ev) => {
@@ -301,9 +301,9 @@ describe("Help protocol routing (B.3)", () => {
 
   it("does NOT emit AgentHelpRequested for non-Help protocols", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus } = await import("../src/platform/queue/agent-bus.js")
-    const { BusProtocol } = await import("../src/shared/enums/bus.js")
-    const { subscribeToEvents } = await import("../src/platform/events/broadcaster.js")
+    const { AgentBus } = await import("../src/infra/queue/agent-bus.js")
+    const { BusProtocol } = await import("../src/internal/enums/bus.js")
+    const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
 
     const seen: string[] = []
     const unsubscribe = subscribeToEvents((ev) => {
@@ -335,7 +335,7 @@ describe("Help protocol routing (B.3)", () => {
 describe("Per-child bus identity (B.3)", () => {
   it("createBusTools binds runId+agentName per call so children publish as themselves", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus, createBusTools } = await import("../src/platform/queue/agent-bus.js")
+    const { AgentBus, createBusTools } = await import("../src/infra/queue/agent-bus.js")
     seedRun(testDb, "child-A", { goal: "a" })
     seedRun(testDb, "child-B", { goal: "b" })
 
@@ -361,7 +361,7 @@ describe("Per-child bus identity (B.3)", () => {
 
   it("a child's inbox does not echo its own messages but DOES see siblings'", async () => {
     const { rootRunId } = await bootstrap()
-    const { AgentBus, createBusTools } = await import("../src/platform/queue/agent-bus.js")
+    const { AgentBus, createBusTools } = await import("../src/infra/queue/agent-bus.js")
     seedRun(testDb, "child-A", { goal: "a" })
     seedRun(testDb, "child-B", { goal: "b" })
 

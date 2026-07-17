@@ -30,7 +30,7 @@ afterEach(() => {
 })
 
 async function setup() {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
 }
@@ -39,9 +39,9 @@ describe("entity registry bootstrap", () => {
   it("seeds all deploy artifact entities on an empty database", async () => {
     await setup()
     const { seedEntityRegistryIfEmpty } = await import(
-      "../src/features/sync/application/seed-entity-registry.js"
+      "../src/api/sync/application/seed-entity-registry.js"
     )
-    const db = await import("../src/platform/persistence/sqlite.js")
+    const db = await import("../src/infra/persistence/sqlite.js")
 
     const result = seedEntityRegistryIfEmpty(repoRoot)
     expect(result.source).toBe("artifacts")
@@ -58,9 +58,9 @@ describe("entity registry bootstrap", () => {
   it("is idempotent when entities already exist", async () => {
     await setup()
     const { seedEntityRegistryIfEmpty } = await import(
-      "../src/features/sync/application/seed-entity-registry.js"
+      "../src/api/sync/application/seed-entity-registry.js"
     )
-    const db = await import("../src/platform/persistence/sqlite.js")
+    const db = await import("../src/infra/persistence/sqlite.js")
 
     const first = seedEntityRegistryIfEmpty(repoRoot)
     const second = seedEntityRegistryIfEmpty(repoRoot)
@@ -73,8 +73,8 @@ describe("entity registry bootstrap", () => {
 
   it("creates sync definition configs after entity seed via boot hook", async () => {
     await setup()
-    const { loadBootSyncEnvironments } = await import("../src/bootstrap/sync.js")
-    const db = await import("../src/platform/persistence/sqlite.js")
+    const { loadBootSyncEnvironments } = await import("../src/boot/sync-environments.js")
+    const db = await import("../src/infra/persistence/sqlite.js")
 
     loadBootSyncEnvironments(repoRoot, [])
 
@@ -84,12 +84,12 @@ describe("entity registry bootstrap", () => {
 
   it("seeds flow presets on a fresh database after migrations", async () => {
     await setup()
-    const db = await import("../src/platform/persistence/sqlite.js")
+    const db = await import("../src/infra/persistence/sqlite.js")
 
     expect(db.listSyncRunPresets("_default")).toHaveLength(0)
     expect(db.syncRunCatalogEmpty("_default")).toBe(true)
 
-    const { loadBootSyncEnvironments } = await import("../src/bootstrap/sync.js")
+    const { loadBootSyncEnvironments } = await import("../src/boot/sync-environments.js")
     loadBootSyncEnvironments(repoRoot, [])
 
     const presets = db.listSyncRunPresets("_default")

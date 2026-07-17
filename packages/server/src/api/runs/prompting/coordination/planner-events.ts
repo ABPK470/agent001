@@ -1,8 +1,8 @@
 import type { EngineServices } from "@mia/agent"
 import { EventType, PipelineStatus } from "@mia/agent"
-import * as db from "../../../../platform/persistence/sqlite.js"
-import { AuditActor } from "../../../../shared/enums/audit.js"
-import { broadcast, broadcastTraceLoose } from "../../../../platform/events/broadcaster.js"
+import * as db from "../../../../infra/persistence/sqlite.js"
+import { AuditActor } from "../../../../internal/enums/audit.js"
+import { broadcast, broadcastTraceLoose } from "../../../../infra/events/broadcaster.js"
 
 // ── Planner trace event dispatcher ───────────────────────────────
 

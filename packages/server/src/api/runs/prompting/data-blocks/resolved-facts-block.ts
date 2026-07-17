@@ -30,7 +30,7 @@ import {
   resolveGoalDataAnchors,
   type LargeObjectFact
 } from "@mia/agent"
-import { listTableVerdicts } from "../../../../platform/persistence/memory.js"
+import { listTableVerdicts } from "../../../../infra/persistence/memory.js"
 
 /**
  * Maximum number of catalog-derived large objects to include in the

@@ -2,7 +2,7 @@
  * Run-scoped audit query — all events for one agent run, no sliding window cap.
  */
 
-import * as db from "../../../../platform/persistence/sqlite.js"
+import * as db from "../../../../infra/persistence/sqlite.js"
 import { mapDbEventsAsc } from "./build-operations-from-events.js"
 import { buildAgentRunPipeline } from "./pipelines/agent-run.js"
 import type { OperationPipeline } from "./types.js"

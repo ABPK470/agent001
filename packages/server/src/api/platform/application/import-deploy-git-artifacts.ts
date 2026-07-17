@@ -9,7 +9,7 @@ import { tmpdir } from "node:os"
 
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
 
-import { getDb } from "../../../platform/persistence/sqlite.js"
+import { getDb } from "../../../infra/persistence/sqlite.js"
 import { importOneAuthoredSync } from "../../sync/application/import-authored-sync.js"
 import { loadAuthoringFlowCatalog } from "../../sync/application/definitions.js"
 import { parseAuthoredSyncJson } from "../../sync/domain/authored-sync-document.js"

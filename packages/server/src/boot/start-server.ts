@@ -8,11 +8,11 @@ import {
   loadTenantConfigFromEnv,
   resolveTenantConfigPath
 } from "@mia/agent"
-import { buildApp } from "../app/build-app.js"
+import { buildApp } from "../http/build-app.js"
 import { loadPublishedSyncVocabularyAtBoot } from "./published-sync-bundle.js"
-import { bootstrapAdminFromEnv } from "../features/auth/index.js"
-import { openDatabase, runDatabaseMaintenance, getLlmConfig, getDbPath } from "../platform/persistence/index.js"
-import { resolveServerDataDir } from "../platform/persistence/server-data-dir.js"
+import { bootstrapAdminFromEnv } from "../api/auth/index.js"
+import { openDatabase, runDatabaseMaintenance, getLlmConfig, getDbPath } from "../infra/persistence/index.js"
+import { resolveServerDataDir } from "../infra/persistence/server-data-dir.js"
 import { printStartupBanner } from "./banner.js"
 import { createServerContext } from "./context.js"
 import { buildLlmAndCatalog } from "./llm.js"
@@ -22,7 +22,7 @@ import { listenHost, listenPort, projectRoot, resolveUiDist } from "./paths.js"
 import { createServerWorkspaceRef } from "./server-workspace.js"
 import { registerGracefulShutdown } from "./shutdown.js"
 import { startSyncPlatform } from "./sync-platform.js"
-import { recoverStaleProposerRuns } from "../features/proposer/runtime/recovery.js"
+import { recoverStaleProposerRuns } from "../api/proposer/runtime/recovery.js"
 
 function recoverStaleRuns(orchestrator: ReturnType<typeof createOrchestrator>): void {
   const recovery = orchestrator.recoverStaleRuns()

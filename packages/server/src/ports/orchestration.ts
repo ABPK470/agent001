@@ -16,12 +16,12 @@ import type {
   SyncPlan,
   SyncRunSink
 } from "@mia/sync"
-import type { RunWorkspaceContext, WorkspaceDiff } from "../features/runs/workspace/index.js"
-import type { AgentBus } from "../platform/queue/agent-bus.js"
-import type { RunQueue } from "../platform/queue/run-queue.js"
+import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace.js"
+import type { AgentBus } from "../infra/queue/agent-bus.js"
+import type { RunQueue } from "../infra/queue/run-queue.js"
 import type { MessageRouterPort } from "./channels.js"
 import type { ClarificationsRegistryPort } from "./clarifications.js"
-export type { RunPriority } from "../platform/queue/run-queue.js"
+export type { RunPriority } from "../infra/queue/run-queue.js"
 
 // ── Run-level state ───────────────────────────────────────────────
 

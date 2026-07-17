@@ -10,7 +10,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   loadPriorTurns,
   PRIOR_TURN_ANSWER_MAX_CHARS
-} from "../src/features/runs/core/data-blocks/prior-turns.js"
+} from "../src/api/runs/prompting/data-blocks/prior-turns.js"
 import { seedUser } from "./_fk-helpers.js"
 
 let db: Database.Database
@@ -24,7 +24,7 @@ beforeEach(async () => {
   db = new Database(":memory:")
   db.pragma("journal_mode = WAL")
   db.pragma("foreign_keys = ON")
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(db)
   _migrate(db)
 })

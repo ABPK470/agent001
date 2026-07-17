@@ -2,7 +2,7 @@
  * Plan-scoped audit query — all sync events for one plan, no sliding window cap.
  */
 
-import * as db from "../../../../platform/persistence/sqlite.js"
+import * as db from "../../../../infra/persistence/sqlite.js"
 import { mapDbEventsAsc } from "./build-operations-from-events.js"
 import { buildSyncRunPipeline } from "./pipelines/sync-run.js"
 import type { OperationPipeline } from "./types.js"

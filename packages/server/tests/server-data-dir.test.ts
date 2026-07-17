@@ -7,7 +7,7 @@ import {
   resolveEvidenceDir,
   resolveServerDataDir,
   resolveSyncPlansDir,
-} from "../src/platform/persistence/server-data-dir.js"
+} from "../src/infra/persistence/server-data-dir.js"
 
 describe("server data dir", () => {
   const originalDataDir = process.env.MIA_DATA_DIR

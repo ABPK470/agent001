@@ -46,7 +46,7 @@ flowchart LR
 
 | Entry | Code | Package export |
 |-------|------|----------------|
-| HTTP preview | `packages/server/src/features/sync/routes.ts` | `previewSync` |
+| HTTP preview | `packages/server/src/api/sync/routes.ts` | `previewSync` |
 | HTTP execute | same | `executeSync` |
 | Agent tool | `packages/sync/src/application/shell/tools.ts` | `createSyncPreviewTool` / execute tool |
 | Plan load | routes + execute | `loadPlan` / `savePlan` |

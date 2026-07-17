@@ -10,7 +10,7 @@ import {
   recordSyncRunFinish,
   recordSyncRunPreview,
   recordSyncRunStart
-} from "../src/platform/persistence/db/sync-runs.js"
+} from "../src/infra/persistence/db/sync-runs.js"
 import { seedUser } from "./_fk-helpers.js"
 
 let testDb: Database.Database
@@ -18,7 +18,7 @@ let testDb: Database.Database
 describe("sync run persistence", () => {
   beforeEach(async () => {
     testDb = new Database(":memory:")
-    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
     _setDb(testDb)
     _migrate(testDb)
   })

@@ -9,8 +9,8 @@ import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 
-import type { CurrentSession } from "../../src/features/auth/index.js"
-import * as db from "../../src/platform/persistence/db/index.js"
+import type { CurrentSession } from "../../src/api/auth/index.js"
+import * as db from "../../src/infra/persistence/db/index.js"
 
 export const TENANT = "_default"
 
@@ -52,7 +52,7 @@ export async function setupCatalogOperatorFixture(): Promise<CatalogOperatorFixt
   const dataDir = mkdtempSync(join(tmpdir(), "catalog-operator-"))
   process.env["MIA_DATA_DIR"] = dataDir
   const testDb = new Database(":memory:")
-  const { _setDb, _migrate } = await import("../../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
 
@@ -60,13 +60,13 @@ export async function setupCatalogOperatorFixture(): Promise<CatalogOperatorFixt
   seedRepoArtifacts(projectRoot)
 
   const { seedEntityRegistryIfEmpty } = await import(
-    "../../src/features/sync/application/seed-entity-registry.js"
+    "../../src/api/sync/application/seed-entity-registry.js"
   )
   const { seedSyncMetadataIfEmpty } = await import(
-    "../../src/features/sync/application/seed-sync-metadata.js"
+    "../../src/api/sync/application/seed-sync-metadata.js"
   )
   const { ensureSyncDefinitionConfigs } = await import(
-    "../../src/features/sync/application/definitions.js"
+    "../../src/api/sync/application/definitions.js"
   )
   seedEntityRegistryIfEmpty(projectRoot)
   seedSyncMetadataIfEmpty(projectRoot)
@@ -94,7 +94,7 @@ export async function buildEntityRegistryApp(
   fixture: CatalogOperatorFixture,
 ): Promise<FastifyInstance> {
   const { registerEntityRegistryRoutes } = await import(
-    "../../src/features/sync/transport/definitions-routes.js"
+    "../../src/api/sync/transport/definitions-routes.js"
   )
   const { seedUser, seedSession } = await import("../_fk-helpers.js")
 
@@ -117,7 +117,7 @@ export async function buildSyncMetadataApp(
   fixture: CatalogOperatorFixture,
 ): Promise<FastifyInstance> {
   const { registerSyncMetadataRoutes } = await import(
-    "../../src/features/sync/transport/sync-metadata-routes.js"
+    "../../src/api/sync/transport/sync-metadata-routes.js"
   )
   const { seedUser, seedSession } = await import("../_fk-helpers.js")
 

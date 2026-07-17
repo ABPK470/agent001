@@ -15,7 +15,7 @@ import {
   AttachmentScope,
   AttachmentSource,
   AttachmentStatus
-} from "../../../shared/enums/attachments.js"
+} from "../../../internal/enums/attachments.js"
 import { getDb } from "../db-connection.js"
 
 export { AttachmentImportMode, AttachmentIngestionMode, AttachmentScope, AttachmentSource, AttachmentStatus }

@@ -25,7 +25,7 @@ export function extractMentionedPaths(output: string): string[] {
     if (m[1] && m[1].length < 200) paths.push(m[1])
   }
   // "created/wrote/modified [to] <path>" patterns — the optional "to" is
-  // critical because tool output often says "Successfully wrote to tmp/app/main.js"
+  // critical because tool output often says "Successfully wrote to tmp/http/main.js"
   for (const m of output.matchAll(
     /(?:creat|writ|wrote|modif|generat|saved)\w*\s+(?:to\s+)?(?:file\s+)?["']?([^\s"'`,]+\.[a-zA-Z0-9]+)/gi
   )) {

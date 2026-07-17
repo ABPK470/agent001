@@ -1,4 +1,4 @@
-import { MemoryTier } from "../../../shared/enums/memory.js"
+import { MemoryTier } from "../../../internal/enums/memory.js"
 import { getDb } from "../sqlite.js"
 import type { MemoryEntry } from "./types.js"
 

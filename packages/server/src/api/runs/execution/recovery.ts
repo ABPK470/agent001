@@ -1,7 +1,7 @@
 import { EventType } from "@mia/agent"
-import { broadcast } from "../../../platform/events/broadcaster.js"
-import * as db from "../../../platform/persistence/sqlite.js"
-import { NotificationActionType } from "../../../shared/enums/notifications.js"
+import { broadcast } from "../../../infra/events/broadcaster.js"
+import * as db from "../../../infra/persistence/sqlite.js"
+import { NotificationActionType } from "../../../internal/enums/notifications.js"
 import { createNotification } from "./persistence.js"
 
 // ── Recovery depends interface ────────────────────────────────────

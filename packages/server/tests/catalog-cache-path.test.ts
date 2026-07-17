@@ -7,7 +7,7 @@ import {
   resolveCatalogCacheBasePath,
   resolveCatalogCachePath,
   resolveServerDataDir,
-} from "../src/platform/catalog/catalog-cache-path.js"
+} from "../src/infra/catalog/catalog-cache-path.js"
 
 describe("catalog cache paths", () => {
   const originalDataDir = process.env.MIA_DATA_DIR

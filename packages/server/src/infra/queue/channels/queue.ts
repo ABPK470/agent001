@@ -18,7 +18,7 @@
 
 import { EventType } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { DeliveryStatus } from "../../../shared/enums/channels.js"
+import { DeliveryStatus } from "../../../internal/enums/channels.js"
 import { broadcast } from "../../events/broadcaster.js"
 import { DEFAULT_RETRY_POLICY, withRetry } from "./retry.js"
 import type { Channel, ChannelType, OutboundMessage, RetryPolicy } from "./types.js"

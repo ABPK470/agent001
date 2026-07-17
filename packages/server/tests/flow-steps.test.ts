@@ -4,8 +4,8 @@ import {
   assertFlowStepCatalogIds,
   FlowStepsValidationError,
   parseStoredFlowStepsJson,
-} from "../src/features/sync/domain/flow-steps.js"
-import { parsePresetSteps } from "../src/platform/persistence/db/sync-run-catalog.js"
+} from "../src/infra/persistence/sync-flow-steps.js"
+import { parsePresetSteps } from "../src/infra/persistence/db/sync-run-catalog.js"
 
 describe("flow step catalog ids", () => {
   it("accepts canonical camelCase step kinds", () => {

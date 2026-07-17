@@ -5,7 +5,7 @@
 import type { EntityDefinition, ValidationResult } from "@mia/sync"
 import { validateAuthoredExportRoundTrip, validateEntityExportable } from "@mia/sync"
 
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 
 export class EntityExportValidationError extends Error {
   readonly name = "EntityExportValidationError"

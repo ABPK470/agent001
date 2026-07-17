@@ -19,7 +19,7 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
-import { getSandboxBackend } from "../src/platform/sandbox/backend.js"
+import { getSandboxBackend } from "../src/infra/sandbox/backend.js"
 
 const created: string[] = []
 

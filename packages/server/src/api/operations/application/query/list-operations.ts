@@ -3,7 +3,7 @@
  * Single code path for list + focus (plan/run audit).
  */
 
-import * as db from "../../../../platform/persistence/sqlite.js"
+import * as db from "../../../../infra/persistence/sqlite.js"
 import {
   buildOperationsFromEvents,
   mapDbEventsChronological

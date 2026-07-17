@@ -4,7 +4,7 @@
 
 import { DEFAULT_SYSTEM_PROMPT } from "@mia/agent"
 import { getDb } from "../connection.js"
-import { LlmProvider } from "../../../shared/enums/llm.js"
+import { LlmProvider } from "../../../internal/enums/llm.js"
 
 // ── LLM config ───────────────────────────────────────────────────
 

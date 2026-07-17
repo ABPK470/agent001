@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
 import { createPublishedSyncDefinitionRegistry, type EntityDefinition } from "@mia/sync"
-import type { CurrentSession } from "../src/features/auth/index.js"
+import type { CurrentSession } from "../src/api/auth/index.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -46,9 +46,9 @@ function createHost(root: string): AgentHost {
 }
 
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
-  const { registerSyncRoutes } = await import("../src/features/sync/routes.js")
-  const { seedSyncMetadataIfEmpty } = await import("../src/features/sync/application/seed-sync-metadata.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { registerSyncRoutes } = await import("../src/api/sync/routes.js")
+  const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/application/seed-sync-metadata.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
 
   _setDb(testDb)
@@ -159,7 +159,7 @@ afterEach(() => {
 describe("sync routes", () => {
   it("publishes DB-authored definitions and exposes them immediately via runtime definitions", async () => {
     const { app } = await buildApp(adminSession())
-    const { saveEntityDefinition } = await import("../src/platform/persistence/db/index.js")
+    const { saveEntityDefinition } = await import("../src/infra/persistence/db/index.js")
 
     const entityDefinition: EntityDefinition = {
       tenantId: "_default",
@@ -256,7 +256,7 @@ describe("sync routes", () => {
 
   it("GET /api/sync/history supports search and status filters", async () => {
     const { app } = await buildApp(adminSession())
-    const { recordSyncRunPreview } = await import("../src/platform/persistence/db/sync-runs.js")
+    const { recordSyncRunPreview } = await import("../src/infra/persistence/db/sync-runs.js")
     const { seedUser } = await import("./_fk-helpers.js")
 
     seedUser(testDb, "admin@example.com", { displayName: "Admin User", isAdmin: true })

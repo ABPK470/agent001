@@ -16,7 +16,7 @@ import {
   markRunToolApprovalDenied,
   markRunWaitingForApproval,
   upsertPendingRunToolApproval,
-} from "../src/platform/persistence/db/index.js"
+} from "../src/infra/persistence/db/index.js"
 import { seedRun, seedUser } from "./_fk-helpers.js"
 
 const UPN = "alice@example.com"

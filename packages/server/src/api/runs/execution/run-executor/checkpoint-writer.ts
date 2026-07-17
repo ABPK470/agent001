@@ -27,8 +27,8 @@
  */
 
 import { EventType, type Message } from "@mia/agent"
-import { broadcast } from "../../../../platform/events/broadcaster.js"
-import * as db from "../../../../platform/persistence/sqlite.js"
+import { broadcast } from "../../../../infra/events/broadcaster.js"
+import * as db from "../../../../infra/persistence/sqlite.js"
 
 export interface WriteCheckpointInput {
   runId: string

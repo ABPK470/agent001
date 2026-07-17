@@ -1,11 +1,11 @@
 import { accessSync, constants, existsSync, mkdirSync } from "node:fs"
 import { resolve } from "node:path"
 
-import { isPublishedSyncBundlePresent, PUBLISHED_SYNC_BUNDLE_PATH } from "../../bootstrap/published-sync-bundle.js"
-import { resolveUiDist } from "../../bootstrap/paths.js"
-import { isDatabricksConfigured } from "../../platform/llm/databricks-broker.js"
-import { resolveServerDataDir } from "../../platform/persistence/server-data-dir.js"
-import { isLlmProvider } from "../../shared/enums/llm.js"
+import { isPublishedSyncBundlePresent, PUBLISHED_SYNC_BUNDLE_PATH } from "../../boot/published-sync-bundle.js"
+import { resolveUiDist } from "../../boot/paths.js"
+import { isDatabricksConfigured } from "../../infra/llm/databricks-broker.js"
+import { resolveServerDataDir } from "../../infra/persistence/server-data-dir.js"
+import { isLlmProvider } from "../../internal/enums/llm.js"
 
 import { databricksAuthMode, hasMssqlConfigured, readEnvState, suggestDataDir } from "./env-context.js"
 import type { SetupCheck, SetupLayout, SetupReport } from "./types.js"

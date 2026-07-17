@@ -10,7 +10,7 @@ import {
   getRunSnapshots,
   previewRollback,
   rollbackRun
-} from "../../platform/effects/index.js"
+} from "../../infra/effects/index.js"
 import {
   clearAllMemories,
   consolidate,
@@ -20,7 +20,7 @@ import {
   retrieveContext,
   searchEntries,
   type MemoryTier
-} from "../../platform/persistence/memory.js"
+} from "../../infra/persistence/memory.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 import {
   compareTrajectories,

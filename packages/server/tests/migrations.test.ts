@@ -4,8 +4,8 @@
 
 import Database from "better-sqlite3"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { _migrate, _setDb } from "../src/platform/persistence/connection.js"
-import { listMigrations, MIGRATIONS, runMigrations } from "../src/platform/persistence/migrations/index.js"
+import { _migrate, _setDb } from "../src/infra/persistence/connection.js"
+import { listMigrations, MIGRATIONS, runMigrations } from "../src/infra/persistence/migrations/index.js"
 
 let testDb: Database.Database
 

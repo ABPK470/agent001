@@ -10,8 +10,8 @@ This document describes how cross-environment metadata synchronization works in 
 | Orchestrator (preview / execute) | `packages/sync/src/application/shell/orchestrator/` |
 | Domain (recipes, diff, environments) | `packages/sync/src/domain/` |
 | Agent tools | `packages/sync/src/application/shell/tools.ts` |
-| Server REST routes | `packages/server/src/features/sync/routes.ts` |
-| Definition publish / compile | `packages/server/src/features/sync/application/definitions.ts` |
+| Server REST routes | `packages/server/src/api/sync/routes.ts` |
+| Definition publish / compile | `packages/server/src/api/sync/application/definitions.ts` |
 | Published runtime bundle | `sync-definitions/published/definitions.bundle.json` |
 | Environment config (optional file) | `deploy/sync/sync-environments.json` |
 | Flow templates | `deploy/sync/artifacts/flow-templates.json` |
@@ -252,7 +252,7 @@ Contains everything preview/execute need:
 
 ### Publish pipeline
 
-**Entry:** `publishSyncDefinitionsFromDb()` in `packages/server/src/features/sync/application/definitions.ts`
+**Entry:** `publishSyncDefinitionsFromDb()` in `packages/server/src/api/sync/application/definitions.ts`
 
 1. Load all `EntityDefinition` rows from SQLite.
 2. Load per-entity `sync_definition_config` (flow preset, custom steps, bindings, ownership).
@@ -911,7 +911,7 @@ Name resolution: `search_sync_entities` with `mode=id` or auto-detect numeric id
 ## 17. Agent tools and chat integration
 
 **Factory:** `packages/sync/src/application/shell/tools.ts`  
-**Registration:** `packages/server/src/features/runs/tooling/registry.ts`
+**Registration:** `packages/server/src/api/runs/tooling/registry.ts`
 
 | Tool | Purpose |
 |------|---------|
@@ -949,7 +949,7 @@ Parses goals like `sync contract abcd from uat to dev` into `SyncOperationIntent
 
 ## 18. REST API surface
 
-**Registrar:** `registerSyncRoutes()` in `packages/server/src/features/sync/routes.ts`
+**Registrar:** `registerSyncRoutes()` in `packages/server/src/api/sync/routes.ts`
 
 | Method | Path | Description |
 |--------|------|-------------|
@@ -1012,7 +1012,7 @@ Plans older than **1 hour** cannot execute — forces re-preview against current
 ### Events
 
 **Emitter:** `emitSyncEvent()` — `packages/sync/src/application/shell/events.ts`  
-**Server sink:** `packages/server/src/bootstrap/sync.ts` → SSE broadcast
+**Server sink:** `packages/server/src/boot/sync.ts` → SSE broadcast
 
 Key event types (`@mia/shared-enums`):
 

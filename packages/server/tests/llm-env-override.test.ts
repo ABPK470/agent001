@@ -1,6 +1,6 @@
 import Database from "better-sqlite3"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { applyLlmEnvOverride } from "../src/platform/llm/env-override.js"
+import { applyLlmEnvOverride } from "../src/infra/llm/env-override.js"
 
 let db: Database.Database
 const envBackup = { ...process.env }

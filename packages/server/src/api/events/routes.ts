@@ -4,7 +4,7 @@
 
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
-import * as db from "../../platform/persistence/sqlite.js"
+import * as db from "../../infra/persistence/sqlite.js"
 
 export function registerEventRoutes(app: FastifyInstance): void {
   app.get<{ Querystring: { limit?: string; before?: string; after?: string; types?: string } }>(

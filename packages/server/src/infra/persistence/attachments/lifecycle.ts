@@ -17,7 +17,7 @@
  */
 
 import { getDb } from "../db-connection.js"
-import { AttachmentScope } from "../../../shared/enums/attachments.js"
+import { AttachmentScope } from "../../../internal/enums/attachments.js"
 import { auditAttachmentsPruned } from "./audit.js"
 
 const DAY_MS = 24 * 60 * 60 * 1000

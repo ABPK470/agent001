@@ -22,7 +22,7 @@ import {
   type ConnectorKindId,
 } from "@mia/shared-types"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 
 type ConfigValue = string | number | boolean | null
 type ConfigMap = Record<string, ConfigValue>

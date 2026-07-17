@@ -1,8 +1,8 @@
 import type { Agent } from "@mia/agent"
 import { EventType, RunStatus } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { broadcast } from "../../../platform/events/broadcaster.js"
-import * as db from "../../../platform/persistence/sqlite.js"
+import { broadcast } from "../../../infra/events/broadcaster.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 import type { ActiveRun, NotificationOpts } from "../../../ports/orchestration.js"
 import type { AuditLogPort } from "./run-executor/types.js"
 // ── Trace ─────────────────────────────────────────────────────────

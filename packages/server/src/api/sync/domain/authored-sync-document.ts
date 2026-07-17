@@ -13,7 +13,7 @@ import {
   type SyncDefinitionFlowTemplateCatalog,
 } from "@mia/sync"
 
-import type { DbSyncDefinitionConfig } from "../../../platform/persistence/sqlite.js"
+import type { DbSyncDefinitionConfig } from "../../../infra/persistence/sqlite.js"
 import {
   assertAuthoredExportRoundTrip,
   assertEntityExportable,

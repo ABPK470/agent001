@@ -4,7 +4,7 @@
 
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
-import * as db from "../../platform/persistence/sqlite.js"
+import * as db from "../../infra/persistence/sqlite.js"
 
 function dashboardIdFor(req: { session: { upn: string } }): string {
   return `dashboard:${req.session.upn.toLowerCase()}`

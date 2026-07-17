@@ -1,6 +1,6 @@
 import { EventType, getCatalogSchemaFingerprint } from "@mia/agent"
 import { getDb } from "../sqlite.js"
-import { MemoryRole, MemoryTier } from "../../../shared/enums/memory.js"
+import { MemoryRole, MemoryTier } from "../../../internal/enums/memory.js"
 import { broadcast } from "../../events/broadcaster.js"
 import { pickEpisodicChoreographyHint } from "./episodic-choreography.js"
 import { augmentGoalQueryForFts, episodicShortcutMatchesGoal } from "./goal-class.js"

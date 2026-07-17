@@ -28,7 +28,7 @@ export interface TurnInputs {
 
 interface Fixture {
   db: Database.Database
-  mem: typeof import("../../src/platform/persistence/memory/index.js")
+  mem: typeof import("../../src/infra/persistence/memory/index.js")
   simulateTurn(inputs: TurnInputs): Promise<SimulatedTurn>
   retrieve(args: {
     goal: string
@@ -89,12 +89,12 @@ export async function buildFixture(): Promise<Fixture> {
   db.pragma("journal_mode = WAL")
   db.pragma("foreign_keys = OFF")
 
-  const { _setDb, _migrate } = await import("../../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../../src/infra/persistence/db/index.js")
   _setDb(db)
   _migrate(db)
   db.pragma("foreign_keys = OFF")
 
-  const mem = await import("../../src/platform/persistence/memory/index.js")
+  const mem = await import("../../src/infra/persistence/memory/index.js")
 
   const cleanup = (): void => {
     try {

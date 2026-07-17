@@ -1,8 +1,8 @@
 import Database from "better-sqlite3"
 import { beforeEach, describe, expect, it } from "vitest"
 
-import { _migrate } from "../../platform/persistence/connection.js"
-import * as db from "../../platform/persistence/sqlite.js"
+import { _migrate } from "../../infra/persistence/connection.js"
+import * as db from "../../infra/persistence/sqlite.js"
 import { loadPersistedConnectors } from "./runtime/live-connectors.js"
 import type { ConfigureMssqlConnection } from "@mia/agent"
 

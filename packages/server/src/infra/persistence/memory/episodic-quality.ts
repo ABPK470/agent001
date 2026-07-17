@@ -10,7 +10,7 @@
  */
 
 import { isUserSafeFailureAnswer, RunStatus } from "@mia/agent"
-import { EpisodicAnswerKind } from "../../../shared/enums/memory.js"
+import { EpisodicAnswerKind } from "../../../internal/enums/memory.js"
 
 /** Tools that do not constitute warehouse / execution work on their own. */
 const LOW_SIGNAL_TOOLS = new Set([

@@ -31,10 +31,10 @@ afterEach(() => {
 })
 
 async function setup() {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  return import("../src/platform/persistence/db/proposals.js")
+  return import("../src/infra/persistence/db/proposals.js")
 }
 
 function finding(over: Partial<ProposerFinding> = {}): ProposerFinding {

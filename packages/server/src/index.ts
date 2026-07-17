@@ -1,7 +1,7 @@
 /**
  * Server entry point.
  */
-import "./bootstrap/load-env.js"
+import "./boot/load-env.js"
 
 const args = process.argv.slice(2)
 
@@ -19,7 +19,7 @@ if (args[0] === "setup") {
 import { ensureSetupReady } from "./cli/setup/gate.js"
 ensureSetupReady()
 
-import { startServer } from "./bootstrap/start-server.js"
+import { startServer } from "./boot/start-server.js"
 
 startServer().catch((error) => {
   console.error("Failed to start server:", error)

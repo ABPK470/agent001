@@ -203,7 +203,7 @@ const BASELINE_SQL = `
     -- reconstruct multi-agent decisions. Lifecycle is tied to the root
     -- run: ON DELETE CASCADE wipes messages when the run is purged.
     --
-    -- protocol is a closed enum (see packages/server/src/shared/enums/bus.ts).
+    -- protocol is a closed enum (see packages/server/src/internal/enums/bus.ts).
     -- reply_to links Answer messages to their originating Question so
     -- the wait_for_response tool can resolve the right reply. The
     -- self-referential FK uses ON DELETE SET NULL because the parent

@@ -1,5 +1,5 @@
 // ── Types ────────────────────────────────────────────────────────
-import type { WorkspaceMountMode } from "../../shared/enums/sandbox.js"
+import type { WorkspaceMountMode } from "../../internal/enums/sandbox.js"
 /** Sandbox configuration — matches agenc-core's SandboxConfig shape. */
 export interface SandboxConfig {
   /**

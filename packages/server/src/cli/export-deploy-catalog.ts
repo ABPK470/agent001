@@ -14,8 +14,8 @@ import {
   buildDeployCatalogSnapshot,
   defaultExportParentDir,
   writeDeployCatalogSnapshot,
-} from "../features/platform/application/export-deploy-artifacts.js"
-import { openDatabase } from "../platform/persistence/connection.js"
+} from "../api/platform/application/export-deploy-artifacts.js"
+import { openDatabase } from "../infra/persistence/connection.js"
 
 main()
 

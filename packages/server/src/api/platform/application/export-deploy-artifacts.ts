@@ -15,7 +15,7 @@ import type { EntityDefinition, Scd2Strategy, SyncEnvironment } from "@mia/sync"
 import type { EntityRegistryExportDocument } from "../../sync/domain/entity-yaml.js"
 import { buildEntityRegistryExportDocument, entityRunYamlFromConfig } from "../../sync/domain/entity-yaml.js"
 import { assertTenantEntitiesExportable } from "../../sync/application/assert-entity-export.js"
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT = "_default"
 

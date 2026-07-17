@@ -16,8 +16,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   loadKnownObjects,
   renderKnownObjectsBlock
-} from "../src/features/runs/core/data-blocks/known-objects.js"
-import type { PriorTurn } from "../src/features/runs/core/data-blocks/prior-turns.js"
+} from "../src/api/runs/prompting/data-blocks/known-objects.js"
+import type { PriorTurn } from "../src/api/runs/prompting/data-blocks/prior-turns.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -29,7 +29,7 @@ beforeEach(async () => {
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
   testDb.pragma("foreign_keys = OFF")
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
 })

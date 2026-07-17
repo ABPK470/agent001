@@ -17,8 +17,8 @@ import {
   withPermissionDefaults,
 } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import { broadcast } from "../../../platform/events/broadcaster.js"
-import * as db from "../../../platform/persistence/sqlite.js"
+import { broadcast } from "../../../infra/events/broadcaster.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 import { recordSyncCatalogChange } from "../../platform/application/sync-catalog-versioning.js"
 import { refreshEnvDerivedPolicies } from "../../policies/application/policy-seeder.js"
 import { isBuiltinSyncEnvironment } from "../domain/builtin-sync-environments.js"

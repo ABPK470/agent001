@@ -1,6 +1,6 @@
 // ── Event types ──────────────────────────────────────────────────
 
-import { TrajectoryEditOperation, TrajectoryEventKind } from "../../../shared/enums/trajectory.js"
+import { TrajectoryEditOperation, TrajectoryEventKind } from "../../../internal/enums/trajectory.js"
 
 export interface GoalEvent {
   kind: typeof TrajectoryEventKind.Goal

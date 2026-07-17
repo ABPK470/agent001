@@ -14,8 +14,8 @@ import {
   softDeleteAttachment,
   uploadAttachment,
   type AttachmentRow
-} from "../../platform/persistence/attachments.js"
-import { AttachmentScope, isAttachmentScope } from "../../shared/enums/attachments.js"
+} from "../../infra/persistence/attachments.js"
+import { AttachmentScope, isAttachmentScope } from "../../internal/enums/attachments.js"
 
 /** Accept legacy `session` uploads during API transition. */
 function normalizeAttachmentScope(scope: unknown): AttachmentScope | null {

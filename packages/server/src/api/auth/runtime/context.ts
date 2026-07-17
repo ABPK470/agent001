@@ -16,14 +16,7 @@
  * verified user key (FK to users.upn). `displayName` and `isAdmin` come
  * from JOIN with the users table at request time.
  */
-export interface CurrentSession {
-  sid: string
-  displayName: string
-  upn: string
-  isAdmin: boolean
-  ip: string
-  userAgent: string
-}
+export type { CurrentSession } from "../../../ports/session.js"
 
 // ── Per-run kill signals (provided to tools via runWithMssqlKillSignal) ──
 

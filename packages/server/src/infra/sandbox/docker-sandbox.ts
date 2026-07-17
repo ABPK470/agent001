@@ -1,7 +1,7 @@
 import { execFile } from "node:child_process"
 import { randomBytes } from "node:crypto"
 import { promisify } from "node:util"
-import { WorkspaceMountMode } from "../../shared/enums/sandbox.js"
+import { WorkspaceMountMode } from "../../internal/enums/sandbox.js"
 import {
   DEFAULT_IDLE_TIMEOUT,
   DEFAULT_IMAGE,

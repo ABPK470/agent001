@@ -1,9 +1,9 @@
 import { closeMssqlPool, type AgentHost } from "@mia/agent"
 import type { FastifyInstance } from "fastify"
-import { stopScheduler } from "../features/proposer/index.js"
-import type { AgentOrchestrator } from "../features/runs/orchestrator.js"
-import type { DockerSandbox } from "../platform/sandbox/index.js"
-import type { MessageQueue } from "../platform/queue/channels/index.js"
+import { stopScheduler } from "../api/proposer/index.js"
+import type { AgentOrchestrator } from "../api/runs/orchestrator.js"
+import type { DockerSandbox } from "../infra/sandbox/index.js"
+import type { MessageQueue } from "../infra/queue/channels/index.js"
 
 export interface GracefulShutdownDeps {
   readonly app: FastifyInstance

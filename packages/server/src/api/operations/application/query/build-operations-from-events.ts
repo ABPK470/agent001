@@ -3,13 +3,13 @@
  */
 
 import { isEventType } from "@mia/agent"
-import type { DbEvent } from "../../../../platform/persistence/db/events.js"
+import type { DbEvent } from "../../../../infra/persistence/db/events.js"
 import { buildPipelinesFromBuckets } from "./build-pipelines.js"
 import { buildPreviewToPlanMap, correlateEventsIntoBuckets } from "./correlate.js"
 import { filterOperations } from "./filter.js"
 import { mergeSyncPlanPipelines } from "./merge-sync-run.js"
 import type { ListOperationsOpts, OperationEvent, OperationPipeline } from "./types.js"
-import { hydratePersistedSqlEventData } from "../../../../platform/persistence/db/sync-sql-log.js"
+import { hydratePersistedSqlEventData } from "../../../../infra/persistence/db/sync-sql-log.js"
 import { safeParse } from "./utils.js"
 
 function mapDbEventRow(e: DbEvent): OperationEvent | null {

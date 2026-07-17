@@ -1,4 +1,4 @@
-import { TrajectoryEventKind } from "../../../shared/enums/trajectory.js"
+import { TrajectoryEventKind } from "../../../internal/enums/trajectory.js"
 import { loadTrajectory } from "./loader.js"
 import type { ToolCallEvent, Trajectory } from "./types.js"
 

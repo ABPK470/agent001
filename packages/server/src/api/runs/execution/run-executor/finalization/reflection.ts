@@ -1,5 +1,5 @@
 import { detectInternalFailure, isPlatformUnconfiguredAnswer, type ExecutableTool } from "@mia/agent"
-import { runReflectionTurn } from "../../../core/coordination/run-reflection.js"
+import { runReflectionTurn } from "../../../prompting/coordination/run-reflection.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
 function findVerdictTool(tools: ExecutableTool[]): ExecutableTool | undefined {

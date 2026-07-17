@@ -2255,7 +2255,7 @@ describe("Plan validation: validatePlan", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html", "tmp/app/game.js"],
+            targetArtifacts: ["tmp/http/index.html", "tmp/http/game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2281,7 +2281,7 @@ describe("Plan validation: validatePlan", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html", "tmp/app/game.js"],
+            targetArtifacts: ["tmp/http/index.html", "tmp/http/game.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2386,7 +2386,7 @@ describe("Plan validation: validatePlan", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html"],
+            targetArtifacts: ["tmp/http/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2401,7 +2401,7 @@ describe("Plan validation: validatePlan", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/logic.js"],
+            targetArtifacts: ["tmp/http/logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2430,7 +2430,7 @@ describe("Plan validation: validatePlan", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html"],
+            targetArtifacts: ["tmp/http/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2455,7 +2455,7 @@ describe("Plan validation: validatePlan", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/state-view.js"],
+            targetArtifacts: ["tmp/http/state-view.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2469,7 +2469,7 @@ describe("Plan validation: validatePlan", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/logic.js"],
+            targetArtifacts: ["tmp/http/logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2495,7 +2495,7 @@ describe("Plan validation: validatePlan", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/state-view.js"],
+            targetArtifacts: ["tmp/http/state-view.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2509,7 +2509,7 @@ describe("Plan validation: validatePlan", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/logic.js"],
+            targetArtifacts: ["tmp/http/logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2815,7 +2815,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file", "run_command"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html"],
+            targetArtifacts: ["tmp/http/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2829,7 +2829,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/game-logic.js", "tmp/app/ui-logic.js"],
+            targetArtifacts: ["tmp/http/game-logic.js", "tmp/http/ui-logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2849,7 +2849,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-html",
             status: "completed",
-            output: "wrote tmp/app/index.html",
+            output: "wrote tmp/http/index.html",
             durationMs: 1
           }
         ],
@@ -2905,7 +2905,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file", "run_command"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html"],
+            targetArtifacts: ["tmp/http/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2919,7 +2919,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/game-logic.js", "tmp/app/ui-logic.js"],
+            targetArtifacts: ["tmp/http/game-logic.js", "tmp/http/ui-logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -2939,7 +2939,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-html",
             status: "completed",
-            output: "wrote tmp/app/index.html",
+            output: "wrote tmp/http/index.html",
             durationMs: 1
           }
         ],
@@ -2948,7 +2948,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-js",
             status: "completed",
-            output: "wrote tmp/app/game-logic.js and tmp/app/ui-logic.js",
+            output: "wrote tmp/http/game-logic.js and tmp/http/ui-logic.js",
             durationMs: 1
           }
         ]
@@ -3012,7 +3012,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html"],
+            targetArtifacts: ["tmp/http/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3026,7 +3026,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/chess_logic.js", "tmp/app/interactive.js"],
+            targetArtifacts: ["tmp/http/chess_logic.js", "tmp/http/interactive.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3046,7 +3046,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-html",
             status: "completed",
-            output: "wrote tmp/app/index.html",
+            output: "wrote tmp/http/index.html",
             durationMs: 1
           }
         ],
@@ -3055,7 +3055,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-js",
             status: "completed",
-            output: "wrote tmp/app/chess_logic.js",
+            output: "wrote tmp/http/chess_logic.js",
             durationMs: 1
           }
         ]
@@ -3116,7 +3116,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html"],
+            targetArtifacts: ["tmp/http/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3130,7 +3130,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/game-logic.js"],
+            targetArtifacts: ["tmp/http/game-logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3150,7 +3150,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-html",
             status: "completed",
-            output: "wrote tmp/app/index.html",
+            output: "wrote tmp/http/index.html",
             durationMs: 1
           }
         ],
@@ -3159,7 +3159,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-js",
             status: "completed",
-            output: "wrote tmp/app/game-logic.js",
+            output: "wrote tmp/http/game-logic.js",
             durationMs: 1
           }
         ]
@@ -3210,7 +3210,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html"],
+            targetArtifacts: ["tmp/http/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3224,7 +3224,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/game_ui.js"],
+            targetArtifacts: ["tmp/http/game_ui.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3238,7 +3238,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/game_logic.js"],
+            targetArtifacts: ["tmp/http/game_logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3261,7 +3261,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-html",
             status: "completed",
-            output: "wrote tmp/app/index.html",
+            output: "wrote tmp/http/index.html",
             durationMs: 1
           }
         ],
@@ -3270,7 +3270,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-ui",
             status: "completed",
-            output: "wrote tmp/app/game_ui.js",
+            output: "wrote tmp/http/game_ui.js",
             durationMs: 1
           }
         ],
@@ -3279,7 +3279,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-logic",
             status: "completed",
-            output: "wrote tmp/app/game_logic.js",
+            output: "wrote tmp/http/game_logic.js",
             durationMs: 1
           }
         ]
@@ -3353,7 +3353,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html"],
+            targetArtifacts: ["tmp/http/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3367,7 +3367,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/main.js", "tmp/app/game-logic.js", "tmp/app/ui-logic.js"],
+            targetArtifacts: ["tmp/http/main.js", "tmp/http/game-logic.js", "tmp/http/ui-logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3387,13 +3387,13 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-html",
             status: "completed",
-            output: "wrote tmp/app/index.html",
+            output: "wrote tmp/http/index.html",
             durationMs: 1
           }
         ],
         [
           "create-js",
-          { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }
+          { name: "create-js", status: "completed", output: "wrote tmp/http/main.js", durationMs: 1 }
         ]
       ])
     }
@@ -3442,7 +3442,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/index.html"],
+            targetArtifacts: ["tmp/http/index.html"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3456,7 +3456,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/main.js"],
+            targetArtifacts: ["tmp/http/main.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3476,13 +3476,13 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-html",
             status: "completed",
-            output: "wrote tmp/app/index.html",
+            output: "wrote tmp/http/index.html",
             durationMs: 1
           }
         ],
         [
           "create-js",
-          { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }
+          { name: "create-js", status: "completed", output: "wrote tmp/http/main.js", durationMs: 1 }
         ]
       ])
     }
@@ -3732,7 +3732,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/main.js", "tmp/app/game-logic.js"],
+            targetArtifacts: ["tmp/http/main.js", "tmp/http/game-logic.js"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -3749,7 +3749,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
       stepResults: new Map([
         [
           "create-js",
-          { name: "create-js", status: "completed", output: "wrote tmp/app/main.js", durationMs: 1 }
+          { name: "create-js", status: "completed", output: "wrote tmp/http/main.js", durationMs: 1 }
         ]
       ])
     }
@@ -4025,7 +4025,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/game_ui.js", "tmp/app/styles.css"],
+            targetArtifacts: ["tmp/http/game_ui.js", "tmp/http/styles.css"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -4045,7 +4045,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-ui",
             status: "completed",
-            output: "wrote tmp/app/game_ui.js and tmp/app/styles.css",
+            output: "wrote tmp/http/game_ui.js and tmp/http/styles.css",
             durationMs: 1
           }
         ]
@@ -4094,7 +4094,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
             allowedWriteRoots: ["."],
             allowedTools: ["write_file", "read_file"],
             requiredSourceArtifacts: [],
-            targetArtifacts: ["tmp/app/styles.css"],
+            targetArtifacts: ["tmp/http/styles.css"],
             effectClass: "filesystem_write",
             verificationMode: "none",
             artifactRelations: []
@@ -4114,7 +4114,7 @@ describe("Verifier: runDeterministicProbes modality coverage", () => {
           {
             name: "create-styles",
             status: "completed",
-            output: "wrote tmp/app/styles.css",
+            output: "wrote tmp/http/styles.css",
             durationMs: 1
           }
         ]

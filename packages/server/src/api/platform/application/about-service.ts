@@ -10,8 +10,8 @@ import { readFileSync } from "node:fs"
 import { resolve } from "node:path"
 import type { AgentHost } from "@mia/agent"
 import { getEnvironments } from "@mia/sync"
-import * as db from "../../../platform/persistence/sqlite.js"
-import { PROVIDER_DEFAULTS } from "../../../platform/llm/registry.js"
+import * as db from "../../../infra/persistence/sqlite.js"
+import { PROVIDER_DEFAULTS } from "../../../infra/llm/registry.js"
 import { getPlatformHealth, type PlatformHealth } from "./platform-health-service.js"
 
 export interface AboutDossier {
@@ -56,7 +56,7 @@ export interface AboutDossier {
     allowedOperations: string[]
     denyDml: boolean
     denyDdl: boolean
-    allowedSyncTargets: string[] | null
+    allowedSyncEnvironments: string[] | null
   }>
   /** Active provider/model + catalog of configured providers. */
   providers: {
@@ -170,7 +170,7 @@ export function buildAboutDossier(opts: {
       allowedOperations: [...(env.allowedOperations ?? [])].map(String),
       denyDml: Boolean(env.denyDml),
       denyDdl: Boolean(env.denyDdl),
-      allowedSyncTargets: env.allowedSyncTargets,
+      allowedSyncEnvironments: env.allowedSyncEnvironments,
     }))
 
   const available = Object.entries(PROVIDER_DEFAULTS).map(([id, def]) => ({

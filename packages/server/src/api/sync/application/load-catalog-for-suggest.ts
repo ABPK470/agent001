@@ -5,7 +5,7 @@ import { catalogSnapshotFromAgentJson, type CatalogSnapshotForSuggest } from "@m
 import {
   resolveCatalogCacheBasePath,
   resolveCatalogCachePath,
-} from "../../../platform/catalog/catalog-cache-path.js"
+} from "../../../infra/catalog/catalog-cache-path.js"
 
 function resolveCatalogCachePaths(): string[] {
   const paths: string[] = [resolveCatalogCacheBasePath()]

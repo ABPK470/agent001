@@ -7,9 +7,7 @@
  */
 
 import { isSyncRunStatus, SYNC_RUN_STATUSES, SyncRunStatus } from "@mia/shared-enums"
-import {
-  requireSyncRunActorUpn
-} from "../../../features/sync/application/plan-actor.js"
+import { requireSyncRunActorUpn } from "../sync-plan-actor.js"
 import { getDb } from "../connection.js"
 
 export interface SyncRunRow {

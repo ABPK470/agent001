@@ -3,7 +3,7 @@
  * Standalone sync events get their own pipeline even when they also carry a runId.
  */
 
-import { OperationKind } from "../../../../shared/enums/operations.js"
+import { OperationKind } from "../../../../internal/enums/operations.js"
 import type { EventBucket, OperationEvent } from "./types.js"
 import { resolveSyncPlanId, strField } from "./utils.js"
 

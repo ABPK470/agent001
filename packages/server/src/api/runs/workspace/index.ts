@@ -3,7 +3,7 @@ import { createHash, randomUUID } from "node:crypto"
 import { cp, mkdir, readFile, readdir, rm, stat, unlink, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { dirname, join, relative, resolve } from "node:path"
-import { RunProfile, RunTaskType } from "../../../shared/enums/run-workspace.js"
+import { RunProfile, RunTaskType } from "../../../internal/enums/run-workspace.js"
 
 export { RunTaskType }
 
@@ -20,20 +20,8 @@ export { RunTaskType }
  */
 export { RunProfile }
 
-export interface RunWorkspaceContext {
-  readonly runId: string
-  readonly sourceRoot: string
-  readonly executionRoot: string
-  readonly taskType: RunTaskType
-  readonly isolated: boolean
-  readonly profile: RunProfile
-}
-
-export interface WorkspaceDiff {
-  readonly added: readonly string[]
-  readonly modified: readonly string[]
-  readonly deleted: readonly string[]
-}
+export type { RunWorkspaceContext, WorkspaceDiff } from "../../../ports/workspace.js"
+import type { RunWorkspaceContext, WorkspaceDiff } from "../../../ports/workspace.js"
 
 const CODEGEN_RE =
   /\b(?:build|create|implement|develop|write|code|scaffold|refactor|fix|patch|edit|modify|add|remove|rename|generate)\b/i

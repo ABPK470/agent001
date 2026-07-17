@@ -1,6 +1,6 @@
 import Fastify, { type FastifyInstance } from "fastify"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { CurrentSession } from "../src/features/auth/index.js"
+import type { CurrentSession } from "../src/api/auth/index.js"
 
 function fakeSession(over: Partial<CurrentSession> = {}): CurrentSession {
   return {
@@ -14,7 +14,7 @@ function fakeSession(over: Partial<CurrentSession> = {}): CurrentSession {
 }
 
 async function buildApp(session: CurrentSession | null) {
-  const { registerRunRoutes } = await import("../src/features/runs/routes.js")
+  const { registerRunRoutes } = await import("../src/api/runs/routes.js")
   const startRun = vi.fn(() => "run-123")
   const app = Fastify({ logger: false })
   app.addHook("onRequest", async (req) => {
@@ -26,7 +26,7 @@ async function buildApp(session: CurrentSession | null) {
   registerRunRoutes(app, {
     startRun,
     getRunWorkspaceDiff: () => null
-  } as unknown as import("../src/features/runs/orchestrator.js").AgentOrchestrator)
+  } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
 
   await app.ready()
   return { app, startRun }

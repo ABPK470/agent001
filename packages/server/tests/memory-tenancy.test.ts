@@ -34,11 +34,11 @@ afterEach(() => {
 })
 
 async function setupMemory() {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
-  return await import("../src/platform/persistence/memory/index.js")
+  return await import("../src/infra/persistence/memory/index.js")
 }
 
 const THREAD_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa"
@@ -336,7 +336,7 @@ describe("memory tenancy \u2014 cross-tier UPN isolation", () => {
 
   it("memory_vectors mirrors upn/shared and SQL filter prevents cross-tenant rows", async () => {
     const mem = await setupMemory()
-    const { getDb } = await import("../src/platform/persistence/db/index.js")
+    const { getDb } = await import("../src/infra/persistence/db/index.js")
 
     // Insert a few entries for two tenants and stamp synthetic embeddings
     // directly so the test does not depend on Ollama being reachable.

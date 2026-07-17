@@ -8,7 +8,7 @@
  */
 
 import type Database from "better-sqlite3"
-import { isLlmProvider, LlmProvider, type LlmProvider as LlmProviderId } from "../../shared/enums/llm.js"
+import { isLlmProvider, LlmProvider, type LlmProvider as LlmProviderId } from "../../internal/enums/llm.js"
 import { PROVIDER_DEFAULTS } from "./registry.js"
 
 export interface LlmEnvOverride {

@@ -16,7 +16,7 @@ import {
   type Message
 } from "@mia/agent"
 import { buildSyncOperationalVocabularyForHost, formatSyncDriftIntentBlock, formatSyncOperationIntentBlock } from "@mia/sync"
-import { listResolvedTerms } from "../../../../platform/persistence/memory.js"
+import { listResolvedTerms } from "../../../../infra/persistence/memory.js"
 import { buildClarificationBlock } from "../clarification-block.js"
 import { buildResolvedFactsBlock } from "../data-blocks/resolved-facts-block.js"
 import type { BuildContext } from "./types.js"

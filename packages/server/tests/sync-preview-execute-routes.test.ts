@@ -6,7 +6,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
-import type { CurrentSession } from "../src/features/auth/index.js"
+import type { CurrentSession } from "../src/api/auth/index.js"
 import { writeEntityBundle } from "../../sync/src/test-support/entity-fixtures.js"
 import { buildEntityPlan } from "../../sync/src/test-support/plan-fixtures.js"
 import { ENTITY_SPECS } from "../../sync/src/test-support/entity-fixtures.js"
@@ -60,8 +60,8 @@ function createHost(root: string): AgentHost {
 }
 
 async function buildApp(session: CurrentSession): Promise<{ app: FastifyInstance; host: AgentHost }> {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
-  const { registerSyncRoutes } = await import("../src/features/sync/routes.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { registerSyncRoutes } = await import("../src/api/sync/routes.js")
   const { seedUser, seedSession } = await import("./_fk-helpers.js")
 
   _setDb(testDb)

@@ -3,8 +3,8 @@
  */
 
 import { EventType } from "@mia/shared-enums"
-import { OperationKind, OperationStatus } from "../../../../../shared/enums/operations.js"
-import { getProposerRun } from "../../../../../platform/persistence/proposals.js"
+import { OperationKind, OperationStatus } from "../../../../../internal/enums/operations.js"
+import { getProposerRun } from "../../../../../infra/persistence/proposals.js"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../types.js"
 import { durationOf, inferPipelineStatus, numField, strField } from "../utils.js"
 

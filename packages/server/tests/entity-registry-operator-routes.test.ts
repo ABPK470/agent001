@@ -9,8 +9,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
 
-import { formatAuthoredSyncJson } from "../src/features/sync/domain/authored-sync-document.js"
-import * as db from "../src/platform/persistence/db/index.js"
+import { formatAuthoredSyncJson } from "../src/api/sync/domain/authored-sync-document.js"
+import * as db from "../src/infra/persistence/db/index.js"
 import {
   buildEntityRegistryApp,
   setupCatalogOperatorFixture,
@@ -171,7 +171,7 @@ describe("entity registry operator routes", () => {
   it("rejects non-admin import attempts", async () => {
     const Fastify = (await import("fastify")).default
     const { registerEntityRegistryRoutes } = await import(
-      "../src/features/sync/transport/definitions-routes.js"
+      "../src/api/sync/transport/definitions-routes.js"
     )
     const guestApp = Fastify({ logger: false })
     guestApp.addHook("onRequest", async (req) => {

@@ -4,12 +4,12 @@
  */
 
 import { EventType } from "@mia/shared-enums"
-import { broadcast } from "../../../platform/events/broadcaster.js"
+import { broadcast } from "../../../infra/events/broadcaster.js"
 import {
   findStaleProposerRuns,
   finishProposerRun,
-} from "../../../platform/persistence/proposals.js"
-import { cancelOperation } from "../../../platform/operations/cancel-registry.js"
+} from "../../../infra/persistence/proposals.js"
+import { cancelOperation } from "../../../infra/operations/cancel-registry.js"
 
 export function recoverStaleProposerRuns(): string[] {
   const stale = findStaleProposerRuns()

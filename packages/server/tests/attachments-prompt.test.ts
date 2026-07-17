@@ -36,9 +36,9 @@ afterEach(() => {
 
 describe("attachments in system prompt", () => {
   it("includes a manifest line per attachment when ids are supplied", async () => {
-    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
-    const { uploadAttachment } = await import("../src/platform/persistence/attachments/index.js")
-    const { buildSystemMessages } = await import("../src/features/runs/core/system-messages/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+    const { uploadAttachment } = await import("../src/infra/persistence/attachments/index.js")
+    const { buildSystemMessages } = await import("../src/api/runs/prompting/system-messages/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)
@@ -91,8 +91,8 @@ describe("attachments in system prompt", () => {
   })
 
   it("omits the manifest section entirely when no attachments are bound", async () => {
-    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
-    const { buildSystemMessages } = await import("../src/features/runs/core/system-messages/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+    const { buildSystemMessages } = await import("../src/api/runs/prompting/system-messages/index.js")
     _setDb(testDb)
     _migrate(testDb)
     seedTestUsers(testDb)

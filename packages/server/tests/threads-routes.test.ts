@@ -4,7 +4,7 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { CurrentSession } from "../src/features/auth/index.js"
+import type { CurrentSession } from "../src/api/auth/index.js"
 
 function fakeSession(over: Partial<CurrentSession> = {}): CurrentSession {
   return {
@@ -28,7 +28,7 @@ beforeEach(async () => {
   db = new Database(":memory:")
   db.pragma("journal_mode = WAL")
   db.pragma("foreign_keys = ON")
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(db)
   _migrate(db)
   const { seedUser } = await import("./_fk-helpers.js")
@@ -47,9 +47,9 @@ afterEach(() => {
 })
 
 async function buildApp(session: CurrentSession | null) {
-  const { registerThreadRoutes } = await import("../src/features/threads/routes.js")
-  const { registerRunRoutes } = await import("../src/features/runs/routes.js")
-  const { deleteThreadAndRuns } = await import("../src/platform/persistence/db/threads.js")
+  const { registerThreadRoutes } = await import("../src/api/threads/routes.js")
+  const { registerRunRoutes } = await import("../src/api/runs/routes.js")
+  const { deleteThreadAndRuns } = await import("../src/infra/persistence/db/threads.js")
   const startRun = vi.fn(() => "run-new")
   const app = Fastify({ logger: false })
   app.addHook("onRequest", async (req) => {
@@ -61,7 +61,7 @@ async function buildApp(session: CurrentSession | null) {
     startRun,
     getRunWorkspaceDiff: () => null,
     purgeThread: (threadId: string, upn: string) => deleteThreadAndRuns(threadId, upn)
-  } as unknown as import("../src/features/runs/orchestrator.js").AgentOrchestrator
+  } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator
   registerThreadRoutes(app, orchestrator)
   registerRunRoutes(app, orchestrator)
   await app.ready()

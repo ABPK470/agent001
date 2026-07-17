@@ -29,7 +29,7 @@
 
 import { spawn, spawnSync, type ChildProcess } from "node:child_process"
 import { resolve, sep } from "node:path"
-import { SandboxBackendKind } from "../../shared/enums/sandbox.js"
+import { SandboxBackendKind } from "../../internal/enums/sandbox.js"
 import { getSandbox } from "./index.js"
 import type { SandboxResult } from "./types.js"
 

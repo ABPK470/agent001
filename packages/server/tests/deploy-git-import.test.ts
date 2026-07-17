@@ -12,10 +12,10 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   applyDeployGitBundle,
   parseDeployGitBundleFromDir,
-} from "../src/features/platform/application/import-deploy-git-artifacts.js"
-import { writeDeployGitExport } from "../src/features/platform/application/export-deploy-git-artifacts.js"
-import { ensureSyncDefinitionConfigs } from "../src/features/sync/application/definitions.js"
-import * as db from "../src/platform/persistence/db/index.js"
+} from "../src/api/platform/application/import-deploy-git-artifacts.js"
+import { writeDeployGitExport } from "../src/api/platform/application/export-deploy-git-artifacts.js"
+import { ensureSyncDefinitionConfigs } from "../src/api/sync/application/definitions.js"
+import * as db from "../src/infra/persistence/db/index.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -51,7 +51,7 @@ async function setupDb(): Promise<void> {
   dataDir = mkdtempSync(join(tmpdir(), "deploy-git-import-test-"))
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
 
@@ -59,7 +59,7 @@ async function setupDb(): Promise<void> {
   seedRepoArtifacts(projectRoot)
 
   const { seedSyncMetadataIfEmpty } = await import(
-    "../src/features/sync/application/seed-sync-metadata.js"
+    "../src/api/sync/application/seed-sync-metadata.js"
   )
   seedSyncMetadataIfEmpty(projectRoot)
 }
@@ -79,7 +79,7 @@ describe("deploy git layout import", () => {
     expect(db.listEntityDefinitions("_default").length).toBe(0)
 
     const { seedEntityRegistryIfEmpty } = await import(
-      "../src/features/sync/application/seed-entity-registry.js"
+      "../src/api/sync/application/seed-entity-registry.js"
     )
     seedEntityRegistryIfEmpty(projectRoot)
     ensureSyncDefinitionConfigs(projectRoot)

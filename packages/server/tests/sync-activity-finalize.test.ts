@@ -1,7 +1,7 @@
 import { OperationStatus } from "@mia/shared-enums"
 import { describe, expect, it } from "vitest"
-import { finalizeStaleRunningActivities } from "../src/features/operations/application/query/utils.js"
-import type { OperationActivity } from "../src/features/operations/application/query/types.js"
+import { finalizeStaleRunningActivities } from "../src/api/operations/application/query/utils.js"
+import type { OperationActivity } from "../src/api/operations/application/query/types.js"
 
 describe("finalizeStaleRunningActivities", () => {
   it("marks orphan running table activities skipped when sync run ended skipped", () => {

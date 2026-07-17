@@ -1,4 +1,4 @@
-import { EffectKind, EffectStatus } from "../../shared/enums/effects.js"
+import { EffectKind, EffectStatus } from "../../internal/enums/effects.js"
 // ── Types ────────────────────────────────────────────────────────
 
 export { EffectKind, EffectStatus }

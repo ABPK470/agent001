@@ -12,7 +12,7 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { CatalogGraph, type CatalogTable } from "@mia/agent"
 import type { BootHostDeps } from "../src/ports/orchestration.js"
-import { persistLearnedTermFromResolution } from "../src/features/runs/execution/clarifications-learned.js"
+import { persistLearnedTermFromResolution } from "../src/api/runs/execution/clarifications-learned.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -34,11 +34,11 @@ afterEach(() => {
 })
 
 async function setupMemory() {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
-  return await import("../src/platform/persistence/memory/index.js")
+  return await import("../src/infra/persistence/memory/index.js")
 }
 
 function fixtureCatalog(): CatalogGraph {

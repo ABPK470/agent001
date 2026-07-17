@@ -2,7 +2,7 @@ import {
   hasSyncDefinitionFlowTemplate,
 } from "@mia/sync"
 
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 import type { EntityRunYaml } from "../domain/entity-yaml.js"
 import { loadAuthoringFlowCatalog, upsertSyncDefinitionConfig } from "./definitions.js"
 

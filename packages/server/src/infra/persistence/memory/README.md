@@ -5,7 +5,7 @@ This document covers **goal classes** — how we tag task *shape* for episodic F
 recall and shortcut eligibility.
 
 Implementation: `goal-class.ts`. Prompt/tool gating uses a related but separate
-layer in `features/runs/core/goal-classification.ts` (`syncIntent`, `dbScore`).
+layer in `features/runs/prompting/goal-classification.ts` (`syncIntent`, `dbScore`).
 
 ---
 

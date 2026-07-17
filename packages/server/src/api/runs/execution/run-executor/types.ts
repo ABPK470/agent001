@@ -12,9 +12,9 @@ import {
   type Unsubscribe
 } from "@mia/agent"
 import { type WorkspaceDiff, type prepareRunWorkspace } from "../../workspace/index.js"
-import type { AgentBus } from "../../../../platform/queue/agent-bus.js"
-import { type RunPriority } from "../../../../platform/queue/run-queue.js"
-import type { MemoryPerTier } from "../../../../platform/persistence/memory/tier-context.js"
+import type { AgentBus } from "../../../../infra/queue/agent-bus.js"
+import { type RunPriority } from "../../../../infra/queue/run-queue.js"
+import type { MemoryPerTier } from "../../../../infra/persistence/memory/tier-context.js"
 import type { ClarificationsRegistryPort } from "../../../../ports/clarifications.js"
 import type { ActiveRun, BootHostDeps, NotificationOpts } from "../../../../ports/orchestration.js"
 
@@ -152,7 +152,7 @@ export type PerRunHostBundle = {
 export type ToolResolution = {
   governedTools: Tool[]
   perTier: MemoryPerTier
-  toolDecision: ReturnType<typeof import("../../core/decide-sections.js").decideSections>
+  toolDecision: ReturnType<typeof import("../../prompting/decide-sections.js").decideSections>
 }
 
 export type ToolResolutionContext = {
@@ -191,7 +191,7 @@ export type DelegateToolsBundle = {
 
 export type ExecutionSystemMessagesBundle = {
   effectivePrompt: string
-  systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages/index.js").buildSystemMessages>>
+  systemMessages: Awaited<ReturnType<typeof import("../../prompting/system-messages/index.js").buildSystemMessages>>
 }
 
 export type ExecutionEnvironment = {
@@ -206,8 +206,8 @@ export type ExecutionEnvironment = {
   markRunStarted: () => Promise<void>
   disposeEventWiring: Unsubscribe
   runContext: ReturnType<typeof import("@mia/agent").makeRunContext>
-  toolDecision: ReturnType<typeof import("../../core/decide-sections.js").decideSections>
+  toolDecision: ReturnType<typeof import("../../prompting/decide-sections.js").decideSections>
   delegateCtx: DelegateContext
   allTools: ExecutableTool[]
-  systemMessages: Awaited<ReturnType<typeof import("../../core/system-messages/index.js").buildSystemMessages>>
+  systemMessages: Awaited<ReturnType<typeof import("../../prompting/system-messages/index.js").buildSystemMessages>>
 }

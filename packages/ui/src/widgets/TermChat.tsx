@@ -9,7 +9,7 @@
 import { ArrowUp, Check, ChevronDown, ChevronRight, FolderOpen, Dot, Plus, Square } from "lucide-react"
 import React, { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
-import { ThreadRunRail } from "../features/threads/ThreadRunRail"
+import { ThreadRunRail } from "../api/threads/ThreadRunRail"
 import { AskUserPrompt } from "../components/AskUserPrompt"
 import { AttachmentChips, type PendingAttachment } from "../components/AttachmentChips"
 import { ChatScrollProvider, useChatScroll } from "../components/ChatScrollContext"

@@ -22,7 +22,7 @@ import {
 import { existsSync, readdirSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 const SEED_YAML = "deploy/sync/entity-registry.seed.yaml"

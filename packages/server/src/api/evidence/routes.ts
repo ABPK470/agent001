@@ -6,14 +6,14 @@ import type { FastifyInstance, FastifyRequest } from "fastify"
 import { createReadStream, existsSync } from "node:fs"
 import { readFile } from "node:fs/promises"
 import { resolve } from "node:path"
-import type { Signer } from "../../platform/persistence/evidence.js"
+import type { Signer } from "../../infra/persistence/evidence.js"
 import {
   getEvidenceByPlan,
   listEvidence,
   verifyEvidence,
   type EvidenceIndexRow
-} from "../../platform/persistence/evidence.js"
-import { getDb } from "../../platform/persistence/sqlite.js"
+} from "../../infra/persistence/evidence.js"
+import { getDb } from "../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 

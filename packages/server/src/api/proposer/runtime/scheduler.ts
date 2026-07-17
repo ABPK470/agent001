@@ -19,7 +19,7 @@
 
 import type { AgentHost } from "@mia/agent"
 import type { LlmCompletionPort } from "@mia/sync"
-import { getDb } from "../../../platform/persistence/sqlite.js"
+import { getDb } from "../../../infra/persistence/sqlite.js"
 import { runProposer } from "../application/runner.js"
 
 export interface ProposerScheduleRow {

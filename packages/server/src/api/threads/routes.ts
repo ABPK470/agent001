@@ -8,8 +8,8 @@ import {
   threadExportFilename,
 } from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
-import * as db from "../../platform/persistence/sqlite.js"
-import { sendUserDownload } from "../../shared/http/attachment-response.js"
+import * as db from "../../infra/persistence/sqlite.js"
+import { sendUserDownload } from "../../internal/http/attachment-response.js"
 import { canAccessThread } from "../auth/application/thread-access.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 

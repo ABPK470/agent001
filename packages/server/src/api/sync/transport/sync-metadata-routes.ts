@@ -15,12 +15,12 @@ import {
 } from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
 
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 import { recordSyncCatalogChange } from "../../platform/application/sync-catalog-versioning.js"
 import {
   buildFlowCatalogFromSyncMetadataDoc,
   prepareFlowStepsForStorage,
-} from "../domain/flow-steps.js"
+} from "../../../infra/persistence/sync-flow-steps.js"
 
 const TENANT = "_default"
 

@@ -5,8 +5,8 @@
 import { EventType } from "@mia/shared-enums"
 import type { RiskTier } from "@mia/sync"
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
-import { broadcast } from "../../platform/events/broadcaster.js"
-import * as db from "../../platform/persistence/sqlite.js"
+import { broadcast } from "../../infra/events/broadcaster.js"
+import * as db from "../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 const TOKEN_TTL_MS_DEFAULT = 24 * 60 * 60 * 1000

@@ -28,9 +28,9 @@ import {
 import {
   PUBLISHED_SYNC_BUNDLE_PATH,
   reloadPublishedSyncVocabulary
-} from "../../../bootstrap/published-sync-bundle.js"
-import { _resetGoalClassificationCache } from "../../runs/core/goal-classification.js"
-import * as db from "../../../platform/persistence/sqlite.js"
+} from "../../../boot/published-sync-bundle.js"
+import { _resetGoalClassificationCache } from "../../runs/prompting/goal-classification.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 const PUBLISHED_BUNDLE_PATH = PUBLISHED_SYNC_BUNDLE_PATH

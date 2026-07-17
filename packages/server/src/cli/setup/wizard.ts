@@ -7,7 +7,7 @@ import { config } from "dotenv"
 import {
   DEFAULT_COPILOT_MODEL,
   DEFAULT_DATABRICKS_MODEL,
-} from "../../platform/llm/registry.js"
+} from "../../infra/llm/registry.js"
 import {
   databricksAuthMode,
   hasMssqlConfigured,
@@ -22,7 +22,7 @@ import {
   hasBlockingErrors,
   runSetupChecks,
 } from "./checks.js"
-import { formatSyncBootNote } from "../../bootstrap/published-sync-bundle.js"
+import { formatSyncBootNote } from "../../boot/published-sync-bundle.js"
 import { describeLayout, resolveSetupLayout } from "./layout.js"
 import type { SetupLayout } from "./types.js"
 

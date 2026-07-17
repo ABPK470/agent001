@@ -3,7 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import * as db from "../../platform/persistence/sqlite.js"
+import * as db from "../../infra/persistence/sqlite.js"
 
 export function registerUsageRoutes(app: FastifyInstance): void {
   app.get("/api/usage", async (req, reply) => {

@@ -8,7 +8,7 @@ import { executeSync, type ExecuteProgress } from "@mia/sync"
 import {
   registerOperation,
   unregisterOperation,
-} from "../../../platform/operations/cancel-registry.js"
+} from "../../../infra/operations/cancel-registry.js"
 
 export const SYNC_EXECUTE_OPERATION = "sync.execute" as const
 

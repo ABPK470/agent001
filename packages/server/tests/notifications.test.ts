@@ -15,7 +15,7 @@ import {
   markRunCrashed,
   saveNotification,
   type DbNotification
-} from "../src/platform/persistence/db/index.js"
+} from "../src/infra/persistence/db/index.js"
 import { seedSession, seedUser } from "./_fk-helpers.js"
 
 // ── Helper: in-memory DB ─────────────────────────────────────────

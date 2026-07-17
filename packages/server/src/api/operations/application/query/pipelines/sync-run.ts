@@ -3,8 +3,8 @@
  */
 
 import { SyncRunStatus, syncExecuteCompletedHasWarnings } from "@mia/shared-enums"
-import { OperationKind, OperationStatus } from "../../../../../shared/enums/operations.js"
-import * as db from "../../../../../platform/persistence/sqlite.js"
+import { OperationKind, OperationStatus } from "../../../../../internal/enums/operations.js"
+import * as db from "../../../../../infra/persistence/sqlite.js"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../types.js"
 import { durationOf, inferPipelineStatus, strField } from "../utils.js"
 import { buildSyncPipeline, summariseSyncEvents } from "./sync.js"

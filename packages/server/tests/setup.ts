@@ -8,7 +8,7 @@ import { loadPublishedSyncEntityIdsFromBundle, setTenantConfig } from "@mia/agen
 import { beforeAll, beforeEach } from "vitest"
 import { join, dirname } from "node:path"
 import { fileURLToPath } from "node:url"
-import { _resetDecideSectionsCache } from "../src/features/runs/core/decide-sections.ts"
+import { _resetDecideSectionsCache } from "../src/api/runs/prompting/decide-sections.ts"
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..")
 

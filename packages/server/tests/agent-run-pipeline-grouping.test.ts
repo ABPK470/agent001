@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const listEventsForRunId = vi.fn()
 const getRun = vi.fn()
 
-vi.mock("../src/platform/persistence/sqlite.js", () => ({
+vi.mock("../src/infra/persistence/sqlite.js", () => ({
   listEventsForRunId,
   getRun
 }))
@@ -40,7 +40,7 @@ describe("agent-run pipeline telemetry grouping", () => {
       { type: EventType.RunCompleted, created_at: "2026-05-27T14:55:09.000Z", data: JSON.stringify({ runId: "run-1" }) }
     ])
 
-    const { listOperationsForRun } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperationsForRun } = await import("../src/api/operations/application/query/index.ts")
     const { operation } = listOperationsForRun("run-1")
 
     expect(operation).not.toBeNull()
@@ -79,7 +79,7 @@ describe("agent-run pipeline telemetry grouping", () => {
       { type: EventType.RunCompleted, created_at: "2026-05-27T14:55:07.000Z", data: JSON.stringify({ runId: "run-1" }) }
     ])
 
-    const { listOperationsForRun } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperationsForRun } = await import("../src/api/operations/application/query/index.ts")
     const { operation } = listOperationsForRun("run-1")
 
     // The step between the two bursts closes the first group, so each iteration
@@ -108,7 +108,7 @@ describe("agent-run pipeline telemetry grouping", () => {
       { type: EventType.RunCompleted, created_at: "2026-05-27T14:55:04.000Z", data: JSON.stringify({ runId: "run-1" }) }
     ])
 
-    const { listOperationsForRun } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperationsForRun } = await import("../src/api/operations/application/query/index.ts")
     const { operation } = listOperationsForRun("run-1")
     const names = operation!.activities.map((a) => a.name)
 
@@ -130,7 +130,7 @@ describe("agent-run pipeline telemetry grouping", () => {
       { type: EventType.RunFailed, created_at: "2026-05-27T14:55:03.000Z", data: JSON.stringify({ runId: "run-1", error: "boom" }) }
     ])
 
-    const { listOperationsForRun } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperationsForRun } = await import("../src/api/operations/application/query/index.ts")
     const { operation } = listOperationsForRun("run-1")
     expect(operation!.activities.map((a) => a.name)).toEqual(["started", "Debug trace", "failed"])
     const debugTrace = operation!.activities.find((a) => a.name === "Debug trace")!

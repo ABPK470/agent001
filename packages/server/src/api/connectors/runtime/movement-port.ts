@@ -35,7 +35,7 @@ import {
 } from "@mia/connectors"
 import { Pool } from "pg"
 import type { Connector, ConnectorKindId } from "@mia/shared-types"
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 
 function asString(value: unknown): string | undefined {
   return typeof value === "string" && value !== "" ? value : undefined

@@ -259,7 +259,7 @@ run auto-resumes from the last checkpoint on the next start.
 
 ## Tools
 
-Tools are registered in `packages/server/src/features/runs/tooling/registry.ts`. Each agent
+Tools are registered in `packages/server/src/api/runs/tooling/registry.ts`. Each agent
 whitelist picks a subset; the live catalog (names + descriptions) is always:
 
 ```bash

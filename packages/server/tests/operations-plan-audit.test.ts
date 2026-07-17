@@ -5,7 +5,7 @@ const listEventsForPlanId = vi.fn()
 const getSyncRun = vi.fn()
 const getSyncRunPlanJson = vi.fn()
 
-vi.mock("../src/platform/persistence/sqlite.js", () => ({
+vi.mock("../src/infra/persistence/sqlite.js", () => ({
   listEventsForPlanId,
   getSyncRun,
   getSyncRunPlanJson
@@ -59,7 +59,7 @@ describe("listOperationsForPlan", () => {
     getSyncRunPlanJson.mockReturnValue(null)
 
     const { listOperationsForPlan } = await import(
-      "../src/features/operations/application/query/list-operations-for-plan.ts"
+      "../src/api/operations/application/query/list-operations-for-plan.ts"
     )
     const result = listOperationsForPlan(planId)
 
@@ -78,7 +78,7 @@ describe("listOperationsForPlan", () => {
     listEventsForPlanId.mockReturnValue([])
 
     const { listOperationsForPlan } = await import(
-      "../src/features/operations/application/query/list-operations-for-plan.ts"
+      "../src/api/operations/application/query/list-operations-for-plan.ts"
     )
     const result = listOperationsForPlan("missing-plan")
 

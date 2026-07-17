@@ -17,8 +17,8 @@ import {
   insertUser,
   updateLastLoginAt,
   type DbUser
-} from "../../../platform/persistence/users.js"
-import { UserSource } from "../../../shared/enums/auth.js"
+} from "../../../infra/persistence/users.js"
+import { UserSource } from "../../../internal/enums/auth.js"
 
 const BCRYPT_ROUNDS = 10 // dev-grade; raise if/when production volume warrants
 

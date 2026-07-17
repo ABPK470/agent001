@@ -38,15 +38,15 @@ afterEach(() => {
 })
 
 async function setup() {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
-  const { subscribeToEvents } = await import("../src/platform/events/broadcaster.js")
+  const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
   const { writeRunCheckpoint } = await import(
-    "../src/features/runs/execution/run-executor/checkpoint-writer.js"
+    "../src/api/runs/execution/run-executor/checkpoint-writer.js"
   )
-  const db = await import("../src/platform/persistence/sqlite.js")
+  const db = await import("../src/infra/persistence/sqlite.js")
   return { writeRunCheckpoint, subscribeToEvents, db }
 }
 

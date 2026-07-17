@@ -6,7 +6,7 @@ const getRun = vi.fn()
 const getSyncRun = vi.fn()
 const getSyncRunPlanJson = vi.fn()
 
-vi.mock("../src/platform/persistence/sqlite.js", () => ({
+vi.mock("../src/infra/persistence/sqlite.js", () => ({
   listEvents,
   getRun,
   getSyncRun,
@@ -86,7 +86,7 @@ describe("listOperations sync bucketing", () => {
       error: null
     })
 
-    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperations } = await import("../src/api/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
 
     expect(result.operations).toHaveLength(2)
@@ -137,7 +137,7 @@ describe("listOperations sync bucketing", () => {
       error: null
     })
 
-    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperations } = await import("../src/api/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
 
@@ -210,7 +210,7 @@ describe("listOperations sync bucketing", () => {
       })
     )
 
-    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperations } = await import("../src/api/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
     const executePhase = execute.activities.find((a) => a.name === "Execute")
@@ -307,7 +307,7 @@ describe("listOperations sync bucketing", () => {
     })
     getSyncRunPlanJson.mockReturnValue(null)
 
-    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperations } = await import("../src/api/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const execute = result.operations[0]
     const executePhase = execute.activities.find((a) => a.name === "Execute")
@@ -381,7 +381,7 @@ describe("listOperations sync bucketing", () => {
     })
     getSyncRunPlanJson.mockReturnValue(null)
 
-    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperations } = await import("../src/api/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const preview = result.operations.find((op) => op.kind === OperationKind.SyncRun)
 
@@ -441,7 +441,7 @@ describe("listOperations sync bucketing", () => {
       })
     )
 
-    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperations } = await import("../src/api/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
     const preview = result.operations.find((op) => op.kind === OperationKind.SyncRun)
     const scope = preview?.activities[0]?.children?.find((a) => a.name === "Preflight checks")
@@ -508,7 +508,7 @@ describe("listOperations sync bucketing", () => {
     })
     getSyncRun.mockReturnValue(undefined)
 
-    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperations } = await import("../src/api/operations/application/query/index.ts")
     const agent = listOperations({ limit: 50 }).operations.find((op) => op.kind === OperationKind.AgentRun)
 
     expect(agent?.activities.map((a) => a.name)).toEqual([
@@ -584,7 +584,7 @@ describe("listOperations sync bucketing", () => {
       error: "Source audit gate failed — execute skipped",
     })
 
-    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperations } = await import("../src/api/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
 
     const preview = result.operations.find((op) => op.id === "plan-skip")
@@ -640,7 +640,7 @@ describe("listOperations sync bucketing", () => {
       error: null,
     })
 
-    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperations } = await import("../src/api/operations/application/query/index.ts")
     const result = listOperations({ limit: 50 })
 
     expect(result.operations.every((op) => op.kind !== OperationKind.System)).toBe(true)
@@ -683,7 +683,7 @@ describe("listOperations sync bucketing", () => {
       error: null,
     })
 
-    const { listOperations } = await import("../src/features/operations/application/query/index.ts")
+    const { listOperations } = await import("../src/api/operations/application/query/index.ts")
     const result = listOperations({ limit: 50, kind: "sync" })
 
     expect(result.operations).toHaveLength(1)

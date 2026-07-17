@@ -14,8 +14,8 @@
 
 import { EventType } from "@mia/agent"
 import { createHash, randomUUID } from "node:crypto"
-import type { CurrentSession } from "../../../features/auth/runtime/context.js"
-import { UserSource } from "../../../shared/enums/auth.js"
+import type { CurrentSession } from "../../../ports/session.js"
+import { UserSource } from "../../../internal/enums/auth.js"
 import { broadcast } from "../../events/broadcaster.js"
 import * as db from "../../persistence/sqlite.js"
 import type { MessageQueue } from "./queue.js"

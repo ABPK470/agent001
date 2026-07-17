@@ -5,8 +5,8 @@
 import { isPolicyEffect, PolicyEffect } from "@mia/agent"
 import { EventType } from "@mia/shared-enums"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import * as db from "../../platform/persistence/sqlite.js"
-import { broadcast } from "../../platform/events/broadcaster.js"
+import * as db from "../../infra/persistence/sqlite.js"
+import { broadcast } from "../../infra/events/broadcaster.js"
 
 function audit(req: FastifyRequest, action: string, detail: Record<string, unknown>): void {
   try {

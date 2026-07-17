@@ -6,7 +6,7 @@ import {
   buildFlowCatalogFromSyncMetadataDoc,
   parseStoredFlowStepsJson,
   prepareFlowStepsForStorage,
-} from "../../../features/sync/domain/flow-steps.js"
+} from "../sync-flow-steps.js"
 import { getDb } from "../connection.js"
 
 const DEFAULT_TENANT = "_default"

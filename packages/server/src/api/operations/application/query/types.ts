@@ -4,7 +4,7 @@
  */
 
 import type { EventType } from "@mia/agent"
-import { OperationKind, OperationStatus } from "../../../../shared/enums/operations.js"
+import { OperationKind, OperationStatus } from "../../../../internal/enums/operations.js"
 
 export { OperationKind, OperationStatus }
 

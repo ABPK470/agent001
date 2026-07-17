@@ -18,5 +18,5 @@
     "noFallthroughCasesInSwitch": true
   },
   "include": ["src"],
-  "exclude": ["node_modules", "dist", "src/platform/persistence/migrations/archive"]
+  "exclude": ["node_modules", "dist", "src/infra/persistence/migrations/archive"]
 }

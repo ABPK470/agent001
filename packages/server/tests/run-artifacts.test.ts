@@ -6,7 +6,7 @@ import {
   listRunArtifactFiles,
   openRunArtifactStream,
   resolveRunArtifactFile,
-} from "../src/features/runs/run-artifacts.js"
+} from "../src/api/runs/run-artifacts.js"
 
 describe("run artifacts", () => {
   const root = join(tmpdir(), `mia-artifacts-${Date.now()}`)

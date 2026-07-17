@@ -11,10 +11,10 @@ import {
   synthesizeGenericFailureAnswer,
   type ToolKillManager
 } from "@mia/agent"
-import { broadcast, broadcastTrace } from "../../../../platform/events/broadcaster.js"
-import * as db from "../../../../platform/persistence/sqlite.js"
-import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
-import { handlePlannerTrace } from "../../core/coordination/planner-events.js"
+import { broadcast, broadcastTrace } from "../../../../infra/events/broadcaster.js"
+import * as db from "../../../../infra/persistence/sqlite.js"
+import { TrajectoryEventKind } from "../../../../internal/enums/trajectory.js"
+import { handlePlannerTrace } from "../../prompting/coordination/planner-events.js"
 import { consumeMatchingToolGrant } from "../../application/run-tool-approval.js"
 import { writeRunCheckpoint } from "./checkpoint-writer.js"
 import { persistToolResult } from "../tool-result-persister.js"

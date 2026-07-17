@@ -15,10 +15,10 @@ import {
   type ExecuteProgress
 } from "@mia/sync"
 import type { FastifyInstance, FastifyReply } from "fastify"
-import { broadcast } from "../../platform/events/broadcaster.js"
-import { cancelOperation } from "../../platform/operations/cancel-registry.js"
-import { PUBLISHED_SYNC_BUNDLE_PATH } from "../../bootstrap/published-sync-bundle.js"
-import * as db from "../../platform/persistence/sqlite.js"
+import { broadcast } from "../../infra/events/broadcaster.js"
+import { cancelOperation } from "../../infra/operations/cancel-registry.js"
+import { PUBLISHED_SYNC_BUNDLE_PATH } from "../../boot/published-sync-bundle.js"
+import * as db from "../../infra/persistence/sqlite.js"
 import {
   listSyncDefinitionAdminItems,
   listSyncDefinitionRuntimeOptions,

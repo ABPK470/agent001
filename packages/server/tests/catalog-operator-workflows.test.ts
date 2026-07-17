@@ -9,24 +9,24 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   applyDeployCatalogSnapshot,
   validateDeployCatalogSnapshot,
-} from "../src/features/platform/application/import-deploy-artifacts.js"
-import { buildDeployCatalogSnapshot } from "../src/features/platform/application/export-deploy-artifacts.js"
+} from "../src/api/platform/application/import-deploy-artifacts.js"
+import { buildDeployCatalogSnapshot } from "../src/api/platform/application/export-deploy-artifacts.js"
 import {
   commitSyncCatalogVersion,
   rollbackSyncCatalogVersion,
-} from "../src/features/platform/application/sync-catalog-versioning.js"
+} from "../src/api/platform/application/sync-catalog-versioning.js"
 import {
   ensureSyncDefinitionConfigs,
   listSyncDefinitionAdminItems,
   loadAuthoringFlowCatalog,
   publishSyncDefinitionsFromDb,
-} from "../src/features/sync/application/definitions.js"
+} from "../src/api/sync/application/definitions.js"
 import {
   buildFlowCatalogFromSyncMetadataDoc,
   FlowStepsValidationError,
   prepareFlowStepsForStorage,
-} from "../src/features/sync/domain/flow-steps.js"
-import * as db from "../src/platform/persistence/db/index.js"
+} from "../src/api/sync/domain/flow-steps.js"
+import * as db from "../src/infra/persistence/db/index.js"
 import { isCatalogId } from "@mia/shared-types"
 import {
   buildSyncMetadataApp,

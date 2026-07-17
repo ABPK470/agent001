@@ -8,13 +8,13 @@
 
 import Database from "better-sqlite3"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { QueueStore } from "../src/platform/queue/channels/queue.js"
-import { MessageQueue } from "../src/platform/queue/channels/queue.js"
-import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/platform/queue/channels/retry.js"
-import type { ConversationStore, RunTrigger } from "../src/platform/queue/channels/router.js"
-import { MessageRouter } from "../src/platform/queue/channels/router.js"
-import { TeamsChannel } from "../src/platform/queue/channels/teams.js"
-import type { Channel, ChannelConfig, Conversation, OutboundMessage } from "../src/platform/queue/channels/types.js"
+import type { QueueStore } from "../src/infra/queue/channels/queue.js"
+import { MessageQueue } from "../src/infra/queue/channels/queue.js"
+import { ChannelApiError, computeDelay, DEFAULT_RETRY_POLICY, withRetry } from "../src/infra/queue/channels/retry.js"
+import type { ConversationStore, RunTrigger } from "../src/infra/queue/channels/router.js"
+import { MessageRouter } from "../src/infra/queue/channels/router.js"
+import { TeamsChannel } from "../src/infra/queue/channels/teams.js"
+import type { Channel, ChannelConfig, Conversation, OutboundMessage } from "../src/infra/queue/channels/types.js"
 
 // ── Test helpers ─────────────────────────────────────────────────
 
@@ -291,7 +291,7 @@ describe("MessageQueue", () => {
 
   beforeEach(() => {
     // Mock broadcast to prevent errors in isolated test env.
-    vi.mock("../src/platform/events/broadcaster.js", () => ({
+    vi.mock("../src/infra/events/broadcaster.js", () => ({
       broadcast: vi.fn()
     }))
 
@@ -335,12 +335,12 @@ describe("MessageRouter", () => {
   let testDb: Database.Database
 
   beforeEach(async () => {
-    vi.mock("../src/platform/events/broadcaster.js", () => ({
+    vi.mock("../src/infra/events/broadcaster.js", () => ({
       broadcast: vi.fn()
     }))
 
     testDb = new Database(":memory:")
-    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
     _setDb(testDb)
     _migrate(testDb)
 

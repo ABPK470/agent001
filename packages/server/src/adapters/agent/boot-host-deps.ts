@@ -1,5 +1,5 @@
 import type { ConfigureAgentOptions } from "@mia/agent"
-import type { BootHostDeps } from "../ports/orchestration.js"
+import type { BootHostDeps } from "../../ports/orchestration.js"
 
 /** Map boot-time host deps into configureAgent options for per-run host construction. */
 export function bootHostDepsToConfigureAgentOptions(

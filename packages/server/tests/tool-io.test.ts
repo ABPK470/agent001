@@ -3,8 +3,8 @@ import { describe, expect, it } from "vitest"
 import {
   buildToolIoFromStepEvents,
   buildToolIoSummary
-} from "../src/features/operations/application/query/tool-io.js"
-import type { OperationEvent } from "../src/features/operations/application/query/types.js"
+} from "../src/api/operations/application/query/tool-io.js"
+import type { OperationEvent } from "../src/api/operations/application/query/types.js"
 
 describe("tool-io", () => {
   it("builds structured tool I/O from step events", () => {

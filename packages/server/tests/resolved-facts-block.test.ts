@@ -14,7 +14,7 @@ import { describe, expect, it } from "vitest"
 import {
   buildResolvedFactsBlock,
   extractObjectTokens
-} from "../src/features/runs/core/data-blocks/resolved-facts-block.js"
+} from "../src/api/runs/prompting/data-blocks/resolved-facts-block.js"
 
 function col(name: string): CatalogColumn {
   return { name, dataType: "int", nullable: false } as CatalogColumn

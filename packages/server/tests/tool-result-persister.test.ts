@@ -24,11 +24,11 @@ afterEach(() => {
 })
 
 async function setupDb() {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
-  return await import("../src/features/runs/execution/tool-result-persister.js")
+  return await import("../src/api/runs/execution/tool-result-persister.js")
 }
 
 const THREAD_ID = "cccccccc-cccc-4ccc-8ccc-cccccccccccc"
@@ -56,7 +56,7 @@ function seedThreadAndRuns(runIds: string[]): void {
 }
 
 async function loadPriorResultsForThread() {
-  const { loadPriorResults } = await import("../src/features/runs/core/data-blocks/prior-results-block.js")
+  const { loadPriorResults } = await import("../src/api/runs/prompting/data-blocks/prior-results-block.js")
   return loadPriorResults({ threadId: THREAD_ID, upn: UPN })
 }
 

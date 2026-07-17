@@ -1,4 +1,4 @@
-import { WorkspaceMountMode } from "../../shared/enums/sandbox.js"
+import { WorkspaceMountMode } from "../../internal/enums/sandbox.js"
 
 // ── Constants ────────────────────────────────────────────────────
 

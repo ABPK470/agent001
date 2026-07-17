@@ -1,11 +1,11 @@
 import { getCatalog, PolicyRole, resolveEffectiveMssqlConnection, resolveGoalDataAnchors, seedMssqlVerifiedTables, type AgentHost, type RunContext, type Tool } from "@mia/agent"
-import { broadcastTrace } from "../../../../platform/events/broadcaster.js"
-import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
-import { loadCandidateVerdicts, loadKnownObjects } from "../../core/data-blocks/known-objects.js"
-import { loadPriorResults } from "../../core/data-blocks/prior-results-block.js"
-import { loadPriorTurns } from "../../core/data-blocks/prior-turns.js"
-import { buildSystemMessages } from "../../core/system-messages/index.js"
-import type { MemoryPerTier } from "../../../../platform/persistence/memory/tier-context.js"
+import { broadcastTrace } from "../../../../infra/events/broadcaster.js"
+import { TrajectoryEventKind } from "../../../../internal/enums/trajectory.js"
+import { loadCandidateVerdicts, loadKnownObjects } from "../../prompting/data-blocks/known-objects.js"
+import { loadPriorResults } from "../../prompting/data-blocks/prior-results-block.js"
+import { loadPriorTurns } from "../../prompting/data-blocks/prior-turns.js"
+import { buildSystemMessages } from "../../prompting/system-messages/index.js"
+import type { MemoryPerTier } from "../../../../infra/persistence/memory/tier-context.js"
 import type {
   ActiveRunRecord,
   ExecuteRunRequestDto,

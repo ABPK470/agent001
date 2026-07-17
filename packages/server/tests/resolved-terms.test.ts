@@ -32,11 +32,11 @@ afterEach(() => {
 })
 
 async function setupMemory() {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   testDb.pragma("foreign_keys = OFF")
-  return await import("../src/platform/persistence/memory/index.js")
+  return await import("../src/infra/persistence/memory/index.js")
 }
 
 describe("resolved_terms — save + list", () => {

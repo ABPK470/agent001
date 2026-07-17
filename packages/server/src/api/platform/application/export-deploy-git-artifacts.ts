@@ -12,7 +12,7 @@ import { join, resolve } from "node:path"
 
 import type { EntityDefinition } from "@mia/sync"
 
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 import { loadAuthoringFlowCatalog } from "../../sync/application/definitions.js"
 import {
   entityToAuthoredSyncDefinition,

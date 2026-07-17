@@ -91,12 +91,12 @@ import {
   syncExecuteTool,
   syncPreviewTool
 } from "@mia/sync"
-import { ingestAgentNote, recordTableVerdict } from "../../../platform/persistence/memory.js"
+import { ingestAgentNote, recordTableVerdict } from "../../../infra/persistence/memory.js"
 import {
   getToolResult,
   isRecallableToolResult,
   loadRecentToolResultsForThread
-} from "../../../platform/persistence/tool-results.js"
+} from "../../../infra/persistence/tool-results.js"
 
 export { thinkTool }
 
@@ -583,7 +583,7 @@ const RECALL_DEFAULT_CAP = 8 * 1024
 const RECALL_FULL_CAP = 48 * 1024
 
 function formatRecall(
-  row: import("../../../platform/persistence/tool-results.js").DbToolResult,
+  row: import("../../../infra/persistence/tool-results.js").DbToolResult,
   full: boolean
 ): {
   ok: true

@@ -6,14 +6,14 @@ import { resolve } from "node:path"
 import {
   findExistingCatalogCachePath,
   resolveCatalogCachePath,
-} from "../../../platform/catalog/catalog-cache-path.js"
+} from "../../../infra/catalog/catalog-cache-path.js"
 
 import {
   ensureSyncDefinitionConfigs,
   seedEntityRegistryIfEmpty,
 } from "../../sync/index.js"
-import * as db from "../../../platform/persistence/sqlite.js"
-import { getDb } from "../../../platform/persistence/connection.js"
+import * as db from "../../../infra/persistence/sqlite.js"
+import { getDb } from "../../../infra/persistence/connection.js"
 
 const PUBLISHED_BUNDLE_PATH = "sync-definitions/published/definitions.bundle.json"
 

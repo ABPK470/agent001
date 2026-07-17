@@ -30,7 +30,7 @@ import {
   type ProposerPassResult,
   type RankableProposal
 } from "@mia/sync"
-import { broadcast } from "../../../platform/events/broadcaster.js"
+import { broadcast } from "../../../infra/events/broadcaster.js"
 import {
   createProposerRun,
   finishProposerRun,
@@ -41,14 +41,14 @@ import {
   saveAnnotation,
   saveRankScore,
   type ProposalRow
-} from "../../../platform/persistence/proposals.js"
-import { probeRowDivergence } from "../../runs/core/proposer/divergence-probe.js"
-import { bindLlmOperationContext, emitLlmInteractionCleared } from "../../../platform/llm/operation-context.js"
+} from "../../../infra/persistence/proposals.js"
+import { probeRowDivergence } from "../../runs/prompting/proposer/divergence-probe.js"
+import { bindLlmOperationContext, emitLlmInteractionCleared } from "../../../infra/llm/operation-context.js"
 import {
   registerOperation,
   throwIfCancelled,
   unregisterOperation,
-} from "../../../platform/operations/cancel-registry.js"
+} from "../../../infra/operations/cancel-registry.js"
 
 export interface ProposerRunnerOptions extends ProposerPassOptions {
   tenantId: string

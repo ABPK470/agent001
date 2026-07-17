@@ -15,14 +15,14 @@ import { validateEntityDefinition } from "@mia/sync"
 import { defaultSyncDefinitionFlowTemplateId, hasSyncDefinitionFlowTemplate, withPermissionDefaults } from "@mia/sync"
 import { validateCatalogId } from "@mia/shared-types"
 
-import * as db from "../../../platform/persistence/sqlite.js"
-import { getDb } from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
+import { getDb } from "../../../infra/persistence/sqlite.js"
 import {
   buildFlowCatalogFromSyncMetadataDoc,
   FlowStepsValidationError,
   prepareFlowStepsForStorage,
   validateFlowStepsForCatalog,
-} from "../../sync/domain/flow-steps.js"
+} from "../../../infra/persistence/sync-flow-steps.js"
 import { applyEntityRunYaml } from "../../sync/application/apply-entity-run-yaml.js"
 import {
   ensureSyncDefinitionConfigs,

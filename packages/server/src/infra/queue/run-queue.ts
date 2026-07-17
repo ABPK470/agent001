@@ -18,7 +18,7 @@
  */
 
 import { EventType } from "@mia/agent"
-import { RunPriority } from "../../shared/enums/queue.js"
+import { RunPriority } from "../../internal/enums/queue.js"
 import { broadcast } from "../events/broadcaster.js"
 
 // ── Types ────────────────────────────────────────────────────────

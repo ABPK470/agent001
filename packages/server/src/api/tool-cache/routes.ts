@@ -3,7 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { cleanupExpiredCache, clearUserCache, getCacheStats } from "../../platform/persistence/tool-cache.js"
+import { cleanupExpiredCache, clearUserCache, getCacheStats } from "../../infra/persistence/tool-cache.js"
 
 export function registerToolCacheRoutes(app: FastifyInstance): void {
   app.get("/api/tool-cache/stats", async () => {

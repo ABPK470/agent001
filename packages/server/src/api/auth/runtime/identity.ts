@@ -26,7 +26,7 @@
  */
 
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify"
-import { createSession, deleteSession, getSessionWithUser } from "../../../platform/persistence/sessions.js"
+import { createSession, deleteSession, getSessionWithUser } from "../../../infra/persistence/sessions.js"
 import { upsertSsoUser } from "../application/users.js"
 import type { CurrentSession } from "./context.js"
 import { SESSION_COOKIE, SESSION_TTL_SECONDS, signSid, verifySid } from "./session.js"

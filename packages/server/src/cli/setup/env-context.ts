@@ -1,9 +1,9 @@
 import { homedir, platform } from "node:os"
 import { join } from "node:path"
 
-import { isDatabricksConfigured } from "../../platform/llm/databricks-broker.js"
-import { isLlmProvider } from "../../shared/enums/llm.js"
-import { countEnabledMssqlConnectors } from "../../features/connectors/runtime/live-connectors.js"
+import { isDatabricksConfigured } from "../../infra/llm/databricks-broker.js"
+import { isLlmProvider } from "../../internal/enums/llm.js"
+import { countEnabledMssqlConnectors } from "../../api/connectors/runtime/live-connectors.js"
 
 import { parseEnvFile } from "./env-file.js"
 import type { SetupLayout } from "./types.js"

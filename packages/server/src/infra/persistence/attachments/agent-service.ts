@@ -18,7 +18,7 @@ import {
   uploadAttachment,
   type AttachmentRow
 } from "./index.js"
-import { AttachmentImportMode, AttachmentScope, AttachmentSource } from "../../../shared/enums/attachments.js"
+import { AttachmentImportMode, AttachmentScope, AttachmentSource } from "../../../internal/enums/attachments.js"
 import { auditAttachmentImported, auditAttachmentPromoted } from "./audit.js"
 
 const TEXT_MEDIA_PREFIXES = ["text/"]

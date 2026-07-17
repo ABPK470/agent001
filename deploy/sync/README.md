@@ -4,7 +4,7 @@ Bootstrap data for sync: rebuild **legacy MyMI pipelines** into mia **entity reg
 
 **Artifact formats:** Entity JSON exists in two shapes — **Format A** (git deploy artifacts) and **Format B** (registry / catalog snapshot). See [ARTIFACT-FORMATS.md](./ARTIFACT-FORMATS.md) for when to use each, file layouts, and import/export paths.
 
-**Not in this tree:** SQLite schema migrations live in `packages/server/src/platform/persistence/migrations/`.
+**Not in this tree:** SQLite schema migrations live in `packages/server/src/infra/persistence/migrations/`.
 
 ## Why this exists
 

@@ -7,13 +7,13 @@
 
 import type { AgentHost, LLMClient } from "@mia/agent"
 import type { LlmCompletionPort } from "@mia/sync"
-import { dispatchNotification } from "../features/notifications/application/delivery-routing.js"
-import { startScheduler } from "../features/proposer/index.js"
-import { createLlmCompletionAdapter } from "../platform/llm/index.js"
-import { tryBuildSignerFromEnv } from "../platform/persistence/index.js"
-import type { Signer } from "../platform/persistence/evidence.js"
-import { subscribeToEvents } from "../platform/events/broadcaster.js"
-import { resolveEvidenceDir } from "../platform/persistence/server-data-dir.js"
+import { dispatchNotification } from "../api/notifications/application/delivery-routing.js"
+import { startScheduler } from "../api/proposer/index.js"
+import { createLlmCompletionAdapter } from "../infra/llm/index.js"
+import { tryBuildSignerFromEnv } from "../infra/persistence/index.js"
+import type { Signer } from "../infra/persistence/evidence.js"
+import { subscribeToEvents } from "../infra/events/broadcaster.js"
+import { resolveEvidenceDir } from "../infra/persistence/server-data-dir.js"
 
 export interface SyncPlatformRuntime {
   readonly evidenceStorageRoot: string

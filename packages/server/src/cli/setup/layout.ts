@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs"
 import { resolve } from "node:path"
 
-import { projectRoot } from "../../bootstrap/paths.js"
+import { projectRoot } from "../../boot/paths.js"
 
 import type { SetupLayout } from "./types.js"
 

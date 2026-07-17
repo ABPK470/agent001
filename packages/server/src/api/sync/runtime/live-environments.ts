@@ -7,7 +7,7 @@ import {
   type SyncEnvironment
 } from "@mia/sync"
 
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 
 export interface PersistedSyncEnvironmentLoad {
   environments: SyncEnvironment[]

@@ -6,12 +6,12 @@
  * Continuity is scoped exclusively by `thread_id` (see continuity.ts).
  */
 
-import type { DbToolResult } from "../../../../platform/persistence/tool-results.js"
+import type { DbToolResult } from "../../../../infra/persistence/tool-results.js"
 import {
   extractToolResultText,
   isRecallableToolResult,
   loadRecentToolResultsForThread
-} from "../../../../platform/persistence/tool-results.js"
+} from "../../../../infra/persistence/tool-results.js"
 
 /** Tools whose results we surface in <prior_results>. Mirrors the writer. */
 const SURFACED_TOOLS = ["query_mssql", "export_query_to_file"] as const

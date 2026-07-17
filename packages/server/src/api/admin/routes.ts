@@ -3,10 +3,10 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { listSessions, listUserHistory, listUsersWithStats } from "../../platform/persistence/sessions.js"
-import { setUserAdmin } from "../../platform/persistence/db/users.js"
-import * as db from "../../platform/persistence/sqlite.js"
-import { getDb } from "../../platform/persistence/sqlite.js"
+import { listSessions, listUserHistory, listUsersWithStats } from "../../infra/persistence/sessions.js"
+import { setUserAdmin } from "../../infra/persistence/db/users.js"
+import * as db from "../../infra/persistence/sqlite.js"
+import { getDb } from "../../infra/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 
 function parseAuditScopeType(raw: string | undefined): db.AuditScopeType | undefined {

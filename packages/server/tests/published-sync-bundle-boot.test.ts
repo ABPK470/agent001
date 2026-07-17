@@ -7,9 +7,9 @@ import {
   formatPublishedSyncBundleMissingWarning,
   loadPublishedSyncVocabularyAtBoot,
   reloadPublishedSyncVocabulary
-} from "../src/bootstrap/published-sync-bundle.js"
+} from "../src/boot/published-sync-bundle.js"
 import { resetPublishedSyncEntityIds } from "@mia/agent"
-import { _resetGoalClassificationCache } from "../src/features/runs/core/goal-classification.js"
+import { _resetGoalClassificationCache } from "../src/api/runs/prompting/goal-classification.js"
 
 describe("published sync bundle boot", () => {
   let tempRoot: string

@@ -11,14 +11,14 @@ import {
   type Tool
 } from "@mia/agent"
 import { randomUUID } from "node:crypto"
-import { bootHostDepsToConfigureAgentOptions } from "../../bootstrap/boot-host-adapter.js"
+import { bootHostDepsToConfigureAgentOptions } from "../../adapters/agent/boot-host-deps.js"
 import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace/index.js"
 import { cleanupRunWorkspace, cleanupStaleRunWorkspaces } from "./workspace/index.js"
-import { broadcast } from "../../platform/events/broadcaster.js"
-import { cleanupExpiredCache } from "../../platform/persistence/index.js"
-import * as db from "../../platform/persistence/sqlite.js"
-import { AgentBus, createBusTools } from "../../platform/queue/agent-bus.js"
-import { RunPriority, RunQueue } from "../../platform/queue/run-queue.js"
+import { broadcast } from "../../infra/events/broadcaster.js"
+import { cleanupExpiredCache } from "../../infra/persistence/index.js"
+import * as db from "../../infra/persistence/sqlite.js"
+import { AgentBus, createBusTools } from "../../infra/queue/agent-bus.js"
+import { RunPriority, RunQueue } from "../../infra/queue/run-queue.js"
 import type { MessageRouterPort } from "../../ports/channels.js"
 import type {
   ActiveRun,
@@ -27,7 +27,7 @@ import type {
   NotificationOpts,
   OrchestratorConfig
 } from "../../ports/orchestration.js"
-import { TrajectoryEventKind } from "../../shared/enums/trajectory.js"
+import { TrajectoryEventKind } from "../../internal/enums/trajectory.js"
 import type { CurrentSession } from "../auth/runtime/context.js"
 import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
 import { persistLearnedTermFromResolution } from "./execution/clarifications-learned.js"

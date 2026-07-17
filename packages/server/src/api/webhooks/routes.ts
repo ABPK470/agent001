@@ -3,7 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { ChannelType, isChannelType } from "../../shared/enums/channels.js"
+import { ChannelType, isChannelType } from "../../internal/enums/channels.js"
 import {
   deleteChannelConfig,
   getDeliveryStats,
@@ -13,7 +13,7 @@ import {
   TeamsChannel,
   type MessageQueue,
   type MessageRouter
-} from "../../platform/queue/channels/index.js"
+} from "../../infra/queue/channels/index.js"
 
 export function registerWebhookRoutes(
   app: FastifyInstance,

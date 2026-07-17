@@ -5,7 +5,7 @@
 import Database from "better-sqlite3"
 import { EventType } from "@mia/agent"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { CurrentSession } from "../src/features/auth/index.js"
+import type { CurrentSession } from "../src/api/auth/index.js"
 import { seedRun, seedUser } from "./_fk-helpers.js"
 
 const UPN = "alice@example.com"
@@ -35,7 +35,7 @@ afterEach(() => {
 })
 
 async function setupDb(): Promise<void> {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
   seedUser(testDb, UPN)
@@ -45,7 +45,7 @@ describe("run tool approval application", () => {
   it("approveRunToolStep grants approval, broadcasts resolved, resumes run", async () => {
     await setupDb()
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
-    const { upsertPendingRunToolApproval } = await import("../src/platform/persistence/db/index.js")
+    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
     const approval = upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
@@ -55,15 +55,15 @@ describe("run tool approval application", () => {
       policyName: "approve_fetch",
     })
 
-    const { subscribeToEvents } = await import("../src/platform/events/broadcaster.js")
+    const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
     const events: { type: string; data: Record<string, unknown> }[] = []
     const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data as Record<string, unknown> }))
 
     const resumeRun = vi.fn(() => "run-1-resumed")
-    const orchestrator = { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/features/runs/orchestrator.js").AgentOrchestrator
+    const orchestrator = { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator
 
     try {
-      const { approveRunToolStep } = await import("../src/features/runs/application/run-tool-approval.js")
+      const { approveRunToolStep } = await import("../src/api/runs/application/run-tool-approval.js")
       const result = approveRunToolStep(orchestrator, approval.id, session())
 
       expect(result).toEqual({ ok: true, runId: "run-1", resumedRunId: "run-1-resumed" })
@@ -85,7 +85,7 @@ describe("run tool approval application", () => {
   it("denyRunToolStep cancels run and broadcasts resolved + run.cancelled", async () => {
     await setupDb()
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
-    const { upsertPendingRunToolApproval } = await import("../src/platform/persistence/db/index.js")
+    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
     const approval = upsertPendingRunToolApproval({
       runId: "run-1",
       stepId: "step-1",
@@ -95,15 +95,15 @@ describe("run tool approval application", () => {
       policyName: "policy",
     })
 
-    const { subscribeToEvents } = await import("../src/platform/events/broadcaster.js")
+    const { subscribeToEvents } = await import("../src/infra/events/broadcaster.js")
     const events: { type: string; data: Record<string, unknown> }[] = []
     const unsub = subscribeToEvents((e) => events.push({ type: e.type, data: e.data as Record<string, unknown> }))
 
     const cancelRun = vi.fn()
-    const orchestrator = { resumeRun: vi.fn(), cancelRun } as unknown as import("../src/features/runs/orchestrator.js").AgentOrchestrator
+    const orchestrator = { resumeRun: vi.fn(), cancelRun } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator
 
     try {
-      const { denyRunToolStep } = await import("../src/features/runs/application/run-tool-approval.js")
+      const { denyRunToolStep } = await import("../src/api/runs/application/run-tool-approval.js")
       const result = denyRunToolStep(orchestrator, approval.id, session(), "operator denied")
 
       expect(result).toEqual({ ok: true, runId: "run-1" })
@@ -126,7 +126,7 @@ describe("run tool approval application", () => {
     seedRun(testDb, "run-done", { upn: UPN, status: "completed" })
     seedRun(testDb, "run-other", { upn: "bob@example.com", status: "waiting_for_approval" })
 
-    const { upsertPendingRunToolApproval } = await import("../src/platform/persistence/db/index.js")
+    const { upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
     const mine = upsertPendingRunToolApproval({
       runId: "run-wait",
       stepId: "step-1",
@@ -152,7 +152,7 @@ describe("run tool approval application", () => {
       policyName: "p",
     })
 
-    const { listPendingToolApprovalsForSession } = await import("../src/features/runs/application/run-tool-approval.js")
+    const { listPendingToolApprovalsForSession } = await import("../src/api/runs/application/run-tool-approval.js")
     const pending = listPendingToolApprovalsForSession(session())
     expect(pending).toHaveLength(1)
     expect(pending[0]?.id).toBe(mine.id)
@@ -162,7 +162,7 @@ describe("run tool approval application", () => {
     await setupDb()
     seedRun(testDb, "run-1", { upn: UPN, status: "running" })
     const { upsertPendingRunToolApproval, markRunToolApprovalApproved, getRunToolApproval } =
-      await import("../src/platform/persistence/db/index.js")
+      await import("../src/infra/persistence/db/index.js")
 
     const approval = upsertPendingRunToolApproval({
       runId: "run-1",
@@ -174,7 +174,7 @@ describe("run tool approval application", () => {
     })
     markRunToolApprovalApproved(approval.id, UPN)
 
-    const { consumeMatchingToolGrant } = await import("../src/features/runs/application/run-tool-approval.js")
+    const { consumeMatchingToolGrant } = await import("../src/api/runs/application/run-tool-approval.js")
     consumeMatchingToolGrant("run-1", null, "write_file", { path: "/tmp/a.txt", content: "hi" })
     expect(getRunToolApproval(approval.id)?.status).toBe("consumed")
   })

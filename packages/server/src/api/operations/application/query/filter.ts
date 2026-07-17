@@ -2,7 +2,7 @@
  * Apply optional query filters (kind, status, free-text search) after pipelines are built.
  */
 
-import { OperationKind } from "../../../../shared/enums/operations.js"
+import { OperationKind } from "../../../../internal/enums/operations.js"
 import type { ListOperationsOpts, OperationPipeline } from "./types.js"
 
 function matchesKindFilter(pipeline: OperationPipeline, kind: string): boolean {

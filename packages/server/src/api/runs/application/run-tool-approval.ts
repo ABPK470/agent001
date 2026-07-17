@@ -3,8 +3,8 @@ import { stripRuntimeToolArgs } from "@mia/shared-types"
 
 import { canAccessRun, requireSessionUpn } from "../../auth/application/access.js"
 import type { CurrentSession } from "../../auth/runtime/context.js"
-import { broadcast } from "../../../platform/events/broadcaster.js"
-import * as db from "../../../platform/persistence/sqlite.js"
+import { broadcast } from "../../../infra/events/broadcaster.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 import type { AgentOrchestrator } from "../orchestrator.js"
 
 function stableArgsKey(args: Record<string, unknown>): string {

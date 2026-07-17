@@ -11,11 +11,11 @@ import { mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { recordTableVerdict } from "../src/platform/persistence/memory/index.js"
+import { recordTableVerdict } from "../src/infra/persistence/memory/index.js"
 import {
   loadCandidateVerdicts,
   renderKnownObjectsBlock
-} from "../src/features/runs/core/data-blocks/known-objects.js"
+} from "../src/api/runs/prompting/data-blocks/known-objects.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -27,7 +27,7 @@ beforeEach(async () => {
   testDb = new Database(":memory:")
   testDb.pragma("journal_mode = WAL")
   testDb.pragma("foreign_keys = OFF")
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
 })

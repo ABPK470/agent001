@@ -191,15 +191,21 @@ state, and exposes the REST + SSE API.
 
 ```
 packages/server/src/
-├── index.ts          # main(): the boot sequence; builds everything and listens
-├── bootstrap/        # Ordered startup helpers (config, llm, sync, workspace)
-├── features/         # ~24 vertical feature modules (the bulk of the app)
-├── platform/         # Cross-feature subsystems (persistence, events, queue, …)
-├── ports/            # Server-side ports (orchestration, channels, clarifications)
-├── crypto/           # Signing / evidence primitives
-├── cli/              # Standalone CLI entry points (e.g. entity-registry export)
-└── shared/           # Errors, HTTP helpers, shared enums/types/utils
+├── index.ts          # thin process entry → boot/start-server
+├── boot/             # process spine
+├── http/             # Fastify composition
+├── infra/            # db, events, queue, sandbox, effects, MSSQL, …
+├── adapters/         # concrete @mia/agent + @mia/sync port implementations
+├── api/              # product HTTP surfaces (runs, sync, platform, auth, …)
+├── ports/            # server-owned contracts
+├── cli/              # standalone CLI entry points
+└── internal/         # server-only helpers / enum façades
 ```
+
+Dependency rules and forbidden folders are in
+[docs/doctrine.md](docs/doctrine.md) and enforced by `npm run lint:arch`.
+Operator control plane = `api/platform`; run prompt assembly =
+`api/runs/prompting`.
 
 ### The boot sequence (`index.ts`)
 
@@ -215,29 +221,18 @@ the Fastify app and register all feature routes → open the SSE endpoint →
 recover stale runs from prior crashes → listen on `:3102` → register graceful
 shutdown.
 
-### The feature convention
+### The `api/` surface convention
 
-Each folder under `features/` is a self-contained vertical with the same
-internal layering and a single public barrel:
+Each folder under `api/` is a product HTTP surface. Thin surfaces are a single
+`routes.ts`. Fat surfaces grow folders only when weight demands it (no empty
+Nest-style scaffolds). See [docs/doctrine.md](docs/doctrine.md).
 
-```
-features/<name>/
-├── routes.ts       # Transport — Fastify handlers: parse request, call application, serialize
-├── application/    # Business logic — mostly pure, calls persistence/domain
-├── runtime/        # Stateful per-feature context (sessions, caches, providers)
-├── transport/      # Additional route groups when one file isn't enough
-├── domain/         # Feature-local types and enums
-└── index.ts        # The feature's public surface; external code imports only this
-```
+Surfaces include `runs`, `sync`, `platform` (operator control plane), `auth`,
+`notifications`, `policies`, `proposer`, `approvals`, `evidence`, `metrics`, …
 
-The ~24 features include `runs`, `agents`, `auth`, `browser`, `sync`,
-`notifications`, `policies`, `attachments`, `memory`, `llm`, `usage`, `admin`,
-and the F1 reconciliation set (`proposer`, `approvals`, `evidence`, `metrics`).
+### The `runs` surface — how a run actually runs
 
-### The `runs` feature — how a run actually runs
-
-This is the core of the server. `AgentOrchestrator`
-(`features/runs/orchestrator.ts`) owns the run lifecycle:
+`AgentOrchestrator` (`api/runs/orchestrator.ts`) owns the run lifecycle:
 
 1. **`startRun()`** — allocate a run id, build and role-filter the tool set,
    load policy rules, persist a run row, broadcast `RunQueued`, and enqueue the
@@ -253,7 +248,7 @@ This is the core of the server. `AgentOrchestrator`
    environment and continues from the last checkpoint; `cancelRun()` aborts the
    controller; a single tool call can be killed via its registered abort signal.
 
-### The `platform/` layer
+### The `infra/` layer
 
 | Subsystem | Responsibility |
 |---|---|

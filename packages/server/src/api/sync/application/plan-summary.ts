@@ -1,4 +1,4 @@
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 
 type LooseRecord = Record<string, unknown>
 

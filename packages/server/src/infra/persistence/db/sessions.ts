@@ -15,8 +15,12 @@
  * sessions any more.
  */
 
-import { newSid } from "../../../features/auth/runtime/session.js"
+import { randomBytes } from "node:crypto"
 import { getDb } from "../connection.js"
+
+function newSid(): string {
+  return randomBytes(16).toString("hex")
+}
 
 export interface DbSession {
   sid: string

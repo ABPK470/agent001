@@ -1,5 +1,5 @@
-import { getDb } from "../../../platform/persistence/sqlite.js"
-import { TrajectoryEditOperation } from "../../../shared/enums/trajectory.js"
+import { getDb } from "../../../infra/persistence/sqlite.js"
+import { TrajectoryEditOperation } from "../../../internal/enums/trajectory.js"
 import type { Mutation, Trajectory, TrajectoryEvent } from "./types.js"
 
 // ── Loader ───────────────────────────────────────────────────────

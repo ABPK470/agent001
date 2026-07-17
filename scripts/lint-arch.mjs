@@ -2,13 +2,21 @@
 /**
  * lint-arch.mjs — architecture / doctrine lint (no ESLint dependency).
  *
- * Enforces docs/doctrine.md hard edges:
+ * Enforces docs/doctrine.md hard edges for @mia/agent and @mia/server:
  *
- *   1. Forbidden resurrected trees (application/, domain/services/, …)
- *   2. Agent layer import direction
- *   3. No module-level mutable state outside allowlists
- *   4. No new AsyncLocalStorage for DI
- *   5. Server / other packages must not deep-import agent src
+ *   Agent:
+ *     1. Forbidden resurrected trees (application/, domain/services/, …)
+ *     2. Layer import direction
+ *     3. No module-level mutable state outside allowlists
+ *     4. No new AsyncLocalStorage for DI
+ *
+ *   Server:
+ *     5. Canonical top-level folders (+ transitional aliases)
+ *     6. Forbidden names (api/deploy, hosting/, top-level crypto/)
+ *     7. Shell layer import direction
+ *
+ *   Cross-package:
+ *     8. Other packages must not deep-import agent src
  *
  * Run: `npm run lint:arch`  (or `node scripts/lint-arch.mjs`)
  */
@@ -287,6 +295,160 @@ function lintNoDeepAgentImports(pkgSrc, pkgLabel) {
   }
 }
 
+// ── Server: canonical layers (target names only — no aliases) ───
+const SERVER_LAYER_ALIAS = {
+  boot: "boot",
+  http: "http",
+  infra: "infra",
+  adapters: "adapters",
+  api: "api",
+  ports: "ports",
+  internal: "internal",
+  cli: "cli",
+}
+
+const SERVER_ALLOWED = {
+  boot: new Set(["boot", "infra", "adapters", "api", "ports", "http", "internal"]),
+  http: new Set(["http", "api", "infra", "boot", "ports", "internal"]),
+  api: new Set(["api", "infra", "adapters", "ports", "boot", "internal"]),
+  adapters: new Set(["adapters", "infra", "ports", "internal"]),
+  infra: new Set(["infra", "internal", "ports"]),
+  ports: new Set(["ports", "internal"]),
+  cli: new Set(["cli", "boot", "infra", "api", "internal", "adapters"]),
+  internal: new Set(["internal"]),
+}
+
+/** Known reverse-edge / contract debt — shrink these. */
+const SERVER_LAYER_ALLOWLIST = [
+  {
+    from: "ports/orchestration.ts",
+    toPrefix: "infra/queue/",
+    note: "queue concrete types — extract interfaces into ports/",
+  },
+]
+
+/** Trees / folder names that must not exist under packages/server/src. */
+const FORBIDDEN_SERVER_TREES = [
+  "crypto",
+  "deploy",
+  "api/deploy",
+  "hosting",
+  "api/runs/hosting",
+  // retired names — do not resurrect
+  "bootstrap",
+  "app",
+  "features",
+  "platform",
+  "shared",
+  "api/runs/core",
+]
+
+function serverLayerOf(relPath) {
+  const head = relPath.split("/")[0]
+  return SERVER_LAYER_ALIAS[head] ?? null
+}
+
+function isServerLayerAllowlisted(fromRel, toRel) {
+  for (const a of SERVER_LAYER_ALLOWLIST) {
+    if (a.from && a.from !== fromRel) continue
+    if (a.fromPrefix && !fromRel.startsWith(a.fromPrefix)) continue
+    if (a.toPrefix && !toRel.startsWith(a.toPrefix)) continue
+    return a
+  }
+  return null
+}
+
+function lintServerForbiddenTrees() {
+  for (const tree of FORBIDDEN_SERVER_TREES) {
+    const abs = join(SERVER_SRC, tree)
+    if (existsSync(abs)) {
+      fail(abs, 0, "server-forbidden-tree",
+        `doctrine forbids packages/server/src/${tree}/ — see docs/doctrine.md ` +
+          `(control plane = api/platform; run prompt logic = api/runs/prompting)`)
+    }
+  }
+  // Also scan for a hosting/ directory anywhere under server src
+  for (const file of walk(SERVER_SRC)) {
+    const rel = relative(SERVER_SRC, file)
+    if (rel.split("/").includes("hosting")) {
+      fail(file, 0, "server-forbidden-tree",
+        `doctrine forbids hosting/ — use api/runs/prompting/ (today: features/runs/prompting/)`)
+      break
+    }
+    if (/(^|\/)deploy\//.test(rel) || rel === "deploy" || rel.startsWith("deploy/")) {
+      // allow business filenames like export-deploy-artifacts.ts; ban deploy/ folders only
+      const parts = rel.split("/")
+      if (parts.includes("deploy")) {
+        fail(file, 0, "server-forbidden-tree",
+          `doctrine forbids a deploy/ folder under server — use api/infra/ for the control plane; ` +
+            `keep "deploy" only in business filenames/routes`)
+        break
+      }
+    }
+  }
+}
+
+function lintServerTopLevel() {
+  if (!existsSync(SERVER_SRC)) return
+  const allowedHeads = new Set([
+    ...Object.keys(SERVER_LAYER_ALIAS),
+    "index.ts",
+  ])
+  for (const name of readdirSync(SERVER_SRC)) {
+    if (name.startsWith(".")) continue
+    const abs = join(SERVER_SRC, name)
+    const st = statSync(abs)
+    if (st.isFile()) {
+      if (name === "index.ts") continue
+      // allow stray md next to src root
+      if (name.endsWith(".md")) continue
+      fail(abs, 0, "server-top-level",
+        `unexpected file at server src root: ${name}`)
+      continue
+    }
+    if (!allowedHeads.has(name)) {
+      fail(abs, 0, "server-top-level",
+        `unknown server top-level "${name}". Allowed: boot, http, infra, adapters, api, ports, internal, cli`)
+    }
+  }
+}
+
+function lintServerLayerImports(file, src) {
+  const fromRel = relative(SERVER_SRC, file)
+  const fromLayer = serverLayerOf(fromRel)
+  if (!fromLayer) return
+
+  const lines = src.split("\n")
+  const importRe = /(?:import|export)\s+(?:type\s+)?(?:[^"'`;]+?\s+from\s+)?["']([^"']+)["']/g
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) continue
+    importRe.lastIndex = 0
+    let m
+    while ((m = importRe.exec(line)) !== null) {
+      const spec = m[1]
+      if (!spec.startsWith(".")) continue
+      const targetAbs = resolveImportTarget(file, spec)
+      const toRel = relative(SERVER_SRC, targetAbs)
+      if (toRel.startsWith("..")) continue
+      const toLayer = serverLayerOf(toRel)
+      if (!toLayer || toLayer === fromLayer) continue
+
+      const allowed = SERVER_ALLOWED[fromLayer]
+      if (allowed?.has(toLayer)) continue
+
+      const debt = isServerLayerAllowlisted(fromRel, toRel)
+      if (debt) continue
+
+      fail(file, i + 1, "server-layer-import",
+        `${fromLayer} may not import ${toLayer} ("${spec}" → ${toRel}). ` +
+          `Allowed from ${fromLayer}: ${[...allowed].join(", ") || "(none)"}. ` +
+          `See docs/doctrine.md`)
+    }
+  }
+}
+
 // ── Run ─────────────────────────────────────────────────────────
 lintForbiddenTrees()
 
@@ -298,12 +460,23 @@ for (const f of agentFiles) {
   lintNoAls(f, src)
 }
 
+lintServerForbiddenTrees()
+lintServerTopLevel()
+const serverFiles = walk(SERVER_SRC)
+for (const f of serverFiles) {
+  const src = readFileSync(f, "utf8")
+  lintServerLayerImports(f, src)
+}
+
 lintNoDeepAgentImports(SERVER_SRC, "server")
 lintNoDeepAgentImports(SYNC_SRC, "sync")
 lintNoDeepAgentImports(UI_SRC, "ui")
 
 if (errors.length === 0) {
-  console.log(`lint-arch: ${agentFiles.length} agent files OK (${LAYER_ALLOWLIST.length} debt allowlists).`)
+  console.log(
+    `lint-arch: ${agentFiles.length} agent + ${serverFiles.length} server files OK ` +
+      `(${LAYER_ALLOWLIST.length} agent / ${SERVER_LAYER_ALLOWLIST.length} server debt allowlists).`,
+  )
   process.exit(0)
 }
 

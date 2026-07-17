@@ -11,9 +11,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
 
-import { importAuthoredSyncFromText } from "../src/features/sync/application/import-authored-sync.js"
-import { formatAuthoredSyncJson } from "../src/features/sync/domain/authored-sync-document.js"
-import * as db from "../src/platform/persistence/db/index.js"
+import { importAuthoredSyncFromText } from "../src/api/sync/application/import-authored-sync.js"
+import { formatAuthoredSyncJson } from "../src/api/sync/domain/authored-sync-document.js"
+import * as db from "../src/infra/persistence/db/index.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -44,7 +44,7 @@ async function setupEmptyDb(): Promise<void> {
   dataDir = mkdtempSync(join(tmpdir(), "artifact-import-test-"))
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
 
@@ -52,7 +52,7 @@ async function setupEmptyDb(): Promise<void> {
   seedRepoArtifacts(projectRoot)
 
   const { seedSyncMetadataIfEmpty } = await import(
-    "../src/features/sync/application/seed-sync-metadata.js"
+    "../src/api/sync/application/seed-sync-metadata.js"
   )
   seedSyncMetadataIfEmpty(projectRoot)
 }

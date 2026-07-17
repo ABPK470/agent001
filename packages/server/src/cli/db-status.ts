@@ -3,9 +3,9 @@
  * Usage: npm run db:status
  */
 
-import "../bootstrap/load-env.js"
-import { getDbPath, openDatabase } from "../platform/persistence/connection.js"
-import { listMigrations } from "../platform/persistence/migrations/index.js"
+import "../boot/load-env.js"
+import { getDbPath, openDatabase } from "../infra/persistence/connection.js"
+import { listMigrations } from "../infra/persistence/migrations/index.js"
 
 const db = openDatabase()
 const rows = listMigrations(db)

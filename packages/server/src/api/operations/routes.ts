@@ -3,8 +3,8 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { subscribeToEvents } from "../../platform/events/broadcaster.js"
-import { searchEvents } from "../../platform/persistence/events.js"
+import { subscribeToEvents } from "../../infra/events/broadcaster.js"
+import { searchEvents } from "../../infra/persistence/events.js"
 import { isOperationLogEvent } from "./application/query/operation-log-events.js"
 import {
   listOperations,

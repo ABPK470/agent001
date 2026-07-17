@@ -27,7 +27,7 @@ import {
   traceEntryFromStepFailed,
   traceEntryFromStepStarted,
 } from "./lib/sse-run-trace.js"
-import { isDefaultThreadTitle, threadTitleFromGoal } from "./features/threads/threadTitle.js"
+import { isDefaultThreadTitle, threadTitleFromGoal } from "./api/threads/threadTitle.js"
 import { RunStatus } from "./enums"
 import type {
   AuditEntry,

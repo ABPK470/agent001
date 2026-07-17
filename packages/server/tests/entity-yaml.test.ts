@@ -18,7 +18,7 @@ import {
   parseEntitiesJson,
   parseEntitiesYaml,
   parseEntityYaml
-} from "../src/features/sync/domain/entity-yaml.js"
+} from "../src/api/sync/domain/entity-yaml.js"
 
 const FULL_DEF: EntityDefinition = {
   id: "contract",

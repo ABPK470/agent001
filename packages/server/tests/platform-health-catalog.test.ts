@@ -6,8 +6,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { configureAgent } from "@mia/agent"
 
-import { findExistingCatalogCachePath } from "../src/platform/catalog/catalog-cache-path.js"
-import { getPlatformHealth } from "../src/features/platform/application/platform-health-service.js"
+import { findExistingCatalogCachePath } from "../src/infra/catalog/catalog-cache-path.js"
+import { getPlatformHealth } from "../src/api/platform/application/platform-health-service.js"
 
 describe("catalog cache discovery", () => {
   const originalDataDir = process.env.MIA_DATA_DIR
@@ -49,7 +49,7 @@ describe("getPlatformHealth catalog", () => {
     process.env.LLM_PROVIDER = "copilot-chat"
 
     testDb = new Database(":memory:")
-    const { _setDb, _migrate } = await import("../src/platform/persistence/connection.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/connection.js")
     _setDb(testDb)
     _migrate(testDb)
   })
@@ -58,7 +58,7 @@ describe("getPlatformHealth catalog", () => {
     if (originalDataDir === undefined) delete process.env.MIA_DATA_DIR
     else process.env.MIA_DATA_DIR = originalDataDir
     testDb.close()
-    const { _setDb } = await import("../src/platform/persistence/connection.js")
+    const { _setDb } = await import("../src/infra/persistence/connection.js")
     _setDb(null as unknown as Database.Database)
     rmSync(dataDir, { recursive: true, force: true })
     rmSync(projectRoot, { recursive: true, force: true })

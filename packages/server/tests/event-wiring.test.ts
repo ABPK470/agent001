@@ -6,16 +6,16 @@ const { broadcast, saveLog } = vi.hoisted(() => ({
   saveLog: vi.fn()
 }))
 
-vi.mock("../src/platform/events/broadcaster.js", () => ({
+vi.mock("../src/infra/events/broadcaster.js", () => ({
   broadcast,
   toBroadcastData: <T extends object>(value: T) => value as unknown as Record<string, unknown>
 }))
 
-vi.mock("../src/platform/persistence/sqlite.js", () => ({
+vi.mock("../src/infra/persistence/sqlite.js", () => ({
   saveLog
 }))
 
-import { wireEventBroadcasting } from "../src/features/runs/core/coordination/event-wiring.js"
+import { wireEventBroadcasting } from "../src/api/runs/prompting/coordination/event-wiring.js"
 
 type DomainEventLike = {
   type: string

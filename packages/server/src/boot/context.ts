@@ -1,27 +1,27 @@
 import { configureAgent, type AgentHost } from "@mia/agent"
 import { configurePlanStore } from "@mia/sync"
-import { seedDefaultPoliciesIfMissing } from "../features/policies/application/policy-seeder.js"
-import { setupMssql } from "../platform/mssql/setup.js"
-import { listFreezeWindowDefinitionsForTenant } from "../platform/persistence/index.js"
+import { seedDefaultPoliciesIfMissing } from "../api/policies/application/policy-seeder.js"
+import { setupMssql } from "../infra/mssql/setup.js"
+import { listFreezeWindowDefinitionsForTenant } from "../infra/persistence/index.js"
 import type { BootHostDeps } from "../ports/orchestration.js"
 import {
   createServerWorkspaceRef,
   resolveServerWorkspace,
   type ServerWorkspaceRef
 } from "./server-workspace.js"
-import { resolveSyncPlansDir } from "../platform/persistence/server-data-dir.js"
+import { resolveSyncPlansDir } from "../infra/persistence/server-data-dir.js"
 import { projectRoot } from "./paths.js"
-import { configureSandbox, type SandboxRuntime } from "./sandbox.js"
+import { configureSandbox, type SandboxRuntime } from "../adapters/agent/shell.js"
 import {
   createBridgeEventSink,
   createSyncEventSink,
   createSyncRunSink,
-  loadBootSyncEnvironments,
-} from "./sync.js"
-import { loadPersistedConnectors } from "../features/connectors/runtime/live-connectors.js"
-import { mssqlConfigsFromConnectors } from "../features/connectors/runtime/mssql-from-connectors.js"
-import { createMssqlPoolProvider } from "../features/connectors/runtime/mssql-pool-provider.js"
-import { buildMovementPort } from "../features/connectors/runtime/movement-port.js"
+} from "../adapters/sync/sinks.js"
+import { loadBootSyncEnvironments } from "./sync-environments.js"
+import { loadPersistedConnectors } from "../api/connectors/runtime/live-connectors.js"
+import { mssqlConfigsFromConnectors } from "../api/connectors/runtime/mssql-from-connectors.js"
+import { createMssqlPoolProvider } from "../api/connectors/runtime/mssql-pool-provider.js"
+import { buildMovementPort } from "../api/connectors/runtime/movement-port.js"
 
 export interface ServerContext {
   readonly projectRoot: string

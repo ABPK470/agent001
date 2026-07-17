@@ -1,5 +1,5 @@
 import type { ShellClient } from "@mia/agent"
-import { type DockerSandbox, initSandbox } from "../platform/sandbox/index.js"
+import { type DockerSandbox, initSandbox } from "../../infra/sandbox/index.js"
 
 export interface SandboxRuntime {
   readonly sandbox: DockerSandbox

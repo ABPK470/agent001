@@ -1,3 +1,5 @@
 export * from "./channels.js"
 export * from "./clarifications.js"
 export * from "./orchestration.js"
+export * from "./session.js"
+export * from "./workspace.js"

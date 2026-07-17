@@ -1,7 +1,7 @@
 import Database from "better-sqlite3"
 import Fastify, { type FastifyInstance } from "fastify"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import type { CurrentSession } from "../src/features/auth/index.js"
+import type { CurrentSession } from "../src/api/auth/index.js"
 import { seedSession, seedUser } from "./_fk-helpers.js"
 
 let testDb: Database.Database
@@ -37,8 +37,8 @@ function seedConnection(name: string): void {
 }
 
 async function buildApp(session: CurrentSession): Promise<FastifyInstance> {
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
-  const { registerApprovalRoutes } = await import("../src/features/approvals/routes.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
+  const { registerApprovalRoutes } = await import("../src/api/approvals/routes.js")
   _setDb(testDb)
   _migrate(testDb)
   seedUser(testDb, session.upn, { displayName: session.displayName, isAdmin: session.isAdmin })

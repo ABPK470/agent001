@@ -5,7 +5,7 @@
 import Database from "better-sqlite3"
 import Fastify, { type FastifyInstance } from "fastify"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
-import type { CurrentSession } from "../src/features/auth/index.js"
+import type { CurrentSession } from "../src/api/auth/index.js"
 import { seedRun, seedSession, seedUser } from "./_fk-helpers.js"
 
 const UPN = "alice@example.com"
@@ -37,10 +37,10 @@ afterEach(async () => {
   testDb.close()
 })
 
-async function buildApp(orchestrator: import("../src/features/runs/orchestrator.js").AgentOrchestrator) {
-  const { _setDb, _migrate, upsertPendingRunToolApproval } = await import("../src/platform/persistence/db/index.js")
-  const { registerRunRoutes } = await import("../src/features/runs/routes.js")
-  const { registerNotificationRoutes } = await import("../src/features/notifications/routes.js")
+async function buildApp(orchestrator: import("../src/api/runs/orchestrator.js").AgentOrchestrator) {
+  const { _setDb, _migrate, upsertPendingRunToolApproval } = await import("../src/infra/persistence/db/index.js")
+  const { registerRunRoutes } = await import("../src/api/runs/routes.js")
+  const { registerNotificationRoutes } = await import("../src/api/notifications/routes.js")
 
   _setDb(testDb)
   _migrate(testDb)
@@ -62,7 +62,7 @@ async function buildApp(orchestrator: import("../src/features/runs/orchestrator.
 describe("run tool approval routes", () => {
   it("GET /api/runs/tool-approvals/pending returns pending approvals for the session", async () => {
     const resumeRun = vi.fn()
-    const built = await buildApp({ resumeRun, cancelRun: vi.fn() } as unknown as import("../src/features/runs/orchestrator.js").AgentOrchestrator)
+    const built = await buildApp({ resumeRun, cancelRun: vi.fn() } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
     app = built.app
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
 
@@ -85,7 +85,7 @@ describe("run tool approval routes", () => {
   it("POST approve and deny routes act on pending approvals", async () => {
     const resumeRun = vi.fn(() => "run-1-resumed")
     const cancelRun = vi.fn()
-    const built = await buildApp({ resumeRun, cancelRun } as unknown as import("../src/features/runs/orchestrator.js").AgentOrchestrator)
+    const built = await buildApp({ resumeRun, cancelRun } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
     app = built.app
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
 
@@ -128,7 +128,7 @@ describe("run tool approval routes", () => {
 
   it("notification approve-run-step action delegates to approval service", async () => {
     const resumeRun = vi.fn(() => "run-1-resumed")
-    const built = await buildApp({ resumeRun, cancelRun: vi.fn() } as unknown as import("../src/features/runs/orchestrator.js").AgentOrchestrator)
+    const built = await buildApp({ resumeRun, cancelRun: vi.fn() } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator)
     app = built.app
     seedRun(testDb, "run-1", { upn: UPN, status: "waiting_for_approval" })
 
@@ -141,7 +141,7 @@ describe("run tool approval routes", () => {
       policyName: "approve_fetch",
     })
 
-    const { saveNotification } = await import("../src/platform/persistence/db/index.js")
+    const { saveNotification } = await import("../src/infra/persistence/db/index.js")
     saveNotification({
       id: "note-1",
       type: "approval.required",

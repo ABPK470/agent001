@@ -15,7 +15,7 @@
 
 import { getCatalog, resolveEffectiveMssqlConnection, type AgentHost } from "@mia/agent"
 import type { ResolvedClarification } from "@mia/agent"
-import { saveResolvedTerm } from "../../../platform/persistence/memory.js"
+import { saveResolvedTerm } from "../../../infra/persistence/memory.js"
 import type { BootHostDeps } from "../../../ports/orchestration.js"
 
 /**

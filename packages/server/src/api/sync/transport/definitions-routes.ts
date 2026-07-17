@@ -21,8 +21,8 @@ import {
   type Scd2Strategy
 } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import { broadcast } from "../../../platform/events/broadcaster.js"
-import * as db from "../../../platform/persistence/sqlite.js"
+import { broadcast } from "../../../infra/events/broadcaster.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 import {
   entityToAuthoredSyncDefinition,
   formatAuthoredSyncJson,

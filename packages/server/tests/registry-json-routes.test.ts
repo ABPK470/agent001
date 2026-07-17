@@ -8,7 +8,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
-import { formatEntityJson, parseEntitiesJson } from "../src/features/sync/domain/entity-yaml.js"
+import { formatEntityJson, parseEntitiesJson } from "../src/api/sync/domain/entity-yaml.js"
 import type { EntityDefinition } from "@mia/sync"
 
 let testDb: Database.Database
@@ -61,7 +61,7 @@ describe("registry JSON format routes", () => {
     dataDir = mkdtempSync(join(tmpdir(), "registry-json-route-test-"))
     process.env["MIA_DATA_DIR"] = dataDir
     testDb = new Database(":memory:")
-    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
     _setDb(testDb)
     _migrate(testDb)
   })

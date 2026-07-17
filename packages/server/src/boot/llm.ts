@@ -1,7 +1,7 @@
 import { buildCatalog, getMssqlConfig, type AgentHost, type LLMClient } from "@mia/agent"
-import { buildLlmClient } from "../platform/llm/registry.js"
-import { resolveCatalogCachePath } from "../platform/catalog/catalog-cache-path.js"
-import { getLlmConfig } from "../platform/persistence/index.js"
+import { buildLlmClient } from "../infra/llm/registry.js"
+import { resolveCatalogCachePath } from "../infra/catalog/catalog-cache-path.js"
+import { getLlmConfig } from "../infra/persistence/index.js"
 
 export async function buildLlmAndCatalog(
   host: AgentHost,

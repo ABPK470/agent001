@@ -6,7 +6,7 @@
  *   npm run setup -- --force   walk through all prompts (defaults from .env)
  */
 
-import "../bootstrap/load-env.js"
+import "../boot/load-env.js"
 
 import { runSetupCheckOnly } from "./setup/gate.js"
 import { runSetupWizard } from "./setup/wizard.js"

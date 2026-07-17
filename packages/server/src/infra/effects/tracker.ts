@@ -1,7 +1,7 @@
 import { EventType } from "@mia/agent"
 import { randomUUID } from "node:crypto"
 import { readFile, stat } from "node:fs/promises"
-import { EffectKind, EffectStatus } from "../../shared/enums/effects.js"
+import { EffectKind, EffectStatus } from "../../internal/enums/effects.js"
 import { broadcast } from "../events/broadcaster.js"
 import { getDb } from "../persistence/sqlite.js"
 import { captureSnapshot, hashContent } from "./snapshots.js"

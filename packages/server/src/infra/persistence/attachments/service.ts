@@ -5,7 +5,7 @@
  */
 
 import { basename, extname } from "node:path"
-import { AttachmentIngestionMode } from "../../../shared/enums/attachments.js"
+import { AttachmentIngestionMode } from "../../../internal/enums/attachments.js"
 import { auditAttachmentUploaded } from "./audit.js"
 import { assertOwnerQuota, computeRetentionUntil } from "./lifecycle.js"
 import {

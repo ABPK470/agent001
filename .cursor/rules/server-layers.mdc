@@ -1,0 +1,39 @@
+---
+description: Enforce @mia/server shell-layer doctrine when adding or moving files
+globs: packages/server/**/*
+alwaysApply: false
+---
+
+# Server layer doctrine
+
+`@mia/server` is the composition root (shell). Do **not** mirror agent’s
+`domain/core/runtime` everywhere.
+
+| Kind of code | Put it in |
+| --- | --- |
+| Process startup / shutdown | `boot/` |
+| Fastify app composition | `http/` |
+| SQLite, SSE, queue, sandbox, effects, MSSQL pools | `infra/` |
+| Implementations of `@mia/agent` / `@mia/sync` ports | `adapters/` |
+| HTTP product surface | `api/<surface>/` |
+| Server-owned contracts | `ports/` |
+| Server-only helpers / enum façades | `internal/` |
+| CLI entrypoints | `cli/` |
+
+**Retired names (do not recreate):** `bootstrap/`, `app/`, `features/`,
+`platform/` (top-level), `shared/`, `api/runs/core/`, `hosting/`, `api/deploy/`.
+
+## Naming that must stay unambiguous
+
+- **Operator control plane:** `api/platform/` — never `api/deploy/`
+- **Run prompt / tool-gating pure logic:** `api/runs/prompting/`
+- Thin surfaces may be a single `routes.ts`
+
+## Dependency direction
+
+`api` → `infra` / `adapters` / `ports` / `internal`  
+`infra` ↛ `api`  
+`adapters` → `infra` / `ports` / `internal`  
+`ports` → `ports` / `internal` (not api / infra impl)
+
+Full contract: `docs/doctrine.md`. Enforce with `npm run lint:arch`.

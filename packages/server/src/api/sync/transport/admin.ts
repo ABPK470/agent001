@@ -4,14 +4,14 @@
 
 import { EventType } from "@mia/shared-enums"
 import type { FastifyInstance, FastifyRequest } from "fastify"
-import { broadcast } from "../../../platform/events/broadcaster.js"
+import { broadcast } from "../../../infra/events/broadcaster.js"
 import {
   deleteFreezeWindow,
   FreezeWindowValidationError,
   listFreezeWindowsForTenant,
   saveAdminAudit,
   upsertFreezeWindow
-} from "../../../platform/persistence/sqlite.js"
+} from "../../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 

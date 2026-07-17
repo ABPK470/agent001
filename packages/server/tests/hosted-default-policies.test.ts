@@ -15,7 +15,7 @@ import {
   type Step
 } from "@mia/agent"
 import { describe, expect, it } from "vitest"
-import { hostedDefaultPolicyRules } from "../src/features/policies/domain/hosted-defaults.js"
+import { hostedDefaultPolicyRules } from "../src/api/policies/domain/hosted-defaults.js"
 
 function makeStep(action: string, input: Record<string, unknown> = {}): Step {
   return {

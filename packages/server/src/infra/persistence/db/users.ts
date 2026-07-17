@@ -12,7 +12,7 @@
  * bcrypt). This module is the pure DB surface.
  */
 
-import { UserSource } from "../../../shared/enums/auth.js"
+import { UserSource } from "../../../internal/enums/auth.js"
 import { getDb } from "../connection.js"
 
 export interface DbUser {

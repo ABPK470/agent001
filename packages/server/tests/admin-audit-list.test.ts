@@ -5,7 +5,7 @@ import {
   listAuditLogPaginated,
   saveAdminAudit,
   saveAudit,
-} from "../src/platform/persistence/db/runs.js"
+} from "../src/infra/persistence/db/runs.js"
 import { seedRun, seedUser } from "./_fk-helpers.js"
 
 let testDb: Database.Database
@@ -13,7 +13,7 @@ let testDb: Database.Database
 describe("admin audit list", () => {
   beforeEach(async () => {
     testDb = new Database(":memory:")
-    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
     _setDb(testDb)
     _migrate(testDb)
 

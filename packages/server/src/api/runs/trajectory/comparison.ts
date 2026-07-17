@@ -1,4 +1,4 @@
-import { TrajectoryEventKind } from "../../../shared/enums/trajectory.js"
+import { TrajectoryEventKind } from "../../../internal/enums/trajectory.js"
 import type { GoalEvent } from "./types.js"
 import { replay } from "./validator.js"
 

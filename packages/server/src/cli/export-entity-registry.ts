@@ -7,11 +7,11 @@
 
 import { resolve } from "node:path"
 
-import { openDatabase } from "../platform/persistence/connection.js"
+import { openDatabase } from "../infra/persistence/connection.js"
 import {
   defaultExportParentDir,
   writeEntityRegistrySnapshot,
-} from "../features/sync/application/export-entity-registry.js"
+} from "../api/sync/application/export-entity-registry.js"
 
 main()
 

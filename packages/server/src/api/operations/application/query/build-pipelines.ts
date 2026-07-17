@@ -3,7 +3,7 @@
  * (title, status, activities) by delegating to the pipeline-specific builders.
  */
 
-import { OperationKind } from "../../../../shared/enums/operations.js"
+import { OperationKind } from "../../../../internal/enums/operations.js"
 import type { OperationPipeline } from "./types.js"
 import { buildAgentRunPipeline } from "./pipelines/agent-run.js"
 import { buildProposerRunPipeline } from "./pipelines/proposer-run.js"

@@ -1,6 +1,6 @@
-import { MemoryTier } from "../../../shared/enums/memory.js"
-import { MemoryRole } from "../../../shared/enums/memory.js"
-import { MemorySource } from "../../../shared/enums/memory.js"
+import { MemoryTier } from "../../../internal/enums/memory.js"
+import { MemoryRole } from "../../../internal/enums/memory.js"
+import { MemorySource } from "../../../internal/enums/memory.js"
 // ── Types ────────────────────────────────────────────────────────
 
 export { MemoryTier }

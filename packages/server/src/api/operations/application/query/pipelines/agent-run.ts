@@ -4,8 +4,8 @@
  */
 
 import { EventType, RunStatus } from "@mia/agent"
-import { OperationKind, OperationStatus } from "../../../../../shared/enums/operations.js"
-import * as db from "../../../../../platform/persistence/sqlite.js"
+import { OperationKind, OperationStatus } from "../../../../../internal/enums/operations.js"
+import * as db from "../../../../../infra/persistence/sqlite.js"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../types.js"
 import { buildToolIoFromStepEvents, buildToolIoSummary, resolveStepToolName } from "../tool-io.js"
 import { durationOf, inferPipelineStatus, numField, strField } from "../utils.js"

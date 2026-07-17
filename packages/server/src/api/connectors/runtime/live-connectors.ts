@@ -28,8 +28,8 @@ import {
   type ConnectorKindId,
 } from "@mia/shared-types"
 
-import * as db from "../../../platform/persistence/sqlite.js"
-import { getDbPath } from "../../../platform/persistence/connection.js"
+import * as db from "../../../infra/persistence/sqlite.js"
+import { getDbPath } from "../../../infra/persistence/connection.js"
 
 const DEFAULT_SEED_PATH = "deploy/connectors/connectors.json"
 

@@ -1,4 +1,4 @@
-import type { AgentOrchestrator } from "../features/runs/orchestrator.js"
+import type { AgentOrchestrator } from "../api/runs/orchestrator.js"
 import {
   MessageQueue,
   MessageRouter,
@@ -6,7 +6,7 @@ import {
   SqliteQueueStore,
   TeamsChannel,
   listChannelConfigs
-} from "../platform/queue/channels/index.js"
+} from "../infra/queue/channels/index.js"
 
 export interface MessagingRuntime {
   readonly messageQueue: MessageQueue

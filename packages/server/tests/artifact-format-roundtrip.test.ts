@@ -12,26 +12,26 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
 import { entityDefinitionFromAuthoredSync, loadSyncDefinitionFlowTemplateCatalog, validateEntityDefinition } from "@mia/sync"
 
-import { exportDeployGitZipBuffer } from "../src/features/platform/application/export-deploy-git-artifacts.js"
+import { exportDeployGitZipBuffer } from "../src/api/platform/application/export-deploy-git-artifacts.js"
 import {
   applyDeployCatalogSnapshot,
   validateDeployCatalogSnapshot,
-} from "../src/features/platform/application/import-deploy-artifacts.js"
-import { buildDeployCatalogSnapshot } from "../src/features/platform/application/export-deploy-artifacts.js"
+} from "../src/api/platform/application/import-deploy-artifacts.js"
+import { buildDeployCatalogSnapshot } from "../src/api/platform/application/export-deploy-artifacts.js"
 import {
   applyDeployGitBundle,
   parseDeployGitBundleFromDir,
-} from "../src/features/platform/application/import-deploy-git-artifacts.js"
-import { writeDeployGitExport } from "../src/features/platform/application/export-deploy-git-artifacts.js"
-import { ensureSyncDefinitionConfigs } from "../src/features/sync/application/definitions.js"
-import { importAuthoredSyncFromText, importOneAuthoredSync } from "../src/features/sync/application/import-authored-sync.js"
+} from "../src/api/platform/application/import-deploy-git-artifacts.js"
+import { writeDeployGitExport } from "../src/api/platform/application/export-deploy-git-artifacts.js"
+import { ensureSyncDefinitionConfigs } from "../src/api/sync/application/definitions.js"
+import { importAuthoredSyncFromText, importOneAuthoredSync } from "../src/api/sync/application/import-authored-sync.js"
 import {
   entityToAuthoredSyncDefinition,
   formatAuthoredSyncJson,
   syncConfigInputFromDb,
-} from "../src/features/sync/domain/authored-sync-document.js"
-import { formatEntityJson, parseEntitiesJson } from "../src/features/sync/domain/entity-yaml.js"
-import * as db from "../src/platform/persistence/db/index.js"
+} from "../src/api/sync/domain/authored-sync-document.js"
+import { formatEntityJson, parseEntitiesJson } from "../src/api/sync/domain/entity-yaml.js"
+import * as db from "../src/infra/persistence/db/index.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -67,7 +67,7 @@ async function setupSeededDb(): Promise<void> {
   dataDir = mkdtempSync(join(tmpdir(), "artifact-roundtrip-test-"))
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
-  const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+  const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
 
@@ -75,10 +75,10 @@ async function setupSeededDb(): Promise<void> {
   seedRepoArtifacts(projectRoot)
 
   const { seedEntityRegistryIfEmpty } = await import(
-    "../src/features/sync/application/seed-entity-registry.js"
+    "../src/api/sync/application/seed-entity-registry.js"
   )
   const { seedSyncMetadataIfEmpty } = await import(
-    "../src/features/sync/application/seed-sync-metadata.js"
+    "../src/api/sync/application/seed-sync-metadata.js"
   )
   seedEntityRegistryIfEmpty(projectRoot)
   seedSyncMetadataIfEmpty(projectRoot)

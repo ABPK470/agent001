@@ -140,11 +140,11 @@ afterEach(() => {
 
 describe("sync definition pipeline (e2e)", () => {
   it("artifact seed -> entity registry -> publish preserves the contract DatasetMappingColumn predicate", async () => {
-    const { _setDb, _migrate } = await import("../src/platform/persistence/db/index.js")
+    const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
     const { seedEntityRegistryIfEmpty } =
-      await import("../src/features/sync/application/seed-entity-registry.js")
-    const { publishSyncDefinitionsFromDb } = await import("../src/features/sync/application/definitions.js")
-    const { seedSyncMetadataIfEmpty } = await import("../src/features/sync/application/seed-sync-metadata.js")
+      await import("../src/api/sync/application/seed-entity-registry.js")
+    const { publishSyncDefinitionsFromDb } = await import("../src/api/sync/application/definitions.js")
+    const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/application/seed-sync-metadata.js")
 
     _setDb(testDb)
     _migrate(testDb)
@@ -177,12 +177,12 @@ describe("sync definition pipeline (e2e)", () => {
   })
 
   it("publish preserves multi-hop sql predicates matching scaffold output", async () => {
-    const { _setDb, _migrate, saveEntityDefinition } = await import("../src/platform/persistence/db/index.js")
-    const { publishSyncDefinitionsFromDb } = await import("../src/features/sync/application/definitions.js")
+    const { _setDb, _migrate, saveEntityDefinition } = await import("../src/infra/persistence/db/index.js")
+    const { publishSyncDefinitionsFromDb } = await import("../src/api/sync/application/definitions.js")
 
     _setDb(testDb)
     _migrate(testDb)
-    const { seedSyncMetadataIfEmpty } = await import("../src/features/sync/application/seed-sync-metadata.js")
+    const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/application/seed-sync-metadata.js")
     seedSyncMetadataIfEmpty(projectRoot)
 
     const entity = makeFkPathEntity("fk_path_entity")
@@ -208,13 +208,13 @@ describe("sync definition pipeline (e2e)", () => {
   })
 
   it("published custom entity is loadable at runtime with predicates intact", async () => {
-    const { _setDb, _migrate, saveEntityDefinition } = await import("../src/platform/persistence/db/index.js")
-    const { publishSyncDefinitionsFromDb } = await import("../src/features/sync/application/definitions.js")
+    const { _setDb, _migrate, saveEntityDefinition } = await import("../src/infra/persistence/db/index.js")
+    const { publishSyncDefinitionsFromDb } = await import("../src/api/sync/application/definitions.js")
     const { listPublishedSyncDefinitions } = await import("@mia/sync")
 
     _setDb(testDb)
     _migrate(testDb)
-    const { seedSyncMetadataIfEmpty } = await import("../src/features/sync/application/seed-sync-metadata.js")
+    const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/application/seed-sync-metadata.js")
     seedSyncMetadataIfEmpty(projectRoot)
 
     const entity = makeFkPathEntity("custom_runtime_entity")
@@ -232,16 +232,16 @@ describe("sync definition pipeline (e2e)", () => {
 
   it("compilePublishedSyncDefinition matches server publish output for same entity", async () => {
     const { _setDb, _migrate, saveEntityDefinition, listSyncDefinitionConfigs } =
-      await import("../src/platform/persistence/db/index.js")
+      await import("../src/infra/persistence/db/index.js")
     const {
       publishSyncDefinitionsFromDb,
       ensureSyncDefinitionConfigs,
       loadAuthoringFlowCatalog,
-    } = await import("../src/features/sync/application/definitions.js")
+    } = await import("../src/api/sync/application/definitions.js")
 
     _setDb(testDb)
     _migrate(testDb)
-    const { seedSyncMetadataIfEmpty } = await import("../src/features/sync/application/seed-sync-metadata.js")
+    const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/application/seed-sync-metadata.js")
     seedSyncMetadataIfEmpty(projectRoot)
 
     const entity = makeFkPathEntity("compose_parity")
@@ -250,7 +250,7 @@ describe("sync definition pipeline (e2e)", () => {
     const config = listSyncDefinitionConfigs("_default").find((row) => row.entity_id === "compose_parity")!
 
     const { buildFlowCatalog, compilePublishedSyncDefinition } = await import("@mia/sync")
-    const db = await import("../src/platform/persistence/db/index.js")
+    const db = await import("../src/infra/persistence/db/index.js")
     // Must use the same authoring catalog as publish: DB presets strip `phase`
     // from stored steps, so snapForSteps only freezes kinds (phases stay {}).
     // File-template catalogs still carry phase and would diverge.

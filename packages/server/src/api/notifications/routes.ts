@@ -3,7 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import * as db from "../../platform/persistence/sqlite.js"
+import * as db from "../../infra/persistence/sqlite.js"
 import { canAccessRun } from "../auth/application/access.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 
@@ -110,7 +110,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             reply.code(400)
             return { error: "runId required" }
           }
-          const { rollbackRun } = await import("../../platform/effects/index.js")
+          const { rollbackRun } = await import("../../infra/effects/index.js")
           const result = await rollbackRun(runId)
           return {
             ok: true,

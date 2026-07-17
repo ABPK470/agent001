@@ -1,7 +1,7 @@
 import { loadSyncMetadataArtifact } from "@mia/sync"
 import { resolve } from "node:path"
 
-import * as db from "../../../platform/persistence/sqlite.js"
+import * as db from "../../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT = "_default"
 

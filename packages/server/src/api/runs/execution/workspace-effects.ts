@@ -6,11 +6,11 @@ import {
   cleanupRunWorkspace,
   computeWorkspaceDiff
 } from "../workspace/index.js"
-import { recordEffect, recordFileWrite } from "../../../platform/effects/index.js"
-import { broadcastTrace } from "../../../platform/events/broadcaster.js"
+import { recordEffect, recordFileWrite } from "../../../infra/effects/index.js"
+import { broadcastTrace } from "../../../infra/events/broadcaster.js"
 import type { ActiveRun, NotificationOpts } from "../../../ports/orchestration.js"
-import { EffectKind } from "../../../shared/enums/effects.js"
-import { NotificationActionType } from "../../../shared/enums/notifications.js"
+import { EffectKind } from "../../../internal/enums/effects.js"
+import { NotificationActionType } from "../../../internal/enums/notifications.js"
 
 // ── Effect-tracked tool wrappers ──────────────────────────────────
 
