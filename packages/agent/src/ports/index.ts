@@ -1,5 +1,9 @@
 /**
- * Contract door for the `ports/` cluster.
+ * Ports — outside-world contracts and port-backed services.
+ *
+ * What: host/store/client shapes + AuditService / Learner / memory adapters.
+ * Why: I/O and repository-backed services stay at the edge.
+ * Next: server implements host ports; createEngineServices wires in-memory adapters.
  */
 
 export type {
@@ -21,3 +25,5 @@ export type {
   ToolKnowledgeStore,
   UserInputReader
 } from "./ports.js"
+
+export * from "./services/index.js"

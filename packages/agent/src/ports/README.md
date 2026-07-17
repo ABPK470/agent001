@@ -1,5 +1,10 @@
 # Ports
 
-**What:** Contracts for outside-world dependencies (stores, clients, sinks).  
-**Why:** Keep I/O at the edge; runtime host implements these shapes.  
-**Next:** Server wires concrete adapters into `configureAgent(...)`.
+**What:** Contracts for outside dependencies, plus port-backed services.  
+**Why:** Keep I/O at the edge; core stays pure.  
+**Next:** Server implements host ports; runs use `createEngineServices()` for in-memory adapters.
+
+| Path | Contents |
+| ---- | -------- |
+| `ports.ts` | Host/store/client/sink shapes |
+| `services/` | `AuditService`, `Learner`, Memory* adapters |

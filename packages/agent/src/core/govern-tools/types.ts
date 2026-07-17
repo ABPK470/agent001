@@ -6,19 +6,16 @@
  */
 
 import { randomUUID } from "node:crypto"
+import { type AgentRun, type AuditEntry, type Step, StepStatus } from "../../domain/index.js"
+import { RulePolicyEvaluator } from "../policy/index.js"
 import {
-  type AgentRun,
-  type AuditEntry,
   AuditService,
   Learner,
   MemoryAuditRepository,
   MemoryEventBus,
   MemoryExecutionRecordRepository,
-  MemoryRunRepository,
-  RulePolicyEvaluator,
-  type Step,
-  StepStatus
-} from "../../domain/index.js"
+  MemoryRunRepository
+} from "../../ports/services/index.js"
 
 // ── Engine infrastructure ────────────────────────────────────────
 

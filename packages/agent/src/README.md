@@ -40,7 +40,7 @@ tools, checks whether the work is done, and repeats until it can answer.
 | `application/shell/runtime-cluster/` | `runtime/host/` |
 | `application/shell/delegation` (decision) | `core/delegate-decision/` |
 | shim forests under core | deleted |
-| `domain` flat services | `domain/types/`, `domain/services/`, `domain/tenant/` |
+| `domain` flat services | `domain/types/`, `domain/tenant/` (services → core/policy + ports/services) |
 | `tools/mssql*` | `tools/database/` |
 | `tools/filesystem*` | `tools/files/` |
 | `tools/shell/` | `tools/shell-command/` |

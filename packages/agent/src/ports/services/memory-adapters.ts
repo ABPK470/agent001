@@ -1,19 +1,19 @@
 /**
  * In-memory implementations of governance infrastructure.
  *
- * These power audit, policy, learning, and event broadcast during a single run.
+ * These power audit, learning, and event broadcast during a single run.
  * Each run gets fresh instances — no cross-run state.
  */
 
-import type { DomainEvent } from "../services/events.js"
+import type { DomainEvent } from "../../domain/types/events.js"
 import type {
   AuditRepository,
   EventBus,
   ExecutionRecordRepository,
   RunRepository,
   Unsubscribe
-} from "./interfaces.js"
-import type { AgentRun, AuditEntry, ExecutionRecord } from "./run-models.js"
+} from "../../domain/types/interfaces.js"
+import type { AgentRun, AuditEntry, ExecutionRecord } from "../../domain/types/run-models.js"
 
 // ── Repositories ─────────────────────────────────────────────────
 

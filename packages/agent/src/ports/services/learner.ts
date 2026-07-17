@@ -4,8 +4,8 @@
  * Stats can feed back into tool selection and retry decisions.
  */
 
-import type { ExecutionRecordRepository } from "../types/interfaces.js"
-import type { ExecutionRecord } from "../types/run-models.js"
+import type { ExecutionRecordRepository } from "../../domain/types/interfaces.js"
+import type { ExecutionRecord } from "../../domain/types/run-models.js"
 
 export interface OperationStats {
   total: number

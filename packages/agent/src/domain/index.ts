@@ -1,12 +1,9 @@
 /**
- * Domain — shared words, shapes, and domain services.
+ * Domain — vocabulary only: enums and types.
  *
- * What: enums, models, policy/audit/learner/events.
- * Why: one vocabulary for core, runtime, tools, and the platform.
- * Next: import from here (or `@mia/agent`); do not invent parallel types.
- *
- * Honesty: this is not “vocabulary only.” `services/` holds real domain
- * services (policy evaluation, audit, learner, event helpers).
+ * What: shared words and shapes for the agent package.
+ * Why: one meaning for core, runtime, tools, and the platform.
+ * Next: pure decisions live in `core/`; port-backed services in `ports/services/`.
  */
 
 export * from "./enums/index.js"
@@ -56,7 +53,7 @@ export {
   stepStarted,
   type ApprovalRequired,
   type DomainEvent
-} from "./services/events.js"
+} from "./types/events.js"
 
 export type {
   AuditRepository,
@@ -67,26 +64,7 @@ export type {
   Unsubscribe
 } from "./types/interfaces.js"
 
-export { AuditService } from "./services/audit.js"
-export { Learner, type OperationStats } from "./services/learner.js"
-export { type HostedPolicyContext } from "./services/policy-context.js"
-export {
-  extractToolFacts,
-  matchesSelectorRule,
-  resolveSelectorRules,
-  type PolicySelectors,
-  type SelectorResolution,
-  type SelectorRuleParameters,
-  type ToolFacts
-} from "./services/policy-selectors.js"
-export { RulePolicyEvaluator } from "./services/policy.js"
-
-export {
-  MemoryAuditRepository,
-  MemoryEventBus,
-  MemoryExecutionRecordRepository,
-  MemoryRunRepository
-} from "./types/memory.js"
+export type { HostedPolicyContext } from "./types/policy-context.js"
 
 export * from "./types/agent-constants.js"
 export * from "./types/agent-types.js"

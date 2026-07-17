@@ -21,14 +21,14 @@
  *   "no match → allow" behavior so existing flows are not affected.
  */
 
-import { PolicyEffect } from "../enums/index.js"
-import { PolicyViolationError } from "../types/errors.js"
-import type { PolicyEvaluator } from "../types/interfaces.js"
-import type { AgentRun, PolicyRule, Step } from "../types/run-models.js"
+import { PolicyEffect } from "../../domain/enums/index.js"
+import { PolicyViolationError } from "../../domain/types/errors.js"
+import type { PolicyEvaluator } from "../../domain/types/interfaces.js"
+import type { AgentRun, PolicyRule, Step } from "../../domain/types/run-models.js"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
 
-import type { HostedPolicyContext } from "./policy-context.js"
-import { extractToolFacts, resolveSelectorRules } from "./policy-selectors.js"
+import type { HostedPolicyContext } from "../../domain/types/policy-context.js"
+import { extractToolFacts, resolveSelectorRules } from "./selectors.js"
 
 function stableArgsKey(args: Record<string, unknown>): string {
   return JSON.stringify(stripRuntimeToolArgs(args))

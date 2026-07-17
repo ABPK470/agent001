@@ -92,10 +92,10 @@ databases — all I/O arrives through ports.
 ```
 packages/agent/src/
 ├── index.ts          # Public barrel — the entire supported surface
-├── domain/           # Enums, models, domain services, tenant config
-├── core/             # Pure decisions (plan, choose-path, clarify, doctrine, govern, recover)
+├── domain/           # Enums + types (+ tenant config); vocabulary only
+├── core/             # Pure decisions (plan, choose-path, clarify, doctrine, policy, govern, recover)
 ├── runtime/          # Stateful drivers (host, run-a-goal loop, delegate)
-├── ports/            # Interface contracts for everything external
+├── ports/            # Host contracts + AuditService / Learner / memory adapters
 ├── tools/            # Executable tools (database/, files/, shell-command/, …)
 ├── memory/           # Context compaction, memory tiers, token budgeting
 ├── llm/              # LLM client implementations
@@ -151,6 +151,7 @@ the main intentional process-wide singleton besides the boot host itself.
 | `recover/` | Retry policy, circuit-breaker, recovery hints |
 | `clarify/` | Detect unresolved ambiguity in the goal |
 | `doctrine/` | Executable MSSQL query rules |
+| `policy/` | Selector matching + `RulePolicyEvaluator` (pure) |
 | `delegate-decision/` | Pure gate: should this work be delegated? |
 
 ### What lives in `runtime/` (stateful)

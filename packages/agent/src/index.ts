@@ -4,7 +4,7 @@
  * Story order: domain → ports → runtime host → Agent run → core helpers → tools.
  */
 
-// ── Domain (words, shapes, services) ────────────────────────────────
+// ── Domain (words + shapes only) ────────────────────────────────────
 export * from "./domain/index.js"
 export {
   DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE,
@@ -96,9 +96,13 @@ export type {
 export * from "./runtime/delegate.js"
 export * from "./runtime/loop.js"
 
+// ── Ports (contracts + audit/learner adapters) ──────────────────────
+export * from "./ports/services/index.js"
+
 // ── Core (pure decisions) ───────────────────────────────────────────
 export * from "./core/clarify.js"
 export * from "./core/doctrine.js"
+export * from "./core/policy.js"
 export * from "./core/govern-tools.js"
 export * from "./core/recover.js"
 export {

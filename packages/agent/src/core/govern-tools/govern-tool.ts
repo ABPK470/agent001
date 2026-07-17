@@ -20,7 +20,7 @@ import {
   stepFailed,
   stepStarted
 } from "../../domain/index.js"
-import type { HostedPolicyContext } from "../../domain/services/policy-context.js"
+import type { HostedPolicyContext } from "../../domain/types/policy-context.js"
 import { normalizeToolExecutionOutput } from "../../tools/index.js"
 import { TOOL_RETRY_POLICY, type ToolRetryPolicy, withToolRetry } from "../recover.js"
 import { type EngineServices, type RunState, createToolStep } from "./types.js"

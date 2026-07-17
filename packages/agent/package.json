@@ -12,7 +12,8 @@
     "./tools": "./src/tools/index.ts",
     "./memory": "./src/memory/index.ts",
     "./llm": "./src/llm/index.ts",
-    "./internal": "./src/internal/index.ts"
+    "./internal": "./src/internal/index.ts",
+    "./core/policy": "./src/core/policy.ts"
   },
   "engines": {
     "node": ">=20"
