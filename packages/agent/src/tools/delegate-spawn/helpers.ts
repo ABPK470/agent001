@@ -1,4 +1,4 @@
-import type { VerificationAttempt } from "../../application/core/planner.js"
+import type { VerificationAttempt } from "../../core/plan.js"
 import { uniqueStrings } from "../delegate-paths.js"
 
 export interface ChildSpec {
@@ -35,7 +35,7 @@ export function buildVerificationAttempts(
 export function buildChildExecutionResult(
   output: string,
   toolCalls: readonly { name: string; args: Record<string, unknown>; result: string; isError: boolean }[]
-): import("../../application/core/planner.js").ChildExecutionResult {
+): import("../../core/plan.js").ChildExecutionResult {
   const mutatedArtifacts = uniqueStrings(
     toolCalls
       .filter(

@@ -1,6 +1,6 @@
-import { MSSQL_DOCTRINES } from "../../application/core/doctrine.js"
-import { emitToolTrace, type ToolTraceContext } from "../../application/shell/loop.js"
-import { PlannerTraceKind } from "../../domain/index.js"
+import { MSSQL_DOCTRINES } from "../../../core/doctrine.js"
+import { emitToolTrace, type ToolTraceContext } from "../../../runtime/loop.js"
+import { PlannerTraceKind } from "../../../domain/index.js"
 import type { QueryValidationDiagnostics } from "./validation.js"
 
 const SQL_PREVIEW_MAX_CHARS = 600

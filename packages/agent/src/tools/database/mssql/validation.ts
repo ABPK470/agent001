@@ -3,10 +3,10 @@
 import {
   DOCTRINE_FIX_HINTS,
   getDoctrineLessonTemplate
-} from "../../application/core/doctrine-cluster/fix-hints.js"
-import { getTenantConfig } from "../../application/shell/tenant-config.js"
-import { AggregateFamily, AggregateSeverity } from "../../domain/enums/sql-guard.js"
-import type { CatalogAccessor } from "../catalog/index.js"
+} from "../../../core/doctrine/fix-hints.js"
+import { getTenantConfig } from "../../../domain/tenant/tenant-config.js"
+import { AggregateFamily, AggregateSeverity } from "../../../domain/enums/sql-guard.js"
+import type { CatalogAccessor } from "../../catalog/index.js"
 import {
   detectBareInventedColumns,
   detectPostUnionGroupBy,
@@ -31,7 +31,7 @@ import {
   persistedMirrorOf,
   primaryKeyColumns,
   unionBranchCount
-} from "../catalog/queries.js"
+} from "../../catalog/queries.js"
 
 /** Appends a doctrine-owned fixHint to an error string, when one is registered. */
 function withFixHint(error: string, code: string): string {
@@ -243,7 +243,7 @@ export interface QueryValidationDiagnostics {
    * the calling tool can route it to the agent's memory writer. Pure data;
    * the validator has no side effects.
    */
-  readonly lesson?: import("../../application/core/doctrine-cluster/fix-hints.js").NoteLessonPayload | null
+  readonly lesson?: import("../../../core/doctrine/fix-hints.js").NoteLessonPayload | null
 }
 
 function analyzeTempTableBatch(query: string): TempTableBatchAnalysis {

@@ -14,12 +14,12 @@ import { mkdtemp, readFile, rm } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { detectPlaceholderPatterns } from "../src/application/core/governance.js"
-import { Agent } from "../src/application/shell/agent.js"
+import { detectPlaceholderPatterns } from "../src/core/govern-tools.js"
+import { Agent } from "../src/runtime/agent.js"
 import { configureAgent } from "../src/index.js"
-import { normalizeToolExecutionOutput } from "../src/tools/_helpers/index.js"
+import { normalizeToolExecutionOutput } from "../src/tools/_shared/index.js"
 import { createListDirectoryTool, createReadFileTool, createWriteFileTool } from "../src/tools/index.js"
-import type { LLMClient, LLMResponse, Tool } from "../src/domain/agent-types.js"
+import type { LLMClient, LLMResponse, Tool } from "../src/domain/models/agent-types.js"
 
 // ── Helpers ──────────────
 

@@ -36,7 +36,7 @@
 //
 // Pure function of ClarifyContext. No I/O, no LLM.
 
-import { MessageRole } from "../../../../domain/enums/message.js"
+import { MessageRole } from "../../../domain/enums/message.js"
 import type { ClarifyContext, Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
 

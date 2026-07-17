@@ -1,6 +1,6 @@
 import type sql from "mssql"
 import { describe, expect, it } from "vitest"
-import { formatResults } from "../src/tools/mssql/formatter.js"
+import { formatResults } from "../src/tools/database/mssql/formatter.js"
 
 function makeRs(rows: Array<Record<string, unknown>>): sql.IRecordSet<unknown> {
   // Vitest test stub — we don't need the IRecordSet metadata properties,

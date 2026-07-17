@@ -11,7 +11,7 @@
  */
 
 import type { Message } from "../../types.js"
-import { goalContainsDomainKeyword } from "../../../shell/known-vocabulary.js"
+import { goalContainsDomainKeyword } from "../../../domain/tenant/known-vocabulary.js"
 import {
   CONVERSATIONAL_DATA_QUERY_RE,
   DATA_FETCH_PIPELINE_RE,

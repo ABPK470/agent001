@@ -1,4 +1,4 @@
-import { DelegationRole, VerificationMode } from "../../../../domain/index.js"
+import { DelegationRole, VerificationMode } from "../../../domain/index.js"
 /**
  * Gates 8 + 8b: file-artifact evidence + target-artifact coverage
  * + reference integrity.
@@ -6,7 +6,7 @@ import { DelegationRole, VerificationMode } from "../../../../domain/index.js"
  * @module
  */
 
-import { DelegationOutputValidationCode } from "../../../../domain/enums/delegation.js"
+import { DelegationOutputValidationCode } from "../../../domain/enums/delegation.js"
 import {
   classifyTaskIntent,
   extractLocalArtifactReferences,

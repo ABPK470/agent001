@@ -6,7 +6,7 @@
  * so the fixtures must prove that.
  */
 import { beforeEach, describe, expect, it } from "vitest"
-import { resetTenantConfig } from "../src/application/shell/tenant-config.js"
+import { resetTenantConfig } from "../src/domain/tenant/tenant-config.js"
 import { CatalogGraph } from "../src/tools/catalog/graph/index.js"
 import {
   _resetCatalogQueriesCache,

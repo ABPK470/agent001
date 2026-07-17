@@ -9,9 +9,9 @@
 //
 // Pure function of (goal, catalog, tenant). No I/O, no LLM.
 
-import type { TenantConfig } from "../../../shell/tenant-config.js"
-import { buildKnownVocabulary } from "../../../shell/known-vocabulary.js"
-import type { CatalogGraph } from "../../../../tools/index.js"
+import type { TenantConfig } from "../../../domain/tenant/tenant-config.js"
+import { buildKnownVocabulary } from "../../../domain/tenant/known-vocabulary.js"
+import type { CatalogGraph } from "../../../tools/index.js"
 import type { Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
 import { isCanonicallyGroundedEntity } from "../entity-canonical.js"

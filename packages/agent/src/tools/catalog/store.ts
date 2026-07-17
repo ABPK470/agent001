@@ -1,5 +1,5 @@
-import type { AgentHost } from "../../application/shell/runtime.js"
-import { tryResolveMssqlConnectionName } from "../mssql/resolve-connection.js"
+import type { AgentHost } from "../../runtime/runtime.js"
+import { tryResolveMssqlConnectionName } from "../database/mssql/resolve-connection.js"
 import { CatalogGraph } from "./graph/index.js"
 import type { CatalogBuildOptions, CatalogSnapshot } from "./types.js"
 

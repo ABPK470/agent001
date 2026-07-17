@@ -18,7 +18,7 @@ import {
   findNonTmpMutations,
   validateQuery,
   validateTempTableBatch
-} from "../src/tools/mssql/validation.js"
+} from "../src/tools/database/mssql/validation.js"
 import { canonicalFixtureCatalog } from "./helpers/fixture-catalog.js"
 
 const RO = false // writeEnabled = false (read-only mode)

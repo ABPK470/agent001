@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest"
-import { createAgentLoopState } from "../src/application/shell/loop-cluster/state.js"
+import { createAgentLoopState } from "../src/runtime/loop/state.js"
 import {
   guardCompletion,
   prepareTurn,
   turnStartContext,
   type LoopPolicyContext
-} from "../src/application/shell/loop-cluster/loop-policy/index.js"
+} from "../src/runtime/loop/loop-policy/index.js"
 
 const TOOLS = [
   "read_file",

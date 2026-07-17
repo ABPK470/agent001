@@ -5,7 +5,7 @@
  * Each run gets fresh instances — no cross-run state.
  */
 
-import type { DomainEvent } from "./events.js"
+import type { DomainEvent } from "../services/events.js"
 import type {
   AuditRepository,
   EventBus,
@@ -13,7 +13,7 @@ import type {
   RunRepository,
   Unsubscribe
 } from "./interfaces.js"
-import type { AgentRun, AuditEntry, ExecutionRecord } from "./models.js"
+import type { AgentRun, AuditEntry, ExecutionRecord } from "./run-models.js"
 
 // ── Repositories ─────────────────────────────────────────────────
 

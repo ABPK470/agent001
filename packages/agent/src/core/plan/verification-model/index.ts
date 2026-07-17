@@ -1,4 +1,4 @@
-import { VerifierMode, VerifierOutcome } from "../../domain/index.js"
+import { VerifierMode, VerifierOutcome } from "../../../domain/index.js"
 import {
   buildEvidenceId,
   deriveOwnershipAttribution,

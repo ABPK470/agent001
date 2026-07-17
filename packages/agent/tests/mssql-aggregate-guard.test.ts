@@ -17,7 +17,7 @@ import {
   findAggregateSemanticIssues,
   getQueryWarnings,
   validateQuery
-} from "../src/tools/mssql/validation.js"
+} from "../src/tools/database/mssql/validation.js"
 
 describe("aggregate-semantic guard — BLOCK (alias-function mismatch)", () => {
   it("blocks SUM(...) AS Avg…", () => {

@@ -1,4 +1,4 @@
-import { DelegationHardBlockedMatchSource } from "../../../domain/enums/delegation.js"
+import { DelegationHardBlockedMatchSource } from "../../domain/enums/delegation.js"
 /**
  * Safety risk assessment and hard-block detection for delegation decisions.
  *
@@ -12,7 +12,7 @@ import type {
   DelegationHardBlockedTaskClass,
   DelegationSubagentStepProfile,
   ResolvedDelegationDecisionConfig
-} from "./decision/index.js"
+} from "../../core/delegate-decision/index.js"
 
 // ============================================================================
 // Risk patterns

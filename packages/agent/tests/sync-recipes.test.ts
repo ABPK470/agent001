@@ -5,7 +5,7 @@ import {
 } from "@mia/sync"
 import { resolve } from "node:path"
 import { describe, expect, it } from "vitest"
-import { configureAgent } from "../src/application/shell/runtime.js"
+import { configureAgent } from "../src/runtime/runtime.js"
 
 describe("selectDefinitionTables", () => {
   it("keeps FK-only tables disabled unless explicitly enabled", () => {

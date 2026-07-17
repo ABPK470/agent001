@@ -3,7 +3,7 @@ import {
   StepRole,
   ToolOutcomeSeverity,
   VerificationMode
-} from "../../domain/index.js"
+} from "../../../domain/index.js"
 /**
  * Pipeline validation — subagent completion checks, artifact quality gates,
  * syntax validation, and gibberish detection.
@@ -13,15 +13,15 @@ import {
  * @module
  */
 
-import type { ToolCallRecord } from "../../../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/index.js"
 import {
   buildContractSpec,
   getCorrectionGuidance,
   specRequiresFileMutationEvidence,
   specRequiresSuccessfulToolEvidence,
   validateDelegatedOutputContract
-} from "../../../shell/delegation.js"
-import { detectInconsistentBranches, detectPlaceholderPatterns } from "../../governance.js"
+} from "../../../runtime/delegate.js"
+import { detectInconsistentBranches, detectPlaceholderPatterns } from "../../govern-tools.js"
 import type { Tool } from "../../types.js"
 import {
   type SubagentStepValidationContext,

@@ -12,9 +12,9 @@
  * @module
  */
 
-import type { CatalogGraph } from "../../../tools/catalog/graph/index.js"
-import { getTenantConfig, type TenantConfig } from "../../shell/tenant-config.js"
-import { isAnalyticEntityCandidate, schemaTierSortKey } from "../../../tools/catalog/schema-role.js"
+import type { CatalogGraph } from "../../tools/catalog/graph/index.js"
+import { getTenantConfig, type TenantConfig } from "../../domain/tenant/tenant-config.js"
+import { isAnalyticEntityCandidate, schemaTierSortKey } from "../../tools/catalog/schema-role.js"
 
 const PREFERRED_ANALYTIC_SCHEMAS = new Set(["publish", "persistedview", "dim", "fact", "list"])
 

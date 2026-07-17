@@ -15,7 +15,7 @@ import {
   detectWideUnionViewTopnWithoutBranchAggregation,
   listExpensiveUnionViews,
   unionBranchCount
-} from "../tools/index.js"
+} from "../../tools/index.js"
 import { DOCTRINE_FIX_HINTS } from "./fix-hints.js"
 import type { DoctrineModule } from "./types.js"
 

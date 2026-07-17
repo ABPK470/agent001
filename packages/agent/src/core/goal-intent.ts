@@ -11,8 +11,8 @@
  * @module
  */
 
-import type { Message } from "../../domain/agent-types.js"
-import { MessageRole } from "../../domain/enums/message.js"
+import type { Message } from "../domain/models/agent-types.js"
+import { MessageRole } from "../domain/enums/message.js"
 import {
   DIALOGUE_MEMORY_RE,
   DIALOGUE_RECALL_RE,
@@ -21,7 +21,7 @@ import {
   EXPLICIT_ENV_ACTION_RE,
   SESSION_META_DIALOGUE_RE,
   SIMPLE_DIALOGUE_RE
-} from "./planner-cluster/internal/decision-patterns.js"
+} from "./plan/internal/decision-patterns.js"
 
 /** Task/work verbs — present in the goal itself → not dialogue. */
 const TASK_INTENT_RE =

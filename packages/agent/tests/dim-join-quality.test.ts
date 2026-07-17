@@ -6,7 +6,7 @@
  */
 import { describe, expect, it } from "vitest"
 
-import { detectDimJoinNullRot, renderDimJoinNullBanner } from "../src/tools/mssql/dim-join-quality.js"
+import { detectDimJoinNullRot, renderDimJoinNullBanner } from "../src/tools/database/mssql/dim-join-quality.js"
 
 describe("detectDimJoinNullRot", () => {
   it("flags ClientName when more than half the rows are NULL", () => {

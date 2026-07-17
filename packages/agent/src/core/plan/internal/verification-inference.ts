@@ -1,4 +1,4 @@
-import { VerifierIssueSeverity } from "../../domain/index.js"
+import { VerifierIssueSeverity } from "../../../domain/index.js"
 /**
  * Verification inference helpers — issue classification, severity, repair class,
  * ownership attribution, path extraction.

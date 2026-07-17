@@ -5,7 +5,7 @@ import {
   isEffectClass,
   isStepRole,
   isVerificationMode
-} from "../../domain/index.js"
+} from "../../../domain/index.js"
 /**
  * Parse helpers and auto-fix normalizers for plan structures.
  *

@@ -12,7 +12,7 @@
  * @module
  */
 
-import type { Message } from "../../domain/agent-types.js"
+import type { Message } from "../../domain/models/agent-types.js"
 import { estimateTokensFromMessages } from "../tokens.js"
 
 export { compactAtWriteTime } from "./write-time-compact.js"

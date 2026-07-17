@@ -7,7 +7,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { buildRecoveryHints, type ToolCallRecord } from "../src/application/core/recovery.js"
+import { buildRecoveryHints, type ToolCallRecord } from "../src/core/recover.js"
 
 function call(over: Partial<ToolCallRecord>): ToolCallRecord {
   return {

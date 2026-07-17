@@ -114,9 +114,9 @@ export function decorateMssqlError(rawMessage: string): string {
 // (b) a catalog snapshot is available, (c) at least one referenced table is
 // catalog-resolvable. Otherwise returns the input unchanged.
 
-import type { AgentHost } from "../../application/shell/runtime.js"
-import { getCatalog } from "../catalog/store.js"
-import type { CatalogColumn, CatalogTable } from "../catalog/types.js"
+import type { AgentHost } from "../../../runtime/runtime.js"
+import { getCatalog } from "../../catalog/store.js"
+import type { CatalogColumn, CatalogTable } from "../../catalog/types.js"
 
 const INVALID_COL_RE = /Invalid column name '([^']+)'/i
 const FROM_JOIN_TABLE_RE = /\b(?:FROM|JOIN)\s+\[?(\w+)\]?\.\[?(\w+)\]?/gi

@@ -10,10 +10,10 @@
  * See /memories/repo/tool-knowledge-cache.md.
  */
 
-import type { AgentHost } from "../application/shell/runtime.js"
+import type { AgentHost } from "../runtime/runtime.js"
 import type { ToolKnowledgeCachedTool, ToolKnowledgeFingerprint } from "../ports/index.js"
 import { getCatalog } from "./catalog/store.js"
-import { tryResolveMssqlConnectionName } from "./mssql/resolve-connection.js"
+import { tryResolveMssqlConnectionName } from "./database/mssql/resolve-connection.js"
 
 function fnv1a32(s: string): string {
   let h = 0x811c9dc5

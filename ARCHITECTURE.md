@@ -92,30 +92,27 @@ databases — all I/O arrives through ports.
 ```
 packages/agent/src/
 ├── index.ts          # Public barrel — the entire supported surface
-├── domain/           # Vocabulary only: types, enums, constants. No logic.
-├── application/
-│   ├── core/         # Pure decision logic (planning, routing, governance, recovery, …)
-│   └── shell/        # Stateful machinery (the Agent loop, host & run-context factories)
-├── ports/            # Interface contracts for everything external (ports.ts)
-├── tools/            # ~40 executable tools, grouped by domain
+├── domain/           # Enums, models, domain services, tenant config
+├── core/             # Pure decisions (plan, choose-path, clarify, doctrine, govern, recover)
+├── runtime/          # Stateful drivers (host, run-a-goal loop, delegate)
+├── ports/            # Interface contracts for everything external
+├── tools/            # Executable tools (database/, files/, shell-command/, …)
 ├── memory/           # Context compaction, memory tiers, token budgeting
-├── llm/              # LLM client implementations (OpenAI, OpenAI-compatible, Databricks)
-└── internal/         # Logger, JSON, path helpers (not exported)
+├── llm/              # LLM client implementations
+└── internal/         # Logger, JSON, path helpers
 ```
 
 ### How a run executes
 
-`Agent` (in `application/shell/agent-cluster/`) drives the loop:
+`Agent` → `runtime/run-a-goal/run-goal.ts` drives the loop as named steps:
 
-1. Build the initial messages (goal + system blocks + recalled memory).
-2. **Routing first.** `attemptPlannerRouting()` (in
-   `application/core/planner-routing-cluster/`) scores the goal and chooses
-   _direct_ or _planner_. If the planner path succeeds, it returns immediately.
-3. Otherwise enter the **tool loop**: call the LLM → run completion guards → if
-   the model asked for tools, execute each one (governed, traced), feed results
-   back, repeat → if the model produced text, run post-round checks (stuck
-   detection, answer-stability guard) and extract the final answer.
-4. Return the answer plus token usage.
+1. **Prepare messages** — goal + system blocks.
+2. **Try planner path** (`core/choose-path`) — outcomes: `answered` | `use_tool_loop`.
+3. **Tool loop** — prepare iteration → ask model → decide next action →
+   finish check or run tools → after tools (stuck / recover) → repeat.
+4. **Finish** — return the answer plus token usage.
+
+Every branch returns a named outcome; unhandled outcomes throw with full route state.
 
 Tools are **not** globally registered. They are passed to the `Agent`
 constructor as an array of `ExecutableTool`s already bound to their host and
@@ -144,25 +141,26 @@ server boot from `MIA_TENANT_CONFIG` → `tenant.json` and read via
 Tool handlers receive `AgentHost` + `RunContext` by argument. `TenantConfig` is
 the main intentional process-wide singleton besides the boot host itself.
 
-### What lives in `application/core/` (pure)
+### What lives in `core/` (pure)
 
 | Cluster | Responsibility |
 |---|---|
-| `planner-cluster` | Decompose a goal into a verifiable artifact graph; generate, execute, and verify plans |
-| `planner-routing-cluster` | Decide _direct vs. planner_; escalate on failure |
-| `governance-cluster` | Tool-quality and execution-policy checks run before each call |
-| `recovery-cluster` | Retry policy, budget extension, circuit-breaker on repeated tool failure |
-| `clarify-cluster` | Detect unresolved ambiguity in the goal and emit a clarification request |
-| `doctrine-cluster` | Executable MSSQL query rules (big-view budget, temp-table naming, wide-union policy) |
+| `plan/` | Decompose a goal into a verifiable artifact graph; generate, execute, and verify plans |
+| `choose-path/` | Decide _direct vs. planner_ |
+| `govern-tools/` | Tool-quality and execution-policy checks run before each call |
+| `recover/` | Retry policy, circuit-breaker, recovery hints |
+| `clarify/` | Detect unresolved ambiguity in the goal |
+| `doctrine/` | Executable MSSQL query rules |
+| `delegate-decision/` | Pure gate: should this work be delegated? |
 
-### What lives in `application/shell/` (stateful)
+### What lives in `runtime/` (stateful)
 
 | Cluster | Responsibility |
 |---|---|
-| `agent-cluster` | The `Agent` class — orchestrates the whole loop |
-| `loop-cluster` | Iteration mechanics: per-tool execution, completion guards, post-round checks |
-| `runtime-cluster` | `configureAgent()` / `makeRunContext()` — the host and context factories |
-| `delegation-cluster` | Validates and routes work to child agents; enforces depth limits |
+| `run-a-goal/` | `Agent` + prose spine (`run-goal.ts` + `steps/`) |
+| `loop/` | Iteration mechanics: tool execution, completion guards, post-round |
+| `host/` | `configureAgent()` / `makeRunContext()` |
+| `delegate/` | Validates and routes work to child agents (drivers) |
 
 ### Supporting subsystems
 

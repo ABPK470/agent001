@@ -7,7 +7,7 @@
  * @module
  */
 
-import { DelegationOutputValidationCode } from "../../../domain/enums/delegation.js"
+import { DelegationOutputValidationCode } from "../../domain/enums/delegation.js"
 
 /**
  * Get targeted retry guidance for a specific validation failure.

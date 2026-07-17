@@ -19,7 +19,7 @@ import {
   CHART_CATALOGUE_SECTION,
   DEFAULT_SYSTEM_PROMPT,
   MIA_DATA_PERSONA_SECTION
-} from "../src/application/shell/loop-cluster/system-prompt.js"
+} from "../src/runtime/loop/system-prompt.js"
 
 const KB = 1024
 
@@ -61,7 +61,7 @@ describe("prompt source-of-truth — byte ceilings", () => {
     expect(BIG_TABLE_ETL_SECTION).toMatch(/deterministic|tiebreaker/i) // TOP n needs a tiebreaker
     // Note: the structural anti-pattern statements (find-all on every #temp,
     // ≤ 2× large-object touches) moved into the doctrine SSoT
-    // (packages/agent/src/application/core/doctrine-cluster/) — see doctrine-registry tests. The prompt
+    // (packages/agent/src/core/doctrine/) — see doctrine-registry tests. The prompt
     // file no longer re-states them; the validator enforces them as hard blocks.
     expect(BIG_TABLE_ETL_SECTION).toMatch(/\{\{\s*mirrorSchema\s*\}\}\.\[\{\{\s*wideUnionView\s*\}\}\]/)
     expect(BIG_TABLE_ETL_SECTION).toMatch(/Repeated scalar subqueries against the same `#detail` temp/i)

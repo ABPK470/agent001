@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
+import { validateQueryDetailed } from "../src/tools/database/mssql/validation.js"
 
 describe("validateQueryDetailed — alias bracket auto-fix", () => {
   it("normalizes dim.Officer off and returns preparedQuery for execution", () => {

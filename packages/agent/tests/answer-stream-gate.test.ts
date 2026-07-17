@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from "vitest"
-import { Agent } from "../src/application/shell/agent.js"
-import type { LLMClient, LLMResponse, Tool } from "../src/domain/agent-types.js"
-import { synthesizeFinalAnswer } from "../src/application/shell/agent-cluster/agent-helpers.js"
+import { Agent } from "../src/runtime/agent.js"
+import type { LLMClient, LLMResponse, Tool } from "../src/domain/models/agent-types.js"
+import { synthesizeFinalAnswer } from "../src/runtime/run-a-goal/agent-helpers.js"
 import {
   createAnswerStreamGate,
   emitAnswerChunks,
   emitAnswerChunksPaced
-} from "../src/application/shell/agent-cluster/answer-stream-gate.js"
+} from "../src/runtime/run-a-goal/answer-stream-gate.js"
 
 describe("emitAnswerChunks", () => {
   it("emits fixed-size chunks", () => {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import type { ExecutionEnvelope, SubagentTaskStep } from "../src/application/core/planner.js"
+import type { ExecutionEnvelope, SubagentTaskStep } from "../src/core/plan.js"
 import { computePlannerChildBudgetMetrics, computePlannerChildMaxIterations } from "../src/tools/index.js"
 
 function makeEnvelope(overrides: Partial<ExecutionEnvelope> = {}): ExecutionEnvelope {

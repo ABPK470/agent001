@@ -2,13 +2,13 @@
  * Stateful-shell entrypoint for host/runtime configuration.
  */
 
-export { configureAgent, makeRunContext } from "./runtime-cluster/index.js"
+export { configureAgent, makeRunContext } from "./host/index.js"
 export type {
   ConfigureAgentOptions,
   ConfigureAgentSyncOptions,
   ConfigureMssqlConnection,
   MakeRunContextOptions
-} from "./runtime-cluster/index.js"
+} from "./host/index.js"
 
 export type {
   AgentHost,
@@ -24,7 +24,7 @@ export type {
   SyncOpContext,
   TenantHost,
   ToolTraceContext
-} from "./runtime-cluster/index.js"
+} from "./host/index.js"
 
 export type {
   AttachmentMetadata,
@@ -46,4 +46,4 @@ export type {
   ToolKnowledgeSaveArgs,
   ToolKnowledgeStore,
   UserInputReader
-} from "./runtime-cluster/index.js"
+} from "./host/index.js"

@@ -4,16 +4,16 @@
  * Includes: stuck detection, budget extension, recovery hint injection, and post-delegation verification.
  */
 
-import { buildRecoveryHints } from "../../../core/recovery.js"
-import * as log from "../../../../internal/index.js"
-import type { ToolCallRecord } from "../../../../tools/index.js"
+import { buildRecoveryHints } from "../../../core/recover.js"
+import * as log from "../../../internal/index.js"
+import type { ToolCallRecord } from "../../../tools/index.js"
 import {
   checkToolLoopStuckDetection,
   evaluateToolRoundBudgetExtension,
   summarizeToolRoundProgress
-} from "../../../../tools/index.js"
-import { MessageRole } from "../../../../domain/enums/message.js"
-import type { AgentConfig, Message } from "../../../../domain/agent-types.js"
+} from "../../../tools/index.js"
+import { MessageRole } from "../../../domain/enums/message.js"
+import type { AgentConfig, Message } from "../../../domain/models/agent-types.js"
 import type { AgentLoopState } from "../state.js"
 
 /** Result of post-round processing. */

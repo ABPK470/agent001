@@ -3,8 +3,8 @@
 // reason, at least one doctrine should be capable of explaining it.
 
 import { describe, expect, it } from "vitest"
-import { enforceDoctrines } from "../src/application/core/doctrine.js"
-import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
+import { enforceDoctrines } from "../src/core/doctrine.js"
+import { validateQueryDetailed } from "../src/tools/database/mssql/validation.js"
 
 interface Case {
   readonly name: string

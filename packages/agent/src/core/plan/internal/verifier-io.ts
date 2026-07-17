@@ -6,7 +6,7 @@
  * @module
  */
 
-import { normalizeToolExecutionOutput } from "../../tools/index.js"
+import { normalizeToolExecutionOutput } from "../../../tools/index.js"
 import type { Tool } from "../../types.js"
 
 // ============================================================================

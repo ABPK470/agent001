@@ -4,7 +4,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { decorateMssqlError } from "../src/tools/mssql/error-hints.js"
+import { decorateMssqlError } from "../src/tools/database/mssql/error-hints.js"
 
 describe("decorateMssqlError", () => {
   it("annotates Invalid column name with explore_mssql_schema guidance", () => {

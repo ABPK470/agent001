@@ -1,6 +1,6 @@
-import { ToolControlDirective, ToolOutcomeSeverity } from "./enums/delegation.js"
-import { LLMCallPhase } from "./enums/llm.js"
-import { MessageRole } from "./enums/message.js"
+import { ToolControlDirective, ToolOutcomeSeverity } from "../enums/delegation.js"
+import { LLMCallPhase } from "../enums/llm.js"
+import { MessageRole } from "../enums/message.js"
 /**
  * Core types for the AI agent.
  *
@@ -106,9 +106,7 @@ export interface ToolCall {
   arguments: Record<string, unknown>
 }
 
-export type { ToolOutcomeSeverity }
-
-export type { ToolControlDirective }
+// ToolOutcomeSeverity / ToolControlDirective: import from domain/enums (avoid barrel clashes).
 
 export interface ToolResultArtifactState {
   readonly path: string
@@ -364,9 +362,9 @@ export interface AgentConfig {
   onPlannerTrace?: (entry: Record<string, unknown>) => void
   /** Delegation function for planner-spawned children (injected by server). */
   plannerDelegateFn?: (
-    step: import("../application/core/planner.js").SubagentTaskStep,
-    envelope: import("../application/core/planner.js").ExecutionEnvelope
-  ) => Promise<import("../application/core/planner.js").DelegateResult>
+    step: import("../../core/plan.js").SubagentTaskStep,
+    envelope: import("../../core/plan.js").ExecutionEnvelope
+  ) => Promise<import("../../core/plan.js").DelegateResult>
   /**
    * Completion validator — called when the agent tries to exit (0 tool calls).
    * If it returns a non-null string, that string is injected as a system message

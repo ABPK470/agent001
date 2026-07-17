@@ -15,8 +15,8 @@ import { mkdtemp, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
-import { configureAgent } from "../src/application/shell/runtime.js"
-import { createReadFileTool } from "../src/tools/filesystem/read-write.js"
+import { configureAgent } from "../src/runtime/runtime.js"
+import { createReadFileTool } from "../src/tools/files/filesystem/read-write.js"
 
 let tempDir: string
 

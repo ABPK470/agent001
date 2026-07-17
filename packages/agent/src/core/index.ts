@@ -1,10 +1,14 @@
 /**
- * Public door for agent functional-core orchestration.
+ * Public door for agent functional core (pure decisions).
+ *
+ * What: plan, choose-path, clarify, doctrine, govern-tools, recover.
+ * Why: decisions without owning the loop.
+ * Next: runtime calls these from run-a-goal steps.
  */
 
 export * from "./clarify.js"
 export * from "./doctrine.js"
-export * from "./governance.js"
-export * from "./planner-routing.js"
-export * from "./planner.js"
-export * from "./recovery.js"
+export * from "./govern-tools.js"
+export * from "./choose-path.js"
+export * from "./plan.js"
+export * from "./recover.js"

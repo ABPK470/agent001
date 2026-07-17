@@ -3,7 +3,7 @@ import {
   normalizeMssqlAliasBrackets,
   validateAliasBracketConvention,
   prepareMssqlQueryAliases
-} from "../src/tools/mssql/sql-alias-brackets.js"
+} from "../src/tools/database/mssql/sql-alias-brackets.js"
 
 describe("CTE alias repro (screenshot shape)", () => {
   it("normalizes a multi-CTE query with CTE-alias refs in main + nested CTE bodies", () => {

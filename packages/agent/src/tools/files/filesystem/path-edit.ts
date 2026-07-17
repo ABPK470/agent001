@@ -1,9 +1,9 @@
 import { readdir, readFile, stat, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
-import { detectPlaceholderPatterns } from "../../application/core/governance.js"
-import type { AgentHost } from "../../application/shell/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
-import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
+import { detectPlaceholderPatterns } from "../../../core/govern-tools.js"
+import type { AgentHost } from "../../../runtime/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../../../domain/models/agent-types.js"
+import { ToolControlDirective, ToolOutcomeSeverity } from "../../../domain/index.js"
 import { checkWriteIntegrity, hasStructuralIntegrityIssue } from "../filesystem-integrity.js"
 import { buildToolOutcome, safePathResolvedWith, safePathWith } from "../filesystem-security.js"
 

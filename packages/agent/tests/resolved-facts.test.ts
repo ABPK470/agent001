@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest"
 import {
   RESOLVED_FACTS_BUDGET_BYTES,
   buildResolvedFacts
-} from "../src/application/core/doctrine-cluster/resolved-facts.js"
+} from "../src/core/doctrine/resolved-facts.js"
 
 describe("resolvedFacts builder", () => {
   it("returns empty string when there are no facts", () => {

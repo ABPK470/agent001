@@ -5,7 +5,7 @@
  */
 
 import { randomUUID } from "node:crypto"
-import { RunStatus, StepStatus } from "./enums/index.js"
+import { RunStatus, StepStatus } from "../enums/index.js"
 import { InvalidTransitionError } from "./errors.js"
 
 // ── Step (runtime) ───────────────────────────────────────────────
@@ -264,4 +264,4 @@ export interface ExecutionRecord {
 }
 
 // Re-export PolicyEffect for convenience — used in PolicyRule
-import { PolicyEffect } from "./enums/index.js"
+import { PolicyEffect } from "../enums/index.js"

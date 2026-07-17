@@ -8,14 +8,14 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   isCanonicallyGroundedEntity,
   resolveCanonicalEntityTable
-} from "../src/application/core/clarify-cluster/entity-canonical.js"
-import { schemaMatchDetector } from "../src/application/core/clarify-cluster/detectors/schema-match.js"
-import type { ClarifyContext } from "../src/application/core/clarify-cluster/types.js"
+} from "../src/core/clarify/entity-canonical.js"
+import { schemaMatchDetector } from "../src/core/clarify/detectors/schema-match.js"
+import type { ClarifyContext } from "../src/core/clarify/types.js"
 import {
   getTenantConfig,
   resetTenantConfig,
   setTenantConfig
-} from "../src/application/shell/tenant-config.js"
+} from "../src/domain/tenant/tenant-config.js"
 import { CatalogGraph } from "../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../src/tools/catalog/types.js"
 

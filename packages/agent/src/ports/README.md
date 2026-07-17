@@ -1,13 +1,5 @@
-# ports
+# Ports
 
-Contracts owned by `@mia/agent`.
-
-Use the canonical contract suffixes here:
-
-- `*Sink`
-- `*Store`
-- `*Reader`
-- `*Client`
-
-This folder should remain the most explicit expression of P&A inside the agent
-package.
+**What:** Contracts for outside-world dependencies (stores, clients, sinks).  
+**Why:** Keep I/O at the edge; runtime host implements these shapes.  
+**Next:** Server wires concrete adapters into `configureAgent(...)`.

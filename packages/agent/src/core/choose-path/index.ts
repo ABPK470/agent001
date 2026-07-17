@@ -4,13 +4,13 @@
  * @module
  */
 
-import { PlannerTraceKind } from "../../../domain/index.js"
-import * as log from "../../../internal/index.js"
-import type { ToolCallRecord } from "../../../tools/index.js"
-import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../../domain/agent-types.js"
-import type { AgentLoopState } from "../../shell/loop.js"
-import type { PlannerContext } from "../planner.js"
-import { assessPlannerDecision, executePlannerPath } from "../planner.js"
+import { PlannerTraceKind } from "../../domain/index.js"
+import * as log from "../../internal/index.js"
+import type { ToolCallRecord } from "../../tools/index.js"
+import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../domain/models/agent-types.js"
+import type { AgentLoopState } from "../../domain/models/agent-loop-state.js"
+import type { PlannerContext } from "../plan.js"
+import { assessPlannerDecision, executePlannerPath } from "../plan.js"
 
 export interface PlannerRoutingResult {
   readonly finalAnswer?: string

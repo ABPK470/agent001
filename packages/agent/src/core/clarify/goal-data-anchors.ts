@@ -14,10 +14,10 @@
  * @module
  */
 
-import { getTenantConfig } from "../../shell/tenant-config.js"
-import { tokenize } from "../../../tools/catalog/helpers.js"
-import type { CatalogGraph } from "../../../tools/catalog/graph/index.js"
-import type { CatalogTable } from "../../../tools/catalog/types.js"
+import { getTenantConfig } from "../../domain/tenant/tenant-config.js"
+import { tokenize } from "../../tools/catalog/helpers.js"
+import type { CatalogGraph } from "../../tools/catalog/graph/index.js"
+import type { CatalogTable } from "../../tools/catalog/types.js"
 import { goalTokens } from "./detectors/stopwords.js"
 
 /** `schema.object` — two-part SQL identifiers in goal text. */

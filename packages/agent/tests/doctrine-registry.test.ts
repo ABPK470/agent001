@@ -4,7 +4,7 @@ import {
   MSSQL_DOCTRINES,
   assembleDoctrineBlock,
   enforceDoctrines
-} from "../src/application/core/doctrine.js"
+} from "../src/core/doctrine.js"
 
 describe("doctrine registry", () => {
   it("every doctrine declares stable id and version", () => {

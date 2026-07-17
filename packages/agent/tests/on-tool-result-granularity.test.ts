@@ -6,9 +6,9 @@
  */
 
 import { describe, expect, it, vi } from "vitest"
-import { Agent } from "../src/application/shell/agent.js"
+import { Agent } from "../src/runtime/agent.js"
 import { MessageRole } from "../src/domain/enums/message.js"
-import type { LLMClient, LLMResponse, Tool } from "../src/domain/agent-types.js"
+import type { LLMClient, LLMResponse, Tool } from "../src/domain/models/agent-types.js"
 
 describe("onToolResult granularity", () => {
   it("fires once per tool call and includes the just-appended tool result in messages", async () => {

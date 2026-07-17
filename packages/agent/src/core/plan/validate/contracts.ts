@@ -1,4 +1,4 @@
-import { DiagnosticCategory, DiagnosticSeverity, EffectClass, VerificationMode } from "../../domain/index.js"
+import { DiagnosticCategory, DiagnosticSeverity, EffectClass, VerificationMode } from "../../../domain/index.js"
 /**
  * Step contract, artifact ownership, and verification coverage passes.
  * Extracted from validate.ts.

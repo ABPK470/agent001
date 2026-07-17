@@ -7,11 +7,11 @@
  */
 
 import sql from "mssql"
-import type { AgentHost, RunContext } from "../application/shell/runtime.js"
-import { getTenantConfig } from "../application/shell/tenant-config.js"
-import type { ExecutableTool, Tool, ToolMetadata } from "../domain/agent-types.js"
-import { fingerprintForQname, persistToCache, tryServeFromCache } from "./_tool-cache.js"
-import { getCatalog } from "./catalog/store.js"
+import type { AgentHost, RunContext } from "../../runtime/runtime.js"
+import { getTenantConfig } from "../../domain/tenant/tenant-config.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/models/agent-types.js"
+import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
+import { getCatalog } from "../catalog/store.js"
 import { getPool, resolveToolConnectionArg } from "./mssql/index.js"
 import { markMssqlTableProfiled } from "./mssql/schema-verified.js"
 import { isLargeObject } from "./mssql/validation.js"

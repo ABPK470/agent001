@@ -1,1 +1,1 @@
-export * from "../../domain/agent-types.js"
+export * from "../domain/models/agent-types.js"

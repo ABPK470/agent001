@@ -4,12 +4,12 @@
  * @module
  */
 
-import { PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
+import { PlannerTraceKind, VerifierOutcome } from "../../../domain/index.js"
 import {
   buildEscalationInput,
   resolveEscalation,
   type EscalationDecision
-} from "../../../shell/delegation.js"
+} from "../../../runtime/delegate.js"
 import type { Tool } from "../../types.js"
 import { createBudgetState, maybeExtendBudget } from "../circuit-breaker.js"
 import type { DelegateFn } from "../pipeline/index.js"

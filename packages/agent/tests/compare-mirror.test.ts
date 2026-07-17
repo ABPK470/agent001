@@ -15,7 +15,7 @@
  *   - INSUFFICIENT_DATA — anything else (stale, drifted, suspicious, unknown)
  */
 import { describe, expect, it } from "vitest"
-import { decideMirrorRecommendation } from "../src/tools/mssql-profiler.js"
+import { decideMirrorRecommendation } from "../src/tools/database/mssql-profiler.js"
 
 function stats(qname: string, rows: number | null, statsDate: Date | null, exists = true) {
   return { qname, rows, statsDate, exists }

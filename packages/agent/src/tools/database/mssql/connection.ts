@@ -1,5 +1,5 @@
 import sql from "mssql"
-import type { AgentHost } from "../../application/shell/runtime.js"
+import type { AgentHost } from "../../../runtime/runtime.js"
 import {
   canonicalizeConfiguredConnectionName,
   listMssqlConnectionNames,

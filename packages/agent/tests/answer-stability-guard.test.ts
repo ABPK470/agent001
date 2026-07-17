@@ -11,8 +11,8 @@ import {
   checkAnswerStability,
   computeAnswerSignature,
   type LoopPolicyContext
-} from "../src/application/shell/loop-cluster/loop-policy/index.js"
-import { createAgentLoopState } from "../src/application/shell/loop-cluster/state.js"
+} from "../src/runtime/loop/loop-policy/index.js"
+import { createAgentLoopState } from "../src/runtime/loop/state.js"
 
 const ANSWER_WITH_TABLE = [
   "## Top clients",

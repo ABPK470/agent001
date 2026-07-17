@@ -1,4 +1,4 @@
-import { PipelineStatus, VerifierOutcome } from "../../domain/index.js"
+import { PipelineStatus, VerifierOutcome } from "../../../domain/index.js"
 /**
  * Verifier deterministic probes — top-level loop that fans out per-step
  * assessment and runs cross-step integration probes.

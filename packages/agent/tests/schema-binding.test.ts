@@ -9,8 +9,8 @@ import {
   extractCteOutputColumns,
   outputNameFromSelectItem,
   parseCteChain
-} from "../src/tools/mssql/schema-binding.js"
-import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
+} from "../src/tools/database/mssql/schema-binding.js"
+import { validateQueryDetailed } from "../src/tools/database/mssql/validation.js"
 
 function col(name: string): CatalogColumn {
   return { name, dataType: "int", maxLength: null, nullable: false, isPK: false }

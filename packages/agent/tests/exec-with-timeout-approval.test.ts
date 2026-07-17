@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import { ApprovalRequiredError } from "../src/domain/index.js"
-import { executeToolWithTimeout } from "../src/tools/_helpers/utils/exec-with-timeout.js"
+import { executeToolWithTimeout } from "../src/tools/_shared/utils/exec-with-timeout.js"
 
 describe("executeToolWithTimeout", () => {
   it("re-throws ApprovalRequiredError instead of treating it as a tool failure", async () => {

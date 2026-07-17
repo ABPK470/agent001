@@ -1,4 +1,4 @@
-import { VerifierIssueSeverity } from "../../domain/index.js"
+import { VerifierIssueSeverity } from "../../../domain/index.js"
 /**
  * System-level verifier checks — derived from per-step issue details to
  * surface cross-cutting failures (ownership ambiguity, integration drift).

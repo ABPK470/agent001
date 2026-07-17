@@ -5,19 +5,19 @@
  * @module
  */
 
-import { MessageRole } from "../../../domain/enums/message.js"
-import * as log from "../../../internal/index.js"
+import { MessageRole } from "../../domain/enums/message.js"
+import * as log from "../../internal/index.js"
 import {
   applyFullCompaction,
   compactMessages,
   shouldApplyFullCompaction,
   truncateMessages
-} from "../../../memory/index.js"
+} from "../../memory/index.js"
 import {
   prepareTurn,
   turnStartContext
-} from "../loop-cluster/loop-policy/index.js"
-import type { AgentConfig, Message, Tool } from "../../../domain/agent-types.js"
+} from "../loop/loop-policy/index.js"
+import type { AgentConfig, Message, Tool } from "../../domain/models/agent-types.js"
 import type { AgentLoopState } from "../loop.js"
 
 /**

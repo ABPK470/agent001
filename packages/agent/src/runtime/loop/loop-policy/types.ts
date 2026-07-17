@@ -8,7 +8,7 @@
  * @module
  */
 
-import type { AgentConfig, Message, Tool } from "../../../../domain/agent-types.js"
+import type { AgentConfig, Message, Tool } from "../../../domain/models/agent-types.js"
 import type { AgentLoopState } from "../state.js"
 
 /** Snapshot of loop state for policy rules. Rules may mutate `state` one-shot flags. */

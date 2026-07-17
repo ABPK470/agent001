@@ -1,30 +1,11 @@
 /**
- * Agent package barrel — the public face of `@mia/agent`.
+ * `@mia/agent` public barrel — the only supported import path outside this package.
  *
- * Re-exports happen one cluster at a time. Outside this package, never
- * import from `packages/agent/src/<cluster>/<file>.js` directly — always
- * through here or through the cluster's `index.ts`.
+ * Story order: domain → ports → runtime host → Agent run → core helpers → tools.
  */
 
-// ── Runtime Shell ───────────────────────────────────────────────────
-export { Agent } from "./application/shell/agent.js"
-export { configureAgent, makeRunContext } from "./application/shell/runtime.js"
-export type {
-  AgentHost,
-  AttachmentMetadata,
-  AttachmentStore as AttachmentService,
-  ConfigureAgentOptions,
-  ConfigureAgentSyncOptions,
-  ConfigureMssqlConnection,
-  MakeRunContextOptions,
-  MssqlConnectorPool,
-  MssqlEntry,
-  MssqlPoolProvider,
-  RunContext,
-  ShellClient
-} from "./application/shell/runtime.js"
-
-// ── Types & constants ───────────────────────────────────────────────
+// ── Domain (words, shapes, services) ────────────────────────────────
+export * from "./domain/index.js"
 export {
   DEFAULT_SUBAGENT_VERIFIER_MIN_CONFIDENCE,
   DEFAULT_TOOL_FAILURE_BREAKER_COOLDOWN_MS,
@@ -44,13 +25,13 @@ export {
   RECOVERY_HINT_PREFIX,
   SAFE_RETRY_TOOLS,
   VERIFICATION_TOOLS
-} from "./domain/agent-constants.js"
+} from "./domain/models/agent-constants.js"
 export {
   ChatBudgetExceededError,
   DROP_PRIORITY,
   NEVER_DROP_SECTIONS,
   SECTION_WEIGHTS
-} from "./domain/agent-types.js"
+} from "./domain/models/agent-types.js"
 export type {
   AgentConfig,
   ChatCallUsageRecord,
@@ -66,21 +47,9 @@ export type {
   ToolDefinition,
   ToolKillManager,
   ToolMetadata
-} from "./domain/agent-types.js"
+} from "./domain/models/agent-types.js"
 
-// ── Clusters (one barrel per cluster) ───────────────────────────────
-export * from "./application/core/clarify.js"
-export * from "./application/core/doctrine.js"
-export * from "./application/core/governance.js"
-export * from "./application/core/recovery.js"
-export * from "./application/shell/delegation.js"
-export * from "./application/shell/loop.js"
-export * from "./domain/index.js"
-export * from "./llm/index.js"
-export * from "./memory/index.js"
-export * from "./tools/index.js"
-
-// ── Tenant configuration ────────────────────────────────────────────
+// ── Tenant (documented ambient exception) ───────────────────────────
 export {
   DEFAULT_CATALOG_BOOTSTRAP,
   DEFAULT_TENANT_CONFIG,
@@ -92,22 +61,46 @@ export {
   resetTenantConfig,
   resolveTenantConfigPath,
   setTenantConfig
-} from "./application/shell/tenant-config.js"
-export type { CatalogBootstrapMetadata, TenantConfig } from "./application/shell/tenant-config.js"
+} from "./domain/tenant/tenant-config.js"
+export type { CatalogBootstrapMetadata, TenantConfig } from "./domain/tenant/tenant-config.js"
 export {
   getPublishedSyncEntityIds,
   loadPublishedSyncEntityIdsFromBundle,
   resetPublishedSyncEntityIds,
   setPublishedSyncEntityIds
-} from "./application/shell/published-sync-vocabulary.js"
+} from "./domain/tenant/published-sync-vocabulary.js"
 export {
   buildKnownVocabulary,
   catalogSchemaTokens,
   goalContainsDomainKeyword,
   goalContainsSyncEntityId
-} from "./application/shell/known-vocabulary.js"
+} from "./domain/tenant/known-vocabulary.js"
 
-// ── Planner public surface (curated subset; planner has its own index) ─
+// ── Runtime (host + run a goal) ─────────────────────────────────────
+export { Agent } from "./runtime/agent.js"
+export { configureAgent, makeRunContext } from "./runtime/runtime.js"
+export type {
+  AgentHost,
+  AttachmentMetadata,
+  AttachmentStore as AttachmentService,
+  ConfigureAgentOptions,
+  ConfigureAgentSyncOptions,
+  ConfigureMssqlConnection,
+  MakeRunContextOptions,
+  MssqlConnectorPool,
+  MssqlEntry,
+  MssqlPoolProvider,
+  RunContext,
+  ShellClient
+} from "./runtime/runtime.js"
+export * from "./runtime/delegate.js"
+export * from "./runtime/loop.js"
+
+// ── Core (pure decisions) ───────────────────────────────────────────
+export * from "./core/clarify.js"
+export * from "./core/doctrine.js"
+export * from "./core/govern-tools.js"
+export * from "./core/recover.js"
 export {
   GENERIC_FAILURE_PREFIX,
   PLATFORM_UNCONFIGURED_PREFIX,
@@ -126,4 +119,9 @@ export {
   type InternalFailureHit,
   type PlatformUnconfiguredHit,
   type PolishFailureInput
-} from "./application/core/planner.js"
+} from "./core/plan.js"
+
+// ── Tools, LLM, memory ──────────────────────────────────────────────
+export * from "./tools/index.js"
+export * from "./llm/index.js"
+export * from "./memory/index.js"

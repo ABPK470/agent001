@@ -5,14 +5,14 @@
  * when the user names an environment in prose.
  */
 
-import type { AgentHost } from "../../application/shell/runtime.js"
+import type { AgentHost } from "../../runtime/runtime.js"
 import { getCatalogConnectionNames } from "./store.js"
 import {
   listMssqlConnectionNames,
   lookupRegistryKey,
   resolveMssqlConnectionName,
   tryResolveMssqlConnectionName
-} from "../mssql/resolve-connection.js"
+} from "../database/mssql/resolve-connection.js"
 
 const GOAL_ENV_RE = /\b(dev|uat|prod|production|development)\b/i
 

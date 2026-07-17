@@ -7,9 +7,9 @@
  * @module
  */
 
-import type { ToolCallRecord } from "../../../../tools/index.js"
-import { DelegationOutputValidationCode } from "../../domain/enums/delegation.js"
-import { normalizeToolExecutionOutput } from "../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/index.js"
+import { DelegationOutputValidationCode } from "../../../domain/enums/delegation.js"
+import { normalizeToolExecutionOutput } from "../../../tools/index.js"
 import type { Tool } from "../../types.js"
 import {
   buildBlueprintSeedTemplate,

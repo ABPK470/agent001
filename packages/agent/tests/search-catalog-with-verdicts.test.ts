@@ -11,8 +11,8 @@
  * run-executor host wiring) so this exercise is hermetic — no DB.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import type { TableVerdictRecord, TableVerdictsReader } from "../src/application/shell/runtime.js"
-import { resetTenantConfig } from "../src/application/shell/tenant-config.js"
+import type { TableVerdictRecord, TableVerdictsReader } from "../src/runtime/runtime.js"
+import { resetTenantConfig } from "../src/domain/tenant/tenant-config.js"
 import { CatalogGraph } from "../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../src/tools/catalog/types.js"
 

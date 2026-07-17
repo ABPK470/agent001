@@ -1,4 +1,4 @@
-import { StepRole, VerifierOutcome } from "../../domain/index.js"
+import { StepRole, VerifierOutcome } from "../../../domain/index.js"
 /**
  * Per-subagent-step deterministic assessment — extracted from
  * verifier-probes.ts to keep the runDeterministicProbes loop readable.

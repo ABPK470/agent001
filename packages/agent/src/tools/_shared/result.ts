@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { ToolResultEnvelope } from "../../domain/agent-types.js"
+import type { ToolResultEnvelope } from "../../domain/models/agent-types.js"
 
 // ============================================================================
 // Types

@@ -1,4 +1,4 @@
-import { BanditArmId } from "../../../domain/enums/delegation.js"
+import { BanditArmId } from "../../domain/enums/delegation.js"
 /**
  * Delegation bandit tuner — online UCB1 arm selection for delegation scoring.
  *

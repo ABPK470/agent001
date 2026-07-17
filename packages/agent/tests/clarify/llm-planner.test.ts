@@ -12,15 +12,15 @@ import {
   parsePlannerResponse,
   runLlmPlanner,
   shouldInvokePlanner
-} from "../../src/application/core/clarify-cluster/llm-planner.js"
+} from "../../src/core/clarify/llm-planner.js"
 import type {
   ClarifyContext,
   ResolvedClarification
-} from "../../src/application/core/clarify-cluster/types.js"
-import { DEFAULT_TENANT_CONFIG } from "../../src/application/shell/tenant-config.js"
+} from "../../src/core/clarify/types.js"
+import { DEFAULT_TENANT_CONFIG } from "../../src/domain/tenant/tenant-config.js"
 import { CatalogGraph } from "../../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../../src/tools/catalog/types.js"
-import type { LLMClient, LLMResponse, Message, Tool } from "../../src/domain/agent-types.js"
+import type { LLMClient, LLMResponse, Message, Tool } from "../../src/domain/models/agent-types.js"
 
 function col(name: string, dataType = "int"): CatalogColumn {
   return { name, dataType, nullable: false, isPK: false, maxLength: null }

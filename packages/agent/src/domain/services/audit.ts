@@ -2,9 +2,9 @@
  * Audit service — immutable log of every action during a run.
  */
 
-import type { AuditRepository, Unsubscribe } from "./interfaces.js"
-import type { AuditEntry } from "./models.js"
-import { createAuditEntry } from "./models.js"
+import type { AuditRepository, Unsubscribe } from "../models/interfaces.js"
+import type { AuditEntry } from "../models/run-models.js"
+import { createAuditEntry } from "../models/run-models.js"
 
 type AuditListener = (entry: AuditEntry) => void | Promise<void>
 

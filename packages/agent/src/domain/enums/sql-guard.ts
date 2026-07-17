@@ -1,6 +1,6 @@
 /**
  * SQL-guard enums — severities + semantic families used by the
- * aggregate-correctness guard in `tools/mssql/validation.ts`.
+ * aggregate-correctness guard in `tools/database/mssql/validation.ts`.
  *
  * Why these are enums (and not inline string literals):
  *   • The same values appear in multiple modules (validation, the

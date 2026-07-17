@@ -1,5 +1,5 @@
 import { MessageRole } from "../src/domain/enums/message.js"
-import type { Message } from "../src/domain/agent-types.js"
+import type { Message } from "../src/domain/models/agent-types.js"
 import {
   extractPriorAssistantNarrative,
   extractTurnMinusOneAnswer,
@@ -7,7 +7,7 @@ import {
   isConversationalNoToolGoal,
   isDirectDialogueGoal,
   isDirectSyncExecuteCommand
-} from "../src/application/core/goal-intent.js"
+} from "../src/core/goal-intent.js"
 
 function priorTurnsMessage(answer: string, goal = "how many LOCs?"): Message {
   const answerLines = answer

@@ -21,10 +21,10 @@
  *   "no match → allow" behavior so existing flows are not affected.
  */
 
-import { PolicyEffect } from "./enums/index.js"
-import { PolicyViolationError } from "./errors.js"
-import type { PolicyEvaluator } from "./interfaces.js"
-import type { AgentRun, PolicyRule, Step } from "./models.js"
+import { PolicyEffect } from "../enums/index.js"
+import { PolicyViolationError } from "../models/errors.js"
+import type { PolicyEvaluator } from "../models/interfaces.js"
+import type { AgentRun, PolicyRule, Step } from "../models/run-models.js"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
 
 import type { HostedPolicyContext } from "./policy-context.js"

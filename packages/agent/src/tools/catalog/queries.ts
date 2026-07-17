@@ -17,7 +17,7 @@
 // All accessors are pure and synchronous — they read in-memory catalog
 // data only. No SQL is issued from this module.
 
-import { getTenantConfig } from "../../application/shell/tenant-config.js"
+import { getTenantConfig } from "../../domain/tenant/tenant-config.js"
 import type { CatalogGraph } from "./graph/index.js"
 import type { CatalogTable } from "./types.js"
 

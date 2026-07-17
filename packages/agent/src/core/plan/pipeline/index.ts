@@ -1,4 +1,4 @@
-import { PipelineStatus } from "../../domain/index.js"
+import { PipelineStatus } from "../../../domain/index.js"
 /**
  * Pipeline executor — execute a plan's steps in DAG-ordered fashion.
  *
@@ -16,7 +16,7 @@ import { PipelineStatus } from "../../domain/index.js"
  * @module
  */
 
-import type { ToolCallRecord } from "../../../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/index.js"
 import type { Tool } from "../../types.js"
 import { injectPriorContext } from "../internal/pipeline-context.js"
 import {

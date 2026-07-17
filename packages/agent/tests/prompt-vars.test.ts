@@ -8,8 +8,8 @@ import {
   _resetPromptVarsCache,
   buildPromptVars,
   renderPromptVars
-} from "../src/application/shell/loop-cluster/prompt-vars.js"
-import { resetTenantConfig, setTenantConfig } from "../src/application/shell/tenant-config.js"
+} from "../src/runtime/loop/prompt-vars.js"
+import { resetTenantConfig, setTenantConfig } from "../src/domain/tenant/tenant-config.js"
 
 describe("renderPromptVars — substitution semantics", () => {
   beforeEach(() => {

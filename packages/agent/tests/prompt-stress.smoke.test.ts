@@ -12,7 +12,7 @@ import { describe, expect, it } from "vitest"
 import { MessageRole } from "../src/domain/enums/message.js"
 import { compactMessages, truncateMessages } from "../src/memory/index.js"
 import { estimateTokensFromMessages } from "../src/memory/tokens.js"
-import type { Message } from "../src/domain/agent-types.js"
+import type { Message } from "../src/domain/models/agent-types.js"
 
 const ENABLED = process.env.MIA_RUN_STRESS === "1"
 

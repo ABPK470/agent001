@@ -1,4 +1,4 @@
-import { BanditArmId, DelegationTraceKind } from "../../domain/index.js"
+import { BanditArmId, DelegationTraceKind } from "../../../domain/index.js"
 /**
  * Step 3b of planner setup — delegation decision gate.
  *
@@ -14,8 +14,8 @@ import {
   type DelegationDecisionInput,
   type DelegationDecisionReason,
   type DelegationSubagentStepProfile
-} from "../../../shell/delegation-cluster/decision/index.js"
-import type { DelegationBanditTuner, DelegationTrajectoryRecord } from "../../../shell/delegation.js"
+} from "../../../core/delegate-decision/index.js"
+import type { DelegationBanditTuner, DelegationTrajectoryRecord } from "../../../runtime/delegate.js"
 import type { Plan, PlanStep } from "../types.js"
 import { buildPlannerFailurePayload } from "./helpers.js"
 import type { PlannerContext, PlannerResult } from "./types.js"

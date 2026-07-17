@@ -1,4 +1,4 @@
-import { VerificationMode } from "../../domain/index.js"
+import { VerificationMode } from "../../../domain/index.js"
 /**
  * Runtime probes for subagent assessment — `npm test` execution when
  * verificationMode is run_tests.

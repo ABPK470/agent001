@@ -9,13 +9,13 @@
  * supplies its own minimal `CatalogGraph` and tenant `domainKeywords`.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { canonicalAmbiguityDetector } from "../src/application/core/clarify-cluster/detectors/canonical-ambiguity.js"
-import type { ClarifyContext } from "../src/application/core/clarify-cluster/types.js"
+import { canonicalAmbiguityDetector } from "../src/core/clarify/detectors/canonical-ambiguity.js"
+import type { ClarifyContext } from "../src/core/clarify/types.js"
 import {
   getTenantConfig,
   resetTenantConfig,
   setTenantConfig
-} from "../src/application/shell/tenant-config.js"
+} from "../src/domain/tenant/tenant-config.js"
 import { MessageRole } from "../src/domain/enums/message.js"
 import { CatalogGraph } from "../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../src/tools/catalog/types.js"

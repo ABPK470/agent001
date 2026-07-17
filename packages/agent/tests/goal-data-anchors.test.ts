@@ -1,15 +1,15 @@
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { schemaMatchDetector } from "../src/application/core/clarify-cluster/detectors/schema-match.js"
+import { schemaMatchDetector } from "../src/core/clarify/detectors/schema-match.js"
 import {
   resolveGoalDataAnchors
-} from "../src/application/core/clarify-cluster/goal-data-anchors.js"
-import type { ClarifyContext } from "../src/application/core/clarify-cluster/types.js"
+} from "../src/core/clarify/goal-data-anchors.js"
+import type { ClarifyContext } from "../src/core/clarify/types.js"
 import {
   DEFAULT_TENANT_CONFIG,
   resetTenantConfig,
   setTenantConfig,
   type TenantConfig
-} from "../src/application/shell/tenant-config.js"
+} from "../src/domain/tenant/tenant-config.js"
 import { handleSearch } from "../src/tools/catalog-search/search-handlers.js"
 import { CatalogGraph } from "../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../src/tools/catalog/types.js"

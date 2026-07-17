@@ -1,8 +1,8 @@
-import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
-import { getTenantConfig } from "../../application/shell/tenant-config.js"
-import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/agent-types.js"
-import { markMssqlTableVerified } from "../mssql/schema-verified.js"
-import { resolveMssqlConnectionName } from "../mssql/resolve-connection.js"
+import type { AgentHost, RunContext } from "../../runtime/runtime.js"
+import { getTenantConfig } from "../../domain/tenant/tenant-config.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/models/agent-types.js"
+import { markMssqlTableVerified } from "../database/mssql/schema-verified.js"
+import { resolveMssqlConnectionName } from "../database/mssql/resolve-connection.js"
 import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"
 import {
   handleColumn,

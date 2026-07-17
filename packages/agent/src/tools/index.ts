@@ -1,15 +1,12 @@
 /**
- * Tools cluster — public API.
+ * Tools — things the agent can do.
  *
- * Outside this folder, import from `./tools/index.js` only.
- * Each file here exports one or more `Tool` objects plus per-tool
- * host/run-bound factory helpers.
- *
- * Note: per-tool subdirectories (catalog/, mssql/, etc.) are private
- * implementation details — do not import them directly.
+ * What: factory functions (`create*Tool`) and shared helpers.
+ * Why: the model needs capabilities; the server chooses which to bind.
+ * Next: register selected tools in `@mia/server`, pass into `new Agent(...)`.
  */
 
-export * from "./_helpers/index.js"
+export * from "./_shared/index.js"
 export * from "./ask-user.js"
 export * from "./attachments.js"
 export * from "./catalog-search/index.js"
@@ -19,17 +16,17 @@ export * from "./delegate-paths.js"
 export * from "./delegate-spawn/index.js"
 export * from "./delegate/index.js"
 export * from "./fetch-url/index.js"
-export * from "./filesystem-integrity.js"
-export * from "./filesystem-security.js"
-export * from "./filesystem/index.js"
+export * from "./files/filesystem-integrity.js"
+export * from "./files/filesystem-security.js"
+export * from "./files/filesystem/index.js"
+export * from "./files/search-files.js"
 export * from "./get-chart-specs.js"
-export * from "./mssql-inspector/index.js"
-export * from "./mssql-profiler.js"
-export * from "./mssql-relationships/index.js"
-export * from "./mssql/index.js"
+export * from "./database/mssql-inspector/index.js"
+export * from "./database/mssql-profiler.js"
+export * from "./database/mssql-relationships/index.js"
+export * from "./database/mssql/index.js"
 export * from "./note.js"
 export * from "./recall/index.js"
 export * from "./record-table-verdict.js"
-export * from "./search-files.js"
-export * from "./shell/index.js"
+export * from "./shell-command/index.js"
 export * from "./think.js"

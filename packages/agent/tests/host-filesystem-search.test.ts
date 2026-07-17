@@ -15,9 +15,9 @@ import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { configureAgent } from "../src/application/shell/runtime.js"
-import { createAppendFileTool, createWriteFileTool } from "../src/tools/filesystem/read-write.js"
-import { createSearchFilesTool } from "../src/tools/search-files.js"
+import { configureAgent } from "../src/runtime/runtime.js"
+import { createAppendFileTool, createWriteFileTool } from "../src/tools/files/filesystem/read-write.js"
+import { createSearchFilesTool } from "../src/tools/files/search-files.js"
 
 let sandboxA: string
 let sandboxB: string

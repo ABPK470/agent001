@@ -9,7 +9,7 @@ import {
   getTenantConfig,
   resetTenantConfig,
   setTenantConfig
-} from "../src/application/shell/tenant-config.js"
+} from "../src/domain/tenant/tenant-config.js"
 import { _resetCatalogQueriesCache } from "../src/tools/catalog/queries.js"
 
 beforeAll(() => {

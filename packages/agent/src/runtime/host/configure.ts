@@ -13,7 +13,7 @@
 import { createPublishedSyncDefinitionRegistry, type SyncEnvironment } from "@mia/sync"
 import type sql from "mssql"
 import type { AgentHost } from "./host.js"
-import { canonicalizeConfiguredConnectionName } from "../../../tools/mssql/resolve-connection.js"
+import { canonicalizeConfiguredConnectionName } from "../../tools/database/mssql/resolve-connection.js"
 
 export interface ConfigureMssqlConnection extends sql.config {
   name: string

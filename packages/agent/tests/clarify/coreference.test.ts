@@ -14,14 +14,14 @@
 
 import { describe, expect, it } from "vitest"
 
-import { schemaMatchDetector } from "../../src/application/core/clarify-cluster/detectors/schema-match.js"
-import { runLlmPlanner, shouldInvokePlanner } from "../../src/application/core/clarify-cluster/llm-planner.js"
-import type { ClarifyContext } from "../../src/application/core/clarify-cluster/types.js"
-import { DEFAULT_TENANT_CONFIG } from "../../src/application/shell/tenant-config.js"
+import { schemaMatchDetector } from "../../src/core/clarify/detectors/schema-match.js"
+import { runLlmPlanner, shouldInvokePlanner } from "../../src/core/clarify/llm-planner.js"
+import type { ClarifyContext } from "../../src/core/clarify/types.js"
+import { DEFAULT_TENANT_CONFIG } from "../../src/domain/tenant/tenant-config.js"
 import { MessageRole } from "../../src/domain/enums/message.js"
 import { CatalogGraph } from "../../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../../src/tools/catalog/types.js"
-import type { LLMClient, Message } from "../../src/domain/agent-types.js"
+import type { LLMClient, Message } from "../../src/domain/models/agent-types.js"
 
 function col(name: string, dataType = "int"): CatalogColumn {
   return { name, dataType, nullable: false, isPK: false, maxLength: null }

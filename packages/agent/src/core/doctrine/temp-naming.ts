@@ -5,7 +5,7 @@
 // rule is citable from one place and the prompt summary stays in sync
 // with what the validator actually blocks.
 
-import { validateTempTableBatch } from "../tools/index.js"
+import { validateTempTableBatch } from "../../tools/index.js"
 import { DOCTRINE_FIX_HINTS } from "./fix-hints.js"
 import type { DoctrineModule } from "./types.js"
 

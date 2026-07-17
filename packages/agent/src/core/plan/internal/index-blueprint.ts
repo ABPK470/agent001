@@ -1,4 +1,4 @@
-import { EffectClass, StepRole, VerificationMode } from "../../domain/index.js"
+import { EffectClass, StepRole, VerificationMode } from "../../../domain/index.js"
 /**
  * Blueprint step injection — auto-inject contract-first blueprint steps
  * for multi-file code generation plans.

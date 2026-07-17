@@ -1,10 +1,10 @@
 import { PlannerTraceKind } from "@mia/agent"
 import { describe, expect, it } from "vitest"
-import { readToolTraceContext } from "../src/application/shell/loop-cluster/tool-execution/trace-context.js"
-import { createAgentLoopState, executeToolRound } from "../src/application/shell/loop.js"
-import { emitMssqlQualityTrace } from "../src/tools/mssql/trace.js"
-import { analyzeMssqlQueryQuality, validateQueryDetailed } from "../src/tools/mssql/validation.js"
-import type { Tool } from "../src/domain/agent-types.js"
+import { readToolTraceContext } from "../src/runtime/loop/tool-execution/trace-context.js"
+import { createAgentLoopState, executeToolRound } from "../src/runtime/loop.js"
+import { emitMssqlQualityTrace } from "../src/tools/database/mssql/trace.js"
+import { analyzeMssqlQueryQuality, validateQueryDetailed } from "../src/tools/database/mssql/validation.js"
+import type { Tool } from "../src/domain/models/agent-types.js"
 
 describe("SQL quality analysis", () => {
   it("derives structural performance heuristics without prompt hardcoding", () => {

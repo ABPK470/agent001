@@ -13,7 +13,7 @@
  * `record_table_verdict`.
  */
 
-import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../../domain/agent-types.js"
+import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../../domain/models/agent-types.js"
 
 /** Payload passed to the bound handler. */
 export interface RecallPriorResultPayload {
@@ -152,7 +152,7 @@ export function bindRecallPriorResultTool(handler: RecallPriorResultHandler): Ex
 
 // ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
 
-import type { AgentHost } from "../../application/shell/runtime.js"
+import type { AgentHost } from "../../runtime/runtime.js"
 
 export function createRecallPriorResultTool(_host: AgentHost): never {
   throw new Error(

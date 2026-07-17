@@ -1,30 +1,23 @@
 /**
- * Engine barrel — governance infrastructure for the agent.
+ * Domain — shared words, shapes, and domain services.
  *
- * This replaces the old @mia/engine package. Only the parts
- * actually used by the agent and server are kept:
- *   - Run/step state machines with guarded transitions
- *   - Domain events for real-time broadcasting
- *   - Policy engine for tool access control
- *   - Audit service for immutable action logging
- *   - Learner for execution metrics
- *   - In-memory adapters (fresh per run)
+ * What: enums, models, policy/audit/learner/events.
+ * Why: one vocabulary for core, runtime, tools, and the platform.
+ * Next: import from here (or `@mia/agent`); do not invent parallel types.
+ *
+ * Honesty: this is not “vocabulary only.” `services/` holds real domain
+ * services (policy evaluation, audit, learner, event helpers).
  */
 
-// Enums — every domain enum lives under `engine/enums/`. Re-export the
-// whole barrel so adding a new domain enum doesn't require touching
-// this file.
 export * from "./enums/index.js"
 
-// Errors
 export {
   ApprovalRequiredError,
   DomainError,
   InvalidTransitionError,
   PolicyViolationError
-} from "./errors.js"
+} from "./models/errors.js"
 
-// Models
 export {
   addStepToRunPure,
   cancelRun,
@@ -51,9 +44,8 @@ export {
   type ExecutionRecord,
   type PolicyRule,
   type Step
-} from "./models.js"
+} from "./models/run-models.js"
 
-// Events
 export {
   approvalRequired,
   runCompleted,
@@ -64,9 +56,8 @@ export {
   stepStarted,
   type ApprovalRequired,
   type DomainEvent
-} from "./events.js"
+} from "./services/events.js"
 
-// Interfaces
 export type {
   AuditRepository,
   EventBus,
@@ -74,12 +65,11 @@ export type {
   PolicyEvaluator,
   RunRepository,
   Unsubscribe
-} from "./interfaces.js"
+} from "./models/interfaces.js"
 
-// Services
-export { AuditService } from "./audit.js"
-export { Learner, type OperationStats } from "./learner.js"
-export { type HostedPolicyContext } from "./policy-context.js"
+export { AuditService } from "./services/audit.js"
+export { Learner, type OperationStats } from "./services/learner.js"
+export { type HostedPolicyContext } from "./services/policy-context.js"
 export {
   extractToolFacts,
   matchesSelectorRule,
@@ -88,16 +78,15 @@ export {
   type SelectorResolution,
   type SelectorRuleParameters,
   type ToolFacts
-} from "./policy-selectors.js"
-export { RulePolicyEvaluator } from "./policy.js"
+} from "./services/policy-selectors.js"
+export { RulePolicyEvaluator } from "./services/policy.js"
 
-// In-memory adapters
 export {
   MemoryAuditRepository,
   MemoryEventBus,
   MemoryExecutionRecordRepository,
   MemoryRunRepository
-} from "./memory.js"
+} from "./models/memory.js"
 
-export * from "./agent-constants.js"
-export * from "./agent-types.js"
+export * from "./models/agent-constants.js"
+export * from "./models/agent-types.js"

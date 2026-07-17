@@ -10,8 +10,7 @@
  * remains importable directly inside the delegation cluster.
  */
 
-export * from "./decision/index.js"
-export * from "./check-decision-safety.js"
+export * from "../../core/delegate-decision/index.js"
 export * from "./learning.js"
 export * from "./validation/index.js"
 export * from "./correct-validation.js"

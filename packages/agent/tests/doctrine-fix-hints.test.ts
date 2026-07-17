@@ -10,8 +10,8 @@ import {
   enforceDoctrines,
   getDoctrineFixHint,
   MSSQL_DOCTRINES
-} from "../src/application/core/doctrine.js"
-import { validateQuery } from "../src/tools/mssql/validation.js"
+} from "../src/core/doctrine.js"
+import { validateQuery } from "../src/tools/database/mssql/validation.js"
 
 describe("doctrine fixHints", () => {
   it("registers a hint for every block-emitting doctrine code", () => {

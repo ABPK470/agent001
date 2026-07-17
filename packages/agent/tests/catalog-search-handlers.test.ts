@@ -16,7 +16,7 @@
  *      `handleTable` / `handleJoins` now bridge that gap.
  */
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
-import { resetTenantConfig, setTenantConfig } from "../src/application/shell/tenant-config.js"
+import { resetTenantConfig, setTenantConfig } from "../src/domain/tenant/tenant-config.js"
 import { handleJoins, handleTable } from "../src/tools/catalog-search/handlers.js"
 import { CatalogGraph } from "../src/tools/catalog/graph/index.js"
 import type { CatalogColumn, CatalogTable } from "../src/tools/catalog/types.js"

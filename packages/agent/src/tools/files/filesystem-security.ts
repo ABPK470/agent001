@@ -1,4 +1,4 @@
-import { ToolControlDirective, ToolOutcomeSeverity } from "../domain/index.js"
+import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
 /**
  * Filesystem path validation and security helpers.
  *
@@ -15,8 +15,8 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "../domain/index.js"
 
 import { lstat, realpath } from "node:fs/promises"
 import { resolve, sep } from "node:path"
-import type { AgentHost } from "../application/shell/runtime.js"
-import type { ToolResultEnvelope } from "../domain/agent-types.js"
+import type { AgentHost } from "../../runtime/runtime.js"
+import type { ToolResultEnvelope } from "../../domain/models/agent-types.js"
 
 export function buildToolOutcome(
   summary: string,

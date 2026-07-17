@@ -7,7 +7,7 @@
 //
 // Pure function of (goal, catalog). No I/O, no LLM.
 
-import type { CatalogGraph } from "../../../../tools/catalog/graph/index.js"
+import type { CatalogGraph } from "../../../tools/catalog/graph/index.js"
 import type { Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
 

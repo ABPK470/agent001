@@ -15,7 +15,7 @@
  * @module
  */
 
-import { computeSafetyRisk, detectHardBlockedTaskClass } from "../check-decision-safety.js"
+import { computeSafetyRisk, detectHardBlockedTaskClass } from "./check-decision-safety.js"
 import { buildDecision } from "./build-decision.js"
 import { resolveDelegationDecisionConfig } from "./config.js"
 import { computeEconomics } from "./economics.js"

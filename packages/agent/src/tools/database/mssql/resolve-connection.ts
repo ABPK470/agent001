@@ -12,7 +12,7 @@
  * `host.mssql.databases` map.
  */
 
-import type { AgentHost } from "../../application/shell/runtime.js"
+import type { AgentHost } from "../../../runtime/runtime.js"
 
 /** Case-insensitive lookup against a set of registry keys. */
 export function lookupRegistryKey(keys: Iterable<string>, name: string): string | null {

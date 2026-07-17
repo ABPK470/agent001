@@ -9,7 +9,7 @@
  * @module
  */
 
-import type { RunContext } from "../../application/shell/runtime.js"
+import type { RunContext } from "../../../runtime/runtime.js"
 
 /** Normalize a schema-qualified name for per-run verification sets. */
 export function verifiedTableKey(qualifiedName: string): string {

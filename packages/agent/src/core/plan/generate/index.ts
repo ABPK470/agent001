@@ -1,4 +1,4 @@
-import { DiagnosticCategory, DiagnosticSeverity } from "../../domain/index.js"
+import { DiagnosticCategory, DiagnosticSeverity } from "../../../domain/index.js"
 /**
  * Plan generation — ask the LLM to decompose a complex task into a structured plan.
  *
@@ -195,5 +195,5 @@ export async function generatePlan(
 // Workspace root normalization + plan salvage moved to ./generate/normalize.ts
 // ============================================================================
 
-import { MessageRole } from "../../domain/enums/message.js"
+import { MessageRole } from "../../../domain/enums/message.js"
 import { normalizeWorkspaceRoots, salvagePlanFromMalformedResponse } from "./normalize.js"

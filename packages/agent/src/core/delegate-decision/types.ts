@@ -1,4 +1,4 @@
-import { DelegationHardBlockedMatchSource } from "../../../../domain/enums/delegation.js"
+import { DelegationHardBlockedMatchSource } from "../../domain/enums/delegation.js"
 /**
  * Type definitions for the delegation-decision pipeline.
  *

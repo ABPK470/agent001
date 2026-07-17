@@ -13,8 +13,8 @@
  * there is no ambient/`getActiveAgentHost()` access here.
  */
 
-import type { AgentHost } from "../application/shell/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../domain/agent-types.js"
+import type { AgentHost } from "../runtime/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../domain/models/agent-types.js"
 import type { AttachmentStore } from "../ports/index.js"
 
 function requireServiceFromHost(host: AgentHost): AttachmentStore {
@@ -52,7 +52,7 @@ export const listAttachmentsToolMetadata: ToolMetadata = {
 
 const READ_ATTACHMENT_DESCRIPTION =
   "Read the text content of an attachment by id. " +
-  "Best for text/* and application/json|csv|xml. Binary attachments are refused — " +
+  "Best for text/* and json|csv|xml. Binary attachments are refused — " +
   "use import_attachment to copy them into the sandbox and process from there. " +
   `Output is truncated at ${DEFAULT_READ_LIMIT_BYTES} bytes by default; pass maxBytes to override. ` +
   "For large attachments, page through by passing the `nextOffset` from the previous call as `offset`."

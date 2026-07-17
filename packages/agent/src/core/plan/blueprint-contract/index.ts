@@ -1,4 +1,4 @@
-import { canonicalizeRelative } from "../../internal/index.js"
+import { canonicalizeRelative } from "../../../internal/index.js"
 import type { Plan, SubagentTaskStep } from "../types.js"
 
 export interface BlueprintFunctionSpec {

@@ -4,9 +4,9 @@
  * @module
  */
 
-import { canonicalizeRelative } from "../../../../internal/index.js"
-import type { ToolCallRecord } from "../../../../tools/index.js"
-import type { AgentConfig, Message, Tool } from "../../../../domain/agent-types.js"
+import { canonicalizeRelative } from "../../../internal/index.js"
+import type { ToolCallRecord } from "../../../tools/index.js"
+import type { AgentConfig, Message, Tool } from "../../../domain/models/agent-types.js"
 import type { AgentLoopState } from "../state.js"
 
 export const FILE_MUTATION_TOOLS = new Set(["write_file", "replace_in_file", "append_file"])

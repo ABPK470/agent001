@@ -2,4 +2,4 @@
  * Stateful-shell entrypoint for the agent execution loop.
  */
 
-export * from "./loop-cluster/index.js"
+export * from "./loop/index.js"

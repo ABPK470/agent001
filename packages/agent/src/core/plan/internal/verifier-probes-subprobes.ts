@@ -5,7 +5,7 @@
  * @module
  */
 
-import { detectPlaceholderPatterns } from "../../governance.js"
+import { detectPlaceholderPatterns } from "../../govern-tools.js"
 import type { Tool } from "../../types.js"
 import type { SubagentTaskStep } from "../types.js"
 import {

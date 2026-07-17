@@ -1,4 +1,4 @@
-import { PlannerTraceKind, VerifierOutcome } from "../../domain/index.js"
+import { PlannerTraceKind, VerifierOutcome } from "../../../domain/index.js"
 /**
  * Phase-0 delegation contract validation. Returns contractFailures detected
  * before LLM verification needs to run.
@@ -10,7 +10,7 @@ import {
   buildContractSpec,
   getCorrectionGuidance,
   validateDelegatedOutputContract
-} from "../../../shell/delegation.js"
+} from "../../../runtime/delegate.js"
 import type { PipelineResult, Plan, SubagentTaskStep, VerifierStepAssessment } from "../types.js"
 
 export interface ContractCheckOptions {

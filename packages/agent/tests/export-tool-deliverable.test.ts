@@ -8,8 +8,8 @@
  */
 
 import { describe, expect, it, vi } from "vitest"
-import { promoteExportedFile } from "../src/tools/mssql/export-tool.js"
-import type { AgentHost, AttachmentMetadata } from "../src/application/shell/runtime.js"
+import { promoteExportedFile } from "../src/tools/database/mssql/export-tool.js"
+import type { AgentHost, AttachmentMetadata } from "../src/runtime/runtime.js"
 
 function fakeHost(attachments: AgentHost["attachments"]): AgentHost {
   return { attachments } as unknown as AgentHost

@@ -13,9 +13,9 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { configureAgent } from "../src/application/shell/runtime.js"
-import { createProfileDataTool } from "../src/tools/mssql-profiler.js"
-import { isLargeObject } from "../src/tools/mssql/validation.js"
+import { configureAgent } from "../src/runtime/runtime.js"
+import { createProfileDataTool } from "../src/tools/database/mssql-profiler.js"
+import { isLargeObject } from "../src/tools/database/mssql/validation.js"
 
 /**
  * Stub a legacy databases-map entry so resolveToolConnectionArg succeeds.
@@ -23,7 +23,7 @@ import { isLargeObject } from "../src/tools/mssql/validation.js"
  * getPool; other paths fail with a connection error (expected in unit tests).
  */
 function makeProfileDataTool(): ReturnType<typeof createProfileDataTool> {
-  const databases = new Map<string, import("../src/application/shell/runtime.js").MssqlEntry>()
+  const databases = new Map<string, import("../src/runtime/runtime.js").MssqlEntry>()
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
     pool: null,

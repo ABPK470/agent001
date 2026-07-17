@@ -1,4 +1,4 @@
-import { DiagnosticCategory, DiagnosticSeverity, EffectClass, VerificationMode } from "../../domain/index.js"
+import { DiagnosticCategory, DiagnosticSeverity, EffectClass, VerificationMode } from "../../../domain/index.js"
 /**
  * Plan parsing — parse LLM JSON responses into typed Plan objects, with auto-fix passes.
  *

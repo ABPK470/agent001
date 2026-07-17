@@ -15,7 +15,7 @@ import {
   resetTenantConfig,
   resolveTenantConfigPath,
   setTenantConfig
-} from "../src/application/shell/tenant-config.js"
+} from "../src/domain/tenant/tenant-config.js"
 
 // Global setup (tests/setup.ts) overrides the tenant config to match the
 // fixture catalog. Reset before AND after each test so this file always

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { AgentHost } from "../src/application/shell/runtime.js"
+import type { AgentHost } from "../src/runtime/runtime.js"
 import { createListAdaptersTool, createBridgeDataTool } from "../src/tools/bridge/index.js"
 import type { ConnectorInfo, MoveSummary } from "@mia/shared-types"
 

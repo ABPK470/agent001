@@ -18,12 +18,12 @@ import sql from "mssql"
 import { mkdir, writeFile } from "node:fs/promises"
 import { dirname } from "node:path"
 import { Buffer } from "node:buffer"
-import { readToolTraceContext } from "../../application/shell/loop.js"
-import type { AgentHost, RunContext } from "../../application/shell/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
-import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../domain/enums/tools.js"
-import { safePathResolvedWith } from "../filesystem-security.js"
-import { getCatalog } from "../catalog/index.js"
+import { readToolTraceContext } from "../../../runtime/loop.js"
+import type { AgentHost, RunContext } from "../../../runtime/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../../../domain/models/agent-types.js"
+import { EXPORT_FORMATS, ExportFormat, isExportFormat } from "../../../domain/enums/tools.js"
+import { safePathResolvedWith } from "../../files/filesystem-security.js"
+import { getCatalog } from "../../catalog/index.js"
 import { getPool } from "./connection.js"
 import { resolveToolConnectionArg } from "./resolve-connection.js"
 import { decorateMssqlError, enrichInvalidColumnError } from "./error-hints.js"
@@ -49,8 +49,8 @@ const PROMOTE_MAX_BYTES = 64 * 1024 * 1024
 const FORMAT_MEDIA_TYPE: Record<ExportFormat, string> = {
   [ExportFormat.Csv]: "text/csv",
   [ExportFormat.Tsv]: "text/tab-separated-values",
-  [ExportFormat.Json]: "application/json",
-  [ExportFormat.Jsonl]: "application/x-ndjson",
+  [ExportFormat.Json]: "json",
+  [ExportFormat.Jsonl]: "x-ndjson",
   [ExportFormat.Txt]: "text/plain"
 }
 

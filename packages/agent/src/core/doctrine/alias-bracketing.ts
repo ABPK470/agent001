@@ -8,7 +8,7 @@ import {
   detectAliasBracketViolations,
   normalizeMssqlAliasBrackets,
   validateAliasBracketConvention
-} from "../../../tools/mssql/sql-alias-brackets.js"
+} from "../../tools/database/mssql/sql-alias-brackets.js"
 import { DOCTRINE_FIX_HINTS } from "./fix-hints.js"
 import type { DoctrineModule } from "./types.js"
 

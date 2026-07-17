@@ -1,4 +1,4 @@
-import { StepRole } from "../../domain/index.js"
+import { StepRole } from "../../../domain/index.js"
 /**
  * Plan remediation — step merging, dependency graph traversal, and
  * automatic remediation of validation errors.

@@ -15,7 +15,7 @@
  */
 
 import { createRequire } from "node:module"
-import type { Message } from "../domain/agent-types.js"
+import type { Message } from "../domain/models/agent-types.js"
 
 const requireCJS = createRequire(import.meta.url)
 

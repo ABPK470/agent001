@@ -9,7 +9,7 @@
  */
 import { describe, expect, it } from "vitest"
 
-import { detectInventedColumns, validateQueryDetailed } from "../src/tools/mssql/validation.js"
+import { detectInventedColumns, validateQueryDetailed } from "../src/tools/database/mssql/validation.js"
 
 // ── fake catalog ────────────────────────────────────────────────
 type Col = { name: string; dataType?: string }

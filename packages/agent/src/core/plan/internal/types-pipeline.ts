@@ -1,10 +1,10 @@
-import { PipelineBlockCode, PipelineStatus } from "../../domain/enums/planner.js"
+import { PipelineBlockCode, PipelineStatus } from "../../../domain/enums/planner.js"
 export { PipelineBlockCode, PipelineStatus }
 // ============================================================================
 // Pipeline execution types (extracted from types.ts)
 // ============================================================================
-import type { ToolCallRecord } from "../../../../tools/index.js"
-import type { DelegationOutputValidationCode } from "../../../shell/delegation.js"
+import type { ToolCallRecord } from "../../../tools/index.js"
+import type { DelegationOutputValidationCode } from "../../../runtime/delegate.js"
 
 export type PipelineStepStatus = "pending" | "running" | "completed" | "failed" | "skipped"
 

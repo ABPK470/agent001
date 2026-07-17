@@ -19,14 +19,15 @@ sync subsystem implementation anymore.
 
 The package follows one doctrine:
 
-> Shell owns state; core is stateless; dependencies are always parameters.
+> Runtime owns state; core is stateless; dependencies are always parameters.
 
 In practice that means:
 
-- no ambient runtime lookups
+- no ambient runtime lookups (except documented `domain/tenant` getters)
 - no exported module-level `setXxx(...)` mutators for boot wiring
 - no new `AsyncLocalStorage` for passing hidden dependencies
-- long-lived state belongs on `AgentHost` or on explicit shell objects
+- long-lived state belongs on `AgentHost` or on explicit runtime objects
+- the run story lives in `runtime/run-a-goal/run-goal.ts`
 
 ## Boot shape
 
@@ -65,25 +66,22 @@ The system-level split is now:
 
 ## Main clusters in `src/`
 
-### `application/shell/`
+### `runtime/`
 
-Own the think → act → observe loop. These modules orchestrate one run and call
-the tool layer, planner, and governance helpers.
+Stateful drivers: host, run context, `run-a-goal` loop, delegation drivers.
 
-### `memory/`
+### `core/`
 
-Token budgeting, truncation, and compaction. This is where long transcripts are
-made small enough for the model.
-
-### `application/core/`
-
-Structured execution pipeline for complex goals: generate, parse, validate,
-execute, verify, and repair.
+Pure decisions: plan, choose-path, clarify, doctrine, govern-tools, recover,
+delegate-decision.
 
 ### `domain/`
 
-Run policy, audit/event semantics, quality checks, and the core domain types
-used across the execution loop.
+Enums, models, domain services (policy/audit/learner), and tenant config.
+
+### `memory/`
+
+Token budgeting, truncation, and compaction.
 
 ### `ports/`
 
@@ -129,10 +127,10 @@ If you are new to the package, read in this order:
 
 1. `docs/doctrine.md`
 2. `src/index.ts`
-3. `src/application/shell/agent.ts` and `src/application/shell/agent-cluster/`
-4. `src/application/shell/loop.ts` and `src/application/shell/loop-cluster/`
+3. `src/runtime/agent.ts` and `src/runtime/run-a-goal/`
+4. `src/runtime/loop.ts` and `src/runtime/loop/`
 5. `src/types.ts`
-6. `src/application/core/planner.ts` and `src/application/core/recovery.ts`
+6. `src/core/plan.ts` and `src/core/recover.ts`
 
 That path gives the shortest route from the public entry point to the execution
 core.

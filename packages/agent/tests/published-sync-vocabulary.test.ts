@@ -4,7 +4,7 @@ import {
   getPublishedSyncEntityIds,
   loadPublishedSyncEntityIdsFromBundle,
   resetPublishedSyncEntityIds
-} from "../src/application/shell/published-sync-vocabulary.js"
+} from "../src/domain/tenant/published-sync-vocabulary.js"
 
 afterEach(() => resetPublishedSyncEntityIds())
 

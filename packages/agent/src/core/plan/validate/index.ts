@@ -1,4 +1,4 @@
-import { DiagnosticSeverity } from "../../domain/index.js"
+import { DiagnosticSeverity } from "../../../domain/index.js"
 /**
  * Plan validation — multi-pass structural and semantic checks on a generated plan.
  *

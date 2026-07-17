@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { TableVerdictsReader } from "../../application/shell/runtime.js"
+import type { TableVerdictsReader } from "../../runtime/runtime.js"
 import type { CatalogGraph } from "../catalog/index.js"
 import { fmtSysEntry, fmtTable } from "./formatters.js"
 

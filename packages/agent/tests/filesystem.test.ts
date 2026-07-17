@@ -9,9 +9,9 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import { configureAgent } from "../src/index.js"
-import { normalizeToolExecutionOutput } from "../src/tools/_helpers/index.js"
+import { normalizeToolExecutionOutput } from "../src/tools/_shared/index.js"
 import { createReadFileTool, createReplaceInFileTool, createWriteFileTool } from "../src/tools/index.js"
-import type { Tool } from "../src/domain/agent-types.js"
+import type { Tool } from "../src/domain/models/agent-types.js"
 
 let tempDir: string
 let writeFileTool!: Tool

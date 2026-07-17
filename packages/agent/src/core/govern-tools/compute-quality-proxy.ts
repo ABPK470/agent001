@@ -1,4 +1,4 @@
-import { VerifierOutcome } from "../../../domain/index.js"
+import { VerifierOutcome } from "../../domain/index.js"
 /**
  * Quality proxy computation — numeric estimate of execution quality.
  *

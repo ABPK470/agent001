@@ -5,7 +5,7 @@
  * @module
  */
 
-import { DelegationOutputValidationCode } from "../../../../domain/enums/delegation.js"
+import { DelegationOutputValidationCode } from "../../../domain/enums/delegation.js"
 import {
   classifyTaskIntent,
   COMPLETION_CLAIM_RE,

@@ -1,5 +1,5 @@
-import { TaskIntent } from "../../../../domain/enums/delegation.js"
-import { StepRole } from "../../../../domain/index.js"
+import { TaskIntent } from "../../../domain/enums/delegation.js"
+import { StepRole } from "../../../domain/index.js"
 /**
  * Delegation validation patterns — evidence helpers and spec requirement
  * classifiers. Pattern constants are in
@@ -8,7 +8,7 @@ import { StepRole } from "../../../../domain/index.js"
  * @module
  */
 
-import type { ToolCallRecord } from "../../../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/index.js"
 import type { DelegationContractSpec } from "../validation/index.js"
 import {
   DOCUMENTATION_TASK_RE,

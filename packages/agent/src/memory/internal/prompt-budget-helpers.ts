@@ -6,7 +6,7 @@
  */
 
 import { MessageRole } from "../../domain/enums/message.js"
-import type { Message, PromptBudgetSection } from "../../domain/agent-types.js"
+import type { Message, PromptBudgetSection } from "../../domain/models/agent-types.js"
 import { SECTION_ORDER, type PromptBudgetCaps } from "../prompt-budget-types.js"
 
 // ── Working entry ─────────────────────────────────────────────────

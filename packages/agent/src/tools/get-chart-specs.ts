@@ -13,8 +13,8 @@
  * renderer-compatible payload.
  */
 
-import { CHART_CATALOGUE_SECTION, renderPromptVars } from "../application/shell/loop.js"
-import type { Tool, ToolMetadata } from "../domain/agent-types.js"
+import { CHART_CATALOGUE_SECTION, renderPromptVars } from "../runtime/loop.js"
+import type { Tool, ToolMetadata } from "../domain/models/agent-types.js"
 
 export const getChartSpecsToolMetadata: ToolMetadata = {
   name: "get_chart_specs",

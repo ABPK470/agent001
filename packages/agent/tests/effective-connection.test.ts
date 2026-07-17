@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest"
-import type { AgentHost } from "../src/application/shell/runtime.js"
+import type { AgentHost } from "../src/runtime/runtime.js"
 import { CatalogGraph } from "../src/tools/catalog/graph/index.js"
 import { resolveEffectiveMssqlConnection } from "../src/tools/catalog/effective-connection.js"
 

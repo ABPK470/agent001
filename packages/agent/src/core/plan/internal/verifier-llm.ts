@@ -1,4 +1,4 @@
-import { DelegationSpanEventKind, VerifierOutcome } from "../../domain/index.js"
+import { DelegationSpanEventKind, VerifierOutcome } from "../../../domain/index.js"
 /**
  * Verifier code structure analysis — deterministic import/declaration
  * extraction and LLM verification wrapper.
@@ -8,7 +8,7 @@ import { DelegationSpanEventKind, VerifierOutcome } from "../../domain/index.js"
  * @module
  */
 
-import { MessageRole } from "../../domain/enums/message.js"
+import { MessageRole } from "../../../domain/enums/message.js"
 import type { LLMClient, Message, Tool } from "../../types.js"
 import type {
   PipelineResult,

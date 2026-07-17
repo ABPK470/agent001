@@ -5,10 +5,10 @@
  * @module
  */
 
-import { MessageRole } from "../../../domain/enums/message.js"
-import * as log from "../../../internal/index.js"
-import type { ToolCallRecord } from "../../../tools/index.js"
-import type { Message, Tool } from "../../../domain/agent-types.js"
+import { MessageRole } from "../../domain/enums/message.js"
+import * as log from "../../internal/index.js"
+import type { ToolCallRecord } from "../../tools/index.js"
+import type { Message, Tool } from "../../domain/models/agent-types.js"
 import type { AgentLoopState } from "../loop.js"
 import { executeToolRound, processPostRound, type PostRoundContext, type ToolExecContext } from "../loop.js"
 

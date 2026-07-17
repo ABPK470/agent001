@@ -1,8 +1,8 @@
 /**
  * Tool-helpers cluster — public API.
  *
- * Outside this folder, import from `./tools/_helpers/index.js` only.
- * Files inside `tools/_helpers/` are private implementation details.
+ * Outside this folder, import from `./tools/_shared/index.js` only.
+ * Files inside `tools/_shared/` are private implementation details.
  */
 
 export * from "./progress.js"

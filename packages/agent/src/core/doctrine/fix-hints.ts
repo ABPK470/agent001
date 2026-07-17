@@ -1,7 +1,7 @@
 // Doctrine fixHint registry — code → canonical refactor advice.
 //
 // This module has NO imports on purpose: both the validator
-// (packages/agent/src/tools/mssql/validation.ts) and the doctrine
+// (packages/agent/src/tools/database/mssql/validation.ts) and the doctrine
 // modules import from here, so any dependency would create a cycle.
 //
 // Each entry is one paragraph, doctrine-owned, and shown verbatim to

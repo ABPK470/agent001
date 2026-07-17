@@ -19,10 +19,10 @@ import {
   DOCTRINE_FIX_HINTS,
   DOCTRINE_LESSON_TEMPLATES,
   getDoctrineLessonTemplate
-} from "../src/application/core/doctrine-cluster/fix-hints.js"
-import { configureAgent, makeRunContext, type RunMemoryWriter } from "../src/application/shell/runtime.js"
-import { createMssqlTool } from "../src/tools/mssql/tools.js"
-import { validateQueryDetailed } from "../src/tools/mssql/validation.js"
+} from "../src/core/doctrine/fix-hints.js"
+import { configureAgent, makeRunContext, type RunMemoryWriter } from "../src/runtime/runtime.js"
+import { createMssqlTool } from "../src/tools/database/mssql/tools.js"
+import { validateQueryDetailed } from "../src/tools/database/mssql/validation.js"
 
 const mssqlTool = createMssqlTool(configureAgent({}))
 
@@ -30,7 +30,7 @@ function makeFixtureWithPool(memory: RunMemoryWriter | null = null): {
   tool: ReturnType<typeof createMssqlTool>
   run: ReturnType<typeof makeRunContext>
 } {
-  const databases = new Map<string, import("../src/application/shell/runtime.js").MssqlEntry>()
+  const databases = new Map<string, import("../src/runtime/runtime.js").MssqlEntry>()
   const host = configureAgent({ mssqlDatabases: databases })
   databases.set("default", {
     config: { server: "stub", database: "stub", user: "u", password: "p" } as never,

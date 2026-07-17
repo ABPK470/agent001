@@ -1,4 +1,4 @@
-import { ToolOutcomeSeverity } from "../../../../domain/index.js"
+import { ToolOutcomeSeverity } from "../../../domain/index.js"
 /**
  * Artifact-tracking helpers used by `executeToolRound` to record
  * mutation outcomes, count repeat failures, route replace_in_file
@@ -8,7 +8,7 @@ import { ToolOutcomeSeverity } from "../../../../domain/index.js"
  * @module
  */
 
-import { executeToolWithTimeout } from "../../../../tools/index.js"
+import { executeToolWithTimeout } from "../../../tools/index.js"
 import type { AgentLoopState } from "../state.js"
 import { normalizeArtifactPath } from "./types.js"
 

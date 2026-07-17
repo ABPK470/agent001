@@ -1,53 +1,59 @@
 # `@mia/agent`
 
-The agent runtime — the thing that drives an LLM through plan / act /
-verify loops with tool use, memory, and recovery.
+The agent runtime — drives an LLM through plan / act / verify loops with tool
+use, memory, and recovery.
 
 ## Public surface
 
 The package barrel is [`src/index.ts`](src/index.ts). **Outside this package,
 import only from `@mia/agent`** — never reach into
-`packages/agent/src/<cluster>/<file>.js` directly.
+`packages/agent/src/<folder>/<file>.js` directly.
 
 Headline exports:
 
-- `configureAgent()` / `makeRunContext()` — explicit host and per-run
-  wiring for tools, ports, and run-scoped state.
-- `Agent` — a single run. Wraps the loop and planner routing.
-- Constants and shared runtime types from `domain/agent-constants.ts` and
-  `src/types.ts`.
-- Cluster barrels for the proposal-aligned `application/`, `domain/`, `tools/`,
-  `memory/`, `llm/`, and `internal/` surfaces.
-- Sync features are owned by `@mia/sync`; import them from that package,
-  not from `@mia/agent`.
+- `configureAgent()` / `makeRunContext()` — host and per-run wiring
+- `Agent` — one run (see `runtime/run-a-goal`)
+- Domain types, enums, and constants
+- Tool factories (`create*Tool`) — the **server** chooses which tools to bind
+- Sync features are owned by `@mia/sync`; import them from that package
+
+How to read the tree: [`src/README.md`](src/README.md).
 
 ## Layout
 
-| Folder               | Purpose                                                                             |
-| -------------------- | ----------------------------------------------------------------------------------- |
-| `application/core/`  | Stateless planner, doctrine, clarify, and recovery logic.                           |
-| `application/shell/` | Stateful loop and runtime wiring, including `Agent` and `configureAgent()`.         |
-| `domain/`            | Domain model: enums, policy, models, learner. Cluster barrel via `domain/index.ts`. |
-| `ports/`             | Contracts for host/runtime dependencies exposed by the agent package.               |
-| `tools/`             | Concrete tool implementations.                                                      |
-| `memory/`            | Context compaction, budgeting, and transcript state.                                |
-| `llm/`               | Model adapters implementing the `LLMClient` contract.                               |
-| `internal/`          | Package-private utilities.                                                          |
+| Folder | Purpose |
+| ------ | ------- |
+| `domain/` | Enums, models, domain services (policy, audit, learner) |
+| `ports/` | Contracts for host / store / client dependencies |
+| `core/` | Pure decisions: plan, choose-path, clarify, doctrine, govern-tools, recover |
+| `runtime/` | Stateful drivers: host, run context, run-a-goal loop, delegate |
+| `tools/` | Concrete tool implementations (factories) |
+| `memory/` | Context compaction and prompt budgeting |
+| `llm/` | Model adapters (`LLMClient`) |
+| `internal/` | Package-private utilities |
+
+## Doctrine
+
+> **Runtime owns state. Core is stateless. Dependencies are always parameters.**
+
+This is functional-core / imperative-shell: the brain (`core/`) decides; the
+hands (`runtime/`) drive the loop and hold mutable state.
 
 ## Tenant config
 
-Per–mia-install JSON (`MIA_TENANT_CONFIG` → `tenant.json`): mirror schema, routing
-keywords, SQL validator thresholds. Separate from `mymi-knowledge.md` (LLM prose).
-Copy [`config/tenant.example.json`](config/tenant.example.json) like `.env.example`.
-See [`config/TENANT-CONFIG.md`](config/TENANT-CONFIG.md). Shipped MyMI file:
+Per–mia-install JSON (`MIA_TENANT_CONFIG` → `tenant.json`): mirror schema,
+routing keywords, SQL validator thresholds. Separate from `mymi-knowledge.md`
+(LLM prose). Copy [`config/tenant.example.json`](config/tenant.example.json).
+See [`config/TENANT-CONFIG.md`](config/TENANT-CONFIG.md). Shipped file:
 [`../../deploy/tenant.json`](../../deploy/tenant.json).
 
 ## Where things go
 
-- **A new enum that crosses the wire** → `@mia/shared-enums`, then
-  re-export in the appropriate `domain/enums/<domain>.ts`.
-- **A new tool** → `tools/<name>.ts`, register through the tool registry.
-- **Reusable helper for tools** → `tool-helpers/`.
-- **A pure function with no domain meaning** → `internal/`.
-- **Anything callers outside the package need** → must be re-exported
-  through `src/index.ts`.
+- **A new enum that crosses the wire** → `@mia/shared-enums`, then re-export in
+  `domain/enums/`.
+- **A new tool** → `tools/<name>/`, export via `tools/index.ts`; register in
+  `@mia/server`.
+- **Reusable helper for tools** → `tools/_shared/`.
+- **A pure decision with no I/O** → `core/`.
+- **A stateful coordinator** → `runtime/`.
+- **Anything callers outside the package need** → re-export through `src/index.ts`.

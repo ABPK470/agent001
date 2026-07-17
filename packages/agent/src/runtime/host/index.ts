@@ -53,4 +53,4 @@ export type {
   ToolKnowledgeSaveArgs,
   ToolKnowledgeStore,
   UserInputReader
-} from "../../../ports/ports.js"
+} from "../../ports/ports.js"

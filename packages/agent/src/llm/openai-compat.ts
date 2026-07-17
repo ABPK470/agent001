@@ -9,7 +9,7 @@
  * Works with any OpenAI-compatible API (OpenAI, Azure, local vLLM, etc.)
  */
 
-import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../domain/agent-types.js"
+import type { LLMClient, LLMResponse, Message, Tool, ToolCall } from "../domain/models/agent-types.js"
 import { MessageRole } from "../domain/enums/message.js"
 
 function safeParseArgs(raw: string): Record<string, unknown> {
@@ -195,7 +195,7 @@ export class OpenAICompatibleClient implements LLMClient {
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
       res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${this.apiKey}` },
+        headers: { "Content-Type": "json", Authorization: `Bearer ${this.apiKey}` },
         body: JSON.stringify(body),
         signal: opts?.signal
       })
@@ -248,7 +248,7 @@ export class OpenAICompatibleClient implements LLMClient {
       res = await fetch(`${this.baseUrl}/v1/chat/completions`, {
         method: "POST",
         headers: {
-          "Content-Type": "application/json",
+          "Content-Type": "json",
           Authorization: `Bearer ${this.apiKey}`
         },
         body: JSON.stringify(body),

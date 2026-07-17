@@ -2,8 +2,8 @@
  * Completion policy — rules applied when the model returns zero tool calls.
  */
 
-import type { AgentConfig, Message } from "../../../../domain/agent-types.js"
-import { MessageRole } from "../../../../domain/enums/message.js"
+import type { AgentConfig, Message } from "../../../domain/models/agent-types.js"
+import { MessageRole } from "../../../domain/enums/message.js"
 import { isDirectDialogueGoal } from "../../../core/goal-intent.js"
 import { checkAnswerStability } from "./answer-stability.js"
 import type { CompletionBlock, CompletionRule, CompletionRuleAsync, LoopPolicyContext } from "./types.js"

@@ -17,7 +17,7 @@
 //
 // Pure function of (goal, catalog, tenant). No I/O, no LLM.
 
-import { MessageRole } from "../../../../domain/enums/message.js"
+import { MessageRole } from "../../../domain/enums/message.js"
 import type { ClarifyContext, Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
 import { resolveGoalDataAnchors } from "../goal-data-anchors.js"

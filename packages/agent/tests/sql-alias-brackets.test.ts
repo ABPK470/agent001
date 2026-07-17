@@ -4,7 +4,7 @@ import {
   normalizeMssqlAliasBrackets,
   prepareMssqlQueryAliases,
   validateAliasBracketConvention
-} from "../src/tools/mssql/sql-alias-brackets.js"
+} from "../src/tools/database/mssql/sql-alias-brackets.js"
 
 describe("normalizeMssqlAliasBrackets", () => {
   it("rewrites dim.Officer off → AS [off] and brackets column refs", () => {

@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { Message, PromptBudgetSection } from "../domain/agent-types.js"
+import type { Message, PromptBudgetSection } from "../domain/models/agent-types.js"
 
 // ============================================================================
 // Types

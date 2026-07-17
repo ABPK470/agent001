@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest"
 import { applyPromptBudget, derivePromptBudgetPlan } from "../src/memory/index.js"
-import type { Message } from "../src/domain/agent-types.js"
+import type { Message } from "../src/domain/models/agent-types.js"
 
 describe("derivePromptBudgetPlan smoke", () => {
   it("derives a stable cap layout for the default config", () => {

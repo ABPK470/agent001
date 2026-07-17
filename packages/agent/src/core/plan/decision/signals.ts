@@ -4,7 +4,7 @@
  * @module
  */
 
-import { MessageRole } from "../../domain/enums/message.js"
+import { MessageRole } from "../../../domain/enums/message.js"
 import type { Message } from "../../types.js"
 import {
   COORDINATION_HEAVY_RE,

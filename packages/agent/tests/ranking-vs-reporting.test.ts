@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from "vitest"
 
-import { detectRankingVsReportingMismatch, getQueryWarnings } from "../src/tools/mssql/validation.js"
+import { detectRankingVsReportingMismatch, getQueryWarnings } from "../src/tools/database/mssql/validation.js"
 
 describe("detectRankingVsReportingMismatch", () => {
   it("fires when a #temp + publish.Revenue are aggregated together", () => {

@@ -4,7 +4,7 @@
  * @module
  */
 
-import { DiagnosticSeverity, PlannerTraceKind } from "../../domain/index.js"
+import { DiagnosticSeverity, PlannerTraceKind } from "../../../domain/index.js"
 import { generatePlan } from "../generate/index.js"
 import { injectBlueprintStep, strengthenExistingBlueprintSteps } from "../internal/index-blueprint.js"
 import {

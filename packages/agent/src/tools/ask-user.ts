@@ -9,8 +9,8 @@
  * injected by the orchestrator at runtime. The tool itself is a thin shell.
  */
 
-import type { AgentHost } from "../application/shell/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../domain/agent-types.js"
+import type { AgentHost } from "../runtime/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../domain/models/agent-types.js"
 
 /**
  * Resolver function injected by the orchestrator.

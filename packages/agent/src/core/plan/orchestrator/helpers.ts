@@ -2,13 +2,13 @@ import {
   PipelineStatus,
   PlannerTraceKind,
   VerifierOutcome
-} from "../../domain/index.js"
+} from "../../../domain/index.js"
 /**
  * Private helpers for the planner orchestrator.
  * @module
  */
 
-import type { DelegationTrajectoryRecord } from "../../../shell/delegation.js"
+import type { DelegationTrajectoryRecord } from "../../../runtime/delegate.js"
 import { detectPlatformUnconfigured } from "../platform-errors.js"
 import { synthesizeAnswer } from "../synthesize.js"
 import type { PipelineResult, Plan, VerifierDecision } from "../types.js"

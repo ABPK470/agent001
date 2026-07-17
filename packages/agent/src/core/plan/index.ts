@@ -15,7 +15,8 @@ export {
   recordSuccess
 } from "./circuit-breaker.js"
 export type { BudgetState } from "./circuit-breaker.js"
-export { assessPlannerDecision } from "./decision/index.js"
+
+export { assessPlannerDecision } from "./decision/assess.js"
 export { generatePlan } from "./generate/index.js"
 export type { PlanGenerationContext, PlanGenerationResult } from "./generate/index.js"
 export { inferForcedOutputDirectoryFromGoal } from "./normalize/index.js"

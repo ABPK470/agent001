@@ -15,8 +15,8 @@
 // Pure of catalogue I/O — takes an LLMClient by dependency injection
 // so unit tests can pass a fake client without spinning up a real model.
 
-import { MessageRole } from "../../../domain/enums/message.js"
-import type { LLMClient, Message } from "../../../domain/agent-types.js"
+import { MessageRole } from "../../domain/enums/message.js"
+import type { LLMClient, Message } from "../../domain/models/agent-types.js"
 import type { AmbiguityFinding, AmbiguityKind, AmbiguitySeverity, ClarifyContext } from "./types.js"
 import { makeFindingId } from "./types.js"
 

@@ -8,9 +8,9 @@
  * @module
  */
 
-import { SHELL_BUILTIN_COMMANDS } from "../../../../domain/agent-constants.js"
-import type { ToolCallRecord } from "../../../../tools/index.js"
-import { extractToolFailureText, parseToolResultObject } from "../../../../tools/index.js"
+import { SHELL_BUILTIN_COMMANDS } from "../../../domain/models/agent-constants.js"
+import type { ToolCallRecord } from "../../../tools/index.js"
+import { extractToolFailureText, parseToolResultObject } from "../../../tools/index.js"
 import { tryNpmHint, tryTestRunnerHint, type AdvancedHintContext } from "./build-advanced.js"
 import {
   commandBasename,

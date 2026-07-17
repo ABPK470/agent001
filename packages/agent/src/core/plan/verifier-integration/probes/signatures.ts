@@ -1,4 +1,4 @@
-import { VerifierOutcome } from "../../../domain/index.js"
+import { VerifierOutcome } from "../../../../domain/index.js"
 /**
  * Cross-file function signature probe — detects parameter count mismatches
  * between function definitions and call sites across plan artifacts.

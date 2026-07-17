@@ -9,7 +9,7 @@
  */
 
 import { MessageRole } from "../../domain/enums/message.js"
-import type { Message } from "../../domain/agent-types.js"
+import type { Message } from "../../domain/models/agent-types.js"
 import type { ArtifactCompactionState, CompactedFileRecord } from "../context-compaction/index.js"
 
 /** Look up the file-path argument under any of the common arg key names. */

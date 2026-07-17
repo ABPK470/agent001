@@ -6,8 +6,8 @@
  * `host.connectors.port.value` port.
  */
 
-import type { AgentHost } from "../../application/shell/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
+import type { AgentHost } from "../../runtime/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/models/agent-types.js"
 import type { ConnectorInfo } from "@mia/shared-types"
 
 function buildListAdaptersTool(host: AgentHost): ExecutableTool {

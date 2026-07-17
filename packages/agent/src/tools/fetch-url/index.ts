@@ -13,8 +13,8 @@
  */
 
 import { lookup } from "node:dns/promises"
-import type { RunContext } from "../../application/shell/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
+import type { RunContext } from "../../runtime/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/models/agent-types.js"
 import { checkHostname, checkResolvedIp } from "./helpers.js"
 
 /** Max response body size (1 MB). */
@@ -93,7 +93,7 @@ async function executeFetchUrl(args: Record<string, unknown>, run?: RunContext):
         headers: {
           "User-Agent":
             "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-          Accept: "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+          Accept: "text/html,xhtml+xml,xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
           "Accept-Language": "en-US,en;q=0.9",
           "Accept-Encoding": "gzip, deflate, br",
           "Sec-Fetch-Dest": "document",

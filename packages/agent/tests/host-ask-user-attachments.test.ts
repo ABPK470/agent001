@@ -18,8 +18,8 @@ import type {
   AttachmentMetadata,
   AttachmentStore,
   UserInputReader
-} from "../src/application/shell/runtime.js"
-import { configureAgent } from "../src/application/shell/runtime.js"
+} from "../src/runtime/runtime.js"
+import { configureAgent } from "../src/runtime/runtime.js"
 import { createAskUserTool } from "../src/tools/ask-user.js"
 import {
   createImportAttachmentTool,

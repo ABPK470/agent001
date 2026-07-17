@@ -8,7 +8,7 @@
  * @module
  */
 
-import { DelegationOutputValidationCode } from "../../../../domain/enums/delegation.js"
+import { DelegationOutputValidationCode } from "../../../domain/enums/delegation.js"
 import {
   isFileMutationToolCall,
   isWorkspaceInspectionToolCall,

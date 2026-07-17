@@ -1,11 +1,7 @@
-# shell
+# Runtime
 
-Classlike or stateful shell for agent application flow.
+**What:** Stateful drivers — host, run context, the run-a-goal loop, delegation.  
+**Why:** Someone must own mutable state and I/O; that is this folder.  
+**Next:** Open `run-a-goal/` for the story of one run.
 
-This folder is the target home for:
-
-- loop drivers
-- stateful runtime coordinators
-- delegation/runtime drivers
-
-Pure decision logic should stay in `application/core/`.
+Rule: runtime owns state; core is called with parameters.

@@ -13,7 +13,7 @@
  * policy engine / host-side bridges explicitly. No globals are mutated.
  */
 
-import { PolicyDbEnvironment, PolicyRole, PolicyRunMode } from "./enums/policy.js"
+import { PolicyDbEnvironment, PolicyRole, PolicyRunMode } from "../enums/policy.js"
 
 export interface HostedPolicyContext {
   /** Run identity (for audit cross-referencing). */

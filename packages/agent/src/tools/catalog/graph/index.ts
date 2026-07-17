@@ -1,4 +1,4 @@
-import type { TableVerdictsReader } from "../../../application/shell/runtime.js"
+import type { TableVerdictsReader } from "../../../runtime/runtime.js"
 import { tokenize } from "../helpers.js"
 import { findFkPath } from "../paths.js"
 import { searchCatalog } from "../search.js"
@@ -96,7 +96,7 @@ export class CatalogGraph {
   // ── Build ─────────────────────────────────────────────────────
 
   static async build(
-    host: import("../../../application/shell/runtime.js").AgentHost,
+    host: import("../../../runtime/runtime.js").AgentHost,
     connection?: string
   ): Promise<CatalogGraph> {
     const r = await loadCatalogFromDb(host, connection)

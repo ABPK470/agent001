@@ -6,7 +6,7 @@ import { StepRole } from "../../domain/index.js"
  * @module
  */
 
-import type { ExecutionEnvelope, SubagentTaskStep } from "../../application/core/planner.js"
+import type { ExecutionEnvelope, SubagentTaskStep } from "../../core/plan.js"
 
 export function buildPlanChildGoal(step: SubagentTaskStep, normalizedEnvelope: ExecutionEnvelope): string {
   const goalParts: string[] = [

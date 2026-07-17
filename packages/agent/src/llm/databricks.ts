@@ -7,7 +7,7 @@
  * or M2M OAuth — see server databricks-broker for token acquisition.
  */
 
-import type { LLMClient, LLMResponse, Message, Tool } from "../domain/agent-types.js"
+import type { LLMClient, LLMResponse, Message, Tool } from "../domain/models/agent-types.js"
 import {
   consumeOpenAICompatibleSSE,
   formatOpenAICompatibleMessage,
@@ -73,7 +73,7 @@ export class DatabricksClient implements LLMClient {
     const res = await fetch(url, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "json",
         Authorization: `Bearer ${token}`,
         Accept: "text/event-stream"
       },
@@ -131,9 +131,9 @@ export class DatabricksClient implements LLMClient {
     const res = await fetch(url, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type": "json",
         Authorization: `Bearer ${token}`,
-        Accept: "application/json"
+        Accept: "json"
       },
       body: JSON.stringify(body),
       signal: opts?.signal

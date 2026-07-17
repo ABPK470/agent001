@@ -1,4 +1,4 @@
-import { DiagnosticCategory, DiagnosticSeverity } from "../../domain/index.js"
+import { DiagnosticCategory, DiagnosticSeverity } from "../../../domain/index.js"
 /**
  * Plan validation checks — path consistency, dependency wiring, visual completeness,
  * shared data contracts.

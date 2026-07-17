@@ -8,14 +8,14 @@
  */
 
 import sql from "mssql"
-import type { AgentHost } from "../../application/shell/runtime.js"
-import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/agent-types.js"
+import type { AgentHost } from "../../../runtime/runtime.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../../domain/models/agent-types.js"
 import {
   fingerprintForCatalogBuild,
   fingerprintForQname,
   persistToCache,
   tryServeFromCache
-} from "../_tool-cache.js"
+} from "../../_tool-cache.js"
 import { getPool, resolveToolConnectionArg } from "../mssql/index.js"
 import {
   bfs,

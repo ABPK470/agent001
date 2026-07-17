@@ -1,4 +1,4 @@
-import { VerifierOutcome } from "../../../domain/index.js"
+import { VerifierOutcome } from "../../../../domain/index.js"
 /**
  * Integration probe functions for cross-step artifact verification.
  *

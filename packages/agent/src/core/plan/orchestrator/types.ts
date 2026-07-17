@@ -30,7 +30,7 @@ export interface PlannerContext {
    * When provided, UCB1 arm selection adjusts the effective score threshold
    * for delegation decisions and records outcomes for online learning.
    */
-  readonly delegationBanditTuner?: import("../../../shell/delegation.js").DelegationBanditTuner
+  readonly delegationBanditTuner?: import("../../../runtime/delegate.js").DelegationBanditTuner
 }
 
 export interface PlannerResult {
@@ -53,5 +53,5 @@ export interface PlannerSetupContext {
   readonly plan: Plan
   readonly runtimeModel: PlannerRuntimeModel
   readonly decision: PlannerDecision
-  readonly banditTrajectory: import("../../../shell/delegation.js").DelegationTrajectoryRecord | undefined
+  readonly banditTrajectory: import("../../../runtime/delegate.js").DelegationTrajectoryRecord | undefined
 }

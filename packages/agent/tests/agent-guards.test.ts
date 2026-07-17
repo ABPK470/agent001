@@ -13,8 +13,8 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
  *   8. normal exit when no guards fire
  */
 import { describe, expect, it } from "vitest"
-import { Agent } from "../src/application/shell/agent.js"
-import type { LLMClient, LLMResponse, Tool } from "../src/domain/agent-types.js"
+import { Agent } from "../src/runtime/agent.js"
+import type { LLMClient, LLMResponse, Tool } from "../src/domain/models/agent-types.js"
 
 // ── Test helpers ─────────────────────────────────────────────────
 

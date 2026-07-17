@@ -1,4 +1,4 @@
-import { getTenantConfig } from "../../application/shell/tenant-config.js"
+import { getTenantConfig } from "../../domain/tenant/tenant-config.js"
 import type { CatalogGraph, CatalogTable } from "../catalog/index.js"
 import { fmtPath, fmtRow } from "./formatters.js"
 

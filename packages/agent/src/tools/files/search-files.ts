@@ -12,8 +12,8 @@
 
 import { readdir, readFile, stat } from "node:fs/promises"
 import { basename, extname, resolve } from "node:path"
-import type { AgentHost } from "../application/shell/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../domain/agent-types.js"
+import type { AgentHost } from "../../runtime/runtime.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/models/agent-types.js"
 
 // ── Configuration ────────────────────────────────────────────────
 

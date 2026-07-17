@@ -1,4 +1,4 @@
-import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js"
+import { ToolControlDirective, ToolOutcomeSeverity } from "../../../domain/index.js"
 /**
  * write_file execution logic. Extracted from read-write.ts.
  *
@@ -7,9 +7,9 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "../../domain/index.js
 
 import { lstat, mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
-import { detectPlaceholderPatterns } from "../../application/core/governance.js"
-import type { AgentHost } from "../../application/shell/runtime.js"
-import type { ToolResultEnvelope } from "../../domain/agent-types.js"
+import { detectPlaceholderPatterns } from "../../../core/govern-tools.js"
+import type { AgentHost } from "../../../runtime/runtime.js"
+import type { ToolResultEnvelope } from "../../../domain/models/agent-types.js"
 import {
   checkWriteIntegrity,
   extractDefinedNames,

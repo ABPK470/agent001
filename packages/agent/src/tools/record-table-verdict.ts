@@ -16,7 +16,7 @@
  * `recordTableVerdict` from server memory.
  */
 
-import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../domain/agent-types.js"
+import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../domain/models/agent-types.js"
 import type { TableVerdictRoleType } from "../ports/index.js"
 
 export const TABLE_VERDICT_ROLES = ["canonical", "subset", "staging", "archive", "rules", "unknown"] as const
@@ -134,7 +134,7 @@ export function bindRecordTableVerdictTool(handler: RecordTableVerdictHandler): 
 
 // ── Host-bound factory (Phase 4 item 7 — API surface only) ───────
 
-import type { AgentHost } from "../application/shell/runtime.js"
+import type { AgentHost } from "../runtime/runtime.js"
 
 export function createRecordTableVerdictTool(_host: AgentHost): never {
   throw new Error(

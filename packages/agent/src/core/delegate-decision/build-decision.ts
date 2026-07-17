@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { HardBlockedTaskClassMatch } from "../check-decision-safety.js"
+import type { HardBlockedTaskClassMatch } from "./check-decision-safety.js"
 import type {
   DelegationDecision,
   DelegationDecisionReason,

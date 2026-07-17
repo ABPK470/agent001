@@ -17,7 +17,7 @@
  */
 
 import type { LLMClient, Message } from "../types.js"
-import { MessageRole } from "../domain/enums/message.js"
+import { MessageRole } from "../../domain/enums/message.js"
 
 export interface PolishFailureInput {
   /** Original user goal/request. */

@@ -1,11 +1,11 @@
 import { readFile as fsReadFile } from "node:fs/promises"
 import { resolve as pathResolve } from "node:path"
-import { detectPlaceholderPatterns } from "../../application/core/governance.js"
-import type { DelegateResult, ExecutionEnvelope, SubagentTaskStep } from "../../application/core/planner.js"
-import { Agent } from "../../application/shell/agent.js"
+import { detectPlaceholderPatterns } from "../../core/govern-tools.js"
+import type { DelegateResult, ExecutionEnvelope, SubagentTaskStep } from "../../core/plan.js"
+import { Agent } from "../../runtime/agent.js"
 import { LLMCallPhase } from "../../domain/enums/llm.js"
 import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"
-import type { Tool } from "../../domain/agent-types.js"
+import type { Tool } from "../../domain/models/agent-types.js"
 import {
   canonicalizeEnvelope,
   computePlannerChildBudgetMetrics,

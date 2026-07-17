@@ -1,42 +1,15 @@
 /**
  * Mutable state for the Agent's direct tool loop.
  *
- * @module
+ * Type lives in domain; factory lives here (runtime owns construction).
  */
 
-import { ToolFailureCircuitBreaker } from "../../core/recovery.js"
-import type { RoundStuckState, ToolLoopState, ToolRoundProgressSummary } from "../../../tools/index.js"
+import { ToolFailureCircuitBreaker } from "../../core/recover.js"
+import type { AgentLoopState as DomainAgentLoopState } from "../../domain/models/agent-loop-state.js"
+import type { AnswerSignature } from "./loop-policy/answer-stability.js"
 
-export interface AgentLoopState {
-  toolLoopState: ToolLoopState
-  roundStuckState: RoundStuckState
-  seenSuccessfulSemanticKeys: Set<string>
-  seenVerificationFailureDiagKeys: Set<string>
-  recentRoundSummaries: ToolRoundProgressSummary[]
-  emittedRecoveryHints: Set<string>
-  circuitBreaker: ToolFailureCircuitBreaker
-  lastRoundHadDelegation: boolean
-  lastDelegationWasReadOnly: boolean
-  wroteUnverifiedFiles: boolean
-  writeVerifyNudged: boolean
-  writtenButNotReread: Set<string>
-  artifactsRequiringReadBeforeMutation: Set<string>
-  fatalArtifactFailureCounts: Map<string, number>
-  blockedArtifactFailureCounts: Map<string, number>
-  writeReviewNudged: boolean
-  prematureHandoffNudges: number
-  inPostDelegationVerification: boolean
-  verificationFoundIssues: boolean
-  earlyExitNudged: boolean
-  budgetNudged: boolean
-  groundednessNudged: boolean
-  completionValidated: boolean
-  completionAttempted: boolean
-  lastFullCompactionIteration: number
-  absoluteIterationCap: number
-  recentTruncatedQueries: Array<{ fingerprint: string; query: string }>
-  cumulativeReadFileHistory: Map<string, number>
-  lastAnswerSignature?: import("./loop-policy/answer-stability.js").AnswerSignature
+export type AgentLoopState = DomainAgentLoopState & {
+  lastAnswerSignature?: AnswerSignature
 }
 
 const INITIAL_FULL_COMPACTION_OFFSET = -8

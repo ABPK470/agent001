@@ -5,7 +5,7 @@
  * @module
  */
 
-import type { CatalogAccessor } from "../catalog/index.js"
+import type { CatalogAccessor } from "../../catalog/index.js"
 import { verifiedTableKey } from "./schema-verified.js"
 
 function isTableVerified(refLower: string, verifiedTables: ReadonlySet<string>): boolean {

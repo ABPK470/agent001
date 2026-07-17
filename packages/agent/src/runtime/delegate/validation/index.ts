@@ -1,4 +1,4 @@
-import { StepRole } from "../../../../domain/index.js"
+import { StepRole } from "../../../domain/index.js"
 /**
  * Delegation output contract validation — structured evidence-based checks.
  *
@@ -16,7 +16,7 @@ import { StepRole } from "../../../../domain/index.js"
  * @module
  */
 
-import type { ToolCallRecord } from "../../../../tools/index.js"
+import type { ToolCallRecord } from "../../../tools/index.js"
 import {
   gateAcceptanceCriteria,
   gateContradictoryCompletion,
@@ -64,7 +64,7 @@ export {
   extractToolFailureText,
   parseToolResultObject,
   type ToolCallRecord
-} from "../../../../tools/index.js"
+} from "../../../tools/index.js"
 
 // ── Master validation orchestrator ───────────────────────────────
 
