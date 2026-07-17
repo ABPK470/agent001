@@ -5,6 +5,7 @@ import {
   reclaimSpace,
   rectToPixels,
   resolveDragLayout,
+  resolveOverlaps,
   ROW_PX,
   snapDragRect,
   type GridRect,
@@ -115,11 +116,13 @@ export function useGridInteraction({
         rows,
         rowPx,
       )
+      const locked = new Set([session.tileId])
       const resized = session.baseTiles.map((tile) =>
         tile.id === session.tileId ? { ...tile, ...next } : tile,
       )
+      const resolved = resolveOverlaps(resized, rows, locked)
       setCandidate(next)
-      setLayoutPreview(reclaimSpace(resized, rows, new Set([session.tileId])))
+      setLayoutPreview(reclaimSpace(resolved, rows, locked))
     }
 
     function onUp(event: PointerEvent) {

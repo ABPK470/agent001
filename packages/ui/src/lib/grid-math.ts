@@ -221,11 +221,23 @@ export function reclaimSpace(
 /**
  * Ensure no two visible tiles occupy the same cells. Later tiles in
  * reading order are nudged into the nearest free slot; if the canvas is
- * packed, the largest overlapping neighbor is split to make room.
+ * packed, the largest unlocked overlapping neighbor is split to make room.
+ *
+ * `lockedIds` are placed first and keep their geometry — used while the user
+ * is resizing/dragging so a west-edge expand is not undone by left-first bias.
  */
-export function resolveOverlaps(tiles: LayoutTile[], maxRows: number): LayoutTile[] {
+export function resolveOverlaps(
+  tiles: LayoutTile[],
+  maxRows: number,
+  lockedIds?: ReadonlySet<string>,
+): LayoutTile[] {
   const rows = Math.max(1, maxRows)
-  const sorted = [...tiles].sort((a, b) => a.y - b.y || a.x - b.x || a.id.localeCompare(b.id))
+  const sorted = [...tiles].sort((a, b) => {
+    const aLocked = lockedIds?.has(a.id) ? 0 : 1
+    const bLocked = lockedIds?.has(b.id) ? 0 : 1
+    if (aLocked !== bLocked) return aLocked - bLocked
+    return a.y - b.y || a.x - b.x || a.id.localeCompare(b.id)
+  })
   let placed: LayoutTile[] = []
 
   for (const tile of sorted) {
@@ -241,7 +253,9 @@ export function resolveOverlaps(tiles: LayoutTile[], maxRows: number): LayoutTil
       continue
     }
 
-    const target = [...placed].sort((a, b) => (b.w * b.h) - (a.w * a.h))[0]
+    const target = [...placed]
+      .filter((item) => !lockedIds?.has(item.id))
+      .sort((a, b) => (b.w * b.h) - (a.w * a.h))[0]
     if (!target) {
       placed.push(candidate)
       continue
@@ -298,6 +312,7 @@ export function normalizeTiles(
   tiles: LayoutTile[],
   defaultsByType: Record<WidgetType, WidgetSizeDefaults>,
   maxRows?: number,
+  lockedIds?: ReadonlySet<string>,
 ): LayoutTile[] {
   const clamped = tiles.map((tile) => {
     const cleared = clearLegacyMaximize(tile)
@@ -306,7 +321,7 @@ export function normalizeTiles(
     return clampTile(cleared, defaults, maxRows)
   })
   if (!maxRows || maxRows <= 0) return clamped
-  return resolveOverlaps(clamped, maxRows)
+  return resolveOverlaps(clamped, maxRows, lockedIds)
 }
 
 /** Find a free slot for `tile` that does not overlap `blockers`. */

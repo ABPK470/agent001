@@ -109,6 +109,32 @@ describe("smart drag swap", () => {
     expect(a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y).toBe(false)
   })
 
+  it("resolveOverlaps keeps a locked tile expanding westward into its neighbor", () => {
+    const tiles: LayoutTile[] = [
+      { id: "left", type: "term-chat", x: 0, y: 0, w: 6, h: 16, minW: 2, minH: 2 },
+      { id: "right", type: "run-history", x: 4, y: 0, w: 8, h: 16, minW: 2, minH: 2 },
+    ]
+    const next = resolveOverlaps(tiles, 16, new Set(["right"]))
+    const left = next.find((t) => t.id === "left")!
+    const right = next.find((t) => t.id === "right")!
+    expect(right).toMatchObject({ x: 4, w: 8 })
+    expect(left.x + left.w).toBe(right.x)
+    expect(left.w).toBe(4)
+  })
+
+  it("resolveOverlaps keeps a locked tile expanding eastward into its neighbor", () => {
+    const tiles: LayoutTile[] = [
+      { id: "left", type: "term-chat", x: 0, y: 0, w: 8, h: 16, minW: 2, minH: 2 },
+      { id: "right", type: "run-history", x: 6, y: 0, w: 6, h: 16, minW: 2, minH: 2 },
+    ]
+    const next = resolveOverlaps(tiles, 16, new Set(["left"]))
+    const left = next.find((t) => t.id === "left")!
+    const right = next.find((t) => t.id === "right")!
+    expect(left).toMatchObject({ x: 0, w: 8 })
+    expect(right.x).toBe(8)
+    expect(right.w).toBe(4)
+  })
+
   it("reclaimSpace expands remaining tiles after one is removed", () => {
     const remaining: LayoutTile[] = [
       { id: "a", type: "term-chat", x: 0, y: 0, w: 4, h: 8, minW: 2, minH: 2 },

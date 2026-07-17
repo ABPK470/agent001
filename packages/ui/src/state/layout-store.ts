@@ -176,6 +176,7 @@ export const useLayoutStore = create<LayoutState>()(
         return {
           views: s.views.map((view) => {
             if (view.id !== viewId) return view
+            const locked = new Set([tileId])
             const nextTiles = view.tiles.map((tile) => {
               if (tile.id !== tileId || tile.pinned) return tile
               return {
@@ -183,10 +184,13 @@ export const useLayoutStore = create<LayoutState>()(
                 ...clampRectToGrid(rect, s.viewportRows, tile.minW, tile.minH),
               }
             })
-            const reclaimed = reclaimSpace(nextTiles, s.viewportRows, new Set([tileId]))
+            // Resolve with the resized tile locked so a west/north expand is not
+            // undone by reading-order collision bias, then grow into any gap.
+            const resolved = normalizeTiles(nextTiles, WIDGET_DEFAULTS, s.viewportRows, locked)
+            const reclaimed = reclaimSpace(resolved, s.viewportRows, locked)
             return {
               ...view,
-              tiles: normalizeTiles(reclaimed, WIDGET_DEFAULTS, s.viewportRows),
+              tiles: normalizeTiles(reclaimed, WIDGET_DEFAULTS, s.viewportRows, locked),
             }
           }),
         }
@@ -195,11 +199,12 @@ export const useLayoutStore = create<LayoutState>()(
       updateTiles: (viewId, tiles, lockedTileId) => set((s) => {
         if (s.soloTileId) return s
         const locked = lockedTileId ? new Set([lockedTileId]) : undefined
-        const reclaimed = reclaimSpace(tiles, s.viewportRows, locked)
+        const resolved = normalizeTiles(tiles, WIDGET_DEFAULTS, s.viewportRows, locked)
+        const reclaimed = reclaimSpace(resolved, s.viewportRows, locked)
         return {
           views: s.views.map((view) =>
             view.id === viewId
-              ? { ...view, tiles: normalizeTiles(reclaimed, WIDGET_DEFAULTS, s.viewportRows) }
+              ? { ...view, tiles: normalizeTiles(reclaimed, WIDGET_DEFAULTS, s.viewportRows, locked) }
               : view,
           ),
         }
