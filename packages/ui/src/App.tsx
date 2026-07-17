@@ -125,8 +125,6 @@ export function App() {
   //   Shell     — authenticated; dashboard visible
   //   Outro     — logout in progress; mosaic covers inward, then logout
   //                  fires and we land back on Login (which plays intro)
-  //   Switching — navigating to ui-term; mosaic covers inward, then redirect
-  //   Reveal    — arrived from ui-term; mosaic dissolves outward over shell
   const [phase, setPhase] = useState<AppPhase>(AppPhase.Loading)
 
   // Decide phase from auth state.
@@ -137,24 +135,14 @@ export function App() {
     if (popOut) { setPhase(AppPhase.Shell); return }
     if (meLoading) return
     // Don't yank a running animation out from under the user just because
-    // `me` updated mid-flight. Outro/switching/reveal own their own exit.
-    if (phase === AppPhase.Outro || phase === AppPhase.Switching || phase === AppPhase.Reveal) return
+    // `me` updated mid-flight. Outro owns its own exit.
+    if (phase === AppPhase.Outro) return
     if (me) {
       // During phase=Login with me set, we're mid-intro — the WelcomeFlow
       // is playing its morph + dissolve over the now-rendered shell. Don't
       // flip to Shell here; let WelcomeFlow.onDone do it once the mosaic
       // has fully dissolved. Otherwise we'd unmount the animation halfway.
       if (phase === AppPhase.Login) return
-      // First paint after a cross-shell hop — honor the transition flag
-      // ui-term sets when it sends us here, so the mosaic dissolve plays.
-      if (phase === AppPhase.Loading) {
-        try {
-          if (window.localStorage.getItem("mia:ui-transition")) {
-            window.localStorage.removeItem("mia:ui-transition")
-            setPhase(AppPhase.Reveal); return
-          }
-        } catch { /* ignore */ }
-      }
       setPhase(AppPhase.Shell)
     } else {
       setPhase(AppPhase.Login)
@@ -170,11 +158,6 @@ export function App() {
     // when the animation hits its done frame, so the dashboard stays
     // visible underneath the dissolving mosaic the whole time.
     setPhase(AppPhase.Outro)
-  }, [])
-
-  // Switch to ui-term — play mosaic cover inward, then navigate.
-  const handleSwitchUi = useCallback(() => {
-    setPhase(AppPhase.Switching)
   }, [])
 
   useEffect(() => {
@@ -473,28 +456,6 @@ export function App() {
           setPhase(AppPhase.Login)
         }}
       />
-    ) : phase === AppPhase.Switching ? (
-      <WelcomeFlow
-        key="switching"
-        mode="outro"
-        onSubmit={async () => {}}
-        onDone={() => {
-          try { window.localStorage.setItem("mia:ui", "term") } catch { /* ignore */ }
-          try { window.localStorage.setItem("mia:ui-transition", "1") } catch { /* ignore */ }
-          const { protocol, hostname, port, pathname } = window.location
-          const url = port === "5179"
-            ? `${protocol}//${hostname}:5180${pathname}`
-            : `${protocol}//${hostname}${port ? ":" + port : ""}${pathname}?ui=term`
-          window.location.assign(url)
-        }}
-      />
-    ) : phase === AppPhase.Reveal ? (
-      <WelcomeFlow
-        key="reveal"
-        mode="reveal"
-        onSubmit={async () => {}}
-        onDone={() => setPhase(AppPhase.Shell)}
-      />
     ) : null
 
   // ── Phase-based rendering ──────────────────────────────────────
@@ -531,7 +492,6 @@ export function App() {
       me,
       onModeChange: transitionShellMode,
       onSignOut: handleSwitchUser,
-      onSwitchUi: handleSwitchUi,
       revealed: shellRevealing || phase === AppPhase.Shell,
       heroStage: (phase === AppPhase.Shell ? "copy" : chatHomeHeroStage) as "hidden" | "pill" | "copy",
       heroRevealProgress: phase === AppPhase.Shell ? 1 : chatHomeHeroRevealProgress,
@@ -675,7 +635,6 @@ export function App() {
         <Toolbar
           onAddWidget={() => canvasRef.current?.openCatalog()}
           onSignOut={handleSwitchUser}
-          onSwitchUi={handleSwitchUi}
           onModeChange={transitionShellMode}
           me={me}
         />

@@ -1,22 +1,18 @@
 /**
- * Top-level App lifecycle phase. Drives the boot/login/logout/inter-shell
- * transitions in `App.tsx`.
+ * Top-level App lifecycle phase. Drives the boot/login/logout transitions
+ * in `App.tsx`.
  *
- *   - Loading   — initial whoami fetch in flight; blank screen
- *   - Login     — not authenticated; <WelcomeFlow/> renders intro + form
- *   - Shell     — authenticated; dashboard visible
- *   - Outro     — logout in progress; mosaic covers inward, then logout
- *                 fires and we land back on Login (which plays intro)
- *   - Switching — navigating to ui-term; mosaic covers inward, then redirect
- *   - Reveal    — arrived from ui-term; mosaic dissolves outward over shell
+ *   - Loading — initial whoami fetch in flight; blank screen
+ *   - Login   — not authenticated; <WelcomeFlow/> renders intro + form
+ *   - Shell   — authenticated; dashboard visible
+ *   - Outro   — logout in progress; mosaic covers inward, then logout
+ *               fires and we land back on Login (which plays intro)
  */
 export const AppPhase = {
-  Loading:   "loading",
-  Login:     "login",
-  Shell:     "shell",
-  Outro:     "outro",
-  Switching: "switching",
-  Reveal:    "reveal",
+  Loading: "loading",
+  Login:   "login",
+  Shell:   "shell",
+  Outro:   "outro",
 } as const
 
 export type AppPhase = (typeof AppPhase)[keyof typeof AppPhase]

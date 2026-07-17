@@ -12,7 +12,6 @@ interface Props {
   me?: Me | null
   onModeChange: (mode: AppShellMode) => void
   onSignOut: () => void
-  onSwitchUi?: () => void
   revealed?: boolean
   heroStage?: "hidden" | "pill" | "copy"
   heroRevealProgress?: number
@@ -24,7 +23,6 @@ export function ChatHomePage({
   me,
   onModeChange,
   onSignOut,
-  onSwitchUi,
   revealed = true,
   heroStage,
   heroRevealProgress = 1,
@@ -51,7 +49,6 @@ export function ChatHomePage({
             me={me}
             onModeChange={onModeChange}
             onSignOut={onSignOut}
-            onSwitchUi={onSwitchUi}
           />
         </header>
 

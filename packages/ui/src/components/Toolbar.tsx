@@ -15,7 +15,6 @@ import { NotificationPanel } from "./NotificationPanel"
 interface Props {
   onAddWidget?: () => void
   onSignOut: () => void
-  onSwitchUi?: () => void
   onModeChange: (mode: AppShellMode) => void
   me?: Me | null
 }
@@ -23,7 +22,7 @@ interface Props {
 const ICON_BTN =
   "flex items-center justify-center w-9 h-9 rounded-lg text-text-muted hover:text-text hover:bg-overlay-hover transition-colors"
 
-export function Toolbar({ onAddWidget, onSignOut, onSwitchUi, onModeChange, me }: Props) {
+export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const connected = useStore((s) => s.connected)
   const views = useStore((s) => s.views)
   const activeViewId = useStore((s) => s.activeViewId)
@@ -201,7 +200,7 @@ export function Toolbar({ onAddWidget, onSignOut, onSwitchUi, onModeChange, me }
         >
           <MessageSquare size={15} />
         </button>
-        {me && <SessionMenu me={me} onSignOut={onSignOut} onSwitchUi={onSwitchUi} />}
+        {me && <SessionMenu me={me} onSignOut={onSignOut} />}
       </div>
     </header>
   )

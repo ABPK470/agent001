@@ -1,7 +1,6 @@
 /**
  * WelcomeIntro — wordmark decode → tile dissolve boot animation.
  *
- * Identical concept to packages/ui-term/src/components/WelcomeIntro.tsx.
  * Self-contained (hardcoded palette — no CSS-var dependency).
  *
  * Supports two modes:

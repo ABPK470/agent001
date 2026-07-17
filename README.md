@@ -21,7 +21,6 @@ packages/
 ├── shared-enums/  # Wire-format enums shared across agent / server / ui
 ├── shared-types/  # Wire-format DTOs shared across agent / server / ui
 ├── ui/            # React dashboard: chat, live trace, audit, policies, sync, usage
-└── ui-term/       # Terminal-style UI variant (same backend, two-pane TUI)
 ```
 
 One sentence per package:
@@ -30,7 +29,7 @@ One sentence per package:
 - **`@mia/server`** — the only place that knows about HTTP, SQLite, Docker, and config. It wires concrete adapters into the agent and exposes the REST + SSE API.
 - **`@mia/sync`** — an independent MSSQL data-reconciliation engine (SQL Server only). Depends on nothing from the agent.
 - **`@mia/shared-enums` / `@mia/shared-types`** — the contract layer every package agrees on.
-- **`@mia/ui` / `@mia/ui-term`** — two independent React single-page apps over the same API.
+- **`@mia/ui`** — React dashboard SPA over the REST + SSE API.
 
 See [ARCHITECTURE.md](ARCHITECTURE.md) for the full structural deep-dive into each package.
 
@@ -42,7 +41,7 @@ Prerequisites: **Node.js ≥ 20**, npm.
 git clone <repo-url> agent001 && cd agent001
 npm install
 npm run setup                 # creates/validates .env — skips prompts when already complete
-npm run dev                   # server :3102 · dashboard :5179 · terminal UI :5180
+npm run dev                   # server :3102 · dashboard :5179
 ```
 
 `better-sqlite3` is a native addon — after `git pull`, run `npm install` on each machine (do not copy `node_modules`). If bindings fail: `rm -rf node_modules && npm install`.
@@ -58,9 +57,7 @@ Open [http://localhost:5179](http://localhost:5179).
 | Script | What it runs |
 |---|---|
 | `npm run setup` | Validate `.env`; prompt only for missing required values (`--check`, `--force`) |
-| `npm run dev` | Server + dashboard + terminal UI together |
-| `npm run dev:classic` | Server + dashboard only |
-| `npm run dev:term` | Server + terminal UI only |
+| `npm run dev` | Server + dashboard |
 | `npm test` | All workspace test suites (Vitest) |
 | `npm run build` | Bundle server → `dist/server.js` + UI → `dist/ui/` |
 | `npm run package` | Build + assemble `release/` folder for hosted deploy |

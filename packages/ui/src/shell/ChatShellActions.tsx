@@ -7,11 +7,10 @@ import type { AppShellMode } from "./types"
 interface Props {
   onModeChange: (mode: AppShellMode) => void
   onSignOut: () => void
-  onSwitchUi?: () => void
   me?: Me | null
 }
 
-export function ChatShellActions({ onModeChange, onSignOut, onSwitchUi, me }: Props) {
+export function ChatShellActions({ onModeChange, onSignOut, me }: Props) {
   return (
     <div className="relative z-10 flex shrink-0 items-center gap-2">
       <ChatChromeButton
@@ -22,7 +21,7 @@ export function ChatShellActions({ onModeChange, onSignOut, onSwitchUi, me }: Pr
         <LayoutGrid size={17} />
       </ChatChromeButton>
       {me ? (
-        <SessionMenu me={me} onSignOut={onSignOut} onSwitchUi={onSwitchUi} chromeVariant="chat" />
+        <SessionMenu me={me} onSignOut={onSignOut} chromeVariant="chat" />
       ) : (
         <ChatChromeButton onClick={onSignOut} title="Sign out" aria-label="Sign out">
           <LogOut size={16} />

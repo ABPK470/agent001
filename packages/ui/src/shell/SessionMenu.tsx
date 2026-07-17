@@ -10,7 +10,6 @@ import {
   LogOut,
   Scale,
   Shield,
-  Terminal,
 } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { AboutModal } from "../components/AboutModal"
@@ -31,7 +30,6 @@ import { SessionThemeSwitch } from "./SessionThemeSwitch"
 interface Props {
   me: Me
   onSignOut: () => void
-  onSwitchUi?: () => void
   /** Chat shell: plain frosted control like workspace — no admin ASCII texture. */
   chromeVariant?: "default" | "chat"
 }
@@ -45,7 +43,7 @@ function menuItemClass(destructive = false): string {
   ].join(" ")
 }
 
-export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "default" }: Props) {
+export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props) {
   const [open, setOpen] = useState(false)
   const [agentOpen, setAgentOpen] = useState(false)
   const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
@@ -59,9 +57,8 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
   const displayName = accountDisplayName(me)
   const subtitle = accountSubtitle(me)
   const role = accountRoleLabel(me)
-  const showTerminalItem = me.isAdmin && Boolean(onSwitchUi)
   const showAdminSection = me.isAdmin
-  const hasMenuActions = showTerminalItem || showAdminSection
+  const hasMenuActions = showAdminSection
 
   useEffect(() => {
     if (!open) return
@@ -123,21 +120,6 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
                 </div>
 
                 {hasMenuActions && <div className="session-menu-divider" />}
-
-                {showTerminalItem && (
-                  <button
-                    type="button"
-                    role="menuitem"
-                    className={menuItemClass()}
-                    onClick={() => {
-                      onSwitchUi!()
-                      close()
-                    }}
-                  >
-                    <Terminal size={15} className="shrink-0 text-text-muted" />
-                    Terminal UI
-                  </button>
-                )}
 
                 {showAdminSection && (
                   <>

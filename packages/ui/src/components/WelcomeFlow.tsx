@@ -25,7 +25,7 @@ import { useState } from "react"
 import {
     WelcomeFlowLegacy,
     type WelcomeFlowLegacyProps,
-} from "../../../ui-term/src/components/WelcomeFlowLegacy"
+} from "./WelcomeFlowLegacy"
 import { useStore } from "../store"
 import {
     IntroConversation,

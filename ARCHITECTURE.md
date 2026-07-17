@@ -56,7 +56,7 @@ the concrete implementations (adapters). The agent never imports the server.
         user
           │
           ▼
-   @mia/ui  /  @mia/ui-term         (two React SPAs, REST + SSE)
+   @mia/ui                          (React SPA, REST + SSE)
           │
           ▼
       @mia/server                   (composition root: HTTP, SQLite, queue, sandbox)
@@ -71,7 +71,7 @@ the concrete implementations (adapters). The agent never imports the server.
 
 Dependency direction is strict and one-way:
 
-- `ui` / `ui-term` → `shared-types` / `shared-enums` (and the server over HTTP)
+- `ui` → `shared-types` / `shared-enums` (and the server over HTTP)
 - `server` → `agent`, `sync`, `shared-*`
 - `agent` → `shared-*` (and a **type-only** awareness from `sync` for tool signatures)
 - `sync` → `shared-*` + `mssql` (it has **no** runtime dependency on the agent)
@@ -351,21 +351,20 @@ once here, so the agent, server, and both UIs cannot drift apart.
 
 ---
 
-## 8. `@mia/ui` & `@mia/ui-term` — the front ends
+## 8. `@mia/ui` — the front end
 
-Two independent React 18 + Vite single-page apps that speak the same backend
-contract (REST for commands, a single SSE stream for live updates). State is
-Zustand; the SSE client deduplicates across browser tabs via `BroadcastChannel`
-and auto-reconnects.
+A React 18 + Vite single-page app over the backend contract (REST for commands,
+a single SSE stream for live updates). State is Zustand; the SSE client
+deduplicates across browser tabs via `BroadcastChannel` and auto-reconnects.
 
-| | `@mia/ui` (dashboard) | `@mia/ui-term` (terminal) |
-|---|---|---|
-| Surface | Draggable grid of widgets: chat, live trace, audit, policies, sync, usage | Two fixed panes — run transcript + unified ops log — driven by keybinds and a slash-command palette |
-| Stack | React + Tailwind + Zustand + force-graph / three.js + react-grid-layout | React + Tailwind + Zustand (lean, no graph deps) |
-| Dev port | `5179` | `5180` |
-| Backend | identical REST + `/api/events/stream` SSE; Vite proxies `/api` and `/ws` to `:3102` | identical |
+| | `@mia/ui` (dashboard) |
+|---|---|
+| Surface | Draggable grid of widgets: chat, live trace, audit, policies, sync, usage |
+| Stack | React + Tailwind + Zustand + force-graph / three.js + react-grid-layout |
+| Dev port | `5179` |
+| Backend | REST + `/api/events/stream` SSE; Vite proxies `/api` and `/ws` to `:3102` |
 
-Both are thin clients: all orchestration, governance, and persistence live in
+It is a thin client: all orchestration, governance, and persistence live in
 the server. The UI only renders state and issues commands.
 
 ---

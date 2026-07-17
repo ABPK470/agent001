@@ -17,7 +17,6 @@ interface Props {
   me?: Me | null
   onModeChange: (mode: AppShellMode) => void
   onSignOut: () => void
-  onSwitchUi?: () => void
   morphLanding?: boolean
   revealed?: boolean
   heroStage?: "hidden" | "pill" | "copy"
@@ -30,7 +29,6 @@ export function ThreadHomePage({
   me,
   onModeChange,
   onSignOut,
-  onSwitchUi,
   morphLanding = false,
   revealed = true,
   heroStage,
@@ -172,7 +170,6 @@ export function ThreadHomePage({
                 me={me}
                 onModeChange={onModeChange}
                 onSignOut={onSignOut}
-                onSwitchUi={onSwitchUi}
               />
             </div>
           </header>

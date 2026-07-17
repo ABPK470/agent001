@@ -18,10 +18,9 @@
     "packages/*"
   ],
   "scripts": {
-    "dev": "npx concurrently -k -n server,ui,term -c blue,magenta,yellow \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui-term\"",
+    "dev": "npx concurrently -k -n server,ui -c blue,magenta \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui\"",
     "setup": "npm run setup -w packages/server",
-    "dev:classic": "npx concurrently -k -n server,ui -c blue,magenta \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui\"",
-    "dev:term": "npx concurrently -k -n server,term -c blue,yellow \"npm run dev -w packages/server\" \"npx wait-on http://127.0.0.1:3102/api/health && npm run dev -w packages/ui-term\"",
+    "dev:classic": "npm run dev",
     "check:contract-dmc-scope": "node scripts/check-contract-dataset-mapping-column-scope.mjs",
     "test": "npm test --workspaces",
     "build:dev": "npm run build --workspaces",
