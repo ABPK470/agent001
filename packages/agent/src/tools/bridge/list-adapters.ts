@@ -1,5 +1,5 @@
 /**
- * tools/data-movement/list-adapters.ts — the `list_adapters` agent tool.
+ * tools/bridge/list-adapters.ts — the `list_adapters` agent tool.
  *
  * Lists the connectors the agent can move data between, with their
  * capabilities (read/write/query). Read-only; thin wrapper over the
@@ -14,8 +14,8 @@ function buildListAdaptersTool(host: AgentHost): ExecutableTool {
   return {
     name: "list_adapters",
     description:
-      "List connectors available for move_data, with their capabilities (read/write/query) and ids. " +
-      "Call this before move_data to learn the connector ids and what each one supports. Read-only.",
+      "List connectors available for bridge_data, with their capabilities (read/write/query) and ids. " +
+      "Call this before bridge_data to learn the connector ids and what each one supports. Read-only.",
     parameters: {
       type: "object",
       additionalProperties: false,
@@ -24,7 +24,7 @@ function buildListAdaptersTool(host: AgentHost): ExecutableTool {
     async execute(): Promise<string> {
       const port = host.connectors.port.value
       if (!port) {
-        return "list_adapters: connector data-movement is not configured on this server (no connectors port wired)."
+        return "list_adapters: connector bridge is not configured on this server (no connectors port wired)."
       }
       const adapters: ConnectorInfo[] = port.listAdapters()
       if (adapters.length === 0) {

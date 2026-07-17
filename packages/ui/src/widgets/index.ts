@@ -6,14 +6,13 @@ import type { ComponentType } from "react"
 import type { WidgetType } from "../types"
 import { ActiveUsers } from "./ActiveUsers"
 import { AgentChat } from "./AgentChat"
-import { DataMovement } from "./data-movement/DataMovement"
+import { Bridge } from "./bridge/Bridge"
 import { DebugInspector } from "./DebugInspector"
 import { EntityRegistry } from "./EntityRegistry"
 import { EnvSync } from "./EnvSync"
 import { LiveLogs } from "./LiveLogs"
 import { MymiDb } from "./MymiDb"
 import { OperationLog } from "./OperationLog"
-import { OperatorEnvironment } from "./OperatorEnvironment"
 import { RunHistory } from "./RunHistory"
 import { RunStatus } from "./RunStatus"
 import { StepTimeline } from "./StepTimeline"
@@ -32,7 +31,6 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "live-logs": LiveLogs,
   "step-timeline": StepTimeline,
   "run-history": RunHistory,
-  "operator-env": OperatorEnvironment,
   "debug-inspector": DebugInspector,
   "mymi-db": MymiDb,
   "active-users": ActiveUsers,
@@ -43,5 +41,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "sync-approvals": SyncApprovals,
   "sync-evidence":  SyncEvidence,
   "sync-admin":     SyncAdmin,
-  "data-movement":  DataMovement,
+  "bridge": Bridge,
 }

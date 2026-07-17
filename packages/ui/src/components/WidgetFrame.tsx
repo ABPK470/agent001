@@ -21,7 +21,6 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "live-logs": "Event Stream",
   "step-timeline": "Step Timeline",
   "run-history": "Run History",
-  "operator-env": "IOE",
   "debug-inspector": "Trace",
   "mymi-db": "Mymi DB",
   "active-users": "Active Users",
@@ -32,7 +31,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "sync-approvals": "Sync Admin · Approvals",
   "sync-evidence":  "Sync Evidence",
   "sync-admin":     "Sync Admin",
-  "data-movement": "Data Movement",
+  "bridge": "Bridge",
 }
 
 interface Props {
@@ -83,7 +82,7 @@ export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
     isTransparent
     || type === "entity-registry"
     || type === "sync-admin"
-    || type === "data-movement"
+    || type === "bridge"
     || type.startsWith("sync-")
 
   return (

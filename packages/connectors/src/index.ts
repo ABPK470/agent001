@@ -1,5 +1,5 @@
 /**
- * @mia/connectors — connector-adapter framework + streaming data-movement engine.
+ * @mia/connectors — connector-adapter framework + streaming Bridge engine.
  */
 
 export {

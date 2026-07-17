@@ -25,7 +25,6 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "live-logs": "Event Stream",
   "step-timeline": "Step Timeline",
   "run-history": "Run History",
-  "operator-env": "IOE",
   "debug-inspector": "Trace",
   "mymi-db": "MyMI Database",
   "active-users": "Active Users",
@@ -36,7 +35,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "sync-approvals": "Sync Admin · Approvals",
   "sync-evidence":  "Sync Evidence",
   "sync-admin":     "Sync Admin",
-  "data-movement": "Data Movement",
+  "bridge": "Bridge",
 }
 
 export function WidgetModal() {
@@ -106,7 +105,7 @@ export function WidgetModal() {
           className={`flex-1 overflow-hidden ${
             modalWidget.type === "entity-registry"
             || modalWidget.type === "sync-admin"
-            || modalWidget.type === "data-movement"
+            || modalWidget.type === "bridge"
             || modalWidget.type.startsWith("sync-")
               ? "p-0"
               : "p-3"

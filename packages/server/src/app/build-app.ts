@@ -10,7 +10,7 @@ import Fastify from "fastify"
 import { existsSync, statSync } from "node:fs"
 import { resolve } from "node:path"
 import { registerConnectorRoutes } from "../features/connectors/transport/connectors.js"
-import { registerDataMovementRoutes } from "../features/connectors/transport/data-movement.js"
+import { registerBridgeRoutes } from "../features/connectors/transport/bridge.js"
 import { registerAdminRoutes } from "../features/admin/routes.js"
 import { registerAgentRoutes } from "../features/agents/routes.js"
 import { registerApprovalRoutes } from "../features/approvals/routes.js"
@@ -243,7 +243,7 @@ export async function buildApp(opts: BuildAppOptions) {
   })
   registerSyncEnvironmentRoutes(app, bootHost)
   registerConnectorRoutes(app, bootHost)
-  registerDataMovementRoutes(app, bootHost)
+  registerBridgeRoutes(app, bootHost)
   registerProfileRoutes(app)
   registerAttachmentRoutes(app)
   registerUsageRoutes(app)

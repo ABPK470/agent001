@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 import type { AgentHost } from "../src/application/shell/runtime.js"
-import { createListAdaptersTool, createMoveDataTool } from "../src/tools/data-movement/index.js"
+import { createListAdaptersTool, createBridgeDataTool } from "../src/tools/bridge/index.js"
 import type { ConnectorInfo, MoveSummary } from "@mia/shared-types"
 
 function hostWith(port: AgentHost["connectors"]["port"]["value"]): AgentHost {
@@ -44,7 +44,7 @@ describe("list_adapters tool", () => {
   })
 })
 
-describe("move_data tool", () => {
+describe("bridge_data tool", () => {
   it("calls the port and formats the summary", async () => {
     let captured: { source: string; target: string; transform?: unknown } | null = null
     const summary: MoveSummary = {
@@ -62,7 +62,7 @@ describe("move_data tool", () => {
       },
       previewMove: async () => ({ rows: [], truncated: false }),
     }
-    const tool = createMoveDataTool(hostWith(port as never))
+    const tool = createBridgeDataTool(hostWith(port as never))
     const out = await tool.execute({
       source: { connectorId: "pg-src", spec: { kind: "sql", sql: "SELECT 1" } },
       target: { connectorId: "ms-tgt", spec: { kind: "sql", table: "t", mode: "append" } },
@@ -79,7 +79,7 @@ describe("move_data tool", () => {
   })
 
   it("validates missing source/target", async () => {
-    const tool = createMoveDataTool(hostWith({ listAdapters: () => [], moveData: async () => ({}) as MoveSummary, previewMove: async () => ({ rows: [], truncated: false }) }))
+    const tool = createBridgeDataTool(hostWith({ listAdapters: () => [], moveData: async () => ({}) as MoveSummary, previewMove: async () => ({ rows: [], truncated: false }) }))
     const out = await tool.execute({ target: { connectorId: "x", spec: { kind: "sql", table: "t", mode: "append" } } })
     expect(out).toContain("source.connectorId and source.spec are required")
   })
@@ -96,7 +96,7 @@ describe("move_data tool", () => {
       } as MoveSummary),
       previewMove: async () => ({ rows: [], truncated: false }),
     }
-    const tool = createMoveDataTool(hostWith(port as never))
+    const tool = createBridgeDataTool(hostWith(port as never))
     const out = await tool.execute({
       source: { connectorId: "pg-src", spec: { kind: "sql", sql: "SELECT 1" } },
       target: { connectorId: "ms-tgt", spec: { kind: "sql", table: "t", mode: "append" } },

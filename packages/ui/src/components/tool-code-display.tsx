@@ -8,7 +8,7 @@ import {
   stripRuntimeToolArgs,
   type ToolCallArtifact,
 } from "@mia/shared-types"
-import { C } from "../widgets/ioe/constants"
+import { C } from "../theme/tokens"
 import { CodeBlock } from "./CodeBlock"
 import { DataTable } from "./DataTable"
 import { JsonViewer } from "./JsonViewer"

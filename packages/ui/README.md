@@ -11,7 +11,7 @@ SSE event stream.
 | `api.ts` | Typed REST client. |
 | `store.ts` | Zustand store — single source of UI state. |
 | `dashboardSync.ts` | SSE subscription + store reconciliation. |
-| `widgets/` | Self-contained UI features (run view, IOE, planner trace). |
+| `widgets/` | Self-contained UI features (run view, planner trace). |
 | `components/` | Generic, presentation-only components. |
 | `hooks/` | Reusable React hooks. |
 | `enums/` | Façade re-exports of `@mia/shared-enums`. |

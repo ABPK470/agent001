@@ -1,5 +1,5 @@
 /**
- * tools/data-movement/tool.ts — the `move_data` agent tool.
+ * tools/bridge/tool.ts — the `bridge_data` agent tool.
  *
  * Streams rows from a source connector to a target connector through an
  * optional declarative transform. Thin wrapper over the opaque
@@ -11,9 +11,9 @@ import type { AgentHost } from "../../application/shell/runtime.js"
 import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
 import type { MoveSummary, ReadSpec, Transform, WriteSpec } from "@mia/shared-types"
 
-function buildMoveDataTool(host: AgentHost): ExecutableTool {
+function buildBridgeDataTool(host: AgentHost): ExecutableTool {
   return {
-    name: "move_data",
+    name: "bridge_data",
     description:
       "Move (copy) rows from a source connector to a target connector through an optional declarative transform. " +
       "Streaming — handles arbitrarily large datasets without loading them all into memory. " +
@@ -70,12 +70,12 @@ function buildMoveDataTool(host: AgentHost): ExecutableTool {
     async execute(args: Record<string, unknown>): Promise<string> {
       const port = host.connectors.port.value
       if (!port) {
-        return "move_data: connector data-movement is not configured on this server (no connectors port wired)."
+        return "bridge_data: connector bridge is not configured on this server (no connectors port wired)."
       }
       const source = args["source"] as { connectorId: string; spec: ReadSpec } | undefined
       const target = args["target"] as { connectorId: string; spec: WriteSpec; stopOnError?: boolean } | undefined
-      if (!source?.connectorId || !source.spec) return "move_data: source.connectorId and source.spec are required."
-      if (!target?.connectorId || !target.spec) return "move_data: target.connectorId and target.spec are required."
+      if (!source?.connectorId || !source.spec) return "bridge_data: source.connectorId and source.spec are required."
+      if (!target?.connectorId || !target.spec) return "bridge_data: target.connectorId and target.spec are required."
       const transform = (args["transform"] ?? undefined) as Transform | undefined
       try {
         const summary: MoveSummary = await port.moveData(
@@ -85,7 +85,7 @@ function buildMoveDataTool(host: AgentHost): ExecutableTool {
         )
         return formatSummary(summary)
       } catch (e) {
-        return `move_data failed: ${e instanceof Error ? e.message : String(e)}`
+        return `bridge_data failed: ${e instanceof Error ? e.message : String(e)}`
       }
     },
   }
@@ -93,7 +93,7 @@ function buildMoveDataTool(host: AgentHost): ExecutableTool {
 
 function formatSummary(s: MoveSummary): string {
   const lines = [
-    `move_data: ${s.status} — rowsRead=${s.rowsRead} rowsWritten=${s.rowsWritten}`,
+    `bridge_data: ${s.status} — rowsRead=${s.rowsRead} rowsWritten=${s.rowsWritten}`,
   ]
   if (s.failedAtRow !== null) lines.push(`  stopped at row ${s.failedAtRow}`)
   if (s.errors.length > 0) {
@@ -104,12 +104,12 @@ function formatSummary(s: MoveSummary): string {
   return lines.join("\n")
 }
 
-export const moveDataToolMetadata: ToolMetadata = (() => {
+export const bridgeDataToolMetadata: ToolMetadata = (() => {
   const stub = {} as AgentHost
-  const t = buildMoveDataTool(stub)
+  const t = buildBridgeDataTool(stub)
   return { name: t.name, description: t.description, parameters: t.parameters }
 })()
 
-export function createMoveDataTool(host: AgentHost): ExecutableTool {
-  return buildMoveDataTool(host)
+export function createBridgeDataTool(host: AgentHost): ExecutableTool {
+  return buildBridgeDataTool(host)
 }

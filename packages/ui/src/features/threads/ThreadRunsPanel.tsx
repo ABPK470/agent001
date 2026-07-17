@@ -1,8 +1,8 @@
 /**
- * Thread + run navigator — shared by the Threads widget and IOE runs sidebar.
+ * Thread + run navigator — shared by the Threads widget.
  */
 
-import { ChevronRight, Plus, Trash2 } from "lucide-react"
+import { ChevronRight, Plus } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { api } from "../../api"
@@ -11,72 +11,40 @@ import { RunStatus } from "../../enums"
 import { useStore } from "../../store"
 import type { Run, Thread } from "../../types"
 import { timeAgo } from "../../util"
-import { C, statusDot } from "../../widgets/ioe/constants"
+import { statusDot } from "../../theme/tokens"
 import { WIDGET_ICONS } from "../../widgets/widget-icons"
 import { DeleteThreadModal } from "./DeleteThreadModal"
 import { ThreadRowMenu } from "./ThreadRowMenu"
-
-type Variant = "widget" | "ioe"
-
-interface Props {
-  variant?: Variant
-}
 
 function RunRow({
   run,
   active,
   onSelect,
-  variant,
 }: {
   run: Run
   active: boolean
   onSelect: () => void
-  variant: Variant
 }) {
   const isLive =
     run.status === RunStatus.Pending ||
     run.status === RunStatus.Running ||
     run.status === RunStatus.Planning
 
-  if (variant === "widget") {
-    return (
-      <button
-        type="button"
-        className={`thread-nav-run ${active ? "thread-nav-run--active" : ""}`}
-        onClick={onSelect}
-      >
-        <span
-          className="thread-nav-run-dot"
-          style={{ background: statusDot(run.status) }}
-          aria-hidden
-        />
-        <span className="thread-nav-run-goal">{run.goal}</span>
-        <span className="thread-nav-run-meta">
-          {isLive ? "live" : timeAgo(run.createdAt)}
-        </span>
-      </button>
-    )
-  }
-
   return (
     <button
       type="button"
-      className="w-full text-left flex items-start gap-2 pl-6 pr-3 py-1.5 transition-colors hover:bg-overlay-2 cursor-pointer"
-      style={{ background: active ? "rgba(123,111,199,0.08)" : "transparent" }}
+      className={`thread-nav-run ${active ? "thread-nav-run--active" : ""}`}
       onClick={onSelect}
     >
       <span
-        className="inline-block w-2 h-2 rounded-full mt-1 shrink-0"
+        className="thread-nav-run-dot"
         style={{ background: statusDot(run.status) }}
+        aria-hidden
       />
-      <div className="min-w-0 flex-1">
-        <div className="truncate" style={{ color: C.text }}>{run.goal}</div>
-        <div className="flex items-center gap-2 mt-0.5" style={{ color: C.dim }}>
-          <span>{run.status}</span>
-          <span>{timeAgo(run.createdAt)}</span>
-          {isLive && <span style={{ color: C.warning }}>live</span>}
-        </div>
-      </div>
+      <span className="thread-nav-run-goal">{run.goal}</span>
+      <span className="thread-nav-run-meta">
+        {isLive ? "live" : timeAgo(run.createdAt)}
+      </span>
     </button>
   )
 }
@@ -257,7 +225,6 @@ function WidgetThreadBlock({
                 key={run.id}
                 run={run}
                 active={run.id === activeRunId}
-                variant="widget"
                 onSelect={() => onSelectRun(run.id)}
               />
             ))}
@@ -268,106 +235,7 @@ function WidgetThreadBlock({
   )
 }
 
-function ThreadBlock({
-  thread,
-  active,
-  expanded,
-  runs,
-  loading,
-  activeRunId,
-  onToggle,
-  onSelectThread,
-  onSelectRun,
-  onDeleteThread,
-  variant,
-}: {
-  thread: Thread
-  active: boolean
-  expanded: boolean
-  runs: Run[] | undefined
-  loading: boolean
-  activeRunId: string | null
-  onToggle: () => void
-  onSelectThread: () => void
-  onSelectRun: (runId: string) => void
-  onDeleteThread: () => void
-  variant: Variant
-}) {
-  const title = thread.title || "New thread"
-  const runCount = thread.runCount ?? runs?.length ?? 0
-
-  if (variant === "widget") {
-    return (
-      <WidgetThreadBlock
-        thread={thread}
-        active={active}
-        expanded={expanded}
-        runs={runs}
-        loading={loading}
-        activeRunId={activeRunId}
-        onToggle={onToggle}
-        onSelectThread={onSelectThread}
-        onSelectRun={onSelectRun}
-        onDeleteThread={onDeleteThread}
-      />
-    )
-  }
-
-  return (
-    <div className="group">
-      <div className="flex items-stretch">
-        <button
-          type="button"
-          aria-label={expanded ? "Collapse runs" : "Expand runs"}
-          className="shrink-0 px-1 text-text-muted"
-          onClick={onToggle}
-        >
-          <ChevronRight size={14} className={`transition-transform ${expanded ? "rotate-90" : ""}`} />
-        </button>
-        <button
-          type="button"
-          className="w-full flex items-center gap-1.5 px-3 py-1.5 text-left hover:bg-overlay-2 transition-colors flex-1 min-w-0"
-          style={active ? { background: "rgba(123,111,199,0.08)" } : undefined}
-          onClick={onSelectThread}
-        >
-          <span className="truncate flex-1 text-[13px]" style={{ color: C.text }}>{title}</span>
-          <span className="shrink-0 text-xs tabular-nums" style={{ color: C.dim }}>{runCount}</span>
-        </button>
-        <button
-          type="button"
-          aria-label={`Delete ${title}`}
-          className="shrink-0 px-2 opacity-0 group-hover:opacity-100 focus:opacity-100 transition-opacity hover:bg-overlay-2"
-          style={{ color: C.dim }}
-          onClick={(event) => {
-            event.stopPropagation()
-            onDeleteThread()
-          }}
-        >
-          <Trash2 size={14} />
-        </button>
-      </div>
-      {expanded && (
-        <div>
-          {loading && <div className="px-6 py-2 text-xs" style={{ color: C.dim }}>Loading…</div>}
-          {!loading && (runs?.length ?? 0) === 0 && (
-            <div className="px-6 py-2 text-xs" style={{ color: C.dim }}>No runs</div>
-          )}
-          {runs?.map((run) => (
-            <RunRow
-              key={run.id}
-              run={run}
-              active={run.id === activeRunId}
-              variant={variant}
-              onSelect={() => onSelectRun(run.id)}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  )
-}
-
-export function ThreadRunsPanel({ variant = "widget" }: Props): React.ReactElement {
+export function ThreadRunsPanel(): React.ReactElement {
   const threads = useStore((s) => s.threads)
   const activeThreadId = useStore((s) => s.activeThreadId)
   const activeThreadRuns = useStore((s) => s.runs)
@@ -456,14 +324,10 @@ export function ThreadRunsPanel({ variant = "widget" }: Props): React.ReactEleme
   const list = (
     <>
       {threads.length === 0 ? (
-        variant === "widget" ? (
-          <EmptyState icon={WIDGET_ICONS["thread-nav"]} message="No threads yet" className="py-8" />
-        ) : (
-          <div className="px-4 py-3 text-[13px]" style={{ color: C.dim }}>No threads yet</div>
-        )
+        <EmptyState icon={WIDGET_ICONS["thread-nav"]} message="No threads yet" className="py-8" />
       ) : (
         threads.map((thread) => (
-          <ThreadBlock
+          <WidgetThreadBlock
             key={thread.id}
             thread={thread}
             active={thread.id === activeThreadId}
@@ -479,7 +343,6 @@ export function ThreadRunsPanel({ variant = "widget" }: Props): React.ReactEleme
             onSelectThread={() => void handleSelectThread(thread.id)}
             onSelectRun={(runId) => void handleSelectRun(thread.id, runId)}
             onDeleteThread={() => handleDeleteThread(thread)}
-            variant={variant}
           />
         ))
       )}
@@ -501,41 +364,18 @@ export function ThreadRunsPanel({ variant = "widget" }: Props): React.ReactEleme
     />
   ) : null
 
-  if (variant === "widget") {
-    return (
-      <>
-        <div className="thread-nav-panel">
-          <div className="thread-nav-scroll">{list}</div>
-          <button
-            type="button"
-            className="thread-nav-new"
-            onClick={() => void createNewThread()}
-          >
-            <Plus size={14} strokeWidth={2} />
-            <span>New thread</span>
-          </button>
-        </div>
-        {deleteModal}
-      </>
-    )
-  }
-
   return (
     <>
-      <div className="text-[13px] min-h-0 overflow-y-auto">
-        <div className="flex items-center justify-end gap-2 px-3 py-2 border-b border-border/40">
-          <button
-            type="button"
-            onClick={() => void createNewThread()}
-            className="inline-flex items-center gap-1 text-xs px-2 py-1 rounded hover:bg-overlay-2"
-            style={{ color: C.textSecondary }}
-            title="New thread"
-          >
-            <Plus size={14} />
-            <span>New</span>
-          </button>
-        </div>
-        {list}
+      <div className="thread-nav-panel">
+        <div className="thread-nav-scroll">{list}</div>
+        <button
+          type="button"
+          className="thread-nav-new"
+          onClick={() => void createNewThread()}
+        >
+          <Plus size={14} strokeWidth={2} />
+          <span>New thread</span>
+        </button>
       </div>
       {deleteModal}
     </>

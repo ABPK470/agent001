@@ -1,5 +1,5 @@
 /**
- * engine.ts — the streaming data-movement engine.
+ * engine.ts — the streaming Bridge engine.
  *
  * `moveData` pulls row batches lazily from the source adapter, applies a
  * declarative transform row-by-row, and pushes batches into the target

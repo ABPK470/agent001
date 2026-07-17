@@ -2897,10 +2897,6 @@ textarea.input {
   animation: slash-palette-in 140ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-.slash-palette--ioe {
-  border-radius: 0.625rem;
-}
-
 .slash-palette--inline {
   position: static;
   flex: 1 1 auto;

@@ -20,7 +20,7 @@ import type { Me } from "../hooks/useMe"
 import { useStore } from "../store"
 import { ConnectorsModal } from "../widgets/connectors/ConnectorsModal"
 import { CONNECTOR_ICON } from "../widgets/connectors/kind-icon"
-import { DataMovementModal } from "../widgets/data-movement/DataMovementModal"
+import { BridgeModal } from "../widgets/bridge/BridgeModal"
 import { accountDisplayName, accountRoleLabel, accountSubtitle } from "./account"
 import { AsciiMicroField } from "./AsciiMicroField"
 import { CHAT_CHROME_BTN } from "./ChatChrome"
@@ -50,7 +50,7 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
   const [usageOpen, setUsageOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
   const [connectorsOpen, setConnectorsOpen] = useState(false)
-  const [dataMovementOpen, setDataMovementOpen] = useState(false)
+  const [bridgeOpen, setBridgeOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -143,12 +143,12 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
                       role="menuitem"
                       className={menuItemClass()}
                       onClick={() => {
-                        setDataMovementOpen(true)
+                        setBridgeOpen(true)
                         close()
                       }}
                     >
                       <ArrowRightLeft size={15} className="shrink-0 text-text-muted" />
-                      Data movement
+                      Bridge
                     </button>
                     <button
                       type="button"
@@ -284,7 +284,7 @@ export function SessionMenu({ me, onSignOut, chromeVariant = "default" }: Props)
       {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
       {connectorsOpen && <ConnectorsModal onClose={() => setConnectorsOpen(false)} />}
-      {dataMovementOpen && <DataMovementModal onClose={() => setDataMovementOpen(false)} />}
+      {bridgeOpen && <BridgeModal onClose={() => setBridgeOpen(false)} />}
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
     </>
   )

@@ -3,7 +3,7 @@ import { ComposerCommandRow } from "./ComposerCommandRow"
 import { COMPOSER_RESULT_HINTS, ComposerKbdFooter } from "./ComposerKbdFooter"
 import type { CommandConsoleLine } from "./commandConsoleModel"
 
-export type CommandConsoleVariant = "term" | "ioe"
+export type CommandConsoleVariant = "term"
 
 export function CommandConsole({
   lines,
@@ -26,7 +26,6 @@ export function CommandConsole({
 
   const rootClass = [
     "cmd-console",
-    variant === "ioe" ? "cmd-console--ioe" : "",
     inline ? "cmd-console--inline" : "",
   ]
     .filter(Boolean)

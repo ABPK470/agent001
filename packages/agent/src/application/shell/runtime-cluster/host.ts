@@ -130,7 +130,7 @@ export interface TenantHost {
 }
 
 /**
- * Opaque port for the connector-adapter data-movement engine. The server
+ * Opaque port for the connector-adapter Bridge engine. The server
  * builds this from persisted connectors (see @mia/connectors `buildConnectorPort`)
  * and binds it AFTER `configureAgent` via the mutable `port` container (the
  * port needs the host's connection pools, which only exist once the host is

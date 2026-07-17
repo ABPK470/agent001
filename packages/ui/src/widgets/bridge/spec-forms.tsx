@@ -1,5 +1,5 @@
 /**
- * spec-forms.tsx — per-kind read/write spec editors for the Data Movement shell.
+ * spec-forms.tsx — per-kind read/write spec editors for the Bridge shell.
  *
  * The engine discriminates a spec by its `kind` field; that kind is fixed by
  * the selected connector's kind (mssql/postgres/hive → "sql", httpApi →

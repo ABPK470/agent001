@@ -28,12 +28,11 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "agent-chat",    label: "Agent Chat",    desc: "Older version of agent chat",                 Icon: WIDGET_ICONS["agent-chat"] },
   { type: "run-status",    label: "Run Status",    desc: "Current run status, progress, and metadata",  Icon: WIDGET_ICONS["run-status"] },
   { type: "step-timeline", label: "Step Timeline", desc: "Visual timeline of tool calls and steps",     Icon: WIDGET_ICONS["step-timeline"] },
-  { type: "operator-env",  label: "IOE",           desc: "IDE like, all data, full control",            Icon: WIDGET_ICONS["operator-env"] },
   { type: "debug-inspector", label: "Trace",       desc: "System prompts, tool resolution, LLM requests & responses", Icon: WIDGET_ICONS["debug-inspector"] },
   { type: "active-users",  label: "Active Users",  desc: "Who's online, what they're running",          Icon: WIDGET_ICONS["active-users"] },
   { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform", Icon: WIDGET_ICONS["entity-registry"] },
   { type: "sync-admin",     label: "Sync Operations", desc: "Proposals, runs, evidence, approvals, connections, schedules, notify routes", Icon: WIDGET_ICONS["sync-admin"] },
-  { type: "data-movement",  label: "Data Movement",   desc: "Move rows between connectors (SQL Server, Postgres, HTTP, Denodo, HDFS) through a declarative transform", Icon: WIDGET_ICONS["data-movement"] },
+  { type: "bridge",  label: "Bridge",   desc: "Move rows between connectors (SQL Server, Postgres, HTTP, Denodo, HDFS) through a declarative transform", Icon: WIDGET_ICONS["bridge"] },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {

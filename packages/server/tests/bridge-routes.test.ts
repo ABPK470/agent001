@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import type { AgentHost } from "@mia/agent"
 import type { ConnectorInfo, MoveSummary } from "@mia/shared-types"
 import type { CurrentSession } from "../src/features/auth/index.js"
-import { registerDataMovementRoutes } from "../src/features/connectors/transport/data-movement.js"
+import { registerBridgeRoutes } from "../src/features/connectors/transport/bridge.js"
 
 function adminSession(): CurrentSession {
   return {
@@ -36,7 +36,7 @@ async function buildApp(session: CurrentSession, port: MockPort | null): Promise
   app.addHook("onRequest", async (req) => {
     ;(req as unknown as { session: CurrentSession }).session = session
   })
-  registerDataMovementRoutes(app, hostWith(port))
+  registerBridgeRoutes(app, hostWith(port))
   await app.ready()
   return app
 }
@@ -52,7 +52,7 @@ const adapters: ConnectorInfo[] = [
   },
 ]
 
-describe("data-movement routes", () => {
+describe("bridge routes", () => {
   it("lists connectors from the port", async () => {
     const app = await buildApp(
       adminSession(),
@@ -62,7 +62,7 @@ describe("data-movement routes", () => {
         previewMove: async () => ({ rows: [], truncated: false }),
       },
     )
-    const res = await app.inject({ method: "GET", url: "/api/data-movement/connectors" })
+    const res = await app.inject({ method: "GET", url: "/api/bridge/connectors" })
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ connectors: adapters })
     await app.close()
@@ -70,7 +70,7 @@ describe("data-movement routes", () => {
 
   it("returns an empty list when the port is not wired", async () => {
     const app = await buildApp(adminSession(), null)
-    const res = await app.inject({ method: "GET", url: "/api/data-movement/connectors" })
+    const res = await app.inject({ method: "GET", url: "/api/bridge/connectors" })
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ connectors: [] })
     await app.close()
@@ -85,11 +85,11 @@ describe("data-movement routes", () => {
         previewMove: async () => ({ rows: [], truncated: false }),
       },
     )
-    const list = await app.inject({ method: "GET", url: "/api/data-movement/connectors" })
+    const list = await app.inject({ method: "GET", url: "/api/bridge/connectors" })
     expect(list.statusCode).toBe(403)
     const run = await app.inject({
       method: "POST",
-      url: "/api/data-movement/run",
+      url: "/api/bridge/run",
       payload: { source: { connectorId: "a", spec: { kind: "sql", sql: "SELECT 1" } }, target: { connectorId: "b", spec: { kind: "sql", table: "t", mode: "append" } } },
     })
     expect(run.statusCode).toBe(403)
@@ -108,7 +108,7 @@ describe("data-movement routes", () => {
     })
     const res = await app.inject({
       method: "POST",
-      url: "/api/data-movement/run",
+      url: "/api/bridge/run",
       payload: {
         source: { connectorId: "pg-src", spec: { kind: "sql", sql: "SELECT 1" } },
         target: { connectorId: "ms-tgt", spec: { kind: "sql", table: "t", mode: "replace" } },
@@ -133,7 +133,7 @@ describe("data-movement routes", () => {
     })
     const res = await app.inject({
       method: "POST",
-      url: "/api/data-movement/run",
+      url: "/api/bridge/run",
       payload: { source: { connectorId: "pg-src", spec: { kind: "sql", sql: "SELECT 1" } } },
     })
     expect(res.statusCode).toBe(400)
@@ -145,7 +145,7 @@ describe("data-movement routes", () => {
     const app = await buildApp(adminSession(), null)
     const run = await app.inject({
       method: "POST",
-      url: "/api/data-movement/run",
+      url: "/api/bridge/run",
       payload: {
         source: { connectorId: "pg-src", spec: { kind: "sql", sql: "SELECT 1" } },
         target: { connectorId: "ms-tgt", spec: { kind: "sql", table: "t", mode: "append" } },
@@ -171,7 +171,7 @@ describe("data-movement routes", () => {
     })
     const res = await app.inject({
       method: "POST",
-      url: "/api/data-movement/preview",
+      url: "/api/bridge/preview",
       payload: {
         source: { connectorId: "pg-src", spec: { kind: "sql", sql: "SELECT a FROM t" } },
         transform: { columns: [{ from: "a", to: "b" }] },
@@ -195,7 +195,7 @@ describe("data-movement routes", () => {
     })
     const res = await app.inject({
       method: "POST",
-      url: "/api/data-movement/run",
+      url: "/api/bridge/run",
       payload: {
         source: { connectorId: "pg-src", spec: { kind: "sql", sql: "SELECT 1" } },
         target: { connectorId: "ms-tgt", spec: { kind: "sql", table: "t", mode: "append" } },

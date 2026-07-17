@@ -116,7 +116,7 @@ export interface BootSyncState {
 }
 
 export interface BootConnectorsState {
-  /** The late-bound data-movement port (shared process-wide across per-run hosts). */
+  /** The late-bound bridge port (shared process-wide across per-run hosts). */
   port: { value: import("@mia/agent").AgentHost["connectors"]["port"]["value"] }
 }
 

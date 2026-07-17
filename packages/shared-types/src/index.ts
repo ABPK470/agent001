@@ -474,7 +474,6 @@ export type WidgetType =
   | "live-logs"
   | "step-timeline"
   | "run-history"
-  | "operator-env"
   | "debug-inspector"
   | "mymi-db"
   | "active-users"
@@ -485,7 +484,7 @@ export type WidgetType =
   | "sync-approvals"
   | "sync-evidence"
   | "sync-admin"
-  | "data-movement"
+  | "bridge"
 
 /**
  * Widget types visible AND interactive for non-admin "visitor" users.
@@ -500,7 +499,6 @@ export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
   "operation-log",
   "mymi-db",
   "run-history",
-  "operator-env",
 ])
 
 export interface ViewConfig {

@@ -5,5 +5,5 @@
 import { ThreadRunsPanel } from "../features/threads/ThreadRunsPanel"
 
 export function ThreadNav() {
-  return <ThreadRunsPanel variant="widget" />
+  return <ThreadRunsPanel />
 }

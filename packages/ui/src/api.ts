@@ -450,26 +450,26 @@ export const api = {
       body: JSON.stringify(body),
     }),
 
-  // Data movement (admin) — move rows between connectors
-  listDataMovementConnectors: () =>
+  // Bridge (admin) — move rows between connectors
+  listBridgeConnectors: () =>
     json<{ connectors: import("@mia/shared-types").ConnectorInfo[] }>(
-      "/api/data-movement/connectors",
+      "/api/bridge/connectors",
     ),
-  previewMove: (body: {
+  previewBridge: (body: {
     source: { connectorId: string; spec: import("@mia/shared-types").ReadSpec }
     transform?: import("@mia/shared-types").Transform
     limit?: number
   }) =>
     json<{ rows: Record<string, unknown>[]; truncated: boolean }>(
-      "/api/data-movement/preview",
+      "/api/bridge/preview",
       { method: "POST", body: JSON.stringify(body) },
     ),
-  runMove: (body: {
+  runBridge: (body: {
     source: { connectorId: string; spec: import("@mia/shared-types").ReadSpec }
     target: { connectorId: string; spec: import("@mia/shared-types").WriteSpec; stopOnError?: boolean }
     transform?: import("@mia/shared-types").Transform
   }) =>
-    json<import("@mia/shared-types").MoveSummary>("/api/data-movement/run", {
+    json<import("@mia/shared-types").MoveSummary>("/api/bridge/run", {
       method: "POST",
       body: JSON.stringify(body),
     }),

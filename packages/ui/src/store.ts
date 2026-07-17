@@ -28,7 +28,7 @@ import {
   traceEntryFromStepStarted,
 } from "./lib/sse-run-trace.js"
 import { isDefaultThreadTitle, threadTitleFromGoal } from "./features/threads/threadTitle.js"
-import { BottomTab, EditorTab, RunStatus, SidebarSection } from "./enums"
+import { RunStatus } from "./enums"
 import type {
   AuditEntry,
   BusMessage,
@@ -189,7 +189,7 @@ function isTerminalInfrastructureError(message: string | null | undefined): bool
  * Schema v14 dropped the `runs.data` column, so the server no longer
  * persists step rows directly — they live only as `tool-call` /
  * `tool-result` / `tool-error` entries inside `trace_entries`. Several
- * widgets (StepTimeline, ToolTimelinePanel, OperatorEnvironment's
+ * widgets (StepTimeline, ToolTimelinePanel,
  * "current activity" derivation, etc.) still consume `Step[]`, so we
  * rebuild the shape here from whatever trace the server returns.
  *
@@ -395,10 +395,6 @@ interface AppState {
   appendStreamingChunk: (chunk: string) => void
   clearStreamingAnswer: () => void
 
-  // IOE layout persistence (survives view switches + page reload)
-  ioeLayout: IoeLayout
-  setIoeLayout: (patch: Partial<IoeLayout>) => void
-
   // EnvSync widget form state (survives view switches + page reload)
   envSyncForm: EnvSyncFormState
   setEnvSyncForm: (patch: Partial<EnvSyncFormState>) => void
@@ -429,45 +425,6 @@ interface AppState {
 
   // SSE event handler
   handleEvent: (event: SseEvent) => void
-}
-
-/** Persisted IOE panel layout. */
-export interface IoeLayout {
-  sidebarSection: SidebarSection
-  sidebarVisible: boolean
-  sidebarSplit: boolean
-  sidebarBottomSection: SidebarSection
-  sidebarSplitRatio: number
-  bottomVisible: boolean
-  chatVisible: boolean
-  editorTab: EditorTab
-  editorSplit: boolean
-  editorRightTab: EditorTab
-  bottomTab: BottomTab
-  bottomSplit: boolean
-  bottomRightTab: BottomTab
-  sidebarWidth: number
-  bottomHeight: number
-  chatWidth: number
-}
-
-const DEFAULT_IOE_LAYOUT: IoeLayout = {
-  sidebarSection: SidebarSection.Details,
-  sidebarVisible: true,
-  sidebarSplit: false,
-  sidebarBottomSection: SidebarSection.Runs,
-  sidebarSplitRatio: 0.5,
-  bottomVisible: true,
-  chatVisible: true,
-  editorTab: EditorTab.ToolTimeline,
-  editorSplit: false,
-  editorRightTab: EditorTab.LlmCalls,
-  bottomTab: BottomTab.Output,
-  bottomSplit: false,
-  bottomRightTab: BottomTab.Audit,
-  sidebarWidth: 260,
-  bottomHeight: 200,
-  chatWidth: 300,
 }
 
 /** Persisted EnvSync widget form state. */
@@ -522,7 +479,6 @@ export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: n
   "live-logs":     { w: 6, h: 8,  minW: 4, minH: 2 },
   "step-timeline": { w: 4, h: 10, minW: 2, minH: 2 },
   "run-history":   { w: 4, h: 8,  minW: 2, minH: 2 },
-  "operator-env": { w: 12, h: 10, minW: 2, minH: 2 },
   "debug-inspector": { w: 6, h: 10, minW: 2, minH: 2 },
   "mymi-db": { w: 12, h: 12, minW: 2, minH: 2 },
   "active-users": { w: 10, h: 10, minW: 2, minH: 2 },
@@ -533,7 +489,7 @@ export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: n
   "sync-approvals": { w: 10, h: 12, minW: 6, minH: 6 },
   "sync-evidence":  { w: 12, h: 12, minW: 6, minH: 6 },
   "sync-admin":     { w: 12, h: 14, minW: 6, minH: 6 },
-  "data-movement":  { w: 12, h: 14, minW: 6, minH: 6 },
+  "bridge":  { w: 12, h: 14, minW: 6, minH: 6 },
 }
 
 const GRID_COLS = 12
@@ -1217,8 +1173,8 @@ export const useStore = create<AppState>()(
         // events for background runs (e.g. started by another widget while
         // the user is reading a different run) must NOT hijack the active
         // selection. This used to be the root cause of "I started a run in
-        // termchat, switched to IOE, came back, and my run is gone" — a
-        // sync.run started by IOE silently became the new active run.
+        // termchat, switched views, came back, and my run is gone" — a
+        // sync.run started elsewhere silently became the new active run.
         const appendToThread =
           s.activeThreadId && run.threadId === s.activeThreadId
         return {
@@ -1574,10 +1530,6 @@ export const useStore = create<AppState>()(
       streamingAnswer: "",
       appendStreamingChunk: (chunk) => set((s) => ({ streamingAnswer: s.streamingAnswer + chunk })),
       clearStreamingAnswer: () => set({ streamingAnswer: "" }),
-
-      // IOE layout
-      ioeLayout: { ...DEFAULT_IOE_LAYOUT },
-      setIoeLayout: (patch) => set((s) => ({ ioeLayout: { ...s.ioeLayout, ...patch } })),
 
       envSyncForm: { ...DEFAULT_ENV_SYNC_FORM },
       setEnvSyncForm: (patch) => set((s) => ({ envSyncForm: { ...s.envSyncForm, ...patch } })),
@@ -2390,7 +2342,6 @@ export const useStore = create<AppState>()(
         selectedAgentId: state.selectedAgentId,
         activeThreadId: state.activeThreadId,
         threadSidebarCollapsed: state.threadSidebarCollapsed,
-        ioeLayout: state.ioeLayout,
         envSyncForm: { ...state.envSyncForm, entityId: "", planId: null },
       }),
     },

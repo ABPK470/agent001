@@ -14,7 +14,6 @@ describe("widget toast migration", () => {
     { name: "EnvSyncWidget", path: "env-sync/EnvSyncWidget.tsx" },
     { name: "ActiveUsers", path: "ActiveUsers.tsx" },
     { name: "MymiDb", path: "MymiDb.tsx" },
-    { name: "OperatorEnvironment", path: "OperatorEnvironment.tsx" },
     { name: "TermChat", path: "TermChat.tsx" },
   ] as const
 

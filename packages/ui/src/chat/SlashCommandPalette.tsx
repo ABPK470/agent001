@@ -3,7 +3,7 @@ import type { ChatSlashCatalogEntry } from "./commands"
 import { ComposerCommandRow } from "./ComposerCommandRow"
 import { COMPOSER_PALETTE_HINTS, ComposerKbdFooter } from "./ComposerKbdFooter"
 
-export type SlashPaletteVariant = "term" | "ioe"
+export type SlashPaletteVariant = "term"
 
 export function SlashCommandPalette({
   commands,
@@ -31,7 +31,6 @@ export function SlashCommandPalette({
 
   const rootClass = [
     "slash-palette",
-    variant === "ioe" ? "slash-palette--ioe" : "",
     inline ? "slash-palette--inline" : "",
   ]
     .filter(Boolean)

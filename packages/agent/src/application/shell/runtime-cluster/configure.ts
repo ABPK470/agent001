@@ -88,7 +88,7 @@ export interface ConfigureAgentOptions {
   // Shared sync surface and hosted sync readers
   sync?: ConfigureAgentSyncOptions
 
-  // Connector-adapter data-movement engine. The port is normally late-bound
+  // Connector-adapter Bridge engine. The port is normally late-bound
   // (server fills `host.connectors.port.value` after configureAgent, because it
   // needs the host's pools). Pass `connectors` here only for tests that want a
   // pre-bound port.

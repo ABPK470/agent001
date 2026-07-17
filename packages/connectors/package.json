@@ -1,7 +1,7 @@
 {
   "name": "@mia/connectors",
   "version": "0.1.0",
-  "description": "Connector-adapter framework + streaming data-movement engine. Per-kind adapters (mssql, postgres, hive, webhdfs, denodo, httpApi) behind driver ports; the engine moves rows source-to-target through a declarative transform.",
+  "description": "Connector-adapter framework + streaming Bridge engine. Per-kind adapters (mssql, postgres, hive, webhdfs, denodo, httpApi) behind driver ports; the engine moves rows source-to-target through a declarative transform.",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

@@ -1,5 +1,5 @@
 /**
- * Data-movement transport routes — admin-only preview + run over the
+ * Bridge transport routes — admin-only preview + run over the
  * connector-adapter engine. Reads the opaque port off the boot host
  * (`host.connectors.port.value`), built by `buildMovementPort` at boot.
  */
@@ -20,8 +20,8 @@ interface RunBody {
   transform?: Transform
 }
 
-export function registerDataMovementRoutes(app: FastifyInstance, host: AgentHost): void {
-  app.get("/api/data-movement/connectors", async (req, reply) => {
+export function registerBridgeRoutes(app: FastifyInstance, host: AgentHost): void {
+  app.get("/api/bridge/connectors", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)
       return { error: "admin only" }
@@ -31,7 +31,7 @@ export function registerDataMovementRoutes(app: FastifyInstance, host: AgentHost
     return { connectors: port.listAdapters() }
   })
 
-  app.post<{ Body: PreviewBody }>("/api/data-movement/preview", async (req, reply) => {
+  app.post<{ Body: PreviewBody }>("/api/bridge/preview", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)
       return { error: "admin only" }
@@ -39,7 +39,7 @@ export function registerDataMovementRoutes(app: FastifyInstance, host: AgentHost
     const port = host.connectors.port.value
     if (!port) {
       reply.code(503)
-      return { error: "connector data-movement is not configured on this server" }
+      return { error: "connector bridge is not configured on this server" }
     }
     const body = req.body ?? ({} as PreviewBody)
     if (!body.source?.connectorId || !body.source?.spec) {
@@ -58,7 +58,7 @@ export function registerDataMovementRoutes(app: FastifyInstance, host: AgentHost
     }
   })
 
-  app.post<{ Body: RunBody }>("/api/data-movement/run", async (req, reply) => {
+  app.post<{ Body: RunBody }>("/api/bridge/run", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)
       return { error: "admin only" }
@@ -66,7 +66,7 @@ export function registerDataMovementRoutes(app: FastifyInstance, host: AgentHost
     const port = host.connectors.port.value
     if (!port) {
       reply.code(503)
-      return { error: "connector data-movement is not configured on this server" }
+      return { error: "connector bridge is not configured on this server" }
     }
     const body = req.body ?? ({} as RunBody)
     if (!body.source?.connectorId || !body.source?.spec) {

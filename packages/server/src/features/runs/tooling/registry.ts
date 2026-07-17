@@ -28,7 +28,7 @@ import {
   createListAdaptersTool,
   createListAttachmentsTool,
   createListDirectoryTool,
-  createMoveDataTool,
+  createBridgeDataTool,
   createMssqlSchemaTool,
   createMssqlTool,
   createProfileDataTool,
@@ -50,7 +50,7 @@ import {
   listAdaptersToolMetadata,
   listAttachmentsToolMetadata,
   listDirectoryToolMetadata,
-  moveDataToolMetadata,
+  bridgeDataToolMetadata,
   mssqlSchemaTool,
   mssqlTool,
   noteToolMetadata,
@@ -132,9 +132,9 @@ const STATIC_TOOL_BINDERS: readonly StaticToolBinder[] = [
   { metadata: profileDataTool, bind: (host, run) => createProfileDataTool(host, run) },
   { metadata: inspectDefinitionTool, bind: (host) => createInspectDefinitionTool(host) },
   { metadata: searchCatalogTool, bind: (host, run) => createSearchCatalogTool(host, run) },
-  // ── Connector data movement (host-bound) ──
+  // ── Connector bridge (host-bound) ──
   { metadata: listAdaptersToolMetadata, bind: (host) => createListAdaptersTool(host) },
-  { metadata: moveDataToolMetadata, bind: (host) => createMoveDataTool(host) },
+  { metadata: bridgeDataToolMetadata, bind: (host) => createBridgeDataTool(host) },
   // ── ABI environment sync ──
   { metadata: compareCatalogsTool, bind: (host) => createCompareCatalogsTool(host) },
   { metadata: listSyncDefinitionsTool, bind: (host) => createListSyncDefinitionsTool(host) },

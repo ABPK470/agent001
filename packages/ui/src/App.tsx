@@ -41,7 +41,6 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "live-logs": "Event Stream",
   "step-timeline": "Step Timeline",
   "run-history": "Run History",
-  "operator-env": "IOE",
   "debug-inspector": "Trace",
   "mymi-db": "MyMI DB",
   "active-users": "Active Users",
@@ -52,7 +51,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "sync-approvals": "Sync Admin · Approvals",
   "sync-evidence":  "Sync Evidence",
   "sync-admin":     "Sync Admin",
-  "data-movement": "Data Movement",
+  "bridge": "Bridge",
 }
 
 const SYNC_CHANNEL = "mia-active-run"
@@ -110,7 +109,6 @@ export function App() {
     return new Set<WidgetType>((currentView?.widgets ?? []).map((widget) => widget.type))
   }, [currentView, popOut])
   const shouldHydrateSelectedRun = visibleWidgetTypes.has("run-status")
-    || visibleWidgetTypes.has("operator-env")
     || visibleWidgetTypes.has("run-history")
     || visibleWidgetTypes.has("step-timeline")
     || visibleWidgetTypes.has("debug-inspector")

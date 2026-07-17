@@ -6,7 +6,7 @@
  *   - postgres creates a per-move pg.Pool from the connector config.
  *
  * The returned port is injected into configureAgent({ connectors }) and is the
- * sole runtime surface the agent + UI call for data movement.
+ * sole runtime surface the agent + UI call for Bridge.
  */
 
 import { type AgentHost } from "@mia/agent"
@@ -98,7 +98,7 @@ export function buildMovementPort(host: AgentHost): ConnectorPort {
     return createMssqlAdapter(connector, {
       driverProvider: async () => {
         const pools = host.mssql.pools
-        if (!pools) throw new Error("MSSQL pool provider not configured for data movement.")
+        if (!pools) throw new Error("MSSQL pool provider not configured for Bridge.")
         const { pool } = await pools.get(connector.id)
         return defaultMssqlDriver(pool)
       },

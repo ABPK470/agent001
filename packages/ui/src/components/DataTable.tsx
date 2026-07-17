@@ -19,7 +19,7 @@
 
 import { ArrowDown, ArrowUp, ArrowUpDown, Check, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Copy, Search, X } from "lucide-react"
 import { useEffect, useMemo, useState, type ReactNode } from "react"
-import { C } from "../widgets/ioe/constants"
+import { C } from "../theme/tokens"
 
 // ── Types ────────────────────────────────────────────────────────
 

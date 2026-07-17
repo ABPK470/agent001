@@ -11,7 +11,6 @@ import {
   Database,
   History,
   Info,
-  LayoutDashboard,
   ListTree,
   Logs,
   MessageSquare,
@@ -35,7 +34,6 @@ export const WIDGET_ICONS: Record<WidgetType, LucideIcon> = {
   "run-history": History,
   "run-status": Info,
   "step-timeline": Clock,
-  "operator-env": LayoutDashboard,
   "debug-inspector": Bug,
   "active-users": Users,
   "entity-registry": TableProperties,
@@ -43,7 +41,7 @@ export const WIDGET_ICONS: Record<WidgetType, LucideIcon> = {
   "sync-approvals": Settings,
   "sync-evidence": Settings,
   "sync-admin": Settings,
-  "data-movement": ArrowRightLeft,
+  "bridge": ArrowRightLeft,
 }
 
 export function widgetIcon(type: WidgetType): LucideIcon {

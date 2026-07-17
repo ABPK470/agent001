@@ -1,9 +1,9 @@
 /**
- * DataMovementShell — move rows between connectors (source → transform → target).
+ * BridgeShell — move rows between connectors (source → transform → target).
  *
- * Separate from sync: this is the generic data-movement surface backed by the
- * @mia/connectors engine. The agent `move_data` tool and the
- * `/api/data-movement` REST routes share the same server port.
+ * Separate from sync: this is the generic bridge surface backed by the
+ * @mia/connectors engine. The agent `bridge_data` tool and the
+ * `/api/bridge` REST routes share the same server port.
  */
 
 import type {
@@ -36,7 +36,7 @@ import {
   parseJsonOpt,
 } from "./spec-forms"
 
-export function DataMovementShell(): JSX.Element {
+export function BridgeShell(): JSX.Element {
   const { toasts, pushToast, dismissToast } = useModalToasts()
   const [connectors, setConnectors] = useState<ConnectorInfo[]>([])
   const [loaded, setLoaded] = useState(false)
@@ -52,7 +52,7 @@ export function DataMovementShell(): JSX.Element {
   useEffect(() => {
     let cancelled = false
     api
-      .listDataMovementConnectors()
+      .listBridgeConnectors()
       .then((res) => {
         if (cancelled) return
         const enabled = res.connectors.filter((c) => c.enabled)
@@ -122,7 +122,7 @@ export function DataMovementShell(): JSX.Element {
     setPreview(null)
     try {
       const transform = buildTransform()
-      const res = await api.previewMove({
+      const res = await api.previewBridge({
         source: { connectorId: sourceId, spec: buildReadSpec(source.kind, sourceSpec) },
         ...(transform ? { transform } : {}),
         limit: 50,
@@ -141,7 +141,7 @@ export function DataMovementShell(): JSX.Element {
     setSummary(null)
     try {
       const transform = buildTransform()
-      const res = await api.runMove({
+      const res = await api.runBridge({
         source: { connectorId: sourceId, spec: buildReadSpec(source.kind, sourceSpec) },
         target: { connectorId: targetId, spec: buildWriteSpec(target.kind, targetSpec) },
         ...(transform ? { transform } : {}),
@@ -158,7 +158,7 @@ export function DataMovementShell(): JSX.Element {
   const canMove = Boolean(source && target) && busy === null
 
   return (
-    <div className="data-movement flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel p-3">
+    <div className="bridge flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel p-3">
       <div className={WIDGET_ENVELOPE}>
         <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
         <div className="shrink-0 border-b border-border-subtle px-5 py-3">

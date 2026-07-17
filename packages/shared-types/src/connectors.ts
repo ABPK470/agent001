@@ -288,7 +288,7 @@ export function toConnectorId(label: string): string {
     .replace(/^-+|-+$/g, "")
 }
 
-// ── Data movement (Phase 3) ───────────────────────────────────────
+// ── Bridge (connector row streaming) ──────────────────────────────
 //
 // Pure domain types for the connector-adapter framework. These are wire/contract
 // types shared by @mia/agent (the opaque host port), @mia/connectors (the engine

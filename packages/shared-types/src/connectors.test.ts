@@ -12,7 +12,7 @@ import {
 } from "./connectors.js"
 
 describe("connector kind catalogue", () => {
-  it("exposes the enabled kinds (mssql + the data-movement adapters)", () => {
+  it("exposes the enabled kinds (mssql + the Bridge adapters)", () => {
     expect(ENABLED_CONNECTOR_KINDS.map((k) => k.id)).toEqual([
       "mssql",
       "postgres",
