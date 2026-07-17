@@ -84,9 +84,9 @@ export function useGridInteraction({
           session.origin,
           rows,
         )
-        const preview = reclaimSpace(resolved, rows, new Set([session.tileId]))
+        // No lock — after a slot swap both tiles must be free to reclaim residual gaps.
         setCandidate(next)
-        setLayoutPreview(preview)
+        setLayoutPreview(reclaimSpace(resolved, rows))
         return
       }
 
@@ -135,14 +135,15 @@ export function useGridInteraction({
 
       if (session.mode === "drag") {
         const next = snapDragRect(session.origin, deltaX, deltaY, cw, rows, rowPx)
-        const preview = resolveDragLayout(
+        const resolved = resolveDragLayout(
           session.baseTiles,
           session.tileId,
           next,
           session.origin,
           rows,
         )
-        updateTiles(viewId, preview, session.tileId)
+        // Commit without locking so reclaimSpace can pack the canvas fully.
+        updateTiles(viewId, reclaimSpace(resolved, rows))
         clearSession()
         return
       }

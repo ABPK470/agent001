@@ -355,10 +355,28 @@ export function findOpenSlot(
 }
 
 /**
- * Live drag resolution: place the dragged tile at `nextRect`, swap with the
- * strongest overlap target (into the drag origin slot), and push any other
- * collisions into the nearest free slot. Always resolves from the pre-drag
- * `tiles` snapshot so neighbors animate fluidly without accumulating drift.
+ * Adopt another tile's slot geometry. Packed canvases stay packed: the tile
+ * takes the slot's x/y/w/h (mins only expand when the slot is too small).
+ */
+export function adoptSlot(
+  tile: LayoutTile,
+  slot: GridRect,
+  maxRows: number,
+): LayoutTile {
+  const w = Math.max(slot.w, tile.minW)
+  const h = Math.max(slot.h, tile.minH)
+  return {
+    ...tile,
+    ...clampRectToGrid({ x: slot.x, y: slot.y, w, h }, maxRows, tile.minW, tile.minH),
+  }
+}
+
+/**
+ * Live drag resolution from the pre-drag snapshot.
+ *
+ * When the pointer overlaps another tile enough, **swap slots** (full geometry
+ * exchange) so a packed canvas cannot grow holes. Otherwise free-move the
+ * dragged tile and park any residual collisions in the nearest open slot.
  */
 export function resolveDragLayout(
   tiles: LayoutTile[],
@@ -370,53 +388,47 @@ export function resolveDragLayout(
   const moving = tiles.find((tile) => tile.id === dragId)
   if (!moving) return tiles
 
-  const dragRect = clampRectToGrid(
+  const probe = clampRectToGrid(
     { x: nextRect.x, y: nextRect.y, w: moving.w, h: moving.h },
     maxRows,
     moving.minW,
     moving.minH,
   )
-  const dragging: LayoutTile = { ...moving, ...dragRect }
   const others = tiles.filter((tile) => tile.id !== dragId)
 
   const overlaps = others
-    .filter((other) => !other.pinned && !other.restore && rectsOverlap(dragRect, other))
-    .sort((a, b) => overlapArea(dragRect, b) - overlapArea(dragRect, a))
+    .filter((other) => !other.pinned && !other.restore && rectsOverlap(probe, other))
+    .sort((a, b) => overlapArea(probe, b) - overlapArea(probe, a))
 
   const swapTarget = overlaps[0]
   const smallerArea = swapTarget
-    ? Math.min(dragRect.w * dragRect.h, swapTarget.w * swapTarget.h)
+    ? Math.min(probe.w * probe.h, swapTarget.w * swapTarget.h)
     : 0
   const shouldSwap = !!swapTarget && smallerArea > 0
-    && overlapArea(dragRect, swapTarget) >= smallerArea * 0.22
+    && overlapArea(probe, swapTarget) >= smallerArea * 0.22
 
+  if (shouldSwap && swapTarget) {
+    const dragged = adoptSlot(moving, swapTarget, maxRows)
+    const swapped = adoptSlot(swapTarget, origin, maxRows)
+    return tiles.map((tile) => {
+      if (tile.id === dragId) return dragged
+      if (tile.id === swapTarget.id) return swapped
+      return tile
+    })
+  }
+
+  const dragging: LayoutTile = { ...moving, ...probe }
   const blockers: LayoutTile[] = [dragging]
   const relocated = new Map<string, LayoutTile>()
 
   for (const tile of others) {
-    if (shouldSwap && tile.id === swapTarget!.id) {
-      let slot = clampRectToGrid(
-        { x: origin.x, y: origin.y, w: tile.w, h: tile.h },
-        maxRows,
-        tile.minW,
-        tile.minH,
-      )
-      if (rectsOverlap(slot, dragRect)) {
-        slot = findOpenSlot(tile, blockers, maxRows)
-      }
-      const placed = { ...tile, ...slot }
-      relocated.set(tile.id, placed)
-      blockers.push(placed)
-      continue
-    }
-
     if (tile.pinned || tile.restore) {
       relocated.set(tile.id, tile)
       blockers.push(tile)
       continue
     }
 
-    if (rectsOverlap(tile, dragRect)) {
+    if (rectsOverlap(tile, probe)) {
       const placed = { ...tile, ...findOpenSlot(tile, blockers, maxRows) }
       relocated.set(tile.id, placed)
       blockers.push(placed)

@@ -94,8 +94,31 @@ describe("smart drag swap", () => {
     )
     const a = next.find((t) => t.id === "a")!
     const b = next.find((t) => t.id === "b")!
-    expect(a.x).toBe(6)
-    expect(b.x).toBe(0)
+    expect(a).toMatchObject({ x: 6, y: 0, w: 6, h: 8 })
+    expect(b).toMatchObject({ x: 0, y: 0, w: 6, h: 8 })
+  })
+
+  it("exchanges full slots when sizes differ so the canvas stays packed", () => {
+    const tiles: LayoutTile[] = [
+      { id: "chat", type: "term-chat", x: 8, y: 0, w: 4, h: 16, minW: 2, minH: 4 },
+      { id: "status", type: "run-status", x: 0, y: 0, w: 8, h: 8, minW: 2, minH: 2 },
+      { id: "sync", type: "env-sync", x: 0, y: 8, w: 8, h: 8, minW: 2, minH: 2 },
+    ]
+    const next = resolveDragLayout(
+      tiles,
+      "status",
+      { x: 8, y: 0, w: 8, h: 8 },
+      { x: 0, y: 0, w: 8, h: 8 },
+      16,
+    )
+    const chat = next.find((t) => t.id === "chat")!
+    const status = next.find((t) => t.id === "status")!
+    const sync = next.find((t) => t.id === "sync")!
+    expect(status).toMatchObject({ x: 8, y: 0, w: 4, h: 16 })
+    expect(chat).toMatchObject({ x: 0, y: 0, w: 8, h: 8 })
+    expect(sync).toMatchObject({ x: 0, y: 8, w: 8, h: 8 })
+    const covered = next.reduce((sum, tile) => sum + tile.w * tile.h, 0)
+    expect(covered).toBe(COLS * 16)
   })
 
   it("resolveOverlaps separates stacked tiles", () => {
