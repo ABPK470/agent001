@@ -1,4 +1,4 @@
-import { PanelLeft, Plus } from "lucide-react"
+import { PanelLeft } from "lucide-react"
 import { useCallback, useEffect, useState } from "react"
 import { IntroAsciiField } from "../../components/IntroAsciiField"
 import { useStore } from "../../store"

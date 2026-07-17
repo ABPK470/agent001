@@ -5,7 +5,6 @@ import type {
   SyncFlowKindHandler,
   SyncFlowKindHandlerType,
   SyncProcedureParameter,
-  SyncStepFieldKey,
   ValueSource,
 } from "../../types"
 import {

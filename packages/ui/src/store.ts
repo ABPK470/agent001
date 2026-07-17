@@ -8,7 +8,6 @@
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
 import {
-  createPreviewProgress,
   reduceEnvSyncPreviewProgress,
   type EnvSyncPreviewProgress,
 } from "./widgets/env-sync/preview-progress.js"
@@ -534,6 +533,7 @@ export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: n
   "sync-approvals": { w: 10, h: 12, minW: 6, minH: 6 },
   "sync-evidence":  { w: 12, h: 12, minW: 6, minH: 6 },
   "sync-admin":     { w: 12, h: 14, minW: 6, minH: 6 },
+  "data-movement":  { w: 12, h: 14, minW: 6, minH: 6 },
 }
 
 const GRID_COLS = 12
@@ -737,7 +737,8 @@ function formatLogEntryInner(
 
   if (type === "debug.trace") {
     const entry = data["entry"] as Record<string, unknown> | undefined
-    if ((entry?.["kind"] as string | undefined) === "planner-sql-quality") {
+    if (!entry) return null
+    if ((entry["kind"] as string) === "planner-sql-quality") {
       const validationCode = typeof entry["validationCode"] === "string" ? entry["validationCode"] : null
       const missingMirrors = Array.isArray(entry["missingPersistedMirrorCandidates"])
         ? (entry["missingPersistedMirrorCandidates"] as string[])
@@ -758,7 +759,7 @@ function formatLogEntryInner(
         error: validationCode != null || entry["phase"] === "blocked",
       }
     }
-    if ((entry?.["kind"] as string | undefined) === "planner-prompt-budget") {
+    if ((entry["kind"] as string) === "planner-prompt-budget") {
       const before = Number(entry["totalBeforeChars"] ?? 0)
       const after = Number(entry["totalAfterChars"] ?? 0)
       const dropped = Array.isArray(entry["droppedSections"]) ? (entry["droppedSections"] as string[]) : []

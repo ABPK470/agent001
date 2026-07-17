@@ -28,6 +28,7 @@ import {
 } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { EmptyState } from "../components/EmptyState"
 import { Listbox, type ListboxOption } from "../components/Listbox"
 import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
 import { useContainerSize } from "../hooks/useContainerSize"
@@ -47,7 +48,7 @@ type ColDef    = {
 type RelData = {
   outbound: Array<{ constraintName: string; localColumn: string; refSchema: string; refTable: string; refColumn: string; refRowCount: number }>
   inbound:  Array<{ constraintName: string; srcSchema: string; srcTable: string; srcColumn: string; localColumn: string; srcRowCount: number }>
-  implicit: Array<{ column: string; dataType: string; tables: Array<{ qualifiedName: string; rowCount: number | null }> }>
+  implicit?: Array<{ column: string; dataType: string; tables: Array<{ qualifiedName: string; rowCount: number | null }> }>
 }
 type PreviewData = { columns: Array<{ name: string; type: string }>; rows: Record<string, unknown>[] }
 type SearchResult = {
@@ -209,7 +210,6 @@ export function MymiDb() {
   const searchInputRef = useRef<HTMLInputElement>(null)
   const rootRef = useRef<HTMLDivElement>(null)
   const { width: rootWidth } = useContainerSize(rootRef)
-  const compact = rootWidth > 0 && rootWidth < 700
   const narrow  = rootWidth > 0 && rootWidth < 520
   const isSearchMode = debouncedSearch.length >= 2
 
@@ -346,7 +346,7 @@ export function MymiDb() {
           }))
           return (
             <Listbox
-              value={activeDb}
+              value={activeDb ?? ""}
               options={dbOpts}
               onChange={(v) => setActiveDb(v)}
               size="md"
@@ -638,10 +638,7 @@ export function MymiDb() {
           {/* Detail panel */}
           <div className="flex-1 flex flex-col overflow-hidden min-w-0">
             {!activeObject && (
-              <div className="flex flex-col items-center justify-center h-full text-text-muted gap-3">
-                <Database size={32} className="opacity-20" />
-                <span className="text-sm">Select a table or view</span>
-              </div>
+              <EmptyState icon={Database} message="Select a table or view" />
             )}
 
             {activeObject && (
@@ -770,7 +767,7 @@ export function MymiDb() {
                                     <td className="px-3 py-1 border-b border-border/30 text-text-muted">{col.ordinal}</td>
                                     <td className="px-2 py-1 border-b border-border/30">
                                       <div className="flex items-center gap-1.5">
-                                        {col.isPk && <Key size={10} className="text-warning shrink-0" title="Primary key" />}
+                                        {col.isPk && <Key size={10} className="text-warning shrink-0" aria-label="Primary key" />}
                                         <span className="font-mono font-medium text-text">{col.name}</span>
                                         {col.fkTable && (
                                           <button
@@ -890,7 +887,7 @@ function Spinner() {
 }
 
 function Empty({ msg }: { msg: string }) {
-  return <div className="px-4 py-8 text-text-muted text-sm text-center">{msg}</div>
+  return <EmptyState icon={Database} message={msg} className="py-8" />
 }
 
 function Badge({ children, color }: { children: React.ReactNode; color: string }) {
@@ -1283,14 +1280,10 @@ function DataModelView({ db, onNotifyError }: { db?: string; onNotifyError?: (me
   }
 
   if (loading) return (
-    <div className="flex-1 flex items-center justify-center text-text-muted gap-2">
-      <Loader2 size={16} className="animate-spin" /> Loading data model…
-    </div>
+    <EmptyState icon={Loader2} message="Loading data model…" className="[&_svg]:animate-spin" />
   )
   if (!raw) return (
-    <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
-      Data model unavailable.
-    </div>
+    <EmptyState icon={Database} message="Data model unavailable." />
   )
 
   const total = raw.objects.length

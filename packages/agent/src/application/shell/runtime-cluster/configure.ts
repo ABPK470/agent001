@@ -18,7 +18,10 @@ import { canonicalizeConfiguredConnectionName } from "../../../tools/mssql/resol
 export interface ConfigureMssqlConnection extends sql.config {
   name: string
   writeEnabled?: boolean
+  /** Resolved knowledge file content (read at boot). */
   knowledge?: string | null
+  /** Original knowledge file path — preserved so the connectors seed can store it. */
+  knowledgePath?: string | null
 }
 
 export interface ConfigureAgentSyncOptions {
@@ -61,6 +64,13 @@ export interface ConfigureAgentOptions {
   mssqlDatabases?: AgentHost["mssql"]["databases"]
   mssqlDefaultConnection?: AgentHost["mssql"]["defaultConnection"]
   mssqlDefaultConnectionName?: string | null
+  /**
+   * Live connector-keyed pool provider — the source of truth for MSSQL pools.
+   * Sync environments resolve their pool through `connectorId`. If omitted, a
+   * throwing stub is installed so any pool access fails loudly instead of
+   * silently falling back.
+   */
+  mssqlPools?: AgentHost["mssql"]["pools"]
 
   // Catalog registry (shared across all per-run hosts at boot)
   catalogInstances?: AgentHost["catalog"]["instances"]
@@ -77,6 +87,12 @@ export interface ConfigureAgentOptions {
 
   // Shared sync surface and hosted sync readers
   sync?: ConfigureAgentSyncOptions
+
+  // Connector-adapter data-movement engine. The port is normally late-bound
+  // (server fills `host.connectors.port.value` after configureAgent, because it
+  // needs the host's pools). Pass `connectors` here only for tests that want a
+  // pre-bound port.
+  connectors?: AgentHost["connectors"]["port"]["value"]
 }
 
 /**
@@ -124,7 +140,8 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
     workspaceRoot,
     mssql: Object.freeze({
       databases: mssqlDatabases,
-      defaultConnection: mssqlDefaultConnection
+      defaultConnection: mssqlDefaultConnection,
+      pools: options.mssqlPools
     }),
     filesystem: Object.freeze({
       basePath: options.filesystemBasePath ?? workspaceRoot
@@ -152,6 +169,9 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       id: options.tenant?.id ?? null,
       displayName: options.tenant?.displayName ?? null,
       featureFlags: options.tenant?.featureFlags ?? new Map<string, boolean>()
+    }),
+    connectors: Object.freeze({
+      port: { value: options.connectors ?? null }
     })
   })
 }

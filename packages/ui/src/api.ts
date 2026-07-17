@@ -6,8 +6,6 @@ import type {
     AgentDefinition,
     EntityRegistryDraftSuggestion,
     EntityRegistryTableSuggestion,
-    EntityRegistrySyncDefinitionScaffoldRequest,
-    EntityRegistrySyncDefinitionScaffoldResponse,
     Notification,
     PolicyRule,
     PublishedSyncDefinition,
@@ -17,6 +15,7 @@ import type {
     Run,
     RunDetail,
     SavedLayout,
+    SseEvent,
     SyncEntityType,
     SyncEnvironment,
     SyncExecuteProgress,
@@ -417,6 +416,63 @@ export const api = {
       `/api/sync-environments/${encodeURIComponent(name)}${opts?.allowBuiltinEdit ? "?allowBuiltinEdit=1" : ""}`,
       { method: "DELETE" },
     ),
+
+  // Connectors (admin)
+  listConnectors: () => json<import("./types").ConnectorAdmin[]>("/api/connectors"),
+  listConnectorKinds: () =>
+    json<import("./types").ConnectorKind[]>("/api/connectors/kinds"),
+  validateConnector: (body: { kind: import("./types").ConnectorKindId; config: Record<string, unknown> }) =>
+    json<import("./types").ConnectorConfigValidation>("/api/connectors/validate", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+  createConnector: (fields: Record<string, unknown>) =>
+    json<{ ok: boolean; id: string }>("/api/connectors", {
+      method: "POST",
+      body: JSON.stringify(fields),
+    }),
+  updateConnector: (id: string, fields: Record<string, unknown>) =>
+    json<{ ok: boolean }>(`/api/connectors/${encodeURIComponent(id)}`, {
+      method: "PUT",
+      body: JSON.stringify(fields),
+    }),
+  deleteConnector: (id: string) =>
+    json<{ ok: boolean }>(`/api/connectors/${encodeURIComponent(id)}`, {
+      method: "DELETE",
+    }),
+  exportConnectors: (opts?: { includeSecrets?: boolean }) =>
+    json<{ version: number; connectors: import("./types").Connector[] }>(
+      `/api/connectors/export${opts?.includeSecrets ? "?includeSecrets=1" : ""}`,
+    ),
+  importConnectors: (body: { version: number; connectors: Array<Record<string, unknown>> }) =>
+    json<{ ok: boolean; imported: number }>("/api/connectors/import", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
+
+  // Data movement (admin) — move rows between connectors
+  listDataMovementConnectors: () =>
+    json<{ connectors: import("@mia/shared-types").ConnectorInfo[] }>(
+      "/api/data-movement/connectors",
+    ),
+  previewMove: (body: {
+    source: { connectorId: string; spec: import("@mia/shared-types").ReadSpec }
+    transform?: import("@mia/shared-types").Transform
+    limit?: number
+  }) =>
+    json<{ rows: Record<string, unknown>[]; truncated: boolean }>(
+      "/api/data-movement/preview",
+      { method: "POST", body: JSON.stringify(body) },
+    ),
+  runMove: (body: {
+    source: { connectorId: string; spec: import("@mia/shared-types").ReadSpec }
+    target: { connectorId: string; spec: import("@mia/shared-types").WriteSpec; stopOnError?: boolean }
+    transform?: import("@mia/shared-types").Transform
+  }) =>
+    json<import("@mia/shared-types").MoveSummary>("/api/data-movement/run", {
+      method: "POST",
+      body: JSON.stringify(body),
+    }),
 
   // Sync definition config (admin)
   listSyncDefinitionConfigs: () => json<import("./types").SyncDefinitionAdminItem[]>("/api/sync-definition-configs"),
@@ -1071,7 +1127,7 @@ export const api = {
       },
     )
   },
-  importEntityRegistryJson: (json: string, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
+  importEntityRegistryJson: (jsonStr: string, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
     const p = new URLSearchParams()
     if (opts?.tenant) p.set("tenant", opts.tenant)
     const qs = p.toString()
@@ -1079,11 +1135,11 @@ export const api = {
       `/api/entity-registry/entities/import-registry-json${qs ? `?${qs}` : ""}`,
       {
         method: "POST",
-        body: JSON.stringify({ json, reason, dryRun: opts?.dryRun ?? false }),
+        body: JSON.stringify({ json: jsonStr, reason, dryRun: opts?.dryRun ?? false }),
       },
     )
   },
-  importEntityDeployArtifact: (json: string, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
+  importEntityDeployArtifact: (jsonStr: string, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
     const p = new URLSearchParams()
     if (opts?.tenant) p.set("tenant", opts.tenant)
     const qs = p.toString()
@@ -1091,7 +1147,7 @@ export const api = {
       `/api/entity-registry/entities/import-artifact${qs ? `?${qs}` : ""}`,
       {
         method: "POST",
-        body: JSON.stringify({ json, reason, dryRun: opts?.dryRun ?? false }),
+        body: JSON.stringify({ json: jsonStr, reason, dryRun: opts?.dryRun ?? false }),
       },
     )
   },
@@ -1409,7 +1465,7 @@ export function syncExecuteStream(
 const BC_CHANNEL = "mia-ws-relay"
 
 export function createEventStream(
-  onEvent: (event: { type: string, data: Record<string, unknown>, timestamp: string }) => void,
+  onEvent: (event: SseEvent) => void,
   onStatus: (connected: boolean) => void,
 ): { close: () => void } {
   const url = `${window.location.origin}${import.meta.env.BASE_URL.replace(/\/$/, "")}/api/events/stream`
@@ -1485,7 +1541,7 @@ export function createEventStream(
  * Avoids duplicate connections and prevents SSE replays from clearing live state.
  */
 export function createPopoutEventRelay(
-  onEvent: (event: { type: string; data: Record<string, unknown>; timestamp: string }) => void,
+  onEvent: (event: SseEvent) => void,
   onStatus: (connected: boolean) => void,
 ): { close: () => void } {
   const bc = new BroadcastChannel(BC_CHANNEL)

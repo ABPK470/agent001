@@ -41,16 +41,17 @@ describe("custom-handlers", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     trackedQueryMock.mockResolvedValue({ recordset: [{ sum: 99 }] } as never)
-    execFileMock.mockImplementation(
-      (
-        _file: string,
-        _args: string[],
-        _opts: object,
-        cb: (err: null, stdout: Buffer, stderr: Buffer) => void,
-      ) => {
-        cb(null, Buffer.from("ok"), Buffer.from(""))
-      },
-    )
+    // execFile is heavily overloaded in @types/node; the mock only needs the 4-arg
+    // (file, args, options, callback) shape the orchestrator calls. Bridge the
+    // overloaded procedure type so the mock implementation typechecks.
+    execFileMock.mockImplementation(((
+      _file: string,
+      _args: readonly string[] | undefined | null,
+      _opts: unknown,
+      cb: (err: unknown, stdout: unknown, stderr: unknown) => void,
+    ) => {
+      cb(null, Buffer.from("ok"), Buffer.from(""))
+    }) as never)
   })
 
   it("substitutes input tokens from resolved values", () => {

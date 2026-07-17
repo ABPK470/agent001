@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process"
 import { randomBytes } from "node:crypto"
-import { resolve } from "node:path"
 import { promisify } from "node:util"
 import { WorkspaceMountMode } from "../../shared/enums/sandbox.js"
 import {

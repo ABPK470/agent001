@@ -2,7 +2,6 @@
  * Merge sync-preview + sync-execute pipelines into one sync-run row for the live feed.
  */
 
-import { SyncRunStatus } from "@mia/shared-enums"
 import { OperationKind, OperationStatus } from "../../../../shared/enums/operations.js"
 import * as db from "../../../../platform/persistence/sqlite.js"
 import type { OperationActivity, OperationPipeline } from "./types.js"

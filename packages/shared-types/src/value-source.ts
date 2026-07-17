@@ -6,7 +6,7 @@
  */
 
 import { validateCatalogId } from "./catalog-id.js"
-import type { CustomValueSourceCatalog, CustomValueSourceDefinition } from "./custom-value-source.js"
+import type { CustomValueSourceCatalog } from "./custom-value-source.js"
 import { formatCustomValueSourcePreview } from "./custom-value-source.js"
 
 /** Step-instance text fields — property name on AuthoredSyncFlowStep. */
@@ -118,7 +118,7 @@ export function formatValueSourcePreview(
 }
 
 export function readStepFieldValue(
-  step: Record<string, unknown>,
+  step: Partial<Record<SyncStepFieldKey, unknown>>,
   field: SyncStepFieldKey,
 ): string {
   const raw = step[field]

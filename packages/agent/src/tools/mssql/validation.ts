@@ -466,9 +466,10 @@ export function detectWideUnionViewTopnWithoutBranchAggregation(
 
       // Escape valve: a JOIN to a #temp on the same key is exactly the
       // narrowing pattern we WANT (the temp's small key set pushes into
-      // each branch).
+      // each branch). Alias-bracket normalisation may rewrite
+      // `s.pkClient` → `[s].[pkClient]`, so allow optional brackets.
       const narrowingJoin = new RegExp(
-        `\\bJOIN\\s+#\\w+\\b[\\s\\S]{0,200}?\\bON\\b[\\s\\S]{0,200}?\\b${escapeRegExp(matchedKey)}\\b\\s*=`,
+        `\\bJOIN\\s+#\\w+\\b[\\s\\S]{0,200}?\\bON\\b[\\s\\S]{0,200}?\\[?${escapeRegExp(matchedKey)}\\]?\\s*=`,
         "i"
       ).test(stmt)
       if (narrowingJoin) continue

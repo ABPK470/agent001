@@ -34,7 +34,7 @@ export function createRepoBundleHost(): SyncRuntimeHost {
     color: "emerald",
     role: "both",
     ringOrder: 0,
-    allowedSyncTargets: ["UAT", "PROD"]
+    allowedSyncEnvironments: ["UAT", "PROD"]
   })
   const uat = withPermissionDefaults({
     name: "UAT",
@@ -42,7 +42,7 @@ export function createRepoBundleHost(): SyncRuntimeHost {
     color: "amber",
     role: "both",
     ringOrder: 1,
-    allowedSyncTargets: null
+    allowedSyncEnvironments: null
   })
   return {
     mssql: {

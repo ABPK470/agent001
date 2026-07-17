@@ -2,16 +2,14 @@
  * Shared chrome for Sync Operations — reuses entity-registry layout tokens.
  */
 
-import { AlertTriangle, Check, CheckCircle2, ChevronRight, Loader2, X, XCircle } from "lucide-react"
+import { Check, CheckCircle2, ChevronRight, Inbox, Loader2, MousePointer2, X, XCircle, type LucideIcon } from "lucide-react"
 import type { ComponentType, JSX, ReactNode } from "react"
+import { EmptyState } from "../../components/EmptyState"
 import {
-  ICON_BTN,
-  ICON_BTN_PRIMARY,
   META_TEXT,
   PANEL,
   TAB_BODY,
   TAB_BODY_INNER,
-  TAB_PILL,
   TOOLBAR_ROW,
 } from "./design"
 import { IconButton } from "../entity-registry/IconButton"
@@ -152,7 +150,7 @@ export function ItemShell({
             </div>
           </div>
         )}
-        <div className="entity-rail-scroll min-h-0 flex-1 overflow-y-auto">
+        <div className="entity-rail-scroll flex min-h-0 flex-1 flex-col overflow-y-auto">
           {listContent}
         </div>
       </aside>
@@ -293,14 +291,19 @@ export function SectionRow({
   )
 }
 
-export function Empty({ title, children }: { title: string; children?: ReactNode }): JSX.Element {
-  return (
-    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-2 px-6 py-12 text-center text-text-muted">
-      <AlertTriangle size={20} className="opacity-40" />
-      <p className="text-sm font-medium text-text">{title}</p>
-      {children && <p className="max-w-md text-sm text-text-muted">{children}</p>}
-    </div>
-  )
+export function Empty({
+  title,
+  children,
+  icon,
+}: {
+  title: string
+  children?: ReactNode
+  icon?: LucideIcon
+}): JSX.Element {
+  const resolved =
+    icon
+    ?? (title.toLowerCase().startsWith("select") ? MousePointer2 : Inbox)
+  return <EmptyState icon={resolved} message={title} detail={children} />
 }
 
 /** In-flight operation banner with optional cancel — used for scans, auth waits, etc. */
@@ -465,9 +468,9 @@ export function AdminTh({ children, className = "" }: { children: ReactNode; cla
   )
 }
 
-export function AdminTd({ children, className = "", colSpan }: { children: ReactNode; className?: string; colSpan?: number }): JSX.Element {
+export function AdminTd({ children, className = "", colSpan, title }: { children: ReactNode; className?: string; colSpan?: number; title?: string }): JSX.Element {
   return (
-    <td colSpan={colSpan} className={`border-t border-border-subtle px-3 py-2 align-middle ${className}`}>
+    <td colSpan={colSpan} title={title} className={`border-t border-border-subtle px-3 py-2 align-middle ${className}`}>
       {children}
     </td>
   )

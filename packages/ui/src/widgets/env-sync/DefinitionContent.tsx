@@ -1,5 +1,6 @@
 import { AlertTriangle, BookOpen, CheckCircle2, Database, Key, ShieldAlert, ShieldCheck, Ship } from "lucide-react"
 
+import { EmptyState } from "../../components/EmptyState"
 import { useStore } from "../../store"
 import type { PublishedSyncDefinition } from "../../types"
 import { DIFF, normalizeOptionalTableSelection } from "./constants"
@@ -19,11 +20,11 @@ export function DefinitionContent({ definition }: { definition: PublishedSyncDef
 
   if (!definition) {
     return (
-      <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-3 py-16 text-text-muted">
-        <BookOpen size={24} className="opacity-30" />
-        <p className="text-sm">No published definition loaded.</p>
-        <p className="text-xs">Compile and publish the repo definitions to make this entity available for sync.</p>
-      </div>
+      <EmptyState
+        icon={BookOpen}
+        message="No published definition loaded."
+        detail="Compile and publish the repo definitions to make this entity available for sync."
+      />
     )
   }
 

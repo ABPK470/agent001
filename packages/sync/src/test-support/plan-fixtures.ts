@@ -5,6 +5,7 @@
 import type { SyncPlan, SyncPlanChangeSet, SyncPlanTable } from "../application/shell/plan-store.js"
 import { loadDeployFlowCatalogForTests } from "../domain/test-flow-catalog.js"
 import { ENTITY_SPECS, type EntityFixtureSpec } from "./entity-fixtures.js"
+import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 
 const EMPTY_CHANGE_SET: SyncPlanChangeSet = { insert: [], update: [], delete: [] }
 
@@ -72,7 +73,7 @@ export function buildEntityPlan(options: BuildPlanOptions): SyncPlan {
     predicate: t.predicate
   }))
 
-  const flowSteps = [
+  const flowSteps: AuthoredSyncFlowStep[] = [
     {
       id: "metadataSync",
       phase: "metadata",

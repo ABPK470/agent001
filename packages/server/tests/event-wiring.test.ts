@@ -67,7 +67,6 @@ describe("wireEventBroadcasting", () => {
     const eventBus = new StubEventBus()
     const auditLog = { subscribe: vi.fn(() => () => {}) }
     const saveTrace = vi.fn()
-    const createNotification = vi.fn()
     const state = {
       run: {
         steps: [
@@ -87,8 +86,7 @@ describe("wireEventBroadcasting", () => {
       { eventBus, auditLog },
       "run-own",
       state,
-      saveTrace,
-      createNotification
+      saveTrace
     )
 
     await eventBus.publish(evt(EventType.StepStarted, { runId: "run-other", stepId: "step-other" }))
@@ -115,15 +113,13 @@ describe("wireEventBroadcasting", () => {
     const eventBus = new StubEventBus()
     const auditLog = { subscribe: vi.fn(() => () => {}) }
     const saveTrace = vi.fn()
-    const createNotification = vi.fn()
     const state = { run: { steps: [] } }
 
     const unsubscribe = wireEventBroadcasting(
       { eventBus, auditLog },
       "run-own",
       state,
-      saveTrace,
-      createNotification
+      saveTrace
     )
 
     await eventBus.publish(
@@ -135,7 +131,6 @@ describe("wireEventBroadcasting", () => {
       })
     )
 
-    expect(createNotification).not.toHaveBeenCalled()
     expect(broadcast).not.toHaveBeenCalled()
 
     unsubscribe()
@@ -145,15 +140,13 @@ describe("wireEventBroadcasting", () => {
     const eventBus = new StubEventBus()
     const auditLog = { subscribe: vi.fn(() => () => {}) }
     const saveTrace = vi.fn()
-    const createNotification = vi.fn()
     const state = { run: { steps: [] } }
 
     const unsubscribe = wireEventBroadcasting(
       { eventBus, auditLog },
       "run-own",
       state,
-      saveTrace,
-      createNotification
+      saveTrace
     )
 
     await eventBus.publish(
@@ -165,7 +158,6 @@ describe("wireEventBroadcasting", () => {
       })
     )
 
-    expect(createNotification).not.toHaveBeenCalled()
     expect(broadcast).toHaveBeenCalledWith(
       expect.objectContaining({
         type: EventType.ApprovalRequired,

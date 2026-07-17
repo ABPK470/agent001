@@ -224,7 +224,7 @@ function emptyResult(
 
 export function buildDependencyGraph(
   rootTable: string,
-  tables: readonly AuthoredSyncDefinitionTable[],
+  tables: readonly Pick<AuthoredSyncDefinitionTable, "name">[],
   tableResults: SyncPlanTable[]
 ): SyncPlanGraph {
   const byName = new Map(tableResults.map((t) => [t.table, t]))

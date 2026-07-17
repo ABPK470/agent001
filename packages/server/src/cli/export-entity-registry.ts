@@ -33,7 +33,7 @@ function parseArgs(argv: string[]): {
   tenantId: string | null
   includeRetired: boolean
 } {
-  const options = {
+  const options: { output: string; tenantId: string | null; includeRetired: boolean } = {
     output: defaultExportParentDir(),
     tenantId: null,
     includeRetired: false,

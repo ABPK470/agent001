@@ -25,8 +25,16 @@ import type {
   SyncRunSink
 } from "@mia/sync"
 import type {
+  ConnectorInfo,
+  MoveSummary,
+  ReadSpec,
+  Transform,
+  WriteSpec,
+} from "@mia/shared-types"
+import type {
   AttachmentStore,
   MssqlEntry,
+  MssqlPoolProvider,
   ShellClient,
   TableVerdictsReader,
   ToolKnowledgeStore,
@@ -41,6 +49,15 @@ export interface MssqlHost {
   readonly databases: Map<string, MssqlEntry>
   /** Override which named connection serves `connection: "default"` (mutable container). */
   readonly defaultConnection: { value: string | null }
+  /**
+   * Live connector-keyed pool provider — the source of truth for MSSQL pools.
+   * Sync environments resolve their pool through `connectorId` (the real FK).
+   * Optional: only sync-capable hosts provide it; agent-only hosts (direct
+   * MSSQL tools/catalog) still use `databases`/`defaultConnection` until
+   * they are migrated onto this provider. Sync pool resolution throws
+   * loudly if this is absent — there is no silent fallback.
+   */
+  readonly pools?: MssqlPoolProvider
 }
 
 export interface FilesystemHost {
@@ -113,6 +130,33 @@ export interface TenantHost {
 }
 
 /**
+ * Opaque port for the connector-adapter data-movement engine. The server
+ * builds this from persisted connectors (see @mia/connectors `buildConnectorPort`)
+ * and binds it AFTER `configureAgent` via the mutable `port` container (the
+ * port needs the host's connection pools, which only exist once the host is
+ * built — so the host holds a late-bound slot, mirroring `defaultConnection`).
+ * CLI/tests leave `port.value` null. The agent never imports adapter drivers.
+ */
+export interface ConnectorPort {
+  moveData(
+    source: { connectorId: string; spec: ReadSpec },
+    target: { connectorId: string; spec: WriteSpec; stopOnError?: boolean },
+    options?: { transform?: Transform; signal?: AbortSignal },
+  ): Promise<MoveSummary>
+  /** Read up to `limit` rows from the source, apply the transform, return them (no write). */
+  previewMove(
+    source: { connectorId: string; spec: ReadSpec },
+    options?: { transform?: Transform; limit?: number },
+  ): Promise<{ rows: Record<string, unknown>[]; truncated: boolean }>
+  listAdapters(): ConnectorInfo[]
+}
+
+export interface ConnectorsHost {
+  /** Late-bound: the server fills this after `configureAgent`. */
+  readonly port: { value: ConnectorPort | null }
+}
+
+/**
  * Everything the agent needs from the world, in one record.
  *
  * Built once by {@link configureAgent} at process startup. Passed by
@@ -136,6 +180,7 @@ export interface AgentHost {
   readonly catalog: CatalogHost
   readonly sync: SyncHost
   readonly tenant: TenantHost
+  readonly connectors: ConnectorsHost
 }
 
 // ── RunContext — built per run, passed as a parameter ────────────

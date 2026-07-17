@@ -4,26 +4,26 @@ import { Listbox, type ListboxOption } from "../../../components/Listbox"
 import { FormCheck } from "../../sync-admin/shared"
 import { HELP_TEXT } from "../chrome"
 import { FormFieldGroup, FormSectionCard } from "../form-section"
-import type { DirectionPolicyMode, TargetFormSnapshot } from "./target-form-model"
+import type { DirectionPolicyMode, EnvironmentFormSnapshot } from "./environment-form-model"
 
 const DIRECTION_POLICY_OPTIONS: ListboxOption<DirectionPolicyMode>[] = [
-  { value: "unrestricted", label: "Unrestricted", hint: "Any target allowed when this env is source" },
-  { value: "restricted", label: "Restricted list", hint: "Only selected targets allowed" },
+  { value: "unrestricted", label: "Unrestricted", hint: "Any environment allowed when this env is source" },
+  { value: "restricted", label: "Restricted list", hint: "Only selected environments allowed" },
   { value: "blocked", label: "Blocked", hint: "No outgoing syncs from this env" },
 ]
 
 export function SyncPolicySection({
   value,
-  peerTargets,
+  peerEnvironments,
   readOnly,
   onChange,
 }: {
-  value: Pick<TargetFormSnapshot, "directionPolicy" | "allowedDirections">
-  peerTargets: Array<{ name: string; displayName: string }>
+  value: Pick<EnvironmentFormSnapshot, "directionPolicy" | "allowedDirections">
+  peerEnvironments: Array<{ name: string; displayName: string }>
   readOnly?: boolean
-  onChange: (patch: Partial<TargetFormSnapshot>) => void
+  onChange: (patch: Partial<EnvironmentFormSnapshot>) => void
 }): JSX.Element {
-  const peers = peerTargets.filter((target) => target.name.trim())
+  const peers = peerEnvironments.filter((target) => target.name.trim())
 
   function toggleDirection(name: string): void {
     const normalized = name.trim()
@@ -39,7 +39,7 @@ export function SyncPolicySection({
       description="Server-enforced on preview and execute. The sync widget still lists all environments — invalid pairs fail at run time."
     >
       <p className={HELP_TEXT}>
-        When this environment is the <strong>source</strong>, which targets it may sync to.
+        When this environment is the <strong>source</strong>, which environments it may sync to.
       </p>
 
       <FormFieldGroup label="Policy">
@@ -56,9 +56,9 @@ export function SyncPolicySection({
 
       {value.directionPolicy === "restricted" && (
         <div className="space-y-2 rounded-lg border border-border-subtle bg-base/20 p-3">
-          <p className="text-xs font-medium uppercase tracking-wide text-text-faint">Allowed targets</p>
+          <p className="text-xs font-medium uppercase tracking-wide text-text-faint">Allowed environments</p>
           {peers.length === 0 ? (
-            <p className={HELP_TEXT}>No other targets configured yet.</p>
+            <p className={HELP_TEXT}>No other environments configured yet.</p>
           ) : (
             peers.map((target) => (
               <FormCheck

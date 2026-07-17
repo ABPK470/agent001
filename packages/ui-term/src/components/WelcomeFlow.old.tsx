@@ -60,7 +60,6 @@ const BAR_END              = BAR_START + BAR_FILL_DURATION
 // Tile dissolve (centre → outward)
 const DISSOLVE_AT          = BAR_END
 const DISSOLVE_SPREAD      = 700
-const TOTAL_DURATION       = DISSOLVE_AT + DISSOLVE_SPREAD + 150
 
 // ── Outro (reverse) timeline ─────────────────────────────────────────────
 const OUTRO_TILES_DONE     = 800
@@ -255,7 +254,7 @@ export function WelcomeFlow({ onSubmit, onDone, mode = "intro" }: WelcomeFlowPro
   // ── Skip on key press (Esc/Space/Enter during morphing/dissolving) ──
   useEffect(() => {
     if (step !== "morphing" && step !== "dissolving") return
-    let skipT: ReturnType<typeof setTimeout> | null = null
+    let skipT: number | null = null
     const skip = (e: KeyboardEvent) => {
       if (e.key !== "Escape" && e.key !== " " && e.key !== "Enter") return
       setSkipping(true)

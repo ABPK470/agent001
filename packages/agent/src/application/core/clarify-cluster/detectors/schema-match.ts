@@ -8,6 +8,7 @@
 // Pure function of (goal, catalog, messages). No I/O, no LLM.
 
 import { MessageRole } from "../../../../domain/enums/message.js"
+import type { CatalogGraph } from "../../../../tools/catalog/graph/index.js"
 import type { ClarifyContext, Detector } from "../types.js"
 import { makeFindingId } from "../types.js"
 import {

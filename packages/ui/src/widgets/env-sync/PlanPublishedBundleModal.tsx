@@ -35,10 +35,10 @@ export function PlanPublishedBundleModal({
           setBundlePath(res.bundlePath ?? null)
           return
         }
-        setBundlePath(res.bundlePath)
-        setBundlePublishedAt(res.bundlePublishedAt)
-        setBundlePublishedVersion(res.bundlePublishedVersion)
-        setDefinition(res.definition)
+        setBundlePath(res.bundlePath ?? null)
+        setBundlePublishedAt(res.bundlePublishedAt ?? null)
+        setBundlePublishedVersion(res.bundlePublishedVersion ?? null)
+        setDefinition(res.definition ?? null)
       })
       .catch((err) => {
         if (!dead) setError(err instanceof Error ? err.message : String(err))

@@ -6,7 +6,7 @@
  * previews on top of that without shrinking the table fan-out first.
  */
 
-import type { MssqlAccessHost } from "../../ports/host.js"
+import type { MssqlAccessHost, SyncEnvironmentRegistryHost } from "../../ports/host.js"
 import { poolGateLimit, readPoolMax } from "./pool-gate.js"
 
 /** Peak in-flight pool slots one table diff may hold on a single connection. */
@@ -19,7 +19,7 @@ function parsePositiveInt(raw: string | undefined): number | null {
 }
 
 export function resolvePreviewTableConcurrency(
-  host: MssqlAccessHost,
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   source: string,
   target: string
 ): number {
@@ -38,7 +38,7 @@ export function resolvePreviewTableConcurrency(
  * Defaults to 1 on typical pool sizes — table parallelism already fills the budget.
  */
 export function resolveEntityPreviewConcurrency(
-  host: MssqlAccessHost,
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   source: string,
   target: string
 ): number {
@@ -64,7 +64,7 @@ export interface PoolConcurrencySummary {
 }
 
 export function summarizePoolConcurrency(
-  host: MssqlAccessHost,
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   source: string,
   target: string
 ): PoolConcurrencySummary {

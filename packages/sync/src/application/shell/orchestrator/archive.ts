@@ -25,7 +25,7 @@ import { trackedQuery } from "./db-helpers.js"
  */
 export async function probeTriggers(
   host: SyncRuntimeHost,
-  tgtPool: ConnectionPool,
+  _tgtPool: ConnectionPool,
   planId: string,
   target: string,
   dataMovementTables: string[],

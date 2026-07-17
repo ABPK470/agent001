@@ -336,6 +336,18 @@ const BASELINE_SQL = `
       updated_by TEXT
     );
 
+    -- Managed connectors — UI-authored connections to external data sources.
+    CREATE TABLE IF NOT EXISTS connectors (
+      id          TEXT PRIMARY KEY,
+      kind        TEXT NOT NULL,
+      body_json   TEXT NOT NULL,
+      enabled     INTEGER NOT NULL DEFAULT 1,
+      created_at  TEXT NOT NULL,
+      updated_at  TEXT NOT NULL,
+      updated_by  TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_connectors_kind ON connectors(kind);
+
     CREATE TABLE IF NOT EXISTS sync_definition_configs (
       tenant_id              TEXT NOT NULL,
       entity_id              TEXT NOT NULL,

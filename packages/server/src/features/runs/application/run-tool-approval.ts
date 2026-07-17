@@ -50,7 +50,7 @@ export function approveRunToolStep(
   })
 
   broadcast({
-    type: "approval.resolved",
+    type: EventType.ApprovalResolved,
     data: {
       runId: approval.runId,
       stepId: approval.stepId,
@@ -94,7 +94,7 @@ export function denyRunToolStep(
   })
 
   broadcast({
-    type: "approval.resolved",
+    type: EventType.ApprovalResolved,
     data: {
       runId: approval.runId,
       stepId: approval.stepId,

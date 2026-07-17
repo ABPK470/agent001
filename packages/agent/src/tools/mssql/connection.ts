@@ -3,7 +3,6 @@ import type { AgentHost } from "../../application/shell/runtime.js"
 import {
   canonicalizeConfiguredConnectionName,
   listMssqlConnectionNames,
-  lookupRegistryKey,
   resolveMssqlConnectionName,
   tryResolveMssqlConnectionName
 } from "./resolve-connection.js"
@@ -135,6 +134,16 @@ export async function getPool(
   name = "default"
 ): Promise<{ pool: sql.ConnectionPool; entry: DatabaseEntry }> {
   const resolvedName = resolveMssqlConnectionName(host, name)
+  const pools = host.mssql.pools
+  if (pools) {
+    // Live provider path (production): resolvedName is a connector id.
+    const r = await pools.get(resolvedName)
+    return {
+      pool: r.pool,
+      entry: { config: r.config, pool: r.pool, writeEnabled: r.writeEnabled, knowledge: r.knowledge }
+    }
+  }
+  // Legacy databases-map path (tests/hosts without a live provider).
   const entry = host.mssql.databases.get(resolvedName)
   if (!entry) {
     const available = listMssqlConnectionNames(host).join(", ") || "none"

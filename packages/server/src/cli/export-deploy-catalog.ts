@@ -58,7 +58,14 @@ function parseArgs(argv: string[]): {
   zipOnly: boolean
   dryRun: boolean
 } {
-  const options = {
+  const options: {
+    output: string
+    tenantId: string | null
+    includeRetired: boolean
+    zip: boolean
+    zipOnly: boolean
+    dryRun: boolean
+  } = {
     output: defaultExportParentDir(),
     tenantId: null,
     includeRetired: false,

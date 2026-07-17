@@ -45,7 +45,7 @@ describe("real published bundle (read-only)", () => {
     const contract = getPublishedSyncDefinition(host, REPO_ROOT, "contract")
     const catalog = JSON.parse(
       readFileSync(resolve(REPO_ROOT, "deploy/sync/artifacts/flow-templates.json"), "utf-8")
-    ) as { flowTemplates: { contract: { steps: unknown[] } } }
+    ) as { flowTemplates: { contract: { steps: Array<{ bindings?: unknown; phase?: unknown }> } } }
 
     expect(stripFlowPresentation(contract.executionFlow.steps)).toEqual(
       stripFlowPresentation(catalog.flowTemplates.contract.steps)

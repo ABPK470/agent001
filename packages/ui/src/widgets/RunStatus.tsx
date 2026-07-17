@@ -5,11 +5,13 @@
 import { Loader2, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../api"
+import { EmptyState } from "../components/EmptyState"
 import { RunStatus as RunStatusEnum } from "../enums"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useStore } from "../store"
 import type { AgentDefinition, RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
 import { fmtTokens, statusColor, timeAgo } from "../util"
+import { WIDGET_ICONS } from "./widget-icons"
 
 type PlannerDecisionTrace = Extract<TraceEntry, { kind: "planner-decision" }>
 
@@ -141,8 +143,8 @@ export function RunStatus() {
 
   if (!run) {
     return (
-      <div className="flex items-center justify-center h-full text-text-muted text-sm">
-        No active run
+      <div className="flex h-full flex-col">
+        <EmptyState icon={WIDGET_ICONS["run-status"]} message="No active run" />
       </div>
     )
   }

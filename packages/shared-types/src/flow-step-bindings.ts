@@ -16,7 +16,9 @@ import {
   stepFieldKeysFromValueSource,
 } from "./value-source.js"
 
-export function isLiteralHandlerSlot(slot: SyncHandlerInput): boolean {
+export function isLiteralHandlerSlot(slot: SyncHandlerInput): slot is SyncHandlerInput & {
+  source: Extract<ValueSource, { type: "literal" }>
+} {
   return isLiteralValueSource(slot.source)
 }
 
@@ -68,7 +70,7 @@ export function stepFieldKeysFromHandler(handler: SyncFlowKindHandler): SyncStep
 
 /** Required step field keys — from handler slot wiring. */
 export function stepFieldKeysForStep(
-  step: Pick<AuthoredSyncFlowStep, "bindings">,
+  _step: Pick<AuthoredSyncFlowStep, "bindings">,
   kindDef: { handler: SyncFlowKindHandler } | undefined,
 ): SyncStepFieldKey[] {
   const keys = new Set<SyncStepFieldKey>()

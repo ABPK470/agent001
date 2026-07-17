@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import type { SyncFlowKindDefinition } from "../../types"
 
 import {
   defaultHandlerForType,
@@ -34,7 +35,7 @@ describe("handler-editor", () => {
   })
 
   it("highlights configured procedure as explicit call preview", () => {
-    const def = {
+    const def: SyncFlowKindDefinition = {
       summary: "",
       description: "",
       handler: {

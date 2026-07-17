@@ -7,13 +7,12 @@
  *   - the execute preflight gate (hard refusal on drift)
  */
 
-import type sql from "mssql"
 import { withPoolSlot } from "../adapters/mssql/pool-gate.js"
 import { runQueryWithRetry } from "../domain/diff-engine/sql-helpers.js"
 import { emitSyncEvent } from "../application/shell/events.js"
 import { EventType } from "./enums.js"
 import type { SyncTelemetryContext } from "../ports/events.js"
-import { getPool, type MssqlAccessHost, type SyncEventHost } from "../ports/index.js"
+import { getPool, type MssqlAccessHost, type SyncEnvironmentRegistryHost, type SyncEventHost } from "../ports/index.js"
 
 export interface CatalogDriftResult {
   catalogCompatible: boolean
@@ -72,7 +71,7 @@ function eventHostFromAccess(host: MssqlAccessHost): SyncEventHost | undefined {
 }
 
 async function queryWithRetry<T>(
-  host: MssqlAccessHost,
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   connection: string,
   query: string,
   label: string,
@@ -83,7 +82,7 @@ async function queryWithRetry<T>(
   const ctx = catalogContext(telemetryContext)
   if (eventHost && ctx) {
     const result = await runQueryWithRetry<T>(
-      host as SyncEventHost & MssqlAccessHost,
+      host as unknown as SyncEventHost & MssqlAccessHost & SyncEnvironmentRegistryHost,
       connection,
       query,
       label,
@@ -126,7 +125,7 @@ async function queryWithRetry<T>(
 }
 
 async function fetchSchema(
-  host: MssqlAccessHost,
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   connection: string,
   schemas: readonly string[],
   telemetryContext?: SyncTelemetryContext
@@ -157,7 +156,7 @@ async function fetchSchema(
 }
 
 async function fetchSchemaForTables(
-  host: MssqlAccessHost,
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   connection: string,
   tables: readonly string[],
   telemetryContext?: SyncTelemetryContext
@@ -215,7 +214,7 @@ function rowsToSnapshot(
 
 /** Live column names per qualified table (preserves catalog casing from sys.columns). */
 export async function fetchTableColumnNamesMap(
-  host: MssqlAccessHost,
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   connection: string,
   tables: readonly string[],
   telemetryContext?: SyncTelemetryContext
@@ -252,7 +251,7 @@ export async function fetchTableColumnNamesMap(
  * relevant to the upcoming sync.
  */
 export async function detectCatalogDrift(
-  host: MssqlAccessHost,
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   source: string,
   target: string,
   restrictTables?: Iterable<string>,
@@ -306,7 +305,7 @@ export async function detectCatalogDrift(
  * rely on existing target-side triggers (the ABI convention is the latter).
  */
 export async function tableHasTriggers(
-  host: MssqlAccessHost,
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   connection: string,
   qualifiedName: string,
   telemetryContext?: SyncTelemetryContext

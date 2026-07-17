@@ -6,6 +6,7 @@ import type { ComponentType } from "react"
 import type { WidgetType } from "../types"
 import { ActiveUsers } from "./ActiveUsers"
 import { AgentChat } from "./AgentChat"
+import { DataMovement } from "./data-movement/DataMovement"
 import { DebugInspector } from "./DebugInspector"
 import { EntityRegistry } from "./EntityRegistry"
 import { EnvSync } from "./EnvSync"
@@ -42,4 +43,5 @@ export const widgetRegistry: Record<WidgetType, ComponentType> = {
   "sync-approvals": SyncApprovals,
   "sync-evidence":  SyncEvidence,
   "sync-admin":     SyncAdmin,
+  "data-movement":  DataMovement,
 }

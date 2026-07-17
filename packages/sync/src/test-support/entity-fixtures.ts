@@ -4,6 +4,7 @@
  */
 
 import { buildMinimalTestFlowCatalog } from "../domain/test-flow-catalog.js"
+import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 
 export interface EntityTableFixture {
   name: string
@@ -140,7 +141,7 @@ export const ENTITY_SPECS: Record<string, EntityFixtureSpec> = {
 }
 
 export function publishedDefinitionFromSpec(spec: EntityFixtureSpec): Record<string, unknown> {
-  const steps = [
+  const steps: AuthoredSyncFlowStep[] = [
     {
       id: "metadataSync",
       phase: "metadata",

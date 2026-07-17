@@ -47,7 +47,7 @@ function mockTranscript(ids: string[], turnOffsets: number[], scrollTop: number,
     },
   } as unknown as HTMLElement
 
-  return { host, content, ids }
+  return [host, content, ids] as [HTMLElement, HTMLElement, string[]]
 }
 
 describe("transcriptOverflows", () => {
@@ -76,10 +76,10 @@ describe("pickNavRunInView", () => {
   const offsets = [0, 500, 1000, 1500]
 
   it("tracks top, middle, and bottom scroll positions", () => {
-    expect(pickNavRunInView(...Object.values(mockTranscript(ids, offsets, 0)))).toBe("r0")
-    expect(pickNavRunInView(...Object.values(mockTranscript(ids, offsets, 800)))).toBe("r1")
-    expect(pickNavRunInView(...Object.values(mockTranscript(ids, offsets, 1200)))).toBe("r2")
-    expect(pickNavRunInView(...Object.values(mockTranscript(ids, offsets, 1600)))).toBe("r3")
+    expect(pickNavRunInView(...mockTranscript(ids, offsets, 0))).toBe("r0")
+    expect(pickNavRunInView(...mockTranscript(ids, offsets, 800))).toBe("r1")
+    expect(pickNavRunInView(...mockTranscript(ids, offsets, 1200))).toBe("r2")
+    expect(pickNavRunInView(...mockTranscript(ids, offsets, 1600))).toBe("r3")
   })
 })
 

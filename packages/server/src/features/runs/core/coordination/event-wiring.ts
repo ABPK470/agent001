@@ -3,7 +3,6 @@ import { EventType } from "@mia/agent"
 import { presentToolCall, serializeToolCallArgs } from "@mia/shared-types"
 import { broadcast, toBroadcastData } from "../../../../platform/events/broadcaster.js"
 import * as db from "../../../../platform/persistence/sqlite.js"
-import type { NotificationOpts } from "../../../../ports/orchestration.js"
 import { TrajectoryEventKind } from "../../../../shared/enums/trajectory.js"
 
 type EventWiringServices = {
@@ -66,8 +65,7 @@ export function wireEventBroadcasting(
   // Keep a live reference to the mutable state holder because state.run is
   // replaced immutably during execution.
   state: RunStateLike,
-  saveTrace: (runId: string, entry: Record<string, unknown>) => void,
-  createNotification: (opts: NotificationOpts) => void
+  saveTrace: (runId: string, entry: Record<string, unknown>) => void
 ): Unsubscribe {
   const events: EventType[] = [
     EventType.RunStarted,

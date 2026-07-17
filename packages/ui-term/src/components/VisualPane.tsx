@@ -54,17 +54,6 @@ const CAT_RGB: Record<string, RGB> = {
   other:    [150, 150, 162],
 }
 
-function categorize(name: string): string {
-  const n = name.toLowerCase()
-  if (/sql|db|query|mssql|database|table|schema|postgres|mongo/.test(n)) return "db"
-  if (/file|read|write|path|fs|dir|folder|edit|list_file/.test(n))       return "file"
-  if (/delegate|spawn|agent|sub|worker/.test(n))                          return "delegate"
-  if (/browser|web|http|fetch|scrape|url|navigate/.test(n))              return "web"
-  if (/search|find|grep|rg|ripgrep/.test(n))                             return "search"
-  if (/shell|exec|run|bash|cmd|script/.test(n))                          return "shell"
-  return "other"
-}
-
 // ─────────────────────────────────────────────────────────────────────────────
 // Wave gate geometry  (mirrors index4.html shader)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -741,7 +730,6 @@ function drawFrame(ctx: CanvasRenderingContext2D, cw: number, ch: number, vs: VS
   // Error:    expands red and fades
   ctx.save()
   for (const op of vs.ops) {
-    const ageMs = now - op.born
     const [r, g, b] = op.rgb
     let alpha = 1, radius = 2.5
     let drawR = r, drawG = g, drawB = b

@@ -19,6 +19,12 @@ export interface SyncDefinitionFlowTemplate {
   steps: AuthoredSyncDefinition["executionFlow"]["steps"]
 }
 
+/** Raw shape parsed from disk/metadata — only `version` and `flowTemplates` are read. */
+interface FlowTemplateCatalogInput {
+  version?: unknown
+  flowTemplates?: Record<string, unknown>
+}
+
 export interface SyncDefinitionFlowTemplateCatalog {
   version: 1
   flowTemplates: Record<EntityRegistrySyncFlowTemplateId, SyncDefinitionFlowTemplate>
@@ -52,23 +58,18 @@ export function loadSyncDefinitionFlowTemplateCatalog(
       `Sync definition flow template catalog not found at ${relPath} or ${DEFAULT_SYNC_METADATA_PATH}.`
     )
   }
-  const parsed = JSON.parse(readFileSync(path, "utf-8")) as Partial<SyncDefinitionFlowTemplateCatalog> & {
-    flowTemplates?: Record<string, unknown>
-  }
+  const parsed = JSON.parse(readFileSync(path, "utf-8")) as FlowTemplateCatalogInput
   return parseFlowTemplateCatalog(parsed, relPath)
 }
 
 function loadFlowTemplateCatalogFromMetadata(projectRoot: string): SyncDefinitionFlowTemplateCatalog {
   const metadata = loadSyncMetadataArtifact(projectRoot)
   const raw = syncMetadataFlowTemplateCatalog(metadata)
-  return parseFlowTemplateCatalog(
-    raw as Partial<SyncDefinitionFlowTemplateCatalog> & { flowTemplates?: Record<string, unknown> },
-    DEFAULT_SYNC_METADATA_PATH,
-  )
+  return parseFlowTemplateCatalog(raw, DEFAULT_SYNC_METADATA_PATH)
 }
 
 function parseFlowTemplateCatalog(
-  parsed: Partial<SyncDefinitionFlowTemplateCatalog> & { flowTemplates?: Record<string, unknown> },
+  parsed: FlowTemplateCatalogInput,
   sourceLabel: string
 ): SyncDefinitionFlowTemplateCatalog {
   if (parsed.version !== 1) {

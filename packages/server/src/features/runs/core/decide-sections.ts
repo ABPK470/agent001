@@ -7,10 +7,10 @@
 import {
   classifyGoal,
   DB_DISCOVERY_TOOL_NAMES,
-  scoreDbLikelihood,
   SYNC_CAPABILITY_TOOL_NAMES,
   _resetGoalClassificationCache
 } from "./goal-classification.js"
+import type { GoalClassification } from "./goal-classification.js"
 
 export {
   classifyGoal,

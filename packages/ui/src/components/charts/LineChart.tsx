@@ -166,6 +166,3 @@ function smoothPath(pts: Array<{ x: number; y: number }>): string {
 }
 
 function truncate(s: string, n: number): string { return s.length > n ? s.slice(0, n - 1) + "…" : s }
-function Empty(): React.ReactElement {
-  return <div className="text-text-muted text-xs italic px-2 py-4">No data</div>
-}

@@ -6,7 +6,7 @@ import { Plus } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 import { Listbox } from "../../components/Listbox"
 import type { SearchablePickOption } from "../../components/SearchablePick"
-import type { AuthoredSyncFlowStep, SyncFlowKindDefinition, SyncFlowKindHandlerType, SyncProcedureParameter } from "../../types"
+import type { AuthoredSyncFlowStep, SyncFlowKindDefinition, SyncFlowKindHandler, SyncFlowKindHandlerType, SyncProcedureParameter } from "../../types"
 import { SYNC_HTTP_SERVICE_SLOTS, formatStepOutputPreviewJson, stepOutputPreview } from "../../types"
 import { FIELD_LABEL, HELP_TEXT, SUBSECTION_HEADING, TAB_CODE, TEXT_BTN } from "./chrome"
 import type { CustomValueSourceUiCatalog } from "./handler-editor"
@@ -182,7 +182,7 @@ function MssqlProcedureFields({
   patchHandler,
   onParametersChange,
 }: {
-  handler: Extract<SyncFlowKindDefinition["handler"], { type: "mssql_procedure" }>
+  handler: SyncFlowKindHandler
   customValueSourceCatalog: CustomValueSourceUiCatalog
   flowStepOptions?: readonly SearchablePickOption[]
   resolveKind?: (kindId: string) => SyncFlowKindDefinition | undefined
@@ -256,7 +256,7 @@ function HttpRequestFields({
   flowStepsForOutputHints,
   onHttpBodyChange,
 }: {
-  handler: Extract<SyncFlowKindDefinition["handler"], { type: "http_request" }>
+  handler: SyncFlowKindHandler
   readOnly?: boolean
   patchHandler: (patch: Partial<SyncFlowKindDefinition["handler"]>) => void
   customValueSourceCatalog: CustomValueSourceUiCatalog
@@ -352,7 +352,7 @@ function HttpBodyPreview({
   handler,
   customValueSourceCatalog,
 }: {
-  handler: Extract<SyncFlowKindDefinition["handler"], { type: "http_request" }>
+  handler: SyncFlowKindHandler
   customValueSourceCatalog: CustomValueSourceUiCatalog
 }): JSX.Element | null {
   const lines = formatHttpCallPreview(handler, customValueSourceCatalog)

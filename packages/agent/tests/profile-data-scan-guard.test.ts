@@ -17,7 +17,23 @@ import { configureAgent } from "../src/application/shell/runtime.js"
 import { createProfileDataTool } from "../src/tools/mssql-profiler.js"
 import { isLargeObject } from "../src/tools/mssql/validation.js"
 
-const profileDataTool = createProfileDataTool(configureAgent({}))
+/**
+ * Stub a legacy databases-map entry so resolveToolConnectionArg succeeds.
+ * Pool is null — deep-mode large-object refusals short-circuit before
+ * getPool; other paths fail with a connection error (expected in unit tests).
+ */
+function makeProfileDataTool(): ReturnType<typeof createProfileDataTool> {
+  const databases = new Map<string, import("../src/application/shell/runtime.js").MssqlEntry>()
+  databases.set("default", {
+    config: { server: "stub", database: "stub", user: "u", password: "p" } as never,
+    pool: null,
+    writeEnabled: false,
+    knowledge: null
+  })
+  return createProfileDataTool(configureAgent({ mssqlDatabases: databases }))
+}
+
+const profileDataTool = makeProfileDataTool()
 
 describe("isLargeObject helper", () => {
   it("flags the canonical UNION big views", () => {

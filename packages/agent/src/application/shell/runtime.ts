@@ -29,7 +29,9 @@ export type {
 export type {
   AttachmentMetadata,
   AttachmentStore,
+  MssqlConnectorPool,
   MssqlEntry,
+  MssqlPoolProvider,
   RecipeReader,
   ShellClient,
   ShellExecResult,

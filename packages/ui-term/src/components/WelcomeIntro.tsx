@@ -67,7 +67,6 @@ const BAR_END_AT      = BAR_FILL_START + BAR_FILL_DURATION   // ~2720ms
 const COMPOSE_OUT     = BAR_END_AT                           // wordmark+bar exit with their tiles
 const DISSOLVE_AT     = BAR_END_AT                           // tile snapping begins now
 const DISSOLVE_SPREAD = 700                                  // window over which the wave travels
-const REVEAL_END      = DISSOLVE_AT + DISSOLVE_SPREAD + 100  // ~3520ms
 
 // ── Outro (reverse) timeline ─────────────────────────────────────────────
 const OUTRO_TILES_DONE      = 800                                             // tiles finish covering
@@ -93,7 +92,7 @@ export function WelcomeIntro({ onDone, durationMs = 3600, mode = "intro" }: Prop
   const [cells, setCells] = useState<LetterCell[]>(
     () => WORD.split("").map(() => ({ state: "hidden", glyph: "" })),
   )
-  const [justLocked, setJustLocked] = useState<boolean[]>(
+  const [, setJustLocked] = useState<boolean[]>(
     () => WORD.split("").map(() => false),
   )
   const startedAtRef = useRef<number>(performance.now())

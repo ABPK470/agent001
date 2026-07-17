@@ -8,10 +8,12 @@
 import { GitBranch, Play, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
+import { EmptyState } from "../components/EmptyState"
 import { RunStatus } from "../enums"
 import { useStore } from "../store"
 import type { AgentDefinition } from "../types"
 import { fmtTokens, statusColor, timeAgo, truncate } from "../util"
+import { WIDGET_ICONS } from "./widget-icons"
 
 export function RunHistory() {
   const runs = useStore((s) => s.runs)
@@ -36,20 +38,16 @@ export function RunHistory() {
 
   if (!activeThreadId) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
-          Select a thread
-        </div>
+      <div className="flex h-full flex-col">
+        <EmptyState icon={WIDGET_ICONS["thread-nav"]} message="Select a thread" />
       </div>
     )
   }
 
   if (runs.length === 0) {
     return (
-      <div className="flex flex-col h-full">
-        <div className="flex-1 flex items-center justify-center text-text-muted text-sm">
-          No runs in this thread
-        </div>
+      <div className="flex h-full flex-col">
+        <EmptyState icon={WIDGET_ICONS["run-history"]} message="No runs in this thread" />
       </div>
     )
   }

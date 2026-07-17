@@ -25,7 +25,6 @@ export interface ToolbarMenuProps {
 
 export function ToolbarMenu({
   title,
-  ariaLabel,
   trigger,
   children,
   minWidthClass = "min-w-[11rem]",

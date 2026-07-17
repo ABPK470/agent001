@@ -2,21 +2,7 @@
  * WidgetCatalog — modal for adding widgets to the canvas.
  */
 
-import {
-  Activity,
-  Bug,
-  Clock,
-  Database,
-  GitMerge,
-  History,
-  LayoutDashboard,
-  MessageSquare,
-  NotebookTabs,
-  ScrollText,
-  Settings,
-  Ship,
-  TableProperties,
-} from "lucide-react"
+import { LayoutDashboard } from "lucide-react"
 import type { ComponentType } from "react"
 import { useIsMobile } from "../hooks/useIsMobile"
 import { useMe } from "../hooks/useMe"
@@ -25,27 +11,29 @@ import type { WidgetType } from "../types"
 import { VISITOR_WIDGETS } from "../types"
 import { ModalShell } from "../widgets/entity-registry/ModalShell"
 import { modalViewerPanelClass } from "../widgets/entity-registry/modal-overlay"
+import { WIDGET_ICONS } from "../widgets/widget-icons"
 
 interface Props {
   onClose: () => void
 }
 
 const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: ComponentType<{ size?: number, className?: string }> }> = [
-  { type: "thread-nav",    label: "Threads",       desc: "Select the active thread and run for chat widgets", Icon: GitMerge },
-  { type: "term-chat",     label: "MI:A Chat",     desc: "Send goals to the agent and see responses",   Icon: MessageSquare },
-  { type: "env-sync",      label: "Sync",          desc: "Pick source, target, entity, preview and execute changes", Icon: Ship },
-  { type: "mymi-db",       label: "Mymi DB",       desc: "Browse MyMI DB schemas, tables, views, and preview data", Icon: Database },
-  { type: "operation-log", label: "Pipelines",     desc: "Pipeline monitor — agent runs, sync",         Icon: NotebookTabs },
-  { type: "live-logs",     label: "Event Stream",  desc: "Real-time SSE event stream",                  Icon: ScrollText },
-  { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: History },
-  { type: "agent-chat",    label: "Agent Chat",    desc: "Older version of agent chat",                 Icon: MessageSquare },
-  { type: "run-status",    label: "Run Status",    desc: "Current run status, progress, and metadata",  Icon: Activity },
-  { type: "step-timeline", label: "Step Timeline", desc: "Visual timeline of tool calls and steps",     Icon: Clock },
-  { type: "operator-env",  label: "IOE",           desc: "IDE like, all data, full control",            Icon: LayoutDashboard },
-  { type: "debug-inspector", label: "Trace",       desc: "System prompts, tool resolution, LLM requests & responses", Icon: Bug },
-  { type: "active-users",  label: "Active Users",  desc: "Who's online, what they're running",          Icon: Activity },
-  { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform", Icon: TableProperties },
-  { type: "sync-admin",     label: "Sync Operations", desc: "Proposals, runs, evidence, approvals, connections, schedules, notify routes", Icon: Settings },
+  { type: "thread-nav",    label: "Threads",       desc: "Select the active thread and run for chat widgets", Icon: WIDGET_ICONS["thread-nav"] },
+  { type: "term-chat",     label: "MI:A Chat",     desc: "Send goals to the agent and see responses",   Icon: WIDGET_ICONS["term-chat"] },
+  { type: "env-sync",      label: "Sync",          desc: "Pick source, target, entity, preview and execute changes", Icon: WIDGET_ICONS["env-sync"] },
+  { type: "mymi-db",       label: "Mymi DB",       desc: "Browse MyMI DB schemas, tables, views, and preview data", Icon: WIDGET_ICONS["mymi-db"] },
+  { type: "operation-log", label: "Pipelines",     desc: "Pipeline monitor — agent runs, sync",         Icon: WIDGET_ICONS["operation-log"] },
+  { type: "live-logs",     label: "Event Stream",  desc: "Real-time SSE event stream",                  Icon: WIDGET_ICONS["live-logs"] },
+  { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: WIDGET_ICONS["run-history"] },
+  { type: "agent-chat",    label: "Agent Chat",    desc: "Older version of agent chat",                 Icon: WIDGET_ICONS["agent-chat"] },
+  { type: "run-status",    label: "Run Status",    desc: "Current run status, progress, and metadata",  Icon: WIDGET_ICONS["run-status"] },
+  { type: "step-timeline", label: "Step Timeline", desc: "Visual timeline of tool calls and steps",     Icon: WIDGET_ICONS["step-timeline"] },
+  { type: "operator-env",  label: "IOE",           desc: "IDE like, all data, full control",            Icon: WIDGET_ICONS["operator-env"] },
+  { type: "debug-inspector", label: "Trace",       desc: "System prompts, tool resolution, LLM requests & responses", Icon: WIDGET_ICONS["debug-inspector"] },
+  { type: "active-users",  label: "Active Users",  desc: "Who's online, what they're running",          Icon: WIDGET_ICONS["active-users"] },
+  { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform", Icon: WIDGET_ICONS["entity-registry"] },
+  { type: "sync-admin",     label: "Sync Operations", desc: "Proposals, runs, evidence, approvals, connections, schedules, notify routes", Icon: WIDGET_ICONS["sync-admin"] },
+  { type: "data-movement",  label: "Data Movement",   desc: "Move rows between connectors (SQL Server, Postgres, HTTP, Denodo, HDFS) through a declarative transform", Icon: WIDGET_ICONS["data-movement"] },
 ]
 
 export function WidgetCatalog({ onClose }: Props) {

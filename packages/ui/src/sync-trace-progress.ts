@@ -55,21 +55,6 @@ function num(data: Record<string, unknown>, key: string): number | null {
   return null
 }
 
-function toolLabel(tool: string): string {
-  switch (tool) {
-    case "sync_diff_scan":
-      return "Env diff scan"
-    case "sync_preview":
-      return "Sync preview"
-    case "sync_execute":
-      return "Sync execute"
-    case "compare_catalogs":
-      return "Catalog compare"
-    default:
-      return tool.replace(/_/g, " ")
-  }
-}
-
 function formatTableProgress(table: string, index?: number, total?: number): string {
   const short = table.split(".").pop() ?? table
   if (index != null && total != null && total > 0) {

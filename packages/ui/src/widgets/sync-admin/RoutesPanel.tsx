@@ -108,7 +108,7 @@ export function RoutesPanel(): JSX.Element {
                 <AdminTh>filter</AdminTh>
                 <AdminTh>on</AdminTh>
                 <AdminTh>updated</AdminTh>
-                <AdminTh />
+                <AdminTh>{""}</AdminTh>
               </tr>
             </thead>
             <tbody>

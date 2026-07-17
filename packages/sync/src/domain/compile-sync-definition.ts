@@ -18,7 +18,6 @@ import { normalizeAuthoredSyncFlowSteps } from "./normalize-flow-step.js"
 import {
   defaultSyncDefinitionFlowTemplateId,
   getSyncDefinitionFlowTemplateSteps,
-  hasSyncDefinitionFlowTemplate,
   type SyncDefinitionFlowTemplateCatalog,
 } from "./sync-definition-flow-templates.js"
 import { resolveFlowSteps } from "./resolve-flow-steps.js"

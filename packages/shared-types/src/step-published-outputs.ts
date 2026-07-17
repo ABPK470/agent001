@@ -10,9 +10,8 @@ import type { AuthoredSyncFlowStep, SyncFlowKindDefinition, SyncFlowKindHandler 
 import { handlerInputSlots } from "./handler-input.js"
 
 /** Procedure parameter names always echoed in handler outputs at runtime. */
-export function procedureParameterOutputKeys(
-  handler: Extract<SyncFlowKindHandler, { type: "mssql_procedure" }>,
-): readonly string[] {
+export function procedureParameterOutputKeys(handler: SyncFlowKindHandler): readonly string[] {
+  if (handler.type !== "mssql_procedure") return []
   return [
     ...new Set(
       (handler.parameters ?? [])

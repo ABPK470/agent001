@@ -6,11 +6,13 @@ import { ChevronRight, Plus, Trash2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { api } from "../../api"
+import { EmptyState } from "../../components/EmptyState"
 import { RunStatus } from "../../enums"
 import { useStore } from "../../store"
 import type { Run, Thread } from "../../types"
 import { timeAgo } from "../../util"
 import { C, statusDot } from "../../widgets/ioe/constants"
+import { WIDGET_ICONS } from "../../widgets/widget-icons"
 import { DeleteThreadModal } from "./DeleteThreadModal"
 import { ThreadRowMenu } from "./ThreadRowMenu"
 
@@ -244,7 +246,11 @@ function WidgetThreadBlock({
           <div className="thread-nav-runs">
             {loading && <div className="thread-nav-runs-status">Loading runs…</div>}
             {!loading && (runs?.length ?? 0) === 0 && (
-              <div className="thread-nav-runs-status">No runs yet</div>
+              <EmptyState
+                icon={WIDGET_ICONS["run-history"]}
+                message="No runs yet"
+                className="py-6"
+              />
             )}
             {runs?.map((run) => (
               <RunRow
@@ -450,9 +456,11 @@ export function ThreadRunsPanel({ variant = "widget" }: Props): React.ReactEleme
   const list = (
     <>
       {threads.length === 0 ? (
-        <div className={variant === "widget" ? "thread-nav-empty" : "px-4 py-3 text-[13px]"} style={variant === "ioe" ? { color: C.dim } : undefined}>
-          No threads yet
-        </div>
+        variant === "widget" ? (
+          <EmptyState icon={WIDGET_ICONS["thread-nav"]} message="No threads yet" className="py-8" />
+        ) : (
+          <div className="px-4 py-3 text-[13px]" style={{ color: C.dim }}>No threads yet</div>
+        )
       ) : (
         threads.map((thread) => (
           <ThreadBlock

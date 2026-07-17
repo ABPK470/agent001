@@ -389,7 +389,7 @@ export interface RuleTemplate {
   form:        Omit<RuleFormValue, "name"> & { name: string }
 }
 
-export const RULE_TEMPLATES: ReadonlyArray<RuleTemplate> = Object.freeze([
+export const RULE_TEMPLATES: ReadonlyArray<RuleTemplate> = [
   {
     id:          "deny_prod_dml",
     label:       "Deny DML on prod",
@@ -494,4 +494,4 @@ export const RULE_TEMPLATES: ReadonlyArray<RuleTemplate> = Object.freeze([
       reason:    "Promoting an attachment is irreversible; ask first.",
     },
   },
-])
+]

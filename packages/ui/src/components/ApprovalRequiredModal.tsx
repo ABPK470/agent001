@@ -7,6 +7,7 @@
 
 import { AlertTriangle, ShieldCheck, ShieldX, X } from "lucide-react"
 import { useState } from "react"
+import type { JSX } from "react"
 import { api } from "../api"
 import { JsonViewer } from "./JsonViewer"
 import { RunStatus } from "../enums"

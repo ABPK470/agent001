@@ -50,6 +50,7 @@ describe("DOCTRINE_LESSON_TEMPLATES registry", () => {
   it("covers the doctrines that have wired block branches", () => {
     expect(Object.keys(DOCTRINE_LESSON_TEMPLATES).sort()).toEqual([
       "aggregate_semantic_mismatch",
+      "alias_bracket_convention",
       "avg_of_coalesce_zero",
       "invented_column",
       "publish_view_topn_without_branch_aggregation",

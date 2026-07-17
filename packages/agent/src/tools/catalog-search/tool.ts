@@ -100,8 +100,8 @@ function buildSearchCatalogTool(host: AgentHost, run?: RunContext): Tool {
         const hint =
           available.length > 0
             ? `Available connections: ${available.join(", ")}. Pass connection='${available[0]}' to target that database, or omit for auto-select.`
-            : "No catalogs loaded. The catalog is built at server startup when MSSQL is configured. " +
-              "Try search_catalog(refresh=true) to build it now, or check that MSSQL_HOST / MSSQL_DATABASES is set."
+            : "No catalogs loaded. The catalog is built at server startup when a SQL Server connector is configured. " +
+              "Try search_catalog(refresh=true) to build it now, or add a connector in the platform menu (Connectors)."
         return `Schema catalog not available for connection '${connName}'. ${hint}`
       }
 

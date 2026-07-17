@@ -29,13 +29,14 @@ import { fetchPkColumns } from "./apply.js"
 import { probeTriggers } from "./archive.js"
 import { scheduleFlowSteps } from "./flow-scheduler.js"
 import { runMetadataSync } from "./metadata-sync.js"
-import { constraintRelaxationTables, dataMovementTables } from "./metadata-scope.js"
+import { dataMovementTables } from "./metadata-scope.js"
 import { validatePlan } from "./plan-table.js"
 import {
   evaluateRootParentPreflight,
   formatRootParentExecuteRefusal
 } from "./root-parent-preflight.js"
 import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
+import { setContractLockOnSource } from "./contract-deploy.js"
 import { toSyncExecuteError, throwIfAborted, isAuditGateSkippedError, type ExecuteOptions, type ExecuteProgress } from "./types.js"
 export type { ExecuteOptions, ExecuteProgress } from "./types.js"
 
@@ -238,7 +239,7 @@ async function executeSyncInner(
   }
   const flowCatalog = flowCatalogFromSnapshot(executionContract.flow.catalog)
   const scheduled = scheduleFlowSteps(flowSteps)
-  const lockStepPresent = flowSteps.some((step) => step.kind === "target-lock")
+  const lockStepPresent = flowSteps.some((step) => step.kind === "targetLock")
   const stepWarnings: { step: string; sproc: string; error: string }[] = []
 
   async function ensureContractUnlockedOnSource(): Promise<void> {

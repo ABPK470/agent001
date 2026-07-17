@@ -33,8 +33,8 @@ const PATTERNS: Array<{ regex: RegExp; build: (m: RegExpMatchArray) => PlatformU
     build: (m) => ({
       subject: `MSSQL connection "${m[1]}"`,
       remediation:
-        "Set MSSQL_HOST (single-database) or MSSQL_DATABASES (multi-database) in the server environment and restart. " +
-        "See packages/server/src/setup-mssql.ts for the full env-var reference."
+        "Add a SQL Server connector in the platform menu (Connectors) and restart the server. " +
+        "See packages/server/src/features/connectors for the connector model."
     })
   },
   {
@@ -45,7 +45,7 @@ const PATTERNS: Array<{ regex: RegExp; build: (m: RegExpMatchArray) => PlatformU
     build: () => ({
       subject: `MSSQL`,
       remediation:
-        "Set MSSQL_HOST (single-database) or MSSQL_DATABASES (multi-database) in the server environment and restart."
+        "Add a SQL Server connector in the platform menu (Connectors) and restart the server."
     })
   }
 ]

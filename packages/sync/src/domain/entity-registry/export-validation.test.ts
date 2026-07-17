@@ -97,10 +97,10 @@ describe("export validation", () => {
       labelColumn: null,
       selfJoinColumn: null,
       legacy: { pipelineId: null, entrySproc: null },
-      governance: { approvalPolicyId: null, freezeWindowIds: [] },
+      governance: { freezeWindowIds: [] },
       strategy: { strategyId: "mymi-scd2", strategyVersion: "latest" },
       bindings: { serviceProfileRef: "default", environmentPolicyRef: "default" },
-      ownership: { team: "sync-platform", owner: null, reviewStatus: "ok", notes: [] },
+      ownership: { team: "sync-platform", owner: null, reviewStatus: "legacy-review-required", notes: [] },
       metadata: {
         tables: [
           {
@@ -118,7 +118,11 @@ describe("export validation", () => {
         reverseOrder: [],
         discrepancies: [],
       },
-      executionFlow: { steps: [{ kind: "metadataSync" }] },
+      executionFlow: {
+        steps: [
+          { id: "metadataSync", kind: "metadataSync", title: "Metadata sync", description: "Apply metadata" },
+        ],
+      },
       provenance: { kind: "manual", sourceArtifact: null, sourceVersion: null },
     } satisfies AuthoredSyncDefinition
 

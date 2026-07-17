@@ -13,7 +13,6 @@ import {
   useShippedDeployArtifacts,
 } from "./application/platform-artifacts-service.js"
 import {
-  ensureInitialSyncCatalogVersion,
   getActiveSyncCatalogVersion,
   importSyncCatalogBundle,
   listSyncCatalogVersions,
@@ -77,7 +76,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       return { ok: false, message: "Admin only" }
     }
     try {
-      const result = await rebuildPlatformCatalog(opts.projectRoot, opts.bootHost)
+      const result = await rebuildPlatformCatalog(opts.bootHost)
       reply.code(result.ok ? 200 : 400)
       return result
     } catch (error) {

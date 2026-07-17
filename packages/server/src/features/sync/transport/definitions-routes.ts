@@ -2,16 +2,14 @@
  * Entity registry transport routes.
  */
 
-import { resolve } from "node:path"
-
 import { EventType } from "@mia/shared-enums"
 import type {
   EntityRegistryDraftSuggestion,
   EntityRegistryTableSuggestion,
   EntityRegistrySyncFlowTemplateId,
   EntityRegistryYamlImportResponse,
-  type EntityRegistryDefinition,
-  type EntityRegistryPreviewYamlRequest,
+  EntityRegistryDefinition,
+  EntityRegistryPreviewYamlRequest,
 } from "@mia/shared-types"
 import {
   hasSyncDefinitionFlowTemplate,

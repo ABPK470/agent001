@@ -23,7 +23,8 @@ function createHost(projectRoot: string): SyncRuntimeHost {
         sink: {
           start: () => {},
           finish: () => {}
-        }
+        },
+        actorUpn: null
       },
       environments: { items: new Map() },
       plans: { diskRoot: null, memCache: new Map() },

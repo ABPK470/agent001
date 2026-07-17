@@ -43,7 +43,7 @@ import {
   type ProposalRow
 } from "../../../platform/persistence/proposals.js"
 import { probeRowDivergence } from "../../runs/core/proposer/divergence-probe.js"
-import { bindLlmOperationContext, clearLlmInteractionForOperation, emitLlmInteractionCleared } from "../../../platform/llm/operation-context.js"
+import { bindLlmOperationContext, emitLlmInteractionCleared } from "../../../platform/llm/operation-context.js"
 import {
   registerOperation,
   throwIfCancelled,

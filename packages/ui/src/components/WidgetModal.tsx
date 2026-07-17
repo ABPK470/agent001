@@ -6,7 +6,7 @@
  * functionality plus an "Add to view" button to embed it.
  */
 
-import { Maximize2, Plus, X } from "lucide-react"
+import { Plus, X } from "lucide-react"
 import { useStore } from "../store"
 import type { WidgetType } from "../types"
 import {
@@ -15,6 +15,7 @@ import {
   modalOverlayClass,
 } from "../widgets/entity-registry/modal-overlay"
 import { widgetRegistry } from "../widgets"
+import { WIDGET_ICONS } from "../widgets/widget-icons"
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
   "thread-nav": "Threads",
@@ -35,6 +36,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "sync-approvals": "Sync Admin · Approvals",
   "sync-evidence":  "Sync Evidence",
   "sync-admin":     "Sync Admin",
+  "data-movement": "Data Movement",
 }
 
 export function WidgetModal() {
@@ -48,6 +50,8 @@ export function WidgetModal() {
 
   const WidgetComponent = widgetRegistry[modalWidget.type]
   if (!WidgetComponent) return null
+
+  const WidgetIcon = WIDGET_ICONS[modalWidget.type]
 
   // Check if this widget type already exists in the current view
   const activeView = views.find((v) => v.id === activeViewId)
@@ -71,7 +75,7 @@ export function WidgetModal() {
         {/* Header */}
         <div className="flex items-center justify-between px-4 h-12 border-b border-border shrink-0">
           <div className="flex items-center gap-2">
-            <Maximize2 size={14} className="text-accent" />
+            <WidgetIcon size={16} className="text-text-muted" />
             <span className="text-sm font-semibold text-text">
               {WIDGET_LABELS[modalWidget.type]}
             </span>
@@ -102,6 +106,7 @@ export function WidgetModal() {
           className={`flex-1 overflow-hidden ${
             modalWidget.type === "entity-registry"
             || modalWidget.type === "sync-admin"
+            || modalWidget.type === "data-movement"
             || modalWidget.type.startsWith("sync-")
               ? "p-0"
               : "p-3"

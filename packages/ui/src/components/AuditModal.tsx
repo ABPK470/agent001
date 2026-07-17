@@ -7,10 +7,12 @@
  */
 
 import {
+  AlertCircle,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
   Download,
+  Loader2,
   RefreshCw,
   Scale,
   SlidersHorizontal,
@@ -27,6 +29,7 @@ import {
 import { ModalShell } from "../widgets/entity-registry/ModalShell"
 import { MODAL_ADMIN_PANEL } from "../widgets/entity-registry/modal-overlay"
 import { DateField } from "./DateField"
+import { EmptyState } from "./EmptyState"
 import { Listbox, type ListboxOption } from "./Listbox"
 import { ModalSearchField } from "./ModalSearchField"
 
@@ -418,13 +421,16 @@ export function AuditModal({ onClose }: { onClose: () => void }) {
 
         <div className="min-h-0 flex-1 overflow-y-auto px-6 py-3 show-scrollbar">
           {error ? (
-            <div className="py-10 text-center text-sm text-error">{error}</div>
+            <EmptyState icon={AlertCircle} message={error} className="py-10" />
           ) : loading && items.length === 0 ? (
-            <div className="py-10 text-center text-sm text-text-muted">Loading audit log…</div>
+            <EmptyState icon={Loader2} message="Loading audit log…" className="py-10 [&_svg]:animate-spin" />
           ) : items.length === 0 ? (
-            <div className="py-10 text-center text-sm text-text-muted">
-              No audit entries match these filters.
-            </div>
+            <EmptyState
+              icon={Scale}
+              message="No audit entries match these filters."
+              detail={activeFilterCount > 0 ? "Try clearing or widening your filters." : undefined}
+              className="py-10"
+            />
           ) : (
             <div className="space-y-0.5">
               {items.map((entry) => {

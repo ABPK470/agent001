@@ -264,15 +264,18 @@ function HelpPanel({ open, onToggle, toolCount }: { open: boolean; onToggle: () 
           <section>
             <h4 className="font-semibold text-text mb-1">The model</h4>
             <p>
-              Every tool call passes through the policy engine. A rule says:{" "}
-              <strong>"WHEN these dimensions match → ALLOW / REQUIRE APPROVAL / DENY"</strong>.
-              The engine collects every rule whose dimensions all match the request, then picks
-              the winner: <em>highest priority wins</em>; ties broken by{" "}
-              <em>deny &gt; require_approval &gt; allow</em>.
+              Every tool call is turned into a fixed fact bag (who is calling, which tool,
+              path / command / DB target if any). A rule says:{" "}
+              <strong>IF these facts match → ALLOW / REQUIRE APPROVAL / DENY</strong>.
+              Rules that do not match are ignored. If several rules match, one winner is
+              chosen: the rule with the highest <em>priority</em> number (a simple rank,
+              not a score). If two matching rules share the same priority, the stricter
+              effect wins: <em>deny &gt; require_approval &gt; allow</em>.
             </p>
             <p className="mt-1.5 text-text-muted">
-              The whole policy surface is finite: {SELECTOR_KEYS.length} dimensions,
-              {" "}{enumValueCount} fixed enum values, {toolCount} tools, 3 effects.
+              The whole policy surface is finite: {SELECTOR_KEYS.length} dimensions
+              ({SELECTOR_KEYS.map((k) => k.key).join(", ")}),{" "}
+              {enumValueCount} fixed enum values, {toolCount} tools, 3 effects.
               There is nothing else the engine reads.
             </p>
           </section>

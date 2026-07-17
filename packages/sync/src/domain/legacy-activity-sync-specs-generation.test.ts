@@ -79,7 +79,7 @@ describe("legacy activity sync specs", () => {
 
     const { scopedPipelineActivities, isExcludedPipelineAction, isExcludedPipelineStoredProcedure } =
       (await import(evidencePath)) as {
-        scopedPipelineActivities: (activities: unknown[]) => unknown[]
+        scopedPipelineActivities: (activities: unknown[]) => Array<{ activityName: string }>
         isExcludedPipelineAction: (action: string) => boolean
         isExcludedPipelineStoredProcedure: (storedProcedure: string | null) => boolean
       }
@@ -123,7 +123,7 @@ describe("legacy activity sync specs", () => {
 
     const scoped = scopedPipelineActivities(pipeline.activities)
     expect(scoped).toHaveLength(2)
-    expect(scoped.map((activity: { activityName: string }) => activity.activityName)).toEqual([
+    expect(scoped.map((activity) => activity.activityName)).toEqual([
       "Synchronize content objects Tran",
       "Handle dependencies"
     ])

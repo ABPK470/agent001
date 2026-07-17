@@ -13,6 +13,10 @@ import { resolveSyncPlansDir } from "../platform/persistence/server-data-dir.js"
 import { projectRoot } from "./paths.js"
 import { configureSandbox, type SandboxRuntime } from "./sandbox.js"
 import { createSyncEventSink, createSyncRunSink, loadBootSyncEnvironments } from "./sync.js"
+import { loadPersistedConnectors } from "../features/connectors/runtime/live-connectors.js"
+import { mssqlConfigsFromConnectors } from "../features/connectors/runtime/mssql-from-connectors.js"
+import { createMssqlPoolProvider } from "../features/connectors/runtime/mssql-pool-provider.js"
+import { buildMovementPort } from "../features/connectors/runtime/movement-port.js"
 
 export interface ServerContext {
   readonly projectRoot: string
@@ -39,16 +43,29 @@ export async function createServerContext(): Promise<ServerContext> {
   const workspace = createServerWorkspaceRef(resolveServerWorkspace())
   const sandbox = await configureSandbox(() => workspace.get())
 
-  const mssqlSetup = setupMssql(projectRoot)
-  const syncEnvironments = loadBootSyncEnvironments(projectRoot, mssqlSetup.configs)
+  // Legacy `.env` MSSQL vars are consulted only as a one-time seed bridge so
+  // existing deployments populate the connectors DB on first boot. The live
+  // source of truth for `host.mssql.databases` is the persisted connectors DB.
+  const legacyMssqlSetup = setupMssql(projectRoot)
+  const connectors = loadPersistedConnectors(projectRoot, legacyMssqlSetup.configs)
+  const mssqlConfigs = mssqlConfigsFromConnectors(connectors.connectors, projectRoot)
+  const mssqlDefaultConnectionName =
+    process.env["MSSQL_DEFAULT_CONNECTION"] ?? legacyMssqlSetup.defaultConnectionName ?? null
+
+  const syncEnvironments = loadBootSyncEnvironments(projectRoot, mssqlConfigs)
   const syncEventSink = createSyncEventSink()
   const syncRunSink = createSyncRunSink()
+
+  // Live, connector-keyed MSSQL pool provider — the single source of truth for
+  // pools. Sync environments resolve their pool through `connectorId`.
+  const mssqlPools = createMssqlPoolProvider(projectRoot)
 
   const catalogInstances: AgentHost["catalog"]["instances"] = new Map()
   const catalogDefaultCachePath: AgentHost["catalog"]["defaultCachePath"] = { value: undefined }
   const bootHost = configureAgent({
-    mssqlConfigs: mssqlSetup.configs,
-    mssqlDefaultConnectionName: mssqlSetup.defaultConnectionName,
+    mssqlConfigs,
+    mssqlDefaultConnectionName,
+    mssqlPools,
     catalogInstances,
     catalogDefaultCachePath,
     sync: {
@@ -60,7 +77,28 @@ export async function createServerContext(): Promise<ServerContext> {
     }
   })
 
+  // Late-bind the connectors port: it needs the boot host's connection pools,
+  // so it is built after configureAgent and stored in the mutable slot. The
+  // port re-reads persisted connectors live from the DB on each call, so
+  // runtime create/enable/disable/delete is reflected without a restart.
+  bootHost.connectors.port.value = buildMovementPort(bootHost)
+
+  const mssqlSummary =
+    mssqlConfigs.length > 0
+      ? mssqlConfigs.map((c) => `${c.name}(${c.server}/${c.database ?? "master"})`).join(", ")
+      : "not configured"
+
   logSyncEnvironments(syncEnvironments)
+  if (connectors.seeded) {
+    if (connectors.source === "file") {
+      console.log(`Connectors seeded from deploy/connectors/connectors.json: ${connectors.summary}`)
+    } else if (connectors.source === "mssql") {
+      console.log(`Connectors seeded from MSSQL_DATABASES: ${connectors.summary}`)
+    }
+  } else {
+    console.log(`Connectors (from persisted DB): ${connectors.summary}`)
+  }
+  console.log(`MSSQL databases (from connectors): ${mssqlSummary}`)
   seedDefaultPoliciesIfMissing(bootHost)
   configurePlanStore(bootHost, resolveSyncPlansDir())
 
@@ -69,7 +107,7 @@ export async function createServerContext(): Promise<ServerContext> {
     workspace,
     sandbox,
     bootHost,
-    mssqlSummary: mssqlSetup.summary,
+    mssqlSummary,
     syncEnvironments
   }
 }
@@ -84,7 +122,8 @@ export function buildBootHostDeps(ctx: ServerContext): BootHostDeps {
     },
     mssql: {
       databases: bootHost.mssql.databases,
-      defaultConnection: bootHost.mssql.defaultConnection
+      defaultConnection: bootHost.mssql.defaultConnection,
+      pools: bootHost.mssql.pools
     },
     catalog: {
       instances: bootHost.catalog.instances,
@@ -97,6 +136,9 @@ export function buildBootHostDeps(ctx: ServerContext): BootHostDeps {
       environments: bootHost.sync.environments,
       plans: bootHost.sync.plans,
       project: bootHost.sync.project
+    },
+    connectors: {
+      port: bootHost.connectors.port
     }
   }
 }

@@ -10,7 +10,7 @@ export type ServiceUrlEntry = {
 
 export type DirectionPolicyMode = "unrestricted" | "restricted" | "blocked"
 
-export type TargetFormSnapshot = {
+export type EnvironmentFormSnapshot = {
   name: string
   displayName: string
   color: string
@@ -22,9 +22,11 @@ export type TargetFormSnapshot = {
   serviceUrls: ServiceUrlEntry[]
   directionPolicy: DirectionPolicyMode
   allowedDirections: string[]
+  /** Foreign key to a managed MSSQL connector — required; the sync run resolves its pool through this. */
+  connectorId: string | null
 }
 
-export function emptyTargetFormSnapshot(): TargetFormSnapshot {
+export function emptyEnvironmentFormSnapshot(): EnvironmentFormSnapshot {
   return {
     name: "",
     displayName: "",
@@ -37,6 +39,7 @@ export function emptyTargetFormSnapshot(): TargetFormSnapshot {
     serviceUrls: defaultServiceUrlEntries(),
     directionPolicy: "unrestricted",
     allowedDirections: [],
+    connectorId: null,
   }
 }
 
@@ -48,8 +51,8 @@ export function defaultServiceUrlEntries(): ServiceUrlEntry[] {
   }))
 }
 
-export function targetFormFromEnv(env: SyncEnvironmentAdmin): TargetFormSnapshot {
-  const direction = directionPolicyFromEnv(env.allowedSyncTargets)
+export function environmentFormFromEnv(env: SyncEnvironmentAdmin): EnvironmentFormSnapshot {
+  const direction = directionPolicyFromEnv(env.allowedSyncEnvironments)
   return {
     name: env.name,
     displayName: env.displayName,
@@ -62,18 +65,20 @@ export function targetFormFromEnv(env: SyncEnvironmentAdmin): TargetFormSnapshot
     serviceUrls: serviceUrlEntriesFromEnv(env),
     directionPolicy: direction.mode,
     allowedDirections: direction.allowedDirections,
+    connectorId: env.connectorId ?? null,
   }
 }
 
-export function cloneTargetFormSnapshot(snapshot: TargetFormSnapshot): TargetFormSnapshot {
+export function cloneEnvironmentFormSnapshot(snapshot: EnvironmentFormSnapshot): EnvironmentFormSnapshot {
   return {
     ...snapshot,
     serviceUrls: snapshot.serviceUrls.map((entry) => ({ ...entry })),
     allowedDirections: [...snapshot.allowedDirections],
+    connectorId: snapshot.connectorId,
   }
 }
 
-export function targetFormToPayload(snapshot: TargetFormSnapshot): Record<string, unknown> {
+export function environmentFormToPayload(snapshot: EnvironmentFormSnapshot): Record<string, unknown> {
   const name = snapshot.name.trim()
   const defaultAccessMode = snapshot.defaultAccessMode
   const denyDml = snapshot.denyDml
@@ -95,12 +100,14 @@ export function targetFormToPayload(snapshot: TargetFormSnapshot): Record<string
     denyDdl,
     allowedOperations: deriveAllowedOperations(defaultAccessMode, denyDml, denyDdl),
     approvalRequiredOperations: [],
-    allowedSyncTargets: allowedSyncTargetsFromForm(snapshot),
+    allowedSyncEnvironments: allowedSyncEnvironmentsFromForm(snapshot),
+    connectorId: snapshot.connectorId ?? null,
   }
 }
 
-export function validateTargetForm(snapshot: TargetFormSnapshot): string | null {
-  if (!snapshot.name.trim()) return "Target name is required."
+export function validateEnvironmentForm(snapshot: EnvironmentFormSnapshot): string | null {
+  if (!snapshot.name.trim()) return "Environment name is required."
+  if (!snapshot.connectorId || !snapshot.connectorId.trim()) return "Connector is required."
   const keys = new Set<string>()
   for (const entry of snapshot.serviceUrls) {
     const key = entry.key.trim().toLowerCase()
@@ -154,18 +161,18 @@ function serviceUrlMapFromEntries(entries: ServiceUrlEntry[]): Record<string, st
 }
 
 function directionPolicyFromEnv(
-  allowedSyncTargets: string[] | null,
+  allowedSyncEnvironments: string[] | null,
 ): { mode: DirectionPolicyMode; allowedDirections: string[] } {
-  if (allowedSyncTargets === null) {
+  if (allowedSyncEnvironments === null) {
     return { mode: "unrestricted", allowedDirections: [] }
   }
-  if (allowedSyncTargets.length === 0) {
+  if (allowedSyncEnvironments.length === 0) {
     return { mode: "blocked", allowedDirections: [] }
   }
-  return { mode: "restricted", allowedDirections: [...allowedSyncTargets] }
+  return { mode: "restricted", allowedDirections: [...allowedSyncEnvironments] }
 }
 
-function allowedSyncTargetsFromForm(snapshot: TargetFormSnapshot): string[] | null {
+function allowedSyncEnvironmentsFromForm(snapshot: EnvironmentFormSnapshot): string[] | null {
   if (snapshot.directionPolicy === "unrestricted") return null
   if (snapshot.directionPolicy === "blocked") return []
   return snapshot.allowedDirections.map((name) => name.trim()).filter(Boolean)

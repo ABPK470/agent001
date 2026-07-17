@@ -7,7 +7,7 @@
  * the type instead so renames flow automatically.
  */
 
-import type { CustomValueSourceDefinition } from "./custom-value-source.js"
+import type { SyncHandlerInput } from "./handler-input.js"
 import type {
     DelegationEndStatus,
     DirectLoopFallbackSource,
@@ -37,6 +37,55 @@ export type {
     VerifierMode,
     VerifierOutcome
 }
+
+export {
+  CONNECTOR_KINDS,
+  ENABLED_CONNECTOR_KINDS,
+  SECRET_MASK,
+  type AdapterCapabilities,
+  type AdapterFactory,
+  type CastKind,
+  type Connector,
+  type ConnectorAdmin,
+  type ConnectorConfigField,
+  type ConnectorConfigFieldType,
+  type ConnectorConfigValidation,
+  type ConnectorInfo,
+  type ConnectorKind,
+  type ConnectorKindId,
+  type AqueductReadSpec,
+  type AwsReadSpec,
+  type AwsWriteSpec,
+  type AzureReadSpec,
+  type AzureWriteSpec,
+  type ConnectorAdapter,
+  type DenodoReadSpec,
+  type FtpReadSpec,
+  type FtpWriteSpec,
+  type HttpApiReadSpec,
+  type HttpApiWriteSpec,
+  type MovementError,
+  type MovementStatus,
+  type MovementValue,
+  type MoveSummary,
+  type ReadSpec,
+  type Row,
+  type SqlReadSpec,
+  type SqlWriteSpec,
+  type Transform,
+  type TransformColumn,
+  type TransformDerive,
+  type WebhdfsReadSpec,
+  type WebhdfsWriteSpec,
+  type WriteMode,
+  type WriteSpec,
+  getConnectorKind,
+  isConnectorKindId,
+  maskConnectorConfig,
+  toConnectorId,
+  validateConnectorConfig,
+  withConnectorConfigDefaults,
+} from "./connectors.js"
 
 
 // ── Run ──────────────────────────────────────────────────────────
@@ -436,6 +485,7 @@ export type WidgetType =
   | "sync-approvals"
   | "sync-evidence"
   | "sync-admin"
+  | "data-movement"
 
 /**
  * Widget types visible AND interactive for non-admin "visitor" users.
@@ -514,7 +564,7 @@ export interface SyncEnvironment {
   color: string
   role: "source" | "target" | "both"
   ringOrder: number
-  allowedSyncTargets: string[] | null
+  allowedSyncEnvironments: string[] | null
 }
 
 export interface SyncRecipeTable {
@@ -668,6 +718,8 @@ export type AuthoredSyncFlowKind =
   | "handleDependencies"
   | "syncDate"
   | "deployDate"
+  // User-authored custom flow kinds (custom_sql / custom_shell_script handlers).
+  | (string & {})
 
 export interface AuthoredSyncDefinitionGovernance {
   freezeWindowIds: string[]
@@ -837,11 +889,12 @@ export interface EntityRegistryTableSuggestion {
 
 export interface CompiledSyncPlanStep {
   id: string
-  phase: AuthoredSyncFlowPhase
+  /** @deprecated Ignored at runtime — execution regions are derived from order around metadataSync. */
+  phase?: AuthoredSyncFlowPhase
   kind: AuthoredSyncFlowKind
   title: string
   description: string
-  bindings?: Record<string, string>
+  bindings?: Record<string, import("./value-source.js").ValueSource>
   objectName?: string | null
   auditObjectType?: string | null
   pipelineName?: string | null
@@ -933,9 +986,22 @@ export interface SyncExecuteProgress {
 
 export type EntityRegistryProvenanceKind = "bundled" | "imported" | "manual" | "agent"
 
+export interface EntityRegistryFkHop {
+  /** Schema-qualified table name traversed. */
+  table: string
+  /** Column on the previous hop (or root) whose value is matched. */
+  fromColumn: string
+  /** Column on `table` that holds the matching value. */
+  toColumn: string
+}
+
 export type EntityRegistryTableScope =
   | { kind: "rootPk"; column: string }
   | { kind: "sql"; predicate: string }
+  /** @deprecated Legacy import only — normalized to `sql` on read/save. Kept so domain
+   *  `EntityTable` values (which may carry this shape in-memory during import) are
+   *  assignable to the API contract. Persisted registry tables never use `fkPath`. */
+  | { kind: "fkPath"; through: EntityRegistryFkHop[] }
 
 export type EntityRegistryProvenance =
   | { kind: "manual" }
@@ -944,6 +1010,12 @@ export type EntityRegistryProvenance =
   | { kind: "imported"; sourceManifestId?: string; source?: string }
   | { kind: "template"; templateId: string; templateVersion?: number; entityId?: string }
   | { kind: "legacy-migration"; legacyPipelineId: number | null }
+  /** Discovered from a stored procedure body (legacy pipeline evidence). */
+  | { kind: "sproc"; sprocName: string; lineRange?: [number, number] }
+  /** Discovered by a configured importer. */
+  | { kind: "importer"; importerId: string }
+  /** Suggested from the FK graph; confidence reflects verification state. */
+  | { kind: "fkGraphSuggester"; confidence: "high" | "medium" | "low" }
 
 export interface EntityRegistryTable {
   name: string
@@ -1544,6 +1616,14 @@ export interface SyncEnvironmentAdmin {
   name: string
   displayName: string
   color: string
+  /**
+   * Optional link to a managed connector (see `Connector`). Pure metadata in
+   * this phase — the sync orchestrator still resolves the environment by
+   * `name` against the MSSQL connection registry, so this field does not
+   * change sync behaviour. It exists so the connections form can record which
+   * connector backs an environment ahead of the connector-becomes-SOT step.
+   */
+  connectorId?: string | null
   role: "source" | "target" | "both"
   ringOrder: number
   agentServiceBaseUrl: string | null
@@ -1556,10 +1636,10 @@ export interface SyncEnvironmentAdmin {
   denyDml: boolean
   denyDdl: boolean
   approvalRequiredOperations: EnvOperation[]
-  allowedSyncTargets: string[] | null
+  allowedSyncEnvironments: string[] | null
   updatedAt: string
   updatedBy: string | null
-  /** Shipped sync targets (dev/uat/prod) — require explicit unlock before edit/delete. */
+  /** Shipped sync environments (dev/uat/prod) — require explicit unlock before edit/delete. */
   builtIn?: boolean
 }
 

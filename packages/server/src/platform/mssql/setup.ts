@@ -22,6 +22,9 @@ function readKnowledgeFile(projectRoot: string, filePath: string): string | null
   }
 }
 
+/** Re-exported for the connectors→mssql bridge (Phase 2 source of truth). */
+export { readKnowledgeFile }
+
 /**
  * Load MSSQL connections from environment variables.
  * Supports multi-database mode (MSSQL_DATABASES JSON array) and
@@ -71,6 +74,7 @@ export function setupMssql(projectRoot: string): {
         trustServerCertificate: db.trustServerCertificate !== false
       },
       writeEnabled: db.writeEnabled ?? false,
+      knowledgePath: db.knowledgePath ?? null,
       knowledge: db.knowledgePath ? readKnowledgeFile(projectRoot, db.knowledgePath) : null
     }))
 
@@ -105,6 +109,7 @@ export function setupMssql(projectRoot: string): {
           trustServerCertificate: process.env["MSSQL_TRUST_CERT"] !== "false"
         },
         writeEnabled: process.env["MSSQL_WRITE_ENABLED"] === "true",
+        knowledgePath: knowledgePath ?? null,
         knowledge: knowledgePath ? readKnowledgeFile(projectRoot, knowledgePath) : null
       }
     ]
@@ -118,7 +123,11 @@ export function setupMssql(projectRoot: string): {
     return { configs, defaultConnectionName: null, summary }
   }
 
-  console.log("MSSQL: not configured — set MSSQL_HOST or MSSQL_DATABASES in .env for SQL Server tools and sync")
+  // No legacy `.env` MSSQL vars. The connectors DB is the live source of truth;
+  // if it is also empty, MSSQL is simply not configured yet. Operators add
+  // connections from the platform menu → Connectors (or deploy/connectors/
+  // connectors.json) — no `.env` edit required.
+  console.log("MSSQL: no legacy .env seed — connectors DB is the source of truth")
 
   return { configs: [], defaultConnectionName: null, summary: "not configured" }
 }

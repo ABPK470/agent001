@@ -8,10 +8,14 @@ import {
 
 const trackedExecute = vi.fn()
 
-vi.mock("./db-helpers.js", () => ({
-  trackedExecute: (...args: unknown[]) => trackedExecute(...args),
-  trackedQuery: vi.fn()
-}))
+vi.mock("./db-helpers.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./db-helpers.js")>()
+  return {
+    ...actual,
+    trackedExecute: (...args: unknown[]) => trackedExecute(...args),
+    trackedQuery: vi.fn(),
+  }
+})
 
 describe("contract governance on source", () => {
   it("runContractAuditGateOnSource uses source connection", async () => {
@@ -32,7 +36,8 @@ describe("contract governance on source", () => {
       "core.uspAuditRunCheck",
       expect.stringContaining("syncOrNot"),
       undefined,
-      expect.anything()
+      expect.anything(),
+      expect.stringMatching(/^EXEC core\.uspAuditRunCheck /),
     )
   })
 

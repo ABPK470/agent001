@@ -9,10 +9,14 @@ import type { SyncExecutionContractStep, SyncPlan } from "../plan-store.js"
 import { trackedExecute, trackedQuery } from "./db-helpers.js"
 import { runPostMetadataPipeline } from "./post-metadata-pipeline.js"
 
-vi.mock("./db-helpers.js", () => ({
-  trackedExecute: vi.fn(),
-  trackedQuery: vi.fn()
-}))
+vi.mock("./db-helpers.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("./db-helpers.js")>()
+  return {
+    ...actual,
+    trackedExecute: vi.fn(),
+    trackedQuery: vi.fn(),
+  }
+})
 
 describe("runPostMetadataPipeline", () => {
   const trackedQueryMock = vi.mocked(trackedQuery)
@@ -105,7 +109,8 @@ describe("runPostMetadataPipeline", () => {
       "core.uspObjectDependencies",
       "flowStep.handleDependencies(handleDependencies)",
       undefined,
-      expect.anything()
+      expect.anything(),
+      expect.stringMatching(/^EXEC core\.uspObjectDependencies /),
     )
     expectAuditProcedure(1, "DEV", { action: "syncDate", id: 791, objType: "Rule" })
     expectAuditProcedure(2, "UAT", { action: "deployDate", id: 791, objType: "Rule" })
@@ -159,7 +164,8 @@ describe("runPostMetadataPipeline", () => {
       "core.uspObjectDependencies",
       "flowStep.handleDependencies(handleDependencies)",
       undefined,
-      expect.anything()
+      expect.anything(),
+      expect.stringMatching(/^EXEC core\.uspObjectDependencies /),
     )
     expect(request.input.mock.calls.map(([name, , value]) => [name, value])).toEqual([
       ["id", 692],
@@ -584,7 +590,8 @@ function createHost(): SyncRuntimeHost {
         sink: {
           start: vi.fn(),
           finish: vi.fn()
-        }
+        },
+        actorUpn: null
       },
       project: {
         dbProjectRoot: null,
@@ -603,7 +610,7 @@ function createHost(): SyncRuntimeHost {
               agentServiceBaseUrl: "https://agent.example",
               etlServiceBaseUrl: "https://etl.example",
               gateServiceBaseUrl: "https://gate.example",
-              allowedSyncTargets: null,
+              allowedSyncEnvironments: null,
               defaultAccessMode: "read_write",
               allowedOperations: ["query_read", "schema_introspect", "sync_preview", "sync_execute", "dml"],
               denyDml: false,
@@ -622,7 +629,7 @@ function createHost(): SyncRuntimeHost {
               agentServiceBaseUrl: "https://agent.example",
               etlServiceBaseUrl: "https://etl.example",
               gateServiceBaseUrl: "https://gate.example",
-              allowedSyncTargets: null,
+              allowedSyncEnvironments: null,
               defaultAccessMode: "read_only",
               allowedOperations: ["query_read", "schema_introspect", "sync_preview"],
               denyDml: true,

@@ -59,8 +59,8 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
   // default 1×1 generator during a synchronize pass), keeping the prior
   // stored size instead of clamping the bad value upward.
   const handleLayoutChange = useCallback(
-    (layout: LayoutItem[]) => {
-      updateLayouts(activeViewId, layout)
+    (layout: readonly LayoutItem[]) => {
+      updateLayouts(activeViewId, [...layout])
     },
     [activeViewId, updateLayouts],
   )

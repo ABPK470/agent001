@@ -14,7 +14,7 @@ function envEventCount(log: ReadonlyArray<{ type: unknown }>): number {
   return count
 }
 
-export function useSyncTargets(
+export function useSyncEnvironments(
   notify: (message: string) => void,
   notifyError: (message: string) => void,
   enabled: boolean,

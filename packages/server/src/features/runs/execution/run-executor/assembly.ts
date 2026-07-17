@@ -113,8 +113,7 @@ export function wireExecutionEvents(
     },
     command.request.runId,
     state,
-    saveTrace,
-    command.sideEffects.notifications.notify
+    saveTrace
   )
 }
 

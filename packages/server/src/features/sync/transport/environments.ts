@@ -48,7 +48,8 @@ type Editable = Pick<
   | "denyDml"
   | "denyDdl"
   | "approvalRequiredOperations"
-  | "allowedSyncTargets"
+  | "allowedSyncEnvironments"
+  | "connectorId"
 >
 
 function sanitise(body: Record<string, unknown>): Partial<Editable> | string {
@@ -125,11 +126,16 @@ function sanitise(body: Record<string, unknown>): Partial<Editable> | string {
     if (typeof body["denyDdl"] !== "boolean") return "denyDdl must be boolean"
     out.denyDdl = body["denyDdl"]
   }
-  if (body["allowedSyncTargets"] !== undefined) {
-    if (body["allowedSyncTargets"] !== null && !Array.isArray(body["allowedSyncTargets"]))
-      return "allowedSyncTargets must be null or an array of environment names"
-    out.allowedSyncTargets =
-      body["allowedSyncTargets"] === null ? null : (body["allowedSyncTargets"] as unknown[]).map(String)
+  if (body["allowedSyncEnvironments"] !== undefined) {
+    if (body["allowedSyncEnvironments"] !== null && !Array.isArray(body["allowedSyncEnvironments"]))
+      return "allowedSyncEnvironments must be null or an array of environment names"
+    out.allowedSyncEnvironments =
+      body["allowedSyncEnvironments"] === null ? null : (body["allowedSyncEnvironments"] as unknown[]).map(String)
+  }
+  if (body["connectorId"] !== undefined) {
+    if (typeof body["connectorId"] !== "string" || body["connectorId"].trim() === "")
+      return "connectorId must be a non-empty string"
+    out.connectorId = (body["connectorId"] as string).trim()
   }
   return out
 }
@@ -191,12 +197,14 @@ function allowBuiltinFromRequest(req: FastifyRequest): boolean {
   return body.allowBuiltinEdit === true
 }
 
-function hasConnection(host: AgentHost, name: string): boolean {
-  return host.mssql.databases.has(name)
-}
-
 function defaultAccessModeForName(name: string): SyncEnvironment["defaultAccessMode"] {
   return /\bprod\b|\buat\b|\bstag(e|ing)?\b/i.test(name) ? "read_only" : "read_write"
+}
+
+/** Live FK check: connectorId must reference a persisted mssql connector. */
+function resolveMssqlConnector(connectorId: string): db.DbConnector | undefined {
+  const row = db.getConnector(connectorId)
+  return row && row.kind === "mssql" ? row : undefined
 }
 
 export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentHost): void {
@@ -221,18 +229,24 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         reply.code(400)
         return { error: "name is required" }
       }
-      if (!hasConnection(host, name)) {
-        reply.code(400)
-        return { error: `unknown MSSQL connection "${name}"` }
-      }
-      if (db.getSyncEnvironment(name)) {
-        reply.code(409)
-        return { error: `environment already exists: ${name}` }
-      }
       const sanitised = sanitise(req.body ?? {})
       if (typeof sanitised === "string") {
         reply.code(400)
         return { error: sanitised }
+      }
+      const connectorId = sanitised.connectorId
+      if (!connectorId) {
+        reply.code(400)
+        return { error: "connectorId is required" }
+      }
+      const connector = resolveMssqlConnector(connectorId)
+      if (!connector) {
+        reply.code(400)
+        return { error: `unknown MSSQL connector "${connectorId}"` }
+      }
+      if (db.getSyncEnvironment(name)) {
+        reply.code(409)
+        return { error: `environment already exists: ${name}` }
       }
       const env = withPermissionDefaults({
         name,
@@ -250,8 +264,9 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         ...(sanitised.denyDml !== undefined ? { denyDml: sanitised.denyDml } : {}),
         ...(sanitised.denyDdl !== undefined ? { denyDdl: sanitised.denyDdl } : {}),
         approvalRequiredOperations: sanitised.approvalRequiredOperations ?? [],
-        allowedSyncTargets: sanitised.allowedSyncTargets ?? [],
+        allowedSyncEnvironments: sanitised.allowedSyncEnvironments ?? [],
         ...(sanitised.serviceUrls ? { serviceUrls: sanitised.serviceUrls } : {}),
+        connectorId,
       })
       db.saveSyncEnvironment(serialiseEnvironment(env, req.session.upn))
       rebuildLiveSyncEnvironments(host)
@@ -289,6 +304,16 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
       if (typeof sanitised === "string") {
         reply.code(400)
         return { error: sanitised }
+      }
+      if (sanitised.connectorId !== undefined) {
+        if (!sanitised.connectorId) {
+          reply.code(400)
+          return { error: "connectorId is required" }
+        }
+        if (!resolveMssqlConnector(sanitised.connectorId)) {
+          reply.code(400)
+          return { error: `unknown MSSQL connector "${sanitised.connectorId}"` }
+        }
       }
       const env = withPermissionDefaults({
         ...normalizeStoredSyncEnvironment(req.params.name, JSON.parse(row.body_json) as Record<string, unknown>),

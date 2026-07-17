@@ -515,7 +515,7 @@ function applyExecuteSkipped(
 function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity[] {
   const METADATA_STEP = "metadataSync"
   const activities: OperationActivity[] = []
-  let currentStep: OperationActivity | null = null
+  const step: { current: OperationActivity | null } = { current: null }
   const openTables = new Map<string, OperationActivity>()
   let executeReadsParent: OperationActivity | null = null
   let sqlChildIndex = 0
@@ -539,23 +539,23 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
   }
 
   const finalizeStep = (endTs: string, status?: OperationStatus, error?: string): void => {
-    if (!currentStep) return
-    if (currentStep.name === METADATA_STEP && status === OperationStatus.Failed) {
+    if (!step.current) return
+    if (step.current.name === METADATA_STEP && status === OperationStatus.Failed) {
       failOpenTables(endTs, error ?? "Rolled back — not committed")
     }
-    currentStep.endedAt = endTs
-    currentStep.durationMs = durationOf(currentStep.startedAt, endTs)
-    if (status) currentStep.status = status
-    else if (currentStep.status === OperationStatus.Running) currentStep.status = OperationStatus.Success
-    if (error) currentStep.error = error
-    currentStep = null
+    step.current.endedAt = endTs
+    step.current.durationMs = durationOf(step.current.startedAt, endTs)
+    if (status) step.current.status = status
+    else if (step.current.status === OperationStatus.Running) step.current.status = OperationStatus.Success
+    if (error) step.current.error = error
+    step.current = null
     openTables.clear()
   }
 
   const openFlowStep = (stepName: string, ev: OperationEvent): void => {
     finalizeStep(ev.timestamp)
     const stepSummary = syncExecuteStepSummary(stepName)
-    currentStep = {
+    step.current = {
       id: `estep:${activities.length}`,
       name: stepName,
       status: OperationStatus.Running,
@@ -566,7 +566,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       ...(stepSummary ? { summary: stepSummary } : {}),
       ...(stepName === METADATA_STEP ? { children: [] as OperationActivity[] } : {})
     }
-    activities.push(currentStep)
+    activities.push(step.current)
   }
 
   const pushLifecycleActivity = (ev: OperationEvent): void => {
@@ -619,10 +619,10 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
   }
 
   const attachToMetadataStep = (ev: OperationEvent): void => {
-    if (currentStep?.name === METADATA_STEP) {
-      currentStep.events.push(ev)
-    } else if (currentStep) {
-      currentStep.events.push(ev)
+    if (step.current?.name === METADATA_STEP) {
+      step.current.events.push(ev)
+    } else if (step.current) {
+      step.current.events.push(ev)
     }
   }
 
@@ -654,7 +654,7 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       if (pipelineFailed && openTables.size > 0) {
         failOpenTables(ev.timestamp)
       }
-      applyExecuteSkipped(ev, activities, currentStep, finalizeStep)
+      applyExecuteSkipped(ev, activities, step.current, finalizeStep)
       continue
     }
 
@@ -670,8 +670,8 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
     if (t === EventType.SyncExecuteStep) {
       const stepName = strField(ev.data, "step") ?? "step"
       if (stepName === `${METADATA_STEP}-done`) {
-        if (currentStep?.name === METADATA_STEP) {
-          currentStep.events.push(ev)
+        if (step.current?.name === METADATA_STEP) {
+          step.current.events.push(ev)
           finalizeStep(ev.timestamp, OperationStatus.Success)
         }
         openFlowStep(stepName, ev)
@@ -685,8 +685,8 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
     if (t === EventType.SyncExecuteStepFailed) {
       const stepName = strField(ev.data, "step") ?? "step"
       const errMsg = strField(ev.data, "error") ?? OperationStatus.Failed
-      if (currentStep && (currentStep.name === stepName || stepName === METADATA_STEP)) {
-        currentStep.events.push(ev)
+      if (step.current && (step.current.name === stepName || stepName === METADATA_STEP)) {
+        step.current.events.push(ev)
         finalizeStep(ev.timestamp, OperationStatus.Failed, errMsg)
       } else {
         activities.push({
@@ -708,10 +708,10 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
       const tableName = strField(ev.data, "table") ?? "table"
       const op = strField(ev.data, "op") ?? "apply"
       const rows = numField(ev.data, "rowsTotal")
-      if (currentStep?.name === METADATA_STEP) {
-        currentStep.events.push(ev)
+      if (step.current?.name === METADATA_STEP) {
+        step.current.events.push(ev)
         const child: OperationActivity = {
-          id: `etbl:${tableName}:${currentStep.children?.length ?? 0}`,
+          id: `etbl:${tableName}:${step.current.children?.length ?? 0}`,
           name: tableName,
           status: OperationStatus.Running,
           startedAt: ev.timestamp,
@@ -720,8 +720,8 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
           summary: `${op}${rows != null ? ` · ${rows} row(s)` : ""}`,
           events: [ev]
         }
-        if (!currentStep.children) currentStep.children = []
-        currentStep.children.push(child)
+        if (!step.current.children) step.current.children = []
+        step.current.children.push(child)
         openTables.set(tableName, child)
         continue
       }
@@ -740,19 +740,19 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
         const applied = numField(ev.data, "rowsApplied")
         if (applied != null) child.summary = `${applied} row(s) committed`
         openTables.delete(tableName)
-        currentStep?.events.push(ev)
+        step.current?.events.push(ev)
         continue
       }
       attachToMetadataStep(ev)
       continue
     }
 
-    if (currentStep) {
+    if (step.current) {
       if (t.endsWith(".sql")) {
-        currentStep.events.push(ev)
+        step.current.events.push(ev)
         continue
       }
-      currentStep.events.push(ev)
+      step.current.events.push(ev)
       continue
     }
 
@@ -770,8 +770,8 @@ function groupSyncExecuteActivities(events: OperationEvent[]): OperationActivity
   }
 
   const lastTs = events[events.length - 1]?.timestamp ?? new Date().toISOString()
-  if (currentStep) {
-    if (pipelineFailed && currentStep.status === OperationStatus.Running) {
+  if (step.current) {
+    if (pipelineFailed && step.current.status === OperationStatus.Running) {
       finalizeStep(lastTs, OperationStatus.Failed)
     } else {
       finalizeStep(lastTs)

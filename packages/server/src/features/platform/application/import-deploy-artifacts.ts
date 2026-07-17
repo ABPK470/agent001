@@ -287,6 +287,7 @@ function applyEnvironments(doc: EnvironmentsDoc): number {
     names.add(name)
     const env = withPermissionDefaults({
       name,
+      connectorId: typeof raw.connectorId === "string" && raw.connectorId.trim() !== "" ? raw.connectorId.trim() : null,
       displayName: String(raw.displayName ?? name),
       color: String(raw.color ?? "slate"),
       role: (raw.role as SyncEnvironment["role"]) ?? "both",
@@ -304,9 +305,13 @@ function applyEnvironments(doc: EnvironmentsDoc): number {
       denyDdl: Boolean(raw.denyDdl),
       approvalRequiredOperations:
         (raw.approvalRequiredOperations as SyncEnvironment["approvalRequiredOperations"]) ?? [],
-      allowedSyncTargets: Array.isArray(raw.allowedSyncTargets)
-        ? raw.allowedSyncTargets.map(String)
-        : [],
+      allowedSyncEnvironments: Array.isArray(raw.allowedSyncEnvironments)
+        ? raw.allowedSyncEnvironments.map(String)
+        : Array.isArray(raw.allowedSyncConnections)
+          ? raw.allowedSyncConnections.map(String)
+          : Array.isArray(raw.allowedSyncTargets)
+            ? raw.allowedSyncTargets.map(String)
+            : [],
     })
     const now = new Date().toISOString()
     const existing = db.getSyncEnvironment(name)
@@ -541,6 +546,7 @@ export function applyDeployCatalogSnapshot(args: {
   }
 
   const tenantId = args.snapshot.tenantId || DEFAULT_TENANT
+  const projectRoot = args.projectRoot
 
   getDb().transaction(() => {
     applyEnvironments(args.snapshot.environments as EnvironmentsDoc)
@@ -550,12 +556,12 @@ export function applyDeployCatalogSnapshot(args: {
     applySyncDefinitionConfigs(
       tenantId,
       args.snapshot.syncDefinitionConfigs,
-      args.projectRoot,
+      projectRoot,
       args.actor,
     )
-    applyEntityRunBindings(tenantId, args.snapshot, args.actor, args.projectRoot)
-    ensureSyncDefinitionConfigs(args.projectRoot, tenantId)
-    rehydrateSyncDefinitionConfigSteps(args.projectRoot, tenantId)
+    applyEntityRunBindings(tenantId, args.snapshot, args.actor, projectRoot)
+    ensureSyncDefinitionConfigs(projectRoot, tenantId)
+    rehydrateSyncDefinitionConfigSteps(projectRoot, tenantId)
   })()
 
   return { ...preview, dryRun: false, applied: true }

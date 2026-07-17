@@ -2,10 +2,11 @@
  * Shared split-pane modal layout for entity-registry governance editors.
  */
 
-import { Search, X } from "lucide-react"
+import { Inbox, MousePointer2, Search, X, type LucideIcon } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 
-import { FORM_HEADING, HELP_TEXT, META_TEXT, PANEL } from "../chrome"
+import { EmptyState } from "../../../components/EmptyState"
+import { FORM_HEADING, META_TEXT, PANEL } from "../chrome"
 
 export { FormFieldGroup, FormSectionCard } from "../form-section"
 
@@ -121,12 +122,14 @@ export function AdminModalEditorBody({ children }: { children: ReactNode }): JSX
   )
 }
 
-export function AdminModalEmpty({ children }: { children: ReactNode }): JSX.Element {
-  return (
-    <div className="flex min-h-[12rem] flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-      <p className={`${HELP_TEXT} max-w-sm text-text-muted`}>{children}</p>
-    </div>
-  )
+export function AdminModalEmpty({
+  icon = MousePointer2,
+  children,
+}: {
+  icon?: LucideIcon
+  children: ReactNode
+}): JSX.Element {
+  return <EmptyState icon={icon} message={children} />
 }
 
 export function AdminRailSection({
@@ -199,11 +202,11 @@ export function AdminRailList({
           <span className="h-6 w-6 shrink-0" aria-hidden />
         )}
       </div>
-      <div className="min-h-0 flex-1 overflow-auto">
+      <div className="flex min-h-0 flex-1 flex-col overflow-auto">
         {items.length === 0 ? (
-          <p className="text-sm text-text-muted">{emptyLabel}</p>
+          <EmptyState icon={Inbox} message={emptyLabel} className="py-8" />
         ) : filtered.length === 0 ? (
-          <p className="text-sm text-text-muted">No matches.</p>
+          <EmptyState icon={Search} message="No matches." className="py-8" />
         ) : (
           <ul className={PANEL}>
             {filtered.map((item, index) => (

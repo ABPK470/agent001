@@ -7,7 +7,7 @@
  * named connection to stay inside a safe budget derived from pool.max.
  */
 
-import type { MssqlAccessHost } from "../../ports/host.js"
+import type { MssqlAccessHost, SyncEnvironmentRegistryHost } from "../../ports/host.js"
 
 interface GateState {
   limit: number
@@ -15,22 +15,30 @@ interface GateState {
   queue: Array<() => void>
 }
 
+type PoolGateHost = MssqlAccessHost & SyncEnvironmentRegistryHost
+
 const gatesByHost = new WeakMap<MssqlAccessHost, Map<string, GateState>>()
 
-export function readPoolMax(host: MssqlAccessHost, connection: string): number {
-  const entry = host.mssql.databases.get(connection)
-  const max = entry?.config?.pool?.max
-  if (typeof max === "number" && max > 0) return max
+export function readPoolMax(host: PoolGateHost, connection: string): number {
+  const pools = host.mssql.pools
+  if (pools) {
+    const env = host.sync.environments.items.get(connection)
+    const connectorId = env?.connectorId
+    if (connectorId) {
+      const max = pools.configOf(connectorId)?.pool?.max
+      if (typeof max === "number" && max > 0) return max
+    }
+  }
   return 10
 }
 
 /** Slots available for sync work on this connection (pool max minus headroom). */
-export function poolGateLimit(host: MssqlAccessHost, connection: string): number {
+export function poolGateLimit(host: PoolGateHost, connection: string): number {
   const headroom = Math.max(1, parseInt(process.env["SYNC_POOL_HEADROOM"] ?? "3", 10) || 3)
   return Math.max(1, readPoolMax(host, connection) - headroom)
 }
 
-function gateFor(host: MssqlAccessHost, connection: string): GateState {
+function gateFor(host: PoolGateHost, connection: string): GateState {
   let perHost = gatesByHost.get(host)
   if (!perHost) {
     perHost = new Map()
@@ -65,7 +73,7 @@ function release(gate: GateState): void {
 
 /** Run one pool-backed operation while holding a gate slot on `connection`. */
 export async function withPoolSlot<T>(
-  host: MssqlAccessHost,
+  host: PoolGateHost,
   connection: string,
   fn: () => Promise<T>
 ): Promise<T> {

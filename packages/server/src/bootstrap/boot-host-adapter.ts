@@ -17,7 +17,8 @@ export function bootHostDepsToConfigureAgentOptions(
     ...(bootHostDeps.mssql
       ? {
           mssqlDatabases: bootHostDeps.mssql.databases,
-          mssqlDefaultConnection: bootHostDeps.mssql.defaultConnection
+          mssqlDefaultConnection: bootHostDeps.mssql.defaultConnection,
+          ...(bootHostDeps.mssql.pools ? { mssqlPools: bootHostDeps.mssql.pools } : {})
         }
       : {}),
     ...(bootHostDeps.catalog
@@ -26,6 +27,7 @@ export function bootHostDepsToConfigureAgentOptions(
           catalogDefaultCachePath: bootHostDeps.catalog.defaultCachePath
         }
       : {}),
-    ...(bootHostDeps.sync ? { sync: bootHostDeps.sync } : {})
+    ...(bootHostDeps.sync ? { sync: bootHostDeps.sync } : {}),
+    ...(bootHostDeps.connectors ? { connectors: bootHostDeps.connectors.port.value } : {})
   }
 }

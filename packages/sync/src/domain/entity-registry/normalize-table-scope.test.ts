@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { compileFkPathPredicate, normalizeEntityDefinition } from "./normalize-table-scope.js"
 import { projectTablePredicate } from "./project-predicate.js"
+import type { EntityTable } from "./types.js"
 
 describe("normalize-table-scope", () => {
   it("compiles legacy fkPath to sql predicate", () => {
@@ -26,7 +27,7 @@ describe("normalize-table-scope", () => {
       idColumn: "testId",
       labelColumn: null,
       selfJoinColumn: null,
-      tables: entity.tables as never,
+      tables: entity.tables as EntityTable[],
       policies: { freezeWindowIds: [] },
       scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
       lineageRefs: [],

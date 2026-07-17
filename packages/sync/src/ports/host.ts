@@ -1,4 +1,5 @@
 import type sql from "mssql"
+import type { MssqlPoolProvider } from "@mia/agent"
 import type { SyncPlan } from "../application/shell/plan-store.js"
 import type { ToolControlDirective, ToolOutcomeSeverity } from "../domain/enums.js"
 import type { SyncEnvironment } from "../domain/environments.js"
@@ -41,6 +42,8 @@ export interface MssqlEntry {
 export interface MssqlHost {
   databases: Map<string, MssqlEntry>
   defaultConnection: { value: string | null }
+  /** Live connector-keyed pool provider — source of truth for sync env pools. Optional; sync resolution throws if absent. */
+  pools?: MssqlPoolProvider
 }
 
 export interface MssqlAccessHost {

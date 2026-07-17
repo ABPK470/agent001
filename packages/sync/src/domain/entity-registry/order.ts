@@ -125,18 +125,6 @@ export function findEntityTableOrderViolations(
   return violations
 }
 
-function dedupeEdges(edges: EntityTableOrderEdge[]): EntityTableOrderEdge[] {
-  const seen = new Set<string>()
-  const out: EntityTableOrderEdge[] = []
-  for (const edge of edges) {
-    const key = `${edge.parent.toLowerCase()}=>${edge.child.toLowerCase()}`
-    if (seen.has(key)) continue
-    seen.add(key)
-    out.push(edge)
-  }
-  return out
-}
-
 function compareNodes(
   left: { table: EntityTable; idx: number },
   right: { table: EntityTable; idx: number },

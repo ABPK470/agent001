@@ -6,9 +6,10 @@
  * Click to expand input/output.
  */
 
-import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
+import { CheckCircle2, Circle, ListTree, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { CodeBlock } from "../components/CodeBlock"
+import { EmptyState } from "../components/EmptyState"
 import { extractToolCode, ToolStepOutput } from "../components/tool-code-display"
 import { JsonViewer } from "../components/JsonViewer"
 import { RunStatus } from "../enums"
@@ -38,8 +39,8 @@ export function StepTimeline() {
 
   if (steps.length === 0) {
     return (
-      <div className="flex items-center justify-center h-full text-text-muted text-sm">
-        No steps yet
+      <div className="flex h-full flex-col">
+        <EmptyState icon={ListTree} message="No steps yet" />
       </div>
     )
   }

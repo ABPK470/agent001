@@ -14,7 +14,7 @@ import { withPoolSlot } from "../../adapters/mssql/pool-gate.js"
 import { emitSyncEvent, emitSyncSqlEvent } from "../../application/shell/events.js"
 import { EventType } from "../enums.js"
 import type { SyncTelemetryContext } from "../../ports/events.js"
-import type { MssqlAccessHost, SyncEventHost } from "../../ports/host.js"
+import type { MssqlAccessHost, SyncEnvironmentRegistryHost, SyncEventHost } from "../../ports/host.js"
 import type { HashColumn, PkHashRow } from "./types.js"
 
 /** Bracket-quote a `schema.table` identifier → `[schema].[table]`. */
@@ -53,7 +53,7 @@ export function isTransientMssqlError(e: unknown): boolean {
  * Backoff: 100ms, 400ms (jittered).
  */
 export async function runQueryWithRetry<T = unknown>(
-  host: SyncEventHost & MssqlAccessHost,
+  host: SyncEventHost & MssqlAccessHost & SyncEnvironmentRegistryHost,
   connectionName: string,
   query: string,
   label: string,

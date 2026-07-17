@@ -12,8 +12,9 @@
  * this shows the raw inputs/outputs that explain WHY.
  */
 
-import { ChevronDown, ChevronRight, Clock, Copy, Search } from "lucide-react"
+import { ChevronDown, ChevronRight, Clock, Copy, Bug, MousePointer2, Search } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { EmptyState } from "../components/EmptyState"
 import { JsonViewer } from "../components/JsonViewer"
 import { useStore } from "../store"
 import type { TraceEntry } from "../types"
@@ -279,17 +280,20 @@ export function DebugInspector() {
       </div>
 
       {/* Main content */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto space-y-2 pr-1">
+      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto space-y-2 pr-1">
         {!activeRunId && (
-          <div className="text-text-muted text-center pt-8 text-sm">Select a run to inspect</div>
+          <EmptyState icon={MousePointer2} message="Select a run to inspect" />
         )}
 
         {activeRunId && !hasDebugData && (
-          <div className="text-text-muted text-center pt-8 text-sm">
-            {trace.length === 0
-              ? "No trace data yet — start an agent run"
-              : "No debug entries found — run may predate debug instrumentation"}
-          </div>
+          <EmptyState
+            icon={Bug}
+            message={
+              trace.length === 0
+                ? "No trace data yet — start an agent run"
+                : "No debug entries found — run may predate debug instrumentation"
+            }
+          />
         )}
 
         {/* ── System Prompt ── */}

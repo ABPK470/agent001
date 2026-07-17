@@ -1,4 +1,3 @@
-import { resolve } from "node:path"
 import { WorkspaceMountMode } from "../../shared/enums/sandbox.js"
 
 // ── Constants ────────────────────────────────────────────────────

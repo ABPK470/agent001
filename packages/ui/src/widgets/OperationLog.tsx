@@ -10,11 +10,13 @@ import type { OperationActivity, OperationEvent, OperationPipeline } from "../ap
 import { api, OperationKind, OperationStatus } from "../api"
 import { CodeBlock } from "../components/CodeBlock"
 import { DecisionLogPanel, isSyncDecisionLogDetails } from "../components/DecisionLogPanel"
+import { EmptyState } from "../components/EmptyState"
 import { JsonViewer } from "../components/JsonViewer"
 import { ToolCallModal, ToolIoBlock } from "../components/ToolCallModal"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { useOperationLogData, type OperationLogKindView } from "../hooks/useOperationLogData"
 import { OperationLogModalsProvider, useOpLogOpenSqlTrace } from "../operation-log-modals"
+import { WIDGET_ICONS } from "./widget-icons"
 import {
   fmtDuration,
   fmtTime,
@@ -591,16 +593,16 @@ export function OperationLog() {
       />
 
       {/* ── Body ────────────────────────────────────────── */}
-      <div ref={scrollRef} className="flex-1 overflow-y-auto pr-1">
+      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
         {loading && filtered.length === 0 && (
-          <div className="text-text-muted/60 text-xs text-center py-8 flex items-center justify-center gap-2">
+          <div className="flex flex-1 items-center justify-center gap-2 text-center text-xs text-text-muted/60">
             <Loader2 size={14} className="animate-spin" />
             Loading operations…
           </div>
         )}
 
         {!loading && filtered.length === 0 && (
-          <div className="text-text-muted text-center pt-12 text-sm">{emptyMessage}</div>
+          <EmptyState icon={WIDGET_ICONS["operation-log"]} message={emptyMessage} />
         )}
 
         {filtered.length > 0 && (

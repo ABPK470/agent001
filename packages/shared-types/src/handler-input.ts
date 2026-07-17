@@ -51,7 +51,7 @@ export function formatHandlerInputLiteral(value: unknown): string {
 
 /** Replace @slotName tokens using resolved input values (SQL batches, shell commands). */
 export function substituteInputTokens(template: string, values: Record<string, unknown>): string {
-  return template.replace(/@([A-Za-z_][A-Za-z0-9_]*)/g, (full, name: string) => {
+  return template.replace(/@([A-Za-z_][A-Za-z0-9_]*)/g, (_full, name: string) => {
     if (!(name in values)) {
       throw new Error(
         `Template uses @${name} but this handler has no input slot named "${name}". Add an input or fix the template.`,

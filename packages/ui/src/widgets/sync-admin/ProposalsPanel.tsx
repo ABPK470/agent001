@@ -54,7 +54,7 @@ export function ProposalsPanel(): JSX.Element {
   const [items, setItems] = useState<Proposal[]>([])
   const [connections, setConnections] = useState<SyncEnvironmentAdmin[]>([])
   const [selected, setSelected] = useState<string | null>(null)
-  const [statusFilter, setStatusFilter] = useState(STATUS_TABS[0].value)
+  const [statusFilter, setStatusFilter] = useState<(typeof STATUS_TABS)[number]["value"]>(STATUS_TABS[0].value)
   const [listBusy, setListBusy] = useState(false)
   const [scanOpen, setScanOpen] = useState(false)
   const [prompt, setPrompt] = useState<{ kind: "dismiss" | "snooze"; proposal: Proposal } | null>(null)

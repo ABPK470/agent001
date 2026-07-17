@@ -1,4 +1,4 @@
-import { DiagnosticCategory, DiagnosticSeverity } from "../../domain/index.js"
+import { DiagnosticSeverity } from "../../domain/index.js"
 /**
  * Plan validation — multi-pass structural and semantic checks on a generated plan.
  *
@@ -21,7 +21,7 @@ import {
   validateSharedDataContract,
   validateVisualCompleteness
 } from "../internal/validate-checks.js"
-import type { Plan, PlanDiagnostic, PlanStep } from "../types.js"
+import type { Plan, PlanDiagnostic } from "../types.js"
 import {
   validateArtifactOwnership,
   validateStepContracts,

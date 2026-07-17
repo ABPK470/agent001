@@ -511,15 +511,6 @@ export interface ChatMessage {
   sensitive?: boolean
 }
 
-function isUiStatusOnlyMessage(text: string): boolean {
-  const normalized = text.trim().toLowerCase()
-  return normalized === "run cancelled by user"
-    || normalized.startsWith("device flow failed:")
-    || normalized.startsWith("device flow initiation failed:")
-    || normalized.startsWith("device flow timed out")
-    || normalized.startsWith("copilot oauth token expired")
-}
-
 function formatUiStatusOnlyMessage(text: string): string {
   const normalized = text.trim().toLowerCase()
   if (normalized === "run cancelled by user") return "Run cancelled."

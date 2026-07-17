@@ -10,7 +10,7 @@ export interface DeployProgress {
 export function deployStepsFromPlan(plan: SyncPlan | null): string[] {
   if (!plan?.executionContract?.flow?.steps) return []
   return plan.executionContract.flow.steps
-    .filter((step) => step.phase === "post-metadata")
+    .filter((step) => step.phase === "postMetadata")
     .map((step) => step.id)
 }
 

@@ -3,7 +3,7 @@ import { presentToolCall, readSseStepId, serializeToolCallArgs } from "@mia/shar
 
 export function traceEntryFromStepStarted(
   data: Record<string, unknown>,
-): TraceEntry | null {
+): Extract<TraceEntry, { kind: "tool-call" }> | null {
   const stepId = readSseStepId(data)
   if (!stepId) return null
   const toolName = (data["action"] as string) ?? "unknown"
@@ -20,7 +20,7 @@ export function traceEntryFromStepStarted(
   }
 }
 
-export function traceEntryFromStepCompleted(data: Record<string, unknown>): TraceEntry | null {
+export function traceEntryFromStepCompleted(data: Record<string, unknown>): Extract<TraceEntry, { kind: "tool-result" }> | null {
   const stepId = readSseStepId(data)
   if (!stepId) return null
   const output = (data["output"] as Record<string, unknown>) ?? {}
@@ -29,7 +29,7 @@ export function traceEntryFromStepCompleted(data: Record<string, unknown>): Trac
   return { kind: "tool-result", invocationId: stepId, text: result }
 }
 
-export function traceEntryFromStepFailed(data: Record<string, unknown>): TraceEntry | null {
+export function traceEntryFromStepFailed(data: Record<string, unknown>): Extract<TraceEntry, { kind: "tool-error" }> | null {
   const stepId = readSseStepId(data)
   if (!stepId) return null
   const errText = (data["error"] as string) ?? "unknown error"

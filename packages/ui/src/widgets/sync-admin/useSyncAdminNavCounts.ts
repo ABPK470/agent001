@@ -1,4 +1,3 @@
-import { EventType } from "@mia/shared-enums"
 import { useCallback, useEffect, useState } from "react"
 
 import { api } from "../../api"

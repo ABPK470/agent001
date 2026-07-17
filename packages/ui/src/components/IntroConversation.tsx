@@ -6,7 +6,6 @@ import {
     HOME_CHAT_GUTTER_X_CLASS,
     HOME_CHAT_INPUT_DOCK_CLASS,
 } from "../shell/chatLayout.js"
-import { ASCII_FIELD_SCRAMBLE_GLYPHS } from "../shell/asciiNoise"
 import { IntroAsciiField, type IntroAsciiRenderTarget } from "./IntroAsciiField"
 import { IntroBrandWordmark } from "./intro/IntroBrandWordmark"
 import { CrystalText, StreamingText } from "./intro/IntroChatText"
@@ -50,109 +49,6 @@ function introBasePath(): string {
 /** If the user reads but never types, settle the header without leaving MI:A stuck. */
 const BRAND_RESOLVE_IDLE_FALLBACK_MS = 10_000
 
-function wmRandomGlyph(seed: number): string {
-  const i = Math.abs((seed * 9301 + 49297) % ASCII_FIELD_SCRAMBLE_GLYPHS.length)
-  return ASCII_FIELD_SCRAMBLE_GLYPHS[i]!
-}
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((r) => window.setTimeout(r, ms))
-}
-
-// ── Decay text — outro scramble. Letters R→L go locked → scrambling
-//    → hidden (encrypted-then-gone), mirroring WelcomeIntro's outro. ──
-const DECAY_LEAD_MS     = 240
-const DECAY_STEP_MS     = 35
-const DECAY_SCRAMBLE_MS = 110
-const DECAY_TICK_MS     = 45
-type DecayCellState = "locked" | "scrambling" | "hidden"
-interface DecayCell { state: DecayCellState; glyph: string }
-
-function DecayText({
-  text,
-  active,
-  direction = "rtl",
-}: {
-  text: string
-  active: boolean
-  direction?: "ltr" | "rtl"
-}) {
-  const [cells, setCells] = useState<DecayCell[]>(
-    () => text.split("").map((ch) => ({ state: "locked", glyph: ch })),
-  )
-
-  // Reset whenever the source text changes while not yet active.
-  useEffect(() => {
-    if (!active) setCells(text.split("").map((ch) => ({ state: "locked", glyph: ch })))
-  }, [text, active])
-
-  useEffect(() => {
-    if (!active) return
-    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      setCells(text.split("").map(() => ({ state: "hidden", glyph: "" })))
-      return
-    }
-    // Wait for the bubble chrome (bg, border, shadow) to fade out
-    // BEFORE the letters start to scramble away. Otherwise the text
-    // looks like it abandons a still-visible empty bubble shell.
-    const startedAt = performance.now() + DECAY_LEAD_MS
-    const total = DECAY_LEAD_MS + text.length * DECAY_STEP_MS + DECAY_SCRAMBLE_MS + 100
-    let raf = 0
-    let lastTick = 0
-    const tick = (now: number) => {
-      const elapsed = now - startedAt
-      if (elapsed > total) return
-      if (now - lastTick < DECAY_TICK_MS) { raf = requestAnimationFrame(tick); return }
-      lastTick = now
-      setCells((prev) => {
-        const next = prev.slice()
-        if (direction === "ltr") {
-          for (let i = 0; i < text.length; i++) {
-            const startAt = i * DECAY_STEP_MS
-            const goneAt = startAt + DECAY_SCRAMBLE_MS
-            if (elapsed < startAt) continue
-            if (elapsed >= goneAt) {
-              if (next[i]!.state !== "hidden") next[i] = { state: "hidden", glyph: "" }
-            } else {
-              next[i] = { state: "scrambling", glyph: wmRandomGlyph(Math.floor(now) + i * 17) }
-            }
-          }
-          return next
-        }
-        // R→L: rightmost letter disappears first.
-        for (let i = text.length - 1; i >= 0; i--) {
-          const ri = text.length - 1 - i
-          const startAt = ri * DECAY_STEP_MS
-          const goneAt = startAt + DECAY_SCRAMBLE_MS
-          if (elapsed < startAt) continue
-          if (elapsed >= goneAt) {
-            if (next[i]!.state !== "hidden") next[i] = { state: "hidden", glyph: "" }
-          } else {
-            next[i] = { state: "scrambling", glyph: wmRandomGlyph(Math.floor(now) + i * 17) }
-          }
-        }
-        return next
-      })
-      raf = requestAnimationFrame(tick)
-    }
-    raf = requestAnimationFrame(tick)
-    return () => cancelAnimationFrame(raf)
-  }, [active, text, direction])
-
-  return (
-    <span className="intro3-decay">
-      {cells.map((cell, i) => (
-        <span
-          key={i}
-          className={`intro3-decay-cell${cell.state === "scrambling" ? " intro3-decay-cell--scramble" : ""}${cell.state === "hidden" ? " intro3-decay-cell--hidden" : ""}`}
-        >
-          {cell.state === "hidden" ? "" : cell.glyph || "\u00A0"}
-        </span>
-      ))}
-    </span>
-  )
-}
-
 /**
  * Conversational login surface — the intro3-derived design that now
  * powers the real login flow.
@@ -192,7 +88,6 @@ export function IntroConversation({
   onLogin,
   enterTrigger = false,
   morphMode = "chat",
-  morphTarget,
   autoplay,
 }: {
   onEntered?: () => void

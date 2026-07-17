@@ -1,7 +1,5 @@
 import { describe, expect, it } from "vitest"
 
-import type { PublishedSyncDefinition } from "@mia/shared-types"
-
 import { requirePublishedFlowCatalog } from "./flow-catalog.js"
 
 describe("requirePublishedFlowCatalog", () => {
@@ -10,7 +8,7 @@ describe("requirePublishedFlowCatalog", () => {
     const def = {
       id: "contract",
       executionFlow: { steps: [], catalog },
-    } as PublishedSyncDefinition
+    }
     expect(requirePublishedFlowCatalog(def)).toEqual({
       ...catalog,
       customValueSources: {},
@@ -21,7 +19,7 @@ describe("requirePublishedFlowCatalog", () => {
     const def = {
       id: "contract",
       executionFlow: { steps: [] },
-    } as PublishedSyncDefinition
+    }
     expect(() => requirePublishedFlowCatalog(def)).toThrow(/Republish entity definitions/)
   })
 })

@@ -38,6 +38,14 @@ export type EnvOperation =
 export interface SyncEnvironment {
   /** Connection name (matches an MSSQL connection registered at startup). */
   name: string
+  /**
+   * Foreign key to a persisted MSSQL connector — the real link used to resolve
+   * the sync run's connection pool (live, via the MSSQL pool provider). Validated
+   * as a required, live FK on create/update; pool resolution throws loudly if
+   * absent. The environment `name` is a free-form slug, no longer required to
+   * match a boot-time connection name.
+   */
+  connectorId?: string | null
   /** Human display name e.g. "Production". Falls back to `name`. */
   displayName: string
   /** Tailwind-friendly accent colour token e.g. "emerald", "amber". */
@@ -69,11 +77,11 @@ export interface SyncEnvironment {
    */
   serviceUrls?: Record<string, string | null>
   /**
-   * Optional explicit list of allowed sync targets when this environment is
+   * Optional explicit list of allowed sync environments when this environment is
    * used as the source. `null` means unrestricted by direction policy; an
-   * empty array means no sync targets are currently allowed.
+   * empty array means no sync environments are currently allowed.
    */
-  allowedSyncTargets: string[] | null
+  allowedSyncEnvironments: string[] | null
   // ── Hosted-mode access control ────────────────────────────────
   /**
    * Default access mode for this environment. UAT and PROD default to
@@ -176,14 +184,14 @@ export function getEnvironment(host: SyncEnvironmentRegistryHost, name: string):
  * fail the same way.
  */
 export function assertSupportedSyncDirection(sourceEnv: SyncEnvironment, targetEnv: SyncEnvironment): void {
-  const allowedTargets = sourceEnv.allowedSyncTargets
-  if (allowedTargets === null) return
+  const allowedConnections = sourceEnv.allowedSyncEnvironments
+  if (allowedConnections === null) return
   const target = targetEnv.name.trim().toLowerCase()
-  const normalized = allowedTargets.map((name) => name.trim().toLowerCase())
+  const normalized = allowedConnections.map((name) => name.trim().toLowerCase())
   if (normalized.includes(target)) return
-  const rendered = allowedTargets.length > 0 ? allowedTargets.join(", ") : "none"
+  const rendered = allowedConnections.length > 0 ? allowedConnections.join(", ") : "none"
   throw new Error(
-    `Unsupported sync direction "${sourceEnv.name} -> ${targetEnv.name}". Allowed targets for ${sourceEnv.name}: ${rendered}.`
+    `Unsupported sync direction "${sourceEnv.name} -> ${targetEnv.name}". Allowed connections for ${sourceEnv.name}: ${rendered}.`
   )
 }
 
@@ -222,8 +230,18 @@ export function withPermissionDefaults(
     gateServiceBaseUrl: e.gateServiceBaseUrl ?? null,
   })
 
+  const rawLegacy = e as Record<string, unknown>
+  const allowedSyncEnvironments = Array.isArray(e.allowedSyncEnvironments)
+    ? e.allowedSyncEnvironments.map(String)
+    : Array.isArray(rawLegacy.allowedSyncConnections)
+      ? (rawLegacy.allowedSyncConnections as unknown[]).map(String)
+      : Array.isArray(rawLegacy.allowedSyncTargets)
+        ? (rawLegacy.allowedSyncTargets as unknown[]).map(String)
+        : null
+
   return {
     name: e.name,
+    connectorId: e.connectorId ?? null,
     displayName: e.displayName ?? e.name,
     color: e.color ?? "slate",
     role: e.role ?? EnvRole.Both,
@@ -232,7 +250,7 @@ export function withPermissionDefaults(
     etlServiceBaseUrl: serviceUrls.etl ?? null,
     gateServiceBaseUrl: serviceUrls.gate ?? null,
     serviceUrls,
-    allowedSyncTargets: Array.isArray(e.allowedSyncTargets) ? e.allowedSyncTargets.map(String) : null,
+    allowedSyncEnvironments,
     defaultAccessMode,
     allowedOperations,
     denyDml,
@@ -270,7 +288,11 @@ export function loadSyncEnvironments(
           etlServiceBaseUrl: e.etlServiceBaseUrl ?? null,
           gateServiceBaseUrl: e.gateServiceBaseUrl ?? null,
           serviceUrls: normalizeServiceUrls(e.serviceUrls as Record<string, unknown> | undefined),
-          allowedSyncTargets: Array.isArray(e.allowedSyncTargets) ? e.allowedSyncTargets.map(String) : null,
+          allowedSyncEnvironments: Array.isArray(e.allowedSyncEnvironments)
+            ? e.allowedSyncEnvironments.map(String)
+            : Array.isArray((e as Record<string, unknown>).allowedSyncTargets)
+              ? ((e as Record<string, unknown>).allowedSyncTargets as unknown[]).map(String)
+              : null,
           defaultAccessMode: e.defaultAccessMode,
           allowedOperations: e.allowedOperations,
           denyDml: e.denyDml,

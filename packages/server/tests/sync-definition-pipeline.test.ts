@@ -233,8 +233,11 @@ describe("sync definition pipeline (e2e)", () => {
   it("compilePublishedSyncDefinition matches server publish output for same entity", async () => {
     const { _setDb, _migrate, saveEntityDefinition, listSyncDefinitionConfigs } =
       await import("../src/platform/persistence/db/index.js")
-    const { publishSyncDefinitionsFromDb, ensureSyncDefinitionConfigs } =
-      await import("../src/features/sync/application/definitions.js")
+    const {
+      publishSyncDefinitionsFromDb,
+      ensureSyncDefinitionConfigs,
+      loadAuthoringFlowCatalog,
+    } = await import("../src/features/sync/application/definitions.js")
 
     _setDb(testDb)
     _migrate(testDb)
@@ -247,12 +250,15 @@ describe("sync definition pipeline (e2e)", () => {
     const config = listSyncDefinitionConfigs("_default").find((row) => row.entity_id === "compose_parity")!
 
     const { buildFlowCatalog, compilePublishedSyncDefinition } = await import("@mia/sync")
-    const { loadSyncDefinitionFlowTemplateCatalog } = await import("@mia/sync")
     const db = await import("../src/platform/persistence/db/index.js")
-    const flowTemplateCatalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
+    // Must use the same authoring catalog as publish: DB presets strip `phase`
+    // from stored steps, so snapForSteps only freezes kinds (phases stay {}).
+    // File-template catalogs still carry phase and would diverge.
+    const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot)
     const flowCatalog = buildFlowCatalog(
-      (await import("../src/platform/persistence/db/index.js")).listSyncRunPhases("_default"),
-      (await import("../src/platform/persistence/db/index.js")).listSyncRunKinds("_default")
+      db.listSyncRunPhases("_default"),
+      db.listSyncRunKinds("_default"),
+      db.listSyncRunBindingSources("_default"),
     )
 
     const direct = compilePublishedSyncDefinition(
@@ -270,7 +276,15 @@ describe("sync definition pipeline (e2e)", () => {
 
     const bundle = JSON.parse(
       readFileSync(join(projectRoot, "sync-definitions", "published", "definitions.bundle.json"), "utf-8")
-    ) as { definitions: Record<string, { metadata: { tables: Array<{ name: string; predicate: string }> } }> }
+    ) as {
+      definitions: Record<
+        string,
+        {
+          metadata: { tables: Array<{ name: string; predicate: string }> }
+          executionFlow: { catalog?: { phases: Record<string, unknown>; kinds: Record<string, unknown> } }
+        }
+      >
+    }
 
     const published = bundle.definitions.compose_parity
     expect(published?.metadata.tables.map((t) => [t.name, t.predicate])).toEqual(

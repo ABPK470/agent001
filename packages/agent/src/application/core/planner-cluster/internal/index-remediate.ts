@@ -1,4 +1,4 @@
-import { StepRole, VerificationMode } from "../../domain/index.js"
+import { StepRole } from "../../domain/index.js"
 /**
  * Plan remediation — step merging, dependency graph traversal, and
  * automatic remediation of validation errors.
@@ -259,7 +259,6 @@ function remediateSharedTargetArtifactWriters(plan: Plan): boolean {
 
 export function remediateValidationErrors(plan: Plan, errors: readonly PlanDiagnostic[]): boolean {
   let changed = false
-  const subagentSteps = plan.steps.filter((s): s is SubagentTaskStep => s.stepType === "subagent_task")
 
   if (errors.some((e) => e.code === "inconsistent_output_directory" || e.code === "mixed_root_and_subdir")) {
     normalizePlanOutputDirectory(plan)

@@ -4,7 +4,7 @@
  * to the user is always via Content-Disposition attachment streams.
  */
 
-import { createReadStream } from "node:fs"
+import { createReadStream, type Dirent } from "node:fs"
 import { readdir, stat } from "node:fs/promises"
 import { basename, join, resolve, sep } from "node:path"
 
@@ -31,7 +31,7 @@ async function walkDir(
   out: RunArtifactEntry[],
 ): Promise<void> {
   if (out.length >= MAX_LIST_FILES) return
-  let entries: Awaited<ReturnType<typeof readdir>>
+  let entries: Dirent[]
   try {
     entries = await readdir(dir, { withFileTypes: true })
   } catch {

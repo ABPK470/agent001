@@ -4,7 +4,7 @@
 
 import { Loader2 } from "lucide-react"
 import type { JSX, ReactNode } from "react"
-import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { type ListboxOption } from "../../components/Listbox"
 import type { AuthoredSyncFlowStep, SyncMetadataCatalogStepType } from "../../types"
 import { ExecutionStepFields } from "./ExecutionStepFields"
 import { ExecutionStepListEditor } from "./ExecutionStepListEditor"

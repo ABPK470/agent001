@@ -3,6 +3,7 @@ import { join } from "node:path"
 
 import { isDatabricksConfigured } from "../../platform/llm/databricks-broker.js"
 import { isLlmProvider } from "../../shared/enums/llm.js"
+import { countEnabledMssqlConnectors } from "../../features/connectors/runtime/live-connectors.js"
 
 import { parseEnvFile } from "./env-file.js"
 import type { SetupLayout } from "./types.js"
@@ -36,7 +37,14 @@ export function suggestDataDir(layout: SetupLayout): string {
   return join(homedir(), ".mia")
 }
 
+/**
+ * MSSQL is "configured" when either:
+ *   - the connectors DB (the source of truth) has an enabled `mssql` connector, or
+ *   - the legacy `.env` vars (MSSQL_HOST / MSSQL_SERVER / MSSQL_DATABASES) are set
+ *     (one-time seed bridge for existing deployments).
+ */
 export function hasMssqlConfigured(env: EnvState): boolean {
+  if (countEnabledMssqlConnectors() > 0) return true
   return Boolean(env.get("MSSQL_HOST") || env.get("MSSQL_SERVER") || env.get("MSSQL_DATABASES"))
 }
 

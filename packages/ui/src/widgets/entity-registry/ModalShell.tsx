@@ -18,7 +18,6 @@ import {
 import {
   MODAL_DETAIL_PANEL,
   MODAL_ENTITY_FOCUS_PANEL,
-  MODAL_ENTITY_WORKSPACE_PANEL,
   type ModalOverlayIntent,
   modalOverlayClass,
   MODAL_SURFACE_CLASS,

@@ -2,9 +2,10 @@
  * Manage sync flows and platform setup.
  */
 
-import { Lock, LockOpen, Plus, Save, Search, Trash2, Workflow, X } from "lucide-react"
+import { Lock, LockOpen, MousePointer2, Plus, Save, Search, Trash2, Workflow, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react"
 import { api } from "../../api"
+import { EmptyState } from "../../components/EmptyState"
 import type { AuthoredSyncFlowStep, CustomValueSourceDefinition, SyncEnvironmentAdmin, SyncFlowKindDefinition, SyncMetadataCatalogResponse } from "../../types"
 import {
   flowStepPickerOptions,
@@ -36,19 +37,19 @@ import {
 import { ModalShell } from "./ModalShell"
 import { ModalToastStack, useModalToasts } from "./ModalToastStack"
 import { HANDLER_TYPE_TAG } from "./param-binding-ui"
-import { SyncTargetForm } from "./sync-targets/SyncTargetForm"
+import { SyncEnvironmentForm } from "./sync-environments/SyncEnvironmentForm"
 import {
-  cloneTargetFormSnapshot,
-  emptyTargetFormSnapshot,
-  targetFormFromEnv,
-  targetFormToPayload,
-  validateTargetForm,
-  type TargetFormSnapshot,
-} from "./sync-targets/target-form-model"
-import { useSyncTargets } from "./sync-targets/useSyncTargets"
+  cloneEnvironmentFormSnapshot,
+  emptyEnvironmentFormSnapshot,
+  environmentFormFromEnv,
+  environmentFormToPayload,
+  validateEnvironmentForm,
+  type EnvironmentFormSnapshot,
+} from "./sync-environments/environment-form-model"
+import { useSyncEnvironments } from "./sync-environments/useSyncEnvironments"
 
 type CatalogTab = "flows" | "stepTypes" | "customValueSources"
-type CatalogView = "flows" | "actions" | "wiring" | "targets"
+type CatalogView = "flows" | "actions" | "wiring" | "environments"
 type FormMode = "create" | "edit"
 
 type FormSnapshot = {
@@ -109,14 +110,14 @@ const VIEW_DESCRIPTIONS: Record<CatalogView, string> = {
   flows: "Ordered steps each entity runs. Expand a step for Text: values or per-flow resolver overrides.",
   actions: "Wire each parameter to Auto:, Query:, Text:, a literal, earlier-step output, or leave blank for per-flow choice.",
   wiring: "Value source catalog — plan context, target SQL, and step text fields. Seeded from deploy ground truth.",
-  targets: "MSSQL sync targets (dev / uat / prod) for preview and execute. Stored in SQLite; .env connection names are not modified.",
+  environments: "MSSQL sync environments (dev / uat / prod) for preview and execute. Stored in SQLite; .env environment names are not modified.",
 }
 
 const NAV_VIEWS: Array<{ view: CatalogView; label: string }> = [
   { view: "flows", label: "Flows" },
   { view: "actions", label: "Actions" },
   { view: "wiring", label: "Wiring" },
-  { view: "targets", label: "Targets" },
+  { view: "environments", label: "Environments" },
 ]
 
 const SETUP_ORDER_HINT = "Compose flows, wire actions once. Manage catalog for paramters wiring and resolvers."
@@ -175,19 +176,19 @@ export function SyncMetadataModal({
   const [formBaseline, setFormBaseline] = useState<FormSnapshot>(() => emptyFormSnapshot())
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
   const [unlockBuiltinConfirmOpen, setUnlockBuiltinConfirmOpen] = useState(false)
-  const [targetFormOpen, setTargetFormOpen] = useState(false)
-  const [targetFormMode, setTargetFormMode] = useState<FormMode>("create")
-  const [targetEditingId, setTargetEditingId] = useState<string | null>(null)
-  const [targetEditingBuiltIn, setTargetEditingBuiltIn] = useState(false)
-  const [targetForm, setTargetForm] = useState<TargetFormSnapshot>(() => emptyTargetFormSnapshot())
-  const [targetFormBaseline, setTargetFormBaseline] = useState<TargetFormSnapshot>(() => emptyTargetFormSnapshot())
-  const [targetConfirmSaveOpen, setTargetConfirmSaveOpen] = useState(false)
+  const [environmentFormOpen, setEnvironmentFormOpen] = useState(false)
+  const [environmentFormMode, setEnvironmentFormMode] = useState<FormMode>("create")
+  const [environmentEditingId, setEnvironmentEditingId] = useState<string | null>(null)
+  const [environmentEditingBuiltIn, setEnvironmentEditingBuiltIn] = useState(false)
+  const [environmentForm, setEnvironmentForm] = useState<EnvironmentFormSnapshot>(() => emptyEnvironmentFormSnapshot())
+  const [environmentFormBaseline, setEnvironmentFormBaseline] = useState<EnvironmentFormSnapshot>(() => emptyEnvironmentFormSnapshot())
+  const [environmentConfirmSaveOpen, setEnvironmentConfirmSaveOpen] = useState(false)
   const pendingInitialFlowId = useRef(initialFlowId)
 
-  const targets = useSyncTargets(
+  const environments = useSyncEnvironments(
     () => { /* success toasts omitted — list reload is enough */ },
     (message) => pushToast(message),
-    catalogView === "targets",
+    catalogView === "environments",
   )
 
   const currentFormSnapshot = useMemo(
@@ -216,14 +217,14 @@ export function SyncMetadataModal({
     [currentFormSnapshot, formBaseline, tab],
   )
 
-  const isTargetFormDirty = useMemo(
-    () => JSON.stringify(targetForm) !== JSON.stringify(targetFormBaseline),
-    [targetForm, targetFormBaseline],
+  const isEnvironmentFormDirty = useMemo(
+    () => JSON.stringify(environmentForm) !== JSON.stringify(environmentFormBaseline),
+    [environmentForm, environmentFormBaseline],
   )
 
-  const targetFormReadOnly = useMemo(
-    () => targetFormMode === "edit" && targetEditingBuiltIn && !targets.builtinEditUnlocked,
-    [targetEditingBuiltIn, targetFormMode, targets.builtinEditUnlocked],
+  const environmentFormReadOnly = useMemo(
+    () => environmentFormMode === "edit" && environmentEditingBuiltIn && !environments.builtinEditUnlocked,
+    [environmentEditingBuiltIn, environmentFormMode, environments.builtinEditUnlocked],
   )
 
   const load = useCallback(async (): Promise<SyncMetadataCatalogResponse | null> => {
@@ -305,83 +306,83 @@ export function SyncMetadataModal({
     setFormBaseline(cloneFormSnapshot(snapshot))
   }
 
-  function closeTargetForm(): void {
-    setTargetFormOpen(false)
-    setTargetConfirmSaveOpen(false)
-    setTargetFormMode("create")
-    setTargetEditingId(null)
-    setTargetEditingBuiltIn(false)
-    const snapshot = emptyTargetFormSnapshot()
-    setTargetForm(snapshot)
-    setTargetFormBaseline(cloneTargetFormSnapshot(snapshot))
+  function closeEnvironmentForm(): void {
+    setEnvironmentFormOpen(false)
+    setEnvironmentConfirmSaveOpen(false)
+    setEnvironmentFormMode("create")
+    setEnvironmentEditingId(null)
+    setEnvironmentEditingBuiltIn(false)
+    const snapshot = emptyEnvironmentFormSnapshot()
+    setEnvironmentForm(snapshot)
+    setEnvironmentFormBaseline(cloneEnvironmentFormSnapshot(snapshot))
   }
 
-  function startTargetCreate(): void {
-    const snapshot = emptyTargetFormSnapshot()
-    setTargetFormOpen(true)
-    setTargetFormMode("create")
-    setTargetEditingId(null)
-    setTargetEditingBuiltIn(false)
-    setTargetForm(snapshot)
-    setTargetFormBaseline(cloneTargetFormSnapshot(snapshot))
+  function startEnvironmentCreate(): void {
+    const snapshot = emptyEnvironmentFormSnapshot()
+    setEnvironmentFormOpen(true)
+    setEnvironmentFormMode("create")
+    setEnvironmentEditingId(null)
+    setEnvironmentEditingBuiltIn(false)
+    setEnvironmentForm(snapshot)
+    setEnvironmentFormBaseline(cloneEnvironmentFormSnapshot(snapshot))
   }
 
-  function startTargetEdit(item: SyncEnvironmentAdmin): void {
+  function startEnvironmentEdit(item: SyncEnvironmentAdmin): void {
     if (
-      targetFormOpen
-      && targetFormMode === "edit"
-      && targetEditingId === item.name
+      environmentFormOpen
+      && environmentFormMode === "edit"
+      && environmentEditingId === item.name
     ) {
       return
     }
-    const snapshot = targetFormFromEnv(item)
-    setTargetFormOpen(true)
-    setTargetFormMode("edit")
-    setTargetEditingId(item.name)
-    setTargetEditingBuiltIn(Boolean(item.builtIn))
-    setTargetForm(snapshot)
-    setTargetFormBaseline(cloneTargetFormSnapshot(snapshot))
+    const snapshot = environmentFormFromEnv(item)
+    setEnvironmentFormOpen(true)
+    setEnvironmentFormMode("edit")
+    setEnvironmentEditingId(item.name)
+    setEnvironmentEditingBuiltIn(Boolean(item.builtIn))
+    setEnvironmentForm(snapshot)
+    setEnvironmentFormBaseline(cloneEnvironmentFormSnapshot(snapshot))
   }
 
-  function requestTargetSave(): void {
-    if (!targetFormOpen || targetFormReadOnly) return
-    const validationError = validateTargetForm(targetForm)
+  function requestEnvironmentSave(): void {
+    if (!environmentFormOpen || environmentFormReadOnly) return
+    const validationError = validateEnvironmentForm(environmentForm)
     if (validationError) {
       pushToast(validationError)
       return
     }
-    setTargetConfirmSaveOpen(true)
+    setEnvironmentConfirmSaveOpen(true)
   }
 
-  function discardTargetFormChanges(): void {
-    setTargetForm(cloneTargetFormSnapshot(targetFormBaseline))
-    setTargetConfirmSaveOpen(false)
+  function discardEnvironmentFormChanges(): void {
+    setEnvironmentForm(cloneEnvironmentFormSnapshot(environmentFormBaseline))
+    setEnvironmentConfirmSaveOpen(false)
   }
 
-  async function commitTargetSave(): Promise<void> {
-    if (!targetFormOpen || targetFormReadOnly) return
-    const payload = targetFormToPayload(targetForm)
+  async function commitEnvironmentSave(): Promise<void> {
+    if (!environmentFormOpen || environmentFormReadOnly) return
+    const payload = environmentFormToPayload(environmentForm)
     const name = String(payload.name ?? "")
-    setTargetConfirmSaveOpen(false)
+    setEnvironmentConfirmSaveOpen(false)
     clearToasts()
     try {
-      if (targetFormMode === "create") {
-        await targets.create(payload)
-        setTargetFormMode("edit")
-        setTargetEditingId(name)
-        setTargetEditingBuiltIn(false)
-        setTargetFormBaseline(cloneTargetFormSnapshot(targetForm))
-      } else if (targetEditingId) {
-        await targets.save(
-          targetEditingId,
+      if (environmentFormMode === "create") {
+        await environments.create(payload)
+        setEnvironmentFormMode("edit")
+        setEnvironmentEditingId(name)
+        setEnvironmentEditingBuiltIn(false)
+        setEnvironmentFormBaseline(cloneEnvironmentFormSnapshot(environmentForm))
+      } else if (environmentEditingId) {
+        await environments.save(
+          environmentEditingId,
           payload,
-          Boolean(targetEditingBuiltIn && targets.builtinEditUnlocked),
+          Boolean(environmentEditingBuiltIn && environments.builtinEditUnlocked),
         )
-        setTargetFormBaseline(cloneTargetFormSnapshot(targetForm))
+        setEnvironmentFormBaseline(cloneEnvironmentFormSnapshot(environmentForm))
       }
       onChanged?.()
     } catch {
-      // useSyncTargets already surfaced the error
+      // useSyncEnvironments already surfaced the error
     }
   }
 
@@ -461,11 +462,11 @@ export function SyncMetadataModal({
   function switchView(next: CatalogView): void {
     setCatalogView(next)
     setListQuery("")
-    if (next === "targets") {
+    if (next === "environments") {
       closeForm()
       return
     }
-    closeTargetForm()
+    closeEnvironmentForm()
     if (next === "flows") {
       setTab("flows")
     } else if (next === "actions") {
@@ -668,18 +669,18 @@ export function SyncMetadataModal({
     return `Write changes to ${TAB_SINGULAR[tab]} "${name}"?`
   })()
 
-  const targetSaveConfirmTitle =
-    targetFormMode === "create" ? "Create target?" : "Save target changes?"
+  const environmentSaveConfirmTitle =
+    environmentFormMode === "create" ? "Create environment?" : "Save environment changes?"
 
-  const targetSaveConfirmBody = (() => {
-    const name = targetForm.displayName.trim() || targetForm.name.trim() || "target"
-    if (targetFormMode === "create") {
-      return `Create MSSQL target "${name}"?`
+  const environmentSaveConfirmBody = (() => {
+    const name = environmentForm.displayName.trim() || environmentForm.name.trim() || "environment"
+    if (environmentFormMode === "create") {
+      return `Create MSSQL environment "${name}"?`
     }
-    if (!isTargetFormDirty) {
+    if (!isEnvironmentFormDirty) {
       return `No edits detected for "${name}". Save anyway?`
     }
-    return `Write changes to target "${name}"?`
+    return `Write changes to environment "${name}"?`
   })()
 
   return (
@@ -690,7 +691,7 @@ export function SyncMetadataModal({
       icon={<Workflow size={20} className="text-text-muted" />}
       stackLevel={stackLevel}
       onClose={() => {
-        if (confirmSaveOpen || targetConfirmSaveOpen) return
+        if (confirmSaveOpen || environmentConfirmSaveOpen) return
         onClose()
       }}
       size="focus"
@@ -722,53 +723,53 @@ export function SyncMetadataModal({
               })}
             </div>
             <div className="flex shrink-0 items-center gap-1.5">
-              {catalogView === "targets" && (
+              {catalogView === "environments" && (
                 <>
                   <button
                     type="button"
                     className={[
                       ICON_BTN,
-                      targets.builtinEditUnlocked ? "text-warning" : "",
+                      environments.builtinEditUnlocked ? "text-warning" : "",
                     ].join(" ")}
-                    title={targets.builtinEditUnlocked ? "Lock built-in targets" : "Unlock built-in targets"}
-                    aria-label={targets.builtinEditUnlocked ? "Lock built-in targets" : "Unlock built-in targets"}
+                    title={environments.builtinEditUnlocked ? "Lock built-in environments" : "Unlock built-in environments"}
+                    aria-label={environments.builtinEditUnlocked ? "Lock built-in environments" : "Unlock built-in environments"}
                     onClick={() => {
-                      if (targets.builtinEditUnlocked) {
-                        targets.setBuiltinEditUnlocked(false)
+                      if (environments.builtinEditUnlocked) {
+                        environments.setBuiltinEditUnlocked(false)
                       } else {
                         setUnlockBuiltinConfirmOpen(true)
                       }
                     }}
                   >
-                    {targets.builtinEditUnlocked ? <LockOpen size={16} /> : <Lock size={16} />}
+                    {environments.builtinEditUnlocked ? <LockOpen size={16} /> : <Lock size={16} />}
                   </button>
                   <button
                     type="button"
-                    onClick={() => startTargetCreate()}
+                    onClick={() => startEnvironmentCreate()}
                     className={ICON_BTN}
-                    title="New target"
-                    aria-label="New target"
+                    title="New environment"
+                    aria-label="New environment"
                   >
                     <Plus size={16} />
                   </button>
                   <button
                     type="button"
-                    onClick={requestTargetSave}
+                    onClick={requestEnvironmentSave}
                     disabled={
-                      targets.saving !== null
-                      || !targetFormOpen
-                      || !targetForm.name.trim()
-                      || targetFormReadOnly
+                      environments.saving !== null
+                      || !environmentFormOpen
+                      || !environmentForm.name.trim()
+                      || environmentFormReadOnly
                     }
                     className={ICON_BTN_PRIMARY}
-                    title={isTargetFormDirty ? "Save unsaved changes" : "Save"}
+                    title={isEnvironmentFormDirty ? "Save unsaved changes" : "Save"}
                     aria-label="Save"
                   >
                     <Save size={16} />
                   </button>
                 </>
               )}
-              {catalogView !== "targets" && (
+              {catalogView !== "environments" && (
                 <>
               {catalogView === "wiring" ? (
                 <button
@@ -813,25 +814,25 @@ export function SyncMetadataModal({
 
         <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
           <div className="flex min-h-0 flex-col overflow-hidden border-b border-border-subtle p-5 lg:border-b-0 lg:border-r">
-            {!catalog && busy && catalogView !== "targets" && <p className="shrink-0 text-sm text-text-muted">Loading…</p>}
-            {catalogView === "targets" && targets.busy && targets.items.length === 0 && (
+            {!catalog && busy && catalogView !== "environments" && <p className="shrink-0 text-sm text-text-muted">Loading…</p>}
+            {catalogView === "environments" && environments.busy && environments.items.length === 0 && (
               <p className="shrink-0 text-sm text-text-muted">Loading…</p>
             )}
-            {catalogView === "targets" && (
+            {catalogView === "environments" && (
               <CatalogList
                 query={listQuery}
                 onQueryChange={setListQuery}
-                searchPlaceholder="Search targets…"
-                items={targets.catalogItems.map((item) => ({
+                searchPlaceholder="Search environments…"
+                items={environments.catalogItems.map((item) => ({
                   ...item,
-                  deletable: !item.builtIn || targets.builtinEditUnlocked,
+                  deletable: !item.builtIn || environments.builtinEditUnlocked,
                 }))}
-                selectedId={targetFormOpen && targetFormMode === "edit" ? targetEditingId : null}
+                selectedId={environmentFormOpen && environmentFormMode === "edit" ? environmentEditingId : null}
                 onSelect={(id) => {
-                  const item = targets.items.find((entry) => entry.name === id)
-                  if (item) startTargetEdit(item)
+                  const item = environments.items.find((entry) => entry.name === id)
+                  if (item) startEnvironmentEdit(item)
                 }}
-                onDelete={(id) => targets.setDeleting(id)}
+                onDelete={(id) => environments.setDeleting(id)}
               />
             )}
             {catalog && catalogView === "flows" && (
@@ -882,57 +883,61 @@ export function SyncMetadataModal({
           </div>
 
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-            {catalogView === "targets" && targetFormOpen ? (
+            {catalogView === "environments" && environmentFormOpen ? (
               <>
                 <div className="shrink-0 border-b border-border-subtle bg-elevated/40 px-5 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-text-faint">
-                    Targets
+                    Environments
                     {" · "}
-                    {targetFormMode === "create" ? "New" : "Edit"}
+                    {environmentFormMode === "create" ? "New" : "Edit"}
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <h3 className={FORM_HEADING}>
-                      {targetForm.displayName.trim() || targetForm.name.trim() || "New target"}
+                      {environmentForm.displayName.trim() || environmentForm.name.trim() || "New environment"}
                     </h3>
-                    {isTargetFormDirty && (
+                    {isEnvironmentFormDirty && (
                       <span className="rounded-full bg-amber-400/10 px-2 py-0.5 text-xs font-medium text-amber-400/90">
                         Unsaved
                       </span>
                     )}
-                    {targetEditingBuiltIn && (
+                    {environmentEditingBuiltIn && (
                       <span className="rounded-full bg-overlay-2 px-2 py-0.5 text-xs text-text-muted">Built-in</span>
                     )}
-                    {targets.builtinEditUnlocked && targetEditingBuiltIn && (
+                    {environments.builtinEditUnlocked && environmentEditingBuiltIn && (
                       <span className="rounded-full bg-warning/10 px-2 py-0.5 text-xs text-warning">Editing unlocked</span>
                     )}
                   </div>
-                  {targetFormMode === "edit" && targetEditingId && (
-                    <p className={`${META_TEXT} mt-1 font-mono`}>{targetEditingId}</p>
+                  {environmentFormMode === "edit" && environmentEditingId && (
+                    <p className={`${META_TEXT} mt-1 font-mono`}>{environmentEditingId}</p>
                   )}
                 </div>
                 <div className="min-h-0 flex-1 overflow-auto bg-base/20 p-5">
-                  <SyncTargetForm
-                    value={targetForm}
-                    onChange={setTargetForm}
-                    mode={targetFormMode}
-                    readOnly={targetFormReadOnly}
+                  <SyncEnvironmentForm
+                    value={environmentForm}
+                    onChange={setEnvironmentForm}
+                    mode={environmentFormMode}
+                    readOnly={environmentFormReadOnly}
                     stackLevel={stackLevel + 1}
-                    peerTargets={targets.items.map((item) => ({
+                    peerEnvironments={environments.items.map((item) => ({
                       name: item.name,
                       displayName: item.displayName,
                     }))}
                   />
                 </div>
               </>
-            ) : catalogView === "targets" ? (
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-base/20 px-6 py-16 text-center">
-                <p className="text-sm font-medium text-text">Nothing selected</p>
-                <p className={`mt-2 max-w-xs ${HELP_TEXT}`}>
-                  Choose a target from the list, or click{" "}
-                  <Plus className="mx-0.5 inline h-3.5 w-3.5 align-text-bottom" aria-hidden />
-                  {" "}to add one matching MSSQL in .env.
-                </p>
-              </div>
+            ) : catalogView === "environments" ? (
+              <EmptyState
+                icon={MousePointer2}
+                message="Nothing selected"
+                className="bg-base/20"
+                detail={(
+                  <>
+                    Choose an environment from the list, or click{" "}
+                    <Plus className="mx-0.5 inline h-3.5 w-3.5 align-text-bottom" aria-hidden />
+                    {" "}to add one matching an enabled SQL Server connector.
+                  </>
+                )}
+              />
             ) : formOpen ? (
               <>
             <div className="shrink-0 border-b border-border-subtle bg-elevated/40 px-5 py-3">
@@ -1124,16 +1129,20 @@ export function SyncMetadataModal({
             </div>
               </>
             ) : (
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center bg-base/20 px-6 py-16 text-center">
-                <p className="text-sm font-medium text-text">Nothing selected</p>
-                <p className={`mt-2 max-w-xs ${HELP_TEXT}`}>
-                  Choose an item from the list to edit it, or click{" "}
-                  <Plus className="mx-0.5 inline h-3.5 w-3.5 align-text-bottom" aria-hidden />
-                  {catalogView === "wiring"
-                    ? " to create a custom value source."
-                    : ` to create a new ${TAB_SINGULAR[tab]}.`}
-                </p>
-              </div>
+              <EmptyState
+                icon={MousePointer2}
+                message="Nothing selected"
+                className="bg-base/20"
+                detail={(
+                  <>
+                    Choose an item from the list to edit it, or click{" "}
+                    <Plus className="mx-0.5 inline h-3.5 w-3.5 align-text-bottom" aria-hidden />
+                    {catalogView === "wiring"
+                      ? " to create a custom value source."
+                      : ` to create a new ${TAB_SINGULAR[tab]}.`}
+                  </>
+                )}
+              />
             )}
           </div>
         </div>
@@ -1142,32 +1151,32 @@ export function SyncMetadataModal({
 
     {unlockBuiltinConfirmOpen && (
       <ConfirmModal
-        title="Unlock built-in targets?"
-        message="Built-in targets (dev, uat, prod) are protected by default. Unlock only when you intend to edit them. You can lock again anytime from the toolbar."
+        title="Unlock built-in environments?"
+        message="Built-in environments (dev, uat, prod) are protected by default. Unlock only when you intend to edit them. You can lock again anytime from the toolbar."
         confirmLabel="Unlock editing"
         stackLevel={stackLevel + 1}
         onCancel={() => setUnlockBuiltinConfirmOpen(false)}
         onConfirm={() => {
-          targets.setBuiltinEditUnlocked(true)
+          environments.setBuiltinEditUnlocked(true)
           setUnlockBuiltinConfirmOpen(false)
         }}
       />
     )}
 
-    {targetConfirmSaveOpen && (
+    {environmentConfirmSaveOpen && (
       <ModalShell
-        title={targetSaveConfirmTitle}
-        subtitle={targetForm.displayName.trim() || targetForm.name.trim() || undefined}
+        title={environmentSaveConfirmTitle}
+        subtitle={environmentForm.displayName.trim() || environmentForm.name.trim() || undefined}
         size="detail"
         stackLevel={stackLevel + 1}
-        onClose={() => setTargetConfirmSaveOpen(false)}
+        onClose={() => setEnvironmentConfirmSaveOpen(false)}
         footer={(
           <div className="flex w-full flex-wrap items-center gap-2">
-            {isTargetFormDirty && (
+            {isEnvironmentFormDirty && (
               <button
                 type="button"
-                onClick={discardTargetFormChanges}
-                disabled={targets.saving !== null}
+                onClick={discardEnvironmentFormChanges}
+                disabled={environments.saving !== null}
                 className={`${TEXT_BTN} text-rose-400 hover:text-rose-300`}
               >
                 Discard changes
@@ -1176,42 +1185,42 @@ export function SyncMetadataModal({
             <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"
-                onClick={() => setTargetConfirmSaveOpen(false)}
-                disabled={targets.saving !== null}
+                onClick={() => setEnvironmentConfirmSaveOpen(false)}
+                disabled={environments.saving !== null}
                 className={TEXT_BTN}
               >
                 Keep editing
               </button>
               <button
                 type="button"
-                onClick={() => void commitTargetSave()}
-                disabled={targets.saving !== null}
+                onClick={() => void commitEnvironmentSave()}
+                disabled={environments.saving !== null}
                 className={TEXT_BTN_PRIMARY}
               >
-                {targetFormMode === "create" ? "Create" : "Save changes"}
+                {environmentFormMode === "create" ? "Create" : "Save changes"}
               </button>
             </div>
           </div>
         )}
       >
-        <p className="p-5 text-sm leading-relaxed text-text-muted">{targetSaveConfirmBody}</p>
+        <p className="p-5 text-sm leading-relaxed text-text-muted">{environmentSaveConfirmBody}</p>
       </ModalShell>
     )}
 
-    {targets.deleting && (
+    {environments.deleting && (
       <ConfirmModal
-        title="Delete target"
-        message={`Delete "${targets.deleting}"?`}
+        title="Delete environment"
+        message={`Delete "${environments.deleting}"?`}
         confirmLabel="Delete"
         danger
-        busy={targets.saving === targets.deleting}
-        onCancel={() => targets.setDeleting(null)}
-        onConfirm={() => void targets.remove(
-          targets.deleting!,
-          Boolean(targets.items.find((i) => i.name === targets.deleting)?.builtIn && targets.builtinEditUnlocked),
+        busy={environments.saving === environments.deleting}
+        onCancel={() => environments.setDeleting(null)}
+        onConfirm={() => void environments.remove(
+          environments.deleting!,
+          Boolean(environments.items.find((i) => i.name === environments.deleting)?.builtIn && environments.builtinEditUnlocked),
         ).then(() => {
-          if (targetEditingId === targets.deleting) closeTargetForm()
-          targets.setDeleting(null)
+          if (environmentEditingId === environments.deleting) closeEnvironmentForm()
+          environments.setDeleting(null)
           onChanged?.()
         })}
       />

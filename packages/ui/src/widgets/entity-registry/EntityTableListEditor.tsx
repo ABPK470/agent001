@@ -19,6 +19,8 @@ function scopeHint(table: EntityRegistryTable): string {
       return `rootPk · ${table.scope.column || "—"}`
     case "sql":
       return "sql scope"
+    default:
+      return table.scope.kind
   }
 }
 

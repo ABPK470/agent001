@@ -329,10 +329,6 @@ function HorizontalBars(props: {
 function truncate(s: string, n: number): string { return s.length > n ? s.slice(0, n - 1) + "…" : s }
 function longest(arr: string[]): number { return arr.reduce((m, s) => Math.max(m, s.length), 0) }
 
-function EmptyState(): React.ReactElement {
-  return <div className="text-text-muted text-xs italic px-2 py-4">No data</div>
-}
-
 // Re-export palette for callers that compose charts manually
 export { CHART_PALETTE };
 

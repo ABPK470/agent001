@@ -99,7 +99,7 @@ beforeEach(() => {
             color: "blue",
             role: "both",
             ringOrder: 0,
-            allowedSyncTargets: []
+            allowedSyncEnvironments: []
           },
           {
             name: "UAT",
@@ -107,7 +107,7 @@ beforeEach(() => {
             color: "teal",
             role: "both",
             ringOrder: 1,
-            allowedSyncTargets: ["DEV"]
+            allowedSyncEnvironments: ["DEV"]
           }
         ]
       },
@@ -136,10 +136,10 @@ describe("sync-environment routes", () => {
     const update = await app.inject({
       method: "PUT",
       url: "/api/sync-environments/UAT?allowBuiltinEdit=true",
-      payload: { role: "source", allowedSyncTargets: ["DEV", "PROD"] }
+      payload: { role: "source", allowedSyncEnvironments: ["DEV", "PROD"] }
     })
     expect(update.statusCode).toBe(200)
-    expect(host.sync.environments.items.get("UAT")?.allowedSyncTargets).toEqual(["DEV", "PROD"])
+    expect(host.sync.environments.items.get("UAT")?.allowedSyncEnvironments).toEqual(["DEV", "PROD"])
     expect(host.sync.environments.items.get("UAT")?.role).toBe("source")
 
     const remove = await app.inject({
@@ -176,7 +176,7 @@ describe("sync-environment routes", () => {
               color: "blue",
               role: "both",
               ringOrder: 0,
-              allowedSyncTargets: ["UAT"]
+              allowedSyncEnvironments: ["UAT"]
             },
             {
               name: "UAT",
@@ -184,7 +184,7 @@ describe("sync-environment routes", () => {
               color: "teal",
               role: "source",
               ringOrder: 1,
-              allowedSyncTargets: ["DEV", "PROD"]
+              allowedSyncEnvironments: ["DEV", "PROD"]
             }
           ]
         },
@@ -202,16 +202,16 @@ describe("sync-environment routes", () => {
     const body = response.json() as Array<{
       name: string
       role: string
-      allowedSyncTargets: string[] | null
+      allowedSyncEnvironments: string[] | null
     }>
     const uat = body.find((env) => env.name === "UAT")
     expect(uat).toMatchObject({
       name: "UAT",
       role: "both",
-      allowedSyncTargets: ["DEV"]
+      allowedSyncEnvironments: ["DEV"]
     })
     expect(host.sync.environments.items.get("UAT")?.role).toBe("both")
-    expect(host.sync.environments.items.get("UAT")?.allowedSyncTargets).toEqual(["DEV"])
+    expect(host.sync.environments.items.get("UAT")?.allowedSyncEnvironments).toEqual(["DEV"])
 
     await app.close()
   })
@@ -242,7 +242,7 @@ describe("sync-environment routes", () => {
         role: "both",
         ringOrder: 1,
         syncAllowlist: ["ghost@example.com"],
-        allowedSyncTargets: ["DEV"],
+        allowedSyncEnvironments: ["DEV"],
         defaultAccessMode: "read_write",
         allowedOperations: ["query_read"],
         denyDml: false,

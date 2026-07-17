@@ -394,7 +394,6 @@ export function suggestEntityDraft(
   }
 
   const heuristic = suggestIdentityHeuristic(rootTable)
-  const tableName = rootTable.split(".").pop() ?? ""
   const idColumn = rootMeta ? findPrimaryKeyColumn(rootMeta) ?? heuristic.idColumn : heuristic.idColumn
   if (!idColumn) return null
 

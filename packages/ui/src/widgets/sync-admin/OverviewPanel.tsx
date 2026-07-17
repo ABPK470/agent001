@@ -9,6 +9,7 @@ import {
 import type { ComponentType, JSX } from "react"
 import { useEffect, useRef, useState } from "react"
 import { api } from "../../api"
+import { EmptyState } from "../../components/EmptyState"
 import { useStore } from "../../store"
 import type { SseEvent } from "../../types"
 import { timeAgo } from "../../util"
@@ -197,7 +198,7 @@ export function OverviewPanel({ onJump }: { onJump: (s: Section) => void }): JSX
             <span className="text-sm font-medium text-text">Recent activity</span>
           </div>
           {activity.length === 0 ? (
-            <p className="px-3 py-8 text-center text-sm text-text-muted">No sync events yet</p>
+            <EmptyState icon={Activity} message="No sync events yet" className="min-h-[10rem] py-8" />
           ) : (
             <ul>
               {activity.map((e, i) => (

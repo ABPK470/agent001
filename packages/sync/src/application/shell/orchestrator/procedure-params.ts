@@ -89,7 +89,14 @@ export function formatProcedureSummary(handler: SyncFlowKindDefinition["handler"
   if (handler.type !== "mssql_procedure" || !handler.procedure?.trim()) return null
   const parts = [handler.procedure.trim()]
   for (const slot of handlerInputSlots(handler)) {
-    const binding = slot.from ? `${slot.name}←${slot.from}` : `${slot.name}=${JSON.stringify(slot.value)}`
+    const src = slot.source
+    if (!src) continue
+    const binding =
+      src.type === "literal"
+        ? `${slot.name}=${JSON.stringify(src.value)}`
+        : src.type === "catalog"
+          ? `${slot.name}←${src.id}`
+          : `${slot.name}←${src.stepId}.${src.output}`
     parts.push(binding)
   }
   return parts.join(" — ")

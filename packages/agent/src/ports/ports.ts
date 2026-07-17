@@ -149,6 +149,35 @@ export interface MssqlEntry {
   knowledge: string | null
 }
 
+// ── Live connector-keyed MSSQL pool provider ──────────────────────
+//
+// The single source of truth for MSSQL database connections: connectors
+// persisted in SQLite, read live. Both sync environments (via their
+// `connectorId` FK) and the agent's direct MSSQL tools/catalog (by connector
+// name) resolve pools through this provider. There is no boot-time name-keyed
+// map and no name-matching fallback.
+
+export interface MssqlConnectorPool {
+  connectorId: string
+  pool: sql.ConnectionPool
+  config: sql.config
+  writeEnabled: boolean
+  knowledge: string | null
+}
+
+export interface MssqlPoolProvider {
+  /** Resolve a pool by connector id (primary key). */
+  get(connectorId: string): Promise<MssqlConnectorPool>
+  /** Resolve a pool by connector name (case-insensitive). */
+  getByName(name: string): Promise<MssqlConnectorPool>
+  /** Read a connector's finalized `sql.config` without connecting (for pool gating). */
+  configOf(connectorId: string): sql.config | undefined
+  /** Enabled mssql connectors (live read). */
+  list(): readonly { id: string; name: string }[]
+  /** Drop the cached pool for a connector (e.g. after config change). */
+  invalidate(connectorId: string): void
+}
+
 // ── Sync ports (recipe reader; sinks live in sync/ for now) ──────
 
 export interface RecipeReader {

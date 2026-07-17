@@ -352,12 +352,12 @@ function toTranscriptRow(e: SseEvent, state?: State): TranscriptRow | null {
 
   if (e.type === "debug.trace") {
     const entry = e.data["entry"] as Record<string, unknown> | undefined
-    if ((entry?.["kind"] as string | undefined) === "planner-sql-quality") {
+    if (entry !== undefined && (entry["kind"] as string) === "planner-sql-quality") {
       const text = `SQL quality — ${summarizeSqlQualityEvent(entry)}`
       const blocked = typeof entry["validationCode"] === "string" || entry["phase"] === "blocked"
       return { id, runId, kind: blocked ? "tool-error" : "info", text, timestamp: ts }
     }
-    if ((entry?.["kind"] as string | undefined) === "planner-prompt-budget") {
+    if (entry !== undefined && (entry["kind"] as string) === "planner-prompt-budget") {
       const before = Number(entry["totalBeforeChars"] ?? 0)
       const after = Number(entry["totalAfterChars"] ?? 0)
       const dropped = Array.isArray(entry["droppedSections"]) ? (entry["droppedSections"] as string[]) : []

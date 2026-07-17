@@ -12,12 +12,14 @@
 import { AlertCircle, ArrowDown, ChevronRight, Database, Filter, Pause, Play } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { EmptyState } from "../components/EmptyState"
 import { SqlTraceFromEventData } from "../components/SqlTrace"
 import { JsonViewer } from "../components/JsonViewer"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { formatLogEntry, useStore } from "../store"
 import type { LogEntry } from "../types"
 import { isSyncSqlEventType } from "../sync-sql-trace"
+import { WIDGET_ICONS } from "./widget-icons"
 import {
   LOG_TOOLBAR_CHIP,
   LOG_TOOLBAR_CHIP_ACTIVE,
@@ -351,13 +353,11 @@ export function LiveLogs() {
       {/* ── Log body ─────────────────────────────────────── */}
       <div
         ref={containerRef}
-        className="log-stream flex-1 min-h-0 overflow-y-auto"
+        className="log-stream flex min-h-0 flex-1 flex-col overflow-y-auto"
         onScroll={handleScroll}
       >
         {source.length === 0 && !searchActive && (
-          <div className="text-text-muted text-center pt-12 font-sans text-sm">
-            Waiting for events…
-          </div>
+          <EmptyState icon={WIDGET_ICONS["live-logs"]} message="Waiting for events…" />
         )}
 
         {filtered.map((log, i) => (
@@ -365,9 +365,7 @@ export function LiveLogs() {
         ))}
 
         {showDbSearching && filtered.length === 0 && dbOnly.length === 0 && (
-          <div className="text-text-muted text-sm text-center py-10">
-            Searching event log database…
-          </div>
+          <EmptyState icon={Database} message="Searching event log database…" />
         )}
 
         {showDbSection && (
@@ -391,12 +389,11 @@ export function LiveLogs() {
         )}
 
         {showEmpty && (
-          <div className="text-text-muted text-center pt-10 pb-6 font-sans text-sm space-y-1">
-            <p>No matches in live buffer or database.</p>
-            <p className="text-xs text-text-muted/60 max-w-md mx-auto">
-              Search message text, event type (e.g. preview, failed), plan id, entity/table names — or use type chips, then add keywords.
-            </p>
-          </div>
+          <EmptyState
+            icon={Filter}
+            message="No matches in live buffer or database."
+            detail="Search message text, event type (e.g. preview, failed), plan id, entity/table names — or use type chips, then add keywords."
+          />
         )}
 
         <div ref={bottomRef} />

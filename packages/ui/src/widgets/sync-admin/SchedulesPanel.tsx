@@ -91,7 +91,7 @@ export function SchedulesPanel(): JSX.Element {
                 <AdminTh>on</AdminTh>
                 <AdminTh>next</AdminTh>
                 <AdminTh>last</AdminTh>
-                <AdminTh />
+                <AdminTh>{""}</AdminTh>
               </tr>
             </thead>
             <tbody>

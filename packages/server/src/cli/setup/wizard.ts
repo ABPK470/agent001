@@ -75,7 +75,7 @@ async function collectCore(
 ): Promise<Updates> {
   const updates: Updates = {}
 
-  const dataDir = await ask(rl, "MIA_DATA_DIR", env.get("MIA_DATA_DIR"), suggestDataDir(layout.packaged))
+  const dataDir = await ask(rl, "MIA_DATA_DIR", env.get("MIA_DATA_DIR"), suggestDataDir(layout))
   if (dataDir) updates.MIA_DATA_DIR = dataDir
 
   const isProd =
@@ -153,13 +153,17 @@ async function collectMssqlIfNeeded(
   force: boolean,
 ): Promise<Updates> {
   if (hasMssqlConfigured(env) && !force) {
-    console.log("MSSQL: using existing .env values (Enter skipped prompts).")
+    console.log("MSSQL: using existing configuration (Connectors DB / .env seed).")
     return {}
   }
 
+  console.log(
+    "Tip: MSSQL connections are managed from the platform menu → Connectors after first boot. " +
+      "The prompts below write a one-time .env seed (legacy bridge) you can remove once connectors are persisted.",
+  )
   const configure = force
-    ? await askYesNo(rl, "Configure MSSQL in .env?", hasMssqlConfigured(env))
-    : await askYesNo(rl, "Add MSSQL to .env now?", false)
+    ? await askYesNo(rl, "Seed MSSQL into .env now?", hasMssqlConfigured(env))
+    : await askYesNo(rl, "Add an MSSQL .env seed now?", false)
   if (!configure) return {}
 
   const updates: Updates = {}
@@ -193,7 +197,7 @@ async function promptForBlockingGaps(
   if (failed.has("env-file")) ensureEnvFile(layout)
 
   if (failed.has("mia-data-dir") || failed.has("mia-data-dir-writable")) {
-    const dataDir = await ask(rl, "MIA_DATA_DIR", env.get("MIA_DATA_DIR"), suggestDataDir(layout.packaged))
+    const dataDir = await ask(rl, "MIA_DATA_DIR", env.get("MIA_DATA_DIR"), suggestDataDir(layout))
     if (dataDir) updates.MIA_DATA_DIR = dataDir
   }
 

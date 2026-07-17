@@ -38,7 +38,7 @@ export class Agent {
   private readonly config: {
     maxIterations: number
     systemPrompt: string
-    systemMessages: Message[] | null
+    systemMessages: Message[] | undefined
     verbose: boolean
     onThinking: AgentConfig["onThinking"]
     onToken: AgentConfig["onToken"]
@@ -72,7 +72,7 @@ export class Agent {
     this.config = {
       maxIterations: config.maxIterations ?? 30,
       systemPrompt: config.systemPrompt ?? DEFAULT_SYSTEM_PROMPT,
-      systemMessages: config.systemMessages ?? null,
+      systemMessages: config.systemMessages,
       verbose: config.verbose ?? true,
       onThinking: config.onThinking,
       onToken: config.onToken,

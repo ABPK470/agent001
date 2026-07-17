@@ -35,6 +35,11 @@ describe("materializeScd2PolicyForSchema", () => {
           name: "core.DatasetMapping",
           scopeColumn: null,
           predicate: "1=1",
+          source: "manual",
+          verified: true,
+          groundedByPipeline: false,
+          enabledByDefault: true,
+          userControllable: false,
           scd2Policy: {
             excludeFromDiff: ["validFrom", "validTo"],
             onInsert: { validFrom: "GETUTCDATE()", validTo: "NULL" },

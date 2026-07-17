@@ -41,7 +41,7 @@ export async function synthesizeFinalAnswer(deps: SynthesizeDeps, messages: Mess
 
 export function buildInitialMessages(
   goal: string,
-  config: { systemMessages: Message[] | null; systemPrompt: string }
+  config: { systemMessages: Message[] | null | undefined; systemPrompt: string }
 ): Message[] {
   if (config.systemMessages && config.systemMessages.length > 0) {
     const sys = config.systemMessages

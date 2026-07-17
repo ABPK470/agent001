@@ -9,6 +9,7 @@
 import { Bell, CheckCircle2, RotateCcw, ShieldAlert, XCircle } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../api"
+import { EmptyState } from "./EmptyState"
 import { RunStatus } from "../enums"
 import { useStore } from "../store"
 import type { Notification, NotificationAction } from "../types"
@@ -255,11 +256,9 @@ export function NotificationPanel() {
             )}
           </div>
 
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
             {notifications.length === 0 ? (
-              <div className="flex items-center justify-center py-12 text-text-muted text-sm">
-                No notifications
-              </div>
+              <EmptyState icon={Bell} message="No notifications" className="py-8" />
             ) : (
               notifications.map((n) => {
                 const Icon = TYPE_ICON[n.type] ?? Bell

@@ -34,9 +34,15 @@ vi.mock("./apply.js", () => ({
   fetchPkColumns: (...args: unknown[]) => fetchPkColumnsMock(...args),
 }))
 
-vi.mock("../../../domain/catalog-drift.js", () => ({
-  detectCatalogDrift: (...args: unknown[]) => detectCatalogDriftMock(...args),
-}))
+vi.mock("../../../domain/catalog-drift.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../../domain/catalog-drift.js")>()
+  return {
+    ...actual,
+    detectCatalogDrift: (...args: unknown[]) => detectCatalogDriftMock(...args),
+    // Preview calls this before diffing; return empty column maps so tests stay unit-scoped.
+    fetchTableColumnNamesMap: vi.fn().mockResolvedValue(new Map()),
+  }
+})
 
 vi.mock("./root-parent-preflight.js", async (importOriginal) => {
   const actual = await importOriginal<typeof import("./root-parent-preflight.js")>()

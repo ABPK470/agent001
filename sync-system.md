@@ -330,7 +330,7 @@ Discrepancies appear as preview warnings, not blockers.
 | `displayName` | UI label |
 | `role` | `source`, `target`, or `both` |
 | `ringOrder` | Deployment ring ordering (0=dev, 1=uat, 2=prod) |
-| `allowedSyncTargets` | When source: explicit target allowlist (`null` = unrestricted) |
+| `allowedSyncEnvironments` | When source: explicit environment allowlist (`null` = unrestricted) |
 | `serviceUrls` | Named HTTP service base URLs (agent, etl, gate, custom) — preferred over legacy URL fields |
 | `agentServiceBaseUrl` | Legacy post-sync Agent callback URL (merged into `serviceUrls`) |
 | `etlServiceBaseUrl` | Legacy dataset/rule ETL deploy callback URL |
@@ -340,7 +340,7 @@ Discrepancies appear as preview warnings, not blockers.
 
 ### Direction policy
 
-`assertSupportedSyncDirection(source, target)` enforces `source.allowedSyncTargets` when configured. Preview and execute both call this.
+`assertSupportedSyncDirection(source, target)` enforces `source.allowedSyncEnvironments` when configured. Preview and execute both call this.
 
 ### Live rebuild
 
@@ -1052,7 +1052,7 @@ Server records preview/execute actions via `recordSyncAudit` (routes layer) for 
 
 | Variable | Effect |
 |----------|--------|
-| `SYNC_ALLOW_PROD=1` | Allow sync target named `prod` |
+| `SYNC_ALLOW_PROD=1` | Allow sync environment named `prod` |
 
 ### Orchestrator tuning (`db-helpers.ts`)
 

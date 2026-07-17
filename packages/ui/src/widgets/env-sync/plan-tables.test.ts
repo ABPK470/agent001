@@ -44,7 +44,15 @@ describe("PlanTables regression guards", () => {
     const src = readSource(planTablesPath)
     expect(src).toContain("setDetail({ table, kind, rowIndex: index, sample })")
     expect(src).toContain('title="View full row"')
-    expect(src).not.toContain('type="button"')
+    // Sample rows open via <tr onClick>; table-row header may use <button type="button">.
+    expect(src).toMatch(/<tr[\s\S]*?onClick=\{openRow\}/)
+    expect(src).toContain("function PlanTableSummaryRow")
+    expect(src).toMatch(
+      /function PlanTableSummaryRow[\s\S]*?<button[\s\S]*?type="button"/,
+    )
+    // No per-cell control that opens row detail (detail opens from the row).
+    expect(src).not.toMatch(/<td[\s\S]*?<button[\s\S]*?setDetail/)
+    expect(src).not.toMatch(/<td[\s\S]*?type="button"/)
   })
 })
 

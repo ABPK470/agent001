@@ -1,4 +1,9 @@
-import type { EntityRegistryDefinition, EntityRegistryTable, EntityRegistryTableScope } from "../../types"
+import type {
+  EntityRegistryDefinition,
+  EntityRegistryDraftSuggestion,
+  EntityRegistryTable,
+  EntityRegistryTableScope,
+} from "../../types"
 import { renumberEntityRegistryTables } from "../../types"
 
 export type EntityEditSectionId =
@@ -249,6 +254,9 @@ function cloneScope(scope: EntityRegistryTableScope): EntityRegistryTableScope {
   if (scope.kind === "sql") {
     return { kind: "sql", predicate: scope.predicate }
   }
+  if (scope.kind === "fkPath") {
+    return { kind: "fkPath", through: scope.through.map((hop) => ({ ...hop })) }
+  }
   return { kind: "rootPk", column: scope.column }
 }
 
@@ -304,7 +312,7 @@ export function defaultNewFormState(): EntityEditFormState {
 
 export function mergeDraftSuggestion(
   form: EntityEditFormState,
-  suggestion: EntityDraftSuggestionLike,
+  suggestion: EntityRegistryDraftSuggestion,
   options: { touchedFields: ReadonlySet<string>; tablesUserEdited: boolean },
 ): EntityEditFormState {
   const { touchedFields, tablesUserEdited } = options

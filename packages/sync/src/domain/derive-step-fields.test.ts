@@ -4,16 +4,7 @@ import { deriveStepFieldsFromHandler, normalizeKindDefinition } from "@mia/share
 
 describe("derive-step-fields", () => {
   it("returns empty stepFields — bindings drive step field requirements", () => {
-    expect(
-      deriveStepFieldsFromHandler({
-        type: "http_request",
-        connection: "target",
-        httpService: "etl",
-        httpMethod: "POST",
-        httpPath: "/dataset/deploy",
-        httpBody: [{ name: "datasetId" }],
-      }),
-    ).toEqual({})
+    expect(deriveStepFieldsFromHandler()).toEqual({})
   })
 
   it("normalizes kind definition stepFields to empty", () => {

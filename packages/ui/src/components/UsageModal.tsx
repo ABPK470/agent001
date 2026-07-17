@@ -2,9 +2,10 @@
  * UsageModal — token consumption tracking modal.
  */
 
-import { Activity, Hash, MessageSquare, Zap } from "lucide-react"
+import { Activity, AlertCircle, Hash, Loader2, MessageSquare, Zap } from "lucide-react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
+import { EmptyState } from "./EmptyState"
 import { ModalShell } from "../widgets/entity-registry/ModalShell"
 import { MODAL_ADMIN_PANEL } from "../widgets/entity-registry/modal-overlay"
 
@@ -51,13 +52,9 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
       size="default"
     >
       {loading ? (
-        <div className="flex flex-1 items-center justify-center py-12 text-sm text-text-muted">
-          Loading…
-        </div>
+        <EmptyState icon={Loader2} message="Loading…" className="[&_svg]:animate-spin" />
       ) : !data ? (
-        <div className="flex flex-1 items-center justify-center py-12 text-sm text-text-muted">
-          Failed to load usage data.
-        </div>
+        <EmptyState icon={AlertCircle} message="Failed to load usage data." />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           <div className="grid shrink-0 grid-cols-2 gap-3 px-6 pb-4 pt-2 sm:grid-cols-4">
@@ -72,9 +69,12 @@ export function UsageModal({ onClose }: { onClose: () => void }) {
               Per-run breakdown ({data.totals.runCount} runs)
             </div>
             {data.runs.length === 0 ? (
-              <div className="py-6 text-center text-sm text-text-muted">
-                No usage data yet. Start an agent run to track tokens.
-              </div>
+              <EmptyState
+                icon={Activity}
+                message="No usage data yet"
+                detail="Start an agent run to track tokens."
+                className="py-8"
+              />
             ) : (
               <div className="space-y-1.5">
                 {data.runs.map((run) => (

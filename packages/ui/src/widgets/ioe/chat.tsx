@@ -9,6 +9,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../api"
 import { ChatScrollProvider } from "../../components/ChatScrollContext"
 import { CodeBlock } from "../../components/CodeBlock"
+import { EmptyState } from "../../components/EmptyState"
 import { extractToolCode } from "../../components/tool-code-display"
 import { ScrollToLatestButton } from "../../components/ScrollToLatestButton"
 import { SmartAnswer } from "../../components/SmartAnswer"
@@ -260,14 +261,12 @@ export function ChatPanel({
       >
         <div ref={messagesInnerRef} className="space-y-3" style={{ overflowAnchor: "none" }}>
         {visibleMessages.length === 0 && !isRunning ? (
-          <div
-            className="flex flex-col items-center justify-center h-full gap-2"
-            style={{ color: C.dim }}
-          >
-            <MessageSquare size={32} />
-            <span className="text-[13px]">No conversation yet</span>
-            <span className="text-[13px]">Start a run to see the agent&apos;s reasoning</span>
-          </div>
+          <EmptyState
+            icon={MessageSquare}
+            message="No conversation yet"
+            detail="Start a run to see the agent's reasoning"
+            className="h-full"
+          />
         ) : (
           <>
             {chatTurns.map((turn, turnIndex) => (

@@ -1,22 +1,38 @@
 import { describe, expect, it } from "vitest"
-import type { MssqlAccessHost } from "../../ports/host.js"
+import type { MssqlAccessHost, SyncEnvironmentRegistryHost } from "../../ports/host.js"
 import {
   resolveEntityPreviewConcurrency,
   resolvePreviewTableConcurrency
 } from "./pool-concurrency.js"
 import { _resetPoolGatesForHost } from "./pool-gate.js"
 
-function stubHost(poolMax: number): MssqlAccessHost {
+function stubHost(poolMax: number): MssqlAccessHost & SyncEnvironmentRegistryHost {
   const config = { pool: { max: poolMax } }
   return {
     mssql: {
-      databases: new Map([
-        ["dev", { config, pool: null, writeEnabled: false, knowledge: null }],
-        ["uat", { config, pool: null, writeEnabled: false, knowledge: null }]
-      ]),
-      defaultConnection: { value: "dev" }
+      databases: new Map(),
+      defaultConnection: { value: "dev" },
+      pools: {
+        async get() {
+          throw new Error("not used")
+        },
+        async getByName() {
+          throw new Error("not used")
+        },
+        configOf: (id: string) => (id === "dev" || id === "uat" ? config : undefined),
+        list: () => [{ id: "dev", name: "dev" }, { id: "uat", name: "uat" }],
+        invalidate() {}
+      }
+    },
+    sync: {
+      environments: {
+        items: new Map([
+          ["dev", { name: "dev", connectorId: "dev" }],
+          ["uat", { name: "uat", connectorId: "uat" }]
+        ])
+      }
     }
-  } as unknown as MssqlAccessHost
+  } as unknown as MssqlAccessHost & SyncEnvironmentRegistryHost
 }
 
 describe("pool concurrency", () => {

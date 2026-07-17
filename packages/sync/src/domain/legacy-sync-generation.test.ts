@@ -4,6 +4,8 @@ import { join, resolve } from "node:path"
 
 import { describe, expect, it } from "vitest"
 
+import type { SyncDefinitionFlowTemplateCatalog } from "@mia/sync"
+
 const repoRoot = resolve(import.meta.dirname, "../../../..")
 const evidenceFixture = resolve(repoRoot, "deploy/sync/fixtures/legacy-pipeline-evidence.fixture.json")
 const flowTemplatesSeed = resolve(repoRoot, "deploy/sync/artifacts/flow-templates.json")
@@ -15,8 +17,10 @@ const pipelineIds = "692,780,788,791,792,798"
 
 interface DerivedMetadataTable {
   name: string
+  scopeColumn: string | null
   predicate: string
-  source: "fk+pipeline" | "fk-only" | "pipeline-only"
+  source: "fk+pipeline" | "fk-only" | "pipeline-only" | "manual"
+  verified: boolean
 }
 
 interface DerivedSyncDefinition {
@@ -172,9 +176,7 @@ describe("legacy sync generators", () => {
       buildFlowTemplateCatalogFromPipelines: (
         pipelines: unknown[],
         options?: { activitySyncSpecs?: Record<string, unknown> }
-      ) => {
-        flowTemplates: { contract: { steps: Array<{ id: string; title: string }> } }
-      }
+      ) => SyncDefinitionFlowTemplateCatalog
     }
     const { loadLegacyActivitySyncSpecs } = (await import(specsPath)) as {
       loadLegacyActivitySyncSpecs: () => Record<string, unknown>

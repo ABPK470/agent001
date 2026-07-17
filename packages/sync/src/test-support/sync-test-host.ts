@@ -8,12 +8,33 @@ import { join } from "node:path"
 
 import { createPublishedSyncDefinitionRegistry } from "../domain/published-definition-registry.js"
 import { withPermissionDefaults } from "../domain/environments.js"
+import type { MssqlPoolProvider } from "@mia/agent"
 import type { SyncRuntimeHost } from "../ports/host.js"
 import { configureSyncOrchestrator } from "../application/shell/orchestrator/db-helpers.js"
 import { configurePlanStore } from "../application/shell/plan-store.js"
 import { writeEntityBundle, type ENTITY_SPECS } from "./entity-fixtures.js"
 
 const tempRoots: string[] = []
+
+/**
+ * Throwing pool provider for tests — mirrors an empty `databases` map: any pool
+ * resolution fails loudly. Tests that need a real pool mock the DB helpers.
+ */
+const THROWING_POOLS: MssqlPoolProvider = {
+  async get(id) {
+    throw new Error(`MSSQL connector "${id}" not configured.`)
+  },
+  async getByName(name) {
+    throw new Error(`MSSQL connection "${name}" not configured.`)
+  },
+  configOf() {
+    return undefined
+  },
+  list() {
+    return []
+  },
+  invalidate() {},
+}
 
 export function createSyncTestHost(projectRoot: string): SyncRuntimeHost {
   const dev = withPermissionDefaults({
@@ -22,7 +43,7 @@ export function createSyncTestHost(projectRoot: string): SyncRuntimeHost {
     color: "emerald",
     role: "both",
     ringOrder: 0,
-    allowedSyncTargets: ["UAT", "PROD"]
+    allowedSyncEnvironments: ["UAT", "PROD"]
   })
   const uat = withPermissionDefaults({
     name: "UAT",
@@ -30,7 +51,7 @@ export function createSyncTestHost(projectRoot: string): SyncRuntimeHost {
     color: "amber",
     role: "both",
     ringOrder: 1,
-    allowedSyncTargets: null
+    allowedSyncEnvironments: null
   })
   const prod = withPermissionDefaults({
     name: "PROD",
@@ -38,13 +59,14 @@ export function createSyncTestHost(projectRoot: string): SyncRuntimeHost {
     color: "rose",
     role: "both",
     ringOrder: 2,
-    allowedSyncTargets: null
+    allowedSyncEnvironments: null
   })
 
   return {
     mssql: {
       databases: new Map(),
-      defaultConnection: { value: "DEV" }
+      defaultConnection: { value: "DEV" },
+      pools: THROWING_POOLS
     },
     sync: {
       events: { sink: () => {} },

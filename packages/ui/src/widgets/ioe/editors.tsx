@@ -2,6 +2,7 @@
  * IOE editor-area panels — Trace (DAG-style), LLM Calls, Map, EditorTabs.
  */
 
+import { traceExportFilename } from "@mia/shared-types"
 import { CheckCircle2, Circle, Loader2, RotateCcw, XCircle } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { CodeBlock } from "../../components/CodeBlock"
@@ -13,11 +14,10 @@ import {
 } from "../../components/tool-code-display"
 import { JsonViewer } from "../../components/JsonViewer"
 import { EditorTab, RunStatus } from "../../enums"
+import { downloadAuthenticated } from "../../lib/userDownload"
 import type { AgentDefinition, BusMessage, Run, Step, TraceEntry } from "../../types"
 import { fmtTokens, formatMs, remediationHintForValidationCode, truncate } from "../../util"
-import { traceExportFilename } from "@mia/shared-types"
-import { downloadAuthenticated } from "../../lib/userDownload"
-import { C } from "./constants"
+import { C, fmtK, statusDot } from "./constants"
 
 // ═══════════════════════════════════════════════════════════════════
 //  Export: format Agent Loop trace as plain text
@@ -30,9 +30,9 @@ export function formatTraceAsText(trace: TraceEntry[]): string {
   if (isPlannerRun(trace)) {
     const g = groupTraceForPlanner(trace)
     const lines: string[] = []
-    for (const e of g.preamble) lines.push(fmtEvent(e, 0))
-    for (const p of g.pipelines) fmtPipeline(p, lines)
-    for (const e of g.trailing) lines.push(fmtEvent(e, 0))
+    for (const preamble of g.preamble) lines.push(fmtEvent(preamble, 0))
+    for (const pipe of g.pipelines) fmtPipeline(pipe, lines)
+    for (const t of g.trailing) lines.push(fmtEvent(t, 0))
     return lines.join("\n")
   }
 
@@ -324,12 +324,6 @@ export function ToolTimelinePanel({ steps }: { steps: Step[] }) {
     if (Array.isArray(value)) return value.length > 0
     if (typeof value === "object") return Object.keys(value as Record<string, unknown>).length > 0
     return true
-  }
-
-  const formatDetail = (value: unknown) => {
-    if (typeof value === "string") return value
-    if (value == null) return ""
-    return JSON.stringify(value, null, 2)
   }
 
   useEffect(() => {

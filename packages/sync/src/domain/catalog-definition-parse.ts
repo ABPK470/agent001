@@ -7,7 +7,7 @@
 import type { SyncFlowKindDefinition, SyncFlowPhaseDefinition } from "@mia/shared-types"
 import { normalizeKindDefinition } from "@mia/shared-types"
 
-export function defaultCustomPhaseDefinition(id: string, label: string): SyncFlowPhaseDefinition {
+export function defaultCustomPhaseDefinition(_id: string, label: string): SyncFlowPhaseDefinition {
   return {
     summary: label,
     description: "Custom phase — define when steps in this phase run and which connection they use.",

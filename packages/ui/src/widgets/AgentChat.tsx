@@ -531,7 +531,7 @@ export function AgentChat() {
       // produced a runs row server-side.
       const msg = err instanceof Error ? err.message : String(err)
       console.error("Failed to start run:", err)
-      setError(`Failed to start run: ${msg}`)
+      cmdConsole.api.logError(`Failed to start run: ${msg}`)
       setActiveRun(null)
       setDraft(goal)
       setAttachments(attachments)

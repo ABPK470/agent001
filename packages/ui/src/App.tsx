@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import { api, createEventStream, createPopoutEventRelay } from "./api"
 import { Canvas, type CanvasHandle } from "./components/Canvas"
 import { ChatHomePage } from "./components/ChatHomePage"
+import { EmptyState } from "./components/EmptyState"
 import { MobileNav } from "./components/MobileNav"
 import { ApprovalRequiredModal } from "./components/ApprovalRequiredModal"
 import { PolicyEditor } from "./components/PolicyEditor"
@@ -51,6 +52,7 @@ const WIDGET_LABELS: Record<WidgetType, string> = {
   "sync-approvals": "Sync Admin · Approvals",
   "sync-evidence":  "Sync Evidence",
   "sync-admin":     "Sync Admin",
+  "data-movement": "Data Movement",
 }
 
 const SYNC_CHANNEL = "mia-active-run"
@@ -610,15 +612,18 @@ export function App() {
         {/* Widget area — full remaining space */}
         <main className="flex-1 overflow-hidden flex flex-col">
           {widgets.length === 0 ? (
-            <div className="flex-1 flex flex-col items-center justify-center gap-4 px-6">
-              <p className="text-text-secondary text-center">No widgets in this view yet</p>
-              <button
-                className="px-6 py-3 text-sm text-text-secondary border border-border rounded-xl active:bg-overlay-2"
-                onClick={() => setMobileCatalogOpen(true)}
-              >
-                Add Widget
-              </button>
-            </div>
+            <EmptyState
+              icon={LayoutGrid}
+              message="No widgets in this view yet"
+              action={(
+                <button
+                  className="px-6 py-3 text-sm text-text-secondary border border-border rounded-xl active:bg-overlay-2"
+                  onClick={() => setMobileCatalogOpen(true)}
+                >
+                  Add Widget
+                </button>
+              )}
+            />
           ) : WidgetComponent ? (
             <>
               {/* Intra-view pager — only when this view holds more than

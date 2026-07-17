@@ -27,32 +27,32 @@ describe("removed sync environment fields", () => {
       role: "both",
       ringOrder: 1,
       syncAllowlist: ["ghost@example.com"],
-      allowedSyncTargets: ["DEV"],
+      allowedSyncEnvironments: ["DEV"],
     })
     expect("syncAllowlist" in env).toBe(false)
-    expect(env.allowedSyncTargets).toEqual(["DEV"])
+    expect(env.allowedSyncEnvironments).toEqual(["DEV"])
   })
 })
 
 describe("assertSupportedSyncDirection", () => {
-  it("allows explicitly configured targets", () => {
-    const source = withPermissionDefaults({ name: "UAT", role: "both", allowedSyncTargets: ["DEV"] })
+  it("allows explicitly configured connections", () => {
+    const source = withPermissionDefaults({ name: "UAT", role: "both", allowedSyncEnvironments: ["DEV"] })
     const target = withPermissionDefaults({ name: "DEV", role: "both" })
 
     expect(() => assertSupportedSyncDirection(source, target)).not.toThrow()
   })
 
-  it("rejects targets not present in the source allowlist", () => {
-    const source = withPermissionDefaults({ name: "DEV", role: "both", allowedSyncTargets: [] })
+  it("rejects connections not present in the source allowlist", () => {
+    const source = withPermissionDefaults({ name: "DEV", role: "both", allowedSyncEnvironments: [] })
     const target = withPermissionDefaults({ name: "UAT", role: "both" })
 
     expect(() => assertSupportedSyncDirection(source, target)).toThrow(
-      'Unsupported sync direction "DEV -> UAT". Allowed targets for DEV: none.'
+      'Unsupported sync direction "DEV -> UAT". Allowed connections for DEV: none.'
     )
   })
 
   it("allows unrestricted sources when no direction policy is configured", () => {
-    const source = withPermissionDefaults({ name: "UAT", role: "both", allowedSyncTargets: null })
+    const source = withPermissionDefaults({ name: "UAT", role: "both", allowedSyncEnvironments: null })
     const target = withPermissionDefaults({ name: "PROD", role: "both" })
 
     expect(() => assertSupportedSyncDirection(source, target)).not.toThrow()

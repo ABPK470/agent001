@@ -25,6 +25,8 @@ function scopeSecondRow(table: EntityRegistryTable): string {
       return `rootPk · ${table.scope.column}`
     case "sql":
       return table.scope.predicate
+    default:
+      return table.scope.kind
   }
 }
 

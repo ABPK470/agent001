@@ -55,7 +55,7 @@ export interface PostRoundContext {
  * Run all post-round processing. Returns instructions for the loop controller.
  */
 export function processPostRound(ctx: PostRoundContext): PostRoundResult {
-  const { roundToolCalls, state, messages, config, iteration, allToolCalls } = ctx
+  const { roundToolCalls, state, messages, config, iteration } = ctx
 
   // Accumulate tool calls
   ctx.allToolCalls.push(...roundToolCalls)

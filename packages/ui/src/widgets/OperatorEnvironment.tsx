@@ -108,8 +108,6 @@ export function OperatorEnvironment() {
   const selectedAgentId = useStore((s) => s.selectedAgentId)
   const setSelectedAgent = useStore((s) => s.setSelectedAgent)
   const setTrace = useStore((s) => s.setTrace)
-  const setSteps = useStore((s) => s.setSteps)
-  const setAudit = useStore((s) => s.setAudit)
   const pendingInput = useStore((s) => s.pendingInput)
   const clearPendingInput = useStore((s) => s.clearPendingInput)
   const executingToolCalls = useStore((s) => s.executingToolCalls)

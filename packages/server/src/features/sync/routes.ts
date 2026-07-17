@@ -4,7 +4,6 @@
 
 import { type AgentHost } from "@mia/agent"
 import { EventType, isSyncRunStatus, type SyncRunStatus } from "@mia/shared-enums"
-import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import {
   getEnvironments,
   listPublishedSyncDefinitions,
@@ -110,11 +109,6 @@ function sanitiseDefinitionConfig(body: Record<string, unknown>):
     out.ownershipNotes = (body["ownershipNotes"] as unknown[]).map(String)
   }
   return out
-}
-
-function asRequiredString(value: unknown, field: string): string {
-  if (typeof value !== "string" || value.trim() === "") throw new Error(`${field} must be a non-empty string`)
-  return value.trim()
 }
 
 function auditSync(

@@ -2,8 +2,10 @@
  * Entity-registry rail primitives for Sync Operations list columns + section nav.
  */
 
+import { Inbox, type LucideIcon } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 
+import { EmptyState } from "../../components/EmptyState"
 import { IconButton, TOOLBAR_ICON } from "../entity-registry/IconButton"
 
 export { TOOLBAR_ICON }
@@ -73,13 +75,16 @@ export function RailList({ children, label }: { children: ReactNode; label?: str
   )
 }
 
-export function RailEmpty({ title, children }: { title: string; children?: ReactNode }): JSX.Element {
-  return (
-    <div className="px-3 py-10 text-center text-sm text-text-muted">
-      <p className="font-medium text-text">{title}</p>
-      {children ? <p className="mt-1">{children}</p> : null}
-    </div>
-  )
+export function RailEmpty({
+  title,
+  children,
+  icon = Inbox,
+}: {
+  title: string
+  children?: ReactNode
+  icon?: LucideIcon
+}): JSX.Element {
+  return <EmptyState icon={icon} message={title} detail={children} className="py-8" />
 }
 
 export function ToolbarIconBtn({

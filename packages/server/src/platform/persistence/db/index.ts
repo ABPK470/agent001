@@ -137,6 +137,15 @@ export {
 export { listApiRequests, saveApiRequest, type DbApiRequest } from "./api-requests.js"
 
 export {
+  countConnectors,
+  deleteConnector,
+  getConnector,
+  listConnectors,
+  saveConnector,
+  type DbConnector,
+} from "./connectors.js"
+
+export {
   deleteWebhookDrain,
   getWebhookDrain,
   listEvents,

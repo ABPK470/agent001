@@ -83,7 +83,7 @@ function hostWithEnvs(overrides?: {
     color: "emerald",
     role: overrides?.sourceRole ?? "both",
     ringOrder: 0,
-    allowedSyncTargets: ["UAT", "PROD"]
+    allowedSyncEnvironments: ["UAT", "PROD"]
   })
   const target = withPermissionDefaults({
     name: overrides?.targetName ?? "UAT",
@@ -91,7 +91,7 @@ function hostWithEnvs(overrides?: {
     color: "amber",
     role: overrides?.targetRole ?? "both",
     ringOrder: 1,
-    allowedSyncTargets: null
+    allowedSyncEnvironments: null
   })
   host.sync.environments.items.set("DEV", source)
   host.sync.environments.items.set("UAT", target)
@@ -104,7 +104,7 @@ function hostWithEnvs(overrides?: {
         color: "rose",
         role: "both",
         ringOrder: 2,
-        allowedSyncTargets: null
+        allowedSyncEnvironments: null
       })
     )
   }

@@ -45,6 +45,10 @@ function readCatalogCacheDetail(path: string): string {
 }
 
 function mssqlConnectionNames(host: AgentHost): string[] {
+  // Live: prefer the connector-keyed pool provider (reads the connectors DB on
+  // every call) so runtime enable/disable is reflected without a restart.
+  const pools = host.mssql.pools
+  if (pools) return pools.list().map((c) => c.name)
   return getMssqlConfig(host).map((c) => c.name)
 }
 
@@ -53,7 +57,8 @@ export function getPlatformHealth(
   mssqlSummary: string,
   bootHost: AgentHost,
 ): PlatformHealth {
-  const configured = mssqlSummary !== "not configured"
+  const pools = bootHost.mssql.pools
+  const configured = pools ? pools.list().length > 0 : mssqlSummary !== "not configured"
   const connections = configured ? mssqlConnectionNames(bootHost) : []
 
   let catalogAvailable = false
@@ -97,7 +102,7 @@ export function getPlatformHealth(
   const hints: string[] = []
   if (!configured) {
     hints.push(
-      "Optional: add MSSQL_HOST or MSSQL_DATABASES to .env and restart for live schema catalog and sync against SQL Server.",
+      "Optional: add a SQL Server connector (Connectors, in the platform menu) and restart for live schema catalog and sync against SQL Server.",
     )
   } else if (!catalogAvailable) {
     hints.push(
@@ -142,14 +147,13 @@ export function getPlatformHealth(
 }
 
 export async function rebuildPlatformCatalog(
-  projectRoot: string,
   host: AgentHost,
 ): Promise<{ ok: boolean; message: string }> {
   const configs = getMssqlConfig(host)
   if (configs.length === 0) {
     return {
       ok: false,
-      message: "MSSQL is not configured — set MSSQL_HOST or MSSQL_DATABASES in .env and restart the server.",
+      message: "MSSQL is not configured — add a SQL Server connector (Connectors, in the platform menu) and restart the server.",
     }
   }
 

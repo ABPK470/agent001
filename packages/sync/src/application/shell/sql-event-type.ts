@@ -1,4 +1,4 @@
-import type { EventType as SyncEventType, SyncOperationType } from "../../domain/enums.js"
+import type { EventType as SyncEventType } from "../../domain/enums.js"
 import { EventType, SyncOperationType as SyncOp } from "../../domain/enums.js"
 import type { SyncTelemetryContext } from "../../ports/events.js"
 

@@ -17,7 +17,9 @@ export type {
   ConfigureAgentSyncOptions,
   ConfigureMssqlConnection,
   MakeRunContextOptions,
+  MssqlConnectorPool,
   MssqlEntry,
+  MssqlPoolProvider,
   RunContext,
   ShellClient
 } from "./application/shell/runtime.js"

@@ -4,7 +4,7 @@
 
 import { EventType } from "@mia/shared-enums"
 import type { AuthoredSyncDefinition, EntityRegistryYamlImportResponse } from "@mia/shared-types"
-import { entityDefinitionFromAuthoredSync, validateEntityDefinition } from "@mia/sync"
+import { entityDefinitionFromAuthoredSync, validateEntityDefinition, type ValidationResult } from "@mia/sync"
 
 import { broadcast } from "../../../platform/events/broadcaster.js"
 import * as db from "../../../platform/persistence/sqlite.js"
@@ -75,7 +75,7 @@ export function importOneAuthoredSync(args: {
   id: string | null
   version?: number
   created?: boolean
-  error?: string | db.EntityRegistryValidationResult
+  error?: string | ValidationResult
   skipped?: string
 } {
   const def = entityDefinitionFromAuthoredSync(args.authored, args.tenantId)

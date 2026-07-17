@@ -28,7 +28,7 @@ import type { PkHashRow } from "./types.js"
 export async function detectScopeMisattribution(
   host: SyncRuntimeHost,
   targetConn: string,
-  table: AuthoredSyncDefinitionTable,
+  table: Pick<AuthoredSyncDefinitionTable, "name" | "scopeColumn" | "predicate">,
   entityId: string | number,
   pkColumns: string[],
   insertCandidates: PkHashRow[],

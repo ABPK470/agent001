@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, type JSX } from "react"
 import { ModalShell } from "../ModalShell"
 import { FORM_HEADING, ICON_BTN, META_TEXT, TEXT_BTN, TEXT_BTN_PRIMARY } from "../chrome"
 import { FormFieldGroup, FormSectionCard } from "../form-section"
-import type { ServiceUrlEntry } from "./target-form-model"
+import type { ServiceUrlEntry } from "./environment-form-model"
 
 type DraftRow = ServiceUrlEntry & { rowId: string }
 
@@ -66,7 +66,7 @@ export function ServiceUrlsField({
               <p className={`${META_TEXT} mt-1`}>
                 {readOnly
                   ? "View endpoints"
-                  : "Opens full editor — then Save the target to persist"}
+                  : "Opens full editor — then Save the environment to persist"}
               </p>
             </div>
             <ExternalLink size={16} className="shrink-0 text-text-muted" aria-hidden />
@@ -151,7 +151,7 @@ function ServiceUrlsModal({
   return (
     <ModalShell
       title={readOnly ? "Service URLs" : "Edit service URLs"}
-      subtitle="Keys are lowercase identifiers used by sync flow HTTP steps. Done updates this form — Save the target from the toolbar to persist."
+      subtitle="Keys are lowercase identifiers used by sync flow HTTP steps. Done updates this form — Save the environment from the toolbar to persist."
       size="default"
       stackLevel={stackLevel}
       onClose={onClose}

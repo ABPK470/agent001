@@ -76,7 +76,7 @@ export async function refreshDeployArtifactsFromDatabase(
   if (configs.length === 0) {
     return {
       ok: false,
-      message: "MSSQL is not configured — set MSSQL_HOST or MSSQL_DATABASES in .env and restart the server.",
+      message: "MSSQL is not configured — add a SQL Server connector (Connectors, in the platform menu) and restart the server.",
       source: "mssql",
     }
   }
@@ -112,7 +112,7 @@ export async function refreshDeployArtifactsFromDatabase(
       force: true,
     })
 
-    const catalog = await rebuildPlatformCatalog(projectRoot, host)
+    const catalog = await rebuildPlatformCatalog(host)
     const catalogNote = catalog.ok ? ` Schema catalog: ${catalog.message}.` : ` Schema catalog: ${catalog.message}`
 
     if (options.reseedSqlite !== false) {

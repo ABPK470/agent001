@@ -11,7 +11,6 @@ import { homedir, tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 
 import type { EntityDefinition, Scd2Strategy, SyncEnvironment } from "@mia/sync"
-import { buildFlowCatalog } from "@mia/sync"
 
 import type { EntityRegistryExportDocument } from "../../sync/domain/entity-yaml.js"
 import { buildEntityRegistryExportDocument, entityRunYamlFromConfig } from "../../sync/domain/entity-yaml.js"
@@ -111,13 +110,6 @@ function exportSyncMetadataDocument(tenantId: string) {
     ]),
   )
 
-  buildFlowCatalog(
-    db.listSyncRunPhases(tenantId),
-    db.listSyncRunKinds(tenantId),
-    db.listSyncRunBindingSources(tenantId),
-    db.listSyncRunPresets(tenantId),
-  )
-
   return {
     version: 1 as const,
     _comment:
@@ -144,6 +136,7 @@ function exportEnvironmentsDocument() {
     const body = JSON.parse(row.body_json) as SyncEnvironment
     return {
       name: body.name,
+      connectorId: body.connectorId ?? null,
       displayName: body.displayName,
       color: body.color,
       role: body.role,
@@ -152,7 +145,7 @@ function exportEnvironmentsDocument() {
       etlServiceBaseUrl: body.etlServiceBaseUrl,
       gateServiceBaseUrl: body.gateServiceBaseUrl,
       serviceUrls: body.serviceUrls,
-      allowedSyncTargets: body.allowedSyncTargets ?? [],
+      allowedSyncEnvironments: body.allowedSyncEnvironments ?? [],
       defaultAccessMode: body.defaultAccessMode,
       allowedOperations: body.allowedOperations,
       denyDml: body.denyDml,

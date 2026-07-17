@@ -22,7 +22,6 @@ const DIM  = "var(--text-faint, #52525b)"
 const ACC  = "var(--accent, #d8b4fe)"
 const ERR  = "var(--error, #f87171)"
 const FONT = '"JetBrains Mono","SFMono-Regular",Consolas,Menlo,monospace'
-const FS   = 16
 
 /* ── Mosaic grid ───────────────────────────────────────────────────────── */
 const COLS = 60
@@ -41,15 +40,8 @@ const BOT_START    = 100
 const STEP_MS      = 140
 const BOT_END      = BOT_START + WORD.length * STEP_MS + LOCK_MS
 const DISSOLVE_AT  = BOT_END + 500
-const DISSOLVE_MS  = 700
 
 /* ── Outro timeline ───────────────────────────────────────────────────── */
-const OUTRO_COVER_MS  = 800
-const OUTRO_SHOW_MS   = OUTRO_COVER_MS
-const OUTRO_EAT_START = OUTRO_SHOW_MS + 400
-const OUTRO_EAT_END   = OUTRO_EAT_START + WORD.length * STEP_MS + LOCK_MS
-const OUTRO_HIDE_MS   = OUTRO_EAT_END + 200
-const OUTRO_DONE_MS   = OUTRO_HIDE_MS + 300
 
 /* ── Helpers ───────────────────────────────────────────────────────────── */
 function rndGlyph(seed: number) {
@@ -59,7 +51,6 @@ function rndGlyph(seed: number) {
 type CellState = "hidden" | "scrambling" | "locked"
 interface Cell { state: CellState; glyph: string }
 const hiddenCells = (): Cell[] => WORD.split("").map(() => ({ state: "hidden", glyph: "" }))
-const lockedCells = (): Cell[] => WORD.split("").map(ch => ({ state: "locked", glyph: ch }))
 
 /* ── Bot SVG ───────────────────────────────────────────────────────────── */
 function Bot({ size = 42 }: { size?: number }) {

@@ -2,8 +2,9 @@
  * History tab — version timeline.
  */
 
-import { Clock, User } from "lucide-react"
+import { Clock, History, User } from "lucide-react"
 import type { JSX } from "react"
+import { EmptyState } from "../../components/EmptyState"
 import type { EntityRegistryHistoryEntry } from "../../types"
 import { timeAgo } from "../../util"
 import { PANEL } from "./chrome"
@@ -14,7 +15,7 @@ export interface EntityHistoryProps {
 
 export function EntityHistory({ entries }: EntityHistoryProps): JSX.Element {
   if (entries.length === 0) {
-    return <p className="text-sm text-text-muted">No history yet.</p>
+    return <EmptyState icon={History} message="No history yet." className="min-h-[12rem] py-8" />
   }
   return (
     <ol className={PANEL}>

@@ -83,7 +83,7 @@ describe("publishedOutputKeysForStep", () => {
   it("resolves keys from the selected step kind definition in catalog", () => {
     const keys = publishedOutputKeysForStep(
       "gate",
-      [{ id: "gate", kind: "audit-check", title: "", description: "" }],
+      [{ id: "gate", kind: "auditCheck", title: "", description: "" }],
       () => auditCheckKind,
     )
     expect(keys).toEqual(auditCheckKind.publishedOutputs)
@@ -97,7 +97,7 @@ describe("pruneStaleResultColumnKeys", () => {
   })
 
   it("keeps real result columns", () => {
-    expect(pruneStaleResultColumnKeys(["status", "message"], ["id", "action"]).sort()).toEqual([
+    expect([...pruneStaleResultColumnKeys(["status", "message"], ["id", "action"])].sort()).toEqual([
       "message",
       "status",
     ])

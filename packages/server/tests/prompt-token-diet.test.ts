@@ -537,20 +537,27 @@ describe("buildToolContext gates", () => {
 
 describe("buildSystemMessages cache hint + section budget", () => {
   it("marks the LAST system message with cacheHint=ephemeral", async () => {
-    const messages = await buildSystemMessages({
-      goal: "hello",
-      host,
-      systemPrompt: undefined,
-      allTools: [],
-      runWorkspace: RW,
-      perTier: emptyTier(),
-      runId: "run-x"
-    })
-    expect(messages.length).toBeGreaterThan(0)
-    expect(messages[messages.length - 1].cacheHint).toBe("ephemeral")
-    // No earlier system message should also carry the hint (single cache breakpoint).
-    for (let i = 0; i < messages.length - 1; i++) {
-      expect(messages[i].cacheHint).toBeUndefined()
+    // buildLawSections → resolveEffectiveMssqlConnection requires at least one
+    // registered connection after B4 live connector/pool unification.
+    setMssqlConfigs(host, [{ name: "uat", server: "h", database: "d" }])
+    try {
+      const messages = await buildSystemMessages({
+        goal: "hello",
+        host,
+        systemPrompt: undefined,
+        allTools: [],
+        runWorkspace: RW,
+        perTier: emptyTier(),
+        runId: "run-x"
+      })
+      expect(messages.length).toBeGreaterThan(0)
+      expect(messages[messages.length - 1].cacheHint).toBe("ephemeral")
+      // No earlier system message should also carry the hint (single cache breakpoint).
+      for (let i = 0; i < messages.length - 1; i++) {
+        expect(messages[i].cacheHint).toBeUndefined()
+      }
+    } finally {
+      setMssqlConfigs(host, [])
     }
   })
 

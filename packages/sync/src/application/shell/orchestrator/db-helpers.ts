@@ -12,7 +12,7 @@
 import type sql from "mssql"
 import { getPool } from "../../../adapters/mssql/connection.js"
 import { withPoolSlot } from "../../../adapters/mssql/pool-gate.js"
-import type { MssqlAccessHost, SyncEventHost, SyncProjectRootHost } from "../../../ports/host.js"
+import type { MssqlAccessHost, SyncEnvironmentRegistryHost, SyncEventHost, SyncProjectRootHost } from "../../../ports/host.js"
 import type { SyncTelemetryContext } from "../events.js"
 import { emitSyncSqlEvent } from "../events.js"
 
@@ -85,7 +85,7 @@ export async function mapWithConcurrency<T, R>(
  * pool request. Pass `request` for transaction-bound or pre-parameterized queries.
  */
 export async function trackedQuery<T = unknown>(
-  host: SyncEventHost & MssqlAccessHost,
+  host: SyncEventHost & MssqlAccessHost & SyncEnvironmentRegistryHost,
   connection: string,
   sqlText: string,
   label: string,
@@ -139,7 +139,7 @@ export async function trackedQuery<T = unknown>(
  * Use when the executed statement differs from the human-readable log text.
  */
 export async function trackedLoggedQuery<T = unknown>(
-  host: SyncEventHost & MssqlAccessHost,
+  host: SyncEventHost & MssqlAccessHost & SyncEnvironmentRegistryHost,
   connection: string,
   label: string,
   sqlForLog: string,
@@ -199,7 +199,7 @@ function formatSqlLogLiteral(value: unknown): string {
 
 /** Same as trackedQuery but for `.execute(sproc)` calls. */
 export async function trackedExecute(
-  host: SyncEventHost & MssqlAccessHost,
+  host: SyncEventHost & MssqlAccessHost & SyncEnvironmentRegistryHost,
   connection: string,
   sprocName: string,
   label: string,

@@ -354,8 +354,14 @@ describe("validateEntityDefinition — lineage + version", () => {
     expect(r.errors.some((e) => e.code === "lineage_object_invalid")).toBe(true)
   })
 
-  it("rejects version < 1", () => {
+  it("allows version 0 as an import placeholder", () => {
+    // shapeAsEntity stamps version 0; save overwrites it with a real version.
     const r = validateEntityDefinition(validDef({ version: 0 }))
+    expect(r.errors.some((e) => e.code === "version_not_positive")).toBe(false)
+  })
+
+  it("rejects non-positive versions other than the 0 placeholder", () => {
+    const r = validateEntityDefinition(validDef({ version: -1 }))
     expect(r.errors.some((e) => e.code === "version_not_positive")).toBe(true)
   })
 })

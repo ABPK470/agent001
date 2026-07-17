@@ -1,6 +1,7 @@
 import { AlertTriangle, History, Loader2, Ship, XCircle } from "lucide-react"
 import type { ReactNode } from "react"
 
+import { EmptyState } from "../../components/EmptyState"
 import type { SyncEnvironment } from "../../types"
 import {
   ModalShell as RegistryModalShell,
@@ -73,24 +74,34 @@ export function Empty({ envs, blocker, srcEnv, tgtEnv, hasDefinitions }: {
 }) {
   if (envs.length < 2) {
     return (
-      <div className="flex-1 flex items-center justify-center">
-        <div className="max-w-md px-6 text-sm text-text-muted text-center space-y-2">
-          <AlertTriangle size={20} className="mx-auto text-warning opacity-60" />
-          <p>Need at least 2 environments.</p>
-          <p className="text-xs">Add another to <span className="font-mono text-text">MSSQL_DATABASES</span> in <span className="font-mono text-text">.env</span>.</p>
-        </div>
-      </div>
+      <EmptyState
+        icon={AlertTriangle}
+        message="Need at least 2 environments."
+        detail={
+          <>
+            Add another to <span className="font-mono text-text">MSSQL_DATABASES</span> in{" "}
+            <span className="font-mono text-text">.env</span>.
+          </>
+        }
+        className="[&_svg]:text-warning [&_svg]:opacity-60"
+      />
     )
   }
   return (
-    <div className="flex-1 flex flex-col items-center justify-center text-center gap-3">
-      <Ship size={20} className="text-text-muted opacity-40" />
-      <p className="text-sm text-text-muted">{blocker ?? "Select entity and click Preview"}</p>
-      {!hasDefinitions && <p className="text-xs text-warning">No published definitions loaded</p>}
-      {srcEnv && tgtEnv && !blocker && (
-        <p className="text-xs text-text-muted font-mono">{srcEnv.displayName} → {tgtEnv.displayName}</p>
-      )}
-    </div>
+    <EmptyState
+      icon={Ship}
+      message={blocker ?? "Select entity and click Preview"}
+      detail={
+        <>
+          {!hasDefinitions && <p className="text-warning">No published definitions loaded</p>}
+          {srcEnv && tgtEnv && !blocker && (
+            <p className="font-mono">
+              {srcEnv.displayName} → {tgtEnv.displayName}
+            </p>
+          )}
+        </>
+      }
+    />
   )
 }
 
@@ -101,11 +112,5 @@ export function EmptyHistory({
   message?: string
   action?: ReactNode
 }) {
-  return (
-    <div className="flex flex-col items-center justify-center min-h-[200px] text-text-muted gap-2 py-12">
-      <History size={20} className="opacity-40" />
-      <p className="text-sm">{message}</p>
-      {action}
-    </div>
-  )
+  return <EmptyState icon={History} message={message} action={action} />
 }

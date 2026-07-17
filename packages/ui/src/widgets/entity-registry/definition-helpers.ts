@@ -48,6 +48,8 @@ export function scopeSummary(scope: EntityRegistryTableScope): string {
       return `rootPk · ${scope.column}`
     case "sql":
       return "sql scope"
+    default:
+      return scope.kind
   }
 }
 

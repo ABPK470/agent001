@@ -1,0 +1,62 @@
+{
+  "version": 1,
+  "connectors": [
+    {
+      "id": "dev",
+      "kind": "mssql",
+      "name": "dev",
+      "displayName": "DEV",
+      "enabled": false,
+      "config": {
+        "host": "sqldev",
+        "port": 1433,
+        "database": "mymi",
+        "user": "admin",
+        "password": "abcd",
+        "domain": "corp",
+        "encrypt": true,
+        "trustServerCertificate": true,
+        "writeEnabled": false,
+        "knowledgePath": null
+      }
+    },
+    {
+      "id": "uat",
+      "kind": "mssql",
+      "name": "uat",
+      "displayName": "UAT",
+      "enabled": false,
+      "config": {
+        "host": "sqluat",
+        "port": 1433,
+        "database": "mymi",
+        "user": "admin",
+        "password": "abcd",
+        "domain": "corp",
+        "encrypt": true,
+        "trustServerCertificate": true,
+        "writeEnabled": false,
+        "knowledgePath": null
+      }
+    },
+    {
+      "id": "prod",
+      "kind": "mssql",
+      "name": "prod",
+      "displayName": "PROD",
+      "enabled": false,
+      "config": {
+        "host": "sqlprod",
+        "port": 1433,
+        "database": "mymi",
+        "user": "admin",
+        "password": "abcd",
+        "domain": "corp",
+        "encrypt": true,
+        "trustServerCertificate": true,
+        "writeEnabled": false,
+        "knowledgePath": null
+      }
+    }
+  ]
+}

@@ -28,7 +28,7 @@ interface SyncRunRow {
   source: string
   target: string
   actorUpn: string | null
-  status: "started" | "preview" | "success" | "failed"
+  status: "started" | "preview" | "success" | "failed" | "skipped"
   error: string | null
   startedAt: string
   finishedAt: string | null

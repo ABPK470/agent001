@@ -37,7 +37,7 @@ export interface ValueSourceResolveContext {
 export async function resolveValueSource(
   source: ValueSource,
   ctx: ValueSourceResolveContext,
-  step: Pick<SyncExecutionContractStep, "id"> & Record<string, unknown>,
+  step: Pick<SyncExecutionContractStep, "id" | "objectName" | "auditObjectType" | "pipelineName">,
 ): Promise<unknown> {
   if (isLiteralValueSource(source)) {
     return source.value
@@ -59,7 +59,7 @@ export async function resolveValueSource(
 export async function resolveCatalogDefinition(
   def: CustomValueSourceDefinition,
   ctx: ValueSourceResolveContext,
-  step: Pick<SyncExecutionContractStep, "id"> & Record<string, unknown>,
+  step: Pick<SyncExecutionContractStep, "id" | "objectName" | "auditObjectType" | "pipelineName">,
   label: string,
 ): Promise<unknown> {
   switch (def.resolver.kind) {

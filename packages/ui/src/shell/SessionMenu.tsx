@@ -2,7 +2,16 @@
  * SessionMenu — identity + session actions behind a single burger control.
  */
 
-import { Activity, BookOpen, Brain, LogOut, Scale, Shield, Terminal } from "lucide-react"
+import {
+  Activity,
+  ArrowRightLeft,
+  BookOpen,
+  Brain,
+  LogOut,
+  Scale,
+  Shield,
+  Terminal,
+} from "lucide-react"
 import { useEffect, useRef, useState } from "react"
 import { AboutModal } from "../components/AboutModal"
 import { AgentEditor } from "../components/AgentEditor"
@@ -10,6 +19,9 @@ import { AuditModal } from "../components/AuditModal"
 import { UsageModal } from "../components/UsageModal"
 import type { Me } from "../hooks/useMe"
 import { useStore } from "../store"
+import { ConnectorsModal } from "../widgets/connectors/ConnectorsModal"
+import { CONNECTOR_ICON } from "../widgets/connectors/kind-icon"
+import { DataMovementModal } from "../widgets/data-movement/DataMovementModal"
 import { accountDisplayName, accountRoleLabel, accountSubtitle } from "./account"
 import { AsciiMicroField } from "./AsciiMicroField"
 import { CHAT_CHROME_BTN } from "./ChatChrome"
@@ -39,6 +51,8 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
   const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
   const [usageOpen, setUsageOpen] = useState(false)
   const [auditOpen, setAuditOpen] = useState(false)
+  const [connectorsOpen, setConnectorsOpen] = useState(false)
+  const [dataMovementOpen, setDataMovementOpen] = useState(false)
   const [aboutOpen, setAboutOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -135,6 +149,30 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
                       role="menuitem"
                       className={menuItemClass()}
                       onClick={() => {
+                        setConnectorsOpen(true)
+                        close()
+                      }}
+                    >
+                      <CONNECTOR_ICON size={15} className="shrink-0 text-text-muted" />
+                      Connectors
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass()}
+                      onClick={() => {
+                        setDataMovementOpen(true)
+                        close()
+                      }}
+                    >
+                      <ArrowRightLeft size={15} className="shrink-0 text-text-muted" />
+                      Data movement
+                    </button>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      className={menuItemClass()}
+                      onClick={() => {
                         setAgentOpen(true)
                         close()
                       }}
@@ -214,7 +252,6 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
               </>
             ) : (
               <>
-                {/* Operator: one tight card — identity, theme, actions — few dividers. */}
                 <div className="px-3.5 pb-2 pt-2.5">
                   <div className="flex min-w-0 items-baseline justify-between gap-2">
                     <p className="truncate text-[14px] font-semibold leading-snug text-text">{displayName}</p>
@@ -264,6 +301,8 @@ export function SessionMenu({ me, onSignOut, onSwitchUi, chromeVariant = "defaul
       {agentOpen && <AgentEditor onClose={() => setAgentOpen(false)} />}
       {usageOpen && <UsageModal onClose={() => setUsageOpen(false)} />}
       {auditOpen && <AuditModal onClose={() => setAuditOpen(false)} />}
+      {connectorsOpen && <ConnectorsModal onClose={() => setConnectorsOpen(false)} />}
+      {dataMovementOpen && <DataMovementModal onClose={() => setDataMovementOpen(false)} />}
       {aboutOpen && <AboutModal onClose={() => setAboutOpen(false)} />}
     </>
   )

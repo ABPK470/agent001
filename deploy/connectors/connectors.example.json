@@ -1,0 +1,42 @@
+{
+  "version": 1,
+  "connectors": [
+    {
+      "id": "dev",
+      "kind": "mssql",
+      "name": "dev",
+      "displayName": "Development",
+      "enabled": true,
+      "config": {
+        "host": "db-dev.example.com",
+        "port": 1433,
+        "database": "mymi_dev",
+        "user": "sa",
+        "password": "change-me",
+        "domain": null,
+        "encrypt": true,
+        "trustServerCertificate": true,
+        "writeEnabled": true,
+        "knowledgePath": "./deploy/mssql/mymi-knowledge.md"
+      }
+    },
+    {
+      "id": "prod",
+      "kind": "mssql",
+      "name": "prod",
+      "displayName": "Production",
+      "enabled": true,
+      "config": {
+        "host": "db-prod.example.com",
+        "port": 1433,
+        "database": "mymi_prod",
+        "user": "sa",
+        "password": "change-me",
+        "encrypt": true,
+        "trustServerCertificate": false,
+        "writeEnabled": false,
+        "knowledgePath": null
+      }
+    }
+  ]
+}

@@ -52,6 +52,7 @@ export const EventType = {
 
   // Approvals + user input
   ApprovalRequired: "approval.required",
+  ApprovalResolved: "approval.resolved",
   UserInputRequired: "user_input.required",
   UserInputResponse: "user_input.response",
 

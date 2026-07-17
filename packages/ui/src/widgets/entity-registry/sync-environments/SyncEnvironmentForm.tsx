@@ -3,10 +3,11 @@
  */
 
 import type { JSX } from "react"
-import { useCallback, useEffect, useMemo, useRef } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 
+import { api } from "../../../api"
 import { Listbox, type ListboxOption } from "../../../components/Listbox"
-import type { SyncEnvironmentAdmin } from "../../../types"
+import type { ConnectorAdmin, SyncEnvironmentAdmin } from "../../../types"
 import { FormFieldGroup, FormSectionCard } from "../form-section"
 import { HELP_TEXT } from "../chrome"
 import { FormCheck } from "../../sync-admin/shared"
@@ -19,7 +20,7 @@ import {
 import { EnvColorPicker } from "./EnvColorPicker"
 import { ServiceUrlsField } from "./ServiceUrlsField"
 import { SyncPolicySection } from "./SyncPolicySection"
-import type { ServiceUrlEntry, TargetFormSnapshot } from "./target-form-model"
+import type { ServiceUrlEntry, EnvironmentFormSnapshot } from "./environment-form-model"
 
 const ROLE_OPTIONS: ListboxOption<SyncEnvironmentAdmin["role"]>[] = [
   { value: "source", label: "source" },
@@ -32,20 +33,20 @@ const ACCESS_MODE_OPTIONS: ListboxOption<SyncEnvironmentAdmin["defaultAccessMode
   { value: "read_write", label: "read_write" },
 ]
 
-export function SyncTargetForm({
+export function SyncEnvironmentForm({
   value,
   onChange,
   mode,
   readOnly = false,
   stackLevel = 1,
-  peerTargets = [],
+  peerEnvironments = [],
 }: {
-  value: TargetFormSnapshot
-  onChange: (next: TargetFormSnapshot) => void
+  value: EnvironmentFormSnapshot
+  onChange: (next: EnvironmentFormSnapshot) => void
   mode: "create" | "edit"
   readOnly?: boolean
   stackLevel?: number
-  peerTargets?: Array<{ name: string; displayName: string }>
+  peerEnvironments?: Array<{ name: string; displayName: string }>
 }): JSX.Element {
   const effectiveOps = useMemo(
     () => deriveAllowedOperations(value.defaultAccessMode, value.denyDml, value.denyDdl),
@@ -56,8 +57,40 @@ export function SyncTargetForm({
   const valueRef = useRef(value)
   valueRef.current = value
 
+  const [connectors, setConnectors] = useState<ConnectorAdmin[]>([])
+  useEffect(() => {
+    let alive = true
+    void api.listConnectors().then((rows) => {
+      if (alive) setConnectors([...rows].sort((a, b) => a.id.localeCompare(b.id)))
+    }).catch(() => { /* admin-only surface; ignore load errors silently */ })
+    return () => { alive = false }
+  }, [])
+
+  const connectorOptions: ListboxOption<string>[] = useMemo(() => {
+    const none: ListboxOption<string> = { value: "", label: "None", hint: "No linked connector" }
+    const opts: ListboxOption<string>[] = connectors.map((c) => ({
+      value: c.id,
+      label: c.displayName,
+      hint: c.kind,
+      disabled: c.kind !== "mssql",
+    }))
+    return [none, ...opts]
+  }, [connectors])
+
+  function onConnectorChange(id: string): void {
+    const next = id || null
+    if (mode === "create" && !value.name.trim()) {
+      const conn = connectors.find((c) => c.id === id)
+      if (conn) {
+        onChange({ ...valueRef.current, connectorId: next, name: conn.name })
+        return
+      }
+    }
+    patch({ connectorId: next })
+  }
+
   const patch = useCallback(
-    (fields: Partial<TargetFormSnapshot>) => {
+    (fields: Partial<EnvironmentFormSnapshot>) => {
       onChange({ ...valueRef.current, ...fields })
     },
     [onChange],
@@ -88,7 +121,7 @@ export function SyncTargetForm({
   }
 
   const accessReadOnly = readOnly || value.defaultAccessMode === "read_only"
-  const policyPeers = peerTargets.filter((target) => target.name !== value.name)
+  const policyPeers = peerEnvironments.filter((target) => target.name !== value.name)
 
   const handleServiceUrlsChange = useCallback(
     (serviceUrls: ServiceUrlEntry[]) => patch({ serviceUrls }),
@@ -99,13 +132,13 @@ export function SyncTargetForm({
     <div className="space-y-3">
       {readOnly && (
         <p className={HELP_TEXT}>
-          Built-in target is locked. Unlock from the toolbar to edit dev, uat, or prod.
+          Built-in environment is locked. Unlock from the toolbar to edit dev, uat, or prod.
         </p>
       )}
 
       <FormSectionCard
         title="Identity"
-        description="Name must match MSSQL_DATABASES in .env."
+        description="Name must match an enabled SQL Server connector."
         emphasized
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -128,6 +161,20 @@ export function SyncTargetForm({
             />
           </FormFieldGroup>
         </div>
+        <FormFieldGroup
+          label="Connector"
+          hint="Only SQL Server connectors are selectable today; other kinds are greyed-out."
+        >
+          <Listbox
+            value={value.connectorId ?? ""}
+            options={connectorOptions}
+            onChange={onConnectorChange}
+            size="sm"
+            className="w-full"
+            ariaLabel="Connector"
+            disabled={readOnly}
+          />
+        </FormFieldGroup>
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <EnvColorPicker
             value={value.color}
@@ -160,7 +207,7 @@ export function SyncTargetForm({
 
       <FormSectionCard
         title="Access"
-        description="Default access mode and write blocks for this target."
+        description="Default access mode and write blocks for this environment."
       >
         <FormFieldGroup label="Access mode">
           <Listbox
@@ -209,7 +256,7 @@ export function SyncTargetForm({
 
       <SyncPolicySection
         value={value}
-        peerTargets={policyPeers}
+        peerEnvironments={policyPeers}
         readOnly={readOnly}
         onChange={patch}
       />

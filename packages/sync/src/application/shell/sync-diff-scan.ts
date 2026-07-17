@@ -14,7 +14,7 @@ import { assertSupportedSyncDirection, getEnvironment } from "../../domain/envir
 import { getPublishedSyncDefinitionForHost, type PublishedSyncDefinition } from "../../domain/published-definitions.js"
 import type { SyncRuntimeHost } from "../../ports/index.js"
 import { emitSyncEvent } from "./events.js"
-import { mapWithConcurrency, projectRoot, trackedQuery } from "./orchestrator/db-helpers.js"
+import { mapWithConcurrency, trackedQuery } from "./orchestrator/db-helpers.js"
 import { previewSync } from "./orchestrator/preview.js"
 import type { SyncPlan } from "./plan-store.js"
 

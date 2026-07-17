@@ -218,7 +218,13 @@ export async function fetchEntityDisplayName(
     FROM ${qtable(definition.rootTable)} WITH (NOLOCK)
     WHERE [${definition.idColumn}] = ${idLiteral}
   `
-  const r = await trackedQuery(host, source, sqlText, `discovery.displayName(${definition.rootTable})`, ctx)
+  const r = await trackedQuery<{ displayName: string | null }>(
+    host,
+    source,
+    sqlText,
+    `discovery.displayName(${definition.rootTable})`,
+    ctx,
+  )
   return (r.recordset[0]?.displayName as string | undefined) ?? null
 }
 

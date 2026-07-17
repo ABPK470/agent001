@@ -28,8 +28,8 @@ function planWithDeploySteps(): SyncPlan {
       flow: {
         steps: [
           { id: "metadata-sync", phase: "metadata", kind: "metadata-sync", title: "m", description: "m" },
-          { id: "contract-create-dataset-stage", phase: "post-metadata", kind: "contract-create-stage-dataset", title: "s", description: "s" },
-          { id: "contract-deploy-etl", phase: "post-metadata", kind: "contract-deploy-etl", title: "e", description: "e" }
+          { id: "contract-create-dataset-stage", phase: "postMetadata", kind: "contract-create-stage-dataset", title: "s", description: "s" },
+          { id: "contract-deploy-etl", phase: "postMetadata", kind: "contract-deploy-etl", title: "e", description: "e" }
         ]
       },
       provenance: { kind: "manual" }

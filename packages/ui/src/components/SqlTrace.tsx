@@ -1,6 +1,7 @@
-import { Maximize2 } from "lucide-react"
+import { Database, Maximize2 } from "lucide-react"
 import { useState } from "react"
 import { CodeBlock } from "./CodeBlock"
+import { EmptyState } from "./EmptyState"
 import { SqlTraceModal } from "./SqlTraceModal"
 import { formatSqlTraceMeta, hasSqlTraceContent, readSqlTraceFields, type SqlTraceFields } from "../sync-sql-trace"
 
@@ -80,9 +81,11 @@ export function SqlTraceList({
 }) {
   if (items.length === 0) {
     return (
-      <div className="text-text py-4 text-center">
-        No SQL trace recorded for this plan yet.
-      </div>
+      <EmptyState
+        icon={Database}
+        message="No SQL trace recorded for this plan yet."
+        className="py-8"
+      />
     )
   }
 

@@ -264,7 +264,7 @@ export function HistoryContent({
   const rangeEnd = Math.min(page * PAGE_SIZE, total)
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       <HistorySearchBar
         searchDraft={searchDraft}
         onSearchChange={setSearchDraft}
@@ -298,26 +298,28 @@ export function HistoryContent({
         />
       )}
 
-      {items.length === 0 ? (
-        <EmptyHistory
-          message={hasActiveFilters ? "No runs match your filters" : "No sync history yet"}
-          action={
-            hasActiveFilters ? (
-              <button
-                type="button"
-                onClick={clearFilters}
-                className="text-xs text-accent hover:text-accent/80 transition-colors"
-              >
-                Clear filters
-              </button>
-            ) : undefined
-          }
-        />
-      ) : (
-        items.map((run) => (
-          <HistoryRunRow key={run.planId} run={run} onOpen={onOpen} onNotifyError={onNotifyError} />
-        ))
-      )}
+      <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+        {items.length === 0 ? (
+          <EmptyHistory
+            message={hasActiveFilters ? "No runs match your filters" : "No sync history yet"}
+            action={
+              hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-xs text-accent hover:text-accent/80 transition-colors"
+                >
+                  Clear filters
+                </button>
+              ) : undefined
+            }
+          />
+        ) : (
+          items.map((run) => (
+            <HistoryRunRow key={run.planId} run={run} onOpen={onOpen} onNotifyError={onNotifyError} />
+          ))
+        )}
+      </div>
     </div>
   )
 }

@@ -21,10 +21,12 @@
 import type { ReactNode } from "react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { EmptyState } from "../components/EmptyState"
 import { useContainerSize } from "../hooks/useContainerSize"
 import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
 import { useStore } from "../store"
 import { ActiveUsersRunModal, type RunPreview } from "./ActiveUsersRunModal"
+import { WIDGET_ICONS } from "./widget-icons"
 import {
   WidgetToolbarFilterMenu,
   WidgetToolbarFilterMenuItem,
@@ -447,9 +449,11 @@ export function ActiveUsers(): ReactNode {
               )
             })}
             {filteredSorted.length === 0 && (
-              <div className="py-8 text-center text-text-muted">
-                {filter ? "No users match filter." : "No sessions yet."}
-              </div>
+              <EmptyState
+                icon={WIDGET_ICONS["active-users"]}
+                message={filter ? "No users match filter." : "No sessions yet."}
+                className="py-8"
+              />
             )}
           </div>
         ) : (
@@ -541,9 +545,15 @@ export function ActiveUsers(): ReactNode {
                 )
               })}
               {filteredSorted.length === 0 && (
-                <tr><td colSpan={AU_TABLE_COL_SPAN} className="py-8 text-center text-text-muted">
-                  {filter ? "No users match filter." : "No sessions yet."}
-                </td></tr>
+                <tr>
+                  <td colSpan={AU_TABLE_COL_SPAN}>
+                    <EmptyState
+                      icon={WIDGET_ICONS["active-users"]}
+                      message={filter ? "No users match filter." : "No sessions yet."}
+                      className="py-8"
+                    />
+                  </td>
+                </tr>
               )}
             </tbody>
           </table>
@@ -1144,7 +1154,11 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
           <div className="px-4 py-3 text-text-muted/50">Loading…</div>
         )}
         {history && !history.loading && history.rows.length === 0 && !history.error && (
-          <div className="px-4 py-3 text-text-muted/40">No runs yet.</div>
+          <EmptyState
+            icon={WIDGET_ICONS["run-history"]}
+            message="No runs yet."
+            className="py-6"
+          />
         )}
 
         {/* Run list — stack cards when narrow, table when wide */}

@@ -99,7 +99,6 @@ export function applyHandlerParamBindingMode(
       const existing =
         param.source &&
         !isLiteralValueSource(param.source) &&
-        param.source.type !== "stepField" &&
         param.source.type !== "priorOutput"
           ? param.source
           : undefined

@@ -1,5 +1,6 @@
 import sql from "mssql"
-import type { MssqlAccessHost, MssqlEntry } from "../../ports/host.js"
+import type { MssqlAccessHost, MssqlEntry, SyncEnvironmentRegistryHost } from "../../ports/host.js"
+import { getEnvironment } from "../../domain/environments.js"
 
 export type { MssqlEntry }
 
@@ -19,36 +20,34 @@ export function getMssqlConfig(host: MssqlAccessHost): Array<{
   }))
 }
 
+/**
+ * Resolve an MSSQL pool for a sync environment name.
+ *
+ * The environment's `connectorId` is the real foreign key to a persisted MSSQL
+ * connector; the pool is built/cached live by `host.mssql.pools`. There is no
+ * boot-time name-keyed map and no name-matching fallback: a missing provider,
+ * a missing `connectorId`, or an unknown environment all fail loudly.
+ */
 export async function getPool(
-  host: MssqlAccessHost,
+  host: MssqlAccessHost & SyncEnvironmentRegistryHost,
   name = "default"
 ): Promise<{ pool: sql.ConnectionPool; entry: MssqlEntry }> {
-  const mssql = host.mssql
-  const resolvedName = mssql.databases.has(name)
-    ? name
-    : name === "default" && mssql.databases.size > 0
-      ? mssql.defaultConnection.value && mssql.databases.has(mssql.defaultConnection.value)
-        ? mssql.defaultConnection.value
-        : (mssql.databases.keys().next().value as string)
-      : name
-  const entry = mssql.databases.get(resolvedName)
-  if (!entry) {
-    const available = Array.from(mssql.databases.keys()).join(", ") || "none"
-    throw new Error(`MSSQL connection "${name}" not configured. Available: ${available}.`)
+  const pools = host.mssql.pools
+  if (!pools) {
+    throw new Error("MSSQL pool provider not configured — pass mssqlPools to configureAgent().")
   }
-  if (entry.pool?.connected) return { pool: entry.pool, entry }
-  if (entry.pool) {
-    try {
-      await entry.pool.close()
-    } catch {}
+  const env = getEnvironment(host, name)
+  if (!env.connectorId) {
+    throw new Error(`Environment "${name}" has no connectorId — cannot resolve MSSQL pool.`)
   }
-  entry.pool = new sql.ConnectionPool(entry.config)
-  // Absorb late/async pool errors (e.g. tedious emitting `socketError` after
-  // the connection has entered `Final`). Without a listener these would be
-  // rethrown by EventEmitter and crash the process.
-  entry.pool.on("error", (err) => {
-    console.warn(`[mssql] pool "${resolvedName}" error:`, err instanceof Error ? err.message : err)
-  })
-  await entry.pool.connect()
-  return { pool: entry.pool, entry }
+  const resolved = await pools.get(env.connectorId)
+  return {
+    pool: resolved.pool,
+    entry: {
+      config: resolved.config,
+      pool: resolved.pool,
+      writeEnabled: resolved.writeEnabled,
+      knowledge: resolved.knowledge
+    }
+  }
 }

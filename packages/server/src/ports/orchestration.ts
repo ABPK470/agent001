@@ -4,6 +4,7 @@ import type {
   EngineServices,
   LLMClient,
   MssqlEntry,
+  MssqlPoolProvider,
   PolicyRole,
   ShellClient
 } from "@mia/agent"
@@ -94,6 +95,7 @@ export interface BootShellDeps {
 export interface BootMssqlState {
   databases: Map<string, MssqlEntry>
   defaultConnection: { value: string | null }
+  pools?: MssqlPoolProvider
 }
 
 export interface BootCatalogState {
@@ -113,6 +115,11 @@ export interface BootSyncState {
   }
 }
 
+export interface BootConnectorsState {
+  /** The late-bound data-movement port (shared process-wide across per-run hosts). */
+  port: { value: import("@mia/agent").AgentHost["connectors"]["port"]["value"] }
+}
+
 /**
  * Boot-time host dependencies — ports the server resolves once at boot and
  * passes to every per-run host. Each field is optional (the server may not
@@ -125,6 +132,7 @@ export interface BootHostDeps {
   mssql?: BootMssqlState
   catalog?: BootCatalogState
   sync?: BootSyncState
+  connectors?: BootConnectorsState
 }
 
 // ── Notification types ────────────────────────────────────────────

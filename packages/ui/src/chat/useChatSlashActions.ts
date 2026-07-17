@@ -121,7 +121,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
           if (files.length > 40) {
             items.push({
               primary: `… and ${files.length - 40} more`,
-              secondary: undefined,
+              secondary: "",
             })
           }
           consoleRef.current.logList(items)
@@ -193,7 +193,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
             marker: t.id === activeThreadId ? "●" : undefined,
           }))
           if (threads.length > 30) {
-            items.push({ primary: `… and ${threads.length - 30} more`, secondary: undefined })
+            items.push({ primary: `… and ${threads.length - 30} more`, secondary: "", marker: undefined })
           }
           consoleRef.current.logList(items)
         },

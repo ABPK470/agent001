@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import type { SyncFlowKindDefinition } from "../../types"
 
 import {
   deriveStepIdentityFromAction,
@@ -45,7 +46,7 @@ describe("execution-step-shared", () => {
   })
 
   it("includes handler type in flow step header lines", () => {
-    const catalog = new Map([
+    const catalog = new Map<string, SyncFlowKindDefinition>([
       [
         "pipelineStart",
         {
@@ -78,7 +79,7 @@ describe("execution-step-shared", () => {
   })
 
   it("summarizes step parameters with field labels", () => {
-    const catalog = new Map([
+    const catalog = new Map<string, SyncFlowKindDefinition>([
       [
         "pipelineStart",
         {

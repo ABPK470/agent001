@@ -16,6 +16,7 @@
  */
 
 import { useEffect, useRef } from "react"
+import type { JSX } from "react"
 import { ASCII_PALETTE, readCssColorInk } from "../shell/asciiNoise"
 
 declare global {
@@ -68,7 +69,7 @@ function mirroredSurfaceColumn(surface: IntroAsciiSurface, c: number, cols: numb
   return c < cols * 0.5 ? cols - 1 - c : c
 }
 
-function isMirroredHomeSurface(surface: IntroAsciiSurface): boolean {
+function isMirroredHomeSurface(_surface: IntroAsciiSurface): boolean {
   return false
 }
 
@@ -77,7 +78,7 @@ function surfaceNoise(
   c: number,
   r: number,
   cols: number,
-  rows: number,
+  _rows: number,
   t: number,
 ): number {
   const base = vnoise(c, r, t)
@@ -183,13 +184,6 @@ function adminCornerAccentMix(
   const warp = (edge - 0.48) * 0.26
   const warped = dist + warp
   return 1 - smoothstep(0.42, 1.02, warped)
-}
-function glyphFor(v: number): string {
-  // Map noise → palette index. Bias toward the sparse end so most of
-  // the canvas reads as breathing space, dense glyphs concentrate in
-  // crests.
-  const idx = Math.min(PALETTE.length - 1, Math.floor(v * v * PALETTE.length))
-  return PALETTE[idx]!
 }
 
 export function IntroAsciiField({
@@ -470,16 +464,16 @@ export function IntroAsciiField({
             cells[idx] = palIdx
             painted[idx] = 1
             const ch = PALETTE[palIdx]!
+            const age = elapsed - rt
+            const alpha = age >= revealSoftEdgeMs
+              ? 1
+              : Math.max(0, age / revealSoftEdgeMs)
             if (ch !== " ") {
               const targetAlpha = cellAlpha(c, r, now)
               if (targetAlpha <= 0.001) continue
               // Soft per-cell fade-in (one-shot — subsequent ambient
               // updates use full ink). Cheap because each cell only
               // gets one of these paints in its lifetime.
-              const age = elapsed - rt
-              const alpha = age >= revealSoftEdgeMs
-                ? 1
-                : Math.max(0, age / revealSoftEdgeMs)
               paintCellAt(c, r, ch, alpha * targetAlpha)
             }
 

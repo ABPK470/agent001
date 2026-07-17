@@ -7,7 +7,6 @@ import type { AuthoredSyncFlowStep } from "../../types"
 import { PhasedStepList } from "./PhasedStepList"
 
 export function FlowStepsPreview({
-  flowId,
   steps,
   emptyMessage = "This flow has no steps yet. Add them in Configuration → Flows.",
 }: {

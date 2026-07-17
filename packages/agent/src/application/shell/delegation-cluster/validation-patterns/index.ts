@@ -1,5 +1,5 @@
 import { TaskIntent } from "../../../../domain/enums/delegation.js"
-import { StepRole, VerificationMode } from "../../../../domain/index.js"
+import { StepRole } from "../../../../domain/index.js"
 /**
  * Delegation validation patterns — evidence helpers and spec requirement
  * classifiers. Pattern constants are in
@@ -18,9 +18,6 @@ import {
   FILE_READ_TOOLS,
   IMPLEMENTATION_TASK_RE,
   LOCAL_ARTIFACT_REFERENCE_RE,
-  LOW_SIGNAL_BROWSER_TARGETS,
-  LOW_SIGNAL_BROWSER_TOOLS,
-  MEANINGFUL_BROWSER_TOOLS,
   NON_WORKSPACE_REF_RE,
   RESEARCH_TASK_RE,
   SHELL_FILE_WRITE_RE,

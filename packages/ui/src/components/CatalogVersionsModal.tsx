@@ -6,6 +6,7 @@ import { History, Loader2, RotateCcw } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useState } from "react"
 import { api } from "../api"
+import { EmptyState } from "./EmptyState"
 import { ConfirmModal } from "../widgets/sync-admin/chrome"
 import { ModalShell } from "../widgets/entity-registry/ModalShell"
 import { modalViewerPanelClass } from "../widgets/entity-registry/modal-overlay"
@@ -78,9 +79,9 @@ export function CatalogVersionsModal({
       <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-4 pt-2">
         {err && <p className="text-sm text-error">{err}</p>}
         {busy ? (
-          <p className="py-10 text-center text-sm text-text-muted">Loading…</p>
+          <EmptyState icon={Loader2} message="Loading…" className="[&_svg]:animate-spin" />
         ) : versions.length === 0 ? (
-          <p className="py-10 text-center text-sm text-text-muted">No versions recorded yet.</p>
+          <EmptyState icon={History} message="No versions recorded yet." />
         ) : (
           <ul className="min-h-0 flex-1 space-y-1 overflow-y-auto show-scrollbar">
             {versions.map((entry) => (
