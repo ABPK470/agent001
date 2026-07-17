@@ -247,8 +247,8 @@ export function ConnectorsShell(): JSX.Element {
               <p className={`${META_TEXT} max-w-3xl leading-relaxed text-text-faint`}>{headerDescription}</p>
             </div>
 
-            <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-              <div className="flex min-h-0 flex-col overflow-hidden border-b border-border-subtle p-5 lg:border-b-0 lg:border-r">
+            <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,auto)_minmax(0,1fr)] gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:grid-rows-1">
+              <div className="flex min-h-0 max-h-[min(50dvh,22rem)] flex-col overflow-hidden border-b border-border-subtle p-5 lg:max-h-none lg:border-b-0 lg:border-r">
                 {view === "connectors" ? (
                   <ConnectorList
                     items={filteredItems}
@@ -452,9 +452,10 @@ function ConnectorList({
 
 function KindList(): JSX.Element {
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-auto">
-      <ul className={PANEL}>
-        {CONNECTOR_KINDS.map((k, index) => (
+    <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
+        <ul className={PANEL}>
+          {CONNECTOR_KINDS.map((k, index) => (
             <li
               key={k.id}
               className={[
@@ -475,7 +476,8 @@ function KindList(): JSX.Element {
               )}
             </li>
           ))}
-      </ul>
+        </ul>
+      </div>
     </div>
   )
 }
