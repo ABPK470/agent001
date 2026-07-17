@@ -27,12 +27,14 @@ What it means in practice:
   closure. There is no `AsyncLocalStorage` carrying
   request state.
 
-`scripts/lint-arch.mjs` enforces this: it bans module-level mutable state
-outside allowlists, bans exported ambient setters, bans `new AsyncLocalStorage`,
-and enforces cross-package import direction.
+`scripts/lint-arch.mjs` (`npm run lint:arch`) enforces this: agent layer
+import direction, forbidden resurrected trees (`application/`,
+`domain/services/`, …), module-level mutable state outside allowlists, exported
+`getGlobal*` / `setGlobal*`, `new AsyncLocalStorage`, and deep imports into
+`packages/agent/src/**` from other packages.
 
-The full rationale lives in [doctrine.md](doctrine.md); the migration history is
-in [P&A_refactor.md](P&A_refactor.md).
+The full rationale lives in [docs/doctrine.md](docs/doctrine.md); the migration
+history is in [P&A_refactor.md](P&A_refactor.md).
 
 ## 2. The port taxonomy
 
@@ -385,7 +387,7 @@ instruction.
 
 ### Shortest orientation path
 
-1. [doctrine.md](doctrine.md) — the rule, in full.
+1. [docs/doctrine.md](docs/doctrine.md) — the rule, in full.
 2. [packages/agent/src/index.ts](packages/agent/src/index.ts) — the agent's public surface.
 3. [packages/server/src/index.ts](packages/server/src/index.ts) — the boot sequence.
 4. [packages/sync/src/index.ts](packages/sync/src/index.ts) — the reconciliation surface.

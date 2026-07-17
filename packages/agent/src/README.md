@@ -19,7 +19,7 @@ tools, checks whether the work is done, and repeats until it can answer.
 
 | Folder | What it is | Why it exists | What happens next |
 | ------ | ---------- | ------------- | ----------------- |
-| `domain/` | Words, shapes, and domain services | Shared meaning across the package | Imported by core, runtime, tools |
+| `domain/` | Enums, types, tenant config (vocabulary only) | Shared meaning across the package | Imported by core, runtime, tools |
 | `ports/` | Shapes for outside dependencies | Keep I/O at the edge | Implemented by the server host |
 | `core/` | Pure decisions | Testable brain; no loop state | Called from runtime steps |
 | `runtime/` | Stateful drivers | Owns the loop, host, run context | Calls core; uses tools + llm |

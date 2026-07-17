@@ -1,0 +1,32 @@
+---
+description: Enforce @mia/agent layer doctrine when adding or moving files
+globs: packages/agent/**/*
+alwaysApply: false
+---
+
+# Agent layer doctrine
+
+Before creating or moving a file under `packages/agent/src/`, pick a layer:
+
+| Kind of code | Put it in |
+| --- | --- |
+| Enums / types / tenant shapes | `domain/` (never `domain/services/`) |
+| Pure decisions (plan, clarify, policy, doctrine, recover, …) | `core/<cluster>/` |
+| Host, run loop, delegate drivers | `runtime/` |
+| I/O contracts + Audit/Learner/adapters | `ports/` |
+| Executable tools | `tools/` |
+| Model adapters / token budgeting | `llm/` / `memory/` |
+| Logger / JSON / paths | `internal/` |
+
+**Do not** resurrect `application/`, `concepts/`, `contracts/`, `decisions/`, or `engine/`.
+
+**Import direction** (enforced by `npm run lint:arch`):
+
+- `domain` → only `domain` (debt allowlists only for known exceptions)
+- `core` → `domain`, `ports`, `tools`, `internal` — not `runtime` (except allowlisted plan↔delegate debt)
+- `runtime` → may use core/domain/ports/tools/llm/memory/internal
+- Outside the package: import `@mia/agent` only
+
+**State:** Runtime owns state. Core is pure. Thread deps as parameters. Documented ambient exception: `getTenantConfig` / `setTenantConfig` in `domain/tenant`.
+
+Full contract: `docs/doctrine.md`.

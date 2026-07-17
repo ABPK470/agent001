@@ -77,7 +77,7 @@ delegate-decision.
 
 ### `domain/`
 
-Enums, models, domain services (policy/audit/learner), and tenant config.
+Enums, types, and tenant config — vocabulary only (no services).
 
 ### `memory/`
 
@@ -85,7 +85,8 @@ Token budgeting, truncation, and compaction.
 
 ### `ports/`
 
-Contracts for host/runtime dependencies that the server and tools satisfy.
+Host contracts plus I/O-backed services (`AuditService`, `Learner`, memory
+adapters) that the server and tools satisfy.
 
 ### `tools/`
 
@@ -125,12 +126,12 @@ The old ambient runtime pattern is gone from the active path:
 
 If you are new to the package, read in this order:
 
-1. `docs/doctrine.md`
+1. `docs/doctrine.md` (repo root)
 2. `src/index.ts`
-3. `src/runtime/agent.ts` and `src/runtime/run-a-goal/`
-4. `src/runtime/loop.ts` and `src/runtime/loop/`
-5. `src/types.ts`
-6. `src/core/plan.ts` and `src/core/recover.ts`
+3. `src/runtime/` (`agent.ts`, `run-a-goal/`)
+4. `src/runtime/loop/`
+5. `src/domain/types/`
+6. `src/core/plan/` and `src/core/recover/`
 
 That path gives the shortest route from the public entry point to the execution
 core.

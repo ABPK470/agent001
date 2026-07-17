@@ -16,6 +16,9 @@ the change around explicit host/context flow.
 - prefer `configure...` and `replace...` APIs for boot wiring over `setXxx`
 - thread request/run/sync context explicitly through parameters or closures
 - keep sync consumers importing from `@mia/sync`, not `@mia/agent`
+- inside `@mia/agent`, place new files in the correct layer (`domain` / `core` /
+  `runtime` / `ports` / …) — `npm run lint:arch` rejects wrong-direction imports
+  and forbidden trees (`application/`, `domain/services/`, …)
 
 ## Validation
 
