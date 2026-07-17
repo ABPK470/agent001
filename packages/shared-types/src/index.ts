@@ -521,6 +521,8 @@ export interface LayoutItem {
   h: number
   minW?: number
   minH?: number
+  /** When true, tile cannot be dragged or resized until unpinned. */
+  pinned?: boolean
 }
 
 // ── SSE events ────────────────────────────────────────────────────────

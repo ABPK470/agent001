@@ -11,6 +11,7 @@
 import { ExternalLink, X } from "lucide-react"
 import { type ReactNode } from "react"
 import { useStore } from "../../state/store"
+import { useLayoutStore } from "../../state/layout-store"
 import type { WidgetType } from "../../types"
 
 const WIDGET_LABELS: Record<WidgetType, string> = {
@@ -42,7 +43,7 @@ interface Props {
 }
 
 export function WidgetFrame({ widgetId, viewId, type, children }: Props) {
-  const removeWidget = useStore((s) => s.removeWidget)
+  const removeWidget = useLayoutStore((s) => s.removeWidget)
 
   function handlePopOut(event?: React.MouseEvent<HTMLButtonElement>) {
     const state = useStore.getState()

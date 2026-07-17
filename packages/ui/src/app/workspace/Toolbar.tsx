@@ -9,6 +9,7 @@ import { SessionMenu } from "../SessionMenu"
 import { CHAT_BRAND_LOGO_SIZE } from "../brand"
 import type { AppShellMode } from "../types"
 import { useStore } from "../../state/store"
+import { useLayoutStore } from "../../state/layout-store"
 import { Logo } from "../../components/Logo"
 import { NotificationPanel } from "../../widgets/platform/NotificationPanel"
 
@@ -24,12 +25,12 @@ const ICON_BTN =
 
 export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
   const connected = useStore((s) => s.connected)
-  const views = useStore((s) => s.views)
-  const activeViewId = useStore((s) => s.activeViewId)
-  const setActiveView = useStore((s) => s.setActiveView)
-  const addView = useStore((s) => s.addView)
-  const removeView = useStore((s) => s.removeView)
-  const renameView = useStore((s) => s.renameView)
+  const views = useLayoutStore((s) => s.views)
+  const activeViewId = useLayoutStore((s) => s.activeViewId)
+  const setActiveView = useLayoutStore((s) => s.setActiveView)
+  const addView = useLayoutStore((s) => s.addView)
+  const removeView = useLayoutStore((s) => s.removeView)
+  const renameView = useLayoutStore((s) => s.renameView)
   const [editing, setEditing] = useState<string | null>(null)
   const [editName, setEditName] = useState("")
   const tabsRef = useRef<HTMLDivElement>(null)

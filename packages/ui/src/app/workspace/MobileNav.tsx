@@ -11,10 +11,10 @@
  */
 
 import { LayoutDashboard, Plus } from "lucide-react"
-import type { ViewConfig } from "../../types"
+import type { WorkspaceView } from "../../lib/workspace-view"
 
 interface Props {
-  views: ViewConfig[]
+  views: WorkspaceView[]
   activeViewId: string
   onSelectView: (id: string) => void
   onAdd: () => void

@@ -8,6 +8,7 @@ import { useEffect, useState } from "react"
 
 import { api } from "../client/index"
 import { useStore } from "../state/store"
+import { useLayoutStore } from "../state/layout-store"
 import type { RunDetail } from "../types"
 import { fmtTokens, statusColor } from "../lib/util"
 import { DetailField, DetailGrid, DetailSection } from "./entity-registry/DetailField"
@@ -104,9 +105,9 @@ export function ActiveUsersRunModal({
 
   const openRunStatus = () => {
     setActiveRun(runId)
-    const { views, activeViewId } = useStore.getState()
+    const { views, activeViewId } = useLayoutStore.getState()
     const view = views.find((v) => v.id === activeViewId)
-    const hasRunStatus = view?.widgets.some((w) => w.type === "run-status")
+    const hasRunStatus = view?.tiles.some((tile) => tile.type === "run-status")
     if (!hasRunStatus) openModalWidget("run-status", runId)
     onClose()
   }

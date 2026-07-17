@@ -32,7 +32,6 @@ import { RunStatus } from "../enums"
 import type {
   AuditEntry,
   BusMessage,
-  LayoutItem,
   LogEntry,
   Notification,
   Run,
@@ -42,12 +41,8 @@ import type {
   SyncPlan,
   Thread,
   TraceEntry,
-  ViewConfig,
-  Widget,
   WidgetType,
 } from "../types"
-import { randomId } from "../lib/util"
-
 export type { PendingToolApproval } from "./pending-approval.js"
 
 /**
@@ -236,19 +231,6 @@ interface AppState {
   // Connection
   connected: boolean
   setConnected: (v: boolean) => void
-
-  // Views (tabs)
-  views: ViewConfig[]
-  activeViewId: string
-  setActiveView: (id: string) => void
-  addView: (name: string) => string
-  removeView: (id: string) => void
-  renameView: (id: string, name: string) => void
-
-  // Widgets
-  addWidget: (viewId: string, type: WidgetType) => void
-  removeWidget: (viewId: string, widgetId: string) => void
-  updateLayouts: (viewId: string, layouts: LayoutItem[]) => void
 
   // Agent selection
   selectedAgentId: string | null
@@ -442,116 +424,7 @@ const DEFAULT_ENV_SYNC_FORM: EnvSyncFormState = {
   planId: null,
 }
 
-// ── Default view ─────────────────────────────────────────────────
-
-const DEFAULT_VIEW_ID = "default"
-
-/**
- * Default workspace view — empty canvas. Chat lives in shell chat mode
- * (ThreadHomePage); workspace is opt-in via the grid layout.
- */
-export function makeDefaultView(): ViewConfig {
-  return {
-    id: DEFAULT_VIEW_ID,
-    name: "Main",
-    widgets: [],
-    layouts: {},
-  }
-}
-
-// ── Widget default sizes ─────────────────────────────────────────
-
-export const WIDGET_DEFAULTS: Record<WidgetType, { w: number, h: number, minW: number, minH: number }> = {
-  "thread-nav":    { w: 3, h: 10, minW: 2, minH: 4 },
-  "agent-chat":    { w: 4, h: 8,  minW: 2, minH: 2 },
-  "term-chat":     { w: 4, h: 8,  minW: 2, minH: 2 },
-  "run-status":    { w: 4, h: 4,  minW: 2, minH: 2 },
-  "live-logs":     { w: 6, h: 8,  minW: 4, minH: 2 },
-  "step-timeline": { w: 4, h: 10, minW: 2, minH: 2 },
-  "run-history":   { w: 4, h: 8,  minW: 2, minH: 2 },
-  "debug-inspector": { w: 6, h: 10, minW: 2, minH: 2 },
-  "mymi-db": { w: 12, h: 12, minW: 2, minH: 2 },
-  "active-users": { w: 10, h: 10, minW: 2, minH: 2 },
-  "env-sync": { w: 12, h: 14, minW: 4, minH: 4 },
-  "operation-log": { w: 8, h: 12, minW: 4, minH: 4 },
-  "entity-registry": { w: 12, h: 14, minW: 6, minH: 6 },
-  "sync-proposals": { w: 12, h: 14, minW: 6, minH: 6 },
-  "sync-approvals": { w: 10, h: 12, minW: 6, minH: 6 },
-  "sync-evidence":  { w: 12, h: 12, minW: 6, minH: 6 },
-  "sync-admin":     { w: 12, h: 14, minW: 6, minH: 6 },
-  "bridge":  { w: 12, h: 14, minW: 6, minH: 6 },
-}
-
-const GRID_COLS = 12
-
-/** Drop widgets removed from the catalogue so saved layouts stay valid. */
-export function pruneUnknownWidgets(views: ViewConfig[]): ViewConfig[] {
-  return views.map((view) => {
-    const widgets = view.widgets.filter((widget) => widget.type in WIDGET_DEFAULTS)
-    const widgetIds = new Set(widgets.map((widget) => widget.id))
-    return {
-      ...view,
-      widgets,
-      layouts: {
-        ...view.layouts,
-        lg: (view.layouts["lg"] ?? []).filter((item) => widgetIds.has(item.i)),
-      },
-    }
-  })
-}
-
-/**
- * Find the best position for a new widget by locating the largest empty
- * rectangle in the current layout and sizing the widget to fill it.
- * If no gap exists, appends at the bottom with full width.
- */
-function findBestFit(
-  existingLayouts: LayoutItem[],
-  widgetId: string,
-  defaults: { w: number; h: number; minW: number; minH: number },
-): LayoutItem {
-  const { minW, minH } = defaults
-
-  // First widget: full width
-  if (existingLayouts.length === 0) {
-    return { i: widgetId, x: 0, y: 0, w: GRID_COLS, h: defaults.h, minW, minH }
-  }
-
-  const maxY = Math.max(...existingLayouts.map((l) => l.y + l.h))
-
-  // Build occupancy grid
-  const grid: boolean[][] = Array.from({ length: maxY }, () => Array(GRID_COLS).fill(false))
-  for (const l of existingLayouts) {
-    for (let y = l.y; y < Math.min(l.y + l.h, maxY); y++) {
-      for (let x = l.x; x < Math.min(l.x + l.w, GRID_COLS); x++) {
-        grid[y][x] = true
-      }
-    }
-  }
-
-  // Find the largest empty rectangle within existing bounds
-  let bestArea = 0
-  let best = { x: 0, y: maxY, w: GRID_COLS, h: defaults.h }
-
-  for (let sy = 0; sy < maxY; sy++) {
-    for (let sx = 0; sx < GRID_COLS; sx++) {
-      if (grid[sy][sx]) continue
-      let maxW = GRID_COLS - sx
-      for (let ey = sy; ey < maxY; ey++) {
-        for (let ex = sx; ex < sx + maxW; ex++) {
-          if (grid[ey][ex]) { maxW = ex - sx; break }
-        }
-        if (maxW < minW) break
-        const h = ey - sy + 1
-        if (h < minH) continue
-        const area = maxW * h
-        if (area > bestArea) { bestArea = area; best = { x: sx, y: sy, w: maxW, h } }
-      }
-    }
-  }
-
-  return { i: widgetId, x: best.x, y: best.y, w: best.w, h: best.h, minW, minH }
-}
+// ── Store ────────────────────────────────────────────────────────
 
 // ── Trace batching buffer ────────────────────────────────────────
 const traceBuf: TraceEntry[] = []
@@ -1014,99 +887,6 @@ export const useStore = create<AppState>()(
       // Connection
       connected: false,
       setConnected: (connected) => set({ connected }),
-
-      // Views
-      views: [makeDefaultView()],
-      activeViewId: DEFAULT_VIEW_ID,
-      setActiveView: (id) => set({ activeViewId: id }),
-      addView: (name) => {
-        const id = randomId()
-        set((s) => ({
-          views: [...s.views, { id, name, widgets: [], layouts: {} }],
-          activeViewId: id,
-        }))
-        return id
-      },
-      removeView: (id) => set((s) => {
-        const filtered = s.views.filter((v) => v.id !== id)
-        if (filtered.length === 0) filtered.push(makeDefaultView())
-        return {
-          views: filtered,
-          activeViewId: s.activeViewId === id ? filtered[0].id : s.activeViewId,
-        }
-      }),
-      renameView: (id, name) => set((s) => ({
-        views: s.views.map((v) => v.id === id ? { ...v, name } : v),
-      })),
-
-      // Widgets
-      addWidget: (viewId, type) => set((s) => {
-        const view = s.views.find((v) => v.id === viewId)
-        if (!view) return s
-        const widget: Widget = { id: randomId(), type }
-        const newWidgets = [...view.widgets, widget]
-        const existing = view.layouts["lg"] ?? []
-        const defaults = WIDGET_DEFAULTS[type]
-        const newItem = findBestFit(existing, widget.id, defaults)
-        return {
-          views: s.views.map((v) =>
-            v.id === viewId
-              ? { ...v, widgets: newWidgets, layouts: { ...v.layouts, lg: [...existing, newItem] } }
-              : v,
-          ),
-        }
-      }),
-      removeWidget: (viewId, widgetId) => set((s) => {
-        const view = s.views.find((v) => v.id === viewId)
-        if (!view) return s
-        const newWidgets = view.widgets.filter((w) => w.id !== widgetId)
-        const newLayouts = (view.layouts["lg"] ?? []).filter((l) => l.i !== widgetId)
-        return {
-          views: s.views.map((v) =>
-            v.id === viewId
-              ? { ...v, widgets: newWidgets, layouts: { ...v.layouts, lg: newLayouts } }
-              : v,
-          ),
-        }
-      }),
-      updateLayouts: (viewId, layouts) => set((s) => ({
-        views: s.views.map((v) => {
-          if (v.id !== viewId) return v
-          // RGL's onLayoutChange fires for many reasons besides a real user
-          // gesture: mount, child sync, breakpoint/width changes,
-          // compaction. During its `synchronizeLayoutWithChildren` pass it
-          // can briefly emit items at the default 1×1 size — smaller than
-          // the widget's configured minW/minH. If we blindly accepted those
-          // and clamped them to the minimum, we would permanently shrink
-          // user-sized widgets to their floor on every restore. So: when an
-          // incoming item is smaller than its widget's configured minimum,
-          // treat it as a bookkeeping emission and KEEP the previously
-          // stored w/h instead of overwriting. Real user resizes always
-          // produce w ≥ minW (RGL enforces that on the resize handle) and
-          // pass through unchanged. We still re-inject the current
-          // minW/minH so layouts saved before this guard pick them up.
-          const prevById = new Map(
-            (v.layouts["lg"] ?? []).map((item) => [item.i, item]),
-          )
-          const normalized = layouts.map((item) => {
-            const widget = v.widgets.find((w) => w.id === item.i)
-            if (!widget) return item
-            const defaults = WIDGET_DEFAULTS[widget.type]
-            if (!defaults) return item
-            const prev = prevById.get(item.i)
-            const undersized =
-              item.w < defaults.minW || item.h < defaults.minH
-            return {
-              ...item,
-              minW: defaults.minW,
-              minH: defaults.minH,
-              w: undersized && prev ? prev.w : Math.max(item.w, defaults.minW),
-              h: undersized && prev ? prev.h : Math.max(item.h, defaults.minH),
-            }
-          })
-          return { ...v, layouts: { ...v.layouts, lg: normalized } }
-        }),
-      })),
 
       // Agent selection
       selectedAgentId: null,
@@ -2359,13 +2139,9 @@ export const useStore = create<AppState>()(
       name: "mia-dashboard",
       merge: (persistedState, currentState) => {
         const persisted = (persistedState ?? {}) as Partial<AppState>
-        const views = persisted.views?.length
-          ? pruneUnknownWidgets(persisted.views)
-          : currentState.views
         return {
           ...currentState,
           ...persisted,
-          views,
           envSyncPlan: null,
           envSyncForm: {
             ...DEFAULT_ENV_SYNC_FORM,
@@ -2376,8 +2152,6 @@ export const useStore = create<AppState>()(
         }
       },
       partialize: (state) => ({
-        views: state.views,
-        activeViewId: state.activeViewId,
         selectedAgentId: state.selectedAgentId,
         activeThreadId: state.activeThreadId,
         threadSidebarCollapsed: state.threadSidebarCollapsed,
@@ -2386,3 +2160,10 @@ export const useStore = create<AppState>()(
     },
   ),
 )
+
+export {
+  makeDefaultView,
+  pruneUnknownWidgets,
+  useLayoutStore,
+  WIDGET_DEFAULTS,
+} from "./layout-store.js"

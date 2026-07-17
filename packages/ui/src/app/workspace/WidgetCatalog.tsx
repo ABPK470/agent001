@@ -3,52 +3,33 @@
  */
 
 import { LayoutDashboard } from "lucide-react"
-import type { ComponentType } from "react"
 import { useIsMobile } from "../../hooks/useIsMobile"
 import { useMe } from "../../hooks/useMe"
-import { useStore } from "../../state/store"
+import { useLayoutStore } from "../../state/layout-store"
 import type { WidgetType } from "../../types"
 import { VISITOR_WIDGETS } from "../../types"
 import { ModalShell } from "../../widgets/entity-registry/ModalShell"
 import { modalViewerPanelClass } from "../../widgets/entity-registry/modal-overlay"
-import { WIDGET_ICONS } from "../../widgets/widget-icons"
+import { catalogEntries } from "./widget-definitions"
 
 interface Props {
   onClose: () => void
 }
 
-const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: ComponentType<{ size?: number, className?: string }> }> = [
-  { type: "thread-nav",    label: "Threads",       desc: "Select the active thread and run for chat widgets", Icon: WIDGET_ICONS["thread-nav"] },
-  { type: "term-chat",     label: "MI:A Chat",     desc: "Send goals to the agent and see responses",   Icon: WIDGET_ICONS["term-chat"] },
-  { type: "env-sync",      label: "Sync",          desc: "Pick source, target, entity, preview and execute changes", Icon: WIDGET_ICONS["env-sync"] },
-  { type: "mymi-db",       label: "Mymi DB",       desc: "Browse MyMI DB schemas, tables, views, and preview data", Icon: WIDGET_ICONS["mymi-db"] },
-  { type: "operation-log", label: "Pipelines",     desc: "Pipeline monitor — agent runs, sync, Bridge", Icon: WIDGET_ICONS["operation-log"] },
-  { type: "live-logs",     label: "Event Stream",  desc: "Real-time SSE event stream",                  Icon: WIDGET_ICONS["live-logs"] },
-  { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: WIDGET_ICONS["run-history"] },
-  { type: "agent-chat",    label: "Agent Chat",    desc: "Older version of agent chat",                 Icon: WIDGET_ICONS["agent-chat"] },
-  { type: "run-status",    label: "Run Status",    desc: "Current run status, progress, and metadata",  Icon: WIDGET_ICONS["run-status"] },
-  { type: "step-timeline", label: "Step Timeline", desc: "Visual timeline of tool calls and steps",     Icon: WIDGET_ICONS["step-timeline"] },
-  { type: "debug-inspector", label: "Trace",       desc: "System prompts, tool resolution, LLM requests & responses", Icon: WIDGET_ICONS["debug-inspector"] },
-  { type: "active-users",  label: "Active Users",  desc: "Who's online, what they're running",          Icon: WIDGET_ICONS["active-users"] },
-  { type: "entity-registry", label: "Entity Registry", desc: "Browse, edit, and version entity definitions for the sync platform", Icon: WIDGET_ICONS["entity-registry"] },
-  { type: "sync-admin",     label: "Sync Operations", desc: "Proposals, runs, evidence, approvals, connections, schedules, notify routes", Icon: WIDGET_ICONS["sync-admin"] },
-  { type: "bridge",  label: "Bridge",   desc: "Move rows between connectors through a declarative transform", Icon: WIDGET_ICONS["bridge"] },
-]
-
 export function WidgetCatalog({ onClose }: Props) {
-  const activeViewId = useStore((s) => s.activeViewId)
-  const views = useStore((s) => s.views)
-  const addWidget = useStore((s) => s.addWidget)
-  const removeWidget = useStore((s) => s.removeWidget)
+  const activeViewId = useLayoutStore((s) => s.activeViewId)
+  const views = useLayoutStore((s) => s.views)
+  const addWidget = useLayoutStore((s) => s.addWidget)
+  const removeWidget = useLayoutStore((s) => s.removeWidget)
   const isMobile = useIsMobile()
   const { me } = useMe()
   const isAdmin = me?.isAdmin ?? false
 
-  const activeView = views.find((v) => v.id === activeViewId)
-  const activeTypes = new Set(activeView?.widgets.map((w) => w.type) ?? [])
+  const activeView = views.find((view) => view.id === activeViewId)
+  const activeTypes = new Set(activeView?.tiles.map((tile) => tile.type) ?? [])
 
   function handleToggle(type: WidgetType) {
-    const existing = activeView?.widgets.find((w) => w.type === type)
+    const existing = activeView?.tiles.find((tile) => tile.type === type)
     if (existing) {
       removeWidget(activeViewId, existing.id)
     } else {
@@ -69,9 +50,10 @@ export function WidgetCatalog({ onClose }: Props) {
           isMobile ? "grid-cols-1" : "grid-cols-2 lg:grid-cols-3"
         }`}
       >
-        {CATALOG.map((item) => {
+        {catalogEntries().map((item) => {
           const isActive = activeTypes.has(item.type)
           const isAllowed = isAdmin || VISITOR_WIDGETS.has(item.type)
+          const Icon = item.icon
           return (
             <button
               key={item.type}
@@ -89,7 +71,7 @@ export function WidgetCatalog({ onClose }: Props) {
               <div className={`w-9 h-9 rounded-lg flex items-center justify-center shrink-0 ${
                 isActive && isAllowed ? "bg-accent/15" : "bg-overlay-2"
               }`}>
-                <item.Icon size={18} className={isActive && isAllowed ? "text-accent" : "text-text-muted"} />
+                <Icon size={18} className={isActive && isAllowed ? "text-accent" : "text-text-muted"} />
               </div>
               <div className="flex-1 min-w-0">
                 <span className={`text-sm font-medium block ${isActive && isAllowed ? "text-accent" : "text-text"}`}>

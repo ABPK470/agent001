@@ -12,6 +12,7 @@ import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
 import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
+import { useLayoutStore } from "../../state/layout-store"
 import type { Notification, NotificationAction } from "../../types"
 
 function timeAgo(date: string): string {
@@ -114,9 +115,9 @@ export function NotificationPanel() {
         const runId = action.data?.runId as string | undefined
         if (runId) {
           setActiveRun(runId)
-          const { views, activeViewId } = useStore.getState()
+          const { views, activeViewId } = useLayoutStore.getState()
           const view = views.find((v) => v.id === activeViewId)
-          const hasRunStatus = view?.widgets.some((w) => w.type === "run-status")
+          const hasRunStatus = view?.tiles.some((tile) => tile.type === "run-status")
           if (!hasRunStatus) {
             openModalWidget("run-status", runId)
           }

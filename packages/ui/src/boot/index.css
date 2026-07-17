@@ -2209,22 +2209,124 @@ textarea.input {
   filter: drop-shadow(0 0 6px var(--logo-mark-live-shadow));
 }
 
-/* ── React Grid Layout overrides ───────────────────────────────── */
+/* ── Workspace flat grid ───────────────────────────────────────── */
 
-.react-grid-layout {
-  position: relative;
+.workspace-tile {
+  position: absolute;
+  transition:
+    left 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    top 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    width 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    height 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    transform 180ms ease,
+    opacity 180ms ease,
+    box-shadow 120ms ease;
+  max-width: 100%;
+  max-height: 100%;
+  will-change: left, top, width, height;
 }
 
-.react-grid-item {
-  transition: none !important;
+.workspace-tile-entering {
+  transform: translateY(12px);
+  opacity: 0.85;
 }
 
-.react-grid-item.react-draggable-dragging {
-  z-index: 100;
-  opacity: 0.9;
+.workspace-tile-entered {
+  transform: translateY(0);
+  opacity: 1;
 }
 
-/* ── Workspace toolbar ─────────────────────────────────────────── */
+.workspace-tile-dragging {
+  z-index: 20;
+  opacity: 0.96;
+  transition: opacity 120ms ease, box-shadow 120ms ease;
+}
+
+.workspace-tile:focus,
+.workspace-tile:focus-visible {
+  outline: none;
+}
+
+.workspace-tile-focused {
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--border) 80%, var(--color-accent) 20%);
+}
+
+.workspace-tile-locked .workspace-resize-handle {
+  display: none;
+}
+
+.workspace-shell .widget-controls {
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+}
+
+.workspace-tile:hover .widget-controls,
+.workspace-tile-focused .widget-controls,
+.workspace-shell:focus-within .widget-controls {
+  opacity: 1;
+}
+
+.workspace-drop-zone {
+  background: color-mix(in srgb, var(--color-accent) 12%, transparent);
+  border: 1px dashed color-mix(in srgb, var(--color-accent) 45%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--color-accent) 20%, transparent);
+}
+
+.workspace-resize-handle {
+  position: absolute;
+  z-index: 12;
+  padding: 0;
+  border: none;
+  background: color-mix(in srgb, var(--color-accent) 55%, transparent);
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.workspace-tile:hover .workspace-resize-handle,
+.workspace-tile-focused .workspace-resize-handle {
+  opacity: 1;
+}
+
+.workspace-resize-handle-se,
+.workspace-resize-handle-sw,
+.workspace-resize-handle-ne,
+.workspace-resize-handle-nw {
+  width: 6px;
+  height: 6px;
+}
+
+.workspace-resize-handle-se { bottom: 0; right: 0; cursor: se-resize; }
+.workspace-resize-handle-sw { bottom: 0; left: 0; cursor: sw-resize; }
+.workspace-resize-handle-ne { top: 0; right: 0; cursor: ne-resize; }
+.workspace-resize-handle-nw { top: 0; left: 0; cursor: nw-resize; }
+
+.workspace-resize-handle-e,
+.workspace-resize-handle-w {
+  top: 0;
+  width: 6px;
+  height: 100%;
+}
+
+.workspace-resize-handle-e { right: 0; cursor: e-resize; }
+.workspace-resize-handle-w { left: 0; cursor: w-resize; }
+
+.workspace-resize-handle-s,
+.workspace-resize-handle-n {
+  left: 0;
+  width: 100%;
+  height: 6px;
+}
+
+.workspace-resize-handle-s { bottom: 0; cursor: s-resize; }
+.workspace-resize-handle-n { top: 0; cursor: n-resize; }
+
+/* Widget content areas must stay text-selectable during tile drags. */
+.widget-content,
+.widget-content * {
+  user-select: text !important;
+  -webkit-user-select: text !important;
+}
+
 .toolbar-brand-logo {
   display: block;
   margin-top: -0.5px;
@@ -2237,61 +2339,6 @@ textarea.input {
   border-radius: 999px;
   background: color-mix(in srgb, var(--text-faint) 32%, var(--border) 68%);
 }
-
-/* Widget content areas must stay text-selectable.
-   react-draggable's enableUserSelectHack sets user-select: none on <body>
-   during any active drag of ANY widget. This override covers the edge case
-   where a neighbouring widget's drag is active while the user tries to
-   interact with text in this widget's content area. */
-.widget-content,
-.widget-content * {
-  user-select: text !important;
-  -webkit-user-select: text !important;
-}
-
-.react-grid-placeholder {
-  background: var(--color-accent) !important;
-  opacity: 0.08 !important;
-  border-radius: 12px !important;
-}
-
-.react-resizable {
-  position: relative;
-}
-
-.react-resizable-handle {
-  position: absolute;
-  z-index: 10;
-  background: none !important;
-  background-image: none !important;
-  border: none !important;
-  padding: 0 !important;
-  transform: none !important;
-  opacity: 0;
-}
-
-/* Kill the ::after indicator from react-grid-layout/css/styles.css */
-.react-grid-item > .react-resizable-handle::after {
-  display: none !important;
-}
-
-/* Cursor change is sufficient feedback.
-   Resize handles become visible only when actively hovering the widget. */
-.react-grid-item:hover > .react-resizable-handle {
-  opacity: 1;
-}
-
-/* Corner handles — invisible hit targets */
-.react-resizable-handle-se { width: 16px; height: 16px; bottom: 0; right: 0; cursor: se-resize; }
-.react-resizable-handle-sw { width: 16px; height: 16px; bottom: 0; left: 0; cursor: sw-resize; }
-.react-resizable-handle-ne { width: 16px; height: 16px; top: 0; right: 0; cursor: ne-resize; }
-.react-resizable-handle-nw { width: 16px; height: 16px; top: 0; left: 0; cursor: nw-resize; }
-
-/* Edge handles — invisible hit targets */
-.react-resizable-handle-e { width: 8px; height: 100%; top: 0; right: 0; cursor: e-resize; }
-.react-resizable-handle-w { width: 8px; height: 100%; top: 0; left: 0; cursor: w-resize; }
-.react-resizable-handle-s { width: 100%; height: 8px; bottom: 0; left: 0; cursor: s-resize; }
-.react-resizable-handle-n { width: 100%; height: 8px; top: 0; left: 0; cursor: n-resize; }
 
 /* ── Mobile ────────────────────────────────────────────────────── */
 

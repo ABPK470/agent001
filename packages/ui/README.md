@@ -32,6 +32,14 @@ src/
 
 Doctrine: [docs/doctrine.md](../../docs/doctrine.md). Enforce with `npm run lint:arch`.
 
+## Workspace grid
+
+Desktop workspace canvases use a flat absolute 2D grid under
+`app/workspace/layout/` (`GridCanvas`, `useGridInteraction`, `grid-math`).
+Tiles are stored in `state/layout-store.ts` and synced via
+`app/workspace/layout/persistence.ts`. Mobile stacks tiles by `(y, x)` in a
+scrollable column.
+
 ## Conventions
 
 - **Wire types**: pull enums from `@mia/shared-enums` (re-exported via `enums/`);

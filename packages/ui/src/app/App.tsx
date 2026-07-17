@@ -23,7 +23,9 @@ import { useServerReachable } from "../hooks/useServerReachable"
 import type { AppShellMode } from "./types"
 import { resolveChatVariant } from "./types"
 import { useStore } from "../state/store"
+import { useLayoutStore } from "../state/layout-store"
 import type { AuditEntry, LogEntry, Step, WidgetType } from "../types"
+import { getWidgetDefinition, widgetComponent } from "./workspace/widget-definitions"
 import { widgetRegistry } from "../widgets"
 
 const SHELL_TRANSITION_MS = 280
@@ -31,27 +33,6 @@ const SHELL_TRANSITION_MS = 280
 function shellTransitionDelay(): number {
   if (typeof window === "undefined") return SHELL_TRANSITION_MS
   return window.matchMedia("(prefers-reduced-motion: reduce)").matches ? 0 : SHELL_TRANSITION_MS
-}
-
-const WIDGET_LABELS: Record<WidgetType, string> = {
-  "thread-nav": "Threads",
-  "agent-chat": "Agent Chat",
-  "term-chat": "MI:A Chat",
-  "run-status": "Run Status",
-  "live-logs": "Event Stream",
-  "step-timeline": "Step Timeline",
-  "run-history": "Run History",
-  "debug-inspector": "Trace",
-  "mymi-db": "MyMI DB",
-  "active-users": "Active Users",
-  "env-sync": "Sync",
-  "operation-log": "Pipelines",
-  "entity-registry": "Entity Registry",
-  "sync-proposals": "Sync Proposals",
-  "sync-approvals": "Sync Admin · Approvals",
-  "sync-evidence":  "Sync Evidence",
-  "sync-admin":     "Sync Admin",
-  "bridge": "Bridge",
 }
 
 const SYNC_CHANNEL = "mia-active-run"
@@ -78,11 +59,10 @@ export function App() {
   const setPendingToolApproval = useStore((s) => s.setPendingToolApproval)
   const policyEditorOpen = useStore((s) => s.policyEditorOpen)
   const setPolicyEditorOpen = useStore((s) => s.setPolicyEditorOpen)
-  const views = useStore((s) => s.views)
-  const activeViewId = useStore((s) => s.activeViewId)
+  const views = useLayoutStore((s) => s.views)
+  const activeViewId = useLayoutStore((s) => s.activeViewId)
   const canvasRef = useRef<CanvasHandle>(null)
   const isMobile = useIsMobile()
-  const [mobileWidgetIdx, setMobileWidgetIdx] = useState(0)
   const [mobileCatalogOpen, setMobileCatalogOpen] = useState(false)
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
   const [usageOpen, setUsageOpen] = useState(false)
@@ -104,9 +84,13 @@ export function App() {
     () => views.find((view) => view.id === activeViewId) ?? views[0] ?? null,
     [views, activeViewId],
   )
+  const tiles = useMemo(
+    () => [...(currentView?.tiles ?? [])].sort((a, b) => a.y - b.y || a.x - b.x),
+    [currentView],
+  )
   const visibleWidgetTypes = useMemo(() => {
     if (popOut) return new Set<WidgetType>([popOut.type])
-    return new Set<WidgetType>((currentView?.widgets ?? []).map((widget) => widget.type))
+    return new Set<WidgetType>((currentView?.tiles ?? []).map((tile) => tile.type))
   }, [currentView, popOut])
   const shouldHydrateSelectedRun = visibleWidgetTypes.has("run-status")
     || visibleWidgetTypes.has("run-history")
@@ -475,10 +459,6 @@ export function App() {
       </>
     )
   }
-  const widgets = currentView?.widgets ?? []
-  const clampedIdx = Math.min(mobileWidgetIdx, Math.max(0, widgets.length - 1))
-  const currentWidget = widgets[clampedIdx]
-  const WidgetComponent = currentWidget ? widgetRegistry[currentWidget.type] : null
 
   let shellBody: ReactNode
 
@@ -512,12 +492,10 @@ export function App() {
               MI<span className="text-accent">:A</span>
             </span>
           </div>
-          <div className="flex-1 min-w-0 flex justify-center px-2">
-            {currentWidget && (
-              <span className="block max-w-full truncate text-xs text-text-muted uppercase tracking-wider whitespace-nowrap">
-                {WIDGET_LABELS[currentWidget.type]}
-              </span>
-            )}
+          <div className="flex-1 min-w-0 text-center px-2">
+            <span className="block max-w-full truncate text-xs text-text-muted uppercase tracking-wider whitespace-nowrap">
+              {currentView?.name ?? "Workspace"}
+            </span>
           </div>
           <div className="shrink-0 flex items-center gap-3">
             <div
@@ -568,13 +546,14 @@ export function App() {
         </header>
 
         {/* Widget area — full remaining space */}
-        <main className="flex-1 overflow-hidden flex flex-col">
-          {widgets.length === 0 ? (
+        <main className="flex-1 overflow-y-auto show-scrollbar">
+          {tiles.length === 0 ? (
             <EmptyState
               icon={LayoutGrid}
               message="No widgets in this view yet"
               action={(
                 <button
+                  type="button"
                   className="px-6 py-3 text-sm text-text-secondary border border-border rounded-xl active:bg-overlay-2"
                   onClick={() => setMobileCatalogOpen(true)}
                 >
@@ -582,32 +561,29 @@ export function App() {
                 </button>
               )}
             />
-          ) : WidgetComponent ? (
-            <>
-              {/* Intra-view pager — only when this view holds more than
-                  one widget. Lets the user step through them on mobile
-                  without taking nav space away from view switching. */}
-              {widgets.length > 1 && (
-                <div className="flex items-center justify-center gap-1.5 py-1.5 shrink-0">
-                  {widgets.map((w, i) => (
-                    <button
-                      key={w.id}
-                      onClick={() => setMobileWidgetIdx(i)}
-                      aria-label={`Widget ${i + 1}`}
-                      className={`h-1.5 rounded-full transition-all ${
-                        i === clampedIdx ? "w-6 bg-accent" : "w-1.5 bg-border"
-                      }`}
-                    />
-                  ))}
-                </div>
-              )}
-              <div className="flex-1 min-h-0 p-2">
-                <div className="h-full bg-surface rounded-xl overflow-hidden p-3">
-                  <WidgetComponent />
-                </div>
-              </div>
-            </>
-          ) : null}
+          ) : (
+            <div className="flex flex-col gap-3 p-2 pb-4">
+              {tiles.map((tile) => {
+                const Widget = widgetComponent(tile.type)
+                const definition = getWidgetDefinition(tile.type)
+                return (
+                  <section
+                    key={tile.id}
+                    className="min-h-[50dvh] bg-surface rounded-xl overflow-hidden flex flex-col"
+                  >
+                    <div className="px-3 h-8 flex items-center shrink-0 border-b border-border-subtle">
+                      <span className="text-xs font-medium text-text-muted uppercase tracking-wider">
+                        {definition.label}
+                      </span>
+                    </div>
+                    <div className={`flex-1 min-h-0 overflow-hidden ${definition.chrome === "flush" ? "" : "p-3"}`}>
+                      <Widget />
+                    </div>
+                  </section>
+                )
+              })}
+            </div>
+          )}
         </main>
 
         {/* Bottom navigation — always visible so the user can switch
@@ -615,10 +591,10 @@ export function App() {
         <MobileNav
           views={views}
           activeViewId={activeViewId}
-          onSelectView={(id) => { useStore.getState().setActiveView(id); setMobileWidgetIdx(0) }}
+          onSelectView={(id) => useLayoutStore.getState().setActiveView(id)}
           onAdd={() => {
-            const newId = useStore.getState().addView(`View ${views.length + 1}`)
-            useStore.getState().setActiveView(newId)
+            const newId = useLayoutStore.getState().addView(`View ${views.length + 1}`)
+            useLayoutStore.getState().setActiveView(newId)
             setMobileCatalogOpen(true)
           }}
         />
