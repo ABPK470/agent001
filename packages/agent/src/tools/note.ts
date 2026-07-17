@@ -19,7 +19,7 @@
  * agent never silently swallows note writes.
  */
 
-import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../domain/models/agent-types.js"
+import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../domain/types/agent-types.js"
 
 /** Allowed values for the optional `category` field. Free-form is intentionally
  * NOT allowed so consolidation and retrieval can rely on a small vocabulary. */

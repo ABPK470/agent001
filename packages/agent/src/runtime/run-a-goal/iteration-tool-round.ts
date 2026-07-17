@@ -8,7 +8,7 @@
 import { MessageRole } from "../../domain/enums/message.js"
 import * as log from "../../internal/index.js"
 import type { ToolCallRecord } from "../../tools/index.js"
-import type { Message, Tool } from "../../domain/models/agent-types.js"
+import type { Message, Tool } from "../../domain/types/agent-types.js"
 import type { AgentLoopState } from "../loop.js"
 import { executeToolRound, processPostRound, type PostRoundContext, type ToolExecContext } from "../loop.js"
 

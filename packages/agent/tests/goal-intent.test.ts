@@ -1,5 +1,5 @@
 import { MessageRole } from "../src/domain/enums/message.js"
-import type { Message } from "../src/domain/models/agent-types.js"
+import type { Message } from "../src/domain/types/agent-types.js"
 import {
   extractPriorAssistantNarrative,
   extractTurnMinusOneAnswer,

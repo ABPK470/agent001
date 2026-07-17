@@ -9,7 +9,7 @@
  * Next: checkCanFinish or runTools.
  */
 
-import type { LLMResponse } from "../../../domain/models/agent-types.js"
+import type { LLMResponse } from "../../../domain/types/agent-types.js"
 import { assertUnhandled } from "../unhandled-outcome.js"
 
 export type NextActionResult =

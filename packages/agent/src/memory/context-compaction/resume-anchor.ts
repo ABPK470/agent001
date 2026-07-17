@@ -6,7 +6,7 @@
  */
 
 import type { ArtifactCompactionState } from "../context-compaction/index.js"
-import type { Message, PromptBudgetSection } from "../../domain/models/agent-types.js"
+import type { Message, PromptBudgetSection } from "../../domain/types/agent-types.js"
 import { MessageRole } from "../../domain/enums/message.js"
 
 export function buildResumeAnchorMessage(state: ArtifactCompactionState): Message {

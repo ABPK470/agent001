@@ -11,7 +11,7 @@
  * Many production agents use this pattern (including Anthropic's recommendations).
  */
 
-import type { Tool } from "../domain/models/agent-types.js"
+import type { Tool } from "../domain/types/agent-types.js"
 
 export const thinkTool: Tool = {
   name: "think",

@@ -14,7 +14,7 @@
  */
 
 import { CHART_CATALOGUE_SECTION, renderPromptVars } from "../runtime/loop.js"
-import type { Tool, ToolMetadata } from "../domain/models/agent-types.js"
+import type { Tool, ToolMetadata } from "../domain/types/agent-types.js"
 
 export const getChartSpecsToolMetadata: ToolMetadata = {
   name: "get_chart_specs",

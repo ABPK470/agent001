@@ -9,7 +9,7 @@
 import sql from "mssql"
 import type { AgentHost, RunContext } from "../../runtime/runtime.js"
 import { getTenantConfig } from "../../domain/tenant/tenant-config.js"
-import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/models/agent-types.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/types/agent-types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../_tool-cache.js"
 import { getCatalog } from "../catalog/store.js"
 import { getPool, resolveToolConnectionArg } from "./mssql/index.js"

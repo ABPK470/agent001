@@ -7,7 +7,7 @@
  * or M2M OAuth — see server databricks-broker for token acquisition.
  */
 
-import type { LLMClient, LLMResponse, Message, Tool } from "../domain/models/agent-types.js"
+import type { LLMClient, LLMResponse, Message, Tool } from "../domain/types/agent-types.js"
 import {
   consumeOpenAICompatibleSSE,
   formatOpenAICompatibleMessage,

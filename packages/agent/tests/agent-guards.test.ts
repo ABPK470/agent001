@@ -14,7 +14,7 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "@mia/agent"
  */
 import { describe, expect, it } from "vitest"
 import { Agent } from "../src/runtime/agent.js"
-import type { LLMClient, LLMResponse, Tool } from "../src/domain/models/agent-types.js"
+import type { LLMClient, LLMResponse, Tool } from "../src/domain/types/agent-types.js"
 
 // ── Test helpers ─────────────────────────────────────────────────
 

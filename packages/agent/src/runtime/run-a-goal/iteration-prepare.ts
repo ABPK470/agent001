@@ -17,7 +17,7 @@ import {
   prepareTurn,
   turnStartContext
 } from "../loop/loop-policy/index.js"
-import type { AgentConfig, Message, Tool } from "../../domain/models/agent-types.js"
+import type { AgentConfig, Message, Tool } from "../../domain/types/agent-types.js"
 import type { AgentLoopState } from "../loop.js"
 
 /**

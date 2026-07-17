@@ -6,7 +6,7 @@
  * @module
  */
 
-import type { AgentConfig, Tool, ToolResultEnvelope } from "../../../domain/models/agent-types.js"
+import type { AgentConfig, Tool, ToolResultEnvelope } from "../../../domain/types/agent-types.js"
 import { executeToolWithTimeout } from "../../../tools/index.js"
 import { withToolTraceArgs } from "./trace-context.js"
 

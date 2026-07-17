@@ -5,7 +5,7 @@ import type { DelegateResult, ExecutionEnvelope, SubagentTaskStep } from "../../
 import { Agent } from "../../runtime/agent.js"
 import { LLMCallPhase } from "../../domain/enums/llm.js"
 import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"
-import type { Tool } from "../../domain/models/agent-types.js"
+import type { Tool } from "../../domain/types/agent-types.js"
 import {
   canonicalizeEnvelope,
   computePlannerChildBudgetMetrics,

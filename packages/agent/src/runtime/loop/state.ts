@@ -5,7 +5,7 @@
  */
 
 import { ToolFailureCircuitBreaker } from "../../core/recover.js"
-import type { AgentLoopState as DomainAgentLoopState } from "../../domain/models/agent-loop-state.js"
+import type { AgentLoopState as DomainAgentLoopState } from "../../domain/types/agent-loop-state.js"
 import type { AnswerSignature } from "./loop-policy/answer-stability.js"
 
 export type AgentLoopState = DomainAgentLoopState & {

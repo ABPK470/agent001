@@ -14,7 +14,7 @@ import {
   MAX_CONSECUTIVE_ALL_FAILED_ROUNDS,
   MAX_CONSECUTIVE_IDENTICAL_FAILURES,
   MAX_CONSECUTIVE_SEMANTIC_DUPLICATE_ROUNDS
-} from "../../../domain/models/agent-constants.js"
+} from "../../../domain/types/agent-constants.js"
 import type { ToolCallRecord } from "../result.js"
 import { buildSemanticToolCallKey, didToolCallFail } from "../result.js"
 

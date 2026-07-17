@@ -16,7 +16,7 @@ export {
   DomainError,
   InvalidTransitionError,
   PolicyViolationError
-} from "./models/errors.js"
+} from "./types/errors.js"
 
 export {
   addStepToRunPure,
@@ -44,7 +44,7 @@ export {
   type ExecutionRecord,
   type PolicyRule,
   type Step
-} from "./models/run-models.js"
+} from "./types/run-models.js"
 
 export {
   approvalRequired,
@@ -65,7 +65,7 @@ export type {
   PolicyEvaluator,
   RunRepository,
   Unsubscribe
-} from "./models/interfaces.js"
+} from "./types/interfaces.js"
 
 export { AuditService } from "./services/audit.js"
 export { Learner, type OperationStats } from "./services/learner.js"
@@ -86,7 +86,7 @@ export {
   MemoryEventBus,
   MemoryExecutionRecordRepository,
   MemoryRunRepository
-} from "./models/memory.js"
+} from "./types/memory.js"
 
-export * from "./models/agent-constants.js"
-export * from "./models/agent-types.js"
+export * from "./types/agent-constants.js"
+export * from "./types/agent-types.js"

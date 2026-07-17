@@ -17,7 +17,7 @@
 import { MessageRole } from "../../domain/enums/message.js"
 import * as log from "../../internal/index.js"
 import type { ToolCallRecord } from "../../tools/index.js"
-import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../domain/models/agent-types.js"
+import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../domain/types/agent-types.js"
 import { synthesizeFinalAnswer } from "./agent-helpers.js"
 import { createAgentLoopState } from "./state.js"
 import { assertUnhandled } from "./unhandled-outcome.js"

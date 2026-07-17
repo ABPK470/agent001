@@ -5,7 +5,7 @@
 import { describe, expect, it } from "vitest"
 import { capRuntimeHints } from "../src/runtime/run-a-goal/iteration-prepare.js"
 import { MessageRole } from "../src/domain/enums/message.js"
-import type { Message } from "../src/domain/models/agent-types.js"
+import type { Message } from "../src/domain/types/agent-types.js"
 
 const sys = (content: string, hint = false): Message => ({
   role: MessageRole.System,

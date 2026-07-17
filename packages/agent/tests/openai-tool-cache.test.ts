@@ -4,7 +4,7 @@
  */
 import { describe, expect, it } from "vitest"
 import { __internal } from "../src/llm/openai.js"
-import type { Tool } from "../src/domain/models/agent-types.js"
+import type { Tool } from "../src/domain/types/agent-types.js"
 
 const tools: Tool[] = [
   {

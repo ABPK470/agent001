@@ -53,7 +53,7 @@ import {
   PolicyRunMode,
   PolicyScope
 } from "../enums/index.js"
-import type { PolicyRule, Step } from "../models/run-models.js"
+import type { PolicyRule, Step } from "../types/run-models.js"
 import type { HostedPolicyContext } from "./policy-context.js"
 
 // ── Selector schema ──────────────────────────────────────────────

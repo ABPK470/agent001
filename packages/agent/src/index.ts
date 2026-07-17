@@ -25,13 +25,13 @@ export {
   RECOVERY_HINT_PREFIX,
   SAFE_RETRY_TOOLS,
   VERIFICATION_TOOLS
-} from "./domain/models/agent-constants.js"
+} from "./domain/types/agent-constants.js"
 export {
   ChatBudgetExceededError,
   DROP_PRIORITY,
   NEVER_DROP_SECTIONS,
   SECTION_WEIGHTS
-} from "./domain/models/agent-types.js"
+} from "./domain/types/agent-types.js"
 export type {
   AgentConfig,
   ChatCallUsageRecord,
@@ -47,7 +47,7 @@ export type {
   ToolDefinition,
   ToolKillManager,
   ToolMetadata
-} from "./domain/models/agent-types.js"
+} from "./domain/types/agent-types.js"
 
 // ── Tenant (documented ambient exception) ───────────────────────────
 export {

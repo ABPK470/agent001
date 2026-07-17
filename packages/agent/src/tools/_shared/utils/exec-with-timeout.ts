@@ -6,9 +6,9 @@
  * @module
  */
 
-import { HIGH_RISK_TOOLS, SAFE_RETRY_TOOLS } from "../../../domain/models/agent-constants.js"
-import type { ToolResultEnvelope } from "../../../domain/models/agent-types.js"
-import { ApprovalRequiredError } from "../../../domain/models/errors.js"
+import { HIGH_RISK_TOOLS, SAFE_RETRY_TOOLS } from "../../../domain/types/agent-constants.js"
+import type { ToolResultEnvelope } from "../../../domain/types/agent-types.js"
+import { ApprovalRequiredError } from "../../../domain/types/errors.js"
 import { didToolCallFail, extractToolFailureText, normalizeToolExecutionOutput } from "../result.js"
 
 export interface ToolExecutionConfig {

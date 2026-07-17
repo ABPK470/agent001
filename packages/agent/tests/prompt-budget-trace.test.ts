@@ -6,7 +6,7 @@
 import { describe, expect, it } from "vitest"
 import { prepareIterationContext } from "../src/runtime/run-a-goal/iteration-prepare.js"
 import { createAgentLoopState } from "../src/runtime/loop.js"
-import type { Message } from "../src/domain/models/agent-types.js"
+import type { Message } from "../src/domain/types/agent-types.js"
 
 function msg(role: Message["role"], content: string, section?: Message["section"]): Message {
   return { role, content, ...(section ? { section } : {}) } as Message

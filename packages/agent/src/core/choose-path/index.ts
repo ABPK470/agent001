@@ -7,8 +7,8 @@
 import { PlannerTraceKind } from "../../domain/index.js"
 import * as log from "../../internal/index.js"
 import type { ToolCallRecord } from "../../tools/index.js"
-import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../domain/models/agent-types.js"
-import type { AgentLoopState } from "../../domain/models/agent-loop-state.js"
+import type { AgentConfig, LLMClient, Message, TokenUsage, Tool } from "../../domain/types/agent-types.js"
+import type { AgentLoopState } from "../../domain/types/agent-loop-state.js"
 import type { PlannerContext } from "../plan.js"
 import { assessPlannerDecision, executePlannerPath } from "../plan.js"
 

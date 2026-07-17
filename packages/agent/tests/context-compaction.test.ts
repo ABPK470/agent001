@@ -11,7 +11,7 @@
  */
 import { describe, expect, it } from "vitest"
 import { compactMessages } from "../src/runtime/agent.js"
-import type { Message } from "../src/domain/models/agent-types.js"
+import type { Message } from "../src/domain/types/agent-types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
 

@@ -14,7 +14,7 @@
 
 import { lookup } from "node:dns/promises"
 import type { RunContext } from "../../runtime/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../../domain/models/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/types/agent-types.js"
 import { checkHostname, checkResolvedIp } from "./helpers.js"
 
 /** Max response body size (1 MB). */

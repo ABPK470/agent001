@@ -15,7 +15,7 @@ import { ToolControlDirective, ToolOutcomeSeverity } from "../../../domain/index
  * @module
  */
 
-import { READ_ONLY_TOOL_NAMES } from "../../../domain/models/agent-constants.js"
+import { READ_ONLY_TOOL_NAMES } from "../../../domain/types/agent-constants.js"
 import { MessageRole } from "../../../domain/enums/message.js"
 import * as log from "../../../internal/index.js"
 import { compactAtWriteTime } from "../../../memory/index.js"

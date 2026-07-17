@@ -9,7 +9,7 @@ import { lstat, mkdir, readFile, writeFile } from "node:fs/promises"
 import { dirname, resolve } from "node:path"
 import { detectPlaceholderPatterns } from "../../../core/govern-tools.js"
 import type { AgentHost } from "../../../runtime/runtime.js"
-import type { ToolResultEnvelope } from "../../../domain/models/agent-types.js"
+import type { ToolResultEnvelope } from "../../../domain/types/agent-types.js"
 import {
   checkWriteIntegrity,
   extractDefinedNames,

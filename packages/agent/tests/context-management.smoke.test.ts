@@ -7,7 +7,7 @@
 
 import { describe, expect, it } from "vitest"
 import { compactMessages, estimateTokens } from "../src/memory/index.js"
-import type { Message } from "../src/domain/models/agent-types.js"
+import type { Message } from "../src/domain/types/agent-types.js"
 
 const m = (role: Message["role"], content: string, extra: Partial<Message> = {}): Message =>
   ({ role, content, ...extra }) as Message

@@ -8,7 +8,7 @@
  * Next: finish, or prepareIteration.
  */
 
-import type { AgentConfig, LLMResponse, Message, Tool } from "../../../domain/models/agent-types.js"
+import type { AgentConfig, LLMResponse, Message, Tool } from "../../../domain/types/agent-types.js"
 import { MessageRole } from "../../../domain/enums/message.js"
 import { completionContext, guardCompletion, type AgentLoopState } from "../../loop.js"
 import type { AnswerStreamGate } from "../answer-stream-gate.js"

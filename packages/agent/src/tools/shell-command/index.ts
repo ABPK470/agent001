@@ -16,7 +16,7 @@
 
 import { execFile } from "node:child_process"
 import type { AgentHost, RunContext } from "../../runtime/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../../domain/models/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/types/agent-types.js"
 
 /** Workspace directory — shell commands run here.
  *  Source: `host.shell.cwd` (built per-run by the server from the run workspace).

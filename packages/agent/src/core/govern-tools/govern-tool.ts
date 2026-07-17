@@ -6,7 +6,7 @@
 
 import { randomUUID } from "node:crypto"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
-import type { ExecutableTool } from "../../domain/models/agent-types.js"
+import type { ExecutableTool } from "../../domain/types/agent-types.js"
 import {
   ApprovalRequiredError,
   type ExecutionRecord,

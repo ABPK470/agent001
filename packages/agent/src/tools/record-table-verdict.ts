@@ -16,7 +16,7 @@
  * `recordTableVerdict` from server memory.
  */
 
-import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../domain/models/agent-types.js"
+import type { ExecutableTool, ToolDefinition, ToolMetadata } from "../domain/types/agent-types.js"
 import type { TableVerdictRoleType } from "../ports/index.js"
 
 export const TABLE_VERDICT_ROLES = ["canonical", "subset", "staging", "archive", "rules", "unknown"] as const

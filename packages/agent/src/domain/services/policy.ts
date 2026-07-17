@@ -22,9 +22,9 @@
  */
 
 import { PolicyEffect } from "../enums/index.js"
-import { PolicyViolationError } from "../models/errors.js"
-import type { PolicyEvaluator } from "../models/interfaces.js"
-import type { AgentRun, PolicyRule, Step } from "../models/run-models.js"
+import { PolicyViolationError } from "../types/errors.js"
+import type { PolicyEvaluator } from "../types/interfaces.js"
+import type { AgentRun, PolicyRule, Step } from "../types/run-models.js"
 import { stripRuntimeToolArgs } from "@mia/shared-types"
 
 import type { HostedPolicyContext } from "./policy-context.js"

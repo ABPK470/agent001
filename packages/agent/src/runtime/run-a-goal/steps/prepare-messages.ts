@@ -6,7 +6,7 @@
  * Next: tryPlannerPath (unless resuming) or the tool loop.
  */
 
-import type { Message } from "../../../domain/models/agent-types.js"
+import type { Message } from "../../../domain/types/agent-types.js"
 import { buildInitialMessages } from "../agent-helpers.js"
 
 export function prepareMessages(

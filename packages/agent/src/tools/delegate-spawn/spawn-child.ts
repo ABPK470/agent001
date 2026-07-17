@@ -1,8 +1,8 @@
 import { Agent } from "../../runtime/agent.js"
-import { READ_ONLY_TOOL_NAMES } from "../../domain/models/agent-constants.js"
+import { READ_ONLY_TOOL_NAMES } from "../../domain/types/agent-constants.js"
 import { LLMCallPhase } from "../../domain/enums/llm.js"
 import { DelegationSpanEventKind, DelegationTraceKind } from "../../domain/enums/planner-trace.js"
-import type { Tool } from "../../domain/models/agent-types.js"
+import type { Tool } from "../../domain/types/agent-types.js"
 import { CHILD_SYSTEM_PROMPT, type DelegateContext, type ResolvedAgent } from "../delegate/index.js"
 import type { ChildSpec } from "./helpers.js"
 

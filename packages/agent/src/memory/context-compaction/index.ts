@@ -19,7 +19,7 @@
  */
 
 import { MessageRole } from "../../domain/enums/message.js"
-import type { Message } from "../../domain/models/agent-types.js"
+import type { Message } from "../../domain/types/agent-types.js"
 import { extractCompactionState } from "./extract-state.js"
 import { buildResumeAnchorMessage } from "./resume-anchor.js"
 

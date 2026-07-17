@@ -6,7 +6,7 @@
 
 import { MessageRole } from "../../domain/enums/message.js"
 import { truncateMessages } from "../../memory/index.js"
-import type { AgentConfig, LLMClient, Message, TokenUsage } from "../../domain/models/agent-types.js"
+import type { AgentConfig, LLMClient, Message, TokenUsage } from "../../domain/types/agent-types.js"
 import { emitAnswerChunksPaced } from "./answer-stream-gate.js"
 
 export interface SynthesizeDeps {

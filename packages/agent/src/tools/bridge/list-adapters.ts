@@ -7,7 +7,7 @@
  */
 
 import type { AgentHost } from "../../runtime/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../../domain/models/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/types/agent-types.js"
 import type { ConnectorInfo } from "@mia/shared-types"
 
 function buildListAdaptersTool(host: AgentHost): ExecutableTool {

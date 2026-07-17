@@ -10,7 +10,7 @@ import { randomUUID } from "node:crypto"
 import { EventType } from "@mia/shared-enums"
 import type { MoveSummary, ReadSpec, Transform, WriteSpec } from "@mia/shared-types"
 import type { AgentHost } from "../../runtime/runtime.js"
-import type { ExecutableTool, ToolMetadata } from "../../domain/models/agent-types.js"
+import type { ExecutableTool, ToolMetadata } from "../../domain/types/agent-types.js"
 
 function emitBridge(
   host: AgentHost,

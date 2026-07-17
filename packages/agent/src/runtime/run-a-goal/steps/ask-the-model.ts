@@ -10,7 +10,7 @@
 
 import { LLMCallPhase } from "../../../domain/enums/llm.js"
 import { MessageRole } from "../../../domain/enums/message.js"
-import type { AgentConfig, LLMClient, LLMResponse, Message, Tool } from "../../../domain/models/agent-types.js"
+import type { AgentConfig, LLMClient, LLMResponse, Message, Tool } from "../../../domain/types/agent-types.js"
 import { createAnswerStreamGate, type AnswerStreamGate } from "../answer-stream-gate.js"
 import { assertUnhandled } from "../unhandled-outcome.js"
 

@@ -9,7 +9,7 @@
 
 import sql from "mssql"
 import type { AgentHost } from "../../../runtime/runtime.js"
-import type { ExecutableTool, Tool, ToolMetadata } from "../../../domain/models/agent-types.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../../domain/types/agent-types.js"
 import {
   fingerprintForCatalogBuild,
   fingerprintForQname,

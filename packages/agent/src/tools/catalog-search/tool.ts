@@ -1,6 +1,6 @@
 import type { AgentHost, RunContext } from "../../runtime/runtime.js"
 import { getTenantConfig } from "../../domain/tenant/tenant-config.js"
-import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/models/agent-types.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../domain/types/agent-types.js"
 import { markMssqlTableVerified } from "../database/mssql/schema-verified.js"
 import { resolveMssqlConnectionName } from "../database/mssql/resolve-connection.js"
 import { buildCatalog, getCatalog, getCatalogConnectionNames } from "../catalog/index.js"

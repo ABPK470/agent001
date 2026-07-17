@@ -1,6 +1,6 @@
 import { describe, expect, it, vi } from "vitest"
 import { Agent } from "../src/runtime/agent.js"
-import type { LLMClient, LLMResponse, Tool } from "../src/domain/models/agent-types.js"
+import type { LLMClient, LLMResponse, Tool } from "../src/domain/types/agent-types.js"
 import { synthesizeFinalAnswer } from "../src/runtime/run-a-goal/agent-helpers.js"
 import {
   createAnswerStreamGate,

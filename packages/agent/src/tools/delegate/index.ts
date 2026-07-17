@@ -26,7 +26,7 @@
  */
 
 import { DelegationTraceKind } from "../../domain/enums/planner-trace.js"
-import type { LLMClient, TokenUsage, Tool } from "../../domain/models/agent-types.js"
+import type { LLMClient, TokenUsage, Tool } from "../../domain/types/agent-types.js"
 import { spawnChild, type ChildSpec } from "../delegate-spawn/index.js"
 export { CHILD_SYSTEM_PROMPT } from "./child-prompt.js"
 

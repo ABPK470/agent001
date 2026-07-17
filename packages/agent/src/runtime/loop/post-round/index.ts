@@ -13,7 +13,7 @@ import {
   summarizeToolRoundProgress
 } from "../../../tools/index.js"
 import { MessageRole } from "../../../domain/enums/message.js"
-import type { AgentConfig, Message } from "../../../domain/models/agent-types.js"
+import type { AgentConfig, Message } from "../../../domain/types/agent-types.js"
 import type { AgentLoopState } from "../state.js"
 
 /** Result of post-round processing. */

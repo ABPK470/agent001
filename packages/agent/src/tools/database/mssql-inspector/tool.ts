@@ -1,6 +1,6 @@
 import type sql from "mssql"
 import type { AgentHost } from "../../../runtime/runtime.js"
-import type { ExecutableTool, Tool, ToolMetadata } from "../../../domain/models/agent-types.js"
+import type { ExecutableTool, Tool, ToolMetadata } from "../../../domain/types/agent-types.js"
 import { fingerprintForQname, persistToCache, tryServeFromCache } from "../../_tool-cache.js"
 import { getPool, resolveToolConnectionArg } from "../mssql/index.js"
 import { runObjectInspection } from "./handlers/definition.js"

@@ -35,7 +35,7 @@ import { ToolFailureCircuitBreaker } from "../src/core/recover.js"
 import * as delegationDecision from "../src/core/delegate-decision/index.js"
 import { runDelegationGate } from "../src/core/plan/orchestrator/setup-delegation.js"
 import { CHILD_SYSTEM_PROMPT } from "../src/tools/index.js"
-import type { LLMClient, Tool } from "../src/domain/models/agent-types.js"
+import type { LLMClient, Tool } from "../src/domain/types/agent-types.js"
 
 // ── Helpers ──────────────────────────────────────────────────────
 
