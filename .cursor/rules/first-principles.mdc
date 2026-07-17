@@ -1,0 +1,32 @@
+---
+description: First-principles coding standard — always apply for every feature, fix, and refactor
+alwaysApply: true
+---
+
+# First principles (always)
+
+Every feature, bug fix, gap, scaling change, and refactor starts from **first principles**. Zero ambiguity. Mature, well-written code — not over-engineered, not under-designed.
+
+Optimize for **predictability**, **cohesion**, and **low cognitive load**. Those fail first in large codebases and kill velocity. The codebase must stay **coherent, cohesive, and uniform** — one thought process everywhere. Self-explanatory. Easy to follow, reason about, extend, and maintain.
+
+## How to think
+
+1. **Name the real problem** before naming folders or patterns. Write the real path first; abstract only after the data and control flow are clear — never architecture for its own sake.
+2. **One clear concept per place** — if a new engineer has to guess, the design is wrong. Good taste means edge cases fall out of a correct shape, not special-case sprawl.
+3. Prefer the **smallest structure that still scales**; add layers only when the edge is real.
+4. **DI / inversion of control, baked plainly:** composition roots wire dependencies; cores stay testable and reusable. Prefer explicit parameters and simple wiring over heavy runtime DI frameworks, deep reference spaghetti, or indirection that hides execution flow. Dependencies must not bury what the code actually does (mechanical sympathy: avoid needless allocations and pointer mazes for “purity theater”).
+5. Use established **design patterns** when they reduce ambiguity and match the local dialect — never as decoration, never a different solution shape for the same kind of problem next door.
+6. Follow [docs/doctrine.md](docs/doctrine.md) and package layer rules. **Talk is cheap:** update doctrine and `lint:arch` together. Run `npm run lint:arch` (also first under `npm run lint`) before merging — drifted structure must not land. Human discipline fails at scale; the lint is the doctrine.
+
+## How code must read
+
+- **Prose-like and self-explanatory:** top-to-bottom without a tour guide.
+- **Uniform with neighbors:** same vocabulary, layering, and solution shape for the same class of problem (match surrounding code or the change is wrong).
+- **Mature simplicity:** complexity lives in the problem, not in ceremony. Must not overwhelm; abstractions must not hide bugs.
+- **Unambiguous names:** say what they are (qualify shared words: agent ports vs server ports vs UI state).
+- **No shims / leftover dialects / pass-through wrappers:** delete old paths; clean, direct APIs only.
+- **Named outcomes over silent fallbacks;** thread dependencies as parameters (no hidden ambient DI).
+
+## Hallmark
+
+Simplicity is the quality bar of high thought — predictable, cohesive, cheap to change. If two designs work, pick the one that is clearer, more uniform, easier to follow tomorrow, and still honest about execution cost — then **enforce it with `lint:arch`** so the next change cannot drift.

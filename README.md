@@ -61,7 +61,7 @@ Open [http://localhost:5179](http://localhost:5179).
 | `npm test` | All workspace test suites (Vitest) |
 | `npm run build` | Bundle server → `dist/server.js` + UI → `dist/ui/` |
 | `npm run package` | Build + assemble `release/` folder for hosted deploy |
-| `npm run lint:arch` | Architecture / doctrine boundary checks |
+| `npm run lint:arch` | Architecture / doctrine boundary checks (also runs first in `npm run lint`) |
 
 ### Minimum `.env` for a laptop (no corp MSSQL)
 

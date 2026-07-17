@@ -24,9 +24,11 @@ the change around explicit host/context flow.
 
 Before sending a change, run the narrowest relevant checks first:
 
-- package-local `tsc --noEmit`
+- `npm run lint:arch` — architecture / doctrine boundaries
+- package-local `tsc --noEmit` / `npm run lint`
 - affected tests
-- `node scripts/lint-arch.mjs` when boundaries or naming change
 
-If you need to change the doctrine, update `docs/doctrine.md` before changing
-the code that relies on it.
+`npm run lint` always runs `lint:arch` first, then workspace typechecks.
+
+If you need to change the doctrine, update `docs/doctrine.md` **and**
+`scripts/lint-arch.mjs` together before changing code that relies on it.

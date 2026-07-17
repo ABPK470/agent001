@@ -27,7 +27,7 @@
     "build": "node scripts/build.mjs",
     "package": "node scripts/package-release.mjs",
     "eval:reliability": "node scripts/reliability-eval.mjs",
-    "lint": "npm run lint --workspaces",
+    "lint": "npm run lint:arch && npm run lint --workspaces --if-present",
     "lint:arch": "node scripts/lint-arch.mjs",
     "pack:test": "npm run build && npm pack",
     "rebuild:native": "npm rebuild better-sqlite3 --build-from-source",

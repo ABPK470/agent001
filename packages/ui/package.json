@@ -29,6 +29,7 @@
     "dev": "vite",
     "start": "vite",
     "build": "vite build",
-    "test": "vitest run"
+    "test": "vitest run",
+    "lint": "tsc --noEmit"
   }
 }
