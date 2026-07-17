@@ -31,4 +31,6 @@ alwaysApply: false
 
 **Dependency:** Sync must not depend on `@mia/agent` (structural tool/host compatibility only).
 
+**Flat control flow** (monorepo-wide — `first-principles.mdc`): peer handlers + explicit params/state. Never nest handler functions that `.on` from inside a hot path, or register un-cleared repeating timers. Trivial one-shot `setTimeout(() => …)` is fine. Wire listeners at setup. Enforced by `lint:arch` (`flat-control-flow`).
+
 Full contract: `docs/doctrine.md`.

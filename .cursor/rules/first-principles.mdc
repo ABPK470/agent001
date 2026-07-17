@@ -27,6 +27,54 @@ Optimize for **predictability**, **cohesion**, and **low cognitive load**. Those
 - **No shims / leftover dialects / pass-through wrappers:** delete old paths; clean, direct APIs only.
 - **Named outcomes over silent fallbacks;** thread dependencies as parameters (no hidden ambient DI).
 
+## Flat control flow (hard rule — UI and Node)
+
+Applies to **`@mia/ui`, `@mia/server`, `@mia/agent`, `@mia/sync`**. Same thought process everywhere. Enforce with `lint:arch` (`flat-control-flow`).
+
+Control flow must stay **flat, peer-shaped, and explicit**. Nested handler functions that close over outer locals are a smell: they hide dependencies, raise cognitive load, allocate per call, and do not port cleanly between browser and Node.
+
+**Required**
+- Peers at one indentation level — `onX` / `handleX` / `processX` as siblings, not children.
+- State for a multi-step interaction lives in an **explicit object or ref** (or parameters), not in a nest of closures.
+- Pure decisions in testable modules (`lib/`, `core/`, `domain/` as appropriate).
+- Node: wire listeners once at composition/setup (`create*`, `start*`, `boot*`, `listen*`) with named peer callbacks or methods — not declare new nested functions inside a request/handler path to `.on` / `addEventListener`, or register **un-cleared repeating** timers (`setInterval` without a reachable clear).
+
+**Forbidden**
+- Declaring nested `function onMove` / `onUp` / `onData` **inside** another handler and registering it there (`addEventListener`, `emitter.on`, …) — per-invocation allocation + hidden captures.
+- Nested/stateful repeating timers that outlive the call without an explicit clear (leaky handles).
+- “Business logic” that only exists inside nested closures so you cannot unit-test it without the outer frame.
+- Different dialects: clever closure nests in the UI but flat peers on the server (or the reverse).
+
+**Allowed (not ceremony)**
+- One-line, stateless fire-and-forget delays: `setTimeout(() => logger.info("done"), 1000)`. Do **not** invent a named peer for every trivial one-shot delay.
+
+```ts
+// ✅ flat peers + explicit state (UI or Node)
+const dragRef = useRef<DragState | null>(null)
+function onPointerDown(...) { dragRef.current = { ... } }
+function onPointerMove(...) { const drag = dragRef.current; ... }
+function onPointerUp(...) { /* commit; clear */ }
+
+// ✅ Node composition root wires once
+function onSocketData(socket, buf, session) { ... }
+function startServer(app) {
+  app.on("connection", (socket) => { /* thin adapt → peer */ })
+}
+
+// ❌ nested listener / handler allocation inside a hot path
+function onPointerDown(...) {
+  function onMove() { ... }   // captures outer locals — hidden deps
+  function onUp() { ... }
+  window.addEventListener("pointermove", onMove)
+  window.addEventListener("pointerup", onUp)
+}
+
+function handleRequest(req) {
+  function onData(chunk) { ... }  // same anti-pattern on Node
+  req.on("data", onData)
+}
+```
+
 ## Hallmark
 
 Simplicity is the quality bar of high thought — predictable, cohesive, cheap to change. If two designs work, pick the one that is clearer, more uniform, easier to follow tomorrow, and still honest about execution cost — then **enforce it with `lint:arch`** so the next change cannot drift.

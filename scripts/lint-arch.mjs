@@ -727,6 +727,7 @@ for (const f of agentFiles) {
   lintLayerImports(f, src)
   lintModuleState(f, src)
   lintNoAls(f, src)
+  lintFlatControlFlow(f, src)
 }
 
 lintServerForbiddenTrees()
@@ -735,6 +736,7 @@ const serverFiles = walk(SERVER_SRC)
 for (const f of serverFiles) {
   const src = readFileSync(f, "utf8")
   lintServerLayerImports(f, src)
+  lintFlatControlFlow(f, src)
 }
 
 lintSyncForbiddenTrees()
@@ -744,6 +746,7 @@ for (const f of syncFiles) {
   const src = readFileSync(f, "utf8")
   lintSyncLayerImports(f, src)
   lintSyncModuleState(f, src)
+  lintFlatControlFlow(f, src)
 }
 
 lintUiForbiddenTrees()
@@ -752,6 +755,67 @@ const uiFiles = existsSync(UI_SRC) ? walk(UI_SRC) : []
 for (const f of uiFiles) {
   const src = readFileSync(f, "utf8")
   lintUiLayerImports(f, src)
+  lintFlatControlFlow(f, src)
+}
+
+/**
+ * Flat control flow (UI + Node): ban nested named functions that register
+ * listeners or repeating timers from inside a hot-path handler — hides
+ * dependencies, allocates per call, raises cognitive load. One-shot
+ * setTimeout(() => ...) arrows are fine (not flagged). Composition/setup
+ * factories (create*, start*, boot*, ...) may still wire listeners once.
+ * See .cursor/rules/first-principles.mdc — Flat control flow.
+ */
+function lintFlatControlFlow(file, src) {
+  if (!/\.(tsx?|jsx?)$/.test(file)) return
+
+  // Line comments only — avoid catastrophic regex on large quoted blobs.
+  const lines = src.replace(/\/\/.*$/gm, "").split("\n")
+  let braceDepth = 0
+  /** @type {{ name: string, depth: number, line: number }[]} */
+  const fnStack = []
+  let useEffectDepth = 0
+
+  const SETUP_OUTER = /^(create|make|build|start|boot|wire|install|listen|setup|init)[A-Z_]/
+  const HOT_OUTER = /^(on|handle|process|run|execute|dispatch)[A-Z]|Pointer|Mouse|Touch|Drag|Down|Up|Move|Request|Message|Chunk|Data|Event/
+  const LISTENER = /(?:window|document)\s*\.\s*addEventListener\s*\(|\.\s*on\s*\(|\.\s*once\s*\(|\bsetInterval\s*\(/
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    const trimmed = line.trim()
+
+    if (/\buse(Layout)?Effect\s*\(/.test(line)) {
+      useEffectDepth = braceDepth + 1
+    }
+
+    const fnMatch = trimmed.match(/^(?:export\s+)?(?:async\s+)?function\s+([A-Za-z0-9_]+)\s*\(/)
+    if (fnMatch) {
+      fnStack.push({ name: fnMatch[1], depth: braceDepth, line: i + 1 })
+    }
+
+    if (LISTENER.test(line) && useEffectDepth === 0 && fnStack.length >= 2) {
+      const outer = fnStack[fnStack.length - 2]
+      const inner = fnStack[fnStack.length - 1]
+      if (!SETUP_OUTER.test(outer.name) && (HOT_OUTER.test(outer.name) || HOT_OUTER.test(inner.name))) {
+        fail(file, inner.line, "flat-control-flow",
+          `Nested function "${inner.name}" inside "${outer.name}" registers a listener or repeating timer. ` +
+            `Keep control flow flat: peer handlers + explicit state (ref/params); wire listeners at setup. ` +
+            `One-shot setTimeout(() => ...) is fine. See .cursor/rules/first-principles.mdc`)
+      }
+    }
+
+    for (let c = 0; c < line.length; c++) {
+      const ch = line[c]
+      if (ch === "{") braceDepth++
+      else if (ch === "}") {
+        braceDepth = Math.max(0, braceDepth - 1)
+        if (useEffectDepth > 0 && braceDepth < useEffectDepth) useEffectDepth = 0
+        while (fnStack.length > 0 && fnStack[fnStack.length - 1].depth >= braceDepth) {
+          fnStack.pop()
+        }
+      }
+    }
+  }
 }
 
 lintNoDeepPackageImports(SERVER_SRC, "server")

@@ -75,6 +75,8 @@ interface LayoutState {
   addView: (name: string) => string
   removeView: (id: string) => void
   renameView: (id: string, name: string) => void
+  /** Move a view tab to a new index in the tab strip. */
+  reorderViews: (viewId: string, toIndex: number) => void
 
   addWidget: (viewId: string, type: WidgetType) => void
   removeWidget: (viewId: string, tileId: string) => void
@@ -123,6 +125,18 @@ export const useLayoutStore = create<LayoutState>()(
       renameView: (id, name) => set((s) => ({
         views: s.views.map((view) => view.id === id ? { ...view, name } : view),
       })),
+
+      reorderViews: (viewId, toIndex) => set((s) => {
+        const fromIndex = s.views.findIndex((view) => view.id === viewId)
+        if (fromIndex < 0) return s
+        const clamped = Math.max(0, Math.min(toIndex, s.views.length - 1))
+        if (fromIndex === clamped) return s
+        const next = [...s.views]
+        const [moved] = next.splice(fromIndex, 1)
+        if (!moved) return s
+        next.splice(clamped, 0, moved)
+        return { views: next }
+      }),
 
       addWidget: (viewId, type) => set((s) => {
         const view = s.views.find((v) => v.id === viewId)

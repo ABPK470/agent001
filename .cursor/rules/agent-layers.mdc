@@ -29,6 +29,8 @@ Before creating or moving a file under `packages/agent/src/`, pick a layer:
 
 **State:** Runtime owns state. Core is pure. Thread deps as parameters. Documented ambient exception: `getTenantConfig` / `setTenantConfig` in `domain/tenant`.
 
+**Flat control flow** (monorepo-wide — `first-principles.mdc`): peer handlers + explicit params/state. Never nest handler functions that `.on` / `addEventListener` from inside a hot path, or register un-cleared repeating timers. Trivial one-shot `setTimeout(() => …)` is fine. Wire listeners at `create*` / `start*` / boot. Enforced by `lint:arch` (`flat-control-flow`).
+
 **Naming:** Say **agent ports** / **agent internal** — the same folder names exist on server and sync.
 
 Full contract: `docs/doctrine.md`.

@@ -51,4 +51,6 @@ alwaysApply: false
 `adapters` → `infra` / `ports` / `internal`  
 `ports` → `ports` / `internal` only  
 
+**Flat control flow** (monorepo-wide — `first-principles.mdc`): peer handlers + explicit params/state. Never nest handler functions that `.on` / `addEventListener` from inside a request/hot path, or register un-cleared repeating timers. Trivial one-shot `setTimeout(() => …)` is fine. Wire listeners at `create*` / `start*` / boot. Enforced by `lint:arch` (`flat-control-flow`).
+
 Full contract: `docs/doctrine.md`. Enforce with `npm run lint:arch`.

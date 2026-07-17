@@ -23,6 +23,8 @@ Do **not** name folders `shell/`, `chrome/`, `kit/`, `surfaces/`, or top-level `
 
 **Forbidden:** `shell/`, `chrome/`, `kit/`, `surfaces/`, `features/`, `api/` (folder), Nest `application/` / `domain/` / `runtime/` / `transport/`.
 
+**Flat control flow** (monorepo-wide — `first-principles.mdc`): peer handlers + explicit state; pure math in `lib/`. Never nest handler functions that register listeners inside a hot path, or un-cleared repeating timers. Trivial one-shot `setTimeout(() => …)` is fine. Same rule as `@mia/server` / `@mia/agent`. Enforced by `lint:arch` (`flat-control-flow`).
+
 **Import direction** (enforced by `npm run lint:arch`):
 
 - `components` → `hooks`, `lib`, `theme`, `enums`, `types` only
