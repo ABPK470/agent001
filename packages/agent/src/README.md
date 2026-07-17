@@ -32,13 +32,13 @@ tools, checks whether the work is done, and repeats until it can answer.
 
 | Old path | New path |
 | -------- | -------- |
-| `application/core/` | `core/` |
-| `application/shell/` | `runtime/` |
-| `application/core/planner*` | `core/plan/`, `core/choose-path/` |
-| `application/core/governance*` | `core/govern-tools/` |
-| `application/shell/agent-cluster/` | `runtime/run-a-goal/` |
-| `application/shell/runtime-cluster/` | `runtime/host/` |
-| `application/shell/delegation` (decision) | `core/delegate-decision/` |
+| `core/` | `core/` |
+| `runtime/` | `runtime/` |
+| `core/planner*` | `core/plan/`, `core/choose-path/` |
+| `core/governance*` | `core/govern-tools/` |
+| `runtime/agent-cluster/` | `runtime/run-a-goal/` |
+| `runtime/runtime-cluster/` | `runtime/host/` |
+| `runtime/delegation` (decision) | `core/delegate-decision/` |
 | shim forests under core | deleted |
 | `domain` flat services | `domain/types/`, `domain/tenant/` (services → core/policy + ports/services) |
 | `tools/mssql*` | `tools/database/` |

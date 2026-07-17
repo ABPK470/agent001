@@ -1,17 +1,8 @@
-import { existsSync, readFileSync } from "node:fs"
-import { resolve } from "node:path"
-
 import type {
   AuthoredSyncDefinition,
   EntityRegistrySyncFlowTemplateId,
   SyncDefinitionRuntimeOptions
 } from "@mia/shared-types"
-
-import {
-  DEFAULT_SYNC_METADATA_PATH,
-  loadSyncMetadataArtifact,
-  syncMetadataFlowTemplateCatalog
-} from "./load-sync-metadata-artifact.js"
 
 export interface SyncDefinitionFlowTemplate {
   label: string
@@ -20,7 +11,7 @@ export interface SyncDefinitionFlowTemplate {
 }
 
 /** Raw shape parsed from disk/metadata — only `version` and `flowTemplates` are read. */
-interface FlowTemplateCatalogInput {
+export interface FlowTemplateCatalogInput {
   version?: unknown
   flowTemplates?: Record<string, unknown>
 }
@@ -31,7 +22,7 @@ export interface SyncDefinitionFlowTemplateCatalog {
 }
 
 export const DEFAULT_SYNC_DEFINITION_FLOW_TEMPLATES_PATH = "deploy/sync/artifacts/flow-templates.json"
-/** Prefer {@link DEFAULT_SYNC_METADATA_PATH} — flow-templates.json is a derived view of sync-metadata.flows. */
+/** Prefer sync-metadata.json — flow-templates.json is a derived view of sync-metadata.flows. */
 
 const KNOWN_FLOW_TEMPLATE_IDS: EntityRegistrySyncFlowTemplateId[] = [
   "contract",
@@ -43,32 +34,7 @@ const KNOWN_FLOW_TEMPLATE_IDS: EntityRegistrySyncFlowTemplateId[] = [
   "metadataOnly"
 ]
 
-export function loadSyncDefinitionFlowTemplateCatalog(
-  projectRoot: string,
-  relPath = DEFAULT_SYNC_DEFINITION_FLOW_TEMPLATES_PATH
-): SyncDefinitionFlowTemplateCatalog {
-  const metadataPath = resolve(projectRoot, DEFAULT_SYNC_METADATA_PATH)
-  if (existsSync(metadataPath)) {
-    return loadFlowTemplateCatalogFromMetadata(projectRoot)
-  }
-
-  const path = resolve(projectRoot, relPath)
-  if (!existsSync(path)) {
-    throw new Error(
-      `Sync definition flow template catalog not found at ${relPath} or ${DEFAULT_SYNC_METADATA_PATH}.`
-    )
-  }
-  const parsed = JSON.parse(readFileSync(path, "utf-8")) as FlowTemplateCatalogInput
-  return parseFlowTemplateCatalog(parsed, relPath)
-}
-
-function loadFlowTemplateCatalogFromMetadata(projectRoot: string): SyncDefinitionFlowTemplateCatalog {
-  const metadata = loadSyncMetadataArtifact(projectRoot)
-  const raw = syncMetadataFlowTemplateCatalog(metadata)
-  return parseFlowTemplateCatalog(raw, DEFAULT_SYNC_METADATA_PATH)
-}
-
-function parseFlowTemplateCatalog(
+export function parseFlowTemplateCatalog(
   parsed: FlowTemplateCatalogInput,
   sourceLabel: string
 ): SyncDefinitionFlowTemplateCatalog {

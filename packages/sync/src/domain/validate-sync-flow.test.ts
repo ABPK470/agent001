@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import { buildFlowCatalog } from "./flow-catalog.js"
-import { loadDeployFlowCatalogForTests } from "./test-flow-catalog.js"
+import { loadDeployFlowCatalogForTests } from "../test-support/test-flow-catalog.js"
 import { validateAuthoredSyncFlow } from "./validate-sync-flow.js"
 
 describe("validateAuthoredSyncFlow", () => {

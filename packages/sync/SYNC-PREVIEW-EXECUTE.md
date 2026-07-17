@@ -48,10 +48,10 @@ flowchart LR
 |-------|------|----------------|
 | HTTP preview | `packages/server/src/api/sync/routes.ts` | `previewSync` |
 | HTTP execute | same | `executeSync` |
-| Agent tool | `packages/sync/src/application/shell/tools.ts` | `createSyncPreviewTool` / execute tool |
+| Agent tool | `packages/sync/src/tools/index.ts` | `createSyncPreviewTool` / execute tool |
 | Plan load | routes + execute | `loadPlan` / `savePlan` |
 
-The **orchestrator** lives under `packages/sync/src/application/shell/orchestrator/`:
+The **orchestrator** lives under `packages/sync/src/runtime/orchestrator/`:
 
 | Module | Role |
 |--------|------|
@@ -596,13 +596,13 @@ Execute post-steps    →  target sprocs / deploy actions (entity-specific)
 
 | Path | Responsibility |
 |------|----------------|
-| `application/shell/orchestrator/preview.ts` | Preview orchestration |
-| `application/shell/orchestrator/execute.ts` | Execute orchestration |
-| `application/shell/orchestrator/metadata-sync.ts` | Transaction + FK toggles |
-| `application/shell/orchestrator/metadata-scope.ts` | `constraintRelaxationTables` / `dataMovementTables` |
-| `application/shell/orchestrator/plan-table.ts` | `validatePlan` + changeSet helpers |
-| `application/shell/orchestrator/apply.ts` | Manifest-driven MERGE + DELETE SQL |
-| `application/shell/plan-store.ts` | Plan types + persistence (`SyncPlanChangeSet`) |
+| `runtime/orchestrator/preview.ts` | Preview orchestration |
+| `runtime/orchestrator/execute.ts` | Execute orchestration |
+| `runtime/orchestrator/metadata-sync.ts` | Transaction + FK toggles |
+| `runtime/orchestrator/metadata-scope.ts` | `constraintRelaxationTables` / `dataMovementTables` |
+| `runtime/orchestrator/plan-table.ts` | `validatePlan` + changeSet helpers |
+| `runtime/orchestrator/apply.ts` | Manifest-driven MERGE + DELETE SQL |
+| `runtime/plan-store.ts` | Plan types + persistence (`SyncPlanChangeSet`) |
 | `domain/diff-engine/change-set.ts` | `buildChangeSet` from diff PK rows |
 | `domain/diff-engine/` | Hash diff + samples + conflicts |
 | `domain/catalog-drift.ts` | Schema compatibility |

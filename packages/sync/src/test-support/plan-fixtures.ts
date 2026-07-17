@@ -2,8 +2,8 @@
  * Shared SyncPlan builders for orchestrator / diff-engine tests.
  */
 
-import type { SyncPlan, SyncPlanChangeSet, SyncPlanTable } from "../application/shell/plan-store.js"
-import { loadDeployFlowCatalogForTests } from "../domain/test-flow-catalog.js"
+import type { SyncPlan, SyncPlanChangeSet, SyncPlanTable } from "../domain/plan.js"
+import { loadDeployFlowCatalogForTests } from "../test-support/test-flow-catalog.js"
 import { ENTITY_SPECS, type EntityFixtureSpec } from "./entity-fixtures.js"
 import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 

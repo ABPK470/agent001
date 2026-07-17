@@ -13,8 +13,12 @@
  * swallowed so it can never break the run's response path.
  */
 
-import { getCatalog, resolveEffectiveMssqlConnection, type AgentHost } from "@mia/agent"
-import type { ResolvedClarification } from "@mia/agent"
+import {
+  getCatalog,
+  resolveEffectiveMssqlConnection,
+  type MssqlCatalogHost,
+  type ResolvedClarification
+} from "@mia/agent"
 import { saveResolvedTerm } from "../../../infra/persistence/memory.js"
 import type { BootHostDeps } from "../../../ports/orchestration.js"
 
@@ -36,19 +40,16 @@ function extractQname(answer: string): string | null {
   return m ? `${m[1]}.${m[2]}` : null
 }
 
-/**
- * Build a minimal host shim from boot deps sufficient for
- * `resolveEffectiveMssqlConnection` + `getCatalog` (they only touch
- * `host.mssql.databases`, `host.mssql.defaultConnection`, and
- * `host.catalog.instances`). The boot catalog Map is the SAME instance shared
- * with every per-run host, so verification here matches what the run sees.
- */
-function bootHostShim(boot: BootHostDeps): AgentHost | null {
+/** Narrow boot deps to the catalog/MSSQL slice — no partial AgentHost cast. */
+function mssqlCatalogHostFromBoot(boot: BootHostDeps): MssqlCatalogHost | null {
   if (!boot.mssql || !boot.catalog) return null
   return {
     mssql: boot.mssql,
-    catalog: { instances: boot.catalog.instances, defaultCachePath: { value: undefined } }
-  } as unknown as AgentHost
+    catalog: {
+      instances: boot.catalog.instances,
+      defaultCachePath: { value: boot.catalog.defaultCachePath.value }
+    }
+  }
 }
 
 /**
@@ -66,7 +67,7 @@ export function persistLearnedTermFromResolution(
   if (!qname) return
 
   try {
-    const host = bootHostShim(boot)
+    const host = mssqlCatalogHostFromBoot(boot)
     if (!host) return
     const connection = resolveEffectiveMssqlConnection(host, goal)
     const catalog = getCatalog(host, connection)

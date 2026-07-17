@@ -5,7 +5,7 @@ import { join, resolve } from "node:path"
 import { afterEach, describe, expect, it } from "vitest"
 
 import type { SyncRuntimeHost } from "../ports/host.js"
-import { createPublishedSyncDefinitionRegistry } from "./published-definition-registry.js"
+import { createPublishedSyncDefinitionRegistry } from "../runtime/published-definition-registry.js"
 import {
   getPublishedSyncDefinitionForHost,
   loadPublishedSyncDefinitionBundle

@@ -6,12 +6,12 @@ import { mkdirSync, mkdtempSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join } from "node:path"
 
-import { createPublishedSyncDefinitionRegistry } from "../domain/published-definition-registry.js"
+import { createPublishedSyncDefinitionRegistry } from "../runtime/published-definition-registry.js"
 import { withPermissionDefaults } from "../domain/environments.js"
-import type { MssqlPoolProvider } from "@mia/agent"
+import type { MssqlPoolProvider } from "../ports/host.js"
 import type { SyncRuntimeHost } from "../ports/host.js"
-import { configureSyncOrchestrator } from "../application/shell/orchestrator/db-helpers.js"
-import { configurePlanStore } from "../application/shell/plan-store.js"
+import { configureSyncOrchestrator } from "../runtime/orchestrator/db-helpers.js"
+import { configurePlanStore } from "../runtime/plan-store.js"
 import { writeEntityBundle, type ENTITY_SPECS } from "./entity-fixtures.js"
 
 const tempRoots: string[] = []

@@ -1,10 +1,9 @@
 # domain
 
-Sync domain concepts, rules, and invariants.
+Types and pure helpers only — no `node:fs`, pools, or event emit.
 
-This is the target home for:
+- Entity registry, governance shapes, environment types
+- Pure parse/validate/compile helpers
+- Diff-engine pure SQL string helpers + change-set math
 
-- diff engine (hash compare + `change-set.ts` builder)
-- entity registry logic
-- sync policy/rule logic
-- sync domain types
+Disk loaders and MSSQL runners live in `runtime/`.

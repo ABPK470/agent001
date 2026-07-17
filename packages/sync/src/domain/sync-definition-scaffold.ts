@@ -1,4 +1,3 @@
-import { readFileSync } from "node:fs"
 import { relative, resolve } from "node:path"
 
 import type { AuthoredSyncDefinition, EntityRegistrySyncFlowTemplateId } from "@mia/shared-types"
@@ -9,7 +8,6 @@ import type { EntityDefinition } from "./entity-registry/types.js"
 import {
   defaultSyncDefinitionFlowTemplateId,
   hasSyncDefinitionFlowTemplate,
-  loadSyncDefinitionFlowTemplateCatalog,
   type SyncDefinitionFlowTemplateCatalog
 } from "./sync-definition-flow-templates.js"
 
@@ -22,8 +20,8 @@ export interface SyncDefinitionScaffoldOptions {
   flowTemplateCatalog?: SyncDefinitionFlowTemplateCatalog
 }
 
-export function loadEntityDefinitionsFromDocument(inputPath: string): EntityDefinition[] {
-  const text = readFileSync(inputPath, "utf-8")
+/** Parse entity definitions from YAML text (multi-document). */
+export function parseEntityDefinitionsFromYaml(text: string): EntityDefinition[] {
   return parseAllDocuments(text, { strict: true })
     .filter((document) => document.contents !== null)
     .map((document) => document.toJSON() as EntityDefinition)
@@ -94,9 +92,9 @@ function resolveFlowTemplateCatalog(
   options: SyncDefinitionScaffoldOptions
 ): SyncDefinitionFlowTemplateCatalog {
   if (options.flowTemplateCatalog) return options.flowTemplateCatalog
-  if (!options.projectRoot)
-    throw new Error("projectRoot is required when flowTemplateCatalog is not provided.")
-  return loadSyncDefinitionFlowTemplateCatalog(options.projectRoot)
+  throw new Error(
+    "flowTemplateCatalog is required — load via loadSyncDefinitionFlowTemplateCatalog from @mia/sync."
+  )
 }
 
 function normalizeSourceArtifact(

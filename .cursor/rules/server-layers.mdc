@@ -34,6 +34,16 @@ alwaysApply: false
 
 **Retired top-level names:** `bootstrap/`, `app/`, `features/`, `platform/`, `shared/`.
 
+## Easy mix-ups
+
+| Say | Mean |
+| --- | --- |
+| `api/platform` | Operator HTTP control plane |
+| `infra/` | db / SSE / queue / sandbox / pools |
+| Top-level `adapters/` | `@mia/agent` + `@mia/sync` port implementations |
+| `api/notifications/adapters/` | Delivery adapters for that surface only |
+| `api/runs/prompting/goal-classification` | Prompt assembly — **not** agent `core/goal-intent` |
+
 ## Dependency direction
 
 `api` → `infra` / `adapters` / `ports` / `internal`  

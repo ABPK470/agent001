@@ -5,7 +5,7 @@
 import { existsSync } from "node:fs"
 import { join, resolve } from "node:path"
 
-import { createPublishedSyncDefinitionRegistry } from "../domain/published-definition-registry.js"
+import { createPublishedSyncDefinitionRegistry } from "../runtime/published-definition-registry.js"
 import { withPermissionDefaults } from "../domain/environments.js"
 import type { SyncRuntimeHost } from "../ports/host.js"
 

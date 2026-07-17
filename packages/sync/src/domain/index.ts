@@ -1,8 +1,9 @@
 /**
- * Sync domain barrel.
+ * Sync domain barrel — vocabulary and pure helpers exported for consumers.
+ * Prefer new pure logic under `core/`; I/O drivers under `runtime/`.
  */
 
-export * from "./catalog-drift.js"
+export * from "./plan.js"
 export * from "./compile-sync-definition.js"
 export * from "./definition-selection.js"
 export * from "./entity-instance-ref.js"
@@ -22,8 +23,6 @@ export * from "./sync-scope-resolution.js"
 export * from "./published-definitions.js"
 export * from "./sync-definition-flow-templates.js"
 export * from "./sync-definition-scaffold.js"
-export * from "./load-sync-metadata-artifact.js"
-export * from "./load-strategies-artifact.js"
 export * from "./catalog-definition-parse.js"
 export * from "./flow-catalog.js"
 export * from "./normalize-flow-step.js"

@@ -14,6 +14,9 @@
 
 import type { AgentHost } from "../../../runtime/runtime.js"
 
+/** Host slice that only needs MSSQL registry / pools. */
+type MssqlResolveHost = Pick<AgentHost, "mssql">
+
 /** Case-insensitive lookup against a set of registry keys. */
 export function lookupRegistryKey(keys: Iterable<string>, name: string): string | null {
   for (const key of keys) {
@@ -27,12 +30,12 @@ export function lookupRegistryKey(keys: Iterable<string>, name: string): string 
 }
 
 /** Live connector entries (id + name) from the pool provider, or null when absent. */
-function connectorEntries(host: AgentHost): Array<{ id: string; name: string }> | null {
+function connectorEntries(host: MssqlResolveHost): Array<{ id: string; name: string }> | null {
   const pools = host.mssql.pools
   return pools ? Array.from(pools.list()) : null
 }
 
-export function listMssqlConnectionNames(host: AgentHost): string[] {
+export function listMssqlConnectionNames(host: MssqlResolveHost): string[] {
   const entries = connectorEntries(host)
   if (entries) return entries.map((e) => e.id)
   return Array.from(host.mssql.databases.keys())
@@ -48,7 +51,7 @@ function isDefaultConnectionToken(name: string | null | undefined): boolean {
  * for the legacy databases path). Throws when an explicit name is unknown or no
  * connections are configured.
  */
-export function resolveMssqlConnectionName(host: AgentHost, name?: string | null): string {
+export function resolveMssqlConnectionName(host: MssqlResolveHost, name?: string | null): string {
   const entries = connectorEntries(host)
   if (entries) {
     if (entries.length === 0) {
@@ -98,7 +101,7 @@ export function resolveMssqlConnectionName(host: AgentHost, name?: string | null
 }
 
 /** Resolve `connection` from a tool args object to the canonical connector id. */
-export function resolveToolConnectionArg(host: AgentHost, args: Record<string, unknown>): string {
+export function resolveToolConnectionArg(host: MssqlResolveHost, args: Record<string, unknown>): string {
   const raw = args.connection != null && String(args.connection).trim()
     ? String(args.connection).trim()
     : null
@@ -107,7 +110,7 @@ export function resolveToolConnectionArg(host: AgentHost, args: Record<string, u
 
 /** Non-throwing variant — returns null when resolution fails. */
 export function tryResolveMssqlConnectionName(
-  host: AgentHost,
+  host: MssqlResolveHost,
   name?: string | null
 ): string | null {
   try {

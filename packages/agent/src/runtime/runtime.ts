@@ -14,6 +14,7 @@ export type {
   AgentHost,
   CatalogHost,
   FilesystemHost,
+  MssqlCatalogHost,
   MssqlHost,
   PolicyContext,
   RunContext,

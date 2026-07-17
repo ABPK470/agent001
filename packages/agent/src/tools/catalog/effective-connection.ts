@@ -5,7 +5,7 @@
  * when the user names an environment in prose.
  */
 
-import type { AgentHost } from "../../runtime/runtime.js"
+import type { MssqlCatalogHost } from "../../runtime/runtime.js"
 import { getCatalogConnectionNames } from "./store.js"
 import {
   listMssqlConnectionNames,
@@ -17,7 +17,7 @@ import {
 const GOAL_ENV_RE = /\b(dev|uat|prod|production|development)\b/i
 
 export function resolveEffectiveMssqlConnection(
-  host: AgentHost,
+  host: MssqlCatalogHost,
   goal: string,
   explicitConnection?: string | null
 ): string {

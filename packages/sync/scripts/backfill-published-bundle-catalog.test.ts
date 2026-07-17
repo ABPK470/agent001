@@ -9,7 +9,7 @@ import { join } from "node:path"
 import type { PublishedSyncDefinitionBundle } from "@mia/shared-types"
 import { describe, expect, it } from "vitest"
 
-import { loadDeployFlowCatalogForTests } from "../src/domain/test-flow-catalog.js"
+import { loadDeployFlowCatalogForTests } from "../src/test-support/test-flow-catalog.js"
 import { REPO_ROOT } from "../src/test-support/repo-bundle.js"
 
 describe("backfill published bundle catalog", () => {

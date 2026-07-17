@@ -191,6 +191,12 @@ export interface AgentHost {
   readonly connectors: ConnectorsHost
 }
 
+/**
+ * Narrow host slice for MSSQL connection + catalog lookup.
+ * Prefer this over fabricating a partial {@link AgentHost}.
+ */
+export type MssqlCatalogHost = Pick<AgentHost, "mssql" | "catalog">
+
 // ── RunContext — built per run, passed as a parameter ────────────
 
 /**

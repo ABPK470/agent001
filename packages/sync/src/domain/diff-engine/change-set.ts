@@ -4,7 +4,7 @@
  * @module
  */
 
-import type { SyncPlanChangeRow, SyncPlanChangeSet } from "../../application/shell/plan-store.js"
+import type { SyncPlanChangeRow, SyncPlanChangeSet } from "../../domain/plan.js"
 import type { PkHashRow } from "./types.js"
 
 export function emptyChangeSet(): SyncPlanChangeSet {

@@ -1,4 +1,4 @@
-import type { SyncPlan } from "../application/shell/plan-store.js"
+import type { SyncPlan } from "../domain/plan.js"
 import type { SyncRunStatus } from "../domain/enums.js"
 
 export interface SyncRunStartInput {

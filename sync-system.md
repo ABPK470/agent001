@@ -1120,7 +1120,7 @@ Metadata may already be committed. Check run warnings, Agent/ETL/Gate service UR
 | `expandTreeIds` | `orchestrator/search.ts` |
 | `detectCatalogDrift` | `domain/catalog-drift.ts` |
 | `evaluateFreezeWindows` | `domain/governance/freeze-windows.ts` |
-| `savePlan` / `loadPlan` | `application/shell/plan-store.ts` |
+| `savePlan` / `loadPlan` | `runtime/plan-store.ts` |
 | `publishSyncDefinitionsFromDb` | `server/.../service/definitions.ts` |
 | `parseSyncOperationIntent` | `domain/sync-operation-intent.ts` |
 

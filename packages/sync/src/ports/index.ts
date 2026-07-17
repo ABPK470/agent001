@@ -1,8 +1,7 @@
 /**
- * Sync ports door.
+ * Sync ports — contracts only (no adapter implementations).
  */
 
-export { getMssqlConfig, getPool, type MssqlEntry } from "../adapters/mssql/index.js"
 export type {
   SyncPlan,
   SyncPlanChangeRow,
@@ -14,7 +13,7 @@ export type {
   SyncPlanTable,
   SyncPlanTableStats,
   SyncPlanTotals
-} from "../application/shell/plan-store.js"
+} from "../domain/plan.js"
 export * from "../domain/enums.js"
 export type { EnvAccessMode, EnvRole } from "../domain/enums.js"
 export type { EnvOperation, LoadSyncEnvironmentsResult, SyncEnvironment } from "../domain/environments.js"
@@ -31,6 +30,10 @@ export type {
   SyncRuntimeHost,
   SyncStateHost,
   Tool,
+  ToolMetadata,
+  ExecutableTool,
+  MssqlConnectorPool,
+  MssqlPoolProvider,
   ToolResultArtifactState,
   ToolResultEnvelope
 } from "./host.js"

@@ -1,10 +1,9 @@
 # ports
 
-Contracts owned by `@mia/sync`.
+Contracts owned by `@mia/sync` (say **sync ports** — not server/agent ports).
 
-This is the target home for sync-owned:
+- `*Host` slices, `*Sink`s
+- Tool / `ExecutableTool` shapes (structural with `@mia/agent`)
+- `MssqlPoolProvider` (declared here so sync does not depend on agent)
 
-- sinks
-- stores
-- readers
-- host-facing contracts
+No implementations.

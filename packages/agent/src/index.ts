@@ -87,6 +87,7 @@ export type {
   ConfigureAgentSyncOptions,
   ConfigureMssqlConnection,
   MakeRunContextOptions,
+  MssqlCatalogHost,
   MssqlConnectorPool,
   MssqlEntry,
   MssqlPoolProvider,

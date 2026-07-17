@@ -2,7 +2,7 @@
 /**
  * lint-arch.mjs — architecture / doctrine lint (no ESLint dependency).
  *
- * Enforces docs/doctrine.md hard edges for @mia/agent and @mia/server:
+ * Enforces docs/doctrine.md hard edges for @mia/agent, @mia/server, @mia/sync:
  *
  *   Agent:
  *     1. Forbidden resurrected trees (application/, domain/services/, …)
@@ -15,8 +15,13 @@
  *     6. Forbidden Nest folders under api/ + retired top-level names
  *     7. Shell layer import direction
  *
+ *   Sync (rhymes with agent):
+ *     8. Forbidden application/ tree
+ *     9. Layer import direction (domain/core/runtime/ports/tools/adapters)
+ *    10. Module-level mutable state outside allowlists
+ *
  *   Cross-package:
- *     8. Other packages must not deep-import agent src
+ *    11. Other packages must not deep-import agent or sync src
  *
  * Run: `npm run lint:arch`  (or `node scripts/lint-arch.mjs`)
  */
@@ -272,8 +277,8 @@ function lintNoAls(file, src) {
   }
 }
 
-// ── Rule 5: no deep imports into agent src ──────────────────────
-function lintNoDeepAgentImports(pkgSrc, pkgLabel) {
+// ── Rule 5: no deep imports into agent/sync src ─────────────────
+function lintNoDeepPackageImports(pkgSrc, pkgLabel) {
   if (!existsSync(pkgSrc)) return
   for (const file of walk(pkgSrc)) {
     const src = readFileSync(file, "utf8")
@@ -281,15 +286,21 @@ function lintNoDeepAgentImports(pkgSrc, pkgLabel) {
     for (let i = 0; i < lines.length; i++) {
       const line = lines[i]
       if (/^\s*\/\//.test(line)) continue
-      // relative reach into packages/agent/src
       if (/packages\/agent\/src\//.test(line) && /from\s+["']/.test(line)) {
         fail(file, i + 1, "no-deep-agent-import",
           `${pkgLabel} must import "@mia/agent", not packages/agent/src/**`)
       }
-      // bare deep path alias style
       if (/from\s+["']@mia\/agent\/src\//.test(line)) {
         fail(file, i + 1, "no-deep-agent-import",
           `${pkgLabel} must import "@mia/agent", not @mia/agent/src/**`)
+      }
+      if (/packages\/sync\/src\//.test(line) && /from\s+["']/.test(line)) {
+        fail(file, i + 1, "no-deep-sync-import",
+          `${pkgLabel} must import "@mia/sync", not packages/sync/src/**`)
+      }
+      if (/from\s+["']@mia\/sync\/src\//.test(line)) {
+        fail(file, i + 1, "no-deep-sync-import",
+          `${pkgLabel} must import "@mia/sync", not @mia/sync/src/**`)
       }
     }
   }
@@ -448,6 +459,151 @@ function lintServerLayerImports(file, src) {
   }
 }
 
+// ── Sync: same dialect as agent ─────────────────────────────────
+const SYNC_LAYERS = new Set([
+  "domain",
+  "core",
+  "runtime",
+  "ports",
+  "tools",
+  "adapters",
+  "internal",
+])
+
+const SYNC_ALLOWED = {
+  domain: new Set(["domain", "ports"]),
+  core: new Set(["domain", "ports", "internal"]),
+  runtime: new Set(["core", "domain", "ports", "adapters", "internal", "tools"]),
+  ports: new Set(["domain", "internal"]),
+  tools: new Set(["domain", "core", "runtime", "ports", "adapters", "internal"]),
+  adapters: new Set(["domain", "ports", "internal"]),
+  internal: new Set(["internal"]),
+}
+
+/** Known transitional sync debt — prefer shrinking. */
+const SYNC_LAYER_ALLOWLIST = []
+
+const FORBIDDEN_SYNC_TREES = ["application"]
+
+const SYNC_STATE_ALLOWLIST = new Set([
+  // process-wide freeze map installed at server boot (see docs/doctrine.md)
+  "domain/governance/freeze-windows.ts",
+])
+
+function syncLayerOf(relPath) {
+  const head = relPath.split("/")[0]
+  return SYNC_LAYERS.has(head) ? head : null
+}
+
+function isSyncLayerAllowlisted(fromRel, toRel) {
+  for (const a of SYNC_LAYER_ALLOWLIST) {
+    if (a.from && a.from !== fromRel) continue
+    if (a.fromPrefix && !fromRel.startsWith(a.fromPrefix)) continue
+    if (a.toPrefix && !toRel.startsWith(a.toPrefix)) continue
+    return a
+  }
+  return null
+}
+
+function lintSyncForbiddenTrees() {
+  for (const tree of FORBIDDEN_SYNC_TREES) {
+    const abs = join(SYNC_SRC, tree)
+    if (existsSync(abs)) {
+      fail(abs, 0, "sync-forbidden-tree",
+        `doctrine forbids packages/sync/src/${tree}/ — use core/ + runtime/ (see docs/doctrine.md)`)
+    }
+  }
+}
+
+function lintSyncTopLevel() {
+  if (!existsSync(SYNC_SRC)) return
+  const allowedHeads = new Set([
+    ...SYNC_LAYERS,
+    "test-support",
+    "index.ts",
+  ])
+  for (const name of readdirSync(SYNC_SRC)) {
+    if (name.startsWith(".")) continue
+    const abs = join(SYNC_SRC, name)
+    const st = statSync(abs)
+    if (st.isFile()) {
+      if (name === "index.ts" || name.endsWith(".md")) continue
+      fail(abs, 0, "sync-top-level", `unexpected file at sync src root: ${name}`)
+      continue
+    }
+    if (!allowedHeads.has(name)) {
+      fail(abs, 0, "sync-top-level",
+        `unknown sync top-level "${name}". Allowed: domain, core, runtime, ports, tools, adapters, internal, test-support`)
+    }
+  }
+}
+
+function lintSyncLayerImports(file, src) {
+  const fromRel = relative(SYNC_SRC, file)
+  // Co-located tests may reach into sibling layers; production edges are what we enforce.
+  if (fromRel.endsWith(".test.ts") || fromRel.endsWith(".test.tsx")) return
+  const fromLayer = syncLayerOf(fromRel)
+  if (!fromLayer) return
+
+  const lines = src.split("\n")
+  const importRe = /(?:import|export)\s+(?:type\s+)?(?:[^"'`;]+?\s+from\s+)?["']([^"']+)["']/g
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (/^\s*\/\//.test(line) || /^\s*\*/.test(line)) continue
+    importRe.lastIndex = 0
+    let m
+    while ((m = importRe.exec(line)) !== null) {
+      const spec = m[1]
+      if (!spec.startsWith(".")) continue
+      const targetAbs = resolveImportTarget(file, spec)
+      const toRel = relative(SYNC_SRC, targetAbs)
+      if (toRel.startsWith("..")) continue
+      const toLayer = syncLayerOf(toRel)
+      if (!toLayer || toLayer === fromLayer) continue
+
+      const allowed = SYNC_ALLOWED[fromLayer]
+      if (allowed?.has(toLayer)) continue
+
+      const debt = isSyncLayerAllowlisted(fromRel, toRel)
+      if (debt) continue
+
+      fail(file, i + 1, "sync-layer-import",
+        `${fromLayer} may not import ${toLayer} ("${spec}" → ${toRel}). ` +
+          `Allowed from ${fromLayer}: ${[...allowed].join(", ") || "(none)"}. ` +
+          `See docs/doctrine.md`)
+    }
+  }
+}
+
+function lintSyncModuleState(file, src) {
+  const rel = relative(SYNC_SRC, file)
+  if (SYNC_STATE_ALLOWLIST.has(rel)) return
+  if (rel.startsWith("test-support/")) return
+  if (rel.endsWith(".test.ts") || rel.endsWith(".test.tsx")) return
+
+  const lines = src.split("\n")
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]
+    if (line.length === 0 || /^\s/.test(line)) continue
+    if (line.startsWith("//") || line.startsWith("/*") || line.startsWith("*")) continue
+
+    if (/^(export\s+)?let\s+\w/.test(line)) {
+      fail(file, i + 1, "sync-no-module-let",
+        `top-level "let" — state belongs on SyncHost / runtime (or freeze-window allowlist)`)
+    }
+    if (/^(export\s+)?var\s+\w/.test(line)) {
+      fail(file, i + 1, "sync-no-module-var",
+        `top-level "var" declaration at module scope`)
+    }
+    if (/^export\s+function\s+(get|set|reset)Global[A-Z]/.test(line)) {
+      const name = line.match(/(get|set|reset)Global[A-Za-z]+/)?.[0]
+      fail(file, i + 1, "sync-no-global-getter-setter",
+        `exported "${name}" — thread state via SyncHost`)
+    }
+  }
+}
+
 // ── Run ─────────────────────────────────────────────────────────
 lintForbiddenTrees()
 
@@ -467,14 +623,24 @@ for (const f of serverFiles) {
   lintServerLayerImports(f, src)
 }
 
-lintNoDeepAgentImports(SERVER_SRC, "server")
-lintNoDeepAgentImports(SYNC_SRC, "sync")
-lintNoDeepAgentImports(UI_SRC, "ui")
+lintSyncForbiddenTrees()
+lintSyncTopLevel()
+const syncFiles = walk(SYNC_SRC)
+for (const f of syncFiles) {
+  const src = readFileSync(f, "utf8")
+  lintSyncLayerImports(f, src)
+  lintSyncModuleState(f, src)
+}
+
+lintNoDeepPackageImports(SERVER_SRC, "server")
+lintNoDeepPackageImports(SYNC_SRC, "sync")
+lintNoDeepPackageImports(UI_SRC, "ui")
+lintNoDeepPackageImports(AGENT_SRC, "agent")
 
 if (errors.length === 0) {
   console.log(
-    `lint-arch: ${agentFiles.length} agent + ${serverFiles.length} server files OK ` +
-      `(${LAYER_ALLOWLIST.length} agent / ${SERVER_LAYER_ALLOWLIST.length} server debt allowlists).`,
+    `lint-arch: ${agentFiles.length} agent + ${serverFiles.length} server + ${syncFiles.length} sync files OK ` +
+      `(${LAYER_ALLOWLIST.length} agent / ${SERVER_LAYER_ALLOWLIST.length} server / ${SYNC_LAYER_ALLOWLIST.length} sync debt allowlists).`,
   )
   process.exit(0)
 }

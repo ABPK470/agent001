@@ -1,4 +1,4 @@
-import type { AgentHost } from "../../runtime/runtime.js"
+import type { AgentHost, MssqlCatalogHost } from "../../runtime/runtime.js"
 import { tryResolveMssqlConnectionName } from "../database/mssql/resolve-connection.js"
 import { CatalogGraph } from "./graph/index.js"
 import type { CatalogBuildOptions, CatalogSnapshot } from "./types.js"
@@ -66,7 +66,7 @@ export async function buildCatalog(
 }
 
 /** Get a previously built/loaded catalog. */
-export function getCatalog(host: AgentHost, connection = "default"): CatalogGraph | null {
+export function getCatalog(host: MssqlCatalogHost, connection = "default"): CatalogGraph | null {
   if (host.catalog.instances.size === 0) return null
   const resolved = tryResolveMssqlConnectionName(host, connection)
   if (resolved) {
@@ -88,15 +88,15 @@ export function getCatalog(host: AgentHost, connection = "default"): CatalogGrap
 }
 
 /** Return the name of every loaded connection, in insertion order. */
-export function getCatalogConnectionNames(host: AgentHost): string[] {
+export function getCatalogConnectionNames(host: MssqlCatalogHost): string[] {
   return Array.from(host.catalog.instances.keys())
 }
 
-export function hasCatalog(host: AgentHost): boolean {
+export function hasCatalog(host: MssqlCatalogHost): boolean {
   return host.catalog.instances.size > 0
 }
 
-export function getCatalogPromptSummary(host: AgentHost, connection = "default"): string {
+export function getCatalogPromptSummary(host: MssqlCatalogHost, connection = "default"): string {
   return getCatalog(host, connection)?.promptSummary() ?? ""
 }
 
@@ -105,6 +105,6 @@ export function getCatalogPromptSummary(host: AgentHost, connection = "default")
  * catalog has been built yet. Cheap, pure — safe to call on every
  * memory write.
  */
-export function getCatalogSchemaFingerprint(host: AgentHost, connection = "default"): string | null {
+export function getCatalogSchemaFingerprint(host: MssqlCatalogHost, connection = "default"): string | null {
   return getCatalog(host, connection)?.schemaFingerprint() ?? null
 }

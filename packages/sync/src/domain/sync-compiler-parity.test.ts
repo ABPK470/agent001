@@ -18,7 +18,7 @@ import {
   scaffoldSyncDefinition,
   shippedStrategyById,
 } from "@mia/sync"
-import { loadDeployFlowCatalogForTests } from "./test-flow-catalog.js"
+import { loadDeployFlowCatalogForTests } from "../test-support/test-flow-catalog.js"
 import { afterEach, describe, expect, it } from "vitest"
 
 const repoRoot = resolve(import.meta.dirname, "../../../..")

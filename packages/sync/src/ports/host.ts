@@ -1,11 +1,28 @@
 import type sql from "mssql"
-import type { MssqlPoolProvider } from "@mia/agent"
-import type { SyncPlan } from "../application/shell/plan-store.js"
+import type { SyncPlan } from "../domain/plan.js"
 import type { ToolControlDirective, ToolOutcomeSeverity } from "../domain/enums.js"
 import type { SyncEnvironment } from "../domain/environments.js"
 import type { PublishedSyncDefinitionRegistry } from "../domain/published-definition-registry.js"
 import type { SyncEventSink } from "./events.js"
 import type { SyncRunSink } from "./run-sink.js"
+
+/** Live connector-keyed pool handle resolved through {@link MssqlPoolProvider}. */
+export interface MssqlConnectorPool {
+  connectorId: string
+  pool: sql.ConnectionPool
+  config: sql.config
+  writeEnabled: boolean
+  knowledge: string | null
+}
+
+/** Resolve MSSQL pools by connector id or name (live read). */
+export interface MssqlPoolProvider {
+  get(connectorId: string): Promise<MssqlConnectorPool>
+  getByName(name: string): Promise<MssqlConnectorPool>
+  configOf(connectorId: string): sql.config | undefined
+  list(): readonly { id: string; name: string }[]
+  invalidate(connectorId: string): void
+}
 
 export interface ToolResultArtifactState {
   readonly path: string
@@ -31,6 +48,16 @@ export interface Tool {
   readonly parameters: Record<string, unknown>
   execute(args: Record<string, unknown>): Promise<string | ToolResultEnvelope>
 }
+
+/** Metadata the runtime and LLM need to advertise a tool without binding execution. */
+export interface ToolMetadata {
+  readonly name: string
+  readonly description: string
+  readonly parameters: Record<string, unknown>
+}
+
+/** Fully bound executable tool — same shape as {@link Tool}. */
+export type ExecutableTool = Tool
 
 export interface MssqlEntry {
   config: sql.config

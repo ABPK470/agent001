@@ -29,4 +29,6 @@ Before creating or moving a file under `packages/agent/src/`, pick a layer:
 
 **State:** Runtime owns state. Core is pure. Thread deps as parameters. Documented ambient exception: `getTenantConfig` / `setTenantConfig` in `domain/tenant`.
 
+**Naming:** Say **agent ports** / **agent internal** — the same folder names exist on server and sync.
+
 Full contract: `docs/doctrine.md`.

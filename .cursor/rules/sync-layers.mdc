@@ -1,0 +1,34 @@
+---
+description: Enforce @mia/sync layer doctrine when adding or moving files
+globs: packages/sync/**/*
+alwaysApply: false
+---
+
+# Sync layer doctrine
+
+`@mia/sync` rhymes with `@mia/agent`: **runtime owns I/O; core is pure; domain is vocabulary.**
+
+| Kind of code | Put it in |
+| --- | --- |
+| Types, enums, pure parse/validate, pure SQL string helpers | `domain/` |
+| Pure proposer / ranking / annotation | `core/` |
+| Preview/execute, plan store, disk loaders, MSSQL query runners | `runtime/` |
+| Host / sink / tool / pool contracts | `ports/` |
+| Agent-facing `create*Tool` factories | `tools/` |
+| Thin MSSQL pool helpers | `adapters/` |
+| Test hosts / fixtures | `test-support/` |
+
+**Do not** resurrect `application/`, `application/core/`, or `application/shell/`.
+
+**Import direction** (enforced by `npm run lint:arch`):
+
+- `domain` → `domain`, `ports` (host type-imports only)
+- `core` → `domain`, `ports`, `internal`
+- `runtime` → `core`, `domain`, `ports`, `adapters`, `internal`, `tools`
+- Outside the package: import `@mia/sync` only
+
+**State:** Runtime / SyncHost owns state. Documented ambient exception: freeze-window registry in `domain/governance/freeze-windows.ts`.
+
+**Dependency:** Sync must not depend on `@mia/agent` (structural tool/host compatibility only).
+
+Full contract: `docs/doctrine.md`.

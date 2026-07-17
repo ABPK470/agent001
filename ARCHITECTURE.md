@@ -27,11 +27,11 @@ What it means in practice:
   closure. There is no `AsyncLocalStorage` carrying
   request state.
 
-`scripts/lint-arch.mjs` (`npm run lint:arch`) enforces this: agent layer
-import direction, forbidden resurrected trees (`application/`,
-`domain/services/`, …), module-level mutable state outside allowlists, exported
-`getGlobal*` / `setGlobal*`, `new AsyncLocalStorage`, and deep imports into
-`packages/agent/src/**` from other packages.
+`scripts/lint-arch.mjs` (`npm run lint:arch`) enforces this: agent + sync layer
+import direction, server shell folders, forbidden resurrected trees
+(`application/`, `domain/services/`, …), module-level mutable state outside
+allowlists, exported `getGlobal*` / `setGlobal*`, `new AsyncLocalStorage`, and
+deep imports into `packages/agent/src/**` or `packages/sync/src/**`.
 
 The full rationale lives in [docs/doctrine.md](docs/doctrine.md); the migration
 history is in [P&A_refactor.md](P&A_refactor.md).
@@ -75,8 +75,8 @@ Dependency direction is strict and one-way:
 
 - `ui` → `shared-types` / `shared-enums` (and the server over HTTP)
 - `server` → `agent`, `sync`, `shared-*`
-- `agent` → `shared-*` (and a **type-only** awareness from `sync` for tool signatures)
-- `sync` → `shared-*` + `mssql` (it has **no** runtime dependency on the agent)
+- `agent` → `shared-*` + `@mia/sync` (sync host vocabulary / tools)
+- `sync` → `shared-*` + `mssql` (**no** dependency on `@mia/agent`; tool shapes are structural)
 
 `@mia/server` is the only package that knows about infrastructure. Everything
 below it is reusable and testable in isolation.
@@ -228,7 +228,7 @@ Each folder under `api/` is a product HTTP surface. Thin surfaces are a single
 
 `service/` · `types/` · `state/` · `handlers/` · `adapters/` · (`runs/prompting/`)
 
-Never Nest names (`application/`, `domain/`, `runtime/`, `transport/`).
+Never Nest names (`runtime/` / `core/`, `domain/`, `runtime/`, `transport/`).
 See [docs/doctrine.md](docs/doctrine.md). Surfaces include `runs`, `sync`,
 `platform` (operator control plane), `auth`, `notifications`, `policies`, …
 
@@ -289,46 +289,51 @@ An independent engine that reconciles **data between two Microsoft SQL Server
 databases**: it computes a deterministic plan to make a target database's rows
 match a source's, then applies it. It is **MSSQL-specific by design** — the
 diff algorithm is hand-written T-SQL (`HASHBYTES`, `CONCAT_WS`,
-`INFORMATION_SCHEMA`, `MERGE`, SQL Server `CONVERT` style codes) and the
-domain code passes the `mssql` driver's own `ConnectionPool` type directly, so
-there is no SQL-dialect abstraction to swap. "SQL" here means SQL Server, not
-"any RDBMS." It has **no runtime dependency on the agent** — only a type-only
-import for tool signatures.
+`INFORMATION_SCHEMA`, `MERGE`, SQL Server `CONVERT` style codes) and runtime
+code passes the `mssql` driver's own `ConnectionPool` type directly, so there
+is no SQL-dialect abstraction to swap. "SQL" here means SQL Server, not
+"any RDBMS." It has **no dependency on `@mia/agent`** — tool/host shapes are
+structural; the server wires both packages.
 
 ### Folder structure
 
 ```
 packages/sync/src/
 ├── index.ts          # Public API barrel
-├── domain/           # Pure reconciliation concepts (no I/O)
-│   ├── diff-engine/  # Content-hash row comparison
-│   ├── entity-registry/, governance/, recipes.ts, environments.ts, …
-├── application/
-│   ├── core/         # Pure proposer: rank & annotate conflicts
-│   └── shell/        # Stateful orchestration: preview, execute, apply, plan store, sinks
-├── adapters/         # MSSQL connection/pool configuration
-└── ports/            # Host, event sink, run sink interfaces
+├── domain/           # Types + pure helpers (no fs / pools / emit)
+│   ├── diff-engine/  # Pure SQL string helpers + change-set math
+│   ├── entity-registry/, governance/, environments types, …
+├── core/             # Pure proposer: rank & annotate conflicts
+├── runtime/          # Preview, execute, plan store, loaders, diff I/O
+├── ports/            # Host, sinks, tool contracts, pool provider
+├── tools/            # Agent-facing create*Tool factories
+├── adapters/         # Thin MSSQL pool helpers
+├── internal/
+└── test-support/
 ```
+
+Same dialect as `@mia/agent`. Enforce with `npm run lint:arch`. Details in
+[docs/doctrine.md](docs/doctrine.md).
 
 ### The flow
 
-1. **Preview** (`application/shell/orchestrator/preview.ts`) — for each table,
-   the **diff-engine** computes a row-level `HASHBYTES('SHA2_256', …)` over
+1. **Preview** (`runtime/orchestrator/preview.ts`) — for each table,
+   `runtime/diff-engine` computes a row-level `HASHBYTES('SHA2_256', …)` over
    canonicalized column values on both source and target, classifying every row
    as INSERT / UPDATE / DELETE. Determinism is enforced with fixed session
    settings and explicit casting; volatile columns (`validFrom`, `validTo`,
    identity PKs, …) are excluded. The result is a `SyncPlan`.
-2. **Propose** (`application/core/proposer/`) — pure ranking and annotation
+2. **Propose** (`core/proposer/`) — pure ranking and annotation
    passes score and enrich conflicts with resolution metadata.
-3. **Execute** (`application/shell/orchestrator/execute.ts`) — applies the plan
+3. **Execute** (`runtime/orchestrator/execute.ts`) — applies the plan
    (MERGE for upserts, controlled DELETE loops), toggles FK constraints,
    probes triggers and emits archive records, and streams per-table progress.
 4. **Safety rails** — drift revalidation before execution, freeze-window
    governance that blocks operations during maintenance windows, and catalog
    drift policies.
 
-The agent reaches this engine through three tools — `compare_catalogs`,
-`sync_preview`, `sync_execute` — exposed from `application/shell/tools.ts`.
+The agent reaches this engine through tools such as `compare_catalogs`,
+`sync_preview`, and `sync_execute` — factories in `tools/index.ts`.
 
 ---
 

@@ -36,6 +36,6 @@ events to the UI. Composition root of the monorepo shell.
 - Operator control plane = `api/platform/` (not `api/deploy/`).
 - Run prompt / tool-gating pure logic = `api/runs/prompting/`.
 - Inside `api/<surface>/` use `service/` · `types/` · `state/` · `handlers/` —
-  never Nest names (`application/`, `domain/`, `runtime/`, `transport/`).
+  never Nest names (`runtime/` / `core/`, `domain/`, `runtime/`, `transport/`).
 
 See `docs/doctrine.md` for the full shell-layer rules.

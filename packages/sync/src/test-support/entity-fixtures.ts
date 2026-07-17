@@ -3,7 +3,7 @@
  * Mirrors production entity topology without hardcoding orchestrator logic.
  */
 
-import { buildMinimalTestFlowCatalog } from "../domain/test-flow-catalog.js"
+import { buildMinimalTestFlowCatalog } from "./test-flow-catalog.js"
 import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 
 export interface EntityTableFixture {
