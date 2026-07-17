@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest"
 import {
+  insertSlotWouldMove,
   markDragMoved,
   resolveViewTabDrop,
   tabIndexFromClientX,
+  tabInsertSlotFromClientX,
+  toIndexFromInsertSlot,
   type ViewTabDragState,
 } from "./view-tab-dnd"
 
@@ -18,6 +21,26 @@ describe("view-tab-dnd", () => {
     expect(tabIndexFromClientX(rects, 280)).toBe(2)
   })
 
+  it("maps pointer X to insertion slots including after last", () => {
+    const rects = [
+      { left: 0, width: 100 },
+      { left: 100, width: 100 },
+      { left: 200, width: 100 },
+    ]
+    expect(tabInsertSlotFromClientX(rects, 40)).toBe(0)
+    expect(tabInsertSlotFromClientX(rects, 160)).toBe(2)
+    expect(tabInsertSlotFromClientX(rects, 280)).toBe(3)
+  })
+
+  it("converts insert slots to reorder toIndex", () => {
+    expect(toIndexFromInsertSlot(0, 3)).toBe(2)
+    expect(toIndexFromInsertSlot(2, 0)).toBe(0)
+    expect(insertSlotWouldMove(1, 1)).toBe(false)
+    expect(insertSlotWouldMove(1, 2)).toBe(false)
+    expect(insertSlotWouldMove(1, 0)).toBe(true)
+    expect(insertSlotWouldMove(1, 3)).toBe(true)
+  })
+
   it("marks movement past threshold", () => {
     const drag: ViewTabDragState = {
       viewId: "a",
@@ -26,8 +49,8 @@ describe("view-tab-dnd", () => {
       pointerId: 1,
       hasMoved: false,
     }
-    expect(markDragMoved(drag, 11, 10)).toBe(false)
-    expect(markDragMoved(drag, 20, 10)).toBe(true)
+    expect(markDragMoved(drag, 14, 10)).toBe(false)
+    expect(markDragMoved(drag, 23, 10)).toBe(true)
     expect(drag.hasMoved).toBe(true)
   })
 

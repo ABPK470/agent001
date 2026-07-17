@@ -5,10 +5,12 @@
 
 import { useRef, useState, type PointerEvent as ReactPointerEvent, type RefObject } from "react"
 import {
+  insertSlotWouldMove,
   markDragMoved,
   readTabRects,
   resolveViewTabDrop,
-  tabIndexFromClientX,
+  tabInsertSlotFromClientX,
+  toIndexFromInsertSlot,
   type ViewTabDragState,
 } from "../lib/view-tab-dnd"
 import { useLayoutStore } from "../state/layout-store"
@@ -19,10 +21,11 @@ export function useViewTabReorder(
 ) {
   const dragRef = useRef<ViewTabDragState | null>(null)
   const [draggingId, setDraggingId] = useState<string | null>(null)
-  const [dropIndex, setDropIndex] = useState<number | null>(null)
+  /** Insertion gap 0..n while dragging; null when idle or click-without-drag. */
+  const [dropSlot, setDropSlot] = useState<number | null>(null)
 
-  function indexFromPointer(clientX: number): number {
-    return tabIndexFromClientX(readTabRects(tabsRef.current), clientX)
+  function slotFromPointer(clientX: number): number {
+    return tabInsertSlotFromClientX(readTabRects(tabsRef.current), clientX)
   }
 
   function onTabPointerDown(viewId: string, event: ReactPointerEvent<HTMLDivElement>) {
@@ -39,18 +42,25 @@ export function useViewTabReorder(
       pointerId: event.pointerId,
       hasMoved: false,
     }
-
-    const views = useLayoutStore.getState().views
-    setDraggingId(viewId)
-    setDropIndex(views.findIndex((view) => view.id === viewId))
+    // Do not enter drag chrome until the press clears the move threshold —
+    // otherwise a normal click feels like a reorder gesture.
   }
 
   function onTabPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
     const drag = dragRef.current
     if (!drag) return
 
-    markDragMoved(drag, event.clientX, event.clientY)
-    setDropIndex(indexFromPointer(event.clientX))
+    const alreadyDragging = drag.hasMoved
+    const moved = markDragMoved(drag, event.clientX, event.clientY)
+    if (!moved) return
+
+    // Enter drag chrome only after the threshold clears (not on pointer-down).
+    if (!alreadyDragging) setDraggingId(drag.viewId)
+
+    const views = useLayoutStore.getState().views
+    const fromIndex = views.findIndex((view) => view.id === drag.viewId)
+    const slot = slotFromPointer(event.clientX)
+    setDropSlot(insertSlotWouldMove(fromIndex, slot) ? slot : null)
   }
 
   function onTabPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
@@ -60,8 +70,9 @@ export function useViewTabReorder(
     event.currentTarget.releasePointerCapture(drag.pointerId)
 
     const { views, reorderViews, setActiveView } = useLayoutStore.getState()
-    const toIndex = indexFromPointer(event.clientX)
     const fromIndex = views.findIndex((view) => view.id === drag.viewId)
+    const slot = slotFromPointer(event.clientX)
+    const toIndex = toIndexFromInsertSlot(fromIndex, slot)
     const action = resolveViewTabDrop(drag, toIndex, fromIndex)
 
     if (action.kind === "reorder") {
@@ -72,12 +83,12 @@ export function useViewTabReorder(
 
     dragRef.current = null
     setDraggingId(null)
-    setDropIndex(null)
+    setDropSlot(null)
   }
 
   return {
     draggingId,
-    dropIndex,
+    dropSlot,
     onTabPointerDown,
     onTabPointerMove,
     onTabPointerUp,

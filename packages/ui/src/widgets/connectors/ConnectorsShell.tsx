@@ -6,8 +6,8 @@
  * form. All enabled kinds are creatable; Hive stays greyed-out until its thrift binding lands.
  */
 
-import { Plus, Save, Search, Trash2, X } from "lucide-react"
-import { useCallback, useMemo, useRef, useState, type JSX } from "react"
+import { Download, Plus, Save, Search, Trash2, Upload, X } from "lucide-react"
+import { useCallback, useMemo, useRef, useState, type ChangeEvent, type JSX } from "react"
 import { EmptyState } from "../../components/EmptyState"
 import {
   CONNECTOR_KINDS,
@@ -78,10 +78,13 @@ export function ConnectorsShell(): JSX.Element {
   const [form, setForm] = useState<ConnectorFormSnapshot>(() => emptyConnectorFormSnapshot("mssql"))
   const [baseline, setBaseline] = useState<ConnectorFormSnapshot>(() => emptyConnectorFormSnapshot("mssql"))
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
+  const [confirmImportOpen, setConfirmImportOpen] = useState(false)
+  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
   const { toasts, pushToast, dismissToast, clearToasts } = useModalToasts()
 
   const connectors = useConnectors(
-    () => { /* success: list reload is enough */ },
+    () => { /* CRUD success: list reload is enough */ },
     (message) => pushToast(message),
     true,
   )
@@ -185,6 +188,33 @@ export function ConnectorsShell(): JSX.Element {
     if (ok && editingId === id) closeForm()
   }
 
+  function onImportPick(event: ChangeEvent<HTMLInputElement>): void {
+    const file = event.target.files?.[0] ?? null
+    event.target.value = ""
+    if (!file) return
+    setPendingImportFile(file)
+    setConfirmImportOpen(true)
+  }
+
+  async function commitImport(): Promise<void> {
+    const file = pendingImportFile
+    setConfirmImportOpen(false)
+    setPendingImportFile(null)
+    if (!file) return
+    clearToasts()
+    const ok = await connectors.importFile(file)
+    if (ok) {
+      pushToast(`Imported connectors from ${file.name}`)
+      closeForm()
+    }
+  }
+
+  async function exportConnectorsFile(): Promise<void> {
+    clearToasts()
+    const ok = await connectors.exportFile()
+    if (ok) pushToast("Downloaded connectors.json")
+  }
+
   const headerDescription = VIEW_DESCRIPTIONS[view]
   const trimmedQuery = listQuery.trim().toLowerCase()
   const filteredItems = trimmedQuery
@@ -227,6 +257,33 @@ export function ConnectorsShell(): JSX.Element {
                 <div className="flex shrink-0 items-center gap-1.5">
                   {view === "connectors" && (
                     <>
+                      <input
+                        ref={importInputRef}
+                        type="file"
+                        accept="application/json,.json"
+                        className="hidden"
+                        onChange={onImportPick}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => importInputRef.current?.click()}
+                        disabled={connectors.busy || connectors.saving !== null}
+                        className={ICON_BTN}
+                        title="Import connectors.json from this device"
+                        aria-label="Import connectors.json"
+                      >
+                        <Upload size={16} />
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => void exportConnectorsFile()}
+                        disabled={connectors.busy || connectors.saving !== null}
+                        className={ICON_BTN}
+                        title="Export connectors.json to this device (includes secrets)"
+                        aria-label="Export connectors.json"
+                      >
+                        <Download size={16} />
+                      </button>
                       <button type="button" onClick={startCreate} className={ICON_BTN} title="New connector" aria-label="New connector">
                         <Plus size={16} />
                       </button>
@@ -354,6 +411,21 @@ export function ConnectorsShell(): JSX.Element {
               : `Write changes to connector "${form.name.trim()}"?`}
           </p>
         </ModalShell>
+      )}
+
+      {confirmImportOpen && pendingImportFile && (
+        <ConfirmModal
+          title="Import connectors.json?"
+          message={`Upsert connectors from "${pendingImportFile.name}" into this environment? Matching ids are overwritten; secrets in the file replace stored values (masked secrets leave existing ones unchanged).`}
+          confirmLabel="Import"
+          busy={connectors.busy}
+          stackLevel={1}
+          onCancel={() => {
+            setConfirmImportOpen(false)
+            setPendingImportFile(null)
+          }}
+          onConfirm={() => void commitImport()}
+        />
       )}
 
       {connectors.deleting && (

@@ -7,6 +7,7 @@
 import { useCallback, useEffect, useRef, useState } from "react"
 
 import { api } from "../../client/index"
+import { downloadBlob } from "../../lib/userDownload"
 import type { ConnectorAdmin } from "../../types"
 
 export function useConnectors(
@@ -104,6 +105,65 @@ export function useConnectors(
     }
   }
 
+  /** Download connectors.json to the user's machine (secrets included for restore). */
+  async function exportFile(): Promise<boolean> {
+    setBusy(true)
+    try {
+      const payload = await api.exportConnectors({ includeSecrets: true })
+      const blob = new Blob([`${JSON.stringify(payload, null, 2)}\n`], {
+        type: "application/json",
+      })
+      downloadBlob(blob, "connectors.json")
+      notifyRef.current(`Exported ${payload.connectors.length} connector(s)`)
+      return true
+    } catch (error) {
+      notifyErrorRef.current(error instanceof Error ? error.message : String(error))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  /** Upsert connectors from a user-picked connectors.json. */
+  async function importFile(file: File): Promise<boolean> {
+    setBusy(true)
+    try {
+      const text = await file.text()
+      let parsed: unknown
+      try {
+        parsed = JSON.parse(text) as unknown
+      } catch {
+        notifyErrorRef.current("Invalid JSON — expected a connectors.json file.")
+        return false
+      }
+      if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) {
+        notifyErrorRef.current("Invalid connectors.json — expected { version, connectors }.")
+        return false
+      }
+      const body = parsed as { version?: unknown; connectors?: unknown }
+      if (body.version !== 1) {
+        notifyErrorRef.current("Unsupported connectors.json version (expected version: 1).")
+        return false
+      }
+      if (!Array.isArray(body.connectors)) {
+        notifyErrorRef.current("Invalid connectors.json — connectors must be an array.")
+        return false
+      }
+      const result = await api.importConnectors({
+        version: 1,
+        connectors: body.connectors as Array<Record<string, unknown>>,
+      })
+      await load()
+      notifyRef.current(`Imported ${result.imported} connector(s)`)
+      return true
+    } catch (error) {
+      notifyErrorRef.current(error instanceof Error ? error.message : String(error))
+      return false
+    } finally {
+      setBusy(false)
+    }
+  }
+
   return {
     items,
     busy,
@@ -114,6 +174,8 @@ export function useConnectors(
     create,
     save,
     remove,
+    exportFile,
+    importFile,
   }
 }
 
