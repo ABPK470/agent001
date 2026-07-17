@@ -17,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 import { api } from "../../api"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { ToastStack, useWidgetToasts } from "../../hooks/useWidgetToasts"
+import { useContainerSize } from "../../hooks/useContainerSize"
 import { useStore } from "../../store"
 import type { PublishedSyncDefinition, SyncEntityType, SyncEnvironment, SyncPlan } from "../../types"
 import { IconButton, TOOLBAR_ICON } from "../entity-registry/IconButton"
@@ -81,7 +82,10 @@ export function EnvSync() {
   const [searchErr, setSearchErr] = useState<string | null>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const searchBoxRef = useRef<HTMLDivElement>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
   const [searchDraft, setSearchDraft] = useState("")
+  const { width: widgetWidth } = useContainerSize(rootRef)
+  const compact = widgetWidth > 0 && widgetWidth < 860
 
   const srcEnv = useMemo(() => envs.find((entry) => entry.name === source) ?? null, [envs, source])
   const tgtEnv = useMemo(() => envs.find((entry) => entry.name === target) ?? null, [envs, target])
@@ -422,8 +426,8 @@ export function EnvSync() {
   const previewActive = isPreviewInProgress(previewing, previewProgress)
 
   return (
-    <div className="relative h-full overflow-hidden flex flex-col gap-3 text-text pb-1">
-      <WidgetToolbar className="env-sync-toolbar overflow-visible z-20">
+    <div ref={rootRef} className="relative h-full overflow-hidden flex flex-col gap-3 text-text pb-1">
+      <WidgetToolbar compact={compact} className="env-sync-toolbar overflow-visible z-20">
         <WidgetToolbarLeading>
           <label className="env-sync-field">
               <span className="field-label">From</span>

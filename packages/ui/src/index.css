@@ -1052,6 +1052,50 @@ textarea.input {
   }
 }
 
+/* Narrow widget panel — same pattern as Pipelines (widget-toolbar--compact).
+   Desktop / wide panels are unchanged (no .widget-toolbar--compact). */
+.widget-toolbar--compact.env-sync-toolbar .widget-toolbar__leading {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 0.5rem 0.625rem;
+  align-items: center;
+  width: 100%;
+  overflow-x: visible;
+}
+
+.widget-toolbar--compact.env-sync-toolbar .env-sync-field {
+  width: 100%;
+  min-width: 0;
+}
+
+.widget-toolbar--compact.env-sync-toolbar .env-sync-field--entity {
+  grid-column: 1 / -1;
+}
+
+.widget-toolbar--compact.env-sync-toolbar .env-sync-toolbar-divider {
+  display: none;
+}
+
+.widget-toolbar--compact.env-sync-toolbar .env-sync-env-select,
+.widget-toolbar--compact.env-sync-toolbar .env-sync-entity-select {
+  width: auto;
+  min-width: 0;
+  max-width: none;
+  flex: 1 1 auto;
+}
+
+.widget-toolbar--compact.env-sync-toolbar .widget-toolbar__search-row {
+  min-width: 0;
+}
+
+.widget-toolbar--compact.env-sync-toolbar .env-sync-search-wrap {
+  min-width: 0;
+}
+
+.widget-toolbar--compact.env-sync-toolbar .widget-toolbar__trailing {
+  flex-shrink: 0;
+}
+
 .env-sync-toolbar .widget-toolbar__leading {
   gap: 0.5rem;
 }
