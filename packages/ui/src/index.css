@@ -1195,6 +1195,161 @@ textarea.input {
 .active-users-widget {
   font-size: 0.875rem;
   line-height: 1.25rem;
+  container-type: inline-size;
+  container-name: active-users;
+  min-width: 0;
+}
+
+.active-users-widget .au-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+@container active-users (min-width: 520px) {
+  .active-users-widget .au-stat-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container active-users (min-width: 860px) {
+  .active-users-widget .au-stat-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
+}
+
+/* Filter bar — always wraps; compact grid under ~860px (JS class or container) */
+.active-users-widget .au-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.active-users-widget .au-filter-search {
+  flex: 1 1 12rem;
+  min-width: 0;
+}
+
+.active-users-widget .au-filter-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+}
+
+.active-users-widget .au-filter-count {
+  margin-left: auto;
+}
+
+.active-users-widget--compact .au-filter-bar,
+.active-users-widget--stack .au-filter-bar {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    "search count"
+    "filters filters";
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.active-users-widget--compact .au-filter-search,
+.active-users-widget--stack .au-filter-search {
+  grid-area: search;
+  width: 100%;
+  flex: none;
+}
+
+.active-users-widget--compact .au-filter-count,
+.active-users-widget--stack .au-filter-count {
+  grid-area: count;
+  margin-left: 0;
+}
+
+.active-users-widget--compact .au-filter-controls,
+.active-users-widget--stack .au-filter-controls {
+  grid-area: filters;
+}
+
+/* Wide table mode: keep filter as a single wrapping row */
+.active-users-widget--table:not(.active-users-widget--compact) .au-filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+}
+
+.active-users-widget--table:not(.active-users-widget--compact) .au-filter-search {
+  flex: 1 1 12rem;
+  width: auto;
+}
+
+.active-users-widget--table:not(.active-users-widget--compact) .au-filter-count {
+  margin-left: auto;
+}
+
+.active-users-widget .au-user-list {
+  min-width: 0;
+  width: 100%;
+}
+
+.active-users-widget .au-user-card {
+  display: block;
+  min-width: 0;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+/* Metric grid reflows to whatever columns fit — never overflows */
+.active-users-widget .au-card-metrics {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(4.75rem, 1fr));
+  gap: 0.5rem 0.625rem;
+  min-width: 0;
+}
+
+.active-users-widget .au-card-metric {
+  min-width: 0;
+}
+
+.active-users-widget .au-users-table {
+  table-layout: auto;
+  width: 100%;
+}
+
+.active-users-widget .au-th-name,
+.active-users-widget .au-td-name {
+  min-width: 6rem;
+  max-width: 12rem;
+}
+
+.active-users-widget .au-th-upn,
+.active-users-widget .au-td-upn {
+  min-width: 5rem;
+  max-width: 10rem;
+}
+
+.active-users-widget .au-detail-meta-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.75rem 1.25rem;
+}
+
+@container active-users (min-width: 520px) {
+  .active-users-widget .au-detail-meta-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container active-users (min-width: 800px) {
+  .active-users-widget .au-detail-meta-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@container active-users (min-width: 1000px) {
+  .active-users-widget .au-detail-meta-grid {
+    grid-template-columns: repeat(5, minmax(0, 1fr));
+  }
 }
 
 .active-users-widget .au-label {
@@ -1212,17 +1367,32 @@ textarea.input {
   line-height: 1;
 }
 
-/* Reserve scrollbar width so sticky header columns don't shift on expand/collapse */
-.active-users-widget .au-table-scroll {
-  scrollbar-gutter: stable;
+/* Stack: vertical scroll only — never clip columns horizontally */
+.active-users-widget--stack .au-body-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  min-width: 0;
 }
 
-.active-users-widget .au-users-table {
-  table-layout: fixed;
+/* Table: only used when container is wide enough; vertical scroll */
+.active-users-widget--table .au-body-scroll {
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+  min-width: 0;
+}
+
+.active-users-widget .au-run-stack {
+  min-width: 0;
+}
+
+.active-users-widget .au-run-card {
+  min-width: 0;
 }
 
 .active-users-widget .au-detail-panel {
   contain: layout style;
+  min-width: 0;
 }
 
 .active-users-widget .au-detail-header {

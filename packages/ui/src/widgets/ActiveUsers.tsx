@@ -21,9 +21,14 @@
 import type { ReactNode } from "react"
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../api"
+import { useContainerSize } from "../hooks/useContainerSize"
 import { ToastStack, useWidgetToasts } from "../hooks/useWidgetToasts"
 import { useStore } from "../store"
 import { ActiveUsersRunModal, type RunPreview } from "./ActiveUsersRunModal"
+import {
+  WidgetToolbarFilterMenu,
+  WidgetToolbarFilterMenuItem,
+} from "./widget-toolbar"
 import {
   isActiveRunStepEvent,
   isHistoryRefreshEvent,
@@ -75,6 +80,31 @@ type SortKey = "name" | "upn" | "sessions" | "runs24h" | "failed24h" | "tokens24
 type SortDir = "asc" | "desc"
 
 const PAGE_SIZE = 50
+
+/**
+ * Layout rules (container width, not viewport):
+ * 1. Never crush a 13-column table into a narrow panel.
+ * 2. Never clip columns behind overflow — that is not responsiveness.
+ * 3. Stack (cards) is the default. Table only when every column fits
+ *    comfortably with no horizontal scroll.
+ */
+const AU_TABLE_MIN_WIDTH_PX = 1200
+const AU_TABLE_COL_SPAN = 13
+
+const SORT_LABELS: Record<SortKey, string> = {
+  status: "Status",
+  name: "Name",
+  upn: "UPN",
+  sessions: "Sessions",
+  totalRuns: "Total Runs",
+  runs24h: "Runs 24h",
+  failed24h: "Failed 24h",
+  tokens24h: "Tokens 24h",
+  llmCalls24h: "LLM Calls",
+  lastModel: "Model",
+  firstSeen: "First Seen",
+  lastSeen: "Last Seen",
+}
 
 function readSseRunId(data: Record<string, unknown>): string | null {
   const runId = data["runId"]
@@ -131,6 +161,13 @@ export function ActiveUsers(): ReactNode {
   const [lastSeenRange, setLastSeenRange] = useState<"all" | "1h" | "24h" | "7d">("all")
   const [adminBusy, setAdminBusy] = useState<string | null>(null)
   const [runModal, setRunModal] = useState<{ runId: string; preview?: RunPreview } | null>(null)
+  const rootRef = useRef<HTMLDivElement>(null)
+  const { width: widgetWidth } = useContainerSize(rootRef)
+  // Stack by default (including before first measure). Table only when fully fits.
+  const useStack = widgetWidth < AU_TABLE_MIN_WIDTH_PX
+  // Filters collapse whenever we stack — chips fight for width on mid-size panels.
+  const compact = useStack || widgetWidth < 860
+  const tiny = widgetWidth > 0 && widgetWidth < 480
 
   const refreshSummary = useCallback(async () => {
     try {
@@ -326,14 +363,28 @@ export function ActiveUsers(): ReactNode {
     })
   }, [])
 
-  if (loading) return <div className="active-users-widget text-text-muted p-4">Loading…</div>
+  if (loading) {
+    return (
+      <div ref={rootRef} className="active-users-widget text-text-muted p-4">
+        Loading…
+      </div>
+    )
+  }
 
   return (
-    <div className="active-users-widget relative h-full flex flex-col overflow-hidden">
+    <div
+      ref={rootRef}
+      className={[
+        "active-users-widget relative h-full flex flex-col overflow-hidden min-w-0",
+        useStack ? "active-users-widget--stack" : "active-users-widget--table",
+        compact ? "active-users-widget--compact" : "",
+        tiny ? "active-users-widget--tiny" : "",
+      ].filter(Boolean).join(" ")}
+    >
       {/* Stat strip */}
       {summary && (
         <div className="shrink-0 border-b border-border-subtle">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 divide-x divide-border-subtle">
+          <div className="au-stat-grid divide-x divide-border-subtle">
             <Stat label="Online"         value={String(summary.online)}        accent={summary.online > 0 ? "emerald" : undefined} />
             <Stat label="Users (7d)"     value={String(summary.users)} />
             <Stat label="Runs in flight" value={String(summary.runsInFlight)}  accent={summary.runsInFlight > 0 ? "blue" : undefined} />
@@ -343,198 +394,160 @@ export function ActiveUsers(): ReactNode {
         </div>
       )}
 
-      {/* Filter bar */}
-      <div className="shrink-0 px-3 py-2 border-b border-border-subtle flex flex-wrap items-center gap-2">
-        <input
-          className="flex-1 min-w-[180px] bg-transparent text-text placeholder:text-text-muted/50 outline-none border border-border-subtle rounded-md px-2.5 py-1.5 focus:border-accent/50"
-          placeholder="Filter by name, UPN, IP, model…"
-          value={filter}
-          onChange={(e) => setFilter(e.target.value)}
-          spellCheck={false}
-        />
-        {/* Status filter */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          {(["all", "online", "running", "offline"] as const).map((s) => (
-            <button key={s}
-              onClick={() => setStatusFilter(s)}
-              className={`px-2 py-1 rounded-md transition-colors ${
-                statusFilter === s
-                  ? "bg-accent/15 text-accent"
-                  : "text-text-muted hover:text-text hover:bg-overlay-2"
-              }`}
-            >{s}</button>
-          ))}
-        </div>
-        {/* Failed-only toggle */}
-        <button
-          onClick={() => setFailedOnly((v) => !v)}
-          className={`px-2 py-1 rounded-md transition-colors shrink-0 ${
-            failedOnly ? "bg-error-soft text-error" : "text-text-muted hover:text-text hover:bg-overlay-2"
-          }`}
-        >failed only</button>
-        {/* Last seen range */}
-        <div className="flex items-center gap-0.5 shrink-0">
-          {(["all", "1h", "24h", "7d"] as const).map((r) => (
-            <button key={r}
-              onClick={() => setLastSeenRange(r)}
-              className={`px-2 py-1 rounded-md transition-colors ${
-                lastSeenRange === r
-                  ? "bg-accent/15 text-accent"
-                  : "text-text-muted hover:text-text hover:bg-overlay-2"
-              }`}
-            >{r === "all" ? "any time" : `last ${r}`}</button>
-          ))}
-        </div>
-        <span className="au-label tabular-nums shrink-0 ml-auto">
-          {filteredSorted.length} {filteredSorted.length === 1 ? "user" : "users"}
-        </span>
-      </div>
+      <ActiveUsersFilterBar
+        filter={filter}
+        setFilter={setFilter}
+        statusFilter={statusFilter}
+        setStatusFilter={setStatusFilter}
+        failedOnly={failedOnly}
+        setFailedOnly={setFailedOnly}
+        lastSeenRange={lastSeenRange}
+        setLastSeenRange={setLastSeenRange}
+        userCount={filteredSorted.length}
+        compact={compact}
+        tiny={tiny}
+        useStack={useStack}
+        sortKey={sortKey}
+        sortDir={sortDir}
+        onSort={onSort}
+      />
 
-      {/* Scrollable table — responsive column hiding kicks in at narrow
-          widths so the essential cols (status / name / UPN) always fit
-          without horizontal scroll, while richer metrics progressively
-          appear at sm/md/lg/xl. The container still allows
-          overflow-auto as a last-resort fallback. */}
-      <div className="flex-1 min-h-0 au-table-scroll overflow-auto">
-        <table className="au-users-table w-full border-collapse">
-          <colgroup>
-            <col className="w-8" />
-            <col style={{ width: "16%" }} />
-            <col style={{ width: "22%" }} />
-            <col style={{ width: "7%" }} />
-            <col style={{ width: "8%" }} />
-            <col style={{ width: "7%" }} />
-            <col style={{ width: "7%" }} />
-            <col style={{ width: "8%" }} />
-            <col style={{ width: "7%" }} />
-            <col style={{ width: "10%" }} />
-            <col style={{ width: "9%" }} />
-            <col style={{ width: "9%" }} />
-            <col className="w-6" />
-          </colgroup>
-          <thead className="sticky top-0 z-20 bg-surface">
-            <tr className="text-left text-xs uppercase tracking-wider text-text-muted border-b border-border-subtle">
-              <SortTh k="status"     current={sortKey} dir={sortDir} onClick={onSort} className="w-8"    label="" />
-              <SortTh k="name"       current={sortKey} dir={sortDir} onClick={onSort}                     label="Name" />
-              <SortTh k="upn"        current={sortKey} dir={sortDir} onClick={onSort}                     label="UPN / Session" />
-              <SortTh k="sessions"   current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden sm:table-cell" label="Sessions" />
-              <SortTh k="totalRuns"  current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden md:table-cell" label="Total Runs" />
-              <SortTh k="runs24h"    current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden sm:table-cell" label="Runs 24h" />
-              <SortTh k="failed24h"  current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden lg:table-cell" label="Failed 24h" />
-              <SortTh k="tokens24h"  current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden md:table-cell" label="Tokens 24h" />
-              <SortTh k="llmCalls24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right hidden lg:table-cell" label="LLM Calls" />
-              <SortTh k="lastModel"  current={sortKey} dir={sortDir} onClick={onSort} className="hidden lg:table-cell"             label="Model" />
-              <SortTh k="firstSeen"  current={sortKey} dir={sortDir} onClick={onSort} className="hidden xl:table-cell"             label="First Seen" />
-              <SortTh k="lastSeen"   current={sortKey} dir={sortDir} onClick={onSort} className="hidden xl:table-cell"             label="Last Seen" />
-              <th className="py-2 px-3 text-xs w-6 hidden sm:table-cell bg-surface" />
-            </tr>
-          </thead>
-          <tbody>
+      {/* Stack = reflow (no clip). Table = only when container is wide enough for all columns. */}
+      <div className="flex-1 min-h-0 min-w-0 au-body-scroll">
+        {useStack ? (
+          <div className="au-user-list divide-y divide-border-subtle">
             {filteredSorted.map((u) => {
               const live = runsByIdentifier.get(u.identifier) ?? []
               const isOpen = expanded === u.identifier
               const hist = history[u.identifier]
               return (
                 <Fragment key={u.identifier}>
-                  <tr
-                    className={`border-b border-border-subtle cursor-pointer hover:bg-overlay-2 transition-colors ${isOpen ? "bg-overlay-2" : ""}`}
-                    onClick={() => toggle(u.identifier)}
-                  >
-                    {/* Status */}
-                    <td className="py-2 px-3">
-                      {live.length > 0 ? (
-                        <span className="inline-block w-2 h-2 rounded-full bg-info animate-pulse" title={`${live.length} running`} />
-                      ) : (
-                        <span className={`inline-block w-2 h-2 rounded-full ${u.online ? "bg-success" : "bg-text-muted/40"}`}
-                              title={u.online ? "online" : "offline"} />
-                      )}
-                    </td>
-                    {/* Name */}
-                    <td className="py-2 px-3 text-text whitespace-nowrap">
-                      {u.displayName ?? <span className="text-text-muted/60">—</span>}
-                      {u.isAdmin ? (
-                        <span className="ml-2 rounded bg-accent/15 px-1.5 py-0.5 au-label font-semibold text-accent">
-                          admin
-                        </span>
-                      ) : null}
-                      {u.runsFailed24h > 0 && (
-                        <span className="ml-2 text-error">{u.runsFailed24h} fail</span>
-                      )}
-                    </td>
-                    {/* UPN */}
-                    <td className="py-2 px-3 font-mono text-text-muted whitespace-nowrap select-text cursor-text" onClick={(e) => e.stopPropagation()}>
-                      {u.upn ?? (() => {
-                        const isName = u.identifier.startsWith("name:")
-                        const short  = isName ? u.identifier.slice(5) : u.identifier.slice(4, 20)
-                        return <span title={isName ? u.identifier.slice(5) : u.identifier.slice(4)}>anon · {short}</span>
-                      })()}
-                      <CopyBtn value={u.upn ?? u.identifier} label="UPN" />
-                    </td>
-                    {/* Sessions */}
-                    <td className="py-2 px-3 text-right tabular-nums text-text-muted hidden sm:table-cell">{u.sessionCount}</td>
-                    {/* Total Runs */}
-                    <td className="py-2 px-3 text-right tabular-nums text-text hidden md:table-cell">
-                      {u.totalRuns > 0 ? u.totalRuns : <span className="text-text-muted/50">0</span>}
-                    </td>
-                    {/* Runs 24h */}
-                    <td className="py-2 px-3 text-right tabular-nums text-text hidden sm:table-cell">
-                      {u.runs24h > 0 ? u.runs24h : <span className="text-text-muted/50">0</span>}
-                    </td>
-                    {/* Failed 24h */}
-                    <td className="py-2 px-3 text-right tabular-nums hidden lg:table-cell">
-                      {u.runsFailed24h > 0
-                        ? <span className="text-error">{u.runsFailed24h}</span>
-                        : <span className="text-text-muted/50">0</span>}
-                    </td>
-                    {/* Tokens 24h */}
-                    <td className="py-2 px-3 text-right tabular-nums text-text-muted hidden md:table-cell">
-                      {u.totalTokens24h > 0 ? formatCompact(u.totalTokens24h) : <span className="text-text-muted/50">0</span>}
-                    </td>
-                    {/* LLM Calls 24h */}
-                    <td className="py-2 px-3 text-right tabular-nums text-text-muted hidden lg:table-cell">
-                      {u.totalLlmCalls24h > 0 ? u.totalLlmCalls24h : <span className="text-text-muted/50">0</span>}
-                    </td>
-                    {/* Model */}
-                    <td className="py-2 px-3 text-text-muted whitespace-nowrap hidden lg:table-cell">
-                      {u.lastModel ?? <span className="text-text-muted/50">—</span>}
-                    </td>
-                    {/* First Seen */}
-                    <td className="py-2 px-3 text-text-muted whitespace-nowrap hidden xl:table-cell" title={u.firstSeenAt}>
-                      {formatRelative(u.firstSeenAt)}
-                    </td>
-                    {/* Last Seen */}
-                    <td className="py-2 px-3 text-text-muted whitespace-nowrap hidden xl:table-cell" title={u.lastSeenAt}>
-                      {formatRelative(u.lastSeenAt)}
-                    </td>
-                    {/* Expand arrow */}
-                    <td className="py-2 px-3 text-text-muted hidden sm:table-cell">{isOpen ? "▾" : "▸"}</td>
-                  </tr>
+                  <UserCardRow
+                    user={u}
+                    liveCount={live.length}
+                    isOpen={isOpen}
+                    onToggle={() => toggle(u.identifier)}
+                  />
                   {isOpen && (
-                    <tr className="bg-overlay-1">
-                      <td colSpan={13} className="w-0 min-w-0 p-0 align-top">
-                        <UserDetail
-                          user={u}
-                          liveRuns={live}
-                          history={hist}
-                          adminBusy={adminBusy === u.identifier}
-                          onToggleAdmin={(next) => void toggleAdmin(u, next)}
-                          onPageChange={(offset) => void loadHistory(u.identifier, offset)}
-                          onCollapse={() => toggle(u.identifier)}
-                          onRunClick={(runId, preview) => setRunModal({ runId, preview })}
-                        />
-                      </td>
-                    </tr>
+                    <div className="bg-overlay-1 border-b border-border-subtle min-w-0">
+                      <UserDetail
+                        user={u}
+                        liveRuns={live}
+                        history={hist}
+                        stack
+                        adminBusy={adminBusy === u.identifier}
+                        onToggleAdmin={(next) => void toggleAdmin(u, next)}
+                        onPageChange={(offset) => void loadHistory(u.identifier, offset)}
+                        onCollapse={() => toggle(u.identifier)}
+                        onRunClick={(runId, preview) => setRunModal({ runId, preview })}
+                      />
+                    </div>
                   )}
                 </Fragment>
               )
             })}
             {filteredSorted.length === 0 && (
-              <tr><td colSpan={13} className="py-8 text-center text-text-muted">
+              <div className="py-8 text-center text-text-muted">
                 {filter ? "No users match filter." : "No sessions yet."}
-              </td></tr>
+              </div>
             )}
-          </tbody>
-        </table>
+          </div>
+        ) : (
+          <table className="au-users-table w-full border-collapse">
+            <thead className="sticky top-0 z-20 bg-surface">
+              <tr className="text-left text-xs uppercase tracking-wider text-text-muted border-b border-border-subtle">
+                <SortTh k="status" current={sortKey} dir={sortDir} onClick={onSort} className="w-8" label="" />
+                <SortTh k="name" current={sortKey} dir={sortDir} onClick={onSort} className="au-th-name" label="Name" />
+                <SortTh k="upn" current={sortKey} dir={sortDir} onClick={onSort} className="au-th-upn" label="UPN / Session" />
+                <SortTh k="sessions" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Sessions" />
+                <SortTh k="totalRuns" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Total Runs" />
+                <SortTh k="runs24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Runs 24h" />
+                <SortTh k="failed24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Failed 24h" />
+                <SortTh k="tokens24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="Tokens 24h" />
+                <SortTh k="llmCalls24h" current={sortKey} dir={sortDir} onClick={onSort} className="text-right" label="LLM Calls" />
+                <SortTh k="lastModel" current={sortKey} dir={sortDir} onClick={onSort} label="Model" />
+                <SortTh k="firstSeen" current={sortKey} dir={sortDir} onClick={onSort} label="First Seen" />
+                <SortTh k="lastSeen" current={sortKey} dir={sortDir} onClick={onSort} label="Last Seen" />
+                <th className="py-2 px-2 text-xs w-8 bg-surface" aria-hidden />
+              </tr>
+            </thead>
+            <tbody>
+              {filteredSorted.map((u) => {
+                const live = runsByIdentifier.get(u.identifier) ?? []
+                const isOpen = expanded === u.identifier
+                const hist = history[u.identifier]
+                return (
+                  <Fragment key={u.identifier}>
+                    <tr
+                      className={`border-b border-border-subtle cursor-pointer hover:bg-overlay-2 transition-colors ${isOpen ? "bg-overlay-2" : ""}`}
+                      onClick={() => toggle(u.identifier)}
+                    >
+                      <td className="py-2 px-3 w-8">
+                        <UserStatusDot user={u} liveCount={live.length} />
+                      </td>
+                      <td className="py-2 px-3 au-td-name">
+                        <UserNameCell user={u} />
+                      </td>
+                      <td className="py-2 px-3 au-td-upn">
+                        <UserUpnCell user={u} />
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums text-text-muted">{u.sessionCount}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-text">
+                        {u.totalRuns > 0 ? u.totalRuns : <span className="text-text-muted/50">0</span>}
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums text-text">
+                        {u.runs24h > 0 ? u.runs24h : <span className="text-text-muted/50">0</span>}
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums">
+                        {u.runsFailed24h > 0
+                          ? <span className="text-error">{u.runsFailed24h}</span>
+                          : <span className="text-text-muted/50">0</span>}
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums text-text-muted">
+                        {u.totalTokens24h > 0 ? formatCompact(u.totalTokens24h) : <span className="text-text-muted/50">0</span>}
+                      </td>
+                      <td className="py-2 px-3 text-right tabular-nums text-text-muted">
+                        {u.totalLlmCalls24h > 0 ? u.totalLlmCalls24h : <span className="text-text-muted/50">0</span>}
+                      </td>
+                      <td className="py-2 px-3 text-text-muted whitespace-nowrap">
+                        {u.lastModel ?? <span className="text-text-muted/50">—</span>}
+                      </td>
+                      <td className="py-2 px-3 text-text-muted whitespace-nowrap" title={u.firstSeenAt}>
+                        {formatRelative(u.firstSeenAt)}
+                      </td>
+                      <td className="py-2 px-3 text-text-muted whitespace-nowrap" title={u.lastSeenAt}>
+                        {formatRelative(u.lastSeenAt)}
+                      </td>
+                      <td className="py-2 px-2 text-text-muted w-8">{isOpen ? "▾" : "▸"}</td>
+                    </tr>
+                    {isOpen && (
+                      <tr className="bg-overlay-1">
+                        <td colSpan={AU_TABLE_COL_SPAN} className="w-0 min-w-0 p-0 align-top">
+                          <UserDetail
+                            user={u}
+                            liveRuns={live}
+                            history={hist}
+                            stack={false}
+                            adminBusy={adminBusy === u.identifier}
+                            onToggleAdmin={(next) => void toggleAdmin(u, next)}
+                            onPageChange={(offset) => void loadHistory(u.identifier, offset)}
+                            onCollapse={() => toggle(u.identifier)}
+                            onRunClick={(runId, preview) => setRunModal({ runId, preview })}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+              {filteredSorted.length === 0 && (
+                <tr><td colSpan={AU_TABLE_COL_SPAN} className="py-8 text-center text-text-muted">
+                  {filter ? "No users match filter." : "No sessions yet."}
+                </td></tr>
+              )}
+            </tbody>
+          </table>
+        )}
       </div>
 
       {runModal && (
@@ -549,6 +562,311 @@ export function ActiveUsers(): ReactNode {
   )
 }
 
+// ── Filter bar ─────────────────────────────────────────────────
+
+const STATUS_LABELS: Record<"all" | "online" | "running" | "offline", string> = {
+  all: "all",
+  online: "online",
+  running: "running",
+  offline: "offline",
+}
+
+const RANGE_LABELS: Record<"all" | "1h" | "24h" | "7d", string> = {
+  all: "any time",
+  "1h": "last 1h",
+  "24h": "last 24h",
+  "7d": "last 7d",
+}
+
+function ActiveUsersFilterBar({
+  filter,
+  setFilter,
+  statusFilter,
+  setStatusFilter,
+  failedOnly,
+  setFailedOnly,
+  lastSeenRange,
+  setLastSeenRange,
+  userCount,
+  compact,
+  tiny,
+  useStack,
+  sortKey,
+  sortDir,
+  onSort,
+}: {
+  filter: string
+  setFilter: (value: string) => void
+  statusFilter: "all" | "online" | "running" | "offline"
+  setStatusFilter: (value: "all" | "online" | "running" | "offline") => void
+  failedOnly: boolean
+  setFailedOnly: (value: boolean | ((prev: boolean) => boolean)) => void
+  lastSeenRange: "all" | "1h" | "24h" | "7d"
+  setLastSeenRange: (value: "all" | "1h" | "24h" | "7d") => void
+  userCount: number
+  compact: boolean
+  tiny: boolean
+  useStack: boolean
+  sortKey: SortKey
+  sortDir: SortDir
+  onSort: (key: SortKey) => void
+}) {
+  const statusLabel = statusFilter === "all" ? "status" : STATUS_LABELS[statusFilter]
+  const rangeLabel = tiny
+    ? (lastSeenRange === "all" ? "time" : lastSeenRange)
+    : (lastSeenRange === "all" ? "any time" : RANGE_LABELS[lastSeenRange])
+  const sortLabel = `${SORT_LABELS[sortKey]} ${sortDir === "asc" ? "↑" : "↓"}`
+
+  return (
+    <div className="au-filter-bar shrink-0 border-b border-border-subtle px-3 py-2">
+      <input
+        className="au-filter-search bg-transparent text-text placeholder:text-text-muted/50 outline-none border border-border-subtle rounded-md px-2.5 py-1.5 focus:border-accent/50"
+        placeholder="Filter by name, UPN, IP, model…"
+        value={filter}
+        onChange={(e) => setFilter(e.target.value)}
+        spellCheck={false}
+      />
+
+      <div className="au-filter-controls">
+        {!compact ? (
+          <>
+            <div className="au-filter-inline flex items-center gap-0.5 shrink-0">
+              {(["all", "online", "running", "offline"] as const).map((s) => (
+                <button
+                  key={s}
+                  type="button"
+                  onClick={() => setStatusFilter(s)}
+                  className={`px-2 py-1 rounded-md transition-colors ${
+                    statusFilter === s
+                      ? "bg-accent/15 text-accent"
+                      : "text-text-muted hover:text-text hover:bg-overlay-2"
+                  }`}
+                >
+                  {s}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              onClick={() => setFailedOnly((v) => !v)}
+              className={`px-2 py-1 rounded-md transition-colors shrink-0 ${
+                failedOnly ? "bg-error-soft text-error" : "text-text-muted hover:text-text hover:bg-overlay-2"
+              }`}
+            >
+              failed only
+            </button>
+            <div className="au-filter-inline flex items-center gap-0.5 shrink-0">
+              {(["all", "1h", "24h", "7d"] as const).map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  onClick={() => setLastSeenRange(r)}
+                  className={`px-2 py-1 rounded-md transition-colors ${
+                    lastSeenRange === r
+                      ? "bg-accent/15 text-accent"
+                      : "text-text-muted hover:text-text hover:bg-overlay-2"
+                  }`}
+                >
+                  {RANGE_LABELS[r]}
+                </button>
+              ))}
+            </div>
+          </>
+        ) : (
+          <>
+            <WidgetToolbarFilterMenu
+              label={statusLabel}
+              active={statusFilter !== "all"}
+              ariaLabel="Filter by status"
+            >
+              {(["all", "online", "running", "offline"] as const).map((s) => (
+                <WidgetToolbarFilterMenuItem
+                  key={s}
+                  label={STATUS_LABELS[s]}
+                  active={statusFilter === s}
+                  onClick={() => setStatusFilter(s)}
+                />
+              ))}
+            </WidgetToolbarFilterMenu>
+            <button
+              type="button"
+              onClick={() => setFailedOnly((v) => !v)}
+              className={`px-2 py-1 rounded-md text-sm transition-colors shrink-0 ${
+                failedOnly ? "bg-error-soft text-error" : "text-text-muted hover:text-text hover:bg-overlay-2"
+              }`}
+            >
+              {tiny ? "failed" : "failed only"}
+            </button>
+            <WidgetToolbarFilterMenu
+              label={rangeLabel}
+              active={lastSeenRange !== "all"}
+              ariaLabel="Filter by last seen"
+            >
+              {(["all", "1h", "24h", "7d"] as const).map((r) => (
+                <WidgetToolbarFilterMenuItem
+                  key={r}
+                  label={RANGE_LABELS[r]}
+                  active={lastSeenRange === r}
+                  onClick={() => setLastSeenRange(r)}
+                />
+              ))}
+            </WidgetToolbarFilterMenu>
+          </>
+        )}
+        {useStack && (
+          <WidgetToolbarFilterMenu
+            label={sortLabel}
+            active
+            ariaLabel="Sort users"
+          >
+            {(Object.keys(SORT_LABELS) as SortKey[]).map((k) => (
+              <WidgetToolbarFilterMenuItem
+                key={k}
+                label={SORT_LABELS[k]}
+                active={sortKey === k}
+                onClick={() => onSort(k)}
+              />
+            ))}
+          </WidgetToolbarFilterMenu>
+        )}
+      </div>
+
+      <span className="au-filter-count au-label tabular-nums shrink-0">
+        {userCount} {userCount === 1 ? "user" : "users"}
+      </span>
+    </div>
+  )
+}
+
+// ── User row cells (shared by list + table layouts) ─────────────
+
+function UserStatusDot({ user, liveCount }: { user: UserRow; liveCount: number }) {
+  if (liveCount > 0) {
+    return (
+      <span
+        className="inline-block w-2 h-2 rounded-full bg-info animate-pulse"
+        title={`${liveCount} running`}
+      />
+    )
+  }
+  return (
+    <span
+      className={`inline-block w-2 h-2 rounded-full ${user.online ? "bg-success" : "bg-text-muted/40"}`}
+      title={user.online ? "online" : "offline"}
+    />
+  )
+}
+
+function UserNameCell({ user }: { user: UserRow }) {
+  return (
+    <div className="min-w-0">
+      <div className="text-text truncate">
+        {user.displayName ?? <span className="text-text-muted/60">—</span>}
+        {user.isAdmin ? (
+          <span className="ml-2 rounded bg-accent/15 px-1.5 py-0.5 au-label font-semibold text-accent">
+            admin
+          </span>
+        ) : null}
+        {user.runsFailed24h > 0 && (
+          <span className="ml-2 text-error">{user.runsFailed24h} fail</span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function UserUpnCell({ user }: { user: UserRow }) {
+  return (
+    <div
+      className="font-mono text-text-muted truncate select-text cursor-text"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {user.upn ?? (() => {
+        const isName = user.identifier.startsWith("name:")
+        const short = isName ? user.identifier.slice(5) : user.identifier.slice(4, 20)
+        return (
+          <span title={isName ? user.identifier.slice(5) : user.identifier.slice(4)}>
+            anon · {short}
+          </span>
+        )
+      })()}
+      <CopyBtn value={user.upn ?? user.identifier} label="UPN" />
+    </div>
+  )
+}
+
+function CardMetric({ label, value, danger }: { label: string; value: ReactNode; danger?: boolean }) {
+  return (
+    <div className="au-card-metric min-w-0">
+      <div className="au-label">{label}</div>
+      <div className={`tabular-nums text-sm truncate ${danger ? "text-error" : "text-text"}`}>{value}</div>
+    </div>
+  )
+}
+
+function UserCardRow({
+  user,
+  liveCount,
+  isOpen,
+  onToggle,
+}: {
+  user: UserRow
+  liveCount: number
+  isOpen: boolean
+  onToggle: () => void
+}) {
+  const upnLabel = user.upn ?? (() => {
+    const isName = user.identifier.startsWith("name:")
+    return isName ? user.identifier.slice(5) : `anon · ${user.identifier.slice(4, 12)}`
+  })()
+
+  return (
+    <button
+      type="button"
+      className={`au-user-card w-full text-left px-3 py-3 hover:bg-overlay-2 transition-colors ${isOpen ? "bg-overlay-2" : ""}`}
+      onClick={onToggle}
+    >
+      <div className="flex items-start gap-2.5 min-w-0">
+        <span className="shrink-0 pt-1.5">
+          <UserStatusDot user={user} liveCount={liveCount} />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="flex items-center gap-2 min-w-0">
+            <span className="text-text truncate font-medium">
+              {user.displayName ?? <span className="text-text-muted/60">—</span>}
+            </span>
+            {user.isAdmin ? (
+              <span className="shrink-0 rounded bg-accent/15 px-1.5 py-0.5 au-label font-semibold text-accent">
+                admin
+              </span>
+            ) : null}
+          </span>
+          <span
+            className="mt-0.5 flex items-center gap-1 font-mono text-xs text-text-muted truncate"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <span className="truncate">{upnLabel}</span>
+            <CopyBtn value={user.upn ?? user.identifier} label="UPN" />
+          </span>
+        </span>
+        <span className="shrink-0 pt-1 text-text-muted">{isOpen ? "▾" : "▸"}</span>
+      </div>
+
+      <div className="au-card-metrics mt-3">
+        <CardMetric label="Sessions" value={user.sessionCount} />
+        <CardMetric label="Total Runs" value={user.totalRuns} />
+        <CardMetric label="Runs 24h" value={user.runs24h} />
+        <CardMetric label="Failed 24h" value={user.runsFailed24h} danger={user.runsFailed24h > 0} />
+        <CardMetric label="Tokens 24h" value={user.totalTokens24h > 0 ? formatCompact(user.totalTokens24h) : "0"} />
+        <CardMetric label="LLM Calls" value={user.totalLlmCalls24h} />
+        <CardMetric label="Model" value={user.lastModel ?? "—"} />
+        <CardMetric label="First Seen" value={formatRelative(user.firstSeenAt)} />
+        <CardMetric label="Last Seen" value={formatRelative(user.lastSeenAt)} />
+      </div>
+    </button>
+  )
+}
+
 // ── Sub-components ──────────────────────────────────────────────
 
 function SortTh({ k, current, dir, onClick, label, className }: {
@@ -558,7 +876,7 @@ function SortTh({ k, current, dir, onClick, label, className }: {
   const active = current === k
   return (
     <th
-      className={`py-2 px-3 text-xs font-semibold cursor-pointer select-none hover:text-text transition-colors bg-surface ${active ? "text-text" : ""} ${className ?? ""}`}
+      className={`py-2 px-3 text-xs font-semibold cursor-pointer select-none hover:text-text transition-colors bg-surface whitespace-nowrap ${active ? "text-text" : ""} ${className ?? ""}`}
       onClick={() => onClick(k)}
       title={label ? (active ? (dir === "asc" ? "Sort descending ↓" : "Sort ascending ↑") : `Sort by ${label}`) : undefined}
     >
@@ -596,9 +914,10 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 
 type RunSortKey = "started" | "duration" | "steps" | "tokens" | "llmCalls" | "model" | "status"
 
-function UserDetail({ user, liveRuns, history, adminBusy, onToggleAdmin, onPageChange, onCollapse, onRunClick }: {
+function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, onPageChange, onCollapse, onRunClick }: {
   user: UserRow; liveRuns: ActiveRunRow[]
   history: HistoryState | undefined
+  stack: boolean
   adminBusy: boolean
   onToggleAdmin: (next: boolean) => void
   onPageChange: (offset: number) => void
@@ -704,7 +1023,7 @@ function UserDetail({ user, liveRuns, history, adminBusy, onToggleAdmin, onPageC
 
       {/* Identity — labeled grid, not a faux table row */}
       <div className="au-detail-meta px-4 py-3 border-b border-border-subtle">
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-5 gap-y-3">
+        <div className="au-detail-meta-grid">
           <KV label="Role" value={user.isAdmin ? "Admin" : "User"} />
           <KV label="First seen" value={formatAbsolute(user.firstSeenAt)} />
           <KV label="Last seen" value={formatAbsolute(user.lastSeenAt)} />
@@ -828,30 +1147,17 @@ function UserDetail({ user, liveRuns, history, adminBusy, onToggleAdmin, onPageC
           <div className="px-4 py-3 text-text-muted/40">No runs yet.</div>
         )}
 
-        {/* Table */}
+        {/* Run list — stack cards when narrow, table when wide */}
         {history && history.rows.length > 0 && (
-          <div>
-          <table className="w-full border-collapse">
-            <thead className="sticky top-0 z-[16] bg-canvas">
-              <tr className="bg-canvas">
-                <th className="py-2 px-3 w-6 bg-canvas" onClick={() => onRunSort("status")} />
-                <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-canvas">Run</th>
-                <RSortTh k="started"  label="Started" />
-                <RSortTh k="duration" label="Duration" right />
-                <RSortTh k="steps"    label="Steps" right />
-                <RSortTh k="tokens"   label="Tokens" right />
-                <RSortTh k="llmCalls" label="LLM Calls" right />
-                <RSortTh k="model"    label="Model" />
-                <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-canvas">Goal</th>
-              </tr>
-            </thead>
-            <tbody>
+          stack ? (
+            <div className="au-run-stack divide-y divide-border-subtle">
               {displayRows.length === 0 ? (
-                <tr><td colSpan={9} className="py-5 text-center text-text-muted/40">No runs match filter.</td></tr>
+                <div className="px-4 py-5 text-center text-text-muted/40">No runs match filter.</div>
               ) : displayRows.map((h) => (
-                <tr
+                <button
                   key={h.runId}
-                  className="border-t border-border-subtle cursor-pointer transition-colors hover:bg-overlay-2"
+                  type="button"
+                  className="au-run-card w-full text-left px-4 py-3 hover:bg-overlay-2 transition-colors min-w-0"
                   onClick={(e) => {
                     e.stopPropagation()
                     onRunClick(h.runId, {
@@ -868,30 +1174,98 @@ function UserDetail({ user, liveRuns, history, adminBusy, onToggleAdmin, onPageC
                     })
                   }}
                 >
-                  <td className="py-2 px-3"><StatusDot status={h.status} /></td>
-                  <td
-                    className="py-2 px-3 font-mono text-text-muted/70 select-text"
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    {h.runId.slice(0, 8)}<CopyBtn value={h.runId} label="run ID" />
-                  </td>
-                  <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap" title={h.createdAt}>{formatRelative(h.createdAt)}</td>
-                  <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{formatDuration(h.durationMs)}</td>
-                  <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.stepCount}</td>
-                  <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.totalTokens != null ? formatCompact(h.totalTokens) : <span className="text-text-muted/30">—</span>}</td>
-                  <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.llmCalls ?? <span className="text-text-muted/30">—</span>}</td>
-                  <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap">{h.model ?? <span className="text-text-muted/30">—</span>}</td>
-                  <td className="py-2 px-3 max-w-[320px] select-text cursor-text" onClick={(e) => e.stopPropagation()}>
-                    <span className="block truncate" title={h.error ? `${h.goal}\n\nError: ${h.error}` : h.goal}>
-                      {h.error && <span className="text-error/90 mr-1.5" title={h.error}>⚠</span>}
-                      <span className={h.error ? "text-text-muted/70" : "text-text"}>{h.goal}</span>
+                  <div className="flex items-start gap-2 min-w-0">
+                    <span className="shrink-0 pt-1"><StatusDot status={h.status} /></span>
+                    <span className="min-w-0 flex-1">
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-text-muted">
+                        <span
+                          className="font-mono select-text"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {h.runId.slice(0, 8)}
+                          <CopyBtn value={h.runId} label="run ID" />
+                        </span>
+                        <span title={h.createdAt}>{formatRelative(h.createdAt)}</span>
+                        <span className="tabular-nums">{formatDuration(h.durationMs)}</span>
+                        <span className="tabular-nums">{h.stepCount} steps</span>
+                        {h.totalTokens != null && (
+                          <span className="tabular-nums">{formatCompact(h.totalTokens)} tok</span>
+                        )}
+                        {h.model && <span className="truncate max-w-[10rem]">{h.model}</span>}
+                      </span>
+                      <span className="mt-1 block text-sm text-text break-words" title={h.error ? `${h.goal}\n\nError: ${h.error}` : h.goal}>
+                        {h.error && <span className="text-error/90 mr-1.5" title={h.error}>⚠</span>}
+                        {h.goal}
+                      </span>
                     </span>
-                  </td>
-                </tr>
+                  </div>
+                </button>
               ))}
-            </tbody>
-          </table>
-          </div>
+            </div>
+          ) : (
+            <div className="au-run-table-wrap min-w-0">
+              <table className="w-full border-collapse">
+                <thead className="sticky top-0 z-[16] bg-canvas">
+                  <tr className="bg-canvas">
+                    <th className="py-2 px-3 w-6 bg-canvas" onClick={() => onRunSort("status")} />
+                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-canvas">Run</th>
+                    <RSortTh k="started"  label="Started" />
+                    <RSortTh k="duration" label="Duration" right />
+                    <RSortTh k="steps"    label="Steps" right />
+                    <RSortTh k="tokens"   label="Tokens" right />
+                    <RSortTh k="llmCalls" label="LLM Calls" right />
+                    <RSortTh k="model"    label="Model" />
+                    <th className="py-2 px-3 text-left au-label font-semibold text-text-muted/50 cursor-default bg-canvas">Goal</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {displayRows.length === 0 ? (
+                    <tr><td colSpan={9} className="py-5 text-center text-text-muted/40">No runs match filter.</td></tr>
+                  ) : displayRows.map((h) => (
+                    <tr
+                      key={h.runId}
+                      className="border-t border-border-subtle cursor-pointer transition-colors hover:bg-overlay-2"
+                      onClick={(e) => {
+                        e.stopPropagation()
+                        onRunClick(h.runId, {
+                          goal: h.goal,
+                          status: h.status,
+                          model: h.model,
+                          stepCount: h.stepCount,
+                          totalTokens: h.totalTokens,
+                          llmCalls: h.llmCalls,
+                          error: h.error,
+                          createdAt: h.createdAt,
+                          completedAt: h.completedAt,
+                          durationMs: h.durationMs,
+                        })
+                      }}
+                    >
+                      <td className="py-2 px-3"><StatusDot status={h.status} /></td>
+                      <td
+                        className="py-2 px-3 font-mono text-text-muted/70 select-text"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        {h.runId.slice(0, 8)}<CopyBtn value={h.runId} label="run ID" />
+                      </td>
+                      <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap" title={h.createdAt}>{formatRelative(h.createdAt)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{formatDuration(h.durationMs)}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.stepCount}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.totalTokens != null ? formatCompact(h.totalTokens) : <span className="text-text-muted/30">—</span>}</td>
+                      <td className="py-2 px-3 text-right tabular-nums text-text-muted/70">{h.llmCalls ?? <span className="text-text-muted/30">—</span>}</td>
+                      <td className="py-2 px-3 text-text-muted/70 whitespace-nowrap">{h.model ?? <span className="text-text-muted/30">—</span>}</td>
+                      <td className="py-2 px-3 max-w-[320px] select-text cursor-text" onClick={(e) => e.stopPropagation()}>
+                        <span className="block truncate" title={h.error ? `${h.goal}\n\nError: ${h.error}` : h.goal}>
+                          {h.error && <span className="text-error/90 mr-1.5" title={h.error}>⚠</span>}
+                          <span className={h.error ? "text-text-muted/70" : "text-text"}>{h.goal}</span>
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )
         )}
       </div>
     </div>
