@@ -7,9 +7,10 @@
  * the kind-specific payload fields; the shell stamps the `kind` on submit.
  */
 
-import type { JSX } from "react"
+import type { JSX, ReactNode } from "react"
 import type { ConnectorKindId, FileFormat, ReadSpec, WriteMode, WriteSpec } from "@mia/shared-types"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { FIELD_LABEL, META_TEXT } from "../entity-registry/chrome"
 import { FormFieldGroup } from "../entity-registry/form-section"
 
 /** The read-spec discriminator a connector kind maps to (null = no read). */
@@ -215,21 +216,60 @@ function TextArea({
   placeholder,
   rows = 4,
   mono = true,
+  fill = false,
 }: {
   value: string
   onChange: (v: string) => void
   placeholder?: string
   rows?: number
   mono?: boolean
+  /** Fill the parent (use inside FillFieldGroup). */
+  fill?: boolean
 }): JSX.Element {
+  if (fill) {
+    return (
+      <textarea
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        spellCheck={false}
+        className={[
+          "input absolute inset-0 h-full w-full resize-none overflow-auto text-sm leading-relaxed",
+          mono ? "font-mono" : "",
+        ].join(" ")}
+      />
+    )
+  }
   return (
     <textarea
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       rows={rows}
+      spellCheck={false}
       className={`input text-sm leading-relaxed ${mono ? "font-mono" : ""}`}
     />
+  )
+}
+
+/** Field group whose textarea child grows to fill remaining panel height. */
+function FillFieldGroup({
+  label,
+  hint,
+  children,
+}: {
+  label: string
+  hint?: string
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-border-subtle/70 bg-base/40 p-2.5">
+      <div className="flex min-h-0 flex-1 flex-col gap-1.5">
+        <span className={`shrink-0 ${FIELD_LABEL}`}>{label}</span>
+        <div className="relative min-h-[10rem] flex-1">{children}</div>
+        {hint ? <span className={`shrink-0 normal-case leading-snug ${META_TEXT}`}>{hint}</span> : null}
+      </div>
+    </div>
   )
 }
 
@@ -239,13 +279,22 @@ function JsonField({
   onChange,
   placeholder,
   hint,
+  fill = false,
 }: {
   label: string
   value: string
   onChange: (v: string) => void
   placeholder?: string
   hint?: string
+  fill?: boolean
 }): JSX.Element {
+  if (fill) {
+    return (
+      <FillFieldGroup label={label} hint={hint}>
+        <TextArea value={value} onChange={onChange} placeholder={placeholder} fill />
+      </FillFieldGroup>
+    )
+  }
   return (
     <FormFieldGroup label={label} hint={hint}>
       <TextArea value={value} onChange={onChange} placeholder={placeholder} rows={3} />
@@ -268,20 +317,20 @@ export function ReadSpecForm({
 
   if (k === "sql") {
     return (
-      <FormFieldGroup label="SQL query" hint="Streaming SELECT — rows are pulled in batches.">
+      <FillFieldGroup label="SQL query" hint="Streaming SELECT — rows are pulled in batches.">
         <TextArea
           value={String(spec["sql"] ?? "")}
           onChange={(v) => patch({ sql: v })}
           placeholder="SELECT id, name FROM schema.table WHERE …"
-          rows={5}
+          fill
         />
-      </FormFieldGroup>
+      </FillFieldGroup>
     )
   }
   if (k === "httpApi") {
     return (
       <>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[8rem_1fr]">
+        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-[8rem_1fr]">
           <FormFieldGroup label="Method">
             <Listbox
               value={(spec["method"] as "GET" | "POST") ?? "GET"}
@@ -296,21 +345,26 @@ export function ReadSpecForm({
             <TextInput value={String(spec["path"] ?? "")} onChange={(v) => patch({ path: v })} placeholder="/api/items" mono />
           </FormFieldGroup>
         </div>
-        <FormFieldGroup label="JSON path" hint="Dot-path to the rows array, e.g. data.items. Empty = top-level array.">
-          <TextInput value={String(spec["jsonPath"] ?? "")} onChange={(v) => patch({ jsonPath: v })} placeholder="data.items" mono />
-        </FormFieldGroup>
+        <div className="shrink-0">
+          <FormFieldGroup label="JSON path" hint="Dot-path to the rows array, e.g. data.items. Empty = top-level array.">
+            <TextInput value={String(spec["jsonPath"] ?? "")} onChange={(v) => patch({ jsonPath: v })} placeholder="data.items" mono />
+          </FormFieldGroup>
+        </div>
         <JsonField
           label="Body (JSON, POST only)"
           value={String(spec["body"] ?? "")}
           onChange={(v) => patch({ body: v })}
           placeholder='{"filter":"active"}'
+          fill
         />
-        <JsonField
-          label="Extra headers (JSON)"
-          value={String(spec["headers"] ?? "")}
-          onChange={(v) => patch({ headers: v })}
-          placeholder='{"X-Tenant":"acme"}'
-        />
+        <div className="shrink-0">
+          <JsonField
+            label="Extra headers (JSON)"
+            value={String(spec["headers"] ?? "")}
+            onChange={(v) => patch({ headers: v })}
+            placeholder='{"X-Tenant":"acme"}'
+          />
+        </div>
       </>
     )
   }
@@ -345,20 +399,24 @@ export function ReadSpecForm({
         onChange={(v) => patch({ params: v })}
         placeholder='{"limit":"100"}'
         hint="Pipeline id comes from the connector config. Params are passed to the Aqueduct preview API."
+        fill
       />
     )
   }
   if (k === "denodo") {
     return (
       <>
-        <FormFieldGroup label="View" hint="Denodo view path, e.g. my_db/my_view.">
-          <TextInput value={String(spec["view"] ?? "")} onChange={(v) => patch({ view: v })} placeholder="my_db/my_view" mono />
-        </FormFieldGroup>
+        <div className="shrink-0">
+          <FormFieldGroup label="View" hint="Denodo view path, e.g. my_db/my_view.">
+            <TextInput value={String(spec["view"] ?? "")} onChange={(v) => patch({ view: v })} placeholder="my_db/my_view" mono />
+          </FormFieldGroup>
+        </div>
         <JsonField
           label="Params (JSON)"
           value={String(spec["params"] ?? "")}
           onChange={(v) => patch({ params: v })}
           placeholder='{"limit":"100"}'
+          fill
         />
       </>
     )
@@ -417,7 +475,7 @@ export function WriteSpecForm({
   if (k === "httpApi") {
     return (
       <>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[8rem_1fr]">
+        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-[8rem_1fr]">
           <FormFieldGroup label="Method">
             <Listbox
               value={(spec["method"] as "POST" | "PUT") ?? "POST"}
@@ -437,13 +495,16 @@ export function WriteSpecForm({
           value={String(spec["body"] ?? "")}
           onChange={(v) => patch({ body: v })}
           placeholder='{"source":"etl"}'
+          fill
         />
-        <JsonField
-          label="Extra headers (JSON)"
-          value={String(spec["headers"] ?? "")}
-          onChange={(v) => patch({ headers: v })}
-          placeholder='{"X-Tenant":"acme"}'
-        />
+        <div className="shrink-0">
+          <JsonField
+            label="Extra headers (JSON)"
+            value={String(spec["headers"] ?? "")}
+            onChange={(v) => patch({ headers: v })}
+            placeholder='{"X-Tenant":"acme"}'
+          />
+        </div>
       </>
     )
   }

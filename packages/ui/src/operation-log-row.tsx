@@ -149,7 +149,7 @@ export function LogGroup({
   }
   return (
     <div
-      className={`rounded-md border border-border-subtle overflow-hidden bg-overlay-1/40 ${
+      className={`overflow-hidden rounded-md border border-border-subtle bg-overlay-1/40 ${
         nested ? "ml-3 mt-0.5" : "mb-1 last:mb-0"
       }`}
     >
@@ -252,8 +252,13 @@ export function OpLogRow({
   depth?: number
 }) {
   const rowClass = linear
-    ? `flex items-center gap-2.5 px-3 py-2 text-left text-text transition-colors hover:bg-elevated/50 ${isLast ? "" : ""}`
-    : `flex items-center gap-2 px-2.5 py-1.5 text-left text-text transition-colors hover:bg-overlay-2/80 ${isLast ? "" : "border-b border-border-subtle"} ${expanded && expandable ? "bg-overlay-1/50" : ""}`
+    ? "flex items-center gap-2.5 px-3 py-2 text-left text-text transition-colors hover:bg-elevated/50"
+    : [
+        "flex items-center gap-2 px-2.5 py-1.5 text-left text-text transition-colors hover:bg-overlay-2/80",
+        // Never draw a bottom rule on the last row — it fights the card edge.
+        isLast ? "" : "border-b border-border-subtle",
+        expanded && expandable ? "bg-overlay-1/50" : "",
+      ].join(" ")
 
   const cells = (
     <LogRowCells
@@ -297,7 +302,13 @@ export function OpLogRow({
   )
 }
 
-/** Indent nested content — each level adds a left guide rail. */
+/**
+ * Nested content under a pipeline / activity.
+ *
+ * Root nest is an *inset* panel (padding + inner rounded border) so guide
+ * rails never run into the outer card’s rounded corner or double its lip.
+ * Deeper nests only indent inside that panel.
+ */
 export function LogNest({
   children,
   linear,
@@ -310,20 +321,27 @@ export function LogNest({
 }) {
   if (linear) {
     return (
-      <div className="border-l border-border-subtle ml-[1.125rem] pl-0">
+      <div className="ml-[1.125rem] border-l border-border-subtle pl-0">
         {children}
       </div>
     )
   }
   if (root) {
+    // Inset the nested panel so rails/dividers never meet the outer card radius.
     return (
-      <div className="border-t border-l border-border-subtle ml-3 mr-0.5 bg-base/20">
-        {children}
+      <div className="border-t border-border-subtle bg-base/15 px-3 py-2.5">
+        <div className="divide-y divide-border-subtle overflow-hidden rounded-md border border-border-subtle bg-overlay-1/30">
+          {children}
+        </div>
       </div>
     )
   }
+  // Deeper nest: indent + rail, with bottom padding so the last child doesn’t
+  // sit on the inset panel’s lip. Strip the last row’s bottom rule as a belt-
+  // and-suspenders against double lips. Root nest is inset, so this rail never
+  // meets the outer card’s rounded corner.
   return (
-    <div className="border-l border-border-subtle ml-4 pl-0">
+    <div className="ml-2.5 border-l border-border-subtle pb-1.5 [&>div:last-child]:border-b-0">
       {children}
     </div>
   )

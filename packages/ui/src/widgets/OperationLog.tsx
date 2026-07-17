@@ -602,8 +602,8 @@ export function OperationLog() {
         totalCount={pipelines.length}
       />
 
-      {/* ── Body ────────────────────────────────────────── */}
-      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1">
+      {/* ── Body — bottom padding keeps the last card off the widget lip ─ */}
+      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto pr-1 pb-4">
         {loading && filtered.length === 0 && (
           <div className="flex flex-1 items-center justify-center gap-2 text-center text-xs text-text-muted/60">
             <Loader2 size={14} className="animate-spin" />
@@ -1103,7 +1103,13 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
     <>
       <OpLogRow
         linear={linear}
-        isLast={isLast && !hasExpandedContent}
+        // Depth 0: collapsed rows rely on the panel’s divide-y; when expanded,
+        // draw a rule under the activity so the first child isn’t flush to it.
+        isLast={
+          depth === 0 && !linear
+            ? !hasExpandedContent
+            : isLast && !hasExpandedContent
+        }
         depth={depth}
         status={status}
         expanded={expanded}
@@ -1230,8 +1236,10 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
     </>
   )
 
+  // Depth-0 activities live inside LogNest’s inset panel (divide-y) — one wrapper
+  // per activity so header + nested events stay a single divide unit (no card chrome).
   if (depth === 0 && !linear) {
-    return <LogGroup>{rowBody}</LogGroup>
+    return <div className="min-w-0 last:pb-0.5">{rowBody}</div>
   }
 
   return rowBody

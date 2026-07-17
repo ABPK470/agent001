@@ -1,22 +1,22 @@
 /**
- * BridgeShell — calm primary surface for Source → Target moves.
+ * BridgeShell — Source → Map → Target surface.
  *
- * Idle: path centered in the viewport (nothing else in the middle).
- * After Preview/Run: path stays top; stage shows results; sticky actions remain.
+ * Idle: compact centered path (not stretched).
+ * Editing: one or both ends may be open; open forms use the available width.
+ * Map opens a modal; it never expands in place.
  */
 
 import type { ConnectorInfo, MoveSummary, Transform } from "@mia/shared-types"
-import { Eye, Play, Settings2, Shuffle } from "lucide-react"
+import { Eye, Play, Shuffle } from "lucide-react"
 import { useEffect, useState, type JSX } from "react"
 import { api } from "../../api"
 import { EmptyState } from "../../components/EmptyState"
 import { META_TEXT, TEXT_BTN, TEXT_BTN_PRIMARY } from "../entity-registry/chrome"
 import { ModalToastStack, useModalToasts } from "../entity-registry/ModalToastStack"
-import { ConnectorKindMark } from "../connectors/ConnectorKindMark"
 import { WIDGET_ICONS } from "../widget-icons"
-import { BridgeEndpointModal } from "./BridgeEndpointModal"
+import { BridgeEndpointCard } from "./BridgeEndpointPanel"
 import { BridgeMapModal } from "./BridgeMapModal"
-import { summarizeMap, summarizeReadSpec, summarizeWriteSpec } from "./bridge-summaries"
+import { summarizeMap } from "./bridge-summaries"
 import {
   buildReadSpec,
   buildWriteSpec,
@@ -31,8 +31,6 @@ import {
   type TransformDraft,
 } from "./transform-draft"
 
-type EndpointRole = "source" | "target"
-
 export function BridgeShell(): JSX.Element {
   const { toasts, pushToast, dismissToast } = useModalToasts()
   const [connectors, setConnectors] = useState<ConnectorInfo[]>([])
@@ -46,7 +44,8 @@ export function BridgeShell(): JSX.Element {
   const [preview, setPreview] = useState<{ rows: Record<string, unknown>[]; truncated: boolean } | null>(null)
   const [summary, setSummary] = useState<MoveSummary | null>(null)
   const [busy, setBusy] = useState<"preview" | "run" | "sample" | null>(null)
-  const [endpointModal, setEndpointModal] = useState<EndpointRole | null>(null)
+  const [sourceOpen, setSourceOpen] = useState(false)
+  const [targetOpen, setTargetOpen] = useState(false)
   const [mapOpen, setMapOpen] = useState(false)
 
   useEffect(() => {
@@ -168,6 +167,27 @@ export function BridgeShell(): JSX.Element {
   const canRun = Boolean(source && target) && busy === null
   const mapLabel = summarizeMap(mapDraft)
   const hasStage = Boolean(preview || summary)
+  const editing = sourceOpen || targetOpen
+
+  const path = (
+    <PathBlock
+      connectors={connectors}
+      sourceId={sourceId}
+      targetId={targetId}
+      sourceSpec={sourceSpec}
+      targetSpec={targetSpec}
+      mapLabel={mapLabel}
+      sourceOpen={sourceOpen}
+      targetOpen={targetOpen}
+      onToggleSource={() => setSourceOpen((v) => !v)}
+      onToggleTarget={() => setTargetOpen((v) => !v)}
+      onSourceConnectorChange={selectSource}
+      onTargetConnectorChange={selectTarget}
+      onSourceSpecChange={setSourceSpec}
+      onTargetSpecChange={setTargetSpec}
+      onOpenMap={() => setMapOpen(true)}
+    />
+  )
 
   return (
     <div className="bridge flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel">
@@ -183,42 +203,26 @@ export function BridgeShell(): JSX.Element {
         />
       ) : (
         <>
-          {hasStage ? (
-            <>
-              <div className="shrink-0 border-b border-border-subtle px-5 py-5 sm:px-8">
-                <PathBlock
-                  source={source}
-                  target={target}
-                  sourceSpec={sourceSpec}
-                  targetSpec={targetSpec}
-                  mapLabel={mapLabel}
-                  onEditSource={() => setEndpointModal("source")}
-                  onEditTarget={() => setEndpointModal("target")}
-                  onOpenMap={() => setMapOpen(true)}
-                />
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {hasStage ? (
+              <>
+                <div className="shrink-0 border-b border-border-subtle px-4 py-3 sm:px-5">{path}</div>
+                <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                  {preview ? (
+                    <PreviewStage rows={preview.rows} truncated={preview.truncated} />
+                  ) : (
+                    <SummaryStage summary={summary!} />
+                  )}
+                </div>
+              </>
+            ) : editing ? (
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3 sm:px-5">{path}</div>
+            ) : (
+              <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8 sm:px-5">
+                {path}
               </div>
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-                {preview ? (
-                  <PreviewStage rows={preview.rows} truncated={preview.truncated} />
-                ) : (
-                  <SummaryStage summary={summary!} />
-                )}
-              </div>
-            </>
-          ) : (
-            <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-5 py-8 sm:px-8">
-              <PathBlock
-                source={source}
-                target={target}
-                sourceSpec={sourceSpec}
-                targetSpec={targetSpec}
-                mapLabel={mapLabel}
-                onEditSource={() => setEndpointModal("source")}
-                onEditTarget={() => setEndpointModal("target")}
-                onOpenMap={() => setMapOpen(true)}
-              />
-            </div>
-          )}
+            )}
+          </div>
 
           <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border-subtle bg-panel px-5 py-3">
             <p className={`hidden min-w-0 truncate sm:block ${META_TEXT}`}>
@@ -250,28 +254,6 @@ export function BridgeShell(): JSX.Element {
         </>
       )}
 
-      {endpointModal === "source" && (
-        <BridgeEndpointModal
-          role="source"
-          connectors={connectors}
-          connectorId={sourceId}
-          spec={sourceSpec}
-          onConnectorChange={selectSource}
-          onSpecChange={setSourceSpec}
-          onClose={() => setEndpointModal(null)}
-        />
-      )}
-      {endpointModal === "target" && (
-        <BridgeEndpointModal
-          role="target"
-          connectors={connectors}
-          connectorId={targetId}
-          spec={targetSpec}
-          onConnectorChange={selectTarget}
-          onSpecChange={setTargetSpec}
-          onClose={() => setEndpointModal(null)}
-        />
-      )}
       {mapOpen && (
         <BridgeMapModal
           draft={mapDraft}
@@ -289,92 +271,173 @@ export function BridgeShell(): JSX.Element {
 }
 
 function PathBlock({
-  source,
-  target,
+  connectors,
+  sourceId,
+  targetId,
   sourceSpec,
   targetSpec,
   mapLabel,
-  onEditSource,
-  onEditTarget,
+  sourceOpen,
+  targetOpen,
+  onToggleSource,
+  onToggleTarget,
+  onSourceConnectorChange,
+  onTargetConnectorChange,
+  onSourceSpecChange,
+  onTargetSpecChange,
   onOpenMap,
 }: {
-  source: ConnectorInfo | null
-  target: ConnectorInfo | null
+  connectors: ConnectorInfo[]
+  sourceId: string
+  targetId: string
   sourceSpec: Record<string, unknown>
   targetSpec: Record<string, unknown>
   mapLabel: string
-  onEditSource: () => void
-  onEditTarget: () => void
+  sourceOpen: boolean
+  targetOpen: boolean
+  onToggleSource: () => void
+  onToggleTarget: () => void
+  onSourceConnectorChange: (id: string) => void
+  onTargetConnectorChange: (id: string) => void
+  onSourceSpecChange: (next: Record<string, unknown>) => void
+  onTargetSpecChange: (next: Record<string, unknown>) => void
   onOpenMap: () => void
 }): JSX.Element {
+  const sourceCard = (
+    <BridgeEndpointCard
+      role="source"
+      connectors={connectors}
+      connectorId={sourceId}
+      spec={sourceSpec}
+      expanded={sourceOpen}
+      onToggle={onToggleSource}
+      onConnectorChange={onSourceConnectorChange}
+      onSpecChange={onSourceSpecChange}
+      compact={!sourceOpen && targetOpen}
+    />
+  )
+  const targetCard = (
+    <BridgeEndpointCard
+      role="target"
+      connectors={connectors}
+      connectorId={targetId}
+      spec={targetSpec}
+      expanded={targetOpen}
+      onToggle={onToggleTarget}
+      onConnectorChange={onTargetConnectorChange}
+      onSpecChange={onTargetSpecChange}
+      compact={!targetOpen && sourceOpen}
+    />
+  )
+
+  // Idle — compact, centered, not stretched
+  if (!sourceOpen && !targetOpen) {
+    return (
+      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-3">
+        {sourceCard}
+        <div className="flex shrink-0 items-center justify-center sm:px-1">
+          <MapChip mapLabel={mapLabel} onOpenMap={onOpenMap} variant="idle" />
+        </div>
+        {targetCard}
+      </div>
+    )
+  }
+
+  // Both open — two forms share the width; Map is a slim center rail
+  if (sourceOpen && targetOpen) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-3 lg:flex-row lg:gap-3">
+        {sourceCard}
+        <div className="flex shrink-0 items-stretch justify-center lg:w-36 xl:w-40">
+          <MapChip mapLabel={mapLabel} onOpenMap={onOpenMap} variant="center" />
+        </div>
+        {targetCard}
+      </div>
+    )
+  }
+
+  // Source only — form owns the canvas; Map + Target as right rail
+  if (sourceOpen) {
+    return (
+      <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-3 lg:flex-row lg:gap-3">
+        {sourceCard}
+        <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-56 xl:w-64">
+          <MapChip mapLabel={mapLabel} onOpenMap={onOpenMap} variant="rail" />
+          {targetCard}
+        </aside>
+      </div>
+    )
+  }
+
+  // Target only — Source + Map as left rail; form owns the canvas
   return (
-    <div className="mx-auto flex w-full max-w-4xl flex-col items-stretch gap-3 sm:flex-row sm:items-stretch sm:justify-center sm:gap-2">
-      <EndpointTile
-        role="Source"
-        connector={source}
-        summary={source ? summarizeReadSpec(source.kind, sourceSpec) : "Choose a source"}
-        onConfigure={onEditSource}
-      />
-      <button
-        type="button"
-        onClick={onOpenMap}
-        title="Configure column mappings, casts, defaults, and rules"
-        className="group flex w-full shrink-0 flex-col items-center justify-center gap-1 self-center rounded-2xl border border-border-subtle bg-overlay-1 px-3 py-3 text-center transition-colors hover:border-border hover:bg-overlay-2 sm:w-[8.5rem]"
-      >
-        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-overlay-2 ring-1 ring-border-subtle/60 text-text-muted group-hover:text-text">
-          <Shuffle size={16} aria-hidden />
-        </span>
-        <span className="text-sm font-semibold text-text">Map columns</span>
-        <span className={`max-w-full truncate px-0.5 ${META_TEXT}`}>{mapLabel}</span>
-      </button>
-      <EndpointTile
-        role="Target"
-        connector={target}
-        summary={target ? summarizeWriteSpec(target.kind, targetSpec) : "Choose a target"}
-        onConfigure={onEditTarget}
-      />
+    <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-3 lg:flex-row lg:gap-3">
+      <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-56 xl:w-64">
+        {sourceCard}
+        <MapChip mapLabel={mapLabel} onOpenMap={onOpenMap} variant="rail" />
+      </aside>
+      {targetCard}
     </div>
   )
 }
 
-function EndpointTile({
-  role,
-  connector,
-  summary,
-  onConfigure,
+function MapChip({
+  mapLabel,
+  onOpenMap,
+  variant,
 }: {
-  role: string
-  connector: ConnectorInfo | null
-  summary: string
-  onConfigure: () => void
+  mapLabel: string
+  onOpenMap: () => void
+  variant: "idle" | "rail" | "center"
 }): JSX.Element {
+  if (variant === "center") {
+    return (
+      <button
+        type="button"
+        onClick={onOpenMap}
+        title="Configure column mappings, casts, defaults, and rules"
+        className="group flex h-full min-h-[5.5rem] w-full flex-col items-center justify-center gap-1.5 rounded-2xl border border-border-subtle bg-overlay-1 px-2 py-3 text-center transition-colors hover:border-border hover:bg-overlay-2"
+      >
+        <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-overlay-2 text-text-muted ring-1 ring-border-subtle/60 group-hover:text-text">
+          <Shuffle size={16} aria-hidden />
+        </span>
+        <span className="text-sm font-semibold text-text">Map</span>
+        <span className={`max-w-full truncate px-0.5 ${META_TEXT}`}>{mapLabel}</span>
+      </button>
+    )
+  }
+
+  if (variant === "rail") {
+    return (
+      <button
+        type="button"
+        onClick={onOpenMap}
+        title="Configure column mappings, casts, defaults, and rules"
+        className="group flex w-full shrink-0 items-center gap-2.5 rounded-2xl border border-border-subtle bg-overlay-1 px-3 py-2.5 text-left transition-colors hover:border-border hover:bg-overlay-2"
+      >
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-overlay-2 text-text-muted ring-1 ring-border-subtle/60 group-hover:text-text">
+          <Shuffle size={16} aria-hidden />
+        </span>
+        <span className="min-w-0 flex-1">
+          <span className="block text-sm font-semibold text-text">Map columns</span>
+          <span className={`block truncate ${META_TEXT}`}>{mapLabel}</span>
+        </span>
+      </button>
+    )
+  }
+
   return (
     <button
       type="button"
-      onClick={onConfigure}
-      title={`Configure ${role.toLowerCase()}`}
-      aria-label={`Configure ${role.toLowerCase()}`}
-      className="group flex min-w-0 flex-1 items-center gap-3.5 rounded-2xl border border-border-subtle bg-elevated/40 px-4 py-3.5 text-left transition-colors hover:border-border hover:bg-overlay-1"
+      onClick={onOpenMap}
+      title="Configure column mappings, casts, defaults, and rules"
+      className="group flex w-full flex-col items-center justify-center gap-1 self-center rounded-2xl border border-border-subtle bg-overlay-1 px-3 py-3 text-center transition-colors hover:border-border hover:bg-overlay-2 sm:w-[8.5rem]"
     >
-      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-overlay-2 ring-1 ring-border-subtle/60">
-        {connector ? (
-          <ConnectorKindMark kind={connector.kind} size={28} title={connector.kind} />
-        ) : (
-          <Settings2 size={22} className="text-text-faint" aria-hidden />
-        )}
-      </div>
-      <div className="min-w-0 flex-1">
-        <div className="text-[11px] font-medium uppercase tracking-wide text-text-faint">{role}</div>
-        <div className="truncate text-sm font-semibold text-text">
-          {connector?.displayName ?? "Select…"}
-        </div>
-        <div className={`mt-0.5 truncate ${META_TEXT}`}>{summary}</div>
-      </div>
-      <Settings2
-        size={16}
-        className="shrink-0 text-text-faint transition-colors group-hover:text-text-muted"
-        aria-hidden
-      />
+      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-overlay-2 text-text-muted ring-1 ring-border-subtle/60 group-hover:text-text">
+        <Shuffle size={16} aria-hidden />
+      </span>
+      <span className="text-sm font-semibold text-text">Map columns</span>
+      <span className={`max-w-full truncate px-0.5 ${META_TEXT}`}>{mapLabel}</span>
     </button>
   )
 }
