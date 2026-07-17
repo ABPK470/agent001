@@ -1,35 +1,26 @@
 /**
- * BridgeShell — move rows between connectors (source → map → target).
+ * BridgeShell — calm primary surface for Source → Target moves.
  *
- * Separate from sync: this is the generic bridge surface backed by the
- * @mia/connectors engine. The agent `bridge_data` tool and the
- * `/api/bridge` REST routes share the same server port.
+ * First principles:
+ *   - One composition: path, stage, actions
+ *   - Connector brand marks at a readable size on the path
+ *   - Specs and Map live in focused modals (progressive disclosure)
+ *   - Preview / result occupy the stage; empty state stays centered
  */
 
-import type {
-  ConnectorInfo,
-  MoveSummary,
-  Transform,
-} from "@mia/shared-types"
-import { ArrowRight, Eye, Play } from "lucide-react"
-import { useEffect, useMemo, useState, type JSX } from "react"
+import type { ConnectorInfo, MoveSummary, Transform } from "@mia/shared-types"
+import { ArrowRight, Eye, Play, Settings2, Shuffle } from "lucide-react"
+import { useEffect, useState, type JSX } from "react"
 import { api } from "../../api"
-import { Listbox, type ListboxOption } from "../../components/Listbox"
-import {
-  FORM_HEADING,
-  HELP_TEXT,
-  ICON_BTN,
-  ICON_BTN_PRIMARY,
-  META_TEXT,
-  WIDGET_ENVELOPE,
-} from "../entity-registry/chrome"
-import { ConnectorKindMark } from "../connectors/ConnectorKindMark"
-import { FormFieldGroup, FormSectionCard } from "../entity-registry/form-section"
+import { EmptyState } from "../../components/EmptyState"
+import { META_TEXT, TEXT_BTN, TEXT_BTN_PRIMARY } from "../entity-registry/chrome"
 import { ModalToastStack, useModalToasts } from "../entity-registry/ModalToastStack"
-import { TransformMap } from "./TransformMap"
+import { ConnectorKindMark } from "../connectors/ConnectorKindMark"
+import { WIDGET_ICONS } from "../widget-icons"
+import { BridgeEndpointModal } from "./BridgeEndpointModal"
+import { BridgeMapModal } from "./BridgeMapModal"
+import { summarizeMap, summarizeReadSpec, summarizeWriteSpec } from "./bridge-summaries"
 import {
-  ReadSpecForm,
-  WriteSpecForm,
   buildReadSpec,
   buildWriteSpec,
   emptyReadSpec,
@@ -43,12 +34,14 @@ import {
   type TransformDraft,
 } from "./transform-draft"
 
+type EndpointRole = "source" | "target"
+
 export function BridgeShell(): JSX.Element {
   const { toasts, pushToast, dismissToast } = useModalToasts()
   const [connectors, setConnectors] = useState<ConnectorInfo[]>([])
   const [loaded, setLoaded] = useState(false)
-  const [sourceId, setSourceId] = useState<string>("")
-  const [targetId, setTargetId] = useState<string>("")
+  const [sourceId, setSourceId] = useState("")
+  const [targetId, setTargetId] = useState("")
   const [sourceSpec, setSourceSpec] = useState<Record<string, unknown>>({})
   const [targetSpec, setTargetSpec] = useState<Record<string, unknown>>({})
   const [mapDraft, setMapDraft] = useState<TransformDraft>(() => emptyTransformDraft())
@@ -56,6 +49,8 @@ export function BridgeShell(): JSX.Element {
   const [preview, setPreview] = useState<{ rows: Record<string, unknown>[]; truncated: boolean } | null>(null)
   const [summary, setSummary] = useState<MoveSummary | null>(null)
   const [busy, setBusy] = useState<"preview" | "run" | "sample" | null>(null)
+  const [endpointModal, setEndpointModal] = useState<EndpointRole | null>(null)
+  const [mapOpen, setMapOpen] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -85,36 +80,24 @@ export function BridgeShell(): JSX.Element {
     }
   }, [pushToast])
 
-  const sourceOptions: ListboxOption<string>[] = useMemo(
-    () =>
-      connectors
-        .filter((c) => c.capabilities.read)
-        .map((c) => ({ value: c.id, label: c.displayName, hint: c.kind })),
-    [connectors],
-  )
-  const targetOptions: ListboxOption<string>[] = useMemo(
-    () =>
-      connectors
-        .filter((c) => c.capabilities.write)
-        .map((c) => ({ value: c.id, label: c.displayName, hint: c.kind })),
-    [connectors],
-  )
-
   const source = connectors.find((c) => c.id === sourceId) ?? null
   const target = connectors.find((c) => c.id === targetId) ?? null
 
-  function onSourceChange(id: string): void {
+  function selectSource(id: string): void {
     const c = connectors.find((x) => x.id === id)
+    if (!c?.capabilities.read) return
     setSourceId(id)
-    setSourceSpec(c ? emptyReadSpec(c.kind) : {})
+    setSourceSpec(emptyReadSpec(c.kind))
     setPreview(null)
     setSourceColumns([])
     setMapDraft(emptyTransformDraft())
   }
-  function onTargetChange(id: string): void {
+
+  function selectTarget(id: string): void {
     const c = connectors.find((x) => x.id === id)
+    if (!c?.capabilities.write) return
     setTargetId(id)
-    setTargetSpec(c ? emptyWriteSpec(c.kind) : {})
+    setTargetSpec(emptyWriteSpec(c.kind))
     setSummary(null)
   }
 
@@ -147,6 +130,7 @@ export function BridgeShell(): JSX.Element {
     if (!source) return
     setBusy("preview")
     setPreview(null)
+    setSummary(null)
     try {
       const transform = resolveTransform()
       const res = await api.previewBridge({
@@ -155,7 +139,6 @@ export function BridgeShell(): JSX.Element {
         limit: 50,
       })
       setPreview(res)
-      // Keep known source fields fresh from raw keys when pass-through-ish preview.
       if (!transform) setSourceColumns(columnNamesFromRows(res.rows))
     } catch (e) {
       pushToast(e instanceof Error ? e.message : String(e))
@@ -184,139 +167,265 @@ export function BridgeShell(): JSX.Element {
     }
   }
 
-  const canMove = Boolean(source && target) && busy === null
+  const canPreview = Boolean(source) && busy === null
+  const canRun = Boolean(source && target) && busy === null
+  const mapLabel = summarizeMap(mapDraft)
 
   return (
-    <div className="bridge flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel p-3">
-      <div className={WIDGET_ENVELOPE}>
-        <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
-        <div className="shrink-0 border-b border-border-subtle px-5 py-3">
-          <div className="flex items-start justify-between gap-3">
-            <div className="min-w-0">
-              <h3 className={FORM_HEADING}>Move data between connectors</h3>
-              <p className={`${META_TEXT} mt-1 max-w-3xl leading-relaxed text-text-faint`}>
-                Source → Map → Target. Preview applies the map without writing; Run executes the full move.
-                File connectors support CSV, JSON, and Parquet.
-              </p>
-              <ol className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-text-faint">
-                <li className="rounded-md bg-accent/10 px-2 py-0.5 text-accent">1 · Source</li>
-                <li aria-hidden className="text-text-faint">→</li>
-                <li className="rounded-md bg-accent/10 px-2 py-0.5 text-accent">2 · Map</li>
-                <li aria-hidden className="text-text-faint">→</li>
-                <li className="rounded-md bg-accent/10 px-2 py-0.5 text-accent">3 · Target</li>
-              </ol>
-            </div>
-            <div className="flex shrink-0 flex-col items-end gap-2">
-              <div className="flex items-center gap-1.5">
-                <button
-                  type="button"
-                  onClick={() => void onPreview()}
-                  disabled={!source || busy !== null}
-                  className={ICON_BTN}
-                  title="Preview up to 50 rows (no write)"
-                  aria-label="Preview"
-                >
-                  <Eye size={16} />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void onRun()}
-                  disabled={!canMove}
-                  className={ICON_BTN_PRIMARY}
-                  title="Run the full move"
-                  aria-label="Run move"
-                >
-                  <Play size={16} />
-                </button>
+    <div className="bridge flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-panel">
+      <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
+
+      {!loaded ? (
+        <EmptyState icon={WIDGET_ICONS.bridge} message="Loading connectors…" />
+      ) : connectors.length === 0 ? (
+        <EmptyState
+          icon={WIDGET_ICONS.bridge}
+          message="No connectors yet"
+          detail="Add one from the platform menu → Connectors."
+        />
+      ) : (
+        <>
+          {/* Path — the whole story in one glance */}
+          <div className="shrink-0 border-b border-border-subtle px-5 py-5 sm:px-8">
+            <div className="mx-auto flex max-w-3xl flex-col items-stretch gap-4 sm:flex-row sm:items-center sm:justify-center sm:gap-3">
+              <EndpointTile
+                role="Source"
+                connector={source}
+                summary={source ? summarizeReadSpec(source.kind, sourceSpec) : "Choose a source"}
+                onConfigure={() => setEndpointModal("source")}
+              />
+              <div className="flex items-center justify-center gap-2 sm:flex-col sm:px-1">
+                <ArrowRight size={18} className="rotate-90 text-text-faint sm:rotate-0" aria-hidden />
               </div>
-              {source && target && (
-                <div
-                  className="inline-flex max-w-[16rem] items-center gap-2 rounded-lg border border-border-subtle bg-elevated/40 px-2.5 py-1.5"
-                  title={`${source.displayName} → ${target.displayName}`}
-                >
-                  <ConnectorKindMark kind={source.kind} size={14} title={source.kind} />
-                  <span className="min-w-0 truncate text-xs font-medium text-text">{source.displayName}</span>
-                  <ArrowRight size={12} className="shrink-0 text-accent" aria-hidden />
-                  <ConnectorKindMark kind={target.kind} size={14} title={target.kind} />
-                  <span className="min-w-0 truncate text-xs font-medium text-text">{target.displayName}</span>
-                </div>
-              )}
+              <EndpointTile
+                role="Target"
+                connector={target}
+                summary={target ? summarizeWriteSpec(target.kind, targetSpec) : "Choose a target"}
+                onConfigure={() => setEndpointModal("target")}
+              />
+            </div>
+
+            <div className="mt-4 flex justify-center">
+              <button
+                type="button"
+                onClick={() => setMapOpen(true)}
+                className="inline-flex items-center gap-2 rounded-full border border-border-subtle bg-overlay-1 px-3.5 py-1.5 text-sm text-text-secondary transition-colors hover:border-border hover:bg-overlay-2 hover:text-text"
+              >
+                <Shuffle size={14} className="text-text-muted" aria-hidden />
+                <span className="font-medium">Map</span>
+                <span className="text-text-faint">·</span>
+                <span className="text-text-muted">{mapLabel}</span>
+              </button>
             </div>
           </div>
-        </div>
 
-        <div className="min-h-0 flex-1 overflow-auto bg-base/20 p-5">
-          {!loaded ? (
-            <p className={HELP_TEXT}>Loading connectors…</p>
-          ) : connectors.length === 0 ? (
-            <p className={HELP_TEXT}>
-              No connectors configured. Add one from the platform menu → Connectors.
-            </p>
-          ) : (
-            <div className="space-y-4">
-              <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <FormSectionCard title="1 · Source" description="Where rows come from." emphasized>
-                  <FormFieldGroup label="Connector">
-                    <Listbox
-                      value={sourceId}
-                      options={sourceOptions}
-                      onChange={onSourceChange}
-                      size="sm"
-                      className="w-full"
-                      ariaLabel="Source connector"
-                      placeholder="Select a source…"
-                    />
-                  </FormFieldGroup>
-                  {source && (
-                    <ReadSpecForm
-                      kind={source.kind}
-                      spec={sourceSpec}
-                      onPatch={(p) => setSourceSpec(p)}
-                    />
-                  )}
-                </FormSectionCard>
-
-                <FormSectionCard title="3 · Target" description="Where rows go." emphasized>
-                  <FormFieldGroup label="Connector">
-                    <Listbox
-                      value={targetId}
-                      options={targetOptions}
-                      onChange={onTargetChange}
-                      size="sm"
-                      className="w-full"
-                      ariaLabel="Target connector"
-                      placeholder="Select a target…"
-                    />
-                  </FormFieldGroup>
-                  {target && (
-                    <WriteSpecForm
-                      kind={target.kind}
-                      spec={targetSpec}
-                      onPatch={(p) => setTargetSpec(p)}
-                    />
-                  )}
-                </FormSectionCard>
-              </div>
-
-              <TransformMap
-                draft={mapDraft}
-                onChange={setMapDraft}
-                sourceColumns={sourceColumns}
-                onSampleColumns={source ? () => void onSampleColumns() : undefined}
-                sampling={busy === "sample"}
+          {/* Stage — preview, result, or ready summary */}
+          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+            {preview ? (
+              <PreviewStage rows={preview.rows} truncated={preview.truncated} />
+            ) : summary ? (
+              <SummaryStage summary={summary} />
+            ) : (
+              <ReadyStage
+                source={source}
+                target={target}
+                mapLabel={mapLabel}
+                sameConnector={Boolean(source && target && source.id === target.id)}
+                canPreview={canPreview}
+                canRun={canRun}
+                busy={busy}
+                onPreview={() => void onPreview()}
+                onRun={() => void onRun()}
+                onOpenMap={() => setMapOpen(true)}
               />
+            )}
+          </div>
 
-              {preview && <PreviewTable rows={preview.rows} truncated={preview.truncated} />}
-              {summary && <SummaryCard summary={summary} />}
+          {/* Sticky actions — always visible */}
+          <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border-subtle bg-panel px-5 py-3">
+            <p className={`hidden min-w-0 truncate sm:block ${META_TEXT}`}>
+              {source && target
+                ? `${source.displayName} → ${target.displayName}`
+                : "Pick source and target to continue"}
+            </p>
+            <div className="ml-auto flex items-center gap-2">
+              <button
+                type="button"
+                className={TEXT_BTN}
+                disabled={!canPreview}
+                onClick={() => void onPreview()}
+              >
+                <Eye size={14} className="mr-1.5 inline-block opacity-70" aria-hidden />
+                {busy === "preview" ? "Previewing…" : "Preview"}
+              </button>
+              <button
+                type="button"
+                className={TEXT_BTN_PRIMARY}
+                disabled={!canRun}
+                onClick={() => void onRun()}
+              >
+                <Play size={14} className="mr-1.5 inline-block opacity-80" aria-hidden />
+                {busy === "run" ? "Running…" : "Run"}
+              </button>
             </div>
-          )}
+          </div>
+        </>
+      )}
+
+      {endpointModal === "source" && (
+        <BridgeEndpointModal
+          role="source"
+          connectors={connectors}
+          connectorId={sourceId}
+          spec={sourceSpec}
+          onConnectorChange={selectSource}
+          onSpecChange={setSourceSpec}
+          onClose={() => setEndpointModal(null)}
+        />
+      )}
+      {endpointModal === "target" && (
+        <BridgeEndpointModal
+          role="target"
+          connectors={connectors}
+          connectorId={targetId}
+          spec={targetSpec}
+          onConnectorChange={selectTarget}
+          onSpecChange={setTargetSpec}
+          onClose={() => setEndpointModal(null)}
+        />
+      )}
+      {mapOpen && (
+        <BridgeMapModal
+          draft={mapDraft}
+          onChange={setMapDraft}
+          sourceColumns={sourceColumns}
+          onSampleColumns={source ? () => void onSampleColumns() : undefined}
+          sampling={busy === "sample"}
+          source={source}
+          target={target}
+          onClose={() => setMapOpen(false)}
+        />
+      )}
+    </div>
+  )
+}
+
+function EndpointTile({
+  role,
+  connector,
+  summary,
+  onConfigure,
+}: {
+  role: string
+  connector: ConnectorInfo | null
+  summary: string
+  onConfigure: () => void
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onConfigure}
+      className="group flex min-w-0 flex-1 items-center gap-3.5 rounded-2xl border border-border-subtle bg-elevated/40 px-4 py-3.5 text-left transition-colors hover:border-border hover:bg-overlay-1"
+    >
+      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-overlay-2 ring-1 ring-border-subtle/60">
+        {connector ? (
+          <ConnectorKindMark kind={connector.kind} size={28} title={connector.kind} />
+        ) : (
+          <Settings2 size={22} className="text-text-faint" aria-hidden />
+        )}
+      </div>
+      <div className="min-w-0 flex-1">
+        <div className="text-[11px] font-medium uppercase tracking-wide text-text-faint">{role}</div>
+        <div className="truncate text-sm font-semibold text-text">
+          {connector?.displayName ?? "Select…"}
         </div>
+        <div className={`mt-0.5 truncate ${META_TEXT}`}>{summary}</div>
+      </div>
+      <span className="shrink-0 text-xs font-medium text-text-faint group-hover:text-text-muted">
+        Edit
+      </span>
+    </button>
+  )
+}
+
+function ReadyStage({
+  source,
+  target,
+  mapLabel,
+  sameConnector,
+  canPreview,
+  canRun,
+  busy,
+  onPreview,
+  onRun,
+  onOpenMap,
+}: {
+  source: ConnectorInfo | null
+  target: ConnectorInfo | null
+  mapLabel: string
+  sameConnector: boolean
+  canPreview: boolean
+  canRun: boolean
+  busy: "preview" | "run" | "sample" | null
+  onPreview: () => void
+  onRun: () => void
+  onOpenMap: () => void
+}): JSX.Element {
+  return (
+    <div className="flex min-h-0 flex-1 flex-col items-center justify-center gap-5 px-6 py-8">
+      <div className="flex max-w-lg flex-wrap items-center justify-center gap-2.5">
+        {source ? (
+          <span className="inline-flex items-center gap-2 rounded-xl border border-border-subtle bg-overlay-1 px-3 py-2">
+            <ConnectorKindMark kind={source.kind} size={22} title={source.kind} />
+            <span className="text-sm font-medium text-text">{source.displayName}</span>
+          </span>
+        ) : (
+          <span className={`text-sm ${META_TEXT}`}>No source</span>
+        )}
+        <ArrowRight size={16} className="text-text-faint" aria-hidden />
+        <button
+          type="button"
+          onClick={onOpenMap}
+          className="inline-flex items-center gap-1.5 rounded-xl border border-border-subtle bg-overlay-1 px-3 py-2 text-sm text-text-secondary hover:border-border hover:text-text"
+        >
+          <Shuffle size={14} aria-hidden />
+          {mapLabel}
+        </button>
+        <ArrowRight size={16} className="text-text-faint" aria-hidden />
+        {target ? (
+          <span className="inline-flex items-center gap-2 rounded-xl border border-border-subtle bg-overlay-1 px-3 py-2">
+            <ConnectorKindMark kind={target.kind} size={22} title={target.kind} />
+            <span className="text-sm font-medium text-text">{target.displayName}</span>
+          </span>
+        ) : (
+          <span className={`text-sm ${META_TEXT}`}>No target</span>
+        )}
+      </div>
+
+      <div className="max-w-md text-center">
+        <p className="text-sm font-medium text-text">Ready to move</p>
+        <p className={`mt-1 ${META_TEXT}`}>
+          {source && target
+            ? `Preview a sample, or run the full move${sameConnector ? " (same connector for both ends)" : ""}.`
+            : "Open Source and Target to choose connectors — they can be different or the same."}
+        </p>
+      </div>
+
+      <div className="flex items-center gap-2">
+        <button type="button" className={TEXT_BTN} disabled={!canPreview} onClick={onPreview}>
+          <Eye size={14} className="mr-1.5 inline-block opacity-70" aria-hidden />
+          {busy === "preview" ? "Previewing…" : "Preview"}
+        </button>
+        <button type="button" className={TEXT_BTN_PRIMARY} disabled={!canRun} onClick={onRun}>
+          <Play size={14} className="mr-1.5 inline-block opacity-80" aria-hidden />
+          {busy === "run" ? "Running…" : "Run"}
+        </button>
       </div>
     </div>
   )
 }
 
-function PreviewTable({
+function PreviewStage({
   rows,
   truncated,
 }: {
@@ -324,20 +433,21 @@ function PreviewTable({
   truncated: boolean
 }): JSX.Element {
   if (rows.length === 0) {
-    return <p className={HELP_TEXT}>Preview returned 0 rows.</p>
+    return <EmptyState icon={WIDGET_ICONS.bridge} message="Preview returned 0 rows" />
   }
   const cols = Object.keys(rows[0]!)
   return (
-    <FormSectionCard
-      title={`Preview · ${rows.length} row${rows.length === 1 ? "" : "s"}${truncated ? " (truncated)" : ""}`}
-      description="First 50 rows after the map — nothing written."
-    >
-      <div className="overflow-auto rounded-md border border-border-subtle">
+    <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-5 py-4">
+      <div className={`mb-2 shrink-0 ${META_TEXT}`}>
+        Preview · {rows.length} row{rows.length === 1 ? "" : "s"}
+        {truncated ? " (truncated)" : ""} · nothing written
+      </div>
+      <div className="min-h-0 flex-1 overflow-auto rounded-xl border border-border-subtle">
         <table className="min-w-full text-xs">
-          <thead className="bg-elevated/60">
+          <thead className="sticky top-0 bg-elevated/90 backdrop-blur-sm">
             <tr>
               {cols.map((c) => (
-                <th key={c} className="whitespace-nowrap px-2.5 py-1.5 text-left font-semibold text-text">
+                <th key={c} className="whitespace-nowrap px-3 py-2 text-left font-semibold text-text">
                   {c}
                 </th>
               ))}
@@ -345,9 +455,9 @@ function PreviewTable({
           </thead>
           <tbody>
             {rows.map((row, i) => (
-              <tr key={i} className="odd:bg-base/30">
+              <tr key={i} className="odd:bg-base/25">
                 {cols.map((c) => (
-                  <td key={c} className="whitespace-nowrap px-2.5 py-1.5 font-mono text-text-muted">
+                  <td key={c} className="whitespace-nowrap px-3 py-1.5 font-mono text-text-muted">
                     {formatCell(row[c])}
                   </td>
                 ))}
@@ -356,7 +466,35 @@ function PreviewTable({
           </tbody>
         </table>
       </div>
-    </FormSectionCard>
+    </div>
+  )
+}
+
+function SummaryStage({ summary }: { summary: MoveSummary }): JSX.Element {
+  const tone =
+    summary.status === "completed"
+      ? "text-emerald-500"
+      : summary.status === "partial"
+        ? "text-amber-500"
+        : "text-rose-500"
+  return (
+    <EmptyState
+      icon={WIDGET_ICONS.bridge}
+      message={<span className={tone}>{summary.status}</span>}
+      detail={
+        <div className="space-y-1">
+          <p>
+            Read {summary.rowsRead} · wrote {summary.rowsWritten}
+            {summary.failedAtRow !== null ? ` · stopped at row ${summary.failedAtRow}` : ""}
+          </p>
+          {summary.errors.slice(0, 3).map((e, i) => (
+            <p key={i} className="font-mono text-[11px]">
+              row {e.row}: {e.message}
+            </p>
+          ))}
+        </div>
+      }
+    />
   )
 }
 
@@ -364,48 +502,4 @@ function formatCell(v: unknown): string {
   if (v === null || v === undefined) return "—"
   if (typeof v === "object") return JSON.stringify(v)
   return String(v)
-}
-
-function SummaryCard({ summary }: { summary: MoveSummary }): JSX.Element {
-  const tone =
-    summary.status === "completed"
-      ? "text-emerald-400"
-      : summary.status === "partial"
-        ? "text-amber-400"
-        : "text-rose-400"
-  return (
-    <FormSectionCard title="Move result" description="Summary returned by the target adapter.">
-      <div className="flex flex-wrap items-center gap-3 text-sm">
-        <span className={`font-semibold ${tone}`}>{summary.status}</span>
-        <span className={META_TEXT}>
-          rows read: <span className="font-mono text-text">{summary.rowsRead}</span>
-        </span>
-        <span className={META_TEXT}>
-          rows written: <span className="font-mono text-text">{summary.rowsWritten}</span>
-        </span>
-        {summary.failedAtRow !== null && (
-          <span className={META_TEXT}>
-            stopped at row <span className="font-mono text-text">{summary.failedAtRow}</span>
-          </span>
-        )}
-        {summary.errors.length > 0 && (
-          <span className={META_TEXT}>
-            errors: <span className="font-mono text-text">{summary.errors.length}</span>
-          </span>
-        )}
-      </div>
-      {summary.errors.length > 0 && (
-        <ul className="mt-2 space-y-1 text-xs text-text-muted">
-          {summary.errors.slice(0, 10).map((e, i) => (
-            <li key={i} className="font-mono">
-              row {e.row}: {e.message}
-            </li>
-          ))}
-          {summary.errors.length > 10 && (
-            <li className="text-text-faint">… +{summary.errors.length - 10} more</li>
-          )}
-        </ul>
-      )}
-    </FormSectionCard>
-  )
 }

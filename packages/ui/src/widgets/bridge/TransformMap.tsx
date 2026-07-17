@@ -1,22 +1,19 @@
 /**
- * TransformMap — structured Bridge Map editor (Source → Map → Target).
+ * TransformMap — production Map workspace for Bridge.
  *
- * Visual form is the only editable source of truth. Advanced JSON is an
- * escape hatch: Apply replaces the draft; Copy updates the textarea from draft.
+ * Layout:
+ *   toolbar → Columns table (primary) → Rules | JSON tabs (secondary)
+ *
+ * Column headers must NOT use `.field-label` (display:block breaks <th>).
  */
 
-import { ChevronDown, ChevronRight, Plus, Trash2 } from "lucide-react"
-import { useState, type JSX, type ReactNode } from "react"
+import { Plus, Trash2 } from "lucide-react"
+import { useMemo, useState, type JSX, type ReactNode } from "react"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import { HELP_TEXT, META_TEXT } from "../entity-registry/chrome"
-import { FormSectionCard } from "../entity-registry/form-section"
+import { HELP_TEXT, META_TEXT, TEXT_BTN, TEXT_BTN_PRIMARY } from "../entity-registry/chrome"
 import {
   CAST_OPTIONS,
   FILTER_OPS,
-  type ColumnDraft,
-  type DefaultDraft,
-  type DeriveDraft,
-  type FilterDraft,
   type TransformDraft,
   formatTransformJson,
   isPassThrough,
@@ -29,9 +26,11 @@ import {
 } from "./transform-draft"
 import type { CastKind, TransformFilterOp } from "@mia/shared-types"
 
+type SecondaryTab = "rules" | "json"
+
 const CAST_LIST: ListboxOption<CastKind | "">[] = CAST_OPTIONS.map((c) => ({
   value: c,
-  label: c === "" ? "No cast" : c,
+  label: c === "" ? "Keep as-is" : c,
 }))
 
 const FILTER_OP_LIST: ListboxOption<TransformFilterOp>[] = FILTER_OPS.map((op) => ({
@@ -39,12 +38,12 @@ const FILTER_OP_LIST: ListboxOption<TransformFilterOp>[] = FILTER_OPS.map((op) =
   label: op,
 }))
 
-const inputClass = "input text-sm min-w-0 w-full"
-const monoClass = `${inputClass} font-mono`
-const rowBtnClass =
-  "inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-overlay-2 hover:text-text transition-colors"
-const addBtnClass =
-  "inline-flex items-center gap-1.5 rounded-md border border-border-subtle bg-overlay-1 px-2.5 py-1.5 text-xs font-medium text-text-secondary hover:bg-overlay-2 hover:text-text transition-colors"
+/** Table header cell — never use .field-label here (it forces display:block). */
+const thClass =
+  "px-3 py-2.5 text-left text-[11px] font-semibold uppercase tracking-wide text-text-muted"
+
+const cellInput =
+  "w-full min-w-0 rounded-md border border-transparent bg-transparent px-2 py-1.5 font-mono text-sm text-text outline-none placeholder:text-text-faint focus:border-border-subtle focus:bg-base/50"
 
 export function TransformMap({
   draft,
@@ -52,38 +51,34 @@ export function TransformMap({
   sourceColumns,
   onSampleColumns,
   sampling,
+  sourceName = null,
+  targetName = null,
 }: {
   draft: TransformDraft
   onChange: (next: TransformDraft) => void
-  /** Known source field names (from last sample / preview). */
   sourceColumns: readonly string[]
-  /** Optional: fetch a source sample and seed identity mappings. */
   onSampleColumns?: () => void
   sampling?: boolean
+  sourceName?: string | null
+  targetName?: string | null
+  variant?: "modal" | "inline"
 }): JSX.Element {
-  const [advancedOpen, setAdvancedOpen] = useState(false)
-  const [jsonText, setJsonText] = useState("")
+  const [tab, setTab] = useState<SecondaryTab>("rules")
+  const [jsonText, setJsonText] = useState(() => formatTransformJson(draft))
   const [jsonError, setJsonError] = useState<string | null>(null)
 
   const passThrough = isPassThrough(draft)
+  const mappedCount = draft.columns.filter((c) => c.from.trim()).length
+  const rulesCount = useMemo(() => {
+    return (
+      draft.derive.filter((d) => d.to.trim()).length +
+      draft.defaults.filter((d) => d.column.trim()).length +
+      draft.filters.filter((f) => f.column.trim()).length
+    )
+  }, [draft])
 
-  function patchColumns(columns: ColumnDraft[]): void {
+  function setColumns(columns: TransformDraft["columns"]): void {
     onChange({ ...draft, columns })
-  }
-  function patchDerive(derive: DeriveDraft[]): void {
-    onChange({ ...draft, derive })
-  }
-  function patchDefaults(defaults: DefaultDraft[]): void {
-    onChange({ ...draft, defaults })
-  }
-  function patchFilters(filters: FilterDraft[]): void {
-    onChange({ ...draft, filters })
-  }
-
-  function openAdvanced(): void {
-    setAdvancedOpen(true)
-    setJsonError(null)
-    setJsonText(formatTransformJson(draft))
   }
 
   function applyJson(): void {
@@ -96,392 +91,531 @@ export function TransformMap({
     onChange(parsed.draft)
   }
 
-  function seedFromKnown(): void {
-    onChange(seedIdentityColumns(draft, sourceColumns))
-  }
+  const fromHint = sourceName ? `Field name on ${sourceName}` : "Field name on the source"
+  const toHint = targetName ? `Field name written to ${targetName}` : "Field name written to the target"
 
   return (
-    <FormSectionCard
-      title="Map"
-      description={
-        passThrough
-          ? "Pass-through — rows keep their source shape. Add column mappings to project, rename, or cast."
-          : "Applied row-by-row after the source read, before the target write."
-      }
-      emphasized
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        {onSampleColumns && (
+    <div className="flex min-h-0 flex-1 flex-col gap-3">
+      <div className="flex shrink-0 flex-wrap items-center gap-2">
+        <StatusPill
+          tone={passThrough ? "neutral" : "accent"}
+          label={passThrough ? "Pass-through" : `${mappedCount} column${mappedCount === 1 ? "" : "s"} mapped`}
+        />
+        {rulesCount > 0 && (
+          <StatusPill tone="neutral" label={`${rulesCount} rule${rulesCount === 1 ? "" : "s"}`} />
+        )}
+        <div className="ml-auto flex flex-wrap items-center gap-2">
+          {onSampleColumns && (
+            <button type="button" className={TEXT_BTN} disabled={sampling} onClick={onSampleColumns}>
+              {sampling ? "Sampling…" : "Sample columns"}
+            </button>
+          )}
+          {sourceColumns.length > 0 && (
+            <button
+              type="button"
+              className={TEXT_BTN}
+              onClick={() => onChange(seedIdentityColumns(draft, sourceColumns))}
+            >
+              Map all 1∶1
+            </button>
+          )}
           <button
             type="button"
-            className={addBtnClass}
-            disabled={sampling}
-            onClick={onSampleColumns}
-            title="Read a few source rows (no transform) and offer their column names"
+            className={TEXT_BTN_PRIMARY}
+            onClick={() => setColumns([...draft.columns, newColumnDraft()])}
           >
-            {sampling ? "Sampling…" : "Sample source columns"}
+            <Plus size={14} />
+            Add column
           </button>
-        )}
-        {sourceColumns.length > 0 && (
-          <button
-            type="button"
-            className={addBtnClass}
-            onClick={seedFromKnown}
-            title="Add identity mappings for every known source column (only if Map is empty)"
-          >
-            Map all columns 1∶1
-          </button>
-        )}
-        {sourceColumns.length > 0 && (
-          <span className={META_TEXT}>
-            Known fields:{" "}
-            <span className="font-mono text-text-muted">{sourceColumns.join(", ")}</span>
-          </span>
-        )}
+        </div>
       </div>
 
-      {/* ── Columns ── */}
-      <MapBlock
-        title="Columns"
-        hint="Project / rename / cast. Leave empty for pass-through. A non-empty list replaces the row with only these fields."
-      >
-        {draft.columns.length === 0 ? (
-          <p className={HELP_TEXT}>No column mappings — source fields pass through as-is.</p>
-        ) : (
-          <div className="space-y-2">
-            <div className="hidden gap-2 px-0.5 text-[11px] font-medium uppercase tracking-wide text-text-faint sm:grid sm:grid-cols-[1fr_1fr_7.5rem_1fr_2rem]">
-              <span>From</span>
-              <span>To</span>
-              <span>Cast</span>
-              <span>Default if empty</span>
-              <span />
+      {sourceColumns.length > 0 && (
+        <p className={`shrink-0 ${META_TEXT}`}>
+          Source fields · <span className="font-mono text-text-secondary">{sourceColumns.join(" · ")}</span>
+        </p>
+      )}
+
+      {/* Columns */}
+      <section className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-xl border border-border-subtle bg-elevated/30">
+        <header className="shrink-0 border-b border-border-subtle px-4 py-3">
+          <div className="flex flex-wrap items-baseline justify-between gap-2">
+            <h3 className="text-sm font-semibold text-text">Column mappings</h3>
+            <span className={META_TEXT}>
+              {passThrough
+                ? "No rows below → every source field is kept"
+                : "Only the rows below are written to the target"}
+            </span>
+          </div>
+          <dl className="mt-2 grid gap-x-4 gap-y-1 text-[11px] text-text-muted sm:grid-cols-2 lg:grid-cols-4">
+            <div>
+              <dt className="font-semibold text-text-secondary">From</dt>
+              <dd>{fromHint}</dd>
             </div>
-            {draft.columns.map((row, index) => (
-              <div
-                key={row.id}
-                className="grid grid-cols-1 gap-2 rounded-md border border-border-subtle/70 bg-base/40 p-2 sm:grid-cols-[1fr_1fr_7.5rem_1fr_2rem] sm:items-center"
-              >
-                <FieldSuggest
-                  value={row.from}
-                  onChange={(from) => {
-                    const next = [...draft.columns]
-                    const cur = next[index]!
-                    next[index] = {
-                      ...cur,
-                      from,
-                      to: cur.to.trim() === "" || cur.to === cur.from ? from : cur.to,
-                    }
-                    patchColumns(next)
-                  }}
-                  suggestions={sourceColumns}
-                  placeholder="source field"
-                  ariaLabel={`Column ${index + 1} from`}
-                />
-                <input
-                  className={monoClass}
-                  value={row.to}
-                  onChange={(e) => {
-                    const next = [...draft.columns]
-                    next[index] = { ...next[index]!, to: e.target.value }
-                    patchColumns(next)
-                  }}
-                  placeholder="target field"
-                  aria-label={`Column ${index + 1} to`}
-                />
-                <Listbox
-                  value={row.cast}
-                  options={CAST_LIST}
-                  onChange={(cast) => {
-                    const next = [...draft.columns]
-                    next[index] = { ...next[index]!, cast }
-                    patchColumns(next)
-                  }}
-                  size="sm"
-                  className="w-full"
-                  ariaLabel={`Column ${index + 1} cast`}
-                />
-                <input
-                  className={monoClass}
-                  value={row.defaultText}
-                  onChange={(e) => {
-                    const next = [...draft.columns]
-                    next[index] = { ...next[index]!, defaultText: e.target.value }
-                    patchColumns(next)
-                  }}
-                  placeholder='e.g. "" or 0 or true'
-                  aria-label={`Column ${index + 1} default`}
-                />
-                <button
-                  type="button"
-                  className={rowBtnClass}
-                  aria-label={`Remove column ${index + 1}`}
-                  onClick={() => patchColumns(draft.columns.filter((_, i) => i !== index))}
-                >
-                  <Trash2 size={14} />
+            <div>
+              <dt className="font-semibold text-text-secondary">To</dt>
+              <dd>{toHint}</dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-text-secondary">Cast</dt>
+              <dd>Convert type (string, number, date…)</dd>
+            </div>
+            <div>
+              <dt className="font-semibold text-text-secondary">Default</dt>
+              <dd>Used when From is null or empty</dd>
+            </div>
+          </dl>
+        </header>
+
+        {draft.columns.length === 0 ? (
+          <div className="flex flex-1 flex-col items-center justify-center gap-3 px-6 py-10 text-center">
+            <p className="text-sm font-medium text-text">Pass-through mode</p>
+            <p className={`max-w-md ${HELP_TEXT}`}>
+              Nothing to map yet — source fields flow through unchanged. Sample columns to map 1∶1, or add a row to rename, cast, or set a default.
+            </p>
+            <div className="mt-1 flex flex-wrap justify-center gap-2">
+              {onSampleColumns && (
+                <button type="button" className={TEXT_BTN} disabled={sampling} onClick={onSampleColumns}>
+                  {sampling ? "Sampling…" : "Sample source columns"}
                 </button>
-              </div>
-            ))}
+              )}
+              <button
+                type="button"
+                className={TEXT_BTN_PRIMARY}
+                onClick={() => setColumns([newColumnDraft()])}
+              >
+                <Plus size={14} />
+                Add mapping
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="min-h-0 flex-1 overflow-auto">
+            <table className="w-full min-w-[44rem] table-fixed border-collapse text-left">
+              <colgroup>
+                <col className="w-[26%]" />
+                <col className="w-[26%]" />
+                <col className="w-[18%]" />
+                <col className="w-[24%]" />
+                <col className="w-10" />
+              </colgroup>
+              <thead className="sticky top-0 z-[1] bg-elevated/95 backdrop-blur-sm">
+                <tr className="border-b border-border-subtle">
+                  <th className={thClass}>From</th>
+                  <th className={thClass}>To</th>
+                  <th className={thClass}>Cast</th>
+                  <th className={thClass}>Default</th>
+                  <th className="w-10 px-2 py-2.5" />
+                </tr>
+              </thead>
+              <tbody>
+                {draft.columns.map((row, index) => (
+                  <tr
+                    key={row.id}
+                    className="border-b border-border-subtle/70 last:border-0 hover:bg-overlay-1/40"
+                  >
+                    <td className="px-1.5 py-1 align-middle">
+                      <FieldSuggest
+                        value={row.from}
+                        onChange={(from) => {
+                          const next = [...draft.columns]
+                          const cur = next[index]!
+                          next[index] = {
+                            ...cur,
+                            from,
+                            to: cur.to.trim() === "" || cur.to === cur.from ? from : cur.to,
+                          }
+                          setColumns(next)
+                        }}
+                        suggestions={sourceColumns}
+                        placeholder="e.g. customer_id"
+                        ariaLabel={`From ${index + 1}`}
+                      />
+                    </td>
+                    <td className="px-1.5 py-1 align-middle">
+                      <input
+                        className={cellInput}
+                        value={row.to}
+                        onChange={(e) => {
+                          const next = [...draft.columns]
+                          next[index] = { ...next[index]!, to: e.target.value }
+                          setColumns(next)
+                        }}
+                        placeholder="e.g. cust_id"
+                        aria-label={`To ${index + 1}`}
+                      />
+                    </td>
+                    <td className="px-1.5 py-1 align-middle">
+                      <Listbox
+                        value={row.cast}
+                        options={CAST_LIST}
+                        onChange={(cast) => {
+                          const next = [...draft.columns]
+                          next[index] = { ...next[index]!, cast }
+                          setColumns(next)
+                        }}
+                        size="sm"
+                        className="w-full"
+                        ariaLabel={`Cast ${index + 1}`}
+                      />
+                    </td>
+                    <td className="px-1.5 py-1 align-middle">
+                      <input
+                        className={cellInput}
+                        value={row.defaultText}
+                        onChange={(e) => {
+                          const next = [...draft.columns]
+                          next[index] = { ...next[index]!, defaultText: e.target.value }
+                          setColumns(next)
+                        }}
+                        placeholder='e.g. 0 or ""'
+                        aria-label={`Default ${index + 1}`}
+                      />
+                    </td>
+                    <td className="px-1 py-1 align-middle">
+                      <button
+                        type="button"
+                        className="inline-flex h-8 w-8 items-center justify-center rounded-md text-text-muted hover:bg-overlay-2 hover:text-text"
+                        aria-label={`Remove mapping ${index + 1}`}
+                        onClick={() => setColumns(draft.columns.filter((_, i) => i !== index))}
+                      >
+                        <Trash2 size={14} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         )}
-        <button type="button" className={addBtnClass} onClick={() => patchColumns([...draft.columns, newColumnDraft()])}>
-          <Plus size={14} />
-          Add column
-        </button>
-      </MapBlock>
+      </section>
 
-      {/* ── Derive ── */}
-      <MapBlock title="Derive" hint='Add fields from templates. Use ${field} — no code eval.'>
-        {draft.derive.map((row, index) => (
-          <div
-            key={row.id}
-            className="grid grid-cols-1 gap-2 rounded-md border border-border-subtle/70 bg-base/40 p-2 sm:grid-cols-[1fr_2fr_2rem] sm:items-center"
+      {/* Secondary tabs — actions stay inside the panel, above the modal footer */}
+      <section className="flex max-h-[min(38vh,20rem)] shrink-0 flex-col overflow-hidden rounded-xl border border-border-subtle bg-elevated/20">
+        <div className="flex shrink-0 items-center gap-1 border-b border-border-subtle px-2 py-1.5">
+          <TabButton active={tab === "rules"} onClick={() => setTab("rules")}>
+            Rules{rulesCount > 0 ? ` · ${rulesCount}` : ""}
+          </TabButton>
+          <TabButton
+            active={tab === "json"}
+            onClick={() => {
+              setTab("json")
+              setJsonError(null)
+              setJsonText(formatTransformJson(draft))
+            }}
           >
-            <input
-              className={monoClass}
-              value={row.to}
-              onChange={(e) => {
-                const next = [...draft.derive]
-                next[index] = { ...next[index]!, to: e.target.value }
-                patchDerive(next)
-              }}
-              placeholder="new field"
-              aria-label={`Derive ${index + 1} name`}
-            />
-            <input
-              className={monoClass}
-              value={row.template}
-              onChange={(e) => {
-                const next = [...draft.derive]
-                next[index] = { ...next[index]!, template: e.target.value }
-                patchDerive(next)
-              }}
-              placeholder={"e.g. row-${id}"}
-              aria-label={`Derive ${index + 1} template`}
-            />
-            <button
-              type="button"
-              className={rowBtnClass}
-              aria-label={`Remove derive ${index + 1}`}
-              onClick={() => patchDerive(draft.derive.filter((_, i) => i !== index))}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        ))}
-        <button type="button" className={addBtnClass} onClick={() => patchDerive([...draft.derive, newDeriveDraft()])}>
-          <Plus size={14} />
-          Add derive
-        </button>
-      </MapBlock>
+            JSON
+          </TabButton>
+        </div>
 
-      {/* ── Defaults ── */}
-      <MapBlock title="Defaults" hint="Fill missing / null / empty after columns and derive.">
-        {draft.defaults.map((row, index) => (
-          <div
-            key={row.id}
-            className="grid grid-cols-1 gap-2 rounded-md border border-border-subtle/70 bg-base/40 p-2 sm:grid-cols-[1fr_1fr_2rem] sm:items-center"
-          >
-            <FieldSuggest
-              value={row.column}
-              onChange={(column) => {
-                const next = [...draft.defaults]
-                next[index] = { ...next[index]!, column }
-                patchDefaults(next)
-              }}
-              suggestions={sourceColumns}
-              placeholder="field"
-              ariaLabel={`Default ${index + 1} column`}
-            />
-            <input
-              className={monoClass}
-              value={row.valueText}
-              onChange={(e) => {
-                const next = [...draft.defaults]
-                next[index] = { ...next[index]!, valueText: e.target.value }
-                patchDefaults(next)
-              }}
-              placeholder="value"
-              aria-label={`Default ${index + 1} value`}
-            />
-            <button
-              type="button"
-              className={rowBtnClass}
-              aria-label={`Remove default ${index + 1}`}
-              onClick={() => patchDefaults(draft.defaults.filter((_, i) => i !== index))}
-            >
-              <Trash2 size={14} />
-            </button>
-          </div>
-        ))}
-        <button
-          type="button"
-          className={addBtnClass}
-          onClick={() => patchDefaults([...draft.defaults, newDefaultDraft()])}
-        >
-          <Plus size={14} />
-          Add default
-        </button>
-      </MapBlock>
-
-      {/* ── Filters ── */}
-      <MapBlock title="Filters" hint="Keep a row only when every rule passes (AND).">
-        {draft.filters.map((row, index) => {
-          const needsValue = row.op !== "exists" && row.op !== "empty"
-          return (
-            <div
-              key={row.id}
-              className="grid grid-cols-1 gap-2 rounded-md border border-border-subtle/70 bg-base/40 p-2 sm:grid-cols-[1fr_7.5rem_1fr_2rem] sm:items-center"
-            >
-              <FieldSuggest
-                value={row.column}
-                onChange={(column) => {
-                  const next = [...draft.filters]
-                  next[index] = { ...next[index]!, column }
-                  patchFilters(next)
-                }}
-                suggestions={sourceColumns}
-                placeholder="field"
-                ariaLabel={`Filter ${index + 1} column`}
-              />
-              <Listbox
-                value={row.op}
-                options={FILTER_OP_LIST}
-                onChange={(op) => {
-                  const next = [...draft.filters]
-                  next[index] = { ...next[index]!, op }
-                  patchFilters(next)
-                }}
-                size="sm"
-                className="w-full"
-                ariaLabel={`Filter ${index + 1} op`}
-              />
-              <input
-                className={monoClass}
-                value={row.valueText}
-                disabled={!needsValue}
-                onChange={(e) => {
-                  const next = [...draft.filters]
-                  next[index] = { ...next[index]!, valueText: e.target.value }
-                  patchFilters(next)
-                }}
-                placeholder={row.op === "in" ? "a, b, c  or  [1,2]" : needsValue ? "value" : "—"}
-                aria-label={`Filter ${index + 1} value`}
-              />
-              <button
-                type="button"
-                className={rowBtnClass}
-                aria-label={`Remove filter ${index + 1}`}
-                onClick={() => patchFilters(draft.filters.filter((_, i) => i !== index))}
+        {tab === "rules" ? (
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            <div className="grid gap-6 lg:grid-cols-3">
+              <RuleGroup
+                title="Derive"
+                hint="Build a new field from ${other_fields}"
+                onAdd={() => onChange({ ...draft, derive: [...draft.derive, newDeriveDraft()] })}
+                addLabel="Add"
               >
-                <Trash2 size={14} />
-              </button>
-            </div>
-          )
-        })}
-        <button type="button" className={addBtnClass} onClick={() => patchFilters([...draft.filters, newFilterDraft()])}>
-          <Plus size={14} />
-          Add filter
-        </button>
-      </MapBlock>
+                {draft.derive.length === 0 ? (
+                  <p className={META_TEXT}>None</p>
+                ) : (
+                  draft.derive.map((row, index) => (
+                    <div key={row.id} className="grid grid-cols-[1fr_1.4fr_auto] gap-1.5">
+                      <input
+                        className={`${cellInput} border-border-subtle/80 bg-base/40`}
+                        value={row.to}
+                        onChange={(e) => {
+                          const next = [...draft.derive]
+                          next[index] = { ...next[index]!, to: e.target.value }
+                          onChange({ ...draft, derive: next })
+                        }}
+                        placeholder="new name"
+                      />
+                      <input
+                        className={`${cellInput} border-border-subtle/80 bg-base/40`}
+                        value={row.template}
+                        onChange={(e) => {
+                          const next = [...draft.derive]
+                          next[index] = { ...next[index]!, template: e.target.value }
+                          onChange({ ...draft, derive: next })
+                        }}
+                        placeholder={"row-${id}"}
+                      />
+                      <IconRemove
+                        onClick={() =>
+                          onChange({ ...draft, derive: draft.derive.filter((_, i) => i !== index) })
+                        }
+                      />
+                    </div>
+                  ))
+                )}
+              </RuleGroup>
 
-      {/* ── Advanced JSON ── */}
-      <div className="rounded-md border border-border-subtle/70 bg-base/30">
-        <button
-          type="button"
-          className="flex w-full items-center gap-2 px-3 py-2 text-left text-xs font-medium text-text-secondary hover:text-text"
-          onClick={() => (advancedOpen ? setAdvancedOpen(false) : openAdvanced())}
-        >
-          {advancedOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-          Advanced JSON
-        </button>
-        {advancedOpen && (
-          <div className="space-y-2 border-t border-border-subtle px-3 pb-3 pt-2">
-            <p className={HELP_TEXT}>
-              Escape hatch for agents and power users. Apply replaces the Map form. Invalid JSON is rejected.
-            </p>
-            <textarea
-              className="input min-h-[8rem] w-full font-mono text-xs leading-relaxed"
-              value={jsonText}
-              onChange={(e) => {
-                setJsonText(e.target.value)
-                setJsonError(null)
-              }}
-              spellCheck={false}
-            />
-            {jsonError && <p className="text-xs text-rose-400">{jsonError}</p>}
-            <div className="flex flex-wrap gap-2">
-              <button type="button" className={addBtnClass} onClick={applyJson}>
-                Apply JSON → Map
+              <RuleGroup
+                title="Defaults"
+                hint="Fill a field after mapping if still empty"
+                onAdd={() => onChange({ ...draft, defaults: [...draft.defaults, newDefaultDraft()] })}
+                addLabel="Add"
+              >
+                {draft.defaults.length === 0 ? (
+                  <p className={META_TEXT}>None</p>
+                ) : (
+                  draft.defaults.map((row, index) => (
+                    <div key={row.id} className="grid grid-cols-[1fr_1fr_auto] gap-1.5">
+                      <FieldSuggest
+                        value={row.column}
+                        onChange={(column) => {
+                          const next = [...draft.defaults]
+                          next[index] = { ...next[index]!, column }
+                          onChange({ ...draft, defaults: next })
+                        }}
+                        suggestions={sourceColumns}
+                        placeholder="field"
+                        bordered
+                      />
+                      <input
+                        className={`${cellInput} border-border-subtle/80 bg-base/40`}
+                        value={row.valueText}
+                        onChange={(e) => {
+                          const next = [...draft.defaults]
+                          next[index] = { ...next[index]!, valueText: e.target.value }
+                          onChange({ ...draft, defaults: next })
+                        }}
+                        placeholder="value"
+                      />
+                      <IconRemove
+                        onClick={() =>
+                          onChange({
+                            ...draft,
+                            defaults: draft.defaults.filter((_, i) => i !== index),
+                          })
+                        }
+                      />
+                    </div>
+                  ))
+                )}
+              </RuleGroup>
+
+              <RuleGroup
+                title="Filters"
+                hint="Keep a row only if every rule passes"
+                onAdd={() => onChange({ ...draft, filters: [...draft.filters, newFilterDraft()] })}
+                addLabel="Add"
+              >
+                {draft.filters.length === 0 ? (
+                  <p className={META_TEXT}>None</p>
+                ) : (
+                  draft.filters.map((row, index) => {
+                    const needsValue = row.op !== "exists" && row.op !== "empty"
+                    return (
+                      <div key={row.id} className="grid grid-cols-[1fr_5.5rem_1fr_auto] gap-1.5">
+                        <FieldSuggest
+                          value={row.column}
+                          onChange={(column) => {
+                            const next = [...draft.filters]
+                            next[index] = { ...next[index]!, column }
+                            onChange({ ...draft, filters: next })
+                          }}
+                          suggestions={sourceColumns}
+                          placeholder="field"
+                          bordered
+                        />
+                        <Listbox
+                          value={row.op}
+                          options={FILTER_OP_LIST}
+                          onChange={(op) => {
+                            const next = [...draft.filters]
+                            next[index] = { ...next[index]!, op }
+                            onChange({ ...draft, filters: next })
+                          }}
+                          size="sm"
+                          className="w-full"
+                          ariaLabel={`Filter op ${index + 1}`}
+                        />
+                        <input
+                          className={`${cellInput} border-border-subtle/80 bg-base/40`}
+                          value={row.valueText}
+                          disabled={!needsValue}
+                          onChange={(e) => {
+                            const next = [...draft.filters]
+                            next[index] = { ...next[index]!, valueText: e.target.value }
+                            onChange({ ...draft, filters: next })
+                          }}
+                          placeholder={needsValue ? "value" : "—"}
+                        />
+                        <IconRemove
+                          onClick={() =>
+                            onChange({
+                              ...draft,
+                              filters: draft.filters.filter((_, i) => i !== index),
+                            })
+                          }
+                        />
+                      </div>
+                    )
+                  })
+                )}
+              </RuleGroup>
+            </div>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col">
+            <div className="min-h-0 flex-1 overflow-y-auto px-4 pt-3">
+              <p className={`mb-2 ${HELP_TEXT}`}>
+                For agents and scripts. Apply replaces the Map form; invalid JSON is rejected.
+              </p>
+              <textarea
+                className="input mb-3 min-h-[9rem] w-full font-mono text-xs leading-relaxed"
+                value={jsonText}
+                onChange={(e) => {
+                  setJsonText(e.target.value)
+                  setJsonError(null)
+                }}
+                spellCheck={false}
+              />
+              {jsonError && <p className="mb-2 text-xs text-rose-400">{jsonError}</p>}
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-2 border-t border-border-subtle bg-elevated/40 px-4 py-3">
+              <button type="button" className={TEXT_BTN_PRIMARY} onClick={applyJson}>
+                Apply JSON
               </button>
               <button
                 type="button"
-                className={addBtnClass}
+                className={TEXT_BTN}
                 onClick={() => {
                   setJsonError(null)
                   setJsonText(formatTransformJson(draft))
                 }}
               >
-                Copy Map → JSON
+                Refresh from Map
               </button>
             </div>
           </div>
         )}
-      </div>
-    </FormSectionCard>
-  )
-}
-
-function MapBlock({
-  title,
-  hint,
-  children,
-}: {
-  title: string
-  hint: string
-  children: ReactNode
-}): JSX.Element {
-  return (
-    <div className="space-y-2">
-      <div>
-        <h5 className="text-xs font-semibold uppercase tracking-wide text-text-muted">{title}</h5>
-        <p className={`mt-0.5 ${META_TEXT}`}>{hint}</p>
-      </div>
-      {children}
+      </section>
     </div>
   )
 }
 
-/** Free-text field with optional click-to-fill suggestions from known columns. */
+function StatusPill({
+  label,
+  tone,
+}: {
+  label: string
+  tone: "neutral" | "accent"
+}): JSX.Element {
+  return (
+    <span
+      className={[
+        "inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium",
+        tone === "accent" ? "bg-accent/12 text-accent" : "bg-overlay-2 text-text-secondary",
+      ].join(" ")}
+    >
+      {label}
+    </span>
+  )
+}
+
+function TabButton({
+  active,
+  onClick,
+  children,
+}: {
+  active: boolean
+  onClick: () => void
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className={[
+        "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+        active ? "bg-overlay-2 text-text" : "text-text-muted hover:bg-overlay-1 hover:text-text",
+      ].join(" ")}
+    >
+      {children}
+    </button>
+  )
+}
+
+function RuleGroup({
+  title,
+  hint,
+  onAdd,
+  addLabel,
+  children,
+}: {
+  title: string
+  hint: string
+  onAdd: () => void
+  addLabel: string
+  children: ReactNode
+}): JSX.Element {
+  return (
+    <div className="space-y-2.5">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <h4 className="text-sm font-semibold text-text">{title}</h4>
+          <p className={META_TEXT}>{hint}</p>
+        </div>
+        <button type="button" className={TEXT_BTN} onClick={onAdd}>
+          <Plus size={13} />
+          {addLabel}
+        </button>
+      </div>
+      <div className="space-y-1.5">{children}</div>
+    </div>
+  )
+}
+
+function IconRemove({ onClick }: { onClick: () => void }): JSX.Element {
+  return (
+    <button
+      type="button"
+      className="inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md text-text-muted hover:bg-overlay-2 hover:text-text"
+      onClick={onClick}
+      aria-label="Remove"
+    >
+      <Trash2 size={14} />
+    </button>
+  )
+}
+
 function FieldSuggest({
   value,
   onChange,
   suggestions,
   placeholder,
   ariaLabel,
+  bordered,
 }: {
   value: string
   onChange: (v: string) => void
   suggestions: readonly string[]
   placeholder?: string
   ariaLabel?: string
+  bordered?: boolean
 }): JSX.Element {
+  const listId = ariaLabel ? `${ariaLabel.replace(/\s+/g, "-")}-list` : undefined
   return (
-    <div className="min-w-0 space-y-1">
+    <>
       <input
-        className={monoClass}
+        className={bordered ? `${cellInput} border-border-subtle/80 bg-base/40` : cellInput}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}
         aria-label={ariaLabel}
-        list={suggestions.length > 0 ? `${ariaLabel}-list` : undefined}
+        list={suggestions.length > 0 ? listId : undefined}
       />
-      {suggestions.length > 0 && (
-        <datalist id={`${ariaLabel}-list`}>
+      {suggestions.length > 0 && listId && (
+        <datalist id={listId}>
           {suggestions.map((s) => (
             <option key={s} value={s} />
           ))}
         </datalist>
       )}
-    </div>
+    </>
   )
 }

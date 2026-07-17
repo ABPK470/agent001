@@ -1,6 +1,5 @@
 /**
- * BridgeModal — opens the Bridge shell as a near-full-viewport
- * modal from the burger menu. Mirrors ConnectorsModal.
+ * BridgeModal — opens Bridge from the session menu.
  */
 
 import { ArrowRightLeft } from "lucide-react"
@@ -12,7 +11,7 @@ export function BridgeModal({ onClose }: { onClose: () => void }): JSX.Element {
   return (
     <ModalShell
       title="Bridge"
-      subtitle="Move rows between connectors through a declarative transform."
+      subtitle="Move rows from one connector to another."
       icon={<ArrowRightLeft size={20} className="text-text-muted" />}
       size="focus"
       stackLevel={0}
