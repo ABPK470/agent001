@@ -23,6 +23,7 @@ import type {
     VerifierOutcome,
 } from "@mia/shared-enums"
 import type { SyncPlanMovement, SyncPlanTableStats } from "./sync-plan.js"
+import type { PlatformImportGateResult } from "./import-gate.js"
 
 export type {
     DelegationEndStatus,
@@ -1200,12 +1201,14 @@ export interface EntityRegistryYamlImportPreview {
   run: { template: string; service: string; environment: string } | null
 }
 
-export interface EntityRegistryYamlImportResponse {
-  ok: boolean
+export interface EntityRegistryYamlImportResponse extends PlatformImportGateResult {
   saved: Array<{ id: string; version: number; created: boolean }>
   skipped: Array<{ id: string; reason: string }>
-  errors: Array<{ id: string | null; error: EntityRegistryValidationResult | string }>
-  dryRun: boolean
+  /**
+   * Structured per-row errors for the YAML editor.
+   * Gate `errors` is the parallel string list for ImportGateModal.
+   */
+  rowErrors: Array<{ id: string | null; error: EntityRegistryValidationResult | string }>
   /** Populated on dry-run when parse succeeds — use to hydrate structured editor fields. */
   preview?: EntityRegistryYamlImportPreview[]
 }
@@ -1743,3 +1746,8 @@ export {
   traceExportFilename,
 } from "./trace-export.js"
 export type { TraceExportRunMeta, TraceExportThreadMeta } from "./trace-export.js"
+export {
+  emptyPlatformImportImpact,
+  type PlatformImportGateResult,
+  type PlatformImportImpact,
+} from "./import-gate.js"

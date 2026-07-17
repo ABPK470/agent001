@@ -10,8 +10,8 @@ import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useMe } from "../hooks/useMe"
 import { useStore } from "../state/store"
 import type { EntityRegistryDefinition, EntityRegistryHistoryEntry } from "../types"
-import { CatalogImportModal } from "./platform/CatalogImportModal"
-import { DeployArtifactImportModal } from "./platform/DeployArtifactImportModal"
+import { CatalogImportGate } from "./platform/CatalogImportGate"
+import { DeployArtifactsImportGate } from "./platform/DeployArtifactsImportGate"
 import { CatalogVersionsModal } from "./platform/CatalogVersionsModal"
 import { Empty } from "./sync-admin/shared"
 import {
@@ -270,7 +270,7 @@ export function EntityRegistry(): JSX.Element {
         />
       )}
       {importOpen && (
-        <CatalogImportModal
+        <CatalogImportGate
           onClose={() => setImportOpen(false)}
           onImported={() => {
             notify("Catalog snapshot imported")
@@ -279,7 +279,7 @@ export function EntityRegistry(): JSX.Element {
         />
       )}
       {deployImportOpen && (
-        <DeployArtifactImportModal
+        <DeployArtifactsImportGate
           onClose={() => setDeployImportOpen(false)}
           onImported={() => {
             notify("Deploy artifacts imported")

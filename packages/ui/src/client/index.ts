@@ -444,8 +444,13 @@ export const api = {
     json<{ version: number; connectors: import("../types").Connector[] }>(
       `/api/connectors/export${opts?.includeSecrets ? "?includeSecrets=1" : ""}`,
     ),
-  importConnectors: (body: { version: number; connectors: Array<Record<string, unknown>> }) =>
-    json<{ ok: boolean; imported: number }>("/api/connectors/import", {
+  importConnectors: (body: {
+    version: number
+    connectors: Array<Record<string, unknown>>
+    dryRun?: boolean
+    reason?: string
+  }) =>
+    json<import("@mia/shared-types").PlatformImportGateResult>("/api/connectors/import", {
       method: "POST",
       body: JSON.stringify(body),
     }),
@@ -582,42 +587,22 @@ export const api = {
       }>
     }>("/api/platform/catalog/versions"),
   importSyncCatalog: (body: { zipBase64?: string; dryRun?: boolean; reason: string }) =>
-    json<{
-      ok: boolean
-      preview: {
-        ok: boolean
-        errors: string[]
-        counts: Record<string, number>
-        dryRun: boolean
-        applied: boolean
-      }
-      version?: { tenantId: string; version: number; reason: string }
-    }>("/api/platform/catalog/import", {
+    json<import("@mia/shared-types").PlatformImportGateResult>("/api/platform/catalog/import", {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  importDeployArtifacts: (body: { zipBase64: string; dryRun?: boolean }) =>
-    json<{
-      ok: boolean
-      preview: {
-        ok: boolean
-        errors: string[]
-        counts: Record<string, number>
-        dryRun: boolean
-        applied: boolean
-      }
-    }>("/api/platform/deploy-artifacts/import", {
+  importDeployArtifacts: (body: { zipBase64: string; dryRun?: boolean; reason?: string }) =>
+    json<import("@mia/shared-types").PlatformImportGateResult>(
+      "/api/platform/deploy-artifacts/import",
+      {
+        method: "POST",
+        body: JSON.stringify(body),
+      },
+    ),
+  rollbackSyncCatalog: (body: { version: number; dryRun?: boolean; reason?: string }) =>
+    json<import("@mia/shared-types").PlatformImportGateResult>("/api/platform/catalog/rollback", {
       method: "POST",
       body: JSON.stringify(body),
-    }),
-  rollbackSyncCatalog: (version: number) =>
-    json<{
-      ok: boolean
-      importResult: { ok: boolean; errors: string[] }
-      version: { tenantId: string; version: number; reason: string }
-    }>("/api/platform/catalog/rollback", {
-      method: "POST",
-      body: JSON.stringify({ version }),
     }),
   factoryResetPlatform: (confirm: string) =>
     json<{ ok: boolean; message: string; seeded?: number; entityIds?: string[] }>(

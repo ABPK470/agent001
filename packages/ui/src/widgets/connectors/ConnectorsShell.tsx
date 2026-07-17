@@ -7,7 +7,7 @@
  */
 
 import { Download, Plus, Save, Search, Trash2, Upload, X } from "lucide-react"
-import { useCallback, useMemo, useRef, useState, type ChangeEvent, type JSX } from "react"
+import { useCallback, useMemo, useRef, useState, type JSX } from "react"
 import { EmptyState } from "../../components/EmptyState"
 import {
   CONNECTOR_KINDS,
@@ -45,6 +45,7 @@ import {
   type ConfigValue,
   type ConnectorFormSnapshot,
 } from "./connector-form-model"
+import { ConnectorsImportGate } from "./ConnectorsImportGate"
 import { useConnectors } from "./useConnectors"
 
 type View = "connectors" | "types"
@@ -78,9 +79,7 @@ export function ConnectorsShell(): JSX.Element {
   const [form, setForm] = useState<ConnectorFormSnapshot>(() => emptyConnectorFormSnapshot("mssql"))
   const [baseline, setBaseline] = useState<ConnectorFormSnapshot>(() => emptyConnectorFormSnapshot("mssql"))
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
-  const [confirmImportOpen, setConfirmImportOpen] = useState(false)
-  const [pendingImportFile, setPendingImportFile] = useState<File | null>(null)
-  const importInputRef = useRef<HTMLInputElement>(null)
+  const [importGateOpen, setImportGateOpen] = useState(false)
   const { toasts, pushToast, dismissToast, clearToasts } = useModalToasts()
 
   const connectors = useConnectors(
@@ -188,27 +187,6 @@ export function ConnectorsShell(): JSX.Element {
     if (ok && editingId === id) closeForm()
   }
 
-  function onImportPick(event: ChangeEvent<HTMLInputElement>): void {
-    const file = event.target.files?.[0] ?? null
-    event.target.value = ""
-    if (!file) return
-    setPendingImportFile(file)
-    setConfirmImportOpen(true)
-  }
-
-  async function commitImport(): Promise<void> {
-    const file = pendingImportFile
-    setConfirmImportOpen(false)
-    setPendingImportFile(null)
-    if (!file) return
-    clearToasts()
-    const ok = await connectors.importFile(file)
-    if (ok) {
-      pushToast(`Imported connectors from ${file.name}`, "ok")
-      closeForm()
-    }
-  }
-
   async function exportConnectorsFile(): Promise<void> {
     clearToasts()
     const ok = await connectors.exportFile()
@@ -257,16 +235,9 @@ export function ConnectorsShell(): JSX.Element {
                 <div className="flex shrink-0 items-center gap-1.5">
                   {view === "connectors" && (
                     <>
-                      <input
-                        ref={importInputRef}
-                        type="file"
-                        accept="application/json,.json"
-                        className="hidden"
-                        onChange={onImportPick}
-                      />
                       <button
                         type="button"
-                        onClick={() => importInputRef.current?.click()}
+                        onClick={() => setImportGateOpen(true)}
                         disabled={connectors.busy || connectors.saving !== null}
                         className={ICON_BTN}
                         title="Import connectors.json from this device"
@@ -413,18 +384,15 @@ export function ConnectorsShell(): JSX.Element {
         </ModalShell>
       )}
 
-      {confirmImportOpen && pendingImportFile && (
-        <ConfirmModal
-          title="Import connectors.json?"
-          message={`Upsert connectors from "${pendingImportFile.name}" into this environment? Matching ids are overwritten; secrets in the file replace stored values (masked secrets leave existing ones unchanged).`}
-          confirmLabel="Import"
-          busy={connectors.busy}
-          stackLevel={1}
-          onCancel={() => {
-            setConfirmImportOpen(false)
-            setPendingImportFile(null)
+      {importGateOpen && (
+        <ConnectorsImportGate
+          onClose={() => setImportGateOpen(false)}
+          onImported={() => {
+            setImportGateOpen(false)
+            closeForm()
+            void connectors.load()
+            pushToast("Imported connectors.json", "ok")
           }}
-          onConfirm={() => void commitImport()}
         />
       )}
 

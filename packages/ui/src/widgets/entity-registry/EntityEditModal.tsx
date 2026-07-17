@@ -264,8 +264,8 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
         setYamlSyncBusy(true)
         try {
           const result = await api.importEntityRegistryYaml(yaml, "preview", { dryRun: true })
-          if (!result.ok || result.errors.length > 0) {
-            const first = result.errors[0]
+          if (!result.ok || result.rowErrors.length > 0) {
+            const first = result.rowErrors[0]
             setYamlError(first ? formatYamlImportError(first) : "Invalid YAML")
             return
           }

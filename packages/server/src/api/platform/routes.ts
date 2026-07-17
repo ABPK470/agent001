@@ -271,10 +271,25 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     const body = (req.body ?? {}) as {
       zipBase64?: string
       dryRun?: boolean
+      reason?: string
     }
+    const dryRun = Boolean(body.dryRun)
     if (!body.zipBase64) {
       reply.code(400)
       return { ok: false, message: "zipBase64 is required" }
+    }
+    const { assertCanApply, catalogPreviewToGate } = await import("./service/import-gate.js")
+    if (!dryRun) {
+      const blocked = assertCanApply({ dryRun: false, reason: body.reason, ok: true })
+      if (blocked) {
+        return catalogPreviewToGate({
+          ok: false,
+          dryRun: false,
+          applied: false,
+          errors: [blocked],
+          counts: {},
+        })
+      }
     }
     try {
       const { parseDeployGitZipBuffer, applyDeployGitBundle } = await import(
@@ -286,15 +301,31 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
         bundle,
         actor: req.session.upn,
         projectRoot: opts.projectRoot,
-        dryRun: body.dryRun,
+        dryRun,
       })
-      return { ok: result.ok, preview: result }
+      return catalogPreviewToGate({
+        ok: result.ok,
+        dryRun: result.dryRun,
+        applied: result.applied,
+        errors: result.errors,
+        counts: result.counts,
+        impact: {
+          creates: [],
+          updates: [...bundle.entityIds],
+          retires: [],
+          deletes: [],
+          skips: [],
+        },
+        warnings: dryRun ? [] : [`reason: ${String(body.reason ?? "").trim()}`],
+      })
     } catch (error) {
-      reply.code(400)
-      return {
+      return catalogPreviewToGate({
         ok: false,
-        message: error instanceof Error ? error.message : "Deploy artifact import failed",
-      }
+        dryRun,
+        applied: false,
+        errors: [error instanceof Error ? error.message : "Deploy artifact import failed"],
+        counts: {},
+      })
     }
   })
 
@@ -319,23 +350,47 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       dryRun?: boolean
       reason?: string
     }
+    const dryRun = Boolean(body.dryRun)
+    const { assertCanApply, catalogPreviewToGate } = await import("./service/import-gate.js")
+    if (!dryRun) {
+      const blocked = assertCanApply({ dryRun: false, reason: body.reason, ok: true })
+      if (blocked) {
+        return catalogPreviewToGate({
+          ok: false,
+          dryRun: false,
+          applied: false,
+          errors: [blocked],
+          counts: {},
+        })
+      }
+    }
     try {
       const result = importSyncCatalogBundle({
         zipBase64: body.zipBase64,
         snapshot: body.snapshot,
-        dryRun: body.dryRun,
+        dryRun,
         reason: body.reason ?? "import",
         actor: req.session.upn,
         projectRoot: opts.projectRoot,
         host: opts.bootHost,
       })
-      return { ok: result.preview.ok, ...result }
+      return catalogPreviewToGate({
+        ok: result.preview.ok,
+        dryRun: result.preview.dryRun,
+        applied: result.preview.applied,
+        errors: result.preview.errors,
+        counts: result.preview.counts,
+        version: result.version ? { version: result.version.version } : undefined,
+        warnings: dryRun ? [] : [`reason: ${String(body.reason ?? "").trim()}`],
+      })
     } catch (error) {
-      reply.code(400)
-      return {
+      return catalogPreviewToGate({
         ok: false,
-        message: error instanceof Error ? error.message : "Catalog import failed",
-      }
+        dryRun,
+        applied: false,
+        errors: [error instanceof Error ? error.message : "Catalog import failed"],
+        counts: {},
+      })
     }
   })
 
@@ -344,25 +399,84 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       reply.code(403)
       return { ok: false, message: "Admin only" }
     }
-    const body = (req.body ?? {}) as { version?: number }
+    const body = (req.body ?? {}) as { version?: number; dryRun?: boolean; reason?: string }
     if (typeof body.version !== "number" || !Number.isFinite(body.version)) {
       reply.code(400)
       return { ok: false, message: "version is required" }
     }
+    const dryRun = Boolean(body.dryRun)
+    const { assertCanApply, catalogPreviewToGate, emptyImpact } = await import("./service/import-gate.js")
+    if (!dryRun) {
+      const blocked = assertCanApply({ dryRun: false, reason: body.reason, ok: true })
+      if (blocked) {
+        return catalogPreviewToGate({
+          ok: false,
+          dryRun: false,
+          applied: false,
+          errors: [blocked],
+          counts: {},
+        })
+      }
+    }
     try {
+      if (dryRun) {
+        const { getSyncCatalogVersionRow } = await import("../../infra/persistence/sqlite.js")
+        const row = getSyncCatalogVersionRow("_default", body.version)
+        if (!row) {
+          return catalogPreviewToGate({
+            ok: false,
+            dryRun: true,
+            applied: false,
+            errors: [`Unknown catalog version ${body.version}`],
+            counts: {},
+          })
+        }
+        const snapshot = JSON.parse(row.snapshot_json) as {
+          entityIds?: string[]
+          environments?: { environments?: unknown[] }
+        }
+        const entityIds = Array.isArray(snapshot.entityIds) ? snapshot.entityIds : []
+        const envCount = Array.isArray(snapshot.environments?.environments)
+          ? snapshot.environments.environments.length
+          : 0
+        const impact = emptyImpact()
+        impact.updates.push(...entityIds)
+        return catalogPreviewToGate({
+          ok: true,
+          dryRun: true,
+          applied: false,
+          errors: [],
+          counts: { entities: entityIds.length, environments: envCount },
+          impact,
+          warnings: [
+            `Restoring catalog version ${body.version} will replace the live sync catalog (entities, environments, strategies, metadata).`,
+          ],
+        })
+      }
+
       const result = rollbackSyncCatalogVersion({
         targetVersion: body.version,
         actor: req.session.upn,
         projectRoot: opts.projectRoot,
         host: opts.bootHost,
       })
-      return { ok: true, ...result }
+      return catalogPreviewToGate({
+        ok: result.importResult.ok,
+        dryRun: false,
+        applied: result.importResult.applied,
+        errors: result.importResult.errors,
+        counts: result.importResult.counts,
+        version: { version: result.version.version },
+        warnings: [`reason: ${String(body.reason ?? "").trim()}`, `rolled back from version ${body.version}`],
+      })
     } catch (error) {
-      reply.code(400)
-      return {
+      return catalogPreviewToGate({
         ok: false,
-        message: error instanceof Error ? error.message : "Catalog rollback failed",
-      }
+        dryRun,
+        applied: false,
+        errors: [error instanceof Error ? error.message : "Catalog rollback failed"],
+        counts: {},
+      })
     }
   })
 }

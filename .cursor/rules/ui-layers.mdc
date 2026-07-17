@@ -25,6 +25,8 @@ Do **not** name folders `shell/`, `chrome/`, `kit/`, `surfaces/`, or top-level `
 
 **Flat control flow** (monorepo-wide — `first-principles.mdc`): peer handlers + explicit state; pure math in `lib/`. Never nest handler functions that register listeners inside a hot path, or un-cleared repeating timers. Trivial one-shot `setTimeout(() => …)` is fine. Same rule as `@mia/server` / `@mia/agent`. Enforced by `lint:arch` (`flat-control-flow`).
 
+**Platform import gate:** file/snapshot imports that mutate platform config use `ImportGateModal` + thin adapters only (dry-run → impact → reason → apply). Do not add parallel `*ImportModal` dialects.
+
 **Import direction** (enforced by `npm run lint:arch`):
 
 - `components` → `hooks`, `lib`, `theme`, `enums`, `types` only

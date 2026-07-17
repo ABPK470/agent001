@@ -53,4 +53,6 @@ alwaysApply: false
 
 **Flat control flow** (monorepo-wide — `first-principles.mdc`): peer handlers + explicit params/state. Never nest handler functions that `.on` / `addEventListener` from inside a request/hot path, or register un-cleared repeating timers. Trivial one-shot `setTimeout(() => …)` is fine. Wire listeners at `create*` / `start*` / boot. Enforced by `lint:arch` (`flat-control-flow`).
 
+**Platform import gate:** mutating file/snapshot imports return `PlatformImportGateResult` via `api/platform/service/import-gate.ts` (dry-run → impact → reason → apply, fail-closed). No parallel import response shapes.
+
 Full contract: `docs/doctrine.md`. Enforce with `npm run lint:arch`.

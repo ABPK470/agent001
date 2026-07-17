@@ -308,53 +308,36 @@ export function registerConnectorRoutes(app: FastifyInstance, _host: AgentHost):
     },
   )
 
-  app.post<{ Body: { version?: number; connectors?: Array<Record<string, unknown>> } }>(
-    "/api/connectors/import",
-    async (req, reply) => {
-      if (!req.session?.isAdmin) {
-        reply.code(403)
-        return { error: "admin only" }
-      }
-      const payload = req.body ?? {}
-      if (payload.version !== 1) {
-        reply.code(400)
-        return { error: "unsupported import version" }
-      }
-      const list = Array.isArray(payload.connectors) ? payload.connectors : []
-      let imported = 0
-      for (const entry of list) {
-        const kind = entry["kind"]
-        if (!isConnectorKindId(kind)) continue
-        const id = typeof entry["id"] === "string" ? toConnectorId(entry["id"]) : ""
-        const name = typeof entry["name"] === "string" ? entry["name"].trim() : id
-        if (!id || !name) continue
-        const config = sanitiseConfig(kind, entry["config"])
-        if (typeof config === "string") continue
-        const existing = db.getConnector(id)
-        const resolvedConfig =
-          existing && entry["config"] !== undefined
-            ? mergeSecretsOnUpdate(kind, config, parseRow(existing).config)
-            : withConnectorConfigDefaults(kind, config)
-        const now = new Date().toISOString()
-        const connector: Connector = {
-          id,
-          kind,
-          name,
-          displayName:
-            typeof entry["displayName"] === "string" && entry["displayName"].trim()
-              ? entry["displayName"].trim()
-              : name,
-          config: resolvedConfig,
-          enabled: entry["enabled"] !== false,
-          createdAt: existing?.created_at ?? now,
-          updatedAt: now,
-          updatedBy: req.session.upn,
-        }
-        db.saveConnector(serialise(connector, req.session.upn, existing?.created_at))
-        imported++
-      }
-      audit(req, "connector.import", { count: imported })
-      return { ok: true, imported }
-    },
-  )
+  app.post<{
+    Body: {
+      version?: number
+      connectors?: Array<Record<string, unknown>>
+      dryRun?: boolean
+      reason?: string
+    }
+  }>("/api/connectors/import", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
+    const { importConnectors } = await import("../service/import-connectors.js")
+    const payload = req.body ?? {}
+    const result = importConnectors({
+      version: payload.version,
+      connectors: payload.connectors,
+      dryRun: Boolean(payload.dryRun),
+      reason: payload.reason,
+      actor: req.session.upn,
+    })
+    // Gate results always 200 — `ok` / `applied` carry success; UI shows impact panel.
+    if (result.applied) {
+      audit(req, "connector.import", {
+        reason: typeof payload.reason === "string" ? payload.reason.trim() : "",
+        creates: result.impact.creates.length,
+        updates: result.impact.updates.length,
+        counts: result.counts,
+      })
+    }
+    return result
+  })
 }

@@ -45,6 +45,7 @@ import {
 import { loadAuthoringFlowCatalog } from "../service/definitions.js"
 import { importAuthoredSyncFromText } from "../service/import-authored-sync.js"
 import { loadCatalogSnapshotForSuggest } from "../service/load-catalog-for-suggest.js"
+import { entityImportToGate } from "../../platform/service/import-gate.js"
 import { recordSyncCatalogChange } from "../../platform/service/sync-catalog-versioning.js"
 
 const DEFAULT_TENANT_ID = "_default"
@@ -90,29 +91,29 @@ function importEntitiesFromText(args: {
   const parsed = args.format === "json" ? parseEntitiesJson(args.content) : parseEntitiesYaml(args.content)
   const saved: EntityRegistryYamlImportResponse["saved"] = []
   const skipped: EntityRegistryYamlImportResponse["skipped"] = []
-  const errors: EntityRegistryYamlImportResponse["errors"] = []
+  const rowErrors: EntityRegistryYamlImportResponse["rowErrors"] = []
   const preview: EntityRegistryYamlImportResponse["preview"] = []
 
   for (const item of parsed) {
     if (!item.ok || !item.def) {
-      errors.push({ id: null, error: item.error ?? "unknown parse error" })
+      rowErrors.push({ id: null, error: item.error ?? "unknown parse error" })
       continue
     }
     if (item.run) {
       if (!args.projectRoot) {
-        errors.push({ id: item.def.id, error: "run block requires server projectRoot" })
+        rowErrors.push({ id: item.def.id, error: "run block requires server projectRoot" })
         continue
       }
       const runError = validateEntityRunYaml(args.projectRoot, item.run)
       if (runError) {
-        errors.push({ id: item.def.id, error: runError })
+        rowErrors.push({ id: item.def.id, error: runError })
         continue
       }
     }
     const defWithTenant = { ...item.def, tenantId: args.tenantId }
     const validation = validateEntityDefinition(defWithTenant)
     if (!validation.ok) {
-      errors.push({ id: item.def.id, error: validation })
+      rowErrors.push({ id: item.def.id, error: validation })
       continue
     }
     const existing = db.getEntityDefinition(args.tenantId, item.def.id, { includeRetired: true })
@@ -150,9 +151,9 @@ function importEntitiesFromText(args: {
       })
     } catch (error) {
       if (error instanceof db.EntityRegistryValidationError) {
-        errors.push({ id: item.def.id, error: error.result })
+        rowErrors.push({ id: item.def.id, error: error.result })
       } else {
-        errors.push({ id: item.def.id, error: (error as Error).message })
+        rowErrors.push({ id: item.def.id, error: (error as Error).message })
       }
     }
   }
@@ -165,7 +166,15 @@ function importEntitiesFromText(args: {
     })
   }
 
-  return { ok: errors.length === 0, saved, skipped, errors, dryRun: args.dryRun, preview: preview.length > 0 ? preview : undefined }
+  const ok = rowErrors.length === 0
+  const gate = entityImportToGate({ ok, dryRun: args.dryRun, saved, skipped, errors: rowErrors })
+  return {
+    ...gate,
+    saved,
+    skipped,
+    rowErrors,
+    preview: preview.length > 0 ? preview : undefined,
+  }
 }
 
 function exportEntityRegistryJson(tenantId: string, entityId: string): string {
@@ -498,7 +507,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           tenantId,
           format: "yaml",
           savedCount: result.saved.length,
-          errorCount: result.errors.length
+          errorCount: result.rowErrors.length
         })
       }
       return result
@@ -536,7 +545,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           tenantId,
           format: "registry-json",
           savedCount: result.saved.length,
-          errorCount: result.errors.length,
+          errorCount: result.rowErrors.length,
         })
       }
       return result
@@ -577,7 +586,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           tenantId,
           format: "artifact",
           savedCount: result.saved.length,
-          errorCount: result.errors.length,
+          errorCount: result.rowErrors.length,
         })
       }
       return result

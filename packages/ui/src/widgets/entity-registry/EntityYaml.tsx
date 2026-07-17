@@ -9,7 +9,7 @@ import type { EntityRegistryDefinition } from "../../types"
 import { PANEL, TAB_ERROR } from "./chrome"
 import { DefinitionExportMenu } from "./DefinitionExportMenu"
 import { DefinitionOverview } from "./DefinitionOverview"
-import { EntityArtifactImportModal } from "./EntityArtifactImportModal"
+import { EntityArtifactImportGate } from "./EntityArtifactImportGate"
 import { SegmentToggle } from "./SegmentToggle"
 import { TabBody, TabPanelHeader, TabShell } from "./TabChrome"
 
@@ -91,7 +91,7 @@ export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: Ent
     <TabShell>
       {exportError && <div className={TAB_ERROR}>{exportError}</div>}
       {importOpen && (
-        <EntityArtifactImportModal
+        <EntityArtifactImportGate
           entityId={entityId}
           onClose={() => setImportOpen(false)}
           onImported={() => {

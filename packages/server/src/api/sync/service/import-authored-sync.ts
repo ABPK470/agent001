@@ -8,6 +8,7 @@ import { entityDefinitionFromAuthoredSync, validateEntityDefinition, type Valida
 
 import { broadcast } from "../../../infra/events/broadcaster.js"
 import * as db from "../../../infra/persistence/sqlite.js"
+import { entityImportToGate } from "../../platform/service/import-gate.js"
 import { recordSyncCatalogChange } from "../../platform/service/sync-catalog-versioning.js"
 import { parseAuthoredSyncJson } from "../types/authored-sync-document.js"
 import { loadAuthoringFlowCatalog, syncConfigFromAuthoredSync, upsertSyncDefinitionConfig } from "./definitions.js"
@@ -23,13 +24,13 @@ export function importAuthoredSyncFromText(args: {
   const parsed = parseAuthoredSyncJson(args.content)
   const saved: EntityRegistryYamlImportResponse["saved"] = []
   const skipped: EntityRegistryYamlImportResponse["skipped"] = []
-  const errors: EntityRegistryYamlImportResponse["errors"] = []
+  const rowErrors: EntityRegistryYamlImportResponse["rowErrors"] = []
 
   const flowTemplateCatalog = loadAuthoringFlowCatalog(args.projectRoot, args.tenantId)
 
   for (const item of parsed) {
     if (!item.ok || !item.authored) {
-      errors.push({ id: null, error: item.error ?? "unknown parse error" })
+      rowErrors.push({ id: null, error: item.error ?? "unknown parse error" })
       continue
     }
     const result = importOneAuthoredSync({
@@ -42,7 +43,7 @@ export function importAuthoredSyncFromText(args: {
       flowTemplateCatalog,
     })
     if (result.error) {
-      errors.push({ id: result.id, error: result.error })
+      rowErrors.push({ id: result.id, error: result.error })
       continue
     }
     if (result.skipped) {
@@ -60,7 +61,9 @@ export function importAuthoredSyncFromText(args: {
     })
   }
 
-  return { ok: errors.length === 0, saved, skipped, errors, dryRun: args.dryRun }
+  const ok = rowErrors.length === 0
+  const gate = entityImportToGate({ ok, dryRun: args.dryRun, saved, skipped, errors: rowErrors })
+  return { ...gate, saved, skipped, rowErrors }
 }
 
 export function importOneAuthoredSync(args: {
