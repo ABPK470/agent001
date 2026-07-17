@@ -12,7 +12,7 @@ import { api } from "../api"
 /** Must match server OPERATIONS_PAGE_EVENT_LIMIT. */
 export const OPERATIONS_PAGE_EVENT_LIMIT = 2000
 
-export type OperationLogKindView = "all" | "agent" | "sync"
+export type OperationLogKindView = "all" | "agent" | "sync" | "bridge"
 
 export function mergeOperationPipelines(
   ...groups: OperationPipeline[][]

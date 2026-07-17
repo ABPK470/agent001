@@ -914,7 +914,7 @@ export const api = {
 
   /**
    * Operation Log — three-level grouped history of pipelines → activities → events.
-   * Server bundles related events into pipelines (agent runs, sync previews,
+   * Server bundles related events into pipelines (agent runs, sync, Bridge,
    * sync executes, system minute-buckets) so the UI can render an expandable
    * tree.
    */

@@ -2,14 +2,32 @@
  * tools/bridge/tool.ts — the `bridge_data` agent tool.
  *
  * Streams rows from a source connector to a target connector through an
- * optional declarative transform. Thin wrapper over the opaque
- * `host.connectors.port.value` port (built by @mia/server from persisted
- * connectors); the agent never imports adapter drivers.
+ * optional declarative transform. Emits bridge.* lifecycle events so the
+ * move appears in Event Stream + Pipelines (same path as the Bridge UI).
  */
 
+import { randomUUID } from "node:crypto"
+import { EventType } from "@mia/shared-enums"
+import type { MoveSummary, ReadSpec, Transform, WriteSpec } from "@mia/shared-types"
 import type { AgentHost } from "../../application/shell/runtime.js"
 import type { ExecutableTool, ToolMetadata } from "../../domain/agent-types.js"
-import type { MoveSummary, ReadSpec, Transform, WriteSpec } from "@mia/shared-types"
+
+function emitBridge(
+  host: AgentHost,
+  type: (typeof EventType)[keyof typeof EventType],
+  data: Record<string, unknown>,
+): void {
+  try {
+    host.connectors.events.sink({ type, data })
+  } catch (e) {
+    console.error(`[bridge.event] sink failed for ${type}:`, e)
+  }
+}
+
+function connectorLabel(host: AgentHost, connectorId: string): string {
+  const hit = host.connectors.port.value?.listAdapters().find((c) => c.id === connectorId)
+  return hit?.displayName ?? connectorId
+}
 
 function buildBridgeDataTool(host: AgentHost): ExecutableTool {
   return {
@@ -78,15 +96,67 @@ function buildBridgeDataTool(host: AgentHost): ExecutableTool {
       if (!source?.connectorId || !source.spec) return "bridge_data: source.connectorId and source.spec are required."
       if (!target?.connectorId || !target.spec) return "bridge_data: target.connectorId and target.spec are required."
       const transform = (args["transform"] ?? undefined) as Transform | undefined
+      const moveId = randomUUID()
+      const sourceName = connectorLabel(host, source.connectorId)
+      const targetName = connectorLabel(host, target.connectorId)
+      emitBridge(host, EventType.BridgeRunStarted, {
+        moveId,
+        sourceId: source.connectorId,
+        targetId: target.connectorId,
+        source: sourceName,
+        target: targetName,
+        hasTransform: Boolean(transform),
+        via: "agent",
+      })
       try {
         const summary: MoveSummary = await port.moveData(
           { connectorId: source.connectorId, spec: source.spec },
           { connectorId: target.connectorId, spec: target.spec, stopOnError: target.stopOnError },
           transform ? { transform } : undefined,
         )
+        if (summary.status === "failed") {
+          emitBridge(host, EventType.BridgeRunFailed, {
+            moveId,
+            sourceId: source.connectorId,
+            targetId: target.connectorId,
+            source: sourceName,
+            target: targetName,
+            status: summary.status,
+            rowsRead: summary.rowsRead,
+            rowsWritten: summary.rowsWritten,
+            failedAtRow: summary.failedAtRow,
+            error: summary.errors[0]?.message ?? "move failed",
+            errorCount: summary.errors.length,
+            via: "agent",
+          })
+        } else {
+          emitBridge(host, EventType.BridgeRunCompleted, {
+            moveId,
+            sourceId: source.connectorId,
+            targetId: target.connectorId,
+            source: sourceName,
+            target: targetName,
+            status: summary.status,
+            rowsRead: summary.rowsRead,
+            rowsWritten: summary.rowsWritten,
+            failedAtRow: summary.failedAtRow,
+            errorCount: summary.errors.length,
+            via: "agent",
+          })
+        }
         return formatSummary(summary)
       } catch (e) {
-        return `bridge_data failed: ${e instanceof Error ? e.message : String(e)}`
+        const error = e instanceof Error ? e.message : String(e)
+        emitBridge(host, EventType.BridgeRunFailed, {
+          moveId,
+          sourceId: source.connectorId,
+          targetId: target.connectorId,
+          source: sourceName,
+          target: targetName,
+          error,
+          via: "agent",
+        })
+        return `bridge_data failed: ${error}`
       }
     },
   }

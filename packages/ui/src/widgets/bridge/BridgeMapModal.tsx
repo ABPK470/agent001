@@ -63,8 +63,6 @@ export function BridgeMapModal({
           sourceColumns={sourceColumns}
           onSampleColumns={onSampleColumns}
           sampling={sampling}
-          sourceName={source?.displayName ?? null}
-          targetName={target?.displayName ?? null}
         />
       </div>
     </ModalShell>

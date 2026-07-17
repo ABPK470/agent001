@@ -37,7 +37,7 @@ import {
 
 // ── Type chips shown in toolbar (order matters) ──────────────────
 
-const EVENT_TYPES = ["all", "run", "step", "sync", "agent", "api", "system"] as const
+const EVENT_TYPES = ["all", "run", "step", "sync", "bridge", "agent", "api", "system"] as const
 type EventType = (typeof EVENT_TYPES)[number]
 
 /** Words from the search box must all appear somewhere in these fields. */
@@ -73,6 +73,7 @@ function eventTypeDbPatterns(filters: Set<EventType>): string[] | undefined {
   const patterns: string[] = []
   for (const filter of filters) {
     if (filter === "sync") patterns.push("sync.")
+    if (filter === "bridge") patterns.push("bridge.")
     if (filter === "run") patterns.push("run.")
     if (filter === "step") patterns.push("step.", "tool_call.")
     if (filter === "agent") patterns.push("delegation.", "planner.", "agent.", "debug.")
@@ -87,6 +88,7 @@ const MSG_COLOR: Record<string, string> = {
   run:    "var(--color-info)",
   step:   "var(--color-accent)",
   sync:   "var(--color-success)",
+  bridge: "var(--color-accent)",
   agent:  "var(--color-accent-hover)",
   api:    "var(--color-accent)",
   system: "var(--color-text-muted)",

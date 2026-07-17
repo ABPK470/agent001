@@ -118,6 +118,8 @@ export interface BootSyncState {
 export interface BootConnectorsState {
   /** The late-bound bridge port (shared process-wide across per-run hosts). */
   port: { value: import("@mia/agent").AgentHost["connectors"]["port"]["value"] }
+  /** Shared Bridge event sink → SSE + event_log. */
+  events: { sink: import("@mia/agent").AgentHost["connectors"]["events"]["sink"] }
 }
 
 /**

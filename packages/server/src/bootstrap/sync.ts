@@ -55,6 +55,13 @@ export function createSyncEventSink(): AgentHost["sync"]["events"]["sink"] {
   }
 }
 
+/** Bridge lifecycle events → SSE + event_log (same path as sync). */
+export function createBridgeEventSink(): AgentHost["connectors"]["events"]["sink"] {
+  return (event) => {
+    broadcast({ type: event.type, data: event.data })
+  }
+}
+
 export function createSyncRunSink(): AgentHost["sync"]["runs"]["sink"] {
   return {
     start: (input) => {

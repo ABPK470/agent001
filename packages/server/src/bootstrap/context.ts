@@ -12,7 +12,12 @@ import {
 import { resolveSyncPlansDir } from "../platform/persistence/server-data-dir.js"
 import { projectRoot } from "./paths.js"
 import { configureSandbox, type SandboxRuntime } from "./sandbox.js"
-import { createSyncEventSink, createSyncRunSink, loadBootSyncEnvironments } from "./sync.js"
+import {
+  createBridgeEventSink,
+  createSyncEventSink,
+  createSyncRunSink,
+  loadBootSyncEnvironments,
+} from "./sync.js"
 import { loadPersistedConnectors } from "../features/connectors/runtime/live-connectors.js"
 import { mssqlConfigsFromConnectors } from "../features/connectors/runtime/mssql-from-connectors.js"
 import { createMssqlPoolProvider } from "../features/connectors/runtime/mssql-pool-provider.js"
@@ -82,6 +87,7 @@ export async function createServerContext(): Promise<ServerContext> {
   // port re-reads persisted connectors live from the DB on each call, so
   // runtime create/enable/disable/delete is reflected without a restart.
   bootHost.connectors.port.value = buildMovementPort(bootHost)
+  bootHost.connectors.events.sink = createBridgeEventSink()
 
   const mssqlSummary =
     mssqlConfigs.length > 0
@@ -138,7 +144,8 @@ export function buildBootHostDeps(ctx: ServerContext): BootHostDeps {
       project: bootHost.sync.project
     },
     connectors: {
-      port: bootHost.connectors.port
+      port: bootHost.connectors.port,
+      events: bootHost.connectors.events,
     }
   }
 }

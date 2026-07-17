@@ -93,6 +93,8 @@ export interface ConfigureAgentOptions {
   // needs the host's pools). Pass `connectors` here only for tests that want a
   // pre-bound port.
   connectors?: AgentHost["connectors"]["port"]["value"]
+  /** Bridge event sink (SSE + event_log). Server wires broadcast; CLI/tests omit. */
+  bridgeEventSink?: AgentHost["connectors"]["events"]["sink"]
 }
 
 /**
@@ -171,7 +173,8 @@ export function configureAgent(options: ConfigureAgentOptions = {}): AgentHost {
       featureFlags: options.tenant?.featureFlags ?? new Map<string, boolean>()
     }),
     connectors: Object.freeze({
-      port: { value: options.connectors ?? null }
+      port: { value: options.connectors ?? null },
+      events: { sink: options.bridgeEventSink ?? NOOP_BRIDGE_EVENT_SINK },
     })
   })
 }
@@ -184,6 +187,10 @@ const NOOP_SHELL_CLIENT: NonNullable<AgentHost["shell"]["client"]> = async () =>
 
 const NOOP_SYNC_EVENT_SINK: AgentHost["sync"]["events"]["sink"] = () => {
   // dropped on the floor — Phase 4 will swap in a real sink
+}
+
+const NOOP_BRIDGE_EVENT_SINK: AgentHost["connectors"]["events"]["sink"] = () => {
+  // dropped when no server broadcaster is wired (CLI / unit tests)
 }
 
 const NOOP_SYNC_RUN_SINK: AgentHost["sync"]["runs"]["sink"] = {

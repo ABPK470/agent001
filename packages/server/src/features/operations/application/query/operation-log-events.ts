@@ -11,6 +11,7 @@ const OPERATION_LOG_NAMESPACES: ReadonlySet<EventNamespace> = new Set([
   EventNamespace.Step,
   EventNamespace.Sync,
   EventNamespace.SyncEnv,
+  EventNamespace.Bridge,
 ])
 
 export function isOperationLogEvent(type: string): boolean {

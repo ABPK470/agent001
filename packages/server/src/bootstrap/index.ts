@@ -1,6 +1,11 @@
 export { bootHostDepsToConfigureAgentOptions } from "./boot-host-adapter.js"
 export { buildLlmAndCatalog } from "./llm.js"
-export { createSyncEventSink, createSyncRunSink, loadBootSyncEnvironments } from "./sync.js"
+export {
+  createBridgeEventSink,
+  createSyncEventSink,
+  createSyncRunSink,
+  loadBootSyncEnvironments,
+} from "./sync.js"
 export { createServerContext, buildBootHostDeps, type ServerContext } from "./context.js"
 export { configureSandbox, type SandboxRuntime } from "./sandbox.js"
 export {

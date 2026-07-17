@@ -4,7 +4,7 @@
  * Data: paginated GET /api/operations (SQLite event_log). SSE only signals refresh.
  */
 
-import { Brain, ChevronRight, Database, GitCompareArrows, Loader2, Settings, Square, Wrench } from "lucide-react"
+import { Brain, ChevronRight, Database, GitCompareArrows, Loader2, Settings, Shuffle, Square, Wrench } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 import type { OperationActivity, OperationEvent, OperationPipeline } from "../api"
 import { api, OperationKind, OperationStatus } from "../api"
@@ -71,6 +71,16 @@ const KIND_META: Record<
         label: "scan",
         Icon: GitCompareArrows,
         color: "var(--color-warning)",
+    },
+    "bridge-preview": {
+        label: "bridge",
+        Icon: Shuffle,
+        color: "var(--color-accent)",
+    },
+    "bridge-run": {
+        label: "bridge",
+        Icon: Shuffle,
+        color: "var(--color-accent)",
     },
     system: {
         label: "system",

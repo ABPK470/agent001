@@ -59,6 +59,11 @@ export function correlateEventsIntoBuckets(
       kind = OperationKind.SyncPreview
       key = `plan:${planId}:preview`
       bucketPlanId = planId
+    } else if (ev.type.startsWith("bridge.")) {
+      const moveId = strField(ev.data, "moveId") ?? `anon:${ev.timestamp}`
+      const isRun = ev.type.startsWith("bridge.run")
+      kind = isRun ? OperationKind.BridgeRun : OperationKind.BridgePreview
+      key = isRun ? `bridge:${moveId}:run` : `bridge:${moveId}:preview`
     } else if (runId) {
       kind = OperationKind.AgentRun
       key = `run:${runId}`

@@ -652,6 +652,7 @@ function scheduleAnswerFlush(set: (fn: (s: AppState) => Partial<AppState>) => vo
  */
 function eventType(type: string): string {
   if (type.startsWith("sync.")) return "sync"
+  if (type.startsWith("bridge.")) return "bridge"
   if (type.startsWith("run.")) return "run"
   if (type.startsWith("step.")) return "step"
   if (type.startsWith("tool_call.")) return "step"
@@ -729,6 +730,54 @@ function formatLogEntryInner(
       }
     }
     return null
+  }
+
+  // ── Bridge events ───────────────────────────────────────────
+  if (type.startsWith("bridge.")) {
+    const moveId = (data["moveId"] as string | undefined)?.slice(0, 8) ?? ""
+    switch (type) {
+      case "bridge.preview.started":
+        return {
+          type: t,
+          message: `Bridge preview started — ${data["source"] ?? "?"}${moveId ? ` (${moveId})` : ""}`,
+          timestamp,
+        }
+      case "bridge.preview.completed":
+        return {
+          type: t,
+          message: `Bridge preview complete — ${data["rowCount"] ?? "?"} rows${data["truncated"] ? " (truncated)" : ""}`,
+          timestamp,
+        }
+      case "bridge.preview.failed":
+        return {
+          type: t,
+          error: true,
+          message: `Bridge preview failed: ${data["error"] ?? "unknown"}`,
+          timestamp,
+        }
+      case "bridge.run.started":
+        return {
+          type: t,
+          message: `Bridge move started — ${data["source"] ?? "?"} → ${data["target"] ?? "?"}${moveId ? ` (${moveId})` : ""}`,
+          timestamp,
+        }
+      case "bridge.run.completed":
+        return {
+          type: t,
+          message: `Bridge move ${data["status"] ?? "completed"} — read ${data["rowsRead"] ?? "?"} · wrote ${data["rowsWritten"] ?? "?"}`,
+          timestamp,
+          error: data["status"] === "partial",
+        }
+      case "bridge.run.failed":
+        return {
+          type: t,
+          error: true,
+          message: `Bridge move failed: ${data["error"] ?? "unknown"}`,
+          timestamp,
+        }
+      default:
+        return { type: t, message: type, timestamp }
+    }
   }
 
   // ── Sync events ─────────────────────────────────────────────

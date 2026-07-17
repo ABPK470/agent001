@@ -224,6 +224,14 @@ export const EventType = {
   SyncExecuteSql: "sync.execute.sql",
   SyncCatalogSql: "sync.catalog.sql",
   SyncDiscoverySql: "sync.discovery.sql",
+
+  // Bridge — connector-to-connector preview / move
+  BridgePreviewStarted: "bridge.preview.started",
+  BridgePreviewCompleted: "bridge.preview.completed",
+  BridgePreviewFailed: "bridge.preview.failed",
+  BridgeRunStarted: "bridge.run.started",
+  BridgeRunCompleted: "bridge.run.completed",
+  BridgeRunFailed: "bridge.run.failed",
 } as const
 
 export type EventType = (typeof EventType)[keyof typeof EventType]
@@ -248,6 +256,7 @@ export const EventNamespace = {
   Planner: "planner",
   Sync: "sync",
   SyncEnv: "sync_env",
+  Bridge: "bridge",
   FreezeWindow: "freeze_window",
   Memory: "memory",
   Attachment: "attachment",
@@ -272,6 +281,7 @@ const NAMESPACE_PREFIX: ReadonlyArray<readonly [string, EventNamespace]> = [
   ["planner.",            EventNamespace.Planner],
   ["sync_env.",           EventNamespace.SyncEnv],
   ["freeze_window.",      EventNamespace.FreezeWindow],
+  ["bridge.",             EventNamespace.Bridge],
   ["sync.",               EventNamespace.Sync],
   ["memory.",             EventNamespace.Memory],
   ["attachment.",         EventNamespace.Attachment],
@@ -304,6 +314,8 @@ const COMPLETION_EVENTS: ReadonlySet<EventType> = new Set([
   EventType.SyncExecuteCompleted,
   EventType.SyncAgentExecuteCompleted,
   EventType.SyncProposerRunCompleted,
+  EventType.BridgePreviewCompleted,
+  EventType.BridgeRunCompleted,
   EventType.RollbackCompleted,
 ])
 
@@ -322,6 +334,8 @@ const FAILURE_EVENTS: ReadonlySet<EventType> = new Set([
   EventType.SyncExecuteFailed,
   EventType.SyncExecuteStepFailed,
   EventType.SyncProposerRunFailed,
+  EventType.BridgePreviewFailed,
+  EventType.BridgeRunFailed,
   EventType.MessageFailed,
 ])
 

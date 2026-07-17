@@ -28,6 +28,11 @@ export function bootHostDepsToConfigureAgentOptions(
         }
       : {}),
     ...(bootHostDeps.sync ? { sync: bootHostDeps.sync } : {}),
-    ...(bootHostDeps.connectors ? { connectors: bootHostDeps.connectors.port.value } : {})
+    ...(bootHostDeps.connectors
+      ? {
+          connectors: bootHostDeps.connectors.port.value,
+          bridgeEventSink: bootHostDeps.connectors.events.sink,
+        }
+      : {})
   }
 }

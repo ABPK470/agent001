@@ -22,7 +22,7 @@ const CATALOG: Array<{ type: WidgetType, label: string, desc: string, Icon: Comp
   { type: "term-chat",     label: "MI:A Chat",     desc: "Send goals to the agent and see responses",   Icon: WIDGET_ICONS["term-chat"] },
   { type: "env-sync",      label: "Sync",          desc: "Pick source, target, entity, preview and execute changes", Icon: WIDGET_ICONS["env-sync"] },
   { type: "mymi-db",       label: "Mymi DB",       desc: "Browse MyMI DB schemas, tables, views, and preview data", Icon: WIDGET_ICONS["mymi-db"] },
-  { type: "operation-log", label: "Pipelines",     desc: "Pipeline monitor — agent runs, sync",         Icon: WIDGET_ICONS["operation-log"] },
+  { type: "operation-log", label: "Pipelines",     desc: "Pipeline monitor — agent runs, sync, Bridge", Icon: WIDGET_ICONS["operation-log"] },
   { type: "live-logs",     label: "Event Stream",  desc: "Real-time SSE event stream",                  Icon: WIDGET_ICONS["live-logs"] },
   { type: "run-history",   label: "Run History",   desc: "Browse past agent runs",                      Icon: WIDGET_ICONS["run-history"] },
   { type: "agent-chat",    label: "Agent Chat",    desc: "Older version of agent chat",                 Icon: WIDGET_ICONS["agent-chat"] },

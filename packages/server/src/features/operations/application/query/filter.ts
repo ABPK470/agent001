@@ -16,6 +16,12 @@ function matchesKindFilter(pipeline: OperationPipeline, kind: string): boolean {
       pipeline.kind === OperationKind.ProposerRun
     )
   }
+  if (kind === "bridge") {
+    return (
+      pipeline.kind === OperationKind.BridgePreview ||
+      pipeline.kind === OperationKind.BridgeRun
+    )
+  }
   return pipeline.kind === kind
 }
 

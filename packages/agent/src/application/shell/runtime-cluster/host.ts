@@ -151,9 +151,17 @@ export interface ConnectorPort {
   listAdapters(): ConnectorInfo[]
 }
 
+/** Sink for Bridge lifecycle events (preview / run) — wired to SSE + event_log on the server. */
+export type BridgeEventSink = (event: {
+  type: import("@mia/shared-enums").EventType
+  data: Record<string, unknown>
+}) => void
+
 export interface ConnectorsHost {
   /** Late-bound: the server fills this after `configureAgent`. */
   readonly port: { value: ConnectorPort | null }
+  /** Mutable sink — server swaps in broadcast; CLI/tests leave the noop. */
+  readonly events: { sink: BridgeEventSink }
 }
 
 /**

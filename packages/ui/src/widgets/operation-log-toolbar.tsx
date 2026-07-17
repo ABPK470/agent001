@@ -55,8 +55,8 @@ export function OperationLogToolbar({
   filteredCount,
   totalCount,
 }: {
-  kindView: "all" | "agent" | "sync"
-  setKindView: (v: "all" | "agent" | "sync") => void
+  kindView: "all" | "agent" | "sync" | "bridge"
+  setKindView: (v: "all" | "agent" | "sync" | "bridge") => void
   statuses: Set<OperationStatus>
   toggleStatus: (s: OperationStatus) => void
   clearStatuses: () => void
@@ -73,9 +73,10 @@ export function OperationLogToolbar({
   return (
     <LogWidgetToolbar compact={compact}>
       <LogWidgetToolbarFilters>
-        {(["all", "agent", "sync"] as const).map((v) => {
+        {(["all", "agent", "sync", "bridge"] as const).map((v) => {
           const active = v === kindView
-          const label = v === "sync" ? (compact || tiny ? "sync" : "synchronization") : v
+          const label =
+            v === "sync" ? (compact || tiny ? "sync" : "synchronization") : v
           return (
             <button
               key={v}

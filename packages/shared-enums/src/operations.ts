@@ -14,6 +14,10 @@ export const OperationKind = {
   /** Full preview + execute audit tree for one sync plan (plan-scoped query). */
   SyncRun:     "sync-run",
   ProposerRun: "proposer-run",
+  /** Connector Bridge preview (read + transform, no write). */
+  BridgePreview: "bridge-preview",
+  /** Connector Bridge move (source → target). */
+  BridgeRun:   "bridge-run",
   System:      "system",
 } as const
 
