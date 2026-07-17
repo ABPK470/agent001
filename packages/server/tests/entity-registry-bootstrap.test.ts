@@ -39,7 +39,7 @@ describe("entity registry bootstrap", () => {
   it("seeds all deploy artifact entities on an empty database", async () => {
     await setup()
     const { seedEntityRegistryIfEmpty } = await import(
-      "../src/api/sync/application/seed-entity-registry.js"
+      "../src/api/sync/service/seed-entity-registry.js"
     )
     const db = await import("../src/infra/persistence/sqlite.js")
 
@@ -58,7 +58,7 @@ describe("entity registry bootstrap", () => {
   it("is idempotent when entities already exist", async () => {
     await setup()
     const { seedEntityRegistryIfEmpty } = await import(
-      "../src/api/sync/application/seed-entity-registry.js"
+      "../src/api/sync/service/seed-entity-registry.js"
     )
     const db = await import("../src/infra/persistence/sqlite.js")
 

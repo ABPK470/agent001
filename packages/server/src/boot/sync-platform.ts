@@ -7,7 +7,7 @@
 
 import type { AgentHost, LLMClient } from "@mia/agent"
 import type { LlmCompletionPort } from "@mia/sync"
-import { dispatchNotification } from "../api/notifications/application/delivery-routing.js"
+import { dispatchNotification } from "../api/notifications/service/delivery-routing.js"
 import { startScheduler } from "../api/proposer/index.js"
 import { createLlmCompletionAdapter } from "../infra/llm/index.js"
 import { tryBuildSignerFromEnv } from "../infra/persistence/index.js"

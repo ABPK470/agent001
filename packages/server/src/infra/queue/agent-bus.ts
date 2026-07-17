@@ -31,6 +31,7 @@
 
 import { EventType } from "@mia/shared-enums"
 import { BusProtocol } from "../../internal/enums/bus.js"
+import type { AgentBusMessage, AgentBusPort } from "../../ports/queue.js"
 import { broadcast } from "../events/broadcaster.js"
 import * as db from "../persistence/sqlite.js"
 
@@ -38,20 +39,12 @@ import type { Tool } from "@mia/agent"
 
 // ── Types ────────────────────────────────────────────────────────
 
-export interface AgentMessage {
-  id: string
-  topic: string
-  fromRunId: string
-  fromAgent: string
-  protocol: BusProtocol
-  content: string
-  replyTo: string | null
-  timestamp: number
-}
+export type AgentMessage = AgentBusMessage
+export type { AgentBusPort }
 
-type MessageHandler = (msg: AgentMessage) => void
+type MessageHandler = (msg: AgentBusMessage) => void
 
-function rowToMessage(row: db.AgentMessageRow): AgentMessage {
+function rowToMessage(row: db.AgentMessageRow): AgentBusMessage {
   return {
     id: row.id,
     topic: row.topic,
@@ -66,7 +59,7 @@ function rowToMessage(row: db.AgentMessageRow): AgentMessage {
 
 // ── AgentBus ─────────────────────────────────────────────────────
 
-export class AgentBus {
+export class AgentBus implements AgentBusPort {
   readonly rootRunId: string
   private readonly subscribers = new Map<string, Set<MessageHandler>>()
 

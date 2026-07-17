@@ -19,11 +19,13 @@
 
 import { EventType } from "@mia/agent"
 import { RunPriority } from "../../internal/enums/queue.js"
+import type { QueueStats, RunQueuePort } from "../../ports/queue.js"
 import { broadcast } from "../events/broadcaster.js"
 
 // ── Types ────────────────────────────────────────────────────────
 
 export { RunPriority }
+export type { QueueStats, RunQueuePort }
 
 const PRIORITY_ORDER: Record<RunPriority, number> = {
   critical: 0, // system recovery
@@ -42,18 +44,9 @@ export interface QueueEntry {
   signal?: AbortSignal
 }
 
-export interface QueueStats {
-  concurrency: number
-  active: number
-  queued: number
-  totalProcessed: number
-  totalDropped: number
-  entries: Array<{ runId: string; priority: RunPriority; waitingMs: number }>
-}
-
 // ── RunQueue ─────────────────────────────────────────────────────
 
-export class RunQueue {
+export class RunQueue implements RunQueuePort {
   private readonly maxConcurrent: number
   private active = 0
   private totalProcessed = 0

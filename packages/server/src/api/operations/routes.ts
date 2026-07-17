@@ -5,12 +5,12 @@
 import type { FastifyInstance } from "fastify"
 import { subscribeToEvents } from "../../infra/events/broadcaster.js"
 import { searchEvents } from "../../infra/persistence/events.js"
-import { isOperationLogEvent } from "./application/query/operation-log-events.js"
+import { isOperationLogEvent } from "./service/query/operation-log-events.js"
 import {
   listOperations,
   OPERATIONS_HEAD_EVENT_LIMIT,
   OPERATIONS_PAGE_EVENT_LIMIT
-} from "./application/query/index.js"
+} from "./service/query/index.js"
 
 /** Debounce SSE snapshots so bursty event streams do not rebuild the log continuously. */
 const OPERATIONS_STREAM_DEBOUNCE_MS = 1500

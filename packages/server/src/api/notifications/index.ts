@@ -2,5 +2,5 @@
  * Notifications subsystem — public surface.
  */
 
-export * from "./application/delivery-routing.js"
-export * from "./application/templates.js"
+export * from "./service/delivery-routing.js"
+export * from "./service/templates.js"

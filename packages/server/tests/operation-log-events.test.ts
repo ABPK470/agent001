@@ -1,7 +1,7 @@
 import { EventType } from "@mia/shared-enums"
 import { describe, expect, it } from "vitest"
 
-import { isOperationLogEvent } from "../src/api/operations/application/query/operation-log-events.js"
+import { isOperationLogEvent } from "../src/api/operations/service/query/operation-log-events.js"
 
 describe("isOperationLogEvent", () => {
   it("includes run, sync, and step lifecycle events", () => {

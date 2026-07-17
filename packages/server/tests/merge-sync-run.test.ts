@@ -1,7 +1,7 @@
 import { EventType, OperationKind, OperationStatus } from "@mia/shared-enums"
 import { describe, expect, it } from "vitest"
-import { mergeSyncPlanPipelines } from "../src/api/operations/application/query/merge-sync-run.js"
-import type { OperationPipeline } from "../src/api/operations/application/query/types.js"
+import { mergeSyncPlanPipelines } from "../src/api/operations/service/query/merge-sync-run.js"
+import type { OperationPipeline } from "../src/api/operations/service/query/types.js"
 
 function stubPipeline(
   planId: string,

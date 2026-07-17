@@ -1,5 +1,5 @@
 /**
- * /api/runtime/profile reflects AGENT_HOSTED_MODE.
+ * /api/state/profile reflects AGENT_HOSTED_MODE.
  */
 
 import Fastify from "fastify"
@@ -23,11 +23,11 @@ async function build() {
   return app
 }
 
-describe("/api/runtime/profile", () => {
+describe("/api/state/profile", () => {
   it("reports developer profile by default", async () => {
     delete process.env[ENV_KEY]
     const app = await build()
-    const res = await app.inject({ method: "GET", url: "/api/runtime/profile" })
+    const res = await app.inject({ method: "GET", url: "/api/state/profile" })
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ profile: "developer", hosted: false })
   })
@@ -35,7 +35,7 @@ describe("/api/runtime/profile", () => {
   it("reports hosted profile when AGENT_HOSTED_MODE=true", async () => {
     process.env[ENV_KEY] = "true"
     const app = await build()
-    const res = await app.inject({ method: "GET", url: "/api/runtime/profile" })
+    const res = await app.inject({ method: "GET", url: "/api/state/profile" })
     expect(res.statusCode).toBe(200)
     expect(res.json()).toEqual({ profile: "hosted", hosted: true })
   })

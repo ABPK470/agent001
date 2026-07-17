@@ -8,7 +8,7 @@ import {
   seedEntityRegistryIfEmpty,
   seedSyncMetadataIfEmpty,
 } from "../api/sync/index.js"
-import { ensureInitialSyncCatalogVersion } from "../api/platform/application/sync-catalog-versioning.js"
+import { ensureInitialSyncCatalogVersion } from "../api/platform/service/sync-catalog-versioning.js"
 
 export function loadBootSyncEnvironments(projectRoot: string, connections: ReadonlyArray<{ name: string }>) {
   const entitySeed = seedEntityRegistryIfEmpty(projectRoot)

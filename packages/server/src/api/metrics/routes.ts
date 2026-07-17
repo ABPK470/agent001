@@ -3,7 +3,7 @@
  */
 
 import type { FastifyInstance } from "fastify"
-import { renderPrometheusMetrics } from "../proposer/application/metrics.js"
+import { renderPrometheusMetrics } from "../proposer/service/metrics.js"
 
 export function registerMetricsRoutes(app: FastifyInstance): void {
   app.get("/metrics", async (_req, reply) => {

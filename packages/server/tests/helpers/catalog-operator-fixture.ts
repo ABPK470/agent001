@@ -60,13 +60,13 @@ export async function setupCatalogOperatorFixture(): Promise<CatalogOperatorFixt
   seedRepoArtifacts(projectRoot)
 
   const { seedEntityRegistryIfEmpty } = await import(
-    "../../src/api/sync/application/seed-entity-registry.js"
+    "../../src/api/sync/service/seed-entity-registry.js"
   )
   const { seedSyncMetadataIfEmpty } = await import(
-    "../../src/api/sync/application/seed-sync-metadata.js"
+    "../../src/api/sync/service/seed-sync-metadata.js"
   )
   const { ensureSyncDefinitionConfigs } = await import(
-    "../../src/api/sync/application/definitions.js"
+    "../../src/api/sync/service/definitions.js"
   )
   seedEntityRegistryIfEmpty(projectRoot)
   seedSyncMetadataIfEmpty(projectRoot)
@@ -94,7 +94,7 @@ export async function buildEntityRegistryApp(
   fixture: CatalogOperatorFixture,
 ): Promise<FastifyInstance> {
   const { registerEntityRegistryRoutes } = await import(
-    "../../src/api/sync/transport/definitions-routes.js"
+    "../../src/api/sync/handlers/definitions-routes.js"
   )
   const { seedUser, seedSession } = await import("../_fk-helpers.js")
 
@@ -117,7 +117,7 @@ export async function buildSyncMetadataApp(
   fixture: CatalogOperatorFixture,
 ): Promise<FastifyInstance> {
   const { registerSyncMetadataRoutes } = await import(
-    "../../src/api/sync/transport/sync-metadata-routes.js"
+    "../../src/api/sync/handlers/sync-metadata-routes.js"
   )
   const { seedUser, seedSession } = await import("../_fk-helpers.js")
 

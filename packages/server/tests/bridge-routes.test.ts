@@ -4,7 +4,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import type { AgentHost } from "@mia/agent"
 import type { ConnectorInfo, MoveSummary } from "@mia/shared-types"
 import type { CurrentSession } from "../src/api/auth/index.js"
-import { registerBridgeRoutes } from "../src/api/connectors/transport/bridge.js"
+import { registerBridgeRoutes } from "../src/api/connectors/handlers/bridge.js"
 
 function adminSession(): CurrentSession {
   return {

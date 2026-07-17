@@ -7,7 +7,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import { configureAgent } from "@mia/agent"
 
 import { findExistingCatalogCachePath } from "../src/infra/catalog/catalog-cache-path.js"
-import { getPlatformHealth } from "../src/api/platform/application/platform-health-service.js"
+import { getPlatformHealth } from "../src/api/platform/service/platform-health-service.js"
 
 describe("catalog cache discovery", () => {
   const originalDataDir = process.env.MIA_DATA_DIR

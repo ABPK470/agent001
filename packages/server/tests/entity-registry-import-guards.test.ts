@@ -18,20 +18,20 @@ import {
 import {
   applyDeployCatalogSnapshot,
   validateDeployCatalogSnapshot,
-} from "../src/api/platform/application/import-deploy-artifacts.js"
-import { buildDeployCatalogSnapshot } from "../src/api/platform/application/export-deploy-artifacts.js"
+} from "../src/api/platform/service/import-deploy-artifacts.js"
+import { buildDeployCatalogSnapshot } from "../src/api/platform/service/export-deploy-artifacts.js"
 import {
   applyDeployGitBundle,
   parseDeployGitBundleFromDir,
-} from "../src/api/platform/application/import-deploy-git-artifacts.js"
-import { writeDeployGitExport } from "../src/api/platform/application/export-deploy-git-artifacts.js"
-import { formatAuthoredSyncJson } from "../src/api/sync/domain/authored-sync-document.js"
-import { formatEntityJson } from "../src/api/sync/domain/entity-yaml.js"
+} from "../src/api/platform/service/import-deploy-git-artifacts.js"
+import { writeDeployGitExport } from "../src/api/platform/service/export-deploy-git-artifacts.js"
+import { formatAuthoredSyncJson } from "../src/api/sync/types/authored-sync-document.js"
+import { formatEntityJson } from "../src/api/sync/types/entity-yaml.js"
 import {
   importAuthoredSyncFromText,
   importOneAuthoredSync,
-} from "../src/api/sync/application/import-authored-sync.js"
-import { loadAuthoringFlowCatalog } from "../src/api/sync/application/definitions.js"
+} from "../src/api/sync/service/import-authored-sync.js"
+import { loadAuthoringFlowCatalog } from "../src/api/sync/service/definitions.js"
 import * as db from "../src/infra/persistence/db/index.js"
 import {
   setupCatalogOperatorFixture,

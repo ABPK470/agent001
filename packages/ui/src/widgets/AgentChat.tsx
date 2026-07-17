@@ -34,7 +34,7 @@ import { formatMs } from "../util"
 // when something went wrong that the user cannot fix. The chat must render
 // these as a small notice card with the run reference, NOT as a normal
 // agent answer. Keep these strings in lockstep with
-// packages/agent/src/application/core/planner-cluster/platform-errors.ts.
+// packages/agent/src/service/core/planner-cluster/platform-errors.ts.
 const PLATFORM_UNCONFIGURED_PREFIX = "This request can\u2019t be completed right now."
 const GENERIC_FAILURE_PREFIX = "This request couldn\u2019t be completed."
 // Invisible marker prepended to LLM-polished failure replies (zero-width

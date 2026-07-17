@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
 
-import { formatAuthoredSyncJson } from "../src/api/sync/domain/authored-sync-document.js"
+import { formatAuthoredSyncJson } from "../src/api/sync/types/authored-sync-document.js"
 import * as db from "../src/infra/persistence/db/index.js"
 import {
   buildEntityRegistryApp,
@@ -171,7 +171,7 @@ describe("entity registry operator routes", () => {
   it("rejects non-admin import attempts", async () => {
     const Fastify = (await import("fastify")).default
     const { registerEntityRegistryRoutes } = await import(
-      "../src/api/sync/transport/definitions-routes.js"
+      "../src/api/sync/handlers/definitions-routes.js"
     )
     const guestApp = Fastify({ logger: false })
     guestApp.addHook("onRequest", async (req) => {

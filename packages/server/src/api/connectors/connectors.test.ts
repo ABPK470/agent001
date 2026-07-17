@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it } from "vitest"
 
 import { _migrate } from "../../infra/persistence/connection.js"
 import * as db from "../../infra/persistence/sqlite.js"
-import { loadPersistedConnectors } from "./runtime/live-connectors.js"
+import { loadPersistedConnectors } from "./state/live-connectors.js"
 import type { ConfigureMssqlConnection } from "@mia/agent"
 
 beforeEach(() => {

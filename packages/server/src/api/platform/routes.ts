@@ -2,22 +2,22 @@ import type { FastifyInstance } from "fastify"
 
 import type { AgentHost } from "@mia/agent"
 
-import { buildAboutDossier } from "./application/about-service.js"
+import { buildAboutDossier } from "./service/about-service.js"
 import {
   factoryResetSyncPlatform,
   getPlatformHealth,
   rebuildPlatformCatalog,
-} from "./application/platform-health-service.js"
+} from "./service/platform-health-service.js"
 import {
   refreshDeployArtifactsFromDatabase,
   useShippedDeployArtifacts,
-} from "./application/platform-artifacts-service.js"
+} from "./service/platform-artifacts-service.js"
 import {
   getActiveSyncCatalogVersion,
   importSyncCatalogBundle,
   listSyncCatalogVersions,
   rollbackSyncCatalogVersion,
-} from "./application/sync-catalog-versioning.js"
+} from "./service/sync-catalog-versioning.js"
 
 export interface RegisterPlatformRoutesOptions {
   projectRoot: string
@@ -128,7 +128,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     }
     try {
       const { buildDeployCatalogSnapshot } = await import(
-        "./application/export-deploy-artifacts.js"
+        "./service/export-deploy-artifacts.js"
       )
       const snapshot = buildDeployCatalogSnapshot({
         includeRetiredEntities: body.includeRetiredEntities,
@@ -158,7 +158,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     }
     try {
       const { exportDeployCatalogZipBuffer } = await import(
-        "./application/export-deploy-artifacts.js"
+        "./service/export-deploy-artifacts.js"
       )
       const { buffer, filename } = exportDeployCatalogZipBuffer({
         includeRetiredEntities: body.includeRetiredEntities,
@@ -169,7 +169,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       return reply.send(buffer)
     } catch (error) {
       const { EntityExportValidationError } = await import(
-        "../sync/application/assert-entity-export.js"
+        "../sync/service/assert-entity-export.js"
       )
       if (error instanceof EntityExportValidationError) {
         reply.code(409)
@@ -198,7 +198,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     }
     try {
       const { exportDeployGitZipBuffer } = await import(
-        "./application/export-deploy-git-artifacts.js"
+        "./service/export-deploy-git-artifacts.js"
       )
       const { buffer, filename } = exportDeployGitZipBuffer(opts.projectRoot, {
         includeRetiredEntities: body.includeRetiredEntities,
@@ -209,7 +209,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
       return reply.send(buffer)
     } catch (error) {
       const { EntityExportValidationError } = await import(
-        "../sync/application/assert-entity-export.js"
+        "../sync/service/assert-entity-export.js"
       )
       if (error instanceof EntityExportValidationError) {
         reply.code(409)
@@ -278,7 +278,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     }
     try {
       const { parseDeployGitZipBuffer, applyDeployGitBundle } = await import(
-        "./application/import-deploy-git-artifacts.js"
+        "./service/import-deploy-git-artifacts.js"
       )
       const buffer = Buffer.from(body.zipBase64, "base64")
       const bundle = parseDeployGitZipBuffer(buffer)
@@ -315,7 +315,7 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     }
     const body = (req.body ?? {}) as {
       zipBase64?: string
-      snapshot?: import("./application/export-deploy-artifacts.js").DeployCatalogSnapshot
+      snapshot?: import("./service/export-deploy-artifacts.js").DeployCatalogSnapshot
       dryRun?: boolean
       reason?: string
     }

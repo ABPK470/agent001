@@ -4,7 +4,7 @@
 
 import type { FastifyInstance } from "fastify"
 import * as db from "../../infra/persistence/sqlite.js"
-import { canAccessRun } from "../auth/application/access.js"
+import { canAccessRun } from "../auth/service/access.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 
 function canSee(
@@ -138,7 +138,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             reply.code(400)
             return { error: "approvalId required" }
           }
-          const { approveRunToolStep } = await import("../runs/application/run-tool-approval.js")
+          const { approveRunToolStep } = await import("../runs/service/run-tool-approval.js")
           return approveRunToolStep(orchestrator, approvalId, req.session ?? null)
         }
         case "deny-run-step": {
@@ -147,7 +147,7 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             reply.code(400)
             return { error: "approvalId required" }
           }
-          const { denyRunToolStep } = await import("../runs/application/run-tool-approval.js")
+          const { denyRunToolStep } = await import("../runs/service/run-tool-approval.js")
           return denyRunToolStep(orchestrator, approvalId, req.session ?? null)
         }
         default:

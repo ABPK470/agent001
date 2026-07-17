@@ -5,7 +5,7 @@
 import type { FastifyInstance } from "fastify"
 import { randomUUID } from "node:crypto"
 import * as db from "../../infra/persistence/sqlite.js"
-import { requireSessionUpn } from "../auth/application/access.js"
+import { requireSessionUpn } from "../auth/service/access.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 import { listAvailableTools } from "../runs/tooling/registry.js"
 

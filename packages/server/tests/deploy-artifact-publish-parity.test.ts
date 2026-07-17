@@ -22,8 +22,8 @@ import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
-import { publishSyncDefinitionsFromDb } from "../src/api/sync/application/definitions.js"
-import { seedEntityRegistryIfEmpty } from "../src/api/sync/application/seed-entity-registry.js"
+import { publishSyncDefinitionsFromDb } from "../src/api/sync/service/definitions.js"
+import { seedEntityRegistryIfEmpty } from "../src/api/sync/service/seed-entity-registry.js"
 import { entityDefinitionFromAuthoredSync, projectTablePredicate } from "@mia/sync"
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../../../", import.meta.url)))
@@ -84,7 +84,7 @@ afterEach(() => {
 async function seedAndPublish(): Promise<Record<string, unknown>> {
   const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   const { seedSyncMetadataIfEmpty } = await import(
-    "../src/api/sync/application/seed-sync-metadata.js"
+    "../src/api/sync/service/seed-sync-metadata.js"
   )
 
   _setDb(testDb)
@@ -157,7 +157,7 @@ describe("deploy artifact publish parity", () => {
   it("repairs degraded SQLite entities from deploy artifacts on boot", async () => {
     const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
     const { repairBundledEntityDefinitionsFromArtifacts } = await import(
-      "../src/api/sync/application/seed-entity-registry.js"
+      "../src/api/sync/service/seed-entity-registry.js"
     )
 
     _setDb(testDb)

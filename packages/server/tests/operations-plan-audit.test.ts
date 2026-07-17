@@ -59,7 +59,7 @@ describe("listOperationsForPlan", () => {
     getSyncRunPlanJson.mockReturnValue(null)
 
     const { listOperationsForPlan } = await import(
-      "../src/api/operations/application/query/list-operations-for-plan.ts"
+      "../src/api/operations/service/query/list-operations-for-plan.ts"
     )
     const result = listOperationsForPlan(planId)
 
@@ -78,7 +78,7 @@ describe("listOperationsForPlan", () => {
     listEventsForPlanId.mockReturnValue([])
 
     const { listOperationsForPlan } = await import(
-      "../src/api/operations/application/query/list-operations-for-plan.ts"
+      "../src/api/operations/service/query/list-operations-for-plan.ts"
     )
     const result = listOperationsForPlan("missing-plan")
 

@@ -11,7 +11,7 @@ import { openDatabase } from "../infra/persistence/connection.js"
 import {
   defaultExportParentDir,
   writeEntityRegistrySnapshot,
-} from "../api/sync/application/export-entity-registry.js"
+} from "../api/sync/service/export-entity-registry.js"
 
 main()
 

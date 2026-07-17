@@ -12,12 +12,12 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
 import { loadSyncDefinitionFlowTemplateCatalog } from "@mia/sync"
 
-import { ensureSyncDefinitionConfigs } from "../src/api/sync/application/definitions.js"
+import { ensureSyncDefinitionConfigs } from "../src/api/sync/service/definitions.js"
 import {
   entityToAuthoredSyncDefinition,
   formatAuthoredSyncJson,
   syncConfigInputFromDb,
-} from "../src/api/sync/domain/authored-sync-document.js"
+} from "../src/api/sync/types/authored-sync-document.js"
 import * as db from "../src/infra/persistence/db/index.js"
 
 let testDb: Database.Database
@@ -62,10 +62,10 @@ async function setupDb(): Promise<void> {
   seedRepoArtifacts(projectRoot)
 
   const { seedEntityRegistryIfEmpty } = await import(
-    "../src/api/sync/application/seed-entity-registry.js"
+    "../src/api/sync/service/seed-entity-registry.js"
   )
   const { seedSyncMetadataIfEmpty } = await import(
-    "../src/api/sync/application/seed-sync-metadata.js"
+    "../src/api/sync/service/seed-sync-metadata.js"
   )
   seedEntityRegistryIfEmpty(projectRoot)
   seedSyncMetadataIfEmpty(projectRoot)

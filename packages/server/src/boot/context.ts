@@ -1,6 +1,6 @@
 import { configureAgent, type AgentHost } from "@mia/agent"
 import { configurePlanStore } from "@mia/sync"
-import { seedDefaultPoliciesIfMissing } from "../api/policies/application/policy-seeder.js"
+import { seedDefaultPoliciesIfMissing } from "../api/policies/service/policy-seeder.js"
 import { setupMssql } from "../infra/mssql/setup.js"
 import { listFreezeWindowDefinitionsForTenant } from "../infra/persistence/index.js"
 import type { BootHostDeps } from "../ports/orchestration.js"
@@ -18,10 +18,10 @@ import {
   createSyncRunSink,
 } from "../adapters/sync/sinks.js"
 import { loadBootSyncEnvironments } from "./sync-environments.js"
-import { loadPersistedConnectors } from "../api/connectors/runtime/live-connectors.js"
-import { mssqlConfigsFromConnectors } from "../api/connectors/runtime/mssql-from-connectors.js"
-import { createMssqlPoolProvider } from "../api/connectors/runtime/mssql-pool-provider.js"
-import { buildMovementPort } from "../api/connectors/runtime/movement-port.js"
+import { loadPersistedConnectors } from "../api/connectors/state/live-connectors.js"
+import { mssqlConfigsFromConnectors } from "../api/connectors/state/mssql-from-connectors.js"
+import { createMssqlPoolProvider } from "../api/connectors/state/mssql-pool-provider.js"
+import { buildMovementPort } from "../api/connectors/state/movement-port.js"
 
 export interface ServerContext {
   readonly projectRoot: string

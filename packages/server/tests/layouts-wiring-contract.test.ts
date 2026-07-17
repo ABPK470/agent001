@@ -28,7 +28,7 @@ describe("layouts wiring (v19) — single-input dashboard key", () => {
   it("dashboardIdFor reads ONLY req.session.upn (no sid, no isAdmin)", () => {
     const src = readFileSync(LAYOUTS_TS, "utf8")
     const fnMatch = src.match(/function dashboardIdFor\([\s\S]*?\n\}/)
-    expect(fnMatch, "dashboardIdFor should exist in features/layouts/routes.ts").not.toBeNull()
+    expect(fnMatch, "dashboardIdFor should exist in api/layouts/routes.ts").not.toBeNull()
     const body = fnMatch![0]
 
     expect(body, "must read req.session.upn").toMatch(/req\.session\.upn|session\.upn/)

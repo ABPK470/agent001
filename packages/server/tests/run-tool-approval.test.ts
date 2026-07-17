@@ -63,7 +63,7 @@ describe("run tool approval application", () => {
     const orchestrator = { resumeRun, cancelRun: vi.fn() } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator
 
     try {
-      const { approveRunToolStep } = await import("../src/api/runs/application/run-tool-approval.js")
+      const { approveRunToolStep } = await import("../src/api/runs/service/run-tool-approval.js")
       const result = approveRunToolStep(orchestrator, approval.id, session())
 
       expect(result).toEqual({ ok: true, runId: "run-1", resumedRunId: "run-1-resumed" })
@@ -103,7 +103,7 @@ describe("run tool approval application", () => {
     const orchestrator = { resumeRun: vi.fn(), cancelRun } as unknown as import("../src/api/runs/orchestrator.js").AgentOrchestrator
 
     try {
-      const { denyRunToolStep } = await import("../src/api/runs/application/run-tool-approval.js")
+      const { denyRunToolStep } = await import("../src/api/runs/service/run-tool-approval.js")
       const result = denyRunToolStep(orchestrator, approval.id, session(), "operator denied")
 
       expect(result).toEqual({ ok: true, runId: "run-1" })
@@ -152,7 +152,7 @@ describe("run tool approval application", () => {
       policyName: "p",
     })
 
-    const { listPendingToolApprovalsForSession } = await import("../src/api/runs/application/run-tool-approval.js")
+    const { listPendingToolApprovalsForSession } = await import("../src/api/runs/service/run-tool-approval.js")
     const pending = listPendingToolApprovalsForSession(session())
     expect(pending).toHaveLength(1)
     expect(pending[0]?.id).toBe(mine.id)
@@ -174,7 +174,7 @@ describe("run tool approval application", () => {
     })
     markRunToolApprovalApproved(approval.id, UPN)
 
-    const { consumeMatchingToolGrant } = await import("../src/api/runs/application/run-tool-approval.js")
+    const { consumeMatchingToolGrant } = await import("../src/api/runs/service/run-tool-approval.js")
     consumeMatchingToolGrant("run-1", null, "write_file", { path: "/tmp/a.txt", content: "hi" })
     expect(getRunToolApproval(approval.id)?.status).toBe("consumed")
   })

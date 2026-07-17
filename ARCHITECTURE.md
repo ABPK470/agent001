@@ -224,11 +224,13 @@ shutdown.
 ### The `api/` surface convention
 
 Each folder under `api/` is a product HTTP surface. Thin surfaces are a single
-`routes.ts`. Fat surfaces grow folders only when weight demands it (no empty
-Nest-style scaffolds). See [docs/doctrine.md](docs/doctrine.md).
+`routes.ts`. Fat surfaces use only these folders when needed:
 
-Surfaces include `runs`, `sync`, `platform` (operator control plane), `auth`,
-`notifications`, `policies`, `proposer`, `approvals`, `evidence`, `metrics`, …
+`service/` · `types/` · `state/` · `handlers/` · `adapters/` · (`runs/prompting/`)
+
+Never Nest names (`application/`, `domain/`, `runtime/`, `transport/`).
+See [docs/doctrine.md](docs/doctrine.md). Surfaces include `runs`, `sync`,
+`platform` (operator control plane), `auth`, `notifications`, `policies`, …
 
 ### The `runs` surface — how a run actually runs
 

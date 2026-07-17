@@ -36,7 +36,7 @@ async function setup() {
   const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  return import("../src/api/notifications/application/delivery-routing.js")
+  return import("../src/api/notifications/service/delivery-routing.js")
 }
 
 describe("notification delivery routing (F1.10)", () => {

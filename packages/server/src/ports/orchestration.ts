@@ -17,11 +17,10 @@ import type {
   SyncRunSink
 } from "@mia/sync"
 import type { RunWorkspaceContext, WorkspaceDiff } from "./workspace.js"
-import type { AgentBus } from "../infra/queue/agent-bus.js"
-import type { RunQueue } from "../infra/queue/run-queue.js"
+import type { AgentBusPort, RunQueuePort } from "./queue.js"
 import type { MessageRouterPort } from "./channels.js"
 import type { ClarificationsRegistryPort } from "./clarifications.js"
-export type { RunPriority } from "../infra/queue/run-queue.js"
+export type { RunPriority } from "./queue.js"
 
 // ── Run-level state ───────────────────────────────────────────────
 
@@ -32,7 +31,7 @@ export interface ActiveRun {
   controller: AbortController
   services: EngineServices
   traceSeq: number
-  bus: AgentBus
+  bus: AgentBusPort
   workspace: RunWorkspaceContext | null
   /**
    * Role used by the policy engine for selector evaluation. Captured at
@@ -157,7 +156,7 @@ export interface NotificationOpts {
 export interface OrchestratorRunCtx {
   llm: LLMClient
   workspace: string | null
-  queue: RunQueue
+  queue: RunQueuePort
   activeRuns: Map<string, ActiveRun>
   pendingInputs: Map<string, { resolve: (answer: string) => void }>
   pendingKills: Map<string, { resolve: (message: string) => void; perToolCtrl: AbortController }>

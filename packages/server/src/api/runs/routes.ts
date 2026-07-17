@@ -11,7 +11,7 @@ import { flagRunMemory } from "../../infra/persistence/memory.js"
 import * as db from "../../infra/persistence/sqlite.js"
 import { sendUserDownload } from "../../internal/http/attachment-response.js"
 import { MemoryValidationAction } from "../../internal/enums/memory.js"
-import { AuthRequiredError, canAccessRun, requireSessionUpn } from "../auth/application/access.js"
+import { AuthRequiredError, canAccessRun, requireSessionUpn } from "../auth/service/access.js"
 import { ContinuityError } from "../runs/continuity.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 import { listRunArtifactFiles, openRunArtifactStream } from "./run-artifacts.js"
@@ -265,7 +265,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
   app.get("/api/runs/tool-approvals/pending", async (req, reply) => {
     try {
       const { listPendingToolApprovalsForSession } = await import(
-        "./application/run-tool-approval.js"
+        "./service/run-tool-approval.js"
       )
       return listPendingToolApprovalsForSession(req.session ?? null)
     } catch (error) {
@@ -278,7 +278,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     "/api/runs/tool-approvals/:id/approve",
     async (req, reply) => {
       try {
-        const { approveRunToolStep } = await import("./application/run-tool-approval.js")
+        const { approveRunToolStep } = await import("./service/run-tool-approval.js")
         return approveRunToolStep(orchestrator, req.params.id, req.session ?? null)
       } catch (error) {
         reply.code(error instanceof Error && error.message.includes("Authentication") ? 401 : 400)
@@ -291,7 +291,7 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
     "/api/runs/tool-approvals/:id/deny",
     async (req, reply) => {
       try {
-        const { denyRunToolStep } = await import("./application/run-tool-approval.js")
+        const { denyRunToolStep } = await import("./service/run-tool-approval.js")
         return denyRunToolStep(
           orchestrator,
           req.params.id,

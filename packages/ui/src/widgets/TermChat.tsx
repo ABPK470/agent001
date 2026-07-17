@@ -504,7 +504,7 @@ type ResponsePart =
   | ResponseSyncProgressPart
 
 // Invisible marker the backend prepends to LLM-polished failure replies.
-// Mirrors POLISHED_FAILURE_MARKER in packages/agent/src/application/core/planner-cluster/platform-errors.ts.
+// Mirrors POLISHED_FAILURE_MARKER in packages/agent/src/service/core/planner-cluster/platform-errors.ts.
 const POLISHED_FAILURE_MARKER = "\u2063pfm:\u2063"
 function stripFailureMarker(text: string): string {
   return text.startsWith(POLISHED_FAILURE_MARKER) ? text.slice(POLISHED_FAILURE_MARKER.length) : text

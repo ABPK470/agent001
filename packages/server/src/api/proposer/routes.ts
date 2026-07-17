@@ -8,10 +8,10 @@ import type { LlmCompletionPort, ProposalStatus, RiskTier } from "@mia/sync"
 import type { FastifyInstance, FastifyRequest } from "fastify"
 import { broadcast } from "../../infra/events/broadcaster.js"
 import * as db from "../../infra/persistence/sqlite.js"
-import { runProposer } from "./application/runner.js"
+import { runProposer } from "./service/runner.js"
 import { cancelOperation } from "../../infra/operations/cancel-registry.js"
 import { clearLlmInteractionForOperation } from "../../infra/llm/operation-context.js"
-import { deleteSchedule, listSchedules, upsertSchedule } from "./runtime/scheduler.js"
+import { deleteSchedule, listSchedules, upsertSchedule } from "./state/scheduler.js"
 
 const DEFAULT_TENANT_ID = "_default"
 

@@ -15,7 +15,7 @@ import { broadcast, broadcastTrace } from "../../../../infra/events/broadcaster.
 import * as db from "../../../../infra/persistence/sqlite.js"
 import { TrajectoryEventKind } from "../../../../internal/enums/trajectory.js"
 import { handlePlannerTrace } from "../../prompting/coordination/planner-events.js"
-import { consumeMatchingToolGrant } from "../../application/run-tool-approval.js"
+import { consumeMatchingToolGrant } from "../../service/run-tool-approval.js"
 import { writeRunCheckpoint } from "./checkpoint-writer.js"
 import { persistToolResult } from "../tool-result-persister.js"
 import type { DelegateRuntimeContext, ExecuteRunCommand, ExecutionEnvironment } from "./types.js"

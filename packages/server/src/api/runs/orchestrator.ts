@@ -28,7 +28,7 @@ import type {
   OrchestratorConfig
 } from "../../ports/orchestration.js"
 import { TrajectoryEventKind } from "../../internal/enums/trajectory.js"
-import type { CurrentSession } from "../auth/runtime/context.js"
+import type { CurrentSession } from "../auth/state/context.js"
 import { ClarificationsRegistry } from "./execution/clarifications-registry.js"
 import { persistLearnedTermFromResolution } from "./execution/clarifications-learned.js"
 import { createNotification, saveTrace } from "./execution/persistence.js"
@@ -36,7 +36,7 @@ import { recoverStaleRunsImpl } from "./execution/recovery.js"
 import { executeRunImpl } from "./execution/run-executor.js"
 import type { ExecuteRunCommand } from "./execution/run-executor/types.js"
 import { applyRunWorkspaceDiff, captureRunWorkspaceDiff } from "./execution/workspace-effects.js"
-import { requireSessionUpn } from "../auth/application/access.js"
+import { requireSessionUpn } from "../auth/service/access.js"
 import { requireOwnedThreadId } from "./continuity.js"
 import { filterToolsForVisitor, getAllTools } from "./tooling/registry.js"
 
@@ -562,10 +562,7 @@ export class AgentOrchestrator {
       },
       runtime: {
         workspaceRoot: this.workspace,
-        queue: {
-          acquire: (queuedRunId, queuedPriority, signal) =>
-            this.queue.acquire(queuedRunId, queuedPriority, signal)
-        },
+        queue: this.queue,
         interaction: {
           llm: this.llm,
           clarifications: this.clarifications,

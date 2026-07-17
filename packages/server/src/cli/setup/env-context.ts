@@ -3,7 +3,7 @@ import { join } from "node:path"
 
 import { isDatabricksConfigured } from "../../infra/llm/databricks-broker.js"
 import { isLlmProvider } from "../../internal/enums/llm.js"
-import { countEnabledMssqlConnectors } from "../../api/connectors/runtime/live-connectors.js"
+import { countEnabledMssqlConnectors } from "../../api/connectors/state/live-connectors.js"
 
 import { parseEnvFile } from "./env-file.js"
 import type { SetupLayout } from "./types.js"

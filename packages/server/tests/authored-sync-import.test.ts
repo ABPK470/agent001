@@ -11,8 +11,8 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
 
-import { importAuthoredSyncFromText } from "../src/api/sync/application/import-authored-sync.js"
-import { formatAuthoredSyncJson } from "../src/api/sync/domain/authored-sync-document.js"
+import { importAuthoredSyncFromText } from "../src/api/sync/service/import-authored-sync.js"
+import { formatAuthoredSyncJson } from "../src/api/sync/types/authored-sync-document.js"
 import * as db from "../src/infra/persistence/db/index.js"
 
 let testDb: Database.Database
@@ -52,7 +52,7 @@ async function setupEmptyDb(): Promise<void> {
   seedRepoArtifacts(projectRoot)
 
   const { seedSyncMetadataIfEmpty } = await import(
-    "../src/api/sync/application/seed-sync-metadata.js"
+    "../src/api/sync/service/seed-sync-metadata.js"
   )
   seedSyncMetadataIfEmpty(projectRoot)
 }

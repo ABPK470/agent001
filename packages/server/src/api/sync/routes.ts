@@ -27,18 +27,18 @@ import {
   publishSyncDefinitionsFromDb,
   resetSyncDefinitionConfig,
   upsertSyncDefinitionConfig
-} from "./application/definitions.js"
+} from "./service/definitions.js"
 import {
   buildSyncAuditDetail,
   loadPersistedSyncPlanSummary,
   summarizeSyncPlan
-} from "./application/plan-summary.js"
-import { rebuildLiveSyncEnvironments } from "./runtime/live-environments.js"
-import { registerSyncMetadataRoutes } from "./transport/sync-metadata-routes.js"
+} from "./service/plan-summary.js"
+import { rebuildLiveSyncEnvironments } from "./state/live-environments.js"
+import { registerSyncMetadataRoutes } from "./handlers/sync-metadata-routes.js"
 import {
   runRegisteredSyncExecute,
   SYNC_EXECUTE_OPERATION,
-} from "./runtime/execute-session.js"
+} from "./state/execute-session.js"
 
 interface PublishSyncDefinitionsResponse {
   publishedAt: string

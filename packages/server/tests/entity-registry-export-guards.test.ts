@@ -13,22 +13,22 @@ import {
 
 import {
   EntityExportValidationError,
-} from "../src/api/sync/application/assert-entity-export.js"
-import { buildDeployCatalogSnapshot } from "../src/api/platform/application/export-deploy-artifacts.js"
-import { exportDeployGitZipBuffer } from "../src/api/platform/application/export-deploy-git-artifacts.js"
-import { parseDeployGitZipBuffer } from "../src/api/platform/application/import-deploy-git-artifacts.js"
-import { validateDeployCatalogSnapshot } from "../src/api/platform/application/import-deploy-artifacts.js"
+} from "../src/api/sync/service/assert-entity-export.js"
+import { buildDeployCatalogSnapshot } from "../src/api/platform/service/export-deploy-artifacts.js"
+import { exportDeployGitZipBuffer } from "../src/api/platform/service/export-deploy-git-artifacts.js"
+import { parseDeployGitZipBuffer } from "../src/api/platform/service/import-deploy-git-artifacts.js"
+import { validateDeployCatalogSnapshot } from "../src/api/platform/service/import-deploy-artifacts.js"
 import {
   entityToAuthoredSyncDefinition,
   formatAuthoredSyncJson,
   syncConfigInputFromDb,
-} from "../src/api/sync/domain/authored-sync-document.js"
-import { formatEntityJson, parseEntitiesJson } from "../src/api/sync/domain/entity-yaml.js"
-import { loadAuthoringFlowCatalog } from "../src/api/sync/application/definitions.js"
+} from "../src/api/sync/types/authored-sync-document.js"
+import { formatEntityJson, parseEntitiesJson } from "../src/api/sync/types/entity-yaml.js"
+import { loadAuthoringFlowCatalog } from "../src/api/sync/service/definitions.js"
 import {
   importAuthoredSyncFromText,
   importOneAuthoredSync,
-} from "../src/api/sync/application/import-authored-sync.js"
+} from "../src/api/sync/service/import-authored-sync.js"
 import * as db from "../src/infra/persistence/db/index.js"
 import {
   buildEntityRegistryApp,

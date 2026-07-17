@@ -11,8 +11,8 @@
  *     4. No new AsyncLocalStorage for DI
  *
  *   Server:
- *     5. Canonical top-level folders (+ transitional aliases)
- *     6. Forbidden names (api/deploy, hosting/, top-level crypto/)
+ *     5. Canonical top-level folders (boot/http/infra/adapters/api/…)
+ *     6. Forbidden Nest folders under api/ + retired top-level names
  *     7. Shell layer import direction
  *
  *   Cross-package:
@@ -319,13 +319,7 @@ const SERVER_ALLOWED = {
 }
 
 /** Known reverse-edge / contract debt — shrink these. */
-const SERVER_LAYER_ALLOWLIST = [
-  {
-    from: "ports/orchestration.ts",
-    toPrefix: "infra/queue/",
-    note: "queue concrete types — extract interfaces into ports/",
-  },
-]
+const SERVER_LAYER_ALLOWLIST = []
 
 /** Trees / folder names that must not exist under packages/server/src. */
 const FORBIDDEN_SERVER_TREES = [
@@ -334,7 +328,7 @@ const FORBIDDEN_SERVER_TREES = [
   "api/deploy",
   "hosting",
   "api/runs/hosting",
-  // retired names — do not resurrect
+  // retired top-level names — do not resurrect
   "bootstrap",
   "app",
   "features",
@@ -342,6 +336,9 @@ const FORBIDDEN_SERVER_TREES = [
   "shared",
   "api/runs/core",
 ]
+
+/** Nest-style folder names forbidden anywhere under api/ */
+const FORBIDDEN_API_NEST_DIRS = ["application", "domain", "runtime", "transport"]
 
 function serverLayerOf(relPath) {
   const head = relPath.split("/")[0]
@@ -363,27 +360,29 @@ function lintServerForbiddenTrees() {
     const abs = join(SERVER_SRC, tree)
     if (existsSync(abs)) {
       fail(abs, 0, "server-forbidden-tree",
-        `doctrine forbids packages/server/src/${tree}/ — see docs/doctrine.md ` +
-          `(control plane = api/platform; run prompt logic = api/runs/prompting)`)
+        `doctrine forbids packages/server/src/${tree}/ — see docs/doctrine.md`)
     }
   }
-  // Also scan for a hosting/ directory anywhere under server src
-  for (const file of walk(SERVER_SRC)) {
-    const rel = relative(SERVER_SRC, file)
-    if (rel.split("/").includes("hosting")) {
-      fail(file, 0, "server-forbidden-tree",
-        `doctrine forbids hosting/ — use api/runs/prompting/ (today: features/runs/prompting/)`)
-      break
-    }
-    if (/(^|\/)deploy\//.test(rel) || rel === "deploy" || rel.startsWith("deploy/")) {
-      // allow business filenames like export-deploy-artifacts.ts; ban deploy/ folders only
-      const parts = rel.split("/")
-      if (parts.includes("deploy")) {
+  const apiRoot = join(SERVER_SRC, "api")
+  if (!existsSync(apiRoot)) return
+  for (const file of walk(apiRoot)) {
+    const parts = relative(SERVER_SRC, file).split("/")
+    for (const nest of FORBIDDEN_API_NEST_DIRS) {
+      if (parts.includes(nest)) {
         fail(file, 0, "server-forbidden-tree",
-          `doctrine forbids a deploy/ folder under server — use api/infra/ for the control plane; ` +
-            `keep "deploy" only in business filenames/routes`)
-        break
+          `doctrine forbids api/**/${nest}/ — use service/ | types/ | state/ | handlers/`)
+        return
       }
+    }
+    if (parts.includes("hosting")) {
+      fail(file, 0, "server-forbidden-tree",
+        `doctrine forbids hosting/ — use api/runs/prompting/`)
+      return
+    }
+    if (parts.includes("deploy")) {
+      fail(file, 0, "server-forbidden-tree",
+        `doctrine forbids api/**/deploy/ — use api/platform/; keep "deploy" in filenames only`)
+      return
     }
   }
 }

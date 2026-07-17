@@ -8,7 +8,7 @@ import { tmpdir } from "node:os"
 import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
-import { formatEntityJson, parseEntitiesJson } from "../src/api/sync/domain/entity-yaml.js"
+import { formatEntityJson, parseEntitiesJson } from "../src/api/sync/types/entity-yaml.js"
 import type { EntityDefinition } from "@mia/sync"
 
 let testDb: Database.Database

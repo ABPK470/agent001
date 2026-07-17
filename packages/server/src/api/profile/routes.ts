@@ -7,7 +7,7 @@ import { getOwnerUsage, getRetentionPolicy } from "../../infra/persistence/attac
 import { getRunProfile } from "../runs/workspace/index.js"
 
 export function registerProfileRoutes(app: FastifyInstance): void {
-  app.get("/api/runtime/profile", async () => {
+  app.get("/api/state/profile", async () => {
     const profile = getRunProfile()
     return {
       profile,
@@ -15,7 +15,7 @@ export function registerProfileRoutes(app: FastifyInstance): void {
     }
   })
 
-  app.get("/api/runtime/attachment-usage", async (req) => {
+  app.get("/api/state/attachment-usage", async (req) => {
     const ownerUpn = req.session.upn
     const usage = getOwnerUsage(ownerUpn)
     const retention = getRetentionPolicy()

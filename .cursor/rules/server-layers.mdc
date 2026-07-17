@@ -20,20 +20,25 @@ alwaysApply: false
 | Server-only helpers / enum façades | `internal/` |
 | CLI entrypoints | `cli/` |
 
-**Retired names (do not recreate):** `bootstrap/`, `app/`, `features/`,
-`platform/` (top-level), `shared/`, `api/runs/core/`, `hosting/`, `api/deploy/`.
+## Inside `api/<surface>/`
 
-## Naming that must stay unambiguous
+| Folder | Meaning |
+| --- | --- |
+| `service/` | Orchestration / use-cases |
+| `types/` | Surface-local shapes |
+| `state/` | Stateful context |
+| `handlers/` | Extra route modules |
+| `prompting/` | (`runs`) prompt / tool-gating pure logic |
 
-- **Operator control plane:** `api/platform/` — never `api/deploy/`
-- **Run prompt / tool-gating pure logic:** `api/runs/prompting/`
-- Thin surfaces may be a single `routes.ts`
+**Never use:** `application/`, `domain/`, `runtime/`, `transport/`, `hosting/`, `deploy/` (as a folder).
+
+**Retired top-level names:** `bootstrap/`, `app/`, `features/`, `platform/`, `shared/`.
 
 ## Dependency direction
 
 `api` → `infra` / `adapters` / `ports` / `internal`  
-`infra` ↛ `api`  
+`infra` → `internal` / `ports`  
 `adapters` → `infra` / `ports` / `internal`  
-`ports` → `ports` / `internal` (not api / infra impl)
+`ports` → `ports` / `internal` only  
 
 Full contract: `docs/doctrine.md`. Enforce with `npm run lint:arch`.

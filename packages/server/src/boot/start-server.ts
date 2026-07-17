@@ -22,7 +22,7 @@ import { listenHost, listenPort, projectRoot, resolveUiDist } from "./paths.js"
 import { createServerWorkspaceRef } from "./server-workspace.js"
 import { registerGracefulShutdown } from "./shutdown.js"
 import { startSyncPlatform } from "./sync-platform.js"
-import { recoverStaleProposerRuns } from "../api/proposer/runtime/recovery.js"
+import { recoverStaleProposerRuns } from "../api/proposer/state/recovery.js"
 
 function recoverStaleRuns(orchestrator: ReturnType<typeof createOrchestrator>): void {
   const recovery = orchestrator.recoverStaleRuns()

@@ -28,12 +28,14 @@ events to the UI. Composition root of the monorepo shell.
 ## Conventions
 
 - Import from these top-level folders only. Old names (`bootstrap/`,
-  `features/`, `platform/`, `shared/`, `app/`) are forbidden — enforced by
+  `api/`, `platform/`, `shared/`, `app/`) are forbidden — enforced by
   `npm run lint:arch`.
 - `infra/persistence/index.ts` is the persistence barrel for outside callers.
 - Wire enums live in `@mia/shared-enums`; re-export via `internal/enums/`.
 - Disk writes on behalf of a run go through `infra/effects/`.
 - Operator control plane = `api/platform/` (not `api/deploy/`).
 - Run prompt / tool-gating pure logic = `api/runs/prompting/`.
+- Inside `api/<surface>/` use `service/` · `types/` · `state/` · `handlers/` —
+  never Nest names (`application/`, `domain/`, `runtime/`, `transport/`).
 
 See `docs/doctrine.md` for the full shell-layer rules.

@@ -12,21 +12,21 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
   applyDeployCatalogSnapshot,
   validateDeployCatalogSnapshot,
-} from "../src/api/platform/application/import-deploy-artifacts.js"
+} from "../src/api/platform/service/import-deploy-artifacts.js"
 import {
   buildDeployCatalogSnapshot,
   writeDeployCatalogSnapshot,
-} from "../src/api/platform/application/export-deploy-artifacts.js"
+} from "../src/api/platform/service/export-deploy-artifacts.js"
 import {
   commitSyncCatalogVersion,
   rollbackSyncCatalogVersion,
-} from "../src/api/platform/application/sync-catalog-versioning.js"
-import { publishSyncDefinitionsFromDb } from "../src/api/sync/application/definitions.js"
+} from "../src/api/platform/service/sync-catalog-versioning.js"
+import { publishSyncDefinitionsFromDb } from "../src/api/sync/service/definitions.js"
 import {
   ensureSyncDefinitionConfigs,
   listSyncDefinitionAdminItems,
   loadAuthoringFlowCatalog,
-} from "../src/api/sync/application/definitions.js"
+} from "../src/api/sync/service/definitions.js"
 import * as db from "../src/infra/persistence/db/index.js"
 
 let testDb: Database.Database
@@ -71,10 +71,10 @@ async function setupDb(): Promise<void> {
   seedRepoArtifacts(projectRoot)
 
   const { seedEntityRegistryIfEmpty } = await import(
-    "../src/api/sync/application/seed-entity-registry.js"
+    "../src/api/sync/service/seed-entity-registry.js"
   )
   const { seedSyncMetadataIfEmpty } = await import(
-    "../src/api/sync/application/seed-sync-metadata.js"
+    "../src/api/sync/service/seed-sync-metadata.js"
   )
   seedEntityRegistryIfEmpty(projectRoot)
   seedSyncMetadataIfEmpty(projectRoot)
@@ -238,7 +238,7 @@ describe("catalog import/export round-trip", () => {
   })
 
   it("loadAuthoringFlowCatalog falls back to shipped steps when a DB preset is empty", async () => {
-    const { loadAuthoringFlowCatalog } = await import("../src/api/sync/application/definitions.js")
+    const { loadAuthoringFlowCatalog } = await import("../src/api/sync/service/definitions.js")
     db.saveSyncRunPreset({
       tenant_id: "_default",
       id: "content",

@@ -12,11 +12,10 @@ import {
   type Unsubscribe
 } from "@mia/agent"
 import { type WorkspaceDiff, type prepareRunWorkspace } from "../../workspace/index.js"
-import type { AgentBus } from "../../../../infra/queue/agent-bus.js"
-import { type RunPriority } from "../../../../infra/queue/run-queue.js"
 import type { MemoryPerTier } from "../../../../infra/persistence/memory/tier-context.js"
 import type { ClarificationsRegistryPort } from "../../../../ports/clarifications.js"
 import type { ActiveRun, BootHostDeps, NotificationOpts } from "../../../../ports/orchestration.js"
+import type { AgentBusPort, RunPriority, RunQueuePort } from "../../../../ports/queue.js"
 
 export type RunWorkspace = Awaited<ReturnType<typeof prepareRunWorkspace>>
 export type ActiveRunRecord = ActiveRun
@@ -37,9 +36,7 @@ export type ExecuteRunRequestDto = {
   priority: RunPriority
 }
 
-export interface RunQueuePort {
-  acquire(runId: string, priority: RunPriority, signal: AbortSignal): Promise<() => void>
-}
+export type { RunQueuePort }
 
 export interface RunInteractionPort {
   llm: LLMClient
@@ -70,8 +67,8 @@ export interface RunWorkspaceStorePort {
 }
 
 export interface RunMessagingPort {
-  publish(message: Parameters<AgentBus["publish"]>[0]): ReturnType<AgentBus["publish"]>
-  history(): ReturnType<AgentBus["history"]>
+  publish(message: Parameters<AgentBusPort["publish"]>[0]): ReturnType<AgentBusPort["publish"]>
+  history(): ReturnType<AgentBusPort["history"]>
   createChildTools(childRunId: string, childAgentName: string): ExecutableTool[]
   sendReply(runId: string, answer: string): Promise<void>
   dispose(): void

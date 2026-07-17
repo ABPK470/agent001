@@ -206,13 +206,13 @@ There is no dedicated CLI for Format A bulk zip; use the API or export from the 
 
 | Concern | Path |
 |---------|------|
-| Format B export | `packages/server/src/api/platform/application/export-deploy-artifacts.ts` |
-| Format B import | `packages/server/src/api/platform/application/import-deploy-artifacts.ts` |
-| Format A export | `packages/server/src/api/platform/application/export-deploy-git-artifacts.ts` |
-| Format A import (bulk) | `packages/server/src/api/platform/application/import-deploy-git-artifacts.ts` |
-| Format A import (single) | `packages/server/src/api/sync/application/import-authored-sync.ts` |
-| Format B entity YAML/JSON | `packages/server/src/api/sync/domain/entity-yaml.ts` |
-| Format A document | `packages/server/src/api/sync/domain/authored-sync-document.ts` |
+| Format B export | `packages/server/src/api/platform/service/export-deploy-artifacts.ts` |
+| Format B import | `packages/server/src/api/platform/service/import-deploy-artifacts.ts` |
+| Format A export | `packages/server/src/api/platform/service/export-deploy-git-artifacts.ts` |
+| Format A import (bulk) | `packages/server/src/api/platform/service/import-deploy-git-artifacts.ts` |
+| Format A import (single) | `packages/server/src/api/sync/service/import-authored-sync.ts` |
+| Format B entity YAML/JSON | `packages/server/src/api/sync/types/entity-yaml.ts` |
+| Format A document | `packages/server/src/api/sync/types/authored-sync-document.ts` |
 | Round-trip tests | `packages/server/tests/artifact-format-roundtrip.test.ts` |
 
 ---
