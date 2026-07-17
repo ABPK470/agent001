@@ -1,26 +1,36 @@
 import { useCallback, type JSX } from "react"
-import { ToastStack, useToasts, type Toast } from "../../components/ToastStack"
+import {
+  ToastStack,
+  useToasts,
+  type Toast,
+  type ToastKind,
+} from "../../components/ToastStack"
 
 const AUTO_DISMISS_MS = 15_000
 
-export type ModalToast = Pick<Toast, "id" | "message">
+export type ModalToast = Pick<Toast, "id" | "message" | "kind">
 
 export function useModalToasts(autoDismissMs = AUTO_DISMISS_MS): {
   toasts: ModalToast[]
-  pushToast: (message: string) => void
+  /** Default kind is `err` — pass `ok` / `info` for non-error feedback. */
+  pushToast: (message: string, kind?: ToastKind) => void
   dismissToast: (id: string) => void
   clearToasts: () => void
 } {
-  const { toasts, pushToast, dismissToast, clearToasts } = useToasts({ err: autoDismissMs })
+  const { toasts, pushToast: push, dismissToast, clearToasts } = useToasts({
+    ok: autoDismissMs,
+    err: autoDismissMs,
+    info: autoDismissMs,
+  })
 
-  const pushErrorToast = useCallback(
-    (message: string) => pushToast(message, "err"),
-    [pushToast],
+  const pushToast = useCallback(
+    (message: string, kind: ToastKind = "err") => push(message, kind),
+    [push],
   )
 
   return {
-    toasts: toasts.map(({ id, message }) => ({ id, message })),
-    pushToast: pushErrorToast,
+    toasts,
+    pushToast,
     dismissToast,
     clearToasts,
   }
@@ -37,7 +47,7 @@ export function ModalToastStack({
 
   return (
     <ToastStack
-      toasts={toasts.map((toast) => ({ ...toast, kind: "err" as const }))}
+      toasts={toasts}
       onDismiss={onDismiss}
       className="pointer-events-none absolute inset-y-3 right-3 z-30 flex w-[min(100%,20rem)] flex-col justify-end gap-2"
     />

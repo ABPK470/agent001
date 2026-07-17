@@ -114,9 +114,9 @@ export function BridgeShell(): JSX.Element {
       const names = columnNamesFromRows(res.rows)
       setSourceColumns(names)
       setMapDraft((prev) => seedIdentityColumns(prev, names))
-      if (names.length === 0) pushToast("Sample returned no columns")
+      if (names.length === 0) pushToast("Sample returned no columns", "info")
     } catch (e) {
-      pushToast(e instanceof Error ? e.message : String(e))
+      pushToast(e instanceof Error ? e.message : String(e), "err")
     } finally {
       setBusy(null)
     }
@@ -137,7 +137,7 @@ export function BridgeShell(): JSX.Element {
       setPreview(res)
       if (!transform) setSourceColumns(columnNamesFromRows(res.rows))
     } catch (e) {
-      pushToast(e instanceof Error ? e.message : String(e))
+      pushToast(e instanceof Error ? e.message : String(e), "err")
     } finally {
       setBusy(null)
     }
@@ -155,9 +155,11 @@ export function BridgeShell(): JSX.Element {
         ...(transform ? { transform } : {}),
       })
       setSummary(res)
-      pushToast(`Move ${res.status}: ${res.rowsWritten} rows written`)
+      const kind =
+        res.status === "failed" ? "err" : res.status === "partial" ? "info" : "ok"
+      pushToast(`Move ${res.status}: ${res.rowsWritten} rows written`, kind)
     } catch (e) {
-      pushToast(e instanceof Error ? e.message : String(e))
+      pushToast(e instanceof Error ? e.message : String(e), "err")
     } finally {
       setBusy(null)
     }

@@ -204,7 +204,7 @@ export function ConnectorsShell(): JSX.Element {
     clearToasts()
     const ok = await connectors.importFile(file)
     if (ok) {
-      pushToast(`Imported connectors from ${file.name}`)
+      pushToast(`Imported connectors from ${file.name}`, "ok")
       closeForm()
     }
   }
@@ -212,7 +212,7 @@ export function ConnectorsShell(): JSX.Element {
   async function exportConnectorsFile(): Promise<void> {
     clearToasts()
     const ok = await connectors.exportFile()
-    if (ok) pushToast("Downloaded connectors.json")
+    if (ok) pushToast("Downloaded connectors.json", "ok")
   }
 
   const headerDescription = VIEW_DESCRIPTIONS[view]
