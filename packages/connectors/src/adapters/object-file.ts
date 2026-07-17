@@ -1,8 +1,11 @@
 /**
- * object-file.ts — shared CSV/JSON file adapter for object-store and FTP kinds.
+ * object-file.ts — shared CSV/JSON/Parquet file adapter for object-store and FTP kinds.
  *
  * aws, azure, and ftp share the same read/write shape (path + format + mode).
  * Each kind supplies its own {@link FileTransferDriver} for fetch/put bytes.
+ *
+ * Parquet append = read existing file (if any), concatenate rows, rewrite.
+ * Parquet always uses a full-file put (binary); csv/json keep streaming puts.
  */
 
 import type {
@@ -14,23 +17,30 @@ import type {
   Connector,
   ConnectorAdapter,
   ConnectorKindId,
+  FileFormat,
   FtpReadSpec,
   FtpWriteSpec,
   MoveSummary,
   ReadSpec,
   Row,
   WriteMode,
+  WriteOptions,
   WriteSpec,
 } from "@mia/shared-types"
 import { makeSummary } from "../engine.js"
-import { parseCsv, serializeRows } from "./webhdfs.js"
+import { serializeParquet } from "../parquet.js"
+import { decodeFileRows } from "./file-formats.js"
+import { putDriverBytes, readDriverBytes } from "./driver-bytes.js"
+import { serializeRows } from "./webhdfs.js"
 
 type RowBatch = Row[]
 type ObjectFileKind = "aws" | "azure" | "ftp"
 
 export interface FileTransferDriver {
   readText(path: string): Promise<string>
+  readBytes(path: string): Promise<Uint8Array>
   putText(path: string, mode: WriteMode, body: ReadableStream<Uint8Array>): Promise<void>
+  putBytes(path: string, mode: WriteMode, body: Uint8Array): Promise<void>
   close(): Promise<void>
 }
 
@@ -76,44 +86,90 @@ export function createObjectFileAdapter(
     async* read(spec: ReadSpec) {
       if (!driver) throw new Error(`${kind} adapter read before open`)
       if (!isObjectFileRead(kind, spec)) throw new Error(`${kind} adapter cannot read spec kind '${spec.kind}'`)
-      const text = await driver.readText(spec.path)
-      const rows = spec.format === "csv" ? parseCsv(text) : parseJsonArray(text)
+      const bytes = await readDriverBytes(driver, spec.path)
+      const rows = await decodeFileRows(spec.format, bytes)
       for (let i = 0; i < rows.length; i += batchSize) {
         yield rows.slice(i, i + batchSize) as RowBatch
       }
     },
-    async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary> {
+    async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>, writeOpts?: WriteOptions): Promise<MoveSummary> {
       if (!driver) throw new Error(`${kind} adapter write before open`)
       if (!isObjectFileWrite(kind, spec)) throw new Error(`${kind} adapter cannot write spec kind '${spec.kind}'`)
       if (!options.writeEnabled) {
         return makeSummary("failed", 0, 0, [{ row: 0, message: "connector is read-only (writeEnabled=false)" }], 0)
       }
-      let rowsRead = 0
-      const counting = async function* (): AsyncGenerator<RowBatch> {
-        for await (const batch of rows) {
-          rowsRead += batch.length
-          yield batch
-        }
-      }
-      const body = ReadableStream.from(serializeRows(counting(), spec.format))
       try {
-        await driver.putText(spec.path, spec.mode, body)
-        return makeSummary("completed", rowsRead, rowsRead, [], null)
+        throwIfAborted(writeOpts?.signal)
+        if (spec.format === "parquet") {
+          return await writeParquet(driver, spec.path, spec.mode, rows, writeOpts?.signal)
+        }
+        return await writeTextFormat(driver, spec.path, spec.mode, spec.format, rows, writeOpts?.signal)
       } catch (e) {
-        return makeSummary("failed", rowsRead, 0, [{ row: 0, message: messageOf(e) }], null)
+        if (isAbortError(e)) {
+          return makeSummary("failed", 0, 0, [{ row: 0, message: messageOf(e) }], 0)
+        }
+        return makeSummary("failed", 0, 0, [{ row: 0, message: messageOf(e) }], null)
       }
     },
   }
 }
 
-function parseJsonArray(text: string): Row[] {
-  const trimmed = text.trim()
-  if (trimmed === "") return []
-  const parsed = JSON.parse(trimmed)
-  if (!Array.isArray(parsed)) {
-    throw new Error(`expected a JSON array, got ${typeof parsed}`)
+async function writeParquet(
+  driver: FileTransferDriver,
+  path: string,
+  mode: WriteMode,
+  rows: AsyncGenerator<RowBatch>,
+  signal?: AbortSignal,
+): Promise<MoveSummary> {
+  const all: Row[] = []
+  if (mode === "append") {
+    try {
+      const existing = await readDriverBytes(driver, path)
+      all.push(...(await decodeFileRows("parquet", existing)))
+    } catch {
+      /* new object */
+    }
   }
-  return parsed as Row[]
+  let incoming = 0
+  for await (const batch of rows) {
+    throwIfAborted(signal)
+    incoming += batch.length
+    all.push(...batch)
+  }
+  await putDriverBytes(driver, path, "replace", serializeParquet(all))
+  return makeSummary("completed", incoming, incoming, [], null)
+}
+
+async function writeTextFormat(
+  driver: FileTransferDriver,
+  path: string,
+  mode: WriteMode,
+  format: Exclude<FileFormat, "parquet">,
+  rows: AsyncGenerator<RowBatch>,
+  signal?: AbortSignal,
+): Promise<MoveSummary> {
+  let rowsRead = 0
+  const counting = async function* (): AsyncGenerator<RowBatch> {
+    for await (const batch of rows) {
+      throwIfAborted(signal)
+      rowsRead += batch.length
+      yield batch
+    }
+  }
+  const body = ReadableStream.from(serializeRows(counting(), format))
+  await driver.putText(path, mode, body)
+  return makeSummary("completed", rowsRead, rowsRead, [], null)
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    const reason = signal.reason
+    throw reason instanceof Error ? reason : new Error("Bridge move aborted")
+  }
+}
+
+function isAbortError(e: unknown): boolean {
+  return e instanceof Error && /aborted/i.test(e.message)
 }
 
 function messageOf(e: unknown): string {

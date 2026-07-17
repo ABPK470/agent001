@@ -119,11 +119,35 @@ describe("httpApi adapter", () => {
     const summary = await adapter.write(
       { kind: "httpApi", method: "POST", path: "/upsert" },
       toAsync([[{ a: 1 }, { a: 2 }, { a: 3 }]]),
+      { stopOnError: false },
     )
     await adapter.close()
     expect(summary.status).toBe("partial")
     expect(summary.rowsRead).toBe(3)
     expect(summary.rowsWritten).toBe(2)
+    expect(summary.errors).toEqual([{ row: 0, message: "boom @ /upsert" }])
+  })
+
+  it("stops at the first row failure when stopOnError is true (default)", async () => {
+    const driver = mockDriver(null)
+    let attempt = 0
+    driver.request = async (method, path, body, headers) => {
+      driver.calls.push({ method, path, body, headers })
+      attempt++
+      if (attempt === 1) throw new Error("boom @ /upsert")
+      return null
+    }
+    const adapter = createHttpApiAdapter(connector(), { driverProvider: async () => driver })
+    await adapter.open()
+    const summary = await adapter.write(
+      { kind: "httpApi", method: "POST", path: "/upsert" },
+      toAsync([[{ a: 1 }, { a: 2 }, { a: 3 }]]),
+    )
+    await adapter.close()
+    expect(summary.status).toBe("partial")
+    expect(summary.rowsRead).toBe(1)
+    expect(summary.rowsWritten).toBe(0)
+    expect(summary.failedAtRow).toBe(0)
     expect(summary.errors).toEqual([{ row: 0, message: "boom @ /upsert" }])
   })
 

@@ -27,6 +27,7 @@ import type {
   WriteSpec,
   HttpApiReadSpec,
   HttpApiWriteSpec,
+  WriteOptions,
 } from "@mia/shared-types"
 import { makeSummary } from "../engine.js"
 
@@ -85,13 +86,15 @@ export function createHttpApiAdapter(
         yield rows.slice(i, i + batchSize) as RowBatch
       }
     },
-    async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary> {
+    async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>, writeOpts?: WriteOptions): Promise<MoveSummary> {
       if (!driver) throw new Error("httpApi adapter write before open")
       if (!isHttpWrite(spec)) throw new Error(`httpApi adapter cannot write spec kind '${spec.kind}'`)
+      const stopOnError = writeOpts?.stopOnError ?? true
       let rowsRead = 0
       let rowsWritten = 0
       const errors: MoveSummary["errors"] = []
       for await (const batch of rows) {
+        throwIfAborted(writeOpts?.signal)
         for (const row of batch) {
           rowsRead++
           try {
@@ -99,6 +102,9 @@ export function createHttpApiAdapter(
             rowsWritten++
           } catch (e) {
             errors.push({ row: rowsRead - 1, message: messageOf(e) })
+            if (stopOnError) {
+              return makeSummary("partial", rowsRead, rowsWritten, errors, rowsRead - 1)
+            }
           }
         }
       }
@@ -107,6 +113,13 @@ export function createHttpApiAdapter(
       }
       return makeSummary("completed", rowsRead, rowsWritten, [], null)
     },
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    const reason = signal.reason
+    throw reason instanceof Error ? reason : new Error("Bridge move aborted")
   }
 }
 

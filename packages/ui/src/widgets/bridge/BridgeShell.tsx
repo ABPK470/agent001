@@ -1,5 +1,5 @@
 /**
- * BridgeShell — move rows between connectors (source → transform → target).
+ * BridgeShell — move rows between connectors (source → map → target).
  *
  * Separate from sync: this is the generic bridge surface backed by the
  * @mia/connectors engine. The agent `bridge_data` tool and the
@@ -21,11 +21,12 @@ import {
   ICON_BTN,
   ICON_BTN_PRIMARY,
   META_TEXT,
-  WIDGET_ENVELOPE
+  WIDGET_ENVELOPE,
 } from "../entity-registry/chrome"
 import { ConnectorKindMark } from "../connectors/ConnectorKindMark"
 import { FormFieldGroup, FormSectionCard } from "../entity-registry/form-section"
 import { ModalToastStack, useModalToasts } from "../entity-registry/ModalToastStack"
+import { TransformMap } from "./TransformMap"
 import {
   ReadSpecForm,
   WriteSpecForm,
@@ -33,8 +34,14 @@ import {
   buildWriteSpec,
   emptyReadSpec,
   emptyWriteSpec,
-  parseJsonOpt,
 } from "./spec-forms"
+import {
+  columnNamesFromRows,
+  compileTransform,
+  emptyTransformDraft,
+  seedIdentityColumns,
+  type TransformDraft,
+} from "./transform-draft"
 
 export function BridgeShell(): JSX.Element {
   const { toasts, pushToast, dismissToast } = useModalToasts()
@@ -44,10 +51,11 @@ export function BridgeShell(): JSX.Element {
   const [targetId, setTargetId] = useState<string>("")
   const [sourceSpec, setSourceSpec] = useState<Record<string, unknown>>({})
   const [targetSpec, setTargetSpec] = useState<Record<string, unknown>>({})
-  const [transformText, setTransformText] = useState("")
+  const [mapDraft, setMapDraft] = useState<TransformDraft>(() => emptyTransformDraft())
+  const [sourceColumns, setSourceColumns] = useState<string[]>([])
   const [preview, setPreview] = useState<{ rows: Record<string, unknown>[]; truncated: boolean } | null>(null)
   const [summary, setSummary] = useState<MoveSummary | null>(null)
-  const [busy, setBusy] = useState<"preview" | "run" | null>(null)
+  const [busy, setBusy] = useState<"preview" | "run" | "sample" | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -100,6 +108,8 @@ export function BridgeShell(): JSX.Element {
     setSourceId(id)
     setSourceSpec(c ? emptyReadSpec(c.kind) : {})
     setPreview(null)
+    setSourceColumns([])
+    setMapDraft(emptyTransformDraft())
   }
   function onTargetChange(id: string): void {
     const c = connectors.find((x) => x.id === id)
@@ -108,12 +118,29 @@ export function BridgeShell(): JSX.Element {
     setSummary(null)
   }
 
-  function buildTransform(): Transform | undefined {
-    const parsed = parseJsonOpt(transformText)
-    if ("error" in parsed) {
-      throw new Error(`Transform JSON: ${parsed.error}`)
+  function resolveTransform(): Transform | undefined {
+    const compiled = compileTransform(mapDraft)
+    if (!compiled.ok) throw new Error(compiled.error)
+    return compiled.transform
+  }
+
+  async function onSampleColumns(): Promise<void> {
+    if (!source) return
+    setBusy("sample")
+    try {
+      const res = await api.previewBridge({
+        source: { connectorId: sourceId, spec: buildReadSpec(source.kind, sourceSpec) },
+        limit: 20,
+      })
+      const names = columnNamesFromRows(res.rows)
+      setSourceColumns(names)
+      setMapDraft((prev) => seedIdentityColumns(prev, names))
+      if (names.length === 0) pushToast("Sample returned no columns")
+    } catch (e) {
+      pushToast(e instanceof Error ? e.message : String(e))
+    } finally {
+      setBusy(null)
     }
-    return parsed.value === undefined ? undefined : (parsed.value as Transform)
   }
 
   async function onPreview(): Promise<void> {
@@ -121,13 +148,15 @@ export function BridgeShell(): JSX.Element {
     setBusy("preview")
     setPreview(null)
     try {
-      const transform = buildTransform()
+      const transform = resolveTransform()
       const res = await api.previewBridge({
         source: { connectorId: sourceId, spec: buildReadSpec(source.kind, sourceSpec) },
         ...(transform ? { transform } : {}),
         limit: 50,
       })
       setPreview(res)
+      // Keep known source fields fresh from raw keys when pass-through-ish preview.
+      if (!transform) setSourceColumns(columnNamesFromRows(res.rows))
     } catch (e) {
       pushToast(e instanceof Error ? e.message : String(e))
     } finally {
@@ -140,7 +169,7 @@ export function BridgeShell(): JSX.Element {
     setBusy("run")
     setSummary(null)
     try {
-      const transform = buildTransform()
+      const transform = resolveTransform()
       const res = await api.runBridge({
         source: { connectorId: sourceId, spec: buildReadSpec(source.kind, sourceSpec) },
         target: { connectorId: targetId, spec: buildWriteSpec(target.kind, targetSpec) },
@@ -166,16 +195,23 @@ export function BridgeShell(): JSX.Element {
             <div className="min-w-0">
               <h3 className={FORM_HEADING}>Move data between connectors</h3>
               <p className={`${META_TEXT} mt-1 max-w-3xl leading-relaxed text-text-faint`}>
-                Stream rows from a source connector through an optional declarative transform into a target connector.
-                Preview reads up to 50 rows without writing; Run executes the full move.
+                Source → Map → Target. Preview applies the map without writing; Run executes the full move.
+                File connectors support CSV, JSON, and Parquet.
               </p>
+              <ol className="mt-2 flex flex-wrap items-center gap-1.5 text-[11px] font-medium uppercase tracking-wide text-text-faint">
+                <li className="rounded-md bg-accent/10 px-2 py-0.5 text-accent">1 · Source</li>
+                <li aria-hidden className="text-text-faint">→</li>
+                <li className="rounded-md bg-accent/10 px-2 py-0.5 text-accent">2 · Map</li>
+                <li aria-hidden className="text-text-faint">→</li>
+                <li className="rounded-md bg-accent/10 px-2 py-0.5 text-accent">3 · Target</li>
+              </ol>
             </div>
             <div className="flex shrink-0 flex-col items-end gap-2">
               <div className="flex items-center gap-1.5">
                 <button
                   type="button"
                   onClick={() => void onPreview()}
-                  disabled={!canMove || busy === "preview"}
+                  disabled={!source || busy !== null}
                   className={ICON_BTN}
                   title="Preview up to 50 rows (no write)"
                   aria-label="Preview"
@@ -185,7 +221,7 @@ export function BridgeShell(): JSX.Element {
                 <button
                   type="button"
                   onClick={() => void onRun()}
-                  disabled={!canMove || busy === "run"}
+                  disabled={!canMove}
                   className={ICON_BTN_PRIMARY}
                   title="Run the full move"
                   aria-label="Run move"
@@ -219,7 +255,7 @@ export function BridgeShell(): JSX.Element {
           ) : (
             <div className="space-y-4">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
-                <FormSectionCard title="Source" description="Where rows come from." emphasized>
+                <FormSectionCard title="1 · Source" description="Where rows come from." emphasized>
                   <FormFieldGroup label="Connector">
                     <Listbox
                       value={sourceId}
@@ -240,7 +276,7 @@ export function BridgeShell(): JSX.Element {
                   )}
                 </FormSectionCard>
 
-                <FormSectionCard title="Target" description="Where rows go." emphasized>
+                <FormSectionCard title="3 · Target" description="Where rows go." emphasized>
                   <FormFieldGroup label="Connector">
                     <Listbox
                       value={targetId}
@@ -262,18 +298,13 @@ export function BridgeShell(): JSX.Element {
                 </FormSectionCard>
               </div>
 
-              <FormSectionCard
-                title="Transform (optional)"
-                description="Rename or cast columns, then add computed fields — applied row-by-row after the source read."
-              >
-                <textarea
-                  value={transformText}
-                  onChange={(e) => setTransformText(e.target.value)}
-                  rows={4}
-                  placeholder={'{\n  "columns": [{ "from": "id", "to": "key" }],\n  "derive": [{ "to": "label", "template": "row-${id}" }]\n}'}
-                  className="input text-sm font-mono leading-relaxed"
-                />
-              </FormSectionCard>
+              <TransformMap
+                draft={mapDraft}
+                onChange={setMapDraft}
+                sourceColumns={sourceColumns}
+                onSampleColumns={source ? () => void onSampleColumns() : undefined}
+                sampling={busy === "sample"}
+              />
 
               {preview && <PreviewTable rows={preview.rows} truncated={preview.truncated} />}
               {summary && <SummaryCard summary={summary} />}
@@ -299,7 +330,7 @@ function PreviewTable({
   return (
     <FormSectionCard
       title={`Preview · ${rows.length} row${rows.length === 1 ? "" : "s"}${truncated ? " (truncated)" : ""}`}
-      description="First 50 rows from the source after the transform — nothing written."
+      description="First 50 rows after the map — nothing written."
     >
       <div className="overflow-auto rounded-md border border-border-subtle">
         <table className="min-w-full text-xs">
@@ -378,6 +409,3 @@ function SummaryCard({ summary }: { summary: MoveSummary }): JSX.Element {
     </FormSectionCard>
   )
 }
-
-
-

@@ -8,7 +8,7 @@
  */
 
 import type { JSX } from "react"
-import type { ConnectorKindId, ReadSpec, WriteMode, WriteSpec } from "@mia/shared-types"
+import type { ConnectorKindId, FileFormat, ReadSpec, WriteMode, WriteSpec } from "@mia/shared-types"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { FormFieldGroup } from "../entity-registry/form-section"
 
@@ -76,10 +76,10 @@ export function buildReadSpec(kind: ConnectorKindId, bag: Record<string, unknown
     } as ReadSpec
   }
   if (k === "webhdfs") {
-    return { kind: "webhdfs", path: String(bag["path"] ?? ""), format: (bag["format"] as "csv" | "json") ?? "csv" }
+    return { kind: "webhdfs", path: String(bag["path"] ?? ""), format: (bag["format"] as FileFormat) ?? "csv" }
   }
   if (k === "aws" || k === "azure" || k === "ftp") {
-    return { kind: k, path: String(bag["path"] ?? ""), format: (bag["format"] as "csv" | "json") ?? "csv" }
+    return { kind: k, path: String(bag["path"] ?? ""), format: (bag["format"] as FileFormat) ?? "csv" }
   }
   if (k === "aqueduct") {
     const params = jsonField(bag, "params")
@@ -124,7 +124,7 @@ export function buildWriteSpec(kind: ConnectorKindId, bag: Record<string, unknow
     return {
       kind: k,
       path: String(bag["path"] ?? ""),
-      format: (bag["format"] as "csv" | "json") ?? "csv",
+      format: (bag["format"] as FileFormat) ?? "csv",
       mode: (bag["mode"] as "append" | "replace") ?? "replace",
     } as WriteSpec
   }
@@ -182,9 +182,10 @@ const HTTP_WRITE_METHODS: ListboxOption<"POST" | "PUT">[] = [
   { value: "POST", label: "POST" },
   { value: "PUT", label: "PUT" },
 ]
-const FORMAT_OPTIONS: ListboxOption<"csv" | "json">[] = [
+const FORMAT_OPTIONS: ListboxOption<"csv" | "json" | "parquet">[] = [
   { value: "csv", label: "CSV" },
   { value: "json", label: "JSON" },
+  { value: "parquet", label: "Parquet" },
 ]
 
 function TextInput({
@@ -325,7 +326,7 @@ export function ReadSpecForm({
         </FormFieldGroup>
         <FormFieldGroup label="Format">
           <Listbox
-            value={(spec["format"] as "csv" | "json") ?? "csv"}
+            value={(spec["format"] as FileFormat) ?? "csv"}
             options={FORMAT_OPTIONS}
             onChange={(v) => patch({ format: v })}
             size="sm"
@@ -459,7 +460,7 @@ export function WriteSpecForm({
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <FormFieldGroup label="Format">
             <Listbox
-              value={(spec["format"] as "csv" | "json") ?? "csv"}
+              value={(spec["format"] as FileFormat) ?? "csv"}
               options={FORMAT_OPTIONS}
               onChange={(v) => patch({ format: v })}
               size="sm"

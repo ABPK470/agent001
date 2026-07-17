@@ -1,21 +1,17 @@
 /**
  * adapters/webhdfs.ts — HDFS file adapter over the WebHDFS REST API.
  *
- * Reads: `op=OPEN` returns the file body; CSV (header row) or JSON array is
- *   parsed into rows and re-batched.
- * Writes: rows are serialized to CSV / JSON on the fly into a ReadableStream
- *   and `PUT` to HDFS (`op=CREATE` for replace, `op=APPEND` for append). The
- *   stream is pulled lazily from the row generator, so a multi-GB write never
- *   holds the whole file in memory.
- *
- * Driver calls go through a {@link WebHdfsDriver} port so the adapter is
- * testable without a live HDFS cluster.
+ * Reads: `op=OPEN` returns the file body; CSV / JSON / Parquet is parsed into
+ *   rows and re-batched.
+ * Writes: CSV/JSON stream via PUT; Parquet materializes a binary buffer.
+ *   `mode` selects CREATE (replace) vs APPEND (text) or read-merge-rewrite (parquet).
  */
 
 import type {
   AdapterCapabilities,
   Connector,
   ConnectorAdapter,
+  FileFormat,
   MoveSummary,
   MovementValue,
   ReadSpec,
@@ -23,17 +19,21 @@ import type {
   WebhdfsReadSpec,
   WebhdfsWriteSpec,
   WriteMode,
+  WriteOptions,
   WriteSpec,
 } from "@mia/shared-types"
 import { makeSummary } from "../engine.js"
+import { serializeParquet } from "../parquet.js"
+import { decodeFileRows } from "./file-formats.js"
+import { putDriverBytes, readDriverBytes } from "./driver-bytes.js"
 
 type RowBatch = Row[]
 
 export interface WebHdfsDriver {
-  /** Return the full text body of a file. */
   readText(path: string): Promise<string>
-  /** Upload a byte stream to a path. `mode` selects CREATE (replace) vs APPEND. */
+  readBytes(path: string): Promise<Uint8Array>
   putText(path: string, mode: WriteMode, body: ReadableStream<Uint8Array>): Promise<void>
+  putBytes(path: string, mode: WriteMode, body: Uint8Array): Promise<void>
   close(): Promise<void>
 }
 
@@ -74,34 +74,77 @@ export function createWebhdfsAdapter(
     async* read(spec: ReadSpec) {
       if (!driver) throw new Error("webhdfs adapter read before open")
       if (!isWebhdfsRead(spec)) throw new Error(`webhdfs adapter cannot read spec kind '${spec.kind}'`)
-      const text = await driver.readText(spec.path)
-      const rows = spec.format === "csv" ? parseCsv(text) : parseJsonArray(text)
+      const bytes = await readDriverBytes(driver, spec.path)
+      const rows = await decodeFileRows(spec.format, bytes)
       for (let i = 0; i < rows.length; i += batchSize) {
         yield rows.slice(i, i + batchSize) as RowBatch
       }
     },
-    async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary> {
+    async write(spec: WriteSpec, rows: AsyncGenerator<RowBatch>, writeOpts?: WriteOptions): Promise<MoveSummary> {
       if (!driver) throw new Error("webhdfs adapter write before open")
       if (!isWebhdfsWrite(spec)) throw new Error(`webhdfs adapter cannot write spec kind '${spec.kind}'`)
       if (!options.writeEnabled) {
         return makeSummary("failed", 0, 0, [{ row: 0, message: "connector is read-only (writeEnabled=false)" }], 0)
       }
-      let rowsRead = 0
-      const counting = async function* (): AsyncGenerator<RowBatch> {
-        for await (const batch of rows) {
-          rowsRead += batch.length
-          yield batch
-        }
-      }
-      const body = ReadableStream.from(serializeRows(counting(), spec.format))
       try {
-        await driver.putText(spec.path, spec.mode, body)
-        return makeSummary("completed", rowsRead, rowsRead, [], null)
+        throwIfAborted(writeOpts?.signal)
+        if (spec.format === "parquet") {
+          return await writeParquet(driver, spec.path, spec.mode, rows, writeOpts?.signal)
+        }
+        return await writeTextFormat(driver, spec.path, spec.mode, spec.format, rows, writeOpts?.signal)
       } catch (e) {
-        return makeSummary("failed", rowsRead, 0, [{ row: 0, message: messageOf(e) }], null)
+        return makeSummary("failed", 0, 0, [{ row: 0, message: messageOf(e) }], null)
       }
     },
   }
+}
+
+async function writeParquet(
+  driver: WebHdfsDriver,
+  path: string,
+  mode: WriteMode,
+  rows: AsyncGenerator<RowBatch>,
+  signal?: AbortSignal,
+): Promise<MoveSummary> {
+  const all: Row[] = []
+  if (mode === "append") {
+    try {
+      const existing = await readDriverBytes(driver, path)
+      const prior = await decodeFileRows("parquet", existing)
+      all.push(...prior)
+    } catch {
+      /* new file */
+    }
+  }
+  let incoming = 0
+  for await (const batch of rows) {
+    throwIfAborted(signal)
+    incoming += batch.length
+    all.push(...batch)
+  }
+  await putDriverBytes(driver, path, "replace", serializeParquet(all))
+  return makeSummary("completed", incoming, incoming, [], null)
+}
+
+async function writeTextFormat(
+  driver: WebHdfsDriver,
+  path: string,
+  mode: WriteMode,
+  format: Exclude<FileFormat, "parquet">,
+  rows: AsyncGenerator<RowBatch>,
+  signal?: AbortSignal,
+): Promise<MoveSummary> {
+  let rowsRead = 0
+  const counting = async function* (): AsyncGenerator<RowBatch> {
+    for await (const batch of rows) {
+      throwIfAborted(signal)
+      rowsRead += batch.length
+      yield batch
+    }
+  }
+  const body = ReadableStream.from(serializeRows(counting(), format))
+  await driver.putText(path, mode, body)
+  return makeSummary("completed", rowsRead, rowsRead, [], null)
 }
 
 // ── serialization (streaming) ────────────────────────────────────
@@ -146,18 +189,6 @@ function csvField(value: unknown): string {
   return s
 }
 
-// ── parsing (read) ───────────────────────────────────────────────
-
-function parseJsonArray(text: string): Row[] {
-  const trimmed = text.trim()
-  if (trimmed === "") return []
-  const parsed = JSON.parse(trimmed)
-  if (!Array.isArray(parsed)) {
-    throw new Error(`webhdfs: expected a JSON array, got ${typeof parsed}`)
-  }
-  return parsed as Row[]
-}
-
 /** Minimal RFC-4180-ish CSV parser: quotes, embedded commas, embedded newlines. */
 export function parseCsv(text: string): Row[] {
   const rows: Row[] = []
@@ -196,7 +227,6 @@ export function parseCsv(text: string): Row[] {
       continue
     }
     if (ch === "\r") {
-      // handle CRLF
       if (text[i + 1] === "\n") i++
       record.push(field)
       field = ""
@@ -216,7 +246,6 @@ export function parseCsv(text: string): Row[] {
     field += ch
     i++
   }
-  // flush trailing field/record (file without final newline)
   if (field !== "" || record.length > 0) {
     record.push(field)
     records.push(record)
@@ -225,7 +254,7 @@ export function parseCsv(text: string): Row[] {
   const header = records[0]!
   for (let r = 1; r < records.length; r++) {
     const rec = records[r]!
-    if (rec.length === 1 && rec[0] === "") continue // skip blank lines
+    if (rec.length === 1 && rec[0] === "") continue
     const row: Row = {}
     for (let c = 0; c < header.length; c++) {
       row[header[c]!] = (rec[c] ?? "") as MovementValue
@@ -233,6 +262,13 @@ export function parseCsv(text: string): Row[] {
     rows.push(row)
   }
   return rows
+}
+
+function throwIfAborted(signal?: AbortSignal): void {
+  if (signal?.aborted) {
+    const reason = signal.reason
+    throw reason instanceof Error ? reason : new Error("Bridge move aborted")
+  }
 }
 
 function messageOf(e: unknown): string {

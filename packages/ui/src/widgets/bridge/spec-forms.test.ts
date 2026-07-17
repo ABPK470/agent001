@@ -127,6 +127,19 @@ describe("buildWriteSpec", () => {
       mode: "append",
     })
   })
+  it("builds parquet read/write specs for object stores", () => {
+    expect(buildReadSpec("aws", { path: "/data/x.parquet", format: "parquet" })).toEqual({
+      kind: "aws",
+      path: "/data/x.parquet",
+      format: "parquet",
+    })
+    expect(buildWriteSpec("webhdfs", { path: "/out.parquet", format: "parquet", mode: "replace" })).toEqual({
+      kind: "webhdfs",
+      path: "/out.parquet",
+      format: "parquet",
+      mode: "replace",
+    })
+  })
 })
 
 describe("parseJsonOpt", () => {

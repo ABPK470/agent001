@@ -348,16 +348,21 @@ export function defaultWebhdfsDriver(connector: Connector): WebHdfsDriver {
   const userParam = user ? `&user.name=${encodeURIComponent(user)}` : ""
   const normPath = (p: string) => (p.startsWith("/") ? p : `/${p}`)
 
+  async function readBytes(path: string): Promise<Uint8Array> {
+    const url = `${base}${normPath(path)}?op=OPEN${userParam}`
+    const res = await fetch(url, { method: "GET", headers: authHeaders, redirect: "follow" })
+    if (!res.ok) {
+      const text = await res.text().catch(() => "")
+      throw new Error(`webhdfs OPEN ${path} → ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 200)}` : ""}`)
+    }
+    return new Uint8Array(await res.arrayBuffer())
+  }
+
   return {
     async readText(path) {
-      const url = `${base}${normPath(path)}?op=OPEN${userParam}`
-      const res = await fetch(url, { method: "GET", headers: authHeaders, redirect: "follow" })
-      if (!res.ok) {
-        const text = await res.text().catch(() => "")
-        throw new Error(`webhdfs OPEN ${path} → ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 200)}` : ""}`)
-      }
-      return await res.text()
+      return new TextDecoder().decode(await readBytes(path))
     },
+    readBytes,
     async putText(path, mode, body) {
       const op = mode === "replace" ? "CREATE&overwrite=true" : "APPEND"
       const url = `${base}${normPath(path)}?op=${op}${userParam}`
@@ -372,7 +377,20 @@ export function defaultWebhdfsDriver(connector: Connector): WebHdfsDriver {
         const text = await res.text().catch(() => "")
         throw new Error(`webhdfs ${op.split("&")[0]} ${path} → ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 200)}` : ""}`)
       }
-      // drain so the socket can be reused
+      await res.text().catch(() => {})
+    },
+    async putBytes(path, _mode, body) {
+      const url = `${base}${normPath(path)}?op=CREATE&overwrite=true${userParam}`
+      const res = await fetch(url, {
+        method: "PUT",
+        headers: { "Content-Type": "application/octet-stream", ...authHeaders },
+        body,
+        redirect: "follow",
+      })
+      if (!res.ok) {
+        const text = await res.text().catch(() => "")
+        throw new Error(`webhdfs CREATE ${path} → ${res.status} ${res.statusText}${text ? `: ${text.slice(0, 200)}` : ""}`)
+      }
       await res.text().catch(() => {})
     },
     async close() {
@@ -395,6 +413,11 @@ export function defaultAwsDriver(connector: Connector): FileTransferDriver {
       const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: normalizeKey(path) }))
       return (await res.Body?.transformToString()) ?? ""
     },
+    async readBytes(path) {
+      const res = await client.send(new GetObjectCommand({ Bucket: bucket, Key: normalizeKey(path) }))
+      const bytes = await res.Body?.transformToByteArray()
+      return bytes ? new Uint8Array(bytes) : new Uint8Array()
+    },
     async putText(path, mode, body) {
       const key = normalizeKey(path)
       if (mode === "replace") {
@@ -410,6 +433,16 @@ export function defaultAwsDriver(connector: Connector): FileTransferDriver {
       }
       const merged = Readable.from(concatTextStream(existing, body))
       await client.send(new PutObjectCommand({ Bucket: bucket, Key: key, Body: merged }))
+    },
+    async putBytes(path, _mode, body) {
+      await client.send(
+        new PutObjectCommand({
+          Bucket: bucket,
+          Key: normalizeKey(path),
+          Body: body,
+          ContentType: "application/vnd.apache.parquet",
+        }),
+      )
     },
     async close() {
       client.destroy()
@@ -432,6 +465,11 @@ export function defaultAzureDriver(connector: Connector): FileTransferDriver {
       const buf = await blob.downloadToBuffer()
       return buf.toString("utf8")
     },
+    async readBytes(path) {
+      const blob = containerClient.getBlockBlobClient(normalizeKey(path))
+      const buf = await blob.downloadToBuffer()
+      return new Uint8Array(buf)
+    },
     async putText(path, mode, body) {
       const blob = containerClient.getBlockBlobClient(normalizeKey(path))
       if (mode === "replace") {
@@ -446,6 +484,12 @@ export function defaultAzureDriver(connector: Connector): FileTransferDriver {
       }
       const merged = Readable.from(concatTextStream(existing, body))
       await blob.uploadStream(merged)
+    },
+    async putBytes(path, _mode, body) {
+      const blob = containerClient.getBlockBlobClient(normalizeKey(path))
+      await blob.uploadData(body, {
+        blobHTTPHeaders: { blobContentType: "application/vnd.apache.parquet" },
+      })
     },
     async close() {
       /* stateless */
@@ -465,22 +509,11 @@ export function defaultFtpDriver(connector: Connector): FileTransferDriver {
 
   return {
     async readText(path) {
-      const client = new FtpClient()
-      try {
-        await client.access({ host, port, user, password, secure })
-        if (baseDir) await client.cd(baseDir)
-        const chunks: Buffer[] = []
-        const writable = new Writable({
-          write(chunk, _enc, cb) {
-            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
-            cb()
-          },
-        })
-        await client.downloadTo(writable, remotePath(path))
-        return Buffer.concat(chunks).toString("utf8")
-      } finally {
-        client.close()
-      }
+      const bytes = await readFtpBytes(host, port, user, password, secure, baseDir, path)
+      return new TextDecoder().decode(bytes)
+    },
+    async readBytes(path) {
+      return readFtpBytes(host, port, user, password, secure, baseDir, path)
     },
     async putText(path, mode, body) {
       const client = new FtpClient()
@@ -512,9 +545,46 @@ export function defaultFtpDriver(connector: Connector): FileTransferDriver {
         client.close()
       }
     },
+    async putBytes(path, _mode, body) {
+      const client = new FtpClient()
+      try {
+        await client.access({ host, port, user, password, secure })
+        if (baseDir) await client.cd(baseDir)
+        await client.uploadFrom(Readable.from([Buffer.from(body)]), remotePath(path))
+      } finally {
+        client.close()
+      }
+    },
     async close() {
       /* per-call client */
     },
+  }
+}
+
+async function readFtpBytes(
+  host: string,
+  port: number,
+  user: string,
+  password: string,
+  secure: boolean,
+  baseDir: string,
+  path: string,
+): Promise<Uint8Array> {
+  const client = new FtpClient()
+  try {
+    await client.access({ host, port, user, password, secure })
+    if (baseDir) await client.cd(baseDir)
+    const chunks: Buffer[] = []
+    const writable = new Writable({
+      write(chunk, _enc, cb) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+        cb()
+      },
+    })
+    await client.downloadTo(writable, remotePath(path))
+    return new Uint8Array(Buffer.concat(chunks))
+  } finally {
+    client.close()
   }
 }
 

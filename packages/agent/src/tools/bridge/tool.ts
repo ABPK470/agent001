@@ -16,13 +16,14 @@ function buildBridgeDataTool(host: AgentHost): ExecutableTool {
     name: "bridge_data",
     description:
       "Move (copy) rows from a source connector to a target connector through an optional declarative transform. " +
-      "Streaming — handles arbitrarily large datasets without loading them all into memory. " +
+      "Streaming — handles arbitrarily large datasets without loading them all into memory (Parquet/HTTP JSON payloads are bounded by file/response size). " +
       "Use list_adapters to see connectors and their capabilities. " +
-      "source.spec / target.spec are kind-specific: SQL kinds (mssql, postgres, hive) use { kind: 'sql', sql | table+mode }; " +
-      "httpApi uses { kind: 'httpApi', method, path, ... }; webhdfs uses { kind: 'webhdfs', path, format }; " +
+      "source.spec / target.spec are kind-specific: SQL kinds (mssql, postgres, databricks) use { kind: 'sql', sql | table+mode }; " +
+      "httpApi uses { kind: 'httpApi', method, path, ... }; webhdfs/aws/azure/ftp use { kind, path, format: 'csv'|'json'|'parquet', mode? }; " +
       "denodo uses { kind: 'denodo', view, params }. " +
-      "transform = { columns: [{ from, to, cast? }], derive: [{ to, template: '${field}' }] }. " +
-      "Write modes: 'append' (batch insert) or 'replace' (truncate+insert in one transaction, rolls back on error). " +
+      "transform = { columns: [{ from, to, cast?, default? }], derive: [{ to, template }], defaults: [{ column, value }], filter: [{ column, op, value? }] }. " +
+      "casts: string|number|boolean|date|datetime|json. filter ops: eq|neq|gt|gte|lt|lte|in|exists|empty. " +
+      "Write modes: 'append' (batch insert / merge-rewrite for parquet) or 'replace' (truncate+insert / overwrite file). " +
       "Returns a summary: status (completed|partial|failed), rowsRead, rowsWritten, errors.",
     parameters: {
       type: "object",

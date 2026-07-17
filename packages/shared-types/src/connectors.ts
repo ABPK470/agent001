@@ -308,6 +308,9 @@ export type Row = Record<string, MovementValue>
 
 export type WriteMode = "append" | "replace"
 
+/** File formats for object-store / WebHDFS Bridge specs. */
+export type FileFormat = "csv" | "json" | "parquet"
+
 export type MovementStatus = "completed" | "partial" | "failed"
 
 /** What an adapter can do. Non-SQL kinds set `query`/`write` false as appropriate. */
@@ -316,6 +319,13 @@ export interface AdapterCapabilities {
   readonly write: boolean
   /** SQL-like `SELECT` supported (drives the `query` read spec). */
   readonly query: boolean
+}
+
+/** Options forwarded from the Bridge engine into adapter `write`. */
+export interface WriteOptions {
+  /** Append-mode / non-transactional writers: stop at first row error (default true). */
+  readonly stopOnError?: boolean
+  readonly signal?: AbortSignal
 }
 
 // ── Read specs (discriminated by kind) ───────────────────────────
@@ -338,7 +348,7 @@ export interface HttpApiReadSpec {
 export interface WebhdfsReadSpec {
   readonly kind: "webhdfs"
   readonly path: string
-  readonly format: "csv" | "json"
+  readonly format: FileFormat
 }
 
 export interface DenodoReadSpec {
@@ -350,19 +360,19 @@ export interface DenodoReadSpec {
 export interface AwsReadSpec {
   readonly kind: "aws"
   readonly path: string
-  readonly format: "csv" | "json"
+  readonly format: FileFormat
 }
 
 export interface AzureReadSpec {
   readonly kind: "azure"
   readonly path: string
-  readonly format: "csv" | "json"
+  readonly format: FileFormat
 }
 
 export interface FtpReadSpec {
   readonly kind: "ftp"
   readonly path: string
-  readonly format: "csv" | "json"
+  readonly format: FileFormat
 }
 
 export interface AqueductReadSpec {
@@ -400,28 +410,28 @@ export interface HttpApiWriteSpec {
 export interface WebhdfsWriteSpec {
   readonly kind: "webhdfs"
   readonly path: string
-  readonly format: "csv" | "json"
+  readonly format: FileFormat
   readonly mode: WriteMode
 }
 
 export interface AwsWriteSpec {
   readonly kind: "aws"
   readonly path: string
-  readonly format: "csv" | "json"
+  readonly format: FileFormat
   readonly mode: WriteMode
 }
 
 export interface AzureWriteSpec {
   readonly kind: "azure"
   readonly path: string
-  readonly format: "csv" | "json"
+  readonly format: FileFormat
   readonly mode: WriteMode
 }
 
 export interface FtpWriteSpec {
   readonly kind: "ftp"
   readonly path: string
-  readonly format: "csv" | "json"
+  readonly format: FileFormat
   readonly mode: WriteMode
 }
 
@@ -435,7 +445,7 @@ export type WriteSpec =
 
 // ── Transform (declarative, adapter-agnostic, applied row-by-row) ──
 
-export type CastKind = "string" | "number" | "boolean"
+export type CastKind = "string" | "number" | "boolean" | "date" | "datetime" | "json"
 
 export interface TransformColumn {
   /** Source column name. */
@@ -444,6 +454,8 @@ export interface TransformColumn {
   readonly to: string
   /** Optional cast applied in the engine (no source-side pushdown). */
   readonly cast?: CastKind
+  /** If source is null/undefined/empty, use this value before cast. */
+  readonly default?: MovementValue
 }
 
 export interface TransformDerive {
@@ -453,11 +465,39 @@ export interface TransformDerive {
   readonly template: string
 }
 
+export interface TransformDefault {
+  /** Column to fill when missing/null/empty after projection. */
+  readonly column: string
+  readonly value: MovementValue
+}
+
+export type TransformFilterOp =
+  | "eq"
+  | "neq"
+  | "gt"
+  | "gte"
+  | "lt"
+  | "lte"
+  | "in"
+  | "exists"
+  | "empty"
+
+/** Keep a row only when every filter predicate passes (AND). */
+export interface TransformFilter {
+  readonly column: string
+  readonly op: TransformFilterOp
+  readonly value?: MovementValue | readonly MovementValue[]
+}
+
 export interface Transform {
   /** Column projection + rename + cast. An empty list passes rows through unchanged. */
   readonly columns?: TransformColumn[]
   /** Derived columns appended to each row. */
   readonly derive?: TransformDerive[]
+  /** Fill missing/null/empty columns after projection + derive. */
+  readonly defaults?: TransformDefault[]
+  /** Row keep/drop predicates (AND). Applied after projection/derive/defaults. */
+  readonly filter?: TransformFilter[]
 }
 
 // ── Movement summary ────────────────────────────────────────────
@@ -490,7 +530,11 @@ export interface ConnectorAdapter {
   open(): Promise<void>
   close(): Promise<void>
   read(spec: ReadSpec): AsyncGenerator<Row[]>
-  write(spec: WriteSpec, rows: AsyncGenerator<Row[]>): Promise<MoveSummary>
+  write(
+    spec: WriteSpec,
+    rows: AsyncGenerator<Row[]>,
+    options?: WriteOptions,
+  ): Promise<MoveSummary>
 }
 
 /** Builds an adapter for one connector instance from its persisted config. */

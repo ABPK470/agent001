@@ -70,7 +70,7 @@ export interface ConnectorPort {
   /** Read up to `limit` rows from the source, apply the transform, return them (no write). */
   previewMove(
     source: ConnectorPortMoveSource,
-    options?: { transform?: Transform; limit?: number },
+    options?: { transform?: Transform; limit?: number; signal?: AbortSignal },
   ): Promise<{ rows: Row[]; truncated: boolean }>
   listAdapters(): ConnectorInfo[]
 }
@@ -142,7 +142,11 @@ export function buildConnectorPort(
       try {
         const rows: Row[] = []
         let truncated = false
-        for await (const batch of applyTransform(srcAdapter.read(source.spec), options?.transform)) {
+        for await (const batch of applyTransform(
+          srcAdapter.read(source.spec),
+          options?.transform,
+          options?.signal,
+        )) {
           for (const row of batch) {
             if (rows.length >= limit) {
               truncated = true

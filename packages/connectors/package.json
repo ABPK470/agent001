@@ -16,6 +16,8 @@
     "@azure/storage-blob": "^12.28.0",
     "@mia/shared-types": "*",
     "basic-ftp": "^5.0.5",
+    "hyparquet": "^1.26.2",
+    "hyparquet-writer": "^0.16.1",
     "mssql": "^12.2.1",
     "pg": "^8.13.1",
     "pg-query-stream": "^4.8.1"

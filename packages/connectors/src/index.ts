@@ -11,6 +11,8 @@ export {
   type MoveTarget,
 } from "./engine.js"
 
+export { parseParquet, serializeParquet } from "./parquet.js"
+
 export {
   AdapterRegistry,
   buildConnectorPort,
