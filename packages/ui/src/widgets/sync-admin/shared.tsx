@@ -255,7 +255,7 @@ export function DetailFields({ children }: { children: ReactNode }): JSX.Element
   )
 }
 
-/** Chevron row — matches entity-registry DefinitionOverview section list. */
+/** Chevron row — matches entity-registry EntityOverviewSections list. */
 export function SectionRow({
   title,
   subtitle,

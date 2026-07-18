@@ -7,7 +7,7 @@ import { useMemo, useState, type JSX } from "react"
 import type { EntityRegistryTable } from "../../types"
 import { PANEL } from "./chrome"
 import { DetailField, DetailGrid } from "./DetailField"
-import { scopeSummary, sortedTables, tableSourceLabel } from "./definition-helpers"
+import { scopeSummary, sortedTables, tableSourceLabel } from "./entity-overview-helpers"
 
 function DefaultOnIndicator({ enabled }: { enabled: boolean | null | undefined }): JSX.Element {
   if (enabled === true) {

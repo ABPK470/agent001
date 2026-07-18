@@ -1,5 +1,5 @@
 /**
- * Publish definitions — confirmation modal with unpublished change preview.
+ * Publish Catalog tip → SyncDefinitions — confirmation with unpublished change preview.
  */
 
 import { CheckCircle2, Loader2, Rocket, X, XCircle } from "lucide-react"
@@ -11,7 +11,7 @@ import type { PublishSyncDefinitionsResponse, SyncDefinitionAdminItem } from "..
 
 type PublishPhase = "idle" | "publishing" | "done"
 
-export function PublishDefinitionsModal({
+export function PublishSyncDefinitionsModal({
   entityCount,
   unpublished,
   onClose,
@@ -58,7 +58,7 @@ export function PublishDefinitionsModal({
   }
 
   const title =
-    phase === "idle" ? "Publish definitions"
+    phase === "idle" ? "Publish SyncDefinitions"
       : phase === "publishing" ? "Publishing…"
         : error ? "Publish failed"
           : "Publish complete"
@@ -99,8 +99,8 @@ export function PublishDefinitionsModal({
             <div className="flex-1 overflow-y-auto">
               <div className="px-4 sm:px-5 pt-4 pb-3 text-justify">
                 <p className="text-sm text-text-muted leading-relaxed">
-                  Compile and publish entity definitions to the runtime sync bundle.
-                  Preview and execute use the published version — saving the registry alone does not publish.
+                  Compose Catalog tip into SyncDefinitions for preview and execute.
+                  Saving the Entity Registry alone does not publish.
                 </p>
               </div>
 
@@ -178,7 +178,7 @@ export function PublishDefinitionsModal({
 
         {phase === "publishing" && (
           <div className="flex flex-1 flex-col items-center justify-center px-4 sm:px-5 py-10 text-center text-sm text-text-muted">
-            Compiling entity registry and writing published bundle…
+            Composing Catalog tip into SyncDefinitions…
           </div>
         )}
 
@@ -191,7 +191,7 @@ export function PublishDefinitionsModal({
                 <p className="text-sm text-text-muted leading-relaxed">
                   Published{" "}
                   <span className="font-semibold text-text">{result.definitionCount}</span>{" "}
-                  definition{result.definitionCount === 1 ? "" : "s"}.
+                  SyncDefinition{result.definitionCount === 1 ? "" : "s"}.
                 </p>
               ) : null}
 

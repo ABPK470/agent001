@@ -15,7 +15,7 @@ import {
   newStep,
 } from "./execution-step-shared"
 
-export interface SourceSurfaceProps {
+export interface EntityJsonSurfaceProps {
   loading: boolean
   body: string
   onBody: (v: string) => void
@@ -24,7 +24,14 @@ export interface SourceSurfaceProps {
   placeholder?: string
 }
 
-export function SourceSurface({ loading, body, onBody, reason, onReason, placeholder }: SourceSurfaceProps): JSX.Element {
+export function EntityJsonSurface({
+  loading,
+  body,
+  onBody,
+  reason,
+  onReason,
+  placeholder,
+}: EntityJsonSurfaceProps): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 text-xs">
       {loading && (

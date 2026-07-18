@@ -532,16 +532,6 @@ body {
   background: color-mix(in srgb, var(--color-accent) 9%, rgba(30, 25, 20, 0.055));
 }
 
-/* Selected segment — same surface as entity rail selection */
-.registry-mode-toggle__btn--active {
-  background: color-mix(in srgb, var(--color-accent) 11%, var(--color-overlay-2));
-  color: var(--color-text);
-}
-
-:root[data-theme="light"] .registry-mode-toggle__btn--active {
-  background: color-mix(in srgb, var(--color-accent) 9%, rgba(30, 25, 20, 0.055));
-}
-
 .entity-rail-item {
   display: block;
   min-width: 0;
@@ -813,9 +803,9 @@ body {
   word-break: break-word;
 }
 
-/* ── Entity Registry · definition overview code blocks ─────────── */
+/* ── Entity Registry · entity JSON code blocks ─────────────────── */
 
-.entity-registry-definition__code {
+.entity-registry-entity__code {
   display: block;
   white-space: pre-wrap;
   word-break: break-word;

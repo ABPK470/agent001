@@ -5,17 +5,17 @@ import type {
   EntityRegistryTableScope,
 } from "../../types"
 
-export type DefinitionSectionId = "identity" | "scd2" | "policies" | "tables" | "run" | "lineage"
+export type EntityOverviewSectionId = "identity" | "scd2" | "policies" | "tables" | "run" | "lineage"
 
-export interface DefinitionRunSummary {
+export interface EntityRunSummary {
   flowTemplateId: string
   serviceProfileRef: string
   environmentPolicyRef: string
   stepCount: number
 }
 
-export interface DefinitionSection {
-  id: DefinitionSectionId
+export interface EntityOverviewSection {
+  id: EntityOverviewSectionId
   title: string
   subtitle: string
   badge?: string
@@ -66,12 +66,12 @@ export function tableSourceLabel(source: EntityRegistryTable["source"]): string 
   }
 }
 
-export function buildDefinitionSections(
+export function buildEntityOverviewSections(
   def: EntityRegistryDefinition,
-  run?: DefinitionRunSummary | null,
-): DefinitionSection[] {
+  run?: EntityRunSummary | null,
+): EntityOverviewSection[] {
   const freezeCount = def.policies.freezeWindowIds.length
-  const sections: DefinitionSection[] = [
+  const sections: EntityOverviewSection[] = [
     {
       id: "identity",
       title: def.displayName || def.id,
@@ -98,7 +98,7 @@ export function buildDefinitionSections(
     },
     {
       id: "run",
-      title: "Run",
+      title: "Run bindings",
       subtitle: run ? run.flowTemplateId : "Not configured",
       badge: run && run.stepCount > 0 ? String(run.stepCount) : undefined,
     },

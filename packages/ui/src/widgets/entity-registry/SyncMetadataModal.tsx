@@ -109,7 +109,7 @@ const TAB_SINGULAR: Record<CatalogTab, string> = {
 const VIEW_DESCRIPTIONS: Record<CatalogView, string> = {
   flows: "Ordered steps each entity runs. Expand a step for Text: values or per-flow resolver overrides.",
   actions: "Wire each parameter to Auto:, Query:, Text:, a literal, earlier-step output, or leave blank for per-flow choice.",
-  valueSources: "Value source catalog — plan context, target SQL, and step text fields. Seeded from deploy ground truth.",
+  valueSources: "Value source catalog — plan context, target SQL, and step text fields. Seeded from Catalog seeds.",
   environments: "MSSQL sync environments (dev / uat / prod) for preview and execute. Stored in SQLite; .env environment names are not modified.",
 }
 

@@ -26,7 +26,7 @@ import {
   type EntityEditSectionId,
   validateEntityEditForm,
 } from "./entity-edit-form"
-import { SourceSurface } from "./EntityEditSurfaces"
+import { EntityJsonSurface } from "./EntityEditSurfaces"
 import { EntityTableListEditor } from "./EntityTableListEditor"
 import { FlowStepsPreview } from "./FlowStepsPreview"
 import { FreezeWindowsSelect } from "./FreezeWindowsSelect"
@@ -51,7 +51,7 @@ const SECTION_LABELS: Record<EntityEditSectionId, string> = {
   policies: "Freeze windows",
   tables: "Tables",
   run: "Run",
-  source: "Source",
+  source: "Entity JSON",
 }
 
 export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose, onSaved }: EntityEditModalProps): JSX.Element {
@@ -282,7 +282,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
             return
           }
           if (mode === "edit" && item.def.id !== entityId) {
-            setSourceError(`Source id must remain "${entityId}"`)
+            setSourceError(`Entity id must remain "${entityId}"`)
             return
           }
           setSourceError(null)
@@ -414,7 +414,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
           if (previewId && previewId !== entityId) {
             setSavePreview(null)
             setSavePreviewFingerprint(null)
-            setSavePreviewErr(`Source id must remain "${entityId}"`)
+            setSavePreviewErr(`Entity id must remain "${entityId}"`)
             setSavePreviewBusy(false)
             return
           }
@@ -477,7 +477,11 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
     <>
     <ModalShell
       title={mode === "new" ? "New entity" : `Edit · ${entityId}`}
-      subtitle={mode === "edit" && initial ? `Revision ${initial.version} → ${initial.version + 1}` : "Structured editor"}
+      subtitle={
+        mode === "edit" && initial
+          ? `Revision ${initial.version} → ${initial.version + 1}`
+          : "Edit Catalog entity"
+      }
       icon={<FilePenLine size={20} className="text-text-muted" />}
       size="focus"
       onClose={onClose}
@@ -641,11 +645,11 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                     <p className="shrink-0 text-sm text-emerald-400/90">JSON is valid and synced with the structured sections.</p>
                   )}
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-base/40">
-                    <SourceSurface
+                    <EntityJsonSurface
                       loading={false}
                       body={form.sourceBody}
                       onBody={(sourceBody) => patch({ sourceBody })}
-                      placeholder="Paste or edit entity JSON…"
+                      placeholder="Paste or edit EntityDefinition JSON…"
                     />
                   </div>
                 </div>

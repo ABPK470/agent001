@@ -14,7 +14,7 @@ describe("EntityRegistry notifications", () => {
     expect(src).toContain('from "../components/useWidgetToasts"')
     expect(src).toContain("useWidgetToasts")
     expect(src).toContain("<ToastStack")
-    expect(src).toContain('notify(`Published ${res.definitionCount} definition(s)`)')
+    expect(src).toContain('notify(`Published ${res.definitionCount} SyncDefinition(s)`)')
     expect(src).not.toContain("setToast")
     expect(src).not.toContain('aria-label="Dismiss"')
   })

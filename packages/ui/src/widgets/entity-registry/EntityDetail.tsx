@@ -6,11 +6,11 @@
 import type { JSX } from "react"
 import type { EntityRegistryDefinition } from "../../types"
 import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, TOOLBAR_ROW } from "./chrome"
+import { EntityOverview } from "./EntityOverview"
 import { EntityTables } from "./EntityTables"
-import { EntityYaml } from "./EntityYaml"
 
 const TABS = ["overview", "tables"] as const
-export type EntityTab = typeof TABS[number]
+export type EntityTab = (typeof TABS)[number]
 
 const TAB_LABELS: Record<EntityTab, string> = {
   overview: "Overview",
@@ -64,7 +64,7 @@ export function EntityDetailContent({
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
       {tab === "overview" && (
-        <EntityYaml
+        <EntityOverview
           def={def}
           jsonText={jsonText}
           entityId={def.id}
@@ -73,27 +73,6 @@ export function EntityDetailContent({
         />
       )}
       {tab === "tables" && <EntityTables def={def} />}
-    </div>
-  )
-}
-
-/** @deprecated use EntityDetailToolbar + EntityDetailContent from shell */
-export interface EntityDetailProps {
-  def: EntityRegistryDefinition
-  tab: EntityTab
-  onTab: (tab: EntityTab) => void
-  jsonText: string
-}
-
-export function EntityDetail(props: EntityDetailProps): JSX.Element {
-  return (
-    <div className="flex h-full min-h-0 flex-col">
-      <EntityDetailToolbar def={props.def} tab={props.tab} onTab={props.onTab} />
-      <EntityDetailContent
-        def={props.def}
-        tab={props.tab}
-        jsonText={props.jsonText}
-      />
     </div>
   )
 }

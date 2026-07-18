@@ -57,7 +57,7 @@ export const TAB_BODY_INNER =
 export const TAB_ERROR = "shrink-0 px-3 py-1.5 text-sm text-error"
 
 export const TAB_CODE =
-  "entity-registry-definition__code m-0 font-mono text-sm leading-relaxed text-text"
+  "entity-registry-entity__code m-0 font-mono text-sm leading-relaxed text-text"
 
 export const SECTION_TITLE = "text-base font-semibold text-text"
 

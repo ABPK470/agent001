@@ -4,11 +4,11 @@ import { PANEL } from "./chrome"
 import { DetailField, DetailGrid, DetailSection } from "./DetailField"
 import { EntityTablesExplorer } from "./EntityTablesExplorer"
 import {
-  buildDefinitionSections,
+  buildEntityOverviewSections,
   provenanceLabel,
-  type DefinitionRunSummary,
-  type DefinitionSectionId,
-} from "./definition-helpers"
+  type EntityOverviewSectionId,
+  type EntityRunSummary,
+} from "./entity-overview-helpers"
 import { ModalShell } from "./ModalShell"
 import { PhasedStepList } from "./PhasedStepList"
 
@@ -174,27 +174,27 @@ function RunSection({ runConfig }: { runConfig: SyncDefinitionAdminItem | null }
   )
 }
 
-const SECTION_TITLES: Record<DefinitionSectionId, string> = {
+const SECTION_TITLES: Record<EntityOverviewSectionId, string> = {
   identity: "Identity",
   scd2: "SCD2 strategy",
   policies: "Freeze windows",
   tables: "Tables",
-  run: "Run",
+  run: "Run bindings",
   lineage: "Lineage",
 }
 
-export function DefinitionSectionModal({
+export function EntitySectionModal({
   sectionId,
   def,
   runConfig,
   onClose,
 }: {
-  sectionId: DefinitionSectionId
+  sectionId: EntityOverviewSectionId
   def: EntityRegistryDefinition
   runConfig: SyncDefinitionAdminItem | null
   onClose: () => void
 }): JSX.Element {
-  const runSummary: DefinitionRunSummary | null = runConfig
+  const runSummary: EntityRunSummary | null = runConfig
     ? {
         flowTemplateId: runConfig.flowTemplateId,
         serviceProfileRef: runConfig.serviceProfileRef,
@@ -202,7 +202,7 @@ export function DefinitionSectionModal({
         stepCount: runConfig.executionSteps.length,
       }
     : null
-  const section = buildDefinitionSections(def, runSummary).find((item) => item.id === sectionId)
+  const section = buildEntityOverviewSections(def, runSummary).find((item) => item.id === sectionId)
 
   return (
     <ModalShell

@@ -1,5 +1,5 @@
 /**
- * Overview tab — read-only summary with optional JSON source view.
+ * Overview tab — read-only Catalog summary with optional EntityDefinition JSON view.
  */
 
 import type { JSX } from "react"
@@ -7,15 +7,15 @@ import { useEffect, useState } from "react"
 import { api } from "../../client/index"
 import type { EntityRegistryDefinition } from "../../types"
 import { PANEL, TAB_ERROR } from "./chrome"
-import { DefinitionExportMenu } from "./DefinitionExportMenu"
-import { DefinitionOverview } from "./DefinitionOverview"
+import { EntityJsonExportMenu } from "./EntityJsonExportMenu"
+import { EntityOverviewSections } from "./EntityOverviewSections"
 import { EntityRegistryJsonImportGate } from "./EntityRegistryJsonImportGate"
 import { SegmentToggle } from "./SegmentToggle"
 import { TabBody, TabPanelHeader, TabShell } from "./TabChrome"
 
-export type DefinitionView = "overview" | "json"
+export type EntityOverviewView = "overview" | "json"
 
-export interface EntityYamlProps {
+export interface EntityOverviewProps {
   def: EntityRegistryDefinition
   jsonText: string
   entityId: string
@@ -23,10 +23,16 @@ export interface EntityYamlProps {
   onImported?: () => void
 }
 
-export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: EntityYamlProps): JSX.Element {
+export function EntityOverview({
+  def,
+  jsonText,
+  entityId,
+  isAdmin,
+  onImported,
+}: EntityOverviewProps): JSX.Element {
   const [exportBusy, setExportBusy] = useState(false)
   const [exportError, setExportError] = useState<string | null>(null)
-  const [view, setView] = useState<DefinitionView>("overview")
+  const [view, setView] = useState<EntityOverviewView>("overview")
   const [registryJson, setRegistryJson] = useState(jsonText)
   const [importOpen, setImportOpen] = useState(false)
 
@@ -57,7 +63,7 @@ export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: Ent
 
   async function downloadRegistryJson(): Promise<void> {
     const text = registryJson.trim() ? registryJson : await loadRegistryJson()
-    downloadText(`${entityId}.registry.json`, text)
+    downloadText(`${entityId}.entity.json`, text)
   }
 
   return (
@@ -77,7 +83,7 @@ export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: Ent
       <TabBody>
         <div className={`${PANEL} flex h-full min-h-0 flex-1 flex-col overflow-hidden bg-elevated/20`}>
           <TabPanelHeader>
-            <DefinitionExportMenu
+            <EntityJsonExportMenu
               exportBusy={exportBusy}
               onCopyRegistryJson={() => void copyRegistryJson()}
               onDownloadRegistryJson={() => void downloadRegistryJson()}
@@ -90,15 +96,15 @@ export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: Ent
                 { value: "json", label: "JSON" },
               ]}
               onChange={setView}
-              ariaLabel="Definition view"
+              ariaLabel="Catalog entity view"
             />
           </TabPanelHeader>
 
           <div className="min-h-0 flex-1 overflow-auto p-3">
             {view === "overview" ? (
-              <DefinitionOverview def={def} />
+              <EntityOverviewSections def={def} />
             ) : (
-              <pre className="entity-registry-definition__code m-0 font-mono text-xs leading-relaxed text-text">
+              <pre className="entity-registry-entity__code m-0 font-mono text-xs leading-relaxed text-text">
                 {registryJson || "…"}
               </pre>
             )}

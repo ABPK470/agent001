@@ -1,5 +1,5 @@
 /**
- * Definition overview — read-only section list with detail modals.
+ * Catalog entity overview — read-only section list with detail modals.
  */
 
 import { useEffect, useState } from "react"
@@ -7,16 +7,16 @@ import type { JSX } from "react"
 import { api } from "../../client/index"
 import type { EntityRegistryDefinition, SyncDefinitionAdminItem } from "../../types"
 import { PANEL } from "./chrome"
-import { buildDefinitionSections, type DefinitionSectionId } from "./definition-helpers"
-import { DefinitionSectionModal } from "./DefinitionSectionModal"
+import { buildEntityOverviewSections, type EntityOverviewSectionId } from "./entity-overview-helpers"
+import { EntitySectionModal } from "./EntitySectionModal"
 import { ChevronRight } from "lucide-react"
 
-export interface DefinitionOverviewProps {
+export interface EntityOverviewSectionsProps {
   def: EntityRegistryDefinition
 }
 
-export function DefinitionOverview({ def }: DefinitionOverviewProps): JSX.Element {
-  const [openSection, setOpenSection] = useState<DefinitionSectionId | null>(null)
+export function EntityOverviewSections({ def }: EntityOverviewSectionsProps): JSX.Element {
+  const [openSection, setOpenSection] = useState<EntityOverviewSectionId | null>(null)
   const [runConfig, setRunConfig] = useState<SyncDefinitionAdminItem | null>(null)
 
   useEffect(() => {
@@ -25,7 +25,7 @@ export function DefinitionOverview({ def }: DefinitionOverviewProps): JSX.Elemen
       .catch(() => setRunConfig(null))
   }, [def.id, def.version])
 
-  const sections = buildDefinitionSections(
+  const sections = buildEntityOverviewSections(
     def,
     runConfig
       ? {
@@ -67,7 +67,7 @@ export function DefinitionOverview({ def }: DefinitionOverviewProps): JSX.Elemen
       </ol>
 
       {openSection && (
-        <DefinitionSectionModal
+        <EntitySectionModal
           sectionId={openSection}
           def={def}
           runConfig={runConfig}
