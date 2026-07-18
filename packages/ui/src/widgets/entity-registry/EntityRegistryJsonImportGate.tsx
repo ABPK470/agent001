@@ -1,12 +1,12 @@
 /**
- * Single deploy artifact JSON import — thin adapter over ImportGateModal.
+ * Single EntityDefinition / registry JSON import — thin adapter over ImportGateModal.
  */
 
 import type { JSX } from "react"
 import { api } from "../../client/index"
 import { ImportGateModal } from "../platform/ImportGateModal"
 
-export function EntityArtifactImportGate({
+export function EntityRegistryJsonImportGate({
   entityId,
   onClose,
   onImported,
@@ -17,19 +17,19 @@ export function EntityArtifactImportGate({
 }): JSX.Element {
   return (
     <ImportGateModal
-      title="Import deploy artifact"
+      title="Import registry JSON"
       subtitle={
         entityId
-          ? `Apply ${entityId}.json (AuthoredSyncDefinition) into SQLite.`
-          : "Apply deploy/sync/artifacts/entities/*.json into SQLite."
+          ? `Apply EntityDefinition JSON for ${entityId} into SQLite.`
+          : "Apply EntityDefinition registry JSON into SQLite."
       }
       accept=".json,application/json"
-      fileLabel="Choose deploy artifact JSON…"
+      fileLabel="Choose registry JSON…"
       validate={(json, reason) =>
-        api.importEntityDeployArtifact(json, reason, { dryRun: true })
+        api.importEntityRegistryJson(json, reason, { dryRun: true })
       }
       apply={(json, reason) =>
-        api.importEntityDeployArtifact(json, reason, { dryRun: false })
+        api.importEntityRegistryJson(json, reason, { dryRun: false })
       }
       onApplied={onImported}
       onClose={onClose}

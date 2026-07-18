@@ -1,5 +1,6 @@
 /**
  * Definition tab — import/export with copy-or-download mode toggle.
+ * Catalog dialect only (Registry JSON) — no Deploy/Authored artifact path.
  */
 
 import { ArrowUpDown, Copy, Download, Upload } from "lucide-react"
@@ -14,9 +15,7 @@ export interface DefinitionExportMenuProps {
   exportBusy: boolean
   onCopyRegistryJson: () => void
   onDownloadRegistryJson: () => void
-  onCopyDeployArtifact: () => void
-  onDownloadDeployArtifact: () => void
-  onImportDeployArtifact?: () => void
+  onImportRegistryJson?: () => void
 }
 
 function stopMenuClose(event: { stopPropagation: () => void }): void {
@@ -27,9 +26,7 @@ export function DefinitionExportMenu({
   exportBusy,
   onCopyRegistryJson,
   onDownloadRegistryJson,
-  onCopyDeployArtifact,
-  onDownloadDeployArtifact,
-  onImportDeployArtifact,
+  onImportRegistryJson,
 }: DefinitionExportMenuProps): JSX.Element {
   const [mode, setMode] = useState<DefinitionExportMode>("copy")
   const exportIcon = mode === "copy" ? <Copy size={14} /> : <Download size={14} />
@@ -64,19 +61,13 @@ export function DefinitionExportMenu({
         onClick={mode === "copy" ? onCopyRegistryJson : onDownloadRegistryJson}
         disabled={exportBusy}
       />
-      <ToolbarMenuItem
-        icon={exportIcon}
-        label="Deploy artifact"
-        onClick={mode === "copy" ? onCopyDeployArtifact : onDownloadDeployArtifact}
-        disabled={exportBusy}
-      />
-      {onImportDeployArtifact && (
+      {onImportRegistryJson && (
         <>
           <div className="my-1 border-t border-border-subtle" role="separator" />
           <ToolbarMenuItem
             icon={<Upload size={14} />}
-            label="Import deploy artifact"
-            onClick={onImportDeployArtifact}
+            label="Import registry JSON"
+            onClick={onImportRegistryJson}
             disabled={exportBusy}
           />
         </>

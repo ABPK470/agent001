@@ -9,7 +9,7 @@ import type { EntityRegistryDefinition } from "../../types"
 import { PANEL, TAB_ERROR } from "./chrome"
 import { DefinitionExportMenu } from "./DefinitionExportMenu"
 import { DefinitionOverview } from "./DefinitionOverview"
-import { EntityArtifactImportGate } from "./EntityArtifactImportGate"
+import { EntityRegistryJsonImportGate } from "./EntityRegistryJsonImportGate"
 import { SegmentToggle } from "./SegmentToggle"
 import { TabBody, TabPanelHeader, TabShell } from "./TabChrome"
 
@@ -28,7 +28,6 @@ export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: Ent
   const [exportError, setExportError] = useState<string | null>(null)
   const [view, setView] = useState<DefinitionView>("overview")
   const [registryJson, setRegistryJson] = useState(jsonText)
-  const [artifactJson, setArtifactJson] = useState("")
   const [importOpen, setImportOpen] = useState(false)
 
   useEffect(() => {
@@ -51,22 +50,6 @@ export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: Ent
     }
   }
 
-  async function loadDeployArtifact(): Promise<string> {
-    setExportBusy(true)
-    setExportError(null)
-    try {
-      const next = await api.getEntityDeployArtifactJson(entityId)
-      setArtifactJson(next)
-      return next
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error)
-      setExportError(message)
-      throw error
-    } finally {
-      setExportBusy(false)
-    }
-  }
-
   async function copyRegistryJson(): Promise<void> {
     const text = registryJson.trim() ? registryJson : await loadRegistryJson()
     await navigator.clipboard.writeText(text)
@@ -77,21 +60,11 @@ export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: Ent
     downloadText(`${entityId}.registry.json`, text)
   }
 
-  async function copyDeployArtifact(): Promise<void> {
-    const text = artifactJson.trim() ? artifactJson : await loadDeployArtifact()
-    await navigator.clipboard.writeText(text)
-  }
-
-  async function downloadDeployArtifact(): Promise<void> {
-    const text = artifactJson.trim() ? artifactJson : await loadDeployArtifact()
-    downloadText(`${entityId}.json`, text)
-  }
-
   return (
     <TabShell>
       {exportError && <div className={TAB_ERROR}>{exportError}</div>}
       {importOpen && (
-        <EntityArtifactImportGate
+        <EntityRegistryJsonImportGate
           entityId={entityId}
           onClose={() => setImportOpen(false)}
           onImported={() => {
@@ -108,9 +81,7 @@ export function EntityYaml({ def, jsonText, entityId, isAdmin, onImported }: Ent
               exportBusy={exportBusy}
               onCopyRegistryJson={() => void copyRegistryJson()}
               onDownloadRegistryJson={() => void downloadRegistryJson()}
-              onCopyDeployArtifact={() => void copyDeployArtifact()}
-              onDownloadDeployArtifact={() => void downloadDeployArtifact()}
-              onImportDeployArtifact={isAdmin ? () => setImportOpen(true) : undefined}
+              onImportRegistryJson={isAdmin ? () => setImportOpen(true) : undefined}
             />
             <SegmentToggle
               value={view}

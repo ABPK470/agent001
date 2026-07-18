@@ -35,7 +35,12 @@ export function seedRepoArtifacts(root: string): void {
     }
   }
 
-  for (const name of ["sync-metadata.json", "strategies.json", "flow-templates.json"]) {
+  for (const name of [
+    "sync-metadata.json",
+    "strategies.json",
+    "flow-templates.json",
+    "sync-definition-configs.json",
+  ]) {
     const source = join(repoDeploySync, "artifacts", name)
     if (existsSync(source)) {
       copyFileSync(source, join(targetDeploySync, "artifacts", name))
