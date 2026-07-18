@@ -2,22 +2,22 @@
  * CatalogVersionsModal — browse sync catalog versions and rollback via import gate.
  */
 
-import { History, Loader2, RotateCcw, SlidersHorizontal, X } from "lucide-react"
+import { History, Loader2, RotateCcw, SlidersHorizontal } from "lucide-react"
 import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../client/index"
 import { DateField } from "../../components/DateField"
 import { EmptyState } from "../../components/EmptyState"
+import {
+  ActiveFilterChips,
+  FilterField,
+  FilterSheet,
+  FilterToggles,
+  type ActiveFilterChipModel,
+} from "../../components/FilterSheet"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SearchablePick, type SearchablePickOption } from "../../components/SearchablePick"
 import { useLiveReload } from "../../hooks/useLiveReload"
-import {
-  TAB_PILL,
-  TAB_PILL_ACTIVE,
-  TAB_PILL_IDLE,
-  TAB_SEGMENT_TRACK,
-  TEXT_BTN,
-} from "../entity-registry/chrome"
 import { ModalShell } from "../entity-registry/ModalShell"
 import {
   WidgetToolbar,
@@ -33,7 +33,6 @@ import {
   DEFAULT_CATALOG_VERSION_FILTERS,
   filterCatalogVersions,
   type CatalogVersionFilters,
-  type CatalogVersionKind,
   type CatalogVersionSort,
 } from "./catalog-version-filters"
 
@@ -59,6 +58,7 @@ export function CatalogVersionsModal({
   const [activeNeedsPublish, setActiveNeedsPublish] = useState(false)
   const [publishedCatalogVersion, setPublishedCatalogVersion] = useState<number | null>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
 
   const load = useCallback(async (): Promise<void> => {
     setBusy(true)
@@ -111,7 +111,7 @@ export function CatalogVersionsModal({
   const actorOptions = useMemo<SearchablePickOption[]>(() => {
     const actors = [...new Set(versions.map((entry) => entry.createdBy).filter(Boolean))].sort()
     return [
-      { value: "", label: "Any user" },
+      { value: "", label: "Any" },
       ...actors.map((actor) => ({ value: actor, label: actor })),
     ]
   }, [versions])
@@ -121,15 +121,49 @@ export function CatalogVersionsModal({
     setFilters(DEFAULT_CATALOG_VERSION_FILTERS)
   }
 
-  function toggleKind(kind: CatalogVersionKind): void {
-    setFilters((current) => {
-      const selected = new Set(current.kinds ?? [])
-      if (selected.has(kind)) selected.delete(kind)
-      else selected.add(kind)
-      const next = [...selected]
-      return { ...current, kinds: next.length > 0 ? next : undefined }
-    })
-  }
+  const activeChips = useMemo((): ActiveFilterChipModel[] => {
+    const chips: ActiveFilterChipModel[] = []
+    for (const kind of filters.kinds ?? []) {
+      const label =
+        CATALOG_VERSION_KIND_OPTIONS.find((option) => option.value === kind)?.label ?? kind
+      chips.push({
+        id: `kind:${kind}`,
+        label: "Kind",
+        value: label,
+        onRemove: () => {
+          setFilters((current) => {
+            const next = (current.kinds ?? []).filter((item) => item !== kind)
+            return { ...current, kinds: next.length > 0 ? next : undefined }
+          })
+        },
+      })
+    }
+    if (filters.from?.trim()) {
+      chips.push({
+        id: "from",
+        label: "From",
+        value: filters.from,
+        onRemove: () => setFilters((current) => ({ ...current, from: undefined })),
+      })
+    }
+    if (filters.to?.trim()) {
+      chips.push({
+        id: "to",
+        label: "To",
+        value: filters.to,
+        onRemove: () => setFilters((current) => ({ ...current, to: undefined })),
+      })
+    }
+    if (filters.actor?.trim()) {
+      chips.push({
+        id: "user",
+        label: "User",
+        value: filters.actor,
+        onRemove: () => setFilters((current) => ({ ...current, actor: undefined })),
+      })
+    }
+    return chips
+  }, [filters])
 
   return (
     <>
@@ -149,12 +183,23 @@ export function CatalogVersionsModal({
               onClear={() => setSearchDraft("")}
             />
             <WidgetToolbarTrailing>
+              <div className="w-[7.5rem] shrink-0">
+                <Listbox
+                  value={filters.sort}
+                  options={CATALOG_VERSION_SORT_OPTIONS as ListboxOption<CatalogVersionSort>[]}
+                  onChange={(sort) => setFilters((current) => ({ ...current, sort }))}
+                  size="sm"
+                  className="w-full listbox-control"
+                  ariaLabel="Sort"
+                />
+              </div>
               <span className="widget-toolbar__count hidden sm:inline-flex">
                 <span className="widget-toolbar__count-filtered">{filtered.length}</span>
                 <span className="widget-toolbar__count-sep">/</span>
                 <span className="widget-toolbar__count-total">{versions.length}</span>
               </span>
               <button
+                ref={filterBtnRef}
                 type="button"
                 onClick={() => setFiltersOpen((value) => !value)}
                 className={`widget-toolbar__icon-btn relative ${
@@ -177,79 +222,74 @@ export function CatalogVersionsModal({
             </WidgetToolbarTrailing>
           </WidgetToolbar>
 
-          {filtersOpen && (
-            <div className="shrink-0 space-y-2 border-b border-border-subtle px-3 py-2.5">
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className={`${TAB_SEGMENT_TRACK} flex-wrap`} role="group" aria-label="Change kind">
-                  {CATALOG_VERSION_KIND_OPTIONS.map((option) => {
-                    const active = (filters.kinds ?? []).includes(option.value)
-                    return (
-                      <button
-                        key={option.value}
-                        type="button"
-                        aria-pressed={active}
-                        onClick={() => toggleKind(option.value)}
-                        className={[TAB_PILL, active ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
-                      >
-                        {option.label}
-                      </button>
-                    )
-                  })}
-                </div>
-                {hasActiveFilters && (
-                  <button type="button" onClick={clearFilters} className={TEXT_BTN}>
-                    <X size={12} />
-                    Clear
-                  </button>
-                )}
-              </div>
+          <ActiveFilterChips
+            chips={activeChips}
+            onClear={hasActiveFilters ? clearFilters : undefined}
+          />
 
-              <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-                <FilterControl label="From date">
-                  <DateField
-                    value={filters.from}
-                    onChange={(from) => setFilters((current) => ({ ...current, from }))}
-                    placeholder="Any start date"
-                    ariaLabel="Filter from date"
-                    size="sm"
-                    className="w-full"
-                  />
-                </FilterControl>
-                <FilterControl label="To date">
-                  <DateField
-                    value={filters.to}
-                    onChange={(to) => setFilters((current) => ({ ...current, to }))}
-                    placeholder="Any end date"
-                    ariaLabel="Filter to date"
-                    size="sm"
-                    className="w-full"
-                  />
-                </FilterControl>
-                <FilterControl label="Sort order">
-                  <Listbox
-                    value={filters.sort}
-                    options={CATALOG_VERSION_SORT_OPTIONS as ListboxOption<CatalogVersionSort>[]}
-                    onChange={(sort) => setFilters((current) => ({ ...current, sort }))}
-                    size="sm"
-                    className="w-full listbox-control"
-                    ariaLabel="Sort order"
-                  />
-                </FilterControl>
-                <FilterControl label="User">
-                  <SearchablePick
-                    value={filters.actor ?? ""}
-                    options={actorOptions}
-                    onChange={(actor) =>
-                      setFilters((current) => ({ ...current, actor: actor || undefined }))
-                    }
-                    placeholder="Any user"
-                    ariaLabel="Filter by user"
-                    className="listbox-control"
-                  />
-                </FilterControl>
-              </div>
+          <FilterSheet
+            open={filtersOpen}
+            onClose={() => setFiltersOpen(false)}
+            anchorRef={filterBtnRef}
+            footer={
+              hasActiveFilters ? (
+                <button
+                  type="button"
+                  onClick={clearFilters}
+                  className="text-xs font-medium text-text-muted hover:text-text"
+                >
+                  Clear all
+                </button>
+              ) : null
+            }
+          >
+            <FilterField label="Kind">
+              <FilterToggles
+                options={CATALOG_VERSION_KIND_OPTIONS}
+                values={filters.kinds ?? []}
+                onChange={(kinds) =>
+                  setFilters((current) => ({
+                    ...current,
+                    kinds: kinds.length > 0 ? kinds : undefined,
+                  }))
+                }
+              />
+            </FilterField>
+            <div className="grid grid-cols-2 gap-3">
+              <FilterField label="From">
+                <DateField
+                  value={filters.from}
+                  onChange={(from) => setFilters((current) => ({ ...current, from }))}
+                  placeholder="Pick date"
+                  ariaLabel="From"
+                  size="sm"
+                  className="w-full"
+                />
+              </FilterField>
+              <FilterField label="To">
+                <DateField
+                  value={filters.to}
+                  onChange={(to) => setFilters((current) => ({ ...current, to }))}
+                  placeholder="Pick date"
+                  ariaLabel="To"
+                  size="sm"
+                  className="w-full"
+                />
+              </FilterField>
             </div>
-          )}
+            <FilterField label="User">
+              <SearchablePick
+                value={filters.actor ?? ""}
+                options={actorOptions}
+                onChange={(actor) =>
+                  setFilters((current) => ({ ...current, actor: actor || undefined }))
+                }
+                placeholder="UPN"
+                ariaLabel="User"
+                size="sm"
+              />
+            </FilterField>
+          </FilterSheet>
 
           <div className="flex min-h-0 flex-1 flex-col gap-2 px-6 pb-4 pt-3">
             {err && <p className="text-sm text-error">{err}</p>}
@@ -357,16 +397,6 @@ export function CatalogVersionsModal({
         />
       )}
     </>
-  )
-}
-
-/** Placeholder-led control — label is for assistive tech only (avoids uppercase form soup). */
-function FilterControl({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
-  return (
-    <label className="block min-w-0">
-      <span className="sr-only">{label}</span>
-      {children}
-    </label>
   )
 }
 

@@ -77,6 +77,7 @@ export function DateField({
   disabled,
   className = "",
   size = "sm",
+  showIcon = true,
 }: {
   value?: string
   onChange: (value: string | undefined) => void
@@ -85,6 +86,8 @@ export function DateField({
   disabled?: boolean
   className?: string
   size?: "sm" | "md"
+  /** Calendar glyph — turn off in filter bars so the trigger matches Listbox. */
+  showIcon?: boolean
 }): JSX.Element {
   const instanceId = useId()
   const btnRef = useRef<HTMLButtonElement>(null)
@@ -203,7 +206,7 @@ export function DateField({
           className,
         ].join(" ")}
       >
-        <Calendar size={14} className="shrink-0 text-text-muted" aria-hidden />
+        {showIcon && <Calendar size={14} className="shrink-0 text-text-muted" aria-hidden />}
         <span className="min-w-0 flex-1 truncate leading-snug">
           {label ?? <span className="text-text-muted">{placeholder}</span>}
         </span>

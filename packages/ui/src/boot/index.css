@@ -708,12 +708,16 @@ body {
   font-size: 0.875rem;
 }
 
-/* Listbox triggers in forms — match .input footprint */
+/* Listbox / DateField / SearchablePick triggers — one footprint */
 .entity-registry label [aria-haspopup="listbox"],
 .modal-surface label [aria-haspopup="listbox"],
 .sync-admin label [aria-haspopup="listbox"],
 .entity-registry .listbox-control[aria-haspopup="listbox"],
-.modal-surface .listbox-control[aria-haspopup="listbox"] {
+.modal-surface .listbox-control[aria-haspopup="listbox"],
+.entity-registry .listbox-control[aria-haspopup="dialog"],
+.modal-surface .listbox-control[aria-haspopup="dialog"],
+.filter-bar .listbox-control[aria-haspopup="listbox"],
+.filter-bar .listbox-control[aria-haspopup="dialog"] {
   font-size: 0.875rem;
   padding: 0.5rem 0.625rem;
   border-radius: 0.5rem;
@@ -724,7 +728,8 @@ body {
 .modal-surface label [aria-haspopup="listbox"] .truncate,
 .sync-admin label [aria-haspopup="listbox"] .truncate,
 .entity-registry .listbox-control[aria-haspopup="listbox"] .truncate,
-.modal-surface .listbox-control[aria-haspopup="listbox"] .truncate {
+.modal-surface .listbox-control[aria-haspopup="listbox"] .truncate,
+.filter-bar .listbox-control .truncate {
   font-size: inherit;
   font-weight: 400;
 }

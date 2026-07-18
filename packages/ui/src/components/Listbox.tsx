@@ -39,6 +39,11 @@ export interface ListboxProps<T extends string> {
   disabled?: boolean
   /** Placeholder for the in-popover filter field. */
   searchPlaceholder?: string
+  /**
+   * When true, `value === ""` shows `placeholder` on the closed trigger instead of
+   * the empty option’s label (use for filter bars: idle = field name, menu = “Any”).
+   */
+  blankIsPlaceholder?: boolean
 }
 
 const SEARCH_ROW_HEIGHT = 40
@@ -86,6 +91,7 @@ export function Listbox<T extends string>({
   ariaLabel,
   disabled,
   searchPlaceholder = "Filter…",
+  blankIsPlaceholder = false,
 }: ListboxProps<T>): JSX.Element {
   const instanceId = useId()
   const [open, setOpen] = useState(false)
@@ -102,7 +108,8 @@ export function Listbox<T extends string>({
     placement: "below" | "above"
   } | null>(null)
 
-  const selected = options.find((o) => o.value === value) ?? null
+  const matched = options.find((o) => o.value === value) ?? null
+  const selected = blankIsPlaceholder && value === "" ? null : matched
   const showDots = options.some((o) => o.dot)
   const filteredOptions = useMemo(() => filterListboxOptions(options, query), [options, query])
 

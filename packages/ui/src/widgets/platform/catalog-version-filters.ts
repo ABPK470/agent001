@@ -2,10 +2,15 @@
  * Client-side filters for configuration (sync catalog) versions.
  */
 
+/**
+ * One-word kind ids + labels (UI filter dialect).
+ * Version `reason` prefixes stay machine-shaped (`entity-registry:…`, `sync-metadata:…`);
+ * {@link classifyCatalogVersionReason} maps those onto these kinds.
+ */
 export type CatalogVersionKind =
   | "seed"
-  | "entity-registry"
-  | "sync-metadata"
+  | "entities"
+  | "metadata"
   | "rollback"
   | "import"
   | "other"
@@ -40,26 +45,26 @@ export const DEFAULT_CATALOG_VERSION_FILTERS: CatalogVersionFilters = {
 
 export const CATALOG_VERSION_KIND_OPTIONS: Array<{ value: CatalogVersionKind; label: string }> = [
   { value: "seed", label: "Seed" },
-  { value: "entity-registry", label: "Entity registry" },
-  { value: "sync-metadata", label: "Sync metadata" },
+  { value: "entities", label: "Entities" },
+  { value: "metadata", label: "Metadata" },
   { value: "rollback", label: "Rollback" },
   { value: "import", label: "Import" },
   { value: "other", label: "Other" },
 ]
 
 export const CATALOG_VERSION_SORT_OPTIONS: Array<{ value: CatalogVersionSort; label: string }> = [
-  { value: "version_desc", label: "Newest version" },
-  { value: "version_asc", label: "Oldest version" },
-  { value: "created_desc", label: "Newest created" },
-  { value: "created_asc", label: "Oldest created" },
+  { value: "version_desc", label: "Newest" },
+  { value: "version_asc", label: "Oldest" },
+  { value: "created_desc", label: "Recent" },
+  { value: "created_asc", label: "Earliest" },
 ]
 
 export function classifyCatalogVersionReason(reason: string): CatalogVersionKind {
   const value = reason.trim().toLowerCase()
   if (value.startsWith("seed:")) return "seed"
   if (value.startsWith("rollback:")) return "rollback"
-  if (value.startsWith("entity-registry:")) return "entity-registry"
-  if (value.startsWith("sync-metadata:")) return "sync-metadata"
+  if (value.startsWith("entity-registry:")) return "entities"
+  if (value.startsWith("sync-metadata:")) return "metadata"
   if (value.includes("import") || value.startsWith("catalog:")) return "import"
   return "other"
 }

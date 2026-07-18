@@ -7,12 +7,18 @@ import {
   Loader2,
   SlidersHorizontal,
   View,
-  X,
 } from "lucide-react"
-import { useCallback, useEffect, useMemo, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState, type RefObject } from "react"
 
 import { api, type SyncHistoryParams, type SyncHistoryPage, type SyncRunStatus } from "../../client/index"
 import { DateField } from "../../components/DateField"
+import {
+  ActiveFilterChips,
+  FilterField,
+  FilterSheet,
+  FilterToggles,
+  type ActiveFilterChipModel,
+} from "../../components/FilterSheet"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SearchablePick } from "../../components/SearchablePick"
 import { useMe } from "../../hooks/useMe"
@@ -24,13 +30,6 @@ import {
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
 } from "../widget-toolbar"
-import {
-  TAB_PILL,
-  TAB_PILL_ACTIVE,
-  TAB_PILL_IDLE,
-  TAB_SEGMENT_TRACK,
-  TEXT_BTN,
-} from "../entity-registry/chrome"
 import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
@@ -51,7 +50,7 @@ type HistoryFilters = Omit<SyncHistoryParams, "page" | "pageSize">
 
 const DEFAULT_FILTERS: HistoryFilters = { sort: "started_desc" }
 
-const STATUS_OPTIONS: Array<{ value: SyncRunStatus; label: string }> = [
+const STATUS_OPTIONS: ListboxOption<SyncRunStatus>[] = [
   { value: "preview", label: "Preview" },
   { value: "started", label: "Executing" },
   { value: "success", label: "Completed" },
@@ -61,10 +60,10 @@ const STATUS_OPTIONS: Array<{ value: SyncRunStatus; label: string }> = [
 ]
 
 const SORT_OPTIONS: ListboxOption<NonNullable<HistoryFilters["sort"]>>[] = [
-  { value: "started_desc", label: "Newest first" },
-  { value: "started_asc", label: "Oldest first" },
-  { value: "finished_desc", label: "Recently finished" },
-  { value: "finished_asc", label: "Earliest finished" },
+  { value: "started_desc", label: "Newest" },
+  { value: "started_asc", label: "Oldest" },
+  { value: "finished_desc", label: "Recent" },
+  { value: "finished_asc", label: "Earliest" },
 ]
 
 function entityLabel(run: SyncRunItem): string {
@@ -147,12 +146,12 @@ export function HistoryContent({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [data, setData] = useState<SyncHistoryPage | null>(null)
   const [loading, setLoading] = useState(true)
-  const [envOptions, setEnvOptions] = useState<ListboxOption<string>[]>([{ value: "", label: "Any environment" }])
+  const [envOptions, setEnvOptions] = useState<ListboxOption<string>[]>([{ value: "", label: "Any" }])
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const entityTypeOptions = useMemo<ListboxOption<string>[]>(
     () => [
-      { value: "", label: "Any entity type" },
+      { value: "", label: "Any" },
       ...ENTITY_TYPES.map((type) => ({ value: type, label: type })),
     ],
     [],
@@ -163,7 +162,7 @@ export function HistoryContent({
       .syncEnvironments()
       .then((envs) =>
         setEnvOptions([
-          { value: "", label: "Any environment" },
+          { value: "", label: "Any" },
           ...envs.map((env) => ({
             value: env.name,
             label: env.displayName.toUpperCase(),
@@ -244,22 +243,88 @@ export function HistoryContent({
     return () => clearInterval(timer)
   }, [data?.items, page, reload])
 
+  const filterBtnRef = useRef<HTMLButtonElement>(null)
+
+  const patchFilters = (patch: Partial<HistoryFilters>): void => {
+    setFilters((current) => ({ ...current, ...patch }))
+    setPage(1)
+  }
+
   const clearFilters = () => {
     setSearchDraft("")
     setFilters(DEFAULT_FILTERS)
     setPage(1)
   }
 
-  const toggleStatus = (status: SyncRunStatus) => {
-    setFilters((current) => {
-      const selected = new Set(current.status ?? [])
-      if (selected.has(status)) selected.delete(status)
-      else selected.add(status)
-      const next = [...selected]
-      return { ...current, status: next.length > 0 ? next : undefined }
-    })
-    setPage(1)
-  }
+  const statusLabel = (status: SyncRunStatus): string =>
+    STATUS_OPTIONS.find((option) => option.value === status)?.label ?? status
+
+  const activeChips = useMemo((): ActiveFilterChipModel[] => {
+    const chips: ActiveFilterChipModel[] = []
+    for (const status of filters.status ?? []) {
+      chips.push({
+        id: `status:${status}`,
+        label: "Status",
+        value: statusLabel(status),
+        onRemove: () => {
+          setFilters((current) => {
+            const next = (current.status ?? []).filter((item) => item !== status)
+            return { ...current, status: next.length > 0 ? next : undefined }
+          })
+          setPage(1)
+        },
+      })
+    }
+    if (filters.from?.trim()) {
+      chips.push({
+        id: "from",
+        label: "From",
+        value: filters.from,
+        onRemove: () => patchFilters({ from: undefined }),
+      })
+    }
+    if (filters.to?.trim()) {
+      chips.push({
+        id: "to",
+        label: "To",
+        value: filters.to,
+        onRemove: () => patchFilters({ to: undefined }),
+      })
+    }
+    if (filters.entityType?.trim()) {
+      chips.push({
+        id: "entity",
+        label: "Entity",
+        value: filters.entityType,
+        onRemove: () => patchFilters({ entityType: undefined }),
+      })
+    }
+    if (filters.actorUpn?.trim()) {
+      chips.push({
+        id: "user",
+        label: "User",
+        value: filters.actorUpn,
+        onRemove: () => patchFilters({ actorUpn: undefined }),
+      })
+    }
+    if (filters.source?.trim()) {
+      chips.push({
+        id: "source",
+        label: "Source",
+        value: filters.source,
+        onRemove: () => patchFilters({ source: undefined }),
+      })
+    }
+    if (filters.target?.trim()) {
+      chips.push({
+        id: "target",
+        label: "Target",
+        value: filters.target,
+        onRemove: () => patchFilters({ target: undefined }),
+      })
+    }
+    return chips
+  }, [filters])
 
   if (loading && !data) return <Loading>Loading history…</Loading>
 
@@ -274,8 +339,11 @@ export function HistoryContent({
       <HistorySearchBar
         searchDraft={searchDraft}
         onSearchChange={setSearchDraft}
+        sort={filters.sort ?? "started_desc"}
+        onSortChange={(sort) => patchFilters({ sort })}
         filtersOpen={filtersOpen}
         onToggleFilters={() => setFiltersOpen((value) => !value)}
+        filterBtnRef={filterBtnRef}
         activeFilterCount={activeFilterCount}
         loading={loading}
         rangeStart={rangeStart}
@@ -286,22 +354,105 @@ export function HistoryContent({
         onPageChange={(nextPage) => reload(nextPage)}
       />
 
-      {filtersOpen && (
-        <HistoryFiltersPanel
-          filters={filters}
-          isAdmin={isAdmin}
-          envOptions={envOptions}
-          entityTypeOptions={entityTypeOptions}
-          onFiltersChange={(patch) => {
-            setFilters((current) => ({ ...current, ...patch }))
-            setPage(1)
-          }}
-          selectedStatuses={filters.status ?? []}
-          onToggleStatus={toggleStatus}
-          onClear={clearFilters}
-          hasActiveFilters={hasActiveFilters}
-        />
-      )}
+      <ActiveFilterChips chips={activeChips} onClear={hasActiveFilters ? clearFilters : undefined} />
+
+      <FilterSheet
+        open={filtersOpen}
+        onClose={() => setFiltersOpen(false)}
+        anchorRef={filterBtnRef}
+        footer={
+          hasActiveFilters ? (
+            <button
+              type="button"
+              onClick={clearFilters}
+              className="text-xs font-medium text-text-muted hover:text-text"
+            >
+              Clear all
+            </button>
+          ) : null
+        }
+      >
+        <FilterField label="Status">
+          <FilterToggles
+            options={STATUS_OPTIONS}
+            values={filters.status ?? []}
+            onChange={(status) =>
+              patchFilters({ status: status.length > 0 ? status : undefined })
+            }
+          />
+        </FilterField>
+        <div className="grid grid-cols-2 gap-3">
+          <FilterField label="From">
+            <DateField
+              value={filters.from}
+              onChange={(from) => patchFilters({ from })}
+              placeholder="Pick date"
+              ariaLabel="From"
+              size="sm"
+              className="w-full"
+            />
+          </FilterField>
+          <FilterField label="To">
+            <DateField
+              value={filters.to}
+              onChange={(to) => patchFilters({ to })}
+              placeholder="Pick date"
+              ariaLabel="To"
+              size="sm"
+              className="w-full"
+            />
+          </FilterField>
+        </div>
+        <FilterField label="Entity">
+          <Listbox
+            value={filters.entityType ?? ""}
+            options={entityTypeOptions}
+            onChange={(entityType) => patchFilters({ entityType: entityType || undefined })}
+            size="sm"
+            className="w-full listbox-control"
+            ariaLabel="Entity"
+            placeholder="Any"
+            blankIsPlaceholder
+          />
+        </FilterField>
+        <FilterField label="User">
+          <SearchablePick
+            value={filters.actorUpn ?? ""}
+            options={[]}
+            onChange={(actorUpn) => patchFilters({ actorUpn: actorUpn || undefined })}
+            placeholder={isAdmin ? "UPN" : "Yours"}
+            ariaLabel="User"
+            disabled={!isAdmin}
+            size="sm"
+          />
+        </FilterField>
+        <div className="grid grid-cols-2 gap-3">
+          <FilterField label="Source">
+            <Listbox
+              value={filters.source ?? ""}
+              options={envOptions}
+              onChange={(source) => patchFilters({ source: source || undefined })}
+              size="sm"
+              className="w-full listbox-control"
+              ariaLabel="Source"
+              placeholder="Any"
+              blankIsPlaceholder
+            />
+          </FilterField>
+          <FilterField label="Target">
+            <Listbox
+              value={filters.target ?? ""}
+              options={envOptions}
+              onChange={(target) => patchFilters({ target: target || undefined })}
+              size="sm"
+              className="w-full listbox-control"
+              ariaLabel="Target"
+              placeholder="Any"
+              blankIsPlaceholder
+            />
+          </FilterField>
+        </div>
+      </FilterSheet>
 
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
         {items.length === 0 ? (
@@ -332,8 +483,11 @@ export function HistoryContent({
 function HistorySearchBar({
   searchDraft,
   onSearchChange,
+  sort,
+  onSortChange,
   filtersOpen,
   onToggleFilters,
+  filterBtnRef,
   activeFilterCount,
   loading,
   rangeStart,
@@ -345,8 +499,11 @@ function HistorySearchBar({
 }: {
   searchDraft: string
   onSearchChange: (value: string) => void
+  sort: NonNullable<HistoryFilters["sort"]>
+  onSortChange: (sort: NonNullable<HistoryFilters["sort"]>) => void
   filtersOpen: boolean
   onToggleFilters: () => void
+  filterBtnRef: RefObject<HTMLButtonElement | null>
   activeFilterCount: number
   loading: boolean
   rangeStart: number
@@ -365,6 +522,16 @@ function HistorySearchBar({
         onClear={() => onSearchChange("")}
       />
       <WidgetToolbarTrailing>
+        <div className="w-[7.5rem] shrink-0">
+          <Listbox
+            value={sort}
+            options={SORT_OPTIONS}
+            onChange={onSortChange}
+            size="sm"
+            className="w-full listbox-control"
+            ariaLabel="Sort"
+          />
+        </div>
         <span className="widget-toolbar__count hidden sm:inline-flex">
           <span className="widget-toolbar__count-filtered">
             {total === 0 ? "No runs" : `${rangeStart}–${rangeEnd}`}
@@ -399,6 +566,7 @@ function HistorySearchBar({
           <ChevronRight size={14} />
         </button>
         <button
+          ref={filterBtnRef}
           type="button"
           onClick={onToggleFilters}
           className={`widget-toolbar__icon-btn relative ${
@@ -420,146 +588,6 @@ function HistorySearchBar({
         </button>
       </WidgetToolbarTrailing>
     </WidgetToolbar>
-  )
-}
-
-function HistoryFiltersPanel({
-  filters,
-  isAdmin,
-  envOptions,
-  entityTypeOptions,
-  onFiltersChange,
-  selectedStatuses,
-  onToggleStatus,
-  onClear,
-  hasActiveFilters,
-}: {
-  filters: HistoryFilters
-  isAdmin: boolean
-  envOptions: ListboxOption<string>[]
-  entityTypeOptions: ListboxOption<string>[]
-  onFiltersChange: (patch: Partial<HistoryFilters>) => void
-  selectedStatuses: SyncRunStatus[]
-  onToggleStatus: (status: SyncRunStatus) => void
-  onClear: () => void
-  hasActiveFilters: boolean
-}) {
-  return (
-    <div className="shrink-0 space-y-2 border-b border-border-subtle px-3 py-2.5">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className={`${TAB_SEGMENT_TRACK} flex-wrap`} role="group" aria-label="Status">
-          {STATUS_OPTIONS.map((option) => {
-            const active = selectedStatuses.includes(option.value)
-            return (
-              <button
-                key={option.value}
-                type="button"
-                aria-pressed={active}
-                onClick={() => onToggleStatus(option.value)}
-                className={[TAB_PILL, active ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
-              >
-                {option.label}
-              </button>
-            )
-          })}
-        </div>
-        {hasActiveFilters && (
-          <button type="button" onClick={onClear} className={TEXT_BTN}>
-            <X size={12} />
-            Clear
-          </button>
-        )}
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
-        <HistoryFilterControl label="From date">
-          <DateField
-            value={filters.from}
-            onChange={(from) => onFiltersChange({ from })}
-            placeholder="Any start date"
-            ariaLabel="Filter from date"
-            size="sm"
-            className="w-full"
-          />
-        </HistoryFilterControl>
-        <HistoryFilterControl label="To date">
-          <DateField
-            value={filters.to}
-            onChange={(to) => onFiltersChange({ to })}
-            placeholder="Any end date"
-            ariaLabel="Filter to date"
-            size="sm"
-            className="w-full"
-          />
-        </HistoryFilterControl>
-        <HistoryFilterControl label="Sort order">
-          <Listbox
-            value={filters.sort ?? "started_desc"}
-            options={SORT_OPTIONS}
-            onChange={(sort) => onFiltersChange({ sort })}
-            size="sm"
-            className="w-full listbox-control"
-            ariaLabel="Sort order"
-          />
-        </HistoryFilterControl>
-        <HistoryFilterControl label="Entity type">
-          <Listbox
-            value={filters.entityType ?? ""}
-            options={entityTypeOptions}
-            onChange={(entityType) => onFiltersChange({ entityType: entityType || undefined })}
-            size="sm"
-            className="w-full listbox-control"
-            ariaLabel="Entity type"
-            placeholder="Any entity type"
-          />
-        </HistoryFilterControl>
-      </div>
-
-      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
-        <HistoryFilterControl label={isAdmin ? "User (UPN)" : "User"}>
-          <SearchablePick
-            value={filters.actorUpn ?? ""}
-            options={[]}
-            onChange={(actorUpn) => onFiltersChange({ actorUpn: actorUpn || undefined })}
-            placeholder={isAdmin ? "Filter by UPN" : "Your runs only"}
-            ariaLabel="Filter by user"
-            disabled={!isAdmin}
-            className="listbox-control"
-          />
-        </HistoryFilterControl>
-        <HistoryFilterControl label="Source environment">
-          <Listbox
-            value={filters.source ?? ""}
-            options={envOptions}
-            onChange={(source) => onFiltersChange({ source: source || undefined })}
-            size="sm"
-            className="w-full listbox-control"
-            ariaLabel="Source environment"
-            placeholder="Any source"
-          />
-        </HistoryFilterControl>
-        <HistoryFilterControl label="Target environment">
-          <Listbox
-            value={filters.target ?? ""}
-            options={envOptions}
-            onChange={(target) => onFiltersChange({ target: target || undefined })}
-            size="sm"
-            className="w-full listbox-control"
-            ariaLabel="Target environment"
-            placeholder="Any target"
-          />
-        </HistoryFilterControl>
-      </div>
-    </div>
-  )
-}
-
-function HistoryFilterControl({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <label className="block min-w-0">
-      <span className="sr-only">{label}</span>
-      {children}
-    </label>
   )
 }
 

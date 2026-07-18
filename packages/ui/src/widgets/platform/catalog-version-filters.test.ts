@@ -35,10 +35,10 @@ const SAMPLE: CatalogVersionEntry[] = [
 ]
 
 describe("classifyCatalogVersionReason", () => {
-  it("maps known reason prefixes", () => {
+  it("maps known reason prefixes onto one-word kinds", () => {
     expect(classifyCatalogVersionReason("seed:initial")).toBe("seed")
-    expect(classifyCatalogVersionReason("entity-registry:save:x")).toBe("entity-registry")
-    expect(classifyCatalogVersionReason("sync-metadata:wiring:x")).toBe("sync-metadata")
+    expect(classifyCatalogVersionReason("entity-registry:save:x")).toBe("entities")
+    expect(classifyCatalogVersionReason("sync-metadata:wiring:x")).toBe("metadata")
     expect(classifyCatalogVersionReason("rollback:from:2")).toBe("rollback")
     expect(classifyCatalogVersionReason("catalog:import:zip")).toBe("import")
   })

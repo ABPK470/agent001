@@ -213,7 +213,7 @@ export function ConnectorsShell(): JSX.Element {
           <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
             <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
             <div className="shrink-0 space-y-2 border-b border-border-subtle px-5 py-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex h-9 items-center justify-between gap-3">
                 <div className="inline-flex items-center gap-1" role="tablist" aria-label="Connectors sections">
                   {NAV_VIEWS.map((entry) => {
                     const active = view === entry.view
@@ -231,47 +231,66 @@ export function ConnectorsShell(): JSX.Element {
                     )
                   })}
                 </div>
-                <div className="flex shrink-0 items-center gap-1.5">
-                  {view === "connectors" && (
-                    <>
-                      <button
-                        type="button"
-                        onClick={() => setImportGateOpen(true)}
-                        disabled={connectors.busy || connectors.saving !== null}
-                        className={ICON_BTN}
-                        title="Import connectors.json from this device"
-                        aria-label="Import connectors.json"
-                      >
-                        <Upload size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => void exportConnectorsFile()}
-                        disabled={connectors.busy || connectors.saving !== null}
-                        className={ICON_BTN}
-                        title="Export connectors.json to this device (includes secrets)"
-                        aria-label="Export connectors.json"
-                      >
-                        <Download size={16} />
-                      </button>
-                      <button type="button" onClick={startCreate} className={ICON_BTN} title="New connector" aria-label="New connector">
-                        <Plus size={16} />
-                      </button>
-                      <button
-                        type="button"
-                        onClick={requestSave}
-                        disabled={connectors.saving !== null || !formOpen || !form.name.trim() || kindDisabled}
-                        className={ICON_BTN_PRIMARY}
-                        title={isDirty ? "Save unsaved changes" : "Save"}
-                        aria-label="Save"
-                      >
-                        <Save size={16} />
-                      </button>
-                    </>
-                  )}
+                {/* Always reserve the Connectors action cluster so Types does not reflow the header. */}
+                <div
+                  className={`flex shrink-0 items-center gap-1.5 ${view === "types" ? "invisible" : ""}`}
+                  aria-hidden={view === "types"}
+                >
+                  <button
+                    type="button"
+                    onClick={() => setImportGateOpen(true)}
+                    disabled={view !== "connectors" || connectors.busy || connectors.saving !== null}
+                    tabIndex={view === "connectors" ? undefined : -1}
+                    className={ICON_BTN}
+                    title="Import connectors.json from this device"
+                    aria-label="Import connectors.json"
+                  >
+                    <Upload size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => void exportConnectorsFile()}
+                    disabled={view !== "connectors" || connectors.busy || connectors.saving !== null}
+                    tabIndex={view === "connectors" ? undefined : -1}
+                    className={ICON_BTN}
+                    title="Export connectors.json to this device (includes secrets)"
+                    aria-label="Export connectors.json"
+                  >
+                    <Download size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={startCreate}
+                    disabled={view !== "connectors"}
+                    tabIndex={view === "connectors" ? undefined : -1}
+                    className={ICON_BTN}
+                    title="New connector"
+                    aria-label="New connector"
+                  >
+                    <Plus size={16} />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={requestSave}
+                    disabled={
+                      view !== "connectors" ||
+                      connectors.saving !== null ||
+                      !formOpen ||
+                      !form.name.trim() ||
+                      kindDisabled
+                    }
+                    tabIndex={view === "connectors" ? undefined : -1}
+                    className={ICON_BTN_PRIMARY}
+                    title={isDirty ? "Save unsaved changes" : "Save"}
+                    aria-label="Save"
+                  >
+                    <Save size={16} />
+                  </button>
                 </div>
               </div>
-              <p className={`${META_TEXT} max-w-3xl leading-relaxed text-text-faint`}>{headerDescription}</p>
+              <p className={`${META_TEXT} min-h-[2.75rem] max-w-3xl leading-relaxed text-text-faint`}>
+                {headerDescription}
+              </p>
             </div>
 
             <div className="grid min-h-0 flex-1 grid-cols-1 grid-rows-[minmax(0,auto)_minmax(0,1fr)] gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)] lg:grid-rows-1">
@@ -290,7 +309,7 @@ export function ConnectorsShell(): JSX.Element {
                     onDelete={(id) => connectors.setDeleting(id)}
                   />
                 ) : (
-                  <KindList />
+                  <KindList query={listQuery} onQueryChange={setListQuery} />
                 )}
               </div>
 
@@ -489,33 +508,78 @@ function ConnectorList({
   )
 }
 
-function KindList(): JSX.Element {
+function KindList({
+  query,
+  onQueryChange,
+}: {
+  query: string
+  onQueryChange: (q: string) => void
+}): JSX.Element {
+  const trimmed = query.trim().toLowerCase()
+  const kinds = trimmed
+    ? CONNECTOR_KINDS.filter(
+        (k) =>
+          k.id.toLowerCase().includes(trimmed) ||
+          k.displayName.toLowerCase().includes(trimmed),
+      )
+    : CONNECTOR_KINDS
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2">
+      <div className="input flex shrink-0 items-center gap-2 py-0 pl-2.5 pr-2">
+        <Search className="h-3.5 w-3.5 shrink-0 text-text-faint" aria-hidden />
+        <input
+          type="text"
+          role="searchbox"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          placeholder="Search types…"
+          className="min-w-0 flex-1 border-0 bg-transparent py-2 text-sm outline-none focus:ring-0"
+          aria-label="Search types"
+        />
+        {query ? (
+          <button
+            type="button"
+            onClick={() => onQueryChange("")}
+            className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-text-muted hover:bg-elevated hover:text-text"
+            aria-label="Clear filter"
+          >
+            <X className="h-3.5 w-3.5" />
+          </button>
+        ) : (
+          <span className="h-6 w-6 shrink-0" aria-hidden />
+        )}
+      </div>
       <div className="min-h-0 flex-1 overflow-y-auto overscroll-contain">
-        <ul className={PANEL}>
-          {CONNECTOR_KINDS.map((k, index) => (
-            <li
-              key={k.id}
-              className={[
-                "flex items-center gap-2 px-3 py-2 text-sm",
-                index < CONNECTOR_KINDS.length - 1 ? "border-b border-border/20" : "",
-                k.enabled ? "" : "opacity-50",
-              ].join(" ")}
-            >
-              <ConnectorKindMark kind={k.id} size={14} title={k.displayName} />
-              <div className="flex min-w-0 flex-1 flex-col">
-                <span className="min-w-0 truncate font-medium text-text">{k.displayName}</span>
-                <span className={`font-mono ${META_TEXT}`}>{k.id}</span>
-              </div>
-              {k.enabled ? (
-                <span className="shrink-0 rounded-md bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent">Active</span>
-              ) : (
-                <span className={`shrink-0 ${META_TEXT} text-text-faint`}>Planned</span>
-              )}
-            </li>
-          ))}
-        </ul>
+        {kinds.length === 0 ? (
+          <p className="text-sm text-text-muted">Empty.</p>
+        ) : (
+          <ul className={PANEL}>
+            {kinds.map((k, index) => (
+              <li
+                key={k.id}
+                className={[
+                  "flex items-center gap-2 px-3 py-2 text-sm",
+                  index < kinds.length - 1 ? "border-b border-border/20" : "",
+                  k.enabled ? "" : "opacity-50",
+                ].join(" ")}
+              >
+                <ConnectorKindMark kind={k.id} size={14} title={k.displayName} />
+                <div className="flex min-w-0 flex-1 flex-col">
+                  <span className="min-w-0 truncate font-medium text-text">{k.displayName}</span>
+                  <span className={`font-mono ${META_TEXT}`}>{k.id}</span>
+                </div>
+                {k.enabled ? (
+                  <span className="shrink-0 rounded-md bg-accent/15 px-2 py-0.5 text-[11px] font-semibold text-accent">
+                    Active
+                  </span>
+                ) : (
+                  <span className={`shrink-0 ${META_TEXT} text-text-faint`}>Planned</span>
+                )}
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
     </div>
   )
