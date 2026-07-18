@@ -597,22 +597,3 @@ export function normalizeCatalogSnapshotPayload(body: Record<string, unknown>): 
 }
 
 export { buildEntityRegistryExportDocument }
-
-/** Apply platform-wide files from a deploy/git export bundle (not entity registry B format). */
-export function applyDeployGitPlatformFiles(args: {
-  tenantId: string
-  actor: string
-  syncMetadata: Record<string, unknown>
-  strategies: Record<string, unknown>
-  environments: Record<string, unknown>
-}): { environments: number; strategies: number; flows: number } {
-  const meta = args.syncMetadata as SyncMetadataDoc
-  const envCount = applyEnvironments(args.environments as EnvironmentsDoc)
-  applySyncMetadata(args.tenantId, meta)
-  applyStrategies(args.tenantId, args.strategies as StrategiesDoc, args.actor)
-  return {
-    environments: envCount,
-    strategies: (args.strategies as StrategiesDoc).strategies?.length ?? 0,
-    flows: meta.flows ? Object.keys(meta.flows).length : 0,
-  }
-}

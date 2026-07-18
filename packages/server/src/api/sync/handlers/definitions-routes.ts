@@ -24,11 +24,6 @@ import type { FastifyInstance, FastifyRequest } from "fastify"
 import { broadcast } from "../../../infra/events/broadcaster.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 import {
-  entityToAuthoredSyncDefinition,
-  formatAuthoredSyncJson,
-  syncConfigInputFromDb,
-} from "../types/authored-sync-document.js"
-import {
   formatEntitiesYaml,
   formatEntityJson,
   formatEntityYaml,
@@ -42,8 +37,6 @@ import {
   assertTenantEntitiesExportable,
   EntityExportValidationError,
 } from "../service/assert-entity-export.js"
-import { loadAuthoringFlowCatalog } from "../service/definitions.js"
-import { importAuthoredSyncFromText } from "../service/import-authored-sync.js"
 import { loadCatalogSnapshotForSuggest } from "../service/load-catalog-for-suggest.js"
 import { entityImportToGate } from "../../platform/service/import-gate.js"
 import { recordSyncCatalogChange } from "../../platform/service/sync-catalog-versioning.js"
@@ -259,39 +252,6 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     const tenantId = resolveTenant(req)
     return sendRegistryJson(tenantId, req.params.id, reply)
   })
-
-  app.get<{ Params: { id: string } }>(
-    "/api/entity-registry/entities/:id/artifact.json",
-    async (req, reply) => {
-      if (!projectRoot) {
-        reply.code(503)
-        return { error: "artifact export requires server projectRoot" }
-      }
-      const tenantId = resolveTenant(req)
-      const def = db.getEntityDefinition(tenantId, req.params.id, { includeRetired: true })
-      if (!def) {
-        reply.code(404)
-        return { error: `entity not found: ${req.params.id}` }
-      }
-      try {
-        const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
-        const configRow = db.getSyncDefinitionConfig(tenantId, req.params.id)
-        const authored = entityToAuthoredSyncDefinition(
-          def,
-          flowTemplateCatalog,
-          configRow ? syncConfigInputFromDb(configRow) : null,
-        )
-        reply.header("content-type", "application/json; charset=utf-8")
-        return formatAuthoredSyncJson(authored)
-      } catch (error) {
-        if (error instanceof EntityExportValidationError) {
-          reply.code(409)
-          return { error: error.message, entityId: error.entityId, validation: error.result }
-        }
-        throw error
-      }
-    },
-  )
 
   app.get("/api/entity-registry/entities.yaml", async (req, reply) => {
     const tenantId = resolveTenant(req)
@@ -544,47 +504,6 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         audit(req, "entity_registry.imported", {
           tenantId,
           format: "registry-json",
-          savedCount: result.saved.length,
-          errorCount: result.rowErrors.length,
-        })
-      }
-      return result
-    },
-  )
-
-  app.post<{ Body: { json: string; reason: string; dryRun?: boolean } }>(
-    "/api/entity-registry/entities/import-artifact",
-    async (req, reply): Promise<EntityRegistryYamlImportResponse | { error: string }> => {
-      if (!req.session?.isAdmin) {
-        reply.code(403)
-        return { error: "admin only" }
-      }
-      if (!projectRoot) {
-        reply.code(503)
-        return { error: "artifact import requires server projectRoot" }
-      }
-      if (typeof req.body?.json !== "string" || req.body.json.trim() === "") {
-        reply.code(400)
-        return { error: "'json' body is required" }
-      }
-      if (!req.body.reason || req.body.reason.trim() === "") {
-        reply.code(400)
-        return { error: "'reason' is required" }
-      }
-      const tenantId = resolveTenant(req)
-      const dryRun = Boolean(req.body.dryRun)
-      const result = importAuthoredSyncFromText({
-        tenantId,
-        actor: req.session.upn,
-        reason: req.body.reason,
-        content: req.body.json,
-        projectRoot,
-        dryRun,
-      })
-      if (!dryRun) {
-        audit(req, "entity_registry.imported", {
-          tenantId,
-          format: "artifact",
           savedCount: result.saved.length,
           errorCount: result.rowErrors.length,
         })

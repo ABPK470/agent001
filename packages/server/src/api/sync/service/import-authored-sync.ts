@@ -56,7 +56,7 @@ export function importAuthoredSyncFromText(args: {
   if (!args.dryRun && saved.length > 0) {
     recordSyncCatalogChange({
       tenantId: args.tenantId,
-      reason: `entity-registry:import-artifact:${args.reason}`,
+      reason: `entity-registry:import-authored-compat:${args.reason}`,
       actor: args.actor,
     })
   }

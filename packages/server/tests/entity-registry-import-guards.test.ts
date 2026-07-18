@@ -4,9 +4,8 @@
  */
 
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
-import { mkdtempSync, readFileSync, rmSync } from "node:fs"
-import { tmpdir } from "node:os"
-import { join, resolve } from "node:path"
+import { readFileSync } from "node:fs"
+import { resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import {
@@ -21,11 +20,6 @@ import {
   validateDeployCatalogSnapshot,
 } from "../src/api/platform/service/import-deploy-artifacts.js"
 import { buildDeployCatalogSnapshot } from "../src/api/platform/service/export-deploy-artifacts.js"
-import {
-  applyDeployGitBundle,
-  parseDeployGitBundleFromDir,
-} from "../src/api/platform/service/import-deploy-git-artifacts.js"
-import { writeDeployGitExport } from "../src/api/platform/service/export-deploy-git-artifacts.js"
 import { formatAuthoredSyncJson } from "../src/api/sync/types/authored-sync-document.js"
 import { formatEntityJson } from "../src/api/sync/types/entity-yaml.js"
 import {
@@ -41,20 +35,23 @@ import {
   type CatalogOperatorFixture,
 } from "./helpers/catalog-operator-fixture.js"
 
-const G1_WIRE = resolve(
+const G1_AUTHORED_HISTORICAL = resolve(
   fileURLToPath(
-    new URL("../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-wire.json", import.meta.url),
+    new URL(
+      "../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-authored-historical.json",
+      import.meta.url,
+    ),
   ),
 )
 
 let fixture: CatalogOperatorFixture
 
 function loadArtifact(entityId: string): AuthoredSyncDefinition {
-  const g1 = JSON.parse(readFileSync(G1_WIRE, "utf-8")) as {
+  const g1 = JSON.parse(readFileSync(G1_AUTHORED_HISTORICAL, "utf-8")) as {
     entities: Record<string, AuthoredSyncDefinition>
   }
   const authored = g1.entities[entityId]
-  if (!authored) throw new Error(`Missing G1 Authored entity ${entityId}`)
+  if (!authored) throw new Error(`Missing historical Authored entity ${entityId}`)
   return authored
 }
 
@@ -222,73 +219,52 @@ describe("per-entity authored import guards", () => {
   })
 })
 
-describe("bulk deploy-git import guards", () => {
-  it("restores corrupted content predicates when re-importing ground-truth deploy git bundle", () => {
-    const parent = mkdtempSync(join(tmpdir(), "import-guard-export-"))
-    try {
-      const exported = writeDeployGitExport({
-        outputParentDir: parent,
-        projectRoot: fixture.projectRoot,
-        tenantId: TENANT,
-      })
-      const bundle = parseDeployGitBundleFromDir(exported.folderPath)
+describe("catalog snapshot import guards", () => {
+  it("restores corrupted content predicates when re-importing catalog snapshot", () => {
+    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
 
-      corruptContentContentTypePredicate()
-      expect(contentTypePredicateFromDb()).toMatch(/IN\s*\(\s*SELECT\s+DISTINCT/i)
+    corruptContentContentTypePredicate()
+    expect(contentTypePredicateFromDb()).toMatch(/IN\s*\(\s*SELECT\s+DISTINCT/i)
 
-      const applied = applyDeployGitBundle({
-        bundle,
-        actor: "test",
-        projectRoot: fixture.projectRoot,
-        dryRun: false,
-      })
-      expect(applied.applied).toBe(true)
-    } finally {
-      rmSync(parent, { recursive: true, force: true })
-    }
+    const applied = applyDeployCatalogSnapshot({
+      snapshot,
+      actor: "test",
+      projectRoot: fixture.projectRoot,
+      dryRun: false,
+    })
+    expect(applied.applied).toBe(true)
 
     const predicate = contentTypePredicateFromDb()
     expect(predicate).toContain("EXISTS")
     expect(isDegradedLegacyFallbackPredicate(predicate!)).toBe(false)
   })
 
-  it("bulk import of shipped artifacts never introduces degraded IN-list predicates", () => {
-    const parent = mkdtempSync(join(tmpdir(), "import-guard-bulk-"))
-    try {
-      const exported = writeDeployGitExport({
-        outputParentDir: parent,
-        projectRoot: fixture.projectRoot,
-        tenantId: TENANT,
-      })
-      const bundle = parseDeployGitBundleFromDir(exported.folderPath)
+  it("bulk catalog re-import never introduces degraded IN-list predicates", () => {
+    const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT, includeRetiredEntities: true })
 
-      for (const row of db.listEntityDefinitions(TENANT)) {
-        db.retireEntityDefinition(TENANT, row.id, "test")
+    for (const row of db.listEntityDefinitions(TENANT)) {
+      db.retireEntityDefinition(TENANT, row.id, "test")
+    }
+
+    const applied = applyDeployCatalogSnapshot({
+      snapshot,
+      actor: "test",
+      projectRoot: fixture.projectRoot,
+      dryRun: false,
+    })
+    expect(applied.applied).toBe(true)
+
+    for (const entity of db.listEntityDefinitions(TENANT)) {
+      for (const table of entity.tables) {
+        if (table.scope.kind !== "sql") continue
+        expect(
+          isDegradedLegacyFallbackPredicate(table.scope.predicate),
+          `${entity.id}.${table.name}`,
+        ).toBe(false)
       }
-
-      applyDeployGitBundle({
-        bundle,
-        actor: "test",
-        projectRoot: fixture.projectRoot,
-        dryRun: false,
-      })
-
-      for (const entity of db.listEntityDefinitions(TENANT)) {
-        for (const table of entity.tables) {
-          if (table.scope.kind !== "sql") continue
-          expect(
-            isDegradedLegacyFallbackPredicate(table.scope.predicate),
-            `${entity.id}.${table.name}`,
-          ).toBe(false)
-        }
-      }
-    } finally {
-      rmSync(parent, { recursive: true, force: true })
     }
   })
-})
 
-describe("catalog snapshot import guards", () => {
   it("preview rejects entity registry rows with degraded predicates", () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
     const entity = db.getEntityDefinition(TENANT, "content")

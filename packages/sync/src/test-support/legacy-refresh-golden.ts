@@ -1,12 +1,12 @@
 /**
  * Legacy refresh golden builders — Phase 0 lock for catalog shape unification.
  *
- * G1 = generator wire artifacts (entities + sync-metadata + strategies + envs + flow-templates)
- * G2 = logical catalog after Authored→EntityDefinition (+ run config projection)
+ * G1 = native seed wire (EntityDefinition entities + sync-definition-configs + shared catalog files)
+ * G2 = logical catalog (entities + configs + metadata) — equals G1 entities/configs after stamp normalize
  * G3 = Publish compose (SyncDefinition) minus publishedAt/publishedVersion
  *
- * Volatile fields stripped in normalize*: generatedAt / provenance.sourceVersion / createdAt on entities
- * only when comparing wire Authored; G2 uses a fixed createdAt.
+ * Historical Authored wire lives at g1-authored-historical.json for A→B conversion tests only.
+ * Volatile fields: G2 uses a fixed createdAt; Authored historical normalizes provenance.sourceVersion.
  */
 
 import { existsSync, readdirSync, readFileSync } from "node:fs"
@@ -23,7 +23,6 @@ import {
   type SyncDefinitionConfigInput,
 } from "../domain/compile-sync-definition.js"
 import { buildFlowCatalog, type FlowCatalog } from "../domain/flow-catalog.js"
-import { entityDefinitionFromAuthoredSync } from "../domain/entity-registry/from-authored-sync.js"
 import type { EntityDefinition } from "../domain/entity-registry/types.js"
 import {
   defaultSyncDefinitionFlowTemplateId,
@@ -93,19 +92,6 @@ export function isEntityDefinitionSeed(raw: unknown): raw is EntityDefinition {
   return Array.isArray(doc["tables"]) && typeof doc["rootTable"] === "string" && !isAuthoredSyncDefinitionSeed(raw)
 }
 
-export function loadShippedAuthoredEntities(projectRoot: string): Record<string, AuthoredSyncDefinition> {
-  const dir = resolve(projectRoot, "deploy/sync/artifacts/entities")
-  const out: Record<string, AuthoredSyncDefinition> = {}
-  for (const file of readdirSync(dir).filter((name) => name.endsWith(".json")).sort()) {
-    const raw = readJson(join(dir, file))
-    if (!isAuthoredSyncDefinitionSeed(raw)) {
-      throw new Error(`Expected AuthoredSyncDefinition seed at ${file} for G1 freeze`)
-    }
-    out[raw.id] = raw
-  }
-  return out
-}
-
 export function loadShippedEntityDefinitionSeeds(projectRoot: string): Record<string, EntityDefinition> {
   const dir = resolve(projectRoot, "deploy/sync/artifacts/entities")
   const out: Record<string, EntityDefinition> = {}
@@ -119,34 +105,25 @@ export function loadShippedEntityDefinitionSeeds(projectRoot: string): Record<st
   return out
 }
 
-export function normalizeAuthoredWire(authored: AuthoredSyncDefinition): AuthoredSyncDefinition {
-  return {
-    ...authored,
-    provenance: {
-      ...authored.provenance,
-      sourceVersion: "<generatedAt>",
-    },
-  }
-}
-
-export function buildG1WireGolden(projectRoot: string): {
-  entities: Record<string, AuthoredSyncDefinition>
+export type G1NativeWireGolden = {
+  entities: Record<string, EntityDefinition>
+  configs: Record<string, SeedRunConfig>
   syncMetadata: unknown
   strategies: unknown
   environments: unknown
   flowTemplates: unknown
-} {
-  const entitiesRaw = loadShippedAuthoredEntities(projectRoot)
-  const entities: Record<string, AuthoredSyncDefinition> = {}
-  for (const [id, authored] of Object.entries(entitiesRaw)) {
-    entities[id] = normalizeAuthoredWire(authored)
-  }
+}
+
+/** Native EntityDefinition seed wire (current git authoring format). */
+export function buildG1WireGolden(projectRoot: string): G1NativeWireGolden {
+  const logical = buildG2LogicalFromNativeSeeds(projectRoot)
   return {
-    entities,
-    syncMetadata: readJson(resolve(projectRoot, "deploy/sync/artifacts/sync-metadata.json")),
-    strategies: readJson(resolve(projectRoot, "deploy/sync/artifacts/strategies.json")),
-    environments: readJson(resolve(projectRoot, "deploy/sync/sync-environments.json")),
-    flowTemplates: readJson(resolve(projectRoot, "deploy/sync/artifacts/flow-templates.json")),
+    entities: logical.entities,
+    configs: logical.configs,
+    syncMetadata: logical.syncMetadata,
+    strategies: logical.strategies,
+    environments: logical.environments,
+    flowTemplates: logical.flowTemplates,
   }
 }
 
@@ -179,30 +156,6 @@ export function configInputFromSeedRun(config: SeedRunConfig, flowTemplateCatalo
     ownership_owner: config.ownershipOwner,
     review_status: config.reviewStatus,
     ownership_notes_json: JSON.stringify(config.ownershipNotes),
-  }
-}
-
-export function buildG2LogicalFromAuthored(
-  projectRoot: string,
-  authoredById: Record<string, AuthoredSyncDefinition>,
-): LogicalCatalogGolden {
-  const flowTemplateCatalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
-  const entities: Record<string, EntityDefinition> = {}
-  const configs: Record<string, SeedRunConfig> = {}
-  for (const id of Object.keys(authoredById).sort()) {
-    const authored = authoredById[id]!
-    entities[id] = entityDefinitionFromAuthoredSync(authored, "_default", {
-      createdAt: LEGACY_REFRESH_SEED_CREATED_AT,
-    })
-    configs[id] = seedRunConfigFromAuthored(authored, flowTemplateCatalog)
-  }
-  return {
-    entities,
-    configs,
-    syncMetadata: readJson(resolve(projectRoot, "deploy/sync/artifacts/sync-metadata.json")),
-    strategies: readJson(resolve(projectRoot, "deploy/sync/artifacts/strategies.json")),
-    environments: readJson(resolve(projectRoot, "deploy/sync/sync-environments.json")),
-    flowTemplates: readJson(resolve(projectRoot, "deploy/sync/artifacts/flow-templates.json")),
   }
 }
 

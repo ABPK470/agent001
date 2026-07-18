@@ -1,8 +1,8 @@
 /**
- * Deploy artifact (AuthoredSyncDefinition) export — format A.
+ * AuthoredSyncDefinition compile helpers — process JSON / import-compat.
  *
- * Compiles EntityDefinition + sync admin config into the same JSON shape as
- * `deploy/sync/artifacts/entities/*.json`.
+ * Not a seed authoring dialect. Seeds are EntityDefinition + sync-definition-configs.
+ * Kept for materialize (A→B), export round-trip checks, and Publish scaffold.
  */
 
 import type { AuthoredSyncDefinition } from "@mia/shared-types"

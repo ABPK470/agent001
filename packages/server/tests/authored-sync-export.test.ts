@@ -1,5 +1,5 @@
 /**
- * Deploy artifact export — B → A per entity.
+ * Authored compile export — B → A per entity (process JSON / import-compat).
  */
 
 import Database from "better-sqlite3"

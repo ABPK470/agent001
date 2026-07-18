@@ -190,46 +190,6 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     }
   })
 
-  app.post("/api/platform/deploy-artifacts/export/download", async (req, reply) => {
-    if (!req.session?.isAdmin) {
-      reply.code(403)
-      return { ok: false, message: "Admin only" }
-    }
-    const body = (req.body ?? {}) as {
-      includeRetiredEntities?: boolean
-    }
-    try {
-      const { exportDeployGitZipBuffer } = await import(
-        "./service/export-deploy-git-artifacts.js"
-      )
-      const { buffer, filename } = exportDeployGitZipBuffer(opts.projectRoot, {
-        includeRetiredEntities: body.includeRetiredEntities,
-      })
-      reply
-        .header("Content-Type", "application/zip")
-        .header("Content-Disposition", `attachment; filename="${filename}"`)
-      return reply.send(buffer)
-    } catch (error) {
-      const { EntityExportValidationError } = await import(
-        "../sync/service/assert-entity-export.js"
-      )
-      if (error instanceof EntityExportValidationError) {
-        reply.code(409)
-        return {
-          ok: false,
-          message: error.message,
-          entityId: error.entityId,
-          validation: error.result,
-        }
-      }
-      reply.code(500)
-      return {
-        ok: false,
-        message: error instanceof Error ? error.message : "Deploy artifact export failed",
-      }
-    }
-  })
-
   app.post("/api/platform/artifacts/refresh", async (req, reply) => {
     if (!req.session?.isAdmin) {
       reply.code(403)
@@ -262,72 +222,6 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
         message: error instanceof Error ? error.message : "Artifact refresh failed",
         source,
       }
-    }
-  })
-
-  app.post("/api/platform/deploy-artifacts/import", async (req, reply) => {
-    if (!req.session?.isAdmin) {
-      reply.code(403)
-      return { ok: false, message: "Admin only" }
-    }
-    const body = (req.body ?? {}) as {
-      zipBase64?: string
-      dryRun?: boolean
-      reason?: string
-    }
-    const dryRun = Boolean(body.dryRun)
-    if (!body.zipBase64) {
-      reply.code(400)
-      return { ok: false, message: "zipBase64 is required" }
-    }
-    const { assertCanApply, catalogPreviewToGate } = await import("./service/import-gate.js")
-    if (!dryRun) {
-      const blocked = assertCanApply({ dryRun: false, reason: body.reason, ok: true })
-      if (blocked) {
-        return catalogPreviewToGate({
-          ok: false,
-          dryRun: false,
-          applied: false,
-          errors: [blocked],
-          counts: {},
-        })
-      }
-    }
-    try {
-      const { parseDeployGitZipBuffer, applyDeployGitBundle } = await import(
-        "./service/import-deploy-git-artifacts.js"
-      )
-      const buffer = Buffer.from(body.zipBase64, "base64")
-      const bundle = parseDeployGitZipBuffer(buffer)
-      const result = applyDeployGitBundle({
-        bundle,
-        actor: req.session.upn,
-        projectRoot: opts.projectRoot,
-        dryRun,
-      })
-      return catalogPreviewToGate({
-        ok: result.ok,
-        dryRun: result.dryRun,
-        applied: result.applied,
-        errors: result.errors,
-        counts: result.counts,
-        impact: {
-          creates: [],
-          updates: [...bundle.entityIds],
-          retires: [],
-          deletes: [],
-          skips: [],
-        },
-        warnings: dryRun ? [] : [`reason: ${String(body.reason ?? "").trim()}`],
-      })
-    } catch (error) {
-      return catalogPreviewToGate({
-        ok: false,
-        dryRun,
-        applied: false,
-        errors: [error instanceof Error ? error.message : "Deploy artifact import failed"],
-        counts: {},
-      })
     }
   })
 

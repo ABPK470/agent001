@@ -9,14 +9,17 @@ import { looksIncompleteScopePredicate, resolveReviewPlaceholderPredicate } from
 import { validateEntityDefinition } from "./validate.js"
 
 const repoRoot = resolve(import.meta.dirname, "../../../../..")
-const g1Path = resolve(repoRoot, "packages/sync/src/test-support/__goldens__/legacy-refresh/g1-wire.json")
+const g1AuthoredPath = resolve(
+  repoRoot,
+  "packages/sync/src/test-support/__goldens__/legacy-refresh/g1-authored-historical.json",
+)
 
 function loadG1Authored(entityId: string): AuthoredSyncDefinition {
-  const g1 = JSON.parse(readFileSync(g1Path, "utf-8")) as {
+  const g1 = JSON.parse(readFileSync(g1AuthoredPath, "utf-8")) as {
     entities: Record<string, AuthoredSyncDefinition>
   }
   const authored = g1.entities[entityId]
-  if (!authored) throw new Error(`Missing G1 Authored entity ${entityId}`)
+  if (!authored) throw new Error(`Missing historical Authored entity ${entityId}`)
   return {
     ...authored,
     provenance: {

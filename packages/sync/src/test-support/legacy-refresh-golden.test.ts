@@ -2,7 +2,8 @@
  * Phase 0 — freeze legacy refresh ground truth (G1/G2/G3).
  *
  * UPDATE_GOLDENS=1 regenerates committed JSON under __goldens__/legacy-refresh/.
- * After native EntityDefinition seeds land, G1 is retired; G2/G3 remain the contract.
+ * G1 = native EntityDefinition seed wire; G2/G3 remain the semantic + publish contracts.
+ * g1-authored-historical.json is frozen separately for A→B conversion tests (not regenerated here).
  */
 
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -12,18 +13,13 @@ import { describe, expect, it } from "vitest"
 
 import {
   buildG1WireGolden,
-  buildG2LogicalFromAuthored,
   buildG2LogicalFromNativeSeeds,
   buildG3PublishedFromLogical,
   ENTITY_IDS,
   goldenDir,
-  isAuthoredSyncDefinitionSeed,
   isEntityDefinitionSeed,
-  loadShippedAuthoredEntities,
   type LogicalCatalogGolden,
 } from "./legacy-refresh-golden.js"
-
-// Goldens live beside this module under __goldens__/legacy-refresh/
 
 const repoRoot = resolve(import.meta.dirname, "../../../..")
 const goldensRoot = goldenDir(repoRoot)
@@ -42,53 +38,36 @@ function readGolden(name: string): unknown {
   return JSON.parse(readFileSync(path, "utf-8")) as unknown
 }
 
-function entitiesAreNative(): boolean {
-  const sample = resolve(repoRoot, "deploy/sync/artifacts/entities/dataset.json")
-  const raw = JSON.parse(readFileSync(sample, "utf-8")) as unknown
-  return isEntityDefinitionSeed(raw)
-}
-
 describe("legacy refresh goldens (Phase 0)", () => {
-  it("freezes G1 wire + G2 logical + G3 published from current seeds", () => {
-    let logical: LogicalCatalogGolden
+  it("freezes G1 native wire + G2 logical + G3 published from current seeds", () => {
+    const sample = resolve(repoRoot, "deploy/sync/artifacts/entities/dataset.json")
+    const raw = JSON.parse(readFileSync(sample, "utf-8")) as unknown
+    expect(isEntityDefinitionSeed(raw)).toBe(true)
 
-    if (entitiesAreNative()) {
-      logical = buildG2LogicalFromNativeSeeds(repoRoot)
-      if (updateGoldens) {
-        writeGolden("g2-logical.json", logical)
-        writeGolden("g3-published.json", buildG3PublishedFromLogical(repoRoot, logical))
-      }
-    } else {
-      const authored = loadShippedAuthoredEntities(repoRoot)
-      expect(Object.keys(authored).sort()).toEqual([...ENTITY_IDS].sort())
-      for (const id of ENTITY_IDS) {
-        expect(isAuthoredSyncDefinitionSeed(authored[id])).toBe(true)
-      }
-
-      const g1 = buildG1WireGolden(repoRoot)
-      logical = buildG2LogicalFromAuthored(repoRoot, authored)
-      const g3 = buildG3PublishedFromLogical(repoRoot, logical)
-
-      if (updateGoldens) {
-        writeGolden("g1-wire.json", g1)
-        writeGolden("g2-logical.json", logical)
-        writeGolden("g3-published.json", g3)
-      }
-
-      expect(g1).toEqual(readGolden("g1-wire.json"))
-    }
-
+    const g1 = buildG1WireGolden(repoRoot)
+    const logical: LogicalCatalogGolden = buildG2LogicalFromNativeSeeds(repoRoot)
     const g3 = buildG3PublishedFromLogical(repoRoot, logical)
 
+    if (updateGoldens) {
+      writeGolden("g1-wire.json", g1)
+      writeGolden("g2-logical.json", logical)
+      writeGolden("g3-published.json", g3)
+    }
+
+    expect(Object.keys(g1.entities).sort()).toEqual([...ENTITY_IDS].sort())
+    expect(Object.keys(g1.configs).sort()).toEqual([...ENTITY_IDS].sort())
     expect(Object.keys(logical.entities).sort()).toEqual([...ENTITY_IDS].sort())
     expect(Object.keys(logical.configs).sort()).toEqual([...ENTITY_IDS].sort())
     expect(Object.keys(g3.definitions).sort()).toEqual([...ENTITY_IDS].sort())
 
-    // Exhaustive field checks via deep equality to frozen goldens
+    expect(g1).toEqual(readGolden("g1-wire.json"))
     expect(logical).toEqual(readGolden("g2-logical.json"))
     expect(g3).toEqual(readGolden("g3-published.json"))
 
-    // Explicit coverage of flows / steps / inputs (sync-metadata)
+    // G1 native wire matches G2 logical (same stamp normalize)
+    expect(g1.entities).toEqual(logical.entities)
+    expect(g1.configs).toEqual(logical.configs)
+
     const meta = logical.syncMetadata as {
       flows: Record<string, { steps: Array<{ id: string; kind: string; inputs?: unknown }> }>
       actions: unknown[]
@@ -98,26 +77,26 @@ describe("legacy refresh goldens (Phase 0)", () => {
     expect(meta.phases.length).toBeGreaterThan(0)
     expect(meta.actions.length).toBeGreaterThan(0)
     expect(meta.valueSources.length).toBeGreaterThan(0)
+    expect(Object.keys(meta.flows).length).toBeGreaterThan(0)
+
     for (const id of ENTITY_IDS) {
-      const flow = meta.flows[id]
-      expect(flow, `missing flow ${id}`).toBeTruthy()
-      expect(flow.steps.length).toBeGreaterThan(0)
-      expect(flow.steps.some((step) => step.kind === "metadataSync")).toBe(true)
-
-      const entity = logical.entities[id]!
-      expect(entity.tables.length).toBeGreaterThan(0)
-      for (const table of entity.tables) {
-        expect(table.scope.kind === "rootPk" || table.scope.kind === "sql").toBe(true)
-        if (table.scope.kind === "sql") {
-          expect(table.scope.predicate.length).toBeGreaterThan(0)
-        }
-      }
-
       const published = g3.definitions[id]!
-      expect(published.metadata.tables.length).toBe(entity.tables.length)
       expect(published.executionFlow.steps.length).toBeGreaterThan(0)
-      expect(published.executionFlow.catalog).toBeTruthy()
-      expect(Object.keys(published.executionFlow.catalog!.kinds).length).toBeGreaterThan(0)
+      expect(published.metadata.tables.length).toBeGreaterThan(0)
+    }
+  })
+
+  it("keeps frozen Authored historical wire for conversion tests", () => {
+    const path = join(goldensRoot, "g1-authored-historical.json")
+    expect(existsSync(path)).toBe(true)
+    const historical = JSON.parse(readFileSync(path, "utf-8")) as {
+      entities: Record<string, { schemaVersion: number; metadata: { tables: unknown[] } }>
+    }
+    expect(Object.keys(historical.entities).sort()).toEqual([...ENTITY_IDS].sort())
+    for (const id of ENTITY_IDS) {
+      const authored = historical.entities[id]!
+      expect(authored.schemaVersion).toBe(1)
+      expect(authored.metadata.tables.length).toBeGreaterThan(0)
     }
   })
 })

@@ -1,5 +1,5 @@
 /**
- * Integration tests — full A ↔ B format flows and cross-format safety.
+ * Integration tests — Catalog snapshot + Authored compat conversion round-trips.
  */
 
 import Database from "better-sqlite3"
@@ -12,17 +12,11 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
 import { entityDefinitionFromAuthoredSync, loadSyncDefinitionFlowTemplateCatalog, validateEntityDefinition } from "@mia/sync"
 
-import { exportDeployGitZipBuffer } from "../src/api/platform/service/export-deploy-git-artifacts.js"
 import {
   applyDeployCatalogSnapshot,
   validateDeployCatalogSnapshot,
 } from "../src/api/platform/service/import-deploy-artifacts.js"
 import { buildDeployCatalogSnapshot } from "../src/api/platform/service/export-deploy-artifacts.js"
-import {
-  applyDeployGitBundle,
-  parseDeployGitBundleFromDir,
-} from "../src/api/platform/service/import-deploy-git-artifacts.js"
-import { writeDeployGitExport } from "../src/api/platform/service/export-deploy-git-artifacts.js"
 import { ensureSyncDefinitionConfigs } from "../src/api/sync/service/definitions.js"
 import { importAuthoredSyncFromText, importOneAuthoredSync } from "../src/api/sync/service/import-authored-sync.js"
 import {
@@ -37,6 +31,22 @@ let testDb: Database.Database
 let dataDir: string
 let projectRoot: string
 const ORIGINAL_DATA_DIR = process.env["MIA_DATA_DIR"]
+
+const G1_AUTHORED = resolve(
+  fileURLToPath(
+    new URL(
+      "../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-authored-historical.json",
+      import.meta.url,
+    ),
+  ),
+)
+
+function loadG1Authored(): Record<string, AuthoredSyncDefinition> {
+  const g1 = JSON.parse(readFileSync(G1_AUTHORED, "utf-8")) as {
+    entities: Record<string, AuthoredSyncDefinition>
+  }
+  return g1.entities
+}
 
 function seedRepoArtifacts(root: string): void {
   const repoDeploySync = resolve(fileURLToPath(new URL("../../../deploy/sync", import.meta.url)))
@@ -101,14 +111,8 @@ describe("artifact format round-trip integration", () => {
     process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
   })
 
-  it("G1 Authored → EntityDefinition → Authored preserves core entity semantics for dataset", () => {
-    const g1Path = resolve(
-      fileURLToPath(new URL("../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-wire.json", import.meta.url)),
-    )
-    const g1 = JSON.parse(readFileSync(g1Path, "utf-8")) as {
-      entities: Record<string, AuthoredSyncDefinition>
-    }
-    const seed = g1.entities.dataset
+  it("historical Authored → EntityDefinition → Authored preserves core entity semantics for dataset", () => {
+    const seed = loadG1Authored().dataset
     expect(seed).toBeTruthy()
 
     const entityB = entityDefinitionFromAuthoredSync(seed!)
@@ -172,42 +176,29 @@ describe("artifact format round-trip integration", () => {
     expect(db.getSyncDefinitionConfig("_default", "dataset")?.flow_preset).toBeTruthy()
   })
 
-  it("deploy git bulk export/import round-trip restores retired entities", () => {
-    const parent = mkdtempSync(join(tmpdir(), "artifact-roundtrip-export-"))
-    try {
-      const exported = writeDeployGitExport({
-        outputParentDir: parent,
-        projectRoot,
-        tenantId: "_default",
-      })
-      const bundle = parseDeployGitBundleFromDir(exported.folderPath)
+  it("catalog snapshot export/import restores retired entities", () => {
+    const snapshot = buildDeployCatalogSnapshot({
+      tenantId: "_default",
+      includeRetiredEntities: true,
+    })
 
-      for (const row of db.listEntityDefinitions("_default")) {
-        db.retireEntityDefinition("_default", row.id, "test")
-      }
-      expect(db.listEntityDefinitions("_default").length).toBe(0)
-
-      const applied = applyDeployGitBundle({
-        bundle,
-        actor: "test",
-        projectRoot,
-        dryRun: false,
-      })
-      expect(applied.applied).toBe(true)
-      expect(db.listEntityDefinitions("_default").length).toBeGreaterThan(0)
-    } finally {
-      rmSync(parent, { recursive: true, force: true })
+    for (const row of db.listEntityDefinitions("_default")) {
+      db.retireEntityDefinition("_default", row.id, "test")
     }
+    expect(db.listEntityDefinitions("_default").length).toBe(0)
+
+    const applied = applyDeployCatalogSnapshot({
+      snapshot,
+      actor: "test",
+      projectRoot,
+      dryRun: false,
+    })
+    expect(applied.applied).toBe(true)
+    expect(db.listEntityDefinitions("_default").length).toBeGreaterThan(0)
   })
 
   it("per-entity Authored import (compat) then export round-trips through SQLite", () => {
-    const g1Path = resolve(
-      fileURLToPath(new URL("../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-wire.json", import.meta.url)),
-    )
-    const g1 = JSON.parse(readFileSync(g1Path, "utf-8")) as {
-      entities: Record<string, AuthoredSyncDefinition>
-    }
-    const seed = g1.entities.gateMetadata!
+    const seed = loadG1Authored().gateMetadata!
     importAuthoredSyncFromText({
       tenantId: "_default",
       actor: "test",
@@ -231,13 +222,7 @@ describe("artifact format round-trip integration", () => {
   })
 
   it("metadataOnly flow survives Authored import via step-kind inference", () => {
-    const g1Path = resolve(
-      fileURLToPath(new URL("../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-wire.json", import.meta.url)),
-    )
-    const g1 = JSON.parse(readFileSync(g1Path, "utf-8")) as {
-      entities: Record<string, AuthoredSyncDefinition>
-    }
-    const seed = g1.entities.dataset!
+    const seed = loadG1Authored().dataset!
     const metadataOnly = {
       ...seed,
       executionFlow: { steps: [{ kind: "metadataSync" }] },
@@ -255,14 +240,5 @@ describe("artifact format round-trip integration", () => {
     })
     expect(result.error).toBeUndefined()
     expect(db.getSyncDefinitionConfig("_default", "dataset")?.flow_preset).toBe("metadataOnly")
-  })
-
-  it("deploy git zip buffer export contains entity artifacts", () => {
-    const { buffer, filename, entityIds } = exportDeployGitZipBuffer(projectRoot, {
-      tenantId: "_default",
-    })
-    expect(buffer.length).toBeGreaterThan(0)
-    expect(filename).toMatch(/^mia-deploy-artifacts-/)
-    expect(entityIds).toContain("dataset")
   })
 })

@@ -1,34 +1,13 @@
 /**
- * Export guards — every export path must emit import-safe JSON only.
+ * Export guards — Catalog export paths must emit import-safe JSON only.
  */
 
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
-import type { AuthoredSyncDefinition } from "@mia/shared-types"
-import {
-  entityDefinitionFromAuthoredSync,
-  isDegradedLegacyFallbackPredicate,
-  looksIncompleteScopePredicate,
-} from "@mia/sync"
-
-import {
-  EntityExportValidationError,
-} from "../src/api/sync/service/assert-entity-export.js"
+import { EntityExportValidationError } from "../src/api/sync/service/assert-entity-export.js"
 import { buildDeployCatalogSnapshot } from "../src/api/platform/service/export-deploy-artifacts.js"
-import { exportDeployGitZipBuffer } from "../src/api/platform/service/export-deploy-git-artifacts.js"
-import { parseDeployGitZipBuffer } from "../src/api/platform/service/import-deploy-git-artifacts.js"
 import { validateDeployCatalogSnapshot } from "../src/api/platform/service/import-deploy-artifacts.js"
-import {
-  entityToAuthoredSyncDefinition,
-  formatAuthoredSyncJson,
-  syncConfigInputFromDb,
-} from "../src/api/sync/types/authored-sync-document.js"
 import { formatEntityJson, parseEntitiesJson } from "../src/api/sync/types/entity-yaml.js"
-import { loadAuthoringFlowCatalog } from "../src/api/sync/service/definitions.js"
-import {
-  importAuthoredSyncFromText,
-  importOneAuthoredSync,
-} from "../src/api/sync/service/import-authored-sync.js"
 import * as db from "../src/infra/persistence/db/index.js"
 import {
   buildEntityRegistryApp,
@@ -81,27 +60,6 @@ function corruptContentContentTypePredicate(): void {
   `)
 }
 
-function assertAuthoredImportable(authored: AuthoredSyncDefinition): void {
-  for (const table of authored.metadata.tables) {
-    expect(looksIncompleteScopePredicate(table.predicate)).toBe(false)
-    expect(isDegradedLegacyFallbackPredicate(table.predicate)).toBe(false)
-    expect(table.note ?? "").not.toMatch(/Predicate unresolved from legacy pipeline variable/)
-  }
-  const reimported = entityDefinitionFromAuthoredSync(authored, TENANT)
-  const flowTemplateCatalog = loadAuthoringFlowCatalog(fixture.projectRoot, TENANT)
-  const result = importOneAuthoredSync({
-    authored,
-    tenantId: TENANT,
-    actor: "export-guard",
-    reason: "round-trip",
-    projectRoot: fixture.projectRoot,
-    dryRun: true,
-    flowTemplateCatalog,
-  })
-  expect(result.error, `${authored.id} dry-run import`).toBeUndefined()
-  expect(reimported.tables.length).toBe(authored.metadata.tables.length)
-}
-
 beforeEach(async () => {
   fixture = await setupCatalogOperatorFixture()
 })
@@ -112,31 +70,6 @@ afterEach(() => {
 
 describe("entity export guards — per-entity paths", () => {
   for (const entityId of CORE_ENTITIES) {
-    it(`deploy artifact export for ${entityId} is import-safe`, () => {
-      const entity = db.getEntityDefinition(TENANT, entityId)
-      const config = db.getSyncDefinitionConfig(TENANT, entityId)
-      expect(entity).toBeTruthy()
-      expect(config).toBeTruthy()
-
-      const catalog = loadAuthoringFlowCatalog(fixture.projectRoot, TENANT)
-      const authored = entityToAuthoredSyncDefinition(
-        entity!,
-        catalog,
-        syncConfigInputFromDb(config!),
-      )
-      assertAuthoredImportable(authored)
-
-      const applied = importAuthoredSyncFromText({
-        tenantId: TENANT,
-        actor: "export-guard",
-        reason: `${entityId}-round-trip`,
-        content: formatAuthoredSyncJson(authored),
-        projectRoot: fixture.projectRoot,
-        dryRun: true,
-      })
-      expect(applied.ok).toBe(true)
-    })
-
     it(`registry JSON export for ${entityId} is import-safe`, () => {
       const entity = db.getEntityDefinition(TENANT, entityId)
       const config = db.getSyncDefinitionConfig(TENANT, entityId)
@@ -161,32 +94,9 @@ describe("entity export guards — bulk paths", () => {
     expect(preview.ok).toBe(true)
     expect(preview.errors).toEqual([])
   })
-
-  it("deploy git zip export contains only import-safe authored artifacts", () => {
-    const { buffer } = exportDeployGitZipBuffer(fixture.projectRoot, { tenantId: TENANT })
-    expect(buffer.length).toBeGreaterThan(0)
-
-    const bundle = parseDeployGitZipBuffer(buffer)
-    for (const entityId of CORE_ENTITIES) {
-      const authored = bundle.entities.find((entity) => entity.id === entityId)
-      expect(authored, `missing ${entityId} in deploy zip export`).toBeTruthy()
-      assertAuthoredImportable(authored!)
-    }
-  })
 })
 
 describe("entity export guards — corrupt SQLite blocked at export", () => {
-  it("per-entity deploy artifact export fails when SQLite has degraded predicates", () => {
-    corruptContentContentTypePredicate()
-    const entity = db.getEntityDefinition(TENANT, "content")
-    const config = db.getSyncDefinitionConfig(TENANT, "content")
-    const catalog = loadAuthoringFlowCatalog(fixture.projectRoot, TENANT)
-
-    expect(() =>
-      entityToAuthoredSyncDefinition(entity!, catalog, syncConfigInputFromDb(config!)),
-    ).toThrow(EntityExportValidationError)
-  })
-
   it("catalog snapshot export fails when any entity is not exportable", () => {
     corruptContentContentTypePredicate()
     expect(() => buildDeployCatalogSnapshot({ tenantId: TENANT })).toThrow(
@@ -194,12 +104,12 @@ describe("entity export guards — corrupt SQLite blocked at export", () => {
     )
   })
 
-  it("HTTP artifact export returns 409 when entity is not exportable", async () => {
+  it("HTTP registry JSON export returns 409 when entity is not exportable", async () => {
     corruptContentContentTypePredicate()
     const app = await buildEntityRegistryApp(fixture)
     const response = await app.inject({
       method: "GET",
-      url: "/api/entity-registry/entities/content/artifact.json",
+      url: "/api/entity-registry/entities/content/registry.json",
     })
     expect(response.statusCode).toBe(409)
     const body = response.json() as { error: string; entityId: string }

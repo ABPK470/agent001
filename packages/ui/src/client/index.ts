@@ -567,14 +567,6 @@ export const api = {
         { method: "POST", body: JSON.stringify(body ?? {}) },
       ),
     ),
-  downloadDeployArtifacts: (body?: { includeRetiredEntities?: boolean }) =>
-    import("../lib/userDownload.js").then(({ downloadAuthenticated }) =>
-      downloadAuthenticated(
-        "/api/platform/deploy-artifacts/export/download",
-        "mia-deploy-artifacts.zip",
-        { method: "POST", body: JSON.stringify(body ?? {}) },
-      ),
-    ),
   listSyncCatalogVersions: () =>
     json<{
       ok: boolean
@@ -660,14 +652,6 @@ export const api = {
       method: "POST",
       body: JSON.stringify(body),
     }),
-  importDeployArtifacts: (body: { zipBase64: string; dryRun?: boolean; reason?: string }) =>
-    json<import("@mia/shared-types").PlatformImportGateResult>(
-      "/api/platform/deploy-artifacts/import",
-      {
-        method: "POST",
-        body: JSON.stringify(body),
-      },
-    ),
   rollbackSyncCatalog: (body: { version: number; dryRun?: boolean; reason?: string }) =>
     json<import("@mia/shared-types").PlatformImportGateResult>("/api/platform/catalog/rollback", {
       method: "POST",
@@ -1094,17 +1078,6 @@ export const api = {
     if (!res.ok) throw new Error(await res.text())
     return await res.text()
   },
-  getEntityDeployArtifactJson: async (id: string, opts?: { tenant?: string }): Promise<string> => {
-    const p = new URLSearchParams()
-    if (opts?.tenant) p.set("tenant", opts.tenant)
-    const qs = p.toString()
-    const res = await fetch(
-      `${BASE}/api/entity-registry/entities/${encodeURIComponent(id)}/artifact.json${qs ? `?${qs}` : ""}`,
-      { credentials: "include" },
-    )
-    if (!res.ok) throw new Error(await res.text())
-    return await res.text()
-  },
   suggestEntityRegistryDraft: (rootTable: string, opts?: { tenant?: string }) => {
     const p = new URLSearchParams()
     p.set("rootTable", rootTable)
@@ -1207,18 +1180,6 @@ export const api = {
     const qs = p.toString()
     return json<import("../types").EntityRegistryYamlImportResponse>(
       `/api/entity-registry/entities/import-registry-json${qs ? `?${qs}` : ""}`,
-      {
-        method: "POST",
-        body: JSON.stringify({ json: jsonStr, reason, dryRun: opts?.dryRun ?? false }),
-      },
-    )
-  },
-  importEntityDeployArtifact: (jsonStr: string, reason: string, opts?: { tenant?: string; dryRun?: boolean }) => {
-    const p = new URLSearchParams()
-    if (opts?.tenant) p.set("tenant", opts.tenant)
-    const qs = p.toString()
-    return json<import("../types").EntityRegistryYamlImportResponse>(
-      `/api/entity-registry/entities/import-artifact${qs ? `?${qs}` : ""}`,
       {
         method: "POST",
         body: JSON.stringify({ json: jsonStr, reason, dryRun: opts?.dryRun ?? false }),

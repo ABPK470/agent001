@@ -1,5 +1,5 @@
 /**
- * Deploy artifact import — A → B per entity.
+ * Authored import compat — A → B per entity (historical Authored wire).
  */
 
 import Database from "better-sqlite3"
@@ -19,6 +19,24 @@ let testDb: Database.Database
 let dataDir: string
 let projectRoot: string
 const ORIGINAL_DATA_DIR = process.env["MIA_DATA_DIR"]
+
+const G1_AUTHORED = resolve(
+  fileURLToPath(
+    new URL(
+      "../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-authored-historical.json",
+      import.meta.url,
+    ),
+  ),
+)
+
+function loadHistoricalAuthored(entityId: string): AuthoredSyncDefinition {
+  const g1 = JSON.parse(readFileSync(G1_AUTHORED, "utf-8")) as {
+    entities: Record<string, AuthoredSyncDefinition>
+  }
+  const authored = g1.entities[entityId]
+  if (!authored) throw new Error(`Missing historical Authored entity ${entityId}`)
+  return authored
+}
 
 function seedRepoArtifacts(root: string): void {
   const repoDeploySync = resolve(fileURLToPath(new URL("../../../deploy/sync", import.meta.url)))
@@ -57,7 +75,7 @@ async function setupEmptyDb(): Promise<void> {
   seedSyncMetadataIfEmpty(projectRoot)
 }
 
-describe("deploy artifact import (A → B)", () => {
+describe("authored import compat (A → B)", () => {
   beforeEach(async () => {
     await setupEmptyDb()
   })
@@ -68,9 +86,8 @@ describe("deploy artifact import (A → B)", () => {
     process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
   })
 
-  it("imports dataset.json into entity registry with sync config", () => {
-    const seedPath = resolve(projectRoot, "deploy/sync/artifacts/entities/dataset.json")
-    const seed = JSON.parse(readFileSync(seedPath, "utf-8")) as AuthoredSyncDefinition
+  it("imports historical dataset Authored into entity registry with sync config", () => {
+    const seed = loadHistoricalAuthored("dataset")
 
     const preview = importAuthoredSyncFromText({
       tenantId: "_default",
@@ -104,9 +121,8 @@ describe("deploy artifact import (A → B)", () => {
     expect(config?.flow_preset).toBeTruthy()
   })
 
-  it("updates an existing entity when re-importing artifact", () => {
-    const seedPath = resolve(projectRoot, "deploy/sync/artifacts/entities/dataset.json")
-    const seed = JSON.parse(readFileSync(seedPath, "utf-8")) as AuthoredSyncDefinition
+  it("updates an existing entity when re-importing Authored JSON", () => {
+    const seed = loadHistoricalAuthored("dataset")
     const content = formatAuthoredSyncJson(seed)
 
     importAuthoredSyncFromText({
@@ -118,7 +134,7 @@ describe("deploy artifact import (A → B)", () => {
       dryRun: false,
     })
 
-    const updated = { ...seed, description: "Updated via artifact re-import" }
+    const updated = { ...seed, description: "Updated via authored re-import" }
     const second = importAuthoredSyncFromText({
       tenantId: "_default",
       actor: "test",
@@ -132,7 +148,7 @@ describe("deploy artifact import (A → B)", () => {
     expect(db.getEntityDefinition("_default", "dataset")?.description).toBe(updated.description)
   })
 
-  it("rejects invalid artifact JSON", () => {
+  it("rejects invalid Authored JSON", () => {
     const result = importAuthoredSyncFromText({
       tenantId: "_default",
       actor: "test",

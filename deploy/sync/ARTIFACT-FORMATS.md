@@ -42,7 +42,7 @@ deploy/sync seeds (native Catalog JSON)
 | `artifacts/flow-templates.json` | View of flows (compile helper) |
 | `sync-environments.json` | Environments |
 
-Generator path: derive Authored in memory → `entityDefinitionFromAuthoredSync` → write EntityDefinition + configs (`packages/sync/scripts/materialize-native-entity-seeds.ts`). Semantic goldens: `packages/sync/src/test-support/__goldens__/legacy-refresh/` (G2 logical catalog, G3 published process JSON).
+Generator path: derive Authored in memory → `entityDefinitionFromAuthoredSync` → write EntityDefinition + configs (`packages/sync/scripts/materialize-native-entity-seeds.ts`). Goldens: `packages/sync/src/test-support/__goldens__/legacy-refresh/` — G1 native wire, G2 logical catalog, G3 published process JSON.
 
 ---
 
