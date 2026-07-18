@@ -36,7 +36,7 @@ export interface DeployCatalogSnapshot {
    * On disk, entities are written as artifacts/entities/{id}.json (seed mirror).
    */
   entityRegistry: EntityRegistryExportDocument | null
-  /** @deprecated Legacy zip compat only — new exports leave this null. */
+  /** Legacy zip import only — new exports always null (no tip configs dialect). */
   syncDefinitionConfigs: SyncDefinitionConfigExportDocument | null
   entityIds: string[]
 }

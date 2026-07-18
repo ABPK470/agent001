@@ -24,7 +24,6 @@ import {
 } from "../src/api/platform/service/sync-catalog-versioning.js"
 import { publishSyncDefinitionsFromDb } from "../src/api/sync/service/definitions.js"
 import {
-  ensureSyncDefinitionConfigs,
   listSyncDefinitionAdminItems,
   loadAuthoringFlowCatalog,
 } from "../src/api/sync/service/definitions.js"
@@ -79,7 +78,6 @@ async function setupDb(): Promise<void> {
   )
   seedEntityRegistryIfEmpty(projectRoot)
   seedSyncMetadataIfEmpty(projectRoot)
-  ensureSyncDefinitionConfigs(projectRoot)
 }
 
 describe("catalog import/export round-trip", () => {
@@ -106,10 +104,6 @@ describe("catalog import/export round-trip", () => {
     const preview = validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(true)
 
-    for (const row of db.listSyncDefinitionConfigs("_default")) {
-      db.deleteSyncDefinitionConfig("_default", row.entity_id)
-    }
-
     const applied = applyDeployCatalogSnapshot({
       snapshot,
       actor: "test",
@@ -119,8 +113,7 @@ describe("catalog import/export round-trip", () => {
     expect(applied.ok).toBe(true)
     expect(applied.applied).toBe(true)
 
-    const restored = db.getSyncDefinitionConfig("_default", "dataset")
-    expect(restored?.flow_preset).toBe(flowPreset)
+    expect(db.getEntityDefinition("_default", "dataset")?.flowId).toBe(flowPreset)
 
     const adminItems = listSyncDefinitionAdminItems(projectRoot)
     const datasetItem = adminItems.find((item) => item.id === "dataset")
@@ -139,19 +132,13 @@ describe("catalog import/export round-trip", () => {
     expect("metadataOnly" in catalog.flowTemplates).toBe(true)
     expect("dataset" in catalog.flowTemplates).toBe(true)
 
-    db.saveSyncDefinitionConfig({
-      tenant_id: "_default",
-      entity_id: "dataset",
-      flow_preset: "metadataOnly",
-      execution_steps_json: "[]",
-      service_profile_ref: "default",
-      environment_policy_ref: "default",
-      ownership_team: "sync-platform",
-      ownership_owner: null,
-      review_status: "legacy-review-required",
-      ownership_notes_json: JSON.stringify(["test"]),
-      updated_at: new Date().toISOString(),
-      updated_by: "test",
+    const entity = db.getEntityDefinition("_default", "dataset")
+    expect(entity).toBeTruthy()
+    db.saveEntityDefinition({
+      tenantId: "_default",
+      actor: "test",
+      reason: "test-flowId",
+      def: { ...entity!, flowId: "metadataOnly" },
     })
 
     const items = listSyncDefinitionAdminItems(projectRoot)

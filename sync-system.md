@@ -143,7 +143,7 @@ Preview (`previewSync`) will fail fast if any prerequisite is missing or invalid
    - Else synthesize one env per MSSQL connection (`role: both`)
    - Merge legacy `sync_env_overrides`
 3. **Entity registry (SQLite)** — versioned `EntityDefinition` rows (tables, scopes, SCD2 strategy refs, policies). Edited via Sync Admin / entity registry UI.
-4. **Sync definition configs** — per-entity admin config (flow template, execution steps, bindings, ownership). Seeded from `deploy/sync/artifacts/entities/*.json`.
+4. **Entity `flowId`** — which flow template to publish for each entity (on the entity document itself). Bindings/ownership are compose-time stubs at Publish, not a tip table.
 5. **Publish definitions** — `POST /api/sync/definitions/publish` → writes `sync-definitions/published/definitions.bundle.json`.
 6. **Freeze window registry** — DB definitions installed via `installFreezeWindowRegistry()` for tenant `_default`.
 7. **Plan store directory** — `MIA_DATA_DIR/sync-plans/` (default `~/.mia/sync-plans/`) created if missing.

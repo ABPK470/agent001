@@ -124,21 +124,6 @@ export interface DbSyncEnvironment {
   updated_by: string | null
 }
 
-export interface DbSyncDefinitionConfig {
-  tenant_id: string
-  entity_id: string
-  flow_preset: string
-  execution_steps_json: string
-  service_profile_ref: string
-  environment_policy_ref: string
-  ownership_team: string
-  ownership_owner: string | null
-  review_status: "legacy-review-required" | "reviewed"
-  ownership_notes_json: string
-  updated_at: string
-  updated_by: string | null
-}
-
 export function listSyncEnvOverrides(): DbSyncEnvOverride[] {
   return getDb()
     .prepare("SELECT * FROM sync_environment_overrides ORDER BY name")
@@ -194,68 +179,4 @@ export function saveSyncEnvironment(row: DbSyncEnvironment): void {
 
 export function deleteSyncEnvironment(name: string): void {
   getDb().prepare("DELETE FROM sync_environments WHERE name = ?").run(name)
-}
-
-export function countSyncDefinitionConfigs(tenantId: string): number {
-  const row = getDb()
-    .prepare("SELECT COUNT(*) AS count FROM sync_definition_configs WHERE tenant_id = ?")
-    .get(tenantId) as { count: number }
-  return row.count
-}
-
-export function listSyncDefinitionConfigs(tenantId: string): DbSyncDefinitionConfig[] {
-  return getDb()
-    .prepare("SELECT * FROM sync_definition_configs WHERE tenant_id = ? ORDER BY entity_id")
-    .all(tenantId) as DbSyncDefinitionConfig[]
-}
-
-export function getSyncDefinitionConfig(
-  tenantId: string,
-  entityId: string
-): DbSyncDefinitionConfig | undefined {
-  return getDb()
-    .prepare("SELECT * FROM sync_definition_configs WHERE tenant_id = ? AND entity_id = ?")
-    .get(tenantId, entityId) as DbSyncDefinitionConfig | undefined
-}
-
-export function saveSyncDefinitionConfig(row: DbSyncDefinitionConfig): void {
-  getDb()
-    .prepare(
-      `
-    INSERT OR REPLACE INTO sync_definition_configs (
-      tenant_id,
-      entity_id,
-      flow_preset,
-      execution_steps_json,
-      service_profile_ref,
-      environment_policy_ref,
-      ownership_team,
-      ownership_owner,
-      review_status,
-      ownership_notes_json,
-      updated_at,
-      updated_by
-    ) VALUES (
-      @tenant_id,
-      @entity_id,
-      @flow_preset,
-      @execution_steps_json,
-      @service_profile_ref,
-      @environment_policy_ref,
-      @ownership_team,
-      @ownership_owner,
-      @review_status,
-      @ownership_notes_json,
-      @updated_at,
-      @updated_by
-    )
-  `
-    )
-    .run(row)
-}
-
-export function deleteSyncDefinitionConfig(tenantId: string, entityId: string): void {
-  getDb()
-    .prepare("DELETE FROM sync_definition_configs WHERE tenant_id = ? AND entity_id = ?")
-    .run(tenantId, entityId)
 }

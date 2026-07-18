@@ -25,8 +25,7 @@ import {
   getSyncPublishStatus,
   PublishSyncDefinitionsError,
   publishSyncDefinitionsFromDb,
-  resetSyncDefinitionConfig,
-  upsertSyncDefinitionConfig
+  resetEntityFlowId,
 } from "./service/definitions.js"
 import {
   buildSyncAuditDetail,
@@ -287,20 +286,6 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         actor: req.session.upn,
         reason: "sync-definition-config:flowId",
       })
-      upsertSyncDefinitionConfig(projectRoot, {
-        tenant_id: "_default",
-        entity_id: req.params.entityId,
-        flow_preset: flowId,
-        execution_steps_json: "[]",
-        service_profile_ref: "default",
-        environment_policy_ref: "default",
-        ownership_team: "sync-platform",
-        ownership_owner: null,
-        review_status: "legacy-review-required",
-        ownership_notes_json: JSON.stringify(["Derived from entity.flowId."]),
-        updated_at: new Date().toISOString(),
-        updated_by: req.session.upn,
-      })
       broadcast({
         type: EventType.SyncDefinitionsPublished,
         data: { action: "config-updated", entityId: req.params.entityId, actor: req.session.upn }
@@ -315,7 +300,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         reply.code(403)
         return { error: "admin only" }
       }
-      const reset = resetSyncDefinitionConfig(projectRoot, "_default", req.params.entityId)
+      const reset = resetEntityFlowId(projectRoot, "_default", req.params.entityId, req.session.upn)
       if (!reset) {
         reply.code(404)
         return { error: `unknown entity \"${req.params.entityId}\"` }

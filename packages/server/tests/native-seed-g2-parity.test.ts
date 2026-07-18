@@ -70,13 +70,12 @@ afterEach(() => {
 })
 
 describe("native seed ≡ G2 logical catalog", () => {
-  it("boot seed + ensure configs match frozen G2 entities and run bindings", async () => {
-    const { _setDb, _migrate, listEntityDefinitions, listSyncDefinitionConfigs } = await import(
+  it("boot seed matches frozen G2 entities and flowId bindings", async () => {
+    const { _setDb, _migrate, listEntityDefinitions } = await import(
       "../src/infra/persistence/db/index.js"
     )
     const { seedEntityRegistryIfEmpty } = await import("../src/api/sync/service/seed-entity-registry.js")
     const { seedSyncMetadataIfEmpty } = await import("../src/api/sync/service/seed-sync-metadata.js")
-    const { ensureSyncDefinitionConfigs } = await import("../src/api/sync/service/definitions.js")
 
     _setDb(testDb)
     _migrate(testDb)
@@ -84,23 +83,10 @@ describe("native seed ≡ G2 logical catalog", () => {
     expect(seeded.source).toBe("artifacts")
     expect(seeded.seeded).toBeGreaterThan(0)
     seedSyncMetadataIfEmpty(projectRoot)
-    ensureSyncDefinitionConfigs(projectRoot)
 
     const g2 = JSON.parse(readFileSync(G2_PATH, "utf-8")) as {
       entities: Record<string, EntityDefinition>
-      configs: Record<
-        string,
-        {
-          entityId: string
-          flowPreset: string
-          serviceProfileRef: string
-          environmentPolicyRef: string
-          ownershipTeam: string
-          ownershipOwner: string | null
-          reviewStatus: string
-          ownershipNotes: string[]
-        }
-      >
+      configs: Record<string, { entityId: string; flowPreset: string }>
     }
 
     const entities = listEntityDefinitions("_default")
@@ -109,15 +95,7 @@ describe("native seed ≡ G2 logical catalog", () => {
     for (const entity of entities) {
       const expected = g2.entities[entity.id]!
       expect(normalizeEntity(entity)).toEqual(normalizeEntity(expected))
-    }
-
-    const configs = listSyncDefinitionConfigs("_default")
-    expect(configs.map((c) => c.entity_id).sort()).toEqual(Object.keys(g2.configs).sort())
-    for (const row of configs) {
-      const expected = g2.configs[row.entity_id]!
-      expect(row.flow_preset).toBe(expected.flowPreset)
-      expect(row.service_profile_ref).toBe("default")
-      expect(row.environment_policy_ref).toBe("default")
+      expect(entity.flowId).toBe(g2.configs[entity.id]!.flowPreset)
     }
   })
 

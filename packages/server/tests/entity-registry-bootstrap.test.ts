@@ -71,15 +71,16 @@ describe("entity registry bootstrap", () => {
     expect(db.listEntityDefinitions("_default")).toHaveLength(6)
   })
 
-  it("creates sync definition configs after entity seed via boot hook", async () => {
+  it("seeds entities with flowId via boot hook (no configs table)", async () => {
     await setup()
     const { loadBootSyncEnvironments } = await import("../src/boot/sync-environments.js")
     const db = await import("../src/infra/persistence/sqlite.js")
 
     loadBootSyncEnvironments(repoRoot, [])
 
-    expect(db.listEntityDefinitions("_default").length).toBeGreaterThan(0)
-    expect(db.listSyncDefinitionConfigs("_default").length).toBeGreaterThan(0)
+    const entities = db.listEntityDefinitions("_default")
+    expect(entities.length).toBeGreaterThan(0)
+    expect(entities.every((entity) => Boolean(entity.flowId?.trim()))).toBe(true)
   })
 
   it("seeds flow presets on a fresh database after migrations", async () => {

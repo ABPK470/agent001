@@ -30,7 +30,7 @@ import {
   parseEntitiesJson,
   parseEntitiesYaml
 } from "../types/entity-yaml.js"
-import { syncDerivedConfigFromFlowId, validateEntityFlowId } from "../service/apply-entity-run-yaml.js"
+import { validateEntityFlowId } from "../service/apply-entity-run-yaml.js"
 import {
   assertEntityExportable,
   assertTenantEntitiesExportable,
@@ -119,15 +119,6 @@ function importEntitiesFromText(args: {
         reason: args.reason
       })
       saved.push({ id: result.id, version: result.version, created })
-      if (args.projectRoot) {
-        syncDerivedConfigFromFlowId(
-          args.projectRoot,
-          args.tenantId,
-          result.id,
-          defWithTenant.flowId,
-          args.actor,
-        )
-      }
       broadcast({
         type: EventType.EntityRegistryImported,
         data: {
@@ -371,15 +362,6 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           versionLabel: req.body.versionLabel ?? null,
           createOnly: req.body.createOnly === true,
         })
-        if (projectRoot) {
-          syncDerivedConfigFromFlowId(
-            projectRoot,
-            tenantId,
-            result.id,
-            req.body.def.flowId,
-            req.session.upn,
-          )
-        }
         audit(req, "entity_registry.saved", {
           tenantId,
           id: result.id,

@@ -69,12 +69,8 @@ export async function setupCatalogOperatorFixture(): Promise<CatalogOperatorFixt
   const { seedSyncMetadataIfEmpty } = await import(
     "../../src/api/sync/service/seed-sync-metadata.js"
   )
-  const { ensureSyncDefinitionConfigs } = await import(
-    "../../src/api/sync/service/definitions.js"
-  )
   seedEntityRegistryIfEmpty(projectRoot)
   seedSyncMetadataIfEmpty(projectRoot)
-  ensureSyncDefinitionConfigs(projectRoot)
 
   const adminSession: CurrentSession = {
     sid: "sid-catalog-operator",

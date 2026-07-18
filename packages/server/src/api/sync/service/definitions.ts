@@ -22,7 +22,6 @@ import {
   validateAuthoredSyncFlow,
   validateEntityDefinition,
   type EntityDefinition,
-  type SyncDefinitionConfigInput,
   type SyncDefinitionFlowTemplate,
   type SyncDefinitionFlowTemplateCatalog
 } from "@mia/sync"
@@ -77,19 +76,6 @@ export function defaultEntityFlowId(
   tenantId = DEFAULT_TENANT_ID,
 ): EntityRegistrySyncFlowTemplateId {
   return defaultFlowTemplateId(entityId, loadAuthoringFlowCatalog(projectRoot, tenantId))
-}
-
-export function syncConfigInputFromDb(row: db.DbSyncDefinitionConfig): SyncDefinitionConfigInput {
-  return {
-    flow_preset: row.flow_preset,
-    execution_steps_json: row.execution_steps_json,
-    service_profile_ref: row.service_profile_ref,
-    environment_policy_ref: row.environment_policy_ref,
-    ownership_team: row.ownership_team,
-    ownership_owner: row.ownership_owner,
-    review_status: row.review_status,
-    ownership_notes_json: row.ownership_notes_json,
-  }
 }
 
 export function listSyncDefinitionRuntimeOptions(projectRoot: string): SyncDefinitionRuntimeOptions {
@@ -168,80 +154,23 @@ function defaultFlowTemplateId(
   return defaultSyncDefinitionFlowTemplateId(entityId, flowTemplateCatalog)
 }
 
-function defaultConfigForEntity(
-  entity: EntityDefinition,
-  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog
-): db.DbSyncDefinitionConfig {
-  const input = syncDefinitionConfigFromEntity(entity, flowTemplateCatalog)
-  return {
-    tenant_id: entity.tenantId,
-    entity_id: entity.id,
-    flow_preset: input.flow_preset,
-    execution_steps_json: input.execution_steps_json,
-    service_profile_ref: input.service_profile_ref,
-    environment_policy_ref: input.environment_policy_ref,
-    ownership_team: input.ownership_team,
-    ownership_owner: input.ownership_owner,
-    review_status: input.review_status,
-    ownership_notes_json: input.ownership_notes_json,
-    updated_at: new Date().toISOString(),
-    updated_by: null,
-  }
-}
-
-function derivedConfigFromFlowId(
-  entity: EntityDefinition,
-  flowId: string,
-  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
-): db.DbSyncDefinitionConfig {
-  const flowPreset =
-    flowId.trim() && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, flowId)
-      ? flowId
-      : defaultFlowTemplateId(entity.id, flowTemplateCatalog)
-  return {
-    tenant_id: entity.tenantId,
-    entity_id: entity.id,
-    flow_preset: flowPreset,
-    execution_steps_json: JSON.stringify(resolveFlowSteps(flowPreset, flowTemplateCatalog)),
-    service_profile_ref: "default",
-    environment_policy_ref: "default",
-    ownership_team: "sync-platform",
-    ownership_owner: null,
-    review_status: "legacy-review-required",
-    ownership_notes_json: JSON.stringify(["Derived from entity.flowId."]),
-    updated_at: new Date().toISOString(),
-    updated_by: "system",
-  }
-}
-
-function seedFromRepoDefinition(
-  projectRoot: string,
-  entity: EntityDefinition
-): db.DbSyncDefinitionConfig | null {
-  const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot)
-  if (entity.flowId?.trim()) {
-    return derivedConfigFromFlowId(entity, entity.flowId, flowTemplateCatalog)
-  }
-
-  // Legacy seed file with flowId / run.template (mid-migration).
-  const entityPath = resolve(projectRoot, ENTITY_SEEDS_DIR, `${entity.id}.json`)
-  if (existsSync(entityPath)) {
-    try {
-      const raw = JSON.parse(readFileSync(entityPath, "utf-8")) as {
-        flowId?: string
-        run?: { template?: string }
-      }
-      const flowId = raw.flowId?.trim() || raw.run?.template?.trim()
-      if (flowId) return derivedConfigFromFlowId(entity, flowId, flowTemplateCatalog)
-    } catch (error) {
-      console.warn(
-        `[sync-definitions] failed to seed config from ${entityPath}:`,
-        error instanceof Error ? error.message : error,
-      )
+/** Prefer shipped seed flowId (legacy run.template accepted). */
+export function seedFlowIdFromRepo(projectRoot: string, entityId: string): string | null {
+  const entityPath = resolve(projectRoot, ENTITY_SEEDS_DIR, `${entityId}.json`)
+  if (!existsSync(entityPath)) return null
+  try {
+    const raw = JSON.parse(readFileSync(entityPath, "utf-8")) as {
+      flowId?: string
+      run?: { template?: string }
     }
+    return raw.flowId?.trim() || raw.run?.template?.trim() || null
+  } catch (error) {
+    console.warn(
+      `[sync-definitions] failed to read seed flowId from ${entityPath}:`,
+      error instanceof Error ? error.message : error,
+    )
+    return null
   }
-
-  return null
 }
 
 function loadPublishedBundle(_projectRoot?: string): PersistedPublishedBundle | null {
@@ -253,38 +182,6 @@ function loadPublishedBundle(_projectRoot?: string): PersistedPublishedBundle | 
     publishedVersion: raw.publishedVersion,
     catalogVersion: raw.catalogVersion,
     definitions: raw.definitions as Record<string, PublishedSyncDefinition | null>,
-  }
-}
-
-export function ensureSyncDefinitionConfigs(projectRoot: string, tenantId = DEFAULT_TENANT_ID): void {
-  const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
-  const entities = db.listEntityDefinitions(tenantId)
-  if (entities.length === 0) return
-  const existing = new Set(db.listSyncDefinitionConfigs(tenantId).map((row) => row.entity_id))
-  for (const entity of entities) {
-    if (existing.has(entity.id)) continue
-    db.saveSyncDefinitionConfig(
-      seedFromRepoDefinition(projectRoot, entity) ?? defaultConfigForEntity(entity, flowTemplateCatalog)
-    )
-  }
-}
-
-/** Re-resolve per-entity flow steps from catalog after bulk metadata/config import. */
-export function rehydrateSyncDefinitionConfigSteps(
-  projectRoot: string,
-  tenantId = DEFAULT_TENANT_ID,
-): void {
-  const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
-  for (const row of db.listSyncDefinitionConfigs(tenantId)) {
-    const flowPreset =
-      row.flow_preset?.trim() && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, row.flow_preset)
-        ? row.flow_preset
-        : defaultFlowTemplateId(row.entity_id, flowTemplateCatalog)
-    db.saveSyncDefinitionConfig({
-      ...row,
-      flow_preset: flowPreset,
-      execution_steps_json: JSON.stringify(resolveFlowSteps(flowPreset, flowTemplateCatalog)),
-    })
   }
 }
 
@@ -339,28 +236,26 @@ export function getSyncPublishStatus(
   }
 }
 
+/**
+ * Admin list for Publish UI. Flow comes from entity.flowId + catalog.
+ * Bindings/ownership fields are compose-time stubs (same as Publish), not tip SoT.
+ */
 export function listSyncDefinitionAdminItems(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID
 ): SyncDefinitionAdminItem[] {
-  ensureSyncDefinitionConfigs(projectRoot, tenantId)
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
   const entities = db.listEntityDefinitions(tenantId)
-  const configs = new Map(db.listSyncDefinitionConfigs(tenantId).map((row) => [row.entity_id, row]))
   const gap = resolveCatalogPublishGap(projectRoot, tenantId)
   const published = gap.published
   return entities.map((entity) => {
-    const config = configs.get(entity.id) ?? defaultConfigForEntity(entity, flowTemplateCatalog)
-    const flowTemplateId = config.flow_preset as EntityRegistrySyncFlowTemplateId
+    const compose = syncDefinitionConfigFromEntity(entity, flowTemplateCatalog)
+    const flowTemplateId = compose.flow_preset as EntityRegistrySyncFlowTemplateId
     const publishedDefinition = published?.definitions?.[entity.id] ?? null
     const publishedAt = publishedDefinition?.publishedAt ?? null
     const publishedSourceVersion = publishedDefinition?.provenance?.sourceVersion ?? null
     const entityNeedsPublish =
-      publishedDefinition == null ||
-      publishedSourceVersion !== String(entity.version) ||
-      (publishedAt != null && config.updated_at > publishedAt)
-    // Catalog tip ahead of last publish (metadata/wiring/envs/…) means every
-    // definition would be recompiled — surface that on each admin row.
+      publishedDefinition == null || publishedSourceVersion !== String(entity.version)
     const needsPublish = entityNeedsPublish || gap.catalogNeedsPublish
     return {
       id: entity.id,
@@ -369,14 +264,14 @@ export function listSyncDefinitionAdminItems(
       tableCount: entity.tables.length,
       flowTemplateId,
       executionSteps: resolveFlowSteps(flowTemplateId, flowTemplateCatalog),
-      serviceProfileRef: config.service_profile_ref,
-      environmentPolicyRef: config.environment_policy_ref,
-      ownershipTeam: config.ownership_team,
-      ownershipOwner: config.ownership_owner,
-      reviewStatus: config.review_status,
-      ownershipNotes: JSON.parse(config.ownership_notes_json) as string[],
-      updatedAt: config.updated_at,
-      updatedBy: config.updated_by,
+      serviceProfileRef: compose.service_profile_ref,
+      environmentPolicyRef: compose.environment_policy_ref,
+      ownershipTeam: compose.ownership_team,
+      ownershipOwner: compose.ownership_owner,
+      reviewStatus: compose.review_status,
+      ownershipNotes: JSON.parse(compose.ownership_notes_json) as string[],
+      updatedAt: entity.createdAt,
+      updatedBy: entity.createdBy,
       publishedVersion: publishedDefinition?.publishedVersion ?? null,
       publishedAt,
       needsPublish,
@@ -384,31 +279,28 @@ export function listSyncDefinitionAdminItems(
   })
 }
 
-export function upsertSyncDefinitionConfig(projectRoot: string, row: db.DbSyncDefinitionConfig): void {
-  ensureSyncDefinitionConfigs(projectRoot, row.tenant_id)
-  const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, row.tenant_id)
-  const flowPreset =
-    row.flow_preset || defaultFlowTemplateId(row.entity_id, flowTemplateCatalog)
-  db.saveSyncDefinitionConfig({
-    ...row,
-    flow_preset: flowPreset,
-    execution_steps_json: JSON.stringify(resolveFlowSteps(flowPreset, flowTemplateCatalog)),
-  })
-}
-
-export function resetSyncDefinitionConfig(
+/** Reset entity.flowId to shipped seed (or catalog default). */
+export function resetEntityFlowId(
   projectRoot: string,
   tenantId: string,
-  entityId: string
-): db.DbSyncDefinitionConfig | null {
+  entityId: string,
+  actor: string,
+): EntityDefinition | null {
   const entity = db.getEntityDefinition(tenantId, entityId)
   if (!entity) return null
-  db.deleteSyncDefinitionConfig(tenantId, entityId)
-  const reset =
-    seedFromRepoDefinition(projectRoot, entity) ??
-    defaultConfigForEntity(entity, loadAuthoringFlowCatalog(projectRoot, tenantId))
-  db.saveSyncDefinitionConfig(reset)
-  return reset
+  const catalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
+  const seedFlow = seedFlowIdFromRepo(projectRoot, entityId)
+  const flowId =
+    seedFlow && hasSyncDefinitionFlowTemplate(catalog, seedFlow)
+      ? seedFlow
+      : defaultFlowTemplateId(entityId, catalog)
+  const result = db.saveEntityDefinition({
+    tenantId,
+    def: { ...entity, flowId },
+    actor,
+    reason: "sync-definition-config:reset",
+  })
+  return db.getEntityDefinition(tenantId, result.id) ?? null
 }
 
 function resolveExecutionStepsForValidation(
@@ -444,8 +336,6 @@ export function publishSyncDefinitionsFromDb(
   stdout: string[]
   stderr: string[]
 } {
-  ensureSyncDefinitionConfigs(projectRoot, tenantId)
-  rehydrateSyncDefinitionConfigSteps(projectRoot, tenantId)
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
   const flowCatalog = buildFlowCatalog(
     db.listSyncPhases(tenantId),
@@ -470,7 +360,7 @@ export function publishSyncDefinitionsFromDb(
     for (const warning of entityValidation.warnings) {
       stderr.push(`[${entity.id}] ${warning.message}`)
     }
-    // Tip SoT: entity.flowId. Derived configs table is only a cache.
+    // Tip SoT: entity.flowId. Compose stubs (bindings/ownership) are not tip fields.
     const config = syncDefinitionConfigFromEntity(entity, flowTemplateCatalog)
     const steps = normalizeAuthoredSyncFlowSteps(
       resolveExecutionStepsForValidation(config, flowTemplateCatalog),

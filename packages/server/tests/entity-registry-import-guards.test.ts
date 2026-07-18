@@ -247,12 +247,12 @@ describe("catalog snapshot import guards", () => {
       ),
     }
 
-    const config = db.getSyncDefinitionConfig(TENANT, "content")!
+    const content = db.getEntityDefinition(TENANT, "content")!
     snapshot.entityRegistry = {
       version: 1,
       _comment: "test",
       entities: [
-        JSON.parse(formatEntityJson({ ...degraded, flowId: config.flow_preset })) as Record<string, unknown>,
+        JSON.parse(formatEntityJson({ ...degraded, flowId: content.flowId })) as Record<string, unknown>,
       ],
     }
 

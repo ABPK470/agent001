@@ -61,7 +61,7 @@ Handler wiring always uses `{ "type": "catalog", "id": "…" }` — no legacy sh
 
 | File | SQLite tables | UI surface |
 |------|---------------|------------|
-| `artifacts/entities/*.json` | `entity_defs` (+ derived `sync_definition_configs` from `flowId`) | Entity Registry |
+| `artifacts/entities/*.json` | `entity_defs` (`EntityDefinition` + `flowId`) | Entity Registry |
 | `artifacts/sync-metadata.json` | phases, actions, valueSources, flows | Configuration → Flows / Actions / Sources |
 | `artifacts/strategies.json` | SCD2 strategies | Strategies |
 | `artifacts/flow-templates.json` | derived flow view | publish helper |

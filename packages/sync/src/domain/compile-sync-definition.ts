@@ -23,6 +23,7 @@ import {
 } from "./sync-definition-flow-templates.js"
 import { resolveFlowSteps } from "./resolve-flow-steps.js"
 
+/** Ephemeral Publish compose input — not a Catalog tip row / SQLite table. */
 export interface SyncDefinitionConfigInput {
   flow_preset: string
   execution_steps_json: string
@@ -44,7 +45,10 @@ export interface CompileAuthoredOptions {
   resolveScd2Strategy?: (strategyId: string, strategyVersion: number | "latest") => Scd2Strategy | null
 }
 
-/** Compose-time defaults for published bindings/ownership — not tip fields. */
+/**
+ * Compose-time defaults for published bindings/ownership.
+ * Not Catalog tip fields and not persisted — Publish stamps these into SyncDefinition only.
+ */
 export function defaultConfig(entityId: string, catalog: SyncDefinitionFlowTemplateCatalog): SyncDefinitionConfigInput {
   const flowTemplateId = defaultSyncDefinitionFlowTemplateId(entityId, catalog)
   return {

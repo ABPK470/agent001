@@ -5,7 +5,6 @@ import { resolve } from "node:path"
 
 import { getMssqlConfig, type AgentHost } from "@mia/agent"
 
-import { ensureSyncDefinitionConfigs } from "../../sync/service/definitions.js"
 import {
   ensureDeploySyncMetadataSeeds,
   refreshBuiltInFlowPresetsFromArtifact,
@@ -37,9 +36,6 @@ export function importDeployArtifactsIntoSqlite(
     const reset = factoryResetSyncPlatform(projectRoot)
     seeded = reset.seeded
     entityIds = reset.entityIds
-    if (seeded > 0) {
-      ensureSyncDefinitionConfigs(projectRoot)
-    }
   }
 
   ensureDeploySyncMetadataSeeds(projectRoot)

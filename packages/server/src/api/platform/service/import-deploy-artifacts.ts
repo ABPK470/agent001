@@ -23,13 +23,7 @@ import {
   prepareFlowStepsForStorage,
   validateFlowStepsForCatalog,
 } from "../../../infra/persistence/sync-flow-steps.js"
-import { syncDerivedConfigFromFlowId } from "../../sync/service/apply-entity-run-yaml.js"
-import {
-  ensureSyncDefinitionConfigs,
-  loadAuthoringFlowCatalog,
-  rehydrateSyncDefinitionConfigSteps,
-  upsertSyncDefinitionConfig,
-} from "../../sync/service/definitions.js"
+import { loadAuthoringFlowCatalog } from "../../sync/service/definitions.js"
 import {
   buildEntityRegistryExportDocument,
   parseEntitiesJson,
@@ -466,7 +460,11 @@ function applyStrategies(tenantId: string, doc: StrategiesDoc, actor: string): v
   }
 }
 
-function applySyncDefinitionConfigs(
+/**
+ * Legacy zip compat: sync-definition-configs.json only patches entity.flowId.
+ * Bindings/ownership in that file are ignored (compose-time stubs on Publish).
+ */
+function applyLegacyConfigFlowIds(
   tenantId: string,
   doc: SyncDefinitionConfigExportDocument | null,
   projectRoot: string,
@@ -474,33 +472,23 @@ function applySyncDefinitionConfigs(
 ): number {
   if (!doc?.configs?.length) return 0
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
-  const importedIds = new Set(doc.configs.map((config) => config.entityId))
-  for (const row of db.listSyncDefinitionConfigs(tenantId)) {
-    if (!importedIds.has(row.entity_id)) {
-      db.deleteSyncDefinitionConfig(tenantId, row.entity_id)
-    }
-  }
-  const now = new Date().toISOString()
+  let count = 0
   for (const config of doc.configs) {
-    const flowPreset = hasSyncDefinitionFlowTemplate(flowTemplateCatalog, config.flowPreset)
+    const entity = db.getEntityDefinition(tenantId, config.entityId)
+    if (!entity) continue
+    const flowId = hasSyncDefinitionFlowTemplate(flowTemplateCatalog, config.flowPreset)
       ? config.flowPreset
       : defaultSyncDefinitionFlowTemplateId(config.entityId, flowTemplateCatalog)
-    upsertSyncDefinitionConfig(projectRoot, {
-      tenant_id: tenantId,
-      entity_id: config.entityId,
-      flow_preset: flowPreset,
-      execution_steps_json: "[]",
-      service_profile_ref: config.serviceProfileRef,
-      environment_policy_ref: config.environmentPolicyRef,
-      ownership_team: config.ownershipTeam,
-      ownership_owner: config.ownershipOwner,
-      review_status: config.reviewStatus,
-      ownership_notes_json: JSON.stringify(config.ownershipNotes),
-      updated_at: now,
-      updated_by: actor,
+    if (entity.flowId === flowId) continue
+    db.saveEntityDefinition({
+      tenantId,
+      def: { ...entity, flowId },
+      actor,
+      reason: "catalog-import:legacy-config-flowId",
     })
+    count++
   }
-  return doc.configs.length
+  return count
 }
 
 function collectSnapshotEntityIds(snapshot: DeployCatalogSnapshot): Set<string> {
@@ -550,30 +538,6 @@ function applyEntityDefinitions(
   return count
 }
 
-function applyEntityFlowBindings(
-  tenantId: string,
-  snapshot: DeployCatalogSnapshot,
-  actor: string,
-  projectRoot: string,
-): number {
-  const importedIds = collectSnapshotEntityIds(snapshot)
-  for (const row of db.listSyncDefinitionConfigs(tenantId)) {
-    if (!importedIds.has(row.entity_id)) {
-      db.deleteSyncDefinitionConfig(tenantId, row.entity_id)
-    }
-  }
-  let count = 0
-  for (const entry of snapshot.entityRegistry?.entities ?? []) {
-    const parsed = parseEntitiesJson(JSON.stringify(entry))
-    for (const item of parsed) {
-      if (!item.ok || !item.def?.flowId) continue
-      syncDerivedConfigFromFlowId(projectRoot, tenantId, item.def.id, item.def.flowId, actor)
-      count++
-    }
-  }
-  return count
-}
-
 export function applyDeployCatalogSnapshot(args: {
   snapshot: DeployCatalogSnapshot
   actor: string
@@ -603,19 +567,15 @@ export function applyDeployCatalogSnapshot(args: {
     applySyncMetadata(tenantId, args.snapshot.syncMetadata as SyncMetadataDoc)
     applyStrategies(tenantId, args.snapshot.strategies as StrategiesDoc, args.actor)
     applyEntityDefinitions(tenantId, args.snapshot, args.actor)
-    // Prefer entity.flowId. Optional sync-definition-configs.json is legacy zip compat.
+    // Entities already carry flowId. Legacy configs JSON only patches flowId when present.
     if (args.snapshot.syncDefinitionConfigs?.configs?.length) {
-      applySyncDefinitionConfigs(
+      applyLegacyConfigFlowIds(
         tenantId,
         args.snapshot.syncDefinitionConfigs,
         projectRoot,
         args.actor,
       )
-    } else {
-      applyEntityFlowBindings(tenantId, args.snapshot, args.actor, projectRoot)
     }
-    ensureSyncDefinitionConfigs(projectRoot, tenantId)
-    rehydrateSyncDefinitionConfigSteps(projectRoot, tenantId)
   })()
 
   return { ...preview, dryRun: false, applied: true }

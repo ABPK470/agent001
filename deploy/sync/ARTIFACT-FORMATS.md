@@ -53,11 +53,11 @@ deploy/sync/                         # also: mia-sync-export-<timestamp>/
 | `artifacts/flow-templates.json` | View of flows (not a second hand-edited SoT) |
 | `sync-environments.json` | Environments |
 
-SQLite stores each entity document in `entity_def_versions.body_json`. `sync_definition_configs` is a **derived publish cache** from `entity.flowId`, not a second authoring dialect.
+SQLite stores each entity document in `entity_def_versions.body_json`. Publish and admin resolve flow from `entity.flowId` + the flow catalog only — there is no tip configs table. Bindings/ownership on published SyncDefinitions are compose-time stubs only.
 
 Generator: Authored in temp staging → `entityDefinitionFromAuthoredSync` → write entity files (`materialize-native-entity-seeds.ts --authored-dir=…`). Authored never lands in `artifacts/`.
 
-Import accepts legacy `entity-registry.json` / `sync-definition-configs.json` / `run.template` if present.
+Import accepts legacy `entity-registry.json` / `run.template` if present. Legacy `sync-definition-configs.json` only patches `entity.flowId` (bindings/ownership ignored).
 
 ---
 

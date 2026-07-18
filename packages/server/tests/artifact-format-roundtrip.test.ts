@@ -14,7 +14,6 @@ import {
   validateDeployCatalogSnapshot,
 } from "../src/api/platform/service/import-deploy-artifacts.js"
 import { buildDeployCatalogSnapshot } from "../src/api/platform/service/export-deploy-artifacts.js"
-import { ensureSyncDefinitionConfigs } from "../src/api/sync/service/definitions.js"
 import { formatEntityJson, parseEntitiesJson } from "../src/api/sync/types/entity-yaml.js"
 import * as db from "../src/infra/persistence/db/index.js"
 
@@ -71,7 +70,6 @@ async function setupSeededDb(): Promise<void> {
   )
   seedEntityRegistryIfEmpty(projectRoot)
   seedSyncMetadataIfEmpty(projectRoot)
-  ensureSyncDefinitionConfigs(projectRoot)
 }
 
 describe("catalog format round-trip integration", () => {
@@ -98,10 +96,8 @@ describe("catalog format round-trip integration", () => {
   it("catalog snapshot B bulk export/import round-trip still works", () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
     expect(validateDeployCatalogSnapshot(snapshot).ok).toBe(true)
-
-    for (const row of db.listSyncDefinitionConfigs("_default")) {
-      db.deleteSyncDefinitionConfig("_default", row.entity_id)
-    }
+    const expectedFlowId = db.getEntityDefinition("_default", "dataset")?.flowId
+    expect(expectedFlowId).toBeTruthy()
 
     const applied = applyDeployCatalogSnapshot({
       snapshot,
@@ -110,7 +106,7 @@ describe("catalog format round-trip integration", () => {
       dryRun: false,
     })
     expect(applied.applied).toBe(true)
-    expect(db.getSyncDefinitionConfig("_default", "dataset")?.flow_preset).toBeTruthy()
+    expect(db.getEntityDefinition("_default", "dataset")?.flowId).toBe(expectedFlowId)
   })
 
   it("catalog snapshot export/import restores retired entities", () => {

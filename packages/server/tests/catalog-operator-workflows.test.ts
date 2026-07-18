@@ -16,7 +16,6 @@ import {
   rollbackSyncCatalogVersion,
 } from "../src/api/platform/service/sync-catalog-versioning.js"
 import {
-  ensureSyncDefinitionConfigs,
   listSyncDefinitionAdminItems,
   loadAuthoringFlowCatalog,
   publishSyncDefinitionsFromDb,
@@ -211,7 +210,7 @@ describe("catalog operator workflows — Configuration API", () => {
 describe("catalog operator workflows — import and export", () => {
   it("dry-run import previews without mutating SQLite", () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
-    const before = db.listSyncDefinitionConfigs(TENANT).length
+    const beforeFlowId = db.getEntityDefinition(TENANT, "dataset")?.flowId
 
     const preview = applyDeployCatalogSnapshot({
       snapshot,
@@ -221,7 +220,7 @@ describe("catalog operator workflows — import and export", () => {
     })
     expect(preview.ok).toBe(true)
     expect(preview.applied).toBe(false)
-    expect(db.listSyncDefinitionConfigs(TENANT).length).toBe(before)
+    expect(db.getEntityDefinition(TENANT, "dataset")?.flowId).toBe(beforeFlowId)
   })
 
   it("rejects kebab-case flows in import preview before any writes", () => {
@@ -249,17 +248,21 @@ describe("catalog operator workflows — import and export", () => {
     }).applied).toBe(false)
   })
 
-  it("export → wipe configs → import restores entity flow bindings", () => {
+  it("export → clear flowId → import restores entity flowId", () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
     const datasetBefore = snapshot.entityRegistry?.entities.find(
       (entry) => (entry as { id?: string }).id === "dataset",
     ) as { flowId?: string } | undefined
     expect(datasetBefore?.flowId).toBeTruthy()
 
-    for (const row of db.listSyncDefinitionConfigs(TENANT)) {
-      db.deleteSyncDefinitionConfig(TENANT, row.entity_id)
-    }
-    expect(db.getSyncDefinitionConfig(TENANT, "dataset")).toBeFalsy()
+    const entity = db.getEntityDefinition(TENANT, "dataset")
+    expect(entity).toBeTruthy()
+    db.saveEntityDefinition({
+      tenantId: TENANT,
+      actor: "operator",
+      reason: "clear-flow",
+      def: { ...entity!, flowId: "metadataOnly" },
+    })
 
     const applied = applyDeployCatalogSnapshot({
       snapshot,
@@ -269,8 +272,7 @@ describe("catalog operator workflows — import and export", () => {
     })
     expect(applied.applied).toBe(true)
 
-    const restored = db.getSyncDefinitionConfig(TENANT, "dataset")
-    expect(restored?.flow_preset).toBe(datasetBefore?.flowId)
+    expect(db.getEntityDefinition(TENANT, "dataset")?.flowId).toBe(datasetBefore?.flowId)
     const adminItems = listSyncDefinitionAdminItems(fixture.projectRoot)
     expect(adminItems.find((item) => item.id === "dataset")?.executionSteps.length).toBeGreaterThan(0)
   })
@@ -422,7 +424,6 @@ describe("catalog operator workflows — configuration versions and rollback", (
       projectRoot: fixture.projectRoot,
       dryRun: false,
     })
-    ensureSyncDefinitionConfigs(fixture.projectRoot)
 
     const result = publishSyncDefinitionsFromDb(fixture.projectRoot)
     expect(result.definitionCount).toBeGreaterThan(0)

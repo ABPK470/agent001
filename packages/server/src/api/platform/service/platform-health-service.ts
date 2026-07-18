@@ -6,10 +6,7 @@ import {
   resolveCatalogCachePath,
 } from "../../../infra/catalog/catalog-cache-path.js"
 
-import {
-  ensureSyncDefinitionConfigs,
-  seedEntityRegistryIfEmpty,
-} from "../../sync/index.js"
+import { seedEntityRegistryIfEmpty } from "../../sync/index.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 import { getDb } from "../../../infra/persistence/connection.js"
 
@@ -172,14 +169,10 @@ export async function rebuildPlatformCatalog(
 export function factoryResetSyncPlatform(projectRoot: string): { seeded: number; entityIds: string[] } {
   const database = getDb()
   db.wipeEntityRegistry()
-  database.exec(`DELETE FROM sync_definition_configs`)
 
   database.exec(`DELETE FROM sync_definitions`)
   database.exec(`DELETE FROM sync_publish_meta`)
 
   const seed = seedEntityRegistryIfEmpty(projectRoot)
-  if (seed.seeded > 0) {
-    ensureSyncDefinitionConfigs(projectRoot)
-  }
   return { seeded: seed.seeded, entityIds: seed.entityIds }
 }

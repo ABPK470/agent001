@@ -79,32 +79,26 @@ export {
 } from "./tool-results.js"
 
 export {
-  countSyncDefinitionConfigs,
   countSyncEnvironments,
   deleteLayout,
   deletePolicyRule,
-  deleteSyncDefinitionConfig,
   deleteSyncEnvironment,
   deleteSyncEnvOverride,
   getLayout,
   getLayouts,
-  getSyncDefinitionConfig,
   getSyncEnvironment,
   getSyncEnvOverride,
   listPolicyRules,
-  listSyncDefinitionConfigs,
   listSyncEnvironments,
   listSyncEnvOverrides,
   PolicySource,
   saveLayout,
   savePolicyRule,
-  saveSyncDefinitionConfig,
   saveSyncEnvironment,
   saveSyncEnvOverride,
   seedPolicyRuleIfMissing,
   type DbLayout,
   type DbPolicyRule,
-  type DbSyncDefinitionConfig,
   type DbSyncEnvironment,
   type DbSyncEnvOverride
 } from "./config.js"

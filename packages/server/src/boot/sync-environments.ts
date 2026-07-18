@@ -1,5 +1,4 @@
 import {
-  ensureSyncDefinitionConfigs,
   ensureCustomValueSourcesSeeded,
   ensureDeploySyncMetadataSeeds,
   ensureFlowPresetsSeeded,
@@ -32,7 +31,6 @@ export function loadBootSyncEnvironments(projectRoot: string, connections: Reado
       `[entity-registry] repaired ${repairedEntities.length} bundled definition(s) from deploy artifacts: ${repairedEntities.join(", ")}`,
     )
   }
-  ensureSyncDefinitionConfigs(projectRoot)
   const environments = loadPersistedSyncEnvironments(projectRoot, connections)
   ensureInitialSyncCatalogVersion("system")
   return environments

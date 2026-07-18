@@ -348,23 +348,6 @@ const BASELINE_SQL = `
     );
     CREATE INDEX IF NOT EXISTS idx_connectors_kind ON connectors(kind);
 
-    CREATE TABLE IF NOT EXISTS sync_definition_configs (
-      tenant_id              TEXT NOT NULL,
-      entity_id              TEXT NOT NULL,
-      flow_preset            TEXT NOT NULL,
-      execution_steps_json   TEXT NOT NULL DEFAULT '[]',
-      service_profile_ref    TEXT NOT NULL,
-      environment_policy_ref TEXT NOT NULL,
-      ownership_team         TEXT NOT NULL,
-      ownership_owner        TEXT,
-      review_status          TEXT NOT NULL
-        CHECK (review_status IN ('legacy-review-required','reviewed')),
-      ownership_notes_json   TEXT NOT NULL DEFAULT '[]',
-      updated_at             TEXT NOT NULL,
-      updated_by             TEXT,
-      PRIMARY KEY (tenant_id, entity_id)
-    );
-
     -- Sync vocabulary catalog (phases, actions, flows, value sources).
     -- Boot-seeded from deploy/sync/artifacts/sync-metadata.json; operator edits persist here.
     CREATE TABLE IF NOT EXISTS sync_phases (

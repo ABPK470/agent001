@@ -247,11 +247,10 @@ describe("sync definition pipeline (e2e)", () => {
   })
 
   it("compilePublishedSyncDefinition matches server publish output for same entity", async () => {
-    const { _setDb, _migrate, saveEntityDefinition, listSyncDefinitionConfigs } =
+    const { _setDb, _migrate, saveEntityDefinition } =
       await import("../src/infra/persistence/db/index.js")
     const {
       publishSyncDefinitionsFromDb,
-      ensureSyncDefinitionConfigs,
       loadAuthoringFlowCatalog,
     } = await import("../src/api/sync/service/definitions.js")
 
@@ -262,10 +261,12 @@ describe("sync definition pipeline (e2e)", () => {
 
     const entity = makeFkPathEntity("compose_parity")
     saveEntityDefinition({ tenantId: "_default", def: entity, actor: "test", reason: "seed" })
-    ensureSyncDefinitionConfigs(projectRoot)
-    const config = listSyncDefinitionConfigs("_default").find((row) => row.entity_id === "compose_parity")!
 
-    const { buildFlowCatalog, compilePublishedSyncDefinition } = await import("@mia/sync")
+    const {
+      buildFlowCatalog,
+      compilePublishedSyncDefinition,
+      syncDefinitionConfigFromEntity,
+    } = await import("@mia/sync")
     const db = await import("../src/infra/persistence/db/index.js")
     // Must use the same authoring catalog as publish: DB presets strip `phase`
     // from stored steps, so snapForSteps only freezes kinds (phases stay {}).
@@ -276,6 +277,7 @@ describe("sync definition pipeline (e2e)", () => {
       db.listSyncActions("_default"),
       db.listSyncValueSources("_default"),
     )
+    const config = syncDefinitionConfigFromEntity(entity, flowTemplateCatalog)
 
     const direct = compilePublishedSyncDefinition(
       entity,

@@ -11,7 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { compileAuthoredSyncDefinition, loadSyncDefinitionFlowTemplateCatalog } from "@mia/sync"
 
-import { ensureSyncDefinitionConfigs, syncConfigInputFromDb } from "../src/api/sync/service/definitions.js"
+import { syncDefinitionConfigFromEntity } from "@mia/sync"
 import * as db from "../src/infra/persistence/db/index.js"
 
 let testDb: Database.Database
@@ -62,7 +62,6 @@ async function setupDb(): Promise<void> {
   )
   seedEntityRegistryIfEmpty(projectRoot)
   seedSyncMetadataIfEmpty(projectRoot)
-  ensureSyncDefinitionConfigs(projectRoot)
 }
 
 describe("Authored process-JSON compile (B → A)", () => {
@@ -78,14 +77,12 @@ describe("Authored process-JSON compile (B → A)", () => {
 
   it("compiles dataset EntityDefinition into AuthoredSyncDefinition with matching tables", () => {
     const entity = db.getEntityDefinition("_default", "dataset")
-    const configRow = db.getSyncDefinitionConfig("_default", "dataset")
     expect(entity).toBeTruthy()
-    expect(configRow).toBeTruthy()
 
     const catalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
     const authored = compileAuthoredSyncDefinition(entity!, {
       flowTemplateCatalog: catalog,
-      config: syncConfigInputFromDb(configRow!),
+      config: syncDefinitionConfigFromEntity(entity!, catalog),
       sourceArtifact: `deploy/sync/artifacts/entities/${entity!.id}.json`,
     })
 
@@ -94,13 +91,13 @@ describe("Authored process-JSON compile (B → A)", () => {
     expect(authored.metadata.tables.length).toBe(entity!.tables.length)
   })
 
-  it("includes execution flow steps from sync definition config", () => {
+  it("includes execution flow steps from entity.flowId", () => {
     const entity = db.getEntityDefinition("_default", "content")
-    const configRow = db.getSyncDefinitionConfig("_default", "content")
+    expect(entity).toBeTruthy()
     const catalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
     const authored = compileAuthoredSyncDefinition(entity!, {
       flowTemplateCatalog: catalog,
-      config: syncConfigInputFromDb(configRow!),
+      config: syncDefinitionConfigFromEntity(entity!, catalog),
     })
     expect(authored.executionFlow.steps.length).toBeGreaterThan(0)
   })
