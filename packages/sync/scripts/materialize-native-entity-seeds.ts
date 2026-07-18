@@ -1,9 +1,13 @@
 /**
- * Convert deploy/sync/artifacts/entities/*.json from AuthoredSyncDefinition → EntityDefinition
- * and write sync-definition-configs.json. Idempotent when seeds are already native.
+ * Convert AuthoredSyncDefinition → EntityDefinition seeds + sync-definition-configs.json.
  *
  * Usage:
  *   npx tsx packages/sync/scripts/materialize-native-entity-seeds.ts [projectRoot]
+ *   npx tsx …/materialize-native-entity-seeds.ts [projectRoot] --authored-dir=<dir>
+ *
+ * Without --authored-dir: convert in-place under deploy/sync/artifacts/entities (repair path).
+ * With --authored-dir: read Authored JSON from that directory; write native seeds to artifacts
+ * (refresh path — Authored never lands in the git seed tree).
  */
 
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
@@ -21,20 +25,43 @@ import {
 } from "../src/test-support/legacy-refresh-golden.js"
 import { loadSyncDefinitionFlowTemplateCatalog } from "../src/runtime/load-flow-templates.js"
 
+function parseArgs(argv: string[]): { projectRoot: string; authoredDir: string | null } {
+  let projectRoot: string | null = null
+  let authoredDir: string | null = null
+  for (const arg of argv) {
+    if (arg.startsWith("--authored-dir=")) {
+      authoredDir = resolve(arg.slice("--authored-dir=".length))
+      continue
+    }
+    if (arg.startsWith("--")) {
+      throw new Error(`Unknown flag: ${arg}`)
+    }
+    if (projectRoot) throw new Error(`Unexpected argument: ${arg}`)
+    projectRoot = resolve(arg)
+  }
+  return {
+    projectRoot: projectRoot ?? resolve(import.meta.dirname, "../../.."),
+    authoredDir,
+  }
+}
+
 function main(): void {
-  const projectRoot = resolve(process.argv[2] ?? resolve(import.meta.dirname, "../../.."))
-  const entitiesDir = resolve(projectRoot, "deploy/sync/artifacts/entities")
+  const { projectRoot, authoredDir } = parseArgs(process.argv.slice(2))
+  const outEntitiesDir = resolve(projectRoot, "deploy/sync/artifacts/entities")
+  const sourceDir = authoredDir ?? outEntitiesDir
   const flowTemplateCatalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
+
+  mkdirSync(outEntitiesDir, { recursive: true })
 
   const configs: SeedRunConfig[] = []
   let converted = 0
   let alreadyNative = 0
 
-  for (const file of readdirSync(entitiesDir).filter((name) => name.endsWith(".json")).sort()) {
-    const path = join(entitiesDir, file)
-    const raw = JSON.parse(readFileSync(path, "utf-8")) as unknown
+  for (const file of readdirSync(sourceDir).filter((name) => name.endsWith(".json")).sort()) {
+    const sourcePath = join(sourceDir, file)
+    const raw = JSON.parse(readFileSync(sourcePath, "utf-8")) as unknown
 
-    if (isEntityDefinitionSeed(raw)) {
+    if (authoredDir == null && isEntityDefinitionSeed(raw)) {
       alreadyNative++
       continue
     }
@@ -47,29 +74,31 @@ function main(): void {
     const entity = entityDefinitionFromAuthoredSync(authored, "_default", {
       createdAt: LEGACY_REFRESH_SEED_CREATED_AT,
     })
-    writeFileSync(path, `${JSON.stringify(entity, null, 2)}\n`, "utf-8")
+    writeFileSync(join(outEntitiesDir, file), `${JSON.stringify(entity, null, 2)}\n`, "utf-8")
     configs.push(seedRunConfigFromAuthored(authored, flowTemplateCatalog))
     converted++
   }
 
   if (converted > 0) {
     writeConfigs(projectRoot, configs)
-  } else if (alreadyNative > 0) {
-    // Ensure configs file exists when seeds were converted earlier
+  } else if (alreadyNative > 0 && authoredDir == null) {
     const configsPath = resolve(projectRoot, "deploy/sync/artifacts/sync-definition-configs.json")
     try {
       readFileSync(configsPath, "utf-8")
     } catch {
       throw new Error(
-        "Entity seeds are native but sync-definition-configs.json is missing. Re-run from Authored seeds.",
+        "Entity seeds are native but sync-definition-configs.json is missing. Re-run refresh-from-legacy.",
       )
     }
+  } else if (authoredDir != null && converted === 0) {
+    throw new Error(`No Authored entity JSON found in ${authoredDir}`)
   }
 
   console.log(
     JSON.stringify({
       ok: true,
       projectRoot,
+      authoredDir,
       converted,
       alreadyNative,
       configsWritten: converted > 0,

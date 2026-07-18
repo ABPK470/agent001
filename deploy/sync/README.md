@@ -84,9 +84,9 @@ After refresh: restart server → review Entity Registry → **Publish**.
 
 ## Materialize step
 
-Refresh still derives Authored process JSON in memory for table/predicate logic, then runs:
+Refresh derives Authored process JSON in a temp staging dir (never under `artifacts/`), then runs:
 
-`npx tsx packages/sync/scripts/materialize-native-entity-seeds.ts`
+`npx tsx packages/sync/scripts/materialize-native-entity-seeds.ts <root> --authored-dir=<staging>`
 
 which converts 1:1 via `entityDefinitionFromAuthoredSync` and writes EntityDefinition files + `sync-definition-configs.json`.
 

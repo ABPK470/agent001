@@ -3,7 +3,7 @@
  */
 
 import type { EntityDefinition, ValidationResult } from "@mia/sync"
-import { validateAuthoredExportRoundTrip, validateEntityExportable } from "@mia/sync"
+import { validateEntityExportable } from "@mia/sync"
 
 import * as db from "../../../infra/persistence/sqlite.js"
 
@@ -23,16 +23,6 @@ export function assertEntityExportable(def: EntityDefinition): void {
   const result = validateEntityExportable(def)
   if (!result.ok) {
     throw new EntityExportValidationError(def.id, result)
-  }
-}
-
-export function assertAuthoredExportRoundTrip(
-  source: EntityDefinition,
-  authored: Parameters<typeof validateAuthoredExportRoundTrip>[1],
-): void {
-  const result = validateAuthoredExportRoundTrip(source, authored, source.tenantId)
-  if (!result.ok) {
-    throw new EntityExportValidationError(source.id, result)
   }
 }
 

@@ -17,8 +17,9 @@
  */
 
 import { spawnSync } from "node:child_process"
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
-import { dirname, resolve } from "node:path"
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs"
+import { tmpdir } from "node:os"
+import { dirname, join, resolve } from "node:path"
 
 import { loadCatalogIndexFromPool } from "./catalog-index.mjs"
 import { buildLegacyActivitySyncSpecs } from "./legacy-activity-sync-specs.mjs"
@@ -79,19 +80,20 @@ export async function refreshDeployArtifactsFromLegacy(projectRoot, options = {}
   )
   const generatedAt = new Date().toISOString()
   const entityIds = []
+  /** @type {string | null} */
+  let authoredStagingDir = null
 
   if (!metadataOnly) {
     const catalogIndex = await loadCatalogIndex(projectRoot, options)
-    const entitiesDir = resolve(projectRoot, PATHS.entitiesDir)
-    mkdirSync(entitiesDir, { recursive: true })
+    // Authored stays in temp only — materialize writes EntityDefinition into PATHS.entitiesDir.
+    authoredStagingDir = mkdtempSync(join(tmpdir(), "mia-authored-staging-"))
     for (const definition of deriveSyncDefinitions(
       selectedPipelines,
       catalogIndex,
       generatedAt,
       SOURCE_ARTIFACT,
     )) {
-      // Write Authored briefly — materializeNativeEntitySeeds converts to EntityDefinition + configs.
-      writeJson(resolve(entitiesDir, `${definition.id}.json`), definition, force)
+      writeJson(join(authoredStagingDir, `${definition.id}.json`), definition, true)
       entityIds.push(definition.id)
     }
   }
@@ -108,8 +110,13 @@ export async function refreshDeployArtifactsFromLegacy(projectRoot, options = {}
   const specsArtifact = buildLegacyActivitySyncSpecs(evidence, flowCatalog, syncMetadata)
   writeJson(resolve(projectRoot, PATHS.activitySpecs), specsArtifact, force)
 
-  if (!metadataOnly && entityIds.length > 0) {
-    materializeNativeEntitySeeds(projectRoot)
+  if (!metadataOnly && authoredStagingDir && entityIds.length > 0) {
+    try {
+      mkdirSync(resolve(projectRoot, PATHS.entitiesDir), { recursive: true })
+      materializeNativeEntitySeeds(projectRoot, authoredStagingDir)
+    } finally {
+      rmSync(authoredStagingDir, { recursive: true, force: true })
+    }
   }
 
   return {
@@ -125,14 +132,23 @@ export async function refreshDeployArtifactsFromLegacy(projectRoot, options = {}
   }
 }
 
-/** Authored → EntityDefinition + sync-definition-configs.json (1:1 via entityDefinitionFromAuthoredSync). */
-function materializeNativeEntitySeeds(projectRoot) {
+/**
+ * Authored (staging dir) → EntityDefinition + sync-definition-configs.json
+ * (1:1 via entityDefinitionFromAuthoredSync).
+ * @param {string} projectRoot
+ * @param {string} authoredDir
+ */
+function materializeNativeEntitySeeds(projectRoot, authoredDir) {
   const script = resolve(projectRoot, "packages/sync/scripts/materialize-native-entity-seeds.ts")
-  const result = spawnSync("npx", ["tsx", script, projectRoot], {
-    cwd: projectRoot,
-    encoding: "utf-8",
-    stdio: ["ignore", "pipe", "pipe"],
-  })
+  const result = spawnSync(
+    "npx",
+    ["tsx", script, projectRoot, `--authored-dir=${authoredDir}`],
+    {
+      cwd: projectRoot,
+      encoding: "utf-8",
+      stdio: ["ignore", "pipe", "pipe"],
+    },
+  )
   if (result.status !== 0) {
     throw new Error(
       `materialize-native-entity-seeds failed: ${result.stderr || result.stdout || `exit ${result.status}`}`,

@@ -5,15 +5,12 @@
  *   - SQLite entity_defs is the live authoring source of truth.
  *   - deploy/sync/entity-registry.seed.yaml (when present) is the preferred
  *     cold-start snapshot of EntityDefinition documents.
- *   - Otherwise deploy/sync/artifacts/entities/*.json (EntityDefinition seeds;
- *     legacy AuthoredSyncDefinition files are still accepted and converted once).
+ *   - Otherwise deploy/sync/artifacts/entities/*.json (EntityDefinition seeds only).
  *
  * Idempotent: no-op when the tenant already has entity rows.
  */
 
-import type { AuthoredSyncDefinition } from "@mia/shared-types"
 import {
-  entityDefinitionFromAuthoredSync,
   loadEntityDefinitionsFromDocument,
   projectTablePredicate,
   validateEntityDefinition,
@@ -29,7 +26,6 @@ const SEED_YAML = "deploy/sync/entity-registry.seed.yaml"
 const ARTIFACTS_DIR = "deploy/sync/artifacts/entities"
 const SEED_ACTOR = "system"
 const SEED_REASON = "bundled-seed"
-const SEED_CREATED_AT = "2026-01-01T00:00:00.000Z"
 
 export type EntityRegistrySeedSource = "none" | "yaml" | "artifacts"
 
@@ -151,29 +147,27 @@ function seedFromArtifacts(artifactsDir: string, tenantId: string): EntityRegist
 
 function loadEntitySeedFile(path: string, tenantId: string): EntityDefinition {
   const raw = JSON.parse(readFileSync(path, "utf-8")) as unknown
-  if (isEntityDefinitionDocument(raw)) {
-    return { ...raw, tenantId }
+  if (!isEntityDefinitionDocument(raw)) {
+    throw new Error(
+      `Expected EntityDefinition seed at ${path} (Authored seeds are no longer accepted — re-run refresh-from-legacy)`,
+    )
   }
-  if (isAuthoredDocument(raw)) {
-    return entityDefinitionFromAuthoredSync(raw, tenantId, { createdAt: SEED_CREATED_AT })
-  }
-  throw new Error(`Unrecognized entity seed shape: ${path}`)
+  return { ...raw, tenantId }
 }
 
 function isEntityDefinitionDocument(raw: unknown): raw is EntityDefinition {
   if (!raw || typeof raw !== "object") return false
   const doc = raw as Record<string, unknown>
-  return Array.isArray(doc["tables"]) && typeof doc["rootTable"] === "string" && !isAuthoredDocument(raw)
-}
-
-function isAuthoredDocument(raw: unknown): raw is AuthoredSyncDefinition {
-  if (!raw || typeof raw !== "object") return false
-  const doc = raw as Record<string, unknown>
+  if (!Array.isArray(doc["tables"]) || typeof doc["rootTable"] !== "string") return false
+  // Reject Authored process JSON (schemaVersion + metadata.tables).
   const metadata = doc["metadata"]
-  return (
+  if (
     typeof doc["schemaVersion"] === "number" &&
     metadata !== null &&
     typeof metadata === "object" &&
     Array.isArray((metadata as { tables?: unknown }).tables)
-  )
+  ) {
+    return false
+  }
+  return true
 }

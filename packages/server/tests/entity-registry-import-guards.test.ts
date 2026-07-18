@@ -1,6 +1,6 @@
 /**
- * Import corruption guards — authored / bulk / catalog paths must never persist
- * degraded predicates or unresolved review placeholders into SQLite.
+ * Import corruption guards — Catalog paths must never persist degraded predicates
+ * or unresolved review placeholders into SQLite.
  */
 
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
@@ -13,6 +13,7 @@ import {
   isDegradedLegacyFallbackPredicate,
   projectTablePredicate,
   resolveReviewPlaceholderPredicate,
+  validateEntityDefinition,
 } from "@mia/sync"
 
 import {
@@ -20,13 +21,7 @@ import {
   validateDeployCatalogSnapshot,
 } from "../src/api/platform/service/import-deploy-artifacts.js"
 import { buildDeployCatalogSnapshot } from "../src/api/platform/service/export-deploy-artifacts.js"
-import { formatAuthoredSyncJson } from "../src/api/sync/types/authored-sync-document.js"
 import { formatEntityJson } from "../src/api/sync/types/entity-yaml.js"
-import {
-  importAuthoredSyncFromText,
-  importOneAuthoredSync,
-} from "../src/api/sync/service/import-authored-sync.js"
-import { loadAuthoringFlowCatalog } from "../src/api/sync/service/definitions.js"
 import * as db from "../src/infra/persistence/db/index.js"
 import {
   setupCatalogOperatorFixture,
@@ -46,7 +41,7 @@ const G1_AUTHORED_HISTORICAL = resolve(
 
 let fixture: CatalogOperatorFixture
 
-function loadArtifact(entityId: string): AuthoredSyncDefinition {
+function loadHistoricalAuthored(entityId: string): AuthoredSyncDefinition {
   const g1 = JSON.parse(readFileSync(G1_AUTHORED_HISTORICAL, "utf-8")) as {
     entities: Record<string, AuthoredSyncDefinition>
   }
@@ -117,9 +112,9 @@ describe("resolveReviewPlaceholderPredicate — first principles", () => {
   })
 })
 
-describe("per-entity authored import guards", () => {
-  it("rejects artifacts with unresolved review placeholders without writing SQLite", () => {
-    const seed = loadArtifact("content")
+describe("A→B conversion guards (historical Authored → EntityDefinition)", () => {
+  it("rejects unresolved review placeholders", () => {
+    const seed = loadHistoricalAuthored("content")
     const poisoned: AuthoredSyncDefinition = {
       ...seed,
       metadata: {
@@ -137,24 +132,14 @@ describe("per-entity authored import guards", () => {
       },
     }
 
-    const before = contentTypePredicateFromDb()
-    const result = importAuthoredSyncFromText({
-      tenantId: TENANT,
-      actor: "test",
-      reason: "placeholder-guard",
-      content: formatAuthoredSyncJson(poisoned),
-      projectRoot: fixture.projectRoot,
-      dryRun: false,
-    })
-
-    expect(result.ok).toBe(false)
-    expect(result.errors.length).toBeGreaterThan(0)
-    expect(contentTypePredicateFromDb()).toBe(before)
-    expect(contentTypePredicateFromDb()).toContain("EXISTS")
+    const def = entityDefinitionFromAuthoredSync(poisoned, TENANT)
+    const validation = validateEntityDefinition(def)
+    expect(validation.ok).toBe(false)
+    expect(validation.errors.some((issue) => issue.code.includes("scope") || issue.message.includes("placeholder") || issue.message.includes("incomplete"))).toBe(true)
   })
 
-  it("rejects explicit degraded IN-list predicates from authored artifacts", () => {
-    const seed = loadArtifact("dataset")
+  it("rejects explicit degraded IN-list predicates", () => {
+    const seed = loadHistoricalAuthored("dataset")
     const poisoned: AuthoredSyncDefinition = {
       ...seed,
       metadata: {
@@ -171,51 +156,26 @@ describe("per-entity authored import guards", () => {
       },
     }
 
-    const flowTemplateCatalog = loadAuthoringFlowCatalog(fixture.projectRoot, TENANT)
-    const result = importOneAuthoredSync({
-      authored: poisoned,
-      tenantId: TENANT,
-      actor: "test",
-      reason: "degraded-guard",
-      projectRoot: fixture.projectRoot,
-      dryRun: false,
-      flowTemplateCatalog,
-    })
-
-    expect(result.error).toBeTruthy()
-    const validation =
-      typeof result.error === "object" && result.error && "ok" in result.error
-        ? result.error
-        : null
-    expect(validation?.ok).toBe(false)
-    expect(
-      validation?.errors.some((issue) => issue.code === "scope_degraded_legacy") ??
-        String(result.error).includes("degraded"),
-    ).toBe(true)
+    const def = entityDefinitionFromAuthoredSync(poisoned, TENANT)
+    const validation = validateEntityDefinition(def)
+    expect(validation.ok).toBe(false)
+    expect(validation.errors.some((issue) => issue.code === "scope_degraded_legacy")).toBe(true)
   })
 
-  it("imports ground-truth content artifact with EXISTS predicates intact", () => {
-    const seed = loadArtifact("content")
-    importAuthoredSyncFromText({
-      tenantId: TENANT,
-      actor: "test",
-      reason: "good-content",
-      content: formatAuthoredSyncJson(seed),
-      projectRoot: fixture.projectRoot,
-      dryRun: false,
-    })
-
-    const predicate = contentTypePredicateFromDb()
-    expect(predicate).toBeTruthy()
-    expect(predicate).toContain("EXISTS")
-    expect(isDegradedLegacyFallbackPredicate(predicate!)).toBe(false)
-
+  it("converts ground-truth content Authored with EXISTS predicates intact", () => {
+    const seed = loadHistoricalAuthored("content")
     const entity = entityDefinitionFromAuthoredSync(seed, TENANT)
+    expect(validateEntityDefinition(entity).ok).toBe(true)
+
     const expected = projectTablePredicate(
       entity,
       entity.tables.find((table) => table.name === "gate.ContentType")!,
     )
-    expect(predicate).toBe(expected)
+    expect(expected).toContain("EXISTS")
+    expect(isDegradedLegacyFallbackPredicate(expected)).toBe(false)
+
+    // Boot seed already loaded native content — projected predicate matches historical A→B.
+    expect(contentTypePredicateFromDb()).toBe(expected)
   })
 })
 

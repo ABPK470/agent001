@@ -2,7 +2,6 @@ import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 import type {
-  AuthoredSyncDefinition,
   AuthoredSyncFlowStep,
   EntityRegistrySyncFlowTemplateId,
   PublishedSyncDefinition,
@@ -22,6 +21,7 @@ import {
   validateAuthoredSyncFlow,
   validateEntityDefinition,
   type EntityDefinition,
+  type SyncDefinitionConfigInput,
   type SyncDefinitionFlowTemplate,
   type SyncDefinitionFlowTemplateCatalog
 } from "@mia/sync"
@@ -31,7 +31,6 @@ import { _resetGoalClassificationCache } from "../../runs/prompting/goal-classif
 import * as db from "../../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
-const ENTITY_SEEDS_DIR = "deploy/sync/artifacts/entities"
 const SYNC_DEFINITION_CONFIGS_SEED = "deploy/sync/artifacts/sync-definition-configs.json"
 const SQLITE_PUBLISHED_STORAGE = "sqlite:sync_definitions" as const
 
@@ -77,6 +76,19 @@ export function defaultEntityFlowId(
   tenantId = DEFAULT_TENANT_ID,
 ): EntityRegistrySyncFlowTemplateId {
   return defaultFlowTemplateId(entityId, loadAuthoringFlowCatalog(projectRoot, tenantId))
+}
+
+export function syncConfigInputFromDb(row: db.DbSyncDefinitionConfig): SyncDefinitionConfigInput {
+  return {
+    flow_preset: row.flow_preset,
+    execution_steps_json: row.execution_steps_json,
+    service_profile_ref: row.service_profile_ref,
+    environment_policy_ref: row.environment_policy_ref,
+    ownership_team: row.ownership_team,
+    ownership_owner: row.ownership_owner,
+    review_status: row.review_status,
+    ownership_notes_json: row.ownership_notes_json,
+  }
 }
 
 export function listSyncDefinitionRuntimeOptions(projectRoot: string): SyncDefinitionRuntimeOptions {
@@ -180,49 +192,6 @@ function defaultConfigForEntity(
   }
 }
 
-function inferFlowTemplateId(
-  entityId: string,
-  definition: Partial<AuthoredSyncDefinition>,
-  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog
-): EntityRegistrySyncFlowTemplateId {
-  const kinds = (definition.executionFlow?.steps ?? []).map((step) => step.kind)
-  for (const [templateId, steps] of Object.entries(
-    buildSyncDefinitionFlowTemplateSteps(flowTemplateCatalog)
-  ) as Array<[EntityRegistrySyncFlowTemplateId, AuthoredSyncDefinition["executionFlow"]["steps"]]>) {
-    if (steps.map((step) => step.kind).join("|") === kinds.join("|")) return templateId
-  }
-  return defaultFlowTemplateId(entityId, flowTemplateCatalog)
-}
-
-/** Build sync_definition_configs row from an authored deploy artifact. */
-export function syncConfigFromAuthoredSync(
-  tenantId: string,
-  entity: EntityDefinition,
-  authored: AuthoredSyncDefinition,
-  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
-  actor: string,
-  existing?: db.DbSyncDefinitionConfig | null,
-): db.DbSyncDefinitionConfig {
-  const base = existing ?? defaultConfigForEntity(entity, flowTemplateCatalog)
-  const flowTemplateId = inferFlowTemplateId(entity.id, authored, flowTemplateCatalog)
-  return {
-    tenant_id: tenantId,
-    entity_id: entity.id,
-    flow_preset: flowTemplateId,
-    execution_steps_json: JSON.stringify(resolveFlowSteps(flowTemplateId, flowTemplateCatalog)),
-    service_profile_ref: authored.bindings?.serviceProfileRef ?? base.service_profile_ref,
-    environment_policy_ref: authored.bindings?.environmentPolicyRef ?? base.environment_policy_ref,
-    ownership_team: authored.ownership?.team ?? base.ownership_team,
-    ownership_owner: authored.ownership?.owner ?? base.ownership_owner,
-    review_status: authored.ownership?.reviewStatus ?? base.review_status,
-    ownership_notes_json: JSON.stringify(
-      authored.ownership?.notes ?? (JSON.parse(base.ownership_notes_json) as string[]),
-    ),
-    updated_at: new Date().toISOString(),
-    updated_by: actor,
-  }
-}
-
 type SeedConfigDoc = {
   configs?: Array<{
     entityId: string
@@ -274,20 +243,7 @@ function seedFromRepoDefinition(
     }
   }
 
-  // Compat: Authored entity seed still on disk (pre-unification trees).
-  const authoredPath = resolve(projectRoot, ENTITY_SEEDS_DIR, `${entity.id}.json`)
-  if (!existsSync(authoredPath)) return null
-  try {
-    const parsed = JSON.parse(readFileSync(authoredPath, "utf-8")) as AuthoredSyncDefinition
-    if (typeof parsed.schemaVersion !== "number" || !parsed.metadata?.tables) return null
-    return syncConfigFromAuthoredSync(entity.tenantId, entity, parsed, flowTemplateCatalog, "system")
-  } catch (error) {
-    console.warn(
-      `[sync-definitions] failed to seed config from ${authoredPath}:`,
-      error instanceof Error ? error.message : error,
-    )
-    return null
-  }
+  return null
 }
 
 function loadPublishedBundle(_projectRoot?: string): PersistedPublishedBundle | null {

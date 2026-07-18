@@ -42,7 +42,7 @@ deploy/sync seeds (native Catalog JSON)
 | `artifacts/flow-templates.json` | View of flows (compile helper) |
 | `sync-environments.json` | Environments |
 
-Generator path: derive Authored in memory → `entityDefinitionFromAuthoredSync` → write EntityDefinition + configs (`packages/sync/scripts/materialize-native-entity-seeds.ts`). Goldens: `packages/sync/src/test-support/__goldens__/legacy-refresh/` — G1 native wire, G2 logical catalog, G3 published process JSON.
+Generator path: Authored in temp staging → `entityDefinitionFromAuthoredSync` → write EntityDefinition + configs (`packages/sync/scripts/materialize-native-entity-seeds.ts --authored-dir=…`). Authored never lands in `artifacts/`. Goldens: `packages/sync/src/test-support/__goldens__/legacy-refresh/` — G1 native wire, G2 logical catalog, G3 published process JSON.
 
 ---
 
@@ -70,7 +70,7 @@ Same semantic catalog as seeds; entities may be bulk `entity-registry.json` inst
 
 `compilePublishedSyncDefinition` / Publish builds process JSON from Catalog tip + configs + live flow catalog. Stored in `sync_definitions`. Preview/execute read **only** that published bundle.
 
-Legacy **AuthoredSyncDefinition** remains the compile/runtime process JSON base type (and a short import-compat path). It is **not** the git/seed authoring format anymore.
+Legacy **AuthoredSyncDefinition** remains the compile/runtime process JSON base type (Publish / scaffold). It is **not** a seed or export/import authoring format.
 
 ---
 

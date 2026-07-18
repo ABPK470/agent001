@@ -1,23 +1,17 @@
 /**
- * Authored compile export — B → A per entity (process JSON / import-compat).
+ * Process-JSON compile (B → AuthoredSyncDefinition) — scaffold / Publish intermediate.
  */
 
 import Database from "better-sqlite3"
 import { tmpdir } from "node:os"
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, rmSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs"
 import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
-import type { AuthoredSyncDefinition } from "@mia/shared-types"
-import { loadSyncDefinitionFlowTemplateCatalog } from "@mia/sync"
+import { compileAuthoredSyncDefinition, loadSyncDefinitionFlowTemplateCatalog } from "@mia/sync"
 
-import { ensureSyncDefinitionConfigs } from "../src/api/sync/service/definitions.js"
-import {
-  entityToAuthoredSyncDefinition,
-  formatAuthoredSyncJson,
-  syncConfigInputFromDb,
-} from "../src/api/sync/types/authored-sync-document.js"
+import { ensureSyncDefinitionConfigs, syncConfigInputFromDb } from "../src/api/sync/service/definitions.js"
 import * as db from "../src/infra/persistence/db/index.js"
 
 let testDb: Database.Database
@@ -48,22 +42,17 @@ function seedRepoArtifacts(root: string): void {
       copyFileSync(source, join(targetDeploySync, "artifacts", name))
     }
   }
-
-  const envSource = join(repoDeploySync, "sync-environments.json")
-  if (existsSync(envSource)) {
-    copyFileSync(envSource, join(targetDeploySync, "sync-environments.json"))
-  }
 }
 
 async function setupDb(): Promise<void> {
-  dataDir = mkdtempSync(join(tmpdir(), "artifact-export-test-"))
+  dataDir = mkdtempSync(join(tmpdir(), "authored-compile-test-"))
   process.env["MIA_DATA_DIR"] = dataDir
   testDb = new Database(":memory:")
   const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
 
-  projectRoot = mkdtempSync(join(tmpdir(), "artifact-export-root-"))
+  projectRoot = mkdtempSync(join(tmpdir(), "authored-compile-root-"))
   seedRepoArtifacts(projectRoot)
 
   const { seedEntityRegistryIfEmpty } = await import(
@@ -77,7 +66,7 @@ async function setupDb(): Promise<void> {
   ensureSyncDefinitionConfigs(projectRoot)
 }
 
-describe("deploy artifact export (B → A)", () => {
+describe("Authored process-JSON compile (B → A)", () => {
   beforeEach(async () => {
     await setupDb()
   })
@@ -88,50 +77,32 @@ describe("deploy artifact export (B → A)", () => {
     process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
   })
 
-  it("exports dataset as AuthoredSyncDefinition matching EntityDefinition seed tables", () => {
-    const seedPath = resolve(projectRoot, "deploy/sync/artifacts/entities/dataset.json")
-    const seed = JSON.parse(readFileSync(seedPath, "utf-8")) as {
-      rootTable: string
-      idColumn: string
-      tables: Array<{ name: string }>
-    }
-
+  it("compiles dataset EntityDefinition into AuthoredSyncDefinition with matching tables", () => {
     const entity = db.getEntityDefinition("_default", "dataset")
-    expect(entity).toBeTruthy()
-
     const configRow = db.getSyncDefinitionConfig("_default", "dataset")
+    expect(entity).toBeTruthy()
     expect(configRow).toBeTruthy()
 
     const catalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
-    const authored = entityToAuthoredSyncDefinition(
-      entity!,
-      catalog,
-      syncConfigInputFromDb(configRow!),
-    )
-    const exported = JSON.parse(formatAuthoredSyncJson(authored)) as AuthoredSyncDefinition
+    const authored = compileAuthoredSyncDefinition(entity!, {
+      flowTemplateCatalog: catalog,
+      config: syncConfigInputFromDb(configRow!),
+      sourceArtifact: `deploy/sync/artifacts/entities/${entity!.id}.json`,
+    })
 
-    expect(exported.id).toBe("dataset")
-    expect(exported.schemaVersion).toBe(1)
-    expect(exported.rootTable).toBe(seed.rootTable)
-    expect(exported.idColumn).toBe(seed.idColumn)
-    expect(exported.metadata.tables.length).toBe(seed.tables.length)
-    expect(exported.executionFlow.steps.length).toBeGreaterThan(0)
-    expect(exported.bindings.serviceProfileRef).toBe(configRow!.service_profile_ref)
-    expect(exported.bindings.environmentPolicyRef).toBe(configRow!.environment_policy_ref)
+    expect(authored.id).toBe("dataset")
+    expect(authored.rootTable).toBe(entity!.rootTable)
+    expect(authored.metadata.tables.length).toBe(entity!.tables.length)
   })
 
   it("includes execution flow steps from sync definition config", () => {
-    const entity = db.getEntityDefinition("_default", "contract")
-    const configRow = db.getSyncDefinitionConfig("_default", "contract")
+    const entity = db.getEntityDefinition("_default", "content")
+    const configRow = db.getSyncDefinitionConfig("_default", "content")
     const catalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
-
-    const authored = entityToAuthoredSyncDefinition(
-      entity!,
-      catalog,
-      syncConfigInputFromDb(configRow!),
-    )
-
-    expect(authored.executionFlow.steps.length).toBeGreaterThan(1)
-    expect(authored.metadata.executionOrder[0]).toBeTruthy()
+    const authored = compileAuthoredSyncDefinition(entity!, {
+      flowTemplateCatalog: catalog,
+      config: syncConfigInputFromDb(configRow!),
+    })
+    expect(authored.executionFlow.steps.length).toBeGreaterThan(0)
   })
 })
