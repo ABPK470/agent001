@@ -13,6 +13,7 @@ import {
   buildSyncDefinitionRuntimeFlowOptions,
   buildFlowCatalog,
   compilePublishedSyncDefinition,
+  syncDefinitionConfigFromEntity,
   defaultSyncDefinitionFlowTemplateId,
   hasSyncDefinitionFlowTemplate,
   loadSyncDefinitionFlowTemplateCatalog,
@@ -32,8 +33,6 @@ import * as db from "../../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
 const ENTITY_SEEDS_DIR = "deploy/sync/artifacts/entities"
-/** @deprecated Prefer entity seed `run` — kept for mid-migration checkouts. */
-const SYNC_DEFINITION_CONFIGS_SEED = "deploy/sync/artifacts/sync-definition-configs.json"
 const SQLITE_PUBLISHED_STORAGE = "sqlite:sync_definitions" as const
 
 const SERVICE_PROFILE_OPTIONS: SyncDefinitionRuntimeOptions["serviceProfiles"] = [
@@ -173,113 +172,45 @@ function defaultConfigForEntity(
   entity: EntityDefinition,
   flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog
 ): db.DbSyncDefinitionConfig {
-  const now = new Date().toISOString()
-  const flowTemplateId = defaultFlowTemplateId(entity.id, flowTemplateCatalog)
+  const input = syncDefinitionConfigFromEntity(entity, flowTemplateCatalog)
   return {
     tenant_id: entity.tenantId,
     entity_id: entity.id,
-    flow_preset: flowTemplateId,
-    execution_steps_json: JSON.stringify(resolveFlowSteps(flowTemplateId, flowTemplateCatalog)),
-    service_profile_ref: "default",
-    environment_policy_ref: "default",
-    ownership_team: "sync-platform",
-    ownership_owner: null,
-    review_status: "legacy-review-required",
-    ownership_notes_json: JSON.stringify([
-      "Managed in DB via Entity Registry + Sync Admin.",
-      "Review and publish after changing runtime bindings or flow preset."
-    ]),
-    updated_at: now,
-    updated_by: null
+    flow_preset: input.flow_preset,
+    execution_steps_json: input.execution_steps_json,
+    service_profile_ref: input.service_profile_ref,
+    environment_policy_ref: input.environment_policy_ref,
+    ownership_team: input.ownership_team,
+    ownership_owner: input.ownership_owner,
+    review_status: input.review_status,
+    ownership_notes_json: input.ownership_notes_json,
+    updated_at: new Date().toISOString(),
+    updated_by: null,
   }
 }
 
-type SeedConfigDoc = {
-  configs?: Array<{
-    entityId: string
-    flowPreset: string
-    serviceProfileRef: string
-    environmentPolicyRef: string
-    ownershipTeam: string
-    ownershipOwner: string | null
-    reviewStatus: "legacy-review-required" | "reviewed"
-    ownershipNotes: string[]
-  }>
-}
-
-function configRowFromSeedRun(
+function derivedConfigFromFlowId(
   entity: EntityDefinition,
-  row: {
-    flowPreset: string
-    serviceProfileRef: string
-    environmentPolicyRef: string
-    ownershipTeam: string
-    ownershipOwner: string | null
-    reviewStatus: "legacy-review-required" | "reviewed"
-    ownershipNotes: string[]
-  },
+  flowId: string,
   flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
 ): db.DbSyncDefinitionConfig {
   const flowPreset =
-    row.flowPreset?.trim() && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, row.flowPreset)
-      ? row.flowPreset
+    flowId.trim() && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, flowId)
+      ? flowId
       : defaultFlowTemplateId(entity.id, flowTemplateCatalog)
   return {
     tenant_id: entity.tenantId,
     entity_id: entity.id,
     flow_preset: flowPreset,
     execution_steps_json: JSON.stringify(resolveFlowSteps(flowPreset, flowTemplateCatalog)),
-    service_profile_ref: row.serviceProfileRef,
-    environment_policy_ref: row.environmentPolicyRef,
-    ownership_team: row.ownershipTeam,
-    ownership_owner: row.ownershipOwner,
-    review_status: row.reviewStatus,
-    ownership_notes_json: JSON.stringify(row.ownershipNotes),
+    service_profile_ref: "default",
+    environment_policy_ref: "default",
+    ownership_team: "sync-platform",
+    ownership_owner: null,
+    review_status: "legacy-review-required",
+    ownership_notes_json: JSON.stringify(["Derived from entity.flowId."]),
     updated_at: new Date().toISOString(),
     updated_by: "system",
-  }
-}
-
-function seedFromEntityRunFile(
-  projectRoot: string,
-  entity: EntityDefinition,
-  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
-): db.DbSyncDefinitionConfig | null {
-  const entityPath = resolve(projectRoot, ENTITY_SEEDS_DIR, `${entity.id}.json`)
-  if (!existsSync(entityPath)) return null
-  try {
-    const raw = JSON.parse(readFileSync(entityPath, "utf-8")) as {
-      run?: {
-        template?: string
-        service?: string
-        environment?: string
-        ownershipTeam?: string
-        ownershipOwner?: string | null
-        reviewStatus?: "legacy-review-required" | "reviewed"
-        ownershipNotes?: string[]
-      }
-    }
-    const run = raw.run
-    if (!run?.template?.trim()) return null
-    return configRowFromSeedRun(
-      entity,
-      {
-        flowPreset: run.template,
-        serviceProfileRef: run.service ?? "default",
-        environmentPolicyRef: run.environment ?? "default",
-        ownershipTeam: run.ownershipTeam ?? "sync-platform",
-        ownershipOwner: run.ownershipOwner ?? null,
-        reviewStatus: run.reviewStatus ?? "legacy-review-required",
-        ownershipNotes: run.ownershipNotes ?? ["Managed via entity registry seed."],
-      },
-      flowTemplateCatalog,
-    )
-  } catch (error) {
-    console.warn(
-      `[sync-definitions] failed to seed config from ${entityPath}:`,
-      error instanceof Error ? error.message : error,
-    )
-    return null
   }
 }
 
@@ -288,20 +219,23 @@ function seedFromRepoDefinition(
   entity: EntityDefinition
 ): db.DbSyncDefinitionConfig | null {
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot)
-  const fromRun = seedFromEntityRunFile(projectRoot, entity, flowTemplateCatalog)
-  if (fromRun) return fromRun
+  if (entity.flowId?.trim()) {
+    return derivedConfigFromFlowId(entity, entity.flowId, flowTemplateCatalog)
+  }
 
-  const configsPath = resolve(projectRoot, SYNC_DEFINITION_CONFIGS_SEED)
-  if (existsSync(configsPath)) {
+  // Legacy seed file with flowId / run.template (mid-migration).
+  const entityPath = resolve(projectRoot, ENTITY_SEEDS_DIR, `${entity.id}.json`)
+  if (existsSync(entityPath)) {
     try {
-      const doc = JSON.parse(readFileSync(configsPath, "utf-8")) as SeedConfigDoc
-      const row = (doc.configs ?? []).find((entry) => entry.entityId === entity.id)
-      if (row) {
-        return configRowFromSeedRun(entity, row, flowTemplateCatalog)
+      const raw = JSON.parse(readFileSync(entityPath, "utf-8")) as {
+        flowId?: string
+        run?: { template?: string }
       }
+      const flowId = raw.flowId?.trim() || raw.run?.template?.trim()
+      if (flowId) return derivedConfigFromFlowId(entity, flowId, flowTemplateCatalog)
     } catch (error) {
       console.warn(
-        `[sync-definitions] failed to seed config from ${configsPath}:`,
+        `[sync-definitions] failed to seed config from ${entityPath}:`,
         error instanceof Error ? error.message : error,
       )
     }
@@ -519,7 +453,6 @@ export function publishSyncDefinitionsFromDb(
     db.listSyncValueSources(tenantId),
   )
   const entities = db.listEntityDefinitions(tenantId)
-  const configs = new Map(db.listSyncDefinitionConfigs(tenantId).map((row) => [row.entity_id, row]))
   const publishedAt = new Date().toISOString()
   const publishedVersion = publishedAt
   const compiled: Record<string, PublishedSyncDefinition | null> = {}
@@ -537,7 +470,8 @@ export function publishSyncDefinitionsFromDb(
     for (const warning of entityValidation.warnings) {
       stderr.push(`[${entity.id}] ${warning.message}`)
     }
-    const config = configs.get(entity.id) ?? defaultConfigForEntity(entity, flowTemplateCatalog)
+    // Tip SoT: entity.flowId. Derived configs table is only a cache.
+    const config = syncDefinitionConfigFromEntity(entity, flowTemplateCatalog)
     const steps = normalizeAuthoredSyncFlowSteps(
       resolveExecutionStepsForValidation(config, flowTemplateCatalog),
       { entityId: entity.id, rootTable: entity.rootTable },

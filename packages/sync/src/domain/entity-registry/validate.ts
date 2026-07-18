@@ -160,6 +160,9 @@ function validateIdentity(def: EntityDefinition, errors: ValidationError[]): voi
   if (!def.displayName || def.displayName.trim().length === 0) {
     errors.push({ code: "id_invalid", message: "displayName is required", path: "/displayName" })
   }
+  if (!def.flowId || def.flowId.trim().length === 0) {
+    errors.push({ code: "id_invalid", message: "flowId is required", path: "/flowId" })
+  }
 }
 
 function validateTenant(def: EntityDefinition, errors: ValidationError[]): void {

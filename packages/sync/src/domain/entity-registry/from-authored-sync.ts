@@ -144,6 +144,8 @@ function entityTableFromAuthored(
 export type EntityDefinitionFromAuthoredOptions = {
   /** Stable stamp for seeds/goldens — defaults to wall clock. */
   createdAt?: string
+  /** Flow association — defaults to authored.id (caller may resolve via catalog). */
+  flowId?: string
 }
 
 export function entityDefinitionFromAuthoredSync(
@@ -189,6 +191,7 @@ export function entityDefinitionFromAuthoredSync(
     },
     lineageRefs: [],
     provenance,
+    flowId: options?.flowId ?? authored.id,
     legacyEntrySproc: authored.legacy.entrySproc,
     reverseOrder: [...authored.metadata.reverseOrder],
     discrepancies: authored.metadata.discrepancies.map(

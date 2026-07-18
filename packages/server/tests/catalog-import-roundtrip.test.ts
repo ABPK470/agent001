@@ -92,15 +92,15 @@ describe("catalog import/export round-trip", () => {
     process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
   })
 
-  it("exports and re-imports entity run bindings", () => {
+  it("exports and re-imports entity flowId", () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
     expect(snapshot.syncDefinitionConfigs).toBeNull()
 
     const datasetEntry = snapshot.entityRegistry?.entities.find(
       (entry) => (entry as { id?: string }).id === "dataset",
-    ) as { run?: { template?: string } } | undefined
-    expect(datasetEntry?.run?.template).toBeTruthy()
-    const flowPreset = datasetEntry!.run!.template!
+    ) as { flowId?: string } | undefined
+    expect(datasetEntry?.flowId).toBeTruthy()
+    const flowPreset = datasetEntry!.flowId!
 
     const preview = validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(true)
@@ -163,9 +163,9 @@ describe("catalog import/export round-trip", () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
     const datasetEntry = snapshot.entityRegistry?.entities.find(
       (entry) => (entry as { id?: string }).id === "dataset",
-    ) as { run?: { template?: string } } | undefined
-    expect(datasetEntry?.run).toBeTruthy()
-    datasetEntry!.run!.template = "does-not-exist"
+    ) as { flowId?: string } | undefined
+    expect(datasetEntry?.flowId).toBeTruthy()
+    datasetEntry!.flowId = "does-not-exist"
 
     const preview = validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(false)

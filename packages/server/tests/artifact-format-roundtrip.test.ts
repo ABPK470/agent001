@@ -88,16 +88,11 @@ describe("catalog format round-trip integration", () => {
   it("B → registry JSON → B preserves structured fields", () => {
     const entity = db.getEntityDefinition("_default", "contract")
     expect(entity).toBeTruthy()
-    const config = db.getSyncDefinitionConfig("_default", "contract")
-    const json = formatEntityJson(entity!, {
-      template: config!.flow_preset,
-      service: config!.service_profile_ref,
-      environment: config!.environment_policy_ref,
-    })
+    const json = formatEntityJson(entity!)
     const parsed = parseEntitiesJson(json)
     expect(parsed[0]?.ok).toBe(true)
     expect(parsed[0]?.def?.tables.length).toBe(entity!.tables.length)
-    expect(parsed[0]?.run?.template).toBe(config!.flow_preset)
+    expect(parsed[0]?.def?.flowId).toBe(entity!.flowId)
   })
 
   it("catalog snapshot B bulk export/import round-trip still works", () => {

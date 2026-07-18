@@ -191,6 +191,7 @@ describe("sync routes", () => {
       scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
       lineageRefs: [],
       provenance: { kind: "manual" },
+      flowId: "pipelineActivity",
       legacyEntrySproc: null,
       reverseOrder: ["core.PipelineActivity"],
       discrepancies: [],

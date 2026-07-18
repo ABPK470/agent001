@@ -45,6 +45,7 @@ const SAMPLE: EntityDefinition = {
   scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
   lineageRefs: [],
   provenance: { kind: "manual" },
+  flowId: "metadataOnly",
   legacyEntrySproc: null,
   reverseOrder: [],
   discrepancies: [],
@@ -72,14 +73,10 @@ describe("registry JSON format routes", () => {
   })
 
   it("round-trips registry JSON through parseEntitiesJson", () => {
-    const text = formatEntityJson(SAMPLE, {
-      template: "metadataOnly",
-      service: "default",
-      environment: "default",
-    })
+    const text = formatEntityJson({ ...SAMPLE, flowId: "metadataOnly" })
     const parsed = parseEntitiesJson(text)
     expect(parsed[0]?.ok).toBe(true)
     expect(parsed[0]?.def?.id).toBe("sample")
-    expect(parsed[0]?.run?.template).toBe("metadataOnly")
+    expect(parsed[0]?.def?.flowId).toBe("metadataOnly")
   })
 })

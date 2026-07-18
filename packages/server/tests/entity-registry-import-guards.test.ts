@@ -252,13 +252,7 @@ describe("catalog snapshot import guards", () => {
       version: 1,
       _comment: "test",
       entities: [
-        JSON.parse(
-          formatEntityJson(degraded, {
-            template: config.flow_preset,
-            service: config.service_profile_ref,
-            environment: config.environment_policy_ref,
-          }),
-        ) as Record<string, unknown>,
+        JSON.parse(formatEntityJson({ ...degraded, flowId: config.flow_preset })) as Record<string, unknown>,
       ],
     }
 

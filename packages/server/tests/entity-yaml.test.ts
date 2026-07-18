@@ -84,6 +84,7 @@ const FULL_DEF: EntityDefinition = {
   },
   lineageRefs: [],
   provenance: { kind: "legacy-migration", legacyPipelineId: 42 },
+  flowId: "contract",
   legacyEntrySproc: "dbo.uspSyncContract",
   reverseOrder: ["dbo.ContractLineItem", "dbo.Contract"],
   discrepancies: [],
@@ -195,42 +196,45 @@ describe("entity-yaml round-trip", () => {
     expect(parsed.def!.id).toBe(FULL_DEF.id)
   })
 
-  it("preserves run block separately from entity fields", () => {
-    const yaml = formatEntityYaml(FULL_DEF, {
-      template: "metadataOnly",
-      service: "default",
-      environment: "default"
-    })
+  it("round-trips flowId on the entity tip document", () => {
+    const yaml = formatEntityYaml({ ...FULL_DEF, flowId: "metadataOnly" })
     const parsed = parseEntityYaml(yaml)
     expect(parsed.ok).toBe(true)
-    expect(parsed.run).toEqual({
-      template: "metadataOnly",
-      service: "default",
-      environment: "default"
-    })
-    expect(stripServerStamped(parsed.def!)).toEqual(stripServerStamped(FULL_DEF))
+    expect(parsed.def!.flowId).toBe("metadataOnly")
+    expect(stripServerStamped(parsed.def!)).toEqual(
+      stripServerStamped({ ...FULL_DEF, flowId: "metadataOnly" }),
+    )
   })
 
-  it("ignores run block when absent", () => {
-    const yaml = formatEntityYaml(FULL_DEF)
+  it("maps legacy run.template to flowId on import", () => {
+    const yaml = `id: ${FULL_DEF.id}
+tenantId: ${FULL_DEF.tenantId}
+displayName: ${FULL_DEF.displayName}
+rootTable: ${FULL_DEF.rootTable}
+idColumn: ${FULL_DEF.idColumn}
+scd2:
+  strategyId: ${FULL_DEF.scd2.strategyId}
+  strategyVersion: latest
+tables: []
+policies:
+  freezeWindowIds: []
+provenance:
+  kind: manual
+run:
+  template: dataset
+`
     const parsed = parseEntityYaml(yaml)
     expect(parsed.ok).toBe(true)
-    expect(parsed.run).toBeNull()
+    expect(parsed.def!.flowId).toBe("dataset")
   })
 
-  it("round-trips run block through JSON export", () => {
-    const json = formatEntityJson(FULL_DEF, {
-      template: "dataset",
-      service: "default",
-      environment: "default",
-    })
+  it("round-trips flowId through JSON export", () => {
+    const json = formatEntityJson({ ...FULL_DEF, flowId: "dataset" })
     const parsed = parseEntitiesJson(json)[0]!
     expect(parsed.ok).toBe(true)
-    expect(parsed.run).toEqual({
-      template: "dataset",
-      service: "default",
-      environment: "default",
-    })
-    expect(stripServerStamped(parsed.def!)).toEqual(stripServerStamped(FULL_DEF))
+    expect(parsed.def!.flowId).toBe("dataset")
+    expect(stripServerStamped(parsed.def!)).toEqual(
+      stripServerStamped({ ...FULL_DEF, flowId: "dataset" }),
+    )
   })
 })

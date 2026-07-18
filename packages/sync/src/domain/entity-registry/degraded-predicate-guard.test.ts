@@ -42,6 +42,7 @@ function degradedContentEntity(): EntityDefinition {
     scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "legacy-migration", legacyPipelineId: 692 },
+    flowId: "content",
     legacyEntrySproc: "core.uspSyncContentObjectsTran",
     reverseOrder: [],
     discrepancies: [],

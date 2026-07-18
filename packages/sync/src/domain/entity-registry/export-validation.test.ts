@@ -40,6 +40,7 @@ function minimalEntity(overrides: Partial<EntityDefinition> = {}): EntityDefinit
     scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
+    flowId: overrides.flowId ?? "metadataOnly",
     legacyEntrySproc: null,
     reverseOrder: [],
     discrepancies: [],

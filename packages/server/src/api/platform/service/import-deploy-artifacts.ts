@@ -23,7 +23,7 @@ import {
   prepareFlowStepsForStorage,
   validateFlowStepsForCatalog,
 } from "../../../infra/persistence/sync-flow-steps.js"
-import { applyEntityRunYaml } from "../../sync/service/apply-entity-run-yaml.js"
+import { syncDerivedConfigFromFlowId } from "../../sync/service/apply-entity-run-yaml.js"
 import {
   ensureSyncDefinitionConfigs,
   loadAuthoringFlowCatalog,
@@ -289,8 +289,8 @@ export function validateDeployCatalogSnapshot(snapshot: DeployCatalogSnapshot): 
               errors.push(`entity "${item.def.id}": ${issue.message}`)
             }
           }
+          validateFlowPreset(item.def.id, item.def.flowId)
         }
-        if (item.run) validateFlowPreset(String(item.def?.id ?? "unknown"), item.run.template)
       }
     }
   }
@@ -527,7 +527,7 @@ function applyEntityDefinitions(
   return count
 }
 
-function applyEntityRunBindings(
+function applyEntityFlowBindings(
   tenantId: string,
   snapshot: DeployCatalogSnapshot,
   actor: string,
@@ -543,8 +543,8 @@ function applyEntityRunBindings(
   for (const entry of snapshot.entityRegistry?.entities ?? []) {
     const parsed = parseEntitiesJson(JSON.stringify(entry))
     for (const item of parsed) {
-      if (!item.ok || !item.run || !item.def) continue
-      applyEntityRunYaml(projectRoot, tenantId, item.def.id, item.run, actor)
+      if (!item.ok || !item.def?.flowId) continue
+      syncDerivedConfigFromFlowId(projectRoot, tenantId, item.def.id, item.def.flowId, actor)
       count++
     }
   }
@@ -580,7 +580,7 @@ export function applyDeployCatalogSnapshot(args: {
     applySyncMetadata(tenantId, args.snapshot.syncMetadata as SyncMetadataDoc)
     applyStrategies(tenantId, args.snapshot.strategies as StrategiesDoc, args.actor)
     applyEntityDefinitions(tenantId, args.snapshot, args.actor)
-    // Prefer entity.run (current). Optional sync-definition-configs.json is legacy zip compat.
+    // Prefer entity.flowId. Optional sync-definition-configs.json is legacy zip compat.
     if (args.snapshot.syncDefinitionConfigs?.configs?.length) {
       applySyncDefinitionConfigs(
         tenantId,
@@ -589,7 +589,7 @@ export function applyDeployCatalogSnapshot(args: {
         args.actor,
       )
     } else {
-      applyEntityRunBindings(tenantId, args.snapshot, args.actor, projectRoot)
+      applyEntityFlowBindings(tenantId, args.snapshot, args.actor, projectRoot)
     }
     ensureSyncDefinitionConfigs(projectRoot, tenantId)
     rehydrateSyncDefinitionConfigSteps(projectRoot, tenantId)

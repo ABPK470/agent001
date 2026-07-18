@@ -104,6 +104,7 @@ function makeFkPathEntity(id: string): EntityDefinition {
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
+    flowId: "metadataOnly",
     legacyEntrySproc: null,
     reverseOrder: ["core.Child", "core.Parent"],
     discrepancies: [],

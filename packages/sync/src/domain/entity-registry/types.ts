@@ -238,6 +238,11 @@ export interface EntityDefinition {
   }
   lineageRefs: EntityLineageRef[]
   provenance: EntityDefinitionProvenance
+  /**
+   * Flow in sync-metadata that defines execution steps for this entity.
+   * Publish resolves steps from this id; tip has no other run bindings.
+   */
+  flowId: string
 
   // ── Enriched introspection fields (additive, all optional) ───────
   /** Legacy MyMI entry-point stored procedure name (if migrated). */

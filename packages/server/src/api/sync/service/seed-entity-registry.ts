@@ -152,8 +152,23 @@ function loadEntitySeedFile(path: string, tenantId: string): EntityDefinition {
       `Expected EntityDefinition seed at ${path} (Authored seeds are no longer accepted — re-run refresh-from-legacy)`,
     )
   }
-  const { run: _run, ...rest } = raw as EntityDefinition & { run?: unknown }
-  return { ...rest, tenantId }
+  const doc = { ...(raw as unknown as Record<string, unknown>) }
+  const run = doc["run"]
+  if (
+    (typeof doc["flowId"] !== "string" || doc["flowId"].trim() === "") &&
+    run &&
+    typeof run === "object" &&
+    typeof (run as { template?: unknown }).template === "string" &&
+    (run as { template: string }).template.trim() !== ""
+  ) {
+    doc["flowId"] = (run as { template: string }).template.trim()
+  }
+  delete doc["run"]
+  const entity = doc as unknown as EntityDefinition
+  if (!entity.flowId?.trim()) {
+    entity.flowId = entity.id
+  }
+  return { ...entity, tenantId }
 }
 
 function isEntityDefinitionDocument(raw: unknown): raw is EntityDefinition {

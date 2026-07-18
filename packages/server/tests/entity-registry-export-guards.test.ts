@@ -72,17 +72,13 @@ describe("entity export guards — per-entity paths", () => {
   for (const entityId of CORE_ENTITIES) {
     it(`registry JSON export for ${entityId} is import-safe`, () => {
       const entity = db.getEntityDefinition(TENANT, entityId)
-      const config = db.getSyncDefinitionConfig(TENANT, entityId)
       expect(entity).toBeTruthy()
 
-      const json = formatEntityJson(entity!, {
-        template: config!.flow_preset,
-        service: config!.service_profile_ref,
-        environment: config!.environment_policy_ref,
-      })
+      const json = formatEntityJson(entity!)
       const parsed = parseEntitiesJson(json)
       expect(parsed[0]?.ok).toBe(true)
       expect(parsed[0]?.def?.tables.length).toBe(entity!.tables.length)
+      expect(parsed[0]?.def?.flowId).toBe(entity!.flowId)
     })
   }
 })

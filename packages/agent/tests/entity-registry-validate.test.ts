@@ -57,6 +57,7 @@ function validDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
+    flowId: overrides.flowId ?? "contract",
     legacyEntrySproc: null,
     reverseOrder: [],
     discrepancies: [],

@@ -11,7 +11,7 @@ export type EntityEditSectionId =
   | "scd2"
   | "policies"
   | "tables"
-  | "run"
+  | "flow"
   | "source"
 
 export interface EntityEditSection {
@@ -33,22 +33,13 @@ export interface EntityEditFormState {
   strategyVersion: number | "latest"
   freezeWindowIds: string[]
   tables: EntityRegistryTable[]
-  flowTemplateId: string
-  serviceProfileRef: string
-  environmentPolicyRef: string
+  flowId: string
   reason: string
   versionLabel: string
   sourceBody: string
 }
 
-export function defToFormState(
-  def: EntityRegistryDefinition,
-  run?: {
-    flowTemplateId: string
-    serviceProfileRef: string
-    environmentPolicyRef: string
-  } | null,
-): EntityEditFormState {
+export function defToFormState(def: EntityRegistryDefinition): EntityEditFormState {
   return {
     id: def.id,
     displayName: def.displayName,
@@ -63,9 +54,7 @@ export function defToFormState(
     tables: renumberEntityRegistryTables(
       def.tables.map((table) => ({ ...table, scope: cloneScope(table.scope) })),
     ),
-    flowTemplateId: run?.flowTemplateId ?? "metadataOnly",
-    serviceProfileRef: run?.serviceProfileRef ?? "default",
-    environmentPolicyRef: run?.environmentPolicyRef ?? "default",
+    flowId: def.flowId?.trim() || "metadataOnly",
     reason: "",
     versionLabel: "",
     sourceBody: "",
@@ -85,6 +74,7 @@ export function formStateToDefinition(
     idColumn: form.idColumn.trim(),
     labelColumn: form.labelColumn.trim() || null,
     selfJoinColumn: form.selfJoinColumn.trim() || null,
+    flowId: form.flowId.trim(),
     tables: renumberEntityRegistryTables(form.tables.map(normalizeEntityTable)),
     policies: {
       freezeWindowIds: [...form.freezeWindowIds],
@@ -109,26 +99,14 @@ export function validateEntityEditForm(
   if (mode === "new" && !form.id.trim()) return "Entity id is required"
   if (mode === "new" && reservedIds.has(form.id.trim())) return "Entity id already exists"
   if (!form.displayName.trim()) return "Display name is required"
+  if (!form.flowId.trim()) return "Flow is required"
   if (!form.reason.trim()) return "Add a reason for change"
   return null
-}
-
-export function runBindingToFormRun(run: {
-  template: string
-  service: string
-  environment: string
-}): Pick<EntityEditFormState, "flowTemplateId" | "serviceProfileRef" | "environmentPolicyRef"> {
-  return {
-    flowTemplateId: run.template,
-    serviceProfileRef: run.service,
-    environmentPolicyRef: run.environment,
-  }
 }
 
 export function applySourcePreviewToForm(
   form: EntityEditFormState,
   def: EntityRegistryDefinition,
-  run: Pick<EntityEditFormState, "flowTemplateId" | "serviceProfileRef" | "environmentPolicyRef"> | null,
   mode: "new" | "edit",
 ): EntityEditFormState {
   return {
@@ -146,9 +124,7 @@ export function applySourcePreviewToForm(
     tables: renumberEntityRegistryTables(
       def.tables.map((table) => ({ ...table, scope: cloneScope(table.scope) })),
     ),
-    flowTemplateId: run?.flowTemplateId ?? form.flowTemplateId,
-    serviceProfileRef: run?.serviceProfileRef ?? form.serviceProfileRef,
-    environmentPolicyRef: run?.environmentPolicyRef ?? form.environmentPolicyRef,
+    flowId: def.flowId?.trim() || form.flowId,
   }
 }
 
@@ -198,9 +174,9 @@ export function buildEntityEditSections(
       badge: form.tables.length > 0 ? String(form.tables.length) : undefined,
     },
     {
-      id: "run",
-      label: "Run",
-      hint: form.flowTemplateId || "—",
+      id: "flow",
+      label: "Flow",
+      hint: form.flowId || "—",
       badge:
         flowStepCount != null && flowStepCount > 0 ? String(flowStepCount) : undefined,
     },
@@ -275,6 +251,7 @@ export const NEW_ENTITY_JSON_TEMPLATE = `{
   "description": "",
   "rootTable": "schema.MyTable",
   "idColumn": "myEntityId",
+  "flowId": "metadataOnly",
   "scd2": {
     "strategyId": "mymi-scd2",
     "strategyVersion": "latest"
@@ -282,11 +259,6 @@ export const NEW_ENTITY_JSON_TEMPLATE = `{
   "tables": [],
   "policies": {
     "freezeWindowIds": []
-  },
-  "run": {
-    "template": "metadataOnly",
-    "service": "default",
-    "environment": "default"
   },
   "provenance": {
     "kind": "manual"
@@ -307,9 +279,7 @@ export function defaultNewFormState(): EntityEditFormState {
     strategyVersion: "latest",
     freezeWindowIds: [],
     tables: [],
-    flowTemplateId: "metadataOnly",
-    serviceProfileRef: "default",
-    environmentPolicyRef: "default",
+    flowId: "metadataOnly",
     reason: "",
     versionLabel: "",
     sourceBody: NEW_ENTITY_JSON_TEMPLATE,
@@ -336,10 +306,10 @@ export function mergeDraftSuggestion(
     tables: tablesUserEdited
       ? form.tables
       : suggestion.tables.map((table) => ({ ...table, scope: cloneScope(table.scope) })),
-    flowTemplateId:
-      touchedFields.has("flowTemplateId") || form.flowTemplateId !== "metadataOnly"
-        ? form.flowTemplateId
-        : suggestion.flowTemplateId ?? form.flowTemplateId,
+    flowId:
+      touchedFields.has("flowId") || form.flowId !== "metadataOnly"
+        ? form.flowId
+        : suggestion.flowTemplateId ?? form.flowId,
   }
 }
 

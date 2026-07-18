@@ -39,6 +39,7 @@ function def(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
+    flowId: overrides.flowId ?? "metadataOnly",
     legacyEntrySproc: null,
     reverseOrder: [],
     discrepancies: [],

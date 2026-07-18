@@ -18,6 +18,7 @@ import { normalizeAuthoredSyncFlowSteps } from "./normalize-flow-step.js"
 import {
   defaultSyncDefinitionFlowTemplateId,
   getSyncDefinitionFlowTemplateSteps,
+  hasSyncDefinitionFlowTemplate,
   type SyncDefinitionFlowTemplateCatalog,
 } from "./sync-definition-flow-templates.js"
 import { resolveFlowSteps } from "./resolve-flow-steps.js"
@@ -43,7 +44,8 @@ export interface CompileAuthoredOptions {
   resolveScd2Strategy?: (strategyId: string, strategyVersion: number | "latest") => Scd2Strategy | null
 }
 
-function defaultConfig(entityId: string, catalog: SyncDefinitionFlowTemplateCatalog): SyncDefinitionConfigInput {
+/** Compose-time defaults for published bindings/ownership — not tip fields. */
+export function defaultConfig(entityId: string, catalog: SyncDefinitionFlowTemplateCatalog): SyncDefinitionConfigInput {
   const flowTemplateId = defaultSyncDefinitionFlowTemplateId(entityId, catalog)
   return {
     flow_preset: flowTemplateId,
@@ -53,8 +55,37 @@ function defaultConfig(entityId: string, catalog: SyncDefinitionFlowTemplateCata
     ownership_team: "sync-platform",
     ownership_owner: null,
     review_status: "legacy-review-required",
-    ownership_notes_json: JSON.stringify(["Managed via entity registry + sync admin."])
+    ownership_notes_json: JSON.stringify(["Managed via entity registry + sync admin."]),
   }
+}
+
+/** Build publish config from entity tip `flowId` + compose-time stub defaults. */
+export function syncDefinitionConfigFromEntity(
+  entity: EntityDefinition,
+  catalog: SyncDefinitionFlowTemplateCatalog,
+): SyncDefinitionConfigInput {
+  const base = defaultConfig(entity.id, catalog)
+  const tip = entity.flowId?.trim()
+  const resolved =
+    tip && hasSyncDefinitionFlowTemplate(catalog, tip) ? tip : base.flow_preset
+  return {
+    ...base,
+    flow_preset: resolved,
+    execution_steps_json: JSON.stringify(resolveFlowSteps(resolved, catalog)),
+  }
+}
+
+function resolveTipFlowId(
+  entity: EntityDefinition,
+  config: SyncDefinitionConfigInput,
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
+): string {
+  const tip = entity.flowId?.trim()
+  if (tip && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, tip)) return tip
+  if (config.flow_preset && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, config.flow_preset)) {
+    return config.flow_preset
+  }
+  return defaultSyncDefinitionFlowTemplateId(entity.id, flowTemplateCatalog)
 }
 
 function resolveExecutionSteps(
@@ -63,7 +94,8 @@ function resolveExecutionSteps(
   entity: EntityDefinition,
   flowCatalog?: FlowCatalog,
 ): AuthoredSyncFlowStep[] {
-  const steps = resolveFlowSteps(config.flow_preset, flowTemplateCatalog)
+  const flowId = resolveTipFlowId(entity, config, flowTemplateCatalog)
+  const steps = resolveFlowSteps(flowId, flowTemplateCatalog)
   return flowCatalog
     ? normalizeAuthoredSyncFlowSteps(
         steps,
@@ -161,10 +193,11 @@ export function compileAuthoredSyncDefinition(
   entity: EntityDefinition,
   options: CompileAuthoredOptions
 ): AuthoredSyncDefinition {
-  const base = defaultConfig(entity.id, options.flowTemplateCatalog)
+  const base = syncDefinitionConfigFromEntity(entity, options.flowTemplateCatalog)
   const config: SyncDefinitionConfigInput = {
     ...base,
     ...options.config,
+    flow_preset: entity.flowId?.trim() || options.config?.flow_preset || base.flow_preset,
     service_profile_ref: options.serviceProfileRef ?? options.config?.service_profile_ref ?? base.service_profile_ref,
     environment_policy_ref:
       options.environmentPolicyRef ?? options.config?.environment_policy_ref ?? base.environment_policy_ref,
@@ -173,7 +206,7 @@ export function compileAuthoredSyncDefinition(
         (options.config?.ownership_notes_json
           ? (JSON.parse(options.config.ownership_notes_json) as string[])
           : JSON.parse(base.ownership_notes_json))
-    )
+    ),
   }
   return buildDefinitionCore(entity, config, options.flowTemplateCatalog, {
     kind: entity.provenance.kind === "legacy-migration" ? "legacy-migration" : "manual",

@@ -66,6 +66,7 @@ function normalizeEntityDefinition(raw: EntityDefinition): EntityDefinition {
   return normalizeEntityCanonical({
     ...r,
     tables: (r.tables ?? []).map(normalizeEntityTable),
+    flowId: typeof r.flowId === "string" && r.flowId.trim() !== "" ? r.flowId : r.id,
     legacyEntrySproc: r.legacyEntrySproc ?? null,
     reverseOrder: r.reverseOrder ?? [],
     discrepancies: r.discrepancies ?? [],

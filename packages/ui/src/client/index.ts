@@ -1124,11 +1124,6 @@ export const api = {
   },
   previewEntityRegistryYaml: (
     def: import("../types").EntityRegistryDefinition,
-    run?: {
-      flowTemplateId: string
-      serviceProfileRef: string
-      environmentPolicyRef: string
-    },
     opts?: { tenant?: string },
   ) => {
     const p = new URLSearchParams()
@@ -1138,17 +1133,12 @@ export const api = {
       `/api/entity-registry/entities/preview-yaml${qs ? `?${qs}` : ""}`,
       {
         method: "POST",
-        body: JSON.stringify({ def, run }),
+        body: JSON.stringify({ def }),
       },
     )
   },
   previewEntityRegistryJson: (
     def: import("../types").EntityRegistryDefinition,
-    run?: {
-      flowTemplateId: string
-      serviceProfileRef: string
-      environmentPolicyRef: string
-    },
     opts?: { tenant?: string },
   ) => {
     const p = new URLSearchParams()
@@ -1158,7 +1148,7 @@ export const api = {
       `/api/entity-registry/entities/preview-json${qs ? `?${qs}` : ""}`,
       {
         method: "POST",
-        body: JSON.stringify({ def, run }),
+        body: JSON.stringify({ def }),
       },
     )
   },

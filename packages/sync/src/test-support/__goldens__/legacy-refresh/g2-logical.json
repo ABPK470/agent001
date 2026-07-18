@@ -143,7 +143,8 @@
       "createdBy": "system",
       "reason": "bundled-seed",
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "retiredAt": null
+      "retiredAt": null,
+      "flowId": "content"
     },
     "contract": {
       "id": "contract",
@@ -486,7 +487,8 @@
       "createdBy": "system",
       "reason": "bundled-seed",
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "retiredAt": null
+      "retiredAt": null,
+      "flowId": "contract"
     },
     "dataset": {
       "id": "dataset",
@@ -785,7 +787,8 @@
       "createdBy": "system",
       "reason": "bundled-seed",
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "retiredAt": null
+      "retiredAt": null,
+      "flowId": "dataset"
     },
     "gateMetadata": {
       "id": "gateMetadata",
@@ -974,7 +977,8 @@
       "createdBy": "system",
       "reason": "bundled-seed",
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "retiredAt": null
+      "retiredAt": null,
+      "flowId": "gateMetadata"
     },
     "pipelineActivity": {
       "id": "pipelineActivity",
@@ -1075,7 +1079,8 @@
       "createdBy": "system",
       "reason": "bundled-seed",
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "retiredAt": null
+      "retiredAt": null,
+      "flowId": "pipelineActivity"
     },
     "rule": {
       "id": "rule",
@@ -1352,87 +1357,34 @@
       "createdBy": "system",
       "reason": "bundled-seed",
       "createdAt": "2026-01-01T00:00:00.000Z",
-      "retiredAt": null
+      "retiredAt": null,
+      "flowId": "rule"
     }
   },
   "configs": {
     "content": {
       "entityId": "content",
-      "flowPreset": "content",
-      "serviceProfileRef": "default",
-      "environmentPolicyRef": "default",
-      "ownershipTeam": "sync-platform",
-      "ownershipOwner": null,
-      "reviewStatus": "legacy-review-required",
-      "ownershipNotes": [
-        "Bootstrapped from legacy pipeline ground truth.",
-        "Contains FK-inferred optional scope that still needs deliberate review."
-      ]
+      "flowPreset": "content"
     },
     "contract": {
       "entityId": "contract",
-      "flowPreset": "contract",
-      "serviceProfileRef": "default",
-      "environmentPolicyRef": "default",
-      "ownershipTeam": "sync-platform",
-      "ownershipOwner": null,
-      "reviewStatus": "legacy-review-required",
-      "ownershipNotes": [
-        "Bootstrapped from legacy pipeline ground truth.",
-        "Contains FK-inferred optional scope that still needs deliberate review."
-      ]
+      "flowPreset": "contract"
     },
     "dataset": {
       "entityId": "dataset",
-      "flowPreset": "dataset",
-      "serviceProfileRef": "default",
-      "environmentPolicyRef": "default",
-      "ownershipTeam": "sync-platform",
-      "ownershipOwner": null,
-      "reviewStatus": "legacy-review-required",
-      "ownershipNotes": [
-        "Bootstrapped from legacy pipeline ground truth.",
-        "Contains FK-inferred optional scope that still needs deliberate review."
-      ]
+      "flowPreset": "dataset"
     },
     "gateMetadata": {
       "entityId": "gateMetadata",
-      "flowPreset": "gateMetadata",
-      "serviceProfileRef": "default",
-      "environmentPolicyRef": "default",
-      "ownershipTeam": "sync-platform",
-      "ownershipOwner": null,
-      "reviewStatus": "legacy-review-required",
-      "ownershipNotes": [
-        "Bootstrapped from legacy pipeline ground truth.",
-        "Contains FK-inferred optional scope that still needs deliberate review."
-      ]
+      "flowPreset": "gateMetadata"
     },
     "pipelineActivity": {
       "entityId": "pipelineActivity",
-      "flowPreset": "pipelineActivity",
-      "serviceProfileRef": "default",
-      "environmentPolicyRef": "default",
-      "ownershipTeam": "sync-platform",
-      "ownershipOwner": null,
-      "reviewStatus": "legacy-review-required",
-      "ownershipNotes": [
-        "Bootstrapped from legacy pipeline ground truth.",
-        "Contains FK-inferred optional scope that still needs deliberate review."
-      ]
+      "flowPreset": "pipelineActivity"
     },
     "rule": {
       "entityId": "rule",
-      "flowPreset": "rule",
-      "serviceProfileRef": "default",
-      "environmentPolicyRef": "default",
-      "ownershipTeam": "sync-platform",
-      "ownershipOwner": null,
-      "reviewStatus": "reviewed",
-      "ownershipNotes": [
-        "Bootstrapped from legacy pipeline ground truth.",
-        "All current legacy sync tables were derived directly from pipeline evidence."
-      ]
+      "flowPreset": "rule"
     }
   },
   "syncMetadata": {

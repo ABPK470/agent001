@@ -114,23 +114,25 @@ function emptySectionMaps(): SectionMaps {
 
 function configsFromSnapshot(snapshot: DeployCatalogSnapshot): unknown[] {
   if (snapshot.syncDefinitionConfigs?.configs?.length) {
-    return snapshot.syncDefinitionConfigs.configs
+    return snapshot.syncDefinitionConfigs.configs.map((row) => ({
+      entityId: row.entityId,
+      flowId: row.flowPreset,
+    }))
   }
   const out: unknown[] = []
   for (const entry of snapshot.entityRegistry?.entities ?? []) {
     const record = asRecord(entry)
     if (!record) continue
-    const run = asRecord(record.run)
-    if (!run || typeof run.template !== "string") continue
+    const flowId =
+      typeof record.flowId === "string" && record.flowId.trim() !== ""
+        ? record.flowId
+        : typeof asRecord(record.run)?.template === "string"
+          ? String(asRecord(record.run)!.template)
+          : null
+    if (!flowId) continue
     out.push({
       entityId: String(record.id ?? ""),
-      flowPreset: run.template,
-      serviceProfileRef: run.service ?? "default",
-      environmentPolicyRef: run.environment ?? "default",
-      ownershipTeam: run.ownershipTeam ?? "sync-platform",
-      ownershipOwner: run.ownershipOwner ?? null,
-      reviewStatus: run.reviewStatus ?? "legacy-review-required",
-      ownershipNotes: Array.isArray(run.ownershipNotes) ? run.ownershipNotes : [],
+      flowId,
     })
   }
   return out
@@ -144,15 +146,8 @@ function extractSectionMaps(snapshot: DeployCatalogSnapshot): SectionMaps {
     asRecord(syncMetadata.flows) ??
     {}
 
-  const entitiesWithoutRun = (snapshot.entityRegistry?.entities ?? []).map((entry) => {
-    const record = asRecord(entry)
-    if (!record) return entry
-    const { run: _run, ...rest } = record
-    return rest
-  })
-
   return {
-    entities: mapById(entitiesWithoutRun, "id"),
+    entities: mapById(snapshot.entityRegistry?.entities ?? [], "id"),
     configs: mapById(configsFromSnapshot(snapshot), "entityId"),
     strategies: mapById(asArray(asRecord(snapshot.strategies)?.strategies), "id"),
     environments: mapById(asArray(asRecord(snapshot.environments)?.environments), "name"),

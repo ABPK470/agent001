@@ -21,7 +21,6 @@ import {
   formatSourceImportError,
   mergeDraftSuggestion,
   NEW_ENTITY_JSON_TEMPLATE,
-  runBindingToFormRun,
   type EntityEditFormState,
   type EntityEditSectionId,
   validateEntityEditForm,
@@ -50,7 +49,7 @@ const SECTION_LABELS: Record<EntityEditSectionId, string> = {
   scd2: "SCD2 strategy",
   policies: "Freeze windows",
   tables: "Tables",
-  run: "Run",
+  flow: "Flow",
   source: "Entity JSON",
 }
 
@@ -64,8 +63,6 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
   const [err, setErr] = useState<string | null>(null)
   const [runtimeLoading, setRuntimeLoading] = useState(true)
   const [flowTemplateOptions, setFlowTemplateOptions] = useState<ListboxOption<EntityRegistrySyncFlowTemplateId>[]>([])
-  const [serviceProfileOptions, setServiceProfileOptions] = useState<ListboxOption<string>[]>([])
-  const [environmentPolicyOptions, setEnvironmentPolicyOptions] = useState<ListboxOption<string>[]>([])
   const [flowStepsById, setFlowStepsById] = useState<Record<string, AuthoredSyncFlowStep[]>>({})
   const touchedFieldsRef = useRef(new Set<string>())
   const tablesUserEditedRef = useRef(false)
@@ -140,8 +137,6 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
         : runtimeOptions.flowTemplates.map((o) => ({ value: o.id, label: o.label, hint: o.description }))
 
       setFlowTemplateOptions(flowOptions)
-      setServiceProfileOptions(runtimeOptions.serviceProfiles.map((o) => ({ value: o.id, label: o.label, hint: o.description })))
-      setEnvironmentPolicyOptions(runtimeOptions.environmentPolicies.map((o) => ({ value: o.id, label: o.label, hint: o.description })))
       setFlowStepsById(
         Object.fromEntries(
           (catalog?.flows ?? []).map((flow) => [flow.id, flow.steps.map((step) => ({ ...step }))]),
@@ -150,23 +145,19 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
 
       if (mode === "edit" && entityId && initial) {
         const source = await api.getEntityRegistryJson(entityId)
-        const runRow = configs.find((item) => item.id === entityId) ?? null
-        setBaseDef(initial)
+        const configFlowId = configs.find((item) => item.id === entityId)?.flowTemplateId
+        const hydrated: EntityRegistryDefinition = {
+          ...initial,
+          flowId: initial.flowId?.trim() || configFlowId || "metadataOnly",
+        }
+        setBaseDef(hydrated)
         structuredEditedRef.current = false
         setForm({
-          ...defToFormState(initial, runRow ? {
-            flowTemplateId: runRow.flowTemplateId,
-            serviceProfileRef: runRow.serviceProfileRef,
-            environmentPolicyRef: runRow.environmentPolicyRef,
-          } : null),
+          ...defToFormState(hydrated),
           sourceBody: source,
         })
         formBaselineRef.current = {
-          ...defToFormState(initial, runRow ? {
-            flowTemplateId: runRow.flowTemplateId,
-            serviceProfileRef: runRow.serviceProfileRef,
-            environmentPolicyRef: runRow.environmentPolicyRef,
-          } : null),
+          ...defToFormState(hydrated),
           sourceBody: source,
         }
       } else {
@@ -217,8 +208,8 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
   }, [applyDraftSuggestion, form.rootTable, loading, mode])
 
   const flowPreviewSteps = useMemo(
-    () => flowStepsById[form.flowTemplateId] ?? [],
-    [flowStepsById, form.flowTemplateId],
+    () => flowStepsById[form.flowId] ?? [],
+    [flowStepsById, form.flowId],
   )
 
   const sections = useMemo(
@@ -248,9 +239,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
         strategyVersion: form.strategyVersion,
         freezeWindowIds: form.freezeWindowIds,
         tables: form.tables,
-        flowTemplateId: form.flowTemplateId,
-        serviceProfileRef: form.serviceProfileRef,
-        environmentPolicyRef: form.environmentPolicyRef,
+        flowId: form.flowId,
       }),
     [form],
   )
@@ -288,12 +277,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
           setSourceError(null)
           skipSourceToFormRef.current = true
           setForm((current) => ({
-            ...applySourcePreviewToForm(
-              current,
-              item.def,
-              item.run ? runBindingToFormRun(item.run) : null,
-              mode,
-            ),
+            ...applySourcePreviewToForm(current, item.def, mode),
             sourceBody: current.sourceBody,
             reason: current.reason,
             versionLabel: current.versionLabel,
@@ -326,6 +310,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
             idColumn: "",
             labelColumn: null,
             selfJoinColumn: null,
+            flowId: form.flowId.trim() || "metadataOnly",
             tables: [],
             policies: { freezeWindowIds: [] },
             scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
@@ -342,11 +327,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
             retiredAt: null,
           }
           const def = formStateToDefinition(shell, form)
-          const { json } = await api.previewEntityRegistryJson(def, {
-            flowTemplateId: form.flowTemplateId,
-            serviceProfileRef: form.serviceProfileRef,
-            environmentPolicyRef: form.environmentPolicyRef,
-          })
+          const { json } = await api.previewEntityRegistryJson(def)
           skipFormToSourceRef.current = true
           structuredEditedRef.current = false
           patch({ sourceBody: json })
@@ -572,7 +553,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
             <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden p-5 lg:min-h-0">
               <div className="flex shrink-0 items-center justify-between gap-2">
                 <div className={SECTION_TITLE}>{SECTION_LABELS[section]}</div>
-                {section === "run" && (
+                {section === "flow" && (
                   <button
                     type="button"
                     disabled={runtimeLoading}
@@ -611,7 +592,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                 <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
                   <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
                     <p className="min-w-0 flex-1 text-sm text-text-muted">
-                      Entity source — edits here stay in sync with Identity, Tables, Run, and Configuration.
+                      Entity source — edits here stay in sync with Identity, Tables, Flow, and Configuration.
                     </p>
                     <div className="flex shrink-0 flex-wrap items-center gap-2">
                       {mode === "new" && (
@@ -805,7 +786,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                 </div>
               )}
 
-              {section === "run" && (
+              {section === "flow" && (
                 <div className="space-y-4">
                   <p className="text-sm text-text-muted">
                     Choose which flow recipe runs when this entity syncs. Edit flows, actions, and wiring in Configuration.
@@ -816,28 +797,20 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                     </div>
                   ) : (
                     <>
-                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-                        <Field label="Flow">
-                          <Listbox
-                            value={form.flowTemplateId as EntityRegistrySyncFlowTemplateId}
-                            options={flowTemplateOptions}
-                            onChange={(flowTemplateId) => {
-                              markTouched("flowTemplateId")
-                              patch({ flowTemplateId })
-                            }}
-                            className="w-full"
-                            ariaLabel="Sync flow"
-                          />
-                        </Field>
-                        <Field label="Service">
-                          <Listbox value={form.serviceProfileRef} options={serviceProfileOptions} onChange={(serviceProfileRef) => patch({ serviceProfileRef })} className="w-full" ariaLabel="Service profile" />
-                        </Field>
-                        <Field label="Environment">
-                          <Listbox value={form.environmentPolicyRef} options={environmentPolicyOptions} onChange={(environmentPolicyRef) => patch({ environmentPolicyRef })} className="w-full" ariaLabel="Environment policy" />
-                        </Field>
-                      </div>
+                      <Field label="Flow">
+                        <Listbox
+                          value={form.flowId as EntityRegistrySyncFlowTemplateId}
+                          options={flowTemplateOptions}
+                          onChange={(flowId) => {
+                            markTouched("flowId")
+                            patch({ flowId })
+                          }}
+                          className="w-full"
+                          ariaLabel="Sync flow"
+                        />
+                      </Field>
                       <Field label="Flow steps">
-                        <FlowStepsPreview flowId={form.flowTemplateId} steps={flowPreviewSteps} />
+                        <FlowStepsPreview flowId={form.flowId} steps={flowPreviewSteps} />
                       </Field>
                     </>
                   )}

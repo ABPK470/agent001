@@ -161,8 +161,7 @@ export function DefinitionContent({ definition }: { definition: PublishedSyncDef
           </div>
         )}
 
-        <div className="px-5 py-3 flex items-center justify-between text-xs text-text-muted/40">
-          <span className="font-mono">owner {definition.ownership.team}{definition.ownership.owner ? ` · ${definition.ownership.owner}` : ""}</span>
+        <div className="px-5 py-3 flex items-center justify-end text-xs text-text-muted/40">
           <span>Published {definition.publishedAt ? new Date(definition.publishedAt).toLocaleDateString() : "—"}</span>
         </div>
       </div>

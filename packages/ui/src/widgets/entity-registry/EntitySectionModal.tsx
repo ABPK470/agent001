@@ -6,8 +6,8 @@ import { EntityTablesExplorer } from "./EntityTablesExplorer"
 import {
   buildEntityOverviewSections,
   provenanceLabel,
+  type EntityFlowSummary,
   type EntityOverviewSectionId,
-  type EntityRunSummary,
 } from "./entity-overview-helpers"
 import { ModalShell } from "./ModalShell"
 import { PhasedStepList } from "./PhasedStepList"
@@ -143,29 +143,35 @@ function LineageSection({ def }: { def: EntityRegistryDefinition }): JSX.Element
   )
 }
 
-function RunSection({ runConfig }: { runConfig: SyncDefinitionAdminItem | null }): JSX.Element {
-  if (!runConfig) {
+function FlowSection({
+  flowId,
+  runConfig,
+}: {
+  flowId: string | null
+  runConfig: SyncDefinitionAdminItem | null
+}): JSX.Element {
+  if (!flowId) {
     return (
       <p className="text-sm text-text-muted">
-        No run binding yet. Use <span className="font-medium text-text">⋯ → Edit → Run</span> to pick a flow, service, and environment.
+        No flow associated yet. Use <span className="font-medium text-text">⋯ → Edit → Flow</span> to pick one.
       </p>
     )
   }
 
+  const steps = runConfig?.executionSteps ?? []
+
   return (
     <div className="space-y-3">
       <DetailGrid>
-        <DetailField label="Flow" value={runConfig.flowTemplateId} mono />
-        <DetailField label="Service" value={runConfig.serviceProfileRef} mono />
-        <DetailField label="Environment" value={runConfig.environmentPolicyRef} mono />
-        <DetailField label="Steps" value={runConfig.executionSteps.length} />
+        <DetailField label="Flow" value={flowId} mono />
+        <DetailField label="Steps" value={steps.length} />
       </DetailGrid>
-      {runConfig.executionSteps.length > 0 ? (
+      {steps.length > 0 ? (
         <>
           <p className="text-sm text-text-muted">
-            Steps resolved from flow <span className="font-mono text-text">{runConfig.flowTemplateId}</span>.
+            Steps resolved from flow <span className="font-mono text-text">{flowId}</span>.
           </p>
-          <PhasedStepList steps={runConfig.executionSteps} />
+          <PhasedStepList steps={steps} />
         </>
       ) : (
         <p className="text-xs text-text-muted">Flow has no steps — add them in Configuration → Flows.</p>
@@ -179,7 +185,7 @@ const SECTION_TITLES: Record<EntityOverviewSectionId, string> = {
   scd2: "SCD2 strategy",
   policies: "Freeze windows",
   tables: "Tables",
-  run: "Run bindings",
+  flow: "Flow",
   lineage: "Lineage",
 }
 
@@ -194,15 +200,14 @@ export function EntitySectionModal({
   runConfig: SyncDefinitionAdminItem | null
   onClose: () => void
 }): JSX.Element {
-  const runSummary: EntityRunSummary | null = runConfig
+  const flowId = def.flowId?.trim() || runConfig?.flowTemplateId || null
+  const flowSummary: EntityFlowSummary | null = flowId
     ? {
-        flowTemplateId: runConfig.flowTemplateId,
-        serviceProfileRef: runConfig.serviceProfileRef,
-        environmentPolicyRef: runConfig.environmentPolicyRef,
-        stepCount: runConfig.executionSteps.length,
+        flowId,
+        stepCount: runConfig?.executionSteps.length ?? 0,
       }
     : null
-  const section = buildEntityOverviewSections(def, runSummary).find((item) => item.id === sectionId)
+  const section = buildEntityOverviewSections(def, flowSummary).find((item) => item.id === sectionId)
 
   return (
     <ModalShell
@@ -216,7 +221,7 @@ export function EntitySectionModal({
         {sectionId === "scd2" && <Scd2Section def={def} />}
         {sectionId === "policies" && <PoliciesSection def={def} />}
         {sectionId === "tables" && <TablesSection def={def} />}
-        {sectionId === "run" && <RunSection runConfig={runConfig} />}
+        {sectionId === "flow" && <FlowSection flowId={flowId} runConfig={runConfig} />}
         {sectionId === "lineage" && <LineageSection def={def} />}
       </div>
     </ModalShell>

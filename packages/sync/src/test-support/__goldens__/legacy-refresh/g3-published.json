@@ -29,8 +29,7 @@
         "owner": null,
         "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy pipeline ground truth.",
-          "Contains FK-inferred optional scope that still needs deliberate review."
+          "Managed via entity registry + sync admin."
         ]
       },
       "metadata": {
@@ -334,8 +333,7 @@
         "owner": null,
         "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy pipeline ground truth.",
-          "Contains FK-inferred optional scope that still needs deliberate review."
+          "Managed via entity registry + sync admin."
         ]
       },
       "metadata": {
@@ -1821,8 +1819,7 @@
         "owner": null,
         "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy pipeline ground truth.",
-          "Contains FK-inferred optional scope that still needs deliberate review."
+          "Managed via entity registry + sync admin."
         ]
       },
       "metadata": {
@@ -2411,8 +2408,7 @@
         "owner": null,
         "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy pipeline ground truth.",
-          "Contains FK-inferred optional scope that still needs deliberate review."
+          "Managed via entity registry + sync admin."
         ]
       },
       "metadata": {
@@ -2790,8 +2786,7 @@
         "owner": null,
         "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy pipeline ground truth.",
-          "Contains FK-inferred optional scope that still needs deliberate review."
+          "Managed via entity registry + sync admin."
         ]
       },
       "metadata": {
@@ -3020,10 +3015,9 @@
       "ownership": {
         "team": "sync-platform",
         "owner": null,
-        "reviewStatus": "reviewed",
+        "reviewStatus": "legacy-review-required",
         "notes": [
-          "Bootstrapped from legacy pipeline ground truth.",
-          "All current legacy sync tables were derived directly from pipeline evidence."
+          "Managed via entity registry + sync admin."
         ]
       },
       "metadata": {

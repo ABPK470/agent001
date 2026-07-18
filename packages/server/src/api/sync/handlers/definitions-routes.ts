@@ -27,11 +27,10 @@ import {
   formatEntitiesYaml,
   formatEntityJson,
   formatEntityYaml,
-  entityRunYamlFromConfig,
   parseEntitiesJson,
   parseEntitiesYaml
 } from "../types/entity-yaml.js"
-import { applyEntityRunYaml, validateEntityRunYaml } from "../service/apply-entity-run-yaml.js"
+import { syncDerivedConfigFromFlowId, validateEntityFlowId } from "../service/apply-entity-run-yaml.js"
 import {
   assertEntityExportable,
   assertTenantEntitiesExportable,
@@ -92,14 +91,10 @@ function importEntitiesFromText(args: {
       rowErrors.push({ id: null, error: item.error ?? "unknown parse error" })
       continue
     }
-    if (item.run) {
-      if (!args.projectRoot) {
-        rowErrors.push({ id: item.def.id, error: "run block requires server projectRoot" })
-        continue
-      }
-      const runError = validateEntityRunYaml(args.projectRoot, item.run)
-      if (runError) {
-        rowErrors.push({ id: item.def.id, error: runError })
+    if (args.projectRoot) {
+      const flowError = validateEntityFlowId(args.projectRoot, item.def.flowId, args.tenantId)
+      if (flowError) {
+        rowErrors.push({ id: item.def.id, error: flowError })
         continue
       }
     }
@@ -113,12 +108,7 @@ function importEntitiesFromText(args: {
     const created = existing === null
     if (args.dryRun) {
       saved.push({ id: item.def.id, version: existing ? existing.version + 1 : 1, created })
-      preview.push({
-        def: item.def as EntityRegistryDefinition,
-        run: item.run
-          ? { template: item.run.template, service: item.run.service, environment: item.run.environment }
-          : null,
-      })
+      preview.push({ def: item.def as EntityRegistryDefinition })
       continue
     }
     try {
@@ -129,8 +119,14 @@ function importEntitiesFromText(args: {
         reason: args.reason
       })
       saved.push({ id: result.id, version: result.version, created })
-      if (item.run && args.projectRoot) {
-        applyEntityRunYaml(args.projectRoot, args.tenantId, result.id, item.run, args.actor)
+      if (args.projectRoot) {
+        syncDerivedConfigFromFlowId(
+          args.projectRoot,
+          args.tenantId,
+          result.id,
+          defWithTenant.flowId,
+          args.actor,
+        )
       }
       broadcast({
         type: EventType.EntityRegistryImported,
@@ -174,9 +170,7 @@ function exportEntityRegistryJson(tenantId: string, entityId: string): string {
   const def = db.getEntityDefinition(tenantId, entityId, { includeRetired: true })
   if (!def) return ""
   assertEntityExportable(def)
-  const config = db.getSyncDefinitionConfig(tenantId, entityId)
-  const run = config ? entityRunYamlFromConfig(config) : null
-  return formatEntityJson(def, run)
+  return formatEntityJson(def)
 }
 
 export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?: string): void {
@@ -219,9 +213,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       throw error
     }
     reply.header("content-type", "application/yaml; charset=utf-8")
-    const config = db.getSyncDefinitionConfig(tenantId, req.params.id)
-    const run = config ? entityRunYamlFromConfig(config) : null
-    return formatEntityYaml(def, run)
+    return formatEntityYaml(def)
   })
 
   const sendRegistryJson = (tenantId: string, entityId: string, reply: import("fastify").FastifyReply) => {
@@ -265,16 +257,8 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       throw error
     }
     const defs = db.listEntityDefinitions(tenantId, { includeRetired: true })
-    const runs = new Map(
-      defs
-        .map((def) => {
-          const config = db.getSyncDefinitionConfig(tenantId, def.id)
-          return config ? ([def.id, entityRunYamlFromConfig(config)] as const) : null
-        })
-        .filter((entry): entry is readonly [string, ReturnType<typeof entityRunYamlFromConfig>] => entry !== null)
-    )
     reply.header("content-type", "application/yaml; charset=utf-8")
-    return formatEntitiesYaml(defs, runs)
+    return formatEntitiesYaml(defs)
   })
 
   app.get<{ Params: { id: string } }>("/api/entity-registry/entities/:id/history", async (req) =>
@@ -371,6 +355,13 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         return { error: "'reason' is required" }
       }
       const tenantId = resolveTenant(req)
+      if (projectRoot) {
+        const flowError = validateEntityFlowId(projectRoot, req.body.def.flowId, tenantId)
+        if (flowError) {
+          reply.code(400)
+          return { error: flowError }
+        }
+      }
       try {
         const result = db.saveEntityDefinition({
           tenantId,
@@ -380,6 +371,15 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           versionLabel: req.body.versionLabel ?? null,
           createOnly: req.body.createOnly === true,
         })
+        if (projectRoot) {
+          syncDerivedConfigFromFlowId(
+            projectRoot,
+            tenantId,
+            result.id,
+            req.body.def.flowId,
+            req.session.upn,
+          )
+        }
         audit(req, "entity_registry.saved", {
           tenantId,
           id: result.id,
@@ -523,14 +523,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         reply.code(400)
         return { error: "'def' body is required" }
       }
-      const run = req.body.run
-        ? {
-            template: req.body.run.flowTemplateId,
-            service: req.body.run.serviceProfileRef,
-            environment: req.body.run.environmentPolicyRef,
-          }
-        : null
-      return { yaml: formatEntityYaml(req.body.def as EntityDefinition, run) }
+      return { yaml: formatEntityYaml(req.body.def as EntityDefinition) }
     },
   )
 
@@ -545,14 +538,7 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         reply.code(400)
         return { error: "'def' body is required" }
       }
-      const run = req.body.run
-        ? {
-            template: req.body.run.flowTemplateId,
-            service: req.body.run.serviceProfileRef,
-            environment: req.body.run.environmentPolicyRef,
-          }
-        : null
-      return { json: formatEntityJson(req.body.def as EntityDefinition, run) }
+      return { json: formatEntityJson(req.body.def as EntityDefinition) }
     },
   )
 

@@ -60,54 +60,29 @@ interface PreviewBody {
 }
 
 function sanitiseDefinitionConfig(body: Record<string, unknown>):
-  | {
-      flowTemplateId?: string
-      serviceProfileRef?: string
-      environmentPolicyRef?: string
-      ownershipTeam?: string
-      ownershipOwner?: string | null
-      reviewStatus?: "legacy-review-required" | "reviewed"
-      ownershipNotes?: string[]
-    }
+  | { flowTemplateId?: string }
   | string {
   if (body["executionSteps"] !== undefined) {
     return "executionSteps are defined on flows in Sync metadata — set flowTemplateId only"
   }
-  const out: {
-    flowTemplateId?: string
-    serviceProfileRef?: string
-    environmentPolicyRef?: string
-    ownershipTeam?: string
-    ownershipOwner?: string | null
-    reviewStatus?: "legacy-review-required" | "reviewed"
-    ownershipNotes?: string[]
-  } = {}
-  for (const field of [
-    "flowTemplateId",
+  for (const dead of [
     "serviceProfileRef",
     "environmentPolicyRef",
-    "ownershipTeam"
-  ] as const) {
-    if (body[field] !== undefined) {
-      if (typeof body[field] !== "string" || body[field].trim() === "")
-        return `${field} must be a non-empty string`
-      out[field] = body[field].trim()
+    "ownershipTeam",
+    "ownershipOwner",
+    "reviewStatus",
+    "ownershipNotes",
+  ]) {
+    if (body[dead] !== undefined) {
+      return `${dead} is not tip-editable — set flowTemplateId (entity.flowId) only`
     }
   }
-
-  if (body["ownershipOwner"] !== undefined) {
-    if (body["ownershipOwner"] !== null && typeof body["ownershipOwner"] !== "string")
-      return "ownershipOwner must be null or a string"
-    out.ownershipOwner = typeof body["ownershipOwner"] === "string" ? body["ownershipOwner"].trim() : null
-  }
-  if (body["reviewStatus"] !== undefined) {
-    if (body["reviewStatus"] !== "legacy-review-required" && body["reviewStatus"] !== "reviewed")
-      return "reviewStatus must be legacy-review-required or reviewed"
-    out.reviewStatus = body["reviewStatus"]
-  }
-  if (body["ownershipNotes"] !== undefined) {
-    if (!Array.isArray(body["ownershipNotes"])) return "ownershipNotes must be an array"
-    out.ownershipNotes = (body["ownershipNotes"] as unknown[]).map(String)
+  const out: { flowTemplateId?: string } = {}
+  if (body["flowTemplateId"] !== undefined) {
+    if (typeof body["flowTemplateId"] !== "string" || body["flowTemplateId"].trim() === "") {
+      return "flowTemplateId must be a non-empty string"
+    }
+    out.flowTemplateId = body["flowTemplateId"].trim()
   }
   return out
 }
@@ -294,51 +269,37 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         return { error: sanitised }
       }
       const runtimeOptions = listSyncDefinitionRuntimeOptions(projectRoot)
-      if (
-        sanitised.flowTemplateId !== undefined &&
-        !runtimeOptions.flowTemplates.some((option) => option.id === sanitised.flowTemplateId)
-      ) {
-        reply.code(400)
-        return { error: `unknown flowTemplateId "${sanitised.flowTemplateId}"` }
-      }
-      if (
-        sanitised.serviceProfileRef !== undefined &&
-        !runtimeOptions.serviceProfiles.some((option) => option.id === sanitised.serviceProfileRef)
-      ) {
-        reply.code(400)
-        return { error: `unknown serviceProfileRef "${sanitised.serviceProfileRef}"` }
-      }
-      if (
-        sanitised.environmentPolicyRef !== undefined &&
-        !runtimeOptions.environmentPolicies.some((option) => option.id === sanitised.environmentPolicyRef)
-      ) {
-        reply.code(400)
-        return { error: `unknown environmentPolicyRef "${sanitised.environmentPolicyRef}"` }
-      }
-      const existing = db.getSyncDefinitionConfig("_default", req.params.entityId)
       const flowId =
-        sanitised.flowTemplateId ?? existing?.flow_preset ?? defaultEntityFlowId(projectRoot, req.params.entityId)
+        sanitised.flowTemplateId ??
+        entity.flowId ??
+        defaultEntityFlowId(projectRoot, req.params.entityId)
       if (!flowId) {
         reply.code(400)
         return { error: "flowTemplateId is required" }
       }
+      if (!runtimeOptions.flowTemplates.some((option) => option.id === flowId)) {
+        reply.code(400)
+        return { error: `unknown flowTemplateId "${flowId}"` }
+      }
+      db.saveEntityDefinition({
+        tenantId: "_default",
+        def: { ...entity, flowId },
+        actor: req.session.upn,
+        reason: "sync-definition-config:flowId",
+      })
       upsertSyncDefinitionConfig(projectRoot, {
         tenant_id: "_default",
         entity_id: req.params.entityId,
         flow_preset: flowId,
         execution_steps_json: "[]",
-        service_profile_ref: sanitised.serviceProfileRef ?? existing?.service_profile_ref ?? "default",
-        environment_policy_ref:
-          sanitised.environmentPolicyRef ?? existing?.environment_policy_ref ?? "default",
-        ownership_team: sanitised.ownershipTeam ?? existing?.ownership_team ?? "sync-platform",
-        ownership_owner: sanitised.ownershipOwner ?? existing?.ownership_owner ?? null,
-        review_status: sanitised.reviewStatus ?? existing?.review_status ?? "legacy-review-required",
-        ownership_notes_json: JSON.stringify(
-          sanitised.ownershipNotes ??
-            (existing ? (JSON.parse(existing.ownership_notes_json) as string[]) : [])
-        ),
+        service_profile_ref: "default",
+        environment_policy_ref: "default",
+        ownership_team: "sync-platform",
+        ownership_owner: null,
+        review_status: "legacy-review-required",
+        ownership_notes_json: JSON.stringify(["Derived from entity.flowId."]),
         updated_at: new Date().toISOString(),
-        updated_by: req.session.upn
+        updated_by: req.session.upn,
       })
       broadcast({
         type: EventType.SyncDefinitionsPublished,

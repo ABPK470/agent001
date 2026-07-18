@@ -1092,6 +1092,8 @@ export interface EntityRegistryDefinition {
   scd2: EntityRegistryStrategyRef
   lineageRefs: EntityRegistryLineageRef[]
   provenance: EntityRegistryProvenance
+  /** Flow in sync-metadata that defines execution steps for this entity. */
+  flowId: string
   // Enriched (additive)
   legacyEntrySproc: string | null
   reverseOrder: string[]
@@ -1212,7 +1214,6 @@ export interface EntityRegistryDocumentImportRequest {
 
 export interface EntityRegistryYamlImportPreview {
   def: EntityRegistryDefinition
-  run: { template: string; service: string; environment: string } | null
 }
 
 export interface EntityRegistryYamlImportResponse extends PlatformImportGateResult {
@@ -1229,11 +1230,6 @@ export interface EntityRegistryYamlImportResponse extends PlatformImportGateResu
 
 export interface EntityRegistryPreviewYamlRequest {
   def: EntityRegistryDefinition
-  run?: {
-    flowTemplateId: string
-    serviceProfileRef: string
-    environmentPolicyRef: string
-  }
 }
 
 export interface EntityRegistryPreviewYamlResponse {
@@ -1242,11 +1238,6 @@ export interface EntityRegistryPreviewYamlResponse {
 
 export interface EntityRegistryPreviewJsonRequest {
   def: EntityRegistryDefinition
-  run?: {
-    flowTemplateId: string
-    serviceProfileRef: string
-    environmentPolicyRef: string
-  }
 }
 
 export interface EntityRegistryPreviewJsonResponse {

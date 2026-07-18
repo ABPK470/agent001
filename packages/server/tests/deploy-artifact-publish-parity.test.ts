@@ -59,11 +59,25 @@ function copyRepoDeployArtifacts(targetRoot: string): void {
 }
 
 function loadEntitySeed(entityId: string): EntityDefinition {
-  const raw = JSON.parse(
+  const doc = JSON.parse(
     readFileSync(join(REPO_ARTIFACTS_DIR, `${entityId}.json`), "utf-8"),
-  ) as EntityDefinition & { run?: unknown }
-  const { run: _run, ...rest } = raw
-  return rest
+  ) as Record<string, unknown>
+  const run = doc["run"]
+  if (
+    (typeof doc["flowId"] !== "string" || doc["flowId"].trim() === "") &&
+    run &&
+    typeof run === "object" &&
+    typeof (run as { template?: unknown }).template === "string" &&
+    (run as { template: string }).template.trim() !== ""
+  ) {
+    doc["flowId"] = (run as { template: string }).template.trim()
+  }
+  delete doc["run"]
+  const entity = doc as unknown as EntityDefinition
+  if (!entity.flowId?.trim()) {
+    entity.flowId = entity.id
+  }
+  return entity
 }
 
 function expectedPredicateMap(entityId: string): Map<string, string> {

@@ -13,7 +13,7 @@ import { join, resolve } from "node:path"
 import type { EntityDefinition, Scd2Strategy, SyncEnvironment } from "@mia/sync"
 
 import type { EntityRegistryExportDocument } from "../../sync/types/entity-yaml.js"
-import { buildEntityRegistryExportDocument, entityRunYamlFromConfig } from "../../sync/types/entity-yaml.js"
+import { buildEntityRegistryExportDocument } from "../../sync/types/entity-yaml.js"
 import { assertTenantEntitiesExportable } from "../../sync/service/assert-entity-export.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 
@@ -178,17 +178,8 @@ function exportEntityRegistryDocument(tenantId: string, includeRetired: boolean)
   entityIds: string[]
 } {
   const definitions = db.listEntityDefinitions(tenantId, { includeRetired }) as EntityDefinition[]
-  const runs = new Map(
-    definitions
-      .map((def) => {
-        const config = db.getSyncDefinitionConfig(tenantId, def.id)
-        return config ? ([def.id, entityRunYamlFromConfig(config)] as const) : null
-      })
-      .filter((entry): entry is readonly [string, ReturnType<typeof entityRunYamlFromConfig>] => entry !== null),
-  )
-
   return {
-    document: definitions.length > 0 ? buildEntityRegistryExportDocument(definitions, runs) : null,
+    document: definitions.length > 0 ? buildEntityRegistryExportDocument(definitions) : null,
     entityIds: definitions.map((def) => def.id),
   }
 }

@@ -1,52 +1,67 @@
-import {
-  hasSyncDefinitionFlowTemplate,
-} from "@mia/sync"
+/**
+ * Validate entity tip flowId and keep derived sync_definition_configs cache in sync.
+ * Tip SoT is EntityDefinition.flowId; the configs table is a publish helper only.
+ */
+
+import { hasSyncDefinitionFlowTemplate } from "@mia/sync"
 
 import * as db from "../../../infra/persistence/sqlite.js"
-import type { EntityRunYaml } from "../types/entity-yaml.js"
 import { loadAuthoringFlowCatalog, upsertSyncDefinitionConfig } from "./definitions.js"
 
-export function validateEntityRunYaml(
+export function validateEntityFlowId(
   projectRoot: string,
-  run: EntityRunYaml,
+  flowId: string,
   tenantId = "_default",
 ): string | null {
-  if (run.steps && run.steps.length > 0) {
-    return "run.steps is not supported — define steps on the flow in Sync metadata → Flows"
-  }
-  if (db.getSyncFlow(tenantId, run.template)) return null
+  const trimmed = flowId.trim()
+  if (!trimmed) return "flowId is required"
+  if (db.getSyncFlow(tenantId, trimmed)) return null
   const catalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
-  if (!hasSyncDefinitionFlowTemplate(catalog, run.template)) {
-    return `unknown run.template "${run.template}"`
+  if (!hasSyncDefinitionFlowTemplate(catalog, trimmed)) {
+    return `unknown flowId "${trimmed}"`
   }
   return null
 }
 
+/** @deprecated Use validateEntityFlowId */
+export function validateEntityRunYaml(
+  projectRoot: string,
+  run: { template: string },
+  tenantId = "_default",
+): string | null {
+  return validateEntityFlowId(projectRoot, run.template, tenantId)
+}
+
+export function syncDerivedConfigFromFlowId(
+  projectRoot: string,
+  tenantId: string,
+  entityId: string,
+  flowId: string,
+  actor: string,
+): void {
+  upsertSyncDefinitionConfig(projectRoot, {
+    tenant_id: tenantId,
+    entity_id: entityId,
+    flow_preset: flowId,
+    execution_steps_json: "[]",
+    service_profile_ref: "default",
+    environment_policy_ref: "default",
+    ownership_team: "sync-platform",
+    ownership_owner: null,
+    review_status: "legacy-review-required",
+    ownership_notes_json: JSON.stringify(["Derived from entity.flowId."]),
+    updated_at: new Date().toISOString(),
+    updated_by: actor,
+  })
+}
+
+/** @deprecated Use syncDerivedConfigFromFlowId */
 export function applyEntityRunYaml(
   projectRoot: string,
   tenantId: string,
   entityId: string,
-  run: EntityRunYaml,
-  actor: string
+  run: { template: string },
+  actor: string,
 ): void {
-  const existing = db.getSyncDefinitionConfig(tenantId, entityId)
-  const ownershipNotesJson =
-    run.ownershipNotes !== undefined
-      ? JSON.stringify(run.ownershipNotes)
-      : (existing?.ownership_notes_json ?? JSON.stringify(["Managed via entity registry YAML."]))
-  upsertSyncDefinitionConfig(projectRoot, {
-    tenant_id: tenantId,
-    entity_id: entityId,
-    flow_preset: run.template,
-    execution_steps_json: "[]",
-    service_profile_ref: run.service,
-    environment_policy_ref: run.environment,
-    ownership_team: run.ownershipTeam ?? existing?.ownership_team ?? "sync-platform",
-    ownership_owner:
-      run.ownershipOwner !== undefined ? run.ownershipOwner : (existing?.ownership_owner ?? null),
-    review_status: run.reviewStatus ?? existing?.review_status ?? "legacy-review-required",
-    ownership_notes_json: ownershipNotesJson,
-    updated_at: new Date().toISOString(),
-    updated_by: actor,
-  })
+  syncDerivedConfigFromFlowId(projectRoot, tenantId, entityId, run.template, actor)
 }

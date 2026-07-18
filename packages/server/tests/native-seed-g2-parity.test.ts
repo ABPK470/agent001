@@ -116,12 +116,8 @@ describe("native seed ≡ G2 logical catalog", () => {
     for (const row of configs) {
       const expected = g2.configs[row.entity_id]!
       expect(row.flow_preset).toBe(expected.flowPreset)
-      expect(row.service_profile_ref).toBe(expected.serviceProfileRef)
-      expect(row.environment_policy_ref).toBe(expected.environmentPolicyRef)
-      expect(row.ownership_team).toBe(expected.ownershipTeam)
-      expect(row.ownership_owner).toBe(expected.ownershipOwner)
-      expect(row.review_status).toBe(expected.reviewStatus)
-      expect(JSON.parse(row.ownership_notes_json)).toEqual(expected.ownershipNotes)
+      expect(row.service_profile_ref).toBe("default")
+      expect(row.environment_policy_ref).toBe("default")
     }
   })
 

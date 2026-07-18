@@ -25,14 +25,13 @@ export function EntityOverviewSections({ def }: EntityOverviewSectionsProps): JS
       .catch(() => setRunConfig(null))
   }, [def.id, def.version])
 
+  const flowId = def.flowId?.trim() || runConfig?.flowTemplateId || ""
   const sections = buildEntityOverviewSections(
     def,
-    runConfig
+    flowId
       ? {
-          flowTemplateId: runConfig.flowTemplateId,
-          serviceProfileRef: runConfig.serviceProfileRef,
-          environmentPolicyRef: runConfig.environmentPolicyRef,
-          stepCount: runConfig.executionSteps.length,
+          flowId,
+          stepCount: runConfig?.executionSteps.length ?? 0,
         }
       : null,
   )

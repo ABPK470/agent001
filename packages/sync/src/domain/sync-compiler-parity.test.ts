@@ -65,6 +65,7 @@ function makeEntity(over: Partial<EntityDefinition> = {}): EntityDefinition {
     scd2: { strategyId: "mymi-scd2", strategyVersion: 1, entityOverride: null },
     lineageRefs: [],
     provenance: { kind: "manual" },
+    flowId: over.flowId ?? "metadataOnly",
     legacyEntrySproc: null,
     reverseOrder: [],
     discrepancies: [],
