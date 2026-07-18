@@ -54,12 +54,12 @@ describe("filterCatalogVersions", () => {
     expect(rows.map((r) => r.version)).toEqual([1])
   })
 
-  it("keeps only active when requested", () => {
+  it("filters by actor", () => {
     const rows = filterCatalogVersions(SAMPLE, {
       ...DEFAULT_CATALOG_VERSION_FILTERS,
-      activeOnly: true,
+      actor: "system",
     })
-    expect(rows.map((r) => r.version)).toEqual([4])
+    expect(rows.map((r) => r.version)).toEqual([1])
   })
 })
 
@@ -68,9 +68,9 @@ describe("countActiveCatalogVersionFilters", () => {
     expect(countActiveCatalogVersionFilters(DEFAULT_CATALOG_VERSION_FILTERS, "")).toBe(0)
     expect(
       countActiveCatalogVersionFilters(
-        { ...DEFAULT_CATALOG_VERSION_FILTERS, activeOnly: true, actor: "pka" },
+        { ...DEFAULT_CATALOG_VERSION_FILTERS, actor: "pka" },
         "wiring",
       ),
-    ).toBe(3)
+    ).toBe(2)
   })
 })

@@ -238,21 +238,8 @@ export function CatalogVersionsModal({
                 </FilterField>
               </div>
 
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  aria-pressed={filters.activeOnly}
-                  onClick={() =>
-                    setFilters((current) => ({
-                      ...current,
-                      activeOnly: !current.activeOnly,
-                    }))
-                  }
-                  className={[TAB_PILL, filters.activeOnly ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
-                >
-                  Active only
-                </button>
-                {hasActiveFilters && (
+              {hasActiveFilters && (
+                <div className="flex flex-wrap items-center gap-2">
                   <button
                     type="button"
                     onClick={clearFilters}
@@ -261,8 +248,8 @@ export function CatalogVersionsModal({
                     <X size={12} />
                     Clear all
                   </button>
-                )}
-              </div>
+                </div>
+              )}
             </div>
           )}
 

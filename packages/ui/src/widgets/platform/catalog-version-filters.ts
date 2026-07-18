@@ -31,7 +31,6 @@ export type CatalogVersionFilters = {
   to?: string
   actor?: string
   kinds?: CatalogVersionKind[]
-  activeOnly?: boolean
   sort: CatalogVersionSort
 }
 
@@ -75,7 +74,6 @@ export function countActiveCatalogVersionFilters(
   if (filters.to?.trim()) count++
   if (filters.actor?.trim()) count++
   if (filters.kinds?.length) count++
-  if (filters.activeOnly) count++
   if (filters.sort !== DEFAULT_CATALOG_VERSION_FILTERS.sort) count++
   return count
 }
@@ -105,7 +103,6 @@ export function filterCatalogVersions(
   const toMs = filters.to ? dayEndMs(filters.to) : null
 
   const filtered = versions.filter((entry) => {
-    if (filters.activeOnly && !entry.isActive) return false
     if (actor && !entry.createdBy.toLowerCase().includes(actor)) return false
     if (kinds.size > 0 && !kinds.has(classifyCatalogVersionReason(entry.reason))) return false
     const createdMs = Date.parse(entry.createdAt)
