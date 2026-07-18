@@ -24,7 +24,13 @@ import {
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
 } from "../widget-toolbar"
-import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE } from "../entity-registry/chrome"
+import {
+  TAB_PILL,
+  TAB_PILL_ACTIVE,
+  TAB_PILL_IDLE,
+  TAB_SEGMENT_TRACK,
+  TEXT_BTN,
+} from "../entity-registry/chrome"
 import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
@@ -439,10 +445,9 @@ function HistoryFiltersPanel({
   hasActiveFilters: boolean
 }) {
   return (
-    <div className="shrink-0 border-b border-border/40 px-3 py-2 bg-base/20 space-y-2.5">
-      <div className="space-y-1.5">
-        <div className="field-label">Status</div>
-        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Status">
+    <div className="shrink-0 space-y-2 border-b border-border-subtle px-3 py-2.5">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div className={`${TAB_SEGMENT_TRACK} flex-wrap`} role="group" aria-label="Status">
           {STATUS_OPTIONS.map((option) => {
             const active = selectedStatuses.includes(option.value)
             return (
@@ -458,10 +463,16 @@ function HistoryFiltersPanel({
             )
           })}
         </div>
+        {hasActiveFilters && (
+          <button type="button" onClick={onClear} className={TEXT_BTN}>
+            <X size={12} />
+            Clear
+          </button>
+        )}
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <HistoryFilterField label="From">
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+        <HistoryFilterControl label="From date">
           <DateField
             value={filters.from}
             onChange={(from) => onFiltersChange({ from })}
@@ -470,8 +481,8 @@ function HistoryFiltersPanel({
             size="sm"
             className="w-full"
           />
-        </HistoryFilterField>
-        <HistoryFilterField label="To">
+        </HistoryFilterControl>
+        <HistoryFilterControl label="To date">
           <DateField
             value={filters.to}
             onChange={(to) => onFiltersChange({ to })}
@@ -480,8 +491,8 @@ function HistoryFiltersPanel({
             size="sm"
             className="w-full"
           />
-        </HistoryFilterField>
-        <HistoryFilterField label="Sort">
+        </HistoryFilterControl>
+        <HistoryFilterControl label="Sort order">
           <Listbox
             value={filters.sort ?? "started_desc"}
             options={SORT_OPTIONS}
@@ -490,8 +501,8 @@ function HistoryFiltersPanel({
             className="w-full listbox-control"
             ariaLabel="Sort order"
           />
-        </HistoryFilterField>
-        <HistoryFilterField label="Entity type">
+        </HistoryFilterControl>
+        <HistoryFilterControl label="Entity type">
           <Listbox
             value={filters.entityType ?? ""}
             options={entityTypeOptions}
@@ -501,11 +512,11 @@ function HistoryFiltersPanel({
             ariaLabel="Entity type"
             placeholder="Any entity type"
           />
-        </HistoryFilterField>
+        </HistoryFilterControl>
       </div>
 
-      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-        <HistoryFilterField label={isAdmin ? "User (UPN)" : "User"}>
+      <div className="grid grid-cols-2 gap-2 lg:grid-cols-3">
+        <HistoryFilterControl label={isAdmin ? "User (UPN)" : "User"}>
           <SearchablePick
             value={filters.actorUpn ?? ""}
             options={[]}
@@ -515,8 +526,8 @@ function HistoryFiltersPanel({
             disabled={!isAdmin}
             className="listbox-control"
           />
-        </HistoryFilterField>
-        <HistoryFilterField label="Source">
+        </HistoryFilterControl>
+        <HistoryFilterControl label="Source environment">
           <Listbox
             value={filters.source ?? ""}
             options={envOptions}
@@ -526,8 +537,8 @@ function HistoryFiltersPanel({
             ariaLabel="Source environment"
             placeholder="Any source"
           />
-        </HistoryFilterField>
-        <HistoryFilterField label="Target">
+        </HistoryFilterControl>
+        <HistoryFilterControl label="Target environment">
           <Listbox
             value={filters.target ?? ""}
             options={envOptions}
@@ -537,28 +548,16 @@ function HistoryFiltersPanel({
             ariaLabel="Target environment"
             placeholder="Any target"
           />
-        </HistoryFilterField>
-        <div className="flex items-end">
-          {hasActiveFilters && (
-            <button
-              type="button"
-              onClick={onClear}
-              className="inline-flex items-center gap-1 rounded-lg border border-border/50 px-3 py-2 text-xs text-text-muted hover:text-text hover:bg-elevated/30 transition-colors"
-            >
-              <X size={12} />
-              Clear all
-            </button>
-          )}
-        </div>
+        </HistoryFilterControl>
       </div>
     </div>
   )
 }
 
-function HistoryFilterField({ label, children }: { label: string; children: React.ReactNode }) {
+function HistoryFilterControl({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <label className="block min-w-0 space-y-1">
-      <span className="field-label">{label}</span>
+    <label className="block min-w-0">
+      <span className="sr-only">{label}</span>
       {children}
     </label>
   )

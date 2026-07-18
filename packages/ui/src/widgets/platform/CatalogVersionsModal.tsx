@@ -11,7 +11,13 @@ import { EmptyState } from "../../components/EmptyState"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SearchablePick, type SearchablePickOption } from "../../components/SearchablePick"
 import { useLiveReload } from "../../hooks/useLiveReload"
-import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE } from "../entity-registry/chrome"
+import {
+  TAB_PILL,
+  TAB_PILL_ACTIVE,
+  TAB_PILL_IDLE,
+  TAB_SEGMENT_TRACK,
+  TEXT_BTN,
+} from "../entity-registry/chrome"
 import { ModalShell } from "../entity-registry/ModalShell"
 import {
   WidgetToolbar,
@@ -172,10 +178,9 @@ export function CatalogVersionsModal({
           </WidgetToolbar>
 
           {filtersOpen && (
-            <div className="shrink-0 border-b border-border/40 bg-base/20 px-3 py-2 space-y-2.5">
-              <div className="space-y-1.5">
-                <div className="field-label">Change kind</div>
-                <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Change kind">
+            <div className="shrink-0 space-y-2 border-b border-border-subtle px-3 py-2.5">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className={`${TAB_SEGMENT_TRACK} flex-wrap`} role="group" aria-label="Change kind">
                   {CATALOG_VERSION_KIND_OPTIONS.map((option) => {
                     const active = (filters.kinds ?? []).includes(option.value)
                     return (
@@ -191,10 +196,16 @@ export function CatalogVersionsModal({
                     )
                   })}
                 </div>
+                {hasActiveFilters && (
+                  <button type="button" onClick={clearFilters} className={TEXT_BTN}>
+                    <X size={12} />
+                    Clear
+                  </button>
+                )}
               </div>
 
-              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-                <FilterField label="From">
+              <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+                <FilterControl label="From date">
                   <DateField
                     value={filters.from}
                     onChange={(from) => setFilters((current) => ({ ...current, from }))}
@@ -203,8 +214,8 @@ export function CatalogVersionsModal({
                     size="sm"
                     className="w-full"
                   />
-                </FilterField>
-                <FilterField label="To">
+                </FilterControl>
+                <FilterControl label="To date">
                   <DateField
                     value={filters.to}
                     onChange={(to) => setFilters((current) => ({ ...current, to }))}
@@ -213,8 +224,8 @@ export function CatalogVersionsModal({
                     size="sm"
                     className="w-full"
                   />
-                </FilterField>
-                <FilterField label="Sort">
+                </FilterControl>
+                <FilterControl label="Sort order">
                   <Listbox
                     value={filters.sort}
                     options={CATALOG_VERSION_SORT_OPTIONS as ListboxOption<CatalogVersionSort>[]}
@@ -223,8 +234,8 @@ export function CatalogVersionsModal({
                     className="w-full listbox-control"
                     ariaLabel="Sort order"
                   />
-                </FilterField>
-                <FilterField label="User">
+                </FilterControl>
+                <FilterControl label="User">
                   <SearchablePick
                     value={filters.actor ?? ""}
                     options={actorOptions}
@@ -235,27 +246,14 @@ export function CatalogVersionsModal({
                     ariaLabel="Filter by user"
                     className="listbox-control"
                   />
-                </FilterField>
+                </FilterControl>
               </div>
-
-              {hasActiveFilters && (
-                <div className="flex flex-wrap items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={clearFilters}
-                    className="inline-flex items-center gap-1 rounded-lg border border-border/50 px-3 py-1.5 text-xs text-text-muted hover:text-text hover:bg-elevated/30 transition-colors"
-                  >
-                    <X size={12} />
-                    Clear all
-                  </button>
-                </div>
-              )}
             </div>
           )}
 
-          <div className="flex min-h-0 flex-1 flex-col gap-3 px-6 pb-4 pt-3">
+          <div className="flex min-h-0 flex-1 flex-col gap-2 px-6 pb-4 pt-3">
             {err && <p className="text-sm text-error">{err}</p>}
-            <p className="text-xs text-text-faint">
+            <p className="shrink-0 text-xs text-text-faint">
               Sync bundle last published:{" "}
               {bundlePublishedAt ? new Date(bundlePublishedAt).toLocaleString() : "never"}
               {publishedCatalogVersion != null ? ` (from catalog v${publishedCatalogVersion})` : ""}
@@ -284,7 +282,7 @@ export function CatalogVersionsModal({
                 {filtered.map((entry) => (
                   <li
                     key={entry.version}
-                    className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 text-sm ${entry.isActive ? "border-accent/40 bg-accent/5" : "border-border-subtle"}`}
+                    className={`flex items-center gap-3 rounded-lg border px-3 py-2.5 text-sm ${entry.isActive ? "border-accent/40 bg-accent/5" : "border-border-subtle"}`}
                   >
                     <button
                       type="button"
@@ -362,10 +360,11 @@ export function CatalogVersionsModal({
   )
 }
 
-function FilterField({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
+/** Placeholder-led control — label is for assistive tech only (avoids uppercase form soup). */
+function FilterControl({ label, children }: { label: string; children: React.ReactNode }): JSX.Element {
   return (
-    <label className="block min-w-0 space-y-1">
-      <span className="field-label">{label}</span>
+    <label className="block min-w-0">
+      <span className="sr-only">{label}</span>
       {children}
     </label>
   )
