@@ -10,6 +10,7 @@ import { Loader2, Search, X } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { placeAnchoredPanelForElements } from "../lib/anchored-panel"
 
 /** @deprecated use WidgetToolbarChip classes via widget-toolbar__chip */
 export const LOG_TOOLBAR_CHIP = "widget-toolbar__chip"
@@ -150,7 +151,7 @@ export function WidgetToolbarFilterMenu({
   children,
 }: WidgetToolbarFilterMenuProps): JSX.Element {
   const [open, setOpen] = useState(false)
-  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number; above: boolean } | null>(null)
+  const [pos, setPos] = useState<{ top: number; left: number; minWidth: number } | null>(null)
   const triggerRef = useRef<HTMLButtonElement>(null)
   const panelRef = useRef<HTMLDivElement>(null)
 
@@ -158,16 +159,22 @@ export function WidgetToolbarFilterMenu({
     setOpen(false)
   }
 
+  function placeMenu(): void {
+    const trigger = triggerRef.current
+    if (!trigger) return
+    const next = placeAnchoredPanelForElements(trigger, panelRef.current, {
+      align: "start",
+      estimate: { width: Math.max(trigger.getBoundingClientRect().width, 168), height: 240 },
+    })
+    setPos({
+      top: next.top,
+      left: next.left,
+      minWidth: Math.max(trigger.getBoundingClientRect().width, 168),
+    })
+  }
+
   function openMenu(): void {
-    const rect = triggerRef.current?.getBoundingClientRect()
-    if (rect) {
-      setPos({
-        top: rect.bottom + 4,
-        left: rect.left,
-        minWidth: Math.max(rect.width, 168),
-        above: false,
-      })
-    }
+    placeMenu()
     setOpen(true)
   }
 
@@ -179,35 +186,17 @@ export function WidgetToolbarFilterMenu({
   useLayoutEffect(() => {
     if (!open || !triggerRef.current) return
 
-    function measure(): void {
-      const trigger = triggerRef.current
-      if (!trigger) return
-      const rect = trigger.getBoundingClientRect()
-      const panelHeight = panelRef.current?.offsetHeight ?? 240
-      const viewportPad = 8
-      const spaceBelow = window.innerHeight - rect.bottom - viewportPad
-      const spaceAbove = rect.top - viewportPad
-      const above = spaceBelow < panelHeight && spaceAbove > spaceBelow
-      const top = above ? rect.top - viewportPad : rect.bottom + 4
-      setPos({
-        top,
-        left: rect.left,
-        minWidth: Math.max(rect.width, 168),
-        above,
-      })
-    }
-
-    measure()
-    const raf = requestAnimationFrame(measure)
-    const ro = panelRef.current ? new ResizeObserver(measure) : null
+    placeMenu()
+    const raf = requestAnimationFrame(placeMenu)
+    const ro = panelRef.current ? new ResizeObserver(placeMenu) : null
     if (panelRef.current) ro?.observe(panelRef.current)
-    window.addEventListener("resize", measure)
-    window.addEventListener("scroll", measure, true)
+    window.addEventListener("resize", placeMenu)
+    window.addEventListener("scroll", placeMenu, true)
     return () => {
       cancelAnimationFrame(raf)
       ro?.disconnect()
-      window.removeEventListener("resize", measure)
-      window.removeEventListener("scroll", measure, true)
+      window.removeEventListener("resize", placeMenu)
+      window.removeEventListener("scroll", placeMenu, true)
     }
   }, [open, children])
 
@@ -254,7 +243,6 @@ export function WidgetToolbarFilterMenu({
               top: pos?.top ?? 0,
               left: pos?.left ?? 0,
               minWidth: pos?.minWidth ?? 168,
-              transform: pos?.above ? "translateY(-100%)" : undefined,
               visibility: pos ? "visible" : "hidden",
             }}
           >

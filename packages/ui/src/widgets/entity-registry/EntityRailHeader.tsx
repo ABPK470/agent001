@@ -4,10 +4,13 @@
 
 import { Plus, Settings2 } from "lucide-react"
 import type { JSX } from "react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { placeAnchoredPanelForElements } from "../../lib/anchored-panel"
 import { EntityRailPlatformMenu } from "./EntityRailPlatformMenu"
 import { IconButton, TOOLBAR_ICON } from "./IconButton"
+
+const PLATFORM_MENU_ESTIMATE = { width: 240, height: 320 }
 
 export interface EntityRailHeaderProps {
   isAdmin: boolean
@@ -35,14 +38,24 @@ export function EntityRailHeader({
   onCatalogVersions,
 }: EntityRailHeaderProps): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
-  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const menuBtnRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   function closeMenu(): void {
     setMenuOpen(false)
-    setMenuAnchor(null)
+    setMenuPos(null)
+  }
+
+  function placeMenu(): void {
+    const btn = menuBtnRef.current
+    if (!btn) return
+    const next = placeAnchoredPanelForElements(btn, dropdownRef.current, {
+      align: "start",
+      estimate: PLATFORM_MENU_ESTIMATE,
+    })
+    setMenuPos({ top: next.top, left: next.left })
   }
 
   function toggleMenu(): void {
@@ -50,11 +63,20 @@ export function EntityRailHeader({
       closeMenu()
       return
     }
-    const rect = menuBtnRef.current?.getBoundingClientRect()
-    if (!rect) return
-    setMenuAnchor(rect)
+    const btn = menuBtnRef.current
+    if (!btn) return
+    const next = placeAnchoredPanelForElements(btn, null, {
+      align: "start",
+      estimate: PLATFORM_MENU_ESTIMATE,
+    })
+    setMenuPos({ top: next.top, left: next.left })
     setMenuOpen(true)
   }
+
+  useLayoutEffect(() => {
+    if (!menuOpen) return
+    placeMenu()
+  }, [menuOpen])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -66,11 +88,16 @@ export function EntityRailHeader({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") closeMenu()
     }
+    const reposition = () => placeMenu()
     document.addEventListener("mousedown", onPointerDown)
     document.addEventListener("keydown", onKeyDown)
+    window.addEventListener("resize", reposition)
+    window.addEventListener("scroll", reposition, true)
     return () => {
       document.removeEventListener("mousedown", onPointerDown)
       document.removeEventListener("keydown", onKeyDown)
+      window.removeEventListener("resize", reposition)
+      window.removeEventListener("scroll", reposition, true)
     }
   }, [menuOpen])
 
@@ -94,15 +121,12 @@ export function EntityRailHeader({
             >
               <Settings2 {...TOOLBAR_ICON} />
             </IconButton>
-            {menuOpen && menuAnchor && createPortal(
+            {menuOpen && menuPos && createPortal(
               <div
                 ref={dropdownRef}
                 className="thread-rail-item-dropdown thread-rail-item-dropdown--portal thread-rail-item-dropdown--platform"
                 role="menu"
-                style={{
-                  top: menuAnchor.bottom + 4,
-                  left: menuAnchor.left,
-                }}
+                style={{ top: menuPos.top, left: menuPos.left }}
               >
                 <EntityRailPlatformMenu
                   busy={busy}

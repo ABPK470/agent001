@@ -1,10 +1,12 @@
 /**
  * Anchored icon trigger + dropdown — portaled so parent overflow cannot clip.
+ * Placement flips above the trigger when there is not enough room below.
  */
 
 import type { JSX, ReactNode } from "react"
-import { useLayoutEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { placeAnchoredPanelForElements } from "../../lib/anchored-panel"
 import { IconButton } from "./IconButton"
 
 export const TOOLBAR_MENU_ITEM =
@@ -23,6 +25,8 @@ export interface ToolbarMenuProps {
   compact?: boolean
 }
 
+const MENU_ESTIMATE = { width: 180, height: 160 }
+
 export function ToolbarMenu({
   title,
   trigger,
@@ -31,21 +35,44 @@ export function ToolbarMenu({
   compact = false,
 }: ToolbarMenuProps): JSX.Element {
   const [open, setOpen] = useState(false)
-  const [menuPos, setMenuPos] = useState<{ top: number; right: number; minWidth: number } | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number; minWidth: number } | null>(null)
   const btnRef = useRef<HTMLButtonElement>(null)
+  const panelRef = useRef<HTMLDivElement>(null)
 
   function close(): void {
     setOpen(false)
+    setMenuPos(null)
+  }
+
+  function placeMenu(): void {
+    const btn = btnRef.current
+    if (!btn) return
+    const next = placeAnchoredPanelForElements(btn, panelRef.current, {
+      align: "end",
+      estimate: MENU_ESTIMATE,
+    })
+    const triggerW = btn.getBoundingClientRect().width
+    setMenuPos({
+      top: next.top,
+      left: next.left,
+      minWidth: Math.max(triggerW, 180),
+    })
   }
 
   useLayoutEffect(() => {
-    if (!open || !btnRef.current) return
-    const rect = btnRef.current.getBoundingClientRect()
-    setMenuPos({
-      top: rect.bottom + 4,
-      right: window.innerWidth - rect.right,
-      minWidth: Math.max(rect.width, 180),
-    })
+    if (!open) return
+    placeMenu()
+  }, [open])
+
+  useEffect(() => {
+    if (!open) return
+    const reposition = () => placeMenu()
+    window.addEventListener("resize", reposition)
+    window.addEventListener("scroll", reposition, true)
+    return () => {
+      window.removeEventListener("resize", reposition)
+      window.removeEventListener("scroll", reposition, true)
+    }
   }, [open])
 
   return (
@@ -53,7 +80,24 @@ export function ToolbarMenu({
       <IconButton
         ref={btnRef}
         label={title}
-        onClick={() => setOpen((value) => !value)}
+        onClick={() => {
+          if (open) {
+            close()
+            return
+          }
+          const btn = btnRef.current
+          if (!btn) return
+          const next = placeAnchoredPanelForElements(btn, null, {
+            align: "end",
+            estimate: MENU_ESTIMATE,
+          })
+          setMenuPos({
+            top: next.top,
+            left: next.left,
+            minWidth: Math.max(btn.getBoundingClientRect().width, 180),
+          })
+          setOpen(true)
+        }}
         active={open}
         className={compact ? "!w-7 !h-7 !rounded-md" : undefined}
         aria-expanded={open}
@@ -64,8 +108,9 @@ export function ToolbarMenu({
         <>
           <div className="fixed inset-0 z-[250]" onClick={close} aria-hidden />
           <div
+            ref={panelRef}
             className={`fixed z-[260] ${minWidthClass} rounded-md border border-border-subtle bg-elevated py-1 shadow-2xl`}
-            style={{ top: menuPos.top, right: menuPos.right, minWidth: menuPos.minWidth }}
+            style={{ top: menuPos.top, left: menuPos.left, minWidth: menuPos.minWidth }}
             role="menu"
             onClick={close}
           >

@@ -3861,7 +3861,8 @@ textarea.input {
 .thread-rail-item-dropdown--portal {
   position: fixed;
   z-index: 210;
-  transform: translateX(-100%);
+  /* left/top come from placeAnchoredPanel — no translateX end-align hack */
+  transform: none;
 }
 
 .thread-rail-item-dropdown--platform {

@@ -6,6 +6,7 @@
 import { Check, ChevronDown, Search } from "lucide-react"
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type JSX } from "react"
 import { createPortal } from "react-dom"
+import { placeAnchoredPanel } from "../lib/anchored-panel"
 import { popoverZIndex } from "../lib/modal-stack"
 import {
   claimPopoverOpen,
@@ -112,21 +113,26 @@ export function Listbox<T extends string>({
     const { minWidth, maxWidth } = measurePopoverWidth(r.width, r.left, options)
     const listHeight = Math.min(filteredOptions.length * OPTION_ROW_HEIGHT + 8, 288)
     const estimatedHeight = SEARCH_ROW_HEIGHT + listHeight
-    const spaceBelow = window.innerHeight - r.bottom - 8
-    const spaceAbove = r.top - 8
-    const placement =
-      spaceBelow < estimatedHeight && spaceAbove > spaceBelow ? "above" : "below"
-    const top =
-      placement === "below"
-        ? Math.round(r.bottom + 4)
-        : Math.round(r.top - estimatedHeight - 4)
+    const placed = placeAnchoredPanel({
+      trigger: {
+        left: r.left,
+        top: r.top,
+        right: r.right,
+        bottom: r.bottom,
+        width: r.width,
+        height: r.height,
+      },
+      panel: { width: Math.min(maxWidth, Math.max(minWidth, r.width)), height: estimatedHeight },
+      align: "start",
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    })
 
     setPopPos({
-      top,
-      left: Math.round(r.left),
+      top: placed.top,
+      left: placed.left,
       minWidth,
       maxWidth,
-      placement,
+      placement: placed.placement,
     })
   }, [filteredOptions.length, options])
 

@@ -15,6 +15,7 @@ import {
   type JSX,
 } from "react"
 import { createPortal } from "react-dom"
+import { placeAnchoredPanel } from "../lib/anchored-panel"
 import { popoverZIndex } from "../lib/modal-stack"
 import {
   claimPopoverOpen,
@@ -114,9 +115,26 @@ export function DateField({
     const btn = btnRef.current
     if (!btn) return
     const rect = btn.getBoundingClientRect()
+    const panel = popRef.current?.getBoundingClientRect()
+    const placed = placeAnchoredPanel({
+      trigger: {
+        left: rect.left,
+        top: rect.top,
+        right: rect.right,
+        bottom: rect.bottom,
+        width: rect.width,
+        height: rect.height,
+      },
+      panel: {
+        width: panel?.width ?? Math.max(rect.width, 280),
+        height: panel?.height ?? 320,
+      },
+      align: "start",
+      viewport: { width: window.innerWidth, height: window.innerHeight },
+    })
     setPopPos({
-      top: Math.round(rect.bottom + 4),
-      left: Math.round(rect.left),
+      top: placed.top,
+      left: placed.left,
       minWidth: Math.round(rect.width),
     })
   }, [])

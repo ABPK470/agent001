@@ -45,12 +45,6 @@ export function DefinitionContent({ definition }: { definition: PublishedSyncDef
   return (
     <div className={DEFINITION_MODAL_BODY_CLASS}>
       <div className={DEFINITION_MODAL_HEADER_CLASS}>
-        <div className="px-5 pt-4">
-          <div className="rounded-lg border border-border-subtle bg-overlay-1/40 px-3 py-2.5 text-[11px] text-text-muted">
-            This is the published runtime definition used to compile preview plans. Pre-preview controls in EnvSync are now sourced from this published definition rather than the old recipe bundle.
-          </div>
-        </div>
-
         <div className="px-5 py-4 border-b border-border/40">
           <div className="grid grid-cols-2 gap-x-6 gap-y-2.5 text-sm">
             <div className="flex items-center gap-2">

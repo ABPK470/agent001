@@ -1,9 +1,12 @@
 import { MoreVertical, Pencil, Pin, Trash2 } from "lucide-react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { api } from "../../client/index"
+import { placeAnchoredPanelForElements } from "../../lib/anchored-panel"
 import { useStore } from "../../state/store"
 import type { Thread } from "../../types"
+
+const MENU_ESTIMATE = { width: 168, height: 132 }
 
 export function ThreadRowMenu({
   thread,
@@ -18,15 +21,25 @@ export function ThreadRowMenu({
 }) {
   const upsertThread = useStore((s) => s.upsertThread)
   const [menuOpen, setMenuOpen] = useState(false)
-  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const menuBtnRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   const closeMenu = () => {
     setMenuOpen(false)
-    setMenuAnchor(null)
+    setMenuPos(null)
     onMenuOpenChange?.(false)
+  }
+
+  function placeMenu(): void {
+    const btn = menuBtnRef.current
+    if (!btn) return
+    const next = placeAnchoredPanelForElements(btn, dropdownRef.current, {
+      align: "end",
+      estimate: MENU_ESTIMATE,
+    })
+    setMenuPos({ top: next.top, left: next.left })
   }
 
   useEffect(() => {
@@ -47,12 +60,14 @@ export function ThreadRowMenu({
     }
   }, [menuOpen])
 
+  useLayoutEffect(() => {
+    if (!menuOpen) return
+    placeMenu()
+  }, [menuOpen])
+
   useEffect(() => {
     if (!menuOpen) return
-    const reposition = () => {
-      const rect = menuBtnRef.current?.getBoundingClientRect()
-      if (rect) setMenuAnchor(rect)
-    }
+    const reposition = () => placeMenu()
     window.addEventListener("resize", reposition)
     window.addEventListener("scroll", reposition, true)
     return () => {
@@ -77,9 +92,13 @@ export function ThreadRowMenu({
       closeMenu()
       return
     }
-    const rect = menuBtnRef.current?.getBoundingClientRect()
-    if (!rect) return
-    setMenuAnchor(rect)
+    const btn = menuBtnRef.current
+    if (!btn) return
+    const next = placeAnchoredPanelForElements(btn, null, {
+      align: "end",
+      estimate: MENU_ESTIMATE,
+    })
+    setMenuPos({ top: next.top, left: next.left })
     setMenuOpen(true)
     onMenuOpenChange?.(true)
   }
@@ -104,15 +123,12 @@ export function ThreadRowMenu({
         <MoreVertical size={15} strokeWidth={1.75} />
       </button>
 
-      {menuOpen && menuAnchor && createPortal(
+      {menuOpen && menuPos && createPortal(
         <div
           ref={dropdownRef}
           className="thread-rail-item-dropdown thread-rail-item-dropdown--portal"
           role="menu"
-          style={{
-            top: menuAnchor.bottom + 4,
-            left: menuAnchor.right,
-          }}
+          style={{ top: menuPos.top, left: menuPos.left }}
         >
           <button type="button" role="menuitem" className="thread-rail-item-dropdown-item" onClick={() => void togglePin()}>
             <Pin size={13} strokeWidth={1.75} />

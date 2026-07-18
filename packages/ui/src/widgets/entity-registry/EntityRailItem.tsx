@@ -4,9 +4,12 @@
 
 import { History, MoreVertical, Pencil, Trash2 } from "lucide-react"
 import type { JSX } from "react"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useLayoutEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
+import { placeAnchoredPanelForElements } from "../../lib/anchored-panel"
 import type { EntityRegistryDefinition } from "../../types"
+
+const MENU_ESTIMATE = { width: 168, height: 132 }
 
 export interface EntityRailItemProps {
   entity: EntityRegistryDefinition
@@ -31,14 +34,24 @@ export function EntityRailItem({
 }: EntityRailItemProps): JSX.Element {
   const retired = !!entity.retiredAt
   const [menuOpen, setMenuOpen] = useState(false)
-  const [menuAnchor, setMenuAnchor] = useState<DOMRect | null>(null)
+  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
   const menuRef = useRef<HTMLDivElement>(null)
   const menuBtnRef = useRef<HTMLButtonElement>(null)
   const dropdownRef = useRef<HTMLDivElement>(null)
 
   function closeMenu(): void {
     setMenuOpen(false)
-    setMenuAnchor(null)
+    setMenuPos(null)
+  }
+
+  function placeMenu(): void {
+    const btn = menuBtnRef.current
+    if (!btn) return
+    const next = placeAnchoredPanelForElements(btn, dropdownRef.current, {
+      align: "end",
+      estimate: MENU_ESTIMATE,
+    })
+    setMenuPos({ top: next.top, left: next.left })
   }
 
   function toggleMenu(): void {
@@ -46,11 +59,20 @@ export function EntityRailItem({
       closeMenu()
       return
     }
-    const rect = menuBtnRef.current?.getBoundingClientRect()
-    if (!rect) return
-    setMenuAnchor(rect)
+    const btn = menuBtnRef.current
+    if (!btn) return
+    const next = placeAnchoredPanelForElements(btn, null, {
+      align: "end",
+      estimate: MENU_ESTIMATE,
+    })
+    setMenuPos({ top: next.top, left: next.left })
     setMenuOpen(true)
   }
+
+  useLayoutEffect(() => {
+    if (!menuOpen) return
+    placeMenu()
+  }, [menuOpen])
 
   useEffect(() => {
     if (!menuOpen) return
@@ -62,11 +84,16 @@ export function EntityRailItem({
     const onKeyDown = (event: KeyboardEvent) => {
       if (event.key === "Escape") closeMenu()
     }
+    const reposition = () => placeMenu()
     document.addEventListener("mousedown", onPointerDown)
     document.addEventListener("keydown", onKeyDown)
+    window.addEventListener("resize", reposition)
+    window.addEventListener("scroll", reposition, true)
     return () => {
       document.removeEventListener("mousedown", onPointerDown)
       document.removeEventListener("keydown", onKeyDown)
+      window.removeEventListener("resize", reposition)
+      window.removeEventListener("scroll", reposition, true)
     }
   }, [menuOpen])
 
@@ -112,15 +139,12 @@ export function EntityRailItem({
             <MoreVertical size={15} strokeWidth={1.75} />
           </button>
 
-          {menuOpen && menuAnchor && createPortal(
+          {menuOpen && menuPos && createPortal(
             <div
               ref={dropdownRef}
               className="thread-rail-item-dropdown thread-rail-item-dropdown--portal"
               role="menu"
-              style={{
-                top: menuAnchor.bottom + 4,
-                left: menuAnchor.right,
-              }}
+              style={{ top: menuPos.top, left: menuPos.left }}
             >
               <button
                 type="button"
