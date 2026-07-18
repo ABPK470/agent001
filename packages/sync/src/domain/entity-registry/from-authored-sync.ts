@@ -141,9 +141,15 @@ function entityTableFromAuthored(
   }
 }
 
+export type EntityDefinitionFromAuthoredOptions = {
+  /** Stable stamp for seeds/goldens — defaults to wall clock. */
+  createdAt?: string
+}
+
 export function entityDefinitionFromAuthoredSync(
   authored: AuthoredSyncDefinition,
   tenantId = "_default",
+  options?: EntityDefinitionFromAuthoredOptions,
 ): EntityDefinition {
   const orderIndex = new Map(
     authored.metadata.executionOrder.map((name, index) => [name.toLowerCase(), index + 1] as const),
@@ -162,8 +168,6 @@ export function entityDefinitionFromAuthoredSync(
     authored.provenance.kind === "legacy-migration" || pipelineId !== null
       ? ({ kind: "legacy-migration" as const, legacyPipelineId: pipelineId })
       : ({ kind: "manual" as const })
-
-  const now = new Date().toISOString()
 
   return {
     id: authored.id,
@@ -194,7 +198,7 @@ export function entityDefinitionFromAuthoredSync(
     versionLabel: "bundled-seed",
     createdBy: BOOTSTRAP_ACTOR,
     reason: "bundled-seed",
-    createdAt: now,
+    createdAt: options?.createdAt ?? new Date().toISOString(),
     retiredAt: null,
   }
 }

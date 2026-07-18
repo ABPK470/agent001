@@ -16,7 +16,6 @@ import type {
   SyncPublishStatus,
 } from "../types"
 import { CatalogImportGate } from "./platform/CatalogImportGate"
-import { DeployArtifactsImportGate } from "./platform/DeployArtifactsImportGate"
 import { CatalogVersionsModal } from "./platform/CatalogVersionsModal"
 import { Empty } from "./sync-admin/shared"
 import {
@@ -53,7 +52,6 @@ export function EntityRegistry(): JSX.Element {
   const [publishOpen, setPublishOpen] = useState(false)
   const [exportingConfig, setExportingConfig] = useState(false)
   const [importOpen, setImportOpen] = useState(false)
-  const [deployImportOpen, setDeployImportOpen] = useState(false)
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [retireCandidate, setRetireCandidate] = useState<EntityRegistryDefinition | null>(null)
   const [adminItems, setAdminItems] = useState<SyncDefinitionAdminItem[]>([])
@@ -180,19 +178,6 @@ export function EntityRegistry(): JSX.Element {
     }
   }
 
-  async function exportDeployArtifacts(): Promise<void> {
-    if (!isAdmin || exportingConfig) return
-    setExportingConfig(true)
-    try {
-      const { filename, bytes } = await api.downloadDeployArtifacts()
-      notify(`Exported deploy artifacts (${filename}, ${bytes.toLocaleString()} bytes)`)
-    } catch (e) {
-      notifyError(e instanceof Error ? e.message : String(e))
-    } finally {
-      setExportingConfig(false)
-    }
-  }
-
   function openHistory(entity: EntityRegistryDefinition): void {
     setSelectedId(entity.id)
     setHistoryOpen(true)
@@ -221,9 +206,7 @@ export function EntityRegistry(): JSX.Element {
                 onSyncMetadata={() => setSyncMetadataOpen(true)}
                 onPublish={openPublish}
                 onExportConfig={() => void exportConfiguration()}
-                onExportDeployArtifacts={() => void exportDeployArtifacts()}
                 onImportConfig={() => setImportOpen(true)}
-                onImportDeployArtifacts={() => setDeployImportOpen(true)}
                 onCatalogVersions={() => setVersionsOpen(true)}
               />
               <div className="entity-rail-scroll min-h-0 flex-1 overflow-y-auto">
@@ -341,15 +324,6 @@ export function EntityRegistry(): JSX.Element {
           onClose={() => setImportOpen(false)}
           onImported={() => {
             notify("Catalog snapshot imported")
-            void refreshList({ keepSelection: true })
-          }}
-        />
-      )}
-      {deployImportOpen && (
-        <DeployArtifactsImportGate
-          onClose={() => setDeployImportOpen(false)}
-          onImported={() => {
-            notify("Deploy artifacts imported")
             void refreshList({ keepSelection: true })
           }}
         />

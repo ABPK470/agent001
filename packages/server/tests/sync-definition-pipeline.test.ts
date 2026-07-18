@@ -5,6 +5,7 @@
 import Database from "better-sqlite3"
 import {
   copyFileSync,
+  existsSync,
   mkdirSync,
   mkdtempSync,
   readdirSync,
@@ -153,10 +154,17 @@ describe("sync definition pipeline (e2e)", () => {
     _migrate(testDb)
 
     const repoArtifactsDir = resolve(import.meta.dirname, "../../../deploy/sync/artifacts/entities")
+    const repoArtifactsParent = resolve(import.meta.dirname, "../../../deploy/sync/artifacts")
     const tempArtifactsDir = join(projectRoot, "deploy", "sync", "artifacts", "entities")
     mkdirSync(tempArtifactsDir, { recursive: true })
     for (const file of readdirSync(repoArtifactsDir).filter((name) => name.endsWith(".json"))) {
       copyFileSync(join(repoArtifactsDir, file), join(tempArtifactsDir, file))
+    }
+    for (const name of ["sync-metadata.json", "sync-definition-configs.json", "flow-templates.json", "strategies.json"]) {
+      const source = join(repoArtifactsParent, name)
+      if (existsSync(source)) {
+        copyFileSync(source, join(projectRoot, "deploy", "sync", "artifacts", name))
+      }
     }
 
     const seedResult = seedEntityRegistryIfEmpty(projectRoot)

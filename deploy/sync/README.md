@@ -1,8 +1,8 @@
 # Sync deploy seeds
 
-Bootstrap data for sync: rebuild **legacy MyMI pipelines** into mia **entity registry** + **sync metadata**, then seed SQLite on first boot.
+Bootstrap data for sync: rebuild **legacy MyMI pipelines** into mia **Catalog** (entity registry + sync metadata), seed SQLite on first boot, then **Publish** to compose runtime SyncDefinitions.
 
-**Artifact formats:** Entity JSON exists in two shapes — **Format A** (git deploy artifacts) and **Format B** (registry / catalog snapshot). See [ARTIFACT-FORMATS.md](./ARTIFACT-FORMATS.md) for when to use each, file layouts, and import/export paths.
+**One authoring shape:** EntityDefinition + catalog JSON. See [ARTIFACT-FORMATS.md](./ARTIFACT-FORMATS.md).
 
 **Not in this tree:** SQLite schema migrations live in `packages/server/src/infra/persistence/migrations/`.
 
@@ -17,7 +17,7 @@ Legacy MyMI has **pipelines** and **activities** — not “entities”. “Enti
 | `uspSync*ObjectsTran` entry activity | entity type + table scopes |
 | `properties.sync` on an activity | step type handler definition |
 
-These scripts **reconstruct** legacy ground truth into deploy artifacts. After first boot, operators manage everything in **Entity Registry** (full CRUD). Generators are for:
+These scripts **reconstruct** legacy ground truth into deploy seeds. After first boot, operators manage everything in **Entity Registry** (full CRUD). Generators are for:
 
 1. **Cold start** — ship reviewed seeds in git
 2. **Refresh** — pull latest from live MyMI when MSSQL is available
@@ -25,22 +25,24 @@ These scripts **reconstruct** legacy ground truth into deploy artifacts. After f
 ## Authority model (one path)
 
 ```
-Live MSSQL (optional)  →  refresh-from-legacy  →  deploy/sync/artifacts/*
+Live MSSQL (optional)  →  refresh-from-legacy  →  deploy/sync seeds (Catalog)
                                                       ↓ server boot seed
-                                                 SQLite (operator edits)
+                                                 SQLite Catalog (operator edits)
                                                       ↓ export (optional)
-                                                 deploy/sync/artifacts/*  (review → commit)
+                                                 Catalog snapshot zip
                                                       ↓ Publish
                               SQLite sync_definitions (SyncDefinition JSON)
                                                       ↓
                                                preview / execute
 ```
 
-- **Shipped artifacts** — default for first boot when SQLite is empty.
-- **Refresh from MSSQL** — on a deployed dev/UAT host with corp DB access, admins regenerate artifacts from ground truth, restart, then publish. UI: Policies → Platform → **Refresh from database**.
-- **After boot** — SQLite is the source of truth for operator edits. Deploy artifacts **re-seed built-in rows** on every boot (`built_in=1`); custom rows are preserved.
-- **Export** — download the current SQLite catalog (and/or SyncDefinitions) as JSON/zip — never a Publish side-effect into the tree.
-- **Runtime** reads **SyncDefinitions in SQLite**, not deploy files and not a published JSON file in the repo.
+- **Shipped seeds** — default for first boot when SQLite is empty (`EntityDefinition` + `sync-definition-configs.json` + metadata).
+- **Refresh from MSSQL** — regenerate seeds from ground truth, restart, then Publish. UI: Policies → Platform → **Refresh from database**.
+- **After boot** — SQLite is the source of truth for operator edits.
+- **Export** — Catalog snapshot download only.
+- **Runtime** reads **SyncDefinitions in SQLite**, not deploy files.
+
+Ground-truth lock: `packages/sync/src/test-support/__goldens__/legacy-refresh/` (G2/G3). Regenerating seeds must keep those goldens green.
 
 Handler wiring always uses `{ "type": "catalog", "id": "…" }` — no legacy shorthand types in artifacts.
 
@@ -53,167 +55,42 @@ Handler wiring always uses `{ "type": "catalog", "id": "…" }` — no legacy sh
 | `artifacts/` | Shipped bootstrap JSON — or output of a live MSSQL refresh |
 | `fixtures/` | Offline pipeline evidence for tests / offline generation |
 | `sync-environments.json` | Environment registry seed |
-| `entity-registry.seed.yaml` | Optional entity registry export (YAML) |
+| `entity-registry.seed.yaml` | Optional EntityDefinition YAML cold-start |
 
 ## Shipped artifacts
 
 | File | SQLite tables | UI surface |
 |------|---------------|------------|
-| `artifacts/sync-metadata.json` (`phases`, `actions`, `valueSources`, `flows`) | `sync_phases`, `sync_actions`, `sync_value_sources`, `sync_flows` | Configuration → Flows / Actions / Sources |
-| `artifacts/strategies.json` | `scd2_strategies`, `scd2_strategy_versions` | Entity Registry → Strategies |
-| `artifacts/entities/*.json` | entity registry (Format A) | Entity Registry |
-| `sync-environments.json` | `sync_environments` | Configuration → Environments |
-| `artifacts/flow-templates.json` | (derived view of flows) | compile-time helper |
+| `artifacts/entities/*.json` | `entity_defs` (EntityDefinition) | Entity Registry |
+| `artifacts/sync-definition-configs.json` | `sync_definition_configs` | Configuration / run bindings |
+| `artifacts/sync-metadata.json` | phases, actions, valueSources, flows | Configuration → Flows / Actions / Sources |
+| `artifacts/strategies.json` | SCD2 strategies | Strategies |
+| `artifacts/flow-templates.json` | derived flow view | publish helper |
+| `sync-environments.json` | `sync_environments` | Environments |
 
-## Helpers (derivation only)
+## Commands
 
-| Module | Purpose |
-|--------|---------|
-| `refresh-from-legacy.mjs` | Orchestrator — writes all artifact outputs |
-| `legacy-pipeline-evidence.mjs` | Fetch `core.Pipeline` + `core.Activity` from MSSQL or fixture |
-| `legacy-entity-derivation.mjs` | Pipeline → `artifacts/entities/*.json` (table scopes, predicates) |
-| `sync-metadata-derivation.mjs` | Pipeline → `sync-metadata.json` (actions, flows, valueSources) |
-| `legacy-activity-sync-specs.mjs` | Build offline activity overlay fixture |
-| `catalog-index.mjs` | MSSQL schema snapshot for entity FK closure |
-| `sync-metadata-phases.mjs` | Fixed platform phase vocabulary |
-| `sync-metadata-normalize.mjs` | Normalize handler slots to catalog refs |
-| `value-source-seeds.mjs` | Shipped valueSources catalog (plan context, SQL, step fields) |
+```bash
+# Offline rebuild from fixtures (then materialize native entity seeds)
+node deploy/sync/generators/refresh-from-legacy.mjs \
+  --evidence deploy/sync/fixtures/legacy-pipeline-evidence.fixture.json \
+  --force
 
-No one-shot migration scripts — artifacts in git are already on the current model.
-
-## Refresh from MSSQL
-
-Run from **repo root** on a host with MSSQL configured in `.env`:
-
-```sh
+# Live MSSQL (requires connector)
 node deploy/sync/generators/refresh-from-legacy.mjs --connection uat --force
 ```
 
-Writes:
-
-| Output | Content |
-|--------|---------|
-| `artifacts/entities/*.json` | Entity definitions |
-| `artifacts/sync-metadata.json` | Phases, step types, **wiring**, flows |
-| `artifacts/flow-templates.json` | View of `sync-metadata.flows` |
-| `fixtures/legacy-activity-sync-specs.json` | Offline `pipelineId:sequence` overlay |
-
-Wiring (`customValueSources`) is included automatically via `sync-metadata-derivation.mjs` → `value-source-seeds.mjs`.
-
-**On a running server:** Policies → Platform → **Refresh from database** runs the same helper, then re-imports into SQLite.
-
 After refresh: restart server → review Entity Registry → **Publish**.
 
-## Export from SQLite (Format B — not repo overwrite)
+## Materialize step
 
-After editing in the UI, export the live catalog as a **Format B** snapshot to a timestamped folder on your machine (never overwrites `deploy/sync` seeds in the repo). For **Format A** (git layout with `artifacts/entities/*.json`), use Entity Registry → **Deploy artifacts** or see [ARTIFACT-FORMATS.md](./ARTIFACT-FORMATS.md).
+Refresh still derives Authored process JSON in memory for table/predicate logic, then runs:
 
-```sh
+`npx tsx packages/sync/scripts/materialize-native-entity-seeds.ts`
 
-```sh
-npm run export-deploy-catalog --workspace @mia/server
-# default parent: ~/Downloads → ~/Downloads/mia-sync-export-2026-07-10T14-18-30/
+which converts 1:1 via `entityDefinitionFromAuthoredSync` and writes EntityDefinition files + `sync-definition-configs.json`.
 
-npm run export-deploy-catalog --workspace @mia/server -- --output ~/Documents/mia-exports
-npm run export-deploy-catalog --workspace @mia/server -- --zip
-npm run export-deploy-catalog --workspace @mia/server -- --dry-run
-```
+## Related
 
-**Folder contents** (Format B — similar to `deploy/sync/` but entities are bulk JSON, not `entities/*.json`):
-
-```
-mia-sync-export-<timestamp>/
-  manifest.json
-  sync-environments.json
-  artifacts/
-    sync-metadata.json
-    strategies.json
-    flow-templates.json
-    entity-registry.json
-    sync-definition-configs.json    # when configs exist
-```
-
-| Path | Source (SQLite) |
-|------|-----------------|
-| `manifest.json` | export metadata |
-| `sync-environments.json` | environments |
-| `artifacts/sync-metadata.json` | phases, actions, wiring, flows |
-| `artifacts/strategies.json` | all SCD2 strategies |
-| `artifacts/flow-templates.json` | flow template view |
-| `artifacts/entity-registry.json` | entity definitions + run bindings (Format B) |
-| `artifacts/sync-definition-configs.json` | per-entity flow/service/env bindings |
-
-Entities-only subset:
-
-```sh
-npm run entity-registry:export --workspace @mia/server -- --output ~/Downloads
-```
-
-API (Format B):
-- `POST /api/platform/artifacts/export` — snapshot JSON (save client-side)
-- `POST /api/platform/artifacts/export/download` — zip (Entity Registry → **Catalog snapshot**)
-- `POST /api/platform/catalog/import` — apply zip to SQLite (Entity Registry → **Catalog snapshot** import)
-- `GET /api/platform/catalog/versions` — version history; `POST /api/platform/catalog/rollback` — restore
-
-Format A bulk export/import: `POST /api/platform/deploy-artifacts/export/download` and `…/import` (Entity Registry → **Deploy artifacts**). See [ARTIFACT-FORMATS.md](./ARTIFACT-FORMATS.md).
-
-CLI writes the folder locally.
-
-To ship new git seeds: export **Deploy artifacts** (Format A) or compile manually from a catalog snapshot — do not copy `entity-registry.json` directly into `artifacts/entities/`.
-
-## Offline refresh (tests / CI, no MSSQL)
-
-Metadata only (skips entity JSON — entity derivation needs live schema catalog):
-
-```sh
-node deploy/sync/generators/refresh-from-legacy.mjs \
-  --evidence-file deploy/sync/fixtures/legacy-pipeline-evidence.fixture.json \
-  --metadata-only --force
-```
-
-Default pipeline ids: `692,780,788,791,792,798` (content, gate metadata, contract, rule, dataset, pipeline activity).
-
-## Boot sequence (fresh SQLite)
-
-1. Seeds SCD2 strategies from `artifacts/strategies.json` (`runSeeds`).
-2. Seeds `sync_run_phases`, `sync_run_kinds`, `sync_run_binding_sources`, `sync_run_presets` from `artifacts/sync-metadata.json`.
-3. Refreshes deploy-seeded built-in rows from `sync-metadata.json` on every boot.
-4. Seeds sync environments from `sync-environments.json` when the table is empty.
-5. **Entity defs** — `seedEntityRegistryIfEmpty` imports from `entity-registry.seed.yaml` (if present) or `artifacts/entities/*.json`.
-
-`ensureSyncDefinitionConfigs` mirrors entity → flow bindings after seed. The Entity Registry UI loads vocabulary via `GET /api/sync-metadata`.
-
-## Model
-
-```
-MyMI core.Pipeline + core.Activity.properties
-  → sync-metadata.json (stepTypes + flows + wiring)
-  → SQLite (editable via Sync metadata UI)
-  → publish → execute
-```
-
-- **Step types** — reusable handler definitions. Configuration → Actions.
-- **Flows** — ordered step instances with per-step params. Configuration → Flows.
-- **Wiring** — value source catalog (`customValueSources`). Configuration → Wiring. Handlers reference `{ type: "catalog", id }`.
-- **Phases** — fixed platform boundaries for execute scheduling only; not user-editable.
-- **Strategies** — SCD2 column policies. Entity Registry → Strategies.
-
-Derivation reads `properties.sync` on each activity. Metadata entry activities (`uspSync*ObjectsTran`) infer `metadataSync`. Activities with `action` starting with `_` are excluded from scope.
-
-## Test coverage
-
-All tests below pass in CI (`packages/sync`):
-
-| Artifact | How it is verified |
-|----------|-------------------|
-| `sync-metadata.json` | **Golden file** — regenerate from fixture must match committed file exactly |
-| `flow-templates.json` | **Golden file** — derived view must match committed file exactly |
-| `legacy-activity-sync-specs.json` | **Golden file** — plus full orchestrator round-trip in metadata-only mode |
-| Activity → step mapping | Contract audit steps, `_` action filtering, per-activity overlay keys |
-| `entities/*.json` | **Structural** — root table, id column, legacy pipeline id, entry sproc, required tables, FK ordering |
-
-```sh
-npm test --workspace=@mia/sync -- legacy-sync-generation.test.ts sync-metadata-generation.test.ts legacy-activity-sync-specs-generation.test.ts
-```
-
-Entity Registry UI is the long-term CRUD surface; generators are for **reconstructing from legacy** or **refreshing from live MyMI**.
+- [ARTIFACT-FORMATS.md](./ARTIFACT-FORMATS.md)
+- [packages/sync/SYNC-MODEL.md](../../packages/sync/SYNC-MODEL.md)

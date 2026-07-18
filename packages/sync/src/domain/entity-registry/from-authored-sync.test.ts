@@ -9,6 +9,22 @@ import { looksIncompleteScopePredicate, resolveReviewPlaceholderPredicate } from
 import { validateEntityDefinition } from "./validate.js"
 
 const repoRoot = resolve(import.meta.dirname, "../../../../..")
+const g1Path = resolve(repoRoot, "packages/sync/src/test-support/__goldens__/legacy-refresh/g1-wire.json")
+
+function loadG1Authored(entityId: string): AuthoredSyncDefinition {
+  const g1 = JSON.parse(readFileSync(g1Path, "utf-8")) as {
+    entities: Record<string, AuthoredSyncDefinition>
+  }
+  const authored = g1.entities[entityId]
+  if (!authored) throw new Error(`Missing G1 Authored entity ${entityId}`)
+  return {
+    ...authored,
+    provenance: {
+      ...authored.provenance,
+      sourceVersion: "2026-01-01T00:00:00.000Z",
+    },
+  }
+}
 
 describe("resolveReviewPlaceholderPredicate", () => {
   it("does not guess degraded IN predicates from review placeholders", () => {
@@ -27,9 +43,8 @@ describe("resolveReviewPlaceholderPredicate", () => {
 })
 
 describe("entityDefinitionFromAuthoredSync", () => {
-  it("imports deploy artifacts as valid entity definitions", () => {
-    const path = resolve(repoRoot, "deploy/sync/artifacts/entities/contract.json")
-    const authored = JSON.parse(readFileSync(path, "utf-8")) as AuthoredSyncDefinition
+  it("imports G1 Authored artifacts as valid entity definitions", () => {
+    const authored = loadG1Authored("contract")
     const entity = entityDefinitionFromAuthoredSync(authored)
 
     const validation = validateEntityDefinition(entity)
@@ -40,8 +55,7 @@ describe("entityDefinitionFromAuthoredSync", () => {
   })
 
   it("imports content with resolved lookup-table scopes", () => {
-    const path = resolve(repoRoot, "deploy/sync/artifacts/entities/content.json")
-    const authored = JSON.parse(readFileSync(path, "utf-8")) as AuthoredSyncDefinition
+    const authored = loadG1Authored("content")
     const entity = entityDefinitionFromAuthoredSync(authored)
     const contentType = entity.tables.find((table) => table.name === "gate.ContentType")
 
@@ -56,8 +70,7 @@ describe("entityDefinitionFromAuthoredSync", () => {
   })
 
   it("imports gateMetadata with unique 1-based execution orders", () => {
-    const path = resolve(repoRoot, "deploy/sync/artifacts/entities/gateMetadata.json")
-    const authored = JSON.parse(readFileSync(path, "utf-8")) as AuthoredSyncDefinition
+    const authored = loadG1Authored("gateMetadata")
     const entity = entityDefinitionFromAuthoredSync(authored)
     const orders = entity.tables.map((table) => table.executionOrder).sort((a, b) => a - b)
     expect(orders).toEqual([1, 2, 3, 4, 5, 6, 7])
@@ -66,8 +79,7 @@ describe("entityDefinitionFromAuthoredSync", () => {
   })
 
   it("imports rule with resolved pipeline lookup scopes", () => {
-    const path = resolve(repoRoot, "deploy/sync/artifacts/entities/rule.json")
-    const authored = JSON.parse(readFileSync(path, "utf-8")) as AuthoredSyncDefinition
+    const authored = loadG1Authored("rule")
     const entity = entityDefinitionFromAuthoredSync(authored)
     const validation = validateEntityDefinition(entity)
     expect(validation.ok, JSON.stringify(validation.errors)).toBe(true)

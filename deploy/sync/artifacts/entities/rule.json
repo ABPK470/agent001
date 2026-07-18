@@ -1,184 +1,277 @@
 {
-  "schemaVersion": 1,
   "id": "rule",
+  "tenantId": "_default",
   "displayName": "Rule",
   "description": "Rule sync definition bootstrapped from legacy pipeline ground truth.",
   "rootTable": "core.Rule",
   "idColumn": "ruleId",
   "labelColumn": "name",
   "selfJoinColumn": "parentRuleId",
-  "legacy": {
-    "pipelineId": 791,
-    "entrySproc": "core.uspSyncRuleObjectsTran"
-  },
-  "governance": {
-    "approvalPolicyId": null,
+  "tables": [
+    {
+      "name": "core.Dataset",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[inputDatasetId] = [core].[Dataset].[datasetId] OR __mia_scope.[outputDatasetId] = [core].[Dataset].[datasetId])"
+      },
+      "executionOrder": 1,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "datasetId",
+      "source": "pipeline-only",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.DatasetMapping",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetMapping] dm INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[inputDatasetId] = dm.[datasetId_Left] OR __mia_scope.[outputDatasetId] = dm.[datasetId_Left] WHERE dm.[datasetMappingId] = [core].[DatasetMapping].[datasetMappingId])"
+      },
+      "executionOrder": 2,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "datasetMappingId",
+      "source": "pipeline-only",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.DatasetColumn",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[inputDatasetId] = [core].[DatasetColumn].[datasetId] OR __mia_scope.[outputDatasetId] = [core].[DatasetColumn].[datasetId])"
+      },
+      "executionOrder": 3,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "datasetId",
+      "source": "pipeline-only",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.DatasetMappingColumn",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetMapping] dm INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[inputDatasetId] = dm.[datasetId_Left] OR __mia_scope.[outputDatasetId] = dm.[datasetId_Left] WHERE dm.[datasetMappingId] = [core].[DatasetMappingColumn].[datasetMappingId])"
+      },
+      "executionOrder": 4,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "datasetMappingId",
+      "source": "pipeline-only",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.RuleLinkType",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[RuleLink] rl INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[ruleId] = rl.[ruleId] WHERE rl.[ruleLinkTypeId] = [core].[RuleLinkType].[ruleLinkTypeId])"
+      },
+      "executionOrder": 5,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "ruleLinkTypeId",
+      "source": "pipeline-only",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.RuleType",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleTypeId] = [core].[RuleType].[ruleTypeId])"
+      },
+      "executionOrder": 6,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "ruleTypeId",
+      "source": "pipeline-only",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.Rule",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[Rule].[ruleId])"
+      },
+      "executionOrder": 7,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "ruleId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.RuleLink",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[RuleLink].[ruleId])"
+      },
+      "executionOrder": 8,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "ruleId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.RuleCondition",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[RuleCondition].[ruleId])"
+      },
+      "executionOrder": 9,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "ruleId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.RuleConditionValue",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[RuleCondition] rc INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[ruleId] = rc.[ruleId] WHERE rc.[ruleConditionId] = [core].[RuleConditionValue].[ruleConditionId])"
+      },
+      "executionOrder": 10,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "ruleConditionId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.RuleColumn",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[RuleColumn].[ruleId])"
+      },
+      "executionOrder": 11,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:791"
+      },
+      "scopeColumn": "ruleId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    }
+  ],
+  "policies": {
     "freezeWindowIds": []
   },
-  "strategy": {
+  "scd2": {
     "strategyId": "mymi-scd2",
-    "strategyVersion": "latest"
+    "strategyVersion": "latest",
+    "entityOverride": null
   },
-  "bindings": {
-    "serviceProfileRef": "default",
-    "environmentPolicyRef": "default"
-  },
-  "ownership": {
-    "team": "sync-platform",
-    "owner": null,
-    "reviewStatus": "reviewed",
-    "notes": [
-      "Bootstrapped from legacy pipeline ground truth.",
-      "All current legacy sync tables were derived directly from pipeline evidence."
-    ]
-  },
-  "metadata": {
-    "tables": [
-      {
-        "name": "core.DatasetMappingColumn",
-        "scopeColumn": "datasetMappingId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetMapping] dm INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[inputDatasetId] = dm.[datasetId_Left] OR __mia_scope.[outputDatasetId] = dm.[datasetId_Left] WHERE dm.[datasetMappingId] = [core].[DatasetMappingColumn].[datasetMappingId])",
-        "source": "pipeline-only",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.DatasetMapping",
-        "scopeColumn": "datasetMappingId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetMapping] dm INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[inputDatasetId] = dm.[datasetId_Left] OR __mia_scope.[outputDatasetId] = dm.[datasetId_Left] WHERE dm.[datasetMappingId] = [core].[DatasetMapping].[datasetMappingId])",
-        "source": "pipeline-only",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.DatasetColumn",
-        "scopeColumn": "datasetId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[inputDatasetId] = [core].[DatasetColumn].[datasetId] OR __mia_scope.[outputDatasetId] = [core].[DatasetColumn].[datasetId])",
-        "source": "pipeline-only",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.Dataset",
-        "scopeColumn": "datasetId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[inputDatasetId] = [core].[Dataset].[datasetId] OR __mia_scope.[outputDatasetId] = [core].[Dataset].[datasetId])",
-        "source": "pipeline-only",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.RuleLinkType",
-        "scopeColumn": "ruleLinkTypeId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[RuleLink] rl INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[ruleId] = rl.[ruleId] WHERE rl.[ruleLinkTypeId] = [core].[RuleLinkType].[ruleLinkTypeId])",
-        "source": "pipeline-only",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.RuleLink",
-        "scopeColumn": "ruleId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[RuleLink].[ruleId])",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.RuleConditionValue",
-        "scopeColumn": "ruleConditionId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[RuleCondition] rc INNER JOIN [core].[fRule]({id}) AS __mia_scope ON __mia_scope.[ruleId] = rc.[ruleId] WHERE rc.[ruleConditionId] = [core].[RuleConditionValue].[ruleConditionId])",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.RuleCondition",
-        "scopeColumn": "ruleId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[RuleCondition].[ruleId])",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.RuleType",
-        "scopeColumn": "ruleTypeId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleTypeId] = [core].[RuleType].[ruleTypeId])",
-        "source": "pipeline-only",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.RuleColumn",
-        "scopeColumn": "ruleId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[RuleColumn].[ruleId])",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.Rule",
-        "scopeColumn": "ruleId",
-        "predicate": "EXISTS (SELECT 1 FROM [core].[fRule]({id}) AS __mia_scope WHERE __mia_scope.[ruleId] = [core].[Rule].[ruleId])",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      }
-    ],
-    "executionOrder": [
-      "core.Dataset",
-      "core.DatasetMapping",
-      "core.DatasetColumn",
-      "core.DatasetMappingColumn",
-      "core.RuleLinkType",
-      "core.RuleType",
-      "core.Rule",
-      "core.RuleLink",
-      "core.RuleCondition",
-      "core.RuleConditionValue",
-      "core.RuleColumn"
-    ],
-    "reverseOrder": [
-      "core.RuleColumn",
-      "core.RuleConditionValue",
-      "core.RuleCondition",
-      "core.RuleLink",
-      "core.Rule",
-      "core.RuleType",
-      "core.RuleLinkType",
-      "core.DatasetMappingColumn",
-      "core.DatasetColumn",
-      "core.DatasetMapping",
-      "core.Dataset"
-    ],
-    "discrepancies": []
-  },
-  "executionFlow": {
-    "steps": []
-  },
+  "lineageRefs": [],
   "provenance": {
     "kind": "legacy-migration",
-    "sourceArtifact": "deploy/sync/generators/refresh-from-legacy.mjs",
-    "sourceVersion": "2026-07-09T13:02:24.967Z"
-  }
+    "legacyPipelineId": 791
+  },
+  "legacyEntrySproc": "core.uspSyncRuleObjectsTran",
+  "reverseOrder": [
+    "core.RuleColumn",
+    "core.RuleConditionValue",
+    "core.RuleCondition",
+    "core.RuleLink",
+    "core.Rule",
+    "core.RuleType",
+    "core.RuleLinkType",
+    "core.DatasetMappingColumn",
+    "core.DatasetColumn",
+    "core.DatasetMapping",
+    "core.Dataset"
+  ],
+  "discrepancies": [],
+  "version": 1,
+  "versionLabel": "bundled-seed",
+  "createdBy": "system",
+  "reason": "bundled-seed",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "retiredAt": null
 }

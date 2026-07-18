@@ -50,7 +50,12 @@ function seedRepoArtifacts(root: string): void {
     }
   }
 
-  for (const name of ["sync-metadata.json", "strategies.json", "flow-templates.json"]) {
+  for (const name of [
+    "sync-metadata.json",
+    "strategies.json",
+    "flow-templates.json",
+    "sync-definition-configs.json",
+  ]) {
     const source = join(repoDeploySync, "artifacts", name)
     if (existsSync(source)) {
       copyFileSync(source, join(targetDeploySync, "artifacts", name))
@@ -96,11 +101,17 @@ describe("artifact format round-trip integration", () => {
     process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
   })
 
-  it("A → B → A preserves core entity semantics for dataset", () => {
-    const seedPath = resolve(projectRoot, "deploy/sync/artifacts/entities/dataset.json")
-    const seed = JSON.parse(readFileSync(seedPath, "utf-8")) as AuthoredSyncDefinition
+  it("G1 Authored → EntityDefinition → Authored preserves core entity semantics for dataset", () => {
+    const g1Path = resolve(
+      fileURLToPath(new URL("../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-wire.json", import.meta.url)),
+    )
+    const g1 = JSON.parse(readFileSync(g1Path, "utf-8")) as {
+      entities: Record<string, AuthoredSyncDefinition>
+    }
+    const seed = g1.entities.dataset
+    expect(seed).toBeTruthy()
 
-    const entityB = entityDefinitionFromAuthoredSync(seed)
+    const entityB = entityDefinitionFromAuthoredSync(seed!)
     expect(validateEntityDefinition(entityB).ok).toBe(true)
 
     const catalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
@@ -109,22 +120,22 @@ describe("artifact format round-trip integration", () => {
       entity_id: "dataset",
       flow_preset: "dataset",
       execution_steps_json: "[]",
-      service_profile_ref: seed.bindings.serviceProfileRef,
-      environment_policy_ref: seed.bindings.environmentPolicyRef,
-      ownership_team: seed.ownership.team,
-      ownership_owner: seed.ownership.owner,
-      review_status: seed.ownership.reviewStatus,
-      ownership_notes_json: JSON.stringify(seed.ownership.notes),
+      service_profile_ref: seed!.bindings.serviceProfileRef,
+      environment_policy_ref: seed!.bindings.environmentPolicyRef,
+      ownership_team: seed!.ownership.team,
+      ownership_owner: seed!.ownership.owner,
+      review_status: seed!.ownership.reviewStatus,
+      ownership_notes_json: JSON.stringify(seed!.ownership.notes),
       updated_at: new Date().toISOString(),
       updated_by: "test",
     })
 
     const exportedA = entityToAuthoredSyncDefinition(entityB, catalog, config)
-    expect(exportedA.id).toBe(seed.id)
-    expect(exportedA.rootTable).toBe(seed.rootTable)
-    expect(exportedA.metadata.tables.length).toBe(seed.metadata.tables.length)
+    expect(exportedA.id).toBe(seed!.id)
+    expect(exportedA.rootTable).toBe(seed!.rootTable)
+    expect(exportedA.metadata.tables.length).toBe(seed!.metadata.tables.length)
     expect(exportedA.metadata.tables.map((table) => table.name).sort()).toEqual(
-      seed.metadata.tables.map((table) => table.name).sort(),
+      seed!.metadata.tables.map((table) => table.name).sort(),
     )
   })
 
@@ -189,10 +200,14 @@ describe("artifact format round-trip integration", () => {
     }
   })
 
-  it("per-entity artifact import then export round-trips through SQLite", () => {
-    const seedPath = resolve(projectRoot, "deploy/sync/artifacts/entities/gateMetadata.json")
-    const seed = JSON.parse(readFileSync(seedPath, "utf-8")) as AuthoredSyncDefinition
-
+  it("per-entity Authored import (compat) then export round-trips through SQLite", () => {
+    const g1Path = resolve(
+      fileURLToPath(new URL("../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-wire.json", import.meta.url)),
+    )
+    const g1 = JSON.parse(readFileSync(g1Path, "utf-8")) as {
+      entities: Record<string, AuthoredSyncDefinition>
+    }
+    const seed = g1.entities.gateMetadata!
     importAuthoredSyncFromText({
       tenantId: "_default",
       actor: "test",
@@ -215,9 +230,14 @@ describe("artifact format round-trip integration", () => {
     expect(exported.executionFlow.steps.length).toBeGreaterThan(0)
   })
 
-  it("metadataOnly flow survives artifact import via step-kind inference", () => {
-    const seedPath = resolve(projectRoot, "deploy/sync/artifacts/entities/dataset.json")
-    const seed = JSON.parse(readFileSync(seedPath, "utf-8")) as AuthoredSyncDefinition
+  it("metadataOnly flow survives Authored import via step-kind inference", () => {
+    const g1Path = resolve(
+      fileURLToPath(new URL("../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-wire.json", import.meta.url)),
+    )
+    const g1 = JSON.parse(readFileSync(g1Path, "utf-8")) as {
+      entities: Record<string, AuthoredSyncDefinition>
+    }
+    const seed = g1.entities.dataset!
     const metadataOnly = {
       ...seed,
       executionFlow: { steps: [{ kind: "metadataSync" }] },
@@ -225,7 +245,7 @@ describe("artifact format round-trip integration", () => {
 
     const flowTemplateCatalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
     const result = importOneAuthoredSync({
-      authored: metadataOnly,
+      authored: metadataOnly as AuthoredSyncDefinition,
       tenantId: "_default",
       actor: "test",
       reason: "metadata-only",

@@ -16,6 +16,7 @@
  *   - POST /api/platform/artifacts/refresh (server)
  */
 
+import { spawnSync } from "node:child_process"
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
 import { dirname, resolve } from "node:path"
 
@@ -89,6 +90,7 @@ export async function refreshDeployArtifactsFromLegacy(projectRoot, options = {}
       generatedAt,
       SOURCE_ARTIFACT,
     )) {
+      // Write Authored briefly — materializeNativeEntitySeeds converts to EntityDefinition + configs.
       writeJson(resolve(entitiesDir, `${definition.id}.json`), definition, force)
       entityIds.push(definition.id)
     }
@@ -106,6 +108,10 @@ export async function refreshDeployArtifactsFromLegacy(projectRoot, options = {}
   const specsArtifact = buildLegacyActivitySyncSpecs(evidence, flowCatalog, syncMetadata)
   writeJson(resolve(projectRoot, PATHS.activitySpecs), specsArtifact, force)
 
+  if (!metadataOnly && entityIds.length > 0) {
+    materializeNativeEntitySeeds(projectRoot)
+  }
+
   return {
     ok: true,
     connection: options.connection ?? process.env["MSSQL_DEFAULT_CONNECTION"] ?? "default",
@@ -116,6 +122,21 @@ export async function refreshDeployArtifactsFromLegacy(projectRoot, options = {}
     flows: Object.keys(syncMetadata.flows).length,
     activitySpecs: Object.keys(specsArtifact.specs ?? {}).length,
     paths: { ...PATHS },
+  }
+}
+
+/** Authored → EntityDefinition + sync-definition-configs.json (1:1 via entityDefinitionFromAuthoredSync). */
+function materializeNativeEntitySeeds(projectRoot) {
+  const script = resolve(projectRoot, "packages/sync/scripts/materialize-native-entity-seeds.ts")
+  const result = spawnSync("npx", ["tsx", script, projectRoot], {
+    cwd: projectRoot,
+    encoding: "utf-8",
+    stdio: ["ignore", "pipe", "pipe"],
+  })
+  if (result.status !== 0) {
+    throw new Error(
+      `materialize-native-entity-seeds failed: ${result.stderr || result.stdout || `exit ${result.status}`}`,
+    )
   }
 }
 

@@ -13,6 +13,7 @@ Three execution regions  — before metadataSync | metadataSync (SQL tx) | after
 ```
 
 **One rule:** entities **reference** a flow. Steps run in **array order**; `metadataSync` is the split point.  
+**One authoring shape:** git seeds = SQLite = Catalog snapshot (`EntityDefinition` + catalog JSON).  
 **One definition:** Publish writes SyncDefinitions to SQLite — not a file in the repo. Export is optional download.
 
 ## Terms
@@ -20,10 +21,10 @@ Three execution regions  — before metadataSync | metadataSync (SQL tx) | after
 | Term | Meaning |
 |------|---------|
 | **Catalog** | Editable sync config in SQLite (entities, flows, actions, sources, environments, strategies, run pointers, phases) + tip versions. |
-| **Entity registry** | Versioned DB records (`EntityDefinition`): root table, dependent tables, scope per table, policies. |
+| **Entity registry** | Versioned DB records (`EntityDefinition`): root table, dependent tables, scope per table, policies. Shipped as `deploy/sync/artifacts/entities/*.json`. |
 | **SyncDefinition** | Full operational contract used by preview/execute: structure + governance + bindings + execution flow (+ publish stamps). Stored in `sync_definitions`. |
-| **Authored sync definition** | Same process JSON without requiring publish stamps; also Format A git seeds under `deploy/sync/artifacts/entities/`. |
-| **Entity registry export** | UI/DB shape (`EntityDefinition` + optional `run` bindings). Bulk file: `entity-registry.json`. Also called **Format B**. See [ARTIFACT-FORMATS.md](../../deploy/sync/ARTIFACT-FORMATS.md). |
+| **Authored sync definition** | Process JSON without publish stamps — compile intermediate / runtime base type. **Not** the git seed authoring format. |
+| **Catalog snapshot** | Bulk export/import of Catalog (`entity-registry.json` + metadata). See [ARTIFACT-FORMATS.md](../../deploy/sync/ARTIFACT-FORMATS.md). |
 | **Published sync definition** | SyncDefinition after Publish (`publishedAt` / `publishedVersion`). **Runtime authority** in SQLite. |
 | **Execution contract** | Snapshot on `SyncPlan` that reproduces preview at execute: definition metadata + flow steps + governance. |
 | **SyncPlan** | Persisted preview envelope: entity, envs, `executionContract`, per-table `changeSet`, `stats`, samples, warnings. |
@@ -44,12 +45,13 @@ Three execution regions  — before metadataSync | metadataSync (SQL tx) | after
 
 ## Compilers (all use `projectTablePredicate`)
 
-Format A ↔ Format B conversion is documented in [deploy/sync/ARTIFACT-FORMATS.md](../../deploy/sync/ARTIFACT-FORMATS.md).
-
 | Function | When | Output |
 |----------|------|--------|
-| `scaffoldSyncDefinition` | Export draft from entity registry | `AuthoredSyncDefinition` |
+| `entityDefinitionFromAuthoredSync` | Legacy refresh materialize / import compat | `EntityDefinition` |
+| `scaffoldSyncDefinition` | Draft process JSON from entity + config | `AuthoredSyncDefinition` |
 | `compilePublishedSyncDefinition` | Publish from DB | `PublishedSyncDefinition` |
+
+Semantic goldens (ground truth lock): `packages/sync/src/test-support/__goldens__/legacy-refresh/`.
 
 ## Runtime table selection
 

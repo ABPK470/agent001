@@ -5,8 +5,8 @@
  *   - SQLite entity_defs is the live authoring source of truth.
  *   - deploy/sync/entity-registry.seed.yaml (when present) is the preferred
  *     cold-start snapshot of EntityDefinition documents.
- *   - Otherwise deploy/sync/artifacts/entities/*.json (authored sync defs)
- *     are imported via entityDefinitionFromAuthoredSync.
+ *   - Otherwise deploy/sync/artifacts/entities/*.json (EntityDefinition seeds;
+ *     legacy AuthoredSyncDefinition files are still accepted and converted once).
  *
  * Idempotent: no-op when the tenant already has entity rows.
  */
@@ -29,6 +29,7 @@ const SEED_YAML = "deploy/sync/entity-registry.seed.yaml"
 const ARTIFACTS_DIR = "deploy/sync/artifacts/entities"
 const SEED_ACTOR = "system"
 const SEED_REASON = "bundled-seed"
+const SEED_CREATED_AT = "2026-01-01T00:00:00.000Z"
 
 export type EntityRegistrySeedSource = "none" | "yaml" | "artifacts"
 
@@ -68,8 +69,7 @@ export function repairBundledEntityDefinitionsFromArtifacts(
     .filter((name) => name.endsWith(".json"))
     .sort()) {
     const path = resolve(artifactsDir, file)
-    const authored = JSON.parse(readFileSync(path, "utf-8")) as AuthoredSyncDefinition
-    const canonical = entityDefinitionFromAuthoredSync(authored, tenantId)
+    const canonical = loadEntitySeedFile(path, tenantId)
     const canonicalValidation = validateEntityDefinition(canonical)
     if (!canonicalValidation.ok) {
       throw new Error(
@@ -77,7 +77,7 @@ export function repairBundledEntityDefinitionsFromArtifacts(
       )
     }
 
-    const existing = db.getEntityDefinition(tenantId, authored.id)
+    const existing = db.getEntityDefinition(tenantId, canonical.id)
     if (!existing || !validateEntityDefinition(existing).ok || entityDefinitionDrifted(existing, canonical)) {
       db.saveEntityDefinition({
         tenantId,
@@ -85,7 +85,7 @@ export function repairBundledEntityDefinitionsFromArtifacts(
         actor: SEED_ACTOR,
         reason: "repair:deploy-artifact",
       })
-      repaired.push(authored.id)
+      repaired.push(canonical.id)
     }
   }
   return repaired
@@ -135,8 +135,7 @@ function seedFromArtifacts(artifactsDir: string, tenantId: string): EntityRegist
 
   for (const file of files) {
     const path = resolve(artifactsDir, file)
-    const authored = JSON.parse(readFileSync(path, "utf-8")) as AuthoredSyncDefinition
-    const def = entityDefinitionFromAuthoredSync(authored, tenantId)
+    const def = loadEntitySeedFile(path, tenantId)
     const validation = validateEntityDefinition(def)
     if (!validation.ok) {
       throw new Error(
@@ -148,4 +147,33 @@ function seedFromArtifacts(artifactsDir: string, tenantId: string): EntityRegist
   }
 
   return { seeded: entityIds.length, source: "artifacts", entityIds }
+}
+
+function loadEntitySeedFile(path: string, tenantId: string): EntityDefinition {
+  const raw = JSON.parse(readFileSync(path, "utf-8")) as unknown
+  if (isEntityDefinitionDocument(raw)) {
+    return { ...raw, tenantId }
+  }
+  if (isAuthoredDocument(raw)) {
+    return entityDefinitionFromAuthoredSync(raw, tenantId, { createdAt: SEED_CREATED_AT })
+  }
+  throw new Error(`Unrecognized entity seed shape: ${path}`)
+}
+
+function isEntityDefinitionDocument(raw: unknown): raw is EntityDefinition {
+  if (!raw || typeof raw !== "object") return false
+  const doc = raw as Record<string, unknown>
+  return Array.isArray(doc["tables"]) && typeof doc["rootTable"] === "string" && !isAuthoredDocument(raw)
+}
+
+function isAuthoredDocument(raw: unknown): raw is AuthoredSyncDefinition {
+  if (!raw || typeof raw !== "object") return false
+  const doc = raw as Record<string, unknown>
+  const metadata = doc["metadata"]
+  return (
+    typeof doc["schemaVersion"] === "number" &&
+    metadata !== null &&
+    typeof metadata === "object" &&
+    Array.isArray((metadata as { tables?: unknown }).tables)
+  )
 }

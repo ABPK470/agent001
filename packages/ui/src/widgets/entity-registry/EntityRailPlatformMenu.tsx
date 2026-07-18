@@ -13,9 +13,7 @@ export interface EntityRailPlatformMenuProps {
   onSyncMetadata: () => void
   onPublish: () => void
   onExportConfig: () => void
-  onExportDeployArtifacts: () => void
   onImportConfig: () => void
-  onImportDeployArtifacts: () => void
   onCatalogVersions: () => void
 }
 
@@ -71,9 +69,7 @@ export function EntityRailPlatformMenu({
   onSyncMetadata,
   onPublish,
   onExportConfig,
-  onExportDeployArtifacts,
   onImportConfig,
-  onImportDeployArtifacts,
   onCatalogVersions,
 }: EntityRailPlatformMenuProps): JSX.Element {
   const run = (action: () => void) => () => runAndClose(action, onClose)
@@ -96,12 +92,6 @@ export function EntityRailPlatformMenu({
           disabled={busy}
           onClick={run(onExportConfig)}
         />
-        <MenuItem
-          icon={<Download {...ICON} />}
-          label="Deploy artifacts"
-          disabled={busy}
-          onClick={run(onExportDeployArtifacts)}
-        />
       </MenuSection>
 
       <MenuSection label="Import">
@@ -110,12 +100,6 @@ export function EntityRailPlatformMenu({
           label="Catalog snapshot"
           disabled={busy}
           onClick={run(onImportConfig)}
-        />
-        <MenuItem
-          icon={<Upload {...ICON} />}
-          label="Deploy artifacts"
-          disabled={busy}
-          onClick={run(onImportDeployArtifacts)}
         />
       </MenuSection>
 
@@ -129,7 +113,7 @@ export function EntityRailPlatformMenu({
       />
       <MenuItem
         icon={<Rocket {...ICON} />}
-        label="Publish all"
+        label="Publish"
         disabled={busy}
         emphasis
         onClick={run(onPublish)}

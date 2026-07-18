@@ -31,7 +31,8 @@ import { _resetGoalClassificationCache } from "../../runs/prompting/goal-classif
 import * as db from "../../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
-const AUTHORED_DEFINITIONS_DIR = "deploy/sync/artifacts/entities"
+const ENTITY_SEEDS_DIR = "deploy/sync/artifacts/entities"
+const SYNC_DEFINITION_CONFIGS_SEED = "deploy/sync/artifacts/sync-definition-configs.json"
 const SQLITE_PUBLISHED_STORAGE = "sqlite:sync_definitions" as const
 
 const SERVICE_PROFILE_OPTIONS: SyncDefinitionRuntimeOptions["serviceProfiles"] = [
@@ -222,20 +223,68 @@ export function syncConfigFromAuthoredSync(
   }
 }
 
+type SeedConfigDoc = {
+  configs?: Array<{
+    entityId: string
+    flowPreset: string
+    serviceProfileRef: string
+    environmentPolicyRef: string
+    ownershipTeam: string
+    ownershipOwner: string | null
+    reviewStatus: "legacy-review-required" | "reviewed"
+    ownershipNotes: string[]
+  }>
+}
+
 function seedFromRepoDefinition(
   projectRoot: string,
   entity: EntityDefinition
 ): db.DbSyncDefinitionConfig | null {
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot)
-  const path = resolve(projectRoot, AUTHORED_DEFINITIONS_DIR, `${entity.id}.json`)
-  if (!existsSync(path)) return null
+  const configsPath = resolve(projectRoot, SYNC_DEFINITION_CONFIGS_SEED)
+  if (existsSync(configsPath)) {
+    try {
+      const doc = JSON.parse(readFileSync(configsPath, "utf-8")) as SeedConfigDoc
+      const row = (doc.configs ?? []).find((entry) => entry.entityId === entity.id)
+      if (row) {
+        const flowPreset =
+          row.flowPreset?.trim() && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, row.flowPreset)
+            ? row.flowPreset
+            : defaultFlowTemplateId(entity.id, flowTemplateCatalog)
+        return {
+          tenant_id: entity.tenantId,
+          entity_id: entity.id,
+          flow_preset: flowPreset,
+          execution_steps_json: JSON.stringify(resolveFlowSteps(flowPreset, flowTemplateCatalog)),
+          service_profile_ref: row.serviceProfileRef,
+          environment_policy_ref: row.environmentPolicyRef,
+          ownership_team: row.ownershipTeam,
+          ownership_owner: row.ownershipOwner,
+          review_status: row.reviewStatus,
+          ownership_notes_json: JSON.stringify(row.ownershipNotes),
+          updated_at: new Date().toISOString(),
+          updated_by: "system",
+        }
+      }
+    } catch (error) {
+      console.warn(
+        `[sync-definitions] failed to seed config from ${configsPath}:`,
+        error instanceof Error ? error.message : error,
+      )
+    }
+  }
+
+  // Compat: Authored entity seed still on disk (pre-unification trees).
+  const authoredPath = resolve(projectRoot, ENTITY_SEEDS_DIR, `${entity.id}.json`)
+  if (!existsSync(authoredPath)) return null
   try {
-    const parsed = JSON.parse(readFileSync(path, "utf-8")) as AuthoredSyncDefinition
+    const parsed = JSON.parse(readFileSync(authoredPath, "utf-8")) as AuthoredSyncDefinition
+    if (typeof parsed.schemaVersion !== "number" || !parsed.metadata?.tables) return null
     return syncConfigFromAuthoredSync(entity.tenantId, entity, parsed, flowTemplateCatalog, "system")
   } catch (error) {
     console.warn(
-      `[sync-definitions] failed to seed config from ${path}:`,
-      error instanceof Error ? error.message : error
+      `[sync-definitions] failed to seed config from ${authoredPath}:`,
+      error instanceof Error ? error.message : error,
     )
     return null
   }

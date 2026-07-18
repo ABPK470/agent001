@@ -1,219 +1,85 @@
-# Artifact formats — Format A vs Format B
+# Sync catalog artifacts — one authoring shape
 
-Two JSON shapes carry the **same semantic catalog** (entities, flows, strategies, environments) but target different workflows. Both are built from **SQLite** — the operator-edited source of truth after first boot.
+There is **one editable catalog shape** end-to-end: what SQLite stores, what Entity Registry edits, what git seeds ship, and what Catalog snapshot export/import moves.
 
-| Label | TypeScript type | Primary use |
-|-------|-----------------|-------------|
-| **Format A** | `AuthoredSyncDefinition` | Git boot seeds, commit to `deploy/sync/` |
-| **Format B** | `EntityDefinition` (+ run bindings) | Entity Registry UI, backup/restore |
+| Layer | Shape | Role |
+|-------|--------|------|
+| **Catalog** | `EntityDefinition` + flows/actions/sources/envs/strategies + `sync_definition_configs` | Editable tip (seed, UI, versions, export/import) |
+| **SyncDefinition** | Process JSON (`PublishedSyncDefinition`) | **Only after Publish** — denormalized compose for preview/execute |
 
-Code and tests use **Format A** / **Format B** consistently. UI labels use plainer names (see [UI and API](#ui-and-api)).
+Publish is compose, not copy: resolve scopes→predicates, bind flow steps, snap `executionFlow.catalog`, stamp versions into SQLite `sync_definitions`.
 
 ---
 
 ## Authority flow
 
 ```
-deploy/sync/artifacts/*          git seeds (Format A entities + catalog JSON)
-              ↓ boot seed / import
-         SQLite catalog (editable pieces)
-              ↓ export (optional download)
-    Format B snapshot / Format A zip
-              ↓ Publish (assemble)
-         SQLite sync_definitions   ← SyncDefinition (process JSON)
-              ↓
-         preview / execute
+Legacy MSSQL (optional)  →  refresh-from-legacy
+                              ↓
+deploy/sync seeds (native Catalog JSON)
+                              ↓ boot seed (identity load)
+                         SQLite Catalog tip
+                              ↓ operator edit / versions
+                         SQLite Catalog tip
+                              ↓ Publish (compose)
+                         SQLite sync_definitions
+                              ↓
+                         preview / execute
 ```
 
-**Catalog** = editable pieces in SQLite (entities, flows, actions, sources, environments, …).  
-**SyncDefinition** = the one process contract preview uses (stored in SQLite after Publish).  
-**Publish** never writes a file into the working tree. **Export** may download the same JSON for git/backup.
+**Export** (Catalog snapshot) is optional download — never a Publish side-effect into the tree.
 
 ---
 
-## Format A — deploy / git layout
+## Shipped seed layout
 
-**What it is:** Compiled entity artifacts — the shape shipped in git under `deploy/sync/artifacts/entities/`.
+| Path | Contents |
+|------|----------|
+| `artifacts/entities/{id}.json` | **EntityDefinition** (registry-native) |
+| `artifacts/sync-definition-configs.json` | Per-entity run bindings (flow/service/env/ownership) |
+| `artifacts/sync-metadata.json` | phases, actions, valueSources, flows |
+| `artifacts/strategies.json` | SCD2 strategies |
+| `artifacts/flow-templates.json` | View of flows (compile helper) |
+| `sync-environments.json` | Environments |
 
-| Aspect | Detail |
-|--------|--------|
-| **One entity** | Single JSON file: `AuthoredSyncDefinition` |
-| **Bulk zip** | `mia-deploy-artifacts-<timestamp>.zip` |
-| **Entity files** | `artifacts/entities/{entityId}.json` |
-| **Compiled from** | `EntityDefinition` + sync admin config + flow catalog |
-| **Typical goal** | Review → commit seeds → boot new hosts |
-
-### Entity shape (high level)
-
-Flat top-level fields; tables live under `metadata`:
-
-- `id`, `rootTable`, `idColumn`, `displayName`, …
-- `strategy`, `bindings`, `ownership` — governance and service refs
-- `metadata.tables[]` — scope as SQL `predicate` strings
-- `executionFlow.steps[]` — resolved flow steps
-- `provenance.sourceArtifact` — git path this file mirrors
-
-Example path: `deploy/sync/artifacts/entities/dataset.json`.
-
-### Bulk zip layout
-
-```
-mia-deploy-artifacts-<timestamp>/
-  manifest.json                 # kind: "deploy-git-layout"
-  sync-environments.json
-  artifacts/
-    sync-metadata.json
-    strategies.json
-    flow-templates.json
-    entities/
-      dataset.json
-      contract.json
-      …
-```
-
-Shared catalog files match Format B exports (same SQLite source).
+Generator path: derive Authored in memory → `entityDefinitionFromAuthoredSync` → write EntityDefinition + configs (`packages/sync/scripts/materialize-native-entity-seeds.ts`). Semantic goldens: `packages/sync/src/test-support/__goldens__/legacy-refresh/` (G2 logical catalog, G3 published process JSON).
 
 ---
 
-## Format B — registry / catalog snapshot
+## Catalog snapshot (export / import)
 
-**What it is:** The shape the Entity Registry UI loads and saves — a direct projection of SQLite rows.
-
-| Aspect | Detail |
-|--------|--------|
-| **One entity** | YAML or JSON via Entity Registry (same fields as `EntityDefinition`) |
-| **Bulk zip** | `mia-sync-export-<timestamp>.zip` |
-| **Entity bulk file** | `artifacts/entity-registry.json` — all entities in one document |
-| **Bindings file** | `artifacts/sync-definition-configs.json` — per-entity flow/service/env |
-| **Typical goal** | Backup, version history, move catalog between hosts without git |
-
-### Entity shape (high level)
-
-Registry-native structure (mirrors the edit modal):
-
-- `tables[]` with nested `scope` objects (not flat `metadata.tables`)
-- `scd2`, `policies`, `lineageRefs`, `provenance`
-- optional `run` block: `{ template, service, environment }` on each entity in exports
-- `__meta` — version, `createdAt`, `retiredAt` (informational on export)
-
-Bulk export also includes `sync-definition-configs.json` when configs exist (admin bindings as a separate table projection).
-
-### Bulk zip layout
+Bulk zip from Entity Registry → **Catalog snapshot** (`mia-sync-export-*`):
 
 ```
 mia-sync-export-<timestamp>/
-  manifest.json                 # layout: "deploy/sync mirror"
+  manifest.json
   sync-environments.json
   artifacts/
     sync-metadata.json
     strategies.json
     flow-templates.json
     entity-registry.json
-    sync-definition-configs.json   # when present
+    sync-definition-configs.json
 ```
 
-**Note:** Format B zip is *similar* to the `deploy/sync/` tree but is **not** identical — entities are in `entity-registry.json`, not `artifacts/entities/*.json`.
+Same semantic catalog as seeds; entities may be bulk `entity-registry.json` instead of per-file.
 
 ---
 
-## Shared catalog files (both formats)
+## SyncDefinition (runtime)
 
-These files are the same in both bulk exports (built by `buildDeployCatalogSnapshot()`):
+`compilePublishedSyncDefinition` / Publish builds process JSON from Catalog tip + configs + live flow catalog. Stored in `sync_definitions`. Preview/execute read **only** that published bundle.
 
-| File | SQLite source | UI |
-|------|---------------|-----|
-| `artifacts/sync-metadata.json` | `phases`, `actions`, `valueSources`, `flows` → `sync_phases` / `sync_actions` / `sync_value_sources` / `sync_flows` | Configuration → Flows / Actions / Sources |
-| `artifacts/strategies.json` | SCD2 strategies | Entity Registry → Strategies |
-| `artifacts/flow-templates.json` | derived view of flows | compile-time helper |
-| `sync-environments.json` | `sync_environments` | Configuration → Environments |
+Legacy **AuthoredSyncDefinition** remains the compile/runtime process JSON base type (and a short import-compat path). It is **not** the git/seed authoring format anymore.
 
 ---
 
-## Conversion
+## UI
 
-| Direction | Mechanism | Notes |
-|-----------|-----------|-------|
-| **A → B** | `import-authored-sync.ts`, `import-deploy-git-artifacts.ts` | Compiles authored JSON into `EntityDefinition` + sync config rows |
-| **B → A** | `entityToAuthoredSyncDefinition()` in `authored-sync-document.ts` | Requires exportable entity (valid scopes, no degraded predicates) |
-| **B → B** | `import-deploy-artifacts.ts` | Catalog snapshot import — replaces catalog sections in SQLite |
-| **A → A** | N/A as round-trip file format | Import A→B, export B→A if you need a refreshed git file |
+| Action | Meaning |
+|--------|---------|
+| Catalog snapshot export/import | Move editable Catalog between hosts |
+| Catalog versions | Tip history / rollback |
+| Publish | Compose tip → SyncDefinitions for preview/execute |
 
-Core entity semantics round-trip: tests in `packages/server/tests/artifact-format-roundtrip.test.ts` cover **A → B → A** and **B bulk export/import**.
-
-Compilers (see [SYNC-MODEL.md](../../packages/sync/SYNC-MODEL.md)):
-
-| Function | Output |
-|----------|--------|
-| `entityDefinitionFromAuthoredSync` | Format B from Format A |
-| `entityToAuthoredSyncDefinition` / `scaffoldSyncDefinition` | Format A from Format B |
-| `compilePublishedSyncDefinition` | Published bundle (runtime) |
-
----
-
-## UI and API
-
-### Entity Registry platform menu (⚙)
-
-| UI label | Format | Export endpoint | Import endpoint |
-|----------|--------|-----------------|-----------------|
-| **Catalog snapshot** | B | `POST /api/platform/artifacts/export/download` | `POST /api/platform/catalog/import` |
-| **Deploy artifacts** | A | `POST /api/platform/deploy-artifacts/export/download` | `POST /api/platform/deploy-artifacts/import` |
-
-Catalog **versions** (`GET /api/platform/catalog/versions`, rollback) store Format B snapshots in SQLite history.
-
-### Per-entity (Entity Registry detail view)
-
-| UI / action | Format | Endpoint |
-|-------------|--------|----------|
-| YAML / registry JSON export | B | `GET /api/entity-registry/entities/:id.yaml`, `…/registry.json` |
-| Deploy artifact copy/download | A | `GET /api/entity-registry/entities/:id/artifact.json` |
-| Import deploy artifact | A → B | `POST /api/entity-registry/entities/import-artifact` |
-| Import YAML / registry JSON | B | `POST /api/entity-registry/entities/import-yaml`, `…/import-registry-json` |
-
-### CLI
-
-```sh
-# Format B — catalog snapshot folder (default ~/Downloads)
-npm run export-deploy-catalog --workspace @mia/server
-
-# Format B — entities only
-npm run entity-registry:export --workspace @mia/server
-```
-
-There is no dedicated CLI for Format A bulk zip; use the API or export from the UI.
-
----
-
-## When to use which
-
-| Goal | Use |
-|------|-----|
-| Backup current operator state, rollback, move between servers | **Format B** (catalog snapshot) |
-| Commit reviewed seeds to git, cold-start new deployments | **Format A** (deploy artifacts) |
-| Edit in Entity Registry UI | **Format B** (YAML/JSON import/export) |
-| Replace one entity from a reviewed git file | **Format A** per-entity import |
-| Factory reset from shipped repo files | Policies → Platform → **Use shipped artifacts** (loads A from `deploy/sync/`, re-seeds built-ins) |
-
-**Import deploy artifacts (Format A)** updates SQLite **without** a factory reset — it upserts entities and platform catalog files. That is different from **Use shipped artifacts**, which wipes and re-seeds from the repo.
-
----
-
-## Code map
-
-| Concern | Path |
-|---------|------|
-| Format B export | `packages/server/src/api/platform/service/export-deploy-artifacts.ts` |
-| Format B import | `packages/server/src/api/platform/service/import-deploy-artifacts.ts` |
-| Format A export | `packages/server/src/api/platform/service/export-deploy-git-artifacts.ts` |
-| Format A import (bulk) | `packages/server/src/api/platform/service/import-deploy-git-artifacts.ts` |
-| Format A import (single) | `packages/server/src/api/sync/service/import-authored-sync.ts` |
-| Format B entity YAML/JSON | `packages/server/src/api/sync/types/entity-yaml.ts` |
-| Format A document | `packages/server/src/api/sync/types/authored-sync-document.ts` |
-| Round-trip tests | `packages/server/tests/artifact-format-roundtrip.test.ts` |
-
----
-
-## Related docs
-
-- [deploy/sync/README.md](./README.md) — boot seeds, refresh from MSSQL, export CLI
-- [packages/sync/SYNC-MODEL.md](../../packages/sync/SYNC-MODEL.md) — terminology and publish chain
+See [README.md](./README.md) and [packages/sync/SYNC-MODEL.md](../../packages/sync/SYNC-MODEL.md).

@@ -67,8 +67,10 @@ function buildCatalogSnapshotFromEntityArtifacts(): CatalogSnapshot {
       rootTable: string
       idColumn: string
       labelColumn?: string | null
-      metadata: { tables: Array<{ name: string; scopeColumn: string }> }
+      tables?: Array<{ name: string; scopeColumn?: string | null }>
+      metadata?: { tables: Array<{ name: string; scopeColumn: string }> }
     }
+    const tables = entity.tables ?? entity.metadata?.tables ?? []
     const [rootSchema, rootName] = entity.rootTable.split(".")
     if (rootSchema && rootName) {
       const rootKey = entity.rootTable.toLowerCase()
@@ -76,12 +78,13 @@ function buildCatalogSnapshotFromEntityArtifacts(): CatalogSnapshot {
       if (entity.labelColumn) rootColumns.push({ name: entity.labelColumn, isPK: false })
       byKey.set(rootKey, { schema: rootSchema, name: rootName, columns: rootColumns, fkOutgoing: [] })
     }
-    for (const table of entity.metadata.tables) {
+    for (const table of tables) {
       const [schema, name] = table.name.split(".")
       if (!schema || !name) continue
       const key = table.name.toLowerCase()
       if (byKey.has(key)) continue
-      const columns = [{ name: table.scopeColumn, isPK: true }]
+      const scopeColumn = table.scopeColumn ?? entity.idColumn
+      const columns = [{ name: scopeColumn, isPK: true }]
       if (entity.rootTable === table.name && entity.labelColumn) {
         columns.push({ name: entity.labelColumn, isPK: false })
       }
@@ -278,9 +281,15 @@ describe("legacy sync generators", () => {
       expect(Array.isArray(actual.metadata.tables)).toBe(true)
       if (usingFallbackCatalog || !hasSyncObjectCalls) {
         const artifactPath = resolve(repoRoot, `deploy/sync/artifacts/entities/${name}.json`)
-        const artifact = JSON.parse(readFileSync(artifactPath, "utf-8")) as DerivedSyncDefinition
+        const artifact = JSON.parse(readFileSync(artifactPath, "utf-8")) as {
+          rootTable: string
+          tables?: unknown[]
+          metadata?: { tables?: unknown[] }
+        }
         expect(actual.metadata.tables.length).toBeGreaterThan(0)
         expect(artifact.rootTable).toBe(expected.rootTable)
+        const tableCount = artifact.tables?.length ?? artifact.metadata?.tables?.length ?? 0
+        expect(tableCount).toBeGreaterThan(0)
         continue
       }
       expect(actual.metadata.tables.length).toBeGreaterThanOrEqual(expected.requiredTables.length)

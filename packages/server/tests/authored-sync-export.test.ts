@@ -37,7 +37,12 @@ function seedRepoArtifacts(root: string): void {
     }
   }
 
-  for (const name of ["sync-metadata.json", "strategies.json", "flow-templates.json"]) {
+  for (const name of [
+    "sync-metadata.json",
+    "strategies.json",
+    "flow-templates.json",
+    "sync-definition-configs.json",
+  ]) {
     const source = join(repoDeploySync, "artifacts", name)
     if (existsSync(source)) {
       copyFileSync(source, join(targetDeploySync, "artifacts", name))
@@ -83,9 +88,13 @@ describe("deploy artifact export (B → A)", () => {
     process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
   })
 
-  it("exports dataset as AuthoredSyncDefinition matching seed shape", () => {
+  it("exports dataset as AuthoredSyncDefinition matching EntityDefinition seed tables", () => {
     const seedPath = resolve(projectRoot, "deploy/sync/artifacts/entities/dataset.json")
-    const seed = JSON.parse(readFileSync(seedPath, "utf-8")) as AuthoredSyncDefinition
+    const seed = JSON.parse(readFileSync(seedPath, "utf-8")) as {
+      rootTable: string
+      idColumn: string
+      tables: Array<{ name: string }>
+    }
 
     const entity = db.getEntityDefinition("_default", "dataset")
     expect(entity).toBeTruthy()
@@ -105,10 +114,10 @@ describe("deploy artifact export (B → A)", () => {
     expect(exported.schemaVersion).toBe(1)
     expect(exported.rootTable).toBe(seed.rootTable)
     expect(exported.idColumn).toBe(seed.idColumn)
-    expect(exported.metadata.tables.length).toBe(seed.metadata.tables.length)
+    expect(exported.metadata.tables.length).toBe(seed.tables.length)
     expect(exported.executionFlow.steps.length).toBeGreaterThan(0)
-    expect(exported.bindings.serviceProfileRef).toBe(seed.bindings.serviceProfileRef)
-    expect(exported.bindings.environmentPolicyRef).toBe(seed.bindings.environmentPolicyRef)
+    expect(exported.bindings.serviceProfileRef).toBe(configRow!.service_profile_ref)
+    expect(exported.bindings.environmentPolicyRef).toBe(configRow!.environment_policy_ref)
   })
 
   it("includes execution flow steps from sync definition config", () => {

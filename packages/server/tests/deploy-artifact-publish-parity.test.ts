@@ -6,7 +6,6 @@
  */
 
 import Database from "better-sqlite3"
-import type { AuthoredSyncDefinition } from "@mia/shared-types"
 import {
   copyFileSync,
   existsSync,
@@ -24,7 +23,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { publishSyncDefinitionsFromDb } from "../src/api/sync/service/definitions.js"
 import { seedEntityRegistryIfEmpty } from "../src/api/sync/service/seed-entity-registry.js"
-import { entityDefinitionFromAuthoredSync, projectTablePredicate } from "@mia/sync"
+import { projectTablePredicate, type EntityDefinition } from "@mia/sync"
 
 const REPO_ROOT = resolve(fileURLToPath(new URL("../../../", import.meta.url)))
 const REPO_ARTIFACTS_DIR = join(REPO_ROOT, "deploy/sync/artifacts/entities")
@@ -41,7 +40,12 @@ function copyRepoDeployArtifacts(targetRoot: string): void {
   for (const file of readdirSync(REPO_ARTIFACTS_DIR).filter((name) => name.endsWith(".json"))) {
     copyFileSync(join(REPO_ARTIFACTS_DIR, file), join(targetDir, file))
   }
-  for (const name of ["sync-metadata.json", "strategies.json", "flow-templates.json"]) {
+  for (const name of [
+    "sync-metadata.json",
+    "strategies.json",
+    "flow-templates.json",
+    "sync-definition-configs.json",
+  ]) {
     const source = join(REPO_ROOT, "deploy/sync/artifacts", name)
     if (existsSync(source)) {
       mkdirSync(join(targetRoot, "deploy/sync/artifacts"), { recursive: true })
@@ -55,15 +59,14 @@ function copyRepoDeployArtifacts(targetRoot: string): void {
   }
 }
 
-function loadArtifact(entityId: string): AuthoredSyncDefinition {
+function loadEntitySeed(entityId: string): EntityDefinition {
   return JSON.parse(
     readFileSync(join(REPO_ARTIFACTS_DIR, `${entityId}.json`), "utf-8"),
-  ) as AuthoredSyncDefinition
+  ) as EntityDefinition
 }
 
 function expectedPredicateMap(entityId: string): Map<string, string> {
-  const authored = loadArtifact(entityId)
-  const entity = entityDefinitionFromAuthoredSync(authored, "_default")
+  const entity = loadEntitySeed(entityId)
   return new Map(entity.tables.map((table) => [table.name, projectTablePredicate(entity, table)]))
 }
 

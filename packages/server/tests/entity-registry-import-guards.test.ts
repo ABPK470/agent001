@@ -3,6 +3,7 @@
  * degraded predicates or unresolved review placeholders into SQLite.
  */
 
+import type { AuthoredSyncDefinition } from "@mia/shared-types"
 import { mkdtempSync, readFileSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
@@ -40,16 +41,21 @@ import {
   type CatalogOperatorFixture,
 } from "./helpers/catalog-operator-fixture.js"
 
-const REPO_ARTIFACTS = resolve(
-  fileURLToPath(new URL("../../../deploy/sync/artifacts/entities", import.meta.url)),
+const G1_WIRE = resolve(
+  fileURLToPath(
+    new URL("../../../packages/sync/src/test-support/__goldens__/legacy-refresh/g1-wire.json", import.meta.url),
+  ),
 )
 
 let fixture: CatalogOperatorFixture
 
 function loadArtifact(entityId: string): AuthoredSyncDefinition {
-  return JSON.parse(
-    readFileSync(join(REPO_ARTIFACTS, `${entityId}.json`), "utf-8"),
-  ) as AuthoredSyncDefinition
+  const g1 = JSON.parse(readFileSync(G1_WIRE, "utf-8")) as {
+    entities: Record<string, AuthoredSyncDefinition>
+  }
+  const authored = g1.entities[entityId]
+  if (!authored) throw new Error(`Missing G1 Authored entity ${entityId}`)
+  return authored
 }
 
 function contentTypePredicateFromDb(): string | null {

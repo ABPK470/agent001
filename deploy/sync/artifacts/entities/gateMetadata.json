@@ -1,139 +1,189 @@
 {
-  "schemaVersion": 1,
   "id": "gateMetadata",
+  "tenantId": "_default",
   "displayName": "Gate Metadata",
   "description": "Gate Metadata sync definition bootstrapped from legacy pipeline ground truth.",
   "rootTable": "gate.MetaTable",
   "idColumn": "tableId",
   "labelColumn": "name",
   "selfJoinColumn": null,
-  "legacy": {
-    "pipelineId": 780,
-    "entrySproc": "core.uspSyncDataListObjectsTran"
-  },
-  "governance": {
-    "approvalPolicyId": null,
+  "tables": [
+    {
+      "name": "gate.MetaTable",
+      "scope": {
+        "kind": "rootPk",
+        "column": "tableId"
+      },
+      "executionOrder": 1,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:780"
+      },
+      "scopeColumn": "tableId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "gate.jsonSchema",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [gate].[MetaColumn] mc INNER JOIN [gate].[MetaView] mv ON mv.[viewId] = mc.[viewId] WHERE mv.[tableId] = {id} AND mc.[jsonSchemaId] = [gate].[jsonSchema].[jsonSchemaId])"
+      },
+      "executionOrder": 2,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:780"
+      },
+      "scopeColumn": "jsonSchemaId",
+      "source": "pipeline-only",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "gate.MetaView",
+      "scope": {
+        "kind": "rootPk",
+        "column": "tableId"
+      },
+      "executionOrder": 3,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:780"
+      },
+      "scopeColumn": "viewId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "gate.MetaColumn",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [gate].[MetaView] mv WHERE mv.[viewId] = [gate].[metaColumn].[viewId] AND mv.[tableId] = {id})"
+      },
+      "executionOrder": 4,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:780"
+      },
+      "scopeColumn": "viewId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "gate.Content",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [gate].[MetaView] p WHERE p.viewId = [gate].[Content].viewId AND p.tableId = {id})"
+      },
+      "executionOrder": 5,
+      "scd2Override": null,
+      "verified": false,
+      "archiveTable": null,
+      "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body.",
+      "provenance": {
+        "kind": "fkGraphSuggester",
+        "confidence": "medium"
+      },
+      "scopeColumn": null,
+      "source": "fk-only",
+      "groundedByPipeline": false,
+      "enabledByDefault": false,
+      "userControllable": true
+    },
+    {
+      "name": "gate.ContentLink",
+      "scope": {
+        "kind": "sql",
+        "predicate": "(EXISTS (SELECT 1 FROM [gate].[Content] p WHERE p.contentId = [gate].[ContentLink].contentId)) AND EXISTS (SELECT 1 FROM [gate].[MetaTable] AS __mia_root WHERE __mia_root.[tableId] = {id})"
+      },
+      "executionOrder": 6,
+      "scd2Override": null,
+      "verified": false,
+      "archiveTable": null,
+      "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body.",
+      "provenance": {
+        "kind": "fkGraphSuggester",
+        "confidence": "medium"
+      },
+      "scopeColumn": null,
+      "source": "fk-only",
+      "groundedByPipeline": false,
+      "enabledByDefault": false,
+      "userControllable": true
+    },
+    {
+      "name": "gate.UserGroupPermission",
+      "scope": {
+        "kind": "sql",
+        "predicate": "(EXISTS (SELECT 1 FROM [gate].[Content] p WHERE p.contentId = [gate].[UserGroupPermission].contentId)) AND EXISTS (SELECT 1 FROM [gate].[MetaTable] AS __mia_root WHERE __mia_root.[tableId] = {id})"
+      },
+      "executionOrder": 7,
+      "scd2Override": null,
+      "verified": false,
+      "archiveTable": null,
+      "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body.",
+      "provenance": {
+        "kind": "fkGraphSuggester",
+        "confidence": "medium"
+      },
+      "scopeColumn": null,
+      "source": "fk-only",
+      "groundedByPipeline": false,
+      "enabledByDefault": false,
+      "userControllable": true
+    }
+  ],
+  "policies": {
     "freezeWindowIds": []
   },
-  "strategy": {
+  "scd2": {
     "strategyId": "mymi-scd2",
-    "strategyVersion": "latest"
+    "strategyVersion": "latest",
+    "entityOverride": null
   },
-  "bindings": {
-    "serviceProfileRef": "default",
-    "environmentPolicyRef": "default"
-  },
-  "ownership": {
-    "team": "sync-platform",
-    "owner": null,
-    "reviewStatus": "legacy-review-required",
-    "notes": [
-      "Bootstrapped from legacy pipeline ground truth.",
-      "Contains FK-inferred optional scope that still needs deliberate review."
-    ]
-  },
-  "metadata": {
-    "tables": [
-      {
-        "name": "gate.jsonSchema",
-        "scopeColumn": "jsonSchemaId",
-        "predicate": "EXISTS (SELECT 1 FROM [gate].[MetaColumn] mc INNER JOIN [gate].[MetaView] mv ON mv.[viewId] = mc.[viewId] WHERE mv.[tableId] = {id} AND mc.[jsonSchemaId] = [gate].[jsonSchema].[jsonSchemaId])",
-        "source": "pipeline-only",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "gate.MetaColumn",
-        "scopeColumn": "viewId",
-        "predicate": "EXISTS (SELECT 1 FROM [gate].[MetaView] mv WHERE mv.[viewId] = [gate].[metaColumn].[viewId] AND mv.[tableId] = {id})",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "gate.MetaView",
-        "scopeColumn": "viewId",
-        "predicate": "tableId = {id}",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "gate.MetaTable",
-        "scopeColumn": "tableId",
-        "predicate": "tableId = {id}",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "gate.Content",
-        "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [gate].[MetaView] p WHERE p.viewId = [gate].[Content].viewId AND p.tableId = {id})",
-        "source": "fk-only",
-        "verified": false,
-        "groundedByPipeline": false,
-        "enabledByDefault": false,
-        "userControllable": true,
-        "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body."
-      },
-      {
-        "name": "gate.ContentLink",
-        "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [gate].[Content] p WHERE p.contentId = [gate].[ContentLink].contentId)",
-        "source": "fk-only",
-        "verified": false,
-        "groundedByPipeline": false,
-        "enabledByDefault": false,
-        "userControllable": true,
-        "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body."
-      },
-      {
-        "name": "gate.UserGroupPermission",
-        "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [gate].[Content] p WHERE p.contentId = [gate].[UserGroupPermission].contentId)",
-        "source": "fk-only",
-        "verified": false,
-        "groundedByPipeline": false,
-        "enabledByDefault": false,
-        "userControllable": true,
-        "note": "Predicate inferred from FK graph. Verify against core.uspSyncDataListObjectsTran body."
-      }
-    ],
-    "executionOrder": [
-      "gate.MetaTable",
-      "gate.JsonSchema",
-      "gate.MetaView",
-      "gate.MetaColumn",
-      "gate.Content",
-      "gate.ContentLink",
-      "gate.UserGroupPermission"
-    ],
-    "reverseOrder": [
-      "gate.UserGroupPermission",
-      "gate.ContentLink",
-      "gate.Content",
-      "gate.MetaColumn",
-      "gate.MetaView",
-      "gate.JsonSchema",
-      "gate.MetaTable"
-    ],
-    "discrepancies": []
-  },
-  "executionFlow": {
-    "steps": []
-  },
+  "lineageRefs": [],
   "provenance": {
     "kind": "legacy-migration",
-    "sourceArtifact": "deploy/sync/generators/refresh-from-legacy.mjs",
-    "sourceVersion": "2026-07-09T13:02:24.967Z"
-  }
+    "legacyPipelineId": 780
+  },
+  "legacyEntrySproc": "core.uspSyncDataListObjectsTran",
+  "reverseOrder": [
+    "gate.UserGroupPermission",
+    "gate.ContentLink",
+    "gate.Content",
+    "gate.MetaColumn",
+    "gate.MetaView",
+    "gate.JsonSchema",
+    "gate.MetaTable"
+  ],
+  "discrepancies": [],
+  "version": 1,
+  "versionLabel": "bundled-seed",
+  "createdBy": "system",
+  "reason": "bundled-seed",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "retiredAt": null
 }

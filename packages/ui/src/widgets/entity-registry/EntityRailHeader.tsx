@@ -19,9 +19,7 @@ export interface EntityRailHeaderProps {
   onSyncMetadata: () => void
   onPublish: () => void
   onExportConfig: () => void
-  onExportDeployArtifacts: () => void
   onImportConfig: () => void
-  onImportDeployArtifacts: () => void
   onCatalogVersions: () => void
 }
 
@@ -32,9 +30,7 @@ export function EntityRailHeader({
   onSyncMetadata,
   onPublish,
   onExportConfig,
-  onExportDeployArtifacts,
   onImportConfig,
-  onImportDeployArtifacts,
   onCatalogVersions,
 }: EntityRailHeaderProps): JSX.Element {
   const [menuOpen, setMenuOpen] = useState(false)
@@ -134,9 +130,7 @@ export function EntityRailHeader({
                   onSyncMetadata={onSyncMetadata}
                   onPublish={onPublish}
                   onExportConfig={onExportConfig}
-                  onExportDeployArtifacts={onExportDeployArtifacts}
                   onImportConfig={onImportConfig}
-                  onImportDeployArtifacts={onImportDeployArtifacts}
                   onCatalogVersions={onCatalogVersions}
                 />
               </div>,

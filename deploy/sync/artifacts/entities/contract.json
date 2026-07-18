@@ -1,226 +1,343 @@
 {
-  "schemaVersion": 1,
   "id": "contract",
+  "tenantId": "_default",
   "displayName": "Contract",
   "description": "Contract sync definition bootstrapped from legacy pipeline ground truth.",
   "rootTable": "core.Contract",
   "idColumn": "contractId",
   "labelColumn": "name",
   "selfJoinColumn": null,
-  "legacy": {
-    "pipelineId": 788,
-    "entrySproc": "core.uspSyncCoreObjectsTran"
-  },
-  "governance": {
-    "approvalPolicyId": null,
+  "tables": [
+    {
+      "name": "core.Contract",
+      "scope": {
+        "kind": "rootPk",
+        "column": "contractId"
+      },
+      "executionOrder": 1,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:788"
+      },
+      "scopeColumn": "contractId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.ContractColumn",
+      "scope": {
+        "kind": "rootPk",
+        "column": "contractId"
+      },
+      "executionOrder": 2,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:788"
+      },
+      "scopeColumn": "contractId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.Dataset",
+      "scope": {
+        "kind": "rootPk",
+        "column": "contractId"
+      },
+      "executionOrder": 3,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:788"
+      },
+      "scopeColumn": "contractId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.DatasetMapping",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM (SELECT datasetId AS [datasetId] FROM core.Dataset WHERE contractId = {id}) AS __mia_scope WHERE __mia_scope.[datasetId] = [core].[DatasetMapping].[datasetId_Left])"
+      },
+      "executionOrder": 4,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:788"
+      },
+      "scopeColumn": "datasetId_Left",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.DatasetColumn",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM (SELECT datasetId AS [datasetId] FROM core.Dataset WHERE contractId = {id}) AS __mia_scope WHERE __mia_scope.[datasetId] = [core].[DatasetColumn].[datasetId])"
+      },
+      "executionOrder": 5,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:788"
+      },
+      "scopeColumn": "datasetId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.DatasetMappingColumn",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM (SELECT datasetMappingId FROM core.DatasetMapping WHERE datasetId_Left IN (SELECT datasetId FROM core.Dataset WHERE contractId = {id})) AS __mia_scope WHERE __mia_scope.[datasetMappingId] = [core].[DatasetMappingColumn].[datasetMappingId])"
+      },
+      "executionOrder": 6,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:788"
+      },
+      "scopeColumn": "datasetMappingId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.Pipeline",
+      "scope": {
+        "kind": "rootPk",
+        "column": "contractId"
+      },
+      "executionOrder": 7,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:788"
+      },
+      "scopeColumn": "contractId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.Activity",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM (SELECT pipelineId AS [pipelineId] FROM core.Pipeline WHERE contractId = {id}) AS __mia_scope WHERE __mia_scope.[pipelineId] = [core].[Activity].[pipelineId])"
+      },
+      "executionOrder": 8,
+      "scd2Override": null,
+      "verified": true,
+      "archiveTable": null,
+      "note": null,
+      "provenance": {
+        "kind": "sproc",
+        "sprocName": "legacy-pipeline:788"
+      },
+      "scopeColumn": "pipelineId",
+      "source": "fk+pipeline",
+      "groundedByPipeline": true,
+      "enabledByDefault": true,
+      "userControllable": false
+    },
+    {
+      "name": "core.Rule",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[Dataset] p WHERE p.datasetId = [core].[Rule].inputDatasetId AND p.contractId = {id})"
+      },
+      "executionOrder": 9,
+      "scd2Override": null,
+      "verified": false,
+      "archiveTable": null,
+      "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+      "provenance": {
+        "kind": "fkGraphSuggester",
+        "confidence": "medium"
+      },
+      "scopeColumn": null,
+      "source": "fk-only",
+      "groundedByPipeline": false,
+      "enabledByDefault": false,
+      "userControllable": true
+    },
+    {
+      "name": "core.Step",
+      "scope": {
+        "kind": "sql",
+        "predicate": "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Step].pipelineId AND p.contractId = {id})"
+      },
+      "executionOrder": 10,
+      "scd2Override": null,
+      "verified": false,
+      "archiveTable": null,
+      "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+      "provenance": {
+        "kind": "fkGraphSuggester",
+        "confidence": "medium"
+      },
+      "scopeColumn": null,
+      "source": "fk-only",
+      "groundedByPipeline": false,
+      "enabledByDefault": false,
+      "userControllable": true
+    },
+    {
+      "name": "core.RuleColumn",
+      "scope": {
+        "kind": "sql",
+        "predicate": "(EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleColumn].inputDatasetColumnId)) AND EXISTS (SELECT 1 FROM [core].[Contract] AS __mia_root WHERE __mia_root.[contractId] = {id})"
+      },
+      "executionOrder": 11,
+      "scd2Override": null,
+      "verified": false,
+      "archiveTable": null,
+      "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+      "provenance": {
+        "kind": "fkGraphSuggester",
+        "confidence": "medium"
+      },
+      "scopeColumn": null,
+      "source": "fk-only",
+      "groundedByPipeline": false,
+      "enabledByDefault": false,
+      "userControllable": true
+    },
+    {
+      "name": "core.RuleCondition",
+      "scope": {
+        "kind": "sql",
+        "predicate": "(EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleCondition].inputDatasetColumnId)) AND EXISTS (SELECT 1 FROM [core].[Contract] AS __mia_root WHERE __mia_root.[contractId] = {id})"
+      },
+      "executionOrder": 12,
+      "scd2Override": null,
+      "verified": false,
+      "archiveTable": null,
+      "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+      "provenance": {
+        "kind": "fkGraphSuggester",
+        "confidence": "medium"
+      },
+      "scopeColumn": null,
+      "source": "fk-only",
+      "groundedByPipeline": false,
+      "enabledByDefault": false,
+      "userControllable": true
+    },
+    {
+      "name": "core.RuleLink",
+      "scope": {
+        "kind": "sql",
+        "predicate": "(EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleLink].outputDatasetColumnId)) AND EXISTS (SELECT 1 FROM [core].[Contract] AS __mia_root WHERE __mia_root.[contractId] = {id})"
+      },
+      "executionOrder": 13,
+      "scd2Override": null,
+      "verified": false,
+      "archiveTable": null,
+      "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+      "provenance": {
+        "kind": "fkGraphSuggester",
+        "confidence": "medium"
+      },
+      "scopeColumn": null,
+      "source": "fk-only",
+      "groundedByPipeline": false,
+      "enabledByDefault": false,
+      "userControllable": true
+    },
+    {
+      "name": "core.RuleConditionValue",
+      "scope": {
+        "kind": "sql",
+        "predicate": "(EXISTS (SELECT 1 FROM [core].[RuleCondition] p WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId)) AND EXISTS (SELECT 1 FROM [core].[Contract] AS __mia_root WHERE __mia_root.[contractId] = {id})"
+      },
+      "executionOrder": 14,
+      "scd2Override": null,
+      "verified": false,
+      "archiveTable": null,
+      "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body.",
+      "provenance": {
+        "kind": "fkGraphSuggester",
+        "confidence": "medium"
+      },
+      "scopeColumn": null,
+      "source": "fk-only",
+      "groundedByPipeline": false,
+      "enabledByDefault": false,
+      "userControllable": true
+    }
+  ],
+  "policies": {
     "freezeWindowIds": []
   },
-  "strategy": {
+  "scd2": {
     "strategyId": "mymi-scd2",
-    "strategyVersion": "latest"
+    "strategyVersion": "latest",
+    "entityOverride": null
   },
-  "bindings": {
-    "serviceProfileRef": "default",
-    "environmentPolicyRef": "default"
-  },
-  "ownership": {
-    "team": "sync-platform",
-    "owner": null,
-    "reviewStatus": "legacy-review-required",
-    "notes": [
-      "Bootstrapped from legacy pipeline ground truth.",
-      "Contains FK-inferred optional scope that still needs deliberate review."
-    ]
-  },
-  "metadata": {
-    "tables": [
-      {
-        "name": "core.ContractColumn",
-        "scopeColumn": "contractId",
-        "predicate": "contractId = {id}",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.Contract",
-        "scopeColumn": "contractId",
-        "predicate": "contractId = {id}",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.DatasetMappingColumn",
-        "scopeColumn": "datasetMappingId",
-        "predicate": "EXISTS (SELECT 1 FROM (SELECT datasetMappingId FROM core.DatasetMapping WHERE datasetId_Left IN (SELECT datasetId FROM core.Dataset WHERE contractId = {id})) AS __mia_scope WHERE __mia_scope.[datasetMappingId] = [core].[DatasetMappingColumn].[datasetMappingId])",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.DatasetMapping",
-        "scopeColumn": "datasetId_Left",
-        "predicate": "EXISTS (SELECT 1 FROM (SELECT datasetId AS [datasetId] FROM core.Dataset WHERE contractId = {id}) AS __mia_scope WHERE __mia_scope.[datasetId] = [core].[DatasetMapping].[datasetId_Left])",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.DatasetColumn",
-        "scopeColumn": "datasetId",
-        "predicate": "EXISTS (SELECT 1 FROM (SELECT datasetId AS [datasetId] FROM core.Dataset WHERE contractId = {id}) AS __mia_scope WHERE __mia_scope.[datasetId] = [core].[DatasetColumn].[datasetId])",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.Dataset",
-        "scopeColumn": "contractId",
-        "predicate": "contractId = {id}",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.Activity",
-        "scopeColumn": "pipelineId",
-        "predicate": "EXISTS (SELECT 1 FROM (SELECT pipelineId AS [pipelineId] FROM core.Pipeline WHERE contractId = {id}) AS __mia_scope WHERE __mia_scope.[pipelineId] = [core].[Activity].[pipelineId])",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.Pipeline",
-        "scopeColumn": "contractId",
-        "predicate": "contractId = {id}",
-        "source": "fk+pipeline",
-        "verified": true,
-        "groundedByPipeline": true,
-        "enabledByDefault": true,
-        "userControllable": false
-      },
-      {
-        "name": "core.Rule",
-        "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [core].[Dataset] p WHERE p.datasetId = [core].[Rule].inputDatasetId AND p.contractId = {id})",
-        "source": "fk-only",
-        "verified": false,
-        "groundedByPipeline": false,
-        "enabledByDefault": false,
-        "userControllable": true,
-        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
-      },
-      {
-        "name": "core.Step",
-        "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [core].[Pipeline] p WHERE p.pipelineId = [core].[Step].pipelineId AND p.contractId = {id})",
-        "source": "fk-only",
-        "verified": false,
-        "groundedByPipeline": false,
-        "enabledByDefault": false,
-        "userControllable": true,
-        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
-      },
-      {
-        "name": "core.RuleColumn",
-        "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleColumn].inputDatasetColumnId)",
-        "source": "fk-only",
-        "verified": false,
-        "groundedByPipeline": false,
-        "enabledByDefault": false,
-        "userControllable": true,
-        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
-      },
-      {
-        "name": "core.RuleCondition",
-        "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleCondition].inputDatasetColumnId)",
-        "source": "fk-only",
-        "verified": false,
-        "groundedByPipeline": false,
-        "enabledByDefault": false,
-        "userControllable": true,
-        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
-      },
-      {
-        "name": "core.RuleLink",
-        "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [core].[DatasetColumn] p WHERE p.datasetColumnId = [core].[RuleLink].outputDatasetColumnId)",
-        "source": "fk-only",
-        "verified": false,
-        "groundedByPipeline": false,
-        "enabledByDefault": false,
-        "userControllable": true,
-        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
-      },
-      {
-        "name": "core.RuleConditionValue",
-        "scopeColumn": null,
-        "predicate": "EXISTS (SELECT 1 FROM [core].[RuleCondition] p WHERE p.ruleConditionId = [core].[RuleConditionValue].ruleConditionId)",
-        "source": "fk-only",
-        "verified": false,
-        "groundedByPipeline": false,
-        "enabledByDefault": false,
-        "userControllable": true,
-        "note": "Predicate inferred from FK graph. Verify against core.uspSyncCoreObjectsTran body."
-      }
-    ],
-    "executionOrder": [
-      "core.Contract",
-      "core.ContractColumn",
-      "core.Dataset",
-      "core.DatasetMapping",
-      "core.DatasetColumn",
-      "core.DatasetMappingColumn",
-      "core.Pipeline",
-      "core.Activity",
-      "core.Rule",
-      "core.Step",
-      "core.RuleColumn",
-      "core.RuleCondition",
-      "core.RuleLink",
-      "core.RuleConditionValue"
-    ],
-    "reverseOrder": [
-      "core.RuleConditionValue",
-      "core.RuleLink",
-      "core.RuleCondition",
-      "core.RuleColumn",
-      "core.Step",
-      "core.Rule",
-      "core.Activity",
-      "core.Pipeline",
-      "core.DatasetMappingColumn",
-      "core.DatasetColumn",
-      "core.DatasetMapping",
-      "core.Dataset",
-      "core.ContractColumn",
-      "core.Contract"
-    ],
-    "discrepancies": []
-  },
-  "executionFlow": {
-    "steps": []
-  },
+  "lineageRefs": [],
   "provenance": {
     "kind": "legacy-migration",
-    "sourceArtifact": "deploy/sync/generators/refresh-from-legacy.mjs",
-    "sourceVersion": "2026-07-09T13:02:24.967Z"
-  }
+    "legacyPipelineId": 788
+  },
+  "legacyEntrySproc": "core.uspSyncCoreObjectsTran",
+  "reverseOrder": [
+    "core.RuleConditionValue",
+    "core.RuleLink",
+    "core.RuleCondition",
+    "core.RuleColumn",
+    "core.Step",
+    "core.Rule",
+    "core.Activity",
+    "core.Pipeline",
+    "core.DatasetMappingColumn",
+    "core.DatasetColumn",
+    "core.DatasetMapping",
+    "core.Dataset",
+    "core.ContractColumn",
+    "core.Contract"
+  ],
+  "discrepancies": [],
+  "version": 1,
+  "versionLabel": "bundled-seed",
+  "createdBy": "system",
+  "reason": "bundled-seed",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "retiredAt": null
 }
