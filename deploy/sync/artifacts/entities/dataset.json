@@ -295,5 +295,17 @@
   "createdBy": "system",
   "reason": "bundled-seed",
   "createdAt": "2026-01-01T00:00:00.000Z",
-  "retiredAt": null
+  "retiredAt": null,
+  "run": {
+    "template": "dataset",
+    "service": "default",
+    "environment": "default",
+    "ownershipTeam": "sync-platform",
+    "ownershipOwner": null,
+    "reviewStatus": "legacy-review-required",
+    "ownershipNotes": [
+      "Bootstrapped from legacy pipeline ground truth.",
+      "Contains FK-inferred optional scope that still needs deliberate review."
+    ]
+  }
 }

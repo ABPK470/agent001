@@ -1,26 +1,29 @@
 /**
- * Convert AuthoredSyncDefinition → EntityDefinition seeds + sync-definition-configs.json.
+ * Convert AuthoredSyncDefinition → EntityDefinition seeds with embedded `run`.
  *
  * Usage:
  *   npx tsx packages/sync/scripts/materialize-native-entity-seeds.ts [projectRoot]
  *   npx tsx …/materialize-native-entity-seeds.ts [projectRoot] --authored-dir=<dir>
  *
- * Without --authored-dir: convert in-place under deploy/sync/artifacts/entities (repair path).
+ * Without --authored-dir: convert in-place under deploy/sync/artifacts/entities (repair path),
+ * or migrate native seeds that still use a sibling sync-definition-configs.json.
  * With --authored-dir: read Authored JSON from that directory; write native seeds to artifacts
  * (refresh path — Authored never lands in the git seed tree).
  */
 
-import { mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, mkdirSync, readdirSync, readFileSync, unlinkSync, writeFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 
 import type { AuthoredSyncDefinition } from "@mia/shared-types"
 
 import { entityDefinitionFromAuthoredSync } from "../src/domain/entity-registry/from-authored-sync.js"
 import {
+  entityRunBlockFromSeedConfig,
   isAuthoredSyncDefinitionSeed,
   isEntityDefinitionSeed,
   LEGACY_REFRESH_SEED_CREATED_AT,
   seedRunConfigFromAuthored,
+  seedRunConfigFromEntityDocument,
   type SeedRunConfig,
 } from "../src/test-support/legacy-refresh-golden.js"
 import { loadSyncDefinitionFlowTemplateCatalog } from "../src/runtime/load-flow-templates.js"
@@ -45,16 +48,44 @@ function parseArgs(argv: string[]): { projectRoot: string; authoredDir: string |
   }
 }
 
+function configsPath(projectRoot: string): string {
+  return resolve(projectRoot, "deploy/sync/artifacts/sync-definition-configs.json")
+}
+
+function loadLegacyConfigs(projectRoot: string): Map<string, SeedRunConfig> {
+  const path = configsPath(projectRoot)
+  const out = new Map<string, SeedRunConfig>()
+  if (!existsSync(path)) return out
+  const doc = JSON.parse(readFileSync(path, "utf-8")) as { configs?: SeedRunConfig[] }
+  for (const row of doc.configs ?? []) {
+    out.set(row.entityId, row)
+  }
+  return out
+}
+
+function writeEntityWithRun(
+  outPath: string,
+  entity: Record<string, unknown>,
+  run: SeedRunConfig,
+): void {
+  const doc = {
+    ...entity,
+    run: entityRunBlockFromSeedConfig(run),
+  }
+  writeFileSync(outPath, `${JSON.stringify(doc, null, 2)}\n`, "utf-8")
+}
+
 function main(): void {
   const { projectRoot, authoredDir } = parseArgs(process.argv.slice(2))
   const outEntitiesDir = resolve(projectRoot, "deploy/sync/artifacts/entities")
   const sourceDir = authoredDir ?? outEntitiesDir
   const flowTemplateCatalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
+  const legacyConfigs = loadLegacyConfigs(projectRoot)
 
   mkdirSync(outEntitiesDir, { recursive: true })
 
-  const configs: SeedRunConfig[] = []
   let converted = 0
+  let migratedNative = 0
   let alreadyNative = 0
 
   for (const file of readdirSync(sourceDir).filter((name) => name.endsWith(".json")).sort()) {
@@ -62,7 +93,21 @@ function main(): void {
     const raw = JSON.parse(readFileSync(sourcePath, "utf-8")) as unknown
 
     if (authoredDir == null && isEntityDefinitionSeed(raw)) {
-      alreadyNative++
+      const existingRun = seedRunConfigFromEntityDocument(raw)
+      if (existingRun) {
+        alreadyNative++
+        continue
+      }
+      const doc = raw as { id: string }
+      const fromLegacy = legacyConfigs.get(doc.id)
+      if (!fromLegacy) {
+        throw new Error(
+          `Entity seed ${file} has no run block and no sync-definition-configs entry. Re-run refresh-from-legacy.`,
+        )
+      }
+      const { run: _ignored, ...entity } = raw as Record<string, unknown>
+      writeEntityWithRun(join(outEntitiesDir, file), entity, fromLegacy)
+      migratedNative++
       continue
     }
 
@@ -74,24 +119,29 @@ function main(): void {
     const entity = entityDefinitionFromAuthoredSync(authored, "_default", {
       createdAt: LEGACY_REFRESH_SEED_CREATED_AT,
     })
-    writeFileSync(join(outEntitiesDir, file), `${JSON.stringify(entity, null, 2)}\n`, "utf-8")
-    configs.push(seedRunConfigFromAuthored(authored, flowTemplateCatalog))
+    const run = seedRunConfigFromAuthored(authored, flowTemplateCatalog)
+    writeEntityWithRun(join(outEntitiesDir, file), entity as unknown as Record<string, unknown>, run)
     converted++
   }
 
-  if (converted > 0) {
-    writeConfigs(projectRoot, configs)
-  } else if (alreadyNative > 0 && authoredDir == null) {
-    const configsPath = resolve(projectRoot, "deploy/sync/artifacts/sync-definition-configs.json")
-    try {
-      readFileSync(configsPath, "utf-8")
-    } catch {
-      throw new Error(
-        "Entity seeds are native but sync-definition-configs.json is missing. Re-run refresh-from-legacy.",
-      )
-    }
-  } else if (authoredDir != null && converted === 0) {
+  if (authoredDir != null && converted === 0) {
     throw new Error(`No Authored entity JSON found in ${authoredDir}`)
+  }
+
+  const legacyPath = configsPath(projectRoot)
+  let removedConfigs = false
+  if (existsSync(legacyPath) && (converted > 0 || migratedNative > 0 || alreadyNative > 0)) {
+    // After native seeds carry run, the sibling configs file is redundant.
+    const allHaveRun = readdirSync(outEntitiesDir)
+      .filter((name) => name.endsWith(".json"))
+      .every((name) => {
+        const raw = JSON.parse(readFileSync(join(outEntitiesDir, name), "utf-8")) as unknown
+        return seedRunConfigFromEntityDocument(raw) != null
+      })
+    if (allHaveRun) {
+      unlinkSync(legacyPath)
+      removedConfigs = true
+    }
   }
 
   console.log(
@@ -100,22 +150,11 @@ function main(): void {
       projectRoot,
       authoredDir,
       converted,
+      migratedNative,
       alreadyNative,
-      configsWritten: converted > 0,
+      removedConfigs,
     }),
   )
-}
-
-function writeConfigs(projectRoot: string, configs: SeedRunConfig[]): void {
-  const configsPath = resolve(projectRoot, "deploy/sync/artifacts/sync-definition-configs.json")
-  mkdirSync(resolve(projectRoot, "deploy/sync/artifacts"), { recursive: true })
-  const doc = {
-    version: 1 as const,
-    _comment:
-      "Per-entity run bindings (flow/service/env/ownership). Seeds sync_definition_configs on boot. Pair with artifacts/entities/*.json EntityDefinition seeds.",
-    configs: configs.sort((a, b) => a.entityId.localeCompare(b.entityId)),
-  }
-  writeFileSync(configsPath, `${JSON.stringify(doc, null, 2)}\n`, "utf-8")
 }
 
 main()

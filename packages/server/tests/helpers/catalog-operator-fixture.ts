@@ -39,7 +39,6 @@ export function seedRepoArtifacts(root: string): void {
     "sync-metadata.json",
     "strategies.json",
     "flow-templates.json",
-    "sync-definition-configs.json",
   ]) {
     const source = join(repoDeploySync, "artifacts", name)
     if (existsSync(source)) {

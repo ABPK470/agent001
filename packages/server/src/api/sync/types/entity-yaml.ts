@@ -11,7 +11,7 @@
  *  - A YAML file MAY contain a single `EntityDefinition` document or
  *    a multi-document file (`---` separated) for bulk import. Both
  *    flow through {@link parseEntitiesYaml}.
- *  - Optional `run:` block (template, service, environment) references a flow;
+ *  - Optional `run:` block (template, service, environment, ownership) references a flow;
  *    steps are resolved from that flow at save/publish — never inline in YAML.
  *  - `version`, `versionLabel`, `createdAt`, `createdBy`, `retiredAt`
  *    are NEVER read from the YAML — the server stamps those at save
@@ -24,11 +24,15 @@ import type { AuthoredSyncFlowStep } from "@mia/shared-types"
 import type { EntityDefinition, EntityFkHop, EntityTable, EntityTableScope, Scd2Override } from "@mia/sync"
 import { normalizeEntityDefinition as normalizeEntityScopes } from "@mia/sync"
 
-/** EnvSync run bindings stored alongside the entity in YAML (`run:` block). */
+/** EnvSync run bindings stored alongside the entity (`run:` block). */
 export interface EntityRunYaml {
   template: string
   service: string
   environment: string
+  ownershipTeam?: string
+  ownershipOwner?: string | null
+  reviewStatus?: "legacy-review-required" | "reviewed"
+  ownershipNotes?: string[]
   /** @deprecated Rejected on import — steps belong on the flow definition. */
   steps?: AuthoredSyncFlowStep[]
 }
@@ -72,7 +76,7 @@ export function buildEntityRegistryExportDocument(
 ): EntityRegistryExportDocument {
   return {
     version: 1,
-    _comment: "SQLite snapshot — entity definitions and run bindings.",
+    _comment: "SQLite snapshot — entity definitions with run bindings (flow/service/env/ownership).",
     entities: defs.map((def) => orderEntity(def, runs?.get(def.id) ?? null)),
   }
 }
@@ -81,20 +85,40 @@ export function entityRunYamlFromConfig(config: {
   flow_preset: string
   service_profile_ref: string
   environment_policy_ref: string
+  ownership_team: string
+  ownership_owner: string | null
+  review_status: "legacy-review-required" | "reviewed"
+  ownership_notes_json: string
 }): EntityRunYaml {
+  let ownershipNotes: string[] = []
+  try {
+    const parsed = JSON.parse(config.ownership_notes_json) as unknown
+    if (Array.isArray(parsed)) ownershipNotes = parsed.map(String)
+  } catch {
+    ownershipNotes = []
+  }
   return {
     template: config.flow_preset,
     service: config.service_profile_ref,
-    environment: config.environment_policy_ref
+    environment: config.environment_policy_ref,
+    ownershipTeam: config.ownership_team,
+    ownershipOwner: config.ownership_owner,
+    reviewStatus: config.review_status,
+    ownershipNotes,
   }
 }
 
 function orderRun(run: EntityRunYaml): Record<string, unknown> {
-  return {
+  const out: Record<string, unknown> = {
     template: run.template,
     service: run.service,
     environment: run.environment,
   }
+  if (run.ownershipTeam !== undefined) out["ownershipTeam"] = run.ownershipTeam
+  if (run.ownershipOwner !== undefined) out["ownershipOwner"] = run.ownershipOwner
+  if (run.reviewStatus !== undefined) out["reviewStatus"] = run.reviewStatus
+  if (run.ownershipNotes !== undefined) out["ownershipNotes"] = run.ownershipNotes
+  return out
 }
 
 function orderEntity(def: EntityDefinition, run?: EntityRunYaml | null): Record<string, unknown> {
@@ -331,10 +355,25 @@ function shapeRun(raw: unknown): EntityRunYaml | null | { error: string } {
         'run.steps is not supported — define steps on the flow in Sync metadata → Flows (use run.template only)',
     }
   }
+  const reviewStatus =
+    r["reviewStatus"] === "reviewed" || r["reviewStatus"] === "legacy-review-required"
+      ? (r["reviewStatus"] as EntityRunYaml["reviewStatus"])
+      : undefined
   return {
     template: r["template"] as string,
     service: typeof r["service"] === "string" ? r["service"] : "default",
     environment: typeof r["environment"] === "string" ? r["environment"] : "default",
+    ownershipTeam: typeof r["ownershipTeam"] === "string" ? r["ownershipTeam"] : undefined,
+    ownershipOwner:
+      r["ownershipOwner"] === null
+        ? null
+        : typeof r["ownershipOwner"] === "string"
+          ? r["ownershipOwner"]
+          : undefined,
+    reviewStatus,
+    ownershipNotes: Array.isArray(r["ownershipNotes"])
+      ? (r["ownershipNotes"] as unknown[]).map(String)
+      : undefined,
   }
 }
 

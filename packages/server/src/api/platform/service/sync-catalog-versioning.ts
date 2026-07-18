@@ -131,7 +131,12 @@ export function summarizeDeployCatalogSnapshot(
     tenantId: snapshot.tenantId,
     entityIds: snapshot.entityIds.length > 0 ? [...snapshot.entityIds] : entities.map((e) => e.id),
     entityCount: entities.length || snapshot.entityIds.length,
-    configCount: snapshot.syncDefinitionConfigs?.configs.length ?? 0,
+    configCount:
+      snapshot.syncDefinitionConfigs?.configs.length ??
+      (snapshot.entityRegistry?.entities ?? []).filter((entry) => {
+        const run = (entry as { run?: { template?: string } }).run
+        return typeof run?.template === "string" && run.template.length > 0
+      }).length,
     strategyCount: countRecordKeys(snapshot.strategies),
     environmentCount: countRecordKeys(snapshot.environments),
     flowCount:

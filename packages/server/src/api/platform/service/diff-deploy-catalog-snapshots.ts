@@ -112,6 +112,30 @@ function emptySectionMaps(): SectionMaps {
   }
 }
 
+function configsFromSnapshot(snapshot: DeployCatalogSnapshot): unknown[] {
+  if (snapshot.syncDefinitionConfigs?.configs?.length) {
+    return snapshot.syncDefinitionConfigs.configs
+  }
+  const out: unknown[] = []
+  for (const entry of snapshot.entityRegistry?.entities ?? []) {
+    const record = asRecord(entry)
+    if (!record) continue
+    const run = asRecord(record.run)
+    if (!run || typeof run.template !== "string") continue
+    out.push({
+      entityId: String(record.id ?? ""),
+      flowPreset: run.template,
+      serviceProfileRef: run.service ?? "default",
+      environmentPolicyRef: run.environment ?? "default",
+      ownershipTeam: run.ownershipTeam ?? "sync-platform",
+      ownershipOwner: run.ownershipOwner ?? null,
+      reviewStatus: run.reviewStatus ?? "legacy-review-required",
+      ownershipNotes: Array.isArray(run.ownershipNotes) ? run.ownershipNotes : [],
+    })
+  }
+  return out
+}
+
 function extractSectionMaps(snapshot: DeployCatalogSnapshot): SectionMaps {
   const syncMetadata = asRecord(snapshot.syncMetadata) ?? {}
   const flowsDoc = asRecord(snapshot.flowTemplates) ?? {}
@@ -120,9 +144,16 @@ function extractSectionMaps(snapshot: DeployCatalogSnapshot): SectionMaps {
     asRecord(syncMetadata.flows) ??
     {}
 
+  const entitiesWithoutRun = (snapshot.entityRegistry?.entities ?? []).map((entry) => {
+    const record = asRecord(entry)
+    if (!record) return entry
+    const { run: _run, ...rest } = record
+    return rest
+  })
+
   return {
-    entities: mapById(snapshot.entityRegistry?.entities ?? [], "id"),
-    configs: mapById(snapshot.syncDefinitionConfigs?.configs ?? [], "entityId"),
+    entities: mapById(entitiesWithoutRun, "id"),
+    configs: mapById(configsFromSnapshot(snapshot), "entityId"),
     strategies: mapById(asArray(asRecord(snapshot.strategies)?.strategies), "id"),
     environments: mapById(asArray(asRecord(snapshot.environments)?.environments), "name"),
     flows: mapRecordEntries(flowSource),

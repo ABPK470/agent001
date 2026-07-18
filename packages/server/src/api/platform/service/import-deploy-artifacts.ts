@@ -533,12 +533,18 @@ function applyEntityRunBindings(
   actor: string,
   projectRoot: string,
 ): number {
+  const importedIds = collectSnapshotEntityIds(snapshot)
+  for (const row of db.listSyncDefinitionConfigs(tenantId)) {
+    if (!importedIds.has(row.entity_id)) {
+      db.deleteSyncDefinitionConfig(tenantId, row.entity_id)
+    }
+  }
   let count = 0
   for (const entry of snapshot.entityRegistry?.entities ?? []) {
     const parsed = parseEntitiesJson(JSON.stringify(entry))
     for (const item of parsed) {
-      if (!item.ok || !item.run) continue
-      applyEntityRunYaml(projectRoot, tenantId, item.def!.id, item.run, actor)
+      if (!item.ok || !item.run || !item.def) continue
+      applyEntityRunYaml(projectRoot, tenantId, item.def.id, item.run, actor)
       count++
     }
   }
@@ -574,13 +580,17 @@ export function applyDeployCatalogSnapshot(args: {
     applySyncMetadata(tenantId, args.snapshot.syncMetadata as SyncMetadataDoc)
     applyStrategies(tenantId, args.snapshot.strategies as StrategiesDoc, args.actor)
     applyEntityDefinitions(tenantId, args.snapshot, args.actor)
-    applySyncDefinitionConfigs(
-      tenantId,
-      args.snapshot.syncDefinitionConfigs,
-      projectRoot,
-      args.actor,
-    )
-    applyEntityRunBindings(tenantId, args.snapshot, args.actor, projectRoot)
+    // Prefer entity.run (current). Optional sync-definition-configs.json is legacy zip compat.
+    if (args.snapshot.syncDefinitionConfigs?.configs?.length) {
+      applySyncDefinitionConfigs(
+        tenantId,
+        args.snapshot.syncDefinitionConfigs,
+        projectRoot,
+        args.actor,
+      )
+    } else {
+      applyEntityRunBindings(tenantId, args.snapshot, args.actor, projectRoot)
+    }
     ensureSyncDefinitionConfigs(projectRoot, tenantId)
     rehydrateSyncDefinitionConfigSteps(projectRoot, tenantId)
   })()

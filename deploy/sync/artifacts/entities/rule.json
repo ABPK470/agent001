@@ -273,5 +273,17 @@
   "createdBy": "system",
   "reason": "bundled-seed",
   "createdAt": "2026-01-01T00:00:00.000Z",
-  "retiredAt": null
+  "retiredAt": null,
+  "run": {
+    "template": "rule",
+    "service": "default",
+    "environment": "default",
+    "ownershipTeam": "sync-platform",
+    "ownershipOwner": null,
+    "reviewStatus": "reviewed",
+    "ownershipNotes": [
+      "Bootstrapped from legacy pipeline ground truth.",
+      "All current legacy sync tables were derived directly from pipeline evidence."
+    ]
+  }
 }

@@ -1,7 +1,7 @@
 /**
  * Legacy refresh golden builders — Phase 0 lock for catalog shape unification.
  *
- * G1 = native seed wire (EntityDefinition entities + sync-definition-configs + shared catalog files)
+ * G1 = native seed wire (EntityDefinition entities with `run` + shared catalog files)
  * G2 = logical catalog (entities + configs + metadata) — equals G1 entities/configs after stamp normalize
  * G3 = Publish compose (SyncDefinition) minus publishedAt/publishedVersion
  *
@@ -92,6 +92,52 @@ export function isEntityDefinitionSeed(raw: unknown): raw is EntityDefinition {
   return Array.isArray(doc["tables"]) && typeof doc["rootTable"] === "string" && !isAuthoredSyncDefinitionSeed(raw)
 }
 
+/** Strip optional seed `run` projection — EntityDefinition itself has no run field. */
+export function stripEntitySeedRun(raw: unknown): EntityDefinition {
+  const doc = { ...(raw as Record<string, unknown>) }
+  delete doc["run"]
+  return doc as unknown as EntityDefinition
+}
+
+export function seedRunConfigFromEntityDocument(raw: unknown): SeedRunConfig | null {
+  if (!raw || typeof raw !== "object") return null
+  const doc = raw as Record<string, unknown>
+  const run = doc["run"]
+  if (!run || typeof run !== "object") return null
+  const r = run as Record<string, unknown>
+  if (typeof r["template"] !== "string" || r["template"].trim() === "") return null
+  if (typeof doc["id"] !== "string") return null
+  return {
+    entityId: doc["id"],
+    flowPreset: r["template"],
+    serviceProfileRef: typeof r["service"] === "string" ? r["service"] : "default",
+    environmentPolicyRef: typeof r["environment"] === "string" ? r["environment"] : "default",
+    ownershipTeam: typeof r["ownershipTeam"] === "string" ? r["ownershipTeam"] : "sync-platform",
+    ownershipOwner:
+      r["ownershipOwner"] === null
+        ? null
+        : typeof r["ownershipOwner"] === "string"
+          ? r["ownershipOwner"]
+          : null,
+    reviewStatus: r["reviewStatus"] === "reviewed" ? "reviewed" : "legacy-review-required",
+    ownershipNotes: Array.isArray(r["ownershipNotes"])
+      ? (r["ownershipNotes"] as unknown[]).map(String)
+      : [],
+  }
+}
+
+export function entityRunBlockFromSeedConfig(config: SeedRunConfig): Record<string, unknown> {
+  return {
+    template: config.flowPreset,
+    service: config.serviceProfileRef,
+    environment: config.environmentPolicyRef,
+    ownershipTeam: config.ownershipTeam,
+    ownershipOwner: config.ownershipOwner,
+    reviewStatus: config.reviewStatus,
+    ownershipNotes: config.ownershipNotes,
+  }
+}
+
 export function loadShippedEntityDefinitionSeeds(projectRoot: string): Record<string, EntityDefinition> {
   const dir = resolve(projectRoot, "deploy/sync/artifacts/entities")
   const out: Record<string, EntityDefinition> = {}
@@ -100,7 +146,8 @@ export function loadShippedEntityDefinitionSeeds(projectRoot: string): Record<st
     if (!isEntityDefinitionSeed(raw)) {
       throw new Error(`Expected EntityDefinition seed at ${file}`)
     }
-    out[raw.id] = raw
+    const entity = stripEntitySeedRun(raw)
+    out[entity.id] = entity
   }
   return out
 }
@@ -225,23 +272,33 @@ export function buildG3PublishedFromLogical(
 }
 
 export function buildG2LogicalFromNativeSeeds(projectRoot: string): LogicalCatalogGolden {
-  const entities = loadShippedEntityDefinitionSeeds(projectRoot)
-  for (const entity of Object.values(entities)) {
-    entity.createdAt = LEGACY_REFRESH_SEED_CREATED_AT
-  }
-  const configsPath = resolve(projectRoot, "deploy/sync/artifacts/sync-definition-configs.json")
-  if (!existsSync(configsPath)) {
-    throw new Error("Missing deploy/sync/artifacts/sync-definition-configs.json")
-  }
-  const configsDoc = readJson(configsPath) as {
-    configs: SeedRunConfig[]
-  }
+  const dir = resolve(projectRoot, "deploy/sync/artifacts/entities")
+  const entities: Record<string, EntityDefinition> = {}
   const configs: Record<string, SeedRunConfig> = {}
-  for (const row of configsDoc.configs) {
-    configs[row.entityId] = row
-  }
-  for (const id of Object.keys(entities)) {
-    if (!configs[id]) throw new Error(`Missing sync-definition-configs entry for ${id}`)
+  for (const file of readdirSync(dir).filter((name) => name.endsWith(".json")).sort()) {
+    const raw = readJson(join(dir, file))
+    if (!isEntityDefinitionSeed(raw)) {
+      throw new Error(`Expected EntityDefinition seed at ${file}`)
+    }
+    const entity = stripEntitySeedRun(raw)
+    entity.createdAt = LEGACY_REFRESH_SEED_CREATED_AT
+    entities[entity.id] = entity
+    const fromRun = seedRunConfigFromEntityDocument(raw)
+    if (fromRun) {
+      configs[entity.id] = fromRun
+      continue
+    }
+    // Legacy sibling file (mid-migration checkouts only).
+    const configsPath = resolve(projectRoot, "deploy/sync/artifacts/sync-definition-configs.json")
+    if (existsSync(configsPath)) {
+      const configsDoc = readJson(configsPath) as { configs: SeedRunConfig[] }
+      const row = (configsDoc.configs ?? []).find((entry) => entry.entityId === entity.id)
+      if (row) {
+        configs[entity.id] = row
+        continue
+      }
+    }
+    throw new Error(`Missing entity.run (or legacy sync-definition-configs) for ${entity.id}`)
   }
   return {
     entities,

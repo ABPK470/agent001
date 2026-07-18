@@ -251,8 +251,10 @@ describe("catalog operator workflows — import and export", () => {
 
   it("export → wipe configs → import restores entity flow bindings", () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
-    const datasetBefore = snapshot.syncDefinitionConfigs?.configs.find((row) => row.entityId === "dataset")
-    expect(datasetBefore?.flowPreset).toBeTruthy()
+    const datasetBefore = snapshot.entityRegistry?.entities.find(
+      (entry) => (entry as { id?: string }).id === "dataset",
+    ) as { run?: { template?: string } } | undefined
+    expect(datasetBefore?.run?.template).toBeTruthy()
 
     for (const row of db.listSyncDefinitionConfigs(TENANT)) {
       db.deleteSyncDefinitionConfig(TENANT, row.entity_id)
@@ -268,7 +270,7 @@ describe("catalog operator workflows — import and export", () => {
     expect(applied.applied).toBe(true)
 
     const restored = db.getSyncDefinitionConfig(TENANT, "dataset")
-    expect(restored?.flow_preset).toBe(datasetBefore?.flowPreset)
+    expect(restored?.flow_preset).toBe(datasetBefore?.run?.template)
     const adminItems = listSyncDefinitionAdminItems(fixture.projectRoot)
     expect(adminItems.find((item) => item.id === "dataset")?.executionSteps.length).toBeGreaterThan(0)
   })

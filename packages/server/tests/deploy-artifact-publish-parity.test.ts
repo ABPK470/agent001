@@ -44,7 +44,6 @@ function copyRepoDeployArtifacts(targetRoot: string): void {
     "sync-metadata.json",
     "strategies.json",
     "flow-templates.json",
-    "sync-definition-configs.json",
   ]) {
     const source = join(REPO_ROOT, "deploy/sync/artifacts", name)
     if (existsSync(source)) {
@@ -60,9 +59,11 @@ function copyRepoDeployArtifacts(targetRoot: string): void {
 }
 
 function loadEntitySeed(entityId: string): EntityDefinition {
-  return JSON.parse(
+  const raw = JSON.parse(
     readFileSync(join(REPO_ARTIFACTS_DIR, `${entityId}.json`), "utf-8"),
-  ) as EntityDefinition
+  ) as EntityDefinition & { run?: unknown }
+  const { run: _run, ...rest } = raw
+  return rest
 }
 
 function expectedPredicateMap(entityId: string): Map<string, string> {

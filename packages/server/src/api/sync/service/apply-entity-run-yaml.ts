@@ -30,6 +30,10 @@ export function applyEntityRunYaml(
   actor: string
 ): void {
   const existing = db.getSyncDefinitionConfig(tenantId, entityId)
+  const ownershipNotesJson =
+    run.ownershipNotes !== undefined
+      ? JSON.stringify(run.ownershipNotes)
+      : (existing?.ownership_notes_json ?? JSON.stringify(["Managed via entity registry YAML."]))
   upsertSyncDefinitionConfig(projectRoot, {
     tenant_id: tenantId,
     entity_id: entityId,
@@ -37,11 +41,11 @@ export function applyEntityRunYaml(
     execution_steps_json: "[]",
     service_profile_ref: run.service,
     environment_policy_ref: run.environment,
-    ownership_team: existing?.ownership_team ?? "sync-platform",
-    ownership_owner: existing?.ownership_owner ?? null,
-    review_status: existing?.review_status ?? "legacy-review-required",
-    ownership_notes_json:
-      existing?.ownership_notes_json ?? JSON.stringify(["Managed via entity registry YAML."]),
+    ownership_team: run.ownershipTeam ?? existing?.ownership_team ?? "sync-platform",
+    ownership_owner:
+      run.ownershipOwner !== undefined ? run.ownershipOwner : (existing?.ownership_owner ?? null),
+    review_status: run.reviewStatus ?? existing?.review_status ?? "legacy-review-required",
+    ownership_notes_json: ownershipNotesJson,
     updated_at: new Date().toISOString(),
     updated_by: actor,
   })

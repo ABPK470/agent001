@@ -31,6 +31,8 @@ import { _resetGoalClassificationCache } from "../../runs/prompting/goal-classif
 import * as db from "../../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
+const ENTITY_SEEDS_DIR = "deploy/sync/artifacts/entities"
+/** @deprecated Prefer entity seed `run` — kept for mid-migration checkouts. */
 const SYNC_DEFINITION_CONFIGS_SEED = "deploy/sync/artifacts/sync-definition-configs.json"
 const SQLITE_PUBLISHED_STORAGE = "sqlite:sync_definitions" as const
 
@@ -205,35 +207,97 @@ type SeedConfigDoc = {
   }>
 }
 
+function configRowFromSeedRun(
+  entity: EntityDefinition,
+  row: {
+    flowPreset: string
+    serviceProfileRef: string
+    environmentPolicyRef: string
+    ownershipTeam: string
+    ownershipOwner: string | null
+    reviewStatus: "legacy-review-required" | "reviewed"
+    ownershipNotes: string[]
+  },
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
+): db.DbSyncDefinitionConfig {
+  const flowPreset =
+    row.flowPreset?.trim() && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, row.flowPreset)
+      ? row.flowPreset
+      : defaultFlowTemplateId(entity.id, flowTemplateCatalog)
+  return {
+    tenant_id: entity.tenantId,
+    entity_id: entity.id,
+    flow_preset: flowPreset,
+    execution_steps_json: JSON.stringify(resolveFlowSteps(flowPreset, flowTemplateCatalog)),
+    service_profile_ref: row.serviceProfileRef,
+    environment_policy_ref: row.environmentPolicyRef,
+    ownership_team: row.ownershipTeam,
+    ownership_owner: row.ownershipOwner,
+    review_status: row.reviewStatus,
+    ownership_notes_json: JSON.stringify(row.ownershipNotes),
+    updated_at: new Date().toISOString(),
+    updated_by: "system",
+  }
+}
+
+function seedFromEntityRunFile(
+  projectRoot: string,
+  entity: EntityDefinition,
+  flowTemplateCatalog: SyncDefinitionFlowTemplateCatalog,
+): db.DbSyncDefinitionConfig | null {
+  const entityPath = resolve(projectRoot, ENTITY_SEEDS_DIR, `${entity.id}.json`)
+  if (!existsSync(entityPath)) return null
+  try {
+    const raw = JSON.parse(readFileSync(entityPath, "utf-8")) as {
+      run?: {
+        template?: string
+        service?: string
+        environment?: string
+        ownershipTeam?: string
+        ownershipOwner?: string | null
+        reviewStatus?: "legacy-review-required" | "reviewed"
+        ownershipNotes?: string[]
+      }
+    }
+    const run = raw.run
+    if (!run?.template?.trim()) return null
+    return configRowFromSeedRun(
+      entity,
+      {
+        flowPreset: run.template,
+        serviceProfileRef: run.service ?? "default",
+        environmentPolicyRef: run.environment ?? "default",
+        ownershipTeam: run.ownershipTeam ?? "sync-platform",
+        ownershipOwner: run.ownershipOwner ?? null,
+        reviewStatus: run.reviewStatus ?? "legacy-review-required",
+        ownershipNotes: run.ownershipNotes ?? ["Managed via entity registry seed."],
+      },
+      flowTemplateCatalog,
+    )
+  } catch (error) {
+    console.warn(
+      `[sync-definitions] failed to seed config from ${entityPath}:`,
+      error instanceof Error ? error.message : error,
+    )
+    return null
+  }
+}
+
 function seedFromRepoDefinition(
   projectRoot: string,
   entity: EntityDefinition
 ): db.DbSyncDefinitionConfig | null {
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot)
+  const fromRun = seedFromEntityRunFile(projectRoot, entity, flowTemplateCatalog)
+  if (fromRun) return fromRun
+
   const configsPath = resolve(projectRoot, SYNC_DEFINITION_CONFIGS_SEED)
   if (existsSync(configsPath)) {
     try {
       const doc = JSON.parse(readFileSync(configsPath, "utf-8")) as SeedConfigDoc
       const row = (doc.configs ?? []).find((entry) => entry.entityId === entity.id)
       if (row) {
-        const flowPreset =
-          row.flowPreset?.trim() && hasSyncDefinitionFlowTemplate(flowTemplateCatalog, row.flowPreset)
-            ? row.flowPreset
-            : defaultFlowTemplateId(entity.id, flowTemplateCatalog)
-        return {
-          tenant_id: entity.tenantId,
-          entity_id: entity.id,
-          flow_preset: flowPreset,
-          execution_steps_json: JSON.stringify(resolveFlowSteps(flowPreset, flowTemplateCatalog)),
-          service_profile_ref: row.serviceProfileRef,
-          environment_policy_ref: row.environmentPolicyRef,
-          ownership_team: row.ownershipTeam,
-          ownership_owner: row.ownershipOwner,
-          review_status: row.reviewStatus,
-          ownership_notes_json: JSON.stringify(row.ownershipNotes),
-          updated_at: new Date().toISOString(),
-          updated_by: "system",
-        }
+        return configRowFromSeedRun(entity, row, flowTemplateCatalog)
       }
     } catch (error) {
       console.warn(

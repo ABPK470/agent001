@@ -33,7 +33,6 @@ function copyNativeSeeds(targetRoot: string): void {
     "sync-metadata.json",
     "strategies.json",
     "flow-templates.json",
-    "sync-definition-configs.json",
   ]) {
     const source = join(srcArtifacts, name)
     if (existsSync(source)) copyFileSync(source, join(dstArtifacts, name))

@@ -133,7 +133,7 @@ export async function refreshDeployArtifactsFromLegacy(projectRoot, options = {}
 }
 
 /**
- * Authored (staging dir) → EntityDefinition + sync-definition-configs.json
+ * Authored (staging dir) → EntityDefinition + embedded `run`
  * (1:1 via entityDefinitionFromAuthoredSync).
  * @param {string} projectRoot
  * @param {string} authoredDir

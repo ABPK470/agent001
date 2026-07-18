@@ -35,14 +35,13 @@ deploy/sync seeds (native Catalog JSON)
 
 | Path | Contents |
 |------|----------|
-| `artifacts/entities/{id}.json` | **EntityDefinition** (registry-native) |
-| `artifacts/sync-definition-configs.json` | Per-entity run bindings (flow/service/env/ownership) |
+| `artifacts/entities/{id}.json` | **EntityDefinition** + `run` (flow/service/env/ownership) |
 | `artifacts/sync-metadata.json` | phases, actions, valueSources, flows |
 | `artifacts/strategies.json` | SCD2 strategies |
 | `artifacts/flow-templates.json` | View of flows (compile helper) |
 | `sync-environments.json` | Environments |
 
-Generator path: Authored in temp staging → `entityDefinitionFromAuthoredSync` → write EntityDefinition + configs (`packages/sync/scripts/materialize-native-entity-seeds.ts --authored-dir=…`). Authored never lands in `artifacts/`. Goldens: `packages/sync/src/test-support/__goldens__/legacy-refresh/` — G1 native wire, G2 logical catalog, G3 published process JSON.
+Boot still seeds SQLite `sync_definition_configs` from each entity's `run` block. Generator path: Authored in temp staging → `entityDefinitionFromAuthoredSync` → write EntityDefinition + `run` (`packages/sync/scripts/materialize-native-entity-seeds.ts --authored-dir=…`). Authored never lands in `artifacts/`. Goldens: `packages/sync/src/test-support/__goldens__/legacy-refresh/` — G1 native wire, G2 logical catalog, G3 published process JSON.
 
 ---
 
@@ -59,10 +58,9 @@ mia-sync-export-<timestamp>/
     strategies.json
     flow-templates.json
     entity-registry.json
-    sync-definition-configs.json
 ```
 
-Same semantic catalog as seeds; entities may be bulk `entity-registry.json` instead of per-file.
+Same semantic catalog as seeds; entities are bulk `entity-registry.json` with per-entity `run`. Import still accepts a legacy `sync-definition-configs.json` if present.
 
 ---
 

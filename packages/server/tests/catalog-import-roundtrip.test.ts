@@ -92,12 +92,15 @@ describe("catalog import/export round-trip", () => {
     process.env["MIA_DATA_DIR"] = ORIGINAL_DATA_DIR
   })
 
-  it("exports and re-imports sync definition configs with run bindings", () => {
+  it("exports and re-imports entity run bindings", () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
-    expect(snapshot.syncDefinitionConfigs?.configs.length).toBeGreaterThan(0)
+    expect(snapshot.syncDefinitionConfigs).toBeNull()
 
-    const datasetConfig = snapshot.syncDefinitionConfigs?.configs.find((row) => row.entityId === "dataset")
-    expect(datasetConfig?.flowPreset).toBeTruthy()
+    const datasetEntry = snapshot.entityRegistry?.entities.find(
+      (entry) => (entry as { id?: string }).id === "dataset",
+    ) as { run?: { template?: string } } | undefined
+    expect(datasetEntry?.run?.template).toBeTruthy()
+    const flowPreset = datasetEntry!.run!.template!
 
     const preview = validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(true)
@@ -116,11 +119,11 @@ describe("catalog import/export round-trip", () => {
     expect(applied.applied).toBe(true)
 
     const restored = db.getSyncDefinitionConfig("_default", "dataset")
-    expect(restored?.flow_preset).toBe(datasetConfig?.flowPreset)
+    expect(restored?.flow_preset).toBe(flowPreset)
 
     const adminItems = listSyncDefinitionAdminItems(projectRoot)
     const datasetItem = adminItems.find((item) => item.id === "dataset")
-    expect(datasetItem?.flowTemplateId).toBe(datasetConfig?.flowPreset)
+    expect(datasetItem?.flowTemplateId).toBe(flowPreset)
     expect(datasetItem?.executionSteps.length).toBeGreaterThan(0)
   })
 
@@ -158,35 +161,25 @@ describe("catalog import/export round-trip", () => {
 
   it("rejects snapshots that reference unknown flows", () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: "_default" })
-    snapshot.syncDefinitionConfigs = {
-      version: 1,
-      _comment: "test",
-      configs: [
-        {
-          entityId: "dataset",
-          flowPreset: "does-not-exist",
-          serviceProfileRef: "default",
-          environmentPolicyRef: "default",
-          ownershipTeam: "sync-platform",
-          ownershipOwner: null,
-          reviewStatus: "legacy-review-required",
-          ownershipNotes: [],
-        },
-      ],
-    }
+    const datasetEntry = snapshot.entityRegistry?.entities.find(
+      (entry) => (entry as { id?: string }).id === "dataset",
+    ) as { run?: { template?: string } } | undefined
+    expect(datasetEntry?.run).toBeTruthy()
+    datasetEntry!.run!.template = "does-not-exist"
 
     const preview = validateDeployCatalogSnapshot(snapshot)
     expect(preview.ok).toBe(false)
     expect(preview.errors.some((error) => error.includes("does-not-exist"))).toBe(true)
   })
 
-  it("writes sync-definition-configs.json into export folders", () => {
+  it("does not write sync-definition-configs.json into export folders", () => {
     const parent = mkdtempSync(join(tmpdir(), "catalog-export-dir-"))
     const result = writeDeployCatalogSnapshot({
       outputParentDir: parent,
       tenantId: "_default",
     })
-    expect(result.files).toContain("sync-definition-configs.json")
+    expect(result.files).toContain("entity-registry.json")
+    expect(result.files).not.toContain("sync-definition-configs.json")
     rmSync(parent, { recursive: true, force: true })
   })
 

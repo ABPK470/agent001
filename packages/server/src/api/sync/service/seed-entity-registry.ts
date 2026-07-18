@@ -152,7 +152,8 @@ function loadEntitySeedFile(path: string, tenantId: string): EntityDefinition {
       `Expected EntityDefinition seed at ${path} (Authored seeds are no longer accepted — re-run refresh-from-legacy)`,
     )
   }
-  return { ...raw, tenantId }
+  const { run: _run, ...rest } = raw as EntityDefinition & { run?: unknown }
+  return { ...rest, tenantId }
 }
 
 function isEntityDefinitionDocument(raw: unknown): raw is EntityDefinition {
