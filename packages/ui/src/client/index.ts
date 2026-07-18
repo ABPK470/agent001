@@ -481,6 +481,8 @@ export const api = {
 
   // Sync definition config (admin)
   listSyncDefinitionConfigs: () => json<import("../types").SyncDefinitionAdminItem[]>("/api/sync-definition-configs"),
+  getSyncPublishStatus: () =>
+    json<import("../types").SyncPublishStatus>("/api/sync/definitions/publish-status"),
   getSyncDefinitionConfigOptions: () => json<import("../types").SyncDefinitionRuntimeOptions>("/api/sync-definition-config-options"),
   updateSyncDefinitionConfig: (entityId: string, fields: Record<string, unknown>) =>
     json<{ ok: boolean }>(`/api/sync-definition-configs/${encodeURIComponent(entityId)}`, {
@@ -611,6 +613,48 @@ export const api = {
         }
       }
     }>(`/api/platform/catalog/versions/${encodeURIComponent(String(version))}`),
+  getSyncCatalogVersionDiff: (
+    version: number,
+    against: "previous" | "active" | number = "previous",
+  ) => {
+    const p = new URLSearchParams()
+    p.set("against", String(against))
+    return json<{
+      ok: boolean
+      diff: {
+        fromVersion: number | null
+        toVersion: number
+        against: "previous" | "active" | "version"
+        changeCount: number
+        impact: import("@mia/shared-types").PlatformImportImpact
+        sections: Array<{
+          section: string
+          label: string
+          creates: Array<{
+            id: string
+            kind: "create"
+            changedPaths: string[]
+            beforeJson: string | null
+            afterJson: string | null
+          }>
+          updates: Array<{
+            id: string
+            kind: "update"
+            changedPaths: string[]
+            beforeJson: string | null
+            afterJson: string | null
+          }>
+          deletes: Array<{
+            id: string
+            kind: "delete"
+            changedPaths: string[]
+            beforeJson: string | null
+            afterJson: string | null
+          }>
+        }>
+      }
+    }>(`/api/platform/catalog/versions/${encodeURIComponent(String(version))}/diff?${p}`)
+  },
   importSyncCatalog: (body: { zipBase64?: string; dryRun?: boolean; reason: string }) =>
     json<import("@mia/shared-types").PlatformImportGateResult>("/api/platform/catalog/import", {
       method: "POST",

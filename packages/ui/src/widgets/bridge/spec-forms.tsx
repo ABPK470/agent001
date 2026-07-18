@@ -205,7 +205,7 @@ function TextInput({
       value={value}
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
-      className={`input text-sm ${mono ? "font-mono" : ""}`}
+      className={`input w-full min-w-0 text-sm ${mono ? "font-mono" : ""}`}
     />
   )
 }
@@ -330,14 +330,14 @@ export function ReadSpecForm({
   if (k === "httpApi") {
     return (
       <>
-        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-[8rem_1fr]">
+        <div className="bridge-form-row bridge-form-row--method-path shrink-0">
           <FormFieldGroup label="Method">
             <Listbox
               value={(spec["method"] as "GET" | "POST") ?? "GET"}
               options={HTTP_READ_METHODS}
               onChange={(v) => patch({ method: v })}
               size="sm"
-              className="w-full"
+              className="w-full min-w-0"
               ariaLabel="HTTP method"
             />
           </FormFieldGroup>
@@ -374,7 +374,7 @@ export function ReadSpecForm({
     const pathPlaceholder =
       k === "aws" ? "exports/data.csv" : k === "azure" ? "folder/export.csv" : "/data/export.csv"
     return (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-[1fr_8rem]">
+      <div className="bridge-form-row bridge-form-row--path-format">
         <FormFieldGroup label={pathLabel}>
           <TextInput value={String(spec["path"] ?? "")} onChange={(v) => patch({ path: v })} placeholder={pathPlaceholder} mono />
         </FormFieldGroup>
@@ -384,7 +384,7 @@ export function ReadSpecForm({
             options={FORMAT_OPTIONS}
             onChange={(v) => patch({ format: v })}
             size="sm"
-            className="w-full"
+            className="w-full min-w-0"
             ariaLabel="File format"
           />
         </FormFieldGroup>
@@ -449,14 +449,14 @@ export function WriteSpecForm({
         <FormFieldGroup label="Table" hint="Schema-qualified destination table.">
           <TextInput value={String(spec["table"] ?? "")} onChange={(v) => patch({ table: v })} placeholder="dbo.staging_items" mono />
         </FormFieldGroup>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="bridge-form-row bridge-form-row--2">
           <FormFieldGroup label="Mode" hint="Replace runs TRUNCATE+INSERT in one transaction.">
             <Listbox
               value={(spec["mode"] as WriteMode) ?? "append"}
               options={MODE_OPTIONS}
               onChange={(v) => patch({ mode: v })}
               size="sm"
-              className="w-full"
+              className="w-full min-w-0"
               ariaLabel="Write mode"
             />
           </FormFieldGroup>
@@ -475,14 +475,14 @@ export function WriteSpecForm({
   if (k === "httpApi") {
     return (
       <>
-        <div className="grid shrink-0 grid-cols-1 gap-3 sm:grid-cols-[8rem_1fr]">
+        <div className="bridge-form-row bridge-form-row--method-path shrink-0">
           <FormFieldGroup label="Method">
             <Listbox
               value={(spec["method"] as "POST" | "PUT") ?? "POST"}
               options={HTTP_WRITE_METHODS}
               onChange={(v) => patch({ method: v })}
               size="sm"
-              className="w-full"
+              className="w-full min-w-0"
               ariaLabel="HTTP method"
             />
           </FormFieldGroup>
@@ -518,14 +518,14 @@ export function WriteSpecForm({
         <FormFieldGroup label={pathLabel}>
           <TextInput value={String(spec["path"] ?? "")} onChange={(v) => patch({ path: v })} placeholder={pathPlaceholder} mono />
         </FormFieldGroup>
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <div className="bridge-form-row bridge-form-row--2">
           <FormFieldGroup label="Format">
             <Listbox
               value={(spec["format"] as FileFormat) ?? "csv"}
               options={FORMAT_OPTIONS}
               onChange={(v) => patch({ format: v })}
               size="sm"
-              className="w-full"
+              className="w-full min-w-0"
               ariaLabel="File format"
             />
           </FormFieldGroup>
@@ -535,7 +535,7 @@ export function WriteSpecForm({
               options={MODE_OPTIONS}
               onChange={(v) => patch({ mode: v })}
               size="sm"
-              className="w-full"
+              className="w-full min-w-0"
               ariaLabel="Write mode"
             />
           </FormFieldGroup>

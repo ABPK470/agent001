@@ -1191,6 +1191,67 @@ textarea.input {
   border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle));
 }
 
+/* ── Bridge — path + endpoint forms sized to available space (not viewport) ─ */
+.bridge {
+  container-type: inline-size;
+  container-name: bridge;
+  min-width: 0;
+}
+
+.bridge-path {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+  width: 100%;
+  min-width: 0;
+  min-height: 0;
+}
+
+@container bridge (min-width: 40rem) {
+  .bridge-path {
+    grid-template-columns: minmax(0, 1fr) 9rem minmax(0, 1fr);
+  }
+
+  .bridge-path--idle {
+    align-items: center;
+  }
+
+  .bridge-path--open {
+    align-items: stretch;
+  }
+}
+
+.bridge-endpoint {
+  container-type: inline-size;
+  container-name: bridge-endpoint;
+  min-width: 0;
+}
+
+.bridge-form-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.bridge-form-row > * {
+  min-width: 0;
+}
+
+@container bridge-endpoint (min-width: 22rem) {
+  .bridge-form-row--2 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .bridge-form-row--path-format {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 8rem);
+  }
+
+  .bridge-form-row--method-path {
+    grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+  }
+}
+
 /* ── Active Users widget — typography matches env-sync toolbar ─ */
 .active-users-widget {
   font-size: 0.875rem;

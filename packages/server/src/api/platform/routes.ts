@@ -15,6 +15,7 @@ import {
 import {
   getActiveSyncCatalogVersion,
   getSyncCatalogVersionDetail,
+  getSyncCatalogVersionDiff,
   importSyncCatalogBundle,
   listSyncCatalogVersions,
   rollbackSyncCatalogVersion,
@@ -358,6 +359,39 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
         return { ok: false, message: `Unknown catalog version ${version}` }
       }
       return { ok: true, detail }
+    },
+  )
+
+  app.get<{ Params: { version: string }; Querystring: { against?: string } }>(
+    "/api/platform/catalog/versions/:version/diff",
+    async (req, reply) => {
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { ok: false, message: "Admin only" }
+      }
+      const version = Number(req.params.version)
+      if (!Number.isFinite(version)) {
+        reply.code(400)
+        return { ok: false, message: "version must be a number" }
+      }
+      const rawAgainst = req.query.against?.trim() || "previous"
+      let against: "previous" | "active" | number = "previous"
+      if (rawAgainst === "previous" || rawAgainst === "active") {
+        against = rawAgainst
+      } else {
+        const asNumber = Number(rawAgainst)
+        if (!Number.isFinite(asNumber)) {
+          reply.code(400)
+          return { ok: false, message: "against must be previous, active, or a version number" }
+        }
+        against = asNumber
+      }
+      const diff = getSyncCatalogVersionDiff({ version, against })
+      if (!diff) {
+        reply.code(404)
+        return { ok: false, message: `Unknown catalog version ${version}` }
+      }
+      return { ok: true, diff }
     },
   )
 

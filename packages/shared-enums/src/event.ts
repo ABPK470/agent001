@@ -153,6 +153,8 @@ export const EventType = {
   SyncNotificationRouteSaved: "sync.notification.route.saved",
   SyncNotificationRouteDeleted: "sync.notification.route.deleted",
   SyncDefinitionsPublished: "sync.definitions.published",
+  /** Active sync catalog tip advanced (entity/metadata/env import, rollback, …). */
+  SyncCatalogVersionCommitted: "sync.catalog.version.committed",
 
   // Entity registry (Phase 0 config uplift)
   EntityRegistrySaved: "entity_registry.saved",

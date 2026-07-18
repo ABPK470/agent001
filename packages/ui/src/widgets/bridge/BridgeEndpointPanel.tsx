@@ -57,11 +57,11 @@ export function BridgeEndpointCard({
   return (
     <section
       className={[
-        "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border transition-colors",
+        "bridge-endpoint flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border transition-colors",
         expanded
           ? "h-full min-h-0 w-full flex-1 border-accent/40 bg-elevated/50 ring-1 ring-inset ring-accent/15"
           // Fixed default size — match Map path chip height; never fill the half-slot.
-          : `${pathPillClassName} w-[20rem] max-w-full shrink-0 border-border-subtle bg-elevated/40`,
+          : `${pathPillClassName} w-[min(20rem,100%)] max-w-full shrink-0 border-border-subtle bg-elevated/40`,
       ].join(" ")}
     >
       <button
@@ -100,23 +100,23 @@ export function BridgeEndpointCard({
       </button>
 
       {expanded && (
-        <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-          <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden p-4 sm:p-5">
-            <div className="shrink-0">
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4 overflow-x-hidden overflow-y-auto p-4 sm:p-5">
+            <div className="min-w-0 shrink-0">
               <FormFieldGroup label="Connector">
                 <Listbox
                   value={connectorId}
                   options={options}
                   onChange={onConnectorChange}
                   size="sm"
-                  className="w-full"
+                  className="w-full min-w-0"
                   ariaLabel={`${title} connector`}
                   placeholder={`Select a ${role}…`}
                 />
               </FormFieldGroup>
             </div>
 
-            <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col gap-4">
               {selected && role === "source" && selected.capabilities.read && (
                 <ReadSpecForm kind={selected.kind} spec={spec} onPatch={onSpecChange} />
               )}

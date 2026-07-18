@@ -23,6 +23,7 @@ import {
   listSyncDefinitionAdminItems,
   listSyncDefinitionRuntimeOptions,
   defaultEntityFlowId,
+  getSyncPublishStatus,
   PublishSyncDefinitionsError,
   publishSyncDefinitionsFromDb,
   resetSyncDefinitionConfig,
@@ -260,6 +261,13 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       return { error: "admin only" }
     }
     return listSyncDefinitionAdminItems(projectRoot)
+  })
+  app.get("/api/sync/definitions/publish-status", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
+    return getSyncPublishStatus(projectRoot)
   })
   app.get("/api/sync-definition-config-options", async (req, reply) => {
     if (!req.session?.isAdmin) {

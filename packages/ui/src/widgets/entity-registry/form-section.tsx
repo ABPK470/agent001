@@ -14,10 +14,10 @@ export function FormFieldGroup({
   children: ReactNode
 }): JSX.Element {
   return (
-    <div className="rounded-md border border-border-subtle/70 bg-base/40 p-2.5">
+    <div className="min-w-0 rounded-md border border-border-subtle/70 bg-base/40 p-2.5">
       <label className="flex min-w-0 flex-col gap-1.5">
         <span className={FIELD_LABEL}>{label}</span>
-        {children}
+        <div className="min-w-0">{children}</div>
         {hint ? <span className={`normal-case leading-snug ${META_TEXT}`}>{hint}</span> : null}
       </label>
     </div>

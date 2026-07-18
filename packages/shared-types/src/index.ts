@@ -836,7 +836,18 @@ export interface PublishedSyncDefinitionBundle {
   version: 1
   publishedAt: string
   publishedVersion: string
+  /** Active sync catalog version stamped at publish time (absent on older bundles). */
+  catalogVersion?: number | null
   definitions: Record<string, PublishedSyncDefinition | null>
+}
+
+export interface SyncPublishStatus {
+  catalogNeedsPublish: boolean
+  activeCatalogVersion: number | null
+  publishedCatalogVersion: number | null
+  publishedAt: string | null
+  unpublishedEntityCount: number
+  unpublishedEntityIds: string[]
 }
 
 export interface PublishSyncDefinitionsResponse {
@@ -1683,7 +1694,10 @@ export interface SyncDefinitionAdminItem {
   updatedBy: string | null
   publishedVersion: string | null
   publishedAt: string | null
-  /** True when SQLite entity/config is ahead of the published sync bundle. */
+  /**
+   * True when this entity (or the active catalog tip) is ahead of the published
+   * sync bundle and a publish would recompile it.
+   */
   needsPublish: boolean
 }
 

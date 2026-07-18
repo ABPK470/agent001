@@ -6,7 +6,8 @@ import type {
   AuthoredSyncFlowStep,
   EntityRegistrySyncFlowTemplateId,
   PublishedSyncDefinition,
-  SyncDefinitionRuntimeOptions
+  SyncDefinitionRuntimeOptions,
+  SyncPublishStatus,
 } from "@mia/shared-types"
 import {
   buildSyncDefinitionFlowTemplateSteps,
@@ -111,6 +112,8 @@ interface PersistedPublishedBundle {
   version: 1
   publishedAt: string
   publishedVersion: string
+  /** Active sync catalog version when this bundle was written. */
+  catalogVersion?: number | null
   definitions: Record<string, PublishedSyncDefinition | null>
 }
 
@@ -283,6 +286,57 @@ export function rehydrateSyncDefinitionConfigSteps(
   }
 }
 
+function resolveCatalogPublishGap(
+  projectRoot: string,
+  tenantId = DEFAULT_TENANT_ID,
+): {
+  catalogNeedsPublish: boolean
+  activeCatalogVersion: number | null
+  publishedCatalogVersion: number | null
+  publishedAt: string | null
+  published: PersistedPublishedBundle | null
+} {
+  const published = loadPublishedBundle(projectRoot)
+  const activeCatalogVersion = db.getActiveSyncCatalogVersion(tenantId)
+  const publishedCatalogVersion = published?.catalogVersion ?? null
+  const publishedAt = published?.publishedAt ?? null
+  const catalogNeedsPublish =
+    published == null ||
+    publishedCatalogVersion == null ||
+    (activeCatalogVersion != null && activeCatalogVersion !== publishedCatalogVersion)
+  return {
+    catalogNeedsPublish,
+    activeCatalogVersion,
+    publishedCatalogVersion,
+    publishedAt,
+    published,
+  }
+}
+
+export function getSyncPublishStatus(
+  projectRoot: string,
+  tenantId = DEFAULT_TENANT_ID,
+): SyncPublishStatus {
+  const gap = resolveCatalogPublishGap(projectRoot, tenantId)
+  // Catalog tip is enough to arm Publish; entity ids are best-effort detail.
+  let unpublishedEntityIds: string[] = []
+  try {
+    unpublishedEntityIds = listSyncDefinitionAdminItems(projectRoot, tenantId)
+      .filter((item) => item.needsPublish)
+      .map((item) => item.id)
+  } catch {
+    unpublishedEntityIds = []
+  }
+  return {
+    catalogNeedsPublish: gap.catalogNeedsPublish,
+    activeCatalogVersion: gap.activeCatalogVersion,
+    publishedCatalogVersion: gap.publishedCatalogVersion,
+    publishedAt: gap.publishedAt,
+    unpublishedEntityCount: unpublishedEntityIds.length,
+    unpublishedEntityIds,
+  }
+}
+
 export function listSyncDefinitionAdminItems(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID
@@ -291,17 +345,21 @@ export function listSyncDefinitionAdminItems(
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
   const entities = db.listEntityDefinitions(tenantId)
   const configs = new Map(db.listSyncDefinitionConfigs(tenantId).map((row) => [row.entity_id, row]))
-  const published = loadPublishedBundle(projectRoot)
+  const gap = resolveCatalogPublishGap(projectRoot, tenantId)
+  const published = gap.published
   return entities.map((entity) => {
     const config = configs.get(entity.id) ?? defaultConfigForEntity(entity, flowTemplateCatalog)
     const flowTemplateId = config.flow_preset as EntityRegistrySyncFlowTemplateId
     const publishedDefinition = published?.definitions?.[entity.id] ?? null
     const publishedAt = publishedDefinition?.publishedAt ?? null
     const publishedSourceVersion = publishedDefinition?.provenance?.sourceVersion ?? null
-    const needsPublish =
+    const entityNeedsPublish =
       publishedDefinition == null ||
       publishedSourceVersion !== String(entity.version) ||
       (publishedAt != null && config.updated_at > publishedAt)
+    // Catalog tip ahead of last publish (metadata/wiring/envs/…) means every
+    // definition would be recompiled — surface that on each admin row.
+    const needsPublish = entityNeedsPublish || gap.catalogNeedsPublish
     return {
       id: entity.id,
       displayName: entity.displayName,
@@ -459,6 +517,7 @@ export function publishSyncDefinitionsFromDb(
     version: 1,
     publishedAt,
     publishedVersion,
+    catalogVersion: db.getActiveSyncCatalogVersion(tenantId),
     definitions
   }
   const outputPath = resolve(projectRoot, PUBLISHED_BUNDLE_PATH)

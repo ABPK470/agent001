@@ -5,7 +5,9 @@
  */
 
 import type { AgentHost } from "@mia/agent"
+import { EventType } from "@mia/shared-enums"
 
+import { broadcast } from "../../../infra/events/broadcaster.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 import { rebuildLiveSyncEnvironments } from "../../sync/state/live-environments.js"
 import {
@@ -14,6 +16,10 @@ import {
   parseCatalogZipBuffer,
   type CatalogImportResult,
 } from "./import-deploy-artifacts.js"
+import {
+  diffDeployCatalogSnapshots,
+  type DeployCatalogSnapshotDiff,
+} from "./diff-deploy-catalog-snapshots.js"
 import {
   buildDeployCatalogSnapshot,
   type DeployCatalogSnapshot,
@@ -39,6 +45,15 @@ export function commitSyncCatalogVersion(args: {
     snapshotJson: JSON.stringify(snapshot),
     reason: args.reason,
     actor: args.actor,
+  })
+  broadcast({
+    type: EventType.SyncCatalogVersionCommitted,
+    data: {
+      tenantId,
+      version,
+      reason: args.reason,
+      actor: args.actor,
+    },
   })
   return { tenantId, version, reason: args.reason }
 }
@@ -143,6 +158,64 @@ export function getSyncCatalogVersionDetail(
     isActive: row.version === activeVersion,
     summary: summarizeDeployCatalogSnapshot(snapshot),
   }
+}
+
+export function getSyncCatalogVersionDiff(args: {
+  version: number
+  against?: "previous" | "active" | number
+  tenantId?: string
+}): DeployCatalogSnapshotDiff | null {
+  const tenantId = args.tenantId ?? DEFAULT_TENANT
+  const toRow = db.getSyncCatalogVersionRow(tenantId, args.version)
+  if (!toRow) return null
+
+  const against = args.against ?? "previous"
+  let fromVersion: number | null = null
+  let againstKind: "previous" | "active" | "version" = "previous"
+
+  if (against === "previous") {
+    fromVersion = args.version > 1 ? args.version - 1 : null
+    againstKind = "previous"
+  } else if (against === "active") {
+    fromVersion = getActiveSyncCatalogVersion(tenantId)
+    againstKind = "active"
+  } else {
+    fromVersion = against
+    againstKind = "version"
+  }
+
+  if (fromVersion === args.version) {
+    return diffDeployCatalogSnapshots({
+      from: JSON.parse(toRow.snapshot_json) as DeployCatalogSnapshot,
+      to: JSON.parse(toRow.snapshot_json) as DeployCatalogSnapshot,
+      fromVersion,
+      toVersion: args.version,
+      against: againstKind,
+    })
+  }
+
+  let fromSnapshot: DeployCatalogSnapshot | null = null
+  if (fromVersion != null) {
+    const fromRow = db.getSyncCatalogVersionRow(tenantId, fromVersion)
+    if (!fromRow) {
+      if (againstKind === "previous") {
+        fromSnapshot = null
+        fromVersion = null
+      } else {
+        return null
+      }
+    } else {
+      fromSnapshot = JSON.parse(fromRow.snapshot_json) as DeployCatalogSnapshot
+    }
+  }
+
+  return diffDeployCatalogSnapshots({
+    from: fromSnapshot,
+    to: JSON.parse(toRow.snapshot_json) as DeployCatalogSnapshot,
+    fromVersion,
+    toVersion: args.version,
+    against: againstKind,
+  })
 }
 
 export function rollbackSyncCatalogVersion(args: {

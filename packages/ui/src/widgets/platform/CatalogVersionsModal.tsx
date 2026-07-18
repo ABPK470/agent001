@@ -50,21 +50,23 @@ export function CatalogVersionsModal({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [bundlePublishedAt, setBundlePublishedAt] = useState<string | null>(null)
   const [activeNeedsPublish, setActiveNeedsPublish] = useState(false)
+  const [publishedCatalogVersion, setPublishedCatalogVersion] = useState<number | null>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     setBusy(true)
     setErr(null)
     try {
-      const [res, health, configs] = await Promise.all([
+      const [res, health, status] = await Promise.all([
         api.listSyncCatalogVersions(),
         api.getPlatformHealth().catch(() => null),
-        api.listSyncDefinitionConfigs().catch(() => []),
+        api.getSyncPublishStatus().catch(() => null),
       ])
       setActiveVersion(res.activeVersion)
       setVersions(res.versions)
-      setBundlePublishedAt(health?.publish?.publishedAt ?? null)
-      setActiveNeedsPublish(configs.some((item) => item.needsPublish))
+      setBundlePublishedAt(status?.publishedAt ?? health?.publish?.publishedAt ?? null)
+      setActiveNeedsPublish(Boolean(status?.catalogNeedsPublish || (status?.unpublishedEntityCount ?? 0) > 0))
+      setPublishedCatalogVersion(status?.publishedCatalogVersion ?? null)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
     } finally {
@@ -274,6 +276,7 @@ export function CatalogVersionsModal({
             <p className="text-xs text-text-faint">
               Sync bundle last published:{" "}
               {bundlePublishedAt ? new Date(bundlePublishedAt).toLocaleString() : "never"}
+              {publishedCatalogVersion != null ? ` (from catalog v${publishedCatalogVersion})` : ""}
               {activeVersion != null ? ` · Active catalog: v${activeVersion}` : ""}
             </p>
             {busy ? (
@@ -322,8 +325,10 @@ export function CatalogVersionsModal({
                             }`}
                             title={
                               activeNeedsPublish
-                                ? "Active catalog has entity/config changes not yet compiled into the sync publish bundle"
-                                : "Active catalog entity revisions match the published sync bundle"
+                                ? publishedCatalogVersion != null
+                                  ? `Active catalog v${activeVersion} is ahead of last publish (from v${publishedCatalogVersion})`
+                                  : "Active catalog has changes not yet compiled into the sync publish bundle"
+                                : "Active catalog matches the published sync bundle"
                             }
                           >
                             {activeNeedsPublish ? "publish pending" : "published"}
@@ -390,6 +395,7 @@ function isCatalogVersionsReloadEvent(type: string): boolean {
     type.startsWith("entity_registry.") ||
     type.startsWith("sync_env.") ||
     type.startsWith("sync.metadata.") ||
+    type === "sync.catalog.version.committed" ||
     type === "sync.definitions.published"
   )
 }

@@ -4,15 +4,16 @@
 
 import { Rocket, Trash2 } from "lucide-react"
 import type { JSX } from "react"
-import { useCallback, useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../client/index"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
+import { useLiveReload } from "../hooks/useLiveReload"
 import { useMe } from "../hooks/useMe"
-import { useStore } from "../state/store"
 import type {
   EntityRegistryDefinition,
   EntityRegistryHistoryEntry,
   SyncDefinitionAdminItem,
+  SyncPublishStatus,
 } from "../types"
 import { CatalogImportGate } from "./platform/CatalogImportGate"
 import { DeployArtifactsImportGate } from "./platform/DeployArtifactsImportGate"
@@ -35,6 +36,8 @@ import { SyncMetadataModal } from "./entity-registry/SyncMetadataModal"
 export function EntityRegistry(): JSX.Element {
   const { me } = useMe()
   const isAdmin = me?.isAdmin ?? false
+  const isAdminRef = useRef(isAdmin)
+  isAdminRef.current = isAdmin
 
   const [items, setItems] = useState<EntityRegistryDefinition[]>([])
   const [reservedEntityIds, setReservedEntityIds] = useState<string[]>([])
@@ -54,6 +57,7 @@ export function EntityRegistry(): JSX.Element {
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [retireCandidate, setRetireCandidate] = useState<EntityRegistryDefinition | null>(null)
   const [adminItems, setAdminItems] = useState<SyncDefinitionAdminItem[]>([])
+  const [publishStatus, setPublishStatus] = useState<SyncPublishStatus | null>(null)
 
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
@@ -64,21 +68,28 @@ export function EntityRegistry(): JSX.Element {
     () => adminItems.filter((item) => item.needsPublish),
     [adminItems],
   )
+  const publishPendingCount =
+    publishStatus?.unpublishedEntityCount ?? unpublishedItems.length
+  const publishEnabled =
+    publishPendingCount > 0 || Boolean(publishStatus?.catalogNeedsPublish)
 
   const refreshAdminItems = useCallback(async () => {
-    if (!isAdmin) {
-      setAdminItems([])
-      return
+    // Read admin at call time — mount list refresh can outlive the first
+    // whoami response; a stale !isAdmin closure used to wipe a good status.
+    if (!isAdminRef.current) return
+    const [configsResult, statusResult] = await Promise.allSettled([
+      api.listSyncDefinitionConfigs(),
+      api.getSyncPublishStatus(),
+    ])
+    if (configsResult.status === "fulfilled") {
+      setAdminItems(configsResult.value)
     }
-    try {
-      const configs = await api.listSyncDefinitionConfigs()
-      setAdminItems(configs)
-    } catch {
-      setAdminItems([])
+    if (statusResult.status === "fulfilled") {
+      setPublishStatus(statusResult.value)
     }
-  }, [isAdmin])
+  }, [])
 
-  async function refreshList(opts: { keepSelection?: boolean } = {}) {
+  const refreshList = useCallback(async (opts: { keepSelection?: boolean } = {}) => {
     setBusy(true)
     try {
       const [res, retiredRes] = await Promise.all([
@@ -102,23 +113,21 @@ export function EntityRegistry(): JSX.Element {
     } finally {
       setBusy(false)
     }
-  }
+  }, [notifyError, refreshAdminItems])
 
-  useEffect(() => { void refreshList() }, [])
+  useLiveReload(
+    () => void refreshList({ keepSelection: true }),
+    isEntityRegistryReloadEvent,
+  )
 
   useEffect(() => {
-    if (!isAdmin) return
+    if (!isAdmin) {
+      setAdminItems([])
+      setPublishStatus(null)
+      return
+    }
     void refreshAdminItems()
   }, [isAdmin, refreshAdminItems])
-
-  const entityEventCount = useStore((s) =>
-    s.sseEventLog.filter((e) => typeof e.type === "string" && e.type.startsWith("entity_registry.")).length,
-  )
-  useEffect(() => {
-    if (entityEventCount === 0) return
-    void refreshList({ keepSelection: true })
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [entityEventCount])
 
   useEffect(() => {
     if (!selectedId) return
@@ -233,20 +242,25 @@ export function EntityRegistry(): JSX.Element {
                 <div className="shrink-0 border-t border-border-subtle p-3">
                   <button
                     type="button"
-                    disabled={busy || unpublishedItems.length === 0}
+                    disabled={busy || !publishEnabled}
                     onClick={openPublish}
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-elevated/40 px-3 py-2 text-sm font-medium text-text hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
                     title={
-                      unpublishedItems.length === 0
+                      !publishEnabled
                         ? "No unpublished changes"
-                        : `Publish ${unpublishedItems.length} unpublished change(s)`
+                        : publishStatus?.catalogNeedsPublish
+                          ? `Catalog tip v${publishStatus.activeCatalogVersion ?? "?"} is ahead of last publish` +
+                            (publishStatus.publishedCatalogVersion != null
+                              ? ` (from v${publishStatus.publishedCatalogVersion})`
+                              : "")
+                          : `Publish ${publishPendingCount} unpublished change(s)`
                     }
                   >
                     <Rocket size={14} className="text-accent" />
                     <span>Publish</span>
-                    {unpublishedItems.length > 0 && (
+                    {publishEnabled && (
                       <span className="rounded-md bg-accent/15 px-1.5 py-0.5 font-mono text-xs tabular-nums text-accent">
-                        {unpublishedItems.length}
+                        {publishPendingCount > 0 ? publishPendingCount : "!"}
                       </span>
                     )}
                   </button>
@@ -371,5 +385,16 @@ export function EntityRegistry(): JSX.Element {
         </ModalShell>
       )}
     </>
+  )
+}
+
+/** Registry list + publish badge: entities, envs, catalog tip, and publish events. */
+function isEntityRegistryReloadEvent(type: string): boolean {
+  return (
+    type.startsWith("entity_registry.") ||
+    type.startsWith("sync_env.") ||
+    type.startsWith("sync.metadata.") ||
+    type === "sync.catalog.version.committed" ||
+    type === "sync.definitions.published"
   )
 }

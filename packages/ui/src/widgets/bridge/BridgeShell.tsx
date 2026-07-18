@@ -339,10 +339,8 @@ function PathBlock({
   return (
     <div
       className={[
-        "grid h-full min-h-0 w-full flex-1 grid-cols-1 gap-3",
-        // Fixed 9rem map slot — expanded halves never change when the peer opens/closes.
-        "sm:grid-cols-[minmax(0,1fr)_9rem_minmax(0,1fr)]",
-        anyOpen ? "sm:items-stretch" : "sm:items-center",
+        "bridge-path h-full min-h-0 w-full flex-1",
+        anyOpen ? "bridge-path--open" : "bridge-path--idle",
       ].join(" ")}
     >
       <div
@@ -355,7 +353,7 @@ function PathBlock({
       </div>
       <div
         className={[
-          "flex min-h-0 w-full justify-center",
+          "flex min-h-0 w-full min-w-0 justify-center",
           bothOpen ? "h-full items-stretch" : "items-center",
         ].join(" ")}
       >
@@ -408,7 +406,7 @@ function MapChip({
       type="button"
       onClick={onOpenMap}
       title="Configure column mappings, casts, defaults, and rules"
-      className={`group flex ${PATH_PILL_H} w-[8.5rem] flex-col items-center justify-center gap-1 rounded-2xl border border-border-subtle bg-overlay-1 px-3 py-3 text-center transition-colors hover:border-border hover:bg-overlay-2`}
+      className={`group flex ${PATH_PILL_H} w-[min(8.5rem,100%)] max-w-full flex-col items-center justify-center gap-1 rounded-2xl border border-border-subtle bg-overlay-1 px-3 py-3 text-center transition-colors hover:border-border hover:bg-overlay-2`}
     >
       <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-overlay-2 text-text-muted ring-1 ring-border-subtle/60 group-hover:text-text">
         <Shuffle size={16} aria-hidden />
