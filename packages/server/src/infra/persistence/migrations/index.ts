@@ -7,7 +7,6 @@
 
 import type Database from "better-sqlite3"
 import { runBaselineMigration } from "./0001_baseline.js"
-import { runDropSyncDefinitionConfigsMigration } from "./0002_drop_sync_definition_configs.js"
 
 export interface Migration {
   version: number
@@ -17,7 +16,6 @@ export interface Migration {
 
 export const MIGRATIONS: readonly Migration[] = [
   { version: 1, name: "baseline", up: runBaselineMigration },
-  { version: 2, name: "drop_sync_definition_configs", up: runDropSyncDefinitionConfigsMigration },
 ]
 
 export function runMigrations(db: Database.Database): void {
