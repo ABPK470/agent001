@@ -8,7 +8,7 @@ import {
 } from "../chatLayout.js"
 import { IntroAsciiField, type IntroAsciiRenderTarget } from "./IntroAsciiField"
 import { IntroBrandWordmark } from "./intro/IntroBrandWordmark"
-import { CrystalText, StreamingText } from "./intro/IntroChatText"
+import { CrystalText, RollbackText, StreamingText } from "./intro/IntroChatText"
 
 interface Msg { role: "bot" | "user"; text: string; streamed?: boolean }
 
@@ -62,9 +62,8 @@ const BRAND_RESOLVE_IDLE_FALLBACK_MS = 10_000
  *   - The bare login screen shows ONLY the chat surface (no platform
  *     header, no widget chrome). The widget chrome and platform
  *     header are revealed by the entry morph, not shown up-front.
- *   - The input bar sits centered & narrow during login; on entry it
- *     slides down and expands to its full TermChat-bottom-docked
- *     position.
+ *   - On enter, transcript rolls back through ASCII (reverse of how it
+ *     crystallised), while the input bar FLIPs to the home TermChat pill.
  *   - Header brand (MI: → pinch spawns A → retract on first keystroke → live :)
  *     runs beside the intro — ASCII field, bot greeting, input pill, login
  *     morph. Resolve is user-paced so it never fights the opening question.
@@ -80,6 +79,22 @@ export interface IntroMorphTarget {
   height: number
 }
 
+function clamp01(n: number): number {
+  return Math.max(0, Math.min(1, n))
+}
+
+function lerp(a: number, b: number, t: number): number {
+  return a + (b - a) * t
+}
+
+/** Smooth travel curve — ease in/out without overshoot. */
+function easeInOutCubic(t: number): number {
+  const x = clamp01(t)
+  return x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2
+}
+
+const ENTER_MORPH_MS = 1500
+
 export function IntroConversation({
   onEntered,
   onEnteringStart,
@@ -88,6 +103,7 @@ export function IntroConversation({
   onLogin,
   enterTrigger = false,
   morphMode = "chat",
+  morphTarget,
   autoplay,
 }: {
   onEntered?: () => void
@@ -106,6 +122,8 @@ export function IntroConversation({
    *  this becomes true the intro triggers its entering morph. */
   enterTrigger?: boolean
   morphMode?: IntroMorphMode
+  /** Destination input rect on the home shell (measured under `.chathome`).
+   *  When set, the login pill FLIPs there — continuation, not a cut. */
   morphTarget?: IntroMorphTarget
   /** Optional test-only helper that auto-submits username/password so
    *  the transition can be replayed without manual login cycles. */
@@ -323,37 +341,27 @@ export function IntroConversation({
   const inputDisabled = submitting || entering || botTyping
   const canSend = draft.trim().length > 0 && !inputDisabled
 
-  // Ref to the login input pad so we can measure its actual current
-  // screen rect at entering time. The focus mask is anchored to THIS
-  // rect, not the chathome destination — the pill must stay where it
-  // is and be consumed in place by the ASCII.
-  const loginPillRef = useRef<HTMLDivElement | null>(null)
-  const [loginPillRect, setLoginPillRect] = useState<
-    { left: number; top: number; width: number; height: number } | null
-  >(null)
+  // Login pill — First rect for FLIP. Destination is `morphTarget`
+  // (Last). Travel is the continuous thread from landing → home.
+  const loginPillRef = useRef<HTMLFormElement | null>(null)
+  const [loginPillRect, setLoginPillRect] = useState<IntroMorphTarget | null>(null)
 
-  // Parent-driven morph trigger: when enterTrigger flips true we kick
-  // off the entering animation and schedule the "morph done" hand-off.
+  // Parent-driven morph: enterTrigger → measure First → travel to Last.
   useEffect(() => {
     if (!enterTrigger || entering) return
     if (onEnteringStart) onEnteringStart()
-    // Measure the login pill BEFORE flipping to entering so the focus
-    // mask is anchored on the pill's current resting position. (After
-    // entering=true the pill starts fading; rect should be unaffected
-    // but we capture it first to be safe.)
     const el = loginPillRef.current
     if (el) {
       const r = el.getBoundingClientRect()
       setLoginPillRect({ left: r.left, top: r.top, width: r.width, height: r.height })
     }
     setEntering(true)
-    const morphMs = 1500
     setEnterProgress(0)
     onPillRevealProgress?.(0)
     const startedAt = performance.now()
     let rafId = 0
     const tickProgress = (now: number) => {
-      const nextProgress = Math.max(0, Math.min(1, (now - startedAt) / morphMs))
+      const nextProgress = clamp01((now - startedAt) / ENTER_MORPH_MS)
       setEnterProgress(nextProgress)
       onPillRevealProgress?.(nextProgress)
       if (nextProgress < 1) {
@@ -365,7 +373,7 @@ export function IntroConversation({
       setEnterProgress(1)
       onPillRevealProgress?.(1)
       onEntered?.()
-    }, morphMs)
+    }, ENTER_MORPH_MS)
     return () => {
       window.cancelAnimationFrame(rafId)
       window.clearTimeout(t)
@@ -373,57 +381,96 @@ export function IntroConversation({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [enterTrigger])
 
-  // Login pill stays put during the morph — it's consumed in place by
-  // the boosted ASCII, not teleported to the chathome destination.
+  // Live pill geometry along the FLIP path (or parked at First).
+  const livePill = useMemo(() => {
+    if (!loginPillRect) return null
+    const to = morphTarget
+    if (!to) return loginPillRect
+    const t = easeInOutCubic(enterProgress)
+    return {
+      left: lerp(loginPillRect.left, to.left, t),
+      top: lerp(loginPillRect.top, to.top, t),
+      width: lerp(loginPillRect.width, to.width, t),
+      height: lerp(loginPillRect.height, to.height, t),
+    }
+  }, [enterProgress, loginPillRect, morphTarget])
+
+  // FLIP invert→play on the login pill: translate/scale First → Last,
+  // then hand off opacity to the home pill in the final stretch.
+  // Without a measured Last, dissolve in place (legacy fallback).
+  const pillTravelStyle = useMemo<CSSProperties | undefined>(() => {
+    if (!entering || !loginPillRect) return undefined
+    const to = morphTarget
+    const fadeOut = enterProgress < 0.72 ? 1 : 1 - (enterProgress - 0.72) / 0.28
+    if (!to) {
+      return {
+        opacity: fadeOut,
+        willChange: "opacity",
+      }
+    }
+    const t = easeInOutCubic(enterProgress)
+    const fromCx = loginPillRect.left + loginPillRect.width / 2
+    const fromCy = loginPillRect.top + loginPillRect.height / 2
+    const toCx = to.left + to.width / 2
+    const toCy = to.top + to.height / 2
+    const dx = (toCx - fromCx) * t
+    const dy = (toCy - fromCy) * t
+    const sx = lerp(1, to.width / Math.max(1, loginPillRect.width), t)
+    const sy = lerp(1, to.height / Math.max(1, loginPillRect.height), t)
+    return {
+      transform: `translate3d(${dx}px, ${dy}px, 0) scale(${sx}, ${sy})`,
+      transformOrigin: "center center",
+      opacity: fadeOut,
+      willChange: "transform, opacity",
+      zIndex: 30,
+    }
+  }, [entering, enterProgress, loginPillRect, morphTarget])
 
   const introPillActivityStyle = useMemo<CSSProperties | undefined>(() => {
-    if (!loginPillRect) return undefined
-    const width = loginPillRect.width * 2.2
-    const height = loginPillRect.height * 4.2
-    const build = Math.max(0, Math.min(1, (enterProgress - 0.02) / 0.34))
+    if (!livePill) return undefined
+    const width = livePill.width * 2.2
+    const height = livePill.height * 4.2
+    const build = clamp01((enterProgress - 0.02) / 0.34)
     const buildEase = build * build * (3 - 2 * build)
-    const decayBase = Math.max(0, Math.min(1, (enterProgress - 0.66) / 0.34))
+    const decayBase = clamp01((enterProgress - 0.66) / 0.34)
     const decayEase = decayBase * decayBase * (3 - 2 * decayBase)
-    const opacity = 0.82 * buildEase * (1 - decayEase)
-    const scale = 0.9 + 0.12 * Math.max(0, Math.min(1, enterProgress / 0.84))
+    const opacity = 0.72 * buildEase * (1 - decayEase)
+    const scale = 0.9 + 0.12 * clamp01(enterProgress / 0.84)
     const saturation = 1.01 + 0.14 * buildEase - 0.18 * decayEase
     const brightness = 1.01 + 0.08 * buildEase - 0.1 * decayEase
     return {
-      left: `${loginPillRect.left + loginPillRect.width / 2}px`,
-      top: `${loginPillRect.top + loginPillRect.height / 2}px`,
+      left: `${livePill.left + livePill.width / 2}px`,
+      top: `${livePill.top + livePill.height / 2}px`,
       width: `${width}px`,
       height: `${height}px`,
       opacity,
       transform: `translate3d(-50%, -50%, 0) scale(${scale})`,
       filter: `saturate(${saturation}) brightness(${brightness})`,
     }
-  }, [enterProgress, loginPillRect])
+  }, [enterProgress, livePill])
 
   const introPillActivityTarget = useMemo<IntroAsciiRenderTarget | undefined>(() => {
-    if (!loginPillRect) return undefined
-    const width = loginPillRect.width * 2.2
-    const height = loginPillRect.height * 4.2
+    if (!livePill) return undefined
+    const width = livePill.width * 2.2
+    const height = livePill.height * 4.2
     return {
-      left: (width - loginPillRect.width) / 2,
-      top: (height - loginPillRect.height) / 2,
-      width: loginPillRect.width,
-      height: loginPillRect.height,
-      radius: Math.min(24, loginPillRect.height / 2),
+      left: (width - livePill.width) / 2,
+      top: (height - livePill.height) / 2,
+      width: livePill.width,
+      height: livePill.height,
+      radius: Math.min(24, livePill.height / 2),
       mode: "activity",
       stage: "pill",
       progress: enterProgress,
     }
-  }, [enterProgress, loginPillRect])
+  }, [enterProgress, livePill])
 
-  // Publish only the live LOGIN pill rect. The consume/reveal effect is
-  // intentionally local to the current pill position; the destination
-  // shell should be revealed underneath rather than visually morphed to.
-  const rootStyle: React.CSSProperties = loginPillRect
+  const rootStyle: React.CSSProperties = livePill
     ? ({
-        "--pill-cx": `${loginPillRect.left + loginPillRect.width / 2}px`,
-        "--pill-cy": `${loginPillRect.top + loginPillRect.height / 2}px`,
-        "--pill-w": `${loginPillRect.width}px`,
-        "--pill-h": `${loginPillRect.height}px`,
+        "--pill-cx": `${livePill.left + livePill.width / 2}px`,
+        "--pill-cy": `${livePill.top + livePill.height / 2}px`,
+        "--pill-w": `${livePill.width}px`,
+        "--pill-h": `${livePill.height}px`,
       } as React.CSSProperties)
     : {}
 
@@ -494,23 +541,37 @@ export function IntroConversation({
             <div className={`intro3-scroll-inner relative ${HOME_CHAT_COLUMN_CLASS} space-y-6`}>
               {msgs.map((m, i) => {
                 const isLast = i === msgs.length - 1
+                // Last line rolls back first — reverse of how the chat was written.
+                const rollbackLag = msgs.length <= 1
+                  ? 0
+                  : ((msgs.length - 1 - i) / (msgs.length - 1)) * 0.2
+                const body = entering ? (
+                  <RollbackText
+                    text={m.text}
+                    progress={enterProgress}
+                    lag={rollbackLag}
+                    span={0.42}
+                  />
+                ) : isLast && m.role === "bot" ? (
+                  <StreamingText text={m.text} />
+                ) : (
+                  m.text
+                )
                 if (m.role === "user") {
                   return (
                     <div key={i} className="flex justify-end">
-                      <div className="max-w-[82%] min-w-0">
-                        <div
-                          className="intro3-bubble-user max-w-full overflow-hidden rounded-2xl border border-border-subtle bg-panel-2 px-5 py-3 text-[15px] leading-relaxed text-text dark:bg-bubble-user"
-                          style={{ boxShadow: "var(--shadow-bubble)" }}
-                        >
-                          {m.text}
-                        </div>
+                      <div
+                        className="intro3-bubble-user w-fit max-w-[82%] overflow-hidden rounded-2xl border border-border-subtle bg-panel-2 px-5 py-3 text-[15px] leading-relaxed text-text dark:bg-bubble-user"
+                        style={{ boxShadow: "var(--shadow-bubble)" }}
+                      >
+                        {body}
                       </div>
                     </div>
                   )
                 }
                 return (
                   <div key={i} className="text-[15px] font-medium leading-relaxed text-text">
-                    {isLast && !entering ? <StreamingText text={m.text} /> : m.text}
+                    {body}
                   </div>
                 )
               })}
@@ -527,11 +588,13 @@ export function IntroConversation({
           <div
             className={`intro3-input-pad${inputReady ? " intro3-input-pad--visible" : ""} ${HOME_CHAT_INPUT_DOCK_CLASS}`}
           >
-            <div ref={loginPillRef} className={`relative z-20 ${HOME_CHAT_COLUMN_CLASS}`}>
+            <div className={`relative z-20 ${HOME_CHAT_COLUMN_CLASS}`}>
               <form
+                ref={loginPillRef}
                 data-intro-target="termchat-input"
                 onSubmit={handleSubmit}
                 className="intro3-input chathome-chrome-pill mx-auto w-full rounded-[24px] border border-border bg-elevated px-5 py-4 ring-1 ring-overlay-1 transition-colors focus-within:border-border-strong focus-within:ring-overlay-2 dark:bg-overlay-2"
+                style={pillTravelStyle}
               >
                   <div className="flex flex-col gap-3">
                     {/* Slash-command suggester. When the user starts a

@@ -6,10 +6,9 @@
  *   1. intro    — overlay covers; user converses to authenticate
  *   2. layered  — App shell is already painted underneath (App.tsx
  *                 falls through to the real shell as soon as `me` is set);
- *                 we measure the platform's TermChat input rect, choose
- *                 one of three morph "setups" (empty | chat | nochat),
- *                 and animate the intro input bar to that landing rect
- *   3. fading   — overlay cross-fades to 0 over the painted shell
+ *                 we park the home input at its final layout rect, measure
+ *                 it under `.chathome`, then FLIP the login pill there
+ *   3. fading   — overlay cross-fades after the pill has landed
  *                 (.intro3-route-overlay--fading), then onDone() flips
  *                 App to Shell phase
  *
@@ -132,17 +131,18 @@ function IntroConversationLoginAdapter({
     }
   }
 
-  // After login succeeds, fire onFading (which mounts the shell under
-  // the overlay), then poll until thread bootstrap paints the real input
-  // pill — empty hero or bottom chat bar — before starting the morph.
+  // After login succeeds: reveal shell, park destination pill in its
+  // final layout rect (hero-ready, progress 0), then measure that rect
+  // under `.chathome` only — never the login pill on the overlay.
   function measureAndTrigger() {
-    onFading?.()  // shell reveal starts NOW
+    onFading?.()
+    onEnteringStart?.()
     let attempts = 0
     const maxAttempts = 180
     const tryMeasure = () => {
       attempts++
       const el = document.querySelector<HTMLElement>(
-        '[data-intro-target="termchat-input"]'
+        '.chathome [data-intro-target="termchat-input"]'
       )
       const r = el?.getBoundingClientRect()
       if (r && r.width > 0 && r.height > 0) {
@@ -153,20 +153,18 @@ function IntroConversationLoginAdapter({
           width: r.width,
           height: r.height,
         })
-        // Give one frame for the rootStyle CSS vars + AsciiConverge
-        // to mount before flipping enterTrigger.
         requestAnimationFrame(() => setEnterTrigger(true))
         return
       }
       if (attempts < maxAttempts) {
         requestAnimationFrame(tryMeasure)
       } else {
-        // Last resort — fire anyway so we don't hang the flow.
         setMorphMode(detectMode())
         setEnterTrigger(true)
       }
     }
-    requestAnimationFrame(tryMeasure)
+    // Two frames: first applies hero-ready layout, second measures Final.
+    requestAnimationFrame(() => requestAnimationFrame(tryMeasure))
   }
 
   return (

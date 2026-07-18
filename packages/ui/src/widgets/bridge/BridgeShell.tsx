@@ -1,9 +1,10 @@
 /**
  * BridgeShell — Source → Map → Target surface.
  *
- * Idle: compact centered path (not stretched).
- * Editing: one or both ends may be open; open forms use the available width.
- * Map opens a modal; it never expands in place.
+ * Stable grid: 1fr | 9rem map | 1fr. An expanded end always fills its half at
+ * full height — opening/closing the peer never changes that size. Collapsed
+ * pills keep fixed default chrome and stay parked toward the center. Tall Map
+ * chip only when both ends are open (same column width either way).
  */
 
 import type { ConnectorInfo, MoveSummary, Transform } from "@mia/shared-types"
@@ -30,6 +31,9 @@ import {
   seedIdentityColumns,
   type TransformDraft,
 } from "./transform-draft"
+
+/** Idle path chips — Source, Map, and Target share this height. */
+const PATH_PILL_H = "h-[6.75rem]"
 
 export function BridgeShell(): JSX.Element {
   const { toasts, pushToast, dismissToast } = useModalToasts()
@@ -169,7 +173,6 @@ export function BridgeShell(): JSX.Element {
   const canRun = Boolean(source && target) && busy === null
   const mapLabel = summarizeMap(mapDraft)
   const hasStage = Boolean(preview || summary)
-  const editing = sourceOpen || targetOpen
 
   const path = (
     <PathBlock
@@ -217,10 +220,8 @@ export function BridgeShell(): JSX.Element {
                   )}
                 </div>
               </>
-            ) : editing ? (
-              <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3 sm:px-5">{path}</div>
             ) : (
-              <div className="flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-8 sm:px-5">
+              <div className="flex min-h-0 flex-1 flex-col overflow-hidden px-4 py-3 sm:px-5">
                 {path}
               </div>
             )}
@@ -315,7 +316,7 @@ function PathBlock({
       onToggle={onToggleSource}
       onConnectorChange={onSourceConnectorChange}
       onSpecChange={onSourceSpecChange}
-      compact={!sourceOpen && targetOpen}
+      pathPillClassName={PATH_PILL_H}
     />
   )
   const targetCard = (
@@ -328,57 +329,50 @@ function PathBlock({
       onToggle={onToggleTarget}
       onConnectorChange={onTargetConnectorChange}
       onSpecChange={onTargetSpecChange}
-      compact={!targetOpen && sourceOpen}
+      pathPillClassName={PATH_PILL_H}
     />
   )
 
-  // Idle — compact, centered, not stretched
-  if (!sourceOpen && !targetOpen) {
-    return (
-      <div className="mx-auto flex w-full max-w-3xl flex-col gap-3 sm:flex-row sm:items-stretch sm:gap-3">
-        {sourceCard}
-        <div className="flex shrink-0 items-center justify-center sm:px-1">
-          <MapChip mapLabel={mapLabel} onOpenMap={onOpenMap} variant="idle" />
-        </div>
-        {targetCard}
-      </div>
-    )
-  }
+  const anyOpen = sourceOpen || targetOpen
+  const bothOpen = sourceOpen && targetOpen
 
-  // Both open — two forms share the width; Map is a slim center rail
-  if (sourceOpen && targetOpen) {
-    return (
-      <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-3 lg:flex-row lg:gap-3">
-        {sourceCard}
-        <div className="flex shrink-0 items-stretch justify-center lg:w-36 xl:w-40">
-          <MapChip mapLabel={mapLabel} onOpenMap={onOpenMap} variant="center" />
-        </div>
-        {targetCard}
-      </div>
-    )
-  }
-
-  // Source only — form owns the canvas; Map + Target as right rail
-  if (sourceOpen) {
-    return (
-      <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-3 lg:flex-row lg:gap-3">
-        {sourceCard}
-        <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-56 xl:w-64">
-          <MapChip mapLabel={mapLabel} onOpenMap={onOpenMap} variant="rail" />
-          {targetCard}
-        </aside>
-      </div>
-    )
-  }
-
-  // Target only — Source + Map as left rail; form owns the canvas
   return (
-    <div className="flex h-full min-h-0 w-full flex-1 flex-col gap-3 lg:flex-row lg:gap-3">
-      <aside className="flex w-full shrink-0 flex-col gap-2 lg:w-56 xl:w-64">
+    <div
+      className={[
+        "grid h-full min-h-0 w-full flex-1 grid-cols-1 gap-3",
+        // Fixed 9rem map slot — expanded halves never change when the peer opens/closes.
+        "sm:grid-cols-[minmax(0,1fr)_9rem_minmax(0,1fr)]",
+        anyOpen ? "sm:items-stretch" : "sm:items-center",
+      ].join(" ")}
+    >
+      <div
+        className={[
+          "flex min-h-0 min-w-0",
+          sourceOpen ? "h-full min-h-0 flex-col" : anyOpen ? "items-center justify-end" : "justify-end",
+        ].join(" ")}
+      >
         {sourceCard}
-        <MapChip mapLabel={mapLabel} onOpenMap={onOpenMap} variant="rail" />
-      </aside>
-      {targetCard}
+      </div>
+      <div
+        className={[
+          "flex min-h-0 w-full justify-center",
+          bothOpen ? "h-full items-stretch" : "items-center",
+        ].join(" ")}
+      >
+        <MapChip
+          mapLabel={mapLabel}
+          onOpenMap={onOpenMap}
+          variant={bothOpen ? "center" : "path"}
+        />
+      </div>
+      <div
+        className={[
+          "flex min-h-0 min-w-0",
+          targetOpen ? "h-full min-h-0 flex-col" : anyOpen ? "items-center justify-start" : "justify-start",
+        ].join(" ")}
+      >
+        {targetCard}
+      </div>
     </div>
   )
 }
@@ -390,7 +384,7 @@ function MapChip({
 }: {
   mapLabel: string
   onOpenMap: () => void
-  variant: "idle" | "rail" | "center"
+  variant: "path" | "center"
 }): JSX.Element {
   if (variant === "center") {
     return (
@@ -398,7 +392,7 @@ function MapChip({
         type="button"
         onClick={onOpenMap}
         title="Configure column mappings, casts, defaults, and rules"
-        className="group flex h-full min-h-[5.5rem] w-full flex-col items-center justify-center gap-1.5 rounded-2xl border border-border-subtle bg-overlay-1 px-2 py-3 text-center transition-colors hover:border-border hover:bg-overlay-2"
+        className="group flex h-full w-full flex-col items-center justify-center gap-1.5 rounded-2xl border border-border-subtle bg-overlay-1 px-2 py-3 text-center transition-colors hover:border-border hover:bg-overlay-2"
       >
         <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-overlay-2 text-text-muted ring-1 ring-border-subtle/60 group-hover:text-text">
           <Shuffle size={16} aria-hidden />
@@ -409,31 +403,12 @@ function MapChip({
     )
   }
 
-  if (variant === "rail") {
-    return (
-      <button
-        type="button"
-        onClick={onOpenMap}
-        title="Configure column mappings, casts, defaults, and rules"
-        className="group flex w-full shrink-0 items-center gap-2.5 rounded-2xl border border-border-subtle bg-overlay-1 px-3 py-2.5 text-left transition-colors hover:border-border hover:bg-overlay-2"
-      >
-        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-overlay-2 text-text-muted ring-1 ring-border-subtle/60 group-hover:text-text">
-          <Shuffle size={16} aria-hidden />
-        </span>
-        <span className="min-w-0 flex-1">
-          <span className="block text-sm font-semibold text-text">Map columns</span>
-          <span className={`block truncate ${META_TEXT}`}>{mapLabel}</span>
-        </span>
-      </button>
-    )
-  }
-
   return (
     <button
       type="button"
       onClick={onOpenMap}
       title="Configure column mappings, casts, defaults, and rules"
-      className="group flex w-full flex-col items-center justify-center gap-1 self-center rounded-2xl border border-border-subtle bg-overlay-1 px-3 py-3 text-center transition-colors hover:border-border hover:bg-overlay-2 sm:w-[8.5rem]"
+      className={`group flex ${PATH_PILL_H} w-[8.5rem] flex-col items-center justify-center gap-1 rounded-2xl border border-border-subtle bg-overlay-1 px-3 py-3 text-center transition-colors hover:border-border hover:bg-overlay-2`}
     >
       <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-overlay-2 text-text-muted ring-1 ring-border-subtle/60 group-hover:text-text">
         <Shuffle size={16} aria-hidden />

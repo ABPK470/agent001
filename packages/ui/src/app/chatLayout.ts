@@ -16,16 +16,16 @@ export const HOME_CHAT_GUTTER_X_CLASS = "px-6"
 export const HOME_CHAT_INPUT_DOCK_CLASS = "relative shrink-0 px-6 pb-4 pt-2"
 
 /**
- * User goal row in the transcript — the sticky pin appendage shares this cap.
- * Text is limited to `USER_GOAL_TEXT_MAX_CLASS` so adding the pin does not reflow copy.
+ * User goal row — hug content, cap at 82% of the transcript column.
+ * `w-fit` keeps short goals tight; long goals grow up to the cap.
  */
-export const USER_GOAL_COLUMN_CLASS = "w-full max-w-[82%] min-w-0"
+export const USER_GOAL_COLUMN_CLASS = "w-fit max-w-[82%] min-w-0"
 
 /** Pin-slot width; must match the appendage button in UserGoalBubble. */
 export const USER_GOAL_PIN_SLOT_CLASS = "w-10"
 
-/** Text-area cap inside USER_GOAL_COLUMN_CLASS (100% − pin slot). */
-export const USER_GOAL_TEXT_MAX_CLASS = "max-w-[calc(100%-2.5rem)]"
+/** Bubble shell inside the goal column — never force full column width. */
+export const USER_GOAL_TEXT_MAX_CLASS = "w-fit max-w-full"
 
 export function homeChatColumnWidthPx(viewportWidth: number): number {
   return Math.min(viewportWidth * HOME_CHAT_WIDTH_RATIO, HOME_CHAT_MAX_WIDTH_PX)

@@ -27,10 +27,14 @@ export function TransitionTestPage() {
 
   function measureAndTrigger() {
     setPhase("layered")
+    setHeroStage("pill")
+    setHeroRevealProgress(0)
     let attempts = 0
     const tryMeasure = () => {
       attempts++
-      const el = document.querySelector<HTMLElement>('[data-intro-target="termchat-input"]')
+      const el = document.querySelector<HTMLElement>(
+        '.chathome [data-intro-target="termchat-input"]'
+      )
       const r = el?.getBoundingClientRect()
       if (r && r.width > 0 && r.height > 0) {
         setMorphTarget({ left: r.left, top: r.top, width: r.width, height: r.height })
@@ -43,7 +47,7 @@ export function TransitionTestPage() {
         setEnterTrigger(true)
       }
     }
-    requestAnimationFrame(tryMeasure)
+    requestAnimationFrame(() => requestAnimationFrame(tryMeasure))
   }
 
   return (

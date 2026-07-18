@@ -1,7 +1,35 @@
-import { useEffect, useRef, useState } from "react"
-import { CHAT_BRAND_LOGO_SIZE } from "../../brand"
+import { useEffect, useRef, useState, type CSSProperties } from "react"
+import {
+  CHAT_BRAND_LOGO_SIZE,
+  INTRO_COLON_EMBEDDED_SIZE,
+} from "../../brand"
 import { ASCII_FIELD_SCRAMBLE_GLYPHS } from "../../../lib/ascii-noise"
 import { Logo } from "../../../components/Logo"
+
+const COLON_EMBEDDED_SCALE = INTRO_COLON_EMBEDDED_SIZE / CHAT_BRAND_LOGO_SIZE
+
+/**
+ * Lone colon after letters leave. Stays at embedded optical size until
+ * `settle` (same beat as the purple tint), then eases to the forever mark.
+ */
+function SettlingColonMark({
+  online,
+  className,
+  settle,
+}: {
+  online: boolean
+  className: string
+  settle: boolean
+}) {
+  return (
+    <span
+      className={`intro3-wm-mark-settle${settle ? " intro3-wm-mark-settle--done" : ""}`}
+      style={{ "--wm-colon-settle-from": String(COLON_EMBEDDED_SCALE) } as CSSProperties}
+    >
+      <Logo size={CHAT_BRAND_LOGO_SIZE} online={online} className={className} />
+    </span>
+  )
+}
 
 const WM_REVEAL_DELAY_MS = 220
 const BRAND_COLON_INTRO_MS = 320
@@ -289,21 +317,22 @@ export function IntroBrandWordmark({
       ? ""
       : `${pinchIntro ? " mia-colon-logo--pinch-intro" : ""}${pinchForge ? " mia-colon-logo--pinch-forge" : ""}${rotateResolve ? " mia-colon-logo--rotate-resolve" : ""}`.trim()
 
-  const markSolo =
-    miCells.every((c) => c.state === "retracted") && !aVisible && !rotateResolve
+  // Letters gone → settle to the forever mark size (same as home / toolbar).
+  const markSolo = miCells.every((c) => c.state === "retracted") && !aVisible
 
   const soloMarkClassName = [
     "toolbar-brand-logo",
+    "intro3-wm-mark--solo",
     markPurple && !markLive ? "intro3-wm-mark--purple" : "",
     markAnimClass,
   ].filter(Boolean).join(" ")
 
   if (markSolo || markLive) {
     return (
-      <Logo
-        size={CHAT_BRAND_LOGO_SIZE}
+      <SettlingColonMark
         online={markLive}
-        className={markLive ? "toolbar-brand-logo" : soloMarkClassName}
+        settle={markPurple || markLive}
+        className={markLive ? "toolbar-brand-logo intro3-wm-mark--solo" : soloMarkClassName}
       />
     )
   }
@@ -323,7 +352,7 @@ export function IntroBrandWordmark({
       <BrandLetterSlot cell={miCells[1]!} snapFrom="left" />
       <span className="intro3-wm-colon-anchor intro3-wm-colon-anchor--locked">
         <Logo
-          size={CHAT_BRAND_LOGO_SIZE}
+          size={INTRO_COLON_EMBEDDED_SIZE}
           online={markLive}
           className={markClassName}
         />

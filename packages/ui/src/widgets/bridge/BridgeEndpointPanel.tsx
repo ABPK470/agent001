@@ -1,6 +1,6 @@
 /**
  * BridgeEndpointCard — Source/Target bubble that expands into its form in place.
- * Only one end is open at a time (see BridgeShell).
+ * Path order stays Source | Map | Target; the open end grows on its side.
  */
 
 import type { ConnectorInfo, ConnectorKindId } from "@mia/shared-types"
@@ -22,7 +22,7 @@ export function BridgeEndpointCard({
   onToggle,
   onConnectorChange,
   onSpecChange,
-  compact,
+  pathPillClassName = "",
 }: {
   role: "source" | "target"
   connectors: ConnectorInfo[]
@@ -32,8 +32,8 @@ export function BridgeEndpointCard({
   onToggle: () => void
   onConnectorChange: (id: string) => void
   onSpecChange: (next: Record<string, unknown>) => void
-  /** Collapsed companion beside an open peer — denser chrome. */
-  compact?: boolean
+  /** Shared height with the Map path chip when collapsed. */
+  pathPillClassName?: string
 }): JSX.Element {
   const options: ListboxOption<string>[] = connectors.map((c) => {
     const ok = role === "source" ? c.capabilities.read : c.capabilities.write
@@ -59,10 +59,9 @@ export function BridgeEndpointCard({
       className={[
         "flex min-h-0 min-w-0 flex-col overflow-hidden rounded-2xl border transition-colors",
         expanded
-          ? "flex-1 border-accent/40 bg-elevated/50 ring-1 ring-inset ring-accent/15"
-          : compact
-            ? "shrink-0 border-border-subtle bg-elevated/40"
-            : "flex-1 border-border-subtle bg-elevated/40",
+          ? "h-full min-h-0 w-full flex-1 border-accent/40 bg-elevated/50 ring-1 ring-inset ring-accent/15"
+          // Fixed default size — match Map path chip height; never fill the half-slot.
+          : `${pathPillClassName} w-[20rem] max-w-full shrink-0 border-border-subtle bg-elevated/40`,
       ].join(" ")}
     >
       <button
@@ -71,25 +70,17 @@ export function BridgeEndpointCard({
         aria-expanded={expanded}
         title={expanded ? `Collapse ${title.toLowerCase()}` : `Configure ${title.toLowerCase()}`}
         className={[
-          "flex w-full shrink-0 items-center text-left transition-colors",
-          compact ? "gap-2.5 px-3 py-2.5" : "gap-3.5 px-4 py-3.5",
-          expanded ? "border-b border-border-subtle hover:bg-overlay-1/40" : "hover:bg-overlay-1",
+          "flex w-full items-center gap-3.5 px-4 py-3.5 text-left transition-colors",
+          // Collapsed chrome is identical idle or beside an open peer — only the
+          // opened card itself gains the expand affordance (chevron + form).
+          expanded ? "shrink-0 border-b border-border-subtle hover:bg-overlay-1/40" : "h-full hover:bg-overlay-1",
         ].join(" ")}
       >
-        <div
-          className={[
-            "flex shrink-0 items-center justify-center rounded-xl bg-overlay-2 ring-1 ring-border-subtle/60",
-            compact ? "h-9 w-9" : "h-12 w-12",
-          ].join(" ")}
-        >
+        <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-overlay-2 ring-1 ring-border-subtle/60">
           {selected ? (
-            <ConnectorKindMark
-              kind={selected.kind}
-              size={compact ? 20 : 28}
-              title={selected.kind}
-            />
+            <ConnectorKindMark kind={selected.kind} size={28} title={selected.kind} />
           ) : (
-            <Settings2 size={compact ? 16 : 22} className="text-text-faint" aria-hidden />
+            <Settings2 size={22} className="text-text-faint" aria-hidden />
           )}
         </div>
         <div className="min-w-0 flex-1">
@@ -97,7 +88,9 @@ export function BridgeEndpointCard({
           <div className="truncate text-sm font-semibold text-text">
             {selected?.displayName ?? "Select…"}
           </div>
-          {!expanded && <div className={`mt-0.5 truncate ${META_TEXT}`}>{summary}</div>}
+          <div className={`mt-0.5 truncate ${META_TEXT}${expanded ? " invisible" : ""}`}>
+            {summary}
+          </div>
         </div>
         {expanded ? (
           <ChevronDown size={16} className="shrink-0 text-accent" aria-hidden />

@@ -3235,15 +3235,15 @@ textarea.input {
   opacity: 1;
 }
 
-/* Content fades in as the converge enters its dissolve phase, so the
-   real pill is sitting in place underneath the dissipating ASCII. */
+/* Shell chrome materialises under the traveling login pill — early enough
+   to read as continuation, late enough that the FLIP stays the focus. */
 .chathome-content {
   opacity: 0;
-  transition: opacity 620ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 720ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 .chathome--revealed .chathome-content {
   opacity: 1;
-  transition-delay: 920ms;
+  transition-delay: 420ms;
 }
 
 .chathome-empty-spotlight {
@@ -3295,6 +3295,16 @@ textarea.input {
   opacity: 1;
   filter: blur(0) saturate(1);
   transform: translateY(0) scale(1);
+}
+
+/* Morph handoff: destination sits at its final rect immediately so FLIP
+   measures Last correctly. Motion comes from the traveling login pill;
+   the home pill only cross-fades in via heroRevealProgress. */
+.chathome--hero-pill .chathome-empty-input {
+  opacity: 1;
+  filter: none;
+  transform: none;
+  transition: none;
 }
 
 .chathome--hero-copy-ready {
@@ -4790,8 +4800,25 @@ textarea.input {
   letter-spacing: 0.072em;
   color: var(--text);
   line-height: 1;
-  /* Colon SVG width at CHAT_BRAND_LOGO_SIZE 17 → 13px ≈ 0.65em here. */
-  --wm-colon-w: 0.65em;
+  /* Embedded colon slot — hair under the forever mark while MI…A shows. */
+  --wm-colon-w: 0.62em;
+}
+
+/* Embedded → forever size, locked to the purple tint beat — long soft ease. */
+.intro3-wm-mark-settle {
+  display: inline-flex;
+  align-items: center;
+  transform: scale(var(--wm-colon-settle-from, 0.94));
+  transform-origin: left center;
+  transition: transform 1100ms cubic-bezier(0.37, 0, 0.63, 1);
+}
+.intro3-wm-mark-settle--done {
+  transform: scale(1);
+}
+.intro3-wm-mark-settle .mia-colon-logo {
+  transition:
+    color 1100ms cubic-bezier(0.37, 0, 0.63, 1),
+    filter 1100ms cubic-bezier(0.37, 0, 0.63, 1);
 }
 
 .intro3-wm-colon-anchor {
@@ -5014,7 +5041,7 @@ textarea.input {
    already-painted App below — no pop, no reload-blip. */
 .intro3-route-overlay {
   opacity: 1;
-  transition: opacity 480ms cubic-bezier(0.4, 0, 0.2, 1);
+  transition: opacity 560ms cubic-bezier(0.22, 0.84, 0.24, 1);
 }
 .intro3-route-overlay--fading {
   opacity: 0;
@@ -5177,9 +5204,11 @@ textarea.input {
   padding-top: 5rem;
 }
 
+/* Transcript exit is Ascii rollback (RollbackText) — do not hard-fade the
+   scroll column or the reverse-generation read as an abrupt wipe. */
 .intro3-root--entering .intro3-scroll-inner {
-  opacity: 0;
-  transform: translateY(-10px);
+  opacity: 1;
+  filter: none;
 }
 
 .intro3-mode-empty .intro3-scroll-inner {
@@ -5225,18 +5254,12 @@ textarea.input {
   pointer-events: auto;
   transform: translateY(0);
 }
-/* On entering: login pill fades into the boosted ASCII area. The
-   delay gives the focus circle time to grow over the pill first so the
-   pill visibly *sinks into* the densening ASCII rather than vanishing
-   independently. */
+/* On entering: JS owns transform + opacity (FLIP First→Last). Do not
+   force opacity:0 here — that broke continuity and made the handoff a cut. */
 .intro3-root--entering.intro3-mode-empty .intro3-input,
 .intro3-root--entering.intro3-mode-chat  .intro3-input {
-  opacity: 0;
-  filter: saturate(0.94) brightness(0.98);
-  transition: opacity 540ms cubic-bezier(0.22, 0.84, 0.24, 1) 220ms,
-              filter 540ms cubic-bezier(0.22, 0.84, 0.24, 1) 220ms,
-              width 800ms cubic-bezier(0.4, 0, 0.2, 1),
-              max-width 800ms cubic-bezier(0.4, 0, 0.2, 1);
+  filter: none;
+  transition: none;
 }
 
 /* ── Pill-area focus ──
@@ -5301,9 +5324,7 @@ textarea.input {
 .intro3-mode-empty .intro3-input {
   width: 100%;
 }
-/* When morphing to a measured rect the .intro3-input wrapper must
-   not reshape. The pill is consumed in place; it should fade under the
-   local ASCII field rather than expand or morph its geometry. */
+/* Geometry travel is FLIP (inline transform/scale), not width tweens. */
 .intro3-root--entering.intro3-mode-empty .intro3-input,
 .intro3-root--entering.intro3-mode-chat  .intro3-input {
   width: 100%;

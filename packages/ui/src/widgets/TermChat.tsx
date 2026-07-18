@@ -186,7 +186,7 @@ function UserGoalBubble({
   }
 
   return (
-    <div className={`ml-auto flex w-full max-w-full items-stretch ${shellClass}`} style={shellStyle}>
+    <div className={`ml-auto flex ${USER_GOAL_TEXT_MAX_CLASS} items-stretch ${shellClass}`} style={shellStyle}>
       <button
         type="button"
         onClick={onUnpin}
@@ -196,7 +196,7 @@ function UserGoalBubble({
       >
         <Dot size={15} strokeWidth={2} />
       </button>
-      <div className={`${bodyClass} min-w-0 flex-1`}>
+      <div className={`${bodyClass} min-w-0`}>
         <UserGoalText text={goal} />
       </div>
     </div>
