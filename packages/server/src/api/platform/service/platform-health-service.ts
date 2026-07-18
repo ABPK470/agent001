@@ -1,8 +1,6 @@
 import { buildCatalog, getMssqlConfig, type AgentHost } from "@mia/agent"
 import { validateEntityDefinition } from "@mia/sync"
-import { existsSync, readFileSync, unlinkSync } from "node:fs"
-import { resolve } from "node:path"
-
+import { readFileSync } from "node:fs"
 import {
   findExistingCatalogCachePath,
   resolveCatalogCachePath,
@@ -14,8 +12,6 @@ import {
 } from "../../sync/index.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 import { getDb } from "../../../infra/persistence/connection.js"
-
-const PUBLISHED_BUNDLE_PATH = "sync-definitions/published/definitions.bundle.json"
 
 export interface PlatformHealth {
   ready: boolean
@@ -53,7 +49,7 @@ function mssqlConnectionNames(host: AgentHost): string[] {
 }
 
 export function getPlatformHealth(
-  projectRoot: string,
+  _projectRoot: string,
   mssqlSummary: string,
   bootHost: AgentHost,
 ): PlatformHealth {
@@ -83,20 +79,11 @@ export function getPlatformHealth(
   let publishedAt: string | null = null
   let publishedVersion: string | null = null
   let definitionCount = 0
-  const bundlePath = resolve(projectRoot, PUBLISHED_BUNDLE_PATH)
-  if (existsSync(bundlePath)) {
-    try {
-      const bundle = JSON.parse(readFileSync(bundlePath, "utf-8")) as {
-        publishedAt?: string
-        publishedVersion?: string
-        definitions?: Record<string, unknown | null>
-      }
-      publishedAt = bundle.publishedAt ?? null
-      publishedVersion = bundle.publishedVersion ?? null
-      definitionCount = Object.values(bundle.definitions ?? {}).filter((d) => d != null).length
-    } catch {
-      /* ignore corrupt bundle */
-    }
+  const published = db.loadPublishedBundleFromDb()
+  if (published) {
+    publishedAt = published.publishedAt
+    publishedVersion = published.publishedVersion
+    definitionCount = Object.keys(published.definitions).length
   }
 
   const hints: string[] = []
@@ -187,14 +174,8 @@ export function factoryResetSyncPlatform(projectRoot: string): { seeded: number;
   db.wipeEntityRegistry()
   database.exec(`DELETE FROM sync_definition_configs`)
 
-  const bundlePath = resolve(projectRoot, PUBLISHED_BUNDLE_PATH)
-  if (existsSync(bundlePath)) {
-    try {
-      unlinkSync(bundlePath)
-    } catch {
-      /* ignore */
-    }
-  }
+  database.exec(`DELETE FROM sync_definitions`)
+  database.exec(`DELETE FROM sync_publish_meta`)
 
   const seed = seedEntityRegistryIfEmpty(projectRoot)
   if (seed.seeded > 0) {

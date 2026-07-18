@@ -9,7 +9,7 @@ import { api } from "../../../client/index"
 import { Listbox, type ListboxOption } from "../../../components/Listbox"
 import type { EntityRegistryStrategy } from "../../../types"
 import { Err } from "../../env-sync/chrome"
-import { TAB_PILL } from "../chrome"
+import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE } from "../chrome"
 import { ModalBtnPrimary, ModalBtnSecondary } from "../governance/modal-chrome"
 import {
   AdminModalCanvas,
@@ -341,7 +341,7 @@ function TabPill({
       className={[
         TAB_PILL,
         "inline-flex items-center gap-1.5",
-        active ? "bg-accent/15 text-accent" : "text-text-muted hover:bg-elevated hover:text-text",
+        active ? TAB_PILL_ACTIVE : TAB_PILL_IDLE,
       ].join(" ")}
     >
       {icon} {children}

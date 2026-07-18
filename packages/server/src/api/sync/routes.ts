@@ -17,7 +17,6 @@ import {
 import type { FastifyInstance, FastifyReply } from "fastify"
 import { broadcast } from "../../infra/events/broadcaster.js"
 import { cancelOperation } from "../../infra/operations/cancel-registry.js"
-import { PUBLISHED_SYNC_BUNDLE_PATH } from "../../boot/published-sync-bundle.js"
 import * as db from "../../infra/persistence/sqlite.js"
 import {
   listSyncDefinitionAdminItems,
@@ -45,6 +44,7 @@ interface PublishSyncDefinitionsResponse {
   publishedAt: string
   publishedVersion: string
   definitionCount: number
+  publishedStorage: "sqlite"
   publishedBundlePath: string
   stdout: string[]
   stderr: string[]
@@ -238,10 +238,10 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         const definition = bundle.definitions[req.params.entityId]
         if (!definition) {
           reply.code(404)
-          return { error: `No published definition for "${req.params.entityId}" in ${PUBLISHED_SYNC_BUNDLE_PATH}` }
+          return { error: `No published SyncDefinition for "${req.params.entityId}" in SQLite` }
         }
         return {
-          bundlePath: PUBLISHED_SYNC_BUNDLE_PATH,
+          bundlePath: "sqlite:sync_definitions",
           bundlePublishedAt: bundle.publishedAt,
           bundlePublishedVersion: bundle.publishedVersion,
           definition
@@ -250,7 +250,7 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
         reply.code(404)
         return {
           error: error instanceof Error ? error.message : String(error),
-          bundlePath: PUBLISHED_SYNC_BUNDLE_PATH
+          bundlePath: "sqlite:sync_definitions"
         }
       }
     }

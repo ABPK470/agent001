@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_comment": "MyMI-derived sync vocabulary: step types (reusable handlers) and flows (ordered step instances). Seeds DB-backed config; operators may edit after bootstrap.",
+  "_comment": "MyMI-derived sync vocabulary: actions (reusable handlers), value sources (wiring), and flows (ordered step instances). Seeds DB-backed config; operators may edit after bootstrap.",
   "phases": [
     {
       "id": "preTransaction",
@@ -55,7 +55,343 @@
       }
     }
   ],
-  "stepTypes": [
+  "flows": {
+    "content": {
+      "label": "Content dependencies",
+      "description": "Metadata sync followed by downstream dependency refresh for content entities.",
+      "steps": [
+        {
+          "id": "metadataSync",
+          "phase": "metadata",
+          "kind": "metadataSync",
+          "title": "Metadata sync",
+          "description": "Apply transactional metadata changes for the selected content scope."
+        },
+        {
+          "id": "handleDependencies",
+          "phase": "postMetadata",
+          "kind": "handleDependencies",
+          "title": "Handle dependencies",
+          "description": "Refresh downstream content dependency state.",
+          "objectName": "content"
+        }
+      ]
+    },
+    "gateMetadata": {
+      "label": "Gate refresh",
+      "description": "Metadata sync followed by gate metadata refresh and downstream pipeline start.",
+      "steps": [
+        {
+          "id": "metadataSync",
+          "phase": "metadata",
+          "kind": "metadataSync",
+          "title": "Metadata sync",
+          "description": "Apply transactional metadata changes for the selected gate metadata scope."
+        },
+        {
+          "id": "metaRefresh",
+          "phase": "postMetadata",
+          "kind": "metaRefresh",
+          "title": "Meta refresh",
+          "description": "Refresh target gate metadata."
+        },
+        {
+          "id": "pipelineStart",
+          "phase": "postMetadata",
+          "kind": "pipelineStart",
+          "title": "Pipeline start",
+          "description": "Start the downstream gate refresh pipeline.",
+          "pipelineName": "All Lists content item population"
+        }
+      ]
+    },
+    "contract": {
+      "label": "Contract deploy",
+      "description": "Metadata sync plus full contract deployment, ETL, routines, and deploy stamps.",
+      "steps": [
+        {
+          "id": "auditCheck",
+          "phase": "preTransaction",
+          "kind": "auditCheck",
+          "title": "Audit check (before sync)",
+          "description": "Source uspAuditRunCheck — decide whether metadata sync should run.",
+          "auditObjectType": "Contract"
+        },
+        {
+          "id": "targetLock",
+          "phase": "preTransaction",
+          "kind": "targetLock",
+          "title": "Target lock",
+          "description": "Lock the target contract deployment window."
+        },
+        {
+          "id": "metadataSync",
+          "phase": "metadata",
+          "kind": "metadataSync",
+          "title": "Metadata sync",
+          "description": "Apply transactional metadata changes for the selected contract scope."
+        },
+        {
+          "id": "pipelineRegister",
+          "phase": "postMetadata",
+          "kind": "pipelineRegister",
+          "title": "Pipeline register",
+          "description": "Register affected pipelines with the target agent service.",
+          "bindings": {
+            "pipelineId": {
+              "type": "catalog",
+              "id": "contractPipelineId"
+            }
+          }
+        },
+        {
+          "id": "contractUndeploy",
+          "phase": "postMetadata",
+          "kind": "contractUndeploy",
+          "title": "Contract undeploy",
+          "description": "Undeploy the target contract before redeployment."
+        },
+        {
+          "id": "contractUnlockAfterUndeploy",
+          "phase": "postMetadata",
+          "kind": "targetUnlock",
+          "title": "Unlock after undeploy",
+          "description": "Unlock the contract after undeploy."
+        },
+        {
+          "id": "auditCheckPreDeploy",
+          "phase": "postMetadata",
+          "kind": "auditCheck",
+          "title": "Audit check (before deploy)",
+          "description": "Re-run source audit after undeploy, before physical dataset creation.",
+          "auditObjectType": "Contract"
+        },
+        {
+          "id": "contractLockForDeploy",
+          "phase": "postMetadata",
+          "kind": "targetLock",
+          "title": "Lock for deploy",
+          "description": "Lock the contract for deployment."
+        },
+        {
+          "id": "contractPreScript",
+          "phase": "postMetadata",
+          "kind": "contractPreScript",
+          "title": "Pre-deploy script",
+          "description": "Run contract pre-deployment scripts."
+        },
+        {
+          "id": "contractCreateDatasetStage",
+          "phase": "postMetadata",
+          "kind": "contractCreateStageDataset",
+          "title": "Create stage dataset",
+          "description": "Create the stage dataset."
+        },
+        {
+          "id": "contractCreateDatasetArchive",
+          "phase": "postMetadata",
+          "kind": "contractCreateArchiveDataset",
+          "title": "Create archive dataset",
+          "description": "Create the archive dataset."
+        },
+        {
+          "id": "contractCreateDatasetList",
+          "phase": "postMetadata",
+          "kind": "contractCreateListDataset",
+          "title": "Create list dataset",
+          "description": "Create the list dataset."
+        },
+        {
+          "id": "contractCreateDatasetDim",
+          "phase": "postMetadata",
+          "kind": "contractCreateDimDataset",
+          "title": "Create dim dataset",
+          "description": "Create the dimension dataset."
+        },
+        {
+          "id": "contractCreateDatasetFact",
+          "phase": "postMetadata",
+          "kind": "contractCreateFactDataset",
+          "title": "Create fact dataset",
+          "description": "Create the fact dataset."
+        },
+        {
+          "id": "contractCreateFks",
+          "phase": "postMetadata",
+          "kind": "contractCreateDatasetFks",
+          "title": "Create dataset FKs",
+          "description": "Reconcile contract dataset foreign keys."
+        },
+        {
+          "id": "contractDeployEtl",
+          "phase": "postMetadata",
+          "kind": "contractDeployEtl",
+          "title": "Deploy ETL",
+          "description": "Deploy ETL custom transformations."
+        },
+        {
+          "id": "contractDeployRoutine",
+          "phase": "postMetadata",
+          "kind": "contractDeployRoutine",
+          "title": "Deploy routines",
+          "description": "Deploy contract routines."
+        },
+        {
+          "id": "contractPostScript",
+          "phase": "postMetadata",
+          "kind": "contractPostScript",
+          "title": "Post-deploy script",
+          "description": "Run contract post-deployment scripts."
+        },
+        {
+          "id": "contractUnlockAfterDeploy",
+          "phase": "postMetadata",
+          "kind": "targetUnlock",
+          "title": "Unlock after deploy",
+          "description": "Unlock the contract after deployment."
+        },
+        {
+          "id": "setSyncDate",
+          "phase": "postMetadata",
+          "kind": "syncDate",
+          "title": "Sync date",
+          "description": "Stamp the contract sync date.",
+          "auditObjectType": "Contract"
+        },
+        {
+          "id": "setDeployDate",
+          "phase": "postMetadata",
+          "kind": "deployDate",
+          "title": "Deploy date",
+          "description": "Stamp the contract deploy date.",
+          "auditObjectType": "Contract"
+        }
+      ]
+    },
+    "rule": {
+      "label": "Rule deploy",
+      "description": "Metadata sync, dependent dataset deploy, rule deploy, and dependency refresh.",
+      "steps": [
+        {
+          "id": "metadataSync",
+          "phase": "metadata",
+          "kind": "metadataSync",
+          "title": "Metadata sync",
+          "description": "Apply transactional metadata changes for the selected rule scope."
+        },
+        {
+          "id": "datasetDeploy",
+          "phase": "postMetadata",
+          "kind": "datasetDeploy",
+          "title": "Dataset deploy",
+          "description": "Deploy datasets required by the rule on the target ETL service.",
+          "bindings": {
+            "datasetId": {
+              "type": "catalog",
+              "id": "ruleInputDatasetId"
+            }
+          }
+        },
+        {
+          "id": "rulesDeploy",
+          "phase": "postMetadata",
+          "kind": "rulesDeploy",
+          "title": "Rules deploy",
+          "description": "Deploy the rule package on the target ETL service."
+        },
+        {
+          "id": "syncDate",
+          "phase": "postMetadata",
+          "kind": "syncDate",
+          "title": "Sync date",
+          "description": "Stamp the rule sync date.",
+          "auditObjectType": "Rule"
+        },
+        {
+          "id": "deployDate",
+          "phase": "postMetadata",
+          "kind": "deployDate",
+          "title": "Deploy date",
+          "description": "Stamp the rule deploy date.",
+          "auditObjectType": "Rule"
+        }
+      ]
+    },
+    "dataset": {
+      "label": "Dataset deploy",
+      "description": "Metadata sync followed by dataset deployment on the target ETL service.",
+      "steps": [
+        {
+          "id": "metadataSync",
+          "phase": "metadata",
+          "kind": "metadataSync",
+          "title": "Metadata sync",
+          "description": "Apply transactional metadata changes for the selected dataset scope."
+        },
+        {
+          "id": "datasetDeploy",
+          "phase": "postMetadata",
+          "kind": "datasetDeploy",
+          "title": "Dataset deploy",
+          "description": "Deploy the dataset using the target ETL service.",
+          "bindings": {
+            "datasetId": {
+              "type": "catalog",
+              "id": "planEntityId"
+            }
+          }
+        },
+        {
+          "id": "syncDate",
+          "phase": "postMetadata",
+          "kind": "syncDate",
+          "title": "Sync date",
+          "description": "Stamp the dataset sync date after deployment.",
+          "auditObjectType": "Dataset"
+        }
+      ]
+    },
+    "pipelineActivity": {
+      "label": "Pipeline register",
+      "description": "Metadata sync followed by registering the target pipeline with the agent service.",
+      "steps": [
+        {
+          "id": "metadataSync",
+          "phase": "metadata",
+          "kind": "metadataSync",
+          "title": "Metadata sync",
+          "description": "Apply transactional metadata changes for the selected pipeline activity scope."
+        },
+        {
+          "id": "pipelineRegister",
+          "phase": "postMetadata",
+          "kind": "pipelineRegister",
+          "title": "Pipeline register",
+          "description": "Register the target pipeline with the agent service.",
+          "bindings": {
+            "pipelineId": {
+              "type": "catalog",
+              "id": "planEntityId"
+            }
+          }
+        }
+      ]
+    },
+    "metadataOnly": {
+      "label": "Metadata only",
+      "description": "Only apply metadata changes; do not trigger downstream deploy or refresh steps.",
+      "steps": [
+        {
+          "id": "metadataSync",
+          "phase": "metadata",
+          "kind": "metadataSync",
+          "title": "Metadata sync",
+          "description": "Apply transactional metadata changes for the selected entity scope."
+        }
+      ]
+    }
+  },
+  "actions": [
     {
       "id": "metadataSync",
       "label": "metadataSync",
@@ -1044,7 +1380,7 @@
       }
     }
   ],
-  "customValueSources": [
+  "valueSources": [
     {
       "id": "planEntityId",
       "label": "Plan entity id",
@@ -1147,341 +1483,5 @@
         }
       }
     }
-  ],
-  "flows": {
-    "content": {
-      "label": "Content dependencies",
-      "description": "Metadata sync followed by downstream dependency refresh for content entities.",
-      "steps": [
-        {
-          "id": "metadataSync",
-          "phase": "metadata",
-          "kind": "metadataSync",
-          "title": "Metadata sync",
-          "description": "Apply transactional metadata changes for the selected content scope."
-        },
-        {
-          "id": "handleDependencies",
-          "phase": "postMetadata",
-          "kind": "handleDependencies",
-          "title": "Handle dependencies",
-          "description": "Refresh downstream content dependency state.",
-          "objectName": "content"
-        }
-      ]
-    },
-    "gateMetadata": {
-      "label": "Gate refresh",
-      "description": "Metadata sync followed by gate metadata refresh and downstream pipeline start.",
-      "steps": [
-        {
-          "id": "metadataSync",
-          "phase": "metadata",
-          "kind": "metadataSync",
-          "title": "Metadata sync",
-          "description": "Apply transactional metadata changes for the selected gate metadata scope."
-        },
-        {
-          "id": "metaRefresh",
-          "phase": "postMetadata",
-          "kind": "metaRefresh",
-          "title": "Meta refresh",
-          "description": "Refresh target gate metadata."
-        },
-        {
-          "id": "pipelineStart",
-          "phase": "postMetadata",
-          "kind": "pipelineStart",
-          "title": "Pipeline start",
-          "description": "Start the downstream gate refresh pipeline.",
-          "pipelineName": "All Lists content item population"
-        }
-      ]
-    },
-    "contract": {
-      "label": "Contract deploy",
-      "description": "Metadata sync plus full contract deployment, ETL, routines, and deploy stamps.",
-      "steps": [
-        {
-          "id": "auditCheck",
-          "phase": "preTransaction",
-          "kind": "auditCheck",
-          "title": "Audit check (before sync)",
-          "description": "Source uspAuditRunCheck — decide whether metadata sync should run.",
-          "auditObjectType": "Contract"
-        },
-        {
-          "id": "targetLock",
-          "phase": "preTransaction",
-          "kind": "targetLock",
-          "title": "Target lock",
-          "description": "Lock the target contract deployment window."
-        },
-        {
-          "id": "metadataSync",
-          "phase": "metadata",
-          "kind": "metadataSync",
-          "title": "Metadata sync",
-          "description": "Apply transactional metadata changes for the selected contract scope."
-        },
-        {
-          "id": "pipelineRegister",
-          "phase": "postMetadata",
-          "kind": "pipelineRegister",
-          "title": "Pipeline register",
-          "description": "Register affected pipelines with the target agent service.",
-          "bindings": {
-            "pipelineId": {
-              "type": "catalog",
-              "id": "contractPipelineId"
-            }
-          }
-        },
-        {
-          "id": "contractUndeploy",
-          "phase": "postMetadata",
-          "kind": "contractUndeploy",
-          "title": "Contract undeploy",
-          "description": "Undeploy the target contract before redeployment."
-        },
-        {
-          "id": "contractUnlockAfterUndeploy",
-          "phase": "postMetadata",
-          "kind": "targetUnlock",
-          "title": "Unlock after undeploy",
-          "description": "Unlock the contract after undeploy."
-        },
-        {
-          "id": "auditCheckPreDeploy",
-          "phase": "postMetadata",
-          "kind": "auditCheck",
-          "title": "Audit check (before deploy)",
-          "description": "Re-run source audit after undeploy, before physical dataset creation.",
-          "auditObjectType": "Contract"
-        },
-        {
-          "id": "contractLockForDeploy",
-          "phase": "postMetadata",
-          "kind": "targetLock",
-          "title": "Lock for deploy",
-          "description": "Lock the contract for deployment."
-        },
-        {
-          "id": "contractPreScript",
-          "phase": "postMetadata",
-          "kind": "contractPreScript",
-          "title": "Pre-deploy script",
-          "description": "Run contract pre-deployment scripts."
-        },
-        {
-          "id": "contractCreateDatasetStage",
-          "phase": "postMetadata",
-          "kind": "contractCreateStageDataset",
-          "title": "Create stage dataset",
-          "description": "Create the stage dataset."
-        },
-        {
-          "id": "contractCreateDatasetArchive",
-          "phase": "postMetadata",
-          "kind": "contractCreateArchiveDataset",
-          "title": "Create archive dataset",
-          "description": "Create the archive dataset."
-        },
-        {
-          "id": "contractCreateDatasetList",
-          "phase": "postMetadata",
-          "kind": "contractCreateListDataset",
-          "title": "Create list dataset",
-          "description": "Create the list dataset."
-        },
-        {
-          "id": "contractCreateDatasetDim",
-          "phase": "postMetadata",
-          "kind": "contractCreateDimDataset",
-          "title": "Create dim dataset",
-          "description": "Create the dimension dataset."
-        },
-        {
-          "id": "contractCreateDatasetFact",
-          "phase": "postMetadata",
-          "kind": "contractCreateFactDataset",
-          "title": "Create fact dataset",
-          "description": "Create the fact dataset."
-        },
-        {
-          "id": "contractCreateFks",
-          "phase": "postMetadata",
-          "kind": "contractCreateDatasetFks",
-          "title": "Create dataset FKs",
-          "description": "Reconcile contract dataset foreign keys."
-        },
-        {
-          "id": "contractDeployEtl",
-          "phase": "postMetadata",
-          "kind": "contractDeployEtl",
-          "title": "Deploy ETL",
-          "description": "Deploy ETL custom transformations."
-        },
-        {
-          "id": "contractDeployRoutine",
-          "phase": "postMetadata",
-          "kind": "contractDeployRoutine",
-          "title": "Deploy routines",
-          "description": "Deploy contract routines."
-        },
-        {
-          "id": "contractPostScript",
-          "phase": "postMetadata",
-          "kind": "contractPostScript",
-          "title": "Post-deploy script",
-          "description": "Run contract post-deployment scripts."
-        },
-        {
-          "id": "contractUnlockAfterDeploy",
-          "phase": "postMetadata",
-          "kind": "targetUnlock",
-          "title": "Unlock after deploy",
-          "description": "Unlock the contract after deployment."
-        },
-        {
-          "id": "setSyncDate",
-          "phase": "postMetadata",
-          "kind": "syncDate",
-          "title": "Sync date",
-          "description": "Stamp the contract sync date.",
-          "auditObjectType": "Contract"
-        },
-        {
-          "id": "setDeployDate",
-          "phase": "postMetadata",
-          "kind": "deployDate",
-          "title": "Deploy date",
-          "description": "Stamp the contract deploy date.",
-          "auditObjectType": "Contract"
-        }
-      ]
-    },
-    "rule": {
-      "label": "Rule deploy",
-      "description": "Metadata sync, dependent dataset deploy, rule deploy, and dependency refresh.",
-      "steps": [
-        {
-          "id": "metadataSync",
-          "phase": "metadata",
-          "kind": "metadataSync",
-          "title": "Metadata sync",
-          "description": "Apply transactional metadata changes for the selected rule scope."
-        },
-        {
-          "id": "datasetDeploy",
-          "phase": "postMetadata",
-          "kind": "datasetDeploy",
-          "title": "Dataset deploy",
-          "description": "Deploy datasets required by the rule on the target ETL service.",
-          "bindings": {
-            "datasetId": {
-              "type": "catalog",
-              "id": "ruleInputDatasetId"
-            }
-          }
-        },
-        {
-          "id": "rulesDeploy",
-          "phase": "postMetadata",
-          "kind": "rulesDeploy",
-          "title": "Rules deploy",
-          "description": "Deploy the rule package on the target ETL service."
-        },
-        {
-          "id": "syncDate",
-          "phase": "postMetadata",
-          "kind": "syncDate",
-          "title": "Sync date",
-          "description": "Stamp the rule sync date.",
-          "auditObjectType": "Rule"
-        },
-        {
-          "id": "deployDate",
-          "phase": "postMetadata",
-          "kind": "deployDate",
-          "title": "Deploy date",
-          "description": "Stamp the rule deploy date.",
-          "auditObjectType": "Rule"
-        }
-      ]
-    },
-    "dataset": {
-      "label": "Dataset deploy",
-      "description": "Metadata sync followed by dataset deployment on the target ETL service.",
-      "steps": [
-        {
-          "id": "metadataSync",
-          "phase": "metadata",
-          "kind": "metadataSync",
-          "title": "Metadata sync",
-          "description": "Apply transactional metadata changes for the selected dataset scope."
-        },
-        {
-          "id": "datasetDeploy",
-          "phase": "postMetadata",
-          "kind": "datasetDeploy",
-          "title": "Dataset deploy",
-          "description": "Deploy the dataset using the target ETL service.",
-          "bindings": {
-            "datasetId": {
-              "type": "catalog",
-              "id": "planEntityId"
-            }
-          }
-        },
-        {
-          "id": "syncDate",
-          "phase": "postMetadata",
-          "kind": "syncDate",
-          "title": "Sync date",
-          "description": "Stamp the dataset sync date after deployment.",
-          "auditObjectType": "Dataset"
-        }
-      ]
-    },
-    "pipelineActivity": {
-      "label": "Pipeline register",
-      "description": "Metadata sync followed by registering the target pipeline with the agent service.",
-      "steps": [
-        {
-          "id": "metadataSync",
-          "phase": "metadata",
-          "kind": "metadataSync",
-          "title": "Metadata sync",
-          "description": "Apply transactional metadata changes for the selected pipeline activity scope."
-        },
-        {
-          "id": "pipelineRegister",
-          "phase": "postMetadata",
-          "kind": "pipelineRegister",
-          "title": "Pipeline register",
-          "description": "Register the target pipeline with the agent service.",
-          "bindings": {
-            "pipelineId": {
-              "type": "catalog",
-              "id": "planEntityId"
-            }
-          }
-        }
-      ]
-    },
-    "metadataOnly": {
-      "label": "Metadata only",
-      "description": "Only apply metadata changes; do not trigger downstream deploy or refresh steps.",
-      "steps": [
-        {
-          "id": "metadataSync",
-          "phase": "metadata",
-          "kind": "metadataSync",
-          "title": "Metadata sync",
-          "description": "Apply transactional metadata changes for the selected entity scope."
-        }
-      ]
-    }
-  }
+  ]
 }

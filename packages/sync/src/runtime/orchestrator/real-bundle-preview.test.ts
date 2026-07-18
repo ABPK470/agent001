@@ -17,8 +17,8 @@ const fetchPkColumnsMock = vi.fn()
 const detectCatalogDriftMock = vi.fn()
 const evaluateRootParentMock = vi.fn()
 
-vi.mock("../../domain/diff-engine/index.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../domain/diff-engine/index.js")>()
+vi.mock("../diff-engine/index.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../diff-engine/index.js")>()
   return {
     ...actual,
     diffTable: (...args: unknown[]) => diffTableMock(...args),

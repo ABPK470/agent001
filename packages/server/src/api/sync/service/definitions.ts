@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { resolve } from "node:path"
 
 import type {
@@ -26,16 +26,13 @@ import {
   type SyncDefinitionFlowTemplateCatalog
 } from "@mia/sync"
 
-import {
-  PUBLISHED_SYNC_BUNDLE_PATH,
-  reloadPublishedSyncVocabulary
-} from "../../../boot/published-sync-bundle.js"
+import { reloadPublishedSyncVocabulary } from "../../../boot/published-sync-bundle.js"
 import { _resetGoalClassificationCache } from "../../runs/prompting/goal-classification.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 
 const DEFAULT_TENANT_ID = "_default"
-const PUBLISHED_BUNDLE_PATH = PUBLISHED_SYNC_BUNDLE_PATH
 const AUTHORED_DEFINITIONS_DIR = "deploy/sync/artifacts/entities"
+const SQLITE_PUBLISHED_STORAGE = "sqlite:sync_definitions" as const
 
 const SERVICE_PROFILE_OPTIONS: SyncDefinitionRuntimeOptions["serviceProfiles"] = [
   {
@@ -82,10 +79,10 @@ export function defaultEntityFlowId(
 }
 
 export function listSyncDefinitionRuntimeOptions(projectRoot: string): SyncDefinitionRuntimeOptions {
-  const presets = db.listSyncRunPresets("_default")
+  const presets = db.listSyncFlows("_default")
   if (presets.length > 0) {
     const flowTemplateSteps = Object.fromEntries(
-      presets.map((preset) => [preset.id, db.parsePresetSteps(preset.steps_json)])
+      presets.map((preset) => [preset.id, db.parseFlowSteps(preset.steps_json)])
     ) as SyncDefinitionRuntimeOptions["flowTemplateSteps"]
     return {
       flowTemplates: presets.map((preset) => ({
@@ -122,13 +119,13 @@ export function loadAuthoringFlowCatalog(
   tenantId = DEFAULT_TENANT_ID,
 ): SyncDefinitionFlowTemplateCatalog {
   const fileCatalog = loadSyncDefinitionFlowTemplateCatalog(projectRoot)
-  const presets = db.listSyncRunPresets(tenantId)
+  const presets = db.listSyncFlows(tenantId)
   if (presets.length === 0) return fileCatalog
 
   // DB presets override shipped flows; keep platform builtins (e.g. metadataOnly) from file catalog.
   const flowTemplates = { ...fileCatalog.flowTemplates } as Record<string, SyncDefinitionFlowTemplate>
   for (const preset of presets) {
-    const dbSteps = db.parsePresetSteps(preset.steps_json)
+    const dbSteps = db.parseFlowSteps(preset.steps_json)
     const fileSteps =
       preset.id in fileCatalog.flowTemplates
         ? fileCatalog.flowTemplates[preset.id as EntityRegistrySyncFlowTemplateId].steps
@@ -244,13 +241,15 @@ function seedFromRepoDefinition(
   }
 }
 
-function loadPublishedBundle(projectRoot: string): PersistedPublishedBundle | null {
-  const path = resolve(projectRoot, PUBLISHED_BUNDLE_PATH)
-  if (!existsSync(path)) return null
-  try {
-    return JSON.parse(readFileSync(path, "utf-8")) as PersistedPublishedBundle
-  } catch {
-    return null
+function loadPublishedBundle(_projectRoot?: string): PersistedPublishedBundle | null {
+  const raw = db.loadPublishedBundleFromDb(DEFAULT_TENANT_ID)
+  if (!raw) return null
+  return {
+    version: 1,
+    publishedAt: raw.publishedAt,
+    publishedVersion: raw.publishedVersion,
+    catalogVersion: raw.catalogVersion,
+    definitions: raw.definitions as Record<string, PublishedSyncDefinition | null>,
   }
 }
 
@@ -437,6 +436,7 @@ export function publishSyncDefinitionsFromDb(
   publishedAt: string
   publishedVersion: string
   definitionCount: number
+  publishedStorage: "sqlite"
   publishedBundlePath: string
   stdout: string[]
   stderr: string[]
@@ -445,9 +445,9 @@ export function publishSyncDefinitionsFromDb(
   rehydrateSyncDefinitionConfigSteps(projectRoot, tenantId)
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
   const flowCatalog = buildFlowCatalog(
-    db.listSyncRunPhases(tenantId),
-    db.listSyncRunKinds(tenantId),
-    db.listSyncRunBindingSources(tenantId),
+    db.listSyncPhases(tenantId),
+    db.listSyncActions(tenantId),
+    db.listSyncValueSources(tenantId),
   )
   const entities = db.listEntityDefinitions(tenantId)
   const configs = new Map(db.listSyncDefinitionConfigs(tenantId).map((row) => [row.entity_id, row]))
@@ -513,16 +513,13 @@ export function publishSyncDefinitionsFromDb(
       compiled[entity.id] ?? previousBundle?.definitions?.[entity.id] ?? null
   }
 
-  const bundle: PersistedPublishedBundle = {
-    version: 1,
+  const catalogVersion = db.getActiveSyncCatalogVersion(tenantId)
+  db.replaceSyncDefinitions(tenantId, {
     publishedAt,
     publishedVersion,
-    catalogVersion: db.getActiveSyncCatalogVersion(tenantId),
-    definitions
-  }
-  const outputPath = resolve(projectRoot, PUBLISHED_BUNDLE_PATH)
-  mkdirSync(resolve(projectRoot, "sync-definitions", "published"), { recursive: true })
-  writeFileSync(outputPath, `${JSON.stringify(bundle, null, 2)}\n`, "utf-8")
+    catalogVersion,
+    definitions,
+  })
 
   const vocabularyIds = reloadPublishedSyncVocabulary(projectRoot)
   _resetGoalClassificationCache()
@@ -533,11 +530,12 @@ export function publishSyncDefinitionsFromDb(
     publishedAt,
     publishedVersion,
     definitionCount,
-    publishedBundlePath: PUBLISHED_BUNDLE_PATH,
+    publishedStorage: "sqlite" as const,
+    publishedBundlePath: SQLITE_PUBLISHED_STORAGE,
     stdout: [
-      `Wrote published definition bundle to ${outputPath}`,
-      `Published ${newlyPublishedCount} definition(s) this run; bundle retains ${definitionCount} total`,
-      `Reloaded published sync vocabulary (${vocabularyIds.length} entity types)`
+      `Published SyncDefinitions to SQLite (${SQLITE_PUBLISHED_STORAGE})`,
+      `Published ${newlyPublishedCount} definition(s) this run; ${definitionCount} live total`,
+      `Reloaded published sync vocabulary (${vocabularyIds.length} entity types)`,
     ],
     stderr
   }

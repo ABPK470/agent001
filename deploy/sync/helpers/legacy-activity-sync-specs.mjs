@@ -13,7 +13,8 @@ export function activitySyncSpecKey(pipelineId, activityIndex) {
 }
 
 export function buildLegacyActivitySyncSpecs(evidence, flowTemplateCatalog, syncMetadata) {
-  const kindById = Object.fromEntries(syncMetadata.stepTypes.map((kind) => [kind.id, kind]))
+  const actions = syncMetadata.actions ?? syncMetadata.stepTypes ?? []
+  const kindById = Object.fromEntries(actions.map((kind) => [kind.id, kind]))
   const specs = {}
 
   for (const pipeline of evidence.pipelines ?? []) {

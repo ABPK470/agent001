@@ -2,7 +2,7 @@ import type { ListboxOption } from "../../components/Listbox"
 import type {
   AuthoredSyncFlowStep,
   SyncFlowKindDefinition,
-  SyncMetadataCatalogStepType,
+  SyncMetadataCatalogAction,
   SyncStepFieldKey,
   ValueSource,
   AuthoredSyncFlowKind,
@@ -52,10 +52,10 @@ export const FLOW_STEP_TYPE_OPTIONS: ListboxOption<AuthoredSyncFlowStep["kind"]>
 export type StepTypeCatalogLookup = Map<string, SyncFlowKindDefinition>
 
 export function buildStepTypeCatalogLookup(
-  stepTypes?: readonly SyncMetadataCatalogStepType[] | null,
+  actions?: readonly SyncMetadataCatalogAction[] | null,
 ): StepTypeCatalogLookup | null {
-  if (!stepTypes?.length) return null
-  return new Map(stepTypes.map((entry) => [entry.id, entry.definition]))
+  if (!actions?.length) return null
+  return new Map(actions.map((entry) => [entry.id, entry.definition]))
 }
 
 export function requiredBindingSlotNames(

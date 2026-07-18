@@ -122,7 +122,7 @@ describe("setup checks", () => {
     process.env.MSSQL_HOST = "db.example"
 
     const report = runSetupChecks(makeLayout(tempRoot))
-    expect(report.checks.find((c) => c.id === "published-sync-bundle")?.severity).toBe("warn")
+    expect(report.checks.find((c) => c.id === "published-sync-definitions")?.severity).toBe("warn")
   })
 })
 

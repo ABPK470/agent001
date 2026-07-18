@@ -2,6 +2,10 @@ import type { PublishedSyncDefinition, PublishedSyncDefinitionBundle } from "@mi
 
 import type { SyncProjectRootHost } from "../ports/index.js"
 
+/**
+ * Default relPath for file-backed test registries.
+ * Production uses createDbPublishedSyncDefinitionRegistry (ignores relPath).
+ */
 const DEFAULT_PUBLISHED_DEFINITIONS_PATH = "sync-definitions/published/definitions.bundle.json"
 
 export type { PublishedSyncDefinition, PublishedSyncDefinitionBundle }

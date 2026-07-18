@@ -6,12 +6,14 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import type { SyncRuntimeHost } from "../ports/host.js"
 import { createPublishedSyncDefinitionRegistry } from "../runtime/published-definition-registry.js"
+import { createRepoBundleHost } from "../test-support/repo-bundle.js"
 import {
   getPublishedSyncDefinitionForHost,
   loadPublishedSyncDefinitionBundle
 } from "./published-definitions.js"
 
-function createHost(projectRoot: string): SyncRuntimeHost {
+/** File-registry host for unit tests of the on-disk bundle loader. */
+function createFileBundleHost(projectRoot: string): SyncRuntimeHost {
   return {
     mssql: {
       databases: new Map(),
@@ -60,11 +62,9 @@ afterEach(() => {
 })
 
 describe("published sync definitions", () => {
-  it("loads contract definition with root metadata from the bundle", () => {
-    const projectRoot = resolve(process.cwd(), "../..")
-    const host = createHost(projectRoot)
-
-    const definitions = loadPublishedSyncDefinitionBundle(host, projectRoot)
+  it("loads contract definition with root metadata from the fixture registry", () => {
+    const host = createRepoBundleHost()
+    const definitions = loadPublishedSyncDefinitionBundle(host, resolve(process.cwd(), "../.."))
     const contractDefinition = definitions.definitions.contract
 
     expect(contractDefinition).toBeTruthy()
@@ -72,9 +72,8 @@ describe("published sync definitions", () => {
     expect(contractDefinition?.rootTable).toBe("core.Contract")
   })
 
-  it("resolves optional-table semantics from the published definition authority", () => {
-    const projectRoot = resolve(process.cwd(), "../..")
-    const host = createHost(projectRoot)
+  it("resolves optional-table semantics from the fixture published definitions", () => {
+    const host = createRepoBundleHost()
 
     const contentDefinition = getPublishedSyncDefinitionForHost(host, "content")
     const gateMetadataDefinition = getPublishedSyncDefinitionForHost(host, "gateMetadata")
@@ -89,9 +88,9 @@ describe("published sync definitions", () => {
     ).toEqual(["gate.Content", "gate.ContentLink", "gate.UserGroupPermission"])
   })
 
-  it("reloads the published bundle when the file changes at runtime", () => {
+  it("reloads the published bundle when the file changes at runtime (file registry)", () => {
     const projectRoot = makeTempProjectRoot()
-    const host = createHost(projectRoot)
+    const host = createFileBundleHost(projectRoot)
     const firstMtime = Date.UTC(2026, 4, 28, 12, 0, 0)
     const secondMtime = Date.UTC(2026, 4, 28, 12, 0, 1)
 

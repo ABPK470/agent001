@@ -125,9 +125,9 @@ describe("catalog import/export round-trip", () => {
   })
 
   it("resolves metadataOnly even when DB presets omit it", () => {
-    for (const preset of db.listSyncRunPresets("_default")) {
+    for (const preset of db.listSyncFlows("_default")) {
       if (preset.id === "metadataOnly") {
-        db.deleteSyncRunPreset("_default", preset.id)
+        db.deleteSyncFlow("_default", preset.id)
       }
     }
 
@@ -239,7 +239,7 @@ describe("catalog import/export round-trip", () => {
 
   it("loadAuthoringFlowCatalog falls back to shipped steps when a DB preset is empty", async () => {
     const { loadAuthoringFlowCatalog } = await import("../src/api/sync/service/definitions.js")
-    db.saveSyncRunPreset({
+    db.saveSyncFlow({
       tenant_id: "_default",
       id: "content",
       label: "Broken content",

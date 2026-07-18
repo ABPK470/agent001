@@ -496,36 +496,36 @@ export const api = {
 
   getSyncMetadataCatalog: () =>
     json<import("../types").SyncMetadataCatalogResponse>("/api/sync-metadata"),
-  saveSyncMetadataStepType: (body: import("../types").SyncMetadataCatalogStepTypeSaveBody) =>
-    json<import("../types").SyncMetadataCatalogResponse>("/api/sync-metadata/step-types", {
+  saveSyncMetadataStepType: (body: import("../types").SyncMetadataCatalogActionSaveBody) =>
+    json<import("../types").SyncMetadataCatalogResponse>("/api/sync-metadata/actions", {
       method: "POST",
       body: JSON.stringify(body),
     }),
   deleteSyncMetadataStepType: (id: string) =>
     json<import("../types").SyncMetadataCatalogResponse>(
-      `/api/sync-metadata/step-types/${encodeURIComponent(id)}`,
+      `/api/sync-metadata/actions/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
-  saveSyncMetadataCustomValueSource: (body: import("../types").SyncMetadataCatalogCustomValueSourceSaveBody) =>
-    json<import("../types").SyncMetadataCatalogResponse>("/api/sync-metadata/binding-sources", {
+  saveSyncMetadataCustomValueSource: (body: import("../types").SyncMetadataCatalogValueSourceSaveBody) =>
+    json<import("../types").SyncMetadataCatalogResponse>("/api/sync-metadata/value-sources", {
       method: "POST",
       body: JSON.stringify(body),
     }),
   deleteSyncMetadataCustomValueSource: (id: string) =>
     json<import("../types").SyncMetadataCatalogResponse>(
-      `/api/sync-metadata/binding-sources/${encodeURIComponent(id)}`,
+      `/api/sync-metadata/value-sources/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
   /** @deprecated Use saveSyncMetadataCustomValueSource */
-  saveSyncMetadataBindingSource: (body: import("../types").SyncMetadataCatalogCustomValueSourceSaveBody) =>
-    json<import("../types").SyncMetadataCatalogResponse>("/api/sync-metadata/binding-sources", {
+  saveSyncMetadataBindingSource: (body: import("../types").SyncMetadataCatalogValueSourceSaveBody) =>
+    json<import("../types").SyncMetadataCatalogResponse>("/api/sync-metadata/value-sources", {
       method: "POST",
       body: JSON.stringify(body),
     }),
   /** @deprecated Use deleteSyncMetadataCustomValueSource */
   deleteSyncMetadataBindingSource: (id: string) =>
     json<import("../types").SyncMetadataCatalogResponse>(
-      `/api/sync-metadata/binding-sources/${encodeURIComponent(id)}`,
+      `/api/sync-metadata/value-sources/${encodeURIComponent(id)}`,
       { method: "DELETE" },
     ),
   saveSyncMetadataFlow: (body: {

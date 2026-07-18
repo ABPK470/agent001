@@ -1,17 +1,23 @@
 /**
- * Paths to the checked-in published bundle (read-only in tests).
+ * Fixture host for smoke tests against a checked-in published-bundle snapshot.
+ *
+ * Production authority is SQLite (`sync_definitions`). The file at
+ * `sync-definitions/published/definitions.bundle.json` is a read-only fixture
+ * for predicate/shape checks — not the live publish target.
  */
 
-import { existsSync } from "node:fs"
+import { existsSync, readFileSync } from "node:fs"
 import { join, resolve } from "node:path"
 
-import { createPublishedSyncDefinitionRegistry } from "../runtime/published-definition-registry.js"
+import { createDbPublishedSyncDefinitionRegistry } from "../runtime/db-published-definition-registry.js"
+import type { PublishedSyncDefinitionBundle } from "../domain/published-definitions.js"
 import { withPermissionDefaults } from "../domain/environments.js"
 import type { SyncRuntimeHost } from "../ports/host.js"
 
 /** Monorepo root (`agent001/`). */
 export const REPO_ROOT = resolve(import.meta.dirname, "../../../..")
 
+/** @deprecated Legacy fixture path — not written by Publish. */
 export const PUBLISHED_BUNDLE_REL = "sync-definitions/published/definitions.bundle.json"
 
 export const PUBLISHED_BUNDLE_PATH = join(REPO_ROOT, PUBLISHED_BUNDLE_REL)
@@ -19,13 +25,20 @@ export const PUBLISHED_BUNDLE_PATH = join(REPO_ROOT, PUBLISHED_BUNDLE_REL)
 export function requirePublishedBundle(): void {
   if (!existsSync(PUBLISHED_BUNDLE_PATH)) {
     throw new Error(
-      `Expected published bundle at ${PUBLISHED_BUNDLE_PATH}. ` +
-        `Tests are read-only — they do not create or modify this file.`
+      `Expected fixture published bundle at ${PUBLISHED_BUNDLE_PATH}. ` +
+        `This is a read-only smoke-test fixture, not production storage.`
     )
   }
 }
 
-/** Host pointing at the real repo tree (bundle read-only). */
+function loadFixturePublishedBundle(): PublishedSyncDefinitionBundle | null {
+  if (!existsSync(PUBLISHED_BUNDLE_PATH)) return null
+  const parsed = JSON.parse(readFileSync(PUBLISHED_BUNDLE_PATH, "utf-8")) as PublishedSyncDefinitionBundle
+  if (parsed.version !== 1 || !parsed.definitions) return null
+  return parsed
+}
+
+/** Host pointing at the real repo tree with the fixture bundle injected. */
 export function createRepoBundleHost(): SyncRuntimeHost {
   requirePublishedBundle()
   const dev = withPermissionDefaults({
@@ -65,7 +78,7 @@ export function createRepoBundleHost(): SyncRuntimeHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: REPO_ROOT,
-        publishedDefinitions: createPublishedSyncDefinitionRegistry()
+        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadFixturePublishedBundle)
       }
     }
   } as unknown as SyncRuntimeHost

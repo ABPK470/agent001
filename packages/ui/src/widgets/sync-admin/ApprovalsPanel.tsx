@@ -6,7 +6,7 @@ import { useMe } from "../../hooks/useMe"
 import { timeAgo } from "../../lib/util"
 import { ModalBtnSecondary, PromptModal } from "./chrome"
 import { useConsole } from "./console-context"
-import { TAB_PILL, META_TEXT } from "./design"
+import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, META_TEXT } from "./design"
 import { PolicyRulesModal } from "./PolicyRulesModal"
 import { DetailField, DetailGrid } from "../entity-registry/DetailField"
 import {
@@ -109,10 +109,7 @@ export function ApprovalsPanel(): JSX.Element {
                       key={entry.value}
                       type="button"
                       onClick={() => setFilter(entry.value)}
-                      className={[
-                        TAB_PILL,
-                        filter === entry.value ? "bg-accent/15 text-accent" : "text-text-muted hover:bg-elevated hover:text-text",
-                      ].join(" ")}
+                      className={[TAB_PILL, filter === entry.value ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
                     >
                       {entry.label}
                     </button>

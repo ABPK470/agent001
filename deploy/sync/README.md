@@ -30,8 +30,8 @@ Live MSSQL (optional)  →  refresh-from-legacy  →  deploy/sync/artifacts/*
                                                  SQLite (operator edits)
                                                       ↓ export (optional)
                                                  deploy/sync/artifacts/*  (review → commit)
-                                                      ↓ publish
-                              sync-definitions/published/definitions.bundle.json
+                                                      ↓ Publish
+                              SQLite sync_definitions (SyncDefinition JSON)
                                                       ↓
                                                preview / execute
 ```
@@ -39,8 +39,8 @@ Live MSSQL (optional)  →  refresh-from-legacy  →  deploy/sync/artifacts/*
 - **Shipped artifacts** — default for first boot when SQLite is empty.
 - **Refresh from MSSQL** — on a deployed dev/UAT host with corp DB access, admins regenerate artifacts from ground truth, restart, then publish. UI: Policies → Platform → **Refresh from database**.
 - **After boot** — SQLite is the source of truth for operator edits. Deploy artifacts **re-seed built-in rows** on every boot (`built_in=1`); custom rows are preserved.
-- **Export** — write the current SQLite catalog back to JSON for versioning. CLI or `POST /api/platform/artifacts/export`.
-- **Runtime execute** reads the **published bundle**, not deploy files directly.
+- **Export** — download the current SQLite catalog (and/or SyncDefinitions) as JSON/zip — never a Publish side-effect into the tree.
+- **Runtime** reads **SyncDefinitions in SQLite**, not deploy files and not a published JSON file in the repo.
 
 Handler wiring always uses `{ "type": "catalog", "id": "…" }` — no legacy shorthand types in artifacts.
 
@@ -59,10 +59,10 @@ Handler wiring always uses `{ "type": "catalog", "id": "…" }` — no legacy sh
 
 | File | SQLite tables | UI surface |
 |------|---------------|------------|
-| `artifacts/sync-metadata.json` | `sync_run_phases`, `sync_run_kinds`, `sync_run_binding_sources`, `sync_run_presets` | Configuration → Flows / Actions / Wiring |
+| `artifacts/sync-metadata.json` (`phases`, `actions`, `valueSources`, `flows`) | `sync_phases`, `sync_actions`, `sync_value_sources`, `sync_flows` | Configuration → Flows / Actions / Sources |
 | `artifacts/strategies.json` | `scd2_strategies`, `scd2_strategy_versions` | Entity Registry → Strategies |
 | `artifacts/entities/*.json` | entity registry (Format A) | Entity Registry |
-| `sync-environments.json` | `sync_environments` | Policies → Environments |
+| `sync-environments.json` | `sync_environments` | Configuration → Environments |
 | `artifacts/flow-templates.json` | (derived view of flows) | compile-time helper |
 
 ## Helpers (derivation only)
@@ -72,12 +72,12 @@ Handler wiring always uses `{ "type": "catalog", "id": "…" }` — no legacy sh
 | `refresh-from-legacy.mjs` | Orchestrator — writes all artifact outputs |
 | `legacy-pipeline-evidence.mjs` | Fetch `core.Pipeline` + `core.Activity` from MSSQL or fixture |
 | `legacy-entity-derivation.mjs` | Pipeline → `artifacts/entities/*.json` (table scopes, predicates) |
-| `sync-metadata-derivation.mjs` | Pipeline → `sync-metadata.json` (step types, flows, wiring) |
+| `sync-metadata-derivation.mjs` | Pipeline → `sync-metadata.json` (actions, flows, valueSources) |
 | `legacy-activity-sync-specs.mjs` | Build offline activity overlay fixture |
 | `catalog-index.mjs` | MSSQL schema snapshot for entity FK closure |
 | `sync-metadata-phases.mjs` | Fixed platform phase vocabulary |
 | `sync-metadata-normalize.mjs` | Normalize handler slots to catalog refs |
-| `value-source-seeds.mjs` | Shipped wiring catalog (plan context, SQL, step fields) |
+| `value-source-seeds.mjs` | Shipped valueSources catalog (plan context, SQL, step fields) |
 
 No one-shot migration scripts — artifacts in git are already on the current model.
 

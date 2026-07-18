@@ -93,9 +93,10 @@ async function seedAndPublish(): Promise<Record<string, unknown>> {
   seedSyncMetadataIfEmpty(projectRoot)
   publishSyncDefinitionsFromDb(projectRoot)
 
-  return JSON.parse(
-    readFileSync(join(projectRoot, "sync-definitions/published/definitions.bundle.json"), "utf-8"),
-  ) as Record<string, unknown>
+  const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/db/index.js")
+  const bundle = loadPublishedBundleFromDb()
+  if (!bundle) throw new Error("expected SyncDefinitions in SQLite after publish")
+  return bundle as unknown as Record<string, unknown>
 }
 
 describe("deploy artifact publish parity", () => {
@@ -209,26 +210,25 @@ describe("deploy artifact publish parity", () => {
     }
   })
 
-  it("checked-in definitions.bundle.json matches artifact publish parity", async () => {
-    const bundle = await seedAndPublish()
-    if (process.env["REPUBLISH_BUNDLE"] === "1") {
-      mkdirSync(join(REPO_ROOT, "sync-definitions/published"), { recursive: true })
-      writeFileSync(REPO_BUNDLE_PATH, `${JSON.stringify(bundle, null, 2)}\n`, "utf-8")
-    }
-
-    expect(existsSync(REPO_BUNDLE_PATH)).toBe(true)
-    const checkedIn = JSON.parse(readFileSync(REPO_BUNDLE_PATH, "utf-8")) as {
+  it("SQLite SyncDefinitions match artifact publish parity", async () => {
+    const bundle = (await seedAndPublish()) as {
       definitions: Record<string, { metadata: { tables: Array<{ name: string; predicate: string }> } }>
     }
 
     for (const entityId of ["content", "contract", "dataset", "rule"]) {
       const expected = expectedPredicateMap(entityId)
-      const published = checkedIn.definitions[entityId]
-      expect(published, `checked-in bundle missing ${entityId}`).toBeTruthy()
+      const published = bundle.definitions[entityId]
+      expect(published, `published SyncDefinition missing ${entityId}`).toBeTruthy()
       for (const [tableName, predicate] of expected) {
         const row = published.metadata.tables.find((table) => table.name === tableName)
-        expect(row?.predicate, `checked-in ${entityId}.${tableName}`).toBe(predicate)
+        expect(row?.predicate, `published ${entityId}.${tableName}`).toBe(predicate)
       }
+    }
+
+    // Optional: refresh legacy fixture file for smoke tests (not runtime authority).
+    if (process.env["REPUBLISH_BUNDLE"] === "1") {
+      mkdirSync(join(REPO_ROOT, "sync-definitions/published"), { recursive: true })
+      writeFileSync(REPO_BUNDLE_PATH, `${JSON.stringify(bundle, null, 2)}\n`, "utf-8")
     }
   })
 })

@@ -30,7 +30,6 @@ function walk(dir: string, out: string[] = []): string[] {
 }
 
 function isProductionSource(file: string): boolean {
-  if (file.includes("/migrations/archive/")) return false
   if (file.endsWith(".test.ts") || file.endsWith(".test.tsx")) return false
   if (file.includes("wire-convention-guard.test.ts")) return false
   if (file.includes("/fixtures/")) return false

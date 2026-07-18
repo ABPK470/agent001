@@ -48,7 +48,7 @@ async function main() {
     console.log("Skipped entity definitions (--metadata-only).")
   }
   console.log(
-    `Wrote sync metadata (${result.stepTypes} step types, ${result.flows} flows), flow-templates.json, legacy-activity-sync-specs.json (${result.activitySpecs} specs)`
+    `Wrote sync metadata (${result.actions ?? result.stepTypes} actions, ${result.flows} flows), flow-templates.json, legacy-activity-sync-specs.json (${result.activitySpecs} specs)`
   )
   for (const [key, relPath] of Object.entries(result.paths)) {
     if (key === "entitiesDir" && result.entities.length === 0) continue

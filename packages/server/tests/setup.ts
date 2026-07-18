@@ -2,22 +2,27 @@
  * Server-package vitest setup.
  *
  * Registers MyMI-shaped tenant config and published sync vocabulary the
- * same way production does via MIA_TENANT_CONFIG + definitions.bundle.json.
+ * same way production does after Publish (entity ids from SQLite rows).
+ * Tests that exercise a live DB may re-seed / reload vocabulary themselves.
  */
-import { loadPublishedSyncEntityIdsFromBundle, setTenantConfig } from "@mia/agent"
+import { loadPublishedSyncEntityIdsFromList, setTenantConfig } from "@mia/agent"
 import { beforeAll, beforeEach } from "vitest"
-import { join, dirname } from "node:path"
-import { fileURLToPath } from "node:url"
 import { _resetDecideSectionsCache } from "../src/api/runs/prompting/decide-sections.ts"
-
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "..")
 
 process.env.MIA_SKIP_SETUP = "1"
 
+/** Canonical MyMI entity types — matches a full Publish into sync_definitions. */
+const PUBLISHED_SYNC_VOCABULARY = [
+  "content",
+  "contract",
+  "dataset",
+  "gateMetadata",
+  "pipelineActivity",
+  "rule",
+] as const
+
 beforeAll(() => {
-  loadPublishedSyncEntityIdsFromBundle("sync-definitions/published/definitions.bundle.json", {
-    baseDir: repoRoot
-  })
+  loadPublishedSyncEntityIdsFromList(PUBLISHED_SYNC_VOCABULARY)
 
   setTenantConfig({
     mirrorSchema: "persistedView",

@@ -66,6 +66,7 @@ export type { CatalogBootstrapMetadata, TenantConfig } from "./domain/tenant/ten
 export {
   getPublishedSyncEntityIds,
   loadPublishedSyncEntityIdsFromBundle,
+  loadPublishedSyncEntityIdsFromList,
   resetPublishedSyncEntityIds,
   setPublishedSyncEntityIds
 } from "./domain/tenant/published-sync-vocabulary.js"

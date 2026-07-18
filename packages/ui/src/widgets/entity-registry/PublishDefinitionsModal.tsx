@@ -42,6 +42,7 @@ export function PublishDefinitionsModal({
           publishedAt: "",
           publishedVersion: "",
           definitionCount: 0,
+          publishedStorage: "sqlite",
           publishedBundlePath: "",
           stdout: [],
           stderr: apiError.stderr,

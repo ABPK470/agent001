@@ -62,7 +62,7 @@ describe("sync metadata derivation", () => {
 
   it("gives every step type an executable handler", () => {
     const metadata = JSON.parse(readFileSync(syncMetadataSeed, "utf-8")) as {
-      stepTypes: Array<{
+      actions: Array<{
         id: string
         definition: {
           handler: {
@@ -77,23 +77,23 @@ describe("sync metadata derivation", () => {
       }>
     }
 
-    for (const stepType of metadata.stepTypes) {
-      const handler = stepType.definition.handler
+    for (const action of metadata.actions) {
+      const handler = action.definition.handler
       if (handler.type === "metadata_sync") continue
       if (handler.type === "http_request") {
-        expect(handler.httpService, stepType.id).toBeTruthy()
-        expect(handler.httpPath, stepType.id).toBeTruthy()
+        expect(handler.httpService, action.id).toBeTruthy()
+        expect(handler.httpPath, action.id).toBeTruthy()
         continue
       }
       if (handler.type === "custom_sql") {
-        expect(handler.sqlBatch, stepType.id).toBeTruthy()
+        expect(handler.sqlBatch, action.id).toBeTruthy()
         continue
       }
       if (handler.type === "custom_shell_script") {
-        expect(handler.shellCommand, stepType.id).toBeTruthy()
+        expect(handler.shellCommand, action.id).toBeTruthy()
         continue
       }
-      expect(handler.procedure, stepType.id).toBeTruthy()
+      expect(handler.procedure, action.id).toBeTruthy()
     }
   })
 

@@ -14,7 +14,7 @@ export function validateEntityRunYaml(
   if (run.steps && run.steps.length > 0) {
     return "run.steps is not supported — define steps on the flow in Sync metadata → Flows"
   }
-  if (db.getSyncRunPreset(tenantId, run.template)) return null
+  if (db.getSyncFlow(tenantId, run.template)) return null
   const catalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
   if (!hasSyncDefinitionFlowTemplate(catalog, run.template)) {
     return `unknown run.template "${run.template}"`

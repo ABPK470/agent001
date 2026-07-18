@@ -80,32 +80,32 @@ export function exportTimestampFolderName(exportedAt = new Date()): string {
 }
 
 function exportSyncMetadataDocument(tenantId: string) {
-  const phases = db.listSyncRunPhases(tenantId).map((row) => ({
+  const phases = db.listSyncPhases(tenantId).map((row) => ({
     id: row.id,
     label: row.label,
     sortOrder: row.sort_order,
     definition: db.mapPhaseDefinition(row),
   }))
 
-  const stepTypes = db.listSyncRunKinds(tenantId).map((row) => ({
+  const actions = db.listSyncActions(tenantId).map((row) => ({
     id: row.id,
     label: row.label,
     definition: db.mapKindDefinition(row),
   }))
 
-  const customValueSources = db.listSyncRunBindingSources(tenantId).map((row) => ({
+  const valueSources = db.listSyncValueSources(tenantId).map((row) => ({
     id: row.id,
     label: row.label,
-    definition: db.mapCustomValueSourceDefinition(row),
+    definition: db.mapValueSourceDefinition(row),
   }))
 
   const flows = Object.fromEntries(
-    db.listSyncRunPresets(tenantId).map((row) => [
+    db.listSyncFlows(tenantId).map((row) => [
       row.id,
       {
         label: row.label,
         description: row.description,
-        steps: db.parsePresetSteps(row.steps_json),
+        steps: db.parseFlowSteps(row.steps_json),
       },
     ]),
   )
@@ -113,10 +113,10 @@ function exportSyncMetadataDocument(tenantId: string) {
   return {
     version: 1 as const,
     _comment:
-      "SQLite snapshot — phases, step types (actions), wiring (value sources), and flows. Not a repo seed overwrite.",
+      "SQLite snapshot — phases, actions, value sources, and flows. Not a repo seed overwrite.",
     phases,
-    stepTypes,
-    customValueSources,
+    actions,
+    valueSources,
     flows,
   }
 }

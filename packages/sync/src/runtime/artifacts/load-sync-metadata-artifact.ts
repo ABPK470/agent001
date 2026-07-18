@@ -1,5 +1,5 @@
 /**
- * Load deploy-owned sync metadata artifact (phases, step types, flows).
+ * Load deploy-owned sync metadata artifact (phases, actions, flows, value sources).
  *
  * Authority: deploy/sync/artifacts/sync-metadata.json → SQLite → runtime snapshot.
  */
@@ -23,11 +23,14 @@ export interface SyncMetadataPhase {
   definition: SyncFlowPhaseDefinition
 }
 
-export interface SyncMetadataStepType {
+export interface SyncMetadataAction {
   id: string
   label: string
   definition: SyncFlowKindDefinition
 }
+
+/** @deprecated Use SyncMetadataAction */
+export type SyncMetadataStepType = SyncMetadataAction
 
 export interface SyncMetadataFlow {
   label: string
@@ -35,19 +38,41 @@ export interface SyncMetadataFlow {
   steps: AuthoredSyncFlowStep[]
 }
 
-export interface SyncMetadataCustomValueSource {
+export interface SyncMetadataValueSource {
   id: string
   label: string
   definition: CustomValueSourceDefinition
 }
 
+/** @deprecated Use SyncMetadataValueSource */
+export type SyncMetadataCustomValueSource = SyncMetadataValueSource
+
 export interface SyncMetadataArtifact {
   version: 1
   _comment?: string
   phases: SyncMetadataPhase[]
-  stepTypes: SyncMetadataStepType[]
-  customValueSources?: SyncMetadataCustomValueSource[]
+  actions: SyncMetadataAction[]
+  valueSources?: SyncMetadataValueSource[]
   flows: Record<string, SyncMetadataFlow>
+}
+
+type RawSyncMetadataArtifact = Partial<SyncMetadataArtifact> & {
+  /** @deprecated Prefer `actions` */
+  stepTypes?: SyncMetadataAction[]
+  /** @deprecated Prefer `valueSources` */
+  customValueSources?: SyncMetadataValueSource[]
+}
+
+function readActions(parsed: RawSyncMetadataArtifact): SyncMetadataAction[] | undefined {
+  if (Array.isArray(parsed.actions)) return parsed.actions
+  if (Array.isArray(parsed.stepTypes)) return parsed.stepTypes
+  return undefined
+}
+
+function readValueSources(parsed: RawSyncMetadataArtifact): SyncMetadataValueSource[] {
+  if (Array.isArray(parsed.valueSources)) return parsed.valueSources
+  if (Array.isArray(parsed.customValueSources)) return parsed.customValueSources
+  return []
 }
 
 export function loadSyncMetadataArtifact(
@@ -58,15 +83,16 @@ export function loadSyncMetadataArtifact(
   if (!existsSync(path)) {
     throw new Error(`Sync metadata artifact not found at ${relPath}.`)
   }
-  const parsed = JSON.parse(readFileSync(path, "utf-8")) as Partial<SyncMetadataArtifact>
+  const parsed = JSON.parse(readFileSync(path, "utf-8")) as RawSyncMetadataArtifact
   if (parsed.version !== 1) {
     throw new Error(`Unsupported sync metadata artifact version: ${String(parsed.version)}`)
   }
   if (!Array.isArray(parsed.phases) || parsed.phases.length === 0) {
     throw new Error(`Sync metadata artifact at ${relPath} is missing phases.`)
   }
-  if (!Array.isArray(parsed.stepTypes) || parsed.stepTypes.length === 0) {
-    throw new Error(`Sync metadata artifact at ${relPath} is missing stepTypes.`)
+  const actions = readActions(parsed)
+  if (!actions || actions.length === 0) {
+    throw new Error(`Sync metadata artifact at ${relPath} is missing actions.`)
   }
   if (!parsed.flows || typeof parsed.flows !== "object") {
     throw new Error(`Sync metadata artifact at ${relPath} is missing flows.`)
@@ -77,13 +103,14 @@ export function loadSyncMetadataArtifact(
       throw new Error(`Invalid phase entry in sync metadata artifact at ${relPath}.`)
     }
   }
-  for (const stepType of parsed.stepTypes) {
-    if (!stepType?.id || !stepType.label || !stepType.definition?.handler) {
-      throw new Error(`Invalid step type "${stepType?.id ?? "?"}" in sync metadata artifact at ${relPath}.`)
+  for (const action of actions) {
+    if (!action?.id || !action.label || !action.definition?.handler) {
+      throw new Error(`Invalid action "${action?.id ?? "?"}" in sync metadata artifact at ${relPath}.`)
     }
   }
 
-  for (const source of parsed.customValueSources ?? []) {
+  const valueSources = readValueSources(parsed)
+  for (const source of valueSources) {
     if (!source?.id || !source.label || !source.definition) {
       throw new Error(
         `Invalid value source "${source?.id ?? "?"}" in sync metadata artifact at ${relPath}.`,
@@ -98,8 +125,12 @@ export function loadSyncMetadataArtifact(
   }
 
   return {
-    ...(parsed as SyncMetadataArtifact),
-    customValueSources: parsed.customValueSources ?? [],
+    version: 1,
+    _comment: parsed._comment,
+    phases: parsed.phases,
+    actions,
+    valueSources,
+    flows: parsed.flows,
   }
 }
 

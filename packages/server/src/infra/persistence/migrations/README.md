@@ -4,24 +4,24 @@ Single squashed baseline — terminal SQLite schema for the whole application.
 
 ```
 migrations/
-  0001_baseline.ts   ← full schema (squashed terminal state)
-  archive/           ← historical migrations (audit only, not executed)
+  0001_baseline.ts   ← full schema (only migration the runner executes)
   index.ts           ← runner
 ```
 
-## Adding a schema change
+## Fresh database
 
-1. Edit `0001_baseline.ts` for fresh installs (preferred while schema is still squashed).
-2. If you must support in-place upgrades without a DB reset, add `0002_your_change.ts` with idempotent `up(db)` and append to `MIGRATIONS`.
-3. Restart — runs once, recorded in `schema_migrations`.
+Delete `~/.mia/mia.db` (or the file under `MIA_DATA_DIR`) and restart.
+The runner applies **baseline (v1)** once. That includes:
 
-Prefer `CREATE TABLE IF NOT EXISTS` and `PRAGMA table_info` before `ALTER`.
-Data backfills belong in seeds or admin tools, not in `deploy/sync`.
+- Catalog tables: `sync_phases`, `sync_actions`, `sync_flows`, `sync_value_sources`, `sync_environments`, …
+- Live SyncDefinitions: `sync_definitions`, `sync_publish_meta`
+- Catalog tip history: `sync_catalog_versions`, `sync_catalog_active`
 
-Seeds (default agent, policies) live in `db/seeds.ts`.
+Seeds (default agent, sync metadata from deploy artifacts, etc.) run after migrations in `db/seeds.ts` / boot paths.
 
-Operator workflow regression tests: `tests/catalog-operator-workflows.test.ts`.
+## Schema changes
 
-## Fresh / broken database
+1. Edit `0001_baseline.ts`.
+2. Reset the DB (delete `mia.db`) and restart.
 
-Delete `~/.mia/mia.db` (or `MIA_DATA_DIR`) and restart.
+Do **not** add a second numbered migration unless you intentionally support in-place upgrades again. If you do, append a new file with an unused version and keep `up()` idempotent.

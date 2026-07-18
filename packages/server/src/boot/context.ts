@@ -10,6 +10,9 @@ import {
   type ServerWorkspaceRef
 } from "./server-workspace.js"
 import { resolveSyncPlansDir } from "../infra/persistence/server-data-dir.js"
+import { createDbPublishedSyncDefinitionRegistry } from "@mia/sync"
+
+import { loadPublishedBundleFromSqlite } from "./published-sync-bundle.js"
 import { projectRoot } from "./paths.js"
 import { configureSandbox, type SandboxRuntime } from "../adapters/agent/shell.js"
 import {
@@ -77,7 +80,10 @@ export async function createServerContext(): Promise<ServerContext> {
       events: { sink: syncEventSink },
       runs: { sink: syncRunSink, actorUpn: null },
       environments: { items: syncEnvironments.environments },
-      project: { dbProjectRoot: projectRoot },
+      project: {
+        dbProjectRoot: projectRoot,
+        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite),
+      },
       governance: { freezeWindowsReader: () => listFreezeWindowDefinitionsForTenant() }
     }
   })

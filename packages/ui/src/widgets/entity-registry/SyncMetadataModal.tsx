@@ -26,13 +26,13 @@ import {
   DEFAULT_STEP_TYPE_DEFINITION,
   StepTypeDefinitionEditor,
 } from "./CatalogDefinitionEditor"
-import { FORM_HEADING, HELP_TEXT, ICON_BTN, ICON_BTN_PRIMARY, META_TEXT, PANEL, TAB_PILL, TEXT_BTN, TEXT_BTN_PRIMARY } from "./chrome"
+import { FORM_HEADING, HELP_TEXT, ICON_BTN, ICON_BTN_PRIMARY, META_TEXT, PANEL, TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, TEXT_BTN, TEXT_BTN_PRIMARY } from "./chrome"
 import { FormSurfaceExecutionSteps } from "./EntityEditSurfaces"
 import { buildStepTypeCatalogLookup } from "./execution-step-shared"
 import { FormFieldGroup, FormSectionCard } from "./form-section"
 import {
   customValueSourceCatalogFromMetadata,
-  wiringCatalogListItems,
+  sourcesCatalogListItems,
 } from "./handler-editor"
 import { ModalShell } from "./ModalShell"
 import { ModalToastStack, useModalToasts } from "./ModalToastStack"
@@ -48,8 +48,8 @@ import {
 } from "./sync-environments/environment-form-model"
 import { useSyncEnvironments } from "./sync-environments/useSyncEnvironments"
 
-type CatalogTab = "flows" | "stepTypes" | "customValueSources"
-type CatalogView = "flows" | "actions" | "wiring" | "environments"
+type CatalogTab = "flows" | "actions" | "valueSources"
+type CatalogView = "flows" | "actions" | "valueSources" | "environments"
 type FormMode = "create" | "edit"
 
 type FormSnapshot = {
@@ -85,13 +85,13 @@ function activeFormSlice(snapshot: FormSnapshot, tab: CatalogTab): unknown {
         formDescription: snapshot.formDescription,
         formSteps: snapshot.formSteps,
       }
-    case "stepTypes":
+    case "actions":
       return {
         formId: snapshot.formId,
         formLabel: snapshot.formLabel,
         formStepTypeDefinition: snapshot.formStepTypeDefinition,
       }
-    case "customValueSources":
+    case "valueSources":
       return {
         formId: snapshot.formId,
         formLabel: snapshot.formLabel,
@@ -102,21 +102,21 @@ function activeFormSlice(snapshot: FormSnapshot, tab: CatalogTab): unknown {
 
 const TAB_SINGULAR: Record<CatalogTab, string> = {
   flows: "flow",
-  stepTypes: "action",
-  customValueSources: "custom value source",
+  actions: "action",
+  valueSources: "value source",
 }
 
 const VIEW_DESCRIPTIONS: Record<CatalogView, string> = {
   flows: "Ordered steps each entity runs. Expand a step for Text: values or per-flow resolver overrides.",
   actions: "Wire each parameter to Auto:, Query:, Text:, a literal, earlier-step output, or leave blank for per-flow choice.",
-  wiring: "Value source catalog — plan context, target SQL, and step text fields. Seeded from deploy ground truth.",
+  valueSources: "Value source catalog — plan context, target SQL, and step text fields. Seeded from deploy ground truth.",
   environments: "MSSQL sync environments (dev / uat / prod) for preview and execute. Stored in SQLite; .env environment names are not modified.",
 }
 
 const NAV_VIEWS: Array<{ view: CatalogView; label: string }> = [
   { view: "flows", label: "Flows" },
   { view: "actions", label: "Actions" },
-  { view: "wiring", label: "Wiring" },
+  { view: "valueSources", label: "Sources" },
   { view: "environments", label: "Environments" },
 ]
 
@@ -250,29 +250,29 @@ export function SyncMetadataModal({
       if (flow) startEdit(flow, { description: flow.description, steps: flow.steps })
       return
     }
-    if (tab === "stepTypes") {
-      const kind = nextCatalog.stepTypes.find((entry) => entry.id === savedId)
+    if (tab === "actions") {
+      const kind = nextCatalog.actions.find((entry) => entry.id === savedId)
       if (kind) startEdit(kind, { stepTypeDefinition: kind.definition })
       return
     }
-    if (tab === "customValueSources") {
-      const source = nextCatalog.customValueSources.find((entry) => entry.id === savedId)
+    if (tab === "valueSources") {
+      const source = nextCatalog.valueSources.find((entry) => entry.id === savedId)
       if (source) startEdit(source, { customValueSourceDefinition: source.definition })
     }
   }
 
   const stepTypeOptions = useMemo(
-    () => (catalog?.stepTypes ?? []).map((k) => ({ value: k.id as AuthoredSyncFlowStep["kind"], label: k.label })),
+    () => (catalog?.actions ?? []).map((k) => ({ value: k.id as AuthoredSyncFlowStep["kind"], label: k.label })),
     [catalog],
   )
 
   const customValueSourceCatalog = useMemo(
-    () => customValueSourceCatalogFromMetadata(catalog?.customValueSources ?? []),
+    () => customValueSourceCatalogFromMetadata(catalog?.valueSources ?? []),
     [catalog],
   )
 
   const stepTypeCatalogLookup = useMemo(
-    () => buildStepTypeCatalogLookup(catalog?.stepTypes ?? null),
+    () => buildStepTypeCatalogLookup(catalog?.actions ?? null),
     [catalog],
   )
 
@@ -454,8 +454,8 @@ export function SyncMetadataModal({
     // eslint-disable-next-line react-hooks/exhaustive-deps -- open once when catalog loads
   }, [catalog])
 
-  const wiringListItems = useMemo(
-    () => wiringCatalogListItems(catalog?.customValueSources ?? []),
+  const sourcesListItems = useMemo(
+    () => sourcesCatalogListItems(catalog?.valueSources ?? []),
     [catalog],
   )
 
@@ -470,17 +470,17 @@ export function SyncMetadataModal({
     if (next === "flows") {
       setTab("flows")
     } else if (next === "actions") {
-      setTab("stepTypes")
+      setTab("actions")
     } else {
-      setTab("customValueSources")
+      setTab("valueSources")
     }
     closeForm()
   }
 
-  function selectWiringItem(id: string): void {
-    setCatalogView("wiring")
-    setTab("customValueSources")
-    const entry = catalog?.customValueSources?.find((row) => row.id === id)
+  function selectSourcesItem(id: string): void {
+    setCatalogView("valueSources")
+    setTab("valueSources")
+    const entry = catalog?.valueSources?.find((row) => row.id === id)
     if (entry) startEdit(entry, { customValueSourceDefinition: entry.definition })
   }
 
@@ -490,7 +490,7 @@ export function SyncMetadataModal({
     const label = idToCatalogLabel(id)
     if (!labelTouched) {
       setFormLabel(label)
-      if (tab === "stepTypes") {
+      if (tab === "actions") {
         setFormStepTypeDefinition((current) => ({ ...current, summary: label }))
       }
     }
@@ -498,12 +498,12 @@ export function SyncMetadataModal({
       const kind =
         tab === "flows"
           ? "flow"
-          : tab === "customValueSources"
+          : tab === "valueSources"
             ? "customValueSource"
             : "stepType"
       const description = idToCatalogDescription(id, kind)
       if (tab === "flows") setFormDescription(description)
-      else if (tab === "customValueSources") {
+      else if (tab === "valueSources") {
         setFormCustomValueSourceDefinition((current) => ({ ...current, description }))
       } else {
         setFormStepTypeDefinition((current) => ({ ...current, description }))
@@ -513,16 +513,16 @@ export function SyncMetadataModal({
 
   function validateForm(): string | null {
     const entryLabel =
-      tab === "stepTypes"
+      tab === "actions"
         ? "Action id"
-        : tab === "customValueSources"
+        : tab === "valueSources"
           ? "Custom value source id"
           : "Flow id"
     const idError = validateCatalogId(formId, entryLabel)
     if (idError) return idError
 
     if (tab === "flows") {
-      const kindIds = new Set((catalog?.stepTypes ?? []).map((k) => k.id))
+      const kindIds = new Set((catalog?.actions ?? []).map((k) => k.id))
       for (const step of formSteps) {
         const stepIdError = validateCatalogId(step.id, "Step id")
         if (stepIdError) return `Step id "${step.id || "?"}": ${stepIdError}`
@@ -540,8 +540,8 @@ export function SyncMetadataModal({
       }
     }
 
-    if (tab === "stepTypes") {
-      const catalogIds = new Set((catalog?.customValueSources ?? []).map((entry) => entry.id))
+    if (tab === "actions") {
+      const catalogIds = new Set((catalog?.valueSources ?? []).map((entry) => entry.id))
       for (const slot of handlerInputSlots(formStepTypeDefinition.handler)) {
         if (isStepBoundHandlerSlot(slot)) continue
         if (!slot.source) continue
@@ -554,7 +554,7 @@ export function SyncMetadataModal({
       }
     }
 
-    if (tab === "customValueSources") {
+    if (tab === "valueSources") {
       const resolver = formCustomValueSourceDefinition.resolver
       if (resolver.kind === "targetSql") {
         const queryError = validateTargetSqlQuery(resolver.query)
@@ -574,13 +574,13 @@ export function SyncMetadataModal({
     clearToasts()
     setConfirmSaveOpen(false)
     try {
-      if (tab === "stepTypes") {
+      if (tab === "actions") {
         await api.saveSyncMetadataStepType({
           id,
           label,
           definition: { ...formStepTypeDefinition, summary: formStepTypeDefinition.summary || label },
         })
-      } else if (tab === "customValueSources") {
+      } else if (tab === "valueSources") {
         await api.saveSyncMetadataCustomValueSource({
           id,
           label,
@@ -627,8 +627,8 @@ export function SyncMetadataModal({
     setBusy(true)
     clearToasts()
     try {
-      if (tab === "stepTypes") await api.deleteSyncMetadataStepType(id)
-      else if (tab === "customValueSources") await api.deleteSyncMetadataCustomValueSource(id)
+      if (tab === "actions") await api.deleteSyncMetadataStepType(id)
+      else if (tab === "valueSources") await api.deleteSyncMetadataCustomValueSource(id)
       else await api.deleteSyncMetadataFlow(id)
       if (editingId === id) closeForm()
       await load()
@@ -710,12 +710,7 @@ export function SyncMetadataModal({
                     role="tab"
                     aria-selected={active}
                     onClick={() => switchView(entry.view)}
-                    className={[
-                      TAB_PILL,
-                      active
-                        ? "bg-accent/15 text-accent"
-                        : "text-text-muted hover:bg-elevated hover:text-text",
-                    ].join(" ")}
+                    className={[TAB_PILL, active ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
                   >
                     {entry.label}
                   </button>
@@ -771,11 +766,11 @@ export function SyncMetadataModal({
               )}
               {catalogView !== "environments" && (
                 <>
-              {catalogView === "wiring" ? (
+              {catalogView === "valueSources" ? (
                 <button
                   type="button"
                   onClick={() => {
-                    setTab("customValueSources")
+                    setTab("valueSources")
                     startCreate()
                   }}
                   className={ICON_BTN}
@@ -849,14 +844,14 @@ export function SyncMetadataModal({
                 onDelete={(id) => void removeEntry(id)}
               />
             )}
-            {catalog && catalogView === "wiring" && (
+            {catalog && catalogView === "valueSources" && (
               <CatalogList
                 query={listQuery}
                 onQueryChange={setListQuery}
-                searchPlaceholder="Search wiring…"
-                items={wiringListItems}
+                searchPlaceholder="Search sources…"
+                items={sourcesListItems}
                 selectedId={formOpen && formMode === "edit" ? editingId : null}
-                onSelect={(id) => selectWiringItem(id)}
+                onSelect={(id) => selectSourcesItem(id)}
                 onDelete={(id) => void removeEntry(id)}
               />
             )}
@@ -865,7 +860,7 @@ export function SyncMetadataModal({
                 query={listQuery}
                 onQueryChange={setListQuery}
                 searchPlaceholder="Search actions…"
-                items={catalog.stepTypes.map((k) => ({
+                items={catalog.actions.map((k) => ({
                   id: k.id,
                   label: k.label,
                   tag: HANDLER_TYPE_TAG[k.definition.handler.type] ?? k.definition.handler.type,
@@ -874,7 +869,7 @@ export function SyncMetadataModal({
                 }))}
                 selectedId={formOpen && formMode === "edit" ? editingId : null}
                 onSelect={(id) => {
-                  const k = catalog.stepTypes.find((x) => x.id === id)
+                  const k = catalog.actions.find((x) => x.id === id)
                   if (k) startEdit(k, { stepTypeDefinition: k.definition })
                 }}
                 onDelete={(id) => void removeEntry(id)}
@@ -942,7 +937,7 @@ export function SyncMetadataModal({
               <>
             <div className="shrink-0 border-b border-border-subtle bg-elevated/40 px-5 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-text-faint">
-                {catalogView === "flows" ? "Flows" : catalogView === "actions" ? "Actions" : "Wiring"}
+                {catalogView === "flows" ? "Flows" : catalogView === "actions" ? "Actions" : "Sources"}
                 {" · "}
                 {formMode === "create" ? "New" : "Edit"}
               </p>
@@ -965,12 +960,12 @@ export function SyncMetadataModal({
             </div>
 
             <div className="min-h-0 flex-1 overflow-auto bg-base/20 p-5">
-            {formMode === "edit" && editingBuiltIn && tab === "customValueSources" && (
+            {formMode === "edit" && editingBuiltIn && tab === "valueSources" && (
               <p className={`mb-4 ${HELP_TEXT}`}>
                 Built-in value source — resolution kind and SQL are locked. You can still update the name and description.
               </p>
             )}
-            {formMode === "edit" && editingBuiltIn && tab === "stepTypes" && (
+            {formMode === "edit" && editingBuiltIn && tab === "actions" && (
               <p className={`mb-4 ${HELP_TEXT}`}>Built-in action — handler wiring is locked; names and descriptions can be updated.</p>
             )}
 
@@ -1035,7 +1030,7 @@ export function SyncMetadataModal({
                       rootTable="schema.Entity"
                       entityId={formId}
                       stepTypeOptions={stepTypeOptions}
-                      stepTypes={catalog?.stepTypes}
+                      actions={catalog?.actions}
                       customValueSourceCatalog={customValueSourceCatalog}
                       showAddButton
                     />
@@ -1046,9 +1041,9 @@ export function SyncMetadataModal({
               <FormSectionCard
                 title="Identity"
                 description={
-                  tab === "stepTypes"
+                  tab === "actions"
                     ? "Catalog id and display name for this action."
-                    : tab === "customValueSources"
+                    : tab === "valueSources"
                       ? "Catalog id and label for this value source."
                       : "Catalog id and display name for this action."
                 }
@@ -1061,7 +1056,7 @@ export function SyncMetadataModal({
                     onChange={(e) => onFormIdChange(e.target.value)}
                     disabled={formMode === "edit"}
                     placeholder={
-                      tab === "customValueSources"
+                      tab === "valueSources"
                         ? "ruleInputDatasetId"
                         : "auditCheck"
                     }
@@ -1075,14 +1070,14 @@ export function SyncMetadataModal({
                       setLabelTouched(true)
                       const label = e.target.value
                       setFormLabel(label)
-                      if (tab === "stepTypes") setFormStepTypeDefinition((c) => ({ ...c, summary: label }))
+                      if (tab === "actions") setFormStepTypeDefinition((c) => ({ ...c, summary: label }))
                     }}
                     className="input text-sm"
                   />
                 </FormFieldGroup>
               </div>
               </FormSectionCard>
-              {tab === "stepTypes" && (
+              {tab === "actions" && (
                 <FormSectionCard
                   title="Handler wiring"
                   description="How each parameter is supplied: fixed resolver, Text: field, literal, earlier step output, or chosen on each flow step."
@@ -1103,7 +1098,7 @@ export function SyncMetadataModal({
                   />
                 </FormSectionCard>
               )}
-              {tab === "customValueSources" && (
+              {tab === "valueSources" && (
                 <FormSectionCard
                   title="Resolver definition"
                   description={
@@ -1137,7 +1132,7 @@ export function SyncMetadataModal({
                   <>
                     Choose an item from the list to edit it, or click{" "}
                     <Plus className="mx-0.5 inline h-3.5 w-3.5 align-text-bottom" aria-hidden />
-                    {catalogView === "wiring"
+                    {catalogView === "valueSources"
                       ? " to create a custom value source."
                       : ` to create a new ${TAB_SINGULAR[tab]}.`}
                   </>

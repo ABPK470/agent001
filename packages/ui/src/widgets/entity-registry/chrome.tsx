@@ -21,6 +21,10 @@ export const TOOLBAR_DIVIDER = "h-4 w-px shrink-0 bg-overlay-3"
 export const TAB_PILL =
   "rounded-md px-2.5 py-1.5 text-sm font-medium transition-colors"
 
+/** Selected / idle fills for `TAB_PILL` (section tabs + multi-select filter tabs). */
+export const TAB_PILL_ACTIVE = "bg-accent/15 text-accent"
+export const TAB_PILL_IDLE = "text-text-muted hover:bg-elevated hover:text-text"
+
 /** Sticky subheader inside a scrolling panel — export + view toggle. */
 export const TAB_PANEL_HEADER =
   "sticky top-0 z-10 flex shrink-0 items-center justify-end gap-2 overflow-x-auto border-b border-border-subtle bg-canvas px-3 py-2"

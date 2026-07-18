@@ -36,10 +36,10 @@ export function CatalogJsonDiff({
 function DiffLine({ row }: { row: LineDiffRow }): JSX.Element {
   const tone =
     row.kind === "added"
-      ? "bg-emerald-500/10 text-emerald-200"
+      ? "bg-success-soft text-success"
       : row.kind === "removed"
-        ? "bg-rose-500/10 text-rose-200"
-        : "text-text-muted"
+        ? "bg-error-soft text-error"
+        : "text-text"
   const marker = row.kind === "added" ? "+" : row.kind === "removed" ? "-" : " "
   return (
     <div className={`grid grid-cols-[2.5rem_2.5rem_1.25rem_minmax(0,1fr)] gap-1 px-2 py-0.5 ${tone}`}>

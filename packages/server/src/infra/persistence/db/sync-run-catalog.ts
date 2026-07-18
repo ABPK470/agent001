@@ -11,7 +11,7 @@ import { getDb } from "../connection.js"
 
 const DEFAULT_TENANT = "_default"
 
-export interface DbSyncRunPhase {
+export interface DbSyncPhase {
   tenant_id: string
   id: string
   label: string
@@ -20,7 +20,7 @@ export interface DbSyncRunPhase {
   definition_json: string
 }
 
-export interface DbSyncRunKind {
+export interface DbSyncAction {
   tenant_id: string
   id: string
   label: string
@@ -28,7 +28,7 @@ export interface DbSyncRunKind {
   definition_json: string
 }
 
-export interface DbSyncRunPreset {
+export interface DbSyncFlow {
   tenant_id: string
   id: string
   label: string
@@ -39,42 +39,42 @@ export interface DbSyncRunPreset {
   updated_by: string | null
 }
 
-export function listSyncRunPhases(tenantId = DEFAULT_TENANT): DbSyncRunPhase[] {
+export function listSyncPhases(tenantId = DEFAULT_TENANT): DbSyncPhase[] {
   return getDb()
     .prepare(
-      "SELECT tenant_id, id, label, sort_order, built_in, definition_json FROM sync_run_phases WHERE tenant_id = ? ORDER BY sort_order, id"
+      "SELECT tenant_id, id, label, sort_order, built_in, definition_json FROM sync_phases WHERE tenant_id = ? ORDER BY sort_order, id"
     )
-    .all(tenantId) as DbSyncRunPhase[]
+    .all(tenantId) as DbSyncPhase[]
 }
 
-export function listSyncRunKinds(tenantId = DEFAULT_TENANT): DbSyncRunKind[] {
+export function listSyncActions(tenantId = DEFAULT_TENANT): DbSyncAction[] {
   return getDb()
     .prepare(
-      "SELECT tenant_id, id, label, built_in, definition_json FROM sync_run_kinds WHERE tenant_id = ? ORDER BY id"
+      "SELECT tenant_id, id, label, built_in, definition_json FROM sync_actions WHERE tenant_id = ? ORDER BY id"
     )
-    .all(tenantId) as DbSyncRunKind[]
+    .all(tenantId) as DbSyncAction[]
 }
 
-export function listSyncRunPresets(tenantId = DEFAULT_TENANT): DbSyncRunPreset[] {
+export function listSyncFlows(tenantId = DEFAULT_TENANT): DbSyncFlow[] {
   return getDb()
     .prepare(
-      "SELECT tenant_id, id, label, description, steps_json, built_in, updated_at, updated_by FROM sync_run_presets WHERE tenant_id = ? ORDER BY built_in DESC, id"
+      "SELECT tenant_id, id, label, description, steps_json, built_in, updated_at, updated_by FROM sync_flows WHERE tenant_id = ? ORDER BY built_in DESC, id"
     )
-    .all(tenantId) as DbSyncRunPreset[]
+    .all(tenantId) as DbSyncFlow[]
 }
 
-export function getSyncRunPreset(tenantId: string, id: string): DbSyncRunPreset | null {
+export function getSyncFlow(tenantId: string, id: string): DbSyncFlow | null {
   return (
     (getDb()
       .prepare(
-        "SELECT tenant_id, id, label, description, steps_json, built_in, updated_at, updated_by FROM sync_run_presets WHERE tenant_id = ? AND id = ?"
+        "SELECT tenant_id, id, label, description, steps_json, built_in, updated_at, updated_by FROM sync_flows WHERE tenant_id = ? AND id = ?"
       )
-      .get(tenantId, id) as DbSyncRunPreset | undefined) ?? null
+      .get(tenantId, id) as DbSyncFlow | undefined) ?? null
   )
 }
 
-export function saveSyncRunPhase(
-  row: Omit<DbSyncRunPhase, "built_in" | "definition_json"> & {
+export function saveSyncPhase(
+  row: Omit<DbSyncPhase, "built_in" | "definition_json"> & {
     built_in?: number
     definition_json?: string
   },
@@ -83,7 +83,7 @@ export function saveSyncRunPhase(
     row.definition_json ?? JSON.stringify(parsePhaseDefinition("{}", row.id, row.label))
   getDb()
     .prepare(
-      `INSERT INTO sync_run_phases (tenant_id, id, label, sort_order, built_in, definition_json)
+      `INSERT INTO sync_phases (tenant_id, id, label, sort_order, built_in, definition_json)
        VALUES (@tenant_id, @id, @label, @sort_order, @built_in, @definition_json)
        ON CONFLICT(tenant_id, id) DO UPDATE SET
          label = excluded.label,
@@ -93,8 +93,8 @@ export function saveSyncRunPhase(
     .run({ ...row, built_in: row.built_in ?? 0, definition_json: definition })
 }
 
-export function saveSyncRunKind(
-  row: Omit<DbSyncRunKind, "built_in" | "definition_json"> & {
+export function saveSyncAction(
+  row: Omit<DbSyncAction, "built_in" | "definition_json"> & {
     built_in?: number
     definition_json?: string
   },
@@ -103,7 +103,7 @@ export function saveSyncRunKind(
     row.definition_json ?? JSON.stringify(parseKindDefinition("{}", row.id, row.label))
   getDb()
     .prepare(
-      `INSERT INTO sync_run_kinds (tenant_id, id, label, built_in, definition_json)
+      `INSERT INTO sync_actions (tenant_id, id, label, built_in, definition_json)
        VALUES (@tenant_id, @id, @label, @built_in, @definition_json)
        ON CONFLICT(tenant_id, id) DO UPDATE SET
          label = excluded.label,
@@ -112,10 +112,10 @@ export function saveSyncRunKind(
     .run({ ...row, built_in: row.built_in ?? 0, definition_json: definition })
 }
 
-export function saveSyncRunPreset(row: DbSyncRunPreset): void {
+export function saveSyncFlow(row: DbSyncFlow): void {
   getDb()
     .prepare(
-      `INSERT INTO sync_run_presets (tenant_id, id, label, description, steps_json, built_in, updated_at, updated_by)
+      `INSERT INTO sync_flows (tenant_id, id, label, description, steps_json, built_in, updated_at, updated_by)
        VALUES (@tenant_id, @id, @label, @description, @steps_json, @built_in, @updated_at, @updated_by)
        ON CONFLICT(tenant_id, id) DO UPDATE SET
          label = excluded.label,
@@ -127,41 +127,41 @@ export function saveSyncRunPreset(row: DbSyncRunPreset): void {
     .run(row)
 }
 
-export function deleteSyncRunPhase(tenantId: string, id: string): boolean {
+export function deleteSyncPhase(tenantId: string, id: string): boolean {
   const result = getDb()
-    .prepare("DELETE FROM sync_run_phases WHERE tenant_id = ? AND id = ? AND built_in = 0")
+    .prepare("DELETE FROM sync_phases WHERE tenant_id = ? AND id = ? AND built_in = 0")
     .run(tenantId, id)
   return result.changes > 0
 }
 
-export function deleteSyncRunKind(tenantId: string, id: string): boolean {
+export function deleteSyncAction(tenantId: string, id: string): boolean {
   const result = getDb()
-    .prepare("DELETE FROM sync_run_kinds WHERE tenant_id = ? AND id = ? AND built_in = 0")
+    .prepare("DELETE FROM sync_actions WHERE tenant_id = ? AND id = ? AND built_in = 0")
     .run(tenantId, id)
   return result.changes > 0
 }
 
-export function deleteSyncRunPreset(tenantId: string, id: string): boolean {
+export function deleteSyncFlow(tenantId: string, id: string): boolean {
   const result = getDb()
-    .prepare("DELETE FROM sync_run_presets WHERE tenant_id = ? AND id = ? AND built_in = 0")
+    .prepare("DELETE FROM sync_flows WHERE tenant_id = ? AND id = ? AND built_in = 0")
     .run(tenantId, id)
   return result.changes > 0
 }
 
-export function syncRunCatalogEmpty(tenantId = DEFAULT_TENANT): boolean {
+export function syncCatalogEmpty(tenantId = DEFAULT_TENANT): boolean {
   const row = getDb()
     .prepare(
       `SELECT
-        (SELECT COUNT(*) FROM sync_run_phases WHERE tenant_id = ?) +
-        (SELECT COUNT(*) FROM sync_run_kinds WHERE tenant_id = ?) +
-        (SELECT COUNT(*) FROM sync_run_binding_sources WHERE tenant_id = ?) +
-        (SELECT COUNT(*) FROM sync_run_presets WHERE tenant_id = ?) AS n`
+        (SELECT COUNT(*) FROM sync_phases WHERE tenant_id = ?) +
+        (SELECT COUNT(*) FROM sync_actions WHERE tenant_id = ?) +
+        (SELECT COUNT(*) FROM sync_value_sources WHERE tenant_id = ?) +
+        (SELECT COUNT(*) FROM sync_flows WHERE tenant_id = ?) AS n`
     )
     .get(tenantId, tenantId, tenantId, tenantId) as { n: number }
   return row.n === 0
 }
 
-export function parsePresetSteps(json: string): AuthoredSyncFlowStep[] {
+export function parseFlowSteps(json: string): AuthoredSyncFlowStep[] {
   return parseStoredFlowStepsJson(json)
 }
 
@@ -170,8 +170,8 @@ function flowCatalogFromSyncMetadataArtifact(
 ) {
   return buildFlowCatalogFromSyncMetadataDoc({
     phases: metadata.phases,
-    stepTypes: metadata.stepTypes,
-    customValueSources: metadata.customValueSources,
+    actions: metadata.actions,
+    valueSources: metadata.valueSources,
   })
 }
 
@@ -182,7 +182,7 @@ function serializeFlowStepsFromArtifact(
   return JSON.stringify(prepareFlowStepsForStorage(steps, flowCatalogFromSyncMetadataArtifact(metadata)))
 }
 
-/** @internal Used when seeding built-in presets from an already-loaded artifact document. */
+/** @internal Used when seeding built-in flows from an already-loaded artifact document. */
 export function serializeBuiltInFlowStepsFromArtifact(
   metadata: ReturnType<typeof loadSyncMetadataArtifact>,
   steps: AuthoredSyncFlowStep[],
@@ -190,20 +190,20 @@ export function serializeBuiltInFlowStepsFromArtifact(
   return serializeFlowStepsFromArtifact(metadata, steps)
 }
 
-/** Upsert built-in flow presets from deploy/sync/artifacts/sync-metadata.json (canonical camelCase). */
-export function syncBuiltInFlowPresetsFromArtifact(
+/** Upsert built-in flows from deploy/sync/artifacts/sync-metadata.json (canonical camelCase). */
+export function syncBuiltInFlowsFromArtifact(
   projectRoot: string,
   tenantId = DEFAULT_TENANT,
 ): void {
   const metadata = loadSyncMetadataArtifact(resolve(projectRoot))
   const now = new Date().toISOString()
   const stmt = getDb().prepare(
-    `INSERT INTO sync_run_presets (tenant_id, id, label, description, steps_json, built_in, updated_at, updated_by)
+    `INSERT INTO sync_flows (tenant_id, id, label, description, steps_json, built_in, updated_at, updated_by)
      VALUES (?, ?, ?, ?, ?, 1, ?, NULL)
      ON CONFLICT(tenant_id, id) DO UPDATE SET
        label = excluded.label,
        description = excluded.description,
-       steps_json = CASE WHEN sync_run_presets.built_in = 1 THEN excluded.steps_json ELSE sync_run_presets.steps_json END,
+       steps_json = CASE WHEN sync_flows.built_in = 1 THEN excluded.steps_json ELSE sync_flows.steps_json END,
        updated_at = excluded.updated_at,
        updated_by = NULL`,
   )
@@ -220,11 +220,11 @@ export function syncBuiltInFlowPresetsFromArtifact(
   }
 }
 
-export function mapPhaseDefinition(row: Pick<DbSyncRunPhase, "id" | "label" | "definition_json">) {
+export function mapPhaseDefinition(row: Pick<DbSyncPhase, "id" | "label" | "definition_json">) {
   return parsePhaseDefinition(row.definition_json, row.id, row.label)
 }
 
-export function mapKindDefinition(row: Pick<DbSyncRunKind, "id" | "label" | "definition_json">) {
+export function mapKindDefinition(row: Pick<DbSyncAction, "id" | "label" | "definition_json">) {
   return parseKindDefinition(row.definition_json, row.id, row.label)
 }
 
@@ -235,48 +235,48 @@ export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId
   for (const phase of metadata.phases) {
     getDb()
       .prepare(
-        `INSERT INTO sync_run_phases (tenant_id, id, label, sort_order, built_in, definition_json)
+        `INSERT INTO sync_phases (tenant_id, id, label, sort_order, built_in, definition_json)
          VALUES (?, ?, ?, ?, 1, ?)
          ON CONFLICT(tenant_id, id) DO UPDATE SET
            label = excluded.label,
            sort_order = excluded.sort_order,
-           definition_json = CASE WHEN sync_run_phases.built_in = 1 THEN excluded.definition_json ELSE sync_run_phases.definition_json END`
+           definition_json = CASE WHEN sync_phases.built_in = 1 THEN excluded.definition_json ELSE sync_phases.definition_json END`
       )
       .run(tenantId, phase.id, phase.label, phase.sortOrder, JSON.stringify(phase.definition))
   }
 
-  for (const stepType of metadata.stepTypes) {
+  for (const action of metadata.actions) {
     getDb()
       .prepare(
-        `INSERT INTO sync_run_kinds (tenant_id, id, label, built_in, definition_json)
+        `INSERT INTO sync_actions (tenant_id, id, label, built_in, definition_json)
          VALUES (?, ?, ?, 1, ?)
          ON CONFLICT(tenant_id, id) DO UPDATE SET
            label = excluded.label,
-           definition_json = CASE WHEN sync_run_kinds.built_in = 1 THEN excluded.definition_json ELSE sync_run_kinds.definition_json END`
+           definition_json = CASE WHEN sync_actions.built_in = 1 THEN excluded.definition_json ELSE sync_actions.definition_json END`
       )
-      .run(tenantId, stepType.id, stepType.label, JSON.stringify(stepType.definition))
+      .run(tenantId, action.id, action.label, JSON.stringify(action.definition))
   }
 
-  for (const customValueSource of metadata.customValueSources ?? []) {
+  for (const valueSource of metadata.valueSources ?? []) {
     getDb()
       .prepare(
-        `INSERT INTO sync_run_binding_sources (tenant_id, id, label, built_in, definition_json)
+        `INSERT INTO sync_value_sources (tenant_id, id, label, built_in, definition_json)
          VALUES (?, ?, ?, 1, ?)
          ON CONFLICT(tenant_id, id) DO UPDATE SET
            label = excluded.label,
-           definition_json = CASE WHEN sync_run_binding_sources.built_in = 1 THEN excluded.definition_json ELSE sync_run_binding_sources.definition_json END`
+           definition_json = CASE WHEN sync_value_sources.built_in = 1 THEN excluded.definition_json ELSE sync_value_sources.definition_json END`
       )
       .run(
         tenantId,
-        customValueSource.id,
-        customValueSource.label,
-        JSON.stringify(customValueSource.definition),
+        valueSource.id,
+        valueSource.label,
+        JSON.stringify(valueSource.definition),
       )
   }
 
-  for (const row of listSyncRunPhases(tenantId)) {
+  for (const row of listSyncPhases(tenantId)) {
     if (row.definition_json && row.definition_json !== "{}") continue
-    saveSyncRunPhase({
+    saveSyncPhase({
       tenant_id: row.tenant_id,
       id: row.id,
       label: row.label,
@@ -285,9 +285,9 @@ export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId
     })
   }
 
-  for (const row of listSyncRunKinds(tenantId)) {
+  for (const row of listSyncActions(tenantId)) {
     if (row.definition_json && row.definition_json !== "{}") continue
-    saveSyncRunKind({
+    saveSyncAction({
       tenant_id: row.tenant_id,
       id: row.id,
       label: row.label,
@@ -295,7 +295,7 @@ export function syncDeploySyncMetadataFromArtifact(projectRoot: string, tenantId
     })
   }
 
-  syncBuiltInFlowPresetsFromArtifact(projectRoot, tenantId)
+  syncBuiltInFlowsFromArtifact(projectRoot, tenantId)
 }
 
 /** @deprecated Use syncDeploySyncMetadataFromArtifact */

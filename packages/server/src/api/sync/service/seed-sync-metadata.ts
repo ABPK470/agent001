@@ -10,7 +10,7 @@ function seedFlowPresetsFromMetadata(
   now = new Date().toISOString(),
 ): void {
   for (const [id, flow] of Object.entries(metadata.flows)) {
-    db.saveSyncRunPreset({
+    db.saveSyncFlow({
       tenant_id: DEFAULT_TENANT,
       id,
       label: flow.label,
@@ -25,22 +25,22 @@ function seedFlowPresetsFromMetadata(
 
 /** Upsert built-in flow presets from deploy/sync/artifacts/sync-metadata.json. */
 export function refreshBuiltInFlowPresetsFromArtifact(projectRoot: string): void {
-  db.syncBuiltInFlowPresetsFromArtifact(projectRoot, DEFAULT_TENANT)
+  db.syncBuiltInFlowsFromArtifact(projectRoot, DEFAULT_TENANT)
 }
 
-/** Seed built-in flows when sync_run_presets is empty (migrations may populate other catalog tables first). */
+/** Seed built-in flows when sync_flows is empty (migrations may populate other catalog tables first). */
 export function ensureFlowPresetsSeeded(projectRoot: string): void {
-  if (db.listSyncRunPresets(DEFAULT_TENANT).length > 0) return
+  if (db.listSyncFlows(DEFAULT_TENANT).length > 0) return
   seedFlowPresetsFromMetadata(loadSyncMetadataArtifact(resolve(projectRoot)))
 }
 
 export function seedSyncMetadataIfEmpty(projectRoot: string): void {
-  if (db.syncRunCatalogEmpty(DEFAULT_TENANT)) {
+  if (db.syncCatalogEmpty(DEFAULT_TENANT)) {
     const metadata = loadSyncMetadataArtifact(resolve(projectRoot))
     const now = new Date().toISOString()
 
     for (const phase of metadata.phases) {
-      db.saveSyncRunPhase({
+      db.saveSyncPhase({
         tenant_id: DEFAULT_TENANT,
         id: phase.id,
         label: phase.label,
@@ -50,23 +50,23 @@ export function seedSyncMetadataIfEmpty(projectRoot: string): void {
       })
     }
 
-    for (const stepType of metadata.stepTypes) {
-      db.saveSyncRunKind({
+    for (const action of metadata.actions) {
+      db.saveSyncAction({
         tenant_id: DEFAULT_TENANT,
-        id: stepType.id,
-        label: stepType.label,
+        id: action.id,
+        label: action.label,
         built_in: 1,
-        definition_json: JSON.stringify(stepType.definition),
+        definition_json: JSON.stringify(action.definition),
       })
     }
 
-    for (const customValueSource of metadata.customValueSources ?? []) {
-      db.saveSyncRunBindingSource({
+    for (const valueSource of metadata.valueSources ?? []) {
+      db.saveSyncValueSource({
         tenant_id: DEFAULT_TENANT,
-        id: customValueSource.id,
-        label: customValueSource.label,
+        id: valueSource.id,
+        label: valueSource.label,
         built_in: 1,
-        definition_json: JSON.stringify(customValueSource.definition),
+        definition_json: JSON.stringify(valueSource.definition),
       })
     }
 
@@ -87,16 +87,16 @@ export function ensureDeploySyncMetadataSeeds(projectRoot: string): void {
 
 /** Seed custom value sources when the table is empty on a fresh database. */
 export function ensureCustomValueSourcesSeeded(projectRoot: string): void {
-  if (db.listSyncRunBindingSources(DEFAULT_TENANT).length > 0) return
+  if (db.listSyncValueSources(DEFAULT_TENANT).length > 0) return
 
   const metadata = loadSyncMetadataArtifact(resolve(projectRoot))
-  for (const customValueSource of metadata.customValueSources ?? []) {
-    db.saveSyncRunBindingSource({
+  for (const valueSource of metadata.valueSources ?? []) {
+    db.saveSyncValueSource({
       tenant_id: DEFAULT_TENANT,
-      id: customValueSource.id,
-      label: customValueSource.label,
+      id: valueSource.id,
+      label: valueSource.label,
       built_in: 1,
-      definition_json: JSON.stringify(customValueSource.definition),
+      definition_json: JSON.stringify(valueSource.definition),
     })
   }
 }

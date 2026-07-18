@@ -1,7 +1,8 @@
 /**
  * Database migrations runner
  *
- * Terminal schema lives in `0001_baseline.ts`. Append new files for forward changes only.
+ * Terminal schema lives in `0001_baseline.ts` only. Fresh installs (or after
+ * deleting mia.db) run baseline once.
  */
 
 import type Database from "better-sqlite3"

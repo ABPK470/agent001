@@ -8,7 +8,7 @@ import type { SyncPlan } from "../../types"
 import { timeAgo } from "../../lib/util"
 import { EvidencePanel } from "./EvidencePanel"
 import { useConsole } from "./console-context"
-import { TAB_PILL, PANEL } from "./design"
+import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, PANEL } from "./design"
 import { readExecutionContractSteps } from "./plan-contract"
 import { DecisionLogModal, GovernanceDetailModal, PlanDetailModal } from "./RunDetailModals"
 import {
@@ -178,10 +178,7 @@ function RunsTabsToolbar({
             key={t.value}
             type="button"
             onClick={() => onTab(t.value)}
-            className={[
-              TAB_PILL,
-              tab === t.value ? "bg-accent/15 text-accent" : "text-text-muted hover:bg-elevated hover:text-text",
-            ].join(" ")}
+            className={[TAB_PILL, tab === t.value ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
           >
             {t.label}
           </button>

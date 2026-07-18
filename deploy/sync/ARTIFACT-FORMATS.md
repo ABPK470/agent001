@@ -14,24 +14,20 @@ Code and tests use **Format A** / **Format B** consistently. UI labels use plain
 ## Authority flow
 
 ```
-deploy/sync/artifacts/entities/*.json     Format A (git seeds)
-              ↓ boot seed / import A→B
-         SQLite (EntityDefinition rows)
-              ↓ export
-    ┌─────────┴─────────┐
-    ↓                   ↓
-Format B snapshot   Format A zip
-(catalog snapshot)  (deploy artifacts)
-    ↓                   ↓
-import B→B          import A→B
-(round-trip)        (compile into SQLite)
-              ↓ publish
-sync-definitions/published/definitions.bundle.json
+deploy/sync/artifacts/*          git seeds (Format A entities + catalog JSON)
+              ↓ boot seed / import
+         SQLite catalog (editable pieces)
+              ↓ export (optional download)
+    Format B snapshot / Format A zip
+              ↓ Publish (assemble)
+         SQLite sync_definitions   ← SyncDefinition (process JSON)
               ↓
          preview / execute
 ```
 
-**Publish** always reads SQLite and writes the runtime bundle. Neither export format is read directly at execute time.
+**Catalog** = editable pieces in SQLite (entities, flows, actions, sources, environments, …).  
+**SyncDefinition** = the one process contract preview uses (stored in SQLite after Publish).  
+**Publish** never writes a file into the working tree. **Export** may download the same JSON for git/backup.
 
 ---
 
@@ -126,10 +122,10 @@ These files are the same in both bulk exports (built by `buildDeployCatalogSnaps
 
 | File | SQLite source | UI |
 |------|---------------|-----|
-| `artifacts/sync-metadata.json` | phases, step types, wiring, flows | Configuration |
+| `artifacts/sync-metadata.json` | `phases`, `actions`, `valueSources`, `flows` → `sync_phases` / `sync_actions` / `sync_value_sources` / `sync_flows` | Configuration → Flows / Actions / Sources |
 | `artifacts/strategies.json` | SCD2 strategies | Entity Registry → Strategies |
 | `artifacts/flow-templates.json` | derived view of flows | compile-time helper |
-| `sync-environments.json` | environment registry | Policies → Environments |
+| `sync-environments.json` | `sync_environments` | Configuration → Environments |
 
 ---
 

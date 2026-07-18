@@ -138,8 +138,8 @@ export async function buildSyncMetadataApp(
 
 export function listPresetStepKinds(tenantId = TENANT): string[] {
   const kinds: string[] = []
-  for (const preset of db.listSyncRunPresets(tenantId)) {
-    for (const step of db.parsePresetSteps(preset.steps_json)) {
+  for (const preset of db.listSyncFlows(tenantId)) {
+    for (const step of db.parseFlowSteps(preset.steps_json)) {
       kinds.push(step.kind)
     }
   }
@@ -147,7 +147,7 @@ export function listPresetStepKinds(tenantId = TENANT): string[] {
 }
 
 export function contentFlowStepsFromDb(tenantId = TENANT) {
-  const preset = db.getSyncRunPreset(tenantId, "content")
+  const preset = db.getSyncFlow(tenantId, "content")
   if (!preset) throw new Error("content flow preset missing from seeded catalog")
-  return db.parsePresetSteps(preset.steps_json)
+  return db.parseFlowSteps(preset.steps_json)
 }

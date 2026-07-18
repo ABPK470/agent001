@@ -1,5 +1,6 @@
 /**
- * Read-only smoke tests against the checked-in definitions.bundle.json.
+ * Read-only smoke tests against a fixture published-bundle snapshot.
+ * Production authority is SQLite — the checked-in file is a fixture only.
  * Never writes to sync-definitions/ or any repo config.
  */
 
@@ -23,12 +24,12 @@ describe("real published bundle (read-only)", () => {
     return steps.map(({ bindings: _bindings, phase: _phase, ...step }) => step)
   }
 
-  it("bundle file exists at the expected repo path", () => {
+  it("fixture bundle exists for smoke tests", () => {
     requirePublishedBundle()
     expect(PUBLISHED_BUNDLE_PATH).toContain("sync-definitions/published/definitions.bundle.json")
   })
 
-  it("loads core entity definitions from the repo bundle", () => {
+  it("loads core entity definitions from the fixture registry", () => {
     const host = createRepoBundleHost()
     const bundle = loadPublishedSyncDefinitionBundle(host, REPO_ROOT)
 

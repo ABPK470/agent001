@@ -1,8 +1,8 @@
 /**
- * Published sync entity IDs — runtime vocabulary from definitions.bundle.json.
+ * Published sync entity IDs — runtime vocabulary from live SyncDefinitions (SQLite).
  *
  * Not tenant config: entity types (pipelineActivity, contract, …) are
- * authoritative in the published bundle and loaded once at server boot.
+ * authoritative in published sync_definitions and loaded once at server boot.
  */
 
 import { existsSync, readFileSync } from "node:fs"
@@ -12,7 +12,7 @@ const vocabularyState = {
   entityIds: [] as readonly string[]
 }
 
-/** Entity type ids from the published sync bundle (e.g. pipelineActivity). */
+/** Entity type ids from published SyncDefinitions (e.g. pipelineActivity). */
 export function getPublishedSyncEntityIds(): readonly string[] {
   return vocabularyState.entityIds
 }
@@ -26,9 +26,14 @@ export function resetPublishedSyncEntityIds(): void {
   vocabularyState.entityIds = []
 }
 
+/** Load vocabulary from an ordered list of entity ids (SQLite publish path). */
+export function loadPublishedSyncEntityIdsFromList(ids: readonly string[]): readonly string[] {
+  return setPublishedSyncEntityIds([...ids].sort())
+}
+
 /**
- * Read `definitions` keys from the published bundle. Missing file → empty list.
- * Invalid JSON throws so a broken bundle fails at boot.
+ * @deprecated Prefer loadPublishedSyncEntityIdsFromList after reading SQLite.
+ * Still used by tests that fixture a legacy file bundle.
  */
 export function loadPublishedSyncEntityIdsFromBundle(
   bundlePath: string,

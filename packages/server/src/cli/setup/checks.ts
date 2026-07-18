@@ -1,7 +1,7 @@
 import { accessSync, constants, existsSync, mkdirSync } from "node:fs"
 import { resolve } from "node:path"
 
-import { isPublishedSyncBundlePresent, PUBLISHED_SYNC_BUNDLE_PATH } from "../../boot/published-sync-bundle.js"
+import { isPublishedSyncBundlePresent } from "../../boot/published-sync-bundle.js"
 import { resolveUiDist } from "../../boot/paths.js"
 import { isDatabricksConfigured } from "../../infra/llm/databricks-broker.js"
 import { resolveServerDataDir } from "../../infra/persistence/server-data-dir.js"
@@ -202,13 +202,12 @@ export function runSetupChecks(layout: SetupLayout): SetupReport {
         env.get("MSSQL_DATABASES") ? "MSSQL_DATABASES configured" : `host ${env.get("MSSQL_HOST") || env.get("MSSQL_SERVER")}`,
       ),
     )
-    const bundlePath = resolve(layout.projectRoot, PUBLISHED_SYNC_BUNDLE_PATH)
     checks.push(
       isPublishedSyncBundlePresent(layout.projectRoot)
-        ? ok("published-sync-bundle", "Published sync bundle", bundlePath)
+        ? ok("published-sync-definitions", "Published SyncDefinitions", "SQLite sync_definitions")
         : warn(
-            "published-sync-bundle",
-            "Published sync bundle",
+            "published-sync-definitions",
+            "Published SyncDefinitions",
             "Not published yet — normal before first server start",
             "After first start: Entity Registry → ⚙ → Publish (required for sync preview/execute).",
           ),

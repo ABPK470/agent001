@@ -85,7 +85,7 @@ export type SyncPlanBindingSourceUiCatalog = CustomValueSourceUiCatalog
 /** @deprecated Use CustomValueSourceUiEntry */
 export type SyncPlanBindingSourceUiEntry = CustomValueSourceUiEntry
 
-export function wiringCatalogListItems(
+export function sourcesCatalogListItems(
   sources: ReadonlyArray<{
     id: string
     label: string

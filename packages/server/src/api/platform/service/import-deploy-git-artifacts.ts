@@ -111,8 +111,8 @@ export function validateDeployGitBundle(bundle: DeployGitImportBundle): CatalogI
   const counts: CatalogImportSectionCounts = {
     environments: 0,
     phases: 0,
-    stepTypes: 0,
-    wiring: 0,
+    actions: 0,
+    valueSources: 0,
     flows: 0,
     strategies: 0,
     entities: bundle.entities.length,
@@ -124,15 +124,27 @@ export function validateDeployGitBundle(bundle: DeployGitImportBundle): CatalogI
 
   const meta = bundle.syncMetadata as {
     phases?: unknown[]
+    actions?: unknown[]
+    valueSources?: unknown[]
     stepTypes?: unknown[]
     customValueSources?: unknown[]
     flows?: Record<string, unknown>
   }
+  const actions = Array.isArray(meta.actions)
+    ? meta.actions
+    : Array.isArray(meta.stepTypes)
+      ? meta.stepTypes
+      : null
+  const valueSources = Array.isArray(meta.valueSources)
+    ? meta.valueSources
+    : Array.isArray(meta.customValueSources)
+      ? meta.customValueSources
+      : []
   if (!Array.isArray(meta.phases)) errors.push("sync-metadata.json: phases array is required")
   else counts.phases = meta.phases.length
-  if (!Array.isArray(meta.stepTypes)) errors.push("sync-metadata.json: stepTypes array is required")
-  else counts.stepTypes = meta.stepTypes.length
-  counts.wiring = Array.isArray(meta.customValueSources) ? meta.customValueSources.length : 0
+  if (!actions) errors.push("sync-metadata.json: actions array is required")
+  else counts.actions = actions.length
+  counts.valueSources = valueSources.length
   counts.flows = meta.flows && typeof meta.flows === "object" ? Object.keys(meta.flows).length : 0
   if (counts.flows === 0) errors.push("sync-metadata.json: flows object is required")
 

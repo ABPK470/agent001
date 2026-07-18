@@ -320,10 +320,10 @@ export function buildSyncMetadataFromPipelines(pipelines, options = {}) {
   const metadata = {
     version: 1,
     _comment:
-      "MyMI-derived sync vocabulary: step types (reusable handlers) and flows (ordered step instances). Seeds DB-backed config; operators may edit after bootstrap.",
+      "MyMI-derived sync vocabulary: actions (reusable handlers), value sources (wiring), and flows (ordered step instances). Seeds DB-backed config; operators may edit after bootstrap.",
     phases: SYNC_METADATA_PHASES.map((phase) => ({ ...phase, definition: { ...phase.definition } })),
-    stepTypes: sortStepTypes(stepTypes),
-    customValueSources: VALUE_SOURCE_SEEDS.map((entry) => ({
+    actions: sortStepTypes(stepTypes),
+    valueSources: VALUE_SOURCE_SEEDS.map((entry) => ({
       id: entry.id,
       label: entry.label,
       definition: structuredClone(entry.definition),
@@ -331,8 +331,8 @@ export function buildSyncMetadataFromPipelines(pipelines, options = {}) {
     flows
   }
   enrichStepTypeEntityTypesFromFlows(metadata)
-  for (const stepType of metadata.stepTypes ?? []) {
-    stepType.definition = migrateKindDefinition(stepType.definition, stepType.id)
+  for (const action of metadata.actions ?? []) {
+    action.definition = migrateKindDefinition(action.definition, action.id)
   }
   for (const flow of Object.values(metadata.flows ?? {})) {
     flow.steps = (flow.steps ?? []).map((step) => migrateFlowStep(step))
@@ -352,15 +352,15 @@ export function enrichStepTypeEntityTypesFromFlows(syncMetadata) {
     }
   }
 
-  for (const stepType of syncMetadata.stepTypes ?? []) {
-    const usedBy = usage.get(stepType.id)
+  for (const action of syncMetadata.actions ?? []) {
+    const usedBy = usage.get(action.id)
     if (!usedBy?.size) continue
-    const definition = stepType.definition ?? {}
+    const definition = action.definition ?? {}
     const existing = new Set(definition.entityTypes ?? [])
     if (existing.has("any")) continue
     for (const entityId of usedBy) existing.add(entityId)
     definition.entityTypes = [...existing].sort()
-    stepType.definition = definition
+    action.definition = definition
   }
 }
 
@@ -385,7 +385,8 @@ export function buildFlowTemplateCatalogFromPipelines(pipelines, options = {}) {
 }
 
 export function validateSyncMetadataCoversFlows(syncMetadata) {
-  const stepTypeIds = new Set(syncMetadata.stepTypes.map((stepType) => stepType.id))
+  const actions = syncMetadata.actions ?? syncMetadata.stepTypes ?? []
+  const actionIds = new Set(actions.map((action) => action.id))
   const phaseIds = new Set(syncMetadata.phases.map((phase) => phase.id))
   const referencedKinds = new Set()
   const referencedPhases = new Set()
@@ -397,11 +398,11 @@ export function validateSyncMetadataCoversFlows(syncMetadata) {
     }
   }
 
-  const missingKinds = [...referencedKinds].filter((id) => !stepTypeIds.has(id)).sort()
+  const missingKinds = [...referencedKinds].filter((id) => !actionIds.has(id)).sort()
   const missingPhases = [...referencedPhases].filter((id) => !phaseIds.has(id)).sort()
   if (missingKinds.length > 0 || missingPhases.length > 0) {
     const parts = []
-    if (missingKinds.length > 0) parts.push(`step types: ${missingKinds.join(", ")}`)
+    if (missingKinds.length > 0) parts.push(`actions: ${missingKinds.join(", ")}`)
     if (missingPhases.length > 0) parts.push(`phases: ${missingPhases.join(", ")}`)
     throw new Error(`Sync metadata missing flow references (${parts.join("; ")})`)
   }

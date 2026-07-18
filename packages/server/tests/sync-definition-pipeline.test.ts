@@ -20,11 +20,12 @@ import type { AgentHost } from "@mia/agent"
 import {
   compileFkPathPredicate,
   compilePublishedSyncDefinition,
-  createPublishedSyncDefinitionRegistry,
+  createDbPublishedSyncDefinitionRegistry,
   loadSyncDefinitionFlowTemplateCatalog,
   scaffoldSyncDefinition,
   type EntityDefinition
 } from "@mia/sync"
+import { loadPublishedBundleFromSqlite } from "../src/boot/published-sync-bundle.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -43,7 +44,10 @@ function createHost(root: string): AgentHost {
       governance: { freezeWindowsReader: () => [] },
       environments: { items: new Map() },
       plans: { diskRoot: null, memCache: new Map() },
-      project: { dbProjectRoot: root, publishedDefinitions: createPublishedSyncDefinitionRegistry() }
+      project: {
+        dbProjectRoot: root,
+        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite),
+      }
     }
   } as unknown as AgentHost
 }
@@ -115,7 +119,6 @@ beforeEach(() => {
   dataDir = mkdtempSync(join(tmpdir(), "mia-sync-pipeline-data-"))
   projectRoot = mkdtempSync(join(tmpdir(), "mia-sync-pipeline-root-"))
   mkdirSync(join(projectRoot, "deploy", "sync", "artifacts"), { recursive: true })
-  mkdirSync(join(projectRoot, "sync-definitions", "published"), { recursive: true })
   writeFileSync(
     join(projectRoot, "deploy", "sync", "artifacts", "flow-templates.json"),
     readFileSync(new URL("../../../deploy/sync/artifacts/flow-templates.json", import.meta.url), "utf-8")
@@ -161,15 +164,18 @@ describe("sync definition pipeline (e2e)", () => {
     expect(seedResult.entityIds).toContain("contract")
 
     seedSyncMetadataIfEmpty(projectRoot)
-    publishSyncDefinitionsFromDb(projectRoot)
+    const published = publishSyncDefinitionsFromDb(projectRoot)
+    expect(published.publishedStorage).toBe("sqlite")
 
-    const bundle = JSON.parse(
-      readFileSync(join(projectRoot, "sync-definitions", "published", "definitions.bundle.json"), "utf-8")
-    ) as { definitions: Record<string, { metadata: { tables: Array<{ name: string; predicate: string }> } }> }
+    const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/db/index.js")
+    const bundle = loadPublishedBundleFromDb()
+    expect(bundle).toBeTruthy()
 
-    const table = bundle.definitions.contract?.metadata.tables.find(
-      (t) => t.name === "core.DatasetMappingColumn"
-    )
+    const table = (
+      bundle!.definitions.contract as {
+        metadata: { tables: Array<{ name: string; predicate: string }> }
+      }
+    ).metadata.tables.find((t) => t.name === "core.DatasetMappingColumn")
     expect(table?.predicate).toContain("[core].[DatasetMappingColumn].[datasetMappingId]")
     expect(table?.predicate).toContain("FROM core.DatasetMapping")
     expect(table?.predicate).toContain("FROM core.Dataset WHERE contractId = {id}")
@@ -193,16 +199,17 @@ describe("sync definition pipeline (e2e)", () => {
     const childScaffoldPredicate = scaffolded.metadata.tables.find((t) => t.name === "core.Child")?.predicate
 
     publishSyncDefinitionsFromDb(projectRoot)
-
     publishSyncDefinitionsFromDb(projectRoot)
 
-    const bundle = JSON.parse(
-      readFileSync(join(projectRoot, "sync-definitions", "published", "definitions.bundle.json"), "utf-8")
-    ) as { definitions: Record<string, { metadata: { tables: Array<{ name: string; predicate: string }> } }> }
+    const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/db/index.js")
+    const bundle = loadPublishedBundleFromDb()
+    expect(bundle).toBeTruthy()
 
-    const publishedChild = bundle.definitions.fk_path_entity?.metadata.tables.find(
-      (t) => t.name === "core.Child"
-    )
+    const publishedChild = (
+      bundle!.definitions.fk_path_entity as {
+        metadata: { tables: Array<{ name: string; predicate: string }> }
+      }
+    ).metadata.tables.find((t) => t.name === "core.Child")
     expect(publishedChild?.predicate).toBe(childScaffoldPredicate)
     expect(publishedChild?.predicate).toContain("EXISTS")
   })
@@ -256,9 +263,9 @@ describe("sync definition pipeline (e2e)", () => {
     // File-template catalogs still carry phase and would diverge.
     const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot)
     const flowCatalog = buildFlowCatalog(
-      db.listSyncRunPhases("_default"),
-      db.listSyncRunKinds("_default"),
-      db.listSyncRunBindingSources("_default"),
+      db.listSyncPhases("_default"),
+      db.listSyncActions("_default"),
+      db.listSyncValueSources("_default"),
     )
 
     const direct = compilePublishedSyncDefinition(
@@ -274,19 +281,14 @@ describe("sync definition pipeline (e2e)", () => {
     publishSyncDefinitionsFromDb(projectRoot)
     publishSyncDefinitionsFromDb(projectRoot)
 
-    const bundle = JSON.parse(
-      readFileSync(join(projectRoot, "sync-definitions", "published", "definitions.bundle.json"), "utf-8")
-    ) as {
-      definitions: Record<
-        string,
-        {
-          metadata: { tables: Array<{ name: string; predicate: string }> }
-          executionFlow: { catalog?: { phases: Record<string, unknown>; kinds: Record<string, unknown> } }
-        }
-      >
-    }
+    const { loadPublishedBundleFromDb } = await import("../src/infra/persistence/db/index.js")
+    const bundle = loadPublishedBundleFromDb()
+    expect(bundle).toBeTruthy()
 
-    const published = bundle.definitions.compose_parity
+    const published = bundle!.definitions.compose_parity as {
+      metadata: { tables: Array<{ name: string; predicate: string }> }
+      executionFlow: { catalog?: { phases: Record<string, unknown>; kinds: Record<string, unknown> } }
+    }
     expect(published?.metadata.tables.map((t) => [t.name, t.predicate])).toEqual(
       direct.metadata.tables.map((t) => [t.name, t.predicate])
     )

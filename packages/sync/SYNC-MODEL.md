@@ -5,26 +5,26 @@ One-page glossary for how sync concepts relate in code.
 ## Authority chain
 
 ```
-Sync metadata (DB)       — step types (handlers), flows (ordered steps)
-        +
-Entity registry (DB)     — table structure, scopes, SCD2 refs, flow reference + bindings
-        ↓ publish
-Published sync definition — frozen bundle (definitions.bundle.json)
+Catalog (SQLite)         — entities + flows + actions + sources + environments + run pointers
+        ↓ Publish (assemble)
+SyncDefinitions (SQLite) — one process JSON per entity (same shape preview uses)
         ↓ preview / execute
 Three execution regions  — before metadataSync | metadataSync (SQL tx) | after metadataSync
 ```
 
-**One rule:** entities **reference** a flow. Steps run in **array order**; `metadataSync` is the split point.
+**One rule:** entities **reference** a flow. Steps run in **array order**; `metadataSync` is the split point.  
+**One definition:** Publish writes SyncDefinitions to SQLite — not a file in the repo. Export is optional download.
 
 ## Terms
 
 | Term | Meaning |
 |------|---------|
+| **Catalog** | Editable sync config in SQLite (entities, flows, actions, sources, environments, strategies, run pointers, phases) + tip versions. |
 | **Entity registry** | Versioned DB records (`EntityDefinition`): root table, dependent tables, scope per table, policies. |
-| **Sync definition** | Full operational contract: structure + governance + bindings + execution flow. |
-| **Authored sync definition** | JSON shape before publish (`AuthoredSyncDefinition`). Repo drafts under `deploy/sync/artifacts/entities/`. Also called **Format A**. |
+| **SyncDefinition** | Full operational contract used by preview/execute: structure + governance + bindings + execution flow (+ publish stamps). Stored in `sync_definitions`. |
+| **Authored sync definition** | Same process JSON without requiring publish stamps; also Format A git seeds under `deploy/sync/artifacts/entities/`. |
 | **Entity registry export** | UI/DB shape (`EntityDefinition` + optional `run` bindings). Bulk file: `entity-registry.json`. Also called **Format B**. See [ARTIFACT-FORMATS.md](../../deploy/sync/ARTIFACT-FORMATS.md). |
-| **Published sync definition** | Authored shape + `publishedAt` / `publishedVersion`. **Runtime authority** for preview/execute. |
+| **Published sync definition** | SyncDefinition after Publish (`publishedAt` / `publishedVersion`). **Runtime authority** in SQLite. |
 | **Execution contract** | Snapshot on `SyncPlan` that reproduces preview at execute: definition metadata + flow steps + governance. |
 | **SyncPlan** | Persisted preview envelope: entity, envs, `executionContract`, per-table `changeSet`, `stats`, samples, warnings. |
 | **changeSet** | Per-table insert / update / delete PK lists — **execute authority**. Built at preview; required by `validatePlan`. |
@@ -36,9 +36,10 @@ Three execution regions  — before metadataSync | metadataSync (SQL tx) | after
 | **fetchPkColumns** | Discovers PK column names (`sys.indexes`) before hash queries. Without PK metadata the engine cannot match rows or build `changeSet`. |
 | **Data movement scope** | `dataMovementTables(plan)` — tables with changeSet insert/update PKs that run MERGE. |
 | **Constraint relaxation scope** | `constraintRelaxationTables(plan)` — ancestors that get FK NOCHECK/CHECK; independent from data movement. |
-| **Flow** | Named ordered step list in sync metadata. Include exactly one `metadataSync` step. |
-| **Flow reference** | Entity run binding: `flowTemplateId` + service + environment. |
-| **Step type** | Handler/action (`metadataSync`, `contractDeployEtl`, …). Defines what code runs and failure mode. |
+| **Flow** | Named ordered step list (`sync_flows` / seed `flows`). Include exactly one `metadataSync` step. |
+| **Action** | Reusable step handler (`sync_actions` / seed `actions`). Defines what code runs and failure mode. |
+| **Source** | Value-source catalog entry (`sync_value_sources` / seed `valueSources`) — where a handler input comes from. |
+| **Flow reference** | Entity run binding: which flow + service + environment policy. |
 | **Execution region** | Derived from position vs `metadataSync`: before (pre-tx), metadata (single SQL tx), after (deploy/HTTP). Not a separate catalog. |
 
 ## Compilers (all use `projectTablePredicate`)

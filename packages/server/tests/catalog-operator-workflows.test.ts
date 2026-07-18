@@ -25,7 +25,7 @@ import {
   buildFlowCatalogFromSyncMetadataDoc,
   FlowStepsValidationError,
   prepareFlowStepsForStorage,
-} from "../src/api/sync/types/flow-steps.js"
+} from "../src/infra/persistence/sync-flow-steps.js"
 import * as db from "../src/infra/persistence/db/index.js"
 import { isCatalogId } from "@mia/shared-types"
 import {
@@ -50,8 +50,8 @@ afterEach(() => {
 
 describe("catalog operator workflows — first-principles invariants", () => {
   it("seeded flow presets use camelCase step ids and kinds only", () => {
-    for (const preset of db.listSyncRunPresets(TENANT)) {
-      const steps = db.parsePresetSteps(preset.steps_json)
+    for (const preset of db.listSyncFlows(TENANT)) {
+      const steps = db.parseFlowSteps(preset.steps_json)
       expect(steps.length).toBeGreaterThan(0)
       for (const step of steps) {
         expect(isCatalogId(step.id), `preset ${preset.id} step id ${step.id}`).toBe(true)
@@ -181,7 +181,7 @@ describe("catalog operator workflows — Configuration API", () => {
     })
     expect(response.statusCode).toBe(200)
 
-    const stored = db.getSyncRunPreset(TENANT, "content")
+    const stored = db.getSyncFlow(TENANT, "content")
     expect(stored).toBeTruthy()
     const parsed = JSON.parse(stored!.steps_json) as Array<Record<string, unknown>>
     expect(parsed.every((step) => !("phase" in step))).toBe(true)
@@ -297,13 +297,13 @@ describe("catalog operator workflows — import and export", () => {
     expect(db.getEntityDefinition(TENANT, "operatorOrphan", { includeRetired: true })?.retiredAt).toBeTruthy()
   })
 
-  it("rejects snapshots with kebab-case step type ids", () => {
+  it("rejects snapshots with kebab-case action ids", () => {
     const snapshot = buildDeployCatalogSnapshot({ tenantId: TENANT })
     const meta = snapshot.syncMetadata as {
-      stepTypes?: Array<{ id: string; label: string; definition: unknown }>
+      actions?: Array<{ id: string; label: string; definition: unknown }>
     }
-    meta.stepTypes = [
-      ...(meta.stepTypes ?? []).filter((row) => row.id !== "metadataSync"),
+    meta.actions = [
+      ...(meta.actions ?? []).filter((row) => row.id !== "metadataSync"),
       { id: "metadata-sync", label: "bad", definition: {} },
     ]
 
@@ -341,7 +341,7 @@ describe("catalog operator workflows — configuration versions and rollback", (
   it("rollback restores flow preset steps from the committed snapshot", () => {
     const baseline = commitSyncCatalogVersion({ reason: "flow-baseline", actor: "operator" })
 
-    db.saveSyncRunPreset({
+    db.saveSyncFlow({
       tenant_id: TENANT,
       id: "content",
       label: "Broken content",
@@ -352,7 +352,7 @@ describe("catalog operator workflows — configuration versions and rollback", (
       updated_by: "operator",
     })
     commitSyncCatalogVersion({ reason: "flow-broken", actor: "operator" })
-    expect(db.parsePresetSteps(db.getSyncRunPreset(TENANT, "content")!.steps_json)).toEqual([])
+    expect(db.parseFlowSteps(db.getSyncFlow(TENANT, "content")!.steps_json)).toEqual([])
 
     rollbackSyncCatalogVersion({
       targetVersion: baseline.version,
@@ -360,14 +360,14 @@ describe("catalog operator workflows — configuration versions and rollback", (
       projectRoot: fixture.projectRoot,
     })
 
-    const restored = db.parsePresetSteps(db.getSyncRunPreset(TENANT, "content")!.steps_json)
+    const restored = db.parseFlowSteps(db.getSyncFlow(TENANT, "content")!.steps_json)
     expect(restored.some((step) => step.kind === "metadataSync")).toBe(true)
   })
 
   it("publish succeeds for core entities after rollback to known-good version", () => {
     const baseline = commitSyncCatalogVersion({ reason: "publish-baseline", actor: "operator" })
 
-    db.saveSyncRunPreset({
+    db.saveSyncFlow({
       tenant_id: TENANT,
       id: "content",
       label: "Broken content",
@@ -394,7 +394,7 @@ describe("catalog operator workflows — configuration versions and rollback", (
   it("chained operator cycle: baseline → break → commit → rollback → import → publish", () => {
     const baseline = commitSyncCatalogVersion({ reason: "cycle-baseline", actor: "operator" })
 
-    db.saveSyncRunPreset({
+    db.saveSyncFlow({
       tenant_id: TENANT,
       id: "dataset",
       label: "Broken dataset",
@@ -430,7 +430,7 @@ describe("catalog operator workflows — configuration versions and rollback", (
 
 describe("catalog operator workflows — publish pipeline", () => {
   it("falls back to shipped flow steps when operator left a built-in preset empty in SQLite", () => {
-    db.saveSyncRunPreset({
+    db.saveSyncFlow({
       tenant_id: TENANT,
       id: "content",
       label: "Empty content",
@@ -449,7 +449,7 @@ describe("catalog operator workflows — publish pipeline", () => {
   })
 
   it("boot refresh replaces legacy kebab-case built-in presets from deploy artifact", () => {
-    db.saveSyncRunPreset({
+    db.saveSyncFlow({
       tenant_id: TENANT,
       id: "content",
       label: "Legacy content",
@@ -467,15 +467,15 @@ describe("catalog operator workflows — publish pipeline", () => {
       updated_by: "operator",
     })
 
-    db.syncBuiltInFlowPresetsFromArtifact(fixture.projectRoot, TENANT)
+    db.syncBuiltInFlowsFromArtifact(fixture.projectRoot, TENANT)
 
-    const steps = db.parsePresetSteps(db.getSyncRunPreset(TENANT, "content")!.steps_json)
+    const steps = db.parseFlowSteps(db.getSyncFlow(TENANT, "content")!.steps_json)
     expect(steps.some((step) => step.kind === "metadataSync")).toBe(true)
     expect(steps.every((step) => isCatalogId(step.id) && isCatalogId(step.kind))).toBe(true)
   })
 
-  it("parsePresetSteps fails fast on operator custom presets with kebab-case ids", () => {
-    db.saveSyncRunPreset({
+  it("parseFlowSteps fails fast on operator custom presets with kebab-case ids", () => {
+    db.saveSyncFlow({
       tenant_id: TENANT,
       id: "operatorCustomFlow",
       label: "Legacy corrupt",
@@ -494,7 +494,7 @@ describe("catalog operator workflows — publish pipeline", () => {
     })
 
     expect(() =>
-      db.parsePresetSteps(db.getSyncRunPreset(TENANT, "operatorCustomFlow")!.steps_json),
+      db.parseFlowSteps(db.getSyncFlow(TENANT, "operatorCustomFlow")!.steps_json),
     ).toThrow(FlowStepsValidationError)
   })
 

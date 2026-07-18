@@ -5,7 +5,7 @@
 import { Loader2 } from "lucide-react"
 import type { JSX, ReactNode } from "react"
 import { type ListboxOption } from "../../components/Listbox"
-import type { AuthoredSyncFlowStep, SyncMetadataCatalogStepType } from "../../types"
+import type { AuthoredSyncFlowStep, SyncMetadataCatalogAction } from "../../types"
 import { ExecutionStepFields } from "./ExecutionStepFields"
 import { ExecutionStepListEditor } from "./ExecutionStepListEditor"
 import type { CustomValueSourceUiCatalog } from "./handler-editor"
@@ -71,6 +71,7 @@ export function FormSurfaceExecutionSteps({
   rootTable,
   entityId = "",
   stepTypeOptions,
+  actions,
   stepTypes,
   customValueSourceCatalog,
   bindingSourceCatalog,
@@ -83,7 +84,9 @@ export function FormSurfaceExecutionSteps({
   rootTable: string
   entityId?: string
   stepTypeOptions?: ListboxOption<AuthoredSyncFlowStep["kind"]>[]
-  stepTypes?: readonly SyncMetadataCatalogStepType[] | null
+  actions?: readonly SyncMetadataCatalogAction[] | null
+  /** @deprecated Use `actions` */
+  stepTypes?: readonly SyncMetadataCatalogAction[] | null
   customValueSourceCatalog?: CustomValueSourceUiCatalog
   /** @deprecated Use customValueSourceCatalog */
   bindingSourceCatalog?: CustomValueSourceUiCatalog
@@ -93,7 +96,7 @@ export function FormSurfaceExecutionSteps({
   showAddButton?: boolean
 }): JSX.Element {
   const resolvedStepTypeOptions = stepTypeOptions ?? kindOptions
-  const stepTypeCatalog = buildStepTypeCatalogLookup(stepTypes)
+  const stepTypeCatalog = buildStepTypeCatalogLookup(actions ?? stepTypes)
   const resolvedCatalog = customValueSourceCatalog ?? bindingSourceCatalog ?? {}
   if (variant === "list") {
     return (

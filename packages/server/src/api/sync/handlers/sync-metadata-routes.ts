@@ -2,7 +2,7 @@ import type {
   AuthoredSyncFlowStep,
   CustomValueSourceDefinition,
   SyncFlowKindDefinition,
-  SyncMetadataCatalogCustomValueSourceSaveBody,
+  SyncMetadataCatalogValueSourceSaveBody,
 } from "@mia/shared-types"
 import {
   customValueSourceCatalogFromRows,
@@ -30,33 +30,33 @@ function afterCatalogMutation(reason: string, actor: string): void {
 
 function mapCatalog() {
   return {
-    stepTypes: db.listSyncRunKinds(TENANT).map((row) => ({
+    actions: db.listSyncActions(TENANT).map((row) => ({
       id: row.id,
       label: row.label,
       builtIn: row.built_in === 1,
       definition: db.mapKindDefinition(row),
     })),
-    flows: db.listSyncRunPresets(TENANT).map((row) => ({
+    flows: db.listSyncFlows(TENANT).map((row) => ({
       id: row.id,
       label: row.label,
       description: row.description,
-      steps: db.parsePresetSteps(row.steps_json),
+      steps: db.parseFlowSteps(row.steps_json),
       builtIn: row.built_in === 1,
     })),
-    customValueSources: db.listSyncRunBindingSources(TENANT).map((row) => ({
+    valueSources: db.listSyncValueSources(TENANT).map((row) => ({
       id: row.id,
       label: row.label,
       builtIn: row.built_in === 1,
-      definition: db.mapCustomValueSourceDefinition(row),
+      definition: db.mapValueSourceDefinition(row),
     })),
   }
 }
 
 function customValueSourceCatalogFromDb(): Record<string, CustomValueSourceDefinition> {
   return customValueSourceCatalogFromRows(
-    db.listSyncRunBindingSources(TENANT).map((row) => ({
+    db.listSyncValueSources(TENANT).map((row) => ({
       id: row.id,
-      definition: db.mapCustomValueSourceDefinition(row),
+      definition: db.mapValueSourceDefinition(row),
     })),
   )
 }
@@ -71,7 +71,7 @@ function validateHandlerBindings(
     const sourceError = validateValueSource(slot.source, `Input "${slot.name}"`)
     if (sourceError) return sourceError
     if (slot.source.type === "catalog" && !catalogIds.has(slot.source.id)) {
-      return `Input "${slot.name}" references unknown custom value source "${slot.source.id}".`
+      return `Input "${slot.name}" references unknown value source "${slot.source.id}".`
     }
   }
   return null
@@ -79,21 +79,21 @@ function validateHandlerBindings(
 
 function flowCatalogFromDb() {
   return buildFlowCatalogFromSyncMetadataDoc({
-    phases: db.listSyncRunPhases(TENANT).map((row) => ({
+    phases: db.listSyncPhases(TENANT).map((row) => ({
       id: row.id,
       label: row.label,
       sortOrder: row.sort_order,
       definition: db.mapPhaseDefinition(row),
     })),
-    stepTypes: db.listSyncRunKinds(TENANT).map((row) => ({
+    actions: db.listSyncActions(TENANT).map((row) => ({
       id: row.id,
       label: row.label,
       definition: db.mapKindDefinition(row),
     })),
-    customValueSources: db.listSyncRunBindingSources(TENANT).map((row) => ({
+    valueSources: db.listSyncValueSources(TENANT).map((row) => ({
       id: row.id,
       label: row.label,
-      definition: db.mapCustomValueSourceDefinition(row),
+      definition: db.mapValueSourceDefinition(row),
     })),
   })
 }
@@ -109,14 +109,14 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
 
   app.post<{
     Body: { id: string; label: string; definition?: SyncFlowKindDefinition }
-  }>("/api/sync-metadata/step-types", async (req, reply) => {
+  }>("/api/sync-metadata/actions", async (req, reply) => {
     if (!req.session?.isAdmin) return reply.code(403).send({ error: "admin only" })
     const id = req.body?.id?.trim()
     const label = req.body?.label?.trim()
     if (!id || !label) return reply.code(400).send({ error: "id and label required" })
-    const idError = validateCatalogId(id, "Kind id")
+    const idError = validateCatalogId(id, "Action id")
     if (idError) return reply.code(400).send({ error: idError })
-    const existing = db.listSyncRunKinds(TENANT).find((row) => row.id === id)
+    const existing = db.listSyncActions(TENANT).find((row) => row.id === id)
     const customCatalog = customValueSourceCatalogFromDb()
     const definition = req.body.definition
       ? normalizeKindDefinition(req.body.definition, id)
@@ -126,34 +126,34 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
       const bindingError = validateHandlerBindings(definition, catalogIds)
       if (bindingError) return reply.code(400).send({ error: bindingError })
     }
-    db.saveSyncRunKind({
+    db.saveSyncAction({
       tenant_id: TENANT,
       id,
       label,
       built_in: existing?.built_in ?? 0,
       definition_json: definition ? JSON.stringify(definition) : undefined,
     })
-    afterCatalogMutation(`sync-metadata:step-type:${id}`, req.session.upn)
+    afterCatalogMutation(`sync-metadata:action:${id}`, req.session.upn)
     return mapCatalog()
   })
 
-  app.delete<{ Params: { id: string } }>("/api/sync-metadata/step-types/:id", async (req, reply) => {
+  app.delete<{ Params: { id: string } }>("/api/sync-metadata/actions/:id", async (req, reply) => {
     if (!req.session?.isAdmin) return reply.code(403).send({ error: "admin only" })
-    if (!db.deleteSyncRunKind(TENANT, req.params.id)) {
-      return reply.code(400).send({ error: "cannot delete built-in or missing kind" })
+    if (!db.deleteSyncAction(TENANT, req.params.id)) {
+      return reply.code(400).send({ error: "cannot delete built-in or missing action" })
     }
-    afterCatalogMutation(`sync-metadata:step-type:delete:${req.params.id}`, req.session.upn)
+    afterCatalogMutation(`sync-metadata:action:delete:${req.params.id}`, req.session.upn)
     return mapCatalog()
   })
 
   app.post<{
-    Body: SyncMetadataCatalogCustomValueSourceSaveBody
-  }>("/api/sync-metadata/binding-sources", async (req, reply) => {
+    Body: SyncMetadataCatalogValueSourceSaveBody
+  }>("/api/sync-metadata/value-sources", async (req, reply) => {
     if (!req.session?.isAdmin) return reply.code(403).send({ error: "admin only" })
     const id = req.body?.id?.trim()
     const label = req.body?.label?.trim()
     if (!id || !label) return reply.code(400).send({ error: "id and label required" })
-    const idError = validateCatalogId(id, "Custom value source id")
+    const idError = validateCatalogId(id, "Value source id")
     if (idError) return reply.code(400).send({ error: idError })
     if (!req.body.definition) {
       return reply.code(400).send({ error: "definition required" })
@@ -166,24 +166,24 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
         error: error instanceof Error ? error.message : String(error),
       })
     }
-    const existing = db.listSyncRunBindingSources(TENANT).find((row) => row.id === id)
-    db.saveSyncRunBindingSource({
+    const existing = db.listSyncValueSources(TENANT).find((row) => row.id === id)
+    db.saveSyncValueSource({
       tenant_id: TENANT,
       id,
       label,
       built_in: existing?.built_in ?? 0,
       definition_json: JSON.stringify(definition),
     })
-    afterCatalogMutation(`sync-metadata:wiring:${id}`, req.session.upn)
+    afterCatalogMutation(`sync-metadata:value-source:${id}`, req.session.upn)
     return mapCatalog()
   })
 
-  app.delete<{ Params: { id: string } }>("/api/sync-metadata/binding-sources/:id", async (req, reply) => {
+  app.delete<{ Params: { id: string } }>("/api/sync-metadata/value-sources/:id", async (req, reply) => {
     if (!req.session?.isAdmin) return reply.code(403).send({ error: "admin only" })
-    if (!db.deleteSyncRunBindingSource(TENANT, req.params.id)) {
-      return reply.code(400).send({ error: "cannot delete built-in or missing custom value source" })
+    if (!db.deleteSyncValueSource(TENANT, req.params.id)) {
+      return reply.code(400).send({ error: "cannot delete built-in or missing value source" })
     }
-    afterCatalogMutation(`sync-metadata:wiring:delete:${req.params.id}`, req.session.upn)
+    afterCatalogMutation(`sync-metadata:value-source:delete:${req.params.id}`, req.session.upn)
     return mapCatalog()
   })
 
@@ -196,9 +196,9 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
     if (!id || !label) return reply.code(400).send({ error: "id and label required" })
     const idError = validateCatalogId(id, "Flow id")
     if (idError) return reply.code(400).send({ error: idError })
-    const existing = db.getSyncRunPreset(TENANT, id)
+    const existing = db.getSyncFlow(TENANT, id)
     const flowCatalog = flowCatalogFromDb()
-    const rawSteps = req.body.steps ?? (existing ? db.parsePresetSteps(existing.steps_json) : [])
+    const rawSteps = req.body.steps ?? (existing ? db.parseFlowSteps(existing.steps_json) : [])
     let steps: AuthoredSyncFlowStep[]
     try {
       steps = prepareFlowStepsForStorage(rawSteps, flowCatalog)
@@ -207,7 +207,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
         error: error instanceof Error ? error.message : String(error),
       })
     }
-    db.saveSyncRunPreset({
+    db.saveSyncFlow({
       tenant_id: TENANT,
       id,
       label,
@@ -223,7 +223,7 @@ export function registerSyncMetadataRoutes(app: FastifyInstance): void {
 
   app.delete<{ Params: { id: string } }>("/api/sync-metadata/flows/:id", async (req, reply) => {
     if (!req.session?.isAdmin) return reply.code(403).send({ error: "admin only" })
-    if (!db.deleteSyncRunPreset(TENANT, req.params.id)) {
+    if (!db.deleteSyncFlow(TENANT, req.params.id)) {
       return reply.code(400).send({ error: "cannot delete built-in or missing flow" })
     }
     afterCatalogMutation(`sync-metadata:flow:delete:${req.params.id}`, req.session.upn)

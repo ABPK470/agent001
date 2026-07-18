@@ -44,8 +44,8 @@ vi.mock("./root-parent-preflight.js", async (importOriginal) => {
   }
 })
 
-vi.mock("../../ports/index.js", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("../../ports/index.js")>()
+vi.mock("../../adapters/mssql/connection.js", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../adapters/mssql/connection.js")>()
   return {
     ...actual,
     getPool: (...args: unknown[]) => getPoolMock(...args)

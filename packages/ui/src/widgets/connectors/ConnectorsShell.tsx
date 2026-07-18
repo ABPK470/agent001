@@ -28,6 +28,8 @@ import {
   META_TEXT,
   PANEL,
   TAB_PILL,
+  TAB_PILL_ACTIVE,
+  TAB_PILL_IDLE,
   TEXT_BTN,
   TEXT_BTN_PRIMARY,
   WIDGET_ENVELOPE,
@@ -222,10 +224,7 @@ export function ConnectorsShell(): JSX.Element {
                         role="tab"
                         aria-selected={active}
                         onClick={() => { setView(entry.view); setListQuery("") }}
-                        className={[
-                          TAB_PILL,
-                          active ? "bg-accent/15 text-accent" : "text-text-muted hover:bg-elevated hover:text-text",
-                        ].join(" ")}
+                        className={[TAB_PILL, active ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
                       >
                         {entry.label}
                       </button>

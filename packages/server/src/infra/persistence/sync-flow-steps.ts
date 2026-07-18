@@ -18,7 +18,11 @@ export class FlowStepsValidationError extends Error {
 
 export type SyncMetadataFlowDoc = {
   phases?: Array<{ id: string; label: string; sortOrder: number; definition: unknown }>
+  actions?: Array<{ id: string; label: string; definition: unknown }>
+  valueSources?: Array<{ id: string; label: string; definition: unknown }>
+  /** @deprecated Prefer `actions` */
   stepTypes?: Array<{ id: string; label: string; definition: unknown }>
+  /** @deprecated Prefer `valueSources` */
   customValueSources?: Array<{ id: string; label: string; definition: unknown }>
   flows?: Record<string, { label: string; description?: string; steps: AuthoredSyncFlowStep[] }>
 }
@@ -42,12 +46,13 @@ export function buildFlowCatalogFromSyncMetadataDoc(meta: SyncMetadataFlowDoc): 
     label: phase.label,
     definition_json: JSON.stringify(phase.definition),
   }))
-  const kinds = (meta.stepTypes ?? []).map((kind) => ({
+  const actions = meta.actions ?? meta.stepTypes ?? []
+  const kinds = actions.map((kind) => ({
     id: kind.id,
     label: kind.label,
     definition_json: JSON.stringify(kind.definition),
   }))
-  const wiring = (meta.customValueSources ?? []).map((source) => ({
+  const wiring = (meta.valueSources ?? meta.customValueSources ?? []).map((source) => ({
     id: source.id,
     label: source.label,
     definition_json: JSON.stringify(source.definition),

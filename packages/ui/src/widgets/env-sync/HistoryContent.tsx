@@ -24,6 +24,7 @@ import {
   WidgetToolbarSearch,
   WidgetToolbarTrailing,
 } from "../widget-toolbar"
+import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE } from "../entity-registry/chrome"
 import { EmptyHistory, Loading } from "./chrome"
 import { DIFF, ENTITY_TYPES, dot } from "./constants"
 import { formatPlanEntityLabel } from "./workflow"
@@ -441,19 +442,16 @@ function HistoryFiltersPanel({
     <div className="shrink-0 border-b border-border/40 px-3 py-2 bg-base/20 space-y-2.5">
       <div className="space-y-1.5">
         <div className="field-label">Status</div>
-        <div className="flex flex-wrap gap-1.5">
+        <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Status">
           {STATUS_OPTIONS.map((option) => {
             const active = selectedStatuses.includes(option.value)
             return (
               <button
                 key={option.value}
                 type="button"
+                aria-pressed={active}
                 onClick={() => onToggleStatus(option.value)}
-                className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                  active
-                    ? "border-accent/40 bg-accent/10 text-accent"
-                    : "border-border/50 text-text-muted hover:text-text hover:bg-elevated/30"
-                }`}
+                className={[TAB_PILL, active ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
               >
                 {option.label}
               </button>

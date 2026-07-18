@@ -53,12 +53,12 @@ export function loadDeployFlowCatalogForTests(projectRoot = repoRoot) {
       label: phase.label,
       definition_json: JSON.stringify(phase.definition),
     })),
-    metadata.stepTypes.map((stepType) => ({
-      id: stepType.id,
-      label: stepType.label,
-      definition_json: JSON.stringify(stepType.definition),
+    metadata.actions.map((action) => ({
+      id: action.id,
+      label: action.label,
+      definition_json: JSON.stringify(action.definition),
     })),
-    (metadata.customValueSources ?? []).map((source) => ({
+    (metadata.valueSources ?? []).map((source) => ({
       id: source.id,
       label: source.label,
       definition_json: JSON.stringify(source.definition),

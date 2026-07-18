@@ -11,6 +11,7 @@ import { EmptyState } from "../../components/EmptyState"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SearchablePick, type SearchablePickOption } from "../../components/SearchablePick"
 import { useLiveReload } from "../../hooks/useLiveReload"
+import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE } from "../entity-registry/chrome"
 import { ModalShell } from "../entity-registry/ModalShell"
 import {
   WidgetToolbar,
@@ -174,19 +175,16 @@ export function CatalogVersionsModal({
             <div className="shrink-0 border-b border-border/40 bg-base/20 px-3 py-2 space-y-2.5">
               <div className="space-y-1.5">
                 <div className="field-label">Change kind</div>
-                <div className="flex flex-wrap gap-1.5">
+                <div className="flex flex-wrap items-center gap-1" role="group" aria-label="Change kind">
                   {CATALOG_VERSION_KIND_OPTIONS.map((option) => {
                     const active = (filters.kinds ?? []).includes(option.value)
                     return (
                       <button
                         key={option.value}
                         type="button"
+                        aria-pressed={active}
                         onClick={() => toggleKind(option.value)}
-                        className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                          active
-                            ? "border-accent/40 bg-accent/10 text-accent"
-                            : "border-border/50 text-text-muted hover:text-text hover:bg-elevated/30"
-                        }`}
+                        className={[TAB_PILL, active ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
                       >
                         {option.label}
                       </button>
@@ -243,17 +241,14 @@ export function CatalogVersionsModal({
               <div className="flex flex-wrap items-center gap-2">
                 <button
                   type="button"
+                  aria-pressed={filters.activeOnly}
                   onClick={() =>
                     setFilters((current) => ({
                       ...current,
                       activeOnly: !current.activeOnly,
                     }))
                   }
-                  className={`rounded-full border px-2.5 py-1 text-xs transition-colors ${
-                    filters.activeOnly
-                      ? "border-accent/40 bg-accent/10 text-accent"
-                      : "border-border/50 text-text-muted hover:text-text hover:bg-elevated/30"
-                  }`}
+                  className={[TAB_PILL, filters.activeOnly ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
                 >
                   Active only
                 </button>

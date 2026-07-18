@@ -11,8 +11,8 @@ function snapshot(partial: Partial<DeployCatalogSnapshot>): DeployCatalogSnapsho
     tenantId: "_default",
     syncMetadata: {
       phases: [],
-      stepTypes: [],
-      customValueSources: [],
+      actions: [],
+      valueSources: [],
       flows: {},
     },
     flowTemplates: { version: 1, flowTemplates: {} },

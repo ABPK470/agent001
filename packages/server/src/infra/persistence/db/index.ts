@@ -286,35 +286,47 @@ export {
 } from "./sessions.js"
 
 export {
-  deleteSyncRunKind,
-  deleteSyncRunPhase,
-  deleteSyncRunPreset,
-  getSyncRunPreset,
-  listSyncRunKinds,
-  listSyncRunPhases,
-  listSyncRunPresets,
+  deleteSyncAction,
+  deleteSyncFlow,
+  deleteSyncPhase,
+  getSyncFlow,
+  listSyncActions,
+  listSyncFlows,
+  listSyncPhases,
   mapKindDefinition,
   mapPhaseDefinition,
-  parsePresetSteps,
-  saveSyncRunKind,
-  saveSyncRunPhase,
-  saveSyncRunPreset,
-  syncRunCatalogEmpty,
-  syncBuiltInFlowPresetsFromArtifact,
+  parseFlowSteps,
+  saveSyncAction,
+  saveSyncFlow,
+  saveSyncPhase,
+  syncCatalogEmpty,
+  syncBuiltInFlowsFromArtifact,
   serializeBuiltInFlowStepsFromArtifact,
   syncDeploySyncMetadataFromArtifact,
-  type DbSyncRunKind,
-  type DbSyncRunPhase,
-  type DbSyncRunPreset
+  type DbSyncAction,
+  type DbSyncFlow,
+  type DbSyncPhase,
 } from "./sync-run-catalog.js"
 
 export {
-  deleteSyncRunBindingSource,
-  listSyncRunBindingSources,
-  mapCustomValueSourceDefinition,
-  saveSyncRunBindingSource,
-  type DbSyncRunBindingSource,
-} from "./sync-run-binding-sources.js"
+  deleteSyncValueSource,
+  listSyncValueSources,
+  mapValueSourceDefinition,
+  saveSyncValueSource,
+  type DbSyncValueSource,
+} from "./sync-value-sources.js"
+
+export {
+  getSyncDefinition,
+  getSyncPublishMeta,
+  listSyncDefinitions,
+  loadPublishedBundleFromDb,
+  replaceSyncDefinitions,
+  saveSyncPublishMeta,
+  type DbSyncDefinitionRow,
+  type DbSyncPublishMeta,
+  type PublishedBundleFromDb,
+} from "./sync-definitions.js"
 
 export {
   appendSyncCatalogVersion,

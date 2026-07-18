@@ -6,8 +6,9 @@ import { join } from "node:path"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import type { AgentHost } from "@mia/agent"
-import { createPublishedSyncDefinitionRegistry, type EntityDefinition } from "@mia/sync"
+import { createDbPublishedSyncDefinitionRegistry, type EntityDefinition } from "@mia/sync"
 import type { CurrentSession } from "../src/api/auth/index.js"
+import { loadPublishedBundleFromSqlite } from "../src/boot/published-sync-bundle.js"
 
 let testDb: Database.Database
 let dataDir: string
@@ -39,7 +40,7 @@ function createHost(root: string): AgentHost {
       plans: { diskRoot: null, memCache: new Map() },
       project: {
         dbProjectRoot: root,
-        publishedDefinitions: createPublishedSyncDefinitionRegistry()
+        publishedDefinitions: createDbPublishedSyncDefinitionRegistry(loadPublishedBundleFromSqlite)
       }
     }
   } as unknown as AgentHost
@@ -75,7 +76,6 @@ beforeEach(() => {
   projectRoot = mkdtempSync(join(tmpdir(), "mia-sync-routes-root-"))
   mkdirSync(join(projectRoot, "deploy", "sync", "artifacts"), { recursive: true })
   mkdirSync(join(projectRoot, "sync-definitions", "entities"), { recursive: true })
-  mkdirSync(join(projectRoot, "sync-definitions", "published"), { recursive: true })
   writeFileSync(
     join(projectRoot, "deploy", "sync", "artifacts", "flow-templates.json"),
     readFileSync(new URL("../../../deploy/sync/artifacts/flow-templates.json", import.meta.url), "utf-8")
@@ -216,18 +216,25 @@ describe("sync routes", () => {
     expect(publish.statusCode).toBe(200)
     const publishBody = publish.json() as {
       definitionCount: number
+      publishedStorage: "sqlite"
       publishedBundlePath: string
     }
     expect(publishBody.definitionCount).toBe(1)
-    expect(publishBody.publishedBundlePath).toBe("sync-definitions/published/definitions.bundle.json")
+    expect(publishBody.publishedStorage).toBe("sqlite")
+    expect(publishBody.publishedBundlePath).toBe("sqlite:sync_definitions")
 
-    const publishedBundle = JSON.parse(
-      readFileSync(join(projectRoot, "sync-definitions", "published", "definitions.bundle.json"), "utf-8")
-    ) as {
-      definitions: Record<string, { id: string; publishedVersion: string }>
+    const { loadPublishedBundleFromDb, listSyncDefinitions } =
+      await import("../src/infra/persistence/db/index.js")
+    const rows = listSyncDefinitions()
+    expect(rows.map((row) => row.entity_id)).toEqual(["pipelineActivity"])
+    const publishedBundle = loadPublishedBundleFromDb()
+    expect(publishedBundle).toBeTruthy()
+    const pipelineActivity = publishedBundle!.definitions.pipelineActivity as {
+      id: string
+      publishedVersion: string
     }
-    expect(publishedBundle.definitions.pipelineActivity?.id).toBe("pipelineActivity")
-    expect(typeof publishedBundle.definitions.pipelineActivity?.publishedVersion).toBe("string")
+    expect(pipelineActivity.id).toBe("pipelineActivity")
+    expect(typeof pipelineActivity.publishedVersion).toBe("string")
 
     const definitions = await app.inject({
       method: "GET",
@@ -248,7 +255,7 @@ describe("sync routes", () => {
       bundlePath: string
       definition: { id: string }
     }
-    expect(bundleBody.bundlePath).toBe("sync-definitions/published/definitions.bundle.json")
+    expect(bundleBody.bundlePath).toBe("sqlite:sync_definitions")
     expect(bundleBody.definition.id).toBe("pipelineActivity")
 
     await app.close()

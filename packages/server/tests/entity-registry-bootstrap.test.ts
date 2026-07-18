@@ -86,13 +86,13 @@ describe("entity registry bootstrap", () => {
     await setup()
     const db = await import("../src/infra/persistence/sqlite.js")
 
-    expect(db.listSyncRunPresets("_default")).toHaveLength(0)
-    expect(db.syncRunCatalogEmpty("_default")).toBe(true)
+    expect(db.listSyncFlows("_default")).toHaveLength(0)
+    expect(db.syncCatalogEmpty("_default")).toBe(true)
 
     const { loadBootSyncEnvironments } = await import("../src/boot/sync-environments.js")
     loadBootSyncEnvironments(repoRoot, [])
 
-    const presets = db.listSyncRunPresets("_default")
+    const presets = db.listSyncFlows("_default")
     expect(presets.length).toBe(7)
     expect(presets.map((p) => p.id).sort()).toEqual(
       ["content", "contract", "dataset", "gateMetadata", "metadataOnly", "pipelineActivity", "rule"].sort(),

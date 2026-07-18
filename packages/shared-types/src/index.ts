@@ -854,7 +854,10 @@ export interface PublishSyncDefinitionsResponse {
   publishedAt: string
   publishedVersion: string
   definitionCount: number
-  publishedBundlePath: string
+  /** Live SyncDefinitions are stored in SQLite; path is a stable label, not a file. */
+  publishedStorage: "sqlite"
+  /** @deprecated Use publishedStorage — kept for older UI clients. */
+  publishedBundlePath?: string
   stdout: string[]
   stderr: string[]
 }
@@ -1457,12 +1460,15 @@ export interface SyncMetadataCatalogPhase {
   definition: SyncFlowPhaseDefinition
 }
 
-export interface SyncMetadataCatalogStepType {
+export interface SyncMetadataCatalogAction {
   id: string
   label: string
   builtIn: boolean
   definition: SyncFlowKindDefinition
 }
+
+/** @deprecated Use SyncMetadataCatalogAction */
+export type SyncMetadataCatalogStepType = SyncMetadataCatalogAction
 
 export interface SyncMetadataCatalogFlow {
   id: string
@@ -1472,25 +1478,31 @@ export interface SyncMetadataCatalogFlow {
   builtIn: boolean
 }
 
-export interface SyncMetadataCatalogCustomValueSource {
+export interface SyncMetadataCatalogValueSource {
   id: string
   label: string
   builtIn: boolean
   definition: import("./custom-value-source.js").CustomValueSourceDefinition
 }
 
-/** DB-backed sync vocabulary for the Entity Registry UI (kinds, flows, custom value sources). */
+/** @deprecated Use SyncMetadataCatalogValueSource */
+export type SyncMetadataCatalogCustomValueSource = SyncMetadataCatalogValueSource
+
+/** DB-backed sync vocabulary for the Entity Registry UI (actions, flows, value sources). */
 export interface SyncMetadataCatalogResponse {
-  stepTypes: SyncMetadataCatalogStepType[]
+  actions: SyncMetadataCatalogAction[]
   flows: SyncMetadataCatalogFlow[]
-  customValueSources: SyncMetadataCatalogCustomValueSource[]
+  valueSources: SyncMetadataCatalogValueSource[]
 }
 
-export interface SyncMetadataCatalogCustomValueSourceSaveBody {
+export interface SyncMetadataCatalogValueSourceSaveBody {
   id: string
   label: string
   definition?: import("./custom-value-source.js").CustomValueSourceDefinition
 }
+
+/** @deprecated Use SyncMetadataCatalogValueSourceSaveBody */
+export type SyncMetadataCatalogCustomValueSourceSaveBody = SyncMetadataCatalogValueSourceSaveBody
 
 export interface SyncMetadataCatalogPhaseSaveBody {
   id: string
@@ -1499,24 +1511,27 @@ export interface SyncMetadataCatalogPhaseSaveBody {
   definition?: SyncFlowPhaseDefinition
 }
 
-export interface SyncMetadataCatalogStepTypeSaveBody {
+export interface SyncMetadataCatalogActionSaveBody {
   id: string
   label: string
   definition?: SyncFlowKindDefinition
 }
 
+/** @deprecated Use SyncMetadataCatalogActionSaveBody */
+export type SyncMetadataCatalogStepTypeSaveBody = SyncMetadataCatalogActionSaveBody
+
 /** @deprecated Use SyncMetadataCatalogPhase */
 export type SyncRunCatalogPhase = SyncMetadataCatalogPhase
-/** @deprecated Use SyncMetadataCatalogStepType */
-export type SyncRunCatalogKind = SyncMetadataCatalogStepType
+/** @deprecated Use SyncMetadataCatalogAction */
+export type SyncRunCatalogKind = SyncMetadataCatalogAction
 /** @deprecated Use SyncMetadataCatalogFlow */
 export type SyncRunCatalogPreset = SyncMetadataCatalogFlow
 /** @deprecated Use SyncMetadataCatalogResponse */
 export type SyncRunCatalogResponse = SyncMetadataCatalogResponse
 /** @deprecated Use SyncMetadataCatalogPhaseSaveBody */
 export type SyncRunCatalogPhaseSaveBody = SyncMetadataCatalogPhaseSaveBody
-/** @deprecated Use SyncMetadataCatalogStepTypeSaveBody */
-export type SyncRunCatalogKindSaveBody = SyncMetadataCatalogStepTypeSaveBody
+/** @deprecated Use SyncMetadataCatalogActionSaveBody */
+export type SyncRunCatalogKindSaveBody = SyncMetadataCatalogActionSaveBody
 
 export interface EntityRegistrySyncDefinitionExportRequest {
   flowTemplateId?: EntityRegistrySyncFlowTemplateId

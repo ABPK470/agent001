@@ -365,9 +365,9 @@ const BASELINE_SQL = `
       PRIMARY KEY (tenant_id, entity_id)
     );
 
-    -- Sync vocabulary catalog (phases, step types, flows, bindings, step fields).
+    -- Sync vocabulary catalog (phases, actions, flows, value sources).
     -- Boot-seeded from deploy/sync/artifacts/sync-metadata.json; operator edits persist here.
-    CREATE TABLE IF NOT EXISTS sync_run_phases (
+    CREATE TABLE IF NOT EXISTS sync_phases (
       tenant_id        TEXT NOT NULL,
       id               TEXT NOT NULL,
       label            TEXT NOT NULL,
@@ -377,7 +377,7 @@ const BASELINE_SQL = `
       PRIMARY KEY (tenant_id, id)
     );
 
-    CREATE TABLE IF NOT EXISTS sync_run_kinds (
+    CREATE TABLE IF NOT EXISTS sync_actions (
       tenant_id        TEXT NOT NULL,
       id               TEXT NOT NULL,
       label            TEXT NOT NULL,
@@ -386,7 +386,7 @@ const BASELINE_SQL = `
       PRIMARY KEY (tenant_id, id)
     );
 
-    CREATE TABLE IF NOT EXISTS sync_run_presets (
+    CREATE TABLE IF NOT EXISTS sync_flows (
       tenant_id     TEXT NOT NULL,
       id            TEXT NOT NULL,
       label         TEXT NOT NULL,
@@ -398,13 +398,30 @@ const BASELINE_SQL = `
       PRIMARY KEY (tenant_id, id)
     );
 
-    CREATE TABLE IF NOT EXISTS sync_run_binding_sources (
+    CREATE TABLE IF NOT EXISTS sync_value_sources (
       tenant_id        TEXT NOT NULL,
       id               TEXT NOT NULL,
       label            TEXT NOT NULL,
       built_in         INTEGER NOT NULL DEFAULT 0,
       definition_json  TEXT NOT NULL DEFAULT '{}',
       PRIMARY KEY (tenant_id, id)
+    );
+
+    -- Live published SyncDefinitions (assembled process contracts).
+    CREATE TABLE IF NOT EXISTS sync_publish_meta (
+      tenant_id          TEXT PRIMARY KEY,
+      published_at       TEXT NOT NULL,
+      published_version  TEXT NOT NULL,
+      catalog_version    INTEGER
+    );
+
+    CREATE TABLE IF NOT EXISTS sync_definitions (
+      tenant_id          TEXT NOT NULL,
+      entity_id          TEXT NOT NULL,
+      definition_json    TEXT NOT NULL,
+      published_at       TEXT,
+      published_version  TEXT,
+      PRIMARY KEY (tenant_id, entity_id)
     );
 
     -- Full-configuration snapshots (append-only). Operator rollback restores snapshot JSON into SQLite.

@@ -7,7 +7,7 @@ import {
   formatProcedureSummary,
   handlerConfigHighlight,
   infersCreatesDatasetLayer,
-  wiringCatalogListItems,
+  sourcesCatalogListItems,
 } from "./handler-editor"
 
 describe("handler-editor", () => {
@@ -75,7 +75,7 @@ describe("handler-editor", () => {
   })
 
   it("lists value sources from the catalog", () => {
-    const items = wiringCatalogListItems([
+    const items = sourcesCatalogListItems([
       {
         id: "planEntityId",
         label: "Plan entity id",

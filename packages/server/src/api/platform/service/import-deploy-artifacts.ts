@@ -42,11 +42,15 @@ const DEFAULT_TENANT = "_default"
 export interface CatalogImportSectionCounts {
   environments: number
   phases: number
-  stepTypes: number
-  wiring: number
+  actions: number
+  valueSources: number
   flows: number
   strategies: number
   entities: number
+  /** @deprecated Use `actions` */
+  stepTypes?: number
+  /** @deprecated Use `valueSources` */
+  wiring?: number
 }
 
 export interface CatalogImportPreview {
@@ -63,9 +67,21 @@ export interface CatalogImportResult extends CatalogImportPreview {
 type SyncMetadataDoc = {
   version?: number
   phases?: Array<{ id: string; label: string; sortOrder: number; definition: unknown }>
+  actions?: Array<{ id: string; label: string; definition: unknown }>
+  valueSources?: Array<{ id: string; label: string; definition: unknown }>
+  /** @deprecated Prefer `actions` */
   stepTypes?: Array<{ id: string; label: string; definition: unknown }>
+  /** @deprecated Prefer `valueSources` */
   customValueSources?: Array<{ id: string; label: string; definition: unknown }>
   flows?: Record<string, { label: string; description?: string; steps: AuthoredSyncFlowStep[] }>
+}
+
+function docActions(meta: SyncMetadataDoc) {
+  return meta.actions ?? meta.stepTypes ?? []
+}
+
+function docValueSources(meta: SyncMetadataDoc) {
+  return meta.valueSources ?? meta.customValueSources ?? []
 }
 
 type StrategiesDoc = {
@@ -176,8 +192,8 @@ export function validateDeployCatalogSnapshot(snapshot: DeployCatalogSnapshot): 
   const counts: CatalogImportSectionCounts = {
     environments: 0,
     phases: 0,
-    stepTypes: 0,
-    wiring: 0,
+    actions: 0,
+    valueSources: 0,
     flows: 0,
     strategies: 0,
     entities: 0,
@@ -191,21 +207,26 @@ export function validateDeployCatalogSnapshot(snapshot: DeployCatalogSnapshot): 
   }
 
   const meta = snapshot.syncMetadata as SyncMetadataDoc
+  const actions = docActions(meta)
+  const valueSources = docValueSources(meta)
   if (!Array.isArray(meta.phases)) errors.push("sync-metadata.json: phases array is required")
   else counts.phases = meta.phases.length
-  if (!Array.isArray(meta.stepTypes)) errors.push("sync-metadata.json: stepTypes array is required")
-  else counts.stepTypes = meta.stepTypes.length
-  counts.wiring = Array.isArray(meta.customValueSources) ? meta.customValueSources.length : 0
+  if (!Array.isArray(meta.actions) && !Array.isArray(meta.stepTypes)) {
+    errors.push("sync-metadata.json: actions array is required")
+  } else {
+    counts.actions = actions.length
+  }
+  counts.valueSources = valueSources.length
   counts.flows = meta.flows && typeof meta.flows === "object" ? Object.keys(meta.flows).length : 0
   if (counts.flows === 0) errors.push("sync-metadata.json: flows object is required")
 
-  for (const stepType of meta.stepTypes ?? []) {
-    const idError = validateCatalogId(stepType.id, "Kind id")
-    if (idError) errors.push(`sync-metadata.json stepTypes: ${idError}`)
+  for (const action of actions) {
+    const idError = validateCatalogId(action.id, "Action id")
+    if (idError) errors.push(`sync-metadata.json actions: ${idError}`)
   }
-  for (const source of meta.customValueSources ?? []) {
-    const idError = validateCatalogId(source.id, "Custom value source id")
-    if (idError) errors.push(`sync-metadata.json customValueSources: ${idError}`)
+  for (const source of valueSources) {
+    const idError = validateCatalogId(source.id, "Value source id")
+    if (idError) errors.push(`sync-metadata.json valueSources: ${idError}`)
   }
 
   const flowCatalog =
@@ -333,19 +354,19 @@ function applyEnvironments(doc: EnvironmentsDoc): number {
 
 function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
   const phases = doc.phases ?? []
-  const stepTypes = doc.stepTypes ?? []
-  const wiring = doc.customValueSources ?? []
+  const actions = docActions(doc)
+  const wiring = docValueSources(doc)
   const flows = doc.flows ?? {}
   const flowCatalog = buildFlowCatalogFromSyncMetadataDoc(doc)
 
   const phaseIds = new Set(phases.map((p) => p.id))
-  const kindIds = new Set(stepTypes.map((k) => k.id))
+  const kindIds = new Set(actions.map((k) => k.id))
   const wiringIds = new Set(wiring.map((w) => w.id))
   const flowIds = new Set(Object.keys(flows))
 
   for (const phase of phases) {
-    const existing = db.listSyncRunPhases(tenantId).find((row) => row.id === phase.id)
-    db.saveSyncRunPhase({
+    const existing = db.listSyncPhases(tenantId).find((row) => row.id === phase.id)
+    db.saveSyncPhase({
       tenant_id: tenantId,
       id: phase.id,
       label: phase.label,
@@ -354,27 +375,27 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
       definition_json: JSON.stringify(phase.definition),
     })
   }
-  for (const row of db.listSyncRunPhases(tenantId)) {
-    if (!phaseIds.has(row.id) && row.built_in === 0) db.deleteSyncRunPhase(tenantId, row.id)
+  for (const row of db.listSyncPhases(tenantId)) {
+    if (!phaseIds.has(row.id) && row.built_in === 0) db.deleteSyncPhase(tenantId, row.id)
   }
 
-  for (const stepType of stepTypes) {
-    const existing = db.listSyncRunKinds(tenantId).find((row) => row.id === stepType.id)
-    db.saveSyncRunKind({
+  for (const action of actions) {
+    const existing = db.listSyncActions(tenantId).find((row) => row.id === action.id)
+    db.saveSyncAction({
       tenant_id: tenantId,
-      id: stepType.id,
-      label: stepType.label,
+      id: action.id,
+      label: action.label,
       built_in: existing?.built_in ?? 1,
-      definition_json: JSON.stringify(stepType.definition),
+      definition_json: JSON.stringify(action.definition),
     })
   }
-  for (const row of db.listSyncRunKinds(tenantId)) {
-    if (!kindIds.has(row.id) && row.built_in === 0) db.deleteSyncRunKind(tenantId, row.id)
+  for (const row of db.listSyncActions(tenantId)) {
+    if (!kindIds.has(row.id) && row.built_in === 0) db.deleteSyncAction(tenantId, row.id)
   }
 
   for (const source of wiring) {
-    const existing = db.listSyncRunBindingSources(tenantId).find((row) => row.id === source.id)
-    db.saveSyncRunBindingSource({
+    const existing = db.listSyncValueSources(tenantId).find((row) => row.id === source.id)
+    db.saveSyncValueSource({
       tenant_id: tenantId,
       id: source.id,
       label: source.label,
@@ -382,12 +403,12 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
       definition_json: JSON.stringify(source.definition),
     })
   }
-  for (const row of db.listSyncRunBindingSources(tenantId)) {
-    if (!wiringIds.has(row.id) && row.built_in === 0) db.deleteSyncRunBindingSource(tenantId, row.id)
+  for (const row of db.listSyncValueSources(tenantId)) {
+    if (!wiringIds.has(row.id) && row.built_in === 0) db.deleteSyncValueSource(tenantId, row.id)
   }
 
   for (const [id, flow] of Object.entries(flows)) {
-    const existing = db.getSyncRunPreset(tenantId, id)
+    const existing = db.getSyncFlow(tenantId, id)
     let stepsJson: string
     try {
       stepsJson = JSON.stringify(prepareFlowStepsForStorage(flow.steps ?? [], flowCatalog))
@@ -395,7 +416,7 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
       const message = error instanceof FlowStepsValidationError ? error.message : String(error)
       throw new Error(`sync-metadata.json flow "${id}": ${message}`)
     }
-    db.saveSyncRunPreset({
+    db.saveSyncFlow({
       tenant_id: tenantId,
       id,
       label: flow.label,
@@ -406,8 +427,8 @@ function applySyncMetadata(tenantId: string, doc: SyncMetadataDoc): void {
       updated_by: "catalog-import",
     })
   }
-  for (const row of db.listSyncRunPresets(tenantId)) {
-    if (!flowIds.has(row.id) && row.built_in === 0) db.deleteSyncRunPreset(tenantId, row.id)
+  for (const row of db.listSyncFlows(tenantId)) {
+    if (!flowIds.has(row.id) && row.built_in === 0) db.deleteSyncFlow(tenantId, row.id)
   }
 }
 

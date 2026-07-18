@@ -13,7 +13,7 @@ export type CatalogDiffSectionId =
   | "strategies"
   | "environments"
   | "flows"
-  | "stepTypes"
+  | "actions"
   | "valueSources"
   | "phases"
 
@@ -49,7 +49,7 @@ const SECTION_LABELS: Record<CatalogDiffSectionId, string> = {
   strategies: "Strategies",
   environments: "Environments",
   flows: "Flows",
-  stepTypes: "Step types",
+  actions: "Actions",
   valueSources: "Value sources",
   phases: "Phases",
 }
@@ -106,7 +106,7 @@ function emptySectionMaps(): SectionMaps {
     strategies: new Map(),
     environments: new Map(),
     flows: new Map(),
-    stepTypes: new Map(),
+    actions: new Map(),
     valueSources: new Map(),
     phases: new Map(),
   }
@@ -126,8 +126,8 @@ function extractSectionMaps(snapshot: DeployCatalogSnapshot): SectionMaps {
     strategies: mapById(asArray(asRecord(snapshot.strategies)?.strategies), "id"),
     environments: mapById(asArray(asRecord(snapshot.environments)?.environments), "name"),
     flows: mapRecordEntries(flowSource),
-    stepTypes: mapById(asArray(syncMetadata.stepTypes), "id"),
-    valueSources: mapById(asArray(syncMetadata.customValueSources), "id"),
+    actions: mapById(asArray(syncMetadata.actions ?? syncMetadata.stepTypes), "id"),
+    valueSources: mapById(asArray(syncMetadata.valueSources ?? syncMetadata.customValueSources), "id"),
     phases: mapById(asArray(syncMetadata.phases), "id"),
   }
 }

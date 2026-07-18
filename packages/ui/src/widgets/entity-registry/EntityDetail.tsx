@@ -5,7 +5,7 @@
 
 import type { JSX } from "react"
 import type { EntityRegistryDefinition } from "../../types"
-import { TAB_PILL, TOOLBAR_ROW } from "./chrome"
+import { TAB_PILL, TAB_PILL_ACTIVE, TAB_PILL_IDLE, TOOLBAR_ROW } from "./chrome"
 import { EntityTables } from "./EntityTables"
 import { EntityYaml } from "./EntityYaml"
 
@@ -36,12 +36,7 @@ export function EntityDetailToolbar({
             key={t}
             type="button"
             onClick={() => onTab(t)}
-            className={[
-              TAB_PILL,
-              tab === t
-                ? "bg-accent/15 text-accent"
-                : "text-text-muted hover:bg-elevated hover:text-text",
-            ].join(" ")}
+            className={[TAB_PILL, tab === t ? TAB_PILL_ACTIVE : TAB_PILL_IDLE].join(" ")}
           >
             {t === "tables" ? `Tables · ${(def.tables ?? []).length}` : TAB_LABELS[t]}
           </button>

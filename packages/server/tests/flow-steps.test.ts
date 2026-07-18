@@ -5,7 +5,7 @@ import {
   FlowStepsValidationError,
   parseStoredFlowStepsJson,
 } from "../src/infra/persistence/sync-flow-steps.js"
-import { parsePresetSteps } from "../src/infra/persistence/db/sync-run-catalog.js"
+import { parseFlowSteps } from "../src/infra/persistence/db/sync-run-catalog.js"
 
 describe("flow step catalog ids", () => {
   it("accepts canonical camelCase step kinds", () => {
@@ -24,7 +24,7 @@ describe("flow step catalog ids", () => {
 
   it("rejects legacy kebab-case step kinds at read time", () => {
     expect(() =>
-      parsePresetSteps(
+      parseFlowSteps(
         JSON.stringify([
           {
             id: "metadata-sync",

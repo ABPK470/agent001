@@ -82,38 +82,38 @@ export function CatalogVersionDetailModal({
       size="focus"
       stackLevel={1}
     >
-      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-auto px-6 py-4">
-        {err && <p className="text-sm text-error">{err}</p>}
+      <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6 py-4">
+        {err && <p className="shrink-0 text-sm text-error">{err}</p>}
         {busy ? (
           <EmptyState icon={Loader2} message="Loading version…" className="[&_svg]:animate-spin" />
         ) : detail && summary ? (
           <>
-            <section className={`${PANEL} space-y-2 p-4`}>
+            <section className={`${PANEL} shrink-0 space-y-2 p-4`}>
               <h3 className="text-sm font-medium text-text">Revision</h3>
-              <dl className="grid grid-cols-1 gap-2 text-sm sm:grid-cols-2">
-                <div>
+              <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+                <div className="min-w-0">
                   <dt className="text-xs uppercase tracking-wider text-text-muted">Reason</dt>
-                  <dd className="text-text">{detail.reason}</dd>
+                  <dd className="break-words text-text">{detail.reason}</dd>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <dt className="text-xs uppercase tracking-wider text-text-muted">Created</dt>
                   <dd className="text-text">
                     {detail.createdBy} · {new Date(detail.createdAt).toLocaleString()}
                   </dd>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <dt className="text-xs uppercase tracking-wider text-text-muted">Snapshot exported</dt>
                   <dd className="font-mono text-text">{new Date(summary.exportedAt).toLocaleString()}</dd>
                 </div>
-                <div>
+                <div className="min-w-0">
                   <dt className="text-xs uppercase tracking-wider text-text-muted">Tenant</dt>
                   <dd className="font-mono text-text">{summary.tenantId}</dd>
                 </div>
               </dl>
             </section>
 
-            <section className={`${PANEL} flex min-h-0 flex-col overflow-hidden`}>
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
+            <section className={`${PANEL} flex min-h-0 flex-1 flex-col overflow-hidden`}>
+              <div className="flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-border-subtle px-4 py-3">
                 <div className="min-w-0">
                   <h3 className="flex items-center gap-2 text-sm font-medium text-text">
                     <GitCompareArrows size={14} className="text-text-muted" />
@@ -172,14 +172,14 @@ export function CatalogVersionDetailModal({
               )}
             </section>
 
-            <section className={`${PANEL} p-4`}>
+            <section className={`${PANEL} shrink-0 p-4`}>
               <h3 className="mb-3 text-sm font-medium text-text">Contents</h3>
-              <div className="grid grid-cols-7 gap-2">
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-7">
                 <Stat label="Entities" value={summary.entityCount} />
                 <Stat label="Run configs" value={summary.configCount} />
                 <Stat label="Flows" value={summary.flowCount} />
-                <Stat label="Step types" value={summary.stepTypeCount} />
-                <Stat label="Value sources" value={summary.customValueSourceCount} />
+                <Stat label="Actions" value={summary.stepTypeCount} />
+                <Stat label="Sources" value={summary.customValueSourceCount} />
                 <Stat label="Strategies" value={summary.strategyCount} />
                 <Stat label="Environments" value={summary.environmentCount} />
               </div>
@@ -202,10 +202,10 @@ function DiffEntryCard({
 }): JSX.Element {
   const tone =
     entry.kind === "create"
-      ? "text-emerald-300"
+      ? "text-success"
       : entry.kind === "delete"
-        ? "text-rose-300"
-        : "text-amber-300"
+        ? "text-error"
+        : "text-warning"
   const label =
     entry.kind === "create" ? "Added" : entry.kind === "delete" ? "Removed" : "Changed"
 

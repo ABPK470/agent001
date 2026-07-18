@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "_comment": "MyMI-derived sync vocabulary: step types (reusable handlers) and flows (ordered step instances). Seeds DB-backed config; operators may edit after bootstrap.",
+  "_comment": "MyMI-derived sync vocabulary: actions (reusable handlers), value sources (wiring), and flows (ordered step instances). Seeds DB-backed config; operators may edit after bootstrap.",
   "flowTemplates": {
     "content": {
       "label": "Content dependencies",
