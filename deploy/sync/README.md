@@ -36,10 +36,10 @@ Live MSSQL (optional)  →  refresh-from-legacy  →  deploy/sync seeds (Catalog
                                                preview / execute
 ```
 
-- **Shipped seeds** — default for first boot when SQLite is empty (`EntityDefinition` with `flowId` + metadata).
+- **Shipped seeds** — default for first boot when SQLite is empty (same tree as Catalog export).
 - **Refresh from MSSQL** — regenerate seeds from ground truth, restart, then Publish. UI: Policies → Platform → **Refresh from database**.
-- **After boot** — SQLite is the source of truth for operator edits.
-- **Export** — Catalog snapshot download only.
+- **After boot** — SQLite holds the same Catalog documents (entity `body_json` = seed file shape).
+- **Export** — Catalog snapshot with the **same tree layout** as `deploy/sync` (review / personal copy).
 - **Runtime** reads **SyncDefinitions in SQLite**, not deploy files.
 
 Ground-truth lock: `packages/sync/src/test-support/__goldens__/legacy-refresh/` (G2/G3). Regenerating seeds must keep those goldens green.

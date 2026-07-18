@@ -3,7 +3,7 @@
  */
 
 import Database from "better-sqlite3"
-import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs"
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, rmSync } from "node:fs"
 import { tmpdir } from "node:os"
 import { join, resolve } from "node:path"
 import { fileURLToPath } from "node:url"
@@ -11,6 +11,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import {
   applyDeployCatalogSnapshot,
+  parseCatalogBundleFromDir,
   validateDeployCatalogSnapshot,
 } from "../src/api/platform/service/import-deploy-artifacts.js"
 import {
@@ -172,14 +173,26 @@ describe("catalog import/export round-trip", () => {
     expect(preview.errors.some((error) => error.includes("does-not-exist"))).toBe(true)
   })
 
-  it("does not write sync-definition-configs.json into export folders", () => {
+  it("writes deploy/sync tree (entities/*.json), not bulk entity-registry", () => {
     const parent = mkdtempSync(join(tmpdir(), "catalog-export-dir-"))
     const result = writeDeployCatalogSnapshot({
       outputParentDir: parent,
       tenantId: "_default",
     })
-    expect(result.files).toContain("entity-registry.json")
+    expect(result.files).toContain("entities/dataset.json")
+    expect(result.files).not.toContain("entity-registry.json")
     expect(result.files).not.toContain("sync-definition-configs.json")
+    const entityPath = join(result.folderPath, "artifacts", "entities", "dataset.json")
+    const doc = JSON.parse(readFileSync(entityPath, "utf-8")) as { id: string; flowId: string }
+    expect(doc.id).toBe("dataset")
+    expect(doc.flowId).toBeTruthy()
+
+    const loaded = parseCatalogBundleFromDir(result.folderPath)
+    const dataset = loaded.entityRegistry?.entities.find(
+      (entry) => (entry as { id?: string }).id === "dataset",
+    ) as { flowId?: string } | undefined
+    expect(dataset?.flowId).toBe(doc.flowId)
+
     rmSync(parent, { recursive: true, force: true })
   })
 

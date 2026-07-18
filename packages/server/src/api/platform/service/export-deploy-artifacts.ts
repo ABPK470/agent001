@@ -1,8 +1,8 @@
 /**
- * Export SQLite catalog state to a user-chosen snapshot folder (never overwrites repo seeds).
+ * Export SQLite catalog to a snapshot folder that mirrors deploy/sync layout.
+ * Never overwrites repo seeds.
  *
- * Ground truth flow:
- *   artifact (git) → seed SQLite → operator edits in UI → export snapshot → review → commit manually
+ *   deploy/sync seeds → boot → SQLite catalog → UI edit → export (same tree) → review
  */
 
 import { spawnSync } from "node:child_process"
@@ -13,7 +13,10 @@ import { join, resolve } from "node:path"
 import type { EntityDefinition, Scd2Strategy, SyncEnvironment } from "@mia/sync"
 
 import type { EntityRegistryExportDocument } from "../../sync/types/entity-yaml.js"
-import { buildEntityRegistryExportDocument } from "../../sync/types/entity-yaml.js"
+import {
+  buildEntityRegistryExportDocument,
+  formatEntityJson,
+} from "../../sync/types/entity-yaml.js"
 import { assertTenantEntitiesExportable } from "../../sync/service/assert-entity-export.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 
@@ -28,8 +31,12 @@ export interface DeployCatalogSnapshot {
   flowTemplates: Record<string, unknown>
   strategies: Record<string, unknown>
   environments: Record<string, unknown>
+  /**
+   * In-memory entity list for validate/apply/versions.
+   * On disk, entities are written as artifacts/entities/{id}.json (seed mirror).
+   */
   entityRegistry: EntityRegistryExportDocument | null
-  /** @deprecated Legacy zip compat only — new exports leave this null; run bindings live on entities. */
+  /** @deprecated Legacy zip compat only — new exports leave this null. */
   syncDefinitionConfigs: SyncDefinitionConfigExportDocument | null
   entityIds: string[]
 }
@@ -232,13 +239,23 @@ export function writeDeployCatalogSnapshot(
   const folderName = exportTimestampFolderName(new Date(snapshot.exportedAt))
   const folderPath = resolve(options.outputParentDir, folderName)
   const artifactsDir = join(folderPath, "artifacts")
-  mkdirSync(artifactsDir, { recursive: true })
+  const entitiesDir = join(artifactsDir, "entities")
+  mkdirSync(entitiesDir, { recursive: true })
+
+  const definitions = db.listEntityDefinitions(snapshot.tenantId, {
+    includeRetired: options.includeRetiredEntities ?? false,
+  }) as EntityDefinition[]
+  const entityFiles = definitions.map((def) => {
+    const name = `${def.id}.json`
+    writeFileSync(join(entitiesDir, name), formatEntityJson(def), "utf-8")
+    return `entities/${name}`
+  })
 
   const artifactFiles = [
     "sync-metadata.json",
     "strategies.json",
     "flow-templates.json",
-    ...(snapshot.entityRegistry ? ["entity-registry.json"] : []),
+    ...entityFiles,
   ]
 
   const files = [
@@ -248,17 +265,17 @@ export function writeDeployCatalogSnapshot(
       entityCount: snapshot.entityIds.length,
       entityIds: snapshot.entityIds,
       layout: "deploy/sync mirror",
-      files: ["sync-environments.json", ...artifactFiles.map((name) => `artifacts/${name}`)],
+      files: [
+        "sync-environments.json",
+        ...artifactFiles.map((name) => `artifacts/${name}`),
+      ],
     }),
     writeJsonFile(folderPath, "sync-environments.json", snapshot.environments),
     writeJsonFile(artifactsDir, "sync-metadata.json", snapshot.syncMetadata),
     writeJsonFile(artifactsDir, "strategies.json", snapshot.strategies),
     writeJsonFile(artifactsDir, "flow-templates.json", snapshot.flowTemplates),
+    ...entityFiles,
   ]
-
-  if (snapshot.entityRegistry) {
-    files.push(writeJsonFile(artifactsDir, "entity-registry.json", snapshot.entityRegistry))
-  }
 
   let zipPath: string | null = null
   if (options.zip) {

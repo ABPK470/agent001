@@ -24,7 +24,7 @@ Three execution regions  — before metadataSync | metadataSync (SQL tx) | after
 | **Entity registry** | Versioned DB records (`EntityDefinition`): root table, dependent tables, scope per table, policies. Shipped as `deploy/sync/artifacts/entities/*.json`. |
 | **SyncDefinition** | Full operational contract used by preview/execute: structure + governance + bindings + execution flow (+ publish stamps). Stored in `sync_definitions`. |
 | **Authored sync definition** | Process JSON without publish stamps — compile intermediate / runtime base type. **Not** the git seed authoring format. |
-| **Catalog snapshot** | Bulk export/import of Catalog (`entity-registry.json` + metadata). See [ARTIFACT-FORMATS.md](../../deploy/sync/ARTIFACT-FORMATS.md). |
+| **Catalog snapshot** | Export/import of Catalog as the same tree as `deploy/sync` (`artifacts/entities/*.json` + metadata). See [ARTIFACT-FORMATS.md](../../deploy/sync/ARTIFACT-FORMATS.md). |
 | **Published sync definition** | SyncDefinition after Publish (`publishedAt` / `publishedVersion`). **Runtime authority** in SQLite. |
 | **Execution contract** | Snapshot on `SyncPlan` that reproduces preview at execute: definition metadata + flow steps + governance. |
 | **SyncPlan** | Persisted preview envelope: entity, envs, `executionContract`, per-table `changeSet`, `stats`, samples, warnings. |

@@ -1,13 +1,12 @@
 /**
- * Bidirectional YAML/JSON import/export for `EntityDefinition` tip documents.
+ * Bidirectional YAML/JSON for Catalog entity documents (`EntityDefinition` + `flowId`).
  *
- * Design constraints:
- *  - Round-tripping is faithful for structured fields (stable key order).
- *  - Format mirrors `EntityDefinition` 1:1 — including `flowId`.
- *  - Legacy `run.template` is accepted on import and mapped to `flowId`.
- *  - `version`, `versionLabel`, `createdAt`, `createdBy`, `retiredAt`
- *    are NEVER read from the document — the server stamps those at save.
- *    They ARE emitted when exporting (informational `__meta` only).
+ * Same document as git seeds (`deploy/sync/artifacts/entities/{id}.json`) and
+ * SQLite `entity_def_versions.body_json`. Export/import use this shape 1:1.
+ *
+ * Legacy: `run.template` → `flowId`; `__meta` stamps ignored on import.
+ * Server stamps (`version`, `createdAt`, …) are emitted for review but
+ * overwritten on save.
  */
 
 import { parseAllDocuments, parseDocument, stringify } from "yaml"
@@ -38,7 +37,7 @@ export interface EntityRegistryExportDocument {
 export function buildEntityRegistryExportDocument(defs: EntityDefinition[]): EntityRegistryExportDocument {
   return {
     version: 1,
-    _comment: "SQLite snapshot — entity tip documents (EntityDefinition + flowId).",
+    _comment: "SQLite snapshot — Catalog entity documents (EntityDefinition + flowId).",
     entities: defs.map((def) => orderEntity(def)),
   }
 }
@@ -69,20 +68,19 @@ function orderEntity(def: EntityDefinition): Record<string, unknown> {
 
   if (def.lineageRefs.length > 0) out["lineageRefs"] = def.lineageRefs
   out["provenance"] = def.provenance
-  out["flowId"] = def.flowId
 
   if (def.legacyEntrySproc) out["legacyEntrySproc"] = def.legacyEntrySproc
   if (def.reverseOrder.length > 0) out["reverseOrder"] = def.reverseOrder
   if (def.discrepancies.length > 0) out["discrepancies"] = def.discrepancies
 
-  out["__meta"] = {
-    version: def.version,
-    versionLabel: def.versionLabel,
-    createdBy: def.createdBy,
-    createdAt: def.createdAt,
-    reason: def.reason,
-    retiredAt: def.retiredAt,
-  }
+  // Same field placement as shipped seeds / SQLite body_json (informational on import).
+  out["version"] = def.version
+  out["versionLabel"] = def.versionLabel
+  out["createdBy"] = def.createdBy
+  out["reason"] = def.reason
+  out["createdAt"] = def.createdAt
+  out["retiredAt"] = def.retiredAt
+  out["flowId"] = def.flowId
   return out
 }
 

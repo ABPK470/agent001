@@ -123,14 +123,7 @@ export function parseCatalogBundleFromDir(bundleDir: string): DeployCatalogSnaps
   )
   const environments = requireObject(readJsonFile(join(root, "sync-environments.json")), "sync-environments.json")
 
-  let entityRegistry: EntityRegistryExportDocument | null = null
-  const entityPath = join(root, "artifacts", "entity-registry.json")
-  try {
-    const raw = requireObject(readJsonFile(entityPath), "artifacts/entity-registry.json")
-    entityRegistry = raw as unknown as EntityRegistryExportDocument
-  } catch {
-    entityRegistry = null
-  }
+  const entityRegistry = loadEntityRegistryFromBundle(root)
 
   let syncDefinitionConfigs: SyncDefinitionConfigExportDocument | null = null
   const configPath = join(root, "artifacts", "sync-definition-configs.json")
@@ -155,6 +148,36 @@ export function parseCatalogBundleFromDir(bundleDir: string): DeployCatalogSnaps
     entityRegistry,
     syncDefinitionConfigs,
     entityIds,
+  }
+}
+
+/** Prefer artifacts/entities/*.json (seed mirror); legacy entity-registry.json accepted. */
+function loadEntityRegistryFromBundle(root: string): EntityRegistryExportDocument | null {
+  const entitiesDir = join(root, "artifacts", "entities")
+  if (existsSync(entitiesDir)) {
+    const files = readdirSync(entitiesDir)
+      .filter((name) => name.endsWith(".json"))
+      .sort()
+    if (files.length > 0) {
+      const entities: Record<string, unknown>[] = []
+      for (const file of files) {
+        const raw = requireObject(readJsonFile(join(entitiesDir, file)), `artifacts/entities/${file}`)
+        entities.push(raw)
+      }
+      return {
+        version: 1,
+        _comment: "Loaded from artifacts/entities/*.json",
+        entities,
+      }
+    }
+  }
+
+  const entityPath = join(root, "artifacts", "entity-registry.json")
+  try {
+    const raw = requireObject(readJsonFile(entityPath), "artifacts/entity-registry.json")
+    return raw as unknown as EntityRegistryExportDocument
+  } catch {
+    return null
   }
 }
 
