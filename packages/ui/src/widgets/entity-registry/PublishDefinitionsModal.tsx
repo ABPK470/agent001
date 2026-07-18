@@ -1,5 +1,5 @@
 /**
- * Publish definitions — confirmation modal (same pattern as sync execute).
+ * Publish definitions — confirmation modal with unpublished change preview.
  */
 
 import { CheckCircle2, Loader2, Rocket, X, XCircle } from "lucide-react"
@@ -7,16 +7,18 @@ import type { JSX } from "react"
 import { useState } from "react"
 import { createPortal } from "react-dom"
 import { api } from "../../client/index"
-import type { PublishSyncDefinitionsResponse } from "../../types"
+import type { PublishSyncDefinitionsResponse, SyncDefinitionAdminItem } from "../../types"
 
 type PublishPhase = "idle" | "publishing" | "done"
 
 export function PublishDefinitionsModal({
   entityCount,
+  unpublished,
   onClose,
   onPublished,
 }: {
   entityCount: number
+  unpublished: SyncDefinitionAdminItem[]
   onClose: () => void
   onPublished?: (result: PublishSyncDefinitionsResponse) => void
 }): JSX.Element {
@@ -96,20 +98,56 @@ export function PublishDefinitionsModal({
             <div className="flex-1 overflow-y-auto">
               <div className="px-4 sm:px-5 pt-4 pb-3 text-justify">
                 <p className="text-sm text-text-muted leading-relaxed">
-                  Compile and publish{" "}
-                  <span className="font-semibold text-text">all entity definitions</span>{" "}
-                  to the runtime sync bundle. Preview and execute use the published version.
+                  Compile and publish entity definitions to the runtime sync bundle.
+                  Preview and execute use the published version — saving the registry alone does not publish.
                 </p>
               </div>
 
               <div className="mx-4 sm:mx-5 rounded-lg border border-border-subtle bg-overlay-1 px-4 py-3">
                 <div className="flex items-center justify-center gap-5 font-mono text-sm tabular-nums">
                   <div className="text-center">
+                    <div className="text-lg font-semibold text-text">{unpublished.length}</div>
+                    <div className="text-xs text-text-muted">unpublished</div>
+                  </div>
+                  <div className="text-center">
                     <div className="text-lg font-semibold text-text">{entityCount}</div>
-                    <div className="text-xs text-text-muted">entities</div>
+                    <div className="text-xs text-text-muted">entities total</div>
                   </div>
                 </div>
               </div>
+
+              {unpublished.length > 0 ? (
+                <div className="mx-4 sm:mx-5 mt-3 max-h-64 overflow-y-auto rounded-lg border border-border-subtle">
+                  <ul className="divide-y divide-border-subtle">
+                    {unpublished.map((item) => (
+                      <li key={item.id} className="px-3 py-2.5 text-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <div className="font-mono font-medium text-text">{item.id}</div>
+                            <div className="truncate text-text-muted">{item.displayName}</div>
+                          </div>
+                          <div className="shrink-0 text-right text-xs text-text-faint">
+                            <div>rev {item.entityVersion}</div>
+                            <div>
+                              {item.publishedAt
+                                ? `was ${new Date(item.publishedAt).toLocaleString()}`
+                                : "never published"}
+                            </div>
+                          </div>
+                        </div>
+                        <div className="mt-1 text-xs text-text-muted">
+                          Config updated {new Date(item.updatedAt).toLocaleString()}
+                          {item.updatedBy ? ` · ${item.updatedBy}` : ""}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : (
+                <p className="px-4 sm:px-5 pt-3 text-sm text-text-muted">
+                  No unpublished entity changes detected. Publish still recompiles the full bundle.
+                </p>
+              )}
 
               <div className="px-4 sm:px-5 pt-3 pb-4 text-center">
                 <p className="text-sm text-text-muted/50 leading-relaxed">

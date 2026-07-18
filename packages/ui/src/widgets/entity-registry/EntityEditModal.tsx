@@ -3,27 +3,30 @@ import type { JSX } from "react"
 import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { canApply, fingerprintPayload } from "../../lib/import-gate"
 import type {
   AuthoredSyncFlowStep,
   EntityRegistryDefinition,
   EntityRegistrySyncFlowTemplateId,
+  EntityRegistryYamlImportResponse,
 } from "../../types"
+import { ImportImpactPanel } from "../platform/ImportImpactPanel"
 import { FIELD_LABEL, ICON_BTN, PANEL, SECTION_TITLE, TEXT_BTN, TEXT_BTN_PRIMARY } from "./chrome"
 import {
-  applyYamlPreviewToForm,
+  applySourcePreviewToForm,
   buildEntityEditSections,
   defaultNewFormState,
   defToFormState,
   formStateToDefinition,
-  formatYamlImportError,
+  formatSourceImportError,
   mergeDraftSuggestion,
-  NEW_ENTITY_YAML_TEMPLATE,
-  runYamlToFormRun,
+  NEW_ENTITY_JSON_TEMPLATE,
+  runBindingToFormRun,
   type EntityEditFormState,
   type EntityEditSectionId,
   validateEntityEditForm,
 } from "./entity-edit-form"
-import { YamlSurface } from "./EntityEditSurfaces"
+import { SourceSurface } from "./EntityEditSurfaces"
 import { EntityTableListEditor } from "./EntityTableListEditor"
 import { FlowStepsPreview } from "./FlowStepsPreview"
 import { FreezeWindowsSelect } from "./FreezeWindowsSelect"
@@ -48,7 +51,7 @@ const SECTION_LABELS: Record<EntityEditSectionId, string> = {
   policies: "Freeze windows",
   tables: "Tables",
   run: "Run",
-  yaml: "Source",
+  source: "Source",
 }
 
 export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose, onSaved }: EntityEditModalProps): JSX.Element {
@@ -72,14 +75,18 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
   const [freezeWindowsOpen, setFreezeWindowsOpen] = useState(false)
   const [strategiesOpen, setStrategiesOpen] = useState(false)
   const [governanceCatalogRev, setGovernanceCatalogRev] = useState(0)
-  const [yamlError, setYamlError] = useState<string | null>(null)
-  const [yamlSyncBusy, setYamlSyncBusy] = useState(false)
-  const skipYamlToFormRef = useRef(false)
-  const skipFormToYamlRef = useRef(false)
+  const [sourceError, setSourceError] = useState<string | null>(null)
+  const [sourceSyncBusy, setSourceSyncBusy] = useState(false)
+  const skipSourceToFormRef = useRef(false)
+  const skipFormToSourceRef = useRef(false)
   const hydratedRef = useRef(false)
   const structuredEditedRef = useRef(false)
   const formBaselineRef = useRef<EntityEditFormState>(defaultNewFormState())
   const [confirmSaveOpen, setConfirmSaveOpen] = useState(false)
+  const [savePreview, setSavePreview] = useState<EntityRegistryYamlImportResponse | null>(null)
+  const [savePreviewBusy, setSavePreviewBusy] = useState(false)
+  const [savePreviewFingerprint, setSavePreviewFingerprint] = useState<string | null>(null)
+  const [savePreviewErr, setSavePreviewErr] = useState<string | null>(null)
 
   const markTouched = useCallback((field: string) => {
     touchedFieldsRef.current.add(field)
@@ -108,7 +115,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
   }, [])
 
   const patch = useCallback((partial: Partial<EntityEditFormState>) => {
-    if ("yamlBody" in partial) {
+    if ("sourceBody" in partial) {
       structuredEditedRef.current = false
     } else if (
       Object.keys(partial).some((key) => key !== "reason")
@@ -142,7 +149,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
       )
 
       if (mode === "edit" && entityId && initial) {
-        const yaml = await api.getEntityRegistryYaml(entityId)
+        const source = await api.getEntityRegistryJson(entityId)
         const runRow = configs.find((item) => item.id === entityId) ?? null
         setBaseDef(initial)
         structuredEditedRef.current = false
@@ -152,7 +159,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
             serviceProfileRef: runRow.serviceProfileRef,
             environmentPolicyRef: runRow.environmentPolicyRef,
           } : null),
-          yamlBody: yaml,
+          sourceBody: source,
         })
         formBaselineRef.current = {
           ...defToFormState(initial, runRow ? {
@@ -160,7 +167,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
             serviceProfileRef: runRow.serviceProfileRef,
             environmentPolicyRef: runRow.environmentPolicyRef,
           } : null),
-          yamlBody: yaml,
+          sourceBody: source,
         }
       } else {
         setBaseDef(null)
@@ -250,57 +257,61 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
 
   useEffect(() => {
     if (loading || !hydratedRef.current) return
-    const yaml = form.yamlBody
-    if (!yaml.trim()) {
-      setYamlError(null)
+    const source = form.sourceBody
+    if (!source.trim()) {
+      setSourceError(null)
       return
     }
-    if (skipFormToYamlRef.current) {
-      skipFormToYamlRef.current = false
+    if (skipFormToSourceRef.current) {
+      skipFormToSourceRef.current = false
       return
     }
     const handle = window.setTimeout(() => {
       void (async () => {
-        setYamlSyncBusy(true)
+        setSourceSyncBusy(true)
         try {
-          const result = await api.importEntityRegistryYaml(yaml, "preview", { dryRun: true })
+          const result = await api.importEntityRegistryJson(source, "preview", { dryRun: true })
           if (!result.ok || result.rowErrors.length > 0) {
             const first = result.rowErrors[0]
-            setYamlError(first ? formatYamlImportError(first) : "Invalid YAML")
+            setSourceError(first ? formatSourceImportError(first) : "Invalid JSON")
             return
           }
           const item = result.preview?.[0]
           if (!item) {
-            setYamlError("YAML did not parse to an entity")
+            setSourceError("JSON did not parse to an entity")
             return
           }
-          setYamlError(null)
-          skipYamlToFormRef.current = true
+          if (mode === "edit" && item.def.id !== entityId) {
+            setSourceError(`Source id must remain "${entityId}"`)
+            return
+          }
+          setSourceError(null)
+          skipSourceToFormRef.current = true
           setForm((current) => ({
-            ...applyYamlPreviewToForm(
+            ...applySourcePreviewToForm(
               current,
               item.def,
-              item.run ? runYamlToFormRun(item.run) : null,
+              item.run ? runBindingToFormRun(item.run) : null,
               mode,
             ),
-            yamlBody: current.yamlBody,
+            sourceBody: current.sourceBody,
             reason: current.reason,
             versionLabel: current.versionLabel,
           }))
         } catch (error) {
-          setYamlError(error instanceof Error ? error.message : String(error))
+          setSourceError(error instanceof Error ? error.message : String(error))
         } finally {
-          setYamlSyncBusy(false)
+          setSourceSyncBusy(false)
         }
       })()
     }, 450)
     return () => window.clearTimeout(handle)
-  }, [form.yamlBody, loading, mode])
+  }, [entityId, form.sourceBody, loading, mode])
 
   useEffect(() => {
     if (loading || !hydratedRef.current || !structuredEditedRef.current) return
-    if (skipYamlToFormRef.current) {
-      skipYamlToFormRef.current = false
+    if (skipSourceToFormRef.current) {
+      skipSourceToFormRef.current = false
       return
     }
     const handle = window.setTimeout(() => {
@@ -331,16 +342,16 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
             retiredAt: null,
           }
           const def = formStateToDefinition(shell, form)
-          const { yaml } = await api.previewEntityRegistryYaml(def, {
+          const { json } = await api.previewEntityRegistryJson(def, {
             flowTemplateId: form.flowTemplateId,
             serviceProfileRef: form.serviceProfileRef,
             environmentPolicyRef: form.environmentPolicyRef,
           })
-          skipFormToYamlRef.current = true
+          skipFormToSourceRef.current = true
           structuredEditedRef.current = false
-          patch({ yamlBody: yaml })
+          patch({ sourceBody: json })
         } catch {
-          // keep current yaml when preview fails
+          // keep current source when preview fails
         }
       })()
     }, 450)
@@ -350,62 +361,95 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
   const reservedIds = useMemo(() => new Set(reservedEntityIds), [reservedEntityIds])
 
   const missing = useMemo<string | null>(
-    () => validateEntityEditForm(form, mode, reservedIds, yamlError),
-    [form, mode, reservedIds, yamlError],
+    () => validateEntityEditForm(form, mode, reservedIds, sourceError),
+    [form, mode, reservedIds, sourceError],
   )
 
-  async function reloadSavedYaml(): Promise<void> {
+  async function reloadSavedSource(): Promise<void> {
     if (mode !== "edit" || !entityId) return
     setErr(null)
     try {
-      skipFormToYamlRef.current = true
-      const yaml = await api.getEntityRegistryYaml(entityId)
-      patch({ yamlBody: yaml })
-      setYamlError(null)
+      skipFormToSourceRef.current = true
+      const source = await api.getEntityRegistryJson(entityId)
+      patch({ sourceBody: source })
+      setSourceError(null)
     } catch (error) {
       setErr(error instanceof Error ? error.message : String(error))
     }
   }
 
+  const sourceFingerprint = useMemo(
+    () => fingerprintPayload(form.sourceBody),
+    [form.sourceBody],
+  )
+
+  const saveApplyEnabled = canApply({
+    preview: savePreview,
+    payloadFingerprint: savePreviewFingerprint,
+    currentFingerprint: sourceFingerprint,
+    reason: form.reason,
+  })
+
+  useEffect(() => {
+    if (!confirmSaveOpen) {
+      setSavePreview(null)
+      setSavePreviewFingerprint(null)
+      setSavePreviewErr(null)
+      setSavePreviewBusy(false)
+      return
+    }
+    const payload = form.sourceBody
+    const fingerprint = fingerprintPayload(payload)
+    let cancelled = false
+    setSavePreviewBusy(true)
+    setSavePreviewErr(null)
+    void (async () => {
+      try {
+        const preview = await api.importEntityRegistryJson(payload, form.reason.trim() || "preview", {
+          dryRun: true,
+        })
+        if (cancelled) return
+        if (mode === "edit") {
+          const previewId = preview.preview?.[0]?.def.id ?? preview.saved[0]?.id
+          if (previewId && previewId !== entityId) {
+            setSavePreview(null)
+            setSavePreviewFingerprint(null)
+            setSavePreviewErr(`Source id must remain "${entityId}"`)
+            setSavePreviewBusy(false)
+            return
+          }
+        }
+        setSavePreview(preview)
+        setSavePreviewFingerprint(fingerprint)
+        setSavePreviewErr(preview.ok ? null : preview.errors[0] ?? "Validation failed")
+        setSavePreviewBusy(false)
+      } catch (error) {
+        if (cancelled) return
+        setSavePreview(null)
+        setSavePreviewFingerprint(null)
+        setSavePreviewErr(error instanceof Error ? error.message : String(error))
+        setSavePreviewBusy(false)
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [confirmSaveOpen, entityId, form.reason, form.sourceBody, mode])
+
   async function doSave(): Promise<void> {
     setErr(null)
-    if (missing) return
+    if (missing || !saveApplyEnabled) return
     setBusy(true)
     try {
-      const shell: EntityRegistryDefinition = baseDef ?? {
-        id: form.id.trim(),
-        tenantId: "_default",
-        displayName: "",
-        description: "",
-        rootTable: "",
-        idColumn: "",
-        labelColumn: null,
-        selfJoinColumn: null,
-        tables: [],
-        policies: { freezeWindowIds: [] },
-        scd2: { strategyId: "mymi-scd2", strategyVersion: "latest", entityOverride: null },
-        lineageRefs: [],
-        provenance: { kind: "manual" },
-        legacyEntrySproc: null,
-        reverseOrder: [],
-        discrepancies: [],
-        version: 0,
-        versionLabel: null,
-        createdBy: "",
-        reason: "",
-        createdAt: new Date().toISOString(),
-        retiredAt: null,
+      const result = await api.importEntityRegistryJson(form.sourceBody, form.reason.trim(), {
+        dryRun: false,
+      })
+      if (!result.ok || result.rowErrors.length > 0) {
+        const first = result.rowErrors[0]
+        throw new Error(first ? formatSourceImportError(first) : result.errors[0] ?? "Save failed")
       }
-
-      const def = formStateToDefinition(shell, form)
-      const saved = await api.saveEntityRegistry(def, form.reason, {
-        createOnly: mode === "new",
-      })
-      await api.updateSyncDefinitionConfig(saved.id, {
-        flowTemplateId: form.flowTemplateId,
-        serviceProfileRef: form.serviceProfileRef,
-        environmentPolicyRef: form.environmentPolicyRef,
-      })
+      const saved = result.saved[0]
+      if (!saved) throw new Error("Save produced no entity revision")
       onSaved(saved.id, saved.version)
       onClose()
     } catch (error) {
@@ -417,7 +461,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
   }
 
   function requestSave(): void {
-    if (missing || busy || loading || yamlSyncBusy) return
+    if (missing || busy || loading || sourceSyncBusy) return
     setConfirmSaveOpen(true)
   }
 
@@ -447,8 +491,8 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
           {missing && !busy && !loading && (
             <span className="text-sm text-text-faint">{missing}</span>
           )}
-          {yamlSyncBusy && !missing && (
-            <span className="text-sm text-text-faint">Syncing YAML…</span>
+          {sourceSyncBusy && !missing && (
+            <span className="text-sm text-text-faint">Syncing source…</span>
           )}
           <div className="ml-auto flex items-center gap-2">
             <button
@@ -462,7 +506,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
             <button
               type="button"
               onClick={requestSave}
-              disabled={busy || loading || yamlSyncBusy || missing !== null}
+              disabled={busy || loading || sourceSyncBusy || missing !== null}
               title={missing ?? undefined}
               className="flex items-center gap-1.5 rounded bg-accent px-3 py-1.5 text-xs font-medium text-text-on-accent hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -559,7 +603,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                   </button>
                 )}
               </div>
-              {section === "yaml" ? (
+              {section === "source" ? (
                 <div className="mt-3 flex min-h-0 flex-1 flex-col gap-2 overflow-hidden">
                   <div className="flex shrink-0 flex-wrap items-center justify-between gap-2">
                     <p className="min-w-0 flex-1 text-sm text-text-muted">
@@ -569,7 +613,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                       {mode === "new" && (
                         <button
                           type="button"
-                          onClick={() => patch({ yamlBody: NEW_ENTITY_YAML_TEMPLATE })}
+                          onClick={() => patch({ sourceBody: NEW_ENTITY_JSON_TEMPLATE })}
                           className={TEXT_BTN}
                         >
                           Load starter template
@@ -578,30 +622,30 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                       {mode === "edit" && (
                         <button
                           type="button"
-                          onClick={() => void reloadSavedYaml()}
+                          onClick={() => void reloadSavedSource()}
                           disabled={busy}
                           className={TEXT_BTN}
                         >
-                          Reload saved YAML
+                          Reload saved JSON
                         </button>
                       )}
                     </div>
                   </div>
-                  {yamlError && (
+                  {sourceError && (
                     <div className="flex shrink-0 items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-sm text-rose-300">
                       <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-                      {yamlError}
+                      {sourceError}
                     </div>
                   )}
-                  {!yamlError && form.yamlBody.trim() && !yamlSyncBusy && (
-                    <p className="shrink-0 text-sm text-emerald-400/90">YAML is valid and synced with the structured sections.</p>
+                  {!sourceError && form.sourceBody.trim() && !sourceSyncBusy && (
+                    <p className="shrink-0 text-sm text-emerald-400/90">JSON is valid and synced with the structured sections.</p>
                   )}
                   <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-lg border border-border-subtle bg-base/40">
-                    <YamlSurface
+                    <SourceSurface
                       loading={false}
-                      body={form.yamlBody}
-                      onBody={(yamlBody) => patch({ yamlBody })}
-                      placeholder="Paste or edit entity YAML…"
+                      body={form.sourceBody}
+                      onBody={(sourceBody) => patch({ sourceBody })}
+                      placeholder="Paste or edit entity JSON…"
                     />
                   </div>
                 </div>
@@ -814,7 +858,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
             <button
               type="button"
               onClick={discardFormChanges}
-              disabled={busy}
+              disabled={busy || savePreviewBusy}
               className={`${TEXT_BTN} text-rose-400 hover:text-rose-300`}
             >
               Discard changes
@@ -831,7 +875,12 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
               <button
                 type="button"
                 onClick={() => void doSave()}
-                disabled={busy}
+                disabled={busy || savePreviewBusy || !saveApplyEnabled}
+                title={
+                  saveApplyEnabled
+                    ? undefined
+                    : "Validation must succeed for the current source before applying"
+                }
                 className={TEXT_BTN_PRIMARY}
               >
                 {mode === "new" ? "Create entity" : "Save changes"}
@@ -840,11 +889,20 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
           </div>
         )}
       >
-        <p className="p-5 text-sm leading-relaxed text-text-muted">
-          {mode === "new"
-            ? "This creates a new entity definition in the registry. Review table scopes before publishing to sync environments."
-            : "This writes a new revision to the entity registry. Built-in entities can be edited, but publish will only succeed when every enabled table has a valid scope predicate."}
-        </p>
+        <div className="space-y-3 p-5">
+          <p className="text-sm leading-relaxed text-text-muted">
+            {mode === "new"
+              ? "This creates a new entity definition in the registry via the same import gate used for JSON imports. Review impact below, then publish when you want sync environments to pick it up."
+              : "This writes a new revision via the same import gate used for JSON imports. Publish separately so sync preview/execute use the new revision."}
+          </p>
+          {savePreviewBusy && (
+            <div className="flex items-center gap-2 text-sm text-text-muted">
+              <Loader2 className="h-3.5 w-3.5 animate-spin" /> Validating source…
+            </div>
+          )}
+          {savePreviewErr && <p className="text-sm text-error">{savePreviewErr}</p>}
+          {savePreview && <ImportImpactPanel result={savePreview} />}
+        </div>
       </ModalShell>
     )}
     {syncMetadataOpen && (

@@ -615,6 +615,28 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
     },
   )
 
+  app.post<{ Body: import("@mia/shared-types").EntityRegistryPreviewJsonRequest }>(
+    "/api/entity-registry/entities/preview-json",
+    async (req, reply): Promise<{ json: string } | { error: string }> => {
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { error: "admin only" }
+      }
+      if (!req.body?.def || typeof req.body.def !== "object") {
+        reply.code(400)
+        return { error: "'def' body is required" }
+      }
+      const run = req.body.run
+        ? {
+            template: req.body.run.flowTemplateId,
+            service: req.body.run.serviceProfileRef,
+            environment: req.body.run.environmentPolicyRef,
+          }
+        : null
+      return { json: formatEntityJson(req.body.def as EntityDefinition, run) }
+    },
+  )
+
   app.get("/api/entity-registry/strategies", async (req) => {
     const tenantId = resolveTenant(req)
     const items = db.listAvailableStrategies(tenantId)

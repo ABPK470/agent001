@@ -1226,6 +1226,19 @@ export interface EntityRegistryPreviewYamlResponse {
   yaml: string
 }
 
+export interface EntityRegistryPreviewJsonRequest {
+  def: EntityRegistryDefinition
+  run?: {
+    flowTemplateId: string
+    serviceProfileRef: string
+    environmentPolicyRef: string
+  }
+}
+
+export interface EntityRegistryPreviewJsonResponse {
+  json: string
+}
+
 export type EntityRegistrySyncFlowTemplateId =
   | "contract"
   | "dataset"
@@ -1670,6 +1683,8 @@ export interface SyncDefinitionAdminItem {
   updatedBy: string | null
   publishedVersion: string | null
   publishedAt: string | null
+  /** True when SQLite entity/config is ahead of the published sync bundle. */
+  needsPublish: boolean
 }
 
 // ── Notifications ────────────────────────────────────────────────

@@ -15,7 +15,7 @@ import {
   newStep,
 } from "./execution-step-shared"
 
-export interface YamlSurfaceProps {
+export interface SourceSurfaceProps {
   loading: boolean
   body: string
   onBody: (v: string) => void
@@ -24,7 +24,7 @@ export interface YamlSurfaceProps {
   placeholder?: string
 }
 
-export function YamlSurface({ loading, body, onBody, reason, onReason, placeholder }: YamlSurfaceProps): JSX.Element {
+export function SourceSurface({ loading, body, onBody, reason, onReason, placeholder }: SourceSurfaceProps): JSX.Element {
   return (
     <div className="flex h-full min-h-0 flex-1 flex-col gap-3 text-xs">
       {loading && (

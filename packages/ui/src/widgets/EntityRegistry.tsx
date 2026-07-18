@@ -2,14 +2,18 @@
  * Entity registry — minimal shell: list + task-focused detail.
  */
 
-import { Trash2 } from "lucide-react"
+import { Rocket, Trash2 } from "lucide-react"
 import type { JSX } from "react"
-import { useEffect, useMemo, useState } from "react"
+import { useCallback, useEffect, useMemo, useState } from "react"
 import { api } from "../client/index"
 import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { useMe } from "../hooks/useMe"
 import { useStore } from "../state/store"
-import type { EntityRegistryDefinition, EntityRegistryHistoryEntry } from "../types"
+import type {
+  EntityRegistryDefinition,
+  EntityRegistryHistoryEntry,
+  SyncDefinitionAdminItem,
+} from "../types"
 import { CatalogImportGate } from "./platform/CatalogImportGate"
 import { DeployArtifactsImportGate } from "./platform/DeployArtifactsImportGate"
 import { CatalogVersionsModal } from "./platform/CatalogVersionsModal"
@@ -49,11 +53,30 @@ export function EntityRegistry(): JSX.Element {
   const [deployImportOpen, setDeployImportOpen] = useState(false)
   const [versionsOpen, setVersionsOpen] = useState(false)
   const [retireCandidate, setRetireCandidate] = useState<EntityRegistryDefinition | null>(null)
+  const [adminItems, setAdminItems] = useState<SyncDefinitionAdminItem[]>([])
 
   const selected = useMemo(
     () => items.find((i) => i.id === selectedId) ?? null,
     [items, selectedId],
   )
+
+  const unpublishedItems = useMemo(
+    () => adminItems.filter((item) => item.needsPublish),
+    [adminItems],
+  )
+
+  const refreshAdminItems = useCallback(async () => {
+    if (!isAdmin) {
+      setAdminItems([])
+      return
+    }
+    try {
+      const configs = await api.listSyncDefinitionConfigs()
+      setAdminItems(configs)
+    } catch {
+      setAdminItems([])
+    }
+  }, [isAdmin])
 
   async function refreshList(opts: { keepSelection?: boolean } = {}) {
     setBusy(true)
@@ -73,6 +96,7 @@ export function EntityRegistry(): JSX.Element {
         }
         return current
       })
+      await refreshAdminItems()
     } catch (e) {
       notifyError(e instanceof Error ? e.message : String(e))
     } finally {
@@ -81,6 +105,11 @@ export function EntityRegistry(): JSX.Element {
   }
 
   useEffect(() => { void refreshList() }, [])
+
+  useEffect(() => {
+    if (!isAdmin) return
+    void refreshAdminItems()
+  }, [isAdmin, refreshAdminItems])
 
   const entityEventCount = useStore((s) =>
     s.sseEventLog.filter((e) => typeof e.type === "string" && e.type.startsWith("entity_registry.")).length,
@@ -200,6 +229,29 @@ export function EntityRegistry(): JSX.Element {
                   onRetire={openRetire}
                 />
               </div>
+              {isAdmin && (
+                <div className="shrink-0 border-t border-border-subtle p-3">
+                  <button
+                    type="button"
+                    disabled={busy || unpublishedItems.length === 0}
+                    onClick={openPublish}
+                    className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-elevated/40 px-3 py-2 text-sm font-medium text-text hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
+                    title={
+                      unpublishedItems.length === 0
+                        ? "No unpublished changes"
+                        : `Publish ${unpublishedItems.length} unpublished change(s)`
+                    }
+                  >
+                    <Rocket size={14} className="text-accent" />
+                    <span>Publish</span>
+                    {unpublishedItems.length > 0 && (
+                      <span className="rounded-md bg-accent/15 px-1.5 py-0.5 font-mono text-xs tabular-nums text-accent">
+                        {unpublishedItems.length}
+                      </span>
+                    )}
+                  </button>
+                </div>
+              )}
             </aside>
 
             <div className="flex min-h-0 min-w-0 flex-col overflow-hidden">
@@ -262,6 +314,7 @@ export function EntityRegistry(): JSX.Element {
       {publishOpen && (
         <PublishDefinitionsModal
           entityCount={activeEntityCount}
+          unpublished={unpublishedItems}
           onClose={() => setPublishOpen(false)}
           onPublished={(res) => {
             notify(`Published ${res.definitionCount} definition(s)`)

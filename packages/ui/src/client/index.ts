@@ -586,6 +586,31 @@ export const api = {
         isActive: boolean
       }>
     }>("/api/platform/catalog/versions"),
+  getSyncCatalogVersion: (version: number) =>
+    json<{
+      ok: boolean
+      detail: {
+        tenantId: string
+        version: number
+        reason: string
+        createdBy: string
+        createdAt: string
+        isActive: boolean
+        summary: {
+          exportedAt: string
+          tenantId: string
+          entityIds: string[]
+          entityCount: number
+          configCount: number
+          strategyCount: number
+          environmentCount: number
+          flowCount: number
+          stepTypeCount: number
+          customValueSourceCount: number
+          entities: Array<{ id: string; displayName: string; rootTable: string }>
+        }
+      }
+    }>(`/api/platform/catalog/versions/${encodeURIComponent(String(version))}`),
   importSyncCatalog: (body: { zipBase64?: string; dryRun?: boolean; reason: string }) =>
     json<import("@mia/shared-types").PlatformImportGateResult>("/api/platform/catalog/import", {
       method: "POST",
@@ -1094,6 +1119,26 @@ export const api = {
     const qs = p.toString()
     return json<import("../types").EntityRegistryPreviewYamlResponse>(
       `/api/entity-registry/entities/preview-yaml${qs ? `?${qs}` : ""}`,
+      {
+        method: "POST",
+        body: JSON.stringify({ def, run }),
+      },
+    )
+  },
+  previewEntityRegistryJson: (
+    def: import("../types").EntityRegistryDefinition,
+    run?: {
+      flowTemplateId: string
+      serviceProfileRef: string
+      environmentPolicyRef: string
+    },
+    opts?: { tenant?: string },
+  ) => {
+    const p = new URLSearchParams()
+    if (opts?.tenant) p.set("tenant", opts.tenant)
+    const qs = p.toString()
+    return json<import("../types").EntityRegistryPreviewJsonResponse>(
+      `/api/entity-registry/entities/preview-json${qs ? `?${qs}` : ""}`,
       {
         method: "POST",
         body: JSON.stringify({ def, run }),

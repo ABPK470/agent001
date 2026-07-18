@@ -5,7 +5,6 @@ import {
   ChevronRight,
   Clock,
   Loader2,
-  RefreshCw,
   SlidersHorizontal,
   View,
   X,
@@ -272,7 +271,6 @@ export function HistoryContent({
         onToggleFilters={() => setFiltersOpen((value) => !value)}
         activeFilterCount={activeFilterCount}
         loading={loading}
-        onRefresh={() => reload(page)}
         rangeStart={rangeStart}
         rangeEnd={rangeEnd}
         total={total}
@@ -331,7 +329,6 @@ function HistorySearchBar({
   onToggleFilters,
   activeFilterCount,
   loading,
-  onRefresh,
   rangeStart,
   rangeEnd,
   total,
@@ -345,7 +342,6 @@ function HistorySearchBar({
   onToggleFilters: () => void
   activeFilterCount: number
   loading: boolean
-  onRefresh: () => void
   rangeStart: number
   rangeEnd: number
   total: number
@@ -414,14 +410,6 @@ function HistorySearchBar({
               {activeFilterCount}
             </span>
           )}
-        </button>
-        <button
-          type="button"
-          onClick={onRefresh}
-          className="widget-toolbar__icon-btn"
-          title="Refresh"
-        >
-          <RefreshCw size={14} className={loading ? "animate-spin" : undefined} />
         </button>
       </WidgetToolbarTrailing>
     </WidgetToolbar>

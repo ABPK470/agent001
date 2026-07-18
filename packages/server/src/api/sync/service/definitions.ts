@@ -69,6 +69,7 @@ export interface SyncDefinitionAdminItem {
   updatedBy: string | null
   publishedVersion: string | null
   publishedAt: string | null
+  needsPublish: boolean
 }
 
 export function defaultEntityFlowId(
@@ -295,6 +296,12 @@ export function listSyncDefinitionAdminItems(
     const config = configs.get(entity.id) ?? defaultConfigForEntity(entity, flowTemplateCatalog)
     const flowTemplateId = config.flow_preset as EntityRegistrySyncFlowTemplateId
     const publishedDefinition = published?.definitions?.[entity.id] ?? null
+    const publishedAt = publishedDefinition?.publishedAt ?? null
+    const publishedSourceVersion = publishedDefinition?.provenance?.sourceVersion ?? null
+    const needsPublish =
+      publishedDefinition == null ||
+      publishedSourceVersion !== String(entity.version) ||
+      (publishedAt != null && config.updated_at > publishedAt)
     return {
       id: entity.id,
       displayName: entity.displayName,
@@ -311,7 +318,8 @@ export function listSyncDefinitionAdminItems(
       updatedAt: config.updated_at,
       updatedBy: config.updated_by,
       publishedVersion: publishedDefinition?.publishedVersion ?? null,
-      publishedAt: publishedDefinition?.publishedAt ?? null
+      publishedAt,
+      needsPublish,
     }
   })
 }

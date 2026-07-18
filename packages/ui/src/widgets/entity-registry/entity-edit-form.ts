@@ -12,7 +12,7 @@ export type EntityEditSectionId =
   | "policies"
   | "tables"
   | "run"
-  | "yaml"
+  | "source"
 
 export interface EntityEditSection {
   id: EntityEditSectionId
@@ -38,7 +38,7 @@ export interface EntityEditFormState {
   environmentPolicyRef: string
   reason: string
   versionLabel: string
-  yamlBody: string
+  sourceBody: string
 }
 
 export function defToFormState(
@@ -68,7 +68,7 @@ export function defToFormState(
     environmentPolicyRef: run?.environmentPolicyRef ?? "default",
     reason: "",
     versionLabel: "",
-    yamlBody: "",
+    sourceBody: "",
   }
 }
 
@@ -101,9 +101,9 @@ export function validateEntityEditForm(
   form: EntityEditFormState,
   mode: "new" | "edit",
   reservedIds: ReadonlySet<string>,
-  yamlError?: string | null,
+  sourceError?: string | null,
 ): string | null {
-  if (yamlError) return yamlError
+  if (sourceError) return sourceError
   if (!form.rootTable.trim()) return "Root table is required"
   if (!form.idColumn.trim()) return "ID column is required"
   if (mode === "new" && !form.id.trim()) return "Entity id is required"
@@ -113,7 +113,7 @@ export function validateEntityEditForm(
   return null
 }
 
-export function runYamlToFormRun(run: {
+export function runBindingToFormRun(run: {
   template: string
   service: string
   environment: string
@@ -125,7 +125,7 @@ export function runYamlToFormRun(run: {
   }
 }
 
-export function applyYamlPreviewToForm(
+export function applySourcePreviewToForm(
   form: EntityEditFormState,
   def: EntityRegistryDefinition,
   run: Pick<EntityEditFormState, "flowTemplateId" | "serviceProfileRef" | "environmentPolicyRef"> | null,
@@ -152,8 +152,8 @@ export function applyYamlPreviewToForm(
   }
 }
 
-export function formatYamlImportError(error: { id: string | null; error: unknown }): string {
-  const where = error.id ?? "yaml"
+export function formatSourceImportError(error: { id: string | null; error: unknown }): string {
+  const where = error.id ?? "source"
   if (typeof error.error === "string") return `${where}: ${error.error}`
   return `${where}: ${JSON.stringify(error.error)}`
 }
@@ -205,9 +205,9 @@ export function buildEntityEditSections(
         flowStepCount != null && flowStepCount > 0 ? String(flowStepCount) : undefined,
     },
     {
-      id: "yaml",
+      id: "source",
       label: "Source",
-      hint: form.yamlBody.trim() ? "Synced with sections" : "Paste or edit entity YAML",
+      hint: form.sourceBody.trim() ? "Synced with sections" : "Paste or edit entity JSON",
     },
   ]
 }
@@ -268,24 +268,30 @@ export function cloneEntityTable(table: EntityRegistryTable): EntityRegistryTabl
   }
 }
 
-export const NEW_ENTITY_YAML_TEMPLATE = `id: my-entity
-tenantId: _default
-displayName: My Entity
-description: ""
-rootTable: schema.MyTable
-idColumn: myEntityId
-scd2:
-  strategyId: mymi-scd2
-  strategyVersion: latest
-tables: []
-policies:
-  freezeWindowIds: []
-run:
-  template: metadataOnly
-  service: default
-  environment: default
-provenance:
-  kind: manual
+export const NEW_ENTITY_JSON_TEMPLATE = `{
+  "id": "my-entity",
+  "tenantId": "_default",
+  "displayName": "My Entity",
+  "description": "",
+  "rootTable": "schema.MyTable",
+  "idColumn": "myEntityId",
+  "scd2": {
+    "strategyId": "mymi-scd2",
+    "strategyVersion": "latest"
+  },
+  "tables": [],
+  "policies": {
+    "freezeWindowIds": []
+  },
+  "run": {
+    "template": "metadataOnly",
+    "service": "default",
+    "environment": "default"
+  },
+  "provenance": {
+    "kind": "manual"
+  }
+}
 `
 
 export function defaultNewFormState(): EntityEditFormState {
@@ -306,7 +312,7 @@ export function defaultNewFormState(): EntityEditFormState {
     environmentPolicyRef: "default",
     reason: "",
     versionLabel: "",
-    yamlBody: NEW_ENTITY_YAML_TEMPLATE,
+    sourceBody: NEW_ENTITY_JSON_TEMPLATE,
   }
 }
 

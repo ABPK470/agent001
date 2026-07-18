@@ -14,6 +14,7 @@ import {
 } from "./service/platform-artifacts-service.js"
 import {
   getActiveSyncCatalogVersion,
+  getSyncCatalogVersionDetail,
   importSyncCatalogBundle,
   listSyncCatalogVersions,
   rollbackSyncCatalogVersion,
@@ -338,6 +339,27 @@ export function registerPlatformRoutes(app: FastifyInstance, opts: RegisterPlatf
     const versions = listSyncCatalogVersions()
     return { ok: true, activeVersion, versions }
   })
+
+  app.get<{ Params: { version: string } }>(
+    "/api/platform/catalog/versions/:version",
+    async (req, reply) => {
+      if (!req.session?.isAdmin) {
+        reply.code(403)
+        return { ok: false, message: "Admin only" }
+      }
+      const version = Number(req.params.version)
+      if (!Number.isFinite(version)) {
+        reply.code(400)
+        return { ok: false, message: "version must be a number" }
+      }
+      const detail = getSyncCatalogVersionDetail(version)
+      if (!detail) {
+        reply.code(404)
+        return { ok: false, message: `Unknown catalog version ${version}` }
+      }
+      return { ok: true, detail }
+    },
+  )
 
   app.post("/api/platform/catalog/import", async (req, reply) => {
     if (!req.session?.isAdmin) {
