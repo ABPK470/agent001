@@ -16,7 +16,8 @@ import {
   reparentLeaf,
   setSplitRatio,
   splitBoundsAt,
-  type DropZone,
+  swapLeaves,
+  type DropIntent,
   type SplitNode,
   type SplitPath,
 } from "../../../lib/split-tree"
@@ -54,7 +55,7 @@ export type GridInteractionMode = "drag" | "resize"
 
 export interface DropPreview {
   targetId: string
-  zone: DropZone
+  zone: DropIntent
   rect: { x: number; y: number; w: number; h: number }
 }
 
@@ -106,15 +107,16 @@ function resizePreview(
 
 interface DropResolve {
   preview: DropPreview
-  /** Tree after reparent — same as commit on pointer-up. */
+  /** Tree after drop — same as commit on pointer-up. */
   split: SplitNode
   /** Projected tiles for that tree (overlay + live reflow). */
   tiles: LayoutTile[]
 }
 
 /**
- * Hit-test against the *pre-drag* layout, then resolve the destination rect from
- * the reparented tree so the purple frame matches the post-drop leaf size.
+ * Hit-test against the *pre-drag* layout, then resolve destination from the
+ * post-drop tree. Center of a leaf → leaf-id swap (preview = target's slot);
+ * edge bands → dock/split as before.
  */
 function resolveDrop(
   tiles: readonly LayoutTile[],
@@ -153,8 +155,7 @@ function resolveDrop(
   if (!hit) return null
 
   const px = rectToPixels(hit, cw, rowPx)
-  // Approach-aware zone: entering a neighbor swaps by default; side bands still dock.
-  const zone = dropZoneForDrag(
+  const intent = dropZoneForDrag(
     localX - px.left,
     localY - px.top,
     px.width,
@@ -162,16 +163,24 @@ function resolveDrop(
     hit,
     origin,
   )
-  const next = reparentLeaf(base, dragId, hit.id, zone)
+
+  const next = intent === "swap"
+    ? swapLeaves(base, dragId, hit.id)
+    : reparentLeaf(base, dragId, hit.id, intent)
   if (!next) return null
+
   const projected = projectTiles(next, tiles, COLS, rows)
-  const dest = projected.find((tile) => tile.id === dragId)
+  // Swap preview: full target slot (pre-drag geometry = post-swap for dragId).
+  // Dock preview: projected leaf after the 50/50 split.
+  const dest = intent === "swap"
+    ? { x: hit.x, y: hit.y, w: hit.w, h: hit.h }
+    : projected.find((tile) => tile.id === dragId)
   if (!dest) return null
 
   return {
     preview: {
       targetId: hit.id,
-      zone,
+      zone: intent,
       rect: { x: dest.x, y: dest.y, w: dest.w, h: dest.h },
     },
     split: next,

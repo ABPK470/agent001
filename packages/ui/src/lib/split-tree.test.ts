@@ -15,6 +15,7 @@ import {
   setSplitRatio,
   splitLargestLeaf,
   splitLeaf,
+  swapLeaves,
   treeFromRects,
   type SplitNode,
 } from "./split-tree"
@@ -165,17 +166,107 @@ describe("split-tree", () => {
     expect(dropZoneFromPoint(50, 90, 100, 100)).toBe("s")
   })
 
-  it("dropZoneForDrag swaps on enter instead of sticking to the entry edge", () => {
+  it("dropZoneForDrag: center swaps, edge bands dock", () => {
     const bridge = { x: 6, y: 0, w: 6, h: 6 }
     const chat = { x: 6, y: 6, w: 6, h: 6 }
-    // Cursor just inside Bridge from below — old nearest-edge logic would pick "s".
-    expect(dropZoneForDrag(50, 90, 100, 100, bridge, chat)).toBe("n")
-    // Still can dock to a side via the edge band.
+    // Center of Bridge (vertical approach from Chat below) → leaf-id swap.
+    expect(dropZoneForDrag(50, 50, 100, 100, bridge, chat)).toBe("swap")
+    expect(dropZoneForDrag(50, 90, 100, 100, bridge, chat)).toBe("swap")
+    // Side band still docks.
     expect(dropZoneForDrag(8, 50, 100, 100, bridge, chat)).toBe("w")
-    // Coming from the left prefers east (swap into the right slot).
+    expect(dropZoneForDrag(95, 50, 100, 100, bridge, chat)).toBe("e")
+    // Horizontal approach: center swaps; north/south bands dock.
     const left = { x: 0, y: 0, w: 6, h: 12 }
     const right = { x: 6, y: 0, w: 6, h: 12 }
-    expect(dropZoneForDrag(50, 50, 100, 100, right, left)).toBe("e")
+    expect(dropZoneForDrag(50, 50, 100, 100, right, left)).toBe("swap")
+    expect(dropZoneForDrag(50, 8, 100, 100, right, left)).toBe("n")
+  })
+
+  it("swapLeaves exchanges Chat and Threads slots; Run History stays put", () => {
+    // Home-like: Threads | (Run History / Chat)
+    const tree: SplitNode = {
+      kind: "split",
+      dir: "v",
+      ratio: 0.35,
+      a: leafNode("threads"),
+      b: {
+        kind: "split",
+        dir: "h",
+        ratio: 0.4,
+        a: leafNode("run-history"),
+        b: leafNode("chat"),
+      },
+    }
+    const rows = 12
+    const before = layoutLeaves(tree, canvasBounds(COLS, rows))
+    const threadsBefore = before.find((l) => l.tileId === "threads")!.rect
+    const chatBefore = before.find((l) => l.tileId === "chat")!.rect
+    const runBefore = before.find((l) => l.tileId === "run-history")!.rect
+
+    const swapped = swapLeaves(tree, "chat", "threads")!
+    const after = layoutLeaves(swapped, canvasBounds(COLS, rows))
+    const threadsAfter = after.find((l) => l.tileId === "threads")!.rect
+    const chatAfter = after.find((l) => l.tileId === "chat")!.rect
+    const runAfter = after.find((l) => l.tileId === "run-history")!.rect
+
+    expect(chatAfter).toEqual(threadsBefore)
+    expect(threadsAfter).toEqual(chatBefore)
+    expect(runAfter).toEqual(runBefore)
+    expect(coversCanvas(after, COLS, rows)).toBe(true)
+  })
+
+  it("edge dock still splits when Chat is reparented onto Threads west", () => {
+    const tree: SplitNode = {
+      kind: "split",
+      dir: "v",
+      ratio: 0.35,
+      a: leafNode("threads"),
+      b: {
+        kind: "split",
+        dir: "h",
+        ratio: 0.4,
+        a: leafNode("run-history"),
+        b: leafNode("chat"),
+      },
+    }
+    const rows = 12
+    const before = layoutLeaves(tree, canvasBounds(COLS, rows))
+    const threadsBefore = before.find((l) => l.tileId === "threads")!.rect
+    const runBefore = before.find((l) => l.tileId === "run-history")!.rect
+
+    const docked = reparentLeaf(tree, "chat", "threads", "w")!
+    const after = layoutLeaves(docked, canvasBounds(COLS, rows))
+    const chat = after.find((l) => l.tileId === "chat")!.rect
+    const threads = after.find((l) => l.tileId === "threads")!.rect
+    const run = after.find((l) => l.tileId === "run-history")!.rect
+
+    // Chat and Threads share the former Threads column; Run History takes full right height.
+    expect(chat.y).toBe(0)
+    expect(threads.y).toBe(0)
+    expect(chat.h).toBe(rows)
+    expect(threads.h).toBe(rows)
+    expect(chat.w + threads.w).toBeCloseTo(threadsBefore.w, 5)
+    expect(run.h).toBe(rows)
+    expect(run.h).toBeGreaterThan(runBefore.h)
+    expect(coversCanvas(after, COLS, rows)).toBe(true)
+  })
+
+  it("swapLeaves exchanges equal peer rects", () => {
+    const tree: SplitNode = {
+      kind: "split",
+      dir: "v",
+      ratio: 0.5,
+      a: leafNode("a"),
+      b: leafNode("b"),
+    }
+    const rows = 10
+    const before = layoutLeaves(tree, canvasBounds(COLS, rows))
+    const a0 = before.find((l) => l.tileId === "a")!.rect
+    const b0 = before.find((l) => l.tileId === "b")!.rect
+    const next = swapLeaves(tree, "a", "b")!
+    const after = layoutLeaves(next, canvasBounds(COLS, rows))
+    expect(after.find((l) => l.tileId === "a")!.rect).toEqual(b0)
+    expect(after.find((l) => l.tileId === "b")!.rect).toEqual(a0)
   })
 
   it("projectTiles writes geometry onto metadata", () => {

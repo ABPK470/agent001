@@ -17,6 +17,9 @@ export type SplitPath = readonly ("a" | "b")[]
 /** Drop onto an edge of a target leaf (creates a new split). */
 export type DropZone = "w" | "e" | "n" | "s"
 
+/** Drag over a leaf: edge dock/split, or center leaf-id exchange. */
+export type DropIntent = DropZone | "swap"
+
 export interface LeafLayout {
   tileId: string
   rect: GridRect
@@ -252,6 +255,36 @@ export function reparentLeaf(
   return splitLeaf(without, targetId, dragId, zone) ?? without
 }
 
+/**
+ * Exchange two leaf ids in place. Structure and ratios stay the same — each
+ * widget takes the other's slot (true swap, not dock/split).
+ */
+export function swapLeaves(
+  tree: SplitNode | null,
+  aId: string,
+  bId: string,
+): SplitNode | null {
+  if (!tree) return null
+  if (aId === bId) return tree
+  if (!containsLeaf(tree, aId) || !containsLeaf(tree, bId)) return tree
+
+  function walk(node: SplitNode): SplitNode {
+    if (node.kind === "leaf") {
+      if (node.tileId === aId) return { kind: "leaf", tileId: bId }
+      if (node.tileId === bId) return { kind: "leaf", tileId: aId }
+      return node
+    }
+    return {
+      kind: "split",
+      dir: node.dir,
+      ratio: node.ratio,
+      a: walk(node.a),
+      b: walk(node.b),
+    }
+  }
+  return walk(tree)
+}
+
 /** Prefer vertical then horizontal 50/50 split of the largest leaf (by area). */
 export function splitLargestLeaf(
   tree: SplitNode | null,
@@ -405,6 +438,7 @@ function boundsForPath(tree: SplitNode, path: SplitPath, root: GridRect): GridRe
  * Pick a drop zone from pointer position inside a target leaf rect (normalized 0..1).
  * Center band falls through to nearest edge. Prefer `dropZoneForDrag` when the
  * drag origin is known — nearest-edge alone feels sticky on the entry side.
+ * Keyboard / divider paths still use this (edge only, no leaf-id swap).
  */
 export function dropZoneFromPoint(
   localX: number,
@@ -427,14 +461,14 @@ export function dropZoneFromPoint(
 }
 
 /**
- * Intuitive drop zone while dragging `origin` over `target`.
+ * Drop intent while dragging `origin` over `target`.
  *
- * Crossing into a neighbor defaults to a *swap* along the approach axis
- * (Chat below Bridge → enter Bridge → land on north / take the top). Side
- * docks stay available via thin edge bands orthogonal to that approach.
+ * Center of the target → leaf-id swap (exchange places). Thin edge bands
+ * orthogonal to the approach axis still dock/split (`w`/`e`/`n`/`s`).
  *
  * `localX` / `localY` / `width` / `height` are in the same unit (usually pixels).
- * `origin` / `target` grid rects supply approach direction only.
+ * `origin` / `target` grid rects supply approach direction for which edge bands
+ * are active.
  */
 export function dropZoneForDrag(
   localX: number,
@@ -444,7 +478,7 @@ export function dropZoneForDrag(
   target: GridRect,
   origin: GridRect,
   sideBand = 0.22,
-): DropZone {
+): DropIntent {
   if (width <= 0 || height <= 0) return "e"
   const nx = Math.min(1, Math.max(0, localX / width))
   const ny = Math.min(1, Math.max(0, localY / height))
@@ -457,19 +491,14 @@ export function dropZoneForDrag(
   const dy = originCy - targetCy
   const verticalApproach = Math.abs(dy) >= Math.abs(dx)
 
-  // Swap default: place the dragged leaf on the far side of the target.
-  const swapZone: DropZone = verticalApproach
-    ? (dy >= 0 ? "n" : "s")
-    : (dx >= 0 ? "w" : "e")
-
   if (verticalApproach) {
     if (nx <= sideBand) return "w"
     if (nx >= 1 - sideBand) return "e"
-    return swapZone
+    return "swap"
   }
   if (ny <= sideBand) return "n"
   if (ny >= 1 - sideBand) return "s"
-  return swapZone
+  return "swap"
 }
 
 /** Pixel band rect for a drop zone overlay inside a leaf. */
