@@ -55,6 +55,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
     [runs, activeThreadId],
   )
   const lastRunId = lastRun?.id ?? null
+  const upsertRun = useStore((s) => s.upsertRun)
 
   const ctx: ChatCommandContext = useMemo(
     () => ({
@@ -64,9 +65,20 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
         runStatus === RunStatus.Planning,
       activeThreadId,
       lastRunId,
+      lastRunStatus: lastRun?.status ?? null,
+      lastRunHasCheckpoint: lastRun?.hasCheckpoint ?? null,
+      lastRunRollbackAvailable: lastRun?.rollbackAvailable ?? null,
       hasPendingInput,
     }),
-    [activeThreadId, hasPendingInput, lastRunId, runStatus],
+    [
+      activeThreadId,
+      hasPendingInput,
+      lastRun?.hasCheckpoint,
+      lastRun?.rollbackAvailable,
+      lastRun?.status,
+      lastRunId,
+      runStatus,
+    ],
   )
 
   const downloadLastRunTrace = useCallback(
@@ -143,6 +155,23 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
           onRunStarted?.(runId)
           consoleRef.current.logSuccess(`Resumed as ${runId.slice(0, 8)}…`)
         },
+        rollbackRun: async () => {
+          if (!lastRunId) return
+          const result = await api.rollbackRun(lastRunId)
+          if (result.failed.length > 0) {
+            upsertRun({ id: lastRunId, rollbackAvailable: true })
+            consoleRef.current.logError(
+              `Rolled back ${result.compensated}, ${result.failed.length} failed`,
+            )
+            return
+          }
+          upsertRun({ id: lastRunId, rollbackAvailable: false })
+          consoleRef.current.logSuccess(
+            result.compensated === 0
+              ? "Nothing to roll back."
+              : `Rolled back ${result.compensated} effect(s).`,
+          )
+        },
         showStatus: () => {
           const thread = threads.find((t) => t.id === activeThreadId)
           const rows: Array<{ label: string; value: string }> = []
@@ -157,6 +186,18 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
           if (lastRun) {
             rows.push({ label: "Last run", value: `${lastRun.id.slice(0, 8)}… · ${lastRun.status}` })
             if (lastRun.goal) rows.push({ label: "Goal", value: lastRun.goal })
+            rows.push({
+              label: "Checkpoint",
+              value: lastRun.hasCheckpoint == null ? "…" : lastRun.hasCheckpoint ? "available" : "none",
+            })
+            rows.push({
+              label: "Rollback",
+              value: lastRun.rollbackAvailable == null
+                ? "…"
+                : lastRun.rollbackAvailable
+                  ? "effects pending"
+                  : "nothing to roll back",
+            })
             const tokens = ctx.busy ? liveUsage.totalTokens : lastRun.totalTokens
             const calls = ctx.busy ? liveUsage.llmCalls : lastRun.llmCalls
             if (tokens || calls) {
@@ -210,6 +251,7 @@ export function useChatSlashActions(opts: ChatSlashActionsOptions) {
       threads,
       activeThreadId,
       liveUsage,
+      upsertRun,
     ],
   )
 

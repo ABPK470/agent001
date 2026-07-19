@@ -3,6 +3,7 @@ import { RunStatus } from "@mia/shared-enums"
 import { broadcast } from "../../../../../infra/events/broadcaster.js"
 import * as db from "../../../../../infra/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../internal/enums/notifications.js"
+import { buildRunCapabilityActions } from "../../../run-capability-actions.js"
 import { persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
 
@@ -53,7 +54,7 @@ export async function finalizeCancelledRun(
     runId: request.runId,
     actions: [
       { label: "View", action: NotificationActionType.ViewRun, data: { runId: request.runId } },
-      { label: "Rollback", action: NotificationActionType.RollbackRun, data: { runId: request.runId } }
+      ...buildRunCapabilityActions(request.runId, RunStatus.Cancelled),
     ]
   })
 }

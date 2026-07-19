@@ -193,6 +193,12 @@ export function ActiveUsersRunModal({
                 {run?.hasCheckpoint != null && (
                   <DetailField label="Checkpoint" value={run.hasCheckpoint ? "yes" : "no"} />
                 )}
+                {run?.rollbackAvailable != null && (
+                  <DetailField
+                    label="Rollback"
+                    value={run.rollbackAvailable ? "effects pending" : "nothing to roll back"}
+                  />
+                )}
               </DetailGrid>
             </DetailSection>
 

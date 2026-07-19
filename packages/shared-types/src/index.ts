@@ -1812,3 +1812,15 @@ export {
   type PlatformImportGateResult,
   type PlatformImportImpact,
 } from "./import-gate.js"
+export {
+  canCancelRun,
+  canConfirmRollback,
+  canResumeRun,
+  canRollbackRun,
+  isLiveRunStatus,
+  isRunCapabilityActionAllowed,
+  isTerminalFailureStatus,
+  isTerminalRunStatus,
+  rollbackAvailableFromPreview,
+  type RollbackConfirmPreview,
+} from "./run-capabilities.js"

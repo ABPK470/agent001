@@ -8,12 +8,13 @@
 
 import { Bell, CheckCircle2, RotateCcw, ShieldAlert, XCircle } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
+import { canResumeRun, canRollbackRun } from "@mia/shared-types"
 import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
 import { RunStatus } from "../../enums"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
-import type { Notification, NotificationAction } from "../../types"
+import type { Notification, NotificationAction, Run } from "../../types"
 
 function timeAgo(date: string): string {
   const seconds = Math.floor((Date.now() - new Date(date).getTime()) / 1000)
@@ -45,10 +46,31 @@ function approvalIdFromNotification(notification: Notification): string | undefi
   return action?.data?.approvalId as string | undefined
 }
 
+/**
+ * Drop Resume/Rollback once store capabilities say they are gone.
+ * When the run is not loaded (or flags unknown), trust the server payload
+ * (list endpoint already filters stale actions).
+ */
+function visibleActions(notification: Notification, run: Run | undefined): NotificationAction[] {
+  if (!run) return notification.actions
+  return notification.actions.filter((a) => {
+    if (a.action === "resume-run") {
+      if (run.hasCheckpoint == null) return true
+      return canResumeRun(run.status, run.hasCheckpoint)
+    }
+    if (a.action === "rollback-run") {
+      if (run.rollbackAvailable == null) return true
+      return canRollbackRun(run.status, { rollbackAvailable: run.rollbackAvailable })
+    }
+    return true
+  })
+}
+
 export function NotificationPanel() {
   const [open, setOpen] = useState(false)
   const panelRef = useRef<HTMLDivElement>(null)
   const notifications = useStore((s) => s.notifications)
+  const runs = useStore((s) => s.runs)
   const unreadCount = useStore((s) => s.unreadCount)
   const markNotificationRead = useStore((s) => s.markNotificationRead)
   const markAllRead = useStore((s) => s.markAllRead)
@@ -134,7 +156,7 @@ export function NotificationPanel() {
           try {
             const result = await api.resumeRun(runId)
             if (result.runId) setActiveRun(result.runId)
-          } catch { /* handled by notification */ }
+          } catch { /* server 409 when capability gone */ }
         }
         setOpen(false)
         break
@@ -146,8 +168,11 @@ export function NotificationPanel() {
         const runId = action.data?.runId as string | undefined
         if (runId) {
           try {
-            await api.rollbackRun(runId)
-          } catch { /* swallow */ }
+            const result = await api.rollbackRun(runId)
+            if (result.failed.length === 0) {
+              upsertRun({ id: runId, rollbackAvailable: false })
+            }
+          } catch { /* server 409 when nothing left */ }
         }
         setOpen(false)
         break
@@ -202,6 +227,7 @@ export function NotificationPanel() {
     openModalWidget,
     setActiveRun,
     setPolicyEditorOpen,
+    upsertRun,
   ])
 
   const handleOpenApproval = useCallback((notification: Notification) => {
@@ -265,6 +291,8 @@ export function NotificationPanel() {
                 const Icon = TYPE_ICON[n.type] ?? Bell
                 const color = TYPE_COLOR[n.type] ?? "var(--color-text-muted)"
                 const isApproval = n.type === "approval.required"
+                const run = n.runId ? runs.find((r) => r.id === n.runId) : undefined
+                const actions = visibleActions(n, run)
 
                 return (
                   <div
@@ -298,15 +326,17 @@ export function NotificationPanel() {
                           </p>
                         </button>
 
-                        {n.actions.length > 0 && (
+                        {actions.length > 0 && (
                           <div className="flex flex-wrap gap-2 mt-2">
-                            {n.actions.map((action, i) => (
+                            {actions.map((action, i) => (
                               <button
                                 key={i}
                                 className={`text-[11px] px-2.5 py-1 rounded-md transition-colors ${
                                   action.action === "deny-run-step"
                                     ? "text-error bg-error/10 hover:bg-error/20"
-                                    : "text-accent bg-accent/10 hover:bg-accent/20"
+                                    : action.action === "rollback-run"
+                                      ? "text-warning bg-warning/10 hover:bg-warning/20"
+                                      : "text-accent bg-accent/10 hover:bg-accent/20"
                                 }`}
                                 onClick={() => void handleAction(n, action)}
                               >

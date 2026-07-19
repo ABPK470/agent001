@@ -2,9 +2,18 @@
  * Notification transport routes.
  */
 
+import {
+  canResumeRun,
+  canRollbackRun,
+  type NotificationAction,
+} from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
 import * as db from "../../infra/persistence/sqlite.js"
 import { canAccessRun } from "../auth/service/access.js"
+import {
+  filterNotificationActionsForCapabilities,
+  runCapabilityFlags,
+} from "../runs/run-capability-actions.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 
 function canSee(
@@ -24,17 +33,20 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
     const notifications = session?.isAdmin
       ? db.listNotifications(limit)
       : db.listNotificationsForUser(session!.upn, limit)
-    return notifications.map((notification) => ({
-      id: notification.id,
-      type: notification.type,
-      title: notification.title,
-      message: notification.message,
-      runId: notification.run_id,
-      stepId: notification.step_id,
-      actions: JSON.parse(notification.actions),
-      read: notification.read === 1,
-      createdAt: notification.created_at
-    }))
+    return notifications.map((notification) => {
+      const actions = JSON.parse(notification.actions) as NotificationAction[]
+      return {
+        id: notification.id,
+        type: notification.type,
+        title: notification.title,
+        message: notification.message,
+        runId: notification.run_id,
+        stepId: notification.step_id,
+        actions: filterNotificationActionsForCapabilities(notification.run_id, actions),
+        read: notification.read === 1,
+        createdAt: notification.created_at,
+      }
+    })
   })
 
   app.get("/api/notifications/unread-count", async (req) => {
@@ -86,6 +98,12 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
             reply.code(400)
             return { error: "runId required" }
           }
+          const run = db.getRun(runId)
+          const caps = runCapabilityFlags(runId)
+          if (!run || !canResumeRun(run.status, caps.hasCheckpoint)) {
+            reply.code(409)
+            return { error: "Resume not available for this run" }
+          }
           const newRunId = orchestrator.resumeRun(runId, req.session ?? null)
           if (!newRunId) {
             reply.code(404)
@@ -109,6 +127,12 @@ export function registerNotificationRoutes(app: FastifyInstance, orchestrator: A
           if (!runId) {
             reply.code(400)
             return { error: "runId required" }
+          }
+          const run = db.getRun(runId)
+          const caps = runCapabilityFlags(runId)
+          if (!run || !canRollbackRun(run.status, { rollbackAvailable: caps.rollbackAvailable })) {
+            reply.code(409)
+            return { error: "Nothing left to roll back" }
           }
           const { rollbackRun } = await import("../../infra/effects/index.js")
           const result = await rollbackRun(runId)

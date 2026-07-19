@@ -6,6 +6,7 @@ import { isInternalFailureAnswer } from "../../../../../infra/persistence/memory
 import * as db from "../../../../../infra/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../internal/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../../internal/enums/trajectory.js"
+import { buildRunCapabilityActions } from "../../../run-capability-actions.js"
 import { persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { buildPersistedToolTrace } from "../support.js"
 import type { ExecuteRunCommand, ExecutionEnvironment } from "../types.js"
@@ -96,7 +97,10 @@ export async function finalizeCompletedRun(
         ? `"${request.goal.slice(0, 80)}" finished with ${env.state.run.steps.length} steps. ${pendingChangeCount} workspace changes pending approval.`
         : `"${request.goal.slice(0, 80)}" finished with ${env.state.run.steps.length} steps.`,
     runId: request.runId,
-    actions: [{ label: "View", action: NotificationActionType.ViewRun, data: { runId: request.runId } }]
+    actions: [
+      { label: "View", action: NotificationActionType.ViewRun, data: { runId: request.runId } },
+      ...buildRunCapabilityActions(request.runId, RunStatus.Completed),
+    ]
   })
 
   runtime.messaging.sendReply(request.runId, answer).catch((error) => {

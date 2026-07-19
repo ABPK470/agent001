@@ -5,6 +5,7 @@ import { ingestRunTurns } from "../../../../../infra/persistence/memory.js"
 import * as db from "../../../../../infra/persistence/sqlite.js"
 import { NotificationActionType } from "../../../../../internal/enums/notifications.js"
 import { TrajectoryEventKind } from "../../../../../internal/enums/trajectory.js"
+import { buildRunCapabilityActions } from "../../../run-capability-actions.js"
 import { persistAuditLog, persistTokenUsage } from "../../persistence.js"
 import { writeRunCheckpoint } from "../checkpoint-writer.js"
 import { buildPersistedToolTrace } from "../support.js"
@@ -94,7 +95,6 @@ export async function finalizeFailedRun(
     message: `Failed — ${errMsg.slice(0, 200)}`,
     timestamp: new Date().toISOString()
   })
-  const hasCheckpoint = !!db.getCheckpoint(request.runId)
   sideEffects.notifications.notify({
     type: EventType.RunFailed,
     title: "Run failed",
@@ -102,16 +102,7 @@ export async function finalizeFailedRun(
     runId: request.runId,
     actions: [
       { label: "Review", action: NotificationActionType.ViewRun, data: { runId: request.runId } },
-      ...(hasCheckpoint
-        ? [
-            {
-              label: "Resume",
-              action: NotificationActionType.ResumeRun,
-              data: { runId: request.runId }
-            }
-          ]
-        : []),
-      { label: "Rollback", action: NotificationActionType.RollbackRun, data: { runId: request.runId } }
+      ...buildRunCapabilityActions(request.runId, RunStatus.Failed),
     ]
   })
 }

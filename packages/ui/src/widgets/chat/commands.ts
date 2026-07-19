@@ -5,12 +5,18 @@
  * browser; the server never writes export files for delivery.
  */
 
+import { canResumeRun, canRollbackRun } from "@mia/shared-types"
+
 export type TraceExportFormat = "txt" | "json"
 
 export interface ChatCommandContext {
   busy: boolean
   activeThreadId: string | null
   lastRunId: string | null
+  /** Last run status — used to gate resume/rollback. */
+  lastRunStatus: string | null
+  lastRunHasCheckpoint: boolean | null
+  lastRunRollbackAvailable: boolean | null
   hasPendingInput: boolean
 }
 
@@ -78,8 +84,11 @@ function unavailableReasonFor(cmd: ChatSlashCommand): string {
     case "trace":
     case "files":
     case "rerun":
-    case "resume":
       return "Requires a run in this thread"
+    case "resume":
+      return "Requires a failed run with a checkpoint"
+    case "rollback":
+      return "Requires a run with uncompensated file effects"
     case "cancel":
       return "No active run"
     case "trace-thread":
@@ -101,6 +110,7 @@ function defineChatSlashCommands(deps: {
   cancelRun: () => Promise<void>
   rerunRun: () => Promise<void>
   resumeRun: () => Promise<void>
+  rollbackRun: () => Promise<void>
   showStatus: () => void
   createThread: () => Promise<void>
   openThreads: () => void
@@ -161,8 +171,25 @@ function defineChatSlashCommands(deps: {
       id: "resume",
       label: "Resume from checkpoint",
       slash: "resume",
-      when: (c) => !!c.lastRunId && !c.busy,
+      when: (c) =>
+        !!c.lastRunId
+        && !c.busy
+        && !!c.lastRunStatus
+        && canResumeRun(c.lastRunStatus, c.lastRunHasCheckpoint),
       run: () => deps.resumeRun(),
+    },
+    {
+      id: "rollback",
+      label: "Rollback uncompensated file effects",
+      slash: "rollback",
+      when: (c) =>
+        !!c.lastRunId
+        && !c.busy
+        && !!c.lastRunStatus
+        && canRollbackRun(c.lastRunStatus, {
+          rollbackAvailable: c.lastRunRollbackAvailable,
+        }),
+      run: () => deps.rollbackRun(),
     },
     {
       id: "files",
@@ -189,6 +216,7 @@ export function buildChatSlashCatalog(deps: {
   cancelRun: () => Promise<void>
   rerunRun: () => Promise<void>
   resumeRun: () => Promise<void>
+  rollbackRun: () => Promise<void>
   showStatus: () => void
   createThread: () => Promise<void>
   openThreads: () => void

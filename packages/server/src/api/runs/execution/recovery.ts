@@ -1,7 +1,9 @@
 import { EventType } from "@mia/agent"
+import { RunStatus } from "@mia/shared-enums"
 import { broadcast } from "../../../infra/events/broadcaster.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 import { NotificationActionType } from "../../../internal/enums/notifications.js"
+import { buildRunCapabilityActions } from "../run-capability-actions.js"
 import { createNotification } from "./persistence.js"
 
 // ── Recovery depends interface ────────────────────────────────────
@@ -40,27 +42,20 @@ export function recoverStaleRunsImpl(_activeDeps: RecoveryDeps): { recovered: st
       data: { runId: stale.id, error: "Server restarted — run interrupted" }
     })
 
-    const checkpoint = db.getCheckpoint(stale.id)
-    if (checkpoint) {
-      createNotification({
-        type: EventType.RunFailed,
-        title: "Run interrupted",
-        message: `"${stale.goal.slice(0, 80)}" was interrupted by a server restart. Resume manually from checkpoint.`,
-        runId: stale.id,
-        actions: [
-          { label: "Review", action: NotificationActionType.ViewRun, data: { runId: stale.id } },
-          { label: "Resume", action: NotificationActionType.ResumeRun, data: { runId: stale.id } }
-        ]
-      })
-    } else {
-      createNotification({
-        type: EventType.RunFailed,
-        title: "Run lost",
-        message: `"${stale.goal.slice(0, 80)}" was interrupted with no checkpoint available.`,
-        runId: stale.id,
-        actions: [{ label: "Review", action: NotificationActionType.ViewRun, data: { runId: stale.id } }]
-      })
-    }
+    const capabilityActions = buildRunCapabilityActions(stale.id, RunStatus.Crashed)
+    const canResume = capabilityActions.some((a) => a.action === NotificationActionType.ResumeRun)
+    createNotification({
+      type: EventType.RunFailed,
+      title: canResume ? "Run interrupted" : "Run lost",
+      message: canResume
+        ? `"${stale.goal.slice(0, 80)}" was interrupted by a server restart. Resume manually from checkpoint.`
+        : `"${stale.goal.slice(0, 80)}" was interrupted with no checkpoint available.`,
+      runId: stale.id,
+      actions: [
+        { label: "Review", action: NotificationActionType.ViewRun, data: { runId: stale.id } },
+        ...capabilityActions,
+      ],
+    })
   }
 
   return { recovered: [], failed }
