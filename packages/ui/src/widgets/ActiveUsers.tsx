@@ -924,6 +924,9 @@ function Stat({ label, value, accent }: { label: string; value: string; accent?:
 
 type RunSortKey = "started" | "duration" | "steps" | "tokens" | "llmCalls" | "model" | "status"
 
+/** Run-history table needs ~this many CSS px; below → stacked cards. */
+const AU_RUN_TABLE_MIN_WIDTH_PX = 720
+
 function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, onPageChange, onCollapse, onRunClick }: {
   user: UserRow; liveRuns: ActiveRunRow[]
   history: HistoryState | undefined
@@ -934,6 +937,12 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
   onCollapse: () => void
   onRunClick: (runId: string, preview?: RunPreview) => void
 }) {
+  const detailRef = useRef<HTMLDivElement>(null)
+  const { width: detailWidth } = useContainerSize(detailRef)
+  // Parent `stack` covers the user list; run history follows *this* panel —
+  // a wide users table can still leave a narrow detail column / window.
+  const stackRuns = stack || detailWidth === 0 || detailWidth < AU_RUN_TABLE_MIN_WIDTH_PX
+
   const [runFilter, setRunFilter] = useState("")
   const [runStatus, setRunStatus] = useState<"all" | "succeeded" | "failed" | "running">("all")
   const [runSort, setRunSort] = useState<RunSortKey>("started")
@@ -1001,7 +1010,7 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
   }
 
   return (
-    <div className="au-detail-panel min-w-0 border-t border-border-subtle bg-overlay-1">
+    <div ref={detailRef} className="au-detail-panel min-w-0 border-t border-border-subtle bg-overlay-1">
 
       {/* Collapse handle — sits flush under the parent row */}
       <button
@@ -1161,9 +1170,9 @@ function UserDetail({ user, liveRuns, history, stack, adminBusy, onToggleAdmin, 
           />
         )}
 
-        {/* Run list — stack cards when narrow, table when wide */}
+        {/* Run list — stack cards when *this* panel is narrow, table when wide */}
         {history && history.rows.length > 0 && (
-          stack ? (
+          stackRuns ? (
             <div className="au-run-stack divide-y divide-border-subtle">
               {displayRows.length === 0 ? (
                 <div className="px-4 py-5 text-center text-text-muted/40">No runs match filter.</div>

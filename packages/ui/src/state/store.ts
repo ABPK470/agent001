@@ -905,9 +905,13 @@ export const useStore = create<AppState>()(
       // mount: switching to a view containing RunHistory and then back
       // to TermChat would erase the active run's narrative + tool calls.
       //
-      // Keep in-memory-only rows for the *active* thread (in-flight SSE /
-      // not yet in the latest list response). Never retain runs from other
-      // threads — that leaked prior-thread runs into empty "New thread"s.
+      // `runs` is a multi-thread cache. Callers pass the list for the *active*
+      // thread (listThreadRuns / listRuns({ threadId })). Replace that thread's
+      // rows only — keep other threads so switching back does not flash empty.
+      // Consumers must filter by threadId (TermChat, ThreadRunsPanel, …).
+      //
+      // Also keep in-memory-only rows for the active thread (in-flight SSE /
+      // not yet in the latest list response).
       setRuns: (runs) => set((s) => {
         const prevById = new Map(s.runs.map((r) => [r.id, r]))
         const incomingIds = new Set(runs.map((r) => r.id))
@@ -923,10 +927,13 @@ export const useStore = create<AppState>()(
           }
         })
         const scopeThreadId = s.activeThreadId
+        const otherThreadRuns = scopeThreadId
+          ? s.runs.filter((r) => r.threadId !== scopeThreadId)
+          : []
         const orphans = scopeThreadId
           ? s.runs.filter((r) => !incomingIds.has(r.id) && r.threadId === scopeThreadId)
-          : []
-        return { runs: orphans.length > 0 ? [...merged, ...orphans] : merged }
+          : s.runs.filter((r) => !incomingIds.has(r.id))
+        return { runs: [...otherThreadRuns, ...merged, ...orphans] }
       }),
       setActiveRun: (activeRunId) => {
         if (activeRunId) {
@@ -1059,15 +1066,23 @@ export const useStore = create<AppState>()(
           threadSidebarCollapsed: false,
         })),
       selectThread: async (threadId) => {
-        // Clear runs immediately so the previous thread cannot paint into the next.
+        // Never blank the multi-thread run cache on switch — TermChat keys
+        // emptiness off displayRuns.length, so runs:[] paints the empty hero
+        // for a few ms before listThreadRuns returns. Previous thread cannot
+        // paint into the next: widgets filter by activeThreadId / threadId.
+        const cached = threadId
+          ? get().runs
+              .filter((r) => r.threadId === threadId)
+              .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime())
+          : []
         set({
           activeThreadId: threadId,
-          activeRunId: null,
-          runs: [],
+          activeRunId: cached.length > 0 ? cached[cached.length - 1]!.id : null,
           steps: [],
           trace: [],
           audit: [],
           pendingInput: null,
+          ...(threadId ? {} : { runs: [] }),
         })
         if (!threadId) return
         try {
@@ -1081,9 +1096,12 @@ export const useStore = create<AppState>()(
           get().setRuns(runs)
           if (runs.length > 0) {
             get().setActiveRun(runs[runs.length - 1]!.id)
+          } else {
+            set({ activeRunId: null })
           }
         } catch {
-          if (get().activeThreadId === threadId) set({ runs: [] })
+          // Drop only this thread's rows; keep the rest of the cache.
+          if (get().activeThreadId === threadId) get().setRuns([])
         }
       },
       createNewThread: async () => {

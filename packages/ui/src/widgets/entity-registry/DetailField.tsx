@@ -10,11 +10,11 @@ export function DetailField({
   label: string
   value: ReactNode
   mono?: boolean
-  /** Grid column span on sm+ breakpoints */
+  /** Grid column span when the modal-detail container is wide enough */
   span?: 1 | 2
 }): JSX.Element {
   return (
-    <div className={span === 2 ? "sm:col-span-2" : undefined}>
+    <div className={span === 2 ? "modal-detail-field--span-2" : undefined}>
       <div className="modal-detail-field">
         <span className="modal-detail-field__label">{label}</span>
         <div className={`modal-detail-field__value${mono ? " modal-detail-field__value--mono" : ""}`}>

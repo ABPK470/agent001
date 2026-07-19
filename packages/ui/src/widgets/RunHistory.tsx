@@ -1,179 +1,267 @@
 /**
- * RunHistory — browse past agent runs.
+ * RunHistory — browse past agent runs for the active thread.
  *
- * Click a run to select it (updates other widgets with that run's data).
- * Shows status, goal, time, step count, and inline actions.
+ * Layout follows the *widget container* (grid cell, pop-out window, or
+ * narrow screen) via CSS container queries — never the viewport. Click a
+ * run to select it for the rest of the workspace.
  */
 
 import { GitBranch, Play, RotateCcw, Square, Undo2 } from "lucide-react"
-import { useEffect, useState } from "react"
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
 import { RunStatus } from "../enums"
 import { useStore } from "../state/store"
-import type { AgentDefinition } from "../types"
-import { fmtTokens, statusColor, timeAgo, truncate } from "../lib/util"
+import type { AgentDefinition, Run } from "../types"
+import { fmtTokens, statusColor, timeAgo } from "../lib/util"
 import { WIDGET_ICONS } from "./widget-icons"
 
+function isLiveStatus(status: Run["status"]): boolean {
+  return (
+    status === RunStatus.Running
+    || status === RunStatus.Pending
+    || status === RunStatus.Planning
+  )
+}
+
+function canResume(status: Run["status"]): boolean {
+  return (
+    status === RunStatus.Failed
+    || status === RunStatus.Cancelled
+    || status === RunStatus.Crashed
+  )
+}
+
+function canRerunOrRollback(status: Run["status"]): boolean {
+  return (
+    status === RunStatus.Completed
+    || status === RunStatus.Failed
+    || status === RunStatus.Cancelled
+    || status === RunStatus.Crashed
+  )
+}
+
+function sortRunsNewestFirst(runs: Run[]): Run[] {
+  return [...runs].sort(
+    (a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
+  )
+}
+
+function RunHistoryRow({
+  run,
+  selected,
+  agentLabel,
+  rolledBack,
+  onSelect,
+  onCancel,
+  onResume,
+  onRerun,
+  onRollback,
+}: {
+  run: Run
+  selected: boolean
+  agentLabel: string | null
+  rolledBack: boolean
+  onSelect: () => void
+  onCancel: () => void
+  onResume: () => void
+  onRerun: () => void
+  onRollback: () => void
+}) {
+  const live = isLiveStatus(run.status)
+
+  function onRowKeyDown(e: KeyboardEvent<HTMLDivElement>) {
+    if (e.key === "Enter" || e.key === " ") {
+      e.preventDefault()
+      onSelect()
+    }
+  }
+
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className={`run-history-row${selected ? " run-history-row--selected" : ""}`}
+      onClick={onSelect}
+      onKeyDown={onRowKeyDown}
+    >
+      <div className="run-history-row__main">
+        <span
+          className="run-history-row__dot"
+          style={{
+            background: statusColor(run.status),
+            boxShadow: `0 0 8px ${statusColor(run.status)}66`,
+          }}
+          aria-hidden
+        />
+        <div className="run-history-row__body">
+          <div className="run-history-row__title">
+            <span className="run-history-row__goal" title={run.goal}>{run.goal}</span>
+            <span
+              className="run-history-row__status"
+              style={{ color: statusColor(run.status) }}
+            >
+              {run.status}
+            </span>
+          </div>
+          <div className="run-history-row__meta">
+            {agentLabel && (
+              <span className="run-history-row__agent">{agentLabel}</span>
+            )}
+            <span>{timeAgo(run.createdAt)}</span>
+            <span className="run-history-row__meta-steps">{run.stepCount} steps</span>
+            {run.totalTokens > 0 && (
+              <span className="run-history-row__meta-tokens font-mono">
+                {fmtTokens(run.totalTokens)} tk
+              </span>
+            )}
+            {run.parentRunId && (
+              <span className="run-history-row__resumed">
+                <GitBranch size={12} aria-hidden />
+                resumed
+              </span>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <div
+        className="run-history-row__actions"
+        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => e.stopPropagation()}
+      >
+        {live && (
+          <button
+            type="button"
+            className="run-history-action run-history-action--danger"
+            onClick={onCancel}
+            title="Cancel"
+          >
+            <Square size={14} strokeWidth={2.25} />
+          </button>
+        )}
+        {canResume(run.status) && (
+          <button
+            type="button"
+            className="run-history-action"
+            onClick={onResume}
+            title="Resume from checkpoint"
+          >
+            <RotateCcw size={14} strokeWidth={2.25} />
+          </button>
+        )}
+        {canRerunOrRollback(run.status) && (
+          <button
+            type="button"
+            className="run-history-action"
+            onClick={onRerun}
+            title="Re-run with same goal"
+          >
+            <Play size={14} strokeWidth={2.25} />
+          </button>
+        )}
+        {canRerunOrRollback(run.status) && !rolledBack && (
+          <button
+            type="button"
+            className="run-history-action run-history-action--warning"
+            onClick={onRollback}
+            title="Rollback file changes"
+          >
+            <Undo2 size={14} strokeWidth={2.25} />
+          </button>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export function RunHistory() {
+  const rootRef = useRef<HTMLDivElement>(null)
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
   const activeThreadId = useStore((s) => s.activeThreadId)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
-  const [rolledBackIds, setRolledBackIds] = useState<Set<string>>(new Set())
-  // Load agents
+  const [rolledBackIds, setRolledBackIds] = useState<Set<string>>(() => new Set())
+
   useEffect(() => {
     api.listAgents().then(setAgents).catch(() => {})
   }, [])
 
-  const agentName = (id: string | null) => {
-    if (!id) return null
-    return agents.find((a) => a.id === id)?.name ?? null
+  const agentById = useMemo(() => {
+    const map = new Map<string, string>()
+    for (const agent of agents) map.set(agent.id, agent.name)
+    return map
+  }, [agents])
+
+  const threadRuns = useMemo(() => {
+    if (!activeThreadId) return []
+    return sortRunsNewestFirst(
+      runs.filter((r) => r.threadId === activeThreadId),
+    )
+  }, [runs, activeThreadId])
+
+  function selectRun(runId: string) {
+    setActiveRun(runId)
   }
 
-  async function handleSelect(runId: string) {
-    setActiveRun(runId)
+  function cancelRun(runId: string) {
+    api.cancelRun(runId).catch(() => {})
+  }
+
+  function resumeRun(runId: string) {
+    api.resumeRun(runId).then((r) => {
+      if (r.runId) setActiveRun(r.runId)
+    }).catch(() => {})
+  }
+
+  function rerunRun(runId: string) {
+    api.rerunRun(runId).then((r) => {
+      if (r.runId) setActiveRun(r.runId)
+    }).catch(() => {})
+  }
+
+  function rollbackRun(runId: string) {
+    if (!confirm("Rollback all file changes from this run?")) return
+    api.rollbackRun(runId).then(() => {
+      setRolledBackIds((prev) => new Set(prev).add(runId))
+    }).catch(() => {})
   }
 
   if (!activeThreadId) {
     return (
-      <div className="flex h-full flex-col">
+      <div ref={rootRef} className="run-history-widget">
         <EmptyState icon={WIDGET_ICONS["thread-nav"]} message="Select a thread" />
       </div>
     )
   }
 
-  if (runs.length === 0) {
+  if (threadRuns.length === 0) {
     return (
-      <div className="flex h-full flex-col">
+      <div ref={rootRef} className="run-history-widget">
         <EmptyState icon={WIDGET_ICONS["run-history"]} message="No runs in this thread" />
       </div>
     )
   }
 
   return (
-    <div className="flex flex-col h-full">
-      <div className="flex-1 overflow-y-auto space-y-0.5">
-      {runs.map((run) => {
-        const isActive = run.status === RunStatus.Running || run.status === RunStatus.Pending || run.status === RunStatus.Planning
-
-        return (
-        <div
-          key={run.id}
-          className={`group flex items-center gap-2.5 px-2.5 py-2 min-h-[44px] rounded-lg cursor-pointer transition-colors ${
-            run.id === activeRunId
-              ? "bg-elevated"
-              : "hover:bg-elevated/40"
-          }`}
-          onClick={() => handleSelect(run.id)}
-        >
-          {/* Status dot */}
-          <div
-            className="w-2.5 h-2.5 rounded-full shrink-0 ring-2 ring-border"
-            style={{
-              background: statusColor(run.status),
-              boxShadow: `0 0 8px ${statusColor(run.status)}66`,
-            }}
+    <div ref={rootRef} className="run-history-widget">
+      <div className="run-history-list">
+        {threadRuns.map((run) => (
+          <RunHistoryRow
+            key={run.id}
+            run={run}
+            selected={run.id === activeRunId}
+            agentLabel={run.agentId ? (agentById.get(run.agentId) ?? null) : null}
+            rolledBack={rolledBackIds.has(run.id)}
+            onSelect={() => selectRun(run.id)}
+            onCancel={() => cancelRun(run.id)}
+            onResume={() => resumeRun(run.id)}
+            onRerun={() => rerunRun(run.id)}
+            onRollback={() => rollbackRun(run.id)}
           />
-
-          {/* Info */}
-          <div className="flex-1 min-w-0">
-            <div className="text-sm text-text truncate">{truncate(run.goal, 50)}</div>
-            <div className="flex items-center gap-2 text-[13px] text-text-muted mt-0.5">
-              {agentName(run.agentId) && (
-                <>
-                  <span className="text-accent text-[11px]">{agentName(run.agentId)}</span>
-                  <span className="text-text-muted/40">·</span>
-                </>
-              )}
-              <span>{timeAgo(run.createdAt)}</span>
-              <span className="text-text-muted/40">·</span>
-              <span>{run.stepCount} steps</span>
-              {run.totalTokens > 0 && (
-                <>
-                  <span className="text-text-muted/40">·</span>
-                  <span className="text-text-muted font-mono">{fmtTokens(run.totalTokens)} tk</span>
-                </>
-              )}
-              {run.parentRunId && (
-                <>
-                  <span className="text-text-muted/40">·</span>
-                  <GitBranch size={13} className="text-accent" />
-                  <span className="text-accent">resumed</span>
-                </>
-              )}
-            </div>
-          </div>
-
-          {/* Inline actions (visible on hover) */}
-          <div className="flex items-center gap-1.5 shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
-            {isActive && (
-              <button
-                className="p-1.5 text-error/80 hover:text-error hover:bg-error/10 rounded-md ring-1 ring-border hover:ring-error/30 transition-colors"
-                onClick={(e) => { e.stopPropagation(); api.cancelRun(run.id).catch(() => {}) }}
-                title="Cancel"
-              >
-                <Square size={14} strokeWidth={2.25} />
-              </button>
-            )}
-            {(run.status === RunStatus.Failed || run.status === RunStatus.Cancelled || run.status === RunStatus.Crashed) && (
-              <button
-                className="p-1.5 text-accent/80 hover:text-accent hover:bg-accent/10 rounded-md ring-1 ring-border hover:ring-accent/30 transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  api.resumeRun(run.id).then((r) => {
-                    if (r.runId) setActiveRun(r.runId)
-                  }).catch(() => {})
-                }}
-                title="Resume from checkpoint"
-              >
-                <RotateCcw size={14} strokeWidth={2.25} />
-              </button>
-            )}
-            {(run.status === RunStatus.Completed || run.status === RunStatus.Failed || run.status === RunStatus.Cancelled || run.status === RunStatus.Crashed) && (
-              <button
-                className="p-1.5 text-accent/80 hover:text-accent hover:bg-accent/10 rounded-md ring-1 ring-border hover:ring-accent/30 transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  api.rerunRun(run.id).then((r) => {
-                    if (r.runId) setActiveRun(r.runId)
-                  }).catch(() => {})
-                }}
-                title="Re-run with same goal"
-              >
-                <Play size={14} strokeWidth={2.25} />
-              </button>
-            )}
-            {(run.status === RunStatus.Completed || run.status === RunStatus.Failed || run.status === RunStatus.Cancelled || run.status === RunStatus.Crashed) && !rolledBackIds.has(run.id) && (              <button
-                className="p-1.5 text-warning/80 hover:text-warning hover:bg-warning/10 rounded-md ring-1 ring-border hover:ring-warning/30 transition-colors"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  if (confirm("Rollback all file changes from this run?")) {
-                    api.rollbackRun(run.id).then(() => {
-                      setRolledBackIds((prev) => new Set(prev).add(run.id))
-                    }).catch(() => {})
-                  }
-                }}
-                title="Rollback file changes"
-              >
-                <Undo2 size={14} strokeWidth={2.25} />
-              </button>
-            )}
-          </div>
-
-          {/* Status text */}
-          <span
-            className="text-[13px] font-medium shrink-0"
-            style={{ color: statusColor(run.status) }}
-          >
-            {run.status}
-          </span>
-        </div>
-        )
-      })}
+        ))}
       </div>
     </div>
   )
 }
-

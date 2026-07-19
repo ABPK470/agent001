@@ -144,12 +144,12 @@ export function ActiveUsersRunModal({
                 <DetailField
                   label="Status"
                   value={(
-                    <span className="inline-flex items-center gap-2">
+                    <span className="inline-flex items-center gap-2 min-w-0">
                       <span
-                        className="inline-block h-2 w-2 rounded-full"
+                        className="inline-block h-2 w-2 shrink-0 rounded-full"
                         style={{ backgroundColor: statusColor(status) }}
                       />
-                      {status}
+                      <span className="truncate">{status}</span>
                     </span>
                   )}
                 />
@@ -198,7 +198,7 @@ export function ActiveUsersRunModal({
 
             {answer && (
               <DetailSection title="Answer">
-                <p className="text-sm leading-relaxed text-text-muted whitespace-pre-wrap break-words max-h-48 overflow-y-auto">
+                <p className="text-sm leading-relaxed text-text-muted whitespace-pre-wrap break-words max-h-[min(12rem,30dvh)] overflow-y-auto">
                   {answer}
                 </p>
               </DetailSection>

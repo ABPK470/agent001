@@ -51,9 +51,9 @@ export const MODAL_ENTITY_FOCUS_PANEL =
 /** @deprecated Prefer MODAL_ENTITY_FOCUS_PANEL — alias kept for transitional imports. */
 export const MODAL_ENTITY_WORKSPACE_PANEL = MODAL_ENTITY_FOCUS_PANEL
 
-/** Compact read-only / confirm dialogs (retire, simple prompts). */
+/** Compact read-only / confirm dialogs (retire, run detail, simple prompts). */
 export const MODAL_DETAIL_PANEL =
-  "w-[min(40rem,92vw)] h-auto max-h-[min(72vh,36rem)]"
+  "w-[min(40rem,calc(100vw-1rem))] h-auto max-h-[min(85dvh,40rem)]"
 
 /** Standard list/catalog viewers — Widget picker, catalog browsers. */
 export const MODAL_VIEWER_PANEL =
