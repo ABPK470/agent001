@@ -29,7 +29,7 @@ import {
 import { reloadPublishedSyncVocabulary } from "../../../boot/published-sync-bundle.js"
 import { _resetGoalClassificationCache } from "../../runs/prompting/goal-classification.js"
 import * as db from "../../../infra/persistence/sqlite.js"
-import { classifyCatalogPublishGap } from "./catalog-publish-gap.js"
+import { classifyCatalogPublish } from "./catalog-publish-classification.js"
 
 const DEFAULT_TENANT_ID = "_default"
 const ENTITY_SEEDS_DIR = "deploy/sync/artifacts/entities"
@@ -190,17 +190,17 @@ export function getSyncPublishStatus(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID,
 ): SyncPublishStatus {
-  const gap = classifyCatalogPublishGap(projectRoot, tenantId)
-  const unpublishedEntityIds = [...gap.compileAffectedEntityIds].sort()
+  const classified = classifyCatalogPublish(projectRoot, tenantId)
+  const unpublishedEntityIds = [...classified.compileAffectedEntityIds].sort()
   return {
     // Arms Publish only for compile-relevant tip deltas (not env-only).
-    catalogNeedsPublish: gap.compileNeedsPublish,
-    operationalCatalogAhead: gap.operationalOnlyAhead,
-    dirtyCompileSections: gap.dirtyCompileSections,
-    dirtyOperationalSections: gap.dirtyOperationalSections,
-    activeCatalogVersion: gap.activeCatalogVersion,
-    publishedCatalogVersion: gap.publishedCatalogVersion,
-    publishedAt: gap.publishedAt,
+    catalogNeedsPublish: classified.compileNeedsPublish,
+    operationalCatalogAhead: classified.operationalOnlyAhead,
+    dirtyCompileSections: classified.dirtyCompileSections,
+    dirtyOperationalSections: classified.dirtyOperationalSections,
+    activeCatalogVersion: classified.activeCatalogVersion,
+    publishedCatalogVersion: classified.publishedCatalogVersion,
+    publishedAt: classified.publishedAt,
     unpublishedEntityCount: unpublishedEntityIds.length,
     unpublishedEntityIds,
   }
@@ -212,8 +212,8 @@ export function entityNeedsRepublish(
   entityId: string,
   tenantId = DEFAULT_TENANT_ID,
 ): boolean {
-  const gap = classifyCatalogPublishGap(projectRoot, tenantId)
-  return gap.compileAffectedEntityIds.includes(entityId)
+  const classified = classifyCatalogPublish(projectRoot, tenantId)
+  return classified.compileAffectedEntityIds.includes(entityId)
 }
 
 /**
@@ -226,9 +226,9 @@ export function listSyncDefinitionAdminItems(
 ): SyncDefinitionAdminItem[] {
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
   const entities = db.listEntityDefinitions(tenantId)
-  const gap = classifyCatalogPublishGap(projectRoot, tenantId)
-  const published = gap.published
-  const compileAffected = new Set(gap.compileAffectedEntityIds)
+  const classified = classifyCatalogPublish(projectRoot, tenantId)
+  const published = classified.published
+  const compileAffected = new Set(classified.compileAffectedEntityIds)
   return entities.map((entity) => {
     const compose = syncDefinitionConfigFromEntity(entity, flowTemplateCatalog)
     const flowTemplateId = compose.flow_preset as EntityRegistrySyncFlowTemplateId

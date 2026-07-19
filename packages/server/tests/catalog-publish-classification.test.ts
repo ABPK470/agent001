@@ -3,7 +3,7 @@
  */
 
 import { describe, expect, it } from "vitest"
-import { compileAffectedEntityIdsFromDiff } from "../src/api/sync/service/catalog-publish-gap.js"
+import { compileAffectedEntityIdsFromDiff } from "../src/api/sync/service/catalog-publish-classification.js"
 import type { DeployCatalogSnapshot } from "../src/api/platform/service/export-deploy-artifacts.js"
 import type { DeployCatalogSnapshotDiff } from "../src/api/platform/service/diff-deploy-catalog-snapshots.js"
 import type { PublishedSyncDefinition } from "@mia/shared-types"

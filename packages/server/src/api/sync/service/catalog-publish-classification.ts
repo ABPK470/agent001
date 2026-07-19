@@ -1,11 +1,11 @@
 /**
- * Catalog tip → Publish dirty classification (first principles).
+ * Classify tip vs published catalog for Publish / preview gates.
+ *
+ * Ongoing SoT: diffs the active tip snapshot against the catalog version stamped
+ * at last Publish, then splits compile-relevant vs operational sections.
  *
  * Preview/execute run **published** SyncDefinitions (frozen entity + flow catalog).
  * Environments / connectors stay live and must NOT arm Publish or dirty every entity.
- *
- * Compile-relevant tip deltas (entities, flows, actions, value sources, phases,
- * strategies, run configs) require Publish before those contracts are runtime-true.
  */
 
 import type { PublishedSyncDefinition } from "@mia/shared-types"
@@ -59,7 +59,7 @@ export const OPERATIONAL_CATALOG_SECTIONS: ReadonlySet<CatalogDiffSectionId> = n
   "environments",
 ])
 
-export type CatalogPublishGap = {
+export type CatalogPublishClassification = {
   activeCatalogVersion: number | null
   publishedCatalogVersion: number | null
   publishedAt: string | null
@@ -267,10 +267,10 @@ export function compileAffectedEntityIdsFromDiff(args: {
   return [...affected]
 }
 
-export function classifyCatalogPublishGap(
+export function classifyCatalogPublish(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID,
-): CatalogPublishGap {
+): CatalogPublishClassification {
   void projectRoot
   const published = loadPublishedBundle(tenantId)
   const activeCatalogVersion = db.getActiveSyncCatalogVersion(tenantId)
