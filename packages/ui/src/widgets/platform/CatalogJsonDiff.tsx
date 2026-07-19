@@ -1,22 +1,30 @@
 /**
- * Unified line diff for catalog version JSON payloads.
+ * Unified line diff for catalog JSON payloads.
+ * Default shows the full document; `changesOnly` collapses unchanged runs.
  */
 
 import type { JSX } from "react"
 import { useMemo } from "react"
-import { buildLineTextDiff, type LineDiffRow } from "../../lib/line-text-diff"
+import {
+  buildLineTextDiff,
+  collapseUnchangedDiffRows,
+  type LineDiffRow,
+} from "../../lib/line-text-diff"
 
 export function CatalogJsonDiff({
   beforeJson,
   afterJson,
+  changesOnly = false,
 }: {
   beforeJson: string | null
   afterJson: string | null
+  /** Show change hunks + short context — not the entire unchanged JSON. */
+  changesOnly?: boolean
 }): JSX.Element {
-  const rows = useMemo(
-    () => buildLineTextDiff(beforeJson ?? "", afterJson ?? ""),
-    [beforeJson, afterJson],
-  )
+  const rows = useMemo(() => {
+    const full = buildLineTextDiff(beforeJson ?? "", afterJson ?? "")
+    return changesOnly ? collapseUnchangedDiffRows(full, 2) : full
+  }, [beforeJson, afterJson, changesOnly])
 
   if (rows.length === 0) {
     return <p className="px-3 py-2 text-xs text-text-muted">Empty JSON.</p>
@@ -34,6 +42,13 @@ export function CatalogJsonDiff({
 }
 
 function DiffLine({ row }: { row: LineDiffRow }): JSX.Element {
+  if (row.kind === "ellipsis") {
+    return (
+      <div className="px-2 py-1 text-center text-text-faint select-none">
+        {row.text}
+      </div>
+    )
+  }
   const tone =
     row.kind === "added"
       ? "bg-success-soft text-success"

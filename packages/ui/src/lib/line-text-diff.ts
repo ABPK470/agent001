@@ -2,13 +2,15 @@
  * Line-oriented LCS diff for pretty-printed JSON / text blocks.
  */
 
-export type LineDiffKind = "same" | "added" | "removed"
+export type LineDiffKind = "same" | "added" | "removed" | "ellipsis"
 
 export type LineDiffRow = {
   kind: LineDiffKind
   text: string
   oldLine: number | null
   newLine: number | null
+  /** Present on `ellipsis` rows — how many unchanged lines were omitted. */
+  omitted?: number
 }
 
 const MAX_LINES = 4_000
@@ -51,6 +53,46 @@ export function buildLineTextDiff(oldText: string, newText: string): LineDiffRow
     }
   }
   return rows
+}
+
+/**
+ * Keep change hunks + `context` unchanged lines around them; collapse the rest.
+ * Pure view helper — does not recompute the LCS.
+ */
+export function collapseUnchangedDiffRows(
+  rows: LineDiffRow[],
+  context = 2,
+): LineDiffRow[] {
+  if (rows.length === 0) return rows
+  const keep = new Set<number>()
+  for (let i = 0; i < rows.length; i++) {
+    if (rows[i]!.kind === "same") continue
+    for (let j = Math.max(0, i - context); j <= Math.min(rows.length - 1, i + context); j++) {
+      keep.add(j)
+    }
+  }
+  if (keep.size === 0) return rows
+
+  const out: LineDiffRow[] = []
+  let i = 0
+  while (i < rows.length) {
+    if (keep.has(i)) {
+      out.push(rows[i]!)
+      i++
+      continue
+    }
+    let j = i
+    while (j < rows.length && !keep.has(j)) j++
+    out.push({
+      kind: "ellipsis",
+      text: `··· ${j - i} unchanged line${j - i === 1 ? "" : "s"} ···`,
+      oldLine: null,
+      newLine: null,
+      omitted: j - i,
+    })
+    i = j
+  }
+  return out
 }
 
 function splitLines(text: string): string[] {

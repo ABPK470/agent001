@@ -2,7 +2,7 @@
  * Structured detail + JSON snapshot diff for one sync catalog version.
  */
 
-import { ChevronDown, ChevronRight, GitCompareArrows, History, Loader2 } from "lucide-react"
+import { GitCompareArrows, History, Loader2 } from "lucide-react"
 import type { JSX } from "react"
 import { useEffect, useState } from "react"
 import { api } from "../../client/index"
@@ -10,12 +10,13 @@ import { EmptyState } from "../../components/EmptyState"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { ModalShell } from "../entity-registry/ModalShell"
 import { PANEL } from "../entity-registry/chrome"
-import { CatalogJsonDiff } from "./CatalogJsonDiff"
+import {
+  CatalogDiffSections,
+  firstCatalogDiffEntryKey,
+  type CatalogDiffSection,
+} from "./CatalogDiffSections"
 
 type VersionDetail = Awaited<ReturnType<typeof api.getSyncCatalogVersion>>["detail"]
-type VersionDiff = Awaited<ReturnType<typeof api.getSyncCatalogVersionDiff>>["diff"]
-type DiffSection = VersionDiff["sections"][number]
-type DiffEntry = DiffSection["creates"][number] | DiffSection["updates"][number] | DiffSection["deletes"][number]
 type AgainstChoice = "previous" | "active"
 
 const AGAINST_OPTIONS: ListboxOption<AgainstChoice>[] = [
@@ -33,7 +34,9 @@ export function CatalogVersionDetailModal({
   const [busy, setBusy] = useState(true)
   const [err, setErr] = useState<string | null>(null)
   const [detail, setDetail] = useState<VersionDetail | null>(null)
-  const [diff, setDiff] = useState<VersionDiff | null>(null)
+  const [sections, setSections] = useState<CatalogDiffSection[]>([])
+  const [fromVersion, setFromVersion] = useState<number | null>(null)
+  const [changeCount, setChangeCount] = useState(0)
   const [against, setAgainst] = useState<AgainstChoice>("previous")
   const [openEntryKey, setOpenEntryKey] = useState<string | null>(null)
 
@@ -50,9 +53,10 @@ export function CatalogVersionDetailModal({
         ])
         if (cancelled) return
         setDetail(detailRes.detail)
-        setDiff(diffRes.diff)
-        const first = firstDiffEntryKey(diffRes.diff)
-        setOpenEntryKey(first)
+        setSections(diffRes.diff.sections)
+        setFromVersion(diffRes.diff.fromVersion)
+        setChangeCount(diffRes.diff.changeCount)
+        setOpenEntryKey(firstCatalogDiffEntryKey(diffRes.diff.sections))
         setBusy(false)
       } catch (error) {
         if (cancelled) return
@@ -67,8 +71,8 @@ export function CatalogVersionDetailModal({
 
   const summary = detail?.summary
   const againstLabel =
-    diff?.fromVersion != null
-      ? `v${diff.fromVersion}`
+    fromVersion != null
+      ? `v${fromVersion}`
       : against === "previous"
         ? "none (initial)"
         : "active"
@@ -121,7 +125,7 @@ export function CatalogVersionDetailModal({
                   </h3>
                   <p className="text-xs text-text-muted">
                     JSON diff vs {againstLabel}
-                    {diff ? ` · ${diff.changeCount} change${diff.changeCount === 1 ? "" : "s"}` : ""}
+                    {changeCount > 0 ? ` · ${changeCount} change${changeCount === 1 ? "" : "s"}` : ""}
                   </p>
                 </div>
                 <div className="w-44">
@@ -136,40 +140,17 @@ export function CatalogVersionDetailModal({
                 </div>
               </div>
 
-              {!diff || diff.sections.length === 0 ? (
-                <p className="px-4 py-6 text-sm text-text-muted">
-                  {diff?.fromVersion == null && against === "previous"
+              <CatalogDiffSections
+                sections={sections}
+                openEntryKey={openEntryKey}
+                onToggleEntry={setOpenEntryKey}
+                changesOnly
+                emptyMessage={
+                  fromVersion == null && against === "previous"
                     ? "Initial catalog version — nothing to compare against."
-                    : "No differences in this comparison."}
-                </p>
-              ) : (
-                <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto show-scrollbar p-4">
-                  {diff.sections.map((section) => (
-                    <li key={section.section} className="rounded-lg border border-border-subtle p-3">
-                      <div className="mb-2 flex items-center justify-between gap-2">
-                        <h4 className="text-sm font-medium text-text">{section.label}</h4>
-                        <span className="font-mono text-xs text-text-faint">
-                          +{section.creates.length} ~{section.updates.length} −{section.deletes.length}
-                        </span>
-                      </div>
-                      <div className="space-y-2">
-                        {[...section.creates, ...section.updates, ...section.deletes].map((entry) => {
-                          const key = `${section.section}:${entry.kind}:${entry.id}`
-                          const open = openEntryKey === key
-                          return (
-                            <DiffEntryCard
-                              key={key}
-                              entry={entry}
-                              open={open}
-                              onToggle={() => setOpenEntryKey(open ? null : key)}
-                            />
-                          )
-                        })}
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              )}
+                    : "No differences in this comparison."
+                }
+              />
             </section>
 
             <section className={`${PANEL} shrink-0 p-4`}>
@@ -189,62 +170,6 @@ export function CatalogVersionDetailModal({
       </div>
     </ModalShell>
   )
-}
-
-function DiffEntryCard({
-  entry,
-  open,
-  onToggle,
-}: {
-  entry: DiffEntry
-  open: boolean
-  onToggle: () => void
-}): JSX.Element {
-  const tone =
-    entry.kind === "create"
-      ? "text-success"
-      : entry.kind === "delete"
-        ? "text-error"
-        : "text-warning"
-  const label =
-    entry.kind === "create" ? "Added" : entry.kind === "delete" ? "Removed" : "Changed"
-
-  return (
-    <div className="overflow-hidden rounded-md border border-border-subtle/80">
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-center gap-2 px-2.5 py-2 text-left hover:bg-elevated/40"
-      >
-        {open ? (
-          <ChevronDown size={14} className="shrink-0 text-text-faint" />
-        ) : (
-          <ChevronRight size={14} className="shrink-0 text-text-faint" />
-        )}
-        <span className={`text-[10px] font-semibold uppercase tracking-wider ${tone}`}>{label}</span>
-        <span className="min-w-0 flex-1 truncate font-mono text-sm text-text">{entry.id}</span>
-        {entry.changedPaths.length > 0 && (
-          <span className="hidden max-w-[40%] truncate text-xs text-text-faint sm:inline">
-            {entry.changedPaths.slice(0, 4).join(", ")}
-            {entry.changedPaths.length > 4 ? ` +${entry.changedPaths.length - 4}` : ""}
-          </span>
-        )}
-      </button>
-      {open && (
-        <div className="border-t border-border-subtle p-2">
-          <CatalogJsonDiff beforeJson={entry.beforeJson} afterJson={entry.afterJson} />
-        </div>
-      )}
-    </div>
-  )
-}
-
-function firstDiffEntryKey(diff: VersionDiff): string | null {
-  for (const section of diff.sections) {
-    const entry = section.creates[0] ?? section.updates[0] ?? section.deletes[0]
-    if (entry) return `${section.section}:${entry.kind}:${entry.id}`
-  }
-  return null
 }
 
 function Stat({ label, value }: { label: string; value: number }): JSX.Element {

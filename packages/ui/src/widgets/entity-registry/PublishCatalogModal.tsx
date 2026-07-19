@@ -1,21 +1,37 @@
 /**
- * Publish Catalog tip → sync runtime — confirmation with unpublished change preview.
- * Same ModalShell / Changes-list dialect as catalog version detail (not the same job).
+ * Publish Catalog tip → sync runtime — confirmation with tip-vs-published diff.
+ * Same Changes / CatalogJsonDiff dialect as catalog version detail (different job).
  */
 
 import { CheckCircle2, GitCompareArrows, Loader2, Rocket, XCircle } from "lucide-react"
 import type { JSX } from "react"
-import { useState } from "react"
+import { useEffect, useState } from "react"
 import { api } from "../../client/index"
 import type {
   PublishSyncDefinitionsResponse,
   SyncDefinitionAdminItem,
   SyncPublishStatus,
 } from "../../types"
+import {
+  CatalogDiffSections,
+  firstCatalogDiffEntryKey,
+  type CatalogDiffSection,
+} from "../platform/CatalogDiffSections"
 import { ACTION_BTN, META_TEXT, PANEL, TEXT_BTN } from "./chrome"
 import { ModalShell } from "./ModalShell"
 
 type PublishPhase = "idle" | "publishing" | "done"
+
+/** Tip sections that enter the published SyncDefinition contract. */
+const COMPILE_SECTIONS = new Set([
+  "entities",
+  "configs",
+  "strategies",
+  "flows",
+  "actions",
+  "valueSources",
+  "phases",
+])
 
 const SECTION_LABELS: Record<string, string> = {
   entities: "Entities",
@@ -44,6 +60,60 @@ export function PublishCatalogModal({
   const [phase, setPhase] = useState<PublishPhase>("idle")
   const [result, setResult] = useState<PublishSyncDefinitionsResponse | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [diffBusy, setDiffBusy] = useState(false)
+  const [diffError, setDiffError] = useState<string | null>(null)
+  const [sections, setSections] = useState<CatalogDiffSection[]>([])
+  const [fromVersion, setFromVersion] = useState<number | null>(null)
+  const [toVersion, setToVersion] = useState<number | null>(null)
+  const [changeCount, setChangeCount] = useState(0)
+  const [openEntryKey, setOpenEntryKey] = useState<string | null>(null)
+
+  const tipVersion = publishStatus?.activeCatalogVersion ?? null
+  const publishedVersion = publishStatus?.publishedCatalogVersion ?? null
+
+  useEffect(() => {
+    if (phase !== "idle" || tipVersion == null) {
+      setSections([])
+      setDiffBusy(false)
+      setDiffError(null)
+      return
+    }
+    let cancelled = false
+    setDiffBusy(true)
+    setDiffError(null)
+    setOpenEntryKey(null)
+    const against =
+      publishedVersion != null && publishedVersion !== tipVersion
+        ? publishedVersion
+        : ("previous" as const)
+
+    void api.getSyncCatalogVersionDiff(tipVersion, against).then(
+      (res) => {
+        if (cancelled) return
+        const compileSections = res.diff.sections.filter((s) => COMPILE_SECTIONS.has(s.section))
+        setSections(compileSections)
+        setFromVersion(res.diff.fromVersion)
+        setToVersion(res.diff.toVersion)
+        setChangeCount(
+          compileSections.reduce(
+            (n, s) => n + s.creates.length + s.updates.length + s.deletes.length,
+            0,
+          ),
+        )
+        setOpenEntryKey(firstCatalogDiffEntryKey(compileSections))
+        setDiffBusy(false)
+      },
+      (e: unknown) => {
+        if (cancelled) return
+        setDiffError(e instanceof Error ? e.message : String(e))
+        setSections([])
+        setDiffBusy(false)
+      },
+    )
+    return () => {
+      cancelled = true
+    }
+  }, [phase, tipVersion, publishedVersion])
 
   async function confirmPublish(): Promise<void> {
     setPhase("publishing")
@@ -85,11 +155,20 @@ export function PublishCatalogModal({
   const compileSections = publishStatus?.dirtyCompileSections ?? []
   const operationalOnly = Boolean(publishStatus?.operationalCatalogAhead)
 
+  const compareLabel =
+    tipVersion == null
+      ? "Catalog tip"
+      : publishedVersion != null && fromVersion === publishedVersion
+        ? `Tip v${toVersion ?? tipVersion} vs published v${publishedVersion}`
+        : fromVersion != null
+          ? `Tip v${toVersion ?? tipVersion} vs v${fromVersion}`
+          : `Tip v${tipVersion}`
+
   const subtitle =
     phase === "idle"
       ? operationalOnly
         ? "Environment changes are live at preview/execute — Publish is not required for them."
-        : "Compose Catalog tip into the sync runtime for preview and execute. Environments and connectors stay live and are not frozen by Publish."
+        : "Compose Catalog tip into the sync runtime for preview and execute. Environments and connectors stay live."
       : phase === "publishing"
         ? "Composing Catalog tip into the sync runtime…"
         : undefined
@@ -126,7 +205,7 @@ export function PublishCatalogModal({
       subtitle={subtitle}
       icon={headerIcon}
       onClose={handleClose}
-      size="detail"
+      size="default"
       footer={footer}
     >
       {phase === "idle" && (
@@ -141,11 +220,25 @@ export function PublishCatalogModal({
                 <div className="text-lg font-semibold text-text">{entityCount}</div>
                 <div className={`text-xs ${META_TEXT}`}>entities total</div>
               </div>
+              {changeCount > 0 && (
+                <div className="text-center">
+                  <div className="text-lg font-semibold text-text">{changeCount}</div>
+                  <div className={`text-xs ${META_TEXT}`}>catalog changes</div>
+                </div>
+              )}
             </div>
             {compileSections.length > 0 && (
               <p className={`text-center ${META_TEXT}`}>
                 Tip changed:{" "}
                 {compileSections.map((id) => SECTION_LABELS[id] ?? id).join(", ")}
+              </p>
+            )}
+            {unpublished.length > 0 && (
+              <p className={`text-center ${META_TEXT}`}>
+                Affected:{" "}
+                <span className="font-mono text-text">
+                  {unpublished.map((item) => item.id).join(", ")}
+                </span>
               </p>
             )}
             {operationalOnly && (
@@ -163,46 +256,38 @@ export function PublishCatalogModal({
                   Changes
                 </h3>
                 <p className={`mt-0.5 ${META_TEXT}`}>
-                  {unpublished.length === 0
-                    ? "No entities need republish for compile-relevant tip changes"
-                    : `${unpublished.length} entit${unpublished.length === 1 ? "y" : "ies"} with a stale published contract`}
+                  {compareLabel}
+                  {changeCount > 0
+                    ? ` · ${changeCount} change${changeCount === 1 ? "" : "s"}`
+                    : ""}
+                  {" · compile sections only"}
                 </p>
               </div>
             </div>
 
-            {unpublished.length > 0 ? (
-              <ul className="min-h-0 flex-1 divide-y divide-border-subtle overflow-y-auto show-scrollbar">
-                {unpublished.map((item) => (
-                  <li key={item.id} className="px-4 py-3 text-sm">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <div className="font-mono font-medium text-text">{item.id}</div>
-                        <div className={`truncate ${META_TEXT}`}>{item.displayName}</div>
-                      </div>
-                      <div className={`shrink-0 text-right ${META_TEXT}`}>
-                        <div>rev {item.entityVersion}</div>
-                        <div>
-                          {item.publishedAt
-                            ? `was ${new Date(item.publishedAt).toLocaleString()}`
-                            : "never published"}
-                        </div>
-                      </div>
-                    </div>
-                    <div className={`mt-1 ${META_TEXT}`}>
-                      Config updated {new Date(item.updatedAt).toLocaleString()}
-                      {item.updatedBy ? ` · ${item.updatedBy}` : ""}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            ) : (
+            {diffBusy ? (
+              <div className="flex flex-1 items-center justify-center gap-2 px-4 py-10 text-sm text-text-muted">
+                <Loader2 size={16} className="animate-spin" />
+                Loading tip vs published diff…
+              </div>
+            ) : diffError ? (
+              <p className="px-4 py-6 text-sm text-error">{diffError}</p>
+            ) : tipVersion == null ? (
               <p className={`px-4 py-6 text-sm ${META_TEXT}`}>
-                No unpublished entity changes detected. Publish still recompiles the full bundle.
+                No catalog tip version yet — Publish will compile the current tip.
               </p>
+            ) : (
+              <CatalogDiffSections
+                sections={sections}
+                openEntryKey={openEntryKey}
+                onToggleEntry={setOpenEntryKey}
+                changesOnly
+                emptyMessage="No compile-relevant tip changes vs the last publish. Publish still recompiles the full bundle."
+              />
             )}
           </section>
 
-          <p className={`shrink-0 text-center text-sm leading-relaxed text-text-muted/60`}>
+          <p className="shrink-0 text-center text-sm leading-relaxed text-text-muted/60">
             Invalid flows block publish for that entity. Warnings are logged but do not stop the bundle.
           </p>
         </div>
