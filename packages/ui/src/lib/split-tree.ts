@@ -403,7 +403,8 @@ function boundsForPath(tree: SplitNode, path: SplitPath, root: GridRect): GridRe
 
 /**
  * Pick a drop zone from pointer position inside a target leaf rect (normalized 0..1).
- * Center band falls through to nearest edge.
+ * Center band falls through to nearest edge. Prefer `dropZoneForDrag` when the
+ * drag origin is known — nearest-edge alone feels sticky on the entry side.
  */
 export function dropZoneFromPoint(
   localX: number,
@@ -423,6 +424,52 @@ export function dropZoneFromPoint(
   if (min === distE) return "e"
   if (min === distN) return "n"
   return "s"
+}
+
+/**
+ * Intuitive drop zone while dragging `origin` over `target`.
+ *
+ * Crossing into a neighbor defaults to a *swap* along the approach axis
+ * (Chat below Bridge → enter Bridge → land on north / take the top). Side
+ * docks stay available via thin edge bands orthogonal to that approach.
+ *
+ * `localX` / `localY` / `width` / `height` are in the same unit (usually pixels).
+ * `origin` / `target` grid rects supply approach direction only.
+ */
+export function dropZoneForDrag(
+  localX: number,
+  localY: number,
+  width: number,
+  height: number,
+  target: GridRect,
+  origin: GridRect,
+  sideBand = 0.22,
+): DropZone {
+  if (width <= 0 || height <= 0) return "e"
+  const nx = Math.min(1, Math.max(0, localX / width))
+  const ny = Math.min(1, Math.max(0, localY / height))
+
+  const originCx = origin.x + origin.w / 2
+  const originCy = origin.y + origin.h / 2
+  const targetCx = target.x + target.w / 2
+  const targetCy = target.y + target.h / 2
+  const dx = originCx - targetCx
+  const dy = originCy - targetCy
+  const verticalApproach = Math.abs(dy) >= Math.abs(dx)
+
+  // Swap default: place the dragged leaf on the far side of the target.
+  const swapZone: DropZone = verticalApproach
+    ? (dy >= 0 ? "n" : "s")
+    : (dx >= 0 ? "w" : "e")
+
+  if (verticalApproach) {
+    if (nx <= sideBand) return "w"
+    if (nx >= 1 - sideBand) return "e"
+    return swapZone
+  }
+  if (ny <= sideBand) return "n"
+  if (ny >= 1 - sideBand) return "s"
+  return swapZone
 }
 
 /** Pixel band rect for a drop zone overlay inside a leaf. */

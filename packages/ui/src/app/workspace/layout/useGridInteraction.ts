@@ -8,7 +8,7 @@ import {
   type LayoutTile,
 } from "../../../lib/grid-math"
 import {
-  dropZoneFromPoint,
+  dropZoneForDrag,
   findDividerForLeafEdge,
   getNodeAt,
   projectTiles,
@@ -133,6 +133,9 @@ function resolveDrop(
   const localX = clientX - bounds.left
   const localY = clientY - bounds.top
 
+  const origin = tiles.find((tile) => tile.id === dragId)
+  if (!origin) return null
+
   let hit: LayoutTile | null = null
   for (const tile of tiles) {
     if (tile.id === dragId || tile.pinned) continue
@@ -150,7 +153,15 @@ function resolveDrop(
   if (!hit) return null
 
   const px = rectToPixels(hit, cw, rowPx)
-  const zone = dropZoneFromPoint(localX - px.left, localY - px.top, px.width, px.height)
+  // Approach-aware zone: entering a neighbor swaps by default; side bands still dock.
+  const zone = dropZoneForDrag(
+    localX - px.left,
+    localY - px.top,
+    px.width,
+    px.height,
+    hit,
+    origin,
+  )
   const next = reparentLeaf(base, dragId, hit.id, zone)
   if (!next) return null
   const projected = projectTiles(next, tiles, COLS, rows)

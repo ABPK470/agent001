@@ -4,6 +4,7 @@ import {
   canvasBounds,
   coversCanvas,
   dropZoneFromPoint,
+  dropZoneForDrag,
   findDividerForLeafEdge,
   layoutLeaves,
   leafNode,
@@ -162,6 +163,19 @@ describe("split-tree", () => {
     expect(dropZoneFromPoint(90, 50, 100, 100)).toBe("e")
     expect(dropZoneFromPoint(50, 10, 100, 100)).toBe("n")
     expect(dropZoneFromPoint(50, 90, 100, 100)).toBe("s")
+  })
+
+  it("dropZoneForDrag swaps on enter instead of sticking to the entry edge", () => {
+    const bridge = { x: 6, y: 0, w: 6, h: 6 }
+    const chat = { x: 6, y: 6, w: 6, h: 6 }
+    // Cursor just inside Bridge from below — old nearest-edge logic would pick "s".
+    expect(dropZoneForDrag(50, 90, 100, 100, bridge, chat)).toBe("n")
+    // Still can dock to a side via the edge band.
+    expect(dropZoneForDrag(8, 50, 100, 100, bridge, chat)).toBe("w")
+    // Coming from the left prefers east (swap into the right slot).
+    const left = { x: 0, y: 0, w: 6, h: 12 }
+    const right = { x: 6, y: 0, w: 6, h: 12 }
+    expect(dropZoneForDrag(50, 50, 100, 100, right, left)).toBe("e")
   })
 
   it("projectTiles writes geometry onto metadata", () => {
