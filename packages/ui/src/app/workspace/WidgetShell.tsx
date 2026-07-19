@@ -7,9 +7,17 @@ import { type ReactNode } from "react"
 import { useStore } from "../../state/store"
 import { useLayoutStore } from "../../state/layout-store"
 import type { WidgetType } from "../../types"
+import type { EdgePin } from "../../lib/grid-math"
 import { getWidgetDefinition } from "./widget-definitions"
 
 type ShellMode = "tile" | "modal" | "popout"
+
+const EDGE_PIN_LABEL: Record<EdgePin, string> = {
+  w: "left",
+  e: "right",
+  n: "top",
+  s: "bottom",
+}
 
 interface Props {
   widgetId: string
@@ -17,6 +25,8 @@ interface Props {
   type: WidgetType
   mode?: ShellMode
   pinned?: boolean
+  /** Canvas edge glue from drag snap (`w`/`e`/`n`/`s`). */
+  edgePin?: EdgePin
   maximized?: boolean
   onClose?: () => void
   onDragPointerDown?: (event: React.PointerEvent) => void
@@ -33,6 +43,7 @@ export function WidgetShell({
   type,
   mode = "tile",
   pinned = false,
+  edgePin,
   maximized = false,
   onClose,
   onDragPointerDown,
@@ -122,6 +133,11 @@ export function WidgetShell({
             {definition.label}
             {pinned && !maximized && (
               <span className="ml-1.5 normal-case tracking-normal text-text-faint">(pinned)</span>
+            )}
+            {edgePin && !maximized && !pinned && (
+              <span className="ml-1.5 normal-case tracking-normal text-text-faint">
+                ({EDGE_PIN_LABEL[edgePin]})
+              </span>
             )}
           </span>
           <div

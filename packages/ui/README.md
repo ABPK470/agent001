@@ -36,9 +36,11 @@ Doctrine: [docs/doctrine.md](../../docs/doctrine.md). Enforce with `npm run lint
 
 Desktop workspace canvases use a flat absolute 2D grid under
 `app/workspace/layout/` (`GridCanvas`, `useGridInteraction`, `grid-math`).
-Tiles are stored in `state/layout-store.ts` and synced via
-`app/workspace/layout/persistence.ts`. Mobile stacks tiles by `(y, x)` in a
-scrollable column.
+Drag/resize **arranges** (resolve overlaps only — gaps stay). Add/remove still
+**packs** via `reclaimSpace`. Dragging near a canvas edge sets `edgePin`
+(`w`/`e`/`n`/`s`). Freeze-pin (toolbar) still locks move/resize. Tiles live in
+`state/layout-store.ts` and sync via `app/workspace/layout/persistence.ts`.
+Mobile stacks tiles by `(y, x)` in a scrollable column.
 
 ## Conventions
 

@@ -19,14 +19,29 @@ export interface PixelRect {
   height: number
 }
 
+/** Canvas edge a tile is glued to (gesture snap / viewport reflow). */
+export type EdgePin = "w" | "e" | "n" | "s"
+
 export interface LayoutTile extends GridRect {
   id: string
   type: WidgetType
   minW: number
   minH: number
   pinned?: boolean
+  /** Flush to this canvas edge; re-applied when viewport rows change. */
+  edgePin?: EdgePin
   /** Geometry to restore after un-maximizing. */
   restore?: GridRect
+}
+
+export interface SnapToEdgesResult {
+  rect: GridRect
+  edgePin: EdgePin | undefined
+}
+
+/** True when reclaim/compact must not move or grow this tile. */
+export function isLayoutLocked(tile: LayoutTile): boolean {
+  return !!(tile.pinned || tile.restore || tile.edgePin)
 }
 
 export interface ViewportGridMetrics {
@@ -133,7 +148,7 @@ export function compactDown(
   const sorted = [...tiles].sort((a, b) => a.y - b.y || a.x - b.x)
   const placed: LayoutTile[] = []
   for (const tile of sorted) {
-    if (tile.pinned || tile.restore || lockedIds?.has(tile.id)) {
+    if (isLayoutLocked(tile) || lockedIds?.has(tile.id)) {
       placed.push(tile)
       continue
     }
@@ -164,7 +179,7 @@ export function reclaimSpace(
 
   if (tiles.length === 1) {
     const only = tiles[0]!
-    if (only.pinned || locked.has(only.id)) return tiles
+    if (isLayoutLocked(only) || locked.has(only.id)) return tiles
     return [{
       ...only,
       ...clampRectToGrid({ x: 0, y: 0, w: COLS, h: rows }, rows, only.minW, only.minH),
@@ -172,20 +187,21 @@ export function reclaimSpace(
   }
 
   let current = compactDown(tiles.map((tile) => ({ ...tile })), locked)
+  current = current.map((tile) => applyEdgePin(tile, rows))
   const maxPasses = COLS + rows
 
   for (let pass = 0; pass < maxPasses; pass++) {
     let grew = false
     // Grow unlocked neighbors first so they absorb gaps left by a shrink.
     const order = [...current].sort((a, b) => {
-      const aLocked = locked.has(a.id) ? 1 : 0
-      const bLocked = locked.has(b.id) ? 1 : 0
+      const aLocked = locked.has(a.id) || isLayoutLocked(a) ? 1 : 0
+      const bLocked = locked.has(b.id) || isLayoutLocked(b) ? 1 : 0
       if (aLocked !== bLocked) return aLocked - bLocked
       return (b.w * b.h) - (a.w * a.h)
     })
 
     for (const tile of order) {
-      if (tile.pinned || tile.restore || locked.has(tile.id)) continue
+      if (isLayoutLocked(tile) || locked.has(tile.id)) continue
       const others = current.filter((other) => other.id !== tile.id)
       let next = current.find((item) => item.id === tile.id)!
 
@@ -254,7 +270,7 @@ export function resolveOverlaps(
     }
 
     const target = [...placed]
-      .filter((item) => !lockedIds?.has(item.id))
+      .filter((item) => !lockedIds?.has(item.id) && !isLayoutLocked(item))
       .sort((a, b) => (b.w * b.h) - (a.w * a.h))[0]
     if (!target) {
       placed.push(candidate)
@@ -318,10 +334,11 @@ export function normalizeTiles(
     const cleared = clearLegacyMaximize(tile)
     const defaults = defaultsByType[cleared.type]
     if (!defaults) return cleared
-    return clampTile(cleared, defaults, maxRows)
+    const next = clampTile(cleared, defaults, maxRows)
+    return maxRows && maxRows > 0 ? applyEdgePin(next, maxRows) : next
   })
   if (!maxRows || maxRows <= 0) return clamped
-  return resolveOverlaps(clamped, maxRows, lockedIds)
+  return resolveOverlaps(clamped, maxRows, lockedIds).map((tile) => applyEdgePin(tile, maxRows))
 }
 
 /** Find a free slot for `tile` that does not overlap `blockers`. */
@@ -397,7 +414,7 @@ export function resolveDragLayout(
   const others = tiles.filter((tile) => tile.id !== dragId)
 
   const overlaps = others
-    .filter((other) => !other.pinned && !other.restore && rectsOverlap(probe, other))
+    .filter((other) => !isLayoutLocked(other) && rectsOverlap(probe, other))
     .sort((a, b) => overlapArea(probe, b) - overlapArea(probe, a))
 
   const swapTarget = overlaps[0]
@@ -422,7 +439,7 @@ export function resolveDragLayout(
   const relocated = new Map<string, LayoutTile>()
 
   for (const tile of others) {
-    if (tile.pinned || tile.restore) {
+    if (isLayoutLocked(tile)) {
       relocated.set(tile.id, tile)
       blockers.push(tile)
       continue
@@ -477,12 +494,23 @@ export function placeNewTile(
   const fitted = findBestFit(tiles, id, type, defaults, rowsCap)
   const freeEnough = !tiles.some((tile) => rectsOverlap(fitted, tile))
   if (freeEnough && (!rowsCap || fitted.y + fitted.h <= rowsCap)) {
-    // Prefer a roomy fill when there's a large empty region
+    // Prefer sitting in a half-width gap beside a peer rather than stretching full width.
+    const sideGapW = Math.max(minW, Math.floor(COLS / 2))
+    const beside = rowsCap
+      ? clampRectToGrid(
+        { x: fitted.x, y: fitted.y, w: Math.min(fitted.w, sideGapW), h: Math.max(fitted.h, Math.min(defaults.h, rowsCap)) },
+        rowsCap,
+        minW,
+        minH,
+      )
+      : { ...fitted, w: Math.min(fitted.w, sideGapW) }
     const roomy = rowsCap
       ? { ...fitted, ...clampRectToGrid({ ...fitted, w: Math.max(fitted.w, Math.min(defaults.w, COLS)), h: Math.max(fitted.h, Math.min(defaults.h, rowsCap)) }, rowsCap, minW, minH) }
       : fitted
+    const preferBeside = beside.w <= sideGapW
+      && !tiles.some((tile) => rectsOverlap(beside, tile))
     const stillFree = !tiles.some((tile) => rectsOverlap(roomy, tile))
-    const tile = stillFree ? roomy : fitted
+    const tile = preferBeside ? { ...fitted, ...beside, id, type, minW, minH } : stillFree ? roomy : fitted
     return { tile, tiles: [...tiles, tile] }
   }
 
@@ -491,9 +519,15 @@ export function placeNewTile(
   }
 
   // Canvas is packed — split the largest movable tile to make room.
+  // Prefer a wide peer so the new widget lands beside it (half/half).
   const target = [...tiles]
-    .filter((tile) => !tile.pinned && !tile.restore)
-    .sort((a, b) => (b.w * b.h) - (a.w * a.h) || b.h - a.h)[0]
+    .filter((tile) => !isLayoutLocked(tile))
+    .sort((a, b) => {
+      const aSide = a.w >= 6 && a.w >= minW + a.minW ? 1 : 0
+      const bSide = b.w >= 6 && b.w >= minW + b.minW ? 1 : 0
+      if (aSide !== bSide) return bSide - aSide
+      return (b.w * b.h) - (a.w * a.h) || b.h - a.h
+    })[0]
 
   if (!target) {
     const tile = { ...fitted, ...findOpenSlot({ ...fitted, id, type, minW, minH }, tiles, rowsCap) }
@@ -653,4 +687,68 @@ export function snapDragRect(
     h: tile.h,
   }
   return maxRows ? clampRectToGrid(next, maxRows, tile.minW, tile.minH) : next
+}
+
+/**
+ * Magnetically snap a rect flush to canvas edges when within `thresholdCells`.
+ * When several edges qualify, the last axis checked wins (corner → N/S after W/E).
+ */
+export function snapToCanvasEdges(
+  rect: GridRect,
+  maxRows: number,
+  thresholdCells = 1,
+): SnapToEdgesResult {
+  const rows = Math.max(1, maxRows)
+  const threshold = Math.max(0, thresholdCells)
+  let { x, y, w, h } = clampRectToGrid(rect, rows)
+  let edgePin: EdgePin | undefined
+
+  if (x <= threshold) {
+    x = 0
+    edgePin = "w"
+  }
+  if (COLS - (x + w) <= threshold) {
+    x = COLS - w
+    edgePin = "e"
+  }
+  if (y <= threshold) {
+    y = 0
+    edgePin = "n"
+  }
+  if (rows - (y + h) <= threshold) {
+    y = rows - h
+    edgePin = "s"
+  }
+
+  return {
+    rect: clampRectToGrid({ x, y, w, h }, rows),
+    edgePin,
+  }
+}
+
+/** Re-glue a tile to its `edgePin` after clamp / viewport row changes. */
+export function applyEdgePin(tile: LayoutTile, maxRows: number): LayoutTile {
+  if (!tile.edgePin) return tile
+  const rows = Math.max(1, maxRows)
+  const base = clampRectToGrid(tile, rows, tile.minW, tile.minH)
+  let { x, y, w, h } = base
+  switch (tile.edgePin) {
+    case "w":
+      x = 0
+      break
+    case "e":
+      x = COLS - w
+      break
+    case "n":
+      y = 0
+      break
+    case "s":
+      y = rows - h
+      break
+  }
+  return {
+    ...tile,
+    ...clampRectToGrid({ x, y, w, h }, rows, tile.minW, tile.minH),
+    edgePin: tile.edgePin,
+  }
 }

@@ -524,6 +524,8 @@ export interface LayoutItem {
   minH?: number
   /** When true, tile cannot be dragged or resized until unpinned. */
   pinned?: boolean
+  /** Canvas edge the tile is glued to (`w`/`e`/`n`/`s`). */
+  edgePin?: "w" | "e" | "n" | "s"
 }
 
 // ── SSE events ────────────────────────────────────────────────────────

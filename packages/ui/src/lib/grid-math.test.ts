@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import {
   COLS,
+  applyEdgePin,
   clampRectToGrid,
   colWidth,
   contentHeight,
@@ -13,6 +14,7 @@ import {
   resolveOverlaps,
   rowsForHeight,
   snapDragRect,
+  snapToCanvasEdges,
   viewportGridMetrics,
   type LayoutTile,
 } from "./grid-math"
@@ -190,6 +192,96 @@ describe("smart drag swap", () => {
   })
 })
 
+describe("edge snap + arrange", () => {
+  it("snapToCanvasEdges pulls flush within threshold", () => {
+    const left = snapToCanvasEdges({ x: 1, y: 3, w: 4, h: 4 }, 16, 1)
+    expect(left).toMatchObject({ rect: { x: 0, y: 3, w: 4, h: 4 }, edgePin: "w" })
+
+    const right = snapToCanvasEdges({ x: 7, y: 2, w: 4, h: 4 }, 16, 1)
+    expect(right).toMatchObject({ rect: { x: 8, y: 2, w: 4, h: 4 }, edgePin: "e" })
+
+    const top = snapToCanvasEdges({ x: 3, y: 1, w: 4, h: 4 }, 16, 1)
+    expect(top).toMatchObject({ rect: { x: 3, y: 0, w: 4, h: 4 }, edgePin: "n" })
+
+    const bottom = snapToCanvasEdges({ x: 2, y: 11, w: 4, h: 4 }, 16, 1)
+    expect(bottom).toMatchObject({ rect: { x: 2, y: 12, w: 4, h: 4 }, edgePin: "s" })
+  })
+
+  it("snapToCanvasEdges leaves mid-canvas rects unpinned", () => {
+    const mid = snapToCanvasEdges({ x: 3, y: 4, w: 4, h: 4 }, 16, 1)
+    expect(mid.edgePin).toBeUndefined()
+    expect(mid.rect).toMatchObject({ x: 3, y: 4, w: 4, h: 4 })
+  })
+
+  it("applyEdgePin re-glues after viewport row change", () => {
+    const tile: LayoutTile = {
+      id: "a",
+      type: "term-chat",
+      x: 2,
+      y: 0,
+      w: 4,
+      h: 8,
+      minW: 2,
+      minH: 2,
+      edgePin: "e",
+    }
+    const glued = applyEdgePin(tile, 12)
+    expect(glued).toMatchObject({ x: 8, y: 0, w: 4, h: 8, edgePin: "e" })
+    const shorter = applyEdgePin({ ...glued, h: 6, y: 2, edgePin: "s" }, 10)
+    expect(shorter).toMatchObject({ y: 4, h: 6, edgePin: "s" })
+  })
+
+  it("arrange leaves intentional gaps — resolveDragLayout without reclaimSpace", () => {
+    const tiles: LayoutTile[] = [
+      { id: "a", type: "term-chat", x: 0, y: 0, w: 4, h: 8, minW: 2, minH: 2 },
+      { id: "b", type: "run-status", x: 8, y: 0, w: 4, h: 8, minW: 2, minH: 2 },
+    ]
+    const arranged = resolveDragLayout(
+      tiles,
+      "a",
+      { x: 0, y: 0, w: 4, h: 8 },
+      { x: 0, y: 0, w: 4, h: 8 },
+      16,
+    )
+    const covered = arranged.reduce((sum, tile) => sum + tile.w * tile.h, 0)
+    expect(covered).toBe(4 * 8 + 4 * 8)
+    expect(covered).toBeLessThan(COLS * 16)
+
+    const packed = reclaimSpace(arranged, 16)
+    const packedCovered = packed.reduce((sum, tile) => sum + tile.w * tile.h, 0)
+    expect(packedCovered).toBe(COLS * 16)
+  })
+
+  it("reclaimSpace does not grow edge-pinned tiles into gaps", () => {
+    const tiles: LayoutTile[] = [
+      {
+        id: "a",
+        type: "term-chat",
+        x: 0,
+        y: 0,
+        w: 4,
+        h: 8,
+        minW: 2,
+        minH: 2,
+        edgePin: "w",
+      },
+      { id: "b", type: "run-status", x: 8, y: 0, w: 4, h: 8, minW: 2, minH: 2 },
+    ]
+    const next = reclaimSpace(tiles, 16)
+    const a = next.find((tile) => tile.id === "a")!
+    expect(a).toMatchObject({ x: 0, w: 4, edgePin: "w" })
+  })
+
+  it("placeNewTile prefers a horizontal half-split for the second widget", () => {
+    const first = placeNewTile([], "a", "term-chat", WIDGET_DEFAULTS["term-chat"], 16)
+    const second = placeNewTile(first.tiles, "b", "run-status", WIDGET_DEFAULTS["run-status"], 16)
+    const [left, right] = second.tiles
+    expect(left!.y).toBe(right!.y)
+    expect(left!.h).toBe(right!.h)
+    expect(left!.w + right!.w).toBe(COLS)
+  })
+})
+
 describe("snap / resize grid math", () => {
   it("pixelsToGridRect snaps to column/row units", () => {
     const cw = colWidth(1200)
@@ -263,10 +355,25 @@ describe("workspace view wire migrate", () => {
         h: 6,
         minW: 2,
         minH: 2,
+        edgePin: "w" as const,
       }],
     }
     const roundtrip = viewFromWire(viewToWire(view))
     expect(roundtrip).toEqual(view)
+  })
+
+  it("round-trips edgePin on LayoutItem wire", () => {
+    const legacy = {
+      id: "default",
+      name: "Main",
+      widgets: [{ id: "a", type: "term-chat" as const }],
+      layouts: {
+        lg: [{ i: "a", x: 0, y: 0, w: 6, h: 8, minW: 2, minH: 2, edgePin: "w" as const }],
+      },
+    }
+    const migrated = viewFromWire(legacy)
+    expect(migrated.tiles[0]).toMatchObject({ edgePin: "w", x: 0, w: 6 })
+    expect(viewToWire(migrated).layouts.lg![0]).toMatchObject({ edgePin: "w" })
   })
 
   it("migrates legacy widgets + layouts.lg into tiles", () => {

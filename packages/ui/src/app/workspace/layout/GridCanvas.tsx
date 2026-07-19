@@ -83,6 +83,7 @@ const GridTilePane = memo(function GridTilePane({
         viewId={viewId}
         type={tile.type}
         pinned={!!tile.pinned}
+        edgePin={tile.edgePin}
         maximized={maximized}
         onDragPointerDown={onDragPointerDown}
       >

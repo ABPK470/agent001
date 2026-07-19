@@ -2,12 +2,12 @@ import { useCallback, useEffect, useRef, useState } from "react"
 import {
   colWidth as computeColWidth,
   pixelsToGridRect,
-  reclaimSpace,
   rectToPixels,
   resolveDragLayout,
   resolveOverlaps,
   ROW_PX,
   snapDragRect,
+  snapToCanvasEdges,
   type GridRect,
   type LayoutTile,
 } from "../../../lib/grid-math"
@@ -37,6 +37,28 @@ interface DragSession {
 function isInteractiveChrome(target: EventTarget | null): boolean {
   return target instanceof Element
     && !!target.closest(".widget-controls, button, a, input, textarea, select")
+}
+
+function applyDragEdgeSnap(
+  tiles: LayoutTile[],
+  tileId: string,
+  next: GridRect,
+  maxRows: number,
+): { candidate: GridRect; tiles: LayoutTile[] } {
+  const snapped = snapToCanvasEdges(next, maxRows)
+  const withEdge = tiles.map((tile) => {
+    if (tile.id !== tileId) return tile
+    if (snapped.edgePin) {
+      return { ...tile, ...snapped.rect, edgePin: snapped.edgePin }
+    }
+    const merged = { ...tile, ...snapped.rect }
+    const { edgePin: _drop, ...rest } = merged
+    return rest
+  })
+  return {
+    candidate: snapped.rect,
+    tiles: withEdge,
+  }
 }
 
 export function useGridInteraction({
@@ -77,16 +99,16 @@ export function useGridInteraction({
 
       if (session.mode === "drag") {
         const next = snapDragRect(session.origin, deltaX, deltaY, cw, rows, rowPx)
+        const edged = applyDragEdgeSnap(session.baseTiles, session.tileId, next, rows)
         const resolved = resolveDragLayout(
-          session.baseTiles,
+          edged.tiles,
           session.tileId,
-          next,
+          edged.candidate,
           session.origin,
           rows,
         )
-        // No lock — after a slot swap both tiles must be free to reclaim residual gaps.
-        setCandidate(next)
-        setLayoutPreview(reclaimSpace(resolved, rows))
+        setCandidate(edged.candidate)
+        setLayoutPreview(resolved)
         return
       }
 
@@ -122,7 +144,7 @@ export function useGridInteraction({
       )
       const resolved = resolveOverlaps(resized, rows, locked)
       setCandidate(next)
-      setLayoutPreview(reclaimSpace(resolved, rows, locked))
+      setLayoutPreview(resolved)
     }
 
     function onUp(event: PointerEvent) {
@@ -135,15 +157,16 @@ export function useGridInteraction({
 
       if (session.mode === "drag") {
         const next = snapDragRect(session.origin, deltaX, deltaY, cw, rows, rowPx)
+        const edged = applyDragEdgeSnap(session.baseTiles, session.tileId, next, rows)
         const resolved = resolveDragLayout(
-          session.baseTiles,
+          edged.tiles,
           session.tileId,
-          next,
+          edged.candidate,
           session.origin,
           rows,
         )
-        // Commit without locking so reclaimSpace can pack the canvas fully.
-        updateTiles(viewId, reclaimSpace(resolved, rows))
+        // Arrange: commit resolved layout without grow-fill.
+        updateTiles(viewId, resolved)
         clearSession()
         return
       }

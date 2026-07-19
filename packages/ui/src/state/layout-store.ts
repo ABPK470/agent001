@@ -184,13 +184,10 @@ export const useLayoutStore = create<LayoutState>()(
                 ...clampRectToGrid(rect, s.viewportRows, tile.minW, tile.minH),
               }
             })
-            // Resolve with the resized tile locked so a west/north expand is not
-            // undone by reading-order collision bias, then grow into any gap.
-            const resolved = normalizeTiles(nextTiles, WIDGET_DEFAULTS, s.viewportRows, locked)
-            const reclaimed = reclaimSpace(resolved, s.viewportRows, locked)
+            // Arrange: resolve overlaps only — do not grow-fill gaps after resize.
             return {
               ...view,
-              tiles: normalizeTiles(reclaimed, WIDGET_DEFAULTS, s.viewportRows, locked),
+              tiles: normalizeTiles(nextTiles, WIDGET_DEFAULTS, s.viewportRows, locked),
             }
           }),
         }
@@ -199,12 +196,11 @@ export const useLayoutStore = create<LayoutState>()(
       updateTiles: (viewId, tiles, lockedTileId) => set((s) => {
         if (s.soloTileId) return s
         const locked = lockedTileId ? new Set([lockedTileId]) : undefined
-        const resolved = normalizeTiles(tiles, WIDGET_DEFAULTS, s.viewportRows, locked)
-        const reclaimed = reclaimSpace(resolved, s.viewportRows, locked)
+        // Arrange: commit resolved geometry as-is (pack only on add/remove).
         return {
           views: s.views.map((view) =>
             view.id === viewId
-              ? { ...view, tiles: normalizeTiles(reclaimed, WIDGET_DEFAULTS, s.viewportRows, locked) }
+              ? { ...view, tiles: normalizeTiles(tiles, WIDGET_DEFAULTS, s.viewportRows, locked) }
               : view,
           ),
         }

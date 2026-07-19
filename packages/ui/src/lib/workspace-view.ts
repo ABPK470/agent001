@@ -28,6 +28,7 @@ export function viewToWire(view: WorkspaceView): ViewConfig {
         minW: tile.minW,
         minH: tile.minH,
         ...(tile.pinned ? { pinned: true } : {}),
+        ...(tile.edgePin ? { edgePin: tile.edgePin } : {}),
       })),
     },
   }
@@ -48,6 +49,7 @@ export function viewFromWire(view: ViewConfig): WorkspaceView {
       minW: layout?.minW ?? defaults.minW,
       minH: layout?.minH ?? defaults.minH,
       ...(layout?.pinned ? { pinned: true } : {}),
+      ...(layout?.edgePin ? { edgePin: layout.edgePin } : {}),
     }
   })
   return {
