@@ -451,7 +451,7 @@ describe("catalog operator workflows — publish pipeline", () => {
     expect(result.stderr.some((line) => line.includes('Refusing to publish "content"'))).toBe(false)
   })
 
-  it("boot refresh replaces legacy kebab-case built-in presets from deploy artifact", () => {
+  it("boot refresh repairs corrupt kebab-case built-in presets from deploy artifact", () => {
     db.saveSyncFlow({
       tenant_id: TENANT,
       id: "content",
@@ -475,6 +475,38 @@ describe("catalog operator workflows — publish pipeline", () => {
     const steps = db.parseFlowSteps(db.getSyncFlow(TENANT, "content")!.steps_json)
     expect(steps.some((step) => step.kind === "metadataSync")).toBe(true)
     expect(steps.every((step) => isCatalogId(step.id) && isCatalogId(step.kind))).toBe(true)
+  })
+
+  it("boot refresh preserves valid tip edits on built-in flows (tip SoT)", () => {
+    const before = db.parseFlowSteps(db.getSyncFlow(TENANT, "content")!.steps_json)
+    const markerId = "regressionTipMarker"
+    db.saveSyncFlow({
+      tenant_id: TENANT,
+      id: "content",
+      label: db.getSyncFlow(TENANT, "content")!.label,
+      description: "operator tip edit",
+      steps_json: JSON.stringify([
+        ...before,
+        {
+          id: markerId,
+          kind: "metadataSync",
+          title: "Tip marker",
+          description: "must survive boot",
+          bindings: {},
+        },
+      ]),
+      built_in: 1,
+      updated_at: new Date().toISOString(),
+      updated_by: "operator",
+    })
+
+    db.syncBuiltInFlowsFromArtifact(fixture.projectRoot, TENANT)
+    db.syncDeploySyncMetadataFromArtifact(fixture.projectRoot, TENANT)
+
+    const after = db.parseFlowSteps(db.getSyncFlow(TENANT, "content")!.steps_json)
+    // Tip SoT is steps_json; label/description may refresh from deploy artifact.
+    expect(after.some((step) => step.id === markerId)).toBe(true)
+    expect(after.length).toBeGreaterThan(before.length)
   })
 
   it("parseFlowSteps fails fast on operator custom presets with kebab-case ids", () => {

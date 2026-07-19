@@ -18,6 +18,7 @@ import {
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { useLiveReload } from "../../hooks/useLiveReload"
 import { ModalShell } from "../entity-registry/ModalShell"
+import { activePublishBadge } from "./catalog-publish-badge"
 import {
   WidgetToolbar,
   WidgetToolbarSearch,
@@ -397,10 +398,6 @@ export function CatalogVersionsModal({
   )
 }
 
-/**
- * "published" means tip stamp === last Publish stamp — never "!needsPublish".
- * Tip ahead of publish must not show green while the bundle is still from an older vN.
- */
 function ActivePublishBadge({
   version,
   publishedCatalogVersion,
@@ -412,37 +409,24 @@ function ActivePublishBadge({
   needsPublish: boolean
   operationalAhead: boolean
 }): JSX.Element {
-  const stampMatches =
-    publishedCatalogVersion != null && version === publishedCatalogVersion
-  const label = stampMatches
-    ? "published"
-    : needsPublish
-      ? "publish pending"
-      : operationalAhead
-        ? "env ahead"
-        : "publish pending"
-  const title = stampMatches
-    ? "Active tip stamp matches the last Publish"
-    : needsPublish
-      ? publishedCatalogVersion != null
-        ? `Active catalog v${version} — sync bundle still from v${publishedCatalogVersion}`
-        : "Active catalog has changes not yet compiled into the sync runtime bundle"
-      : operationalAhead
-        ? "Tip ahead for environments only — live at preview/execute, Publish not required"
-        : publishedCatalogVersion != null
-          ? `Active catalog v${version} — sync bundle still from v${publishedCatalogVersion}`
-          : "Publish required"
-  const toneClass = stampMatches
-    ? "border-success/30 bg-success/10 text-success"
-    : needsPublish || !operationalAhead
-      ? "border-warning/30 bg-warning/10 text-warning"
-      : "border-accent/30 bg-accent/10 text-accent"
+  const badge = activePublishBadge({
+    version,
+    publishedCatalogVersion,
+    needsPublish,
+    operationalAhead,
+  })
+  const toneClass =
+    badge.tone === "success"
+      ? "border-success/30 bg-success/10 text-success"
+      : badge.tone === "warning"
+        ? "border-warning/30 bg-warning/10 text-warning"
+        : "border-accent/30 bg-accent/10 text-accent"
   return (
     <span
       className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${toneClass}`}
-      title={title}
+      title={badge.title}
     >
-      {label}
+      {badge.label}
     </span>
   )
 }
