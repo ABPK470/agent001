@@ -1,5 +1,5 @@
 /**
- * Single EntityDefinition / registry JSON import — thin adapter over ImportGateModal.
+ * Per-entity or bulk Catalog JSON import — thin adapter over ImportGateModal.
  */
 
 import type { JSX } from "react"
@@ -17,14 +17,14 @@ export function EntityRegistryJsonImportGate({
 }): JSX.Element {
   return (
     <ImportGateModal
-      title="Import registry JSON"
+      title="Import entity JSON"
       subtitle={
         entityId
-          ? `Apply EntityDefinition JSON for ${entityId} into SQLite.`
-          : "Apply EntityDefinition registry JSON into SQLite."
+          ? `Replace the live Catalog document for ${entityId}.`
+          : "Apply Catalog entity JSON into the live registry."
       }
       accept=".json,application/json"
-      fileLabel="Choose registry JSON…"
+      fileLabel="Choose JSON file…"
       validate={(json, reason) =>
         api.importEntityRegistryJson(json, reason, { dryRun: true })
       }

@@ -1,5 +1,6 @@
 /**
- * Per-entity Catalog JSON import/export (EntityDefinition registry JSON).
+ * Per-entity Catalog JSON import/export.
+ * Menu title names the object; items are verbs only — no TypeScript type names in UI.
  */
 
 import { ArrowUpDown, Copy, Download, Upload } from "lucide-react"
@@ -22,19 +23,19 @@ export function EntityJsonExportMenu({
   return (
     <ToolbarMenu
       title="Entity JSON"
-      ariaLabel="Import or export entity JSON"
+      ariaLabel="Copy, download, or import this entity as JSON"
       trigger={<ArrowUpDown size={16} />}
-      minWidthClass="min-w-[14rem]"
+      minWidthClass="min-w-[10rem]"
     >
       <ToolbarMenuItem
         icon={<Copy size={14} />}
-        label="Copy EntityDefinition JSON"
+        label="Copy"
         onClick={onCopyRegistryJson}
         disabled={exportBusy}
       />
       <ToolbarMenuItem
         icon={<Download size={14} />}
-        label="Download EntityDefinition JSON"
+        label="Download"
         onClick={onDownloadRegistryJson}
         disabled={exportBusy}
       />
@@ -43,7 +44,7 @@ export function EntityJsonExportMenu({
           <div className="my-1 border-t border-border-subtle" role="separator" />
           <ToolbarMenuItem
             icon={<Upload size={14} />}
-            label="Import EntityDefinition JSON"
+            label="Import"
             onClick={onImportRegistryJson}
             disabled={exportBusy}
           />

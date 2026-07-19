@@ -630,7 +630,7 @@ export function EntityEditModal({ mode, initial, reservedEntityIds = [], onClose
                       loading={false}
                       body={form.sourceBody}
                       onBody={(sourceBody) => patch({ sourceBody })}
-                      placeholder="Paste or edit EntityDefinition JSON…"
+                      placeholder="Paste or edit entity JSON…"
                     />
                   </div>
                 </div>
