@@ -1,15 +1,15 @@
 import { rectToPixels, ROW_PX } from "../../../lib/grid-math"
-import type { GridRect } from "../../../lib/grid-math"
+import type { DropPreview } from "./useGridInteraction"
 
 interface Props {
-  candidate: GridRect | null
+  preview: DropPreview | null
   colWidth: number
   rowPx?: number
 }
 
-export function DropZoneOverlay({ candidate, colWidth: cw, rowPx = ROW_PX }: Props) {
-  if (!candidate || cw <= 0) return null
-  const rect = rectToPixels(candidate, cw, rowPx)
+export function DropZoneOverlay({ preview, colWidth: cw, rowPx = ROW_PX }: Props) {
+  if (!preview || cw <= 0) return null
+  const rect = rectToPixels(preview.rect, cw, rowPx)
   return (
     <div
       className="workspace-drop-zone pointer-events-none absolute z-30 rounded-xl"

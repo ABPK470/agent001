@@ -32,15 +32,16 @@ src/
 
 Doctrine: [docs/doctrine.md](../../docs/doctrine.md). Enforce with `npm run lint:arch`.
 
-## Workspace grid
+## Workspace layout
 
-Desktop workspace canvases use a flat absolute 2D grid under
-`app/workspace/layout/` (`GridCanvas`, `useGridInteraction`, `grid-math`).
-Drag/resize **arranges** (resolve overlaps only — gaps stay). Add/remove still
-**packs** via `reclaimSpace`. Dragging near a canvas edge sets `edgePin`
-(`w`/`e`/`n`/`s`). Freeze-pin (toolbar) still locks move/resize. Tiles live in
-`state/layout-store.ts` and sync via `app/workspace/layout/persistence.ts`.
-Mobile stacks tiles by `(y, x)` in a scrollable column.
+Desktop workspace canvases use a **nested H/V split tree** (`lib/split-tree.ts`)
+as the source of truth. Leaves always cover the full canvas; `layoutLeaves`
+projects them onto absolute rects for paint (`GridCanvas`, `useGridInteraction`).
+Resize moves a shared split ratio (both sides reflow). Drag reparents a leaf
+onto an edge drop zone of another pane. Add/remove split or collapse nodes.
+Freeze-pin still locks move/resize. Views live in `state/layout-store.ts` and
+sync via `app/workspace/layout/persistence.ts`. Mobile stacks tiles by `(y, x)`
+in a scrollable column.
 
 ## Conventions
 

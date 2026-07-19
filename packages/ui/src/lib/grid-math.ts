@@ -689,6 +689,213 @@ export function snapDragRect(
   return maxRows ? clampRectToGrid(next, maxRows, tile.minW, tile.minH) : next
 }
 
+/** Orthogonal resize edge (corners are applied as a sequence of these). */
+export type OrthoEdge = "n" | "s" | "e" | "w"
+
+function verticalOverlapLen(a: GridRect, b: GridRect): number {
+  return Math.max(0, Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y))
+}
+
+function horizontalOverlapLen(a: GridRect, b: GridRect): number {
+  return Math.max(0, Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x))
+}
+
+/**
+ * Neighbor that shares the full divider on `edge` (abuts and overlaps).
+ * Prefers the longest shared contact. Locked tiles are skipped.
+ */
+export function findAbuttingNeighbor(
+  tiles: readonly LayoutTile[],
+  tile: LayoutTile,
+  edge: OrthoEdge,
+): LayoutTile | null {
+  const candidates = tiles.filter((other) => {
+    if (other.id === tile.id || isLayoutLocked(other)) return false
+    switch (edge) {
+      case "e":
+        return other.x === tile.x + tile.w && verticalOverlapLen(tile, other) > 0
+      case "w":
+        return other.x + other.w === tile.x && verticalOverlapLen(tile, other) > 0
+      case "s":
+        return other.y === tile.y + tile.h && horizontalOverlapLen(tile, other) > 0
+      case "n":
+        return other.y + other.h === tile.y && horizontalOverlapLen(tile, other) > 0
+    }
+  })
+  if (candidates.length === 0) return null
+  return [...candidates].sort((a, b) => {
+    const score = (n: LayoutTile) =>
+      edge === "e" || edge === "w" ? verticalOverlapLen(tile, n) : horizontalOverlapLen(tile, n)
+    return score(b) - score(a)
+  })[0]!
+}
+
+/**
+ * Move the shared divider between `tileId` and its abutting neighbor on `edge`.
+ * Returns null when there is no suitable neighbor (caller falls back to solo resize).
+ */
+export function resizeAlongSharedEdge(
+  tiles: LayoutTile[],
+  tileId: string,
+  edge: OrthoEdge,
+  nextRect: GridRect,
+  maxRows: number,
+): LayoutTile[] | null {
+  const rows = Math.max(1, maxRows)
+  const active = tiles.find((tile) => tile.id === tileId)
+  if (!active || isLayoutLocked(active)) return null
+
+  const neighbor = findAbuttingNeighbor(tiles, active, edge)
+  if (!neighbor) return null
+
+  let nextActive: GridRect
+  let nextNeighbor: GridRect
+
+  if (edge === "e") {
+    const pairRight = active.x + active.w + neighbor.w
+    const maxW = pairRight - active.x - neighbor.minW
+    const w = Math.min(Math.max(nextRect.w, active.minW), maxW)
+    if (w < active.minW || pairRight - active.x - w < neighbor.minW) return null
+    nextActive = { x: active.x, y: active.y, w, h: active.h }
+    nextNeighbor = { x: active.x + w, y: neighbor.y, w: pairRight - active.x - w, h: neighbor.h }
+  } else if (edge === "w") {
+    const right = active.x + active.w
+    const pairLeft = neighbor.x
+    const maxW = right - pairLeft - neighbor.minW
+    const w = Math.min(Math.max(nextRect.w, active.minW), maxW)
+    const x = right - w
+    if (w < active.minW || x - pairLeft < neighbor.minW) return null
+    nextActive = { x, y: active.y, w, h: active.h }
+    nextNeighbor = { x: pairLeft, y: neighbor.y, w: x - pairLeft, h: neighbor.h }
+  } else if (edge === "s") {
+    const pairBottom = active.y + active.h + neighbor.h
+    const maxH = Math.min(pairBottom - active.y - neighbor.minH, rows - active.y)
+    const h = Math.min(Math.max(nextRect.h, active.minH), maxH)
+    if (h < active.minH || pairBottom - active.y - h < neighbor.minH) return null
+    nextActive = { x: active.x, y: active.y, w: active.w, h }
+    nextNeighbor = { x: neighbor.x, y: active.y + h, w: neighbor.w, h: pairBottom - active.y - h }
+  } else {
+    const bottom = active.y + active.h
+    const pairTop = neighbor.y
+    const maxH = bottom - pairTop - neighbor.minH
+    const h = Math.min(Math.max(nextRect.h, active.minH), maxH)
+    const y = bottom - h
+    if (h < active.minH || y - pairTop < neighbor.minH) return null
+    nextActive = { x: active.x, y, w: active.w, h }
+    nextNeighbor = { x: neighbor.x, y: pairTop, w: neighbor.w, h: y - pairTop }
+  }
+
+  nextActive = clampRectToGrid(nextActive, rows, active.minW, active.minH)
+  nextNeighbor = clampRectToGrid(nextNeighbor, rows, neighbor.minW, neighbor.minH)
+
+  return tiles.map((tile) => {
+    if (tile.id === active.id) return { ...tile, ...nextActive }
+    if (tile.id === neighbor.id) return { ...tile, ...nextNeighbor }
+    return tile
+  })
+}
+
+/**
+ * Resize `tileId` toward `nextRect` along one or more orthogonal edges.
+ * Uses shared-divider math when an unlocked neighbor abuts; otherwise solo + overlap resolve.
+ */
+export function resizeWithSharedEdges(
+  tiles: LayoutTile[],
+  tileId: string,
+  edges: readonly OrthoEdge[],
+  nextRect: GridRect,
+  maxRows: number,
+): LayoutTile[] {
+  const rows = Math.max(1, maxRows)
+  const active = tiles.find((tile) => tile.id === tileId)
+  if (!active) return tiles
+
+  let current = tiles.map((tile) => ({ ...tile }))
+  let working = clampRectToGrid(nextRect, rows, active.minW, active.minH)
+  let usedShared = false
+
+  for (const edge of edges) {
+    const shared = resizeAlongSharedEdge(current, tileId, edge, working, rows)
+    if (!shared) continue
+    usedShared = true
+    current = shared
+    const updated = current.find((tile) => tile.id === tileId)
+    if (updated) working = { x: updated.x, y: updated.y, w: updated.w, h: updated.h }
+  }
+
+  if (usedShared) return current
+
+  const locked = new Set([tileId])
+  const solo = current.map((tile) =>
+    tile.id === tileId ? { ...tile, ...working } : tile,
+  )
+  return resolveOverlaps(solo, rows, locked)
+}
+
+/** Parse a resize handle id into orthogonal edges (e.g. `"se"` → `["s","e"]`). */
+export function orthoEdgesFromResizeHandle(handle: string): OrthoEdge[] {
+  const edges: OrthoEdge[] = []
+  if (handle.includes("n")) edges.push("n")
+  if (handle.includes("s")) edges.push("s")
+  if (handle.includes("e")) edges.push("e")
+  if (handle.includes("w")) edges.push("w")
+  return edges
+}
+
+/**
+ * Magnetically align a dragged rect to nearby peer edges (flush abut / shared guides).
+ * Prefers the closest guide within `thresholdCells` on each axis independently.
+ */
+export function snapToNeighborEdges(
+  rect: GridRect,
+  peers: readonly LayoutTile[],
+  maxRows: number,
+  thresholdCells = 1,
+): GridRect {
+  const rows = Math.max(1, maxRows)
+  const threshold = Math.max(0, thresholdCells)
+  let { x, y, w, h } = clampRectToGrid(rect, rows)
+
+  const xGuides: number[] = []
+  const yGuides: number[] = []
+  for (const peer of peers) {
+    xGuides.push(peer.x, peer.x + peer.w)
+    yGuides.push(peer.y, peer.y + peer.h)
+  }
+
+  let bestDx = threshold + 1
+  let nextX = x
+  for (const guide of xGuides) {
+    const leftDelta = Math.abs(x - guide)
+    if (leftDelta <= threshold && leftDelta < bestDx) {
+      bestDx = leftDelta
+      nextX = guide
+    }
+    const rightDelta = Math.abs(x + w - guide)
+    if (rightDelta <= threshold && rightDelta < bestDx) {
+      bestDx = rightDelta
+      nextX = guide - w
+    }
+  }
+
+  let bestDy = threshold + 1
+  let nextY = y
+  for (const guide of yGuides) {
+    const topDelta = Math.abs(y - guide)
+    if (topDelta <= threshold && topDelta < bestDy) {
+      bestDy = topDelta
+      nextY = guide
+    }
+    const bottomDelta = Math.abs(y + h - guide)
+    if (bottomDelta <= threshold && bottomDelta < bestDy) {
+      bestDy = bottomDelta
+      nextY = guide - h
+    }
+  }
+
+  return clampRectToGrid({ x: nextX, y: nextY, w, h }, rows)
+}
+
 /**
  * Magnetically snap a rect flush to canvas edges when within `thresholdCells`.
  * When several edges qualify, the last axis checked wins (corner → N/S after W/E).

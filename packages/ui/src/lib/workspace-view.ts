@@ -1,7 +1,12 @@
-import type { ViewConfig } from "../types"
-import type { LayoutTile } from "./grid-math"
-import { normalizeTiles } from "./grid-math"
+import type { ViewConfig, ViewSplitNode } from "../types"
+import { COLS, type LayoutTile } from "./grid-math"
 import { WIDGET_DEFAULTS } from "./widget-layout-defaults"
+import {
+  ensureTreeForTiles,
+  projectTiles,
+  treeFromRects,
+  type SplitNode,
+} from "./split-tree"
 
 export type { LayoutTile }
 
@@ -9,9 +14,49 @@ export interface WorkspaceView {
   id: string
   name: string
   tiles: LayoutTile[]
+  /** Nested split tree; null when the view has no widgets. */
+  split: SplitNode | null
 }
 
-export const LAYOUT_DOC_VERSION = 2
+export const LAYOUT_DOC_VERSION = 3
+
+function asSplitNode(node: ViewSplitNode | null | undefined): SplitNode | null {
+  if (!node) return null
+  if (node.kind === "leaf") return { kind: "leaf", tileId: node.tileId }
+  return {
+    kind: "split",
+    dir: node.dir,
+    ratio: node.ratio,
+    a: asSplitNode(node.a)!,
+    b: asSplitNode(node.b)!,
+  }
+}
+
+function toWireSplit(node: SplitNode | null): ViewSplitNode | null {
+  if (!node) return null
+  if (node.kind === "leaf") return { kind: "leaf", tileId: node.tileId }
+  return {
+    kind: "split",
+    dir: node.dir,
+    ratio: node.ratio,
+    a: toWireSplit(node.a)!,
+    b: toWireSplit(node.b)!,
+  }
+}
+
+/** Re-project leaf geometry from the split tree onto tile metadata. */
+export function syncViewGeometry(
+  view: WorkspaceView,
+  rows: number,
+  cols = COLS,
+): WorkspaceView {
+  const split = ensureTreeForTiles(view.split, view.tiles, cols, rows)
+  return {
+    ...view,
+    split,
+    tiles: projectTiles(split, view.tiles, cols, rows),
+  }
+}
 
 export function viewToWire(view: WorkspaceView): ViewConfig {
   return {
@@ -28,13 +73,13 @@ export function viewToWire(view: WorkspaceView): ViewConfig {
         minW: tile.minW,
         minH: tile.minH,
         ...(tile.pinned ? { pinned: true } : {}),
-        ...(tile.edgePin ? { edgePin: tile.edgePin } : {}),
       })),
     },
+    split: toWireSplit(view.split),
   }
 }
 
-export function viewFromWire(view: ViewConfig): WorkspaceView {
+export function viewFromWire(view: ViewConfig, rows = 24): WorkspaceView {
   const layoutById = new Map((view.layouts["lg"] ?? []).map((item) => [item.i, item]))
   const tiles: LayoutTile[] = view.widgets.map((widget) => {
     const layout = layoutById.get(widget.id)
@@ -49,16 +94,17 @@ export function viewFromWire(view: ViewConfig): WorkspaceView {
       minW: layout?.minW ?? defaults.minW,
       minH: layout?.minH ?? defaults.minH,
       ...(layout?.pinned ? { pinned: true } : {}),
-      ...(layout?.edgePin ? { edgePin: layout.edgePin } : {}),
     }
   })
-  return {
-    id: view.id,
-    name: view.name,
-    tiles: normalizeTiles(tiles, WIDGET_DEFAULTS),
-  }
+
+  const fromWire = asSplitNode(view.split ?? null)
+  const split = fromWire
+    ? ensureTreeForTiles(fromWire, tiles, COLS, rows)
+    : treeFromRects(tiles, COLS, rows)
+
+  return syncViewGeometry({ id: view.id, name: view.name, tiles, split }, rows)
 }
 
-export function workspaceViewsFromWire(views: ViewConfig[]): WorkspaceView[] {
-  return views.map(viewFromWire)
+export function workspaceViewsFromWire(views: ViewConfig[], rows = 24): WorkspaceView[] {
+  return views.map((view) => viewFromWire(view, rows))
 }

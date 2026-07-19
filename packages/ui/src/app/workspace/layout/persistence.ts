@@ -8,8 +8,6 @@ import {
   pruneUnknownWidgets,
   useLayoutStore,
 } from "../../../state/layout-store"
-import { normalizeTiles } from "../../../lib/grid-math"
-import { WIDGET_DEFAULTS } from "../../../lib/widget-layout-defaults"
 import { viewFromWire, viewToWire } from "../../../lib/workspace-view"
 import type { ViewConfig } from "../../../types"
 
@@ -37,13 +35,7 @@ export function flushDashboardSave(): void {
 }
 
 function normalizeWireViews(views: ViewConfig[]): ViewConfig[] {
-  return pruneUnknownWidgets(views).map((view) => {
-    const workspace = viewFromWire(view)
-    return viewToWire({
-      ...workspace,
-      tiles: normalizeTiles(workspace.tiles, WIDGET_DEFAULTS),
-    })
-  })
+  return pruneUnknownWidgets(views).map((view) => viewToWire(viewFromWire(view)))
 }
 
 let _suppressSave = false

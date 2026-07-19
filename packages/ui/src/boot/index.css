@@ -2287,16 +2287,25 @@ textarea.input {
 .workspace-tile {
   position: absolute;
   transition:
-    left 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    top 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    width 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    height 160ms cubic-bezier(0.2, 0.8, 0.2, 1),
-    transform 180ms ease,
-    opacity 180ms ease,
+    left 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 140ms cubic-bezier(0.22, 1, 0.36, 1),
+    transform 160ms ease,
+    opacity 140ms ease,
     box-shadow 120ms ease;
   max-width: 100%;
   max-height: 100%;
   will-change: left, top, width, height;
+}
+
+/* Live drag/resize: peers reflow quickly; dragged tile tracks without lag. */
+.workspace-canvas-interacting .workspace-tile:not(.workspace-tile-dragging) {
+  transition:
+    left 100ms cubic-bezier(0.22, 1, 0.36, 1),
+    top 100ms cubic-bezier(0.22, 1, 0.36, 1),
+    width 100ms cubic-bezier(0.22, 1, 0.36, 1),
+    height 100ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .workspace-tile-entering {
@@ -2311,8 +2320,18 @@ textarea.input {
 
 .workspace-tile-dragging {
   z-index: 20;
-  opacity: 0.96;
-  transition: opacity 120ms ease, box-shadow 120ms ease;
+  opacity: 0.62;
+  transition: opacity 100ms ease, box-shadow 100ms ease;
+}
+
+/* Divider resize: keep panes opaque; suppress lag on the active tile only. */
+.workspace-tile-resizing {
+  z-index: 20;
+  transition: none;
+}
+
+.workspace-canvas-interacting .workspace-tile-resizing {
+  transition: none;
 }
 
 .workspace-tile:focus,
@@ -2345,8 +2364,9 @@ textarea.input {
 }
 
 .workspace-drop-zone {
-  background: color-mix(in srgb, var(--color-accent) 10%, transparent);
-  border: 1px dashed color-mix(in srgb, var(--color-accent) 35%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
+  border: 2px solid color-mix(in srgb, var(--color-accent) 42%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 18%, transparent);
 }
 
 .workspace-resize-handle {
@@ -2380,28 +2400,28 @@ textarea.input {
 .workspace-resize-handle-ne { top: 1px; right: 1px; cursor: ne-resize; }
 .workspace-resize-handle-nw { top: 1px; left: 1px; cursor: nw-resize; }
 
-/* Edges: invisible hit targets with a short mid-edge cue (not a full border) */
+/* Edges: wider hit targets so shared dividers feel easy to grab */
 .workspace-resize-handle-e,
 .workspace-resize-handle-w {
   top: 0;
-  width: 6px;
+  width: 10px;
   height: 100%;
   background: transparent;
 }
 
-.workspace-resize-handle-e { right: 0; cursor: e-resize; }
-.workspace-resize-handle-w { left: 0; cursor: w-resize; }
+.workspace-resize-handle-e { right: -2px; cursor: col-resize; }
+.workspace-resize-handle-w { left: -2px; cursor: col-resize; }
 
 .workspace-resize-handle-s,
 .workspace-resize-handle-n {
   left: 0;
   width: 100%;
-  height: 6px;
+  height: 10px;
   background: transparent;
 }
 
-.workspace-resize-handle-s { bottom: 0; cursor: s-resize; }
-.workspace-resize-handle-n { top: 0; cursor: n-resize; }
+.workspace-resize-handle-s { bottom: -2px; cursor: row-resize; }
+.workspace-resize-handle-n { top: -2px; cursor: row-resize; }
 
 .workspace-resize-handle-e::after,
 .workspace-resize-handle-w::after {

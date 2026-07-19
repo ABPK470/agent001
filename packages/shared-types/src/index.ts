@@ -507,11 +507,20 @@ export const VISITOR_WIDGETS: ReadonlySet<WidgetType> = new Set([
   "run-history",
 ])
 
+/** Nested H/V split tree for workspace tiling (source of truth when present). */
+export type ViewSplitDir = "h" | "v"
+
+export type ViewSplitNode =
+  | { kind: "leaf"; tileId: string }
+  | { kind: "split"; dir: ViewSplitDir; ratio: number; a: ViewSplitNode; b: ViewSplitNode }
+
 export interface ViewConfig {
   id: string
   name: string
   widgets: Widget[]
   layouts: Record<string, LayoutItem[]>
+  /** Nested split tree; when absent, layouts.lg rects are migrated on load. */
+  split?: ViewSplitNode | null
 }
 
 export interface LayoutItem {

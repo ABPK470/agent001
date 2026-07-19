@@ -1,8 +1,8 @@
 /**
  * Canvas — the blank canvas where widgets live.
  *
- * Flat absolute 2D grid with custom drag/resize. Renders widgets for the
- * active view and shows an add-widget prompt when empty.
+ * Nested H/V split tree projected onto an absolute grid. Renders widgets for
+ * the active view and shows an add-widget prompt when empty.
  */
 
 import { LayoutGrid, Plus } from "lucide-react"
@@ -25,7 +25,7 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
   const activeView = views.find((view) => view.id === activeViewId)
   if (!activeView) return null
 
-  const { tiles } = activeView
+  const { tiles, split } = activeView
 
   return (
     <div className="relative flex-1 overflow-hidden">
@@ -46,7 +46,12 @@ export const Canvas = forwardRef<CanvasHandle>(function Canvas(_props, ref) {
           </button>
         </div>
       ) : (
-        <GridCanvas viewId={activeViewId} tiles={tiles} onOpenCatalog={() => setCatalogOpen(true)} />
+        <GridCanvas
+          viewId={activeViewId}
+          tiles={tiles}
+          split={split}
+          onOpenCatalog={() => setCatalogOpen(true)}
+        />
       )}
 
       {catalogOpen && <WidgetCatalog onClose={() => setCatalogOpen(false)} />}

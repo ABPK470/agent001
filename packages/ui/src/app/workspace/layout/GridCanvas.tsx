@@ -1,13 +1,15 @@
 import { memo, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
 import {
   COLS,
-  clampRectToGrid,
-  resolveDragLayout,
   viewportGridMetrics,
   rectToPixels,
-  type GridRect,
   type LayoutTile,
 } from "../../../lib/grid-math"
+import {
+  reparentLeaf,
+  type DropZone,
+  type SplitNode,
+} from "../../../lib/split-tree"
 import { useLayoutStore } from "../../../state/layout-store"
 import { WidgetShell } from "../WidgetShell"
 import { widgetComponent } from "../widget-definitions"
@@ -21,6 +23,7 @@ const CANVAS_PAD_PX = 4
 interface Props {
   viewId: string
   tiles: LayoutTile[]
+  split: SplitNode | null
   onOpenCatalog?: () => void
 }
 
@@ -31,6 +34,7 @@ interface GridTilePaneProps {
   cw: number
   rowPx: number
   isDragging: boolean
+  isResizing: boolean
   isEntering: boolean
   isFocused: boolean
   maximized: boolean
@@ -48,6 +52,7 @@ const GridTilePane = memo(function GridTilePane({
   cw,
   rowPx,
   isDragging,
+  isResizing,
   isEntering,
   isFocused,
   maximized,
@@ -65,7 +70,9 @@ const GridTilePane = memo(function GridTilePane({
     <div
       data-tile-id={tile.id}
       tabIndex={0}
-      className={`workspace-tile ${isDragging ? "workspace-tile-dragging" : ""} ${entranceClassName(isEntering)} ${
+      className={`workspace-tile ${isDragging ? "workspace-tile-dragging" : ""} ${
+        isResizing ? "workspace-tile-resizing" : ""
+      } ${entranceClassName(isEntering)} ${
         isFocused ? "workspace-tile-focused" : ""
       } ${locked ? "workspace-tile-locked" : ""}`}
       style={{
@@ -83,7 +90,6 @@ const GridTilePane = memo(function GridTilePane({
         viewId={viewId}
         type={tile.type}
         pinned={!!tile.pinned}
-        edgePin={tile.edgePin}
         maximized={maximized}
         onDragPointerDown={onDragPointerDown}
       >
@@ -103,7 +109,43 @@ const GridTilePane = memo(function GridTilePane({
   )
 })
 
-export function GridCanvas({ viewId, tiles }: Props) {
+function neighborInDirection(
+  tiles: readonly LayoutTile[],
+  focused: LayoutTile,
+  key: "ArrowLeft" | "ArrowRight" | "ArrowUp" | "ArrowDown",
+): { neighbor: LayoutTile; zone: DropZone } | null {
+  const candidates = tiles.filter((tile) => tile.id !== focused.id && !tile.pinned)
+  if (candidates.length === 0) return null
+
+  if (key === "ArrowLeft") {
+    const hit = candidates
+      .filter((tile) => tile.x + tile.w <= focused.x
+        && Math.min(focused.y + focused.h, tile.y + tile.h) - Math.max(focused.y, tile.y) > 0)
+      .sort((a, b) => (b.x + b.w) - (a.x + a.w))[0]
+    return hit ? { neighbor: hit, zone: "e" } : null
+  }
+  if (key === "ArrowRight") {
+    const hit = candidates
+      .filter((tile) => tile.x >= focused.x + focused.w
+        && Math.min(focused.y + focused.h, tile.y + tile.h) - Math.max(focused.y, tile.y) > 0)
+      .sort((a, b) => a.x - b.x)[0]
+    return hit ? { neighbor: hit, zone: "w" } : null
+  }
+  if (key === "ArrowUp") {
+    const hit = candidates
+      .filter((tile) => tile.y + tile.h <= focused.y
+        && Math.min(focused.x + focused.w, tile.x + tile.w) - Math.max(focused.x, tile.x) > 0)
+      .sort((a, b) => (b.y + b.h) - (a.y + a.h))[0]
+    return hit ? { neighbor: hit, zone: "s" } : null
+  }
+  const hit = candidates
+    .filter((tile) => tile.y >= focused.y + focused.h
+      && Math.min(focused.x + focused.w, tile.x + tile.w) - Math.max(focused.x, tile.x) > 0)
+    .sort((a, b) => a.y - b.y)[0]
+  return hit ? { neighbor: hit, zone: "n" } : null
+}
+
+export function GridCanvas({ viewId, tiles, split }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const [containerWidth, setContainerWidth] = useState(0)
   const [containerHeight, setContainerHeight] = useState(0)
@@ -112,7 +154,7 @@ export function GridCanvas({ viewId, tiles }: Props) {
   const setFocusedTile = useLayoutStore((s) => s.setFocusedTile)
   const focusedTileId = useLayoutStore((s) => s.focusedTileId)
   const soloTileId = useLayoutStore((s) => s.soloTileId)
-  const updateTiles = useLayoutStore((s) => s.updateTiles)
+  const commitSplit = useLayoutStore((s) => s.commitSplit)
   const setViewportRows = useLayoutStore((s) => s.setViewportRows)
   const viewportRows = useLayoutStore((s) => s.viewportRows)
 
@@ -131,16 +173,19 @@ export function GridCanvas({ viewId, tiles }: Props) {
 
   const {
     draggingId,
-    candidate,
+    interactionMode,
     layoutPreview,
+    dropPreview,
     onPointerDownDrag,
     onPointerDownResize,
   } = useGridInteraction({
     viewId,
     tiles,
+    split,
     containerWidth: Math.max(0, containerWidth - CANVAS_PAD_PX * 2),
     maxRows,
     rowPx,
+    canvasRef: containerRef,
   })
 
   useEffect(() => {
@@ -171,8 +216,8 @@ export function GridCanvas({ viewId, tiles }: Props) {
   }, [enteringTileIds])
 
   useEffect(() => {
-    const onKeyDown = (event: KeyboardEvent) => {
-      if (!focusedTileId || soloTileId) return
+    function onKeyDown(event: KeyboardEvent) {
+      if (!focusedTileId || soloTileId || !split) return
       if (!(event.key === "ArrowLeft" || event.key === "ArrowRight" || event.key === "ArrowUp" || event.key === "ArrowDown")) {
         return
       }
@@ -182,47 +227,39 @@ export function GridCanvas({ viewId, tiles }: Props) {
       const tile = tiles.find((t) => t.id === focusedTileId)
       if (!tile || tile.pinned) return
 
+      const hit = neighborInDirection(tiles, tile, event.key)
+      if (!hit) return
       event.preventDefault()
-      const step = event.shiftKey ? 2 : 1
-      const next: GridRect = {
-        x: tile.x,
-        y: tile.y,
-        w: tile.w,
-        h: tile.h,
-      }
-      if (event.key === "ArrowLeft") next.x = tile.x - step
-      if (event.key === "ArrowRight") next.x = tile.x + step
-      if (event.key === "ArrowUp") next.y = tile.y - step
-      if (event.key === "ArrowDown") next.y = tile.y + step
-      const preview = resolveDragLayout(
-        tiles,
-        tile.id,
-        clampRectToGrid(next, maxRows, tile.minW, tile.minH),
-        tile,
-        maxRows,
-      )
-      updateTiles(viewId, preview)
+      const next = reparentLeaf(split, tile.id, hit.neighbor.id, hit.zone)
+      commitSplit(viewId, next)
     }
 
     window.addEventListener("keydown", onKeyDown)
     return () => window.removeEventListener("keydown", onKeyDown)
-  }, [focusedTileId, tiles, updateTiles, viewId, maxRows, soloTileId])
+  }, [focusedTileId, tiles, commitSplit, viewId, maxRows, soloTileId, split])
 
   const soloTile = soloTileId ? tiles.find((tile) => tile.id === soloTileId) : null
   const visibleTiles = soloTile
     ? [{ ...soloTile, x: 0, y: 0, w: COLS, h: maxRows }]
     : (layoutPreview ?? tiles)
 
+  const interacting = !soloTileId && !!draggingId
+
   return (
     <div
       ref={containerRef}
-      className="relative h-full w-full overflow-hidden p-1"
+      className={[
+        "relative h-full w-full overflow-hidden p-1",
+        interacting ? "workspace-canvas-interacting" : "",
+      ].join(" ")}
     >
       {cw > 0 && (
-        <div className="relative h-full w-full">
+        <div data-workspace-grid className="relative h-full w-full">
           {visibleTiles.map((tile) => {
             const source = tiles.find((t) => t.id === tile.id) ?? tile
-            const isDragging = !soloTileId && draggingId === tile.id
+            const isActive = !soloTileId && draggingId === tile.id
+            const isDragging = isActive && interactionMode === "drag"
+            const isResizing = isActive && interactionMode === "resize"
             const isEntering = enteringTileIds.includes(tile.id)
             const maximized = soloTileId === tile.id
 
@@ -235,6 +272,7 @@ export function GridCanvas({ viewId, tiles }: Props) {
                 cw={cw}
                 rowPx={rowPx}
                 isDragging={isDragging}
+                isResizing={isResizing}
                 isEntering={isEntering}
                 isFocused={focusedTileId === tile.id}
                 maximized={maximized}
@@ -249,7 +287,9 @@ export function GridCanvas({ viewId, tiles }: Props) {
             )
           })}
 
-          {!soloTileId && <DropZoneOverlay candidate={candidate} colWidth={cw} rowPx={rowPx} />}
+          {!soloTileId && interactionMode === "drag" && (
+            <DropZoneOverlay preview={dropPreview} colWidth={cw} rowPx={rowPx} />
+          )}
         </div>
       )}
     </div>

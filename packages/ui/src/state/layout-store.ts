@@ -1,20 +1,26 @@
 /**
- * Workspace layout store — views, tiles, drag/resize state.
+ * Workspace layout store — views, split tree, projected tiles.
  */
 
 import { create } from "zustand"
 import { persist } from "zustand/middleware"
+import { COLS } from "../lib/grid-math"
 import {
-  clampRectToGrid,
-  compactDown,
-  normalizeTiles,
-  placeNewTile,
-  reclaimSpace,
-  type GridRect,
-} from "../lib/grid-math"
+  projectTiles,
+  removeLeaf,
+  reparentLeaf,
+  setSplitRatio,
+  splitLargestLeaf,
+  type DropZone,
+  type SplitNode,
+  type SplitPath,
+} from "../lib/split-tree"
 import { WIDGET_DEFAULTS } from "../lib/widget-layout-defaults"
 import type { WidgetSizeDefaults } from "../lib/widget-layout-defaults"
-import type { WorkspaceView } from "../lib/workspace-view"
+import {
+  syncViewGeometry,
+  type WorkspaceView,
+} from "../lib/workspace-view"
 import type { ViewConfig, WidgetType } from "../types"
 import { randomId } from "../lib/util"
 
@@ -27,6 +33,7 @@ export function makeDefaultView(): WorkspaceView {
     id: DEFAULT_VIEW_ID,
     name: "Main",
     tiles: [],
+    split: null,
   }
 }
 
@@ -35,6 +42,16 @@ export function pruneUnknownWidgets(views: ViewConfig[]): ViewConfig[] {
   return views.map((view) => {
     const widgets = view.widgets.filter((widget) => widget.type in WIDGET_DEFAULTS)
     const widgetIds = new Set(widgets.map((widget) => widget.id))
+    const pruneSplit = (node: ViewConfig["split"]): ViewConfig["split"] => {
+      if (!node) return null
+      if (node.kind === "leaf") return widgetIds.has(node.tileId) ? node : null
+      const a = pruneSplit(node.a)
+      const b = pruneSplit(node.b)
+      if (!a && !b) return null
+      if (!a) return b
+      if (!b) return a
+      return { ...node, a, b }
+    }
     return {
       ...view,
       widgets,
@@ -42,20 +59,32 @@ export function pruneUnknownWidgets(views: ViewConfig[]): ViewConfig[] {
         ...view.layouts,
         lg: (view.layouts["lg"] ?? []).filter((item) => widgetIds.has(item.i)),
       },
+      split: pruneSplit(view.split ?? null),
     }
   })
 }
 
 function pruneWorkspaceViews(views: WorkspaceView[], maxRows?: number): WorkspaceView[] {
+  const rows = Math.max(1, maxRows ?? 24)
   return views
     .map((view) => ({
       ...view,
       tiles: view.tiles.filter((tile) => tile.type in WIDGET_DEFAULTS),
+      split: view.split ?? null,
     }))
-    .map((view) => ({
-      ...view,
-      tiles: normalizeTiles(view.tiles, WIDGET_DEFAULTS, maxRows),
-    }))
+    .map((view) => syncViewGeometry(view, rows))
+}
+
+function withProjected(
+  view: WorkspaceView,
+  split: SplitNode | null,
+  rows: number,
+): WorkspaceView {
+  return {
+    ...view,
+    split,
+    tiles: projectTiles(split, view.tiles, COLS, rows),
+  }
 }
 
 interface LayoutState {
@@ -65,7 +94,7 @@ interface LayoutState {
   enteringTileIds: string[]
   /**
    * Exclusive maximize: this tile fills the canvas; siblings keep their
-   * saved geometry and are not painted until restore.
+   * tree geometry and are not painted until restore.
    */
   soloTileId: string | null
   /** Latest measured viewport row budget for the active canvas. */
@@ -80,8 +109,10 @@ interface LayoutState {
 
   addWidget: (viewId: string, type: WidgetType) => void
   removeWidget: (viewId: string, tileId: string) => void
-  updateTileRect: (viewId: string, tileId: string, rect: GridRect) => void
-  updateTiles: (viewId: string, tiles: WorkspaceView["tiles"], lockedTileId?: string) => void
+  /** Commit a new split tree (geometry re-projected onto tiles). */
+  commitSplit: (viewId: string, split: SplitNode | null) => void
+  setSplitRatioAt: (viewId: string, path: SplitPath, ratio: number) => void
+  reparentTile: (viewId: string, dragId: string, targetId: string, zone: DropZone) => void
   setViewportRows: (rows: number) => void
   setTilePinned: (viewId: string, tileId: string, pinned: boolean) => void
   toggleTileMaximized: (viewId: string, tileId: string) => void
@@ -105,7 +136,7 @@ export const useLayoutStore = create<LayoutState>()(
       addView: (name) => {
         const id = randomId()
         set((s) => ({
-          views: [...s.views, { id, name, tiles: [] }],
+          views: [...s.views, { id, name, tiles: [], split: null }],
           activeViewId: id,
           soloTileId: null,
         }))
@@ -143,15 +174,23 @@ export const useLayoutStore = create<LayoutState>()(
         if (!view) return s
         const defaults = WIDGET_DEFAULTS[type] as WidgetSizeDefaults
         const id = randomId()
-        const baseTiles = s.soloTileId
-          ? view.tiles
-          : view.tiles
-        const { tile, tiles } = placeNewTile(baseTiles, id, type, defaults, s.viewportRows)
+        const meta = {
+          id,
+          type,
+          x: 0,
+          y: 0,
+          w: defaults.w,
+          h: defaults.h,
+          minW: defaults.minW,
+          minH: defaults.minH,
+        }
+        const tiles = [...view.tiles, meta]
+        const split = splitLargestLeaf(view.split, id, COLS, s.viewportRows)
         return {
           views: s.views.map((v) =>
-            v.id === viewId ? { ...v, tiles: normalizeTiles(tiles, WIDGET_DEFAULTS, s.viewportRows) } : v,
+            v.id === viewId ? withProjected({ ...v, tiles }, split, s.viewportRows) : v,
           ),
-          enteringTileIds: [...s.enteringTileIds, tile.id],
+          enteringTileIds: [...s.enteringTileIds, id],
           soloTileId: null,
         }
       }),
@@ -159,50 +198,45 @@ export const useLayoutStore = create<LayoutState>()(
       removeWidget: (viewId, tileId) => set((s) => ({
         views: s.views.map((view) => {
           if (view.id !== viewId) return view
-          const remaining = view.tiles.filter((tile) => tile.id !== tileId)
-          const reclaimed = reclaimSpace(remaining, s.viewportRows)
-          return {
-            ...view,
-            tiles: normalizeTiles(reclaimed, WIDGET_DEFAULTS, s.viewportRows),
-          }
+          const tiles = view.tiles.filter((tile) => tile.id !== tileId)
+          const split = removeLeaf(view.split, tileId)
+          return withProjected({ ...view, tiles }, split, s.viewportRows)
         }),
         focusedTileId: s.focusedTileId === tileId ? null : s.focusedTileId,
         enteringTileIds: s.enteringTileIds.filter((id) => id !== tileId),
         soloTileId: s.soloTileId === tileId ? null : s.soloTileId,
       })),
 
-      updateTileRect: (viewId, tileId, rect) => set((s) => {
+      commitSplit: (viewId, split) => set((s) => {
+        if (s.soloTileId) return s
+        return {
+          views: s.views.map((view) =>
+            view.id === viewId ? withProjected(view, split, s.viewportRows) : view,
+          ),
+        }
+      }),
+
+      setSplitRatioAt: (viewId, path, ratio) => set((s) => {
         if (s.soloTileId) return s
         return {
           views: s.views.map((view) => {
-            if (view.id !== viewId) return view
-            const locked = new Set([tileId])
-            const nextTiles = view.tiles.map((tile) => {
-              if (tile.id !== tileId || tile.pinned) return tile
-              return {
-                ...tile,
-                ...clampRectToGrid(rect, s.viewportRows, tile.minW, tile.minH),
-              }
-            })
-            // Arrange: resolve overlaps only — do not grow-fill gaps after resize.
-            return {
-              ...view,
-              tiles: normalizeTiles(nextTiles, WIDGET_DEFAULTS, s.viewportRows, locked),
-            }
+            if (view.id !== viewId || !view.split) return view
+            return withProjected(view, setSplitRatio(view.split, path, ratio), s.viewportRows)
           }),
         }
       }),
 
-      updateTiles: (viewId, tiles, lockedTileId) => set((s) => {
+      reparentTile: (viewId, dragId, targetId, zone) => set((s) => {
         if (s.soloTileId) return s
-        const locked = lockedTileId ? new Set([lockedTileId]) : undefined
-        // Arrange: commit resolved geometry as-is (pack only on add/remove).
         return {
-          views: s.views.map((view) =>
-            view.id === viewId
-              ? { ...view, tiles: normalizeTiles(tiles, WIDGET_DEFAULTS, s.viewportRows, locked) }
-              : view,
-          ),
+          views: s.views.map((view) => {
+            if (view.id !== viewId || !view.split) return view
+            const drag = view.tiles.find((tile) => tile.id === dragId)
+            const target = view.tiles.find((tile) => tile.id === targetId)
+            if (!drag || !target || drag.pinned || target.pinned) return view
+            const next = reparentLeaf(view.split, dragId, targetId, zone)
+            return withProjected(view, next, s.viewportRows)
+          }),
         }
       }),
 
@@ -211,10 +245,7 @@ export const useLayoutStore = create<LayoutState>()(
         if (get().viewportRows === nextRows) return
         set((s) => ({
           viewportRows: nextRows,
-          views: s.views.map((view) => ({
-            ...view,
-            tiles: normalizeTiles(view.tiles, WIDGET_DEFAULTS, nextRows),
-          })),
+          views: s.views.map((view) => syncViewGeometry(view, nextRows)),
         }))
       },
 
@@ -265,11 +296,3 @@ export const useLayoutStore = create<LayoutState>()(
     },
   ),
 )
-
-/** Compact unpinned tiles after a remove — optional helper for callers. */
-export function compactView(viewId: string): void {
-  const { views, updateTiles } = useLayoutStore.getState()
-  const view = views.find((v) => v.id === viewId)
-  if (!view) return
-  updateTiles(viewId, compactDown(view.tiles))
-}

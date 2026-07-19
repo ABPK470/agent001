@@ -15,6 +15,11 @@ import {
   rowsForHeight,
   snapDragRect,
   snapToCanvasEdges,
+  snapToNeighborEdges,
+  resizeAlongSharedEdge,
+  resizeWithSharedEdges,
+  findAbuttingNeighbor,
+  orthoEdgesFromResizeHandle,
   viewportGridMetrics,
   type LayoutTile,
 } from "./grid-math"
@@ -339,6 +344,96 @@ describe("snap / resize grid math", () => {
     const used = metrics.rows * metrics.rowPx + (metrics.rows - 1) * 8
     expect(used).toBeCloseTo(400, 0)
   })
+
+  it("findAbuttingNeighbor finds east/west/north/south peers", () => {
+    const left: LayoutTile = {
+      id: "left", type: "term-chat", x: 0, y: 0, w: 6, h: 8, minW: 2, minH: 2,
+    }
+    const right: LayoutTile = {
+      id: "right", type: "run-status", x: 6, y: 0, w: 6, h: 8, minW: 2, minH: 2,
+    }
+    const top: LayoutTile = {
+      id: "top", type: "term-chat", x: 0, y: 0, w: 12, h: 4, minW: 2, minH: 2,
+    }
+    const bottom: LayoutTile = {
+      id: "bottom", type: "run-status", x: 0, y: 4, w: 12, h: 4, minW: 2, minH: 2,
+    }
+    expect(findAbuttingNeighbor([left, right], left, "e")?.id).toBe("right")
+    expect(findAbuttingNeighbor([left, right], right, "w")?.id).toBe("left")
+    expect(findAbuttingNeighbor([top, bottom], top, "s")?.id).toBe("bottom")
+    expect(findAbuttingNeighbor([top, bottom], bottom, "n")?.id).toBe("top")
+  })
+
+  it("resizeAlongSharedEdge grows neighbor when shrinking east edge", () => {
+    const tiles: LayoutTile[] = [
+      { id: "a", type: "term-chat", x: 0, y: 0, w: 6, h: 8, minW: 2, minH: 2 },
+      { id: "b", type: "run-status", x: 6, y: 0, w: 6, h: 8, minW: 2, minH: 2 },
+    ]
+    const next = resizeAlongSharedEdge(tiles, "a", "e", { x: 0, y: 0, w: 4, h: 8 }, 16)
+    expect(next).not.toBeNull()
+    const a = next!.find((t) => t.id === "a")!
+    const b = next!.find((t) => t.id === "b")!
+    expect(a.w).toBe(4)
+    expect(b.x).toBe(4)
+    expect(b.w).toBe(8)
+    expect(a.w + b.w).toBe(12)
+  })
+
+  it("resizeAlongSharedEdge moves west divider together", () => {
+    const tiles: LayoutTile[] = [
+      { id: "a", type: "term-chat", x: 0, y: 0, w: 6, h: 8, minW: 2, minH: 2 },
+      { id: "b", type: "run-status", x: 6, y: 0, w: 6, h: 8, minW: 2, minH: 2 },
+    ]
+    const next = resizeAlongSharedEdge(tiles, "b", "w", { x: 4, y: 0, w: 8, h: 8 }, 16)
+    expect(next).not.toBeNull()
+    const a = next!.find((t) => t.id === "a")!
+    const b = next!.find((t) => t.id === "b")!
+    expect(b.x).toBe(4)
+    expect(b.w).toBe(8)
+    expect(a.w).toBe(4)
+  })
+
+  it("resizeAlongSharedEdge moves south/north dividers together", () => {
+    const tiles: LayoutTile[] = [
+      { id: "a", type: "term-chat", x: 0, y: 0, w: 12, h: 6, minW: 2, minH: 2 },
+      { id: "b", type: "run-status", x: 0, y: 6, w: 12, h: 6, minW: 2, minH: 2 },
+    ]
+    const south = resizeAlongSharedEdge(tiles, "a", "s", { x: 0, y: 0, w: 12, h: 4 }, 16)
+    expect(south!.find((t) => t.id === "a")!.h).toBe(4)
+    expect(south!.find((t) => t.id === "b")).toMatchObject({ y: 4, h: 8 })
+
+    const north = resizeAlongSharedEdge(tiles, "b", "n", { x: 0, y: 4, w: 12, h: 8 }, 16)
+    expect(north!.find((t) => t.id === "b")!.y).toBe(4)
+    expect(north!.find((t) => t.id === "a")!.h).toBe(4)
+  })
+
+  it("resizeWithSharedEdges falls back to solo when no neighbor", () => {
+    const tiles: LayoutTile[] = [
+      { id: "solo", type: "term-chat", x: 0, y: 0, w: 6, h: 6, minW: 2, minH: 2 },
+    ]
+    const next = resizeWithSharedEdges(
+      tiles,
+      "solo",
+      ["e"],
+      { x: 0, y: 0, w: 8, h: 6 },
+      16,
+    )
+    expect(next.find((t) => t.id === "solo")).toMatchObject({ w: 8 })
+  })
+
+  it("orthoEdgesFromResizeHandle expands corners", () => {
+    expect(orthoEdgesFromResizeHandle("se")).toEqual(["s", "e"])
+    expect(orthoEdgesFromResizeHandle("nw")).toEqual(["n", "w"])
+    expect(orthoEdgesFromResizeHandle("e")).toEqual(["e"])
+  })
+
+  it("snapToNeighborEdges aligns flush to a peer edge", () => {
+    const peers: LayoutTile[] = [
+      { id: "peer", type: "run-status", x: 6, y: 0, w: 6, h: 8, minW: 2, minH: 2 },
+    ]
+    const snapped = snapToNeighborEdges({ x: 1, y: 0, w: 5, h: 8 }, peers, 16, 1)
+    expect(snapped.x + snapped.w).toBe(6)
+  })
 })
 
 describe("workspace view wire migrate", () => {
@@ -351,66 +446,93 @@ describe("workspace view wire migrate", () => {
         type: "term-chat" as const,
         x: 0,
         y: 0,
-        w: 4,
-        h: 6,
+        w: COLS,
+        h: 24,
         minW: 2,
         minH: 2,
-        edgePin: "w" as const,
       }],
+      split: { kind: "leaf" as const, tileId: "w1" },
     }
-    const roundtrip = viewFromWire(viewToWire(view))
-    expect(roundtrip).toEqual(view)
-  })
-
-  it("round-trips edgePin on LayoutItem wire", () => {
-    const legacy = {
-      id: "default",
-      name: "Main",
-      widgets: [{ id: "a", type: "term-chat" as const }],
-      layouts: {
-        lg: [{ i: "a", x: 0, y: 0, w: 6, h: 8, minW: 2, minH: 2, edgePin: "w" as const }],
-      },
-    }
-    const migrated = viewFromWire(legacy)
-    expect(migrated.tiles[0]).toMatchObject({ edgePin: "w", x: 0, w: 6 })
-    expect(viewToWire(migrated).layouts.lg![0]).toMatchObject({ edgePin: "w" })
-  })
-
-  it("migrates legacy widgets + layouts.lg into tiles", () => {
-    const legacy = {
-      id: "default",
-      name: "Main",
-      widgets: [{ id: "a", type: "term-chat" as const }],
-      layouts: {
-        lg: [{ i: "a", x: 2, y: 1, w: 6, h: 8, minW: 2, minH: 2 }],
-      },
-    }
-    const migrated = viewFromWire(legacy)
-    expect(migrated.tiles).toEqual([{
-      id: "a",
+    const roundtrip = viewFromWire(viewToWire(view), 24)
+    expect(roundtrip.id).toBe(view.id)
+    expect(roundtrip.split).toEqual({ kind: "leaf", tileId: "w1" })
+    expect(roundtrip.tiles[0]).toMatchObject({
+      id: "w1",
       type: "term-chat",
-      x: 2,
-      y: 1,
-      w: 6,
-      h: 8,
-      minW: 2,
-      minH: 2,
-    }])
+      x: 0,
+      y: 0,
+      w: COLS,
+      h: 24,
+    })
   })
 
-  it("fills missing layout from WIDGET_DEFAULTS", () => {
+  it("round-trips split tree on the wire", () => {
+    const legacy = {
+      id: "default",
+      name: "Main",
+      widgets: [
+        { id: "a", type: "term-chat" as const },
+        { id: "b", type: "run-status" as const },
+      ],
+      layouts: {
+        lg: [
+          { i: "a", x: 0, y: 0, w: 6, h: 24, minW: 2, minH: 2 },
+          { i: "b", x: 6, y: 0, w: 6, h: 24, minW: 2, minH: 2 },
+        ],
+      },
+      split: {
+        kind: "split" as const,
+        dir: "v" as const,
+        ratio: 0.5,
+        a: { kind: "leaf" as const, tileId: "a" },
+        b: { kind: "leaf" as const, tileId: "b" },
+      },
+    }
+    const migrated = viewFromWire(legacy, 24)
+    expect(migrated.split).toMatchObject({ kind: "split", dir: "v" })
+    expect(viewToWire(migrated).split).toMatchObject({ kind: "split", dir: "v" })
+    expect(migrated.tiles.map((t) => t.w).reduce((a, b) => a + b, 0)).toBe(COLS)
+  })
+
+  it("migrates holey legacy layouts into a filled split tree", () => {
+    const legacy = {
+      id: "default",
+      name: "Main",
+      widgets: [
+        { id: "a", type: "term-chat" as const },
+        { id: "b", type: "run-status" as const },
+        { id: "c", type: "run-history" as const },
+      ],
+      layouts: {
+        lg: [
+          { i: "a", x: 0, y: 0, w: 6, h: 12, minW: 2, minH: 2 },
+          { i: "b", x: 0, y: 12, w: 6, h: 12, minW: 2, minH: 2 },
+          { i: "c", x: 6, y: 12, w: 6, h: 12, minW: 2, minH: 2 },
+        ],
+      },
+    }
+    const migrated = viewFromWire(legacy, 24)
+    expect(migrated.split).not.toBeNull()
+    const area = migrated.tiles.reduce((sum, tile) => sum + tile.w * tile.h, 0)
+    expect(area).toBe(COLS * 24)
+  })
+
+  it("fills a single widget to the canvas from defaults", () => {
     const legacy = {
       id: "default",
       name: "Main",
       widgets: [{ id: "b", type: "run-history" as const }],
       layouts: { lg: [] },
     }
-    const migrated = viewFromWire(legacy)
+    const migrated = viewFromWire(legacy, 24)
     expect(migrated.tiles[0]).toMatchObject({
       id: "b",
       type: "run-history",
-      w: WIDGET_DEFAULTS["run-history"].w,
-      h: WIDGET_DEFAULTS["run-history"].h,
+      x: 0,
+      y: 0,
+      w: COLS,
+      h: 24,
     })
+    expect(migrated.split).toEqual({ kind: "leaf", tileId: "b" })
   })
 })
