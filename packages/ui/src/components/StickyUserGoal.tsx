@@ -27,7 +27,7 @@ export const StickyUserGoal = forwardRef(function StickyUserGoal({
   const positionClass = pinned ? `sticky ${topClass} z-30` : "relative"
 
   return (
-    <div ref={ref} className={`${positionClass} flex w-full ${rowAlign} pt-1 pb-2 ${className}`}>
+    <div ref={ref} className={`${positionClass} flex w-full ${rowAlign} ${className}`}>
       {children}
     </div>
   )

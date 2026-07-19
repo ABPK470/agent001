@@ -27,6 +27,14 @@ export const USER_GOAL_PIN_SLOT_CLASS = "w-10"
 /** Bubble shell inside the goal column — never force full column width. */
 export const USER_GOAL_TEXT_MAX_CLASS = "w-fit max-w-full"
 
+/**
+ * Vertical gap between the user goal pill and the agent response / status
+ * (answer, error, cancelled, …). Shared by home chat and the MI:A Chat
+ * widget — use as `flex flex-col` + this gap (not margin) so sticky
+ * goals cannot collapse the spacing.
+ */
+export const USER_GOAL_TO_RESPONSE_GAP_CLASS = "gap-6"
+
 export function homeChatColumnWidthPx(viewportWidth: number): number {
   return Math.min(viewportWidth * HOME_CHAT_WIDTH_RATIO, HOME_CHAT_MAX_WIDTH_PX)
 }

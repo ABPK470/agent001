@@ -1267,11 +1267,19 @@ textarea.input {
   flex-direction: column;
 }
 
+/* Map pill stays vertically centered — same spot as idle — whenever it is
+   the compact chip. Stretch only when both ends are open (full Map column). */
 .bridge-path--open > .bridge-path__slot--map {
-  align-items: stretch;
+  align-items: center;
   justify-content: center;
 }
 
+.bridge-path--open.bridge-path--source-open.bridge-path--target-open > .bridge-path__slot--map {
+  align-items: stretch;
+}
+
+/* Collapsed peer keeps idle park: vertically centered. Horizontal cluster
+   (toward Map) is applied in the wide container query below. */
 .bridge-path--open > .bridge-path__slot--peer {
   align-items: center;
   justify-content: center;
@@ -1324,8 +1332,13 @@ textarea.input {
     align-items: stretch;
   }
 
-  .bridge-path--open > .bridge-path__slot--peer {
-    justify-content: center;
+  /* Peer stays at the idle cluster spot — do not re-center in the column. */
+  .bridge-path--open.bridge-path--source-open:not(.bridge-path--target-open) > .bridge-path__slot--target {
+    justify-content: flex-start;
+  }
+
+  .bridge-path--open.bridge-path--target-open:not(.bridge-path--source-open) > .bridge-path__slot--source {
+    justify-content: flex-end;
   }
 
   .bridge-path--open.bridge-path--source-open:not(.bridge-path--target-open),

@@ -664,7 +664,7 @@ export function AgentChat() {
 
                   {[...recentRuns].reverse().map((run) => (
                       <div key={run.id} className="space-y-2 rounded-lg p-2 relative">
-                          <StickyUserGoal align="end" className="mb-1">
+                          <StickyUserGoal align="end" className="mb-3">
                               <div className="flex items-start gap-2 max-w-[95%]">
                                   <span className="text-text text-base bg-accent/10 rounded-xl rounded-tr-sm px-3 py-1.5 leading-relaxed">
                                       {run.goal}

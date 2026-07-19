@@ -3,8 +3,8 @@
  *
  * Layout is container-sized (widget bounds), not viewport-sized. Narrow stacks
  * a centered path; wide uses 1fr | map | 1fr with idle pills clustered toward
- * the center. Expanded ends fill their column; Map stretches only when both
- * ends are open.
+ * the center. Opening one end keeps Map + the other peer parked at that idle
+ * cluster spot; Map stretches only when both ends are open.
  */
 
 import type { ConnectorInfo, MoveSummary, Transform } from "@mia/shared-types"
@@ -356,7 +356,9 @@ function PathBlock({
       <div
         className={[
           "bridge-path__slot bridge-path__slot--map min-h-0 min-w-0",
-          bothOpen ? "items-stretch" : "",
+          // Center the path pill (matches idle). Stretch only for the
+          // full-height Map column when both endpoints are open.
+          bothOpen ? "items-stretch" : "items-center justify-center",
         ].join(" ")}
       >
         <MapChip

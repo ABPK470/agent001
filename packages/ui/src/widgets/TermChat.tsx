@@ -36,6 +36,7 @@ import {
   USER_GOAL_COLUMN_CLASS,
   USER_GOAL_PIN_SLOT_CLASS,
   USER_GOAL_TEXT_MAX_CLASS,
+  USER_GOAL_TO_RESPONSE_GAP_CLASS,
 } from "../app/chatLayout.js"
 import {
   homeTranscriptColumnShellClassName,
@@ -354,39 +355,47 @@ function ChatTurn({
   const isOwnGoal = !run.upn || run.upn.toLowerCase() === me?.upn?.toLowerCase()
 
   return (
-    <div ref={turnRef} data-run-id={run.id} className={`relative ${isHomeMode ? "mb-6" : "mb-10"}`}>
+    <div
+      ref={turnRef}
+      data-run-id={run.id}
+      className={`relative ${isHomeMode ? "mb-8" : "mb-10"}`}
+    >
       <div ref={sentinelRef} data-run-goal-anchor className="h-px w-full shrink-0" aria-hidden />
-      <StickyUserGoal
-        ref={stickyRef}
-        align="end"
-        topClass={pinProfile === "home" ? STICKY_GOAL_HOME_TOP : pinTopClass}
-        className={isHomeMode ? "mb-1 pt-0" : "mb-4"}
-        pinned={pinned}
-      >
-        <div className={USER_GOAL_COLUMN_CLASS}>
-          {!isOwnGoal && (
-            <div className="flex flex-col items-end gap-1.5">
-              <span className="px-1.5 text-[15px] font-medium uppercase tracking-wide text-text-muted">
-                {run.displayName ?? run.upn}
-              </span>
+      {/* flex + gap (not margin): home and widget share one rhythm; sticky
+          cannot collapse this space. */}
+      <div className={`flex min-w-0 flex-col ${USER_GOAL_TO_RESPONSE_GAP_CLASS}`}>
+        <StickyUserGoal
+          ref={stickyRef}
+          align="end"
+          topClass={pinProfile === "home" ? STICKY_GOAL_HOME_TOP : pinTopClass}
+          className="shrink-0"
+          pinned={pinned}
+        >
+          <div className={USER_GOAL_COLUMN_CLASS}>
+            {!isOwnGoal && (
+              <div className="flex flex-col items-end gap-1.5">
+                <span className="px-1.5 text-[15px] font-medium uppercase tracking-wide text-text-muted">
+                  {run.displayName ?? run.upn}
+                </span>
+                <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
+              </div>
+            )}
+            {isOwnGoal && (
               <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
-            </div>
-          )}
-          {isOwnGoal && (
-            <UserGoalBubble goal={run.goal} showUnpin={showUnpin} onUnpin={handleUnpin} />
-          )}
-        </div>
-      </StickyUserGoal>
+            )}
+          </div>
+        </StickyUserGoal>
 
-      <div className="mt-2">
-        <RunMessage
-          run={run}
-          isActive={isActive}
-          pendingInput={pendingInput}
-          onRespond={onRespond}
-          onNotify={onNotify}
-          onNotifyError={onNotifyError}
-        />
+        <div className="min-w-0">
+          <RunMessage
+            run={run}
+            isActive={isActive}
+            pendingInput={pendingInput}
+            onRespond={onRespond}
+            onNotify={onNotify}
+            onNotifyError={onNotifyError}
+          />
+        </div>
       </div>
     </div>
   )
@@ -2149,8 +2158,8 @@ function RunErrorBanner({ error }: { error: string }) {
   const showDetails = details != null && details !== summary
 
   return (
-    <div className="mt-3 max-w-full rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">
-      <div className="text-[15px] font-medium text-error">Run failed</div>
+    <div className="max-w-full rounded-lg border border-error/30 bg-error/5 px-3 py-2.5">
+      <div className="text-[15px] font-medium leading-6 text-error">Run failed</div>
       <p className="mt-1 text-[15px] leading-5 text-error/85 break-words">{summary}</p>
       {showDetails && (
         <>
@@ -2520,9 +2529,9 @@ function RunMessageImpl({
   const showDiff = isDone && (run.pendingWorkspaceChanges ?? 0) > 0
 
   return (
-    <div className="space-y-3">
+    <div className="space-y-4">
       {renderedParts.length > 0 && (
-        <div className="pl-1 space-y-0">
+        <div className="pl-1 space-y-1">
           {renderedParts}
         </div>
       )}
@@ -2530,9 +2539,9 @@ function RunMessageImpl({
       {/* Deliverable downloads — files the agent promoted (CSV/MD/… exports) */}
       <DeliverableChips runId={run.id} />
 
-      {/* Error */}
+      {/* Terminal status — same rhythm as answer blocks under the user pill */}
       {run.status === "cancelled" && (
-        <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2 text-[15px] text-warning">
+        <div className="rounded-lg border border-warning/30 bg-warning/5 px-3 py-2.5 text-[15px] leading-6 text-warning">
           Run cancelled.
         </div>
       )}
