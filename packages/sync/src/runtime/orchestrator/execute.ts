@@ -14,6 +14,10 @@
 import { flowCatalogFromSnapshot } from "../../domain/flow-catalog.js"
 import { detectCatalogDrift } from "../../runtime/catalog-drift.js"
 import { assertSupportedSyncDirection, getEnvironment } from "../../domain/environments.js"
+import {
+  assertEnvConnectorReady,
+  readyMssqlConnectorIds,
+} from "../../domain/sync-env-eligibility.js"
 import { evaluateFreezeWindows } from "../../domain/governance/freeze-windows.js"
 import { getPool } from "../../adapters/mssql/connection.js"
 import {
@@ -64,6 +68,9 @@ export async function executeSync(
   const targetEnv = getEnvironment(opts.host, plan.target)
   if (sourceEnv.role === "target") throw new Error(`Source "${sourceEnv.name}" is target-only.`)
   if (targetEnv.role === "source") throw new Error(`Target "${targetEnv.name}" is source-only.`)
+  const readyIds = readyMssqlConnectorIds(opts.host)
+  assertEnvConnectorReady(sourceEnv, readyIds)
+  assertEnvConnectorReady(targetEnv, readyIds)
   assertSupportedSyncDirection(sourceEnv, targetEnv)
   // Hard block: PROD is read-only until explicitly unlocked by ops (SYNC_ALLOW_PROD=1).
   if (targetEnv.name.toLowerCase() === "prod" && !process.env["SYNC_ALLOW_PROD"]) {

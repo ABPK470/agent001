@@ -201,7 +201,28 @@ function mapSyncRunRow(row: db.SyncRunRow) {
 export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, host: AgentHost): void {
   app.get("/api/sync/environments", async () => {
     rebuildLiveSyncEnvironments(host)
-    return getEnvironments(host)
+    const readyIds = new Set(
+      db
+        .listConnectors()
+        .filter((row) => row.kind === "mssql" && row.enabled === 1)
+        .map((row) => row.id),
+    )
+    return getEnvironments(host).map((env) => {
+      const connectorId =
+        typeof env.connectorId === "string" && env.connectorId.trim() !== ""
+          ? env.connectorId.trim()
+          : null
+      return {
+        name: env.name,
+        displayName: env.displayName,
+        color: env.color,
+        role: env.role,
+        ringOrder: env.ringOrder,
+        allowedSyncEnvironments: env.allowedSyncEnvironments,
+        connectorId,
+        connectorReady: connectorId !== null && readyIds.has(connectorId),
+      }
+    })
   })
   app.get("/api/sync/definitions", async () => listPublishedSyncDefinitions(host, projectRoot))
   app.get<{ Params: { entityId: string } }>(

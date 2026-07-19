@@ -571,6 +571,10 @@ export interface SyncEnvironment {
   role: "source" | "target" | "both"
   ringOrder: number
   allowedSyncEnvironments: string[] | null
+  /** Linked MSSQL connector id (env → connector plumbing). */
+  connectorId?: string | null
+  /** True when `connectorId` is an enabled MSSQL connector — Sync From/To eligibility. */
+  connectorReady?: boolean
 }
 
 export interface SyncRecipeTable {
@@ -1655,11 +1659,8 @@ export interface SyncEnvironmentAdmin {
   displayName: string
   color: string
   /**
-   * Optional link to a managed connector (see `Connector`). Pure metadata in
-   * this phase — the sync orchestrator still resolves the environment by
-   * `name` against the MSSQL connection registry, so this field does not
-   * change sync behaviour. It exists so the connections form can record which
-   * connector backs an environment ahead of the connector-becomes-SOT step.
+   * FK to a managed MSSQL connector — pool resolution key for Sync.
+   * Must be an enabled `mssql` connector on create/update.
    */
   connectorId?: string | null
   role: "source" | "target" | "both"

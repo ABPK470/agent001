@@ -11,6 +11,10 @@ import { resolveEntityPreviewConcurrency } from "../adapters/mssql/pool-concurre
 import type { SyncEntityId } from "../domain/definition-selection.js"
 import { EventType, SyncOperationType } from "../domain/enums.js"
 import { assertSupportedSyncDirection, getEnvironment } from "../domain/environments.js"
+import {
+  assertEnvConnectorReady,
+  readyMssqlConnectorIds,
+} from "../domain/sync-env-eligibility.js"
 import { getPublishedSyncDefinitionForHost, type PublishedSyncDefinition } from "../domain/published-definitions.js"
 import type { SyncRuntimeHost } from "../ports/index.js"
 import { emitSyncEvent } from "./events.js"
@@ -180,6 +184,9 @@ export async function syncDiffScan(input: SyncDiffScanInput): Promise<SyncDiffSc
   const target = input.target.trim()
   const sourceEnv = getEnvironment(input.host, source)
   const targetEnv = getEnvironment(input.host, target)
+  const readyIds = readyMssqlConnectorIds(input.host)
+  assertEnvConnectorReady(sourceEnv, readyIds)
+  assertEnvConnectorReady(targetEnv, readyIds)
   assertSupportedSyncDirection(sourceEnv, targetEnv)
 
   const definition = getPublishedSyncDefinitionForHost(input.host, input.entityType)

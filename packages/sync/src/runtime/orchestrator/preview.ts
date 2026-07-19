@@ -16,6 +16,10 @@ import { materializeDefinitionTablesForSchema } from "../../domain/entity-regist
 import { coerceSyncEntityId } from "../../domain/entity-instance-ref.js"
 import { buildDependencyGraph, diffTable } from "../diff-engine/index.js"
 import { assertSupportedSyncDirection, getEnvironment } from "../../domain/environments.js"
+import {
+  assertEnvConnectorReady,
+  readyMssqlConnectorIds,
+} from "../../domain/sync-env-eligibility.js"
 import { evaluateFreezeWindows } from "../../domain/governance/freeze-windows.js"
 import { getPublishedSyncDefinition } from "../../domain/published-definitions.js"
 import { instantiatePredicate, instantiatePredicateWithTree } from "../../domain/predicate.js"
@@ -99,6 +103,9 @@ async function previewSyncInner(
       throw new Error(`Environment "${sourceEnv.name}" is target-only — cannot use as source.`)
     if (targetEnv.role === "source")
       throw new Error(`Environment "${targetEnv.name}" is source-only — cannot use as target.`)
+    const readyIds = readyMssqlConnectorIds(input.host)
+    assertEnvConnectorReady(sourceEnv, readyIds)
+    assertEnvConnectorReady(targetEnv, readyIds)
     assertSupportedSyncDirection(sourceEnv, targetEnv)
     // Hard block: PROD is read-only until explicitly unlocked by ops (SYNC_ALLOW_PROD=1).
     if (targetEnv.name.toLowerCase() === "prod" && !process.env["SYNC_ALLOW_PROD"]) {

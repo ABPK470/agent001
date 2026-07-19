@@ -168,9 +168,9 @@ export function getEnvironment(host: SyncEnvironmentRegistryHost, name: string):
 }
 
 /**
- * Temporary hard guard for live ABI sync usage: the only supported
- * direction is UAT -> DEV. Keep this centralized so preview and execute
- * fail the same way.
+ * Outgoing direction policy on the source environment.
+ * `allowedSyncEnvironments === null` → unrestricted; `[]` → blocked.
+ * Role and connector readiness are asserted separately (see sync-env-eligibility).
  */
 export function assertSupportedSyncDirection(sourceEnv: SyncEnvironment, targetEnv: SyncEnvironment): void {
   const allowedConnections = sourceEnv.allowedSyncEnvironments

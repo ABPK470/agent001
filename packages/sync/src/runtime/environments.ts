@@ -41,8 +41,11 @@ export function loadSyncEnvironments(
           e as Record<string, unknown>,
           `${relPath} environment "${e.name}"`,
         )
+        const connectorIdRaw =
+          typeof e.connectorId === "string" && e.connectorId.trim() !== "" ? e.connectorId.trim() : null
         return withPermissionDefaults({
           name: e.name,
+          connectorId: connectorIdRaw,
           displayName: e.displayName ?? e.name,
           color: e.color ?? "slate",
           role: e.role ?? EnvRole.Both,
@@ -78,6 +81,7 @@ export function loadSyncEnvironments(
   const environments = connections.map((connection, i) =>
     withPermissionDefaults({
       name: connection.name,
+      connectorId: connection.name,
       displayName: connection.name,
       color: FALLBACK_PALETTE[i % FALLBACK_PALETTE.length] ?? "slate",
       role: EnvRole.Both,

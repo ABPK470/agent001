@@ -43,6 +43,7 @@ export function createRepoBundleHost(): SyncRuntimeHost {
   requirePublishedBundle()
   const dev = withPermissionDefaults({
     name: "DEV",
+    connectorId: "DEV",
     displayName: "Development",
     color: "emerald",
     role: "both",
@@ -51,6 +52,7 @@ export function createRepoBundleHost(): SyncRuntimeHost {
   })
   const uat = withPermissionDefaults({
     name: "UAT",
+    connectorId: "UAT",
     displayName: "UAT",
     color: "amber",
     role: "both",
@@ -60,7 +62,25 @@ export function createRepoBundleHost(): SyncRuntimeHost {
   return {
     mssql: {
       databases: new Map(),
-      defaultConnection: { value: "DEV" }
+      defaultConnection: { value: "DEV" },
+      pools: {
+        async get(id: string) {
+          throw new Error(`MSSQL connector "${id}" not configured.`)
+        },
+        async getByName(name: string) {
+          throw new Error(`MSSQL connection "${name}" not configured.`)
+        },
+        configOf() {
+          return undefined
+        },
+        list() {
+          return [
+            { id: "DEV", name: "DEV" },
+            { id: "UAT", name: "UAT" },
+          ]
+        },
+        invalidate() {},
+      },
     },
     sync: {
       events: { sink: () => {} },

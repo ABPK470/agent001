@@ -149,7 +149,6 @@ export function loadPersistedConnectors(
   const persistedRows = db.listConnectors()
   if (persistedRows.length > 0) {
     const connectors = persistedRows.map(parseRow)
-    linkSyncEnvironmentConnectorIds()
     return { connectors, source: "db", seeded: false, summary: renderSummary(connectors) }
   }
 
@@ -159,12 +158,15 @@ export function loadPersistedConnectors(
     db.saveConnector(serialiseConnector(connector, null))
   }
   const source = fromFile.length > 0 ? "file" : connectors.length > 0 ? "mssql" : "none"
-  linkSyncEnvironmentConnectorIds()
   return { connectors, source, seeded: true, summary: renderSummary(connectors) }
 }
 
-/** Link sync environments to MSSQL connectors by matching environment name. */
-function linkSyncEnvironmentConnectorIds(): void {
+/**
+ * Backfill missing `connectorId` on sync environments by matching env name
+ * to an mssql connector id/name. Call **after** both connectors and
+ * environments have been loaded/seeded (first boot otherwise finds no env rows).
+ */
+export function linkSyncEnvironmentConnectorIds(): void {
   const envRows = db.listSyncEnvironments()
   if (envRows.length === 0) return
 

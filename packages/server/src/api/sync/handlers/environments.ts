@@ -201,10 +201,10 @@ function defaultAccessModeForName(name: string): SyncEnvironment["defaultAccessM
   return /\bprod\b|\buat\b|\bstag(e|ing)?\b/i.test(name) ? "read_only" : "read_write"
 }
 
-/** Live FK check: connectorId must reference a persisted mssql connector. */
+/** Live FK: connectorId must be a persisted, enabled MSSQL connector. */
 function resolveMssqlConnector(connectorId: string): db.DbConnector | undefined {
   const row = db.getConnector(connectorId)
-  return row && row.kind === "mssql" ? row : undefined
+  return row && row.kind === "mssql" && row.enabled === 1 ? row : undefined
 }
 
 export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentHost): void {
@@ -242,7 +242,9 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
       const connector = resolveMssqlConnector(connectorId)
       if (!connector) {
         reply.code(400)
-        return { error: `unknown MSSQL connector "${connectorId}"` }
+        return {
+          error: `MSSQL connector "${connectorId}" is missing or disabled — enable it in Connectors first`,
+        }
       }
       if (db.getSyncEnvironment(name)) {
         reply.code(409)
@@ -312,7 +314,9 @@ export function registerSyncEnvironmentRoutes(app: FastifyInstance, host: AgentH
         }
         if (!resolveMssqlConnector(sanitised.connectorId)) {
           reply.code(400)
-          return { error: `unknown MSSQL connector "${sanitised.connectorId}"` }
+          return {
+            error: `MSSQL connector "${sanitised.connectorId}" is missing or disabled — enable it in Connectors first`,
+          }
         }
       }
       const env = withPermissionDefaults({

@@ -36,7 +36,7 @@ export function SyncPolicySection({
   return (
     <FormSectionCard
       title="Outgoing directions"
-      description="Server-enforced on preview and execute. The sync widget still lists all environments — invalid pairs fail at run time."
+      description="Felt in the Sync widget From/To lists and enforced again on preview/execute."
     >
       <p className={HELP_TEXT}>
         When this environment is the <strong>source</strong>, which environments it may sync to.

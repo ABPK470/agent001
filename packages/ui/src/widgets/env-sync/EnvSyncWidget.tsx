@@ -39,6 +39,7 @@ import { net, PlanView } from "./PlanTables"
 import { PreviewProgressPanel } from "./PreviewProgressPanel"
 import { createPreviewProgress, isPreviewInProgress } from "../../state/env-sync-preview-progress"
 import type { ModalKind, SearchHit } from "./types"
+import { listSyncSourceOptions, listSyncTargetOptions } from "./sync-env-eligibility"
 import {
   formatSearchHitLabel,
   getPlanEntityType,
@@ -283,10 +284,14 @@ export function EnvSync() {
         if (dead) return
         setEnvs(nextEnvs)
         setDefinitions(nextDefinitions)
+        const sources = listSyncSourceOptions(nextEnvs)
         const nextForm: Partial<typeof form> = {}
-        if (nextEnvs.length >= 1 && !source) nextForm.source = nextEnvs[0].name
-        if (nextEnvs.length >= 2 && !target) nextForm.target = nextEnvs[1].name
-        else if (nextEnvs.length === 1 && !target) nextForm.target = nextEnvs[0].name
+        if (sources.length >= 1 && !source) nextForm.source = sources[0].name
+        const sourceForTargets = nextForm.source ?? source
+        const targets = listSyncTargetOptions(nextEnvs, sourceForTargets || null)
+        if (targets.length >= 1 && !target) {
+          nextForm.target = targets.find((env) => env.name !== sourceForTargets)?.name ?? targets[0].name
+        }
         if (Object.keys(nextForm).length) setForm(nextForm)
       })
       .catch((error) => !dead && notifyError(error instanceof Error ? error.message : String(error)))
@@ -407,8 +412,16 @@ export function EnvSync() {
     startExecStream(displayPlan.planId)
   }
 
-  const srcOpts: ListboxOption<string>[] = envs.filter((entry) => entry.role !== "target").map((entry) => ({ value: entry.name, label: entry.displayName.toUpperCase(), dot: dot(entry.color) }))
-  const tgtOpts: ListboxOption<string>[] = envs.filter((entry) => entry.role !== "source").map((entry) => ({ value: entry.name, label: entry.displayName.toUpperCase(), dot: dot(entry.color) }))
+  const srcOpts: ListboxOption<string>[] = listSyncSourceOptions(envs).map((entry) => ({
+    value: entry.name,
+    label: entry.displayName.toUpperCase(),
+    dot: dot(entry.color),
+  }))
+  const tgtOpts: ListboxOption<string>[] = listSyncTargetOptions(envs, source || null).map((entry) => ({
+    value: entry.name,
+    label: entry.displayName.toUpperCase(),
+    dot: dot(entry.color),
+  }))
   const entOpts: ListboxOption<SyncEntityType>[] = ENTITY_TYPES.map((type) => ({
     value: type,
     label: definitions.find((entry) => entry.id === type)?.displayName ?? type,
@@ -436,7 +449,19 @@ export function EnvSync() {
                 options={srcOpts}
                 onChange={(value) => {
                   if (value !== source) discardStaleWorkflow()
-                  setForm({ source: value })
+                  const nextTargets = listSyncTargetOptions(envs, value)
+                  const targetStillOk = nextTargets.some((env) => env.name === target)
+                  setForm({
+                    source: value,
+                    ...(targetStillOk
+                      ? {}
+                      : {
+                          target:
+                            nextTargets.find((env) => env.name !== value)?.name ??
+                            nextTargets[0]?.name ??
+                            "",
+                        }),
+                  })
                 }}
                 size="sm"
                 variant="default"

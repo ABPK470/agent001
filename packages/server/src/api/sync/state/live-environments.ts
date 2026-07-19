@@ -7,6 +7,7 @@ import {
   type SyncEnvironment
 } from "@mia/sync"
 
+import { linkSyncEnvironmentConnectorIds } from "../../connectors/state/live-connectors.js"
 import * as db from "../../../infra/persistence/sqlite.js"
 
 export interface PersistedSyncEnvironmentLoad {
@@ -55,32 +56,34 @@ export function loadPersistedSyncEnvironments(
   connections: ReadonlyArray<{ name: string }>
 ): PersistedSyncEnvironmentLoad {
   const persistedRows = db.listSyncEnvironments()
-  if (persistedRows.length > 0) {
-    const environments = persistedRows.map(parsePersistedEnvironment)
-    return {
-      environments,
-      source: "db",
-      seeded: false,
-      summary: renderSummary(environments)
+  let source: PersistedSyncEnvironmentLoad["source"] = "db"
+  let seeded = false
+
+  if (persistedRows.length === 0) {
+    const loaded = loadSyncEnvironments(projectRoot, connections)
+    const environments = mergeLegacyOverrides(loaded.environments)
+    const now = new Date().toISOString()
+    for (const env of environments) {
+      db.saveSyncEnvironment({
+        name: env.name,
+        body_json: JSON.stringify(env),
+        created_at: now,
+        updated_at: now,
+        updated_by: null
+      })
     }
+    source = loaded.source
+    seeded = true
   }
 
-  const loaded = loadSyncEnvironments(projectRoot, connections)
-  const environments = mergeLegacyOverrides(loaded.environments)
-  const now = new Date().toISOString()
-  for (const env of environments) {
-    db.saveSyncEnvironment({
-      name: env.name,
-      body_json: JSON.stringify(env),
-      created_at: now,
-      updated_at: now,
-      updated_by: null
-    })
-  }
+  // After envs exist (seeded or already in DB): heal missing connectorId links,
+  // then always re-read so in-memory matches SQLite.
+  linkSyncEnvironmentConnectorIds()
+  const environments = db.listSyncEnvironments().map(parsePersistedEnvironment)
   return {
     environments,
-    source: loaded.source,
-    seeded: true,
+    source,
+    seeded,
     summary: renderSummary(environments)
   }
 }

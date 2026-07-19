@@ -17,8 +17,8 @@ import { writeEntityBundle, type ENTITY_SPECS } from "./entity-fixtures.js"
 const tempRoots: string[] = []
 
 /**
- * Throwing pool provider for tests — mirrors an empty `databases` map: any pool
- * resolution fails loudly. Tests that need a real pool mock the DB helpers.
+ * Throwing pool provider for tests — pool get fails loudly, but `list()`
+ * reports the fixture connector ids so Sync eligibility (enabled mssql) passes.
  */
 const THROWING_POOLS: MssqlPoolProvider = {
   async get(id) {
@@ -31,7 +31,11 @@ const THROWING_POOLS: MssqlPoolProvider = {
     return undefined
   },
   list() {
-    return []
+    return [
+      { id: "DEV", name: "DEV" },
+      { id: "UAT", name: "UAT" },
+      { id: "PROD", name: "PROD" },
+    ]
   },
   invalidate() {},
 }
@@ -39,6 +43,7 @@ const THROWING_POOLS: MssqlPoolProvider = {
 export function createSyncTestHost(projectRoot: string): SyncRuntimeHost {
   const dev = withPermissionDefaults({
     name: "DEV",
+    connectorId: "DEV",
     displayName: "Development",
     color: "emerald",
     role: "both",
@@ -47,6 +52,7 @@ export function createSyncTestHost(projectRoot: string): SyncRuntimeHost {
   })
   const uat = withPermissionDefaults({
     name: "UAT",
+    connectorId: "UAT",
     displayName: "UAT",
     color: "amber",
     role: "both",
@@ -55,6 +61,7 @@ export function createSyncTestHost(projectRoot: string): SyncRuntimeHost {
   })
   const prod = withPermissionDefaults({
     name: "PROD",
+    connectorId: "PROD",
     displayName: "Production",
     color: "rose",
     role: "both",

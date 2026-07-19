@@ -79,6 +79,7 @@ function hostWithEnvs(overrides?: {
   const host = createSyncTestHost(root)
   const source = withPermissionDefaults({
     name: "DEV",
+    connectorId: "DEV",
     displayName: "Dev",
     color: "emerald",
     role: overrides?.sourceRole ?? "both",
@@ -87,6 +88,7 @@ function hostWithEnvs(overrides?: {
   })
   const target = withPermissionDefaults({
     name: overrides?.targetName ?? "UAT",
+    connectorId: overrides?.targetName ?? "UAT",
     displayName: "UAT",
     color: "amber",
     role: overrides?.targetRole ?? "both",
@@ -100,6 +102,7 @@ function hostWithEnvs(overrides?: {
       "PROD",
       withPermissionDefaults({
         name: "PROD",
+        connectorId: "PROD",
         displayName: "Prod",
         color: "rose",
         role: "both",
