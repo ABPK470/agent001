@@ -30,8 +30,72 @@ const ROLE_COLORS: Record<string, string> = {
   tool: "text-info",
 }
 
+/** Collapsed preview length for long system / user / tool / assistant text. */
+const TEXT_PREVIEW_CHARS = 300
+
 function copyText(text: string) {
   navigator.clipboard.writeText(text)
+}
+
+function formatCharCount(n: number): string {
+  return n.toLocaleString()
+}
+
+/**
+ * Long text with a dedicated Show more / Show less control.
+ * The body itself is never a toggle target — selection and copy stay intact.
+ */
+function ExpandableText({
+  text,
+  className = "text-sm font-mono text-text-secondary whitespace-pre-wrap break-words leading-relaxed",
+  previewChars = TEXT_PREVIEW_CHARS,
+  maxExpandedHeight,
+}: {
+  text: string
+  className?: string
+  previewChars?: number
+  /** When expanded, cap height and scroll (system prompt, big payloads). */
+  maxExpandedHeight?: number
+}) {
+  const [expanded, setExpanded] = useState(false)
+  const isLong = text.length > previewChars
+
+  useEffect(() => {
+    setExpanded(false)
+  }, [text])
+
+  function toggleExpanded() {
+    setExpanded((v) => !v)
+  }
+
+  const display = !isLong || expanded ? text : `${text.slice(0, previewChars)}…`
+
+  return (
+    <div className="min-w-0">
+      <pre
+        className={className}
+        style={
+          expanded && maxExpandedHeight
+            ? { maxHeight: maxExpandedHeight, overflowY: "auto" }
+            : undefined
+        }
+      >
+        {display}
+      </pre>
+      {isLong && (
+        <button
+          type="button"
+          className="trace-expand-toggle"
+          onClick={toggleExpanded}
+          aria-expanded={expanded}
+        >
+          {expanded
+            ? "Show less"
+            : `Show more · ${formatCharCount(text.length)} chars`}
+        </button>
+      )}
+    </div>
+  )
 }
 
 // ── Collapsible section ─────────────────────────────────────────
@@ -86,10 +150,6 @@ function MessageBubble({ msg, index }: {
   msg: { role: string; content: string | null; toolCalls: Array<{ id: string; name: string; arguments: Record<string, unknown> }>; toolCallId: string | null }
   index: number
 }) {
-  const [expanded, setExpanded] = useState(false)
-  const isLong = (msg.content?.length ?? 0) > 300
-  const displayContent = expanded || !isLong ? msg.content : msg.content!.slice(0, 300) + "..."
-
   return (
     <div className="border-l-2 pl-2 py-1" style={{ borderColor: msg.role === "system" ? "var(--color-accent)" : msg.role === "user" ? "var(--color-success)" : msg.role === "assistant" ? "var(--color-warning)" : "var(--color-info)" }}>
       <div className="flex items-center gap-2 mb-0.5">
@@ -101,23 +161,12 @@ function MessageBubble({ msg, index }: {
           <span className="text-xs text-text-muted/40 font-mono">← {msg.toolCallId.slice(0, 12)}</span>
         )}
         {msg.content && (
-          <span className="text-xs text-text-muted/30">{msg.content.length} chars</span>
+          <span className="text-xs text-text-muted/30">{formatCharCount(msg.content.length)} chars</span>
         )}
       </div>
 
-      {displayContent && (
-        <pre
-          className="text-sm font-mono text-text-secondary whitespace-pre-wrap break-words leading-relaxed cursor-pointer"
-          onClick={() => setExpanded(!expanded)}
-        >
-          {displayContent}
-        </pre>
-      )}
-
-      {isLong && !expanded && (
-        <button className="text-xs text-accent/60 hover:text-accent mt-0.5" onClick={() => setExpanded(true)}>
-          show full ({msg.content!.length} chars)
-        </button>
+      {msg.content && (
+        <ExpandableText text={msg.content} />
       )}
 
       {!msg.content && msg.toolCalls.length === 0 && (
@@ -147,19 +196,32 @@ function ToolDefinition({ tool }: {
   tool: { name: string; description: string; parameters?: Record<string, unknown> }
 }) {
   const [showSchema, setShowSchema] = useState(false)
+
+  function toggleSchema() {
+    setShowSchema((v) => !v)
+  }
+
   return (
     <div className="border border-border/30 rounded px-2 py-1.5">
-      <div className="flex items-start gap-2">
+      <div className="flex items-start gap-2 min-w-0">
         <span className="text-sm font-mono font-semibold text-warning shrink-0">{tool.name}</span>
-        <span className="text-sm text-text-muted flex-1">{tool.description}</span>
+        <div className="min-w-0 flex-1">
+          <ExpandableText
+            text={tool.description}
+            className="text-sm text-text-muted whitespace-pre-wrap break-words leading-relaxed font-sans"
+            previewChars={160}
+          />
+        </div>
       </div>
       {tool.parameters && (
         <>
           <button
-            className="text-xs text-accent/50 hover:text-accent mt-1"
-            onClick={() => setShowSchema(!showSchema)}
+            type="button"
+            className="trace-expand-toggle mt-1"
+            onClick={toggleSchema}
+            aria-expanded={showSchema}
           >
-            {showSchema ? "hide schema" : "show parameter schema"}
+            {showSchema ? "Hide schema" : "Show parameter schema"}
           </button>
           {showSchema && (
             <JsonViewer value={tool.parameters} label="schema" defaultExpandDepth={2} maxHeight={200} />
@@ -301,13 +363,16 @@ export function DebugInspector() {
         {(filter === "all" || filter === "prompt") && systemPrompt && matchesSearch(systemPrompt.text) && (
           <Section
             label="System Prompt"
-            badge={`${systemPrompt.text.length.toLocaleString()} chars`}
+            badge={`${formatCharCount(systemPrompt.text.length)} chars`}
             badgeColor="text-accent/70"
             copyable={systemPrompt.text}
           >
-            <pre className="code-pre max-h-[500px] overflow-y-auto">
-              {systemPrompt.text}
-            </pre>
+            <ExpandableText
+              text={systemPrompt.text}
+              className="code-pre"
+              previewChars={500}
+              maxExpandedHeight={500}
+            />
           </Section>
         )}
 
@@ -374,9 +439,16 @@ export function DebugInspector() {
                       <div className="text-sm text-text-secondary mt-1">
                         {notes.join(" · ") || "ok"}
                       </div>
-                      <pre className="code-pre mt-1">
-                        {entry.sqlPreview}
-                      </pre>
+                      {entry.sqlPreview && (
+                        <div className="mt-1">
+                          <ExpandableText
+                            text={entry.sqlPreview}
+                            className="code-pre"
+                            previewChars={240}
+                            maxExpandedHeight={320}
+                          />
+                        </div>
+                      )}
                     </div>
                   )
                 })}
@@ -450,9 +522,11 @@ function LlmCallEntry({ call, index }: {
               {res.content && (
                 <div className="mb-2">
                   <div className="text-xs text-text-muted/40 mb-0.5">content:</div>
-                  <pre className="code-pre">
-                    {res.content}
-                  </pre>
+                  <ExpandableText
+                    text={res.content}
+                    className="code-pre"
+                    maxExpandedHeight={360}
+                  />
                 </div>
               )}
 
