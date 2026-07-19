@@ -45,7 +45,7 @@ function seed(
   rows: Array<{ qname: string; tool: string; mode: string; bytes: number; ageMs: number; payload?: string }>
 ): void {
   const stmt = testDb.prepare(`
-    INSERT INTO tool_knowledge (tool, qname, mode, connection, payload_text, fingerprint, bytes, created_at, hit_count)
+    INSERT INTO tool_knowledge_cache (tool, qname, mode, connection, payload_text, fingerprint, bytes, created_at, hit_count)
     VALUES (?, ?, ?, 'default', ?, '5|T|deadbeef', ?, ?, 0)
   `)
   const now = Date.now()

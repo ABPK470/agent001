@@ -1,5 +1,5 @@
 /**
- * tool_knowledge — org-wide cache of heavy MSSQL-tool outputs.
+ * tool_knowledge_cache — org-wide cache of heavy MSSQL-tool outputs.
  *
  * Separate from memory_entries because these are objective ground-truth
  * facts about DB objects (not user-scoped notes). Reads are NEVER filtered
@@ -139,7 +139,7 @@ export function lookupToolKnowledge(opts: LookupOptions): ToolKnowledgeResult {
   const row = getDb()
     .prepare<unknown[], Row>(
       `SELECT payload_text, fingerprint, created_at, created_by_upn
-         FROM tool_knowledge
+         FROM tool_knowledge_cache
         WHERE tool = ? AND qname = ? AND mode = ? AND lower(connection) = lower(?)
         LIMIT 1`
     )
@@ -164,7 +164,7 @@ export function lookupToolKnowledge(opts: LookupOptions): ToolKnowledgeResult {
   try {
     getDb()
       .prepare(
-        `UPDATE tool_knowledge
+        `UPDATE tool_knowledge_cache
             SET last_hit_at = ?, hit_count = hit_count + 1
           WHERE tool = ? AND qname = ? AND mode = ? AND lower(connection) = lower(?)`
       )
@@ -205,7 +205,7 @@ export function saveToolKnowledge(opts: SaveOptions): void {
 
   getDb()
     .prepare(
-      `INSERT INTO tool_knowledge
+      `INSERT INTO tool_knowledge_cache
          (tool, qname, mode, connection, payload_text, fingerprint, bytes, created_by_upn, created_at, hit_count)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
        ON CONFLICT(tool, qname, mode, connection) DO UPDATE SET
@@ -231,7 +231,7 @@ export interface PruneOptions {
 export function pruneToolKnowledge(opts: PruneOptions): number {
   const now = opts.now ?? Date.now()
   const cutoff = now - opts.maxAgeMs
-  const info = getDb().prepare(`DELETE FROM tool_knowledge WHERE created_at < ?`).run(cutoff)
+  const info = getDb().prepare(`DELETE FROM tool_knowledge_cache WHERE created_at < ?`).run(cutoff)
   return typeof info.changes === "number" ? info.changes : 0
 }
 
@@ -245,5 +245,5 @@ export function renderCachedHeader(hit: ToolKnowledgeHit, opts: { tool: CachedTo
   const profiledIso = new Date(hit.profiledAt).toISOString().slice(0, 10)
   const ageHours = Math.round(hit.ageMs / (60 * 60 * 1000))
   const modePart = opts.mode ? `, mode=${opts.mode}` : ""
-  return `[cached from ${profiledIso}${modePart}, ageHours=${ageHours}, source=tool_knowledge]`
+  return `[cached from ${profiledIso}${modePart}, ageHours=${ageHours}, source=tool_knowledge_cache]`
 }

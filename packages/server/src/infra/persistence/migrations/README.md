@@ -21,6 +21,14 @@ Pairs today: `entity_active` + `entity_versions`, `scd2_strategy_active` + `scd2
 
 Other suffixes: `*_config(s)`, `*_log` / `*_audit` / `*_history`, `*_cache`. Roots, runs, and FK children use plain names.
 
+### Config / log / cache renames (postfix pass)
+
+| Kind | Tables |
+| ---- | ------ |
+| `*_configs` | `agent_configs`, `layout_configs`, `policy_configs`, `approval_configs`, `freeze_window_configs`, `proposer_schedule_configs`, `notification_route_configs`, `webhook_drain_configs`, `sync_environment_override_configs`, `browser_domain_policy_configs` (+ existing `llm_config`, `channel_configs`, `browser_proxy_config`) |
+| `*_log` | `run_log`, `api_request_log`, `sync_evidence_log` (+ existing `audit_log`, `event_log`, `sync_sql_log`, `browser_audit_log`, `notification_log`) |
+| `*_cache` | `tool_knowledge_cache`, `resolved_terms_cache` |
+
 ## Fresh database
 
 Delete `~/.mia/mia.db` (or the file under `MIA_DATA_DIR`) and restart.

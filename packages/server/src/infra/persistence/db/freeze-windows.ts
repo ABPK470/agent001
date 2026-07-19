@@ -79,14 +79,14 @@ const rowToRecord = (r: Row): FreezeWindowRecord => ({
 
 export function listFreezeWindowsForTenant(tenantId: string): FreezeWindowRecord[] {
   const rows = getDb()
-    .prepare(`SELECT * FROM freeze_windows WHERE tenant_id = ? ORDER BY starts_at ASC, id ASC`)
+    .prepare(`SELECT * FROM freeze_window_configs WHERE tenant_id = ? ORDER BY starts_at ASC, id ASC`)
     .all(tenantId) as Row[]
   return rows.map(rowToRecord)
 }
 
 export function getFreezeWindow(tenantId: string, id: string): FreezeWindowRecord | null {
   const r = getDb()
-    .prepare(`SELECT * FROM freeze_windows WHERE tenant_id = ? AND id = ?`)
+    .prepare(`SELECT * FROM freeze_window_configs WHERE tenant_id = ? AND id = ?`)
     .get(tenantId, id) as Row | undefined
   return r ? rowToRecord(r) : null
 }
@@ -106,7 +106,7 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
   const db = getDb()
   db.prepare(
     `
-    INSERT INTO freeze_windows
+    INSERT INTO freeze_window_configs
       (tenant_id, id, display_name, description, starts_at, ends_at, created_by, created_at, updated_at)
     VALUES
       (@tenantId, @id, @displayName, @description, @startsAt, @endsAt, @actor,
@@ -134,7 +134,7 @@ export function upsertFreezeWindow(args: UpsertFreezeWindowArgs): FreezeWindowRe
 }
 
 export function deleteFreezeWindow(tenantId: string, id: string): boolean {
-  const info = getDb().prepare(`DELETE FROM freeze_windows WHERE tenant_id = ? AND id = ?`).run(tenantId, id)
+  const info = getDb().prepare(`DELETE FROM freeze_window_configs WHERE tenant_id = ? AND id = ?`).run(tenantId, id)
   if (info.changes > 0 && tenantId === DEFAULT_TENANT_ID) refreshFreezeWindowRegistry()
   return info.changes > 0
 }

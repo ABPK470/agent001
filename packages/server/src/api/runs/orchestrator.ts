@@ -325,7 +325,7 @@ export class AgentOrchestrator {
       })
     }
     // (See startRun: hosted defaults + env-derived rules now seeded into
-    // policy_rules at server boot via policy-seeder.ts, so loading dbRules
+    // policy_configs at server boot via policy-seeder.ts, so loading dbRules
     // above already covers them.)
 
     const resumeRole: PolicyRole = resumeSession!.isAdmin ? PolicyRole.Admin : PolicyRole.HostedUser

@@ -1,6 +1,6 @@
 /**
  * inspect_definition cache integration — verifies the `object=` mode
- * consults the org-wide tool_knowledge cache before reading T-SQL source
+ * consults the org-wide tool_knowledge_cache cache before reading T-SQL source
  * and persists on a successful live run. Dynamic modes (slow_queries,
  * missing_indexes, index_usage, search, depends_on, scan_duplicates)
  * are NOT cached — verified in the "dynamic mode is not cached" test.
@@ -58,7 +58,7 @@ describe("inspect_definition cache integration", () => {
     toolKnowledge.lookup = lookup
     toolKnowledge.save = vi.fn()
     toolKnowledge.renderHeader = () =>
-      "[cached from 2026-05-01, mode=definition, ageHours=1, source=tool_knowledge]"
+      "[cached from 2026-05-01, mode=definition, ageHours=1, source=tool_knowledge_cache]"
 
     const out = (await inspectDefinitionTool.execute({ object: "dim.Date" })) as string
     expect(out).toMatch(/^\[cached from 2026-05-01.*mode=definition/)

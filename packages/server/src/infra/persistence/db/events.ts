@@ -183,18 +183,18 @@ export interface DbWebhookDrain {
 }
 
 export function listWebhookDrains(): DbWebhookDrain[] {
-  return getDb().prepare("SELECT * FROM webhook_drains ORDER BY created_at").all() as DbWebhookDrain[]
+  return getDb().prepare("SELECT * FROM webhook_drain_configs ORDER BY created_at").all() as DbWebhookDrain[]
 }
 
 export function getWebhookDrain(id: string): DbWebhookDrain | undefined {
-  return getDb().prepare("SELECT * FROM webhook_drains WHERE id = ?").get(id) as DbWebhookDrain | undefined
+  return getDb().prepare("SELECT * FROM webhook_drain_configs WHERE id = ?").get(id) as DbWebhookDrain | undefined
 }
 
 export function saveWebhookDrain(drain: DbWebhookDrain): void {
   getDb()
     .prepare(
       `
-    INSERT OR REPLACE INTO webhook_drains (id, url, secret, event_filters, enabled, created_at, updated_at)
+    INSERT OR REPLACE INTO webhook_drain_configs (id, url, secret, event_filters, enabled, created_at, updated_at)
     VALUES (@id, @url, @secret, @event_filters, @enabled, @created_at, @updated_at)
   `
     )
@@ -202,5 +202,5 @@ export function saveWebhookDrain(drain: DbWebhookDrain): void {
 }
 
 export function deleteWebhookDrain(id: string): void {
-  getDb().prepare("DELETE FROM webhook_drains WHERE id = ?").run(id)
+  getDb().prepare("DELETE FROM webhook_drain_configs WHERE id = ?").run(id)
 }

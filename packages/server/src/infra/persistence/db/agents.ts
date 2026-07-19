@@ -49,11 +49,11 @@ export interface DbAgentDefinition {
 }
 
 export function listAgentDefinitions(): DbAgentDefinition[] {
-  return getDb().prepare("SELECT * FROM agent_definitions ORDER BY created_at").all() as DbAgentDefinition[]
+  return getDb().prepare("SELECT * FROM agent_configs ORDER BY created_at").all() as DbAgentDefinition[]
 }
 
 export function getAgentDefinition(id: string): DbAgentDefinition | undefined {
-  return getDb().prepare("SELECT * FROM agent_definitions WHERE id = ?").get(id) as
+  return getDb().prepare("SELECT * FROM agent_configs WHERE id = ?").get(id) as
     | DbAgentDefinition
     | undefined
 }
@@ -62,7 +62,7 @@ export function saveAgentDefinition(agent: DbAgentDefinition): void {
   getDb()
     .prepare(
       `
-    INSERT OR REPLACE INTO agent_definitions (id, name, description, system_prompt, created_at, updated_at)
+    INSERT OR REPLACE INTO agent_configs (id, name, description, system_prompt, created_at, updated_at)
     VALUES (@id, @name, @description, @system_prompt, @created_at, datetime('now'))
   `
     )
@@ -70,7 +70,7 @@ export function saveAgentDefinition(agent: DbAgentDefinition): void {
 }
 
 export function deleteAgentDefinition(id: string): void {
-  getDb().prepare("DELETE FROM agent_definitions WHERE id = ?").run(id)
+  getDb().prepare("DELETE FROM agent_configs WHERE id = ?").run(id)
 }
 
 /**

@@ -2,7 +2,7 @@
  * `<known_objects>` system-anchor block — surfaces a compact directory of
  * tables/views this org has already profiled, so the LLM can:
  *   (a) avoid re-running expensive `profile_data` calls when fresh data
- *       is in the tool_knowledge cache, and
+ *       is in the tool_knowledge_cache cache, and
  *   (b) prefer objects it already understands when answering ambiguous
  *       follow-ups.
  *
@@ -11,7 +11,7 @@
  * `limit` rows newest-first. Output is hard-capped at MAX_CHARS so a
  * runaway extraction can never blow the system-anchor budget.
  *
- * Cache-only: this never reads MSSQL. If tool_knowledge is empty the
+ * Cache-only: this never reads MSSQL. If tool_knowledge_cache is empty the
  * block is empty (caller will skip injection).
  */
 
@@ -31,7 +31,7 @@ export interface LoadKnownObjectsOptions {
   goal: string
   priorTurns: readonly PriorTurn[]
   limit?: number
-  /** Scope tool_knowledge to the MSSQL connection this run targets. */
+  /** Scope tool_knowledge_cache to the MSSQL connection this run targets. */
   connection?: string
 }
 
@@ -77,7 +77,7 @@ function extractQnames(text: string): string[] {
 }
 
 /**
- * Returns the freshest tool_knowledge row per qname for the candidate
+ * Returns the freshest tool_knowledge_cache row per qname for the candidate
  * set, newest first. Stale-by-TTL detection lives in
  * lookupToolKnowledge; here we just show what's on disk and let the LLM
  * decide whether to re-run.
@@ -115,7 +115,7 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
       .prepare(
         `
       SELECT qname, tool, mode, bytes, created_at, payload_text
-      FROM tool_knowledge
+      FROM tool_knowledge_cache
       WHERE qname IN (${placeholders}) AND lower(connection) = lower(?)
       ORDER BY created_at DESC
       LIMIT ?
@@ -142,7 +142,7 @@ export function loadKnownObjects(opts: LoadKnownObjectsOptions): KnownObjectRow[
       .prepare(
         `
       SELECT qname, tool, mode, bytes, created_at, payload_text
-      FROM tool_knowledge
+      FROM tool_knowledge_cache
       WHERE lower(connection) = lower(?)
       ORDER BY created_at DESC
       LIMIT ?
@@ -226,7 +226,7 @@ export function renderKnownObjectsBlock(
   if (rows.length > 0) {
     lines.push(
       "These tables/views have already been profiled or inspected by this org",
-      "and the results are cached in tool_knowledge. For qnames listed below",
+      "and the results are cached in tool_knowledge_cache. For qnames listed below",
       "with an inline `cols:` / `fast:` / `definition:` / `rels:` summary,",
       "treat that summary as AUTHORITATIVE \u2014 do NOT re-call `profile_data`,",
       "`inspect_definition`, `explore_mssql_schema`, or `discover_relationships`",

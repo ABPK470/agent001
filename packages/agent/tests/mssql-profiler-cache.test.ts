@@ -1,6 +1,6 @@
 /**
  * profile_data cache integration — verifies that the agent's profiler
- * consults the org-wide tool_knowledge cache before hitting MSSQL, and
+ * consults the org-wide tool_knowledge_cache cache before hitting MSSQL, and
  * persists successful live runs back into the cache.
  *
  * The cache itself is exercised exhaustively in
@@ -60,7 +60,7 @@ describe("profile_data cache integration", () => {
       profiledAt: Date.UTC(2026, 4, 1)
     }))
     const save = vi.fn()
-    const renderHeader = vi.fn(() => "[cached from 2026-05-01, mode=fast, ageHours=1, source=tool_knowledge]")
+    const renderHeader = vi.fn(() => "[cached from 2026-05-01, mode=fast, ageHours=1, source=tool_knowledge_cache]")
     toolKnowledge.lookup = lookup
     toolKnowledge.save = save
     toolKnowledge.renderHeader = renderHeader

@@ -98,7 +98,7 @@ export function registerEvidenceRoutes(app: FastifyInstance, deps: EvidenceRoute
 
 function lookupEvidenceById(id: string): EvidenceIndexRow | null {
   return (
-    (getDb().prepare(`SELECT * FROM sync_evidence WHERE id = ?`).get(id) as EvidenceIndexRow | undefined) ??
+    (getDb().prepare(`SELECT * FROM sync_evidence_log WHERE id = ?`).get(id) as EvidenceIndexRow | undefined) ??
     null
   )
 }

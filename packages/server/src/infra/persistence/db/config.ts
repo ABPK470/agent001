@@ -21,7 +21,7 @@ export function saveLayout(layout: DbLayout): void {
   getDb()
     .prepare(
       `
-    INSERT OR REPLACE INTO layouts (id, name, config, updated_at)
+    INSERT OR REPLACE INTO layout_configs (id, name, config, updated_at)
     VALUES (@id, @name, @config, @updated_at)
   `
     )
@@ -29,15 +29,15 @@ export function saveLayout(layout: DbLayout): void {
 }
 
 export function getLayouts(): DbLayout[] {
-  return getDb().prepare("SELECT * FROM layouts ORDER BY updated_at DESC").all() as DbLayout[]
+  return getDb().prepare("SELECT * FROM layout_configs ORDER BY updated_at DESC").all() as DbLayout[]
 }
 
 export function getLayout(id: string): DbLayout | undefined {
-  return getDb().prepare("SELECT * FROM layouts WHERE id = ?").get(id) as DbLayout | undefined
+  return getDb().prepare("SELECT * FROM layout_configs WHERE id = ?").get(id) as DbLayout | undefined
 }
 
 export function deleteLayout(id: string): void {
-  getDb().prepare("DELETE FROM layouts WHERE id = ?").run(id)
+  getDb().prepare("DELETE FROM layout_configs WHERE id = ?").run(id)
 }
 
 // ── Policy rule queries ──────────────────────────────────────────
@@ -65,14 +65,14 @@ export interface DbPolicyRule {
 }
 
 export function listPolicyRules(): DbPolicyRule[] {
-  return getDb().prepare("SELECT * FROM policy_rules ORDER BY created_at").all() as DbPolicyRule[]
+  return getDb().prepare("SELECT * FROM policy_configs ORDER BY created_at").all() as DbPolicyRule[]
 }
 
 export function savePolicyRule(rule: DbPolicyRule): void {
   getDb()
     .prepare(
       `
-    INSERT OR REPLACE INTO policy_rules (name, effect, condition, parameters, created_at, source, updated_at, updated_by)
+    INSERT OR REPLACE INTO policy_configs (name, effect, condition, parameters, created_at, source, updated_at, updated_by)
     VALUES (@name, @effect, @condition, @parameters, @created_at, @source, @updated_at, @updated_by)
   `
     )
@@ -92,7 +92,7 @@ export function seedPolicyRuleIfMissing(rule: DbPolicyRule): boolean {
   const result = getDb()
     .prepare(
       `
-    INSERT OR IGNORE INTO policy_rules (name, effect, condition, parameters, created_at, source, updated_at, updated_by)
+    INSERT OR IGNORE INTO policy_configs (name, effect, condition, parameters, created_at, source, updated_at, updated_by)
     VALUES (@name, @effect, @condition, @parameters, @created_at, @source, NULL, NULL)
   `
     )
@@ -104,7 +104,7 @@ export function seedPolicyRuleIfMissing(rule: DbPolicyRule): boolean {
 }
 
 export function deletePolicyRule(name: string): void {
-  getDb().prepare("DELETE FROM policy_rules WHERE name = ?").run(name)
+  getDb().prepare("DELETE FROM policy_configs WHERE name = ?").run(name)
 }
 
 // ── Sync-environment override queries ────────────────────────────
@@ -126,12 +126,12 @@ export interface DbSyncEnvironment {
 
 export function listSyncEnvOverrides(): DbSyncEnvOverride[] {
   return getDb()
-    .prepare("SELECT * FROM sync_environment_overrides ORDER BY name")
+    .prepare("SELECT * FROM sync_environment_override_configs ORDER BY name")
     .all() as DbSyncEnvOverride[]
 }
 
 export function getSyncEnvOverride(name: string): DbSyncEnvOverride | undefined {
-  return getDb().prepare("SELECT * FROM sync_environment_overrides WHERE name = ?").get(name) as
+  return getDb().prepare("SELECT * FROM sync_environment_override_configs WHERE name = ?").get(name) as
     | DbSyncEnvOverride
     | undefined
 }
@@ -140,7 +140,7 @@ export function saveSyncEnvOverride(row: DbSyncEnvOverride): void {
   getDb()
     .prepare(
       `
-    INSERT OR REPLACE INTO sync_environment_overrides (name, overrides_json, updated_at, updated_by)
+    INSERT OR REPLACE INTO sync_environment_override_configs (name, overrides_json, updated_at, updated_by)
     VALUES (@name, @overrides_json, @updated_at, @updated_by)
   `
     )
@@ -148,7 +148,7 @@ export function saveSyncEnvOverride(row: DbSyncEnvOverride): void {
 }
 
 export function deleteSyncEnvOverride(name: string): void {
-  getDb().prepare("DELETE FROM sync_environment_overrides WHERE name = ?").run(name)
+  getDb().prepare("DELETE FROM sync_environment_override_configs WHERE name = ?").run(name)
 }
 
 export function countSyncEnvironments(): number {

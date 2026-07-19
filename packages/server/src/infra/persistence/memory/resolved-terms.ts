@@ -1,5 +1,5 @@
 /**
- * resolved_terms — durable, org-wide store of business-term → warehouse-object
+ * resolved_terms_cache — durable, org-wide store of business-term → warehouse-object
  * mappings learned from clarification answers.
  *
  * When a user answers a `schema-match` / `canonical-ambiguity` question with a
@@ -9,7 +9,7 @@
  * which `entity-canonical` consults to suppress re-asking the same subject.
  *
  * Org-wide by design (not upn-filtered on read): "clients = dim.Client" is an
- * objective property of the shared warehouse, mirroring `tool_knowledge`.
+ * objective property of the shared warehouse, mirroring `tool_knowledge_cache`.
  * `created_by_upn` is provenance only. Connection-scoped so multi-DB tenants
  * don't cross-pollute.
  *
@@ -73,7 +73,7 @@ export function saveResolvedTerm(input: ResolvedTermInput): void {
 
   getDb()
     .prepare(
-      `INSERT INTO resolved_terms (term, qname, connection, created_by_upn, created_at, hit_count)
+      `INSERT INTO resolved_terms_cache (term, qname, connection, created_by_upn, created_at, hit_count)
        VALUES (?, ?, ?, ?, ?, 0)
        ON CONFLICT(term, qname, connection) DO UPDATE SET
          created_by_upn = excluded.created_by_upn,
@@ -97,7 +97,7 @@ export function listResolvedTerms(options: ListResolvedTermsOptions = {}): Resol
   const rows = getDb()
     .prepare<unknown[], Row>(
       `SELECT term, qname, connection, created_by_upn, created_at, last_hit_at, hit_count
-         FROM resolved_terms
+         FROM resolved_terms_cache
         WHERE lower(connection) = lower(?)
         ORDER BY created_at DESC`
     )
@@ -123,7 +123,7 @@ export function listResolvedTerms(options: ListResolvedTermsOptions = {}): Resol
   // Bump hit telemetry for the rows we surfaced. Fire-and-forget; non-fatal.
   try {
     const bump = getDb().prepare(
-      `UPDATE resolved_terms
+      `UPDATE resolved_terms_cache
           SET last_hit_at = ?, hit_count = hit_count + 1
         WHERE term = ? AND lower(connection) = lower(?) AND created_at = ?`
     )
@@ -145,6 +145,6 @@ export interface PruneResolvedTermsOptions {
 export function pruneResolvedTerms(opts: PruneResolvedTermsOptions): number {
   const now = opts.now ?? Date.now()
   const cutoff = now - opts.maxAgeMs
-  const info = getDb().prepare(`DELETE FROM resolved_terms WHERE created_at < ?`).run(cutoff)
+  const info = getDb().prepare(`DELETE FROM resolved_terms_cache WHERE created_at < ?`).run(cutoff)
   return typeof info.changes === "number" ? info.changes : 0
 }

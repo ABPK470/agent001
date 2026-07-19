@@ -5,7 +5,7 @@
  * `schema-match` / `canonical-ambiguity` question. The answer is parsed for a
  * `schema.table` qname; when that qname resolves in the live (boot) catalog
  * for the run's effective connection, the mapping `(subject → qname)` is
- * upserted into `resolved_terms` (org-wide, connection-scoped). Free-text
+ * upserted into `resolved_terms_cache` (org-wide, connection-scoped). Free-text
  * answers that don't contain a resolvable qname are ignored — we only learn
  * objective term→table facts, not prose.
  *

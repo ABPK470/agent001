@@ -3,7 +3,7 @@
  *
  * Plan v3 Phase 3.
  *
- * Why: the agent has rich storage surfaces (3-tier memory, tool_knowledge,
+ * Why: the agent has rich storage surfaces (3-tier memory, tool_knowledge_cache,
  * table verdicts) but no convention for capturing the OUTCOME of a
  * discovery run as a re-usable verdict ("publish.Revenue is the canonical
  * revenue source; publish.RevenueESGRules is one of its branches"). Without

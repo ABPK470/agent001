@@ -30,7 +30,7 @@ export interface DbRun {
 
 // IMPORTANT: this is a true upsert (INSERT … ON CONFLICT DO UPDATE), NOT
 // `INSERT OR REPLACE`. With the v14 schema redesign, several child tables
-// (trace_entries, audit_log, logs, notifications, …) FK to runs(id) with
+// (trace_entries, audit_log, run_log, notifications, …) FK to runs(id) with
 // `ON DELETE CASCADE`. `INSERT OR REPLACE` is implemented as DELETE + INSERT
 // in SQLite, so each status update would silently wipe the entire trace,
 // audit log, and stored logs for that run — leaving every UI widget
@@ -526,7 +526,7 @@ export function saveLog(entry: Omit<DbLog, "id">): void {
   getDb()
     .prepare(
       `
-    INSERT INTO logs (run_id, level, message, timestamp)
+    INSERT INTO run_log (run_id, level, message, timestamp)
     VALUES (@run_id, @level, @message, @timestamp)
   `
     )
@@ -536,10 +536,10 @@ export function saveLog(entry: Omit<DbLog, "id">): void {
 export function getLogs(runId: string, level?: string): DbLog[] {
   if (level) {
     return getDb()
-      .prepare("SELECT * FROM logs WHERE run_id = ? AND level = ? ORDER BY timestamp")
+      .prepare("SELECT * FROM run_log WHERE run_id = ? AND level = ? ORDER BY timestamp")
       .all(runId, level) as DbLog[]
   }
-  return getDb().prepare("SELECT * FROM logs WHERE run_id = ? ORDER BY timestamp").all(runId) as DbLog[]
+  return getDb().prepare("SELECT * FROM run_log WHERE run_id = ? ORDER BY timestamp").all(runId) as DbLog[]
 }
 
 // ── Trace entry queries ──────────────────────────────────────────

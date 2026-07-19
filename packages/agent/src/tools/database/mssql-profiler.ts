@@ -648,7 +648,7 @@ function buildProfileDataTool(host: AgentHost, run?: RunContext): Tool {
 
       // ── Cache: serve fresh results without touching MSSQL ───────────
       //
-      // The org-wide tool_knowledge cache is checked BEFORE the scan-guard
+      // The org-wide tool_knowledge_cache cache is checked BEFORE the scan-guard
       // and pool acquire: a cached deep profile is just as valid (and far
       // faster) as a live one. A hit also satisfies the validator's "must
       // profile big views before querying" rule because the agent receives

@@ -6,7 +6,7 @@
  *
  * Responsibilities:
  *   1. {@link seedDefaultPoliciesIfMissing} — on server boot, write the
- *      hosted-default and per-env-derived rule sets into `policy_rules`
+ *      hosted-default and per-env-derived rule sets into `policy_configs`
  *      with provenance (`source = 'hosted_default' | 'env_derived'`) so
  *      the admin UI can list them, and the operator can edit/delete them
  *      via the existing `/api/policies` endpoints. Rules are seeded only
@@ -27,7 +27,7 @@ import { hostedDefaultPolicyRules, policyRulesFromEnvironments } from "../types/
 // ── Policy rule seeding ──────────────────────────────────────────
 
 /**
- * Insert hosted-default + per-env-derived rules into `policy_rules`
+ * Insert hosted-default + per-env-derived rules into `policy_configs`
  * for any rule names that don't already exist. Returns counts.
  *
  * Call once at server startup AFTER the persisted env registry is loaded

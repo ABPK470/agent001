@@ -69,7 +69,7 @@ function bootDeps(): BootHostDeps {
   const instances = new Map<string, CatalogGraph>([["default", fixtureCatalog()]])
   return {
     mssql: { databases: databases as never, defaultConnection: { value: null } },
-    catalog: { instances }
+    catalog: { instances, defaultCachePath: { value: undefined } }
   }
 }
 

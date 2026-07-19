@@ -25,7 +25,7 @@ export const DisclosureCategory = {
   /** DB schema names, storage paths, env-var names. */
   Infrastructure: "infrastructure",
   /** Agent definition ids, internal agent descriptions, tool whitelists. */
-  AgentDefinitions: "agent_definitions"
+  AgentDefinitions: "agent_configs"
 } as const
 
 export type DisclosureCategory = (typeof DisclosureCategory)[keyof typeof DisclosureCategory]

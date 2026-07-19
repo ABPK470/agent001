@@ -4,11 +4,11 @@
 
 import { getDb } from "../connection.js"
 
-// ── Data reset (preserve policies + layouts) ─────────────────────
+// ── Data reset (preserve policies + layout_configs) ─────────────────────
 
 export function clearTransactionalData(): void {
   const db = getDb()
-  // Deleting runs cascades to audit_log, checkpoints, logs, token_usage,
+  // Deleting runs cascades to audit_log, checkpoints, run_log, token_usage,
   // trace_entries, notifications (where run-scoped), effects, file_snapshots,
   // attachment_imports, and attachments owned by those runs.
   db.exec(`DELETE FROM runs;`)
@@ -16,7 +16,7 @@ export function clearTransactionalData(): void {
   // wipe them explicitly so the inbox is empty after reset.
   db.exec(`DELETE FROM notifications;`)
   try {
-    db.exec("DELETE FROM api_requests")
+    db.exec("DELETE FROM api_request_log")
   } catch {
     /* table may not exist yet */
   }
@@ -25,13 +25,13 @@ export function clearTransactionalData(): void {
 // ── Data lifecycle / pruning ─────────────────────────────────────
 
 /**
- * Prune transient observability rows (api_requests, notifications,
+ * Prune transient observability rows (api_request_log, notifications,
  * event_log) to keep the SQLite file from growing without bound.
  *
  * **Runs are NEVER pruned implicitly.** They represent user work
  * (goals + their trace, audit, attachments) and are the durable record
  * a user expects to find when they log back in. Deleting a run also
- * cascade-deletes its audit_log / checkpoints / logs / token_usage /
+ * cascade-deletes its audit_log / checkpoints / run_log / token_usage /
  * trace_entries / effects / file_snapshots / attachment_imports /
  * notifications rows, which is too destructive to do on a schedule.
  *
@@ -87,8 +87,8 @@ export function pruneOldData(opts?: {
   const apiResult = db
     .prepare(
       `
-    DELETE FROM api_requests WHERE id NOT IN (
-      SELECT id FROM api_requests ORDER BY created_at DESC LIMIT ?
+    DELETE FROM api_request_log WHERE id NOT IN (
+      SELECT id FROM api_request_log ORDER BY created_at DESC LIMIT ?
     )
   `
     )
@@ -138,16 +138,16 @@ export function getDbStats(): Record<string, number> {
   const tables = [
     "runs",
     "audit_log",
-    "logs",
+    "run_log",
     "trace_entries",
     "token_usage",
     "checkpoints",
     "effects",
     "file_snapshots",
     "notifications",
-    "api_requests",
+    "api_request_log",
     "event_log",
-    "webhook_drains"
+    "webhook_drain_configs"
   ] as const
   const stats: Record<string, number> = {}
   for (const t of tables) {

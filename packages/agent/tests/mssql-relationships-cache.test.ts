@@ -1,7 +1,7 @@
 /**
  * discover_relationships cache integration — verifies all four modes
  * (table / between / schema / column) consult the org-wide
- * tool_knowledge cache before traversing the FK graph and persist on a
+ * tool_knowledge_cache cache before traversing the FK graph and persist on a
  * successful live run.
  *
  * Cache keys (mode-specific):
@@ -60,7 +60,7 @@ describe("discover_relationships cache integration", () => {
       profiledAt: 0
     }))
     toolKnowledge.lookup = lookup
-    toolKnowledge.renderHeader = () => "[cached from 2026-05-01, mode=fk, ageHours=1, source=tool_knowledge]"
+    toolKnowledge.renderHeader = () => "[cached from 2026-05-01, mode=fk, ageHours=1, source=tool_knowledge_cache]"
     toolKnowledge.save = vi.fn()
 
     const out = (await discoverRelationshipsTool.execute({ table: "dim.Date" })) as string

@@ -97,7 +97,7 @@ function normalizeEntityTable(t: EntityDefinition["tables"][number]): EntityDefi
 // - scd2.strategyId + scd2.strategyVersion → resolveScd2Strategy
 //                                            (tenant → _default → bundled)
 // - policies.freezeWindowIds[]            → in-process registry (which
-//                                            mirrors freeze_windows DB)
+//                                            mirrors freeze_window_configs DB)
 function validateEntityReferences(tenantId: string, def: EntityDefinition): ValidationResult {
   const errors: ValidationResult["errors"] = []
   const warnings: ValidationResult["warnings"] = []
@@ -113,7 +113,7 @@ function validateEntityReferences(tenantId: string, def: EntityDefinition): Vali
   }
 
   // freeze windows: every referenced id must be in the in-process
-  // registry (which mirrors the freeze_windows DB table for _default).
+  // registry (which mirrors the freeze_window_configs DB table for _default).
   if (def.policies.freezeWindowIds.length > 0) {
     const reg = listFreezeWindowIdsForGate()
     for (const fwId of def.policies.freezeWindowIds) {

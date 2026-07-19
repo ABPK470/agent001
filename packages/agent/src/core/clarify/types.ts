@@ -152,7 +152,7 @@ export interface ClarifyContext {
   /**
    * Durable term→table mappings the org has already learned from prior
    * clarification answers (lowercase business noun → qualified table).
-   * Hydrated at run start from the `resolved_terms` store by `law-sections`
+   * Hydrated at run start from the `resolved_terms_cache` store by `law-sections`
    * and consulted by `entity-canonical` so a subject the org already
    * resolved does not trigger a fresh `ask_user`. Only mappings whose
    * qname resolves in the live catalog are included (stale ones are

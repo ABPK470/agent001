@@ -3,7 +3,7 @@
  *
  * Lightweight zero-dependency cron-style scheduler:
  *  - tick every `tickMs` (default 30s)
- *  - for each enabled `proposer_schedule` row whose `next_run_at` is due,
+ *  - for each enabled `proposer_schedule_configs` row whose `next_run_at` is due,
  *    invoke `runProposer()` exactly once
  *  - guarantee "at most one pass per (tenant, source→target) at any time"
  *    via an in-memory mutex set
@@ -176,7 +176,7 @@ function resolveLlm(
 
 export function listDueSchedules(now: Date): ProposerScheduleRow[] {
   const all = getDb()
-    .prepare(`SELECT * FROM proposer_schedule WHERE enabled = 1`)
+    .prepare(`SELECT * FROM proposer_schedule_configs WHERE enabled = 1`)
     .all() as ProposerScheduleRow[]
   return all.filter((s) => isDue(s, now))
 }
@@ -197,7 +197,7 @@ function persistScheduleAdvance(s: ProposerScheduleRow): void {
   getDb()
     .prepare(
       `
-    UPDATE proposer_schedule
+    UPDATE proposer_schedule_configs
        SET last_run_at = ?, next_run_at = ?
      WHERE tenant_id = ? AND source = ? AND target = ?
   `
@@ -219,7 +219,7 @@ export function upsertSchedule(i: UpsertScheduleInput): ProposerScheduleRow {
   getDb()
     .prepare(
       `
-    INSERT INTO proposer_schedule (tenant_id, source, target, cron, enabled, next_run_at, updated_at, updated_by)
+    INSERT INTO proposer_schedule_configs (tenant_id, source, target, cron, enabled, next_run_at, updated_at, updated_by)
     VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
     ON CONFLICT(tenant_id, source, target) DO UPDATE SET
       cron        = excluded.cron,
@@ -231,19 +231,19 @@ export function upsertSchedule(i: UpsertScheduleInput): ProposerScheduleRow {
     )
     .run(i.tenantId, i.source, i.target, i.cron, i.enabled ? 1 : 0, next ? next.toISOString() : null, i.actor)
   return getDb()
-    .prepare(`SELECT * FROM proposer_schedule WHERE tenant_id = ? AND source = ? AND target = ?`)
+    .prepare(`SELECT * FROM proposer_schedule_configs WHERE tenant_id = ? AND source = ? AND target = ?`)
     .get(i.tenantId, i.source, i.target) as ProposerScheduleRow
 }
 
 export function listSchedules(tenantId: string): ProposerScheduleRow[] {
   return getDb()
-    .prepare(`SELECT * FROM proposer_schedule WHERE tenant_id = ? ORDER BY source, target`)
+    .prepare(`SELECT * FROM proposer_schedule_configs WHERE tenant_id = ? ORDER BY source, target`)
     .all(tenantId) as ProposerScheduleRow[]
 }
 
 export function deleteSchedule(tenantId: string, source: string, target: string): void {
   getDb()
-    .prepare(`DELETE FROM proposer_schedule WHERE tenant_id = ? AND source = ? AND target = ?`)
+    .prepare(`DELETE FROM proposer_schedule_configs WHERE tenant_id = ? AND source = ? AND target = ?`)
     .run(tenantId, source, target)
 }
 

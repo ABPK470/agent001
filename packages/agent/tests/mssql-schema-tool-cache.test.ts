@@ -2,7 +2,7 @@
  * explore_mssql_schema cache integration (Gap 1).
  *
  * Verifies that:
- *   - table='schema.X' consults `tool_knowledge` BEFORE hitting MSSQL.
+ *   - table='schema.X' consults `tool_knowledge_cache` BEFORE hitting MSSQL.
  *   - On a hit (own bucket) the cached payload + header is returned.
  *   - On a miss, the profile_data fast cache is cross-served (with a
  *     small banner) so the FIRST run's profile_data also satisfies the
@@ -72,7 +72,7 @@ describe("explore_mssql_schema cache integration (Gap 1)", () => {
     toolKnowledge.lookup = lookup
     toolKnowledge.save = vi.fn()
     toolKnowledge.renderHeader = () =>
-      "[cached from 2026-05-22, mode=columns, ageHours=1, source=tool_knowledge]"
+      "[cached from 2026-05-22, mode=columns, ageHours=1, source=tool_knowledge_cache]"
 
     const out = (await mssqlSchemaTool.execute({ table: "publish.Revenue" })) as string
     expect(out).toMatch(/^\[cached from 2026-05-22.*mode=columns/)

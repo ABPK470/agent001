@@ -62,10 +62,10 @@ const BASELINE_SQL = `
     );
     CREATE INDEX IF NOT EXISTS idx_threads_upn_updated ON threads(upn, updated_at DESC);
 
-    -- ── agent_definitions ────────────────────────────────────────
+    -- ── agent_configs ────────────────────────────────────────
     -- The 'tools' column has been dropped: tools are always resolved from
     -- ALL_TOOLS in code, never from the DB.
-    CREATE TABLE IF NOT EXISTS agent_definitions (
+    CREATE TABLE IF NOT EXISTS agent_configs (
       id            TEXT PRIMARY KEY,
       name          TEXT NOT NULL UNIQUE,
       description   TEXT NOT NULL DEFAULT '',
@@ -87,7 +87,7 @@ const BASELINE_SQL = `
       step_count     INTEGER NOT NULL DEFAULT 0,
       error          TEXT,
       parent_run_id  TEXT REFERENCES runs(id) ON DELETE SET NULL,
-      agent_id       TEXT REFERENCES agent_definitions(id) ON DELETE SET NULL,
+      agent_id       TEXT REFERENCES agent_configs(id) ON DELETE SET NULL,
       thread_id      TEXT REFERENCES threads(id) ON DELETE SET NULL,
       upn            TEXT NOT NULL REFERENCES users(upn) ON DELETE CASCADE,
       display_name   TEXT NOT NULL,
@@ -119,14 +119,14 @@ const BASELINE_SQL = `
       updated_at   TEXT NOT NULL
     );
 
-    CREATE TABLE IF NOT EXISTS logs (
+    CREATE TABLE IF NOT EXISTS run_log (
       id        INTEGER PRIMARY KEY AUTOINCREMENT,
       run_id    TEXT NOT NULL REFERENCES runs(id) ON DELETE CASCADE,
       level     TEXT NOT NULL DEFAULT 'info',
       message   TEXT NOT NULL,
       timestamp TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_logs_run ON logs(run_id);
+    CREATE INDEX IF NOT EXISTS idx_run_log_run ON run_log(run_id);
 
     CREATE TABLE IF NOT EXISTS token_usage (
       run_id            TEXT PRIMARY KEY REFERENCES runs(id) ON DELETE CASCADE,
@@ -227,7 +227,7 @@ const BASELINE_SQL = `
       ON agent_messages(reply_to);
 
     -- ── Layouts (UI widget arrangements; not user-scoped) ────────
-    CREATE TABLE IF NOT EXISTS layouts (
+    CREATE TABLE IF NOT EXISTS layout_configs (
       id         TEXT PRIMARY KEY,
       name       TEXT NOT NULL,
       config     TEXT NOT NULL,
@@ -235,7 +235,7 @@ const BASELINE_SQL = `
     );
 
     -- ── Policy rules (governance) ────────────────────────────────
-    CREATE TABLE IF NOT EXISTS policy_rules (
+    CREATE TABLE IF NOT EXISTS policy_configs (
       name       TEXT PRIMARY KEY,
       effect     TEXT NOT NULL
         CHECK (effect IN ('allow','require_approval','deny')),
@@ -321,7 +321,7 @@ const BASELINE_SQL = `
     CREATE INDEX IF NOT EXISTS idx_sync_sql_log_time    ON sync_sql_log(created_at DESC);
 
     -- ── Sync-environment overrides (admin-editable on top of JSON) ──
-    CREATE TABLE IF NOT EXISTS sync_environment_overrides (
+    CREATE TABLE IF NOT EXISTS sync_environment_override_configs (
       name           TEXT PRIMARY KEY,
       overrides_json TEXT NOT NULL DEFAULT '{}',
       updated_at     TEXT NOT NULL,
@@ -561,7 +561,7 @@ const BASELINE_SQL = `
     -- applies to every authenticated tenant (admin-managed).
     -- owner_upn nullable here on purpose: NULL = admin-defined global rule
     -- that applies to every authenticated user.
-    CREATE TABLE IF NOT EXISTS browser_domain_policy (
+    CREATE TABLE IF NOT EXISTS browser_domain_policy_configs (
       id          TEXT PRIMARY KEY,
       owner_upn   TEXT REFERENCES users(upn) ON DELETE CASCADE,
       pattern     TEXT NOT NULL,
@@ -569,7 +569,7 @@ const BASELINE_SQL = `
       reason      TEXT NOT NULL DEFAULT '',
       created_at  TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    CREATE INDEX IF NOT EXISTS idx_browser_policy_owner ON browser_domain_policy(owner_upn);
+    CREATE INDEX IF NOT EXISTS idx_browser_policy_owner ON browser_domain_policy_configs(owner_upn);
 
     -- ── Browser audit log ────────────────────────────────────────
     -- Every navigation, search, credential use, and handoff is appended
@@ -746,7 +746,7 @@ const BASELINE_SQL = `
     -- One row per (tenant, target_env, risk_tier). policy is one of
     -- 'none' (no human required), 'single' (1 approver, not self),
     -- 'dual' (2 approvers, both ≠ requester and ≠ each other).
-    CREATE TABLE IF NOT EXISTS approval_policies (
+    CREATE TABLE IF NOT EXISTS approval_configs (
       tenant_id    TEXT NOT NULL,
       target_env   TEXT NOT NULL,
       risk_tier    TEXT NOT NULL CHECK (risk_tier IN ('low','medium','high','critical')),
@@ -809,7 +809,7 @@ const BASELINE_SQL = `
     -- signature_alg let the verifier route requests to the right
     -- signer (HMAC/FILE-RSA/KMS). content_hash is the SHA-256 of the
     -- canonical JSON envelope (signature stripped).
-    CREATE TABLE IF NOT EXISTS sync_evidence (
+    CREATE TABLE IF NOT EXISTS sync_evidence_log (
       id             TEXT PRIMARY KEY,
       tenant_id      TEXT NOT NULL,
       plan_id        TEXT NOT NULL,
@@ -822,11 +822,11 @@ const BASELINE_SQL = `
       signature      TEXT NOT NULL,
       created_at     TEXT NOT NULL DEFAULT (datetime('now'))
     );
-    CREATE INDEX IF NOT EXISTS idx_sync_evidence_plan
-      ON sync_evidence(tenant_id, plan_id);
+    CREATE INDEX IF NOT EXISTS idx_sync_evidence_log_plan
+      ON sync_evidence_log(tenant_id, plan_id);
 
     -- ── Notification routes + delivery log ──────────────────────
-    CREATE TABLE IF NOT EXISTS notification_routes (
+    CREATE TABLE IF NOT EXISTS notification_route_configs (
       id            TEXT PRIMARY KEY,
       tenant_id     TEXT NOT NULL,
       event_type    TEXT NOT NULL,
@@ -837,12 +837,12 @@ const BASELINE_SQL = `
       updated_at    TEXT NOT NULL DEFAULT (datetime('now')),
       updated_by    TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_notification_routes_ev
-      ON notification_routes(tenant_id, event_type, enabled);
+    CREATE INDEX IF NOT EXISTS idx_notification_route_configs_ev
+      ON notification_route_configs(tenant_id, event_type, enabled);
 
     CREATE TABLE IF NOT EXISTS notification_log (
       id            INTEGER PRIMARY KEY AUTOINCREMENT,
-      route_id      TEXT REFERENCES notification_routes(id) ON DELETE SET NULL,
+      route_id      TEXT REFERENCES notification_route_configs(id) ON DELETE SET NULL,
       event_type    TEXT NOT NULL,
       channel       TEXT NOT NULL,
       target        TEXT NOT NULL,
@@ -862,7 +862,7 @@ const BASELINE_SQL = `
     -- end exclusive. Mirror is pushed into the agent's in-process
     -- registry by refreshFreezeWindowRegistry() at boot and on
     -- every upsert/delete.
-    CREATE TABLE IF NOT EXISTS freeze_windows (
+    CREATE TABLE IF NOT EXISTS freeze_window_configs (
       tenant_id    TEXT NOT NULL,
       id           TEXT NOT NULL,
       display_name TEXT NOT NULL,
@@ -875,11 +875,11 @@ const BASELINE_SQL = `
       PRIMARY KEY (tenant_id, id),
       CHECK (datetime(ends_at) > datetime(starts_at))
     );
-    CREATE INDEX IF NOT EXISTS idx_freeze_windows_tenant_starts
-      ON freeze_windows(tenant_id, starts_at);
+    CREATE INDEX IF NOT EXISTS idx_freeze_window_configs_tenant_starts
+      ON freeze_window_configs(tenant_id, starts_at);
 
     -- ── Proposer schedule (per env-pair) ────────────────────────
-    CREATE TABLE IF NOT EXISTS proposer_schedule (
+    CREATE TABLE IF NOT EXISTS proposer_schedule_configs (
       tenant_id     TEXT NOT NULL,
       source        TEXT NOT NULL,
       target        TEXT NOT NULL,
@@ -910,7 +910,7 @@ const BASELINE_SQL = `
     CREATE INDEX IF NOT EXISTS idx_notifications_owner    ON notifications(owner_upn, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_notifications_run      ON notifications(run_id);
 
-    CREATE TABLE IF NOT EXISTS api_requests (
+    CREATE TABLE IF NOT EXISTS api_request_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       method TEXT NOT NULL,
       url TEXT NOT NULL,
@@ -920,7 +920,7 @@ const BASELINE_SQL = `
       response_summary TEXT,
       created_at TEXT NOT NULL
     );
-    CREATE INDEX IF NOT EXISTS idx_api_requests_time ON api_requests(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_api_request_log_time ON api_request_log(created_at DESC);
 
     CREATE TABLE IF NOT EXISTS event_log (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -931,7 +931,7 @@ const BASELINE_SQL = `
     CREATE INDEX IF NOT EXISTS idx_event_log_time ON event_log(created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_event_log_type ON event_log(type);
 
-    CREATE TABLE IF NOT EXISTS webhook_drains (
+    CREATE TABLE IF NOT EXISTS webhook_drain_configs (
       id TEXT PRIMARY KEY,
       url TEXT NOT NULL,
       secret TEXT NOT NULL DEFAULT '',
@@ -1029,7 +1029,7 @@ const BASELINE_SQL = `
     CREATE INDEX IF NOT EXISTS idx_mv_upn    ON memory_vectors(upn);
     CREATE INDEX IF NOT EXISTS idx_mv_shared ON memory_vectors(shared);
 
-    CREATE TABLE IF NOT EXISTS tool_knowledge (
+    CREATE TABLE IF NOT EXISTS tool_knowledge_cache (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
       tool            TEXT NOT NULL,
       qname           TEXT NOT NULL,
@@ -1044,11 +1044,11 @@ const BASELINE_SQL = `
       hit_count       INTEGER NOT NULL DEFAULT 0,
       UNIQUE(tool, qname, mode, connection)
     );
-    CREATE INDEX IF NOT EXISTS idx_tk_lookup  ON tool_knowledge(tool, qname);
-    CREATE INDEX IF NOT EXISTS idx_tk_created ON tool_knowledge(created_at);
+    CREATE INDEX IF NOT EXISTS idx_tk_lookup  ON tool_knowledge_cache(tool, qname);
+    CREATE INDEX IF NOT EXISTS idx_tk_created ON tool_knowledge_cache(created_at);
 
     -- Durable store for clarification resolutions (business-term → warehouse-object mappings).
-    CREATE TABLE IF NOT EXISTS resolved_terms (
+    CREATE TABLE IF NOT EXISTS resolved_terms_cache (
       id              INTEGER PRIMARY KEY AUTOINCREMENT,
       term            TEXT NOT NULL,
       qname           TEXT NOT NULL,
@@ -1059,9 +1059,9 @@ const BASELINE_SQL = `
       hit_count       INTEGER NOT NULL DEFAULT 0,
       UNIQUE(term, qname, connection)
     );
-    CREATE INDEX IF NOT EXISTS idx_rt_term       ON resolved_terms(term);
-    CREATE INDEX IF NOT EXISTS idx_rt_conn       ON resolved_terms(connection);
-    CREATE INDEX IF NOT EXISTS idx_rt_created    ON resolved_terms(created_at DESC);
+    CREATE INDEX IF NOT EXISTS idx_rt_term       ON resolved_terms_cache(term);
+    CREATE INDEX IF NOT EXISTS idx_rt_conn       ON resolved_terms_cache(connection);
+    CREATE INDEX IF NOT EXISTS idx_rt_created    ON resolved_terms_cache(created_at DESC);
 
     CREATE TABLE IF NOT EXISTS effects (
       id         TEXT PRIMARY KEY,

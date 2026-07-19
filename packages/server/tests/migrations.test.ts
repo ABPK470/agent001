@@ -66,7 +66,7 @@ describe("runMigrations", () => {
   it("_migrate runs migrations and seeds", () => {
     _migrate(testDb)
 
-    expect(testDb.prepare("SELECT id FROM agent_definitions WHERE id='default'").get()).toBeTruthy()
+    expect(testDb.prepare("SELECT id FROM agent_configs WHERE id='default'").get()).toBeTruthy()
     expect(testDb.prepare("SELECT name FROM sqlite_master WHERE name='notifications'").get()).toBeTruthy()
   })
 })

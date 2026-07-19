@@ -160,7 +160,7 @@ Streams full result sets to disk when the user wants a file — avoids copying t
 | Cache | Keyed by | Invalidates when |
 |---|---|---|
 | Catalog disk JSON | Connection + file mtime | `refresh=true`, max age, schema version bump |
-| Tool-knowledge (`tool_knowledge` table) | Tool + object + mode + column fingerprint | Column set/type change, catalog graph size change |
+| Tool-knowledge (`tool_knowledge_cache` table) | Tool + object + mode + column fingerprint | Column set/type change, catalog graph size change |
 | `explore_mssql_schema` | Table qname + columns | Same fingerprint as profiler |
 | `discover_relationships` | Table / path / schema / column mode | Catalog topology change |
 

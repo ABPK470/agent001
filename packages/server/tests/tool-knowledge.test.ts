@@ -1,5 +1,5 @@
 /**
- * Tests for the tool_knowledge org-wide cache helper.
+ * Tests for the tool_knowledge_cache org-wide cache helper.
  *
  * Uses the same in-memory SQLite + `_setDb` pattern as
  * memory-ingest-note.test.ts. The cache is org-wide (no upn filter on reads);
@@ -42,7 +42,7 @@ async function setupMemory() {
 const FP_A = { cols: 5, type: "T" as const, csum: "deadbeef" }
 const FP_B = { cols: 5, type: "T" as const, csum: "cafebabe" }
 
-describe("tool_knowledge — save + lookup", () => {
+describe("tool_knowledge_cache — save + lookup", () => {
   it("returns miss when nothing has been written", async () => {
     const mem = await setupMemory()
     const r = mem.lookupToolKnowledge({
@@ -99,7 +99,7 @@ describe("tool_knowledge — save + lookup", () => {
       now: 2_000
     })
     const rows = testDb
-      .prepare(`SELECT COUNT(*) AS n FROM tool_knowledge WHERE tool='profile_data' AND qname='publish.X'`)
+      .prepare(`SELECT COUNT(*) AS n FROM tool_knowledge_cache WHERE tool='profile_data' AND qname='publish.X'`)
       .get() as { n: number }
     expect(rows.n).toBe(1)
 
@@ -241,7 +241,7 @@ describe("tool_knowledge — save + lookup", () => {
       now: 3_000
     })
     const row = testDb
-      .prepare(`SELECT hit_count, last_hit_at FROM tool_knowledge WHERE qname='publish.H'`)
+      .prepare(`SELECT hit_count, last_hit_at FROM tool_knowledge_cache WHERE qname='publish.H'`)
       .get() as { hit_count: number; last_hit_at: number }
     expect(row.hit_count).toBe(2)
     expect(row.last_hit_at).toBe(3_000)
@@ -274,7 +274,7 @@ describe("tool_knowledge — save + lookup", () => {
   })
 })
 
-describe("tool_knowledge — fingerprint helper", () => {
+describe("tool_knowledge_cache — fingerprint helper", () => {
   it("returns null when the catalog has no entry for the object", async () => {
     const mem = await setupMemory()
     expect(mem.fingerprintFromCatalogTable(null)).toBeNull()
@@ -327,7 +327,7 @@ describe("tool_knowledge — fingerprint helper", () => {
   })
 })
 
-describe("tool_knowledge — TTL config", () => {
+describe("tool_knowledge_cache — TTL config", () => {
   it("returns the right TTL per tool/mode and falls back to default", async () => {
     const mem = await setupMemory()
     const DAY = 24 * 60 * 60 * 1000
@@ -339,7 +339,7 @@ describe("tool_knowledge — TTL config", () => {
   })
 })
 
-describe("tool_knowledge — prune", () => {
+describe("tool_knowledge_cache — prune", () => {
   it("removes rows older than maxAgeMs", async () => {
     const mem = await setupMemory()
     mem.saveToolKnowledge({
@@ -360,15 +360,15 @@ describe("tool_knowledge — prune", () => {
     })
     const removed = mem.pruneToolKnowledge({ maxAgeMs: 50_000, now: 100_000 })
     expect(removed).toBe(1)
-    const rows = testDb.prepare(`SELECT qname FROM tool_knowledge ORDER BY qname`).all() as Array<{
+    const rows = testDb.prepare(`SELECT qname FROM tool_knowledge_cache ORDER BY qname`).all() as Array<{
       qname: string
     }>
     expect(rows.map((r) => r.qname)).toEqual(["publish.New"])
   })
 })
 
-describe("tool_knowledge — renderCachedHeader", () => {
-  it("renders a stable [cached from DATE, mode=X, ageHours=Y, source=tool_knowledge] header", async () => {
+describe("tool_knowledge_cache — renderCachedHeader", () => {
+  it("renders a stable [cached from DATE, mode=X, ageHours=Y, source=tool_knowledge_cache] header", async () => {
     const mem = await setupMemory()
     const profiledAt = Date.UTC(2026, 4, 1) // 2026-05-01
     const now = profiledAt + 3 * 60 * 60 * 1000 // +3h
@@ -383,6 +383,6 @@ describe("tool_knowledge — renderCachedHeader", () => {
       },
       { tool: "profile_data", mode: "fast" }
     )
-    expect(header).toBe("[cached from 2026-05-01, mode=fast, ageHours=3, source=tool_knowledge]")
+    expect(header).toBe("[cached from 2026-05-01, mode=fast, ageHours=3, source=tool_knowledge_cache]")
   })
 })

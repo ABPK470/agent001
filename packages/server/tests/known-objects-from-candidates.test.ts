@@ -174,7 +174,7 @@ describe("renderKnownObjectsBlock — with verdicts", () => {
     expect(block).toMatch(/^<known_objects>/)
     expect(block).toContain("DURABLE TABLE VERDICTS")
     expect(block).toContain("publish.Revenue | canonical | 59-branch UNION")
-    expect(block).not.toContain("tool_knowledge")
+    expect(block).not.toContain("tool_knowledge_cache")
     expect(block).toMatch(/<\/known_objects>$/)
   })
 

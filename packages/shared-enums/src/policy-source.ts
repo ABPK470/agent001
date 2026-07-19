@@ -1,5 +1,5 @@
 /**
- * PolicySource — provenance for a `policy_rules` row.
+ * PolicySource — provenance for a `policy_configs` row.
  *
  * Wire-format: server returns it in `/api/policy/*` payloads; UI policy
  * editor compares with `===` to render source badges.

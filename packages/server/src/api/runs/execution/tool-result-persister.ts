@@ -25,7 +25,7 @@ import { MemoryRole, MemorySource, MemoryTier } from "../../../internal/enums/me
  * `query_mssql` / `export_query_to_file` are the primary motivators (they
  * are the source of the "chart-from-prose" hallucination). Catalog / profile
  * tools are intentionally EXCLUDED because they are already mirrored into
- * `tool_knowledge` with semantic indexing.
+ * `tool_knowledge_cache` with semantic indexing.
  */
 const CAPTURED_TOOLS = new Set<string>(["query_mssql", "export_query_to_file"])
 

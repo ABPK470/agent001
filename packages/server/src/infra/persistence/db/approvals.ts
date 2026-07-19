@@ -1,7 +1,7 @@
 /**
  * F1.7 — Approval workflow: persistence + HMAC tokens + plan-drift guard.
  *
- *   approval_policies     per (tenant, target_env, risk_tier) → none/single/dual
+ *   approval_configs     per (tenant, target_env, risk_tier) → none/single/dual
  *   sync_approvals        per proposal: state-machine + audit columns
  *   sync_approval_tokens  one-click HMAC URLs (stored hashed)
  *
@@ -52,7 +52,7 @@ export function upsertApprovalPolicy(p: ApprovalPolicy, actor: string): void {
   getDb()
     .prepare(
       `
-    INSERT INTO approval_policies (tenant_id, target_env, risk_tier, policy, approvers_json, bypass_role, updated_at, updated_by)
+    INSERT INTO approval_configs (tenant_id, target_env, risk_tier, policy, approvers_json, bypass_role, updated_at, updated_by)
     VALUES (?, ?, ?, ?, ?, ?, datetime('now'), ?)
     ON CONFLICT(tenant_id, target_env, risk_tier) DO UPDATE SET
       policy         = excluded.policy,
@@ -69,7 +69,7 @@ export function getApprovalPolicy(tenantId: string, targetEnv: string, tier: Ris
   const row = getDb()
     .prepare(
       `
-    SELECT * FROM approval_policies
+    SELECT * FROM approval_configs
      WHERE tenant_id = ? AND target_env = ? AND risk_tier = ?
   `
     )
@@ -100,7 +100,7 @@ export function getApprovalPolicy(tenantId: string, targetEnv: string, tier: Ris
 
 export function listApprovalPolicies(tenantId: string): ApprovalPolicy[] {
   const rows = getDb()
-    .prepare(`SELECT * FROM approval_policies WHERE tenant_id = ? ORDER BY target_env, risk_tier`)
+    .prepare(`SELECT * FROM approval_configs WHERE tenant_id = ? ORDER BY target_env, risk_tier`)
     .all(tenantId) as ApprovalPolicyRow[]
   return rows.map((row) => ({
     tenantId: row.tenant_id,
@@ -119,7 +119,7 @@ export function deleteApprovalPolicy(
 ): boolean {
   const r = getDb()
     .prepare(
-      `DELETE FROM approval_policies WHERE tenant_id = ? AND target_env = ? AND risk_tier = ?`
+      `DELETE FROM approval_configs WHERE tenant_id = ? AND target_env = ? AND risk_tier = ?`
     )
     .run(tenantId, targetEnv, riskTier)
   return r.changes > 0

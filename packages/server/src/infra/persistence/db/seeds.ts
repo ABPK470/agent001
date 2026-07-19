@@ -43,11 +43,11 @@ export function runSeeds(db: Database.Database, projectRoot = REPO_ROOT): void {
 
   const seededDefaultSha = createHash("sha1").update(DEFAULT_SYSTEM_PROMPT).digest("hex").slice(0, 8)
   const previousDefault = db
-    .prepare("SELECT system_prompt FROM agent_definitions WHERE id = 'default'")
+    .prepare("SELECT system_prompt FROM agent_configs WHERE id = 'default'")
     .get() as { system_prompt: string } | undefined
   db.prepare(
     `
-    INSERT INTO agent_definitions (id, name, description, system_prompt, created_at, updated_at)
+    INSERT INTO agent_configs (id, name, description, system_prompt, created_at, updated_at)
     VALUES (?, ?, ?, ?, datetime('now'), datetime('now'))
     ON CONFLICT(id) DO UPDATE SET
       system_prompt = excluded.system_prompt,
@@ -105,7 +105,7 @@ export function runSeeds(db: Database.Database, projectRoot = REPO_ROOT): void {
     }
   ]
   const insertPolicy = db.prepare(`
-    INSERT OR IGNORE INTO policy_rules (name, effect, condition, parameters, created_at)
+    INSERT OR IGNORE INTO policy_configs (name, effect, condition, parameters, created_at)
     VALUES (@name, @effect, @condition, @parameters, datetime('now'))
   `)
   for (const p of seedPolicies) insertPolicy.run(p)

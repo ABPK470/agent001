@@ -1,7 +1,7 @@
 /**
  * F1.10 — Notification delivery routing + persistence.
  *
- * Routes are stored in `notification_routes`; deliveries are logged in
+ * Routes are stored in `notification_route_configs`; deliveries are logged in
  * `notification_log`. Each delivery is attempted up to `MAX_ATTEMPTS`
  * times with exponential backoff; on terminal failure the row is left
  * in `dlq` for an operator to inspect / replay.
@@ -88,7 +88,7 @@ export function listMatchingRoutes(ev: DispatchEvent): NotificationRoute[] {
   const rows = getDb()
     .prepare(
       `
-    SELECT * FROM notification_routes
+    SELECT * FROM notification_route_configs
      WHERE tenant_id = ? AND event_type = ? AND enabled = 1
   `
     )
@@ -210,7 +210,7 @@ export function upsertNotificationRoute(i: UpsertRouteInput): NotificationRoute 
   getDb()
     .prepare(
       `
-    INSERT INTO notification_routes (id, tenant_id, event_type, filter_json, channel, target, enabled, updated_at, updated_by)
+    INSERT INTO notification_route_configs (id, tenant_id, event_type, filter_json, channel, target, enabled, updated_at, updated_by)
     VALUES (?, ?, ?, ?, ?, ?, ?, datetime('now'), ?)
     ON CONFLICT(id) DO UPDATE SET
       tenant_id   = excluded.tenant_id,
@@ -233,19 +233,19 @@ export function upsertNotificationRoute(i: UpsertRouteInput): NotificationRoute 
       i.enabled ? 1 : 0,
       i.actor
     )
-  const row = getDb().prepare(`SELECT * FROM notification_routes WHERE id = ?`).get(id) as RouteRow
+  const row = getDb().prepare(`SELECT * FROM notification_route_configs WHERE id = ?`).get(id) as RouteRow
   return rowToRoute(row)
 }
 
 export function listNotificationRoutes(tenantId: string): NotificationRoute[] {
   const rows = getDb()
-    .prepare(`SELECT * FROM notification_routes WHERE tenant_id = ? ORDER BY event_type, channel`)
+    .prepare(`SELECT * FROM notification_route_configs WHERE tenant_id = ? ORDER BY event_type, channel`)
     .all(tenantId) as RouteRow[]
   return rows.map(rowToRoute)
 }
 
 export function deleteNotificationRoute(id: string): void {
-  getDb().prepare(`DELETE FROM notification_routes WHERE id = ?`).run(id)
+  getDb().prepare(`DELETE FROM notification_route_configs WHERE id = ?`).run(id)
 }
 
 export interface NotificationLogRow {

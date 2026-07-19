@@ -1,9 +1,9 @@
 /**
  * tool-knowledge summarizer — compact, deterministic per-tool digests
- * of `tool_knowledge.payload_text` for inline rendering inside the
+ * of `tool_knowledge_cache.payload_text` for inline rendering inside the
  * `<known_objects>` system anchor.
  *
- * Why: the org-wide tool cache (`tool_knowledge`) already prevents a
+ * Why: the org-wide tool cache (`tool_knowledge_cache`) already prevents a
  * DB round-trip when the model re-calls `profile_data` /
  * `inspect_definition` / `discover_relationships` / `explore_mssql_schema`
  * with the same params. But the *model itself* still emits the tool
@@ -57,7 +57,7 @@ export interface SummarizeOptions {
 }
 
 /**
- * Compact a cached `tool_knowledge.payload_text` into a 1-3 line
+ * Compact a cached `tool_knowledge_cache.payload_text` into a 1-3 line
  * indented summary suitable for inline injection. Never throws.
  */
 export function summarizeCachedPayload(

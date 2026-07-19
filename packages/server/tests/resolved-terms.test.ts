@@ -1,5 +1,5 @@
 /**
- * Tests for the resolved_terms org-wide learned-mappings store.
+ * Tests for the resolved_terms_cache org-wide learned-mappings store.
  *
  * Mirrors the in-memory SQLite + `_setDb`/`_migrate` pattern from
  * tool-knowledge.test.ts. The store is org-wide (no upn filter on reads),
@@ -39,7 +39,7 @@ async function setupMemory() {
   return await import("../src/infra/persistence/memory/index.js")
 }
 
-describe("resolved_terms — save + list", () => {
+describe("resolved_terms_cache — save + list", () => {
   it("returns an empty list when nothing has been written", async () => {
     const mem = await setupMemory()
     expect(mem.listResolvedTerms({ connection: "default" })).toEqual([])

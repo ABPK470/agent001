@@ -67,7 +67,7 @@ export function renderPrometheusMetrics(): string {
     )
   )
   push(lines, "mia_evidence_envelopes_total", "Total signed evidence envelopes", [
-    { labels: {}, value: scalar("SELECT COUNT(*) AS n FROM sync_evidence") }
+    { labels: {}, value: scalar("SELECT COUNT(*) AS n FROM sync_evidence_log") }
   ])
   push(
     lines,

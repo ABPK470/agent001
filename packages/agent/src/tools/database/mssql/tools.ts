@@ -301,7 +301,7 @@ function buildSchemaMssqlTool(host: AgentHost, run?: RunContext): Tool {
             // repeated discovery call across runs (trace evidence: same
             // table re-explored on every memory-recalled goal). When the
             // table is schema-qualified we can build a catalog fingerprint
-            // and consult `tool_knowledge` exactly like profile_data does.
+            // and consult `tool_knowledge_cache` exactly like profile_data does.
             //
             // Cross-serve: if our own cache misses, try the profile_data
             // fast cache for the same qname — its payload includes the

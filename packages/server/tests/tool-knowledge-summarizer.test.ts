@@ -1,5 +1,5 @@
 /**
- * Tests for the tool_knowledge → inline-summary compactor.
+ * Tests for the tool_knowledge_cache → inline-summary compactor.
  *
  * Fixtures mirror the actual emitter formats — verified against
  * packages/agent/src/tools/{mssql/tools.ts, mssql-profiler.ts,

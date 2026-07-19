@@ -5,7 +5,7 @@
  *   data/evidence/<yyyy>/<mm>/<plan_id>.evidence.pdf
  *
  * The signer signs the canonical-JSON envelope (no signature field) and
- * the signed envelope is then written to disk. The `sync_evidence` row
+ * the signed envelope is then written to disk. The `sync_evidence_log` row
  * records the relative paths, content hash, and signature for fast
  * lookup + verification.
  */
@@ -80,7 +80,7 @@ export async function sealEvidence(i: SealEvidenceInput): Promise<SealedEvidence
   getDb()
     .prepare(
       `
-    INSERT INTO sync_evidence (id, tenant_id, plan_id, proposal_id, envelope_path, pdf_path,
+    INSERT INTO sync_evidence_log (id, tenant_id, plan_id, proposal_id, envelope_path, pdf_path,
                                content_hash, signature_alg, signer_id, signature)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   `
@@ -126,13 +126,13 @@ export interface EvidenceIndexRow {
 export function getEvidenceByPlan(planId: string): EvidenceIndexRow | null {
   return (
     (getDb()
-      .prepare(`SELECT * FROM sync_evidence WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1`)
+      .prepare(`SELECT * FROM sync_evidence_log WHERE plan_id = ? ORDER BY created_at DESC LIMIT 1`)
       .get(planId) as EvidenceIndexRow | undefined) ?? null
   )
 }
 
 export function listEvidence(tenantId: string, limit = 100): EvidenceIndexRow[] {
   return getDb()
-    .prepare(`SELECT * FROM sync_evidence WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?`)
+    .prepare(`SELECT * FROM sync_evidence_log WHERE tenant_id = ? ORDER BY created_at DESC LIMIT ?`)
     .all(tenantId, limit) as EvidenceIndexRow[]
 }
