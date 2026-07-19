@@ -186,6 +186,8 @@ export function useGridInteraction({
   const sessionRef = useRef<DragSession | null>(null)
   const splitRef = useRef(split)
   const tilesRef = useRef(tiles)
+  const moveRafRef = useRef<number | null>(null)
+  const pendingMoveRef = useRef<PointerEvent | null>(null)
   splitRef.current = split
   tilesRef.current = tiles
 
@@ -194,6 +196,11 @@ export function useGridInteraction({
   const interactionsLocked = !!soloTileId
 
   const clearSession = useCallback(() => {
+    if (moveRafRef.current != null) {
+      cancelAnimationFrame(moveRafRef.current)
+      moveRafRef.current = null
+    }
+    pendingMoveRef.current = null
     setDraggingId(null)
     setInteractionMode(null)
     setLayoutPreview(null)
@@ -202,7 +209,7 @@ export function useGridInteraction({
   }, [])
 
   useEffect(() => {
-    function onMove(event: PointerEvent) {
+    function applyMove(event: PointerEvent) {
       const session = sessionRef.current
       const base = splitRef.current
       if (!session || !base || cw <= 0) return
@@ -234,11 +241,29 @@ export function useGridInteraction({
       if (next) setLayoutPreview(projectTiles(next, tilesRef.current, COLS, rows))
     }
 
+    function onMove(event: PointerEvent) {
+      if (!sessionRef.current) return
+      pendingMoveRef.current = event
+      if (moveRafRef.current != null) return
+      moveRafRef.current = requestAnimationFrame(() => {
+        moveRafRef.current = null
+        const pending = pendingMoveRef.current
+        pendingMoveRef.current = null
+        if (pending) applyMove(pending)
+      })
+    }
+
     function onUp(event: PointerEvent) {
       const session = sessionRef.current
       const base = splitRef.current
       if (!session || !base) return
       event.preventDefault()
+
+      if (moveRafRef.current != null) {
+        cancelAnimationFrame(moveRafRef.current)
+        moveRafRef.current = null
+      }
+      pendingMoveRef.current = null
 
       if (session.mode === "drag") {
         const drop = resolveDrop(
@@ -271,8 +296,12 @@ export function useGridInteraction({
     return () => {
       window.removeEventListener("pointermove", onMove)
       window.removeEventListener("pointerup", onUp)
+      if (moveRafRef.current != null) {
+        cancelAnimationFrame(moveRafRef.current)
+        moveRafRef.current = null
+      }
     }
-  }, [clearSession, commitSplit, cw, rowPx, rows, viewId])
+  }, [canvasRef, clearSession, commitSplit, cw, rowPx, rows, viewId])
 
   const onPointerDownDrag = useCallback((tile: LayoutTile, event: React.PointerEvent) => {
     if (cw <= 0 || tile.pinned || interactionsLocked || !splitRef.current) return

@@ -251,6 +251,8 @@ export function GridCanvas({ viewId, tiles, split }: Props) {
       className={[
         "relative h-full w-full overflow-hidden p-1",
         interacting ? "workspace-canvas-interacting" : "",
+        interacting && interactionMode === "resize" ? "workspace-canvas-resizing" : "",
+        interacting && interactionMode === "drag" ? "workspace-canvas-dragging" : "",
       ].join(" ")}
     >
       {cw > 0 && (

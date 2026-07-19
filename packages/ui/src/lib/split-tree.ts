@@ -65,8 +65,12 @@ function clampRatio(ratio: number): number {
   return Math.min(MAX_RATIO, Math.max(MIN_RATIO, ratio))
 }
 
+/**
+ * Continuous split (no cell rounding) so divider drags stay every-frame smooth.
+ * Integer snapping is unnecessary for paint — ratios already encode the layout.
+ */
 function splitSpan(total: number, ratio: number): { first: number; second: number } {
-  const first = Math.max(1, Math.min(total - 1, Math.round(total * clampRatio(ratio))))
+  const first = Math.max(1, Math.min(total - 1, total * clampRatio(ratio)))
   return { first, second: total - first }
 }
 
@@ -121,25 +125,29 @@ export function projectTiles(
   })
 }
 
-/** True when laid-out leaves cover every cell of the canvas with no overlap. */
+/** True when laid-out leaves cover the canvas with no overlap (float-tolerant). */
 export function coversCanvas(leaves: readonly LeafLayout[], cols: number, rows: number): boolean {
   if (leaves.length === 0) return true
-  const cells = cols * rows
-  const seen = new Set<string>()
+  const eps = 1e-4
   let area = 0
   for (const leaf of leaves) {
     const { x, y, w, h } = leaf.rect
-    if (x < 0 || y < 0 || x + w > cols || y + h > rows) return false
+    if (x < -eps || y < -eps || x + w > cols + eps || y + h > rows + eps) return false
+    if (w <= eps || h <= eps) return false
     area += w * h
-    for (let yy = y; yy < y + h; yy++) {
-      for (let xx = x; xx < x + w; xx++) {
-        const key = `${xx},${yy}`
-        if (seen.has(key)) return false
-        seen.add(key)
-      }
+  }
+  if (Math.abs(area - cols * rows) > 0.05) return false
+  for (let i = 0; i < leaves.length; i++) {
+    for (let j = i + 1; j < leaves.length; j++) {
+      const a = leaves[i]!.rect
+      const b = leaves[j]!.rect
+      const overlap =
+        Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x) > eps
+        && Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y) > eps
+      if (overlap) return false
     }
   }
-  return area === cells && seen.size === cells
+  return true
 }
 
 export function getNodeAt(tree: SplitNode, path: SplitPath): SplitNode | null {
