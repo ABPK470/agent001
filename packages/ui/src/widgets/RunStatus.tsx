@@ -1,19 +1,30 @@
 /**
- * RunStatus — shows current run status, metadata, and progress.
+ * RunStatus — truthful status for the active run: capability-gated actions,
+ * errors/answers, workspace apply, and effect rollback only when there is work.
  */
 
 import { Loader2, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useCallback, useEffect, useRef, useState } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
+import { ToastStack, useWidgetToasts } from "../components/useWidgetToasts"
 import { RunStatus as RunStatusEnum } from "../enums"
 import { useContainerSize } from "../hooks/useContainerSize"
+import {
+  canCancelRun,
+  canConfirmRollback,
+  canResumeRun,
+  canRollbackRun,
+  isLiveRunStatus,
+} from "../lib/run-actions"
+import { fmtTokens, statusColor, timeAgo } from "../lib/util"
 import { useStore } from "../state/store"
 import type { AgentDefinition, RollbackPreview, TraceEntry, WorkspaceDiff } from "../types"
-import { fmtTokens, statusColor, timeAgo } from "../lib/util"
 import { WIDGET_ICONS } from "./widget-icons"
 
 type PlannerDecisionTrace = Extract<TraceEntry, { kind: "planner-decision" }>
+
+const PANEL = "rounded-xl border border-border-subtle bg-panel-2"
 
 export function RunStatus() {
   const runs = useStore((s) => s.runs)
@@ -21,11 +32,15 @@ export function RunStatus() {
   const steps = useStore((s) => s.steps)
   const liveUsage = useStore((s) => s.liveUsage)
   const trace = useStore((s) => s.trace)
+  const upsertRun = useStore((s) => s.upsertRun)
+  const setActiveRun = useStore((s) => s.setActiveRun)
+  const { toasts, dismissToast, notifyError, notify, notifyInfo } = useWidgetToasts()
 
   const [agents, setAgents] = useState<AgentDefinition[]>([])
-  useEffect(() => { api.listAgents().then(setAgents).catch(() => {}) }, [])
+  useEffect(() => {
+    api.listAgents().then(setAgents).catch(() => {})
+  }, [])
 
-  // ── Rollback state (must be before any early returns) ──
   const [rollbackPreview, setRollbackPreview] = useState<RollbackPreview | null>(null)
   const [rollbackLoading, setRollbackLoading] = useState(false)
   const [rollbackResult, setRollbackResult] = useState<string | null>(null)
@@ -35,8 +50,6 @@ export function RunStatus() {
   const [workspaceResult, setWorkspaceResult] = useState<string | null>(null)
   const workspaceBusyRef = useRef(false)
   const autoLoadedKeyRef = useRef<string | null>(null)
-  const upsertRun = useStore((s) => s.upsertRun)
-  const setActiveRun = useStore((s) => s.setActiveRun)
 
   const run = runs.find((r) => r.id === activeRunId)
   const agentName = run?.agentId ? agents.find((a) => a.id === run.agentId)?.name : null
@@ -44,6 +57,39 @@ export function RunStatus() {
   const rootRef = useRef<HTMLDivElement>(null)
   const { width: rootWidth } = useContainerSize(rootRef)
   const compact = rootWidth > 0 && rootWidth < 420
+
+  useEffect(() => {
+    setRolledBack(false)
+    setRollbackPreview(null)
+    setRollbackResult(null)
+    setWorkspaceResult(null)
+  }, [activeRunId])
+
+  useEffect(() => {
+    if (!rollbackResult) return
+    const timer = setTimeout(() => setRollbackResult(null), 8000)
+    return () => clearTimeout(timer)
+  }, [rollbackResult])
+
+  // Keep capability flags fresh when the selected run is terminal.
+  useEffect(() => {
+    if (!run) return
+    if (isLiveRunStatus(run.status)) return
+    if (run.hasCheckpoint != null && run.rollbackAvailable != null) return
+    let cancelled = false
+    api.getRun(run.id).then((detail) => {
+      if (cancelled) return
+      upsertRun({
+        id: run.id,
+        hasCheckpoint: detail.hasCheckpoint,
+        rollbackAvailable: detail.rollbackAvailable,
+        error: detail.error,
+        answer: detail.answer,
+        completedAt: detail.completedAt,
+      })
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [run?.id, run?.status, run?.hasCheckpoint, run?.rollbackAvailable, upsertRun])
 
   const refreshWorkspaceDiff = useCallback(async (targetRunId?: string) => {
     const runId = targetRunId ?? run?.id
@@ -77,13 +123,15 @@ export function RunStatus() {
       setWorkspaceDiff(null)
       upsertRun({ id: run.id, pendingWorkspaceChanges: 0 })
       autoLoadedKeyRef.current = null
-    } catch {
+      notify(`Applied ${total} workspace change(s)`)
+    } catch (e) {
       setWorkspaceResult("Failed to apply workspace changes")
+      notifyError(e instanceof Error ? e.message : "Failed to apply workspace changes")
     } finally {
       workspaceBusyRef.current = false
       setWorkspaceLoading(false)
     }
-  }, [run, upsertRun])
+  }, [run, upsertRun, notify, notifyError])
 
   const handleRollbackPreview = useCallback(async () => {
     if (!run) return
@@ -92,11 +140,21 @@ export function RunStatus() {
     try {
       const preview = await api.previewRollback(run.id)
       setRollbackPreview(preview)
-    } catch {
-      setRollbackResult("Failed to load preview")
+      const available = canConfirmRollback(preview)
+      upsertRun({ id: run.id, rollbackAvailable: available })
+      if (!available) {
+        setRollbackResult(
+          preview.wouldFail.length > 0
+            ? "Rollback blocked — see details below"
+            : "Nothing left to roll back",
+        )
+      }
+    } catch (e) {
+      setRollbackResult("Failed to load rollback preview")
+      notifyError(e instanceof Error ? e.message : "Failed to load rollback preview")
     }
     setRollbackLoading(false)
-  }, [run])
+  }, [run, upsertRun, notifyError])
 
   const handleRollbackConfirm = useCallback(async () => {
     if (!run) return
@@ -105,26 +163,26 @@ export function RunStatus() {
       const result = await api.rollbackRun(run.id)
       if (result.failed.length > 0) {
         setRollbackResult(`Rolled back ${result.compensated} effects, ${result.failed.length} failed`)
+        notifyError(`Rollback partially failed (${result.failed.length})`)
+        // Do not hide the action — work may remain.
+        upsertRun({ id: run.id, rollbackAvailable: true })
+      } else if (result.compensated === 0) {
+        setRollbackResult("Nothing to roll back")
+        setRolledBack(true)
+        upsertRun({ id: run.id, rollbackAvailable: false })
       } else {
-        setRollbackResult(`Rolled back ${result.compensated} effects, ${result.skipped} skipped`)
+        setRollbackResult(`Rolled back ${result.compensated} effects${result.skipped ? `, ${result.skipped} skipped` : ""}`)
+        setRolledBack(true)
+        upsertRun({ id: run.id, rollbackAvailable: false })
+        notify(`Rolled back ${result.compensated} effect(s)`)
       }
-    } catch {
+    } catch (e) {
       setRollbackResult("Rollback failed")
+      notifyError(e instanceof Error ? e.message : "Rollback failed")
     }
     setRollbackPreview(null)
     setRollbackLoading(false)
-    setRolledBack(true)
-  }, [run])
-
-  // Reset rolledBack state when switching runs
-  useEffect(() => { setRolledBack(false) }, [activeRunId])
-
-  // Auto-dismiss rollback result after 8 seconds
-  useEffect(() => {
-    if (!rollbackResult) return
-    const timer = setTimeout(() => setRollbackResult(null), 8000)
-    return () => clearTimeout(timer)
-  }, [rollbackResult])
+  }, [run, upsertRun, notify, notifyError])
 
   useEffect(() => {
     if (!run) {
@@ -141,6 +199,29 @@ export function RunStatus() {
     refreshWorkspaceDiff(run.id).catch(() => {})
   }, [run?.id, run?.pendingWorkspaceChanges, refreshWorkspaceDiff])
 
+  const handleCancel = useCallback(async () => {
+    if (!run) return
+    try {
+      await api.cancelRun(run.id)
+      notifyInfo("Cancel requested")
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : "Cancel failed")
+    }
+  }, [run, notifyInfo, notifyError])
+
+  const handleResume = useCallback(async () => {
+    if (!run) return
+    try {
+      const { runId } = await api.resumeRun(run.id)
+      if (runId) {
+        setActiveRun(runId)
+        notifyInfo("Resumed from checkpoint")
+      }
+    } catch (e) {
+      notifyError(e instanceof Error ? e.message : "Resume failed — no checkpoint?")
+    }
+  }, [run, setActiveRun, notifyInfo, notifyError])
+
   if (!run) {
     return (
       <div className="flex h-full flex-col">
@@ -149,90 +230,129 @@ export function RunStatus() {
     )
   }
 
-  const isActive = run.status === RunStatusEnum.Running || run.status === RunStatusEnum.Pending || run.status === RunStatusEnum.Planning
+  const isActive = isLiveRunStatus(run.status)
+  const showCancel = canCancelRun(run.status)
+  const showResume = canResumeRun(run.status, run.hasCheckpoint)
+  const showRollback = canRollbackRun(run.status, {
+    rollbackAvailable: run.rollbackAvailable,
+    alreadyRolledBack: rolledBack,
+  })
+  const pendingWorkspace = workspaceDiff?.total ?? run.pendingWorkspaceChanges ?? 0
+  const showWorkspace = pendingWorkspace > 0 || workspaceLoading || !!workspaceResult
+
   const completedSteps = steps.filter((s) => s.status === RunStatusEnum.Completed).length
   const failedSteps = steps.filter((s) => s.status === RunStatusEnum.Failed).length
-  const latestPlannerDecision = [...trace].reverse().find((entry): entry is PlannerDecisionTrace => entry.kind === "planner-decision")
-
-  async function handleCancel() {
-    if (run) await api.cancelRun(run.id).catch(() => {})
-  }
-
-  async function handleResume() {
-    if (!run) return
-    try {
-      const { runId } = await api.resumeRun(run.id)
-      if (runId) setActiveRun(runId)
-    } catch { /* ignore */ }
-  }
+  const latestPlannerDecision = [...trace].reverse().find(
+    (entry): entry is PlannerDecisionTrace => entry.kind === "planner-decision",
+  )
 
   return (
-    <div ref={rootRef} className="h-full overflow-y-auto flex flex-col gap-3">
-      {/* Status badge */}
+    <div ref={rootRef} className="relative flex h-full flex-col gap-3 overflow-y-auto">
+      <ToastStack toasts={toasts} onDismiss={dismissToast} />
+
       <div className="flex items-center gap-2.5">
         <div
-          className="w-2.5 h-2.5 rounded-full"
+          className="h-2.5 w-2.5 rounded-full"
           style={{ background: statusColor(run.status) }}
         />
-        <span className="text-base font-semibold uppercase tracking-wide" style={{ color: statusColor(run.status) }}>
-          {run.status}
+        <span
+          className="text-base font-semibold uppercase tracking-wide"
+          style={{ color: statusColor(run.status) }}
+        >
+          {run.status.replace(/_/g, " ")}
         </span>
-        {isActive && (
-          <Loader2 size={16} className="text-accent animate-spin ml-auto" />
+        {rolledBack && (
+          <span className="rounded-md bg-warning/15 px-1.5 py-0.5 text-[11px] font-medium text-warning">
+            rolled back
+          </span>
         )}
+        {isActive && <Loader2 size={16} className="ml-auto animate-spin text-accent" />}
       </div>
 
-      {/* Goal */}
       <div>
-        <span className="text-[13px] text-text-muted uppercase tracking-wide">Goal</span>
-        <p className="text-sm text-text mt-0.5 leading-relaxed">{run.goal}</p>
+        <span className="text-[13px] uppercase tracking-wide text-text-muted">Goal</span>
+        <p className="mt-0.5 text-sm leading-relaxed text-text">{run.goal}</p>
       </div>
 
-      {/* Metadata grid */}
-      <div className={`grid ${compact ? "grid-cols-1" : "grid-cols-2"} gap-x-4 gap-y-2.5 text-sm`}>
+      {run.error && (
+        <div className={`${PANEL} border-error/30 px-3 py-2.5`}>
+          <div className="text-[12px] uppercase tracking-wide text-error">Error</div>
+          <p className="mt-1 text-sm leading-snug text-error/90 whitespace-pre-wrap break-words">
+            {run.error}
+          </p>
+        </div>
+      )}
+
+      {run.status === RunStatusEnum.Completed && run.answer && (
+        <div className={`${PANEL} px-3 py-2.5`}>
+          <div className="text-[12px] uppercase tracking-wide text-text-muted">Answer</div>
+          <p className="mt-1 text-sm leading-relaxed text-text-secondary whitespace-pre-wrap break-words">
+            {run.answer}
+          </p>
+        </div>
+      )}
+
+      {run.status === RunStatusEnum.WaitingForApproval && (
+        <div className={`${PANEL} border-warning/30 px-3 py-2.5 text-sm text-text`}>
+          Waiting for tool approval — cancel here, or approve/deny from the chat prompt.
+        </div>
+      )}
+
+      <div className={`grid gap-x-4 gap-y-2.5 text-sm ${compact ? "grid-cols-1" : "grid-cols-2"}`}>
         {agentName && (
           <div>
-            <span className="text-text-muted text-[13px]">Agent</span>
-            <div className="text-accent text-[13px]">{agentName}</div>
+            <span className="text-[13px] text-text-muted">Agent</span>
+            <div className="text-[13px] text-accent">{agentName}</div>
           </div>
         )}
         <div>
-          <span className="text-text-muted text-[13px]">Run ID</span>
-          <div className="text-text-secondary font-mono text-[13px]">{run.id.slice(0, 8)}</div>
+          <span className="text-[13px] text-text-muted">Run ID</span>
+          <div className="font-mono text-[13px] text-text-secondary">{run.id.slice(0, 8)}</div>
         </div>
         <div>
-          <span className="text-text-muted text-[13px]">Started</span>
+          <span className="text-[13px] text-text-muted">Started</span>
           <div className="text-text-secondary">{timeAgo(run.createdAt)}</div>
         </div>
+        {run.completedAt && (
+          <div>
+            <span className="text-[13px] text-text-muted">Finished</span>
+            <div className="text-text-secondary">{timeAgo(run.completedAt)}</div>
+          </div>
+        )}
         <div>
-          <span className="text-text-muted text-[13px]">Steps</span>
+          <span className="text-[13px] text-text-muted">Steps</span>
           <div className="text-text-secondary">
             <span className="text-success">{completedSteps}</span>
-            {failedSteps > 0 && <span className="text-error ml-1">/ {failedSteps} failed</span>}
+            {failedSteps > 0 && <span className="ml-1 text-error">/ {failedSteps} failed</span>}
             {` / ${isActive ? steps.length : run.stepCount} total`}
           </div>
         </div>
         {run.parentRunId && (
           <div>
-            <span className="text-text-muted text-[13px]">Resumed from</span>
-            <div className="text-accent font-mono text-[13px]">{run.parentRunId.slice(0, 8)}</div>
+            <span className="text-[13px] text-text-muted">Resumed from</span>
+            <div className="font-mono text-[13px] text-accent">{run.parentRunId.slice(0, 8)}</div>
           </div>
         )}
         <div>
-          <span className="text-text-muted text-[13px]">Tokens</span>
-          <div className="text-text-secondary font-mono text-[13px]">
+          <span className="text-[13px] text-text-muted">Checkpoint</span>
+          <div className="text-text-secondary">
+            {run.hasCheckpoint == null ? "…" : run.hasCheckpoint ? "available" : "none"}
+          </div>
+        </div>
+        <div>
+          <span className="text-[13px] text-text-muted">Tokens</span>
+          <div className="font-mono text-[13px] text-text-secondary">
             {isActive
               ? <>{fmtTokens(liveUsage.totalTokens)} <span className="text-text-muted">({liveUsage.llmCalls} calls)</span></>
               : run.totalTokens > 0
                 ? <>{fmtTokens(run.totalTokens)} <span className="text-text-muted">({run.llmCalls} calls)</span></>
-                : <span className="text-text-muted">—</span>
-            }
+                : <span className="text-text-muted">—</span>}
           </div>
         </div>
         {(isActive ? liveUsage.promptTokens > 0 : run.promptTokens > 0) && (
           <div>
-            <span className="text-text-muted text-[13px]">Prompt / Completion</span>
-            <div className="text-text-secondary font-mono text-[13px]">
+            <span className="text-[13px] text-text-muted">Prompt / Completion</span>
+            <div className="font-mono text-[13px] text-text-secondary">
               {fmtTokens(isActive ? liveUsage.promptTokens : run.promptTokens)}
               {" / "}
               {fmtTokens(isActive ? liveUsage.completionTokens : run.completionTokens)}
@@ -245,12 +365,12 @@ export function RunStatus() {
         <div className="rounded-xl border border-success/20 bg-success/[0.06] p-3">
           <div className="flex items-center justify-between gap-3">
             <div>
-              <div className="text-[13px] text-text-muted uppercase tracking-wide">Execution Route</div>
-              <div className="text-sm text-text-secondary mt-0.5">
+              <div className="text-[13px] uppercase tracking-wide text-text-muted">Execution route</div>
+              <div className="mt-0.5 text-sm text-text-secondary">
                 {latestPlannerDecision.route ?? (latestPlannerDecision.shouldPlan ? "planner" : "direct")}
               </div>
             </div>
-            <div className={`text-xs font-medium px-2 py-1 rounded-full ${latestPlannerDecision.shouldPlan ? "text-success bg-success/10" : "text-text-secondary bg-overlay-2"}`}>
+            <div className={`rounded-full px-2 py-1 text-xs font-medium ${latestPlannerDecision.shouldPlan ? "bg-success/10 text-success" : "bg-overlay-2 text-text-secondary"}`}>
               {latestPlannerDecision.shouldPlan ? "Planner" : "Direct"}
             </div>
           </div>
@@ -258,54 +378,60 @@ export function RunStatus() {
         </div>
       )}
 
-      {/* Actions */}
-      <div className={`flex gap-2 mt-1 ${compact ? "flex-wrap" : ""}`}>
-        {isActive && (
-          <button
-            className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-error bg-error/10 hover:bg-error/20 active:bg-error/25 rounded-lg transition-colors"
-            onClick={handleCancel}
-          >
-            <Square size={13} />
-            Cancel
-          </button>
-        )}
-        {(run.status === RunStatusEnum.Failed || run.status === RunStatusEnum.Cancelled || run.status === RunStatusEnum.Crashed) && (
-          <button
-            className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-accent bg-accent/10 hover:bg-accent/20 active:bg-accent/25 rounded-lg transition-colors"
-            onClick={handleResume}
-          >
-            <RotateCcw size={13} />
-            Resume
-          </button>
-        )}
-        {(run.status === RunStatusEnum.Completed || run.status === RunStatusEnum.Failed || run.status === RunStatusEnum.Cancelled || run.status === RunStatusEnum.Crashed) && !rolledBack && (
-          <button
-            className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] text-[13px] text-warning bg-warning/10 hover:bg-warning/20 active:bg-warning/25 rounded-lg transition-colors"
-            onClick={handleRollbackPreview}
-            disabled={rollbackLoading}
-          >
-            <Undo2 size={13} />
-            {rollbackLoading ? "Loading..." : "Rollback"}
-          </button>
-        )}
-      </div>
+      {(showCancel || showResume || showRollback) && (
+        <div className={`mt-1 flex gap-2 ${compact ? "flex-wrap" : ""}`}>
+          {showCancel && (
+            <button
+              type="button"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-error/10 px-4 py-2 text-[13px] text-error transition-colors hover:bg-error/20"
+              onClick={() => void handleCancel()}
+            >
+              <Square size={13} />
+              Cancel
+            </button>
+          )}
+          {showResume && (
+            <button
+              type="button"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-accent/10 px-4 py-2 text-[13px] text-accent transition-colors hover:bg-accent/20"
+              onClick={() => void handleResume()}
+              title="Resume from saved checkpoint"
+            >
+              <RotateCcw size={13} />
+              Resume
+            </button>
+          )}
+          {showRollback && (
+            <button
+              type="button"
+              className="flex min-h-[44px] items-center gap-1.5 rounded-lg bg-warning/10 px-4 py-2 text-[13px] text-warning transition-colors hover:bg-warning/20 disabled:opacity-40"
+              onClick={() => void handleRollbackPreview()}
+              disabled={rollbackLoading}
+              title="Roll back uncompensated file effects"
+            >
+              <Undo2 size={13} />
+              {rollbackLoading ? "Loading…" : "Rollback"}
+            </button>
+          )}
+        </div>
+      )}
 
-      {/* Rollback result */}
       {rollbackResult && (
-        <div className="text-[13px] text-text-secondary bg-elevated px-3 py-2 rounded-lg">
+        <div className={`${PANEL} px-3 py-2 text-[13px] text-text-secondary`}>
           {rollbackResult}
         </div>
       )}
 
-      {/* Rollback preview dialog */}
       {rollbackPreview && (
-        <div className="bg-elevated border border-border rounded-lg p-3 space-y-2">
-          <div className="text-sm font-semibold text-warning">Rollback Preview</div>
+        <div className={`${PANEL} space-y-2 p-3`}>
+          <div className="text-sm font-semibold text-warning">Rollback preview</div>
           {rollbackPreview.wouldCompensate.length > 0 && (
             <div>
-              <div className="text-[13px] text-success">Will restore ({rollbackPreview.wouldCompensate.length}):</div>
+              <div className="text-[13px] text-success">
+                Will restore ({rollbackPreview.wouldCompensate.length}):
+              </div>
               {rollbackPreview.wouldCompensate.map((e) => (
-                <div key={e.effectId} className="text-[11px] text-text-muted font-mono truncate pl-2">
+                <div key={e.effectId} className="truncate pl-2 font-mono text-[11px] text-text-muted">
                   {e.kind} {e.target.split("/").pop()}
                 </div>
               ))}
@@ -313,102 +439,102 @@ export function RunStatus() {
           )}
           {rollbackPreview.wouldSkip.length > 0 && (
             <div>
-              <div className="text-[13px] text-text-muted">Will skip ({rollbackPreview.wouldSkip.length}):</div>
+              <div className="text-[13px] text-text-muted">
+                Will skip ({rollbackPreview.wouldSkip.length}):
+              </div>
               {rollbackPreview.wouldSkip.slice(0, 5).map((e) => (
-                <div key={e.effectId} className="text-[11px] text-text-muted font-mono truncate pl-2">
+                <div key={e.effectId} className="truncate pl-2 font-mono text-[11px] text-text-muted">
                   {e.target.split("/").pop()} — {e.reason}
                 </div>
               ))}
-              {rollbackPreview.wouldSkip.length > 5 && (
-                <div className="text-[11px] text-text-muted pl-2">...and {rollbackPreview.wouldSkip.length - 5} more</div>
-              )}
             </div>
           )}
           {rollbackPreview.wouldFail.length > 0 && (
             <div>
-              <div className="text-[13px] text-error">Would fail ({rollbackPreview.wouldFail.length}) — rollback blocked:</div>
+              <div className="text-[13px] text-error">
+                Would fail ({rollbackPreview.wouldFail.length}) — blocked:
+              </div>
               {rollbackPreview.wouldFail.map((e) => (
-                <div key={e.effectId} className="text-[11px] text-error/80 font-mono truncate pl-2">
+                <div key={e.effectId} className="truncate pl-2 font-mono text-[11px] text-error/80">
                   {e.target.split("/").pop()} — {e.reason}
                 </div>
               ))}
             </div>
           )}
           <div className="flex gap-2 pt-1">
-            {rollbackPreview.wouldFail.length === 0 && rollbackPreview.wouldCompensate.length > 0 && (
+            {canConfirmRollback(rollbackPreview) && (
               <button
-                className="flex items-center gap-1.5 px-3 py-1.5 text-[13px] text-warning bg-warning/10 hover:bg-warning/20 rounded-lg transition-colors"
-                onClick={handleRollbackConfirm}
+                type="button"
+                className="flex items-center gap-1.5 rounded-lg bg-warning/10 px-3 py-1.5 text-[13px] text-warning transition-colors hover:bg-warning/20"
+                onClick={() => void handleRollbackConfirm()}
                 disabled={rollbackLoading}
               >
                 <Undo2 size={12} />
-                Confirm Rollback
+                Confirm rollback
               </button>
             )}
             <button
-              className="px-3 py-1.5 text-[13px] text-text-muted hover:text-text rounded-lg transition-colors"
+              type="button"
+              className="rounded-lg px-3 py-1.5 text-[13px] text-text-muted transition-colors hover:text-text"
               onClick={() => setRollbackPreview(null)}
             >
-              Cancel
+              Dismiss
             </button>
           </div>
         </div>
       )}
 
-      {/* Workspace diff approval */}
-      <div className="bg-elevated border border-border rounded-lg p-3 space-y-2">
-        <div className="flex items-center justify-between gap-2">
-          <div className="text-sm font-semibold text-text">Workspace Changes</div>
-          <div className="text-[12px] text-text-muted">
-            {(workspaceDiff?.total ?? run.pendingWorkspaceChanges ?? 0) > 0
-              ? `${workspaceDiff?.total ?? run.pendingWorkspaceChanges} pending`
-              : "none"}
+      {showWorkspace && (
+        <div className={`${PANEL} space-y-2 p-3`}>
+          <div className="flex items-center justify-between gap-2">
+            <div className="text-sm font-semibold text-text">Workspace changes</div>
+            <div className="text-[12px] text-text-muted">
+              {pendingWorkspace > 0 ? `${pendingWorkspace} pending` : "none"}
+            </div>
           </div>
-        </div>
-
-        {(workspaceDiff?.total ?? run.pendingWorkspaceChanges ?? 0) > 0 && (
-          <div className="text-[12px] text-text-secondary">
-            Codegen/file edits are isolated until you apply them.
-          </div>
-        )}
-
-        {workspaceDiff && workspaceDiff.total > 0 && (
-          <div className="space-y-1 text-[12px] font-mono text-text-secondary">
-            {workspaceDiff.added.length > 0 && (
-              <div>+ added: {workspaceDiff.added.slice(0, 4).join(", ")}{workspaceDiff.added.length > 4 ? ` +${workspaceDiff.added.length - 4}` : ""}</div>
-            )}
-            {workspaceDiff.modified.length > 0 && (
-              <div>~ modified: {workspaceDiff.modified.slice(0, 4).join(", ")}{workspaceDiff.modified.length > 4 ? ` +${workspaceDiff.modified.length - 4}` : ""}</div>
-            )}
-            {workspaceDiff.deleted.length > 0 && (
-              <div>- deleted: {workspaceDiff.deleted.slice(0, 4).join(", ")}{workspaceDiff.deleted.length > 4 ? ` +${workspaceDiff.deleted.length - 4}` : ""}</div>
-            )}
-          </div>
-        )}
-
-        <div className="flex gap-2 pt-1">
-          <button
-            className="px-3 py-1.5 text-[13px] text-accent bg-accent/10 hover:bg-accent/20 rounded-lg transition-colors"
-            onClick={() => refreshWorkspaceDiff(run.id)}
-            disabled={workspaceLoading || !run}
-          >
-            {workspaceLoading ? "Loading..." : "Refresh Diff"}
-          </button>
-          {(workspaceDiff?.total ?? run.pendingWorkspaceChanges ?? 0) > 0 && (
+          {pendingWorkspace > 0 && (
+            <div className="text-[12px] text-text-secondary">
+              Isolated codegen edits — apply to merge into the repo workspace.
+            </div>
+          )}
+          {workspaceDiff && workspaceDiff.total > 0 && (
+            <div className="space-y-1 font-mono text-[12px] text-text-secondary">
+              {workspaceDiff.added.length > 0 && (
+                <div>+ added: {workspaceDiff.added.slice(0, 4).join(", ")}{workspaceDiff.added.length > 4 ? ` +${workspaceDiff.added.length - 4}` : ""}</div>
+              )}
+              {workspaceDiff.modified.length > 0 && (
+                <div>~ modified: {workspaceDiff.modified.slice(0, 4).join(", ")}{workspaceDiff.modified.length > 4 ? ` +${workspaceDiff.modified.length - 4}` : ""}</div>
+              )}
+              {workspaceDiff.deleted.length > 0 && (
+                <div>- deleted: {workspaceDiff.deleted.slice(0, 4).join(", ")}{workspaceDiff.deleted.length > 4 ? ` +${workspaceDiff.deleted.length - 4}` : ""}</div>
+              )}
+            </div>
+          )}
+          <div className="flex gap-2 pt-1">
             <button
-              className="px-3 py-1.5 text-[13px] text-success bg-success/10 hover:bg-success/20 rounded-lg transition-colors"
-              onClick={handleApplyWorkspaceDiff}
+              type="button"
+              className="rounded-lg bg-accent/10 px-3 py-1.5 text-[13px] text-accent transition-colors hover:bg-accent/20"
+              onClick={() => void refreshWorkspaceDiff(run.id)}
               disabled={workspaceLoading}
             >
-              Apply Changes
+              {workspaceLoading ? "Loading…" : "Refresh"}
             </button>
+            {pendingWorkspace > 0 && (
+              <button
+                type="button"
+                className="rounded-lg bg-success/10 px-3 py-1.5 text-[13px] text-success transition-colors hover:bg-success/20"
+                onClick={() => void handleApplyWorkspaceDiff()}
+                disabled={workspaceLoading}
+              >
+                Apply changes
+              </button>
+            )}
+          </div>
+          {workspaceResult && (
+            <div className="text-[12px] text-text-secondary">{workspaceResult}</div>
           )}
         </div>
-
-        {workspaceResult && (
-          <div className="text-[12px] text-text-secondary">{workspaceResult}</div>
-        )}
-      </div>
+      )}
     </div>
   )
 }

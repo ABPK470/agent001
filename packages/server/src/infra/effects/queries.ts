@@ -83,3 +83,12 @@ export function getEffectStats(runId: string): {
     idempotent: effects.filter((e) => e.metadata.idempotent).length
   }
 }
+
+/** True when rollback can still compensate at least one file effect. */
+export function runHasCompensatableEffects(runId: string): boolean {
+  return getRunEffects(runId).some(
+    (effect) =>
+      (effect.kind === "create" || effect.kind === "modify" || effect.kind === "delete")
+      && effect.status !== "compensated",
+  )
+}

@@ -6,6 +6,7 @@ import { EventType } from "@mia/agent"
 import type { AuditEntry, LogEntry, Run, RunDetail } from "@mia/shared-types"
 import { formatTraceExportText, traceExportFilename } from "@mia/shared-types"
 import type { FastifyInstance } from "fastify"
+import { runHasCompensatableEffects } from "../../infra/effects/index.js"
 import { getAttachment, type AttachmentRow } from "../../infra/persistence/attachments.js"
 import { flagRunMemory } from "../../infra/persistence/memory.js"
 import * as db from "../../infra/persistence/sqlite.js"
@@ -15,6 +16,14 @@ import { AuthRequiredError, canAccessRun, requireSessionUpn } from "../auth/serv
 import { ContinuityError } from "../runs/continuity.js"
 import type { AgentOrchestrator } from "../runs/orchestrator.js"
 import { listRunArtifactFiles, openRunArtifactStream } from "./run-artifacts.js"
+
+function withRunCapabilities(run: Run): Run {
+  return {
+    ...run,
+    hasCheckpoint: !!db.getCheckpoint(run.id),
+    rollbackAvailable: runHasCompensatableEffects(run.id),
+  }
+}
 
 export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrchestrator): void {
   app.get<{ Querystring: { threadId?: string } }>("/api/runs", async (req, reply) => {
@@ -38,13 +47,13 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
         const pendingWorkspaceChanges = diff
           ? diff.added.length + diff.modified.length + diff.deleted.length
           : 0
-        return db.dbRunToWire(run, {
+        return withRunCapabilities(db.dbRunToWire(run, {
           totalTokens: run.total_tokens ?? 0,
           promptTokens: run.prompt_tokens ?? 0,
           completionTokens: run.completion_tokens ?? 0,
           llmCalls: run.llm_calls ?? 0,
           pendingWorkspaceChanges
-        })
+        }))
       })
     }
     const runs = db.listRunsWithUsageForUser({ upn: s.upn })
@@ -53,13 +62,13 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       const pendingWorkspaceChanges = diff
         ? diff.added.length + diff.modified.length + diff.deleted.length
         : 0
-      return db.dbRunToWire(run, {
+      return withRunCapabilities(db.dbRunToWire(run, {
         totalTokens: run.total_tokens ?? 0,
         promptTokens: run.prompt_tokens ?? 0,
         completionTokens: run.completion_tokens ?? 0,
         llmCalls: run.llm_calls ?? 0,
         pendingWorkspaceChanges
-      })
+      }))
     })
   })
 
@@ -84,13 +93,13 @@ export function registerRunRoutes(app: FastifyInstance, orchestrator: AgentOrche
       : 0
 
     return {
-      ...db.dbRunToWire(run, {
+      ...withRunCapabilities(db.dbRunToWire(run, {
         totalTokens: usage?.total_tokens ?? 0,
         promptTokens: usage?.prompt_tokens ?? 0,
         completionTokens: usage?.completion_tokens ?? 0,
         llmCalls: usage?.llm_calls ?? 0,
         pendingWorkspaceChanges
-      }),
+      })),
       audit: audit.map(
         (entry): AuditEntry => ({
           actor: entry.actor,

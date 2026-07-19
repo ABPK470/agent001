@@ -977,6 +977,11 @@ export const useStore = create<AppState>()(
               auditTrail: d.audit ?? [],
               trace,
               streamingAnswer: "",
+              hasCheckpoint: d.hasCheckpoint,
+              rollbackAvailable: d.rollbackAvailable,
+              error: d.error,
+              answer: d.answer,
+              completedAt: d.completedAt,
             }),
           }))
         }).catch(() => {})

@@ -10,36 +10,16 @@ import { GitBranch, Play, RotateCcw, Square, Undo2 } from "lucide-react"
 import { useEffect, useMemo, useRef, useState, type KeyboardEvent } from "react"
 import { api } from "../client/index"
 import { EmptyState } from "../components/EmptyState"
-import { RunStatus } from "../enums"
 import { useStore } from "../state/store"
 import type { AgentDefinition, Run } from "../types"
+import {
+  canCancelRun,
+  canResumeRun,
+  canRollbackRun,
+  isTerminalRunStatus,
+} from "../lib/run-actions"
 import { fmtTokens, statusColor, timeAgo } from "../lib/util"
 import { WIDGET_ICONS } from "./widget-icons"
-
-function isLiveStatus(status: Run["status"]): boolean {
-  return (
-    status === RunStatus.Running
-    || status === RunStatus.Pending
-    || status === RunStatus.Planning
-  )
-}
-
-function canResume(status: Run["status"]): boolean {
-  return (
-    status === RunStatus.Failed
-    || status === RunStatus.Cancelled
-    || status === RunStatus.Crashed
-  )
-}
-
-function canRerunOrRollback(status: Run["status"]): boolean {
-  return (
-    status === RunStatus.Completed
-    || status === RunStatus.Failed
-    || status === RunStatus.Cancelled
-    || status === RunStatus.Crashed
-  )
-}
 
 function sortRunsNewestFirst(runs: Run[]): Run[] {
   return [...runs].sort(
@@ -68,7 +48,13 @@ function RunHistoryRow({
   onRerun: () => void
   onRollback: () => void
 }) {
-  const live = isLiveStatus(run.status)
+  const showCancel = canCancelRun(run.status)
+  const showResume = canResumeRun(run.status, run.hasCheckpoint)
+  const showRerun = isTerminalRunStatus(run.status)
+  const showRollback = canRollbackRun(run.status, {
+    rollbackAvailable: run.rollbackAvailable,
+    alreadyRolledBack: rolledBack,
+  })
 
   function onRowKeyDown(e: KeyboardEvent<HTMLDivElement>) {
     if (e.key === "Enter" || e.key === " ") {
@@ -132,7 +118,7 @@ function RunHistoryRow({
           onClick={(e) => e.stopPropagation()}
           onKeyDown={(e) => e.stopPropagation()}
         >
-          {live && (
+          {showCancel && (
             <button
               type="button"
               className="run-history-action run-history-action--danger"
@@ -142,7 +128,7 @@ function RunHistoryRow({
               <Square size={14} strokeWidth={2.25} />
             </button>
           )}
-          {canResume(run.status) && (
+          {showResume && (
             <button
               type="button"
               className="run-history-action"
@@ -152,7 +138,7 @@ function RunHistoryRow({
               <RotateCcw size={14} strokeWidth={2.25} />
             </button>
           )}
-          {canRerunOrRollback(run.status) && (
+          {showRerun && (
             <button
               type="button"
               className="run-history-action"
@@ -162,7 +148,7 @@ function RunHistoryRow({
               <Play size={14} strokeWidth={2.25} />
             </button>
           )}
-          {canRerunOrRollback(run.status) && !rolledBack && (
+          {showRollback && (
             <button
               type="button"
               className="run-history-action run-history-action--warning"
@@ -183,6 +169,7 @@ export function RunHistory() {
   const runs = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const setActiveRun = useStore((s) => s.setActiveRun)
+  const upsertRun = useStore((s) => s.upsertRun)
   const activeThreadId = useStore((s) => s.activeThreadId)
   const [agents, setAgents] = useState<AgentDefinition[]>([])
   const [rolledBackIds, setRolledBackIds] = useState<Set<string>>(() => new Set())
@@ -225,9 +212,14 @@ export function RunHistory() {
   }
 
   function rollbackRun(runId: string) {
-    if (!confirm("Rollback all file changes from this run?")) return
-    api.rollbackRun(runId).then(() => {
+    if (!confirm("Rollback uncompensated file effects from this run?")) return
+    api.rollbackRun(runId).then((result) => {
+      if (result.failed.length > 0) {
+        upsertRun({ id: runId, rollbackAvailable: true })
+        return
+      }
       setRolledBackIds((prev) => new Set(prev).add(runId))
+      upsertRun({ id: runId, rollbackAvailable: false })
     }).catch(() => {})
   }
 

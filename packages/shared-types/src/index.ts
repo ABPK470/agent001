@@ -123,6 +123,10 @@ export interface Run {
   completionTokens: number
   llmCalls: number
   pendingWorkspaceChanges?: number
+  /** True when a resume checkpoint exists for this run. */
+  hasCheckpoint?: boolean
+  /** True when uncompensated file effects remain (rollback can do work). */
+  rollbackAvailable?: boolean
   /** Owner UPN — present when the server returns all runs (e.g. admin scope). */
   upn?: string | null
   /** Owner display name — present alongside upn for admin-scope responses. */
