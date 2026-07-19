@@ -11,6 +11,13 @@ export type LineDiffRow = {
   newLine: number | null
   /** Present on `ellipsis` rows — how many unchanged lines were omitted. */
   omitted?: number
+  /**
+   * Present on `ellipsis` rows — the contiguous unchanged rows that were
+   * collapsed. Click-to-expand reveals these in place (above or below a hunk).
+   */
+  hiddenRows?: LineDiffRow[]
+  /** Stable id for expand/collapse state (one per collapsed gap). */
+  id?: string
 }
 
 const MAX_LINES = 4_000
@@ -57,7 +64,8 @@ export function buildLineTextDiff(oldText: string, newText: string): LineDiffRow
 
 /**
  * Keep change hunks + `context` unchanged lines around them; collapse the rest.
- * Pure view helper — does not recompute the LCS.
+ * Each ellipsis carries `hiddenRows` so the UI can expand that gap in place
+ * (above or below a change — same shape either way).
  */
 export function collapseUnchangedDiffRows(
   rows: LineDiffRow[],
@@ -75,6 +83,7 @@ export function collapseUnchangedDiffRows(
 
   const out: LineDiffRow[] = []
   let i = 0
+  let gap = 0
   while (i < rows.length) {
     if (keep.has(i)) {
       out.push(rows[i]!)
@@ -83,14 +92,54 @@ export function collapseUnchangedDiffRows(
     }
     let j = i
     while (j < rows.length && !keep.has(j)) j++
+    const hiddenRows = rows.slice(i, j)
+    const omitted = hiddenRows.length
+    const first = hiddenRows[0]
+    const last = hiddenRows[omitted - 1]
     out.push({
       kind: "ellipsis",
-      text: `··· ${j - i} unchanged line${j - i === 1 ? "" : "s"} ···`,
+      text: `Show ${omitted} unchanged line${omitted === 1 ? "" : "s"}`,
       oldLine: null,
       newLine: null,
-      omitted: j - i,
+      omitted,
+      hiddenRows,
+      id: `gap-${gap}:${first?.oldLine ?? "x"}-${last?.oldLine ?? "y"}:${first?.newLine ?? "x"}-${last?.newLine ?? "y"}`,
     })
+    gap++
     i = j
+  }
+  return out
+}
+
+/**
+ * Materialize collapsed gaps: expanded ellipses become their hidden rows;
+ * collapsed ellipses stay as a single control row.
+ */
+export function materializeCollapsedDiffRows(
+  rows: LineDiffRow[],
+  expandedIds: ReadonlySet<string>,
+): LineDiffRow[] {
+  const out: LineDiffRow[] = []
+  for (const row of rows) {
+    if (row.kind !== "ellipsis") {
+      out.push(row)
+      continue
+    }
+    const id = row.id
+    if (id && expandedIds.has(id) && row.hiddenRows?.length) {
+      out.push({
+        kind: "ellipsis",
+        text: `Hide ${row.omitted ?? row.hiddenRows.length} unchanged line${(row.omitted ?? row.hiddenRows.length) === 1 ? "" : "s"}`,
+        oldLine: null,
+        newLine: null,
+        omitted: row.omitted,
+        hiddenRows: row.hiddenRows,
+        id,
+      })
+      out.push(...row.hiddenRows)
+      continue
+    }
+    out.push(row)
   }
   return out
 }
