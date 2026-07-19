@@ -21,6 +21,7 @@ import { EnvColorPicker } from "./EnvColorPicker"
 import { ServiceUrlsField } from "./ServiceUrlsField"
 import { SyncPolicySection } from "./SyncPolicySection"
 import type { ServiceUrlEntry, EnvironmentFormSnapshot } from "./environment-form-model"
+import { ENV_FORM_ROOT_CLASS } from "./environment-form-layout"
 
 const ROLE_OPTIONS: ListboxOption<SyncEnvironmentAdmin["role"]>[] = [
   { value: "source", label: "source" },
@@ -138,7 +139,7 @@ export function SyncEnvironmentForm({
   )
 
   return (
-    <div className="space-y-3">
+    <div className={ENV_FORM_ROOT_CLASS}>
       {readOnly && (
         <p className={HELP_TEXT}>
           Built-in environment is locked. Unlock from the toolbar to edit dev, uat, or prod.
@@ -179,7 +180,7 @@ export function SyncEnvironmentForm({
             options={connectorOptions}
             onChange={onConnectorChange}
             size="sm"
-            className="w-full"
+            className="listbox-control w-full"
             ariaLabel="Connector"
             disabled={readOnly}
           />
@@ -198,7 +199,7 @@ export function SyncEnvironmentForm({
               options={ROLE_OPTIONS}
               onChange={(role) => patch({ role })}
               size="sm"
-              className="w-full"
+              className="listbox-control w-full"
               ariaLabel="Role"
               disabled={readOnly}
             />
@@ -224,7 +225,7 @@ export function SyncEnvironmentForm({
             options={ACCESS_MODE_OPTIONS}
             onChange={onAccessModeChange}
             size="sm"
-            className="w-full"
+            className="listbox-control w-full"
             ariaLabel="Access"
             disabled={readOnly}
           />

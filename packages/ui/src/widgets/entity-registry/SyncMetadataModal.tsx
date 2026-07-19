@@ -39,6 +39,12 @@ import { ModalToastStack, useModalToasts } from "./ModalToastStack"
 import { HANDLER_TYPE_TAG } from "./param-binding-ui"
 import { SyncEnvironmentForm } from "./sync-environments/SyncEnvironmentForm"
 import {
+  CONFIG_SPLIT_FORM_CLASS,
+  CONFIG_SPLIT_FORM_SCROLL_CLASS,
+  CONFIG_SPLIT_GRID_CLASS,
+  CONFIG_SPLIT_LIST_CLASS,
+} from "./sync-environments/environment-form-layout"
+import {
   cloneEnvironmentFormSnapshot,
   emptyEnvironmentFormSnapshot,
   environmentFormFromEnv,
@@ -807,8 +813,8 @@ export function SyncMetadataModal({
           <p className={`${META_TEXT} max-w-3xl leading-relaxed text-text-faint`}>{headerDescription}</p>
         </div>
 
-        <div className="grid min-h-0 flex-1 grid-cols-1 gap-0 lg:grid-cols-[minmax(0,0.9fr)_minmax(0,1.1fr)]">
-          <div className="flex min-h-0 flex-col overflow-hidden border-b border-border-subtle p-5 lg:border-b-0 lg:border-r">
+        <div className={CONFIG_SPLIT_GRID_CLASS}>
+          <div className={CONFIG_SPLIT_LIST_CLASS}>
             {!catalog && busy && catalogView !== "environments" && <p className="shrink-0 text-sm text-text-muted">Loading…</p>}
             {catalogView === "environments" && environments.busy && environments.items.length === 0 && (
               <p className="shrink-0 text-sm text-text-muted">Loading…</p>
@@ -877,9 +883,9 @@ export function SyncMetadataModal({
             )}
           </div>
 
-          <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+          <div className={CONFIG_SPLIT_FORM_CLASS}>
             {catalogView === "environments" && environmentFormOpen ? (
-              <>
+              <div className={CONFIG_SPLIT_FORM_CLASS}>
                 <div className="shrink-0 border-b border-border-subtle bg-elevated/40 px-5 py-3">
                   <p className="text-[11px] font-semibold uppercase tracking-wide text-text-faint">
                     Environments
@@ -906,7 +912,7 @@ export function SyncMetadataModal({
                     <p className={`${META_TEXT} mt-1 font-mono`}>{environmentEditingId}</p>
                   )}
                 </div>
-                <div className="min-h-0 flex-1 overflow-auto bg-base/20 p-5">
+                <div className={CONFIG_SPLIT_FORM_SCROLL_CLASS}>
                   <SyncEnvironmentForm
                     value={environmentForm}
                     onChange={setEnvironmentForm}
@@ -919,7 +925,7 @@ export function SyncMetadataModal({
                     }))}
                   />
                 </div>
-              </>
+              </div>
             ) : catalogView === "environments" ? (
               <EmptyState
                 icon={MousePointer2}
@@ -934,7 +940,7 @@ export function SyncMetadataModal({
                 )}
               />
             ) : formOpen ? (
-              <>
+              <div className={CONFIG_SPLIT_FORM_CLASS}>
             <div className="shrink-0 border-b border-border-subtle bg-elevated/40 px-5 py-3">
               <p className="text-[11px] font-semibold uppercase tracking-wide text-text-faint">
                 {catalogView === "flows" ? "Flows" : catalogView === "actions" ? "Actions" : "Sources"}
@@ -959,7 +965,7 @@ export function SyncMetadataModal({
               )}
             </div>
 
-            <div className="min-h-0 flex-1 overflow-auto bg-base/20 p-5">
+            <div className={CONFIG_SPLIT_FORM_SCROLL_CLASS}>
             {formMode === "edit" && editingBuiltIn && tab === "valueSources" && (
               <p className={`mb-4 ${HELP_TEXT}`}>
                 Built-in value source — resolution kind and SQL are locked. You can still update the name and description.
@@ -1122,7 +1128,7 @@ export function SyncMetadataModal({
               )}
             </div>
             </div>
-              </>
+              </div>
             ) : (
               <EmptyState
                 icon={MousePointer2}

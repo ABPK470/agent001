@@ -5,6 +5,7 @@ import { FormCheck } from "../../sync-admin/shared"
 import { HELP_TEXT } from "../chrome"
 import { FormFieldGroup, FormSectionCard } from "../form-section"
 import type { DirectionPolicyMode, EnvironmentFormSnapshot } from "./environment-form-model"
+import { ENV_POLICY_ALLOWED_CLASS } from "./environment-form-layout"
 
 const DIRECTION_POLICY_OPTIONS: ListboxOption<DirectionPolicyMode>[] = [
   { value: "unrestricted", label: "Unrestricted", hint: "Any environment allowed when this env is source" },
@@ -25,12 +26,19 @@ export function SyncPolicySection({
 }): JSX.Element {
   const peers = peerEnvironments.filter((target) => target.name.trim())
 
-  function toggleDirection(name: string): void {
+  function setDirectionChecked(name: string, checked: boolean): void {
     const normalized = name.trim()
     const selected = new Set(value.allowedDirections)
-    if (selected.has(normalized)) selected.delete(normalized)
-    else selected.add(normalized)
+    if (checked) selected.add(normalized)
+    else selected.delete(normalized)
     onChange({ allowedDirections: [...selected] })
+  }
+
+  function onPolicyChange(directionPolicy: DirectionPolicyMode): void {
+    onChange({
+      directionPolicy,
+      allowedDirections: directionPolicy === "restricted" ? value.allowedDirections : [],
+    })
   }
 
   return (
@@ -46,29 +54,31 @@ export function SyncPolicySection({
         <Listbox
           value={value.directionPolicy}
           options={DIRECTION_POLICY_OPTIONS}
-          onChange={(directionPolicy) => onChange({ directionPolicy })}
+          onChange={onPolicyChange}
           size="sm"
-          className="w-full"
+          className="listbox-control w-full"
           ariaLabel="Outgoing direction policy"
           disabled={readOnly}
         />
       </FormFieldGroup>
 
       {value.directionPolicy === "restricted" && (
-        <div className="space-y-2 rounded-lg border border-border-subtle bg-base/20 p-3">
+        <div className={ENV_POLICY_ALLOWED_CLASS}>
           <p className="text-xs font-medium uppercase tracking-wide text-text-faint">Allowed environments</p>
           {peers.length === 0 ? (
             <p className={HELP_TEXT}>No other environments configured yet.</p>
           ) : (
-            peers.map((target) => (
-              <FormCheck
-                key={target.name}
-                label={`${target.displayName} (${target.name})`}
-                checked={value.allowedDirections.includes(target.name)}
-                disabled={readOnly}
-                onChange={() => toggleDirection(target.name)}
-              />
-            ))
+            <div className="flex w-full min-w-0 flex-col gap-2">
+              {peers.map((target) => (
+                <FormCheck
+                  key={target.name}
+                  label={`${target.displayName} (${target.name})`}
+                  checked={value.allowedDirections.includes(target.name)}
+                  disabled={readOnly}
+                  onChange={(checked) => setDirectionChecked(target.name, checked)}
+                />
+              ))}
+            </div>
           )}
         </div>
       )}

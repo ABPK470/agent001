@@ -16,7 +16,6 @@ import {
   type ActiveFilterChipModel,
 } from "../../components/FilterSheet"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
-import { SearchablePick, type SearchablePickOption } from "../../components/SearchablePick"
 import { useLiveReload } from "../../hooks/useLiveReload"
 import { ModalShell } from "../entity-registry/ModalShell"
 import {
@@ -108,11 +107,15 @@ export function CatalogVersionsModal({
     [versions, filters],
   )
 
-  const actorOptions = useMemo<SearchablePickOption[]>(() => {
+  const actorOptions = useMemo<ListboxOption<string>[]>(() => {
     const actors = [...new Set(versions.map((entry) => entry.createdBy).filter(Boolean))].sort()
     return [
       { value: "", label: "Any" },
-      ...actors.map((actor) => ({ value: actor, label: actor })),
+      ...actors.map((actor) =>
+        actor === "system"
+          ? { value: actor, label: "system", hint: "Platform / seed — not a registered user" }
+          : { value: actor, label: actor },
+      ),
     ]
   }, [versions])
 
@@ -278,15 +281,17 @@ export function CatalogVersionsModal({
               </FilterField>
             </div>
             <FilterField label="User">
-              <SearchablePick
+              <Listbox
                 value={filters.actor ?? ""}
                 options={actorOptions}
                 onChange={(actor) =>
                   setFilters((current) => ({ ...current, actor: actor || undefined }))
                 }
-                placeholder="UPN"
-                ariaLabel="User"
                 size="sm"
+                className="w-full listbox-control"
+                ariaLabel="User"
+                placeholder="UPN"
+                blankIsPlaceholder
               />
             </FilterField>
           </FilterSheet>
@@ -340,7 +345,7 @@ export function CatalogVersionsModal({
                           <span
                             className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
                               activeNeedsPublish
-                                ? "border-amber-500/30 bg-amber-500/10 text-amber-300"
+                                ? "border-warning/30 bg-warning/10 text-warning"
                                 : "border-success/30 bg-success/10 text-success"
                             }`}
                             title={

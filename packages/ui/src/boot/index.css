@@ -708,12 +708,14 @@ body {
   font-size: 0.875rem;
 }
 
-/* Listbox / DateField / SearchablePick triggers — one footprint */
+/* Listbox / DateField / SearchablePick triggers — one footprint.
+   Prefer `.listbox-control` (FormFieldGroup is a role=group, not <label>). */
+.entity-registry .listbox-control[aria-haspopup="listbox"],
+.modal-surface .listbox-control[aria-haspopup="listbox"],
+.sync-admin .listbox-control[aria-haspopup="listbox"],
 .entity-registry label [aria-haspopup="listbox"],
 .modal-surface label [aria-haspopup="listbox"],
 .sync-admin label [aria-haspopup="listbox"],
-.entity-registry .listbox-control[aria-haspopup="listbox"],
-.modal-surface .listbox-control[aria-haspopup="listbox"],
 .entity-registry .listbox-control[aria-haspopup="dialog"],
 .modal-surface .listbox-control[aria-haspopup="dialog"],
 .filter-bar .listbox-control[aria-haspopup="listbox"],
@@ -724,11 +726,12 @@ body {
   min-height: 2.25rem;
 }
 
+.entity-registry .listbox-control[aria-haspopup="listbox"] .truncate,
+.modal-surface .listbox-control[aria-haspopup="listbox"] .truncate,
+.sync-admin .listbox-control[aria-haspopup="listbox"] .truncate,
 .entity-registry label [aria-haspopup="listbox"] .truncate,
 .modal-surface label [aria-haspopup="listbox"] .truncate,
 .sync-admin label [aria-haspopup="listbox"] .truncate,
-.entity-registry .listbox-control[aria-haspopup="listbox"] .truncate,
-.modal-surface .listbox-control[aria-haspopup="listbox"] .truncate,
 .filter-bar .listbox-control .truncate {
   font-size: inherit;
   font-weight: 400;
