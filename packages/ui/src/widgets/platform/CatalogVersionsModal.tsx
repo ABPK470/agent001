@@ -55,6 +55,7 @@ export function CatalogVersionsModal({
   const [filtersOpen, setFiltersOpen] = useState(false)
   const [bundlePublishedAt, setBundlePublishedAt] = useState<string | null>(null)
   const [activeNeedsPublish, setActiveNeedsPublish] = useState(false)
+  const [operationalCatalogAhead, setOperationalCatalogAhead] = useState(false)
   const [publishedCatalogVersion, setPublishedCatalogVersion] = useState<number | null>(null)
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const filterBtnRef = useRef<HTMLButtonElement>(null)
@@ -72,6 +73,7 @@ export function CatalogVersionsModal({
       setVersions(res.versions)
       setBundlePublishedAt(status?.publishedAt ?? health?.publish?.publishedAt ?? null)
       setActiveNeedsPublish(Boolean(status?.catalogNeedsPublish || (status?.unpublishedEntityCount ?? 0) > 0))
+      setOperationalCatalogAhead(Boolean(status?.operationalCatalogAhead))
       setPublishedCatalogVersion(status?.publishedCatalogVersion ?? null)
     } catch (e) {
       setErr(e instanceof Error ? e.message : String(e))
@@ -342,22 +344,12 @@ export function CatalogVersionsModal({
                           </span>
                         )}
                         {entry.isActive && (
-                          <span
-                            className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${
-                              activeNeedsPublish
-                                ? "border-warning/30 bg-warning/10 text-warning"
-                                : "border-success/30 bg-success/10 text-success"
-                            }`}
-                            title={
-                              activeNeedsPublish
-                                ? publishedCatalogVersion != null
-                                  ? `Active catalog v${activeVersion} is ahead of last publish (from v${publishedCatalogVersion})`
-                                  : "Active catalog has changes not yet compiled into the sync publish bundle"
-                                : "Active catalog matches the published sync bundle"
-                            }
-                          >
-                            {activeNeedsPublish ? "publish pending" : "published"}
-                          </span>
+                          <ActivePublishBadge
+                            version={entry.version}
+                            publishedCatalogVersion={publishedCatalogVersion}
+                            needsPublish={activeNeedsPublish}
+                            operationalAhead={operationalCatalogAhead}
+                          />
                         )}
                       </div>
                       <div className="truncate text-text-muted">{entry.reason}</div>
@@ -402,6 +394,56 @@ export function CatalogVersionsModal({
         />
       )}
     </>
+  )
+}
+
+/**
+ * "published" means tip stamp === last Publish stamp — never "!needsPublish".
+ * Tip ahead of publish must not show green while the bundle is still from an older vN.
+ */
+function ActivePublishBadge({
+  version,
+  publishedCatalogVersion,
+  needsPublish,
+  operationalAhead,
+}: {
+  version: number
+  publishedCatalogVersion: number | null
+  needsPublish: boolean
+  operationalAhead: boolean
+}): JSX.Element {
+  const stampMatches =
+    publishedCatalogVersion != null && version === publishedCatalogVersion
+  const label = stampMatches
+    ? "published"
+    : needsPublish
+      ? "publish pending"
+      : operationalAhead
+        ? "env ahead"
+        : "publish pending"
+  const title = stampMatches
+    ? "Active tip stamp matches the last Publish"
+    : needsPublish
+      ? publishedCatalogVersion != null
+        ? `Active catalog v${version} — sync bundle still from v${publishedCatalogVersion}`
+        : "Active catalog has changes not yet compiled into the sync runtime bundle"
+      : operationalAhead
+        ? "Tip ahead for environments only — live at preview/execute, Publish not required"
+        : publishedCatalogVersion != null
+          ? `Active catalog v${version} — sync bundle still from v${publishedCatalogVersion}`
+          : "Publish required"
+  const toneClass = stampMatches
+    ? "border-success/30 bg-success/10 text-success"
+    : needsPublish || !operationalAhead
+      ? "border-warning/30 bg-warning/10 text-warning"
+      : "border-accent/30 bg-accent/10 text-accent"
+  return (
+    <span
+      className={`rounded border px-1.5 py-0.5 text-[10px] uppercase tracking-wide ${toneClass}`}
+      title={title}
+    >
+      {label}
+    </span>
   )
 }
 

@@ -85,10 +85,6 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null
 }
 
-function asArray(value: unknown): unknown[] {
-  return Array.isArray(value) ? value : []
-}
-
 function loadSnapshotAtVersion(
   tenantId: string,
   version: number | null,
@@ -348,7 +344,8 @@ export function classifyCatalogPublish(
     .filter((s) => OPERATIONAL_CATALOG_SECTIONS.has(s))
 
   // Missing historical snapshot: cannot prove env-only — treat tip ahead as compile-dirty.
-  const compileSectionDirty = publishedSnapshot == null || dirtyCompileSections.length > 0
+  const missingPublishedSnapshot = publishedSnapshot == null
+  const compileSectionDirty = missingPublishedSnapshot || dirtyCompileSections.length > 0
 
   const compileAffectedEntityIds = compileAffectedEntityIdsFromDiff({
     tip: tipSnapshot,
@@ -356,9 +353,19 @@ export function classifyCatalogPublish(
     diff: compileSectionDirty ? diff : null,
   })
 
-  const compileNeedsPublish = compileSectionDirty || compileAffectedEntityIds.length > 0
-  const operationalOnlyAhead =
-    tipAhead && !compileNeedsPublish && dirtyOperationalSections.length > 0
+  const hasCompileDelta =
+    missingPublishedSnapshot
+    || dirtyCompileSections.length > 0
+    || compileAffectedEntityIds.length > 0
+  const hasOperationalDelta = dirtyOperationalSections.length > 0
+
+  // Tip stamp ahead with only environment deltas — live at preview/execute.
+  const operationalOnlyAhead = tipAhead && !hasCompileDelta && hasOperationalDelta
+
+  // Tip stamp ahead for any non-env reason arms Publish — including "zombie tip"
+  // (version number ahead, live content matches publish) so UI cannot claim
+  // published while activeVersion !== publishedCatalogVersion.
+  const compileNeedsPublish = tipAhead ? !operationalOnlyAhead : hasCompileDelta
 
   return {
     activeCatalogVersion,

@@ -1,6 +1,6 @@
 /**
- * Publish Catalog tip → sync runtime — confirmation with tip-vs-published diff.
- * Same Changes / CatalogJsonDiff dialect as catalog version detail (different job).
+ * Publish Catalog tip → sync runtime — confirmation with live tip-vs-published diff.
+ * Diff SoT is publish-preview (live tip), not catalog version-history snapshots.
  */
 
 import { CheckCircle2, GitCompareArrows, Loader2, Rocket, XCircle } from "lucide-react"
@@ -21,17 +21,6 @@ import { ACTION_BTN, META_TEXT, PANEL, TEXT_BTN } from "./chrome"
 import { ModalShell } from "./ModalShell"
 
 type PublishPhase = "idle" | "publishing" | "done"
-
-/** Tip sections that enter the published SyncDefinition contract. */
-const COMPILE_SECTIONS = new Set([
-  "entities",
-  "configs",
-  "strategies",
-  "flows",
-  "actions",
-  "valueSources",
-  "phases",
-])
 
 const SECTION_LABELS: Record<string, string> = {
   entities: "Entities",
@@ -63,44 +52,31 @@ export function PublishCatalogModal({
   const [diffBusy, setDiffBusy] = useState(false)
   const [diffError, setDiffError] = useState<string | null>(null)
   const [sections, setSections] = useState<CatalogDiffSection[]>([])
-  const [fromVersion, setFromVersion] = useState<number | null>(null)
-  const [toVersion, setToVersion] = useState<number | null>(null)
   const [changeCount, setChangeCount] = useState(0)
+  const [previewNeedsPublish, setPreviewNeedsPublish] = useState(false)
+  const [tipVersion, setTipVersion] = useState<number | null>(
+    publishStatus?.activeCatalogVersion ?? null,
+  )
+  const [publishedVersion, setPublishedVersion] = useState<number | null>(
+    publishStatus?.publishedCatalogVersion ?? null,
+  )
   const [openEntryKey, setOpenEntryKey] = useState<string | null>(null)
 
-  const tipVersion = publishStatus?.activeCatalogVersion ?? null
-  const publishedVersion = publishStatus?.publishedCatalogVersion ?? null
-
   useEffect(() => {
-    if (phase !== "idle" || tipVersion == null) {
-      setSections([])
-      setDiffBusy(false)
-      setDiffError(null)
-      return
-    }
+    if (phase !== "idle") return
     let cancelled = false
     setDiffBusy(true)
     setDiffError(null)
     setOpenEntryKey(null)
-    const against =
-      publishedVersion != null && publishedVersion !== tipVersion
-        ? publishedVersion
-        : ("previous" as const)
-
-    void api.getSyncCatalogVersionDiff(tipVersion, against).then(
-      (res) => {
+    void api.getSyncPublishPreview().then(
+      (preview) => {
         if (cancelled) return
-        const compileSections = res.diff.sections.filter((s) => COMPILE_SECTIONS.has(s.section))
-        setSections(compileSections)
-        setFromVersion(res.diff.fromVersion)
-        setToVersion(res.diff.toVersion)
-        setChangeCount(
-          compileSections.reduce(
-            (n, s) => n + s.creates.length + s.updates.length + s.deletes.length,
-            0,
-          ),
-        )
-        setOpenEntryKey(firstCatalogDiffEntryKey(compileSections))
+        setSections(preview.sections)
+        setChangeCount(preview.changeCount)
+        setTipVersion(preview.activeCatalogVersion)
+        setPublishedVersion(preview.publishedCatalogVersion)
+        setPreviewNeedsPublish(preview.catalogNeedsPublish)
+        setOpenEntryKey(firstCatalogDiffEntryKey(preview.sections))
         setDiffBusy(false)
       },
       (e: unknown) => {
@@ -113,7 +89,7 @@ export function PublishCatalogModal({
     return () => {
       cancelled = true
     }
-  }, [phase, tipVersion, publishedVersion])
+  }, [phase])
 
   async function confirmPublish(): Promise<void> {
     setPhase("publishing")
@@ -154,15 +130,19 @@ export function PublishCatalogModal({
 
   const compileSections = publishStatus?.dirtyCompileSections ?? []
   const operationalOnly = Boolean(publishStatus?.operationalCatalogAhead)
+  const stampDrift =
+    tipVersion != null
+    && publishedVersion != null
+    && tipVersion !== publishedVersion
+    && changeCount === 0
+    && previewNeedsPublish
 
   const compareLabel =
     tipVersion == null
       ? "Catalog tip"
-      : publishedVersion != null && fromVersion === publishedVersion
-        ? `Tip v${toVersion ?? tipVersion} vs published v${publishedVersion}`
-        : fromVersion != null
-          ? `Tip v${toVersion ?? tipVersion} vs v${fromVersion}`
-          : `Tip v${tipVersion}`
+      : publishedVersion != null
+        ? `Live tip v${tipVersion} vs published v${publishedVersion}`
+        : `Live tip v${tipVersion}`
 
   const subtitle =
     phase === "idle"
@@ -241,6 +221,12 @@ export function PublishCatalogModal({
                 </span>
               </p>
             )}
+            {stampDrift && (
+              <p className={`text-center text-sm text-warning`}>
+                Tip stamp is ahead of publish, but live tip content matches the published
+                snapshot. Publish reconciles the stamp (v{publishedVersion} → v{tipVersion}).
+              </p>
+            )}
             {operationalOnly && (
               <p className={`text-center ${META_TEXT}`}>
                 Catalog tip also has environment updates (live — not listed below).
@@ -268,21 +254,21 @@ export function PublishCatalogModal({
             {diffBusy ? (
               <div className="flex flex-1 items-center justify-center gap-2 px-4 py-10 text-sm text-text-muted">
                 <Loader2 size={16} className="animate-spin" />
-                Loading tip vs published diff…
+                Loading live tip vs published diff…
               </div>
             ) : diffError ? (
               <p className="px-4 py-6 text-sm text-error">{diffError}</p>
-            ) : tipVersion == null ? (
-              <p className={`px-4 py-6 text-sm ${META_TEXT}`}>
-                No catalog tip version yet — Publish will compile the current tip.
-              </p>
             ) : (
               <CatalogDiffSections
                 sections={sections}
                 openEntryKey={openEntryKey}
                 onToggleEntry={setOpenEntryKey}
                 changesOnly
-                emptyMessage="No compile-relevant tip changes vs the last publish. Publish still recompiles the full bundle."
+                emptyMessage={
+                  stampDrift
+                    ? "No live compile delta — Publish only advances the published catalog stamp to the active tip."
+                    : "No compile-relevant tip changes vs the last publish. Publish still recompiles the full bundle."
+                }
               />
             )}
           </section>

@@ -864,6 +864,7 @@ export interface SyncPublishStatus {
   /**
    * Compile-relevant tip is ahead of published SyncDefinitions — arms Publish.
    * Environment-only tip advances do **not** set this.
+   * Tip version stamp ahead of publish (non-env) always arms Publish.
    */
   catalogNeedsPublish: boolean
   /** Tip ahead only due to operational catalog (environments) — no Publish required. */
@@ -877,6 +878,40 @@ export interface SyncPublishStatus {
   publishedAt: string | null
   unpublishedEntityCount: number
   unpublishedEntityIds: string[]
+}
+
+/** Live tip vs last-published catalog snapshot — what Publish will actually compile. */
+export interface SyncPublishPreview {
+  activeCatalogVersion: number | null
+  publishedCatalogVersion: number | null
+  catalogNeedsPublish: boolean
+  operationalCatalogAhead: boolean
+  changeCount: number
+  sections: Array<{
+    section: string
+    label: string
+    creates: Array<{
+      id: string
+      kind: "create"
+      changedPaths: string[]
+      beforeJson: string | null
+      afterJson: string | null
+    }>
+    updates: Array<{
+      id: string
+      kind: "update"
+      changedPaths: string[]
+      beforeJson: string | null
+      afterJson: string | null
+    }>
+    deletes: Array<{
+      id: string
+      kind: "delete"
+      changedPaths: string[]
+      beforeJson: string | null
+      afterJson: string | null
+    }>
+  }>
 }
 
 export interface PublishSyncDefinitionsResponse {

@@ -483,6 +483,8 @@ export const api = {
   listSyncDefinitionConfigs: () => json<import("../types").SyncDefinitionAdminItem[]>("/api/sync-definition-configs"),
   getSyncPublishStatus: () =>
     json<import("../types").SyncPublishStatus>("/api/sync/definitions/publish-status"),
+  getSyncPublishPreview: () =>
+    json<import("@mia/shared-types").SyncPublishPreview>("/api/sync/definitions/publish-preview"),
   getSyncDefinitionConfigOptions: () => json<import("../types").SyncDefinitionRuntimeOptions>("/api/sync-definition-config-options"),
   updateSyncDefinitionConfig: (entityId: string, fields: Record<string, unknown>) =>
     json<{ ok: boolean }>(`/api/sync-definition-configs/${encodeURIComponent(entityId)}`, {

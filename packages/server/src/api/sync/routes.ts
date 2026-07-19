@@ -23,6 +23,7 @@ import {
   listSyncDefinitionRuntimeOptions,
   defaultEntityFlowId,
   entityNeedsRepublish,
+  getSyncPublishPreview,
   getSyncPublishStatus,
   PublishSyncDefinitionsError,
   publishSyncDefinitionsFromDb,
@@ -264,6 +265,13 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
       return { error: "admin only" }
     }
     return getSyncPublishStatus(projectRoot)
+  })
+  app.get("/api/sync/definitions/publish-preview", async (req, reply) => {
+    if (!req.session?.isAdmin) {
+      reply.code(403)
+      return { error: "admin only" }
+    }
+    return getSyncPublishPreview(projectRoot)
   })
   app.get("/api/sync-definition-config-options", async (req, reply) => {
     if (!req.session?.isAdmin) {

@@ -6,6 +6,7 @@ import type {
   EntityRegistrySyncFlowTemplateId,
   PublishedSyncDefinition,
   SyncDefinitionRuntimeOptions,
+  SyncPublishPreview,
   SyncPublishStatus,
 } from "@mia/shared-types"
 import {
@@ -29,7 +30,10 @@ import {
 import { reloadPublishedSyncVocabulary } from "../../../boot/published-sync-bundle.js"
 import { _resetGoalClassificationCache } from "../../runs/prompting/goal-classification.js"
 import * as db from "../../../infra/persistence/sqlite.js"
-import { classifyCatalogPublish } from "./catalog-publish-classification.js"
+import {
+  COMPILE_CATALOG_SECTIONS,
+  classifyCatalogPublish,
+} from "./catalog-publish-classification.js"
 
 const DEFAULT_TENANT_ID = "_default"
 const ENTITY_SEEDS_DIR = "deploy/sync/artifacts/entities"
@@ -203,6 +207,53 @@ export function getSyncPublishStatus(
     publishedAt: classified.publishedAt,
     unpublishedEntityCount: unpublishedEntityIds.length,
     unpublishedEntityIds,
+  }
+}
+
+/** Live tip vs published catalog snapshot — Publish modal SoT (not version-history JSON). */
+export function getSyncPublishPreview(
+  projectRoot: string,
+  tenantId = DEFAULT_TENANT_ID,
+): SyncPublishPreview {
+  const classified = classifyCatalogPublish(projectRoot, tenantId)
+  const sections = (classified.diff?.sections ?? [])
+    .filter((s) => COMPILE_CATALOG_SECTIONS.has(s.section))
+    .map((s) => ({
+      section: s.section,
+      label: s.label,
+      creates: s.creates.map((e) => ({
+        id: e.id,
+        kind: "create" as const,
+        changedPaths: e.changedPaths,
+        beforeJson: e.beforeJson,
+        afterJson: e.afterJson,
+      })),
+      updates: s.updates.map((e) => ({
+        id: e.id,
+        kind: "update" as const,
+        changedPaths: e.changedPaths,
+        beforeJson: e.beforeJson,
+        afterJson: e.afterJson,
+      })),
+      deletes: s.deletes.map((e) => ({
+        id: e.id,
+        kind: "delete" as const,
+        changedPaths: e.changedPaths,
+        beforeJson: e.beforeJson,
+        afterJson: e.afterJson,
+      })),
+    }))
+  const changeCount = sections.reduce(
+    (n, s) => n + s.creates.length + s.updates.length + s.deletes.length,
+    0,
+  )
+  return {
+    activeCatalogVersion: classified.activeCatalogVersion,
+    publishedCatalogVersion: classified.publishedCatalogVersion,
+    catalogNeedsPublish: classified.compileNeedsPublish,
+    operationalCatalogAhead: classified.operationalOnlyAhead,
+    changeCount,
+    sections,
   }
 }
 

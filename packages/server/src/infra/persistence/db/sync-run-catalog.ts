@@ -197,15 +197,17 @@ export function syncBuiltInFlowsFromArtifact(
 ): void {
   const metadata = loadSyncMetadataArtifact(resolve(projectRoot))
   const now = new Date().toISOString()
+  // Tip SoT: never clobber existing flow steps on boot/seed refresh.
+  // Deploy artifact only fills NEW built-in flow ids; authoring edits survive restart.
   const stmt = getDb().prepare(
     `INSERT INTO sync_flows (tenant_id, id, label, description, steps_json, built_in, updated_at, updated_by)
      VALUES (?, ?, ?, ?, ?, 1, ?, NULL)
      ON CONFLICT(tenant_id, id) DO UPDATE SET
        label = excluded.label,
        description = excluded.description,
-       steps_json = CASE WHEN sync_flows.built_in = 1 THEN excluded.steps_json ELSE sync_flows.steps_json END,
-       updated_at = excluded.updated_at,
-       updated_by = NULL`,
+       steps_json = sync_flows.steps_json,
+       updated_at = sync_flows.updated_at,
+       updated_by = sync_flows.updated_by`,
   )
 
   for (const [id, flow] of Object.entries(metadata.flows)) {
