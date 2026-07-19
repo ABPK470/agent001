@@ -7,20 +7,37 @@ import { CheckCircle2, GitCompareArrows, Loader2, Rocket, XCircle } from "lucide
 import type { JSX } from "react"
 import { useState } from "react"
 import { api } from "../../client/index"
-import type { PublishSyncDefinitionsResponse, SyncDefinitionAdminItem } from "../../types"
+import type {
+  PublishSyncDefinitionsResponse,
+  SyncDefinitionAdminItem,
+  SyncPublishStatus,
+} from "../../types"
 import { ACTION_BTN, META_TEXT, PANEL, TEXT_BTN } from "./chrome"
 import { ModalShell } from "./ModalShell"
 
 type PublishPhase = "idle" | "publishing" | "done"
 
+const SECTION_LABELS: Record<string, string> = {
+  entities: "Entities",
+  configs: "Run configs",
+  strategies: "Strategies",
+  flows: "Flows",
+  actions: "Actions",
+  valueSources: "Value sources",
+  phases: "Phases",
+  environments: "Environments",
+}
+
 export function PublishCatalogModal({
   entityCount,
   unpublished,
+  publishStatus = null,
   onClose,
   onPublished,
 }: {
   entityCount: number
   unpublished: SyncDefinitionAdminItem[]
+  publishStatus?: SyncPublishStatus | null
   onClose: () => void
   onPublished?: (result: PublishSyncDefinitionsResponse) => void
 }): JSX.Element {
@@ -65,9 +82,14 @@ export function PublishCatalogModal({
         : error ? "Publish failed"
           : "Publish complete"
 
+  const compileSections = publishStatus?.dirtyCompileSections ?? []
+  const operationalOnly = Boolean(publishStatus?.operationalCatalogAhead)
+
   const subtitle =
     phase === "idle"
-      ? "Compose Catalog tip into the sync runtime for preview and execute. Saving the Entity Registry alone does not publish."
+      ? operationalOnly
+        ? "Environment changes are live at preview/execute — Publish is not required for them."
+        : "Compose Catalog tip into the sync runtime for preview and execute. Environments and connectors stay live and are not frozen by Publish."
       : phase === "publishing"
         ? "Composing Catalog tip into the sync runtime…"
         : undefined
@@ -109,17 +131,28 @@ export function PublishCatalogModal({
     >
       {phase === "idle" && (
         <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden px-6 py-4">
-          <section className={`${PANEL} shrink-0 p-4`}>
+          <section className={`${PANEL} shrink-0 space-y-3 p-4`}>
             <div className="flex items-center justify-center gap-8 font-mono text-sm tabular-nums">
               <div className="text-center">
                 <div className="text-lg font-semibold text-text">{unpublished.length}</div>
-                <div className={`text-xs ${META_TEXT}`}>unpublished</div>
+                <div className={`text-xs ${META_TEXT}`}>entities to republish</div>
               </div>
               <div className="text-center">
                 <div className="text-lg font-semibold text-text">{entityCount}</div>
                 <div className={`text-xs ${META_TEXT}`}>entities total</div>
               </div>
             </div>
+            {compileSections.length > 0 && (
+              <p className={`text-center ${META_TEXT}`}>
+                Tip changed:{" "}
+                {compileSections.map((id) => SECTION_LABELS[id] ?? id).join(", ")}
+              </p>
+            )}
+            {operationalOnly && (
+              <p className={`text-center ${META_TEXT}`}>
+                Catalog tip also has environment updates (live — not listed below).
+              </p>
+            )}
           </section>
 
           <section className={`${PANEL} flex min-h-0 flex-1 flex-col overflow-hidden`}>
@@ -131,8 +164,8 @@ export function PublishCatalogModal({
                 </h3>
                 <p className={`mt-0.5 ${META_TEXT}`}>
                   {unpublished.length === 0
-                    ? "No unpublished entity changes — publish still recompiles the full bundle"
-                    : `${unpublished.length} unpublished entit${unpublished.length === 1 ? "y" : "ies"}`}
+                    ? "No entities need republish for compile-relevant tip changes"
+                    : `${unpublished.length} entit${unpublished.length === 1 ? "y" : "ies"} with a stale published contract`}
                 </p>
               </div>
             </div>

@@ -230,13 +230,18 @@ export function EntityRegistry(): JSX.Element {
                     className="flex w-full items-center justify-center gap-2 rounded-lg border border-border-subtle bg-elevated/40 px-3 py-2 text-sm font-medium text-text hover:bg-elevated disabled:cursor-not-allowed disabled:opacity-40"
                     title={
                       !publishEnabled
-                        ? "No unpublished changes"
+                        ? publishStatus?.operationalCatalogAhead
+                          ? "Environment tip changes are live — Publish not required"
+                          : "Published sync contracts match compile-relevant tip"
                         : publishStatus?.catalogNeedsPublish
-                          ? `Catalog tip v${publishStatus.activeCatalogVersion ?? "?"} is ahead of last publish` +
+                          ? `Compile-relevant tip v${publishStatus.activeCatalogVersion ?? "?"} ahead of publish` +
                             (publishStatus.publishedCatalogVersion != null
                               ? ` (from v${publishStatus.publishedCatalogVersion})`
+                              : "") +
+                            (publishStatus.dirtyCompileSections?.length
+                              ? ` · ${publishStatus.dirtyCompileSections.join(", ")}`
                               : "")
-                          : `Publish ${publishPendingCount} unpublished change(s)`
+                          : `Publish ${publishPendingCount} entit${publishPendingCount === 1 ? "y" : "ies"}`
                     }
                   >
                     <Rocket size={14} className="text-accent" />
@@ -312,6 +317,7 @@ export function EntityRegistry(): JSX.Element {
         <PublishCatalogModal
           entityCount={activeEntityCount}
           unpublished={unpublishedItems}
+          publishStatus={publishStatus}
           onClose={() => setPublishOpen(false)}
           onPublished={(res) => {
             notify(`Published sync bundle · ${res.definitionCount} definition(s)`)

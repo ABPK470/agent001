@@ -29,6 +29,7 @@ import {
 import { reloadPublishedSyncVocabulary } from "../../../boot/published-sync-bundle.js"
 import { _resetGoalClassificationCache } from "../../runs/prompting/goal-classification.js"
 import * as db from "../../../infra/persistence/sqlite.js"
+import { classifyCatalogPublishGap } from "./catalog-publish-gap.js"
 
 const DEFAULT_TENANT_ID = "_default"
 const ENTITY_SEEDS_DIR = "deploy/sync/artifacts/entities"
@@ -185,55 +186,34 @@ function loadPublishedBundle(_projectRoot?: string): PersistedPublishedBundle | 
   }
 }
 
-function resolveCatalogPublishGap(
-  projectRoot: string,
-  tenantId = DEFAULT_TENANT_ID,
-): {
-  catalogNeedsPublish: boolean
-  activeCatalogVersion: number | null
-  publishedCatalogVersion: number | null
-  publishedAt: string | null
-  published: PersistedPublishedBundle | null
-} {
-  const published = loadPublishedBundle(projectRoot)
-  const activeCatalogVersion = db.getActiveSyncCatalogVersion(tenantId)
-  const publishedCatalogVersion = published?.catalogVersion ?? null
-  const publishedAt = published?.publishedAt ?? null
-  const catalogNeedsPublish =
-    published == null ||
-    publishedCatalogVersion == null ||
-    (activeCatalogVersion != null && activeCatalogVersion !== publishedCatalogVersion)
-  return {
-    catalogNeedsPublish,
-    activeCatalogVersion,
-    publishedCatalogVersion,
-    publishedAt,
-    published,
-  }
-}
-
 export function getSyncPublishStatus(
   projectRoot: string,
   tenantId = DEFAULT_TENANT_ID,
 ): SyncPublishStatus {
-  const gap = resolveCatalogPublishGap(projectRoot, tenantId)
-  // Catalog tip is enough to arm Publish; entity ids are best-effort detail.
-  let unpublishedEntityIds: string[] = []
-  try {
-    unpublishedEntityIds = listSyncDefinitionAdminItems(projectRoot, tenantId)
-      .filter((item) => item.needsPublish)
-      .map((item) => item.id)
-  } catch {
-    unpublishedEntityIds = []
-  }
+  const gap = classifyCatalogPublishGap(projectRoot, tenantId)
+  const unpublishedEntityIds = [...gap.compileAffectedEntityIds].sort()
   return {
-    catalogNeedsPublish: gap.catalogNeedsPublish,
+    // Arms Publish only for compile-relevant tip deltas (not env-only).
+    catalogNeedsPublish: gap.compileNeedsPublish,
+    operationalCatalogAhead: gap.operationalOnlyAhead,
+    dirtyCompileSections: gap.dirtyCompileSections,
+    dirtyOperationalSections: gap.dirtyOperationalSections,
     activeCatalogVersion: gap.activeCatalogVersion,
     publishedCatalogVersion: gap.publishedCatalogVersion,
     publishedAt: gap.publishedAt,
     unpublishedEntityCount: unpublishedEntityIds.length,
     unpublishedEntityIds,
   }
+}
+
+/** True when this entity's published SyncDefinition is behind compile-relevant tip. */
+export function entityNeedsRepublish(
+  projectRoot: string,
+  entityId: string,
+  tenantId = DEFAULT_TENANT_ID,
+): boolean {
+  const gap = classifyCatalogPublishGap(projectRoot, tenantId)
+  return gap.compileAffectedEntityIds.includes(entityId)
 }
 
 /**
@@ -246,17 +226,15 @@ export function listSyncDefinitionAdminItems(
 ): SyncDefinitionAdminItem[] {
   const flowTemplateCatalog = loadAuthoringFlowCatalog(projectRoot, tenantId)
   const entities = db.listEntityDefinitions(tenantId)
-  const gap = resolveCatalogPublishGap(projectRoot, tenantId)
+  const gap = classifyCatalogPublishGap(projectRoot, tenantId)
   const published = gap.published
+  const compileAffected = new Set(gap.compileAffectedEntityIds)
   return entities.map((entity) => {
     const compose = syncDefinitionConfigFromEntity(entity, flowTemplateCatalog)
     const flowTemplateId = compose.flow_preset as EntityRegistrySyncFlowTemplateId
     const publishedDefinition = published?.definitions?.[entity.id] ?? null
     const publishedAt = publishedDefinition?.publishedAt ?? null
-    const publishedSourceVersion = publishedDefinition?.provenance?.sourceVersion ?? null
-    const entityNeedsPublish =
-      publishedDefinition == null || publishedSourceVersion !== String(entity.version)
-    const needsPublish = entityNeedsPublish || gap.catalogNeedsPublish
+    const needsPublish = compileAffected.has(entity.id)
     return {
       id: entity.id,
       displayName: entity.displayName,

@@ -19,7 +19,13 @@ import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { ToastStack, useWidgetToasts } from "../../components/useWidgetToasts"
 import { useContainerSize } from "../../hooks/useContainerSize"
 import { useStore } from "../../state/store"
-import type { PublishedSyncDefinition, SyncEntityType, SyncEnvironment, SyncPlan } from "../../types"
+import type {
+  PublishedSyncDefinition,
+  SyncEntityType,
+  SyncEnvironment,
+  SyncPlan,
+  SyncPublishStatus,
+} from "../../types"
 import { IconButton, TOOLBAR_ICON } from "../entity-registry/IconButton"
 import { ToolbarMenu, ToolbarMenuItem } from "../entity-registry/ToolbarMenu"
 import {
@@ -72,6 +78,7 @@ export function EnvSync() {
 
   const [previewing, setPreviewing] = useState(false)
   const [planLoading, setPlanLoading] = useState(false)
+  const [publishStatus, setPublishStatus] = useState<SyncPublishStatus | null>(null)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
   const [execModalOpen, setExecModalOpen] = useState(false)
   const exec = useSyncExternalStore(subscribeExec, getExecSnapshot)
@@ -91,6 +98,9 @@ export function EnvSync() {
   const srcEnv = useMemo(() => envs.find((entry) => entry.name === source) ?? null, [envs, source])
   const tgtEnv = useMemo(() => envs.find((entry) => entry.name === target) ?? null, [envs, target])
   const definition = useMemo(() => definitions.find((entry) => entry.id === entityType) ?? null, [definitions, entityType])
+  const entityPublishRequired = Boolean(
+    publishStatus?.unpublishedEntityIds?.includes(entityType),
+  )
   const enabledOptionalTables = useMemo(
     () => normalizeOptionalTableSelection(definition, form.enabledOptionalTables),
     [definition, form.enabledOptionalTables],
@@ -279,11 +289,16 @@ export function EnvSync() {
 
   useEffect(() => {
     let dead = false
-    Promise.all([api.syncEnvironments(), api.syncDefinitions()])
-      .then(([nextEnvs, nextDefinitions]) => {
+    Promise.all([
+      api.syncEnvironments(),
+      api.syncDefinitions(),
+      api.getSyncPublishStatus().catch(() => null),
+    ])
+      .then(([nextEnvs, nextDefinitions, nextPublishStatus]) => {
         if (dead) return
         setEnvs(nextEnvs)
         setDefinitions(nextDefinitions)
+        setPublishStatus(nextPublishStatus)
         const sources = listSyncSourceOptions(nextEnvs)
         const nextForm: Partial<typeof form> = {}
         if (sources.length >= 1 && !source) nextForm.source = sources[0].name
@@ -349,6 +364,8 @@ export function EnvSync() {
     !source || !target ? "Pick source + target"
       : source === target ? "Source ≠ target"
         : !definition ? "No published definition"
+          : entityPublishRequired
+            ? "Publish required — catalog tip ahead of published contract for this entity"
           : searchLoading ? "Search in progress…"
             : !entityReady
               ? selection.searchMode === "name" && !selection.committedEntityId
@@ -440,6 +457,13 @@ export function EnvSync() {
 
   return (
     <div ref={rootRef} className="relative h-full overflow-hidden flex flex-col gap-3 text-text pb-1">
+      {entityPublishRequired && (
+        <div className="shrink-0 rounded-lg border border-warning/40 bg-panel-2 px-3 py-2 text-sm text-text">
+          Published sync contract for{" "}
+          <span className="font-mono font-medium">{entityType}</span> is behind the catalog tip.
+          Publish from Entity Registry before preview/execute — tip edits are not applied until then.
+        </div>
+      )}
       <WidgetToolbar compact={compact} className="env-sync-toolbar overflow-visible z-20">
         <WidgetToolbarLeading>
           <label className="env-sync-field">

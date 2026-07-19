@@ -857,7 +857,17 @@ export interface PublishedSyncDefinitionBundle {
 }
 
 export interface SyncPublishStatus {
+  /**
+   * Compile-relevant tip is ahead of published SyncDefinitions — arms Publish.
+   * Environment-only tip advances do **not** set this.
+   */
   catalogNeedsPublish: boolean
+  /** Tip ahead only due to operational catalog (environments) — no Publish required. */
+  operationalCatalogAhead?: boolean
+  /** Diff sections that change published SyncDefinition contracts. */
+  dirtyCompileSections?: string[]
+  /** Diff sections that are live at preview/execute (e.g. environments). */
+  dirtyOperationalSections?: string[]
   activeCatalogVersion: number | null
   publishedCatalogVersion: number | null
   publishedAt: string | null

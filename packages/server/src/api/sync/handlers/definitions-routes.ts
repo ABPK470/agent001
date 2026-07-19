@@ -415,6 +415,11 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
       type: EventType.EntityRegistryRetired,
       data: { tenantId, id: req.params.id, actor: req.session.upn, retiredAt: result.retiredAt }
     })
+    recordSyncCatalogChange({
+      tenantId,
+      reason: `entity-registry:retire:${req.params.id}`,
+      actor: req.session.upn,
+    })
     return result
   })
 
@@ -556,6 +561,11 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
           type: EventType.EntityRegistryStrategyRetired,
           data: { tenantId, id, actor: req.session.upn, retiredAt: result.retiredAt },
         })
+        recordSyncCatalogChange({
+          tenantId,
+          reason: `entity-registry:strategy:retire:${id}`,
+          actor: req.session.upn,
+        })
         return result
       } catch (error) {
         reply.code(409)
@@ -607,6 +617,11 @@ export function registerEntityRegistryRoutes(app: FastifyInstance, projectRoot?:
         broadcast({
           type: EventType.EntityRegistryStrategySaved,
           data: { tenantId, id: result.id, version: result.version, actor: req.session.upn }
+        })
+        recordSyncCatalogChange({
+          tenantId,
+          reason: `entity-registry:strategy:save:${result.id}`,
+          actor: req.session.upn,
         })
         return result
       } catch (error) {

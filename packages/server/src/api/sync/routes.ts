@@ -22,6 +22,7 @@ import {
   listSyncDefinitionAdminItems,
   listSyncDefinitionRuntimeOptions,
   defaultEntityFlowId,
+  entityNeedsRepublish,
   getSyncPublishStatus,
   PublishSyncDefinitionsError,
   publishSyncDefinitionsFromDb,
@@ -408,6 +409,18 @@ export function registerSyncRoutes(app: FastifyInstance, projectRoot: string, ho
     const actor = req.session.upn
     const actorUpn = req.session.upn
     try {
+      // Preview runs published SyncDefinitions only. Block when this entity's
+      // compile-relevant tip is ahead so operators cannot assume tip edits apply.
+      if (entityNeedsRepublish(projectRoot, req.body.entityType)) {
+        reply.code(409)
+        return {
+          error:
+            `Published sync contract for "${req.body.entityType}" is behind the catalog tip. ` +
+            `Publish from Entity Registry before preview/execute.`,
+          code: "publish_required",
+          entityType: req.body.entityType,
+        }
+      }
       rebuildLiveSyncEnvironments(host)
       const plan = await previewSync({
         host,

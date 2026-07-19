@@ -6,7 +6,14 @@ import { Lock, LockOpen, MousePointer2, Plus, Save, Search, Trash2, Workflow, X 
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react"
 import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
-import type { AuthoredSyncFlowStep, CustomValueSourceDefinition, SyncEnvironmentAdmin, SyncFlowKindDefinition, SyncMetadataCatalogResponse } from "../../types"
+import type {
+  AuthoredSyncFlowStep,
+  CustomValueSourceDefinition,
+  SyncEnvironmentAdmin,
+  SyncFlowKindDefinition,
+  SyncMetadataCatalogResponse,
+  SyncPublishStatus,
+} from "../../types"
 import {
   flowStepPickerOptions,
   handlerInputSlots,
@@ -162,6 +169,7 @@ export function SyncMetadataModal({
   const [tab, setTab] = useState<CatalogTab>("flows")
   const [catalogView, setCatalogView] = useState<CatalogView>("flows")
   const [catalog, setCatalog] = useState<SyncMetadataCatalogResponse | null>(null)
+  const [publishStatus, setPublishStatus] = useState<SyncPublishStatus | null>(null)
   const [busy, setBusy] = useState(false)
   const { toasts, pushToast, dismissToast, clearToasts } = useModalToasts()
   const [formMode, setFormMode] = useState<FormMode>("create")
@@ -237,8 +245,12 @@ export function SyncMetadataModal({
     setBusy(true)
     clearToasts()
     try {
-      const next = await api.getSyncMetadataCatalog()
+      const [next, status] = await Promise.all([
+        api.getSyncMetadataCatalog(),
+        api.getSyncPublishStatus().catch(() => null),
+      ])
       setCatalog(next)
+      setPublishStatus(status)
       return next
     } catch (e) {
       pushToast(e instanceof Error ? e.message : String(e))
@@ -704,6 +716,23 @@ export function SyncMetadataModal({
     >
       <div className="entity-registry relative flex min-h-0 flex-1 flex-col">
         <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
+        {publishStatus?.catalogNeedsPublish && (
+          <div className="shrink-0 border-b border-warning/40 bg-panel-2 px-5 py-2.5 text-sm text-text">
+            Compile-relevant tip is ahead of published sync contracts
+            {publishStatus.dirtyCompileSections?.length
+              ? ` (${publishStatus.dirtyCompileSections.join(", ")})`
+              : ""}
+            . Preview/execute keep the last Publish until you republish from Entity Registry.
+            {publishStatus.unpublishedEntityCount > 0
+              ? ` · ${publishStatus.unpublishedEntityCount} entit${publishStatus.unpublishedEntityCount === 1 ? "y" : "ies"} affected.`
+              : ""}
+          </div>
+        )}
+        {publishStatus?.operationalCatalogAhead && !publishStatus.catalogNeedsPublish && (
+          <div className="shrink-0 border-b border-border-subtle bg-panel-2 px-5 py-2.5 text-sm text-text-muted">
+            Environment tip changes are live at preview/execute — Publish is not required for them.
+          </div>
+        )}
         <div className="shrink-0 space-y-2 border-b border-border-subtle px-5 py-3">
           <div className="flex items-center justify-between gap-3">
             <div className="inline-flex items-center gap-1" role="tablist" aria-label="Configuration sections">
