@@ -2581,6 +2581,10 @@ function lerp(start: number, end: number, t: number): number {
   return start + (end - start) * t
 }
 
+/** Destination pill stays invisible until login-pill travel is done.
+ *  Keep slightly after IntroConversation PILL_HANDOFF_FADE_START (0.9). */
+const HERO_PILL_REVEAL_START = 0.92
+
 function TermChatInputBar({
   input,
   isRunning,
@@ -2651,12 +2655,18 @@ function TermChatInputBar({
     onKeyDown(e)
   }
   const isHero = variant === "hero"
-  const reveal = Math.pow(smoothstep(0.46, 1, clamp01(heroRevealProgress)), 1.35)
+  // Appear only in the final handoff window — mid-morph reveal stacks two
+  // pills and breaks the continuous travel read.
+  const reveal = Math.pow(
+    smoothstep(HERO_PILL_REVEAL_START, 1, clamp01(heroRevealProgress)),
+    0.9,
+  )
   const heroStyle: React.CSSProperties | undefined = isHero
     ? {
         opacity: reveal,
-        filter: `blur(${lerp(6, 0, reveal).toFixed(2)}px) saturate(${lerp(0.88, 1, reveal).toFixed(3)})`,
-        boxShadow: reveal > 0.94 ? "var(--hero-pill-shadow-live, var(--hero-pill-shadow))" : "none",
+        filter: `blur(${lerp(4, 0, reveal).toFixed(2)}px) saturate(${lerp(0.94, 1, reveal).toFixed(3)})`,
+        boxShadow: reveal > 0.85 ? "var(--hero-pill-shadow-live, var(--hero-pill-shadow))" : "none",
+        pointerEvents: reveal < 0.08 ? "none" : undefined,
       }
     : undefined
   return (

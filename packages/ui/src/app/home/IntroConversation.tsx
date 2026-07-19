@@ -94,6 +94,10 @@ function easeInOutCubic(t: number): number {
 }
 
 const ENTER_MORPH_MS = 1500
+/** Keep the traveling pill solid until travel is essentially done, then
+ *  cross-fade into the home pill. Must stay ahead of TermChat's
+ *  HERO_PILL_REVEAL_START so the destination never paints early. */
+const PILL_HANDOFF_FADE_START = 0.9
 
 export function IntroConversation({
   onEntered,
@@ -396,12 +400,16 @@ export function IntroConversation({
   }, [enterProgress, loginPillRect, morphTarget])
 
   // FLIP invert→play on the login pill: translate/scale First → Last,
-  // then hand off opacity to the home pill in the final stretch.
+  // then hand off opacity to the home pill only in the final stretch —
+  // never mid-travel (that double-pill read ruins continuity).
   // Without a measured Last, dissolve in place (legacy fallback).
   const pillTravelStyle = useMemo<CSSProperties | undefined>(() => {
     if (!entering || !loginPillRect) return undefined
     const to = morphTarget
-    const fadeOut = enterProgress < 0.72 ? 1 : 1 - (enterProgress - 0.72) / 0.28
+    const fadeOut =
+      enterProgress < PILL_HANDOFF_FADE_START
+        ? 1
+        : 1 - (enterProgress - PILL_HANDOFF_FADE_START) / (1 - PILL_HANDOFF_FADE_START)
     if (!to) {
       return {
         opacity: fadeOut,
@@ -432,7 +440,9 @@ export function IntroConversation({
     const height = livePill.height * 4.2
     const build = clamp01((enterProgress - 0.02) / 0.34)
     const buildEase = build * build * (3 - 2 * build)
-    const decayBase = clamp01((enterProgress - 0.66) / 0.34)
+    // Hold the local ASCII boost through travel; decay with the pill handoff
+    // so the destination never peeks through early.
+    const decayBase = clamp01((enterProgress - PILL_HANDOFF_FADE_START) / (1 - PILL_HANDOFF_FADE_START))
     const decayEase = decayBase * decayBase * (3 - 2 * decayBase)
     const opacity = 0.72 * buildEase * (1 - decayEase)
     const scale = 0.9 + 0.12 * clamp01(enterProgress / 0.84)
