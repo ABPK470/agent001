@@ -135,6 +135,11 @@ function IntroConversationLoginAdapter({
   // final layout rect (hero-ready, progress 0), then measure that rect
   // under `.chathome` only — never the login pill on the overlay.
   function measureAndTrigger() {
+    // Resolve morph mode *before* painting shell hero chrome so the overlay
+    // and shell agree — but overlay transcript CSS stays mode-stable (see
+    // index.css .intro3-scroll-inner) so this never jumps login text.
+    const mode = detectMode()
+    setMorphMode(mode)
     onFading?.()
     onEnteringStart?.()
     let attempts = 0
@@ -146,7 +151,6 @@ function IntroConversationLoginAdapter({
       )
       const r = el?.getBoundingClientRect()
       if (r && r.width > 0 && r.height > 0) {
-        setMorphMode(detectMode())
         setMorphTarget({
           left: r.left,
           top: r.top,
@@ -159,7 +163,6 @@ function IntroConversationLoginAdapter({
       if (attempts < maxAttempts) {
         requestAnimationFrame(tryMeasure)
       } else {
-        setMorphMode(detectMode())
         setEnterTrigger(true)
       }
     }
@@ -170,7 +173,9 @@ function IntroConversationLoginAdapter({
   return (
     <div
       className={`intro3-route-overlay${phase === "fading" ? " intro3-route-overlay--fading" : ""}`}
-      style={{ position: "absolute", inset: 0, zIndex: 1 }}
+      /* fixed: shell mount under the overlay must not reflow login text
+         (absolute + body scrollbar appearing = horizontal/vertical jump). */
+      style={{ position: "fixed", inset: 0, zIndex: 40 }}
       onTransitionEnd={(e) => {
         // Cross-fade complete → hand control back to App so it can flip
         // to Shell phase and unmount this overlay.

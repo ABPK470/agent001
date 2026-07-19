@@ -5483,14 +5483,16 @@ textarea.input {
 /* ── Conversation column ────────────────────────────────────────────── */
 .intro3-scroll-inner {
   justify-content: flex-start;
+  /* Stable for the whole login → morph. Empty vs chat is the shell under
+     the overlay — never re-pad/re-center the login transcript mid-flight. */
+  padding-top: 5rem;
   transition:
     opacity 220ms cubic-bezier(0.4, 0, 0.2, 1),
     transform 260ms cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* Login: text-only top fade when scrolling (no colored scrim on ASCII).
-   Greeting sits at padding-top 5rem — below this short fade band. */
-.intro3-mode-chat .intro3-scroll-area {
+/* Login: text-only top fade when scrolling (no colored scrim on ASCII). */
+.intro3-scroll-area {
   -webkit-mask-image: linear-gradient(
     to bottom,
     transparent 0,
@@ -5505,22 +5507,15 @@ textarea.input {
   );
 }
 
-/* Login only: nudge first bot line below chat-home default. */
-.intro3-mode-chat .intro3-scroll-inner {
-  padding-top: 5rem;
-}
-
 /* Transcript exit is Ascii rollback (RollbackText) — do not hard-fade the
    scroll column or the reverse-generation read as an abrupt wipe. */
 .intro3-root--entering .intro3-scroll-inner {
   opacity: 1;
   filter: none;
-}
-
-.intro3-mode-empty .intro3-scroll-inner {
-  justify-content: center;
-  padding-top: 10vh;
-  padding-bottom: 9rem;
+  /* Keep the same geometry as idle login — morphMode flip must not jump text. */
+  justify-content: flex-start;
+  padding-top: 5rem;
+  padding-bottom: 0;
 }
 
 /* Activity slot — reserves constant vertical space so the chat does not

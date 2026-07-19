@@ -65,7 +65,7 @@ export function TransitionTestPage() {
       {phase !== "done" ? (
         <div
           className={`intro3-route-overlay${phase === "fading" ? " intro3-route-overlay--fading" : ""}`}
-          style={{ position: "absolute", inset: 0, zIndex: 20 }}
+          style={{ position: "fixed", inset: 0, zIndex: 40 }}
           onTransitionEnd={(e) => {
             if (phase === "fading" && e.propertyName === "opacity") {
               setHeroRevealProgress(1)
