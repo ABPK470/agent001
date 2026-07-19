@@ -131,17 +131,16 @@ function IntroConversationLoginAdapter({
     }
   }
 
-  // After login succeeds: reveal shell, park destination pill in its
-  // final layout rect (hero-ready, progress 0), then measure that rect
-  // under `.chathome` only — never the login pill on the overlay.
+  // After login succeeds: park destination pill at its final layout rect
+  // (for FLIP Last), measure it, then start travel. Shell content may
+  // fade under the overlay, but destination reveal stays 0 until travel
+  // arrives (IntroConversation handoffFromTimeProgress).
   function measureAndTrigger() {
-    // Resolve morph mode *before* painting shell hero chrome so the overlay
-    // and shell agree — but overlay transcript CSS stays mode-stable (see
-    // index.css .intro3-scroll-inner) so this never jumps login text.
     const mode = detectMode()
     setMorphMode(mode)
-    onFading?.()
+    // Hero stage + progress=0 first so Last is laid out and hidden.
     onEnteringStart?.()
+    onFading?.()
     let attempts = 0
     const maxAttempts = 180
     const tryMeasure = () => {

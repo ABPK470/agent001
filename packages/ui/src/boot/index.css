@@ -3814,13 +3814,19 @@ textarea.input {
 }
 
 /* Morph handoff: destination sits at its final rect immediately so FLIP
-   measures Last correctly. Motion comes from the traveling login pill;
-   the home pill only cross-fades in via heroRevealProgress. */
+   measures Last correctly. Wrapper is layout-visible; the pill itself
+   stays visibility:hidden until post-arrival handoff (inline styles). */
 .chathome--hero-pill .chathome-empty-input {
   opacity: 1;
   filter: none;
   transform: none;
   transition: none;
+}
+
+.chathome--hero-pill [data-intro-target="termchat-input"] {
+  /* Belt: never paint destination chrome until JS handoff opacity rises.
+     visibility is also set inline; this blocks accidental CSS flashes. */
+  transition: none !important;
 }
 
 .chathome--hero-copy-ready {

@@ -94,10 +94,12 @@ function easeInOutCubic(t: number): number {
 }
 
 const ENTER_MORPH_MS = 1500
-/** Keep the traveling pill solid until travel is essentially done, then
- *  cross-fade into the home pill. Must stay ahead of TermChat's
- *  HERO_PILL_REVEAL_START so the destination never paints early. */
-const PILL_HANDOFF_FADE_START = 0.9
+/**
+ * Handoff is gated on *eased travel* (where the pill actually is), not
+ * wall-clock. Destination stays invisible until the morph is this far
+ * along the path, then a short cross-fade lands it.
+ */
+const PILL_HANDOFF_TRAVEL = 0.985
 
 export function IntroConversation({
   onEntered,
@@ -350,6 +352,13 @@ export function IntroConversation({
   const loginPillRef = useRef<HTMLFormElement | null>(null)
   const [loginPillRect, setLoginPillRect] = useState<IntroMorphTarget | null>(null)
 
+  /** 0 until the traveling pill has arrived; then 0→1 for the cross-fade. */
+  function handoffFromTimeProgress(timeProgress: number): number {
+    const travelT = easeInOutCubic(timeProgress)
+    if (travelT <= PILL_HANDOFF_TRAVEL) return 0
+    return (travelT - PILL_HANDOFF_TRAVEL) / (1 - PILL_HANDOFF_TRAVEL)
+  }
+
   // Parent-driven morph: enterTrigger → measure First → travel to Last.
   useEffect(() => {
     if (!enterTrigger || entering) return
@@ -361,13 +370,15 @@ export function IntroConversation({
     }
     setEntering(true)
     setEnterProgress(0)
+    // Destination must stay dark until travel arrives — never report
+    // wall-clock morph progress as "reveal".
     onPillRevealProgress?.(0)
     const startedAt = performance.now()
     let rafId = 0
     const tickProgress = (now: number) => {
       const nextProgress = clamp01((now - startedAt) / ENTER_MORPH_MS)
       setEnterProgress(nextProgress)
-      onPillRevealProgress?.(nextProgress)
+      onPillRevealProgress?.(handoffFromTimeProgress(nextProgress))
       if (nextProgress < 1) {
         rafId = window.requestAnimationFrame(tickProgress)
       }
@@ -399,17 +410,14 @@ export function IntroConversation({
     }
   }, [enterProgress, loginPillRect, morphTarget])
 
-  // FLIP invert→play on the login pill: translate/scale First → Last,
-  // then hand off opacity to the home pill only in the final stretch —
-  // never mid-travel (that double-pill read ruins continuity).
-  // Without a measured Last, dissolve in place (legacy fallback).
+  // FLIP invert→play on the login pill: translate/scale First → Last.
+  // Opacity stays 1 for the whole travel; only the post-arrival handoff
+  // fades it out as the home pill fades in.
   const pillTravelStyle = useMemo<CSSProperties | undefined>(() => {
     if (!entering || !loginPillRect) return undefined
     const to = morphTarget
-    const fadeOut =
-      enterProgress < PILL_HANDOFF_FADE_START
-        ? 1
-        : 1 - (enterProgress - PILL_HANDOFF_FADE_START) / (1 - PILL_HANDOFF_FADE_START)
+    const handoff = handoffFromTimeProgress(enterProgress)
+    const fadeOut = 1 - handoff
     if (!to) {
       return {
         opacity: fadeOut,
@@ -440,14 +448,11 @@ export function IntroConversation({
     const height = livePill.height * 4.2
     const build = clamp01((enterProgress - 0.02) / 0.34)
     const buildEase = build * build * (3 - 2 * build)
-    // Hold the local ASCII boost through travel; decay with the pill handoff
-    // so the destination never peeks through early.
-    const decayBase = clamp01((enterProgress - PILL_HANDOFF_FADE_START) / (1 - PILL_HANDOFF_FADE_START))
-    const decayEase = decayBase * decayBase * (3 - 2 * decayBase)
-    const opacity = 0.72 * buildEase * (1 - decayEase)
+    const handoff = handoffFromTimeProgress(enterProgress)
+    const opacity = 0.72 * buildEase * (1 - handoff)
     const scale = 0.9 + 0.12 * clamp01(enterProgress / 0.84)
-    const saturation = 1.01 + 0.14 * buildEase - 0.18 * decayEase
-    const brightness = 1.01 + 0.08 * buildEase - 0.1 * decayEase
+    const saturation = 1.01 + 0.14 * buildEase - 0.18 * handoff
+    const brightness = 1.01 + 0.08 * buildEase - 0.1 * handoff
     return {
       left: `${livePill.left + livePill.width / 2}px`,
       top: `${livePill.top + livePill.height / 2}px`,

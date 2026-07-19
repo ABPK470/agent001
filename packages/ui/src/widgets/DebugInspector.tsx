@@ -117,8 +117,9 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen)
   return (
-    <div className="border border-border/50 rounded-lg overflow-hidden">
+    <div className="debug-trace-block shrink-0 rounded-lg border border-border/50 overflow-clip">
       <button
+        type="button"
         className="flex items-center gap-2 w-full px-3 py-2 text-left bg-elevated/30 hover:bg-elevated/50 transition-colors"
         onClick={() => setOpen(!open)}
       >
@@ -243,9 +244,13 @@ export function DebugInspector() {
   const [search, setSearch] = useState("")
   const scrollRef = useRef<HTMLDivElement>(null)
 
-  // Auto-scroll to bottom when trace updates
+  // Follow new trace entries only when already near the bottom — never yank
+  // the viewport while the user is reading an expanded earlier call.
   useEffect(() => {
-    if (scrollRef.current) scrollRef.current.scrollTop = scrollRef.current.scrollHeight
+    const el = scrollRef.current
+    if (!el) return
+    const distance = el.scrollHeight - el.scrollTop - el.clientHeight
+    if (distance < 80) el.scrollTop = el.scrollHeight
   }, [trace.length])
 
   // Extract the 4 debug entry types
@@ -342,8 +347,10 @@ export function DebugInspector() {
         </div>
       </div>
 
-      {/* Main content */}
-      <div ref={scrollRef} className="flex min-h-0 flex-1 flex-col overflow-y-auto space-y-2 pr-1">
+      {/* Main content — block flow, not flex-col. Flex + overflow-hidden
+          children lets an expanded LLM card shrink siblings to zero height
+          ("covers" the previous calls). */}
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto space-y-2 pr-1">
         {!activeRunId && (
           <EmptyState icon={WIDGET_ICONS["debug-inspector"]} message="Select a run to inspect" />
         )}
@@ -466,15 +473,31 @@ function LlmCallEntry({ call, index }: {
   index: number
 }) {
   const [open, setOpen] = useState(false)
+  const rootRef = useRef<HTMLDivElement>(null)
   const req = call.request
   const res = call.response
 
+  function toggleOpen() {
+    const next = !open
+    setOpen(next)
+    // Keep this call's header in view; do not yank the list to the bottom.
+    if (next) {
+      requestAnimationFrame(() => {
+        rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" })
+      })
+    }
+  }
+
   return (
-    <div className="border border-border/40 rounded-lg overflow-hidden">
+    <div
+      ref={rootRef}
+      className="debug-trace-block shrink-0 rounded-lg border border-border/40 overflow-clip"
+    >
       {/* Clickable call header */}
       <button
+        type="button"
         className="flex items-center gap-3 px-3 py-2 bg-elevated/20 w-full text-left cursor-pointer hover:bg-elevated/40 transition-colors"
-        onClick={() => setOpen(!open)}
+        onClick={toggleOpen}
       >
         {open ? <ChevronDown size={14} className="text-text-muted shrink-0" /> : <ChevronRight size={14} className="text-text-muted shrink-0" />}
         <span className="text-sm font-semibold text-info">LLM Call #{index + 1}</span>
@@ -491,7 +514,7 @@ function LlmCallEntry({ call, index }: {
         )}
       </button>
 
-      {/* Collapsible body */}
+      {/* Collapsible body — in normal document flow so siblings stay above */}
       {open && (
         <>
           {/* Request: full message array */}
@@ -499,7 +522,7 @@ function LlmCallEntry({ call, index }: {
             <div className="text-xs font-medium text-text-muted/50 uppercase tracking-wider mb-1.5">
               Request — {req.messageCount} messages, {req.toolCount} tool definitions
             </div>
-            <div className="space-y-1.5 max-h-[400px] overflow-y-auto">
+            <div className="space-y-1.5 max-h-[min(400px,50vh)] overflow-y-auto overscroll-contain">
               {req.messages.map((msg, mi) => (
                 <MessageBubble key={mi} msg={msg} index={mi} />
               ))}

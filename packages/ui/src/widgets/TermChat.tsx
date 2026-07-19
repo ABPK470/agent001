@@ -2571,19 +2571,9 @@ function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
 }
 
-function smoothstep(min: number, max: number, value: number): number {
-  if (max === min) return value >= max ? 1 : 0
-  const t = clamp01((value - min) / (max - min))
-  return t * t * (3 - 2 * t)
-}
-
 function lerp(start: number, end: number, t: number): number {
   return start + (end - start) * t
 }
-
-/** Destination pill stays invisible until login-pill travel is done.
- *  Keep slightly after IntroConversation PILL_HANDOFF_FADE_START (0.9). */
-const HERO_PILL_REVEAL_START = 0.92
 
 function TermChatInputBar({
   input,
@@ -2655,16 +2645,17 @@ function TermChatInputBar({
     onKeyDown(e)
   }
   const isHero = variant === "hero"
-  // Appear only in the final handoff window — mid-morph reveal stacks two
-  // pills and breaks the continuous travel read.
-  const reveal = Math.pow(
-    smoothstep(HERO_PILL_REVEAL_START, 1, clamp01(heroRevealProgress)),
-    0.9,
-  )
+  // heroRevealProgress is already the post-arrival handoff (0 until the
+  // traveling pill has reached Last). Do not re-gate on wall-clock.
+  const reveal = clamp01(heroRevealProgress)
+  const heroArrived = reveal > 0.001
   const heroStyle: React.CSSProperties | undefined = isHero
     ? {
         opacity: reveal,
-        filter: `blur(${lerp(4, 0, reveal).toFixed(2)}px) saturate(${lerp(0.94, 1, reveal).toFixed(3)})`,
+        visibility: heroArrived ? "visible" : "hidden",
+        filter: heroArrived
+          ? `blur(${lerp(3, 0, reveal).toFixed(2)}px) saturate(${lerp(0.96, 1, reveal).toFixed(3)})`
+          : undefined,
         boxShadow: reveal > 0.85 ? "var(--hero-pill-shadow-live, var(--hero-pill-shadow))" : "none",
         pointerEvents: reveal < 0.08 ? "none" : undefined,
       }
