@@ -29,7 +29,7 @@ import { EntityList } from "./entity-registry/EntityList"
 import { EntityRailHeader } from "./entity-registry/EntityRailHeader"
 import { WIDGET_ENVELOPE } from "./entity-registry/chrome"
 import { ModalShell } from "./entity-registry/ModalShell"
-import { PublishSyncDefinitionsModal } from "./entity-registry/PublishSyncDefinitionsModal"
+import { PublishCatalogModal } from "./entity-registry/PublishCatalogModal"
 import { SyncMetadataModal } from "./entity-registry/SyncMetadataModal"
 
 export function EntityRegistry(): JSX.Element {
@@ -309,12 +309,12 @@ export function EntityRegistry(): JSX.Element {
         />
       )}
       {publishOpen && (
-        <PublishSyncDefinitionsModal
+        <PublishCatalogModal
           entityCount={activeEntityCount}
           unpublished={unpublishedItems}
           onClose={() => setPublishOpen(false)}
           onPublished={(res) => {
-            notify(`Published ${res.definitionCount} SyncDefinition(s)`)
+            notify(`Published sync bundle · ${res.definitionCount} definition(s)`)
             void refreshList({ keepSelection: true })
           }}
         />

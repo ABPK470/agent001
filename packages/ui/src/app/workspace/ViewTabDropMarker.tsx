@@ -1,6 +1,6 @@
 /**
- * Insertion caret between view tabs while reordering.
- * Absolutely positioned so it does not shift tab midpoints mid-drag.
+ * Insertion slot between view tabs while reordering.
+ * Accent frame matches workspace drop-zone language; absolute so midpoints stay stable.
  */
 
 import type { JSX } from "react"
@@ -11,13 +11,13 @@ type Props = {
 }
 
 export function ViewTabDropMarker({ edge = "before" }: Props): JSX.Element {
-  const side = edge === "after" ? "left-0" : "-left-1"
+  const side = edge === "after" ? "left-0" : "-left-1.5"
   return (
     <span
-      className={`pointer-events-none absolute ${side} top-1 bottom-1 z-20 flex w-1.5 items-stretch`}
+      className={`pointer-events-none absolute ${side} top-1/2 z-20 -translate-y-1/2`}
       aria-hidden
     >
-      <span className="w-full rounded-full bg-accent shadow-[0_0_0_3px_var(--color-accent-soft)]" />
+      <span className="view-tab-drop-slot block" />
     </span>
   )
 }

@@ -45,6 +45,8 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
     onTabPointerDown,
     onTabPointerMove,
     onTabPointerUp,
+    onTabPointerCancel,
+    onTabLostPointerCapture,
   } = useViewTabReorder(tabsRef, editing)
 
   useEffect(() => {
@@ -93,9 +95,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
 
       <div
         ref={tabsRef}
-        className={`flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none ${
-          draggingId ? "rounded-lg bg-elevated/40 px-1" : ""
-        }`}
+        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
       >
         {views.map((view, index) => {
           const isDragging = draggingId === view.id
@@ -106,32 +106,25 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
               {showMarker && <ViewTabDropMarker edge="before" />}
               <div
                 data-view-id={view.id}
-                className={`
-                  group relative flex h-9 items-center gap-1 px-2.5 text-[13px] shrink-0
-                  rounded-lg transition-[opacity,transform,box-shadow,background-color] cursor-grab active:cursor-grabbing
-                  ${view.id === activeViewId
-                    ? "text-text font-semibold"
-                    : "text-text-muted hover:text-text-secondary"
-                  }
-                  ${draggingId && !isDragging ? "opacity-55" : ""}
-                  ${isDragging
-                    ? "z-10 scale-[1.03] bg-panel-2 text-text opacity-100 shadow-md ring-2 ring-accent/70"
-                    : ""
-                  }
-                `}
+                className={[
+                  "group relative flex h-9 shrink-0 cursor-grab items-center gap-1 rounded-lg px-2.5 text-[13px] transition-[opacity,box-shadow,background-color] active:cursor-grabbing",
+                  view.id === activeViewId
+                    ? "font-semibold text-text"
+                    : "text-text-muted hover:text-text-secondary",
+                  draggingId && !isDragging ? "view-tab-peer-dim" : "",
+                  isDragging ? "view-tab-dragging" : "",
+                ].join(" ")}
                 onPointerDown={(event) => onTabPointerDown(view.id, event)}
                 onPointerMove={onTabPointerMove}
                 onPointerUp={onTabPointerUp}
+                onPointerCancel={onTabPointerCancel}
+                onLostPointerCapture={onTabLostPointerCapture}
                 onDoubleClick={() => handleDoubleClick(view.id, view.name)}
-                title="Drag to reorder"
+                title="Click to open · drag to reorder"
               >
                 <GripVertical
                   size={12}
-                  className={`shrink-0 transition-opacity ${
-                    isDragging || draggingId
-                      ? "text-accent opacity-100"
-                      : "text-text-faint opacity-0 group-hover:opacity-70"
-                  }`}
+                  className="relative z-[2] shrink-0 text-text-faint opacity-0 transition-opacity group-hover:opacity-70"
                   aria-hidden
                 />
                 {editing === view.id ? (
@@ -149,12 +142,12 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
                     onPointerDown={(e) => e.stopPropagation()}
                   />
                 ) : (
-                  <span className="whitespace-nowrap">{view.name}</span>
+                  <span className="relative z-[2] whitespace-nowrap">{view.name}</span>
                 )}
                 {views.length > 1 && (
                   <button
                     type="button"
-                    className="opacity-0 group-hover:opacity-60 hover:!opacity-100 text-text-muted ml-0.5"
+                    className="relative z-[2] ml-0.5 text-text-muted opacity-0 group-hover:opacity-60 hover:!opacity-100"
                     onClick={(e) => {
                       e.stopPropagation()
                       removeView(view.id)

@@ -24,6 +24,12 @@ export function useViewTabReorder(
   /** Insertion gap 0..n while dragging; null when idle or click-without-drag. */
   const [dropSlot, setDropSlot] = useState<number | null>(null)
 
+  function clearDragSession(): void {
+    dragRef.current = null
+    setDraggingId(null)
+    setDropSlot(null)
+  }
+
   function slotFromPointer(clientX: number): number {
     return tabInsertSlotFromClientX(readTabRects(tabsRef.current), clientX)
   }
@@ -67,7 +73,16 @@ export function useViewTabReorder(
     const drag = dragRef.current
     if (!drag) return
 
-    event.currentTarget.releasePointerCapture(drag.pointerId)
+    // Clear before release so lostpointercapture is a no-op (intentional end).
+    dragRef.current = null
+    setDraggingId(null)
+    setDropSlot(null)
+
+    try {
+      event.currentTarget.releasePointerCapture(drag.pointerId)
+    } catch {
+      // Capture may already be gone after cancel.
+    }
 
     const { views, reorderViews, setActiveView } = useLayoutStore.getState()
     const fromIndex = views.findIndex((view) => view.id === drag.viewId)
@@ -80,10 +95,17 @@ export function useViewTabReorder(
     } else {
       setActiveView(action.viewId)
     }
+  }
 
-    dragRef.current = null
-    setDraggingId(null)
-    setDropSlot(null)
+  function onTabPointerCancel(): void {
+    if (!dragRef.current) return
+    clearDragSession()
+  }
+
+  /** Browser/OS stole the capture — abort without activating/reordering. */
+  function onTabLostPointerCapture(): void {
+    if (!dragRef.current) return
+    clearDragSession()
   }
 
   return {
@@ -92,5 +114,7 @@ export function useViewTabReorder(
     onTabPointerDown,
     onTabPointerMove,
     onTabPointerUp,
+    onTabPointerCancel,
+    onTabLostPointerCapture,
   }
 }
