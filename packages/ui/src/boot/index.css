@@ -1203,33 +1203,132 @@ textarea.input {
   border-color: color-mix(in srgb, var(--color-accent) 45%, var(--color-border-subtle));
 }
 
-/* ── Bridge — path + endpoint forms sized to available space (not viewport) ─ */
+/* ── Bridge — path + forms sized to the widget (container), not the viewport ─ */
 .bridge {
-  container-type: inline-size;
+  container-type: size;
   container-name: bridge;
   min-width: 0;
+  min-height: 0;
 }
 
 .bridge-path {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: auto;
   gap: 0.75rem;
   width: 100%;
   min-width: 0;
   min-height: 0;
 }
 
-@container bridge (min-width: 40rem) {
+/* Narrow / default: vertical stack, everything centered (no diagonal park). */
+.bridge-path--idle {
+  align-content: center;
+  justify-items: center;
+  overflow: auto;
+}
+
+.bridge-path--idle > .bridge-path__slot {
+  display: flex;
+  width: 100%;
+  max-width: 22rem;
+  min-width: 0;
+  align-items: center;
+  justify-content: center;
+}
+
+.bridge-path--open {
+  align-items: stretch;
+  overflow: hidden;
+}
+
+.bridge-path--open > .bridge-path__slot {
+  display: flex;
+  min-width: 0;
+  min-height: 0;
+}
+
+.bridge-path--open > .bridge-path__slot--end {
+  flex-direction: column;
+}
+
+.bridge-path--open > .bridge-path__slot--map {
+  align-items: stretch;
+  justify-content: center;
+}
+
+.bridge-path--open > .bridge-path__slot--peer {
+  align-items: center;
+  justify-content: center;
+}
+
+/* Narrow + open: give the expanded end(s) the leftover height. */
+.bridge-path--open.bridge-path--source-open:not(.bridge-path--target-open) {
+  grid-template-rows: minmax(0, 1fr) auto auto;
+}
+
+.bridge-path--open.bridge-path--target-open:not(.bridge-path--source-open) {
+  grid-template-rows: auto auto minmax(0, 1fr);
+}
+
+.bridge-path--open.bridge-path--source-open.bridge-path--target-open {
+  grid-template-rows: minmax(0, 1fr) auto minmax(0, 1fr);
+}
+
+/* Wide: Source | Map | Target in one row. Idle pills cluster toward the center. */
+@container bridge (min-width: 36rem) {
   .bridge-path {
-    grid-template-columns: minmax(0, 1fr) 9rem minmax(0, 1fr);
+    grid-template-columns: minmax(0, 1fr) minmax(6.5rem, 9rem) minmax(0, 1fr);
+    gap: 0.75rem 1rem;
   }
 
   .bridge-path--idle {
     align-items: center;
+    align-content: center;
+    justify-items: stretch;
+  }
+
+  .bridge-path--idle > .bridge-path__slot {
+    max-width: none;
+    height: 100%;
+  }
+
+  .bridge-path--idle > .bridge-path__slot--source {
+    justify-content: flex-end;
+  }
+
+  .bridge-path--idle > .bridge-path__slot--map {
+    justify-content: center;
+  }
+
+  .bridge-path--idle > .bridge-path__slot--target {
+    justify-content: flex-start;
   }
 
   .bridge-path--open {
     align-items: stretch;
+  }
+
+  .bridge-path--open > .bridge-path__slot--peer {
+    justify-content: center;
+  }
+
+  .bridge-path--open.bridge-path--source-open:not(.bridge-path--target-open),
+  .bridge-path--open.bridge-path--target-open:not(.bridge-path--source-open),
+  .bridge-path--open.bridge-path--source-open.bridge-path--target-open {
+    grid-template-rows: none;
+  }
+}
+
+/* Short widget: tighter gaps so the path still fits. */
+@container bridge (max-height: 22rem) {
+  .bridge-path {
+    gap: 0.5rem;
+  }
+
+  .bridge-path--idle {
+    align-content: start;
+    padding-block: 0.25rem;
   }
 }
 
@@ -1261,6 +1360,18 @@ textarea.input {
 
   .bridge-form-row--method-path {
     grid-template-columns: minmax(0, 8rem) minmax(0, 1fr);
+  }
+}
+
+@container bridge-endpoint (max-width: 16rem) {
+  .bridge-endpoint .bridge-endpoint__chrome {
+    gap: 0.75rem;
+    padding-inline: 0.75rem;
+  }
+
+  .bridge-endpoint .bridge-endpoint__mark {
+    width: 2.5rem;
+    height: 2.5rem;
   }
 }
 
@@ -2318,10 +2429,25 @@ textarea.input {
   opacity: 1;
 }
 
+/* Hold state: neutral gray so grab is obvious and distinct from the drop target. */
 .workspace-tile-dragging {
   z-index: 20;
-  opacity: 0.62;
+  opacity: 1;
   transition: opacity 100ms ease, box-shadow 100ms ease;
+  box-shadow:
+    0 0 0 2px color-mix(in srgb, var(--color-text) 18%, transparent),
+    0 8px 22px color-mix(in srgb, var(--color-text) 10%, transparent);
+}
+
+.workspace-tile-dragging::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 25;
+  pointer-events: none;
+  border-radius: 0.75rem;
+  background: color-mix(in srgb, var(--color-text) 6%, transparent);
+  border: 1.5px solid color-mix(in srgb, var(--color-text) 22%, transparent);
 }
 
 /* Divider resize: keep panes opaque; suppress lag on the active tile only. */
@@ -2363,10 +2489,11 @@ textarea.input {
   opacity: 1;
 }
 
+/* Destination: stronger purple than the hold tint so land vs grab stay distinct. */
 .workspace-drop-zone {
-  background: color-mix(in srgb, var(--color-accent) 14%, transparent);
-  border: 2px solid color-mix(in srgb, var(--color-accent) 42%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 18%, transparent);
+  background: color-mix(in srgb, var(--color-accent) 22%, transparent);
+  border: 2px solid color-mix(in srgb, var(--color-accent) 55%, transparent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--color-accent) 24%, transparent);
 }
 
 .workspace-resize-handle {

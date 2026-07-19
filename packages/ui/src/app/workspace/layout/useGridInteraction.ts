@@ -95,12 +95,12 @@ function resizePreview(
   const bounds = splitBoundsAt(base, session.dividerPath, COLS, rows)
   if (!bounds) return null
   const span = axisSpanPx(bounds, session.dividerDir, cw, rowPx)
+  // Mouse delta matches growing side `a` (right/down increases ratio) for every
+  // divider handle — east of left, west of right, south of top, north of bottom.
   const deltaX = clientX - session.startX
   const deltaY = clientY - session.startY
   const raw = session.dividerDir === "v" ? deltaX : deltaY
-  const edge = session.edge ?? "e"
-  const sign = edge.includes("w") || edge.includes("n") ? -1 : 1
-  const ratio = ratioFromPixelDelta(session.originRatio, sign * raw, span)
+  const ratio = ratioFromPixelDelta(session.originRatio, raw, span)
   return setSplitRatio(base, session.dividerPath, ratio)
 }
 

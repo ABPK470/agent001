@@ -1,10 +1,10 @@
 /**
  * BridgeShell — Source → Map → Target surface.
  *
- * Stable grid: 1fr | 9rem map | 1fr. An expanded end always fills its half at
- * full height — opening/closing the peer never changes that size. Collapsed
- * pills keep fixed default chrome and stay parked toward the center. Tall Map
- * chip only when both ends are open (same column width either way).
+ * Layout is container-sized (widget bounds), not viewport-sized. Narrow stacks
+ * a centered path; wide uses 1fr | map | 1fr with idle pills clustered toward
+ * the center. Expanded ends fill their column; Map stretches only when both
+ * ends are open.
  */
 
 import type { ConnectorInfo, MoveSummary, Transform } from "@mia/shared-types"
@@ -227,13 +227,13 @@ export function BridgeShell(): JSX.Element {
             )}
           </div>
 
-          <div className="flex shrink-0 items-center justify-between gap-2 border-t border-border-subtle bg-panel px-5 py-3">
-            <p className={`hidden min-w-0 truncate sm:block ${META_TEXT}`}>
+          <div className="flex shrink-0 flex-wrap items-center justify-between gap-x-2 gap-y-2 border-t border-border-subtle bg-panel px-3 py-2.5 sm:px-5 sm:py-3">
+            <p className={`min-w-0 flex-1 basis-32 truncate ${META_TEXT}`}>
               {source && target
                 ? `${source.displayName} → ${target.displayName}`
                 : "Pick source and target to continue"}
             </p>
-            <div className="ml-auto flex items-center gap-2">
+            <div className="ml-auto flex shrink-0 flex-wrap items-center justify-end gap-2">
               <button
                 type="button"
                 className={TEXT_BTN}
@@ -341,20 +341,22 @@ function PathBlock({
       className={[
         "bridge-path h-full min-h-0 w-full flex-1",
         anyOpen ? "bridge-path--open" : "bridge-path--idle",
+        sourceOpen ? "bridge-path--source-open" : "",
+        targetOpen ? "bridge-path--target-open" : "",
       ].join(" ")}
     >
       <div
         className={[
-          "flex min-h-0 min-w-0",
-          sourceOpen ? "h-full min-h-0 flex-col" : anyOpen ? "items-center justify-end" : "justify-end",
+          "bridge-path__slot bridge-path__slot--source min-h-0 min-w-0",
+          sourceOpen ? "bridge-path__slot--end" : anyOpen ? "bridge-path__slot--peer" : "",
         ].join(" ")}
       >
         {sourceCard}
       </div>
       <div
         className={[
-          "flex min-h-0 w-full min-w-0 justify-center",
-          bothOpen ? "h-full items-stretch" : "items-center",
+          "bridge-path__slot bridge-path__slot--map min-h-0 min-w-0",
+          bothOpen ? "items-stretch" : "",
         ].join(" ")}
       >
         <MapChip
@@ -365,8 +367,8 @@ function PathBlock({
       </div>
       <div
         className={[
-          "flex min-h-0 min-w-0",
-          targetOpen ? "h-full min-h-0 flex-col" : anyOpen ? "items-center justify-start" : "justify-start",
+          "bridge-path__slot bridge-path__slot--target min-h-0 min-w-0",
+          targetOpen ? "bridge-path__slot--end" : anyOpen ? "bridge-path__slot--peer" : "",
         ].join(" ")}
       >
         {targetCard}
@@ -406,9 +408,9 @@ function MapChip({
       type="button"
       onClick={onOpenMap}
       title="Configure column mappings, casts, defaults, and rules"
-      className={`group flex ${PATH_PILL_H} w-[min(8.5rem,100%)] max-w-full flex-col items-center justify-center gap-1 rounded-2xl border border-border-subtle bg-overlay-1 px-3 py-3 text-center transition-colors hover:border-border hover:bg-overlay-2`}
+      className={`group flex ${PATH_PILL_H} w-[min(8.5rem,100%)] max-w-full flex-col items-center justify-center gap-1 rounded-2xl border border-border-subtle bg-overlay-1 px-2 py-2.5 text-center transition-colors hover:border-border hover:bg-overlay-2 sm:px-3 sm:py-3`}
     >
-      <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-overlay-2 text-text-muted ring-1 ring-border-subtle/60 group-hover:text-text">
+      <span className="flex h-8 w-8 items-center justify-center rounded-xl bg-overlay-2 text-text-muted ring-1 ring-border-subtle/60 group-hover:text-text sm:h-9 sm:w-9">
         <Shuffle size={16} aria-hidden />
       </span>
       <span className="text-sm font-semibold text-text">Map columns</span>
