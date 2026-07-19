@@ -55,7 +55,7 @@ export function FormSectionCard({
         <h4 className="text-sm font-semibold text-text">{title}</h4>
         {description ? <p className={`mt-0.5 ${META_TEXT}`}>{description}</p> : null}
       </header>
-      <div className="min-w-0 space-y-3 p-3">{children}</div>
+      <div className="min-w-0 space-y-3 p-3 [&>*]:shrink-0">{children}</div>
     </section>
   )
 }

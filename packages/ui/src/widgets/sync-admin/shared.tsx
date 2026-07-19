@@ -496,19 +496,20 @@ export function FormCheck({
   return (
     <label
       className={[
-        "form-check flex min-h-9 cursor-pointer items-start gap-2.5 rounded-lg border border-border-subtle bg-base/30 px-3 py-2 text-sm text-text",
+        // h-auto shrink-0 — never absorb leftover flex height in split-pane forms.
+        "form-check flex h-auto min-h-9 shrink-0 cursor-pointer items-center gap-2.5 rounded-lg border border-border-subtle bg-base/30 px-3 py-2 text-sm text-text",
         disabled ? "pointer-events-none opacity-50" : "hover:bg-elevated/50",
       ].join(" ")}
     >
-      <span className={`form-check__box mt-0.5 shrink-0 ${checked ? "form-check__box--on" : ""}`} aria-hidden>
+      <span className={`form-check__box relative shrink-0 ${checked ? "form-check__box--on" : ""}`}>
         <input
           type="checkbox"
-          className="sr-only"
+          className="form-check__input"
           checked={checked}
           disabled={disabled}
           onChange={(e) => onChange(e.target.checked)}
         />
-        {checked ? <Check className="h-3 w-3 text-text" strokeWidth={3} /> : null}
+        {checked ? <Check className="h-3 w-3 text-text" strokeWidth={3} aria-hidden /> : null}
       </span>
       <span className="min-w-0 flex-1">
         <span className="font-medium text-text">{label}</span>

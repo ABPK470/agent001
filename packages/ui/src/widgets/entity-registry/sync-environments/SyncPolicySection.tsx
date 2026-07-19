@@ -1,7 +1,7 @@
 import type { JSX } from "react"
 
 import { Listbox, type ListboxOption } from "../../../components/Listbox"
-import { FormCheck } from "../../sync-admin/shared"
+import { FilterToggles } from "../../../components/FilterSheet"
 import { HELP_TEXT } from "../chrome"
 import { FormFieldGroup, FormSectionCard } from "../form-section"
 import type { DirectionPolicyMode, EnvironmentFormSnapshot } from "./environment-form-model"
@@ -25,14 +25,10 @@ export function SyncPolicySection({
   onChange: (patch: Partial<EnvironmentFormSnapshot>) => void
 }): JSX.Element {
   const peers = peerEnvironments.filter((target) => target.name.trim())
-
-  function setDirectionChecked(name: string, checked: boolean): void {
-    const normalized = name.trim()
-    const selected = new Set(value.allowedDirections)
-    if (checked) selected.add(normalized)
-    else selected.delete(normalized)
-    onChange({ allowedDirections: [...selected] })
-  }
+  const peerOptions = peers.map((target) => ({
+    value: target.name,
+    label: `${target.displayName} (${target.name})`,
+  }))
 
   function onPolicyChange(directionPolicy: DirectionPolicyMode): void {
     onChange({
@@ -68,16 +64,15 @@ export function SyncPolicySection({
           {peers.length === 0 ? (
             <p className={HELP_TEXT}>No other environments configured yet.</p>
           ) : (
-            <div className="flex w-full min-w-0 flex-col gap-2">
-              {peers.map((target) => (
-                <FormCheck
-                  key={target.name}
-                  label={`${target.displayName} (${target.name})`}
-                  checked={value.allowedDirections.includes(target.name)}
-                  disabled={readOnly}
-                  onChange={(checked) => setDirectionChecked(target.name, checked)}
-                />
-              ))}
+            <div
+              className={readOnly ? "pointer-events-none opacity-50" : undefined}
+              aria-disabled={readOnly || undefined}
+            >
+              <FilterToggles
+                options={peerOptions}
+                values={value.allowedDirections}
+                onChange={(allowedDirections) => onChange({ allowedDirections })}
+              />
             </div>
           )}
         </div>

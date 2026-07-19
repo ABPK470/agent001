@@ -36,11 +36,14 @@ describe("environment-form-layout", () => {
     expect(CONFIG_SPLIT_GRID_CLASS).toContain("lg:grid-rows-1")
     expect(CONFIG_SPLIT_LIST_CLASS).toContain("min-w-0")
     expect(CONFIG_SPLIT_FORM_CLASS).toContain("min-w-0")
-    expect(CONFIG_SPLIT_FORM_SCROLL_CLASS).toContain("overflow-auto")
+    expect(CONFIG_SPLIT_FORM_SCROLL_CLASS).toContain("overflow-y-auto")
+    expect(CONFIG_SPLIT_FORM_SCROLL_CLASS).toContain("overscroll-contain")
     expect(ENV_FORM_ROOT_CLASS).toContain("w-full")
     expect(ENV_FORM_ROOT_CLASS).toContain("min-w-0")
+    expect(ENV_FORM_ROOT_CLASS).toContain("h-auto")
     expect(ENV_POLICY_ALLOWED_CLASS).toContain("w-full")
     expect(ENV_POLICY_ALLOWED_CLASS).toContain("min-w-0")
+    expect(ENV_POLICY_ALLOWED_CLASS).toContain("shrink-0")
   })
 
   it("SyncMetadataModal uses the split-pane layout tokens", () => {
@@ -64,7 +67,9 @@ describe("environment-form-layout", () => {
     expect(form).toContain("className={ENV_FORM_ROOT_CLASS}")
     expect(policy).toContain("ENV_POLICY_ALLOWED_CLASS")
     expect(policy).toContain("className={ENV_POLICY_ALLOWED_CLASS}")
-    expect(policy).toContain("flex w-full min-w-0 flex-col gap-2")
+    // Compact toggles — not FormCheck cards (those stretched the Restricted pane).
+    expect(policy).toContain("FilterToggles")
+    expect(policy).not.toContain("FormCheck")
   })
 
   it("FormFieldGroup does not wrap controls in <label> (Listbox-safe)", () => {
