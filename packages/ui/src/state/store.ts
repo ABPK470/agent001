@@ -905,9 +905,9 @@ export const useStore = create<AppState>()(
       // mount: switching to a view containing RunHistory and then back
       // to TermChat would erase the active run's narrative + tool calls.
       //
-      // Also keep in-memory-only rows (in-flight runs, thread-scoped rows
-      // not yet visible in the latest listRuns response) so switching from
-      // chat home → platform widgets does not blank the conversation.
+      // Keep in-memory-only rows for the *active* thread (in-flight SSE /
+      // not yet in the latest list response). Never retain runs from other
+      // threads — that leaked prior-thread runs into empty "New thread"s.
       setRuns: (runs) => set((s) => {
         const prevById = new Map(s.runs.map((r) => [r.id, r]))
         const incomingIds = new Set(runs.map((r) => r.id))
@@ -922,7 +922,10 @@ export const useStore = create<AppState>()(
             auditTrail: existing.auditTrail?.length ? existing.auditTrail : incoming.auditTrail,
           }
         })
-        const orphans = s.runs.filter((r) => !incomingIds.has(r.id))
+        const scopeThreadId = s.activeThreadId
+        const orphans = scopeThreadId
+          ? s.runs.filter((r) => !incomingIds.has(r.id) && r.threadId === scopeThreadId)
+          : []
         return { runs: orphans.length > 0 ? [...merged, ...orphans] : merged }
       }),
       setActiveRun: (activeRunId) => {
@@ -1056,18 +1059,17 @@ export const useStore = create<AppState>()(
           threadSidebarCollapsed: false,
         })),
       selectThread: async (threadId) => {
+        // Clear runs immediately so the previous thread cannot paint into the next.
         set({
           activeThreadId: threadId,
           activeRunId: null,
+          runs: [],
           steps: [],
           trace: [],
           audit: [],
           pendingInput: null,
         })
-        if (!threadId) {
-          set({ runs: [] })
-          return
-        }
+        if (!threadId) return
         try {
           const runs = await api.listThreadRuns(threadId)
           // The user may have selected another thread while this request was

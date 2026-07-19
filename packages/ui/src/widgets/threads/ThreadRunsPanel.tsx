@@ -3,7 +3,7 @@
  */
 
 import { ChevronRight, Plus } from "lucide-react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useMemo, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
@@ -239,12 +239,17 @@ function WidgetThreadBlock({
 export function ThreadRunsPanel(): React.ReactElement {
   const threads = useStore((s) => s.threads)
   const activeThreadId = useStore((s) => s.activeThreadId)
-  const activeThreadRuns = useStore((s) => s.runs)
+  const storeRuns = useStore((s) => s.runs)
   const activeRunId = useStore((s) => s.activeRunId)
   const selectThread = useStore((s) => s.selectThread)
   const selectRun = useStore((s) => s.selectRun)
   const deleteThread = useStore((s) => s.deleteThread)
   const createNewThread = useStore((s) => s.createNewThread)
+
+  const activeThreadRuns = useMemo(
+    () => (activeThreadId ? storeRuns.filter((r) => r.threadId === activeThreadId) : []),
+    [storeRuns, activeThreadId],
+  )
 
   const [expandedId, setExpandedId] = useState<string | null>(activeThreadId)
   const [runsByThread, setRunsByThread] = useState<Record<string, Run[]>>({})
@@ -260,7 +265,10 @@ export function ThreadRunsPanel(): React.ReactElement {
   const loadRuns = useCallback(async (threadId: string) => {
     let alreadyLoaded = false
     setRunsByThread((prev) => {
-      alreadyLoaded = prev[threadId] !== undefined
+      const cached = prev[threadId]
+      // Refetch if missing, or if a prior bug cached foreign-thread runs here.
+      alreadyLoaded = cached !== undefined
+        && cached.every((run) => run.threadId === threadId)
       return prev
     })
     if (alreadyLoaded) return
@@ -336,7 +344,7 @@ export function ThreadRunsPanel(): React.ReactElement {
             runs={
               thread.id === activeThreadId
                 ? activeThreadRuns
-                : runsByThread[thread.id]
+                : (runsByThread[thread.id] ?? []).filter((r) => r.threadId === thread.id)
             }
             loading={loadingId === thread.id}
             activeRunId={activeRunId}

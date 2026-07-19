@@ -2565,7 +2565,7 @@ const RunMessage = React.memo(RunMessageImpl, (prev, next) => {
 
 const FORCE_EMPTY_STATE_PREVIEW = false
 /** Widget / pop-out chat column — transcript and input share the same width. */
-const WIDGET_CHAT_COLUMN_CLASS = "w-[90%] max-w-[1400px] mx-auto"
+const WIDGET_CHAT_COLUMN_CLASS = "w-full max-w-[1400px] mx-auto"
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, value))
@@ -3329,7 +3329,9 @@ export function TermChat({
             ? `flex min-h-0 flex-1 flex-col ${
                 showEmptyState ? `${HOME_CHAT_GUTTER_X_CLASS} pt-8 pb-10` : `${HOME_CHAT_GUTTER_X_CLASS} pt-0`
               }`
-            : "flex min-h-0 flex-1 flex-col px-6 py-5"
+            : showEmptyState
+              ? "flex min-h-0 flex-1 flex-col"
+              : "flex min-h-0 flex-1 flex-col px-3 py-3 sm:px-5 sm:py-4"
         }
       >
       {isHomeMode ? (
@@ -3423,12 +3425,56 @@ export function TermChat({
             <div className={transcriptFadeOverlayClass("bottom")} aria-hidden />
           )}
         </div>
+      ) : showEmptyState ? (
+        <div
+          ref={scrollHostRef}
+          {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
+          className="termchat-widget-empty relative flex min-h-0 flex-1 flex-col overflow-hidden"
+        >
+          <div
+            ref={transcriptInnerRef}
+            className="termchat-widget-empty__stage flex min-h-0 flex-1 flex-col items-center justify-center px-4 py-4 text-center sm:px-6 sm:py-5"
+          >
+            <div className="termchat-widget-empty__body chathome-empty-state relative z-10 w-full">
+              <div className="chathome-empty-copy termchat-widget-empty__copy">
+                <p className="termchat-widget-empty__title text-text font-medium tracking-[-0.02em]">
+                  What are you working on?
+                </p>
+                <p className="termchat-widget-empty__detail text-text-muted mx-auto">
+                  Query business data, inspect metadata or run environment synchronization.
+                </p>
+              </div>
+              <div className="chathome-empty-input termchat-widget-empty__input">
+                <TermChatInputBar
+                  input={input}
+                  isRunning={isRunning}
+                  slashOnlyMode={slashOnlyMode}
+                  slashCommands={slashCommands}
+                  commandConsole={cmdConsole}
+                  pendingInput={pendingInput}
+                  sending={sending}
+                  textareaRef={setTextareaRef}
+                  attachments={pendingAttachments}
+                  onChange={handleInputChange}
+                  onKeyDown={onKey}
+                  onCancel={cancel}
+                  onSend={send}
+                  onAttach={openFilePicker}
+                  onRemoveAttachment={removeAttachment}
+                  className="w-full"
+                  variant="default"
+                  heroRevealProgress={heroRevealProgress}
+                />
+              </div>
+            </div>
+          </div>
+        </div>
       ) : (
       <div
         ref={scrollHostRef}
         {...{ [CHAT_SCROLL_HOST_ATTR]: "" }}
         onScroll={onTranscriptScrollWithRail}
-        className={`relative min-h-0 flex-1 overflow-y-auto overflow-x-auto ${WIDGET_CHAT_COLUMN_CLASS} space-y-10`}
+        className={`relative min-h-0 flex-1 overflow-y-auto overflow-x-hidden ${WIDGET_CHAT_COLUMN_CLASS} space-y-8 sm:space-y-10`}
         style={{ overflowAnchor: "none" }}
       >
         <div
@@ -3436,44 +3482,7 @@ export function TermChat({
           className={`relative ${WIDGET_CHAT_COLUMN_CLASS}`}
           style={{ overflowAnchor: "none" }}
         >
-          {showEmptyState && (
-            <div className={`chathome-empty-state relative flex flex-col items-center justify-center px-6 text-center min-h-[58vh]`}>
-              <div className="relative z-10 w-full max-w-[860px] space-y-8">
-                <div className="chathome-empty-copy space-y-2">
-                  <p className="text-[24px] leading-tight tracking-[-0.02em] text-text font-medium">
-                    What are you working on?
-                  </p>
-                  <p className="text-[13px] leading-5 text-text-muted max-w-[520px] mx-auto">
-                    Query business data, inspect metadata or run environment synchronization.
-                  </p>
-                </div>
-                <div className="chathome-empty-input">
-                  <TermChatInputBar
-                    input={input}
-                    isRunning={isRunning}
-                    slashOnlyMode={slashOnlyMode}
-                    slashCommands={slashCommands}
-                    commandConsole={cmdConsole}
-                    pendingInput={pendingInput}
-                    sending={sending}
-                    textareaRef={setTextareaRef}
-                    attachments={pendingAttachments}
-                    onChange={handleInputChange}
-                    onKeyDown={onKey}
-                    onCancel={cancel}
-                    onSend={send}
-                    onAttach={openFilePicker}
-                    onRemoveAttachment={removeAttachment}
-                    className="w-full max-w-[860px]"
-                    variant="default"
-                    heroRevealProgress={heroRevealProgress}
-                  />
-                </div>
-              </div>
-            </div>
-          )}
-
-          {!showEmptyState && displayRuns.map((run) => (
+          {displayRuns.map((run) => (
             <ChatTurn
               key={run.id}
               run={run}
@@ -3506,7 +3515,9 @@ export function TermChat({
       </ChatScrollProvider>
 
       {!showEmptyState && (
-        <div className={`termchat-input-dock termchat-input-dock--composer ${HOME_CHAT_INPUT_DOCK_CLASS}`}>
+        <div className={`termchat-input-dock termchat-input-dock--composer ${
+          isHomeMode ? HOME_CHAT_INPUT_DOCK_CLASS : "px-3 pb-3 pt-1 sm:px-5 sm:pb-4"
+        }`}>
           <div className={`relative z-20 ${isHomeMode ? HOME_CHAT_COLUMN_CLASS : WIDGET_CHAT_COLUMN_CLASS}`}>
             <TermChatInputBar
               input={input}
