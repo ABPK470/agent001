@@ -15,10 +15,11 @@ const DEFAULT_DISMISS_MS: Readonly<Record<ToastKind, number>> = {
   info: 6_000,
 }
 
+/** Solid fills only — never translucent over the canvas/modal. */
 const KIND_STYLES: Readonly<Record<ToastKind, string>> = {
-  ok: "border-border-subtle bg-elevated/95 text-text shadow-lg backdrop-blur-sm",
-  err: "border-error/30 bg-error/10 text-error shadow-lg backdrop-blur-sm",
-  info: "border-info/30 bg-info/10 text-info shadow-lg backdrop-blur-sm",
+  ok: "mia-toast mia-toast--ok",
+  err: "mia-toast mia-toast--err",
+  info: "mia-toast mia-toast--info",
 }
 
 const KIND_ICONS: Readonly<Record<ToastKind, typeof CheckCircle2>> = {
@@ -95,7 +96,7 @@ export function ToastStack({
             key={toast.id}
             role={toast.kind === "err" ? "alert" : "status"}
             className={[
-              "pointer-events-auto flex items-start gap-2.5 rounded-xl border px-4 py-3.5 text-base",
+              "pointer-events-auto flex items-start gap-2.5 rounded-xl border px-4 py-3.5 text-base shadow-lg",
               KIND_STYLES[toast.kind],
             ].join(" ")}
           >

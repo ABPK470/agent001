@@ -95,7 +95,11 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
 
       <div
         ref={tabsRef}
-        className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none"
+        className={[
+          "flex min-w-0 flex-1 items-center gap-1 overflow-x-auto scrollbar-none",
+          // Room for the first-slot drop marker (absolute, half outside the first tab).
+          draggingId ? "pl-2" : "",
+        ].join(" ")}
       >
         {views.map((view, index) => {
           const isDragging = draggingId === view.id
@@ -107,7 +111,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
               <div
                 data-view-id={view.id}
                 className={[
-                  "group relative flex h-9 shrink-0 cursor-grab items-center gap-1 rounded-lg px-2.5 text-[13px] transition-[opacity,box-shadow,background-color] active:cursor-grabbing",
+                  "group relative flex h-9 shrink-0 cursor-grab items-center gap-1 rounded-lg px-2.5 text-[13px] transition-[opacity,background-color] active:cursor-grabbing",
                   view.id === activeViewId
                     ? "font-semibold text-text"
                     : "text-text-muted hover:text-text-secondary",
@@ -163,7 +167,7 @@ export function Toolbar({ onAddWidget, onSignOut, onModeChange, me }: Props) {
           )
         })}
         {dropSlot === views.length && (
-          <div className="relative h-9 w-0 shrink-0">
+          <div className="relative h-9 w-2 shrink-0">
             <ViewTabDropMarker edge="after" />
           </div>
         )}
