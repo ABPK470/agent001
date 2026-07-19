@@ -97,12 +97,6 @@ function RunHistoryRow({
         <div className="run-history-row__body">
           <div className="run-history-row__title">
             <span className="run-history-row__goal" title={run.goal}>{run.goal}</span>
-            <span
-              className="run-history-row__status"
-              style={{ color: statusColor(run.status) }}
-            >
-              {run.status}
-            </span>
           </div>
           <div className="run-history-row__meta">
             {agentLabel && (
@@ -125,51 +119,60 @@ function RunHistoryRow({
         </div>
       </div>
 
-      <div
-        className="run-history-row__actions"
-        onClick={(e) => e.stopPropagation()}
-        onKeyDown={(e) => e.stopPropagation()}
-      >
-        {live && (
-          <button
-            type="button"
-            className="run-history-action run-history-action--danger"
-            onClick={onCancel}
-            title="Cancel"
-          >
-            <Square size={14} strokeWidth={2.25} />
-          </button>
-        )}
-        {canResume(run.status) && (
-          <button
-            type="button"
-            className="run-history-action"
-            onClick={onResume}
-            title="Resume from checkpoint"
-          >
-            <RotateCcw size={14} strokeWidth={2.25} />
-          </button>
-        )}
-        {canRerunOrRollback(run.status) && (
-          <button
-            type="button"
-            className="run-history-action"
-            onClick={onRerun}
-            title="Re-run with same goal"
-          >
-            <Play size={14} strokeWidth={2.25} />
-          </button>
-        )}
-        {canRerunOrRollback(run.status) && !rolledBack && (
-          <button
-            type="button"
-            className="run-history-action run-history-action--warning"
-            onClick={onRollback}
-            title="Rollback file changes"
-          >
-            <Undo2 size={14} strokeWidth={2.25} />
-          </button>
-        )}
+      {/* Status + actions share one vertical center (not the title baseline). */}
+      <div className="run-history-row__trail">
+        <span
+          className="run-history-row__status"
+          style={{ color: statusColor(run.status) }}
+        >
+          {run.status}
+        </span>
+        <div
+          className="run-history-row__actions"
+          onClick={(e) => e.stopPropagation()}
+          onKeyDown={(e) => e.stopPropagation()}
+        >
+          {live && (
+            <button
+              type="button"
+              className="run-history-action run-history-action--danger"
+              onClick={onCancel}
+              title="Cancel"
+            >
+              <Square size={14} strokeWidth={2.25} />
+            </button>
+          )}
+          {canResume(run.status) && (
+            <button
+              type="button"
+              className="run-history-action"
+              onClick={onResume}
+              title="Resume from checkpoint"
+            >
+              <RotateCcw size={14} strokeWidth={2.25} />
+            </button>
+          )}
+          {canRerunOrRollback(run.status) && (
+            <button
+              type="button"
+              className="run-history-action"
+              onClick={onRerun}
+              title="Re-run with same goal"
+            >
+              <Play size={14} strokeWidth={2.25} />
+            </button>
+          )}
+          {canRerunOrRollback(run.status) && !rolledBack && (
+            <button
+              type="button"
+              className="run-history-action run-history-action--warning"
+              onClick={onRollback}
+              title="Rollback file changes"
+            >
+              <Undo2 size={14} strokeWidth={2.25} />
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

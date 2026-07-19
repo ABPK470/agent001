@@ -27,7 +27,7 @@ const bodyClass = (compact: boolean) =>
     ? "text-text-secondary text-[15px] leading-6 w-full min-w-0"
     : "text-text-secondary text-base leading-relaxed w-full min-w-0"
 
-/** Live stream — formatted committed blocks + glyph tail for in-flight prose. */
+/** Live stream — formatted committed blocks + quiet tail for in-flight prose. */
 function StreamingLiveAnswer({ text, compact }: { text: string; compact: boolean }) {
   const { blocks, glyphTail, layout } = useMemo(() => getLiveStreamingRenderParts(text), [text])
 
@@ -37,9 +37,12 @@ function StreamingLiveAnswer({ text, compact }: { text: string; compact: boolean
     (layout.remainderKind === "fenced" || layout.remainderKind === "table") &&
     layout.remainder.length > 0
 
+  // Match SmartAnswer's settled spacing so live → done does not reflow gaps.
   return (
-    <div className={[bodyClass(compact), "space-y-2"].join(" ")}>
-      {hasBlockContent ? <SmartAnswer blocks={blocks} compact={compact} /> : null}
+    <div className={[bodyClass(compact), "space-y-3"].join(" ")}>
+      {hasBlockContent ? (
+        <SmartAnswer blocks={blocks} compact={compact} streaming />
+      ) : null}
       {hasGlyphTail ? (
         <div className="whitespace-pre-wrap break-words">
           <GlyphStreamText text={glyphTail} />
@@ -153,7 +156,7 @@ function TypewriterRevealAnswer({
   const hasProse = proseTail.length > 0
 
   return (
-    <div className={[bodyClass(compact), "space-y-2"].join(" ")}>
+    <div className={[bodyClass(compact), "space-y-3"].join(" ")}>
       {hasBlockContent ? (
         <SmartAnswer
           blocks={segments.blocks}

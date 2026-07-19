@@ -1464,8 +1464,6 @@ textarea.input {
 .run-history-row__title {
   display: flex;
   align-items: baseline;
-  justify-content: space-between;
-  gap: 0.5rem;
   min-width: 0;
 }
 
@@ -1483,12 +1481,22 @@ textarea.input {
   white-space: nowrap;
 }
 
+/* Status sits with action icons — vertically centered to the row, not the title. */
+.run-history-row__trail {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+  align-self: flex-end;
+}
+
 .run-history-row__status {
   flex-shrink: 0;
-  font-size: 11px;
+  font-size: 13px;
   font-weight: 600;
-  line-height: 1.3;
+  line-height: 1;
   text-transform: lowercase;
+  letter-spacing: 0.01em;
 }
 
 .run-history-row__meta {
@@ -1595,9 +1603,13 @@ textarea.input {
   .run-history-row__dot {
     margin-top: 0;
   }
+
+  .run-history-row__trail {
+    align-self: center;
+  }
 }
 
-/* Wide: actions appear on hover/focus so the row stays calm */
+/* Wide: trail (status + actions) appears on hover/focus so the row stays calm */
 @container run-history (min-width: 36rem) {
   .run-history-row__actions {
     opacity: 0;
@@ -2400,31 +2412,32 @@ textarea.input {
 
 /* ── Streaming answer printer ─────────────────────────────────── */
 
+/* Opacity-only stream enters — no translateY (that fought stick-to-bottom). */
 @keyframes stream-block-appear {
-  from { opacity: 0; transform: translateY(4px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes stream-table-row {
-  from { opacity: 0; transform: translateY(3px); }
-  to { opacity: 1; transform: translateY(0); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 @keyframes stream-diagram-enter {
-  from { opacity: 0; transform: scale(0.985); }
-  to { opacity: 1; transform: scale(1); }
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .stream-block-appear {
-  animation: stream-block-appear 0.38s ease-out both;
+  animation: stream-block-appear 0.28s ease-out both;
 }
 
 .stream-table-row {
-  animation: stream-table-row 0.32s ease-out both;
+  animation: stream-table-row 0.22s ease-out both;
 }
 
 .stream-diagram-enter {
-  animation: stream-diagram-enter 0.55s ease-out both;
+  animation: stream-diagram-enter 0.35s ease-out both;
 }
 
 /* ── MI:A colon monogram — brand mark + live status ─────────────── */
@@ -5347,14 +5360,67 @@ textarea.input {
   }
 }
 
-/* Crystal / glyph stream cells — unsettled chars show as muted ASCII noise. */
-.intro3-crystal-cell,
-.glyph-stream-cell {
+/* Crystal cells (login brand) — unsettled chars as muted ASCII noise. */
+.intro3-crystal-cell {
   display: inline-block;
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas,
     "Liberation Mono", "Courier New", monospace;
   color: var(--text-muted);
   opacity: 0.75;
+}
+
+/* Live answer stream — prose as itself + quiet trailing cue (no width thrash). */
+.glyph-stream-text {
+  font: inherit;
+  letter-spacing: inherit;
+}
+
+.glyph-stream-cue {
+  display: inline-block;
+  width: 0.4em;
+  height: 0.85em;
+  margin-left: 0.12em;
+  vertical-align: -0.12em;
+  border-radius: 1px;
+  background: color-mix(in srgb, var(--accent) 50%, transparent);
+  animation: glyph-stream-cue-pulse 1.15s ease-in-out infinite;
+}
+
+@keyframes glyph-stream-cue-pulse {
+  0%, 100% { opacity: 0.35; }
+  50% { opacity: 0.85; }
+}
+
+/* Chart/KPI pending shell — soft fill while fence is still open. */
+.stream-pending-shell__skeleton {
+  flex: 1 1 auto;
+  min-height: 3.5rem;
+  border-radius: 0.5rem;
+  background:
+    linear-gradient(
+      110deg,
+      color-mix(in srgb, var(--overlay-2) 55%, transparent) 0%,
+      color-mix(in srgb, var(--overlay-3) 70%, transparent) 45%,
+      color-mix(in srgb, var(--overlay-2) 55%, transparent) 90%
+    );
+  background-size: 200% 100%;
+  animation: stream-pending-shimmer 1.6s ease-in-out infinite;
+}
+
+@keyframes stream-pending-shimmer {
+  0% { background-position: 100% 0; }
+  100% { background-position: -100% 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glyph-stream-cue,
+  .stream-pending-shell__skeleton {
+    animation: none;
+  }
+
+  .glyph-stream-cue {
+    opacity: 0.55;
+  }
 }
 
 /* ── Header (h-14, mirrors Toolbar position & sizing) ───────────────── */

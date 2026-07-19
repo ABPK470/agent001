@@ -244,7 +244,8 @@ function StreamingCaret({ compact }: { compact?: boolean }) {
 export const COMPACT_TABLE_WRAPPER_CLASS =
   "w-full min-w-0 overflow-x-auto rounded-md border border-border-subtle my-1.5"
 
-function CompactTable({
+/** Compact markdown table — shared by SmartAnswer and the live stream shell. */
+export function CompactTable({
   headers,
   rows,
   animateRows = false,
@@ -374,22 +375,25 @@ export function SmartAnswer({
   text,
   blocks: blocksIn,
   reveal,
-  streaming = false,
+  streaming: _streaming = false,
   compact = false,
 }: {
   text?: string
   blocks?: AnswerBlock[]
   reveal?: StreamRevealState
+  /** @deprecated Kept for callers; spacing no longer differs while streaming. */
   streaming?: boolean
   compact?: boolean
 }) {
+  void _streaming
   const blocks = blocksIn ?? parseAnswerBlocks(text ?? "")
 
   return (
     <CompactContext.Provider value={compact}>
     <div className={[
       compact ? "text-text-secondary text-[15px] leading-6 w-full min-w-0" : "text-text-secondary text-base leading-relaxed w-full min-w-0",
-      streaming ? "space-y-2" : "space-y-3",
+      // Keep live + settled spacing identical — flipping 2↔3 shook the stream.
+      "space-y-3",
     ].join(" ")}>
       {blocks.map((block, bi) => {
         if (reveal && bi > reveal.doneCount) return null

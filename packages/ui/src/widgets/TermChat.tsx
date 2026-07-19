@@ -3214,16 +3214,13 @@ export function TermChat({
     })
   }, [scopedActiveRunId, latestDisplayRunId, scopedActiveRun?.trace?.length, isRunning, streamingAnswer, scrollToBottom])
 
-  // Follow live output while generating — tokens, trace rows, and markdown reflow.
+  // Follow live output when the trace grows. Answer-token height is already
+  // handled by useStickToBottomScroll's ResizeObserver — sticking again on
+  // every streamingAnswer chunk double-scrolled and read as shake.
   useEffect(() => {
-    if (!isRunning && !streamingAnswer) return
+    if (!isRunning) return
     stickIfFollowing()
-  }, [
-    streamingAnswer,
-    scopedActiveRun?.trace?.length,
-    isRunning,
-    stickIfFollowing,
-  ])
+  }, [scopedActiveRun?.trace?.length, isRunning, stickIfFollowing])
 
   const jumpToLatest = useCallback(() => {
     resumeAutoFollow()
