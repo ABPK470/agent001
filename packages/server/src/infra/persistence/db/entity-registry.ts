@@ -2,14 +2,15 @@
  * Persistence for the entity registry — entity definitions + SCD2
  * strategies, both versioned.
  *
- * Storage shape (see ./connection.ts for DDL):
+ * Storage shape (see migrations/0001_baseline.ts for DDL):
  *
- *   entity_defs(tenant_id, id) → current_version + retired_at
- *   entity_def_versions(tenant_id, id, version) → immutable history row
+ *   entity_active(tenant_id, id) → current_version + retired_at
+ *   entity_versions(tenant_id, id, version) → immutable history row
  *     containing the full EntityDefinition JSON + the structured diff
  *     against the prior version.
  *
- *   scd2_strategies / scd2_strategy_versions follow the same pattern.
+ *   scd2_strategy_active / scd2_strategy_versions follow the same pattern.
+ *   Convention: `*_active` = current-version cursor; document body lives in `*_versions`.
  *
  * Save semantics:
  *   - Every save inserts a *new* row in *_versions (append-only — DB
@@ -52,7 +53,7 @@ function parseStoredStrategy(body: string): Scd2Strategy {
  * When the EntityDefinition schema is enriched (e.g. adding the
  * `discrepancies` / `reverseOrder` / `legacyEntrySproc` fields or
  * per-table introspection fields), older rows that were written to
- * `entity_def_versions` before the migration are missing those keys.
+ * `entity_versions` before the migration are missing those keys.
  * Returning the raw JSON would surface as runtime `undefined.length`
  * crashes in any consumer that treats the new fields as required.
  *
@@ -218,7 +219,7 @@ export function saveEntityDefinition(args: {
 
   return db.transaction(() => {
     const pointer = db
-      .prepare(`SELECT current_version, retired_at FROM entity_defs WHERE tenant_id = ? AND id = ?`)
+      .prepare(`SELECT current_version, retired_at FROM entity_active WHERE tenant_id = ? AND id = ?`)
       .get(tenantId, args.def.id) as { current_version: number; retired_at: string | null } | undefined
 
     if (args.createOnly && pointer) {
@@ -251,7 +252,7 @@ export function saveEntityDefinition(args: {
     const diff = diffEntityDefinitions(prev, persisted)
 
     db.prepare(
-      `INSERT INTO entity_def_versions
+      `INSERT INTO entity_versions
          (tenant_id, id, version, body_json, version_label, created_by, created_at, reason, diff_json)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     ).run(
@@ -268,11 +269,11 @@ export function saveEntityDefinition(args: {
 
     if (pointer) {
       db.prepare(
-        `UPDATE entity_defs SET current_version = ?, retired_at = NULL WHERE tenant_id = ? AND id = ?`
+        `UPDATE entity_active SET current_version = ?, retired_at = NULL WHERE tenant_id = ? AND id = ?`
       ).run(nextVersion, tenantId, persisted.id)
     } else {
       db.prepare(
-        `INSERT INTO entity_defs (tenant_id, id, current_version, retired_at) VALUES (?, ?, ?, NULL)`
+        `INSERT INTO entity_active (tenant_id, id, current_version, retired_at) VALUES (?, ?, ?, NULL)`
       ).run(tenantId, persisted.id, nextVersion)
     }
 
@@ -298,7 +299,7 @@ export function readEntityVersionBody(
   const db = getDb()
   const row = db
     .prepare(
-      `SELECT body_json FROM entity_def_versions
+      `SELECT body_json FROM entity_versions
        WHERE tenant_id = ? AND id = ? AND version = ?`
     )
     .get(tenantId, id, version) as { body_json: string } | undefined
@@ -321,7 +322,7 @@ export function getEntityDefinition(
     return readEntityVersionBody(tenantId, id, opts.version)
   }
   const pointer = db
-    .prepare(`SELECT current_version, retired_at FROM entity_defs WHERE tenant_id = ? AND id = ?`)
+    .prepare(`SELECT current_version, retired_at FROM entity_active WHERE tenant_id = ? AND id = ?`)
     .get(tenantId, id) as { current_version: number; retired_at: string | null } | undefined
   if (!pointer) return null
   if (pointer.retired_at && !opts.includeRetired) return null
@@ -340,7 +341,7 @@ export function listEntityDefinitions(
 ): EntityDefinition[] {
   const db = getDb()
   const rows = db
-    .prepare(`SELECT id, current_version, retired_at FROM entity_defs WHERE tenant_id = ? ORDER BY id`)
+    .prepare(`SELECT id, current_version, retired_at FROM entity_active WHERE tenant_id = ? ORDER BY id`)
     .all(tenantId) as { id: string; current_version: number; retired_at: string | null }[]
 
   const out: EntityDefinition[] = []
@@ -368,7 +369,7 @@ export function listEntityDefinitionHistory(tenantId: string, id: string): Entit
   const rows = db
     .prepare(
       `SELECT version, version_label, created_by, created_at, reason, diff_json
-       FROM entity_def_versions
+       FROM entity_versions
        WHERE tenant_id = ? AND id = ?
        ORDER BY version DESC`
     )
@@ -404,14 +405,14 @@ export function retireEntityDefinition(
 ): { retiredAt: string } | null {
   const db = getDb()
   const pointer = db
-    .prepare(`SELECT current_version, retired_at FROM entity_defs WHERE tenant_id = ? AND id = ?`)
+    .prepare(`SELECT current_version, retired_at FROM entity_active WHERE tenant_id = ? AND id = ?`)
     .get(tenantId, id) as { current_version: number; retired_at: string | null } | undefined
   if (!pointer) return null
   if (pointer.retired_at) return { retiredAt: pointer.retired_at }
 
   const retiredAt = new Date().toISOString()
   return db.transaction(() => {
-    db.prepare(`UPDATE entity_defs SET retired_at = ? WHERE tenant_id = ? AND id = ?`).run(
+    db.prepare(`UPDATE entity_active SET retired_at = ? WHERE tenant_id = ? AND id = ?`).run(
       retiredAt,
       tenantId,
       id
@@ -431,11 +432,11 @@ export function retireEntityDefinition(
       }
       const diff = diffEntityDefinitions(prev, retiredDef)
       db.prepare(
-        `INSERT INTO entity_def_versions
+        `INSERT INTO entity_versions
            (tenant_id, id, version, body_json, version_label, created_by, created_at, reason, diff_json)
          VALUES (?, ?, ?, ?, NULL, ?, ?, 'retire', ?)`
       ).run(tenantId, id, nextVersion, JSON.stringify(retiredDef), actor, retiredAt, JSON.stringify(diff))
-      db.prepare(`UPDATE entity_defs SET current_version = ? WHERE tenant_id = ? AND id = ?`).run(
+      db.prepare(`UPDATE entity_active SET current_version = ? WHERE tenant_id = ? AND id = ?`).run(
         nextVersion,
         tenantId,
         id
@@ -452,18 +453,18 @@ export function retireEntityDefinition(
 export function wipeEntityRegistry(): void {
   const db = getDb()
   db.exec(`
-    DROP TRIGGER IF EXISTS entity_def_versions_no_update;
-    DROP TRIGGER IF EXISTS entity_def_versions_no_delete;
+    DROP TRIGGER IF EXISTS entity_versions_no_update;
+    DROP TRIGGER IF EXISTS entity_versions_no_delete;
   `)
-  db.exec(`DELETE FROM entity_def_versions`)
-  db.exec(`DELETE FROM entity_defs`)
+  db.exec(`DELETE FROM entity_versions`)
+  db.exec(`DELETE FROM entity_active`)
   db.exec(`
-    CREATE TRIGGER IF NOT EXISTS entity_def_versions_no_update
-      BEFORE UPDATE ON entity_def_versions
-      BEGIN SELECT RAISE(ABORT, 'entity_def_versions is append-only'); END;
-    CREATE TRIGGER IF NOT EXISTS entity_def_versions_no_delete
-      BEFORE DELETE ON entity_def_versions
-      BEGIN SELECT RAISE(ABORT, 'entity_def_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS entity_versions_no_update
+      BEFORE UPDATE ON entity_versions
+      BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS entity_versions_no_delete
+      BEFORE DELETE ON entity_versions
+      BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
   `)
 }
 
@@ -494,7 +495,7 @@ export function saveScd2Strategy(args: {
   const db = getDb()
   return db.transaction(() => {
     const pointer = db
-      .prepare(`SELECT current_version FROM scd2_strategies WHERE tenant_id = ? AND id = ?`)
+      .prepare(`SELECT current_version FROM scd2_strategy_active WHERE tenant_id = ? AND id = ?`)
       .get(tenantId, normalized.id) as { current_version: number } | undefined
 
     const nextVersion = (pointer?.current_version ?? 0) + 1
@@ -522,11 +523,11 @@ export function saveScd2Strategy(args: {
 
     if (pointer) {
       db.prepare(
-        `UPDATE scd2_strategies SET current_version = ?, retired_at = NULL WHERE tenant_id = ? AND id = ?`
+        `UPDATE scd2_strategy_active SET current_version = ?, retired_at = NULL WHERE tenant_id = ? AND id = ?`
       ).run(nextVersion, tenantId, persisted.id)
     } else {
       db.prepare(
-        `INSERT INTO scd2_strategies (tenant_id, id, current_version, retired_at) VALUES (?, ?, ?, NULL)`
+        `INSERT INTO scd2_strategy_active (tenant_id, id, current_version, retired_at) VALUES (?, ?, ?, NULL)`
       ).run(tenantId, persisted.id, nextVersion)
     }
 
@@ -574,7 +575,7 @@ export function resolveScd2Strategy(
   // then bundled.
   for (const t of tenantId === DEFAULT_TENANT_ID ? [DEFAULT_TENANT_ID] : [tenantId, DEFAULT_TENANT_ID]) {
     const pointer = db
-      .prepare(`SELECT current_version FROM scd2_strategies WHERE tenant_id = ? AND id = ?`)
+      .prepare(`SELECT current_version FROM scd2_strategy_active WHERE tenant_id = ? AND id = ?`)
       .get(t, id) as { current_version: number } | undefined
     if (pointer) {
       const row = db
@@ -672,7 +673,7 @@ function readTenantStrategies(
   const rows = db
     .prepare(
       `SELECT s.id, s.current_version, s.retired_at, v.body_json
-       FROM scd2_strategies s
+       FROM scd2_strategy_active s
        JOIN scd2_strategy_versions v
          ON v.tenant_id = s.tenant_id AND v.id = s.id AND v.version = s.current_version
        WHERE s.tenant_id = ?
@@ -698,7 +699,7 @@ export function retireScd2Strategy(
 ): { retiredAt: string } | null {
   const db = getDb()
   const pointer = db
-    .prepare(`SELECT current_version, retired_at FROM scd2_strategies WHERE tenant_id = ? AND id = ?`)
+    .prepare(`SELECT current_version, retired_at FROM scd2_strategy_active WHERE tenant_id = ? AND id = ?`)
     .get(tenantId, id) as { current_version: number; retired_at: string | null } | undefined
   if (!pointer) return null
   if (pointer.retired_at) return { retiredAt: pointer.retired_at }
@@ -711,7 +712,7 @@ export function retireScd2Strategy(
   }
 
   const retiredAt = new Date().toISOString()
-  db.prepare(`UPDATE scd2_strategies SET retired_at = ? WHERE tenant_id = ? AND id = ?`).run(
+  db.prepare(`UPDATE scd2_strategy_active SET retired_at = ? WHERE tenant_id = ? AND id = ?`).run(
     retiredAt,
     tenantId,
     id,

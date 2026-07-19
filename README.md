@@ -215,7 +215,7 @@ Dev loop without packaging (repo checkout on the server): `npm run build && MIA_
 | **Save entity** | Entity Registry → Edit modal → Save | `POST /api/entity-registry/entities` → `validateEntityDefinition()` (scopes, tables, SCD2 refs) + cross-ref checks. Failures return **422** in the UI. |
 | **Import YAML/JSON** | Entity Registry import | Same validator before write (dry-run available). |
 | **Publish** | Entity Registry **⚙ → Publish** | `publishSyncDefinitionsFromDb()` re-validates every entity; invalid definitions are **skipped** with errors in the response. Writes `sync-definitions/published/definitions.bundle.json`. |
-| **Boot seed** | Server start | Seeds empty `entity_defs` from deploy artifacts; runs `validateEntityDefinition()` per entity. |
+| **Boot seed** | Server start | Seeds empty entity registry (`entity_active` + `entity_versions`) from deploy artifacts; runs `validateEntityDefinition()` per entity. |
 
 The edit modal only checks **form basics** client-side (root table, id column, reason, etc.). **Scope predicates** (`{id}` / `{ids}`, no unsafe SQL, no review placeholders) are enforced on **server save** and again on **publish**.
 

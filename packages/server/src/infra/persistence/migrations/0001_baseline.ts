@@ -589,11 +589,11 @@ const BASELINE_SQL = `
 
     -- ── Entity registry: SCD2 strategies (versioned) ─────────────
     -- Tenant-scoped registry of column-handling strategies referenced by
-    -- entity definitions. Two-table pattern: scd2_strategies is the
+    -- entity definitions. Two-table pattern: scd2_strategy_active is the
     -- pointer (current_version + retired_at), scd2_strategy_versions
     -- is the immutable history. Update + delete on *_versions are
     -- refused by triggers below.
-    CREATE TABLE IF NOT EXISTS scd2_strategies (
+    CREATE TABLE IF NOT EXISTS scd2_strategy_active (
       tenant_id        TEXT NOT NULL,
       id               TEXT NOT NULL,
       current_version  INTEGER NOT NULL,
@@ -619,21 +619,21 @@ const BASELINE_SQL = `
     CREATE INDEX IF NOT EXISTS idx_scd2_versions_lookup
       ON scd2_strategy_versions(tenant_id, id, version DESC);
 
-    -- ── Entity registry: entity definitions (versioned) ──────────
-    -- Same pointer + immutable history pattern. body_json is the full
-    -- EntityDefinition JSON (excluding the version/version_label/etc.
-    -- columns surfaced separately for indexing). diff_json is the
-    -- structured diff vs the prior version produced by
+    -- ── Entity registry: entities (versioned) ────────────────────
+    -- Same *_active + *_versions pattern as SCD2 strategies.
+    -- entity_active is the current-version cursor (no body).
+    -- entity_versions.body_json is the full EntityDefinition.
+    -- diff_json is the structured diff vs the prior version produced by
     -- diffEntityDefinitions() — stored so evidence envelopes can replay
     -- exactly what the proposer saw without recomputing.
-    CREATE TABLE IF NOT EXISTS entity_defs (
+    CREATE TABLE IF NOT EXISTS entity_active (
       tenant_id        TEXT NOT NULL,
       id               TEXT NOT NULL,
       current_version  INTEGER NOT NULL,
       retired_at       TEXT,
       PRIMARY KEY (tenant_id, id)
     );
-    CREATE TABLE IF NOT EXISTS entity_def_versions (
+    CREATE TABLE IF NOT EXISTS entity_versions (
       tenant_id        TEXT NOT NULL,
       id               TEXT NOT NULL,
       version          INTEGER NOT NULL,
@@ -645,16 +645,16 @@ const BASELINE_SQL = `
       diff_json        TEXT NOT NULL DEFAULT '[]',
       PRIMARY KEY (tenant_id, id, version)
     );
-    CREATE TRIGGER IF NOT EXISTS entity_def_versions_no_update
-      BEFORE UPDATE ON entity_def_versions
-      BEGIN SELECT RAISE(ABORT, 'entity_def_versions is append-only'); END;
-    CREATE TRIGGER IF NOT EXISTS entity_def_versions_no_delete
-      BEFORE DELETE ON entity_def_versions
-      BEGIN SELECT RAISE(ABORT, 'entity_def_versions is append-only'); END;
-    CREATE INDEX IF NOT EXISTS idx_entity_defs_tenant
-      ON entity_defs(tenant_id);
-    CREATE INDEX IF NOT EXISTS idx_entity_def_versions_lookup
-      ON entity_def_versions(tenant_id, id, version DESC);
+    CREATE TRIGGER IF NOT EXISTS entity_versions_no_update
+      BEFORE UPDATE ON entity_versions
+      BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS entity_versions_no_delete
+      BEFORE DELETE ON entity_versions
+      BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
+    CREATE INDEX IF NOT EXISTS idx_entity_active_tenant
+      ON entity_active(tenant_id);
+    CREATE INDEX IF NOT EXISTS idx_entity_versions_lookup
+      ON entity_versions(tenant_id, id, version DESC);
 
     -- ══════════════════════════════════════════════════════════════
     -- F1 — Reconciliation Proposer subsystem (Phase 1)

@@ -16,7 +16,7 @@ const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "../../../../
 function seedScd2StrategiesFromArtifact(db: Database.Database, projectRoot: string): void {
   const artifact = loadStrategiesArtifact(resolve(projectRoot))
   const seedStrategyPointer = db.prepare(
-    `INSERT OR IGNORE INTO scd2_strategies (tenant_id, id, current_version, retired_at)
+    `INSERT OR IGNORE INTO scd2_strategy_active (tenant_id, id, current_version, retired_at)
      VALUES (?, ?, ?, NULL)`,
   )
   const seedStrategyVersion = db.prepare(

@@ -184,11 +184,11 @@ describe("deploy artifact publish parity", () => {
     seedEntityRegistryIfEmpty(projectRoot)
 
     const pointer = testDb
-      .prepare(`SELECT current_version FROM entity_defs WHERE tenant_id = '_default' AND id = 'content'`)
+      .prepare(`SELECT current_version FROM entity_active WHERE tenant_id = '_default' AND id = 'content'`)
       .get() as { current_version: number }
     const row = testDb
       .prepare(
-        `SELECT body_json FROM entity_def_versions WHERE tenant_id = '_default' AND id = 'content' AND version = ?`,
+        `SELECT body_json FROM entity_versions WHERE tenant_id = '_default' AND id = 'content' AND version = ?`,
       )
       .get(pointer.current_version) as { body_json: string }
     const body = JSON.parse(row.body_json) as {
@@ -201,16 +201,16 @@ describe("deploy artifact publish parity", () => {
       contentType.note =
         "Predicate unresolved from legacy pipeline variable @contentTypeIds. Verify against core.uspSyncContentObjectsTran body."
     }
-    testDb.exec(`DROP TRIGGER IF EXISTS entity_def_versions_no_update`)
+    testDb.exec(`DROP TRIGGER IF EXISTS entity_versions_no_update`)
     testDb
       .prepare(
-        `UPDATE entity_def_versions SET body_json = ? WHERE tenant_id = '_default' AND id = 'content' AND version = ?`,
+        `UPDATE entity_versions SET body_json = ? WHERE tenant_id = '_default' AND id = 'content' AND version = ?`,
       )
       .run(JSON.stringify(body), pointer.current_version)
     testDb.exec(`
-      CREATE TRIGGER IF NOT EXISTS entity_def_versions_no_update
-      BEFORE UPDATE ON entity_def_versions
-      BEGIN SELECT RAISE(ABORT, 'entity_def_versions is append-only'); END;
+      CREATE TRIGGER IF NOT EXISTS entity_versions_no_update
+      BEFORE UPDATE ON entity_versions
+      BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
     `)
 
     const repaired = repairBundledEntityDefinitionsFromArtifacts(projectRoot)

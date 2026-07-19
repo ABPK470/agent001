@@ -42,7 +42,7 @@ async function setup() {
   _setDb(testDb)
   _migrate(testDb)
   return {
-    defs: await import("../src/infra/persistence/db/entity-defs.js"),
+    defs: await import("../src/infra/persistence/db/entity-registry.js"),
     freezes: await import("../src/infra/persistence/db/freeze-windows.js")
   }
 }

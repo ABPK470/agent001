@@ -207,7 +207,7 @@ export {
   type SaveEntityResult,
   type SaveStrategyResult,
   type Scd2StrategyHistoryEntry
-} from "./entity-defs.js"
+} from "./entity-registry.js"
 
 export {
   countProposalsByStatus,

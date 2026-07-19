@@ -30,11 +30,11 @@ let fixture: CatalogOperatorFixture
 
 function corruptContentContentTypePredicate(): void {
   const pointer = fixture.testDb
-    .prepare(`SELECT current_version FROM entity_defs WHERE tenant_id = ? AND id = 'content'`)
+    .prepare(`SELECT current_version FROM entity_active WHERE tenant_id = ? AND id = 'content'`)
     .get(TENANT) as { current_version: number }
   const row = fixture.testDb
     .prepare(
-      `SELECT body_json FROM entity_def_versions WHERE tenant_id = ? AND id = 'content' AND version = ?`,
+      `SELECT body_json FROM entity_versions WHERE tenant_id = ? AND id = 'content' AND version = ?`,
     )
     .get(TENANT, pointer.current_version) as { body_json: string }
   const body = JSON.parse(row.body_json) as {
@@ -47,16 +47,16 @@ function corruptContentContentTypePredicate(): void {
     contentType.note =
       "Predicate unresolved from legacy pipeline variable @contentTypeIds. Verify against core.uspSyncContentObjectsTran body."
   }
-  fixture.testDb.exec(`DROP TRIGGER IF EXISTS entity_def_versions_no_update`)
+  fixture.testDb.exec(`DROP TRIGGER IF EXISTS entity_versions_no_update`)
   fixture.testDb
     .prepare(
-      `UPDATE entity_def_versions SET body_json = ? WHERE tenant_id = ? AND id = 'content' AND version = ?`,
+      `UPDATE entity_versions SET body_json = ? WHERE tenant_id = ? AND id = 'content' AND version = ?`,
     )
     .run(JSON.stringify(body), TENANT, pointer.current_version)
   fixture.testDb.exec(`
-    CREATE TRIGGER IF NOT EXISTS entity_def_versions_no_update
-    BEFORE UPDATE ON entity_def_versions
-    BEGIN SELECT RAISE(ABORT, 'entity_def_versions is append-only'); END;
+    CREATE TRIGGER IF NOT EXISTS entity_versions_no_update
+    BEFORE UPDATE ON entity_versions
+    BEGIN SELECT RAISE(ABORT, 'entity_versions is append-only'); END;
   `)
 }
 

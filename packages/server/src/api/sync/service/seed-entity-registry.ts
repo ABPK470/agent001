@@ -1,8 +1,8 @@
 /**
- * Bootstrap entity_defs on a fresh database from deploy-owned artifacts.
+ * Bootstrap the entity registry on a fresh database from deploy-owned artifacts.
  *
  * Authority model:
- *   - SQLite entity_defs is the live authoring source of truth.
+ *   - SQLite `entity_active` + `entity_versions` is the live authoring source of truth.
  *   - deploy/sync/entity-registry.seed.yaml (when present) is the preferred
  *     cold-start snapshot of EntityDefinition documents.
  *   - Otherwise deploy/sync/artifacts/entities/*.json (EntityDefinition seeds only).

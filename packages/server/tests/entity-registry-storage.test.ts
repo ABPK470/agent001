@@ -1,6 +1,6 @@
 /**
  * Tests for the entity registry persistence layer
- * (packages/server/src/db/entity-defs.ts).
+ * (packages/server/src/infra/persistence/db/entity-registry.ts).
  *
  * Covers:
  *   - bundled SCD2 strategies are seeded on migrate
@@ -48,7 +48,7 @@ async function setup() {
   const { _setDb, _migrate } = await import("../src/infra/persistence/db/index.js")
   _setDb(testDb)
   _migrate(testDb)
-  return import("../src/infra/persistence/db/entity-defs.js")
+  return import("../src/infra/persistence/db/entity-registry.js")
 }
 
 function validDef(overrides: Partial<EntityDefinition> = {}): EntityDefinition {
@@ -100,7 +100,7 @@ describe("entity registry seed", () => {
   it("populates _default tenant with all bundled strategies", async () => {
     await setup()
     const seeded = testDb
-      .prepare(`SELECT id, current_version FROM scd2_strategies WHERE tenant_id = '_default' ORDER BY id`)
+      .prepare(`SELECT id, current_version FROM scd2_strategy_active WHERE tenant_id = '_default' ORDER BY id`)
       .all() as { id: string; current_version: number }[]
     const ids = seeded.map((s) => s.id).sort()
     expect(ids).toEqual(shippedStrategyIds)
@@ -234,7 +234,7 @@ describe("saveEntityDefinition + getEntityDefinition", () => {
     })
     const row = testDb
       .prepare(
-        `SELECT diff_json FROM entity_def_versions WHERE tenant_id = '_default' AND id = 'contract' AND version = 2`
+        `SELECT diff_json FROM entity_versions WHERE tenant_id = '_default' AND id = 'contract' AND version = 2`
       )
       .get() as { diff_json: string }
     const diff = JSON.parse(row.diff_json)
@@ -307,18 +307,18 @@ describe("retireEntityDefinition", () => {
 })
 
 describe("immutability triggers", () => {
-  it("refuses UPDATE on entity_def_versions", async () => {
+  it("refuses UPDATE on entity_versions", async () => {
     const m = await setup()
     m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
     expect(() =>
-      testDb.prepare(`UPDATE entity_def_versions SET reason = 'tampered' WHERE id = 'contract'`).run()
+      testDb.prepare(`UPDATE entity_versions SET reason = 'tampered' WHERE id = 'contract'`).run()
     ).toThrow(/append-only/)
   })
 
-  it("refuses DELETE on entity_def_versions", async () => {
+  it("refuses DELETE on entity_versions", async () => {
     const m = await setup()
     m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
-    expect(() => testDb.prepare(`DELETE FROM entity_def_versions WHERE id = 'contract'`).run()).toThrow(
+    expect(() => testDb.prepare(`DELETE FROM entity_versions WHERE id = 'contract'`).run()).toThrow(
       /append-only/
     )
   })
@@ -340,15 +340,15 @@ describe("immutability triggers", () => {
   it("wipeEntityRegistry clears rows and restores append-only triggers", async () => {
     const m = await setup()
     m.saveEntityDefinition({ def: validDef(), actor: "u", reason: "" })
-    expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_defs`).get()).toEqual({ c: 1 })
+    expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_active`).get()).toEqual({ c: 1 })
 
     m.wipeEntityRegistry()
 
-    expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_defs`).get()).toEqual({ c: 0 })
-    expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_def_versions`).get()).toEqual({ c: 0 })
+    expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_active`).get()).toEqual({ c: 0 })
+    expect(testDb.prepare(`SELECT COUNT(*) AS c FROM entity_versions`).get()).toEqual({ c: 0 })
 
     m.saveEntityDefinition({ def: validDef({ id: "after-wipe" }), actor: "u", reason: "" })
-    expect(() => testDb.prepare(`DELETE FROM entity_def_versions`).run()).toThrow(/append-only/)
+    expect(() => testDb.prepare(`DELETE FROM entity_versions`).run()).toThrow(/append-only/)
   })
 })
 

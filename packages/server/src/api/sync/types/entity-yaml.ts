@@ -2,7 +2,7 @@
  * Bidirectional YAML/JSON for Catalog entity documents (`EntityDefinition` + `flowId`).
  *
  * Same document as git seeds (`deploy/sync/artifacts/entities/{id}.json`) and
- * SQLite `entity_def_versions.body_json`. Export/import use this shape 1:1.
+ * SQLite `entity_versions.body_json`. Export/import use this shape 1:1.
  *
  * Legacy: `run.template` → `flowId`; `__meta` stamps ignored on import.
  * Server stamps (`version`, `createdAt`, …) are emitted for review but

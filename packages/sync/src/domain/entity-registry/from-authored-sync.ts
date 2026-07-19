@@ -2,7 +2,7 @@
  * Import path: authored sync definition → entity registry row.
  *
  * Deploy-owned `deploy/sync/artifacts/entities/*.json` files are authored
- * sync definitions. On a fresh database the server seeds `entity_defs` from
+ * sync definitions. On a fresh database the server seeds `entity_active` from
  * these artifacts so the Entity Registry widget is populated before any
  * operator import.
  */

@@ -1,5 +1,5 @@
 /**
- * Fresh-database bootstrap: entity_defs seeded from deploy artifacts.
+ * Fresh-database bootstrap: entity_active seeded from deploy artifacts.
  */
 
 import Database from "better-sqlite3"
