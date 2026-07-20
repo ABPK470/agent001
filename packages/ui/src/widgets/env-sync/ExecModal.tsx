@@ -324,7 +324,7 @@ export function ExecModal({ exec, plan, execPlanId, tgtEnv, onConfirm, onCancel,
               </div>
 
               {stalled && (
-                <div className="rounded-lg border border-warning/25 bg-warning/8 px-3 py-2 text-xs text-warning leading-relaxed">
+                <div className="rounded-lg border border-warning/40 bg-panel-2 px-3 py-2 text-xs leading-relaxed text-text">
                   No progress for {formatElapsed(sinceLastEventMs)} — likely waiting on the database
                   (catalog check or a long query). You can cancel; the server stops when the current step finishes or times out.
                 </div>

@@ -552,8 +552,8 @@ function RuleEditor(props: EditorProps) {
       </div>
 
       {props.readOnlyOriginNotice && (
-        <div className="px-3.5 py-2.5 rounded-lg bg-warning/10 border border-warning/30 text-sm text-warning flex items-start gap-2">
-          <AlertCircle size={15} className="mt-0.5 shrink-0" />
+        <div className="flex items-start gap-2 rounded-lg border border-warning/40 bg-panel-2 px-3.5 py-2.5 text-sm text-text">
+          <AlertCircle size={15} className="mt-0.5 shrink-0 text-warning" />
           <span>
             This rule is a <strong>{props.readOnlyOriginNotice.label}</strong> and lives outside the database.
             Saving creates a new <strong>operator</strong> rule with the same name that overrides it on the next run.

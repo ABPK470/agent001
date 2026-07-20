@@ -7,6 +7,7 @@ import {
   Loader2,
   MoreHorizontal,
   RefreshCw,
+  Rocket,
   Search,
   Ship,
   X,
@@ -16,6 +17,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore
 
 import { api } from "../../client/index"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
+import { SetupHintStrip } from "../../components/SetupHintStrip"
 import { ToastStack, useWidgetToasts } from "../../components/useWidgetToasts"
 import { useContainerSize } from "../../hooks/useContainerSize"
 import { useStore } from "../../state/store"
@@ -478,15 +480,30 @@ export function EnvSync() {
   const execForDisplayPlan = displayPlan != null && (execPlanId === displayPlan.planId || exec.kind === "running")
   const previewActive = isPreviewInProgress(previewing, previewProgress)
 
+  const catalogPublishArmed = Boolean(
+    publishStatus?.catalogNeedsPublish || (publishStatus?.unpublishedEntityCount ?? 0) > 0,
+  )
+  const showPublishSetupHint = entityPublishRequired || (definitions.length === 0 && envs.length >= 2)
+
   return (
-    <div ref={rootRef} className="relative h-full overflow-hidden flex flex-col gap-3 text-text pb-1">
-      {entityPublishRequired && (
-        <div className="shrink-0 rounded-lg border border-warning/40 bg-panel-2 px-3 py-2 text-sm text-text">
-          Published sync contract for{" "}
-          <span className="font-mono font-medium">{entityType}</span> is behind the catalog tip.
-          Publish from Entity Registry before preview/execute — tip edits are not applied until then.
-        </div>
+    <div ref={rootRef} className="relative flex h-full flex-col overflow-hidden text-text pb-1">
+      {showPublishSetupHint && (
+        <SetupHintStrip icon={Rocket} className="px-3">
+          {definitions.length === 0 ? (
+            <>
+              No published sync bundle yet. Publish from Entity Registry before preview/execute.
+              {catalogPublishArmed ? " Publish is armed." : ""}
+            </>
+          ) : (
+            <>
+              Published sync contract for{" "}
+              <span className="font-mono font-medium">{entityType}</span> is behind the catalog tip.
+              Publish from Entity Registry before preview/execute — tip edits are not applied until then.
+            </>
+          )}
+        </SetupHintStrip>
       )}
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden pt-3">
       <WidgetToolbar compact={compact} className="env-sync-toolbar overflow-visible z-20">
         <WidgetToolbarLeading>
           <label className="env-sync-field">
@@ -745,10 +762,7 @@ export function EnvSync() {
             srcEnv={srcEnv}
             tgtEnv={tgtEnv}
             hasDefinitions={definitions.length > 0}
-            publishArmed={Boolean(
-              publishStatus?.catalogNeedsPublish
-                || (publishStatus?.unpublishedEntityCount ?? 0) > 0,
-            )}
+            publishHintActive={showPublishSetupHint}
           />
         )}
       </div>
@@ -789,6 +803,7 @@ export function EnvSync() {
         />
       )}
       <ToastStack toasts={toasts} onDismiss={dismissToast} />
+      </div>
     </div>
   )
 }

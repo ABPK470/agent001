@@ -2,10 +2,11 @@
  * Manage sync flows and platform setup.
  */
 
-import { Lock, LockOpen, MousePointer2, Plus, Save, Search, Trash2, Workflow, X } from "lucide-react"
+import { Lock, LockOpen, MousePointer2, Plus, Rocket, Save, Search, Trash2, Workflow, X } from "lucide-react"
 import { useCallback, useEffect, useMemo, useRef, useState, type JSX } from "react"
 import { api } from "../../client/index"
 import { EmptyState } from "../../components/EmptyState"
+import { SetupHintStrip } from "../../components/SetupHintStrip"
 import type {
   AuthoredSyncFlowStep,
   CustomValueSourceDefinition,
@@ -717,7 +718,7 @@ export function SyncMetadataModal({
       <div className="entity-registry relative flex min-h-0 flex-1 flex-col">
         <ModalToastStack toasts={toasts} onDismiss={dismissToast} />
         {publishStatus?.catalogNeedsPublish && (
-          <div className="shrink-0 border-b border-warning/40 bg-panel-2 px-5 py-2.5 text-sm text-text">
+          <SetupHintStrip icon={Rocket}>
             Compile-relevant tip is ahead of published sync contracts
             {publishStatus.dirtyCompileSections?.length
               ? ` (${publishStatus.dirtyCompileSections.join(", ")})`
@@ -726,12 +727,12 @@ export function SyncMetadataModal({
             {publishStatus.unpublishedEntityCount > 0
               ? ` · ${publishStatus.unpublishedEntityCount} entit${publishStatus.unpublishedEntityCount === 1 ? "y" : "ies"} affected.`
               : ""}
-          </div>
+          </SetupHintStrip>
         )}
         {publishStatus?.operationalCatalogAhead && !publishStatus.catalogNeedsPublish && (
-          <div className="shrink-0 border-b border-border-subtle bg-panel-2 px-5 py-2.5 text-sm text-text-muted">
+          <SetupHintStrip tone="muted">
             Environment tip changes are live at preview/execute — Publish is not required for them.
-          </div>
+          </SetupHintStrip>
         )}
         <div className="shrink-0 space-y-2 border-b border-border-subtle px-5 py-3">
           <div className="flex items-center justify-between gap-3">

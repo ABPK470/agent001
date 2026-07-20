@@ -1,4 +1,4 @@
-import { AlertTriangle, History, Loader2, Ship, Upload, XCircle } from "lucide-react"
+import { AlertTriangle, History, Loader2, Rocket, Ship, XCircle } from "lucide-react"
 import type { ReactNode } from "react"
 
 import { EmptyState } from "../../components/EmptyState"
@@ -71,15 +71,15 @@ export function Empty({
   srcEnv,
   tgtEnv,
   hasDefinitions,
-  publishArmed,
+  /** When true, publish strip already carries the story — keep Empty idle. */
+  publishHintActive,
 }: {
   envs: SyncEnvironment[]
   blocker: string | null
   srcEnv: SyncEnvironment | null
   tgtEnv: SyncEnvironment | null
   hasDefinitions: boolean
-  /** Tip ahead of published bundle — Publish is armed in Entity Registry. */
-  publishArmed?: boolean
+  publishHintActive?: boolean
 }) {
   const readyCount = envs.filter((env) => env.connectorReady === true).length
 
@@ -121,43 +121,35 @@ export function Empty({
   if (!hasDefinitions) {
     return (
       <EmptyState
-        icon={Upload}
+        icon={Rocket}
         message="Publish required before Sync can run."
         detail={
-          <>
-            Sync uses the published catalog bundle. Open{" "}
-            <span className="text-text">Entity Registry → Publish</span>
-            {publishArmed ? " (armed — tip is ahead of the published contract)." : "."}
-          </>
+          publishHintActive
+            ? undefined
+            : (
+              <>
+                Sync uses the published catalog bundle. Open{" "}
+                <span className="text-text">Entity Registry → Publish</span>.
+              </>
+            )
         }
         className="[&_svg]:text-warning [&_svg]:opacity-60"
       />
     )
   }
 
-  if (publishArmed && (blocker?.toLowerCase().includes("publish") ?? false)) {
-    return (
-      <EmptyState
-        icon={Upload}
-        message={blocker ?? "Publish required"}
-        detail={
-          <>
-            Catalog tip is ahead of the published contract. Publish from{" "}
-            <span className="text-text">Entity Registry</span> before previewing this entity.
-          </>
-        }
-        className="[&_svg]:text-warning [&_svg]:opacity-60"
-      />
-    )
-  }
+  // Entity-level publish tip is shown in SetupHintStrip — don't duplicate here.
+  const idleMessage = publishHintActive
+    ? "Select entity and click Preview"
+    : (blocker ?? "Select entity and click Preview")
 
   return (
     <EmptyState
       icon={Ship}
-      message={blocker ?? "Select entity and click Preview"}
+      message={idleMessage}
       detail={
         <>
-          {srcEnv && tgtEnv && !blocker && (
+          {srcEnv && tgtEnv && !blocker && !publishHintActive && (
             <p className="font-mono">
               {srcEnv.displayName} → {tgtEnv.displayName}
             </p>
