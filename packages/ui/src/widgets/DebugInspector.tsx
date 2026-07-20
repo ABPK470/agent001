@@ -10,7 +10,7 @@
  * never a separate “TOOL” speaker for the response.
  */
 
-import { ChevronDown, ChevronRight, Copy, Search, X } from "lucide-react"
+import { Check, ChevronDown, ChevronRight, Copy, Search, X } from "lucide-react"
 import {
   useEffect,
   useMemo,
@@ -52,48 +52,78 @@ function formatCharCount(n: number): string {
   return n.toLocaleString()
 }
 
-function copyText(text: string) {
-  navigator.clipboard.writeText(text)
-}
-
-/**
- * Quiet correlator chip — label + id, click copies the full value.
- * Used for run / thread / tool-call ids when matching Event Stream & logs.
- */
-function IdChip({
-  label,
-  value,
-  short = 12,
-}: {
-  label: string
-  value: string
-  /** Visible prefix length; full value is always in title + clipboard. */
-  short?: number
-}) {
+/** Shared Copy / Copied control — same feedback as chat markdown tables. */
+function useCopyFeedback() {
   const [copied, setCopied] = useState(false)
+  const clearTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  function onCopy(e: { stopPropagation: () => void }) {
-    e.stopPropagation()
-    copyText(value)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1200)
+  useEffect(() => {
+    return () => {
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+    }
+  }, [])
+
+  function copyValue(value: string, e?: { stopPropagation: () => void }) {
+    e?.stopPropagation()
+    void navigator.clipboard.writeText(value).then(() => {
+      if (clearTimerRef.current) clearTimeout(clearTimerRef.current)
+      setCopied(true)
+      clearTimerRef.current = setTimeout(() => {
+        setCopied(false)
+        clearTimerRef.current = null
+      }, 1600)
+    }).catch(() => { /* ignore */ })
   }
 
-  const display =
-    value.length > short + 1 ? `${value.slice(0, short)}…` : value
+  return { copied, copyValue }
+}
 
+function CopyControl({
+  value,
+  ariaLabel,
+  className = "trace-id-chip__copy",
+}: {
+  value: string
+  ariaLabel: string
+  className?: string
+}) {
+  const { copied, copyValue } = useCopyFeedback()
   return (
     <button
       type="button"
-      className="trace-id-chip"
-      onClick={onCopy}
-      title={`${label} ${value} — click to copy`}
+      className={className}
+      onClick={(e) => copyValue(value, e)}
+      aria-label={copied ? "Copied" : ariaLabel}
     >
-      <span className="trace-id-chip__label">{label}</span>
-      <span className="trace-id-chip__value font-mono">
-        {copied ? "copied" : display}
-      </span>
+      {copied ? <Check size={11} className="text-success" /> : <Copy size={11} />}
+      <span>{copied ? "Copied" : "Copy"}</span>
     </button>
+  )
+}
+
+/**
+ * Correlator row — full id always visible + Copy control matching chat
+ * markdown tables (icon + “Copy” / check + “Copied”).
+ */
+function IdChip({ label, value }: { label: string; value: string }) {
+  return (
+    <span className="trace-id-chip">
+      <span className="trace-id-chip__label">{label}</span>
+      <span className="trace-id-chip__value font-mono">{value}</span>
+      <CopyControl value={value} ariaLabel={`Copy ${label}`} />
+    </span>
+  )
+}
+
+function SectionCopyButton({ text }: { text: string }) {
+  return (
+    <div className="absolute top-2 right-2">
+      <CopyControl
+        value={text}
+        ariaLabel="Copy"
+        className="trace-id-chip__copy"
+      />
+    </div>
   )
 }
 
@@ -353,17 +383,7 @@ function Section({
       {open && (
         <div className="px-3 py-2.5 border-t border-border/30 relative">
           {copyable && (
-            <button
-              type="button"
-              className="absolute top-2 right-2 p-1 rounded hover:bg-elevated/50 text-text-muted/40 hover:text-text-muted transition-colors"
-              onClick={(e) => {
-                e.stopPropagation()
-                copyText(copyable)
-              }}
-              title="Copy to clipboard"
-            >
-              <Copy size={12} />
-            </button>
+            <SectionCopyButton text={copyable} />
           )}
           {children}
         </div>
@@ -421,7 +441,7 @@ function HistoryMessage({
       {open && (
         <div className="pl-6 pb-2 min-w-0 space-y-1.5">
           {isToolResult && msg.toolCallId && (
-            <IdChip label="tool call" value={msg.toolCallId} short={16} />
+            <IdChip label="tool call" value={msg.toolCallId} />
           )}
           {msg.content && <ExpandableText text={msg.content} />}
           {!msg.content && msg.toolCalls.length === 0 && (
@@ -435,7 +455,7 @@ function HistoryMessage({
                     <span className="text-base font-mono font-medium text-text">
                       {tc.name}
                     </span>
-                    <IdChip label="tool call" value={tc.id} short={16} />
+                    <IdChip label="tool call" value={tc.id} />
                   </div>
                   <JsonViewer
                     value={tc.arguments}
@@ -645,7 +665,7 @@ function LlmCallEntry({
                       <span className="text-base font-mono font-medium text-text">
                         {tc.name}
                       </span>
-                      <IdChip label="tool call" value={tc.id} short={16} />
+                      <IdChip label="tool call" value={tc.id} />
                     </div>
                     <JsonViewer
                       value={tc.arguments}
@@ -881,8 +901,8 @@ export function DebugInspector() {
         </div>
         {(activeRunId || activeThreadId) && (
           <div className="trace-summary__ids">
-            {activeRunId && <IdChip label="run" value={activeRunId} short={10} />}
-            {activeThreadId && <IdChip label="thread" value={activeThreadId} short={10} />}
+            {activeRunId && <IdChip label="run" value={activeRunId} />}
+            {activeThreadId && <IdChip label="thread" value={activeThreadId} />}
           </div>
         )}
         {(stats.promptTokens > 0 || stats.completionTokens > 0) && (
