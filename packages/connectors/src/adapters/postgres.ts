@@ -21,16 +21,31 @@ import { makeSummary } from "../engine.js"
 
 type RowBatch = Row[]
 
+export type PostgresInsertOptions = {
+  /** Emit `INSERT … OVERRIDING SYSTEM VALUE` so explicit identity values stick. */
+  readonly overridingSystemValue?: boolean
+}
+
 export interface PostgresDriver {
   streamQuery(sql: string, batchSize: number): AsyncGenerator<RowBatch>
   beginTransaction(): Promise<PostgresTransaction>
-  insertBatches(table: string, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary>
+  insertBatches(
+    table: string,
+    rows: AsyncGenerator<RowBatch>,
+    options?: PostgresInsertOptions,
+  ): Promise<MoveSummary>
   close(): Promise<void>
 }
 
 export interface PostgresTransaction {
   truncate(table: string): Promise<void>
-  insertBatches(table: string, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary>
+  /** `SET LOCAL session_replication_role = replica` (true) or DEFAULT (false). */
+  setReplicationRole(replica: boolean): Promise<void>
+  insertBatches(
+    table: string,
+    rows: AsyncGenerator<RowBatch>,
+    options?: PostgresInsertOptions,
+  ): Promise<MoveSummary>
   commit(): Promise<void>
   rollback(): Promise<void>
 }
@@ -84,33 +99,53 @@ export function createPostgresAdapter(
       if (!options.writeEnabled) {
         return makeSummary("failed", 0, 0, [{ row: 0, message: "connector is read-only (writeEnabled=false)" }], 0)
       }
-      if (spec.mode === "replace") {
-        return writeReplace(driver, spec, rows)
+      const insertOpts: PostgresInsertOptions | undefined = spec.allowIdentityInsert
+        ? { overridingSystemValue: true }
+        : undefined
+      // Constraint relaxation and replace need a held session/transaction.
+      if (spec.mode === "replace" || spec.relaxConstraints) {
+        return writePowered(driver, spec, rows, insertOpts)
       }
-      return driver.insertBatches(spec.table, rows)
+      return driver.insertBatches(spec.table, rows, insertOpts)
     },
   }
 }
 
-async function writeReplace(
+async function writePowered(
   driver: PostgresDriver,
   spec: SqlWriteSpec,
   rows: AsyncGenerator<RowBatch>,
+  insertOpts: PostgresInsertOptions | undefined,
 ): Promise<MoveSummary> {
   const tx = await driver.beginTransaction()
   let rowsWritten = 0
   try {
-    await tx.truncate(spec.table)
-    const insertSummary = await tx.insertBatches(spec.table, rows)
+    if (spec.relaxConstraints) {
+      await tx.setReplicationRole(true)
+    }
+    if (spec.mode === "replace") {
+      await tx.truncate(spec.table)
+    }
+    const insertSummary = await tx.insertBatches(spec.table, rows, insertOpts)
     rowsWritten = insertSummary.rowsWritten
     if (insertSummary.status !== "completed") {
       await tx.rollback()
-      return makeSummary("failed", insertSummary.rowsRead, rowsWritten, insertSummary.errors, insertSummary.failedAtRow)
+      return makeSummary(
+        "failed",
+        insertSummary.rowsRead,
+        rowsWritten,
+        insertSummary.errors,
+        insertSummary.failedAtRow,
+      )
     }
     await tx.commit()
     return makeSummary("completed", insertSummary.rowsRead, rowsWritten, [], null)
   } catch (e) {
-    await tx.rollback()
+    try {
+      await tx.rollback()
+    } catch {
+      // Connection may already be broken; SET LOCAL ends with the session.
+    }
     return makeSummary("failed", rowsWritten, rowsWritten, [{ row: rowsWritten, message: messageOf(e) }], rowsWritten)
   }
 }

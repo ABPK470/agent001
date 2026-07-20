@@ -43,6 +43,7 @@ export {
   createPostgresAdapter,
   type PostgresAdapterOptions,
   type PostgresDriver,
+  type PostgresInsertOptions,
   type PostgresTransaction,
 } from "./adapters/postgres.js"
 

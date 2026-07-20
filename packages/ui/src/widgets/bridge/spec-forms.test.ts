@@ -48,7 +48,13 @@ describe("emptyReadSpec / emptyWriteSpec", () => {
     expect(emptyReadSpec("aws")).toEqual({ path: "/", format: "csv" })
     expect(emptyReadSpec("aqueduct")).toEqual({ params: "" })
     expect(emptyReadSpec("denodo")).toEqual({ view: "", params: "" })
-    expect(emptyWriteSpec("mssql")).toEqual({ table: "", mode: "append", batchSize: "" })
+    expect(emptyWriteSpec("mssql")).toEqual({
+      table: "",
+      mode: "append",
+      batchSize: "",
+      allowIdentityInsert: false,
+      relaxConstraints: false,
+    })
     expect(emptyWriteSpec("webhdfs")).toEqual({ path: "/", format: "csv", mode: "replace" })
     expect(emptyWriteSpec("denodo")).toEqual({})
   })
@@ -112,6 +118,30 @@ describe("buildWriteSpec", () => {
   it("omits batch size when empty", () => {
     const spec = buildWriteSpec("mssql", { table: "t", mode: "append", batchSize: "" }) as unknown as Record<string, unknown>
     expect(spec["batchSize"]).toBeUndefined()
+  })
+  it("includes mssql/postgres power-ups only when opted in", () => {
+    expect(
+      buildWriteSpec("mssql", {
+        table: "t",
+        mode: "append",
+        allowIdentityInsert: true,
+        relaxConstraints: true,
+      }),
+    ).toEqual({
+      kind: "sql",
+      table: "t",
+      mode: "append",
+      allowIdentityInsert: true,
+      relaxConstraints: true,
+    })
+    const plain = buildWriteSpec("postgres", {
+      table: "t",
+      mode: "append",
+      allowIdentityInsert: false,
+      relaxConstraints: false,
+    }) as unknown as Record<string, unknown>
+    expect(plain["allowIdentityInsert"]).toBeUndefined()
+    expect(plain["relaxConstraints"]).toBeUndefined()
   })
   it("builds an httpApi write spec", () => {
     const spec = buildWriteSpec("httpApi", { method: "PUT", path: "/up", body: '{"source":"etl"}' }) as unknown as Record<string, unknown>

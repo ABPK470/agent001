@@ -28,15 +28,19 @@ export type RowBatch = Row[]
 export interface MssqlDriver {
   /** Stream rows from a SQL query in fixed-size batches. */
   streamQuery(sql: string, batchSize: number): AsyncGenerator<RowBatch>
-  /** Open a transaction for a `replace` write. */
+  /** Open a transaction (also used when identity/constraint power-ups need one session). */
   beginTransaction(): Promise<MssqlTransaction>
-  /** Batch-insert rows into a table (used for `append`). */
+  /** Batch-insert rows into a table (plain append — no session power-ups). */
   insertBatches(table: string, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary>
   close(): Promise<void>
 }
 
 export interface MssqlTransaction {
   truncate(table: string): Promise<void>
+  /** `SET IDENTITY_INSERT … ON/OFF` on this connection. */
+  setIdentityInsert(table: string, on: boolean): Promise<void>
+  /** `NOCHECK` (false) or `CHECK CONSTRAINT ALL` (true) on the target table. */
+  setConstraintsChecked(table: string, checked: boolean): Promise<void>
   insertBatches(table: string, rows: AsyncGenerator<RowBatch>): Promise<MoveSummary>
   commit(): Promise<void>
   rollback(): Promise<void>
@@ -51,6 +55,14 @@ function isSqlRead(spec: ReadSpec): spec is SqlReadSpec {
 
 function isSqlWrite(spec: WriteSpec): spec is SqlWriteSpec {
   return spec.kind === "sql"
+}
+
+function needsPoweredWrite(spec: SqlWriteSpec): boolean {
+  return (
+    spec.mode === "replace" ||
+    Boolean(spec.allowIdentityInsert) ||
+    Boolean(spec.relaxConstraints)
+  )
 }
 
 export interface MssqlAdapterOptions {
@@ -91,36 +103,81 @@ export function createMssqlAdapter(
       if (!options.writeEnabled) {
         return makeSummary("failed", 0, 0, [{ row: 0, message: "connector is read-only (writeEnabled=false)" }], 0)
       }
-      if (spec.mode === "replace") {
-        return writeReplace(driver, spec, rows)
+      if (needsPoweredWrite(spec)) {
+        return writePowered(driver, spec, rows)
       }
       return driver.insertBatches(spec.table, rows)
     },
   }
 }
 
-/** `replace`: TRUNCATE + INSERT inside one transaction; ROLLBACK on any error. */
-async function writeReplace(
+/**
+ * One connection for replace and/or identity/constraint overrides.
+ * IDENTITY_INSERT is session-scoped; NOCHECK persists until restored — always restore.
+ */
+async function writePowered(
   driver: MssqlDriver,
   spec: SqlWriteSpec,
   rows: AsyncGenerator<RowBatch>,
 ): Promise<MoveSummary> {
   const tx = await driver.beginTransaction()
+  let identityOn = false
+  let nocheck = false
   let rowsWritten = 0
   try {
-    await tx.truncate(spec.table)
+    if (spec.relaxConstraints) {
+      await tx.setConstraintsChecked(spec.table, false)
+      nocheck = true
+    }
+    if (spec.allowIdentityInsert) {
+      await tx.setIdentityInsert(spec.table, true)
+      identityOn = true
+    }
+    if (spec.mode === "replace") {
+      await tx.truncate(spec.table)
+    }
     const insertSummary = await tx.insertBatches(spec.table, rows)
     rowsWritten = insertSummary.rowsWritten
+
+    await restoreMssqlGuards(tx, spec.table, identityOn, nocheck)
+    identityOn = false
+    nocheck = false
+
     if (insertSummary.status !== "completed") {
       await tx.rollback()
-      return makeSummary("failed", insertSummary.rowsRead, rowsWritten, insertSummary.errors, insertSummary.failedAtRow)
+      return makeSummary(
+        "failed",
+        insertSummary.rowsRead,
+        rowsWritten,
+        insertSummary.errors,
+        insertSummary.failedAtRow,
+      )
     }
     await tx.commit()
     return makeSummary("completed", insertSummary.rowsRead, rowsWritten, [], null)
   } catch (e) {
-    await tx.rollback()
+    try {
+      await restoreMssqlGuards(tx, spec.table, identityOn, nocheck)
+    } catch {
+      // Best-effort restore before rollback / pool return.
+    }
+    try {
+      await tx.rollback()
+    } catch {
+      // Connection may already be broken.
+    }
     return makeSummary("failed", rowsWritten, rowsWritten, [{ row: rowsWritten, message: messageOf(e) }], rowsWritten)
   }
+}
+
+async function restoreMssqlGuards(
+  tx: MssqlTransaction,
+  table: string,
+  identityOn: boolean,
+  nocheck: boolean,
+): Promise<void> {
+  if (identityOn) await tx.setIdentityInsert(table, false)
+  if (nocheck) await tx.setConstraintsChecked(table, true)
 }
 
 function messageOf(e: unknown): string {

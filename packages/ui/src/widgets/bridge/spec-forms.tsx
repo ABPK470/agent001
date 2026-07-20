@@ -11,6 +11,7 @@ import type { JSX, ReactNode } from "react"
 import { useEffect, useMemo, useState } from "react"
 import type { ConnectorKindId, FileFormat, ReadSpec, WriteMode, WriteSpec } from "@mia/shared-types"
 import { api } from "../../client/index"
+import { LabeledCheckbox } from "../../components/Checkbox"
 import { Listbox, type ListboxOption } from "../../components/Listbox"
 import { SearchablePick, type SearchablePickOption } from "../../components/SearchablePick"
 import { FIELD_LABEL, META_TEXT } from "../entity-registry/chrome"
@@ -111,6 +112,8 @@ export function buildWriteSpec(kind: ConnectorKindId, bag: Record<string, unknow
       table: String(bag["table"] ?? ""),
       mode: (bag["mode"] as "append" | "replace") ?? "append",
       ...(bs !== undefined && bs !== "" ? { batchSize: Number(bs) } : {}),
+      ...(bag["allowIdentityInsert"] === true ? { allowIdentityInsert: true } : {}),
+      ...(bag["relaxConstraints"] === true ? { relaxConstraints: true } : {}),
     } as WriteSpec
   }
   if (k === "httpApi") {
@@ -160,7 +163,13 @@ export function emptyReadSpec(kind: ConnectorKindId): Record<string, unknown> {
 export function emptyWriteSpec(kind: ConnectorKindId): Record<string, unknown> {
   switch (writeSpecKindFor(kind)) {
     case "sql":
-      return { table: "", mode: "append", batchSize: "" }
+      return {
+        table: "",
+        mode: "append",
+        batchSize: "",
+        allowIdentityInsert: false,
+        relaxConstraints: false,
+      }
     case "httpApi":
       return { method: "POST", path: "/", body: "", headers: "" }
     case "webhdfs":
@@ -495,6 +504,32 @@ export function WriteSpecForm({
             />
           </FormFieldGroup>
         </div>
+        {(kind === "mssql" || kind === "postgres") && (
+          <div className="flex min-w-0 flex-col gap-2">
+            <LabeledCheckbox
+              layout="card"
+              label={kind === "mssql" ? "Allow identity insert" : "Override identity columns"}
+              hint={
+                kind === "mssql"
+                  ? "SET IDENTITY_INSERT ON for this write so explicit identity values are accepted. Restored after."
+                  : "INSERT … OVERRIDING SYSTEM VALUE so explicit identity/generated values are kept."
+              }
+              checked={Boolean(spec["allowIdentityInsert"])}
+              onChange={(v) => patch({ allowIdentityInsert: v })}
+            />
+            <LabeledCheckbox
+              layout="card"
+              label="Relax constraints"
+              hint={
+                kind === "mssql"
+                  ? "Temporarily NOCHECK all constraints on the target table, then re-enable after the write."
+                  : "SET LOCAL session_replication_role = replica for this write (skips FK/trigger checks; needs privileges)."
+              }
+              checked={Boolean(spec["relaxConstraints"])}
+              onChange={(v) => patch({ relaxConstraints: v })}
+            />
+          </div>
+        )}
       </>
     )
   }

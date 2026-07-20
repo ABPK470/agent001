@@ -23,7 +23,11 @@ import {
   quotePgTable,
 } from "../sql-idents.js"
 import type { MssqlDriver, MssqlTransaction } from "./mssql.js"
-import type { PostgresDriver, PostgresTransaction } from "./postgres.js"
+import type {
+  PostgresDriver,
+  PostgresInsertOptions,
+  PostgresTransaction,
+} from "./postgres.js"
 import type { DenodoDriver } from "./denodo.js"
 import type { HttpDriver } from "./http-api.js"
 import type { WebHdfsDriver } from "./webhdfs.js"
@@ -107,6 +111,16 @@ function makeMssqlTransaction(pool: sql.ConnectionPool, txCtx: sql.Transaction):
     async truncate(table) {
       await new sql.Request(txCtx).query(`TRUNCATE TABLE ${quoteMssqlTable(table)}`)
     },
+    async setIdentityInsert(table, on) {
+      const flag = on ? "ON" : "OFF"
+      await new sql.Request(txCtx).query(`SET IDENTITY_INSERT ${quoteMssqlTable(table)} ${flag}`)
+    },
+    async setConstraintsChecked(table, checked) {
+      const verb = checked ? "CHECK" : "NOCHECK"
+      await new sql.Request(txCtx).query(
+        `ALTER TABLE ${quoteMssqlTable(table)} ${verb} CONSTRAINT ALL`,
+      )
+    },
     async insertBatches(table, rows) {
       return mssqlInsertBatches(pool, txCtx, table, rows)
     },
@@ -166,8 +180,8 @@ export function defaultPostgresDriver(pool: Pool): PostgresDriver {
       await client.query("BEGIN")
       return makePostgresTransaction(client)
     },
-    async insertBatches(table, rows) {
-      return pgInsertBatches(pool, table, rows)
+    async insertBatches(table, rows, options) {
+      return pgInsertBatches(pool, table, rows, options)
     },
     async close() {
       await pool.end()
@@ -180,8 +194,15 @@ function makePostgresTransaction(client: PoolClient): PostgresTransaction {
     async truncate(table) {
       await client.query(`TRUNCATE TABLE ${quotePgTable(table)}`)
     },
-    async insertBatches(table, rows) {
-      return pgInsertBatches(client, table, rows)
+    async setReplicationRole(replica) {
+      await client.query(
+        replica
+          ? "SET LOCAL session_replication_role = replica"
+          : "SET LOCAL session_replication_role = DEFAULT",
+      )
+    },
+    async insertBatches(table, rows, options) {
+      return pgInsertBatches(client, table, rows, options)
     },
     async commit() {
       await client.query("COMMIT")
@@ -198,8 +219,10 @@ async function pgInsertBatches(
   db: Pool | PoolClient,
   table: string,
   rows: AsyncGenerator<RowBatch>,
+  options?: PostgresInsertOptions,
 ): Promise<MoveSummary> {
   let rowsWritten = 0
+  const overriding = options?.overridingSystemValue ? " OVERRIDING SYSTEM VALUE" : ""
   for await (const batch of rows) {
     if (batch.length === 0) continue
     const cols = Object.keys(batch[0]!)
@@ -207,7 +230,9 @@ async function pgInsertBatches(
       (_, i) => `(${cols.map((_, c) => `$${i * cols.length + c + 1}`).join(",")})`,
     )
     const values = batch.flatMap((r) => cols.map((c) => r[c]))
-    const stmt = `INSERT INTO ${quotePgTable(table)} (${cols.map(quotePgIdent).join(",")}) VALUES ${paramRows.join(",")}`
+    const stmt =
+      `INSERT INTO ${quotePgTable(table)} (${cols.map(quotePgIdent).join(",")})` +
+      `${overriding} VALUES ${paramRows.join(",")}`
     await db.query(stmt, values)
     rowsWritten += batch.length
   }

@@ -397,6 +397,19 @@ export interface SqlWriteSpec {
   readonly table: string
   readonly mode: WriteMode
   readonly batchSize?: number
+  /**
+   * Opt-in: insert explicit values into identity / generated columns.
+   * MSSQL → `SET IDENTITY_INSERT`; Postgres → `OVERRIDING SYSTEM VALUE`.
+   * Ignored by hive / databricks. Default off.
+   */
+  readonly allowIdentityInsert?: boolean
+  /**
+   * Opt-in: temporarily skip CHECK / FK enforcement for this write.
+   * MSSQL → `NOCHECK` / `CHECK CONSTRAINT ALL` on the target table.
+   * Postgres → `SET LOCAL session_replication_role = replica` (needs privileges).
+   * Ignored by hive / databricks. Default off. Always restored after the write.
+   */
+  readonly relaxConstraints?: boolean
 }
 
 export interface HttpApiWriteSpec {

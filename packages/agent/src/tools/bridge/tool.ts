@@ -42,6 +42,7 @@ function buildBridgeDataTool(host: AgentHost): ExecutableTool {
       "transform = { columns: [{ from, to, cast?, default? }], derive: [{ to, template }], defaults: [{ column, value }], filter: [{ column, op, value? }] }. " +
       "casts: string|number|boolean|date|datetime|json. filter ops: eq|neq|gt|gte|lt|lte|in|exists|empty. " +
       "Write modes: 'append' (batch insert / merge-rewrite for parquet) or 'replace' (truncate+insert / overwrite file). " +
+      "SQL write power-ups (mssql/postgres, opt-in): allowIdentityInsert, relaxConstraints. " +
       "Returns a summary: status (completed|partial|failed), rowsRead, rowsWritten, errors.",
     parameters: {
       type: "object",
@@ -68,7 +69,7 @@ function buildBridgeDataTool(host: AgentHost): ExecutableTool {
             spec: {
               type: "object",
               description:
-                "Kind-specific write spec (e.g. { kind: 'sql', table: 't', mode: 'append'|'replace' }).",
+                "Kind-specific write spec (e.g. { kind: 'sql', table: 't', mode: 'append'|'replace', allowIdentityInsert?, relaxConstraints? }).",
               additionalProperties: true,
             },
             stopOnError: {

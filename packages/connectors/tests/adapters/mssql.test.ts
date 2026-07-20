@@ -21,6 +21,8 @@ interface MockDriver extends MssqlDriver {
   truncated: string | null
   committed: boolean
   rolledBack: boolean
+  identityStates: boolean[]
+  constraintsChecked: boolean[]
   insertFailAtBatch?: number
 }
 
@@ -30,6 +32,8 @@ function mockDriver(streamBatches: Row[][]): MockDriver {
     truncated: null,
     committed: false,
     rolledBack: false,
+    identityStates: [],
+    constraintsChecked: [],
     async *streamQuery(_sql, batchSize) {
       let buf: Row[] = []
       for (const row of streamBatches.flat()) {
@@ -53,6 +57,12 @@ function mockDriver(streamBatches: Row[][]): MockDriver {
     return {
       async truncate(table) {
         driver.truncated = table
+      },
+      async setIdentityInsert(_table, on) {
+        driver.identityStates.push(on)
+      },
+      async setConstraintsChecked(_table, checked) {
+        driver.constraintsChecked.push(checked)
       },
       async insertBatches(table, rows) {
         return doInsert(driver, table, rows)
@@ -124,6 +134,7 @@ describe("mssql adapter", () => {
     expect(summary.rowsWritten).toBe(3)
     expect(driver.inserted).toEqual([[{ a: 1 }], [{ a: 2 }, { a: 3 }]])
     expect(driver.truncated).toBeNull()
+    expect(driver.identityStates).toEqual([])
   })
 
   it("replace truncates + inserts in a transaction and commits", async () => {
@@ -142,6 +153,31 @@ describe("mssql adapter", () => {
     expect(driver.truncated).toBe("t")
     expect(driver.committed).toBe(true)
     expect(driver.rolledBack).toBe(false)
+  })
+
+  it("append with identity + relax toggles ON then restores before commit", async () => {
+    const driver = mockDriver([])
+    const adapter = createMssqlAdapter(mockConnector(), {
+      driverProvider: async () => driver,
+      writeEnabled: true,
+    })
+    await adapter.open()
+    const summary = await adapter.write(
+      {
+        kind: "sql",
+        table: "dbo.t",
+        mode: "append",
+        allowIdentityInsert: true,
+        relaxConstraints: true,
+      },
+      toAsync([[{ id: 1 }]]),
+    )
+    await adapter.close()
+    expect(summary.status).toBe("completed")
+    expect(driver.truncated).toBeNull()
+    expect(driver.constraintsChecked).toEqual([false, true])
+    expect(driver.identityStates).toEqual([true, false])
+    expect(driver.committed).toBe(true)
   })
 
   it("replace rolls back when an insert batch fails", async () => {
