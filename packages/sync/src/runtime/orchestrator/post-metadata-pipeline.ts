@@ -128,6 +128,8 @@ export async function runPostMetadataPipeline(
     stepWarnings.push({ step: stepName, sproc: "skipped", error: reason })
     emitDeployProgress(stepName, SyncDeployStepStatus.Skipped, reason)
     emit(host, EventType.SyncExecuteStep, { planId, step: stepName })
+    // Same skip dialect as audit-gate: Pipelines attaches a result child.
+    emit(host, EventType.SyncExecuteSkipped, { planId, step: stepName, message: reason })
   }
 
   for (const entry of input.steps) {

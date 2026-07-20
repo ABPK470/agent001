@@ -60,3 +60,41 @@ export function emitSyncSqlEvent(
     console.log(`[sync.sql] ${input.connection} ${input.label} (${status})\n${input.sql}\n`)
   }
 }
+
+export interface HttpEventInput {
+  planId: string
+  step: string
+  method: string
+  url: string
+  status: number
+  durationMs: number
+  requestBody?: Record<string, unknown> | null
+  responseBody?: Record<string, unknown> | null
+  error?: string | null
+}
+
+function truncateJsonValue(value: unknown): unknown {
+  if (value == null) return value
+  const raw = JSON.stringify(value)
+  if (raw.length <= SQL_EVENT_MAX_CHARS) return value
+  return {
+    __truncated: true,
+    preview: raw.slice(0, SQL_EVENT_MAX_CHARS),
+    length: raw.length,
+  }
+}
+
+/** Peer of emitSyncSqlEvent — HTTP flow-step request/response for Pipelines detail. */
+export function emitSyncHttpEvent(host: SyncEventHost, input: HttpEventInput): void {
+  emitSyncEvent(host, EventType.SyncExecuteHttp, {
+    planId: input.planId,
+    step: input.step,
+    method: input.method,
+    url: input.url,
+    status: input.status,
+    durationMs: input.durationMs,
+    requestBody: truncateJsonValue(input.requestBody ?? null),
+    responseBody: truncateJsonValue(input.responseBody ?? null),
+    error: input.error ?? null,
+  })
+}

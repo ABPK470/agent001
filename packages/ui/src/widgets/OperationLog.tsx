@@ -37,6 +37,11 @@ import {
 } from "./pipelines/operation-log-trace"
 import { isSyncSqlEventType, hasSqlTraceContent, readSqlTraceFields } from "./sync/trace/sync-sql-trace"
 import {
+  formatHttpTraceSummary,
+  isSyncHttpEventType,
+  readHttpTraceFields,
+} from "./sync/trace/sync-http-trace"
+import {
   buildToolIoFromStepEvents,
   isAgentStepEventType,
   readToolIoFromActivity,
@@ -263,12 +268,14 @@ function effectiveActivityStatus(
 
 function defaultActivitySummary(pipelineKind: OperationKind, activity: OperationActivity): string | undefined {
   if (activity.name === "result") return undefined
-  if (activity.status === "skipped" && activity.children?.some((c) => c.name === "result")) {
-    return flowStepDescription(activity)
+  // Skipped flow steps: show the skip reason from the result child, not the generic step blurb.
+  if (activity.status === "skipped") {
+    const resultChild = activity.children?.find((c) => c.name === "result")
+    if (resultChild?.summary) return resultChild.summary
+    if (activity.error) return activity.error
   }
   if (activity.summary && activity.status !== "skipped") return activity.summary
   if (pipelineKind === OperationKind.SyncExecute) {
-    if (activity.status === "skipped") return activity.error ?? undefined
     return (
       EXEC_STEP_DESCRIPTIONS[activity.name] ??
       EXEC_STEP_DESCRIPTIONS[activity.name.replace(/-done$/, "Done")] ??
@@ -285,14 +292,6 @@ function defaultActivitySummary(pipelineKind: OperationKind, activity: Operation
     }
   }
   return undefined
-}
-
-function flowStepDescription(activity: OperationActivity): string | undefined {
-  return (
-    EXEC_STEP_DESCRIPTIONS[activity.name] ??
-    EXEC_STEP_DESCRIPTIONS[activity.name.replace(/-done$/, "Done")] ??
-    activity.summary
-  )
 }
 
 function isSyncExecuteFlowStep(kind: OperationKind, activity: OperationActivity): boolean {
@@ -464,6 +463,8 @@ function formatEventLabel(ev: OperationEvent): string {
     case "sync.discovery.sql":
     case "sync.preview.sql":
       return "SQL"
+    case "sync.execute.http":
+      return "HTTP"
     case "sync.execute.archive.probe": return "Archive probe"
     case "sync.execute.archive.probe.batch": return "Archive probe batch"
     case "sync.execute.archive.skipped": return "Archive skipped"
@@ -1022,6 +1023,59 @@ function FlowStepSqlRow({
   )
 }
 
+/** HTTP peer of FlowStepSqlRow — method/path summary; expand → request/response JSON. */
+function FlowStepHttpRow({
+  ev,
+  expanded,
+  onToggle,
+  linear,
+  isLast,
+  depth = 0,
+}: {
+  ev: OperationEvent
+  expanded: boolean
+  onToggle: () => void
+  linear?: boolean
+  isLast?: boolean
+  depth?: number
+}) {
+  const fields = readHttpTraceFields(ev.data)
+  const failed = Boolean(fields?.error) || (fields != null && fields.status >= 400)
+  const summary = fields ? formatHttpTraceSummary(fields) : "HTTP"
+  const detail = {
+    method: fields?.method,
+    url: fields?.url,
+    status: fields?.status,
+    durationMs: fields?.durationMs,
+    requestBody: fields?.requestBody ?? null,
+    responseBody: fields?.responseBody ?? null,
+    ...(fields?.error ? { error: fields.error } : {}),
+  }
+
+  return (
+    <OpLogRow
+      linear={linear}
+      isLast={isLast && !expanded}
+      depth={depth}
+      expanded={expanded}
+      expandable
+      onToggle={onToggle}
+      showStatus
+      status={failed ? OperationStatus.Failed : OperationStatus.Success}
+      label={<span className={`${OP_LOG_MONO} ${OP_LOG_MUTED}`}>HTTP</span>}
+      meta={summary}
+      durationMs={fields?.durationMs ?? null}
+      timestamp={ev.timestamp}
+    >
+      {expanded && (
+        <div className={`px-2.5 py-1.5 ${linear ? "bg-elevated/30" : "bg-base/30 border-t border-border-subtle"}`}>
+          <JsonViewer value={detail} label="http" defaultExpandDepth={2} maxHeight={360} />
+        </div>
+      )}
+    </OpLogRow>
+  )
+}
+
 // ── Activity row ─────────────────────────────────────────────────
 
 function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipelineError, parentStatus, parentPhaseId, depth = 0, expanded, onToggle, actExpanded, toggleActivity, evExpanded, toggleEvent, linear, isLast }: {
@@ -1052,13 +1106,16 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
   const isFlowStep = isSyncExecuteFlowStep(effectiveKind, activity)
   const resultChild = activity.children?.find((c) => c.name === "result")
   const hasChildren = (activity.children?.length ?? 0) > 0
-  const hasResultChild = resultChild != null
   const sqlEvents = activity.events.filter((ev) => isSyncSqlEventType(ev.type))
+  const httpEvents = activity.events.filter((ev) => isSyncHttpEventType(ev.type))
   const visibleEvents = activity.events.filter(
-    (ev) => !isSyncSqlEventType(ev.type) && !shouldHideSyncExecuteStepEvent(effectiveKind, activity, ev),
+    (ev) =>
+      !isSyncSqlEventType(ev.type)
+      && !isSyncHttpEventType(ev.type)
+      && !shouldHideSyncExecuteStepEvent(effectiveKind, activity, ev),
   )
   const statusMessage =
-    isResultRow || hasResultChild ? null : activity.error ?? null
+    isResultRow || resultChild != null ? null : activity.error ?? null
   const toolIo =
     readToolIoFromActivity(activity) ??
     (activity.events.length > 0 ? buildToolIoFromStepEvents(activity.events) : null)
@@ -1075,15 +1132,19 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
     )
   }
 
+  const detailEventCount = sqlEvents.length + httpEvents.length + visibleEvents.length
   const hasExpandedContent =
     expanded &&
     (statusMessage ||
       isFlowStep ||
       isResultRow ||
       hasChildren ||
-      visibleEvents.length > 0 ||
+      detailEventCount > 0 ||
       (!isResultRow && activity.events.length > 0) ||
       (!isResultRow && activity.events.length === 0 && activity.details))
+
+  const trailingAfterSql = hasChildren || httpEvents.length > 0 || visibleEvents.length > 0
+  const trailingAfterHttp = hasChildren || visibleEvents.length > 0
 
   const rowActions = toolIo ? (
     <button
@@ -1136,9 +1197,23 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
                 key={key}
                 linear={linear}
                 depth={depth + 1}
-                isLast={idx === sqlEvents.length - 1 && !hasChildren && visibleEvents.length === 0}
+                isLast={idx === sqlEvents.length - 1 && !trailingAfterSql}
                 ev={ev}
                 resultData={resultData}
+                expanded={evExpanded.has(key)}
+                onToggle={() => toggleEvent(key)}
+              />
+            )
+          })}
+          {isFlowStep && httpEvents.map((ev, idx) => {
+            const key = `${pipelineId}|${activity.id}|http:${idx}`
+            return (
+              <FlowStepHttpRow
+                key={key}
+                linear={linear}
+                depth={depth + 1}
+                isLast={idx === httpEvents.length - 1 && !trailingAfterHttp}
+                ev={ev}
                 expanded={evExpanded.has(key)}
                 onToggle={() => toggleEvent(key)}
               />
@@ -1171,13 +1246,13 @@ function ActivityRow({ activity, pipelineKind, pipelineId, pipelineStatus, pipel
               )}
             </div>
           )}
-          {hasChildren && !isResultRow && !hasResultChild && activity.children!.map((child, idx) => {
+          {hasChildren && !isResultRow && activity.children!.map((child, idx) => {
             const childKey = pipelineActivityKey(pipelineId, child.id)
             return (
               <ActivityRow
                 key={childKey}
                 linear={linear}
-                isLast={idx === activity.children!.length - 1}
+                isLast={idx === activity.children!.length - 1 && visibleEvents.length === 0}
                 activity={child}
                 pipelineKind={pipelineKind}
                 pipelineId={pipelineId}
@@ -1261,11 +1336,17 @@ function EventRow({ ev, expanded, onToggle, linear, isLast, depth = 0 }: {
   const isFailedEvent = ev.type.includes(".failed") || !!ev.data["error"]
   const isSkippedEvent = ev.type.includes(".skipped")
   const isSql = isSyncSqlEventType(ev.type)
+  const isHttp = isSyncHttpEventType(ev.type)
   const isStep = isAgentStepEventType(ev.type)
   const sqlFields = isSql ? readSqlTraceFields(ev.data) : null
   const sqlTrace = isSql ? describeSqlEvent(ev) : null
+  const httpFields = isHttp ? readHttpTraceFields(ev.data) : null
   const toolIo = isStep ? readToolIoFromEvent(ev) : null
-  const summary = isSql && sqlTrace ? formatTraceRowSummary(sqlTrace) : pickEventSummary(ev)
+  const summary = isSql && sqlTrace
+    ? formatTraceRowSummary(sqlTrace)
+    : isHttp && httpFields
+      ? formatHttpTraceSummary(httpFields)
+      : pickEventSummary(ev)
   const label = isSql ? null : formatEventLabel(ev)
   const displayData = isStep
     ? stripToolIoForInlineDisplay(ev.data)

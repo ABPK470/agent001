@@ -2,7 +2,7 @@ import type { OperationActivity, OperationEvent } from "../../client/index"
 import { isAgentStepEventType } from "../chat/tool-call-io"
 import { isSyncSqlEventType, hasSqlTraceContent, readSqlTraceFields, type SqlTraceFields } from "../sync/trace/sync-sql-trace"
 
-export type TraceKind = "sql" | "shell" | "script" | "io" | "event"
+export type TraceKind = "sql" | "http" | "shell" | "script" | "io" | "event"
 
 export interface TraceRowDescriptor {
   kind: TraceKind
@@ -16,6 +16,7 @@ export interface TraceRowDescriptor {
 
 export function traceKindForEvent(ev: OperationEvent): TraceKind {
   if (isSyncSqlEventType(ev.type)) return "sql"
+  if (ev.type === "sync.execute.http") return "http"
   if (isAgentStepEventType(ev.type)) return "io"
   if (typeof ev.data["command"] === "string" || ev.type.includes("sandbox")) return "shell"
   if (typeof ev.data["script"] === "string") return "script"
@@ -26,6 +27,8 @@ export function detailLabelForKind(kind: TraceKind): string {
   switch (kind) {
     case "sql":
       return "SQL"
+    case "http":
+      return "HTTP"
     case "io":
       return "I/O"
     case "shell":
@@ -41,6 +44,8 @@ export function kindPrefixForKind(kind: TraceKind): string {
   switch (kind) {
     case "sql":
       return "SQL"
+    case "http":
+      return "HTTP"
     case "io":
       return "Step"
     case "shell":

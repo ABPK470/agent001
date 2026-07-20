@@ -221,9 +221,10 @@ export const EventType = {
   Audit: "audit",
   Notification: "notification",
 
-  // Sync — SQL trace events emitted from query helpers
+  // Sync — SQL / HTTP trace events emitted from query / flow-step helpers
   SyncPreviewSql: "sync.preview.sql",
   SyncExecuteSql: "sync.execute.sql",
+  SyncExecuteHttp: "sync.execute.http",
   SyncCatalogSql: "sync.catalog.sql",
   SyncDiscoverySql: "sync.discovery.sql",
 
